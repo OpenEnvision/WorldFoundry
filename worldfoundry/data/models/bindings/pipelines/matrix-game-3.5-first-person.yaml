@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: matrix-game-3.5-first-person
+model_id: matrix-game-3.5-first-person
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.matrix_game.pipeline_matrix_game_3p5:MatrixGame35FirstPersonPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

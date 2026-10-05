@@ -25,7 +25,7 @@ Handles:
 
 from copy import deepcopy
 
-from .config import (
+from .types import (
     ActionFormat,
     ActionRepresentation,
     ActionType,

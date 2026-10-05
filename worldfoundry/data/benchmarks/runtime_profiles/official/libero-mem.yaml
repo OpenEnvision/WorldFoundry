@@ -6,8 +6,10 @@ environment_id: worldfoundry-unified-cu128
 id: libero-mem
 name: LIBERO-Mem
 docker:
-  image: ghcr.io/allenai/vla-evaluation-harness/libero-mem:latest
-  source_image: ghcr.io/allenai/vla-evaluation-harness/libero-mem:latest
+  image: ghcr.io/allenai/vla-evaluation-harness/libero-mem@sha256:3ffb85ecf8c98077020cbdc88fca1b52061b605ee57d20d54fd5140104ae55c7
+  digest: sha256:3ffb85ecf8c98077020cbdc88fca1b52061b605ee57d20d54fd5140104ae55c7
+  source_image: ghcr.io/allenai/vla-evaluation-harness/libero-mem@sha256:3ffb85ecf8c98077020cbdc88fca1b52061b605ee57d20d54fd5140104ae55c7
+  platform: linux/amd64
   python_env: libero_mem
   gpus: all
 needs_new_env: false

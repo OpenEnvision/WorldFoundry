@@ -7,7 +7,6 @@ from scipy.spatial.transform import Rotation as R
 
 from ..generate_custom_trajectory import generate_camera_trajectory_local
 
-
 _MAPPING = {
     (0, 0, 0, 0): 0,
     (1, 0, 0, 0): 1,
@@ -76,9 +75,7 @@ def parse_pose_string(pose_string: str) -> list[dict]:
             for _ in range(num_frames):
                 motions.append({"yaw": yaw_speed})
         else:
-            raise ValueError(
-                f"Unknown action: {action}. Supported actions: w, s, a, d, up, down, left, right"
-            )
+            raise ValueError(f"Unknown action: {action}. Supported actions: w, s, a, d, up, down, left, right")
 
     return motions
 

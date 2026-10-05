@@ -55,6 +55,9 @@ catalog_policy:
     task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit parity run and expected artifact are
     recorded.
+official_sources:
+  project_page: https://ailab-cvc.github.io/videocrafter2/
+  paper: https://arxiv.org/abs/2401.09047
 integration:
   status: integrated
   notes:
@@ -64,3 +67,28 @@ runner_parity:
   notes:
   - WorldFoundry pipeline targets are registered for VideoCrafter1 I2V, VideoCrafter1 T2V, and VideoCrafter2 T2V.
   - Exhaustive upstream benchmark parity remains a longer validation stage.
+docs:
+  publisher: Tencent AI Lab
+  publisher_kind: company
+  publisher_zh: 腾讯 AI Lab
+  overview: VideoCrafter is Tencent AI Lab's open video generation toolbox; this family entry aggregates the in-tree infer-only runtimes for VideoCrafter1 I2V, VideoCrafter1 T2V, and VideoCrafter2 T2V. The per-variant entries (videocrafter1-i2v, videocrafter1-t2v, videocrafter2-t2v) hold the individual routes; checkpoint provenance is tracked here at the family level to avoid duplicate HF aliases.
+  overview_zh: VideoCrafter 是腾讯 AI Lab 的开源视频生成工具箱；本系列条目聚合了 VideoCrafter1 I2V、 VideoCrafter1 T2V 与 VideoCrafter2 T2V 的树内仅推理运行时。各 variant 条目（videocrafter1-i2v、 videocrafter1-t2v、videocrafter2-t2v）持有具体路径；checkpoint 溯源在本系列级条目统一跟踪，避免重复的 HF 别名。
+  architecture: 'U-Net latent video diffusion models: VideoCrafter1 offers T2V (up to 1024x576) and I2V; VideoCrafter2 improves the T2V model by decoupling appearance learning (low-quality video + high-quality image data). Training, dataset, and download helpers are intentionally excluded from the in-tree packages.'
+  architecture_zh: U-Net 潜空间视频扩散模型：VideoCrafter1 提供 T2V（最高 1024x576）与 I2V；VideoCrafter2 通过解耦外观学习（低质量视频 + 高质量图像数据）改进 T2V。训练、数据集与下载辅助脚本被有意排除在树内包外。
+  usage_notes: 'Runner parity is pending; exhaustive upstream benchmark parity is recorded as a longer validation stage. License note from the manifest: the VideoCrafter2 HF card exposes Apache-2.0, but the older Text2Video/Image2Video cards need license review.'
+  usage_notes_zh: Runner parity 为 pending；与上游评测的完整一致性被记录为更长期的验证阶段。manifest 的许可提示： VideoCrafter2 的 HF 卡片为 Apache-2.0，但更早的 Text2Video/Image2Video 卡片需要许可审阅。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  - Older VideoCrafter1 checkpoints need license review before redistribution.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  - 较早的 VideoCrafter1 checkpoint 再分发前需要许可审阅。
+  recommended_benchmarks:
+  - id: evalcrafter
+    reason: The benchmark developed alongside the VideoCrafter effort.
+    reason_zh: 与 VideoCrafter 项目同源的评测。
+  - id: vbench
+    reason: Standard T2V suite.
+    reason_zh: 标准文生视频评测。

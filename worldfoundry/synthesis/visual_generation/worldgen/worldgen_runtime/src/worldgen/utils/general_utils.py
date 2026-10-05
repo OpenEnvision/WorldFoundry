@@ -1,4 +1,3 @@
-import py360convert
 from PIL import Image
 import numpy as np
 import torch
@@ -7,10 +6,26 @@ from skimage import measure, draw
 from typing import Optional, Literal
 import open3d as o3d
 
+try:
+    import py360convert
+except ImportError:
+    py360convert = None
+
+
+def _require_py360convert():
+    if py360convert is None:
+        raise ImportError(
+            "py360convert is required for panorama/cubemap conversion but is not "
+            "installed in the active Python environment"
+        )
+    return py360convert
+
 def pano_to_cube(pano_img: Image.Image, face_w: int, mode: str = 'bilinear') -> list[Image.Image]:
     """Converts a panoramic PIL Image to a list of 6 cubemap face PIL Images."""
     pano_np = np.array(pano_img)
-    cube_faces = py360convert.e2c(pano_np, face_w=face_w, mode='bilinear', cube_format='list')
+    cube_faces = _require_py360convert().e2c(
+        pano_np, face_w=face_w, mode=mode, cube_format='list'
+    )
     cube_pil_faces = [Image.fromarray(face) for face in cube_faces]
     return cube_pil_faces
 
@@ -25,7 +40,9 @@ def cube_to_pano(cube_faces: list[Image.Image], h: int, w: int, mode: str = 'bil
              face_np = face_np.squeeze(axis=2)
         cube_np_faces.append(face_np)
 
-    pano_np = py360convert.c2e(cube_np_faces, h=h, w=w, mode=mode, cube_format='list')
+    pano_np = _require_py360convert().c2e(
+        cube_np_faces, h=h, w=w, mode=mode, cube_format='list'
+    )
     pano_pil = Image.fromarray(pano_np.astype(np.uint8))
     return pano_pil
 
@@ -110,6 +127,10 @@ def batch_nearest_dot(src_dirs, query_dirs, batch=8192):
 
 def fill_mask_from_contour(mask):
     mask_np = mask.squeeze(0).cpu().numpy().astype(np.uint8)
+    # A uniform mask has no contour. Preserve its occupancy instead of
+    # turning a fully conditioned panorama into an all-inpaint request.
+    if mask_np.all() or not mask_np.any():
+        return torch.from_numpy(mask_np.copy())
     contours = measure.find_contours(mask_np, fully_connected="high")
     filled = np.zeros_like(mask_np, dtype=np.uint8)
     for contour in contours:

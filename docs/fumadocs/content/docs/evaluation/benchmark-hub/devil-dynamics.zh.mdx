@@ -1,145 +1,38 @@
 ---
 title: DEVIL Dynamics
-description: DEVIL Dynamics 的资产准备、环境要求与 WorldFoundry 可运行命令。
+description: "NeurIPS 2024 的动力学导向 T2V 评测：动态范围、可控性、动态条件质量。WorldFoundry 导入官方行或 artifact 分数，不编造榜单。"
 ---
 
-## 简介
+DEVIL（国科大与百度；NeurIPS 2024）评的是文本生成视频的 **动力学**，不是好看不好看。Prompt 按动力学等级分层；多个时间粒度的分数汇总成三个协议指标，论文报告与人类评分 **>90% 相关**：
 
-DEVIL Dynamics 从 dynamics 角度评估 text-to-video 生成结果。它补充普通时序一致性评测，重点检查视频是否真的产生了运动、运动是否符合 prompt 指定的动态等级，以及运动是否自然可信。
+- **动态范围** — 模型能产生多少内容变化。
+- **动态可控性** — 是否遵守所提示的动力学等级。
+- **动态质量** — 在该动力学等级下的质量。
 
-WorldFoundry 已经把 DEVIL 测评代码放在仓内：`worldfoundry/evaluation/tasks/execution/runners/devil_dynamics/`。运行这个 benchmark 不需要官方源码仓库副本。
+`devil_dynamics_average` 是这三项的均值。
 
-## Prompt Suite
+论文：[DEVIL](https://arxiv.org/abs/2407.01094)。代码：[MingXiangL/DEVIL](https://github.com/MingXiangL/DEVIL)。
 
-官方 prompt 文本已经随 WorldFoundry 放在：
+WorldFoundry **从已就位的 artifact 分数物化指标行**（`WORLDFOUNDRY_DEVIL_DYNAMICS_ARTIFACT_SCORE_DIR`），或 **导入官方 JSON**。完整重算仍需上游权重（RAFT、CLIP ViT-L/14 与 ViT-B/32、ViCLIP、DINOv2、AMT、动力学回归）。Gemini 自然度组件不在本地重算范围内。
 
-```text
-worldfoundry/data/benchmarks/assets/devil-dynamics/prompts/
-  static/
-  low/
-  medium/
-  high/
-  very_high/
-```
+<BenchmarkPageSections id="devil-dynamics" locale="zh" />
 
-对每条 prompt 生成一个视频，并保留 DEVIL 的动态等级文件名前缀。例如：
-
-```text
-static_1.mp4
-low_12.mp4
-medium_37.mp4
-high_88.mp4
-very_high_123.mp4
-```
-
-生成视频目录可以是扁平目录，也可以有子目录；runner 会递归查找 `.mp4`。
-
-## 必需资产
-
-先把 `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` 指向生成视频目录。
-
-完整重算指标时，需要准备以下 ckpt 和 API：
-
-| 资产 | 环境变量或参数 | 说明 |
-| --- | --- | --- |
-| DEVIL regression model | `WORLDFOUNDRY_DEVIL_REGRESSION_CKPT` 或 `--regression-ckpt` | 通常是 DEVIL `model_weights` 里的 `linear_regress_model.pth`。 |
-| RAFT Things | `WORLDFOUNDRY_DEVIL_RAFT_CKPT` / `WORLDFOUNDRY_RAFT_THINGS_CKPT` 或 `--raft-ckpt` | 可复用 WorldFoundry 的 RAFT base model 资产。 |
-| OpenAI CLIP ViT-L/14 | `WORLDFOUNDRY_DEVIL_CLIP_VIT_L14_PT` / `WORLDFOUNDRY_VBENCH_CLIP_VIT_L14_PT` 或 `--clip-vit-l14` | 用于 dynamics scoring。 |
-| OpenAI CLIP ViT-B/32 | `WORLDFOUNDRY_DEVIL_CLIP_VIT_B32_PT` / `WORLDFOUNDRY_VBENCH_CLIP_VIT_B32_PT` 或 `--clip-vit-b32` | 用于 quality scoring。 |
-| ViCLIP | `WORLDFOUNDRY_DEVIL_VICLIP_CKPT` / `WORLDFOUNDRY_VBENCH_VICLIP_CKPT` 或 `--viclip-ckpt` | 复用 VBench ViCLIP 资产。 |
-| DINOv2 ViT-L/14 | `WORLDFOUNDRY_DEVIL_DINOV2_VITL14_CKPT` / `WORLDFOUNDRY_WBENCH_MEGASAM_DINOV2_CKPT` 或 `--dinov2-vitl14-ckpt` | 用于 segment-level dynamics。 |
-| timm DINO ViT-S/16 | `WORLDFOUNDRY_DEVIL_TIMM_DINO_CKPT` 或 `--timm-dino-ckpt` | 如果 timm 能从缓存或下载拿到 pretrained weights，可以不单独设置；离线复现建议显式设置。 |
-| DINO ViT-B/16 | `WORLDFOUNDRY_DEVIL_DINO_VITB16_CKPT` / `WORLDFOUNDRY_VBENCH_DINO_VITB16_CKPT` 或 `--dino-vitb16-ckpt` | 使用 WorldFoundry 仓内 DINO shim。 |
-| AMT-S config/checkpoint | `WORLDFOUNDRY_DEVIL_AMT_CONFIG`、`WORLDFOUNDRY_DEVIL_AMT_CKPT` 或命令行参数 | config 默认可使用 WorldFoundry 仓内 AMT-S config。 |
-| Naturalness judge | `WORLDFOUNDRY_DEVIL_GEMINI_API_KEY` / `GEMINI_API_KEY` 或 `--gemini-api-key` | 如果传入 `--naturalness-path`，则不需要 API。 |
-
-如果你已经准备好了官方 DEVIL `model_weights` 目录，也可以设置 `WORLDFOUNDRY_DEVIL_MODEL_WEIGHTS_DIR` 或传 `--model-weights-dir`。runner 会在里面查找常见文件名，例如 `linear_regress_model.pth`、`raft-things.pth`、`ViT-L-14.pt`、`ViT-B-32.pt`、`ViClip-InternVid-10M-FLT.pth`、`dinov2_vitl14_pretrain.pth`、`dino_vitbase16_pretrain.pth`、`AMT-S.yaml`、`amt-s.pth`。
-
-Python 环境需要包含 DEVIL 使用的视频指标依赖，包括 `torch`、`torchvision`、`timm`、`decord`、`opencv-python`、`clip`、`easydict`、`scikit-image`、`pytorch-msssim`、`piqa`、`imagehash`、`pandas`、`openpyxl`、`prettytable`、`omegaconf`、`google-generativeai`。Temporal information 组件还需要系统命令 `ffmpeg`、`ffprobe` 和 `bc`。
-
-## 完整评测
-
-通过 WorldFoundry runner 调用仓内 official runtime：
+## 如何运行
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/devil/generated-videos
-export WORLDFOUNDRY_DEVIL_MODEL_WEIGHTS_DIR=/path/to/devil/model_weights
-export GEMINI_API_KEY=...
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/devil_dynamics/run_devil_dynamics_official_runner.py \
-  --run-official \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --model-weights-dir "${WORLDFOUNDRY_DEVIL_MODEL_WEIGHTS_DIR}" \
-  --num-gpus 8 \
-  --output-dir tmp/devil-dynamics/full-run \
-  --json
-```
-
-把 `--num-gpus` 改成你的机器数量即可；单卡就使用 `--num-gpus 1`。
-
-如果 Gemini naturalness 已经提前算好，可以传入 xlsx，跳过 API 调用：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/devil_dynamics/run_devil_dynamics_official_runner.py \
-  --run-official \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --model-weights-dir "${WORLDFOUNDRY_DEVIL_MODEL_WEIGHTS_DIR}" \
-  --naturalness-path /path/to/naturalness_results.xlsx \
-  --num-gpus 8 \
-  --output-dir tmp/devil-dynamics/full-run-reuse-naturalness \
-  --json
-```
-
-## 导入已有结果
-
-如果已经有官方 DEVIL 结果导出，例如 `dynamics_quality_results.xlsx` 或 `devil_dynamics_results.json`，可以直接导入：
-
-```bash
-export WORLDFOUNDRY_DEVIL_DYNAMICS_RESULTS_PATH=/path/to/dynamics_quality_results.xlsx
-
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id devil-dynamics \
   --mode official-validation \
-  --official-results-path "${WORLDFOUNDRY_DEVIL_DYNAMICS_RESULTS_PATH}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/devil-dynamics/import-results \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/devil-dynamics/official-validation \
   --json
 ```
 
-## 输出结构
+每个官方 DEVIL prompt 生成一条视频；等级分层来自官方 prompt 元数据。默认导入：`WORLDFOUNDRY_DEVIL_DYNAMICS_RESULTS_PATH`。运行时分数：`WORLDFOUNDRY_DEVIL_DYNAMICS_ARTIFACT_SCORE_DIR`。
 
-完整评测会写出：
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/devil-dynamics.yaml`，`worldfoundry/evaluation/tasks/execution/runners/devil_dynamics`。
 
-```text
-<output-dir>/
-  scorecard.json
-  raw_metric_table.jsonl
-  per_sample_scores.jsonl
-  upstream/
-    dynamics_results.xlsx
-    quality_results.xlsx
-    naturalness_results.xlsx
-    dynamics_quality_results.xlsx
-    devil_dynamics_results.json
-  upstream_stdout.log
-  upstream_stderr.log
-```
-
-`scorecard.json` 是 WorldFoundry 归一化后的聚合结果；`upstream/devil_dynamics_results.json` 是仓内 runtime 产出的 DEVIL summary。
-
-## 指标
-
-| Metric ID | 含义 | 越高越好 |
-| --- | --- | --- |
-| `dynamics_range` | 生成视频是否覆盖从静态到高动态的预期运动范围。 | 是 |
-| `dynamics_controllability` | 生成运动是否符合 prompt 请求的动态等级排序。 | 是 |
-| `dynamics_quality` | Dynamics-aware quality 和 naturalness；完整重算时包含 Gemini naturalness。 | 是 |
-| `devil_dynamics_average` | 对可用 DEVIL 分量求平均，是 WorldFoundry 的聚合指标。 | 是 |
-
-## Leaderboard 说明
-
-要得到可对齐 leaderboard 的数值，需要完整 DEVIL prompt suite、保留动态等级前缀的文件名、一致的 checkpoint 资产，以及用相同 judge 设置得到的 Gemini naturalness 输出。部分导入结果可以用于回归测试，但不应当声称是完整 DEVIL leaderboard 结果。
+产物包括 `scorecard.json`（主键 `devil_dynamics_average`）与 `raw_metric_table.jsonl`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

@@ -40,3 +40,19 @@ runner_parity:
   - Numerical and GPU rollout validation remain pending until the checkpoint assets are materialized.
 catalog_category: vla_va_wam
 catalog_scope: In-tree inference runtime and checkpoint metadata for embodied policies.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'H-RDT (Human-to-Robotics Diffusion Transformer) pretrains a diffusion-transformer policy on large-scale human manipulation data before robot fine-tuning (paper: arXiv 2506.23503, MPL-2.0). The official release is the 48-dimensional human-motion pretraining checkpoint (embodiedfoundation/H-RDT); WorldFoundry keeps the transformer, flow-matching sampler, DINOv2+SigLIP vision path, and optional T5 language path in-tree.'
+  overview_zh: H-RDT（Human-to-Robotics Diffusion Transformer）先在大规模人类操作数据上预训练扩散 transformer 策略，再做机器人微调（论文：arXiv 2506.23503，MPL-2.0）。官方发布为 48 维人体动作预训练 checkpoint（embodiedfoundation/H-RDT）；WorldFoundry 将 transformer、flow-matching 采样器、 DINOv2+SigLIP 视觉路径与可选 T5 语言路径内置树内。
+  architecture: A diffusion transformer with flow-matching sampling; vision uses DINOv2 plus SigLIP and language optionally uses T5. Module and parameter names preserve the official checkpoint contract with strict restoration.
+  architecture_zh: 扩散 transformer 配 flow-matching 采样；视觉用 DINOv2 加 SigLIP，语言可选 T5。模块与参数名保持官方 checkpoint 契约，恢复为严格模式。
+  usage_notes: The released checkpoint is the human-motion pretraining stage (48-DoF), not the unreleased 14-dimensional robot fine-tune — plan your own fine-tuning for robot deployment. Training, datasets, ROS, robot drivers, simulator clients, and hub mixins are excluded.
+  usage_notes_zh: 发布的 checkpoint 是人体动作预训练阶段（48 维），而非未发布的 14 维机器人微调——机器人部署需自行微调。训练、数据集、ROS、机器人驱动、模拟器客户端与 hub mixin 均被排除。
+  limitations:
+  - Only the human-motion pretraining checkpoint is released; the robot fine-tune is not.
+  - Numerical and GPU rollout validation remain pending until checkpoint assets are materialized.
+  limitations_zh:
+  - 仅发布人体动作预训练 checkpoint；机器人微调版未发布。
+  - 数值与 GPU rollout 验证待 checkpoint 资产就位后进行。

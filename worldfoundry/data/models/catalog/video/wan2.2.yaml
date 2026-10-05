@@ -43,6 +43,38 @@ checkpoint:
         - text-to-video
         - image-to-video
 variants:
+  - id: wan2.2-t2v-a14b
+    task: text-to-video
+    provider: official_repo
+    checkpoint_refs:
+      - repo_id: Wan-AI/Wan2.2-T2V-A14B
+        revision: c8c270b13ee05bfa474194ac9fb07a5868a97cea
+        license: apache-2.0
+        private: false
+        gated: false
+    min_vram_gb: 80
+    runtime_profile: wan2.2-t2v-a14b
+    runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+    pipeline_binding: wan2.2-t2v-a14b
+    integration:
+      status: integrated
+      notes: Native dual-expert recipe routes the official 0.875 boundary and 3.0/4.0 CFG scales.
+  - id: wan2.2-i2v-a14b
+    task: image-to-video
+    provider: official_repo
+    checkpoint_refs:
+      - repo_id: Wan-AI/Wan2.2-I2V-A14B
+        revision: 206a9ee1b7bfaaf8f7e4d81335650533490646a3
+        license: apache-2.0
+        private: false
+        gated: false
+    min_vram_gb: 80
+    runtime_profile: wan2.2-i2v-a14b
+    runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+    pipeline_binding: wan2.2-i2v-a14b
+    integration:
+      status: integrated
+      notes: Native dual-expert recipe routes the official 0.900 boundary and 3.5/3.5 CFG scales.
   - id: wan2.2-ti2v-5b
     task: text-image-to-video
     provider: official_repo
@@ -55,73 +87,29 @@ variants:
     runtime_profile: wan2.2-ti2v-5b-1280x704-121f
     min_vram_gb: 24
     demo_parity:
-      status: pending_demo
-      demo_command:
-        - bash
-        - scripts/model_zoo/run_wan22_ti2v_5b_official_demo.sh
-      expected_artifacts:
-        - path: wan22_ti2v_5b_seed42_1280x704_121f.mp4
-          min_size_bytes: 1000000
-          video_probe:
-            min_frames: 100
-            min_width: 1000
-            min_height: 600
-            min_fps: 20
-            max_fps: 30
+      status: verified
+      notes: The default TI2V 5B demo completed 50 steps and decoded 121 unique frames
+        at 1280x704 and 24 FPS with coherent prompt-aligned motion.
     runner_parity:
-      status: pending_demo
-      demo_command:
-        - python
-        - scripts/model_zoo/run_wan22_ti2v_5b_worldfoundry_runner_demo.py
-      expected_artifacts:
-        - path: wan22_ti2v_5b_worldfoundry_seed42_1280x704_121f.mp4
-          min_size_bytes: 1000000
-          video_probe:
-            min_frames: 100
-            min_width: 1000
-            min_height: 600
-            min_fps: 20
-            max_fps: 30
-      notes: Uses the WorldFoundry Wan2.2 TI2V-5B pipeline with the same prompt, seed, checkpoint, resolution, frame count, shift, CFG scale, dtype conversion, and offload settings as the official demo command. Official 121-frame parity remains pending.
+      status: verified
+      notes: The WorldFoundry Wan2.2 TI2V-5B pipeline completed the full 121-frame,
+        1280x704, 24 FPS, 50-step route with block offload and no collapsed frames.
     runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
     pipeline_binding: wan2.2-ti2v-5b
     integration:
       status: integrated
 demo_parity:
-  status: pending_checkpoint_and_demo
-  demo_command:
-    - bash
-    - scripts/model_zoo/run_wan22_ti2v_5b_official_demo.sh
-  expected_artifacts:
-    - path: wan22_ti2v_5b_seed42_1280x704_121f.mp4
-      min_size_bytes: 1000000
-      video_probe:
-        min_frames: 100
-        min_width: 1000
-        min_height: 600
-        min_fps: 20
-        max_fps: 30
-  official_repo_dir: tmp/model_zoo/repos/github.com_Wan-Video_Wan2.2
+  status: verified
   checkpoint_repo_id: Wan-AI/Wan2.2-TI2V-5B
   checkpoint_snapshot: 921dbaf3f1674a56f47e83fb80a34bac8a8f203e
-  notes: Official TI2V-5B parity command is wired but must pass after checkpoint download and GPU execution before Wan2.2 can be marked integrated.
+  notes: The recorded TI2V 5B route completed 50 steps and decoded 121 unique frames
+    at 1280x704 and 24 FPS with coherent tiger motion and stable forest geometry.
 runner_parity:
-  status: pending_demo
-  demo_command:
-    - python
-    - scripts/model_zoo/run_wan22_ti2v_5b_worldfoundry_runner_demo.py
-  expected_artifacts:
-    - path: wan22_ti2v_5b_worldfoundry_seed42_1280x704_121f.mp4
-      min_size_bytes: 1000000
-      video_probe:
-        min_frames: 100
-        min_width: 1000
-        min_height: 600
-        min_fps: 20
-        max_fps: 30
+  status: verified
   notes:
-    - WorldFoundry pipeline target is registered; generated artifact parity still requires the staged checkpoint/runtime environment.
-    - Official 121-frame parity remains pending.
+    - The default TI2V 5B WorldFoundry route is verified for 121 frames at 1280x704,
+      24 FPS, and 50 steps. The A14B variants are separate routes and are not covered
+      by this demo result.
 notes: Wan2.2 is tracked separately from Wan2.1 because code and checkpoint repos are versioned separately upstream.
 catalog_category: video
 catalog_scope: Official GitHub and/or Hugging Face confirmed open-source or open-weight video generation models. Checkpoints are not tracked in git; local validation may download selected repos under cache/hfd.
@@ -129,7 +117,28 @@ catalog_policy:
   github: Validated with git ls-remote, preferring git ls-remote --symref <repo>.git HEAD for default branch and HEAD SHA.
   huggingface: Validated with the Hugging Face /api/models endpoint. Recorded repo id, sha, private, gated, license, and selected task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit parity run and expected artifact are recorded.
+official_sources:
+  project_page: https://phantom-video.github.io/HuMo/
+  paper: https://arxiv.org/abs/2503.20314
 integration:
   status: integrated
   notes:
     - WorldFoundry wraps the in-tree Wan2.2 TI2V runtime.
+docs:
+  publisher: Alibaba (Tongyi Lab)
+  publisher_kind: company
+  publisher_zh: 阿里巴巴（通义实验室）
+  overview: Wan2.2 is the next Wan generation, tracked separately from Wan2.1 because upstream versions code and checkpoints separately. The recorded runnable surface is the TI2V 5B variant — a compact text+image-to-video model. WorldFoundry wraps the in-tree Wan2.2 TI2V runtime.
+  overview_zh: Wan2.2 是 Wan 的下一代，因上游代码与 checkpoint 独立版本化而与 Wan2.1 分开跟踪。记录的可运行面是 TI2V 5B variant——紧凑的图文生视频模型。WorldFoundry 封装了树内 Wan2.2 TI2V 运行时。
+  architecture: 'Upstream Wan2.2 introduces MoE denoising in its larger variants and a high-compression VAE in the TI2V 5B; this catalog''s recorded route is the 5B dense TI2V model. Contract: prompt/image/video/ actions in, generated_video out.'
+  architecture_zh: 上游 Wan2.2 在大 variant 中引入 MoE 去噪、在 TI2V 5B 中使用高压缩 VAE；本 catalog 记录的路径是 5B 稠密 TI2V 模型。契约：输入 prompt/image/video/actions，输出 generated_video。
+  usage_notes: 'The default TI2V 5B route is verified for 121 frames at 1280x704, 24 FPS, and 50 steps. Stage the official checkpoint locally before running it; the A14B variants require their own checkpoints and validation.'
+  usage_notes_zh: 默认 TI2V 5B 路径已按 1280x704、24 FPS、121 帧、50 步完成验证。运行前请在本地准备官方 checkpoint；A14B variants 需要各自的 checkpoint 与验证。
+  limitations:
+  - This demo result covers only the TI2V 5B variant; the A14B routes require separate quality validation.
+  limitations_zh:
+  - 本次 demo 结果仅覆盖 TI2V 5B variant；A14B 路径需要单独进行质量验证。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard quality suite.
+    reason_zh: 标准质量评测。

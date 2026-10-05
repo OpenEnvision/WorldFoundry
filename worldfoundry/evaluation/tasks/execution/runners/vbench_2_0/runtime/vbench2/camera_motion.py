@@ -9,7 +9,6 @@ from worldfoundry.base_models.perception_core.tracking.cotracker import CoTracke
 import json
 import os
 from vbench2.utils import load_dimension_info, split_video_into_scenes
-from tqdm import tqdm
 
 
 def transform(vector):
@@ -69,6 +68,8 @@ class CameraPredict:
         return [mean_up, mean_down, y]
 
     def infer(self, video, fps=16, end_frame=-1, save_video=False, save_dir="./saved_videos"):
+        if end_frame > 0:
+            video = video[:, :end_frame]
         b,_,_,h,w=video.shape
         self.scale=min(h,w)
         self.height=h
@@ -78,9 +79,6 @@ class CameraPredict:
             vis = Visualizer(save_dir=save_dir, pad_value=120, fps=fps, linewidth=3)
             vis.visualize(video, pred_tracks, pred_visibility, filename="temp1")
             raise
-        if end_frame!=-1:
-            pred_tracks = pred_tracks[:,:end_frame]
-            pred_visibility = pred_visibility[:,:end_frame]
         return pred_tracks[0].long().detach().cpu().numpy()
     
     def get_edge_point(self, track):
@@ -212,9 +210,9 @@ def camera_motion(prompt_dict_ls, camera):
             if len(scene_list)!=0:
                 end_frame = int(scene_list[0][1].get_frames())
             video_reader = decord.VideoReader(video_path)
-            video = video_reader.get_batch(range(len(video_reader))) 
-            frame_count, height, width = video.shape[0], video.shape[1], video.shape[2]
-            video = video.permute(0, 3, 1, 2)[None].float().cuda() # B T C H W
+            decode_frames = min(end_frame, len(video_reader)) if end_frame > 0 else len(video_reader)
+            video = video_reader.get_batch(range(decode_frames))
+            video = video.permute(0, 3, 1, 2)[None].float().to(camera.device, non_blocking=True) # B T C H W
             cap = cv2.VideoCapture(video_path)
             fps = int(cap.get(cv2.CAP_PROP_FPS))
             predict_results = camera.predict(video, fps, end_frame)
@@ -222,12 +220,16 @@ def camera_motion(prompt_dict_ls, camera):
             video_results.append({'video_path': video_path, 'video_results': video_score})
             sim.append(video_score)
     
-    avg_score = np.mean(sim)
+    avg_score = float(np.mean(sim)) if sim else 0.0
     return avg_score, video_results
 
 def compute_camera_motion(json_dir, device, submodules_dict, **kwargs):
     camera = CameraPredict(device, submodules_dict)
     _, prompt_dict_ls = load_dimension_info(json_dir, dimension='camera_motion', lang='en')
     all_results, video_results = camera_motion(prompt_dict_ls, camera)
-    all_results = sum([d['video_results'] for d in video_results]) / len(video_results)
+    all_results = (
+        sum(d['video_results'] for d in video_results) / len(video_results)
+        if video_results
+        else 0.0
+    )
     return all_results, video_results

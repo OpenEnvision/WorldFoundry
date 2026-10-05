@@ -1,0 +1,48 @@
+---
+title: "HY-World 2.0 Trajectory Renderer"
+description: "HY-World 2.0 Trajectory Renderer（Tencent (Hunyuan)）：相机可控视频；Runner 一致性待确认。"
+modelId: "hyworld-worldgen"
+pageSource: authored
+---
+
+HY-World 2.0 轨迹渲染器是腾讯世界生成链中的一个阶段，单独记录：沿 camera JSON 从预先物化的 HY-World 场景点云（render_results/global_pcd.ply）渲染相机可控视频。它有意不加载任何模型 checkpoint——是渲染器，不是生成器。
+
+<ModelPaperFigures modelId="hyworld-worldgen" locale="zh" />
+
+记录论文为[arXiv 2604.14268](https://arxiv.org/abs/2604.14268)。
+
+项目页：[3d-models.hunyuan.tencent.com/world](https://3d-models.hunyuan.tencent.com/world/)。代码：[Tencent-Hunyuan/HY-World-2.0](https://github.com/Tencent-Hunyuan/HY-World-2.0)。
+
+<ModelCommandBuilder modelId="hyworld-worldgen" locale="zh" />
+
+## 用来做什么
+
+用 `hyworld-worldgen` 将已有 HY-World 场景点云按相机轨迹渲染成视频。它不生成场景，也不加载模型 checkpoint。
+
+适配器调用固定版本 `7f668e67c74338d50684e57be46a438459b6bbe1` 的官方轨迹渲染阶段（腾讯混元社区许可）。公开仓库未内置该源码，也未实现完整的五阶段世界生成链。
+
+catalog 记录的任务包括相机可控视频、world-generation-stage、point-cloud-rendering；这条路径从已有点云输出视频。
+
+## 运行时契约
+
+可选 `input_path`、`height`、`width`、`seed`、`camera_json`；产物 `hyworld-worldgen.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `HYWorld2WorldgenPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+提供图像、camera JSON 与指向预物化 HY-World 场景的 scene_path。 场景物化属于独立的完整 HY-World 生成 pipeline。
+
+运行前须把固定版本的官方源码安装到运行目录，并提供含 `render_results/global_pcd.ply` 的预物化场景。公开仓库不包含这两项资产。
+
+## 在 WorldFoundry 中运行
+
+源码与场景准备好后，运行 `worldfoundry-eval run hyworld-worldgen` 输出视频。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+这条渲染路径不加载模型 checkpoint，但需要上述官方源码和预物化场景。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="hyworld-worldgen" locale="zh" />

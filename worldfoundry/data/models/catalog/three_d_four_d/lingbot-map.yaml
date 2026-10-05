@@ -48,3 +48,19 @@ catalog_category: three_d_four_d
 catalog_scope: 3D Gaussian-splatting catalog entries. Integrated entries expose in-tree
   WorldFoundry runtimes; metadata-only entries retain upstream provenance without runnable
   backends.
+docs:
+  publisher: Robbyant (Ant Group)
+  publisher_kind: company
+  publisher_zh: 蚂蚁灵波科技（Robbyant，蚂蚁集团）
+  overview: 'LingBot-Map is Robbyant''s streaming 3D reconstruction model: it consumes image streams and produces camera poses, depth, and point clouds through the GCTStream runtime, supporting both streaming and windowed reconstruction via LingBotMapPipeline. The official runtime is vendored in-tree; checkpoints stay external cache assets.'
+  overview_zh: LingBot-Map 是蚂蚁灵波的流式 3D 重建模型：通过 GCTStream 运行时消费图像流，产出相机位姿、深度与点云，LingBotMapPipeline 同时支持流式与窗口式重建。官方运行时已内置树内；checkpoint 保持为外部缓存资产。
+  architecture: The vendored GCTStream runtime implements the streaming transformer described in the upstream release (paper arXiv 2604.14141); the wrapper defaults to SDPA attention so FlashInfer is not required for baseline execution (pass use_sdpa=false when FlashInfer is available).
+  architecture_zh: 内置的 GCTStream 运行时实现了上游发布所述的流式 Transformer（论文 arXiv 2604.14141）；封装默认使用 SDPA 注意力，基线运行不需要 FlashInfer（FlashInfer 可用时可传 use_sdpa=false）。
+  usage_notes: 'Runner status is implemented_pending_gpu_parity: import and dispatch are in-tree, and full GPU parity needs staged robbyant/lingbot-map checkpoints (apache-2.0). The pipeline accepts a checkpoint file or a local HF snapshot directory.'
+  usage_notes_zh: runner 状态为 implemented_pending_gpu_parity：导入与调度已在树内，完整 GPU 一致性需要就位的 robbyant/lingbot-map checkpoint（apache-2.0）。pipeline 接受 checkpoint 文件或本地 HF snapshot 目录。
+  limitations:
+  - Full GPU parity is pending staged checkpoints.
+  - Streaming reconstruction drifts on long sequences without loop closure.
+  limitations_zh:
+  - 完整 GPU 一致性待 checkpoint 就位。
+  - 无回环约束时，长序列流式重建会漂移。

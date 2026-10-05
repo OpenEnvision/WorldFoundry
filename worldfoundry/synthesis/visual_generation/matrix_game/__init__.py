@@ -19,6 +19,9 @@ _EXPORTS = {
     "MatrixGame1Synthesis": ".matrix_game_1_synthesis",
     "MatrixGame2Synthesis": ".matrix_game_2_synthesis",
     "MatrixGame3Synthesis": ".matrix_game_3_synthesis",
+    "MatrixGame35FirstPersonSynthesis": ".matrix_game_3p5_synthesis",
+    "MatrixGame35Synthesis": ".matrix_game_3p5_synthesis",
+    "MatrixGame35ThirdPersonSynthesis": ".matrix_game_3p5_synthesis",
 }
 
 # Specifies the list of public names that are exported by this module when

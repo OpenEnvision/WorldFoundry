@@ -15,7 +15,7 @@
 # -------------------------------------------------------------------------------------------------
 # This file includes code originally from the DROID-SLAM repository:
 # https://github.com/cvg/DROID-SLAM
-# Licensed under the MIT License. See THIRD_PARTY_LICENSES.md for details.
+# Licensed under the MIT License.
 # -------------------------------------------------------------------------------------------------
 
 """Module for base_models -> three_dimensions -> general_3d -> vipe -> slam -> components -> buffer.py functionality."""

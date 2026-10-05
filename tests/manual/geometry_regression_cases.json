@@ -1,0 +1,3723 @@
+{
+  "cut3r": {
+    "id": "cut3r",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.cut3r.pipeline_cut3r:CUT3RPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/liguang0115--cut3r",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "required_outputs": [
+      "result"
+    ],
+    "save": true,
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/liguang0115--cut3r",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "da3-large-1.1": {
+    "id": "da3-large-1.1",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v3:DepthAnything3Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3-LARGE-1.1",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ],
+      "return_dict": true,
+      "output_dir": "${OUTPUT_DIR}/export",
+      "export_format": "mini_npz"
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3-LARGE-1.1",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    },
+    "save": false,
+    "required_outputs": [
+      "result.depth"
+    ]
+  },
+  "da3metric-large": {
+    "id": "da3metric-large",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v3:DepthAnything3Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3METRIC-LARGE",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ],
+      "return_dict": true,
+      "output_dir": "${OUTPUT_DIR}/export",
+      "export_format": "mini_npz"
+    },
+    "required_outputs": [
+      "result.depth"
+    ],
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3METRIC-LARGE",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "da3nested-giant-large-1.1": {
+    "id": "da3nested-giant-large-1.1",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v3:DepthAnything3Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ],
+      "return_dict": true,
+      "output_dir": "${OUTPUT_DIR}/export",
+      "export_format": "mini_npz"
+    },
+    "required_outputs": [
+      "result.depth"
+    ],
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "depth-anything-v1-base": {
+    "id": "depth-anything-v1-base",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v1:DepthAnything1Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/LiheYoung--depth-anything-base-hf",
+      "device": "cuda",
+      "encoder": "vitb"
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/LiheYoung--depth-anything-base-hf",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "save": true,
+    "extra_calls": {
+      "raw_depth": {
+        "method": "process",
+        "call": {
+          "input_image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "return_visualization": false
+        }
+      }
+    },
+    "required_outputs": [
+      "raw_depth"
+    ]
+  },
+  "depth-anything-v1-large": {
+    "id": "depth-anything-v1-large",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v1:DepthAnything1Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/LiheYoung--depth-anything-large-hf",
+      "device": "cuda",
+      "encoder": "vitl"
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/LiheYoung--depth-anything-large-hf",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "save": true,
+    "extra_calls": {
+      "raw_depth": {
+        "method": "process",
+        "call": {
+          "input_image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "return_visualization": false
+        }
+      }
+    },
+    "required_outputs": [
+      "raw_depth"
+    ]
+  },
+  "depth-anything-v1-small": {
+    "id": "depth-anything-v1-small",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v1:DepthAnything1Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/LiheYoung--depth-anything-small-hf",
+      "device": "cuda",
+      "encoder": "vits"
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/LiheYoung--depth-anything-small-hf",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "save": true,
+    "extra_calls": {
+      "raw_depth": {
+        "method": "process",
+        "call": {
+          "input_image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "return_visualization": false
+        }
+      }
+    },
+    "required_outputs": [
+      "raw_depth"
+    ]
+  },
+  "depth-anything-v2-large": {
+    "id": "depth-anything-v2-large",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v2:DepthAnything2Pipeline",
+    "load": {
+      "pretrained_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Depth-Anything-V2-Large/depth_anything_v2_vitl.pth",
+      "device": "cuda"
+    },
+    "call": {
+      "data_path": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "extra_calls": {
+      "raw_depth": {
+        "method": "process",
+        "call": {
+          "input_image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "return_visualization": false
+        }
+      }
+    },
+    "required_outputs": [
+      "raw_depth"
+    ],
+    "save": true,
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Depth-Anything-V2-Large/depth_anything_v2_vitl.pth",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    }
+  },
+  "hunyuan-mirror": {
+    "id": "hunyuan-mirror",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.hunyuan_world.pipeline_hunyuan_mirror:HunyuanMirrorPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/tencent--HunyuanWorld-Mirror",
+      "device": "cuda",
+      "local_files_only": true
+    },
+    "method": "process_images",
+    "call": {
+      "image_paths": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "required_outputs": [
+      "result.predictions"
+    ],
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/tencent--HunyuanWorld-Mirror",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    },
+    "deterministic": true
+  },
+  "infinite-vggt": {
+    "id": "infinite-vggt",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.infinite_vggt.pipeline_infinite_vggt:InfiniteVGGTPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lch01--StreamVGGT/checkpoints.pth",
+      "device": "cuda"
+    },
+    "call": {
+      "data_path": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "required_outputs": [
+      "result.depth_map",
+      "result.point_map",
+      "result.extrinsic"
+    ],
+    "save": true,
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lch01--StreamVGGT/checkpoints.pth",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "lingbot-map-windowed": {
+    "id": "lingbot-map-windowed",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.lingbot_map.pipeline_lingbot_map:LingBotMapPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/robbyant--lingbot-map",
+      "device": "cuda",
+      "mode": "windowed",
+      "checkpoint_name": "lingbot-map.pt"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/robbyant--lingbot-map",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    },
+    "save": true,
+    "required_outputs": [
+      "result.numpy_data"
+    ]
+  },
+  "loger": {
+    "id": "loger",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.pi3.pipeline_loger:LoGeRPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Junyi42--LoGeR/LoGeR",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "required_outputs": [
+      "result.numpy_data"
+    ],
+    "save": true,
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Junyi42--LoGeR/LoGeR",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "pi3-original": {
+    "id": "pi3-original",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.pi3.pipeline_pi3:Pi3Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/yyfz233--Pi3",
+      "device": "cuda",
+      "mode": "pi3"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/yyfz233--Pi3",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    },
+    "save": true,
+    "required_outputs": [
+      "result.numpy_data"
+    ]
+  },
+  "pi3x": {
+    "id": "pi3x",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.pi3.pipeline_pi3:Pi3Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/yyfz233--Pi3X",
+      "mode": "pi3x",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "required_outputs": [
+      "result.numpy_data.points",
+      "result.numpy_data.camera_poses",
+      "result.numpy_data.depth_map",
+      "result.numpy_data.masks"
+    ],
+    "save": true,
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/yyfz233--Pi3X",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "vggt-omega-alignment": {
+    "id": "vggt-omega-alignment",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.vggt_omega.pipeline_vggt_omega:VGGTOmegaPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/facebook--VGGT-Omega",
+      "device": "cuda",
+      "enable_alignment": true
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/facebook--VGGT-Omega",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    },
+    "save": true,
+    "required_outputs": [
+      "result.numpy_data"
+    ]
+  },
+  "vggt-omega": {
+    "id": "vggt-omega",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.vggt_omega.pipeline_vggt_omega:VGGTOmegaPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/facebook--VGGT-Omega",
+      "device": "cuda",
+      "enable_alignment": false
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/facebook--VGGT-Omega",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    },
+    "save": true,
+    "required_outputs": [
+      "result.numpy_data"
+    ]
+  },
+  "vggt": {
+    "id": "vggt",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.vggt.pipeline_vggt:VGGTPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/facebook--VGGT-1B",
+      "device": "cuda"
+    },
+    "call": {
+      "images": [
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+        "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+      ]
+    },
+    "required_outputs": [
+      "result.numpy_data"
+    ],
+    "save": true,
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/facebook--VGGT-1B",
+      "input-0": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-0.png",
+      "input-1": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-16.png",
+      "input-2": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/frame-32.png"
+    }
+  },
+  "hyworldmirror-2": {
+    "id": "hyworldmirror-2",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.hunyuan_world.pipeline_hy_world_2p0:HYWorld2Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/tencent--HY-World-2.0",
+      "device": "cuda"
+    },
+    "call": {
+      "input_path": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}",
+      "output_path": "${OUTPUT_DIR}/export",
+      "target_size": 518,
+      "apply_sky_mask": false,
+      "save_colmap": false,
+      "save_rendered": false
+    },
+    "capture_modules": [
+      "runtime_pipeline.model"
+    ],
+    "required_outputs": [
+      "forward.runtime_pipeline.model"
+    ],
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/tencent--HY-World-2.0/HY-WorldMirror-2.0",
+      "input_dir": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}"
+    }
+  },
+  "flashworld": {
+    "id": "flashworld",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.flash_world.pipeline_flash_world:FlashWorldPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/imlixinyang--FlashWorld",
+      "required_components": {
+        "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan2.2-TI2V-5B-Diffusers"
+      },
+      "device": "cuda",
+      "offload_t5": true,
+      "offload_vae": false,
+      "offload_transformer_during_vae": false
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "prompt": "A dusty abandoned room with wooden floor and sunlight through the window.",
+      "interactions": [
+        "forward"
+      ],
+      "num_frames": 16,
+      "image_height": 480,
+      "image_width": 704,
+      "return_video": true,
+      "fps": 15
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/imlixinyang--FlashWorld",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan2.2-TI2V-5B-Diffusers",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "result.scene_params",
+      "result.ref_w2c",
+      "result.T_norm"
+    ]
+  },
+  "worldfm": {
+    "id": "worldfm",
+    "seed": 42,
+    "target": "worldfoundry.pipelines.worldfm.pipeline_worldfm:WorldFMPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/worldfm",
+      "required_components": {
+        "moge_pretrained": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/moge-2-vitl-normal/model.pt",
+        "vae_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/worldfm/vae",
+        "step": 2
+      },
+      "device": "cuda"
+    },
+    "call": {
+      "panorama_path": "${WORLDFOUNDRY_REGRESSION_PANORAMA}",
+      "interactions": [
+        [
+          [
+            1.0,
+            0,
+            0.0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.0,
+            0,
+            1.0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9999756307053947,
+            0,
+            0.0069812602979615525,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.0069812602979615525,
+            0,
+            0.9999756307053947,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9999025240093042,
+            0,
+            0.013962180339145272,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.013962180339145272,
+            0,
+            0.9999025240093042,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9997806834748455,
+            0,
+            0.02094241988335696,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.02094241988335696,
+            0,
+            0.9997806834748455,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9996101150403544,
+            0,
+            0.02792163872356888,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.02792163872356888,
+            0,
+            0.9996101150403544,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9993908270190958,
+            0,
+            0.03489949670250097,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.03489949670250097,
+            0,
+            0.9993908270190958,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9991228300988584,
+            0,
+            0.04187565372919963,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.04187565372919963,
+            0,
+            0.9991228300988584,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9988061373414341,
+            0,
+            0.048849769795613264,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.048849769795613264,
+            0,
+            0.9988061373414341,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.998440764181981,
+            0,
+            0.0558215049931638,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.0558215049931638,
+            0,
+            0.998440764181981,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9980267284282716,
+            0,
+            0.06279051952931337,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.06279051952931337,
+            0,
+            0.9980267284282716,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9975640502598242,
+            0,
+            0.0697564737441253,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.0697564737441253,
+            0,
+            0.9975640502598242,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9970527522269202,
+            0,
+            0.07671902812681865,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.07671902812681865,
+            0,
+            0.9970527522269202,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9964928592495044,
+            0,
+            0.0836778433323155,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.0836778433323155,
+            0,
+            0.9964928592495044,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9958843986159703,
+            0,
+            0.09063258019778016,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.09063258019778016,
+            0,
+            0.9958843986159703,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9952273999818312,
+            0,
+            0.09758289975914948,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.09758289975914948,
+            0,
+            0.9952273999818312,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9945218953682733,
+            0,
+            0.10452846326765347,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.10452846326765347,
+            0,
+            0.9945218953682733,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9937679191605964,
+            0,
+            0.11146893220632548,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.11146893220632548,
+            0,
+            0.9937679191605964,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9929655081065369,
+            0,
+            0.11840396830650096,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.11840396830650096,
+            0,
+            0.9929655081065369,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9921147013144779,
+            0,
+            0.12533323356430426,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.12533323356430426,
+            0,
+            0.9921147013144779,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9912155402515417,
+            0,
+            0.13225639025712246,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.13225639025712246,
+            0,
+            0.9912155402515417,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9902680687415704,
+            0,
+            0.13917310096006544,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.13917310096006544,
+            0,
+            0.9902680687415704,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9892723329629883,
+            0,
+            0.14608302856241162,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.14608302856241162,
+            0,
+            0.9892723329629883,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9882283814465528,
+            0,
+            0.15298583628403808,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.15298583628403808,
+            0,
+            0.9882283814465528,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9871362650729879,
+            0,
+            0.15988118769183488,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.15988118769183488,
+            0,
+            0.9871362650729879,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9859960370705049,
+            0,
+            0.16676874671610228,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.16676874671610228,
+            0,
+            0.9859960370705049,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.984807753012208,
+            0,
+            0.17364817766693033,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.17364817766693033,
+            0,
+            0.984807753012208,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9835714708133859,
+            0,
+            0.18051914525055998,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.18051914525055998,
+            0,
+            0.9835714708133859,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9822872507286887,
+            0,
+            0.18738131458572463,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.18738131458572463,
+            0,
+            0.9822872507286887,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9809551553491915,
+            0,
+            0.19423435121997198,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.19423435121997198,
+            0,
+            0.9809551553491915,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9795752495993441,
+            0,
+            0.2010779211459647,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.2010779211459647,
+            0,
+            0.9795752495993441,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9781476007338057,
+            0,
+            0.20791169081775934,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.20791169081775934,
+            0,
+            0.9781476007338057,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9766722783341679,
+            0,
+            0.2147353271670632,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.2147353271670632,
+            0,
+            0.9766722783341679,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0.9751493543055633,
+            0,
+            0.2215484976194673,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            -0.2215484976194673,
+            0,
+            0.9751493543055633,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ]
+      ],
+      "K": [
+        [
+          618.0386719675123,
+          0,
+          256
+        ],
+        [
+          0,
+          618.0386719675123,
+          256
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "scene_name": "royal-esplanade",
+      "fps": 16,
+      "return_dict": true,
+      "output_dir": "${OUTPUT_DIR}/export",
+      "seed": 42
+    },
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/worldfm",
+      "moge": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/moge-2-vitl-normal/model.pt",
+      "input": "${WORLDFOUNDRY_REGRESSION_PANORAMA}"
+    },
+    "required_outputs": [
+      "result.scene_context"
+    ],
+    "deterministic": true
+  },
+  "lyra2-forward": {
+    "id": "lyra2-forward",
+    "seed": 42,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lyra-2.0",
+      "load_runtime": true,
+      "offload": true,
+      "offload_when_prompt": true
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_LYRA_INPUT_IMAGE}",
+      "interactions": [
+        "forward"
+      ],
+      "prompt": "A small turquoise toy on a red table in a room with a painted wall.",
+      "fps": 16,
+      "resolution": [
+        480,
+        832
+      ],
+      "seed": 42,
+      "reconstruct_3d": false,
+      "return_dict": true,
+      "output_dir": "${OUTPUT_DIR}/export"
+    },
+    "target": "worldfoundry.pipelines.lyra.pipeline_lyra2:Lyra2Pipeline",
+    "assets": {
+      "model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lyra-2.0",
+      "input": "${WORLDFOUNDRY_REGRESSION_LYRA_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "result.video_tensor",
+      "result.camera_w2c",
+      "result.zoom_factors"
+    ],
+    "scope": "Video generation and camera trajectory only; reconstruct_3d=false does not validate Lyra-2 reconstruction."
+  },
+  "wan21-t2v-1p3b-short": {
+    "id": "wan21-t2v-1p3b-short",
+    "model_id": "wan2.1-t2v-1.3b",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.wan.pipeline_wan_2p1_t2v:Wan2p1T2VPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "device": "cuda",
+      "torch_dtype": "bfloat16",
+      "offload_mode": "none"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "height": 128,
+          "width": 224,
+          "num_frames": 17,
+          "num_inference_steps": 6,
+          "guidance_scale": 6.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "height": 128,
+          "width": 224,
+          "num_frames": 17,
+          "num_inference_steps": 6,
+          "guidance_scale": 6.0,
+          "fps": 16,
+          "prompt": "A blue bird flies over a snow-covered mountain. The camera pans slowly to the left.",
+          "seed": 43,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "invalid",
+        "call": {
+          "height": 128,
+          "width": 224,
+          "num_frames": -1,
+          "num_inference_steps": 6,
+          "guidance_scale": 6.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true
+        },
+        "expect_error": {
+          "type": "builtins.ValueError",
+          "match": "num_frames must be positive"
+        }
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "height": 128,
+          "width": 224,
+          "num_frames": 17,
+          "num_inference_steps": 6,
+          "guidance_scale": 6.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B"
+    },
+    "required_outputs": [
+      "a.sample",
+      "a.latents",
+      "b.sample",
+      "b.latents",
+      "repeat.sample",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.sample": {
+        "shape": [
+          1,
+          3,
+          17,
+          128,
+          224
+        ],
+        "dtype": "float32"
+      },
+      "b.sample": {
+        "shape": [
+          1,
+          3,
+          17,
+          128,
+          224
+        ],
+        "dtype": "float32"
+      },
+      "repeat.sample": {
+        "shape": [
+          1,
+          3,
+          17,
+          128,
+          224
+        ],
+        "dtype": "float32"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          17,
+          128,
+          224,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.sample",
+        "right": "repeat.sample",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.sample",
+        "right": "b.sample",
+        "relation": "different"
+      }
+    ],
+    "scope": "Short fixed-seed A/B/A replay, decoded MP4 pixels and frame rate; not an official quality benchmark."
+  },
+  "wan22-ti2v-5b-short": {
+    "id": "wan22-ti2v-5b-short",
+    "model_id": "wan2.2-ti2v-5b",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.wan.pipeline_wan_2p2:Wan2p2Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-TI2V-5B",
+      "device": "cuda",
+      "torch_dtype": "bfloat16",
+      "offload_mode": "none"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "height": 128,
+          "width": 256,
+          "num_frames": 9,
+          "num_inference_steps": 4,
+          "guidance_scale": 5.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "height": 128,
+          "width": 256,
+          "num_frames": 9,
+          "num_inference_steps": 4,
+          "guidance_scale": 5.0,
+          "fps": 16,
+          "prompt": "A blue bird flies over a snow-covered mountain. The camera pans slowly to the left.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "invalid",
+        "call": {
+          "height": 128,
+          "width": 256,
+          "num_frames": -1,
+          "num_inference_steps": 4,
+          "guidance_scale": 5.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "expect_error": {
+          "type": "builtins.ValueError",
+          "match": "num_frames must be positive"
+        }
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "height": 128,
+          "width": 256,
+          "num_frames": 9,
+          "num_inference_steps": 4,
+          "guidance_scale": 5.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-TI2V-5B",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "a.sample",
+      "a.latents",
+      "b.sample",
+      "b.latents",
+      "repeat.sample",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.sample": {
+        "shape": [
+          1,
+          3,
+          9,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "b.sample": {
+        "shape": [
+          1,
+          3,
+          9,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "repeat.sample": {
+        "shape": [
+          1,
+          3,
+          9,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          9,
+          128,
+          256,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.sample",
+        "right": "repeat.sample",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.sample",
+        "right": "b.sample",
+        "relation": "different"
+      }
+    ],
+    "scope": "Short fixed-seed A/B/A replay, decoded MP4 pixels and frame rate; not an official quality benchmark."
+  },
+  "ltx-video-098-i2v-short": {
+    "id": "ltx-video-098-i2v-short",
+    "model_id": "ltx-video-i2v",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.ltx_video.pipeline_ltx_video_i2v:LTXVideoI2VPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lightricks--LTX-Video/ltxv-13b-0.9.8-distilled.safetensors",
+      "device": "cuda",
+      "cpu_offload": false,
+      "offload_mode": "none"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "height": 256,
+          "width": 384,
+          "num_frames": 17,
+          "num_inference_steps": 10,
+          "guidance_scale": 1.0,
+          "fps": 30,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "height": 256,
+          "width": 384,
+          "num_frames": 17,
+          "num_inference_steps": 10,
+          "guidance_scale": 1.0,
+          "fps": 30,
+          "prompt": "A blue bird flies over a snow-covered mountain. The camera pans slowly to the left.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "height": 256,
+          "width": 384,
+          "num_frames": 17,
+          "num_inference_steps": 10,
+          "guidance_scale": 1.0,
+          "fps": 30,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "outputs": [
+          "video"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lightricks--LTX-Video/ltxv-13b-0.9.8-distilled.safetensors",
+      "upsampler": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lightricks--LTX-Video/ltxv-spatial-upscaler-0.9.8.safetensors",
+      "text-encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lightricks--LTX-Video/text_encoder",
+      "tokenizer": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Lightricks--LTX-Video/tokenizer",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "a.video",
+      "b.video",
+      "repeat.video"
+    ],
+    "array_contracts": {
+      "a.video": {
+        "shape": [
+          17,
+          256,
+          384,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "b.video": {
+        "shape": [
+          17,
+          256,
+          384,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "repeat.video": {
+        "shape": [
+          17,
+          256,
+          384,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          17,
+          256,
+          384,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          30,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.video",
+        "right": "repeat.video",
+        "relation": "equal"
+      },
+      {
+        "left": "a.video",
+        "right": "b.video",
+        "relation": "different"
+      }
+    ],
+    "scope": "Short fixed-seed A/B/A replay, decoded MP4 pixels and frame rate; not an official quality benchmark."
+  },
+  "cogvideox-2b-t2v-short": {
+    "id": "cogvideox-2b-t2v-short",
+    "model_id": "cogvideox-2b-t2v",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.cogvideox.pipeline_cogvideox_2b_t2v:CogVideoX2bT2VPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/THUDM--CogVideoX-2b",
+      "device": "cuda",
+      "cpu_offload": false
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "height": 128,
+          "width": 192,
+          "num_frames": 9,
+          "num_inference_steps": 4,
+          "guidance_scale": 6.0,
+          "fps": 8,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "height": 128,
+          "width": 192,
+          "num_frames": 9,
+          "num_inference_steps": 4,
+          "guidance_scale": 6.0,
+          "fps": 8,
+          "prompt": "A blue bird flies over a snow-covered mountain. The camera pans slowly to the left.",
+          "seed": 43,
+          "return_dict": true
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "height": 128,
+          "width": 192,
+          "num_frames": 9,
+          "num_inference_steps": 4,
+          "guidance_scale": 6.0,
+          "fps": 8,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true
+        },
+        "outputs": [
+          "video"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/THUDM--CogVideoX-2b"
+    },
+    "required_outputs": [
+      "a.video",
+      "b.video",
+      "repeat.video"
+    ],
+    "array_contracts": {
+      "a.video": {
+        "shape": [
+          9,
+          128,
+          192,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "b.video": {
+        "shape": [
+          9,
+          128,
+          192,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "repeat.video": {
+        "shape": [
+          9,
+          128,
+          192,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          9,
+          128,
+          192,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          8,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.video",
+        "right": "repeat.video",
+        "relation": "equal"
+      },
+      {
+        "left": "a.video",
+        "right": "b.video",
+        "relation": "different"
+      }
+    ],
+    "scope": "Short fixed-seed A/B/A replay, decoded MP4 pixels and frame rate; not an official quality benchmark."
+  },
+  "cosmos-predict25-2b-short": {
+    "id": "cosmos-predict25-2b-short",
+    "model_id": "cosmos-predict2.5-2b",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos_predict2p5:CosmosPredict2p5Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Predict2.5-2B",
+      "device": "cuda",
+      "text_encoder_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Reason1-7B",
+      "vae_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Predict2.5-2B",
+      "torch_dtype": "bfloat16",
+      "offload_mode": "none"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": 17,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "video",
+          "latents"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": 17,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A blue bird flies over a snow-covered mountain. The camera pans slowly to the left.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "outputs": [
+          "video",
+          "latents"
+        ]
+      },
+      {
+        "name": "invalid",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": -1,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "expect_error": {
+          "type": "builtins.ValueError",
+          "match": "num_frames must be positive"
+        }
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": 17,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+        },
+        "outputs": [
+          "video",
+          "latents"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Predict2.5-2B",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "text-encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Reason1-7B"
+    },
+    "required_outputs": [
+      "a.video",
+      "a.latents",
+      "b.video",
+      "b.latents",
+      "repeat.video",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.video": {
+        "shape": [
+          1,
+          3,
+          17,
+          256,
+          448
+        ],
+        "dtype": "float32"
+      },
+      "b.video": {
+        "shape": [
+          1,
+          3,
+          17,
+          256,
+          448
+        ],
+        "dtype": "float32"
+      },
+      "repeat.video": {
+        "shape": [
+          1,
+          3,
+          17,
+          256,
+          448
+        ],
+        "dtype": "float32"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          17,
+          256,
+          448,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.video",
+        "right": "repeat.video",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.video",
+        "right": "b.video",
+        "relation": "different"
+      }
+    ],
+    "scope": "Short fixed-seed A/B/A replay, decoded MP4 pixels and frame rate; not an official quality benchmark."
+  },
+  "cosmos-transfer25-2b-edge-short": {
+    "id": "cosmos-transfer25-2b-edge-short",
+    "model_id": "cosmos-transfer2.5-2b-controlled-video",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.cosmos.pipeline_cosmos_transfer2p5:CosmosTransfer2p5Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/nvidia--Cosmos-Transfer2.5-2B",
+      "device": "cuda",
+      "text_encoder_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Reason1-7B",
+      "vae_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Predict2.5-2B",
+      "torch_dtype": "bfloat16",
+      "offload_mode": "none"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": 17,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4",
+          "control_video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/control.mp4",
+          "controlnet_variant": "edge",
+          "control_is_preprocessed": false,
+          "control_context_scale": 1.0
+        },
+        "outputs": [
+          "video",
+          "latents"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": 17,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A blue bird flies over a snow-covered mountain. The camera pans slowly to the left.",
+          "seed": 43,
+          "return_dict": true,
+          "control_video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/control.mp4",
+          "controlnet_variant": "edge",
+          "control_is_preprocessed": false,
+          "control_context_scale": 1.0
+        },
+        "outputs": [
+          "video",
+          "latents"
+        ]
+      },
+      {
+        "name": "invalid",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": -1,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "control_video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/control.mp4",
+          "controlnet_variant": "edge",
+          "control_is_preprocessed": false,
+          "control_context_scale": 1.0
+        },
+        "expect_error": {
+          "type": "builtins.ValueError",
+          "match": "num_frames must be positive"
+        }
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "height": 256,
+          "width": 448,
+          "num_frames": 17,
+          "num_inference_steps": 4,
+          "guidance_scale": 3.0,
+          "fps": 16,
+          "prompt": "A red fox walks slowly through a sunlit forest clearing. Stable cinematic camera movement.",
+          "seed": 43,
+          "return_dict": true,
+          "control_video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/control.mp4",
+          "controlnet_variant": "edge",
+          "control_is_preprocessed": false,
+          "control_context_scale": 1.0
+        },
+        "outputs": [
+          "video",
+          "latents"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/nvidia--Cosmos-Transfer2.5-2B",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/control.mp4",
+      "text-encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Reason1-7B",
+      "vae": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Predict2.5-2B"
+    },
+    "required_outputs": [
+      "a.video",
+      "a.latents",
+      "b.video",
+      "b.latents",
+      "repeat.video",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.video": {
+        "shape": [
+          1,
+          3,
+          17,
+          256,
+          448
+        ],
+        "dtype": "float32"
+      },
+      "b.video": {
+        "shape": [
+          1,
+          3,
+          17,
+          256,
+          448
+        ],
+        "dtype": "float32"
+      },
+      "repeat.video": {
+        "shape": [
+          1,
+          3,
+          17,
+          256,
+          448
+        ],
+        "dtype": "float32"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          17,
+          256,
+          448,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      },
+      "a.latents": {
+        "shape": [
+          1,
+          16,
+          24,
+          32,
+          56
+        ]
+      },
+      "b.latents": {
+        "shape": [
+          1,
+          16,
+          24,
+          32,
+          56
+        ]
+      },
+      "repeat.latents": {
+        "shape": [
+          1,
+          16,
+          24,
+          32,
+          56
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.video",
+        "right": "repeat.video",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.video",
+        "right": "b.video",
+        "relation": "different"
+      }
+    ],
+    "scope": "Edge-controlled 17-frame A/B/A replay and recovery after invalid frame count; the released weights sample a minimum 93-frame window (24 latent frames) before cropping RGB. Only the general/edge 2B checkpoint is declared; other control variants are outside this case."
+  },
+  "gamma-world-causal-few-step-189f": {
+    "id": "gamma-world-causal-few-step-189f",
+    "model_id": "gamma-world-causal-few-step",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.gamma_world.pipeline_gamma_world:GammaWorldPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Gamma-World",
+      "text_encoder_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Reason1-7B",
+      "device": "cuda",
+      "mode": "causal_few_step",
+      "torch_dtype": "bfloat16",
+      "offload_mode": "block"
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Gamma-World/causal-few-step/model.safetensors",
+      "vae": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Gamma-World/tokenizer.pth",
+      "text-encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Cosmos-Reason1-7B",
+      "first-frame": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat/first_frame.png",
+      "prompt": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat/prompt.txt",
+      "left-actions": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat/action_left.json",
+      "right-actions": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat/action_right.json"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat",
+          "num_frames": 189,
+          "height": 320,
+          "width": 480,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "n_players": 2,
+          "seed": 42,
+          "fps": 16,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "invalid",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat",
+          "num_frames": 17,
+          "height": 320,
+          "width": 480,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "n_players": 2,
+          "seed": 42,
+          "fps": 16,
+          "return_dict": true
+        },
+        "expect_error": {
+          "type": "builtins.ValueError",
+          "match": "require num_frames=189 per view"
+        }
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/gamma-world/buildHouse_flat",
+          "num_frames": 189,
+          "height": 320,
+          "width": 480,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "n_players": 2,
+          "seed": 42,
+          "fps": 16,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      }
+    ],
+    "required_outputs": [
+      "a.sample",
+      "a.latents",
+      "repeat.sample",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.sample": {
+        "shape": [
+          1,
+          3,
+          189,
+          320,
+          960
+        ],
+        "dtype": "float32"
+      },
+      "repeat.sample": {
+        "shape": [
+          1,
+          3,
+          189,
+          320,
+          960
+        ],
+        "dtype": "float32"
+      },
+      "a.latents": {
+        "shape": [
+          1,
+          16,
+          96,
+          40,
+          60
+        ]
+      },
+      "repeat.latents": {
+        "shape": [
+          1,
+          16,
+          96,
+          40,
+          60
+        ]
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          189,
+          320,
+          960,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/a.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.sample",
+        "right": "repeat.sample",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      }
+    ],
+    "scope": "Released four-step causal checkpoint, official buildHouse_flat two-player sample, mandatory 189 RGB frames per view, invalid short request and exact replay. Causal and bidirectional variants and long-horizon quality are outside this case."
+  },
+  "oasis500m-video-short": {
+    "id": "oasis500m-video-short",
+    "model_id": "oasis-500m",
+    "seed": 0,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:Oasis500MPipeline",
+    "load": {
+      "checkpoint_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Etched--oasis-500m/oasis500m.safetensors",
+      "vae_ckpt": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Etched--oasis-500m/vit-l-20.safetensors",
+      "device": "cuda"
+    },
+    "call": {
+      "video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/open-oasis/context.mp4",
+      "actions_path": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/open-oasis/forward.one_hot_actions.json",
+      "num_frames": 6,
+      "ddim_steps": 4,
+      "fps": 20,
+      "return_dict": true,
+      "output_path": "${OUTPUT_DIR}/export/rollout.mp4"
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Etched--oasis-500m/oasis500m.safetensors",
+      "vae": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Etched--oasis-500m/vit-l-20.safetensors",
+      "context-video": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/open-oasis/context.mp4",
+      "actions": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/open-oasis/forward.one_hot_actions.json"
+    },
+    "output_arrays": [
+      "export/rollout.mp4"
+    ],
+    "export_artifacts": [
+      "export/rollout.mp4"
+    ],
+    "required_outputs": [
+      "artifact.export/rollout.mp4.frames",
+      "artifact.export/rollout.mp4.fps"
+    ],
+    "array_contracts": {
+      "artifact.export/rollout.mp4.frames": {
+        "shape": [
+          6,
+          360,
+          640,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "artifact.export/rollout.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          20,
+          1
+        ]
+      }
+    },
+    "scope": "Official subprocess generator with its fixed seed 0, one prompt frame read from a longer video, a short 25-column forward-action stream held through six output frames, four DDIM steps, fully decoded RGB and fps. Latents and long-horizon quality are outside this case."
+  },
+  "matrix-game2-controls-short": {
+    "id": "matrix-game2-controls-short",
+    "model_id": "matrix-game-2",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.matrix_game.pipeline_matrix_game_2:MatrixGame2Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Skywork--Matrix-Game-2.0",
+      "device": "cuda",
+      "mode": "universal"
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Skywork--Matrix-Game-2.0",
+      "input": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "interactions": [
+            "forward"
+          ],
+          "num_frames": 6,
+          "size": [
+            352,
+            640
+          ],
+          "seed": 43,
+          "visualize_ops": false,
+          "fps": 12,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "interactions": [
+            "left"
+          ],
+          "num_frames": 6,
+          "size": [
+            352,
+            640
+          ],
+          "seed": 43,
+          "visualize_ops": false,
+          "fps": 12,
+          "return_dict": true
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "interactions": [
+            "forward"
+          ],
+          "num_frames": 6,
+          "size": [
+            352,
+            640
+          ],
+          "seed": 43,
+          "visualize_ops": false,
+          "fps": 12,
+          "return_dict": true
+        },
+        "outputs": [
+          "video"
+        ]
+      }
+    ],
+    "required_outputs": [
+      "a.video",
+      "b.video",
+      "repeat.video"
+    ],
+    "array_contracts": {
+      "a.video": {
+        "shape": [
+          21,
+          352,
+          640,
+          3
+        ]
+      },
+      "b.video": {
+        "shape": [
+          21,
+          352,
+          640,
+          3
+        ]
+      },
+      "repeat.video": {
+        "shape": [
+          21,
+          352,
+          640,
+          3
+        ]
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          21,
+          352,
+          640,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          12,
+          1
+        ]
+      }
+    },
+    "comparisons": [
+      {
+        "left": "a.video",
+        "right": "repeat.video",
+        "relation": "equal"
+      },
+      {
+        "left": "a.video",
+        "right": "b.video",
+        "relation": "different"
+      }
+    ],
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "scope": "Six latent frames decode to 21 RGB frames; seeded forward/left/forward resident requests. Not long-horizon quality."
+  },
+  "dreamx-world5b-ar-short": {
+    "id": "dreamx-world5b-ar-short",
+    "model_id": "dreamx-world-5b",
+    "seed": 43,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.dreamx_world.pipeline_dreamx_world:DreamXWorld5BARPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/GD-ML--DreamX-World-5B",
+      "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-TI2V-5B",
+      "device": "cuda"
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/GD-ML--DreamX-World-5B",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-TI2V-5B",
+      "input": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}"
+    },
+    "sequence": [
+      {
+        "name": "configure",
+        "method": "configure_realtime",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "prompt": "A first-person view in a blocky outdoor world with stable terrain and lighting.",
+          "seed": 43,
+          "fps": 16
+        },
+        "outputs": []
+      },
+      {
+        "name": "first",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "forward"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      },
+      {
+        "name": "continue",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "camera_r"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      },
+      {
+        "name": "reset",
+        "method": "reset_realtime",
+        "outputs": []
+      },
+      {
+        "name": "configure_repeat",
+        "method": "configure_realtime",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "prompt": "A first-person view in a blocky outdoor world with stable terrain and lighting.",
+          "seed": 43,
+          "fps": 16
+        },
+        "outputs": []
+      },
+      {
+        "name": "repeat",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "forward"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      },
+      {
+        "name": "reset_other",
+        "method": "reset_realtime",
+        "outputs": []
+      },
+      {
+        "name": "configure_other",
+        "method": "configure_realtime",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "prompt": "A first-person view in a blocky outdoor world with stable terrain and lighting.",
+          "seed": 43,
+          "fps": 16
+        },
+        "outputs": []
+      },
+      {
+        "name": "other",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "left"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      }
+    ],
+    "required_outputs": [
+      "first.frames",
+      "continue.frames",
+      "repeat.frames",
+      "other.frames"
+    ],
+    "array_contracts": {
+      "first.frames": {
+        "shape": [
+          9,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "continue.frames": {
+        "shape": [
+          12,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "repeat.frames": {
+        "shape": [
+          9,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "other.frames": {
+        "shape": [
+          9,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "comparisons": [
+      {
+        "left": "first.frames",
+        "right": "repeat.frames",
+        "relation": "equal"
+      },
+      {
+        "left": "first.frames",
+        "right": "other.frames",
+        "relation": "different"
+      }
+    ],
+    "scope": "One 9-frame causal block, a 12-frame continuation, reset/replay, changed initial action. Not long-horizon quality."
+  },
+  "inspatio-world-1p5-image-short": {
+    "id": "inspatio-world-1p5-image-short",
+    "model_id": "inspatio-world-1p5",
+    "target": "worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world_v15:InspatioWorldV15Pipeline",
+    "seed": 0,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world-1.5",
+      "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "device": "cuda:0"
+    },
+    "call": {
+      "scene_dir": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/image_example_00",
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "seed": 0,
+      "return_latents": true,
+      "return_frames": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world-1.5/InSpatio-World-1.5-1.3B.safetensors",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "scene": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/image_example_00"
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "required_outputs": [
+      "result.latents",
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.latents": {
+        "shape": [
+          1,
+          6,
+          16,
+          60,
+          104
+        ],
+        "dtype": "float32"
+      },
+      "result.video": {
+        "shape": [
+          20,
+          480,
+          832,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "scope": "Two causal blocks with pinned prepared RGB/depth/camera inputs; exact upstream parity at BF16 on the tested SDPA backend. Not long-horizon or cross-backend quality."
+  },
+  "inspatio-world-1p5-multiview-short": {
+    "id": "inspatio-world-1p5-multiview-short",
+    "model_id": "inspatio-world-1p5",
+    "target": "worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world_v15:InspatioWorldV15Pipeline",
+    "seed": 0,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world-1.5",
+      "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "device": "cuda:0"
+    },
+    "call": {
+      "scene_dir": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/multiview_example_00",
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "seed": 0,
+      "return_latents": true,
+      "return_frames": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world-1.5/InSpatio-World-1.5-1.3B.safetensors",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "scene": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/multiview_example_00"
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "required_outputs": [
+      "result.latents",
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.latents": {
+        "shape": [
+          1,
+          6,
+          16,
+          60,
+          104
+        ],
+        "dtype": "float32"
+      },
+      "result.video": {
+        "shape": [
+          20,
+          480,
+          832,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "scope": "Two causal blocks with pinned prepared RGB/depth/camera inputs; exact upstream parity at BF16 on the tested SDPA backend. Not long-horizon or cross-backend quality."
+  },
+  "inspatio-world-1p5-video-short": {
+    "id": "inspatio-world-1p5-video-short",
+    "model_id": "inspatio-world-1p5",
+    "target": "worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world_v15:InspatioWorldV15Pipeline",
+    "seed": 0,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world-1.5",
+      "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "device": "cuda:0"
+    },
+    "call": {
+      "scene_dir": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/video_example_00",
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "seed": 0,
+      "return_latents": true,
+      "return_frames": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world-1.5/InSpatio-World-1.5-1.3B.safetensors",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "scene": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/video_example_00"
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "required_outputs": [
+      "result.latents",
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.latents": {
+        "shape": [
+          1,
+          6,
+          16,
+          60,
+          104
+        ],
+        "dtype": "float32"
+      },
+      "result.video": {
+        "shape": [
+          21,
+          480,
+          832,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "scope": "Two causal blocks with pinned prepared RGB/depth/camera inputs; exact upstream parity at BF16 on the tested SDPA backend. Not long-horizon or cross-backend quality."
+  },
+  "inspatio-world-video-short": {
+    "id": "inspatio-world-video-short",
+    "model_id": "inspatio-world",
+    "target": "worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world:InspatioWorldPipeline",
+    "seed": 0,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world",
+      "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "da3_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1",
+      "device": "cuda"
+    },
+    "call": {
+      "videos": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/video_example_00/input/video.mp4",
+      "traj_txt_path": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/video_example_00/input/target_tcw.txt",
+      "prompt": "A slowly moving camera in a realistic scene.",
+      "seed": 0,
+      "deterministic": true,
+      "output_dir": "${OUTPUT_DIR}/generated",
+      "skip_step1": true,
+      "adaptive_frame": false,
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/inspatio--world/InSpatio-World-1.3B.safetensors",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "da3": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1",
+      "input": "${WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT}/video_example_00/input"
+    },
+    "required_outputs": [
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.video": {
+        "dtype": "uint8"
+      }
+    },
+    "scope": "Real legacy checkpoint, video geometry reconstruction, controlled camera rendering and complete short causal rollout. No caption model or long-horizon quality claim."
+  },
+  "lingbot-world-controls-short": {
+    "id": "lingbot-world-controls-short",
+    "model_id": "lingbot-world",
+    "target": "worldfoundry.pipelines.lingbot_world.pipeline_lingbot_world:LingBotPipeline",
+    "seed": 42,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lingbot-world-base-cam",
+      "model_id": "lingbot-world",
+      "device": "cuda",
+      "t5_cpu": true,
+      "offload_model": true,
+      "convert_model_dtype": true
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "prompt": "A slowly moving camera in a realistic scene.",
+      "action_path": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}",
+      "num_frames": 21,
+      "max_area": 28672,
+      "sampling_steps": 4,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lingbot-world-base-cam",
+      "image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "controls": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}"
+    },
+    "required_outputs": [
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.video": {
+        "dtype": "float32"
+      }
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "scope": "Own released lingbot-world checkpoint and explicit camera/action inputs; four-step, 21-frame numerical regression at reduced area. Does not cover the other checkpoint or full-demo quality."
+  },
+  "lingbot-world-act-controls-short": {
+    "id": "lingbot-world-act-controls-short",
+    "model_id": "lingbot-world-act",
+    "target": "worldfoundry.pipelines.lingbot_world.pipeline_lingbot_world:LingBotPipeline",
+    "seed": 42,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/robbyant--lingbot-world-base-act-preview",
+      "model_id": "lingbot-world-act",
+      "device": "cuda",
+      "t5_cpu": true,
+      "offload_model": true,
+      "convert_model_dtype": true
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "prompt": "A slowly moving camera in a realistic scene.",
+      "action_path": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}",
+      "num_frames": 21,
+      "max_area": 28672,
+      "sampling_steps": 4,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/robbyant--lingbot-world-base-act-preview",
+      "image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "controls": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}"
+    },
+    "required_outputs": [
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.video": {
+        "dtype": "float32"
+      }
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "scope": "Own released lingbot-world-act checkpoint and explicit camera/action inputs; four-step, 21-frame numerical regression at reduced area. Does not cover the other checkpoint or full-demo quality."
+  },
+  "lingbot-world-v2-causal-short": {
+    "id": "lingbot-world-v2-causal-short",
+    "model_id": "lingbot-world-v2",
+    "target": "worldfoundry.pipelines.lingbot_world_v2.pipeline_lingbot_world_v2:LingBotWorldV2Pipeline",
+    "seed": 42,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lingbot-world-v2-14b-causal-fast",
+      "device": "cuda",
+      "nproc_per_node": 1,
+      "t5_fsdp": false,
+      "dit_fsdp": false,
+      "t5_cpu": true,
+      "convert_model_dtype": true
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "prompt": "A slowly moving camera in a realistic scene.",
+      "action_path": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}",
+      "frame_num": 21,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lingbot-world-v2-14b-causal-fast",
+      "image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "controls": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}"
+    },
+    "required_outputs": [
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.video": {
+        "shape": [
+          21,
+          464,
+          848,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "scope": "Own released causal-fast checkpoint, explicit camera controls and multiple causal chunks at the official 480p area budget with aspect-preserving VAE alignment. Not long-horizon or streaming-session quality."
+  },
+  "ati-wan21-14b-tracks-short": {
+    "id": "ati-wan21-14b-tracks-short",
+    "model_id": "ati-wan21-14b",
+    "target": "worldfoundry.pipelines.ati.pipeline_ati:ATIPipeline",
+    "seed": 42,
+    "deterministic": true,
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/bytedance-research--ATI",
+      "base_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan2.1-I2V-14B-480P",
+      "device": "cuda",
+      "t5_cpu": true,
+      "offload_model": true
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "prompt": "A slowly moving camera in a realistic scene.",
+      "track_path": "${WORLDFOUNDRY_REGRESSION_ATI_TRACKS}",
+      "output_path": "${OUTPUT_DIR}/pred.mp4",
+      "num_frames": 81,
+      "width": 224,
+      "height": 128,
+      "num_inference_steps": 4,
+      "seed": 42,
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/bytedance-research--ATI",
+      "base": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan2.1-I2V-14B-480P",
+      "image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "tracks": "${WORLDFOUNDRY_REGRESSION_ATI_TRACKS}"
+    },
+    "required_outputs": [
+      "result.video"
+    ],
+    "array_contracts": {
+      "result.video": {
+        "dtype": "float32"
+      }
+    },
+    "export_artifacts": [
+      "pred.mp4"
+    ],
+    "scope": "Own ATI checkpoint and quantized dense point-track input; official 81-frame resampling, four denoising steps at reduced area. Does not certify full-resolution trajectory adherence."
+  },
+  "dreamx-world5b-cam-short": {
+    "id": "dreamx-world5b-cam-short",
+    "model_id": "dreamx-world-5b-cam",
+    "seed": 44,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.dreamx_world.pipeline_dreamx_world:DreamXWorld5BCamPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/GD-ML--DreamX-World-5B-Cam",
+      "wan_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-TI2V-5B",
+      "device": "cuda"
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/GD-ML--DreamX-World-5B-Cam",
+      "wan": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-TI2V-5B",
+      "input": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}"
+    },
+    "sequence": [
+      {
+        "name": "configure",
+        "method": "configure_realtime",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "prompt": "A first-person view in a blocky outdoor world with stable terrain and lighting.",
+          "seed": 44,
+          "fps": 16,
+          "num_frames": 5,
+          "height": 704,
+          "width": 1280,
+          "num_inference_steps": 8,
+          "guidance_scale": 5.0
+        },
+        "outputs": []
+      },
+      {
+        "name": "first",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "forward"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      },
+      {
+        "name": "continue",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "camera_r"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      },
+      {
+        "name": "reset",
+        "method": "reset_realtime",
+        "outputs": []
+      },
+      {
+        "name": "configure_repeat",
+        "method": "configure_realtime",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "prompt": "A first-person view in a blocky outdoor world with stable terrain and lighting.",
+          "seed": 44,
+          "fps": 16,
+          "num_frames": 5,
+          "height": 704,
+          "width": 1280,
+          "num_inference_steps": 8,
+          "guidance_scale": 5.0
+        },
+        "outputs": []
+      },
+      {
+        "name": "repeat",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "forward"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      },
+      {
+        "name": "reset_other",
+        "method": "reset_realtime",
+        "outputs": []
+      },
+      {
+        "name": "configure_other",
+        "method": "configure_realtime",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_GAME_IMAGE}",
+          "prompt": "A first-person view in a blocky outdoor world with stable terrain and lighting.",
+          "seed": 44,
+          "fps": 16,
+          "num_frames": 5,
+          "height": 704,
+          "width": 1280,
+          "num_inference_steps": 8,
+          "guidance_scale": 5.0
+        },
+        "outputs": []
+      },
+      {
+        "name": "other",
+        "method": "stream_realtime",
+        "call": {
+          "interactions": [
+            "left"
+          ]
+        },
+        "outputs": [
+          "frames"
+        ]
+      }
+    ],
+    "required_outputs": [
+      "first.frames",
+      "continue.frames",
+      "repeat.frames",
+      "other.frames"
+    ],
+    "array_contracts": {
+      "first.frames": {
+        "shape": [
+          4,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "continue.frames": {
+        "shape": [
+          4,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "repeat.frames": {
+        "shape": [
+          4,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "other.frames": {
+        "shape": [
+          4,
+          704,
+          1280,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "comparisons": [
+      {
+        "left": "first.frames",
+        "right": "repeat.frames",
+        "relation": "equal"
+      },
+      {
+        "left": "first.frames",
+        "right": "other.frames",
+        "relation": "different"
+      }
+    ],
+    "scope": "Released camera-conditioned 5B checkpoint; a four-frame window, continuation, reset/replay and changed camera translation at native resolution. Eight sampling steps; not default-recipe or long-horizon quality."
+  },
+  "alayaworld-spatial-two-chunks-short": {
+    "id": "alayaworld-spatial-two-chunks-short",
+    "model_id": "alayaworld",
+    "seed": 45,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.alayaworld.pipeline_alayaworld:AlayaWorldPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/AlayaWorld/merged_infer.safetensors",
+      "device": "cuda",
+      "gemma_root": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/gemma-3-12b-it-qat-q4_0-unquantized",
+      "da3_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1",
+      "compile_mode": null,
+      "context_parallel": false
+    },
+    "call": {
+      "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "prompt": "A slowly moving camera in a realistic abandoned room. Stable scene geometry and lighting.",
+      "seed": 45,
+      "rounds": 2,
+      "num_frames": 64,
+      "height": 544,
+      "width": 960,
+      "sampling_steps": 4,
+      "fps": 24,
+      "camera_trajectory": "w*64",
+      "return_dict": true,
+      "output_path": "${OUTPUT_DIR}/export/alayaworld.mp4"
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/AlayaWorld/merged_infer.safetensors",
+      "text_encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/gemma-3-12b-it-qat-q4_0-unquantized",
+      "depth_model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "result.video",
+      "export.export/alayaworld.mp4.frames",
+      "export.export/alayaworld.mp4.fps"
+    ],
+    "export_artifacts": [
+      "export/alayaworld.mp4"
+    ],
+    "array_contracts": {
+      "result.video": {
+        "shape": [
+          64,
+          544,
+          960,
+          3
+        ],
+        "dtype": "uint8"
+      }
+    },
+    "scope": "Released AlayaWorld checkpoint and Gemma/DA3 components; two native 32-frame chunks with spatial-memory retrieval and all four sampling steps. Single GPU; not long-horizon or multi-rank quality."
+  },
+  "diamond-csgo-conditioned-short": {
+    "id": "diamond-csgo-conditioned-short",
+    "model_id": "diamond-csgo",
+    "seed": 46,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:DIAMONDCsgoPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/eloialonso--diamond/csgo/model/csgo.pt",
+      "device": "cuda",
+      "pretrained_dir": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/eloialonso--diamond",
+      "spawn_id": 0,
+      "variant": "csgo",
+      "sampler": "higher_quality"
+    },
+    "call": {
+      "prompt": "",
+      "headless_steps": 6,
+      "action": "forward",
+      "fps": 16,
+      "seed": 46,
+      "output_path": "${OUTPUT_DIR}/export/diamond-csgo.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/eloialonso--diamond/csgo/model/csgo.pt",
+      "spawn": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/eloialonso--diamond/csgo/spawn/0",
+      "config": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/eloialonso--diamond/csgo/config"
+    },
+    "required_outputs": [
+      "export.export/diamond-csgo.mp4.frames",
+      "export.export/diamond-csgo.mp4.fps"
+    ],
+    "scope": "Released CS:GO dynamics/upsampling checkpoint, pinned spawn observations/actions and six conditioned headless steps. Exact exported RGB frames and frame rate; not real-game interaction or long-horizon quality.",
+    "export_artifacts": [
+      "export/diamond-csgo.mp4"
+    ],
+    "array_contracts": {
+      "export.export/diamond-csgo.mp4.frames": {
+        "shape": [
+          7,
+          150,
+          280,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/diamond-csgo.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64"
+      }
+    }
+  }
+}

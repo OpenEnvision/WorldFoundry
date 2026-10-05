@@ -1,0 +1,50 @@
+---
+title: "Metric3D"
+description: "Metric3D（DJI / Zhejiang University）：单目深度估计、米制深度估计；已验证。"
+modelId: "metric3d-prior"
+pageSource: authored
+---
+
+Metric3D 通过把图像归一化到规范相机空间，从单张图像恢复米制尺度深度，使单一模型能够跨相机泛化。本 catalog 中它是已验证的米制深度先验：VIPE SLAM 默认配置通过共享先验工厂按名称引用它，checkpoint 加载推理经 geometry-prior 契约运行。
+
+<ModelPaperFigures modelId="metric3d-prior" locale="zh" />
+
+记录论文为[arXiv 2403.12013](https://arxiv.org/abs/2403.12013)。
+
+项目页：[jugghm.github.io/Metric3Dv2](https://jugghm.github.io/Metric3Dv2/)。代码：[YvanYin/Metric3D](https://github.com/YvanYin/Metric3D)。
+
+<ModelCommandBuilder modelId="metric3d-prior" locale="zh" />
+
+## 用来做什么
+
+`metric3d-prior` 是记录的重建线。从记录的视图写出几何时从这里起步。
+
+按上游论文（ICCV 2023），规范相机变换消解了单图深度的米制歧义；记录的 checkpoint 为 JUGGHM/Metric3D，许可 bsd-2-clause。注册于 base_models/three_dimensions/depth/metric3d。该模型由大疆创新 / 浙江大学发布。
+
+catalog 记录的任务包括 单目深度估计、米制深度估计、几何先验。别名包括 `metric3d`、`yvanyin-metric3d`。模态上，它接受图像，输出深度。
+
+Metric3D 度量深度先验。不是视频卡。
+
+## 运行时契约
+
+可选 `input_path`、`model`、`version`、`focal_length`、`execute`；产物 `metric3d-prior.npz`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `Metric3DPriorPipeline`。
+
+系列状态：**已验证**。
+
+它作为独立几何先验集成在 worldfoundry/base_models 下，通过共享的 geometry-prior pipeline/operator 契约对外暴露。 上层管线（如 ViPE）从这一规范位置导入它，而不是各自保留私有副本。 runner parity 已通过共享契约验证；它是 VIPE SLAM 配置中的默认米制深度选择。
+
+Integrated as an independent metric-depth prior at worldfoundry/base_models/three_dimensions/depth/metric3d.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run metric3d-prior --pipeline.task-profile default` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `JUGGHM/Metric3D`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh metric3d-prior`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="metric3d-prior" locale="zh" />

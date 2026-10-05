@@ -88,7 +88,7 @@ def JEDiMetric(
 
 
 def deterministic_feature_matrix(*, seed: str, num_samples: int, feature_dim: int) -> np.ndarray:
-    rng = np.random.default_rng(abs(hash(seed)) % (2**32))
+    rng = np.random.default_rng(list(seed.encode("utf-8")))
     return rng.random((num_samples, feature_dim), dtype=np.float64)
 
 

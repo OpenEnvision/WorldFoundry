@@ -1,13 +1,92 @@
-"""High-level model construction with optional VRAM management and disk mapping."""
+"""High-level model construction with optional VRAM management and disk mapping.
+
+:func:`load_model` constructs a class, assigns checkpoint weights, and
+optionally installs :func:`~worldfoundry.core.vram.layers.enable_vram_management`.
+:func:`load_model_with_disk_offload` keeps inactive weights on a
+:class:`~worldfoundry.core.vram.disk_map.DiskMap`. ZeRO-3 uses its own
+assignment path.
+
+transformers is imported only for DeepSpeed ZeRO-3; a plain torch load
+must not require that package.
+
+Not this module: file deserialization
+(:mod:`worldfoundry.core.model_loading.checkpoints.file`), Hydra instantiation
+(:mod:`.factory`), or LoRA merge (:mod:`.lora`).
+"""
+
+import contextlib
 
 import torch
-from transformers.integrations import is_deepspeed_zero3_enabled
-from transformers.utils import ContextManagers
 
-from worldfoundry.core.model_loading.file import load_state_dict
+from worldfoundry.core.model_loading.checkpoints.file import load_state_dict
 from worldfoundry.core.vram.disk_map import DiskMap
 from worldfoundry.core.vram.initialization import skip_model_initialization
 from worldfoundry.core.vram.layers import enable_vram_management
+
+# ──────────────────────────────────────────────────────────────────────────
+# ZeRO-3 probe — transformers is optional; missing install means "not enabled"
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def is_deepspeed_zero3_enabled() -> bool:
+    """Lazy proxy for ``transformers.integrations.is_deepspeed_zero3_enabled``.
+
+    Returns False when transformers is not installed: the ZeRO-3 loading path
+    is only reachable through the transformers integration in the first place.
+    """
+
+    try:
+        from transformers.integrations import is_deepspeed_zero3_enabled as _impl
+    except ImportError:
+        return False
+    return _impl()
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Disk-offload buffers — parameters stay lazy; uninitialized empty() must not remain
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def _restore_checkpoint_buffers(
+    model: torch.nn.Module,
+    disk_map: DiskMap,
+    *,
+    torch_dtype: torch.dtype,
+) -> None:
+    """Materialize checkpoint-backed buffers before installing disk wrappers.
+
+    ``skip_model_initialization`` redirects parameters to ``meta`` but leaves
+    buffers on CPU.  Buffers created with ``torch.empty`` therefore contain
+    uninitialized data unless they are explicitly restored from the
+    checkpoint.  Disk-backed wrappers load parameters lazily, so a normal
+    ``load_state_dict`` call is intentionally unavailable in this path.
+
+    Only persistent buffers present in the converted checkpoint mapping are
+    replaced.  Deterministic, non-checkpoint buffers keep the values produced
+    by their constructors.
+    """
+
+    for name, current in model.named_buffers():
+        if name not in disk_map:
+            continue
+        value = disk_map[name]
+        if not isinstance(value, torch.Tensor):
+            raise TypeError(f"checkpoint buffer {name!r} is not a tensor")
+        if current.shape != value.shape:
+            raise ValueError(
+                f"checkpoint buffer {name!r} has shape {tuple(value.shape)}, "
+                f"expected {tuple(current.shape)}"
+            )
+        target_dtype = torch_dtype if value.is_floating_point() or value.is_complex() else value.dtype
+        target_device = current.device if current.device.type != "meta" else torch.device("cpu")
+        owner_name, separator, local_name = name.rpartition(".")
+        owner = model.get_submodule(owner_name) if separator else model
+        owner._buffers[local_name] = value.to(device=target_device, dtype=target_dtype)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Construct + assign — wrap vs DiskMap vs full state dict; ZeRO-3 is separate
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def load_model(
@@ -22,6 +101,8 @@ def load_model(
     vram_config=None,
     vram_limit=None,
     state_dict=None,
+    strict=True,
+    post_load_hook=None,
 ):
     """Construct a model, assign checkpoint weights, and finalize inference placement.
 
@@ -38,6 +119,11 @@ def load_model(
         vram_config: Offload/onload/preparing/computation placement dictionary.
         vram_limit: Optional used-memory limit in GiB for wrappers.
         state_dict: Already-loaded weights; takes precedence over ``path``.
+        strict: Require an exact parameter match.  When false, construct a
+            materialized module, retain its initialization for missing keys,
+            and call ``initialize(missing_keys)`` when the model provides it.
+        post_load_hook: Optional in-place mutation called after checkpoint
+            assignment and before VRAM wrappers or placement are installed.
 
     Returns:
         An eval-mode model with weights assigned.
@@ -47,8 +133,14 @@ def load_model(
         ZeRO-3 receives its specialized state-dict assignment path.
     """
     config = {} if config is None else config
+    if not strict and module_map is not None:
+        raise ValueError("non-strict loading is not supported with wrapped VRAM modules")
+    init_contexts = get_init_context(torch_dtype=torch_dtype, device=device) if strict else []
     try:
-        with ContextManagers(get_init_context(torch_dtype=torch_dtype, device=device)):
+        # Equivalent of transformers.utils.ContextManagers without the import.
+        with contextlib.ExitStack() as init_stack:
+            for init_context in init_contexts:
+                init_stack.enter_context(init_context)
             model = model_class(**config)
     except NotImplementedError as exc:
         # Some third-party-compatible modules move their parameters inside
@@ -77,6 +169,8 @@ def load_model(
         ]
         dtype = [d for d in dtypes if d != "disk"][0]
         if vram_config["offload_device"] != "disk":
+            # CPU/GPU offload: materialize once, then wrap. Disk offload cannot
+            # run post_load_hook — there is no resident state dict to mutate.
             if state_dict is None:
                 state_dict = DiskMap(path, device, torch_dtype=dtype)
             if state_dict_converter is not None:
@@ -84,10 +178,14 @@ def load_model(
             else:
                 state_dict = {i: state_dict[i] for i in state_dict}
             model.load_state_dict(state_dict, assign=True)
+            if post_load_hook is not None:
+                post_load_hook(model)
             model = enable_vram_management(
                 model, module_map, vram_config=vram_config, disk_map=None, vram_limit=vram_limit
             )
         else:
+            if post_load_hook is not None:
+                raise ValueError("post-load mutations are not supported with disk offload")
             disk_map = DiskMap(path, device, state_dict_converter=state_dict_converter)
             model = enable_vram_management(
                 model, module_map, vram_config=vram_config, disk_map=disk_map, vram_limit=vram_limit
@@ -114,11 +212,20 @@ def load_model(
         # Because at this stage, model parameters are partitioned across multiple GPUs.
         # Loading them directly could lead to excessive GPU memory consumption.
         if is_deepspeed_zero3_enabled():
+            if not strict:
+                raise NotImplementedError("non-strict checkpoint loading is not supported with DeepSpeed ZeRO-3")
             from transformers.integrations.deepspeed import _load_state_dict_into_zero3_model
 
             _load_state_dict_into_zero3_model(model, state_dict)
         else:
-            model.load_state_dict(state_dict, assign=True)
+            if strict:
+                model.load_state_dict(state_dict, assign=True)
+            else:
+                incompatible = model.load_state_dict(state_dict, strict=False)
+                if incompatible.missing_keys and hasattr(model, "initialize"):
+                    model.initialize(incompatible.missing_keys)
+        if post_load_hook is not None:
+            post_load_hook(model)
         # Why do we call `to()`?
         # Because some models override the behavior of `to()`,
         # especially those from libraries like Transformers.
@@ -126,6 +233,11 @@ def load_model(
     if hasattr(model, "eval"):
         model = model.eval()
     return model
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Disk-backed construction — skip init, restore buffers, then wrap with disk_map
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def load_model_with_disk_offload(
@@ -153,6 +265,7 @@ def load_model_with_disk_offload(
     if hasattr(model, "eval"):
         model = model.eval()
     disk_map = DiskMap(path, device, state_dict_converter=state_dict_converter)
+    _restore_checkpoint_buffers(model, disk_map, torch_dtype=torch_dtype)
     vram_config = {
         "offload_dtype": "disk",
         "offload_device": "disk",
@@ -163,11 +276,38 @@ def load_model_with_disk_offload(
         "computation_dtype": torch_dtype,
         "computation_device": device,
     }
-    enable_vram_management(model, module_map, vram_config=vram_config, disk_map=disk_map, vram_limit=80)
+    enable_vram_management(
+        model, module_map, vram_config=vram_config, disk_map=disk_map, vram_limit=_disk_offload_vram_limit(device)
+    )
     return model
 
 
+def _disk_offload_vram_limit(device) -> float:
+    """Used-memory budget (GiB) for keeping disk-backed weights resident.
+
+    Derived from the actual device capacity (90% of total memory) instead of
+    the historical hard-coded ``80`` GiB, which assumed A100/H100-80G and let
+    smaller cards keep weights resident until they OOMed. Falls back to the
+    legacy value when the device capacity cannot be determined.
+    """
+
+    try:
+        device_obj = torch.device(device)
+        if device_obj.type == "cuda" and torch.cuda.is_available():
+            total_gib = torch.cuda.get_device_properties(device_obj).total_memory / (1024**3)
+            return total_gib * 0.9
+    except Exception:
+        pass
+    return 80.0
+
+
 def get_init_context(torch_dtype, device):
+    """Return construction contexts: ZeRO-3 partition, or skip-init on meta.
+
+    ZeRO-3 must allocate through ``deepspeed.zero.Init`` so parameters are
+    partitioned on CPU before they touch a card. The skip-init path avoids
+    random fill of a 10B module that will be overwritten by the checkpoint.
+    """
     if is_deepspeed_zero3_enabled():
         import deepspeed
         from transformers.modeling_utils import set_zero3_state

@@ -1,0 +1,49 @@
+---
+title: "DIAMOND"
+description: "Local Atari and CS:GO diffusion world models with shared inference components."
+modelId: "diamond"
+pageSource: authored
+---
+
+DIAMOND predicts game frames from recent observations and actions. WorldFoundry supports the released Atari agents and CS:GO denoiser plus spatial upsampler, reusing the same UNet blocks and EDM sampler.
+
+<ModelPaperFigures modelId="diamond" locale="en" />
+
+[Paper](https://arxiv.org/abs/2405.12399) · [Project](https://diamond-wm.github.io/) · [Source](https://github.com/eloialonso/diamond)
+
+## Run locally
+
+Stage the relevant files from `eloialonso/diamond`. Runtime downloads are disabled. Atari requires its game checkpoint, the two `atari_100k/config` files, the packaged runtime config and an installed Atari environment/ROM. CS:GO requires `csgo/model/csgo.pt`, `csgo/config/agent/csgo.yaml`, and a released spawn directory containing `low_res.npy`, `full_res.npy`, and `act.npy`.
+
+```python
+from worldfoundry.pipelines.world_model.pipeline_runtime_manifest import (
+    DIAMONDPipeline, DIAMONDCsgoPipeline,
+)
+
+atari = DIAMONDPipeline.from_pretrained(
+    pretrained=True, pretrained_game="Pong",
+    pretrained_dir="/path/to/eloialonso--diamond", device="cuda",
+)
+atari(execute=True, headless_steps=100, num_steps_initial_collect=200,
+      fps=15, output_path="pong.mp4")
+
+csgo = DIAMONDCsgoPipeline.from_pretrained(
+    pretrained_dir="/path/to/eloialonso--diamond", device="cuda",
+)
+csgo(execute=True, spawn_id=0, action="forward", headless_steps=24,
+     sampler="higher_quality", seed=42, fps=16, output_path="csgo.mp4")
+```
+
+`DIAMONDPipeline.from_pretrained(variant="csgo", ...)` provides the same CS:GO runtime. The `diamond-csgo` binding selects `DIAMONDCsgoPipeline` directly. `prompt`, `image` and `video` are not required: Atari collects real observations for initialization; CS:GO starts from the supplied spawn history.
+
+CS:GO named actions are `idle`, `forward`, `backward`, `left`, `right`, `jump`, `turn-left`, and `turn-right`. Alternatively, pass `actions_path` to a JSON or NPY array of shape `[headless_steps, 51]` in the official multi-hot layout: 11 keyboard bits, two click bits, 23 mouse-X bins, and 15 mouse-Y bins. Exactly one bin on each mouse axis must be active. An explicit action file takes precedence over the named action. `spawn_dir` overrides `spawn_id`.
+
+The official `higher_quality` preset uses three denoising steps and ten upsampling steps per frame; `fast` uses one of each. Both write H.264 at the requested playback FPS. A rollout of N steps produces N+1 frames including the initial observation. Atari's horizon-50 and terminal resets can restart the context inside the video. CS:GO produces a continuous finite rollout.
+
+## Validation scope
+
+All 26 released Atari checkpoints completed local H100 inference with strict loading, finite pre-clamp outputs, complete video decoding and visual inspection. Following the shared sampler refactor, 52 Euler/Heun comparisons across those checkpoints matched the previous implementation bitwise. A separate matched-context Pong test confirmed opposite paddle responses.
+
+CS:GO `higher_quality` forward/backward rollouts from spawn 0, 24 steps each, matched the official implementation's low-resolution and upsampled tensors bitwise; pre-clamp outputs were finite. The fast preset also matched both branches bitwise on two six-step rollouts. These short checks do not establish long-horizon physics, reward accuracy, or game success. Attribution is centralized in `THIRD-PARTY-NOTICES`.
+
+<ModelRelatedRecipes modelId="diamond" locale="en" />

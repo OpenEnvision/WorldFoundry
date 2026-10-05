@@ -53,6 +53,12 @@ if [[ "${SKIP_INSTALL}" == "0" ]]; then
 fi
 
 npm run types:check
+# pretypes:check generates the API metadata; require all checked-in docs data to be current.
+npm run api:check
+npm run models:check
+npm run models:homes:check
+npm run benchmarks:check
+npm run coverage:check
 
 build_log="$(mktemp -t worldfoundry-docs-build.XXXXXX.log)"
 trap 'rm -f "${build_log}"' EXIT

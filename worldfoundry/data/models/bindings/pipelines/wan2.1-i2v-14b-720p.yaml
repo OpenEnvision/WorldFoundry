@@ -3,9 +3,9 @@ binding_id: wan2.1-i2v-14b-720p
 model_id: wan2.1-i2v-14b-720p
 runner: worldfoundry.pipeline
 pipeline:
-  target: worldfoundry.pipelines.wan.pipeline_wan_2p1_i2v:Wan2p1I2VPipeline
+  target: worldfoundry.pipelines.wan.pipeline_wan_2p1_i2v:Wan2p1I2V720PPipeline
   loading:
     method: from_pretrained
     signature: unified
   invocation:
-    mode: native_or_standard_invocation
+    mode: native_diffusion_invocation

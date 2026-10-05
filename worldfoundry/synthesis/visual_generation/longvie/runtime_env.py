@@ -15,6 +15,7 @@ from typing import Iterable, Sequence
 
 from worldfoundry.runtime.assets import expand_worldfoundry_path
 from worldfoundry.runtime.env import resolve_hfd_root
+from worldfoundry.core.io.paths import checkpoint_root_path
 
 
 # Default Hugging Face repository IDs for various LongVie components and dependencies.
@@ -119,7 +120,7 @@ def _hfd_roots() -> tuple[Path, ...]:
         tuple[Path, ...]: A tuple of unique, resolved HFD root paths.
     """
     # Start with the globally configured HFD root from worldfoundry.runtime.
-    roots = [resolve_hfd_root()]
+    roots = [resolve_hfd_root(), checkpoint_root_path()]
     # Add any local benchmark HFD root if it exists.
     local_root = _local_bench_hfd_root()
     if local_root is not None:
@@ -166,9 +167,11 @@ def _hfd_repo_dirs(repo_id: str) -> Iterable[Path]:
     """
     # Format the repo_id for file system path (e.g., "Vchitect--LongVie2").
     repo_dir = repo_id.replace("/", "--")
+    leaf = repo_id.rsplit("/", 1)[-1]
     # Yield a candidate path for each HFD root.
     for root in _hfd_roots():
         yield root / repo_dir
+        yield root / leaf
 
 
 def _hfd_roots_text() -> str:
@@ -368,6 +371,7 @@ def resolve_control_weight_path(
         path = _expanded_path(value)
         if path.is_file():
             return path.resolve()
+        raise FileNotFoundError(f"LongVie control checkpoint not found: {path}")
     # Otherwise, resolve the containing directory and construct the path to the default file.
     directory = resolve_longvie_weight_dir(weight_dir)
     path = directory / "control.safetensors"

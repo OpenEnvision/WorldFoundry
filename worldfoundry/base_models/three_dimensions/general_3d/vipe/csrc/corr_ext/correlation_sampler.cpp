@@ -1,7 +1,7 @@
 /**
  * This file includes code originally from the Pytorch correlation repository:
  * https://github.com/ClementPinard/Pytorch-Correlation-extension、
- * Licensed under the MIT License. See THIRD_PARTY_LICENSES.md for details.
+ * Licensed under the MIT License.
  */
 
 #include <torch/extension.h>

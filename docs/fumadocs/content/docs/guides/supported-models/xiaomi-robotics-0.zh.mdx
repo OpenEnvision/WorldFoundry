@@ -1,0 +1,32 @@
+---
+title: "Xiaomi-Robotics-0"
+description: "Xiaomi-Robotics-0（Xiaomi Robotics）：`instruction`、`prompt`、`image`、`state` 进，`action_trace`、`xiaomi_robotics_0_action_trace.json` 出；6 个 variant、独立环境 `worldfoundry-xiaomi-robotics-0-cu128`。"
+modelId: "xiaomi-robotics-0"
+pageSource: authored
+---
+
+Xiaomi-Robotics-0 是小米的开放 VLA 策略线，Apache-2.0 基准阵容非常完整：LIBERO、 CALVIN ABCD-D、CALVIN ABC-D、SimplerEnv Google Robot 与 SimplerEnv WidowX 的 checkpoint 均已确认并锁定 revision。catalog 默认为 LIBERO checkpoint。
+
+<ModelPaperFigures modelId="xiaomi-robotics-0" locale="zh" />
+
+论文是 [arXiv 2602.12684](https://arxiv.org/abs/2602.12684)。代码：[XiaomiRobotics/Xiaomi-Robotics-0](https://github.com/XiaomiRobotics/Xiaomi-Robotics-0)。
+
+别名包括 `xr0`、`xiaomi-robotics-zero`、`Xiaomi-Robotics-0`。
+
+<ModelCommandBuilder modelId="xiaomi-robotics-0" locale="zh" />
+
+## 用来做什么
+
+把 Xiaomi-Robotics-0 当视觉-语言-动作策略滚动起来。先跑 `xiaomi-robotics-0-libero`；还有 `xiaomi-robotics-0-calvin-abcd`、`xiaomi-robotics-0-calvin-abc`、`xiaomi-robotics-0-simplerenv-google` 等。启动 `worldfoundry-eval run xiaomi-robotics-0-libero`，任务 profile 为 `vla.policy_rollout`——必填 `instruction`、`prompt`、`image`、`state`；产物 `action_trace`、`xiaomi_robotics_0_action_trace.json`。
+
+不是 [Xiaomi Robotics 1](/zh/docs/guides/supported-models/xiaomi-robotics-1)。 评测看 [LIBERO](/zh/docs/evaluation/benchmark-hub/libero)、[CALVIN](/zh/docs/evaluation/benchmark-hub/calvin)。
+
+## 运行时契约
+
+必填：`instruction`、`prompt`、`image`、`state`。 可选：`video`、`state_dim`、`action_chunk`、`action_chunk_max`。 产物：`action_trace`、`xiaomi_robotics_0_action_trace.json`。 状态：**Verified**。 按基准选择 checkpoint：LIBERO、任一 CALVIN 划分或 SimplerEnv 本体。更新一代请见 xiaomi-robotics-1。
+
+## 在 WorldFoundry 中运行
+
+跑在独立环境 `worldfoundry-xiaomi-robotics-0-cu128`（Python 3.12，CUDA 12.8）。 把 `XiaomiRobotics/Xiaomi-Robotics-0-LIBERO`、`XiaomiRobotics/Xiaomi-Robotics-0-Calvin-ABCD_D`、`XiaomiRobotics/Xiaomi-Robotics-0-Calvin-ABC_D` 等 就位到本地——运行时不代下权重。 启动 `worldfoundry-eval run xiaomi-robotics-0-libero`，任务 profile 为 `vla.policy_rollout`。 许可：Apache-2.0。
+
+<ModelRelatedRecipes modelId="xiaomi-robotics-0" locale="zh" />

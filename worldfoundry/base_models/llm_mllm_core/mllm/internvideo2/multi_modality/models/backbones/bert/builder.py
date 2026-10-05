@@ -1,7 +1,10 @@
-from .xbert import BertConfig, BertForMaskedLM, BertLMHeadModel, BertModel
-
 import logging
 import os
+
+from worldfoundry.core.io.paths import package_data_path
+
+from .xbert import BertConfig, BertForMaskedLM, BertLMHeadModel, BertModel
+
 logger = logging.getLogger(__name__)
 
 def build_bert(model_config, pretrain, checkpoint, encoder_width=None):
@@ -15,7 +18,7 @@ def build_bert(model_config, pretrain, checkpoint, encoder_width=None):
     Returns: TODO
 
     """
-    current_dir = os.path.dirname(os.path.abspath(__file__))  # Get the current script's directory
+    current_dir = str(package_data_path('models', 'runtime', 'configs', 'internvideo2', 'bert'))
     target_file = os.path.join(current_dir, model_config.text_encoder.config)  # Construct the new file path
     bert_config = BertConfig.from_json_file(target_file)
     # bert_config = BertConfig.from_json_file(model_config.text_encoder.config)
@@ -77,7 +80,7 @@ def build_bert_decoder(model_config, checkpoint, only_fusion_layer=True):
     Returns: TODO
 
     """
-    current_dir = os.path.dirname(os.path.abspath(__file__))  # Get the current script's directory
+    current_dir = str(package_data_path('models', 'runtime', 'configs', 'internvideo2', 'bert'))
     target_file = os.path.join(current_dir, model_config.text_encoder.config)  # Construct the new file path
     bert_config = BertConfig.from_json_file(target_file)
     # bert_config = BertConfig.from_json_file(model_config.text_encoder.config)
@@ -111,7 +114,7 @@ def build_lm_bert_decoder(model_config, checkpoint):
     Returns: TODO
 
     """
-    current_dir = os.path.dirname(os.path.abspath(__file__))  # Get the current script's directory
+    current_dir = str(package_data_path('models', 'runtime', 'configs', 'internvideo2', 'bert'))
     target_file = os.path.join(current_dir, model_config.text_encoder.config)  # Construct the new file path
     bert_config = BertConfig.from_json_file(target_file)
     # bert_config = BertConfig.from_json_file(model_config.text_encoder.config)

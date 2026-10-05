@@ -1,167 +1,65 @@
 ---
 title: VBench
-description: 核心 text-to-video VBench 评测，包含仓内 prompts、metric runtime、生成视频 layout 和可运行命令。
+description: "南洋理工 / 上海 AI Lab 的 16 维 T2V 质量套件。WorldFoundry 内置官方 runtime，不编造榜单。"
 ---
 
-## 简介
+VBench（南洋理工 S-Lab 与上海人工智能实验室）把文生视频质量拆成 **16 个维度**，每维由专用感知模型打分，而不是单一 embedding 距离。三组：
 
-VBench 是 CVPR 2024 的 text-to-video 生成评测套件。它把视频质量拆成 16 个维度，而不是只给一个不可解释的总分：subject/background consistency、temporal stability、motion、aesthetics、imaging quality、object/action grounding、spatial relation、scene、style 和 overall prompt consistency。
+- **时序** — 主体 / 背景一致性、闪烁、运动平滑、动态程度。
+- **帧质量** — 美学质量、成像质量。
+- **语义 / 文本对齐** — 物体类别、多物体、人体动作、颜色、空间关系、场景、外观风格、时序风格、整体一致性。
 
-WorldFoundry 已经把 VBench runtime 集成在 `worldfoundry/evaluation/tasks/execution/runners/vbench`。官方 VBench project 只作为 protocol 参考；在 WorldFoundry 中运行 benchmark 不需要另一份源码树。
+官方总分是 **4× 质量 + 1× 语义**（`overall_quality`）。WorldFoundry 还会写出 `temporal_quality`、`frame_quality`、`text_alignment` 聚合。
 
-官方参考：
+论文：[VBench](https://arxiv.org/abs/2311.17982)。项目：[vchitect.github.io/VBench-project](https://vchitect.github.io/VBench-project/)。代码：[Vchitect/VBench](https://github.com/Vchitect/VBench)（Apache-2.0）。仓内 prompt 套件：`worldfoundry/data/benchmarks/assets/vbench/VBench_full_info.json`（946 行）。[VBench-2.0](/zh/docs/evaluation/benchmark-hub/vbench-2.0) 是后续忠实性套件；两者**不可互换**。
 
-- Project page: [vchitect.github.io/VBench-project](https://vchitect.github.io/VBench-project/)
-- Paper: [arXiv:2311.17982](https://arxiv.org/abs/2311.17982)
-- Leaderboard: [Vchitect/VBench_Leaderboard](https://huggingface.co/spaces/Vchitect/VBench_Leaderboard)
-- 仓内 runner: `worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py`
-- 仓内 runtime: `worldfoundry/evaluation/tasks/execution/runners/vbench/runtime`
+WorldFoundry **内置官方 runtime**。两种模式：`custom_input`（任意视频目录；依赖文本的维度需要 `--prompt` / `--prompt-file`）和 `vbench_standard`（官方命名 `"{prompt}-{index}.mp4"`，每条 prompt 5 个样本，`index` 为 `0..4`）。有界 GPU 验证只覆盖 `aesthetic_quality`。
 
-## 评测协议
+<BenchmarkPageSections id="vbench" locale="zh" />
 
-仓内 prompt 和 metadata 资产位于 `worldfoundry/data/benchmarks/assets/vbench`：
+## 如何运行
 
-- `VBench_full_info.json`: 官方 prompt 和 dimension metadata。
-- `prompts/all_dimension.txt`: 完整 prompt 列表。
-- `prompts/prompts_per_dimension/*.txt`: 按维度拆分的 prompt 列表。
-- `prompts/metadata/*.json`: object、color、spatial relation、style 等 metadata。
-
-主指标是 `overall_quality`，由官方 VBench quality 和 semantic 维度聚合得到。
-
-| 分组 | Metrics |
-| --- | --- |
-| Temporal quality | `subject_consistency`, `background_consistency`, `temporal_flickering`, `motion_smoothness`, `dynamic_degree` |
-| Frame quality | `aesthetic_quality`, `imaging_quality` |
-| Text alignment | `object_class`, `multiple_objects`, `human_action`, `color`, `spatial_relationship`, `scene`, `appearance_style`, `temporal_style`, `overall_consistency` |
-| Aggregates | `temporal_quality`, `frame_quality`, `text_alignment`, `overall_quality` |
-
-`custom_input` 模式只支持 `subject_consistency`、`background_consistency`、`motion_smoothness`、`dynamic_degree`、`aesthetic_quality` 和 `imaging_quality` 这六个维度。
-
-## 数据准备
-
-官方 suite 评分需要使用仓内 prompt 列表生成视频。VBench 期望的文件名是：
-
-```text
-<prompt>-<index>.mp4
-```
-
-普通维度使用 `0` 到 `4` 的 index。官方 sampling guide 对 `temporal_flickering` 使用更多 samples；如果要准备 leaderboard evidence，需要按官方 sampling 计划保持一致。
-
-推荐 layout：
-
-```text
-/path/to/vbench/generated_videos/
-  aesthetic_quality/
-    a cinematic shot of a red car-0.mp4
-    a cinematic shot of a red car-1.mp4
-  human_action/
-    a person is playing guitar-0.mp4
-```
-
-设置生成产物根目录：
+目录记录的有界命令：
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/vbench/generated_videos
-```
-
-候选模型训练和推理不属于 VBench 本身。先通过候选模型自己的 WorldFoundry package 完成训练或推理，再把最终视频导出到上面的 layout。
-
-## 权重与 Runtime
-
-使用 WorldFoundry 统一 CUDA 环境运行 runner。VBench metric models 从 VBench cache 路径加载：
-
-```bash
-export WORLDFOUNDRY_VBENCH_CACHE_DIR=/path/to/cache/models/vbench
-export VBENCH_CACHE_DIR="${WORLDFOUNDRY_VBENCH_CACHE_DIR}"
-```
-
-完整 metric stack 会用到 CLIP、ViCLIP、UMT、AMT、LAION aesthetic predictor、MUSIQ、GRiT、Tag2Text、RAFT，以及部分 Detectron2 相关组件。CLIP、ViCLIP、RAFT、detection、segmentation 等 reusable 实现已经整理在 `worldfoundry/base_models` 中；evaluator 权重仍然是运行时资产，需要放到 cache 路径或 local assets guide 中列出的 base-model 资产位置。
-
-候选视频生成模型的 checkpoint 和 evaluator checkpoint 是两类资产。
-
-## 运行 Custom-Input 指标
-
-如果你已有任意生成视频，并且只想跑支持 custom input 的六个维度之一：
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py \
-  --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --dimension aesthetic_quality \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
   --mode custom_input \
-  --output-dir tmp/vbench/aesthetic_quality \
-  --json
+  --dimension aesthetic_quality
 ```
 
-如果所有视频共用同一个 prompt，可以显式传入：
+对自定义目录打一个维度：
 
 ```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py \
-  --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
+  --mode custom_input \
   --dimension subject_consistency \
-  --mode custom_input \
-  --prompt "a dog running through a park" \
-  --output-dir tmp/vbench/subject_consistency_custom \
+  --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/vbench/custom \
   --json
 ```
 
-如果每个视频 prompt 不同，用 `--prompt-file` 传一个从相对视频路径到 prompt 的 JSON。
-
-## 运行官方 Prompt Suite
-
-当你的生成视频已经按官方 VBench prompt 文件名准备好时，使用这个入口：
+导入上游 `full_json` 目录，而不是重跑 evaluator：
 
 ```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py \
-  --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --full-json-dir "$PWD/worldfoundry/data/benchmarks/assets/vbench/VBench_full_info.json" \
-  --preset all \
-  --mode vbench_standard \
-  --output-dir tmp/vbench/full_16 \
-  --timeout 7200 \
-  --json
-```
-
-也可以只跑一个官方维度：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py \
-  --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --full-json-dir "$PWD/worldfoundry/data/benchmarks/assets/vbench/VBench_full_info.json" \
-  --dimension human_action \
-  --mode vbench_standard \
-  --output-dir tmp/vbench/human_action \
-  --json
-```
-
-## 导入已有结果
-
-如果仓内 runtime 或其他官方兼容流程已经产出 `*_eval_results.json`，可以导入成 WorldFoundry scorecard：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py \
-  --official-results-path /path/to/vbench_eval_results.json \
-  --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --preset all \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py run \
+  --from-upstream-results /path/to/vbench_full_json_dir \
   --output-dir tmp/vbench/imported \
   --json
 ```
 
-## 输出文件
+`--load-ckpt-from-local` 强制走本地权重。环境变量：`WORLDFOUNDRY_VBENCH_ROOT`、`WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`、`WORLDFOUNDRY_VBENCH_CACHE_DIR`。共享栈：`vbench_perception_metric_stack`。
 
-每次运行会写出：
+仓内指针：
 
-- `scorecard.json`: WorldFoundry 统一 scorecard，包含 VBench 维度和聚合指标。
-- `raw_metric_table.jsonl`: scorecard 使用的 metric rows。
-- `upstream/*_eval_results.json`: 重新计算 metric 时的官方 runtime 结果 JSON。
-- `upstream_stdout.log` 和 `upstream_stderr.log`: 仓内 VBench runtime 日志。
+```text
+worldfoundry/data/benchmarks/tasks/external/vbench.yaml
+worldfoundry/evaluation/tasks/execution/runners/vbench/runtime
+worldfoundry/data/benchmarks/assets/vbench/VBench_full_info.json
+```
 
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)
+产物包括 `scorecard.json`（主键 `overall_quality`）、`raw_metric_table.jsonl`，以及捕获的上游日志。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

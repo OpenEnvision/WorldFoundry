@@ -1,0 +1,48 @@
+model_id: causal-rcm
+env_name: causal-rcm
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.12'
+cuda_profile: cu126
+driver_status: compatible
+channels:
+- conda-forge
+conda_packages:
+- python=3.12
+- pip
+- ffmpeg>=7,<8
+pip_extra_index_url: https://download.pytorch.org/whl/cu126
+pip_packages:
+- torch==2.11.0
+- torchvision==0.26.0
+- numpy
+- pillow
+- einops
+- omegaconf
+- transformers
+- ftfy
+- regex
+- safetensors
+- imageio[ffmpeg]
+- tqdm
+validation_imports:
+- torch
+- torchvision
+- numpy
+- PIL
+- einops
+- omegaconf
+- transformers
+- ftfy
+- regex
+- safetensors
+- imageio
+- worldfoundry.core.attention.sparse.block_pattern
+- worldfoundry.synthesis.visual_generation.rcm
+notes:
+- Covers only the vendored causal inference path. Upstream's training extras (megatron-core,
+  transformer_engine, wandb, webdataset, fvcore, hydra-core) are intentionally omitted.
+- FlashAttention is optional. The vendored attention module dispatches on compute capability and falls
+  back to PyTorch SDPA (cuDNN / FA2 / mem-efficient) when FlashAttention 3 is absent.
+- MagiAttention is optional and only used when RCM_ATTENTION_BACKEND=magi is set.
+- Upstream validated torch 2.11 on CUDA 12.6; the exact pin keeps this runtime isolated from the shared
+  WorldFoundry environment.

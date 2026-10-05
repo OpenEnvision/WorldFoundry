@@ -24,21 +24,25 @@ All backends share the same varlen contract: ``q``/``k``/``v`` are packed as
 offsets into ``total_tokens``.
 """
 
+import inspect
+
 import torch
 import torch.nn.functional as F
 
 _BACKEND = None
 _flash_varlen = None
+_fa3_has_seqused = False
 
 
 def _select_backend():
-    global _BACKEND, _flash_varlen
+    global _BACKEND, _flash_varlen, _fa3_has_seqused
     if _BACKEND is not None:
         return
     try:
         from flash_attn_interface import flash_attn_varlen_func  # FA3
 
         _flash_varlen, _BACKEND = flash_attn_varlen_func, "fa3"
+        _fa3_has_seqused = "seqused_q" in inspect.signature(flash_attn_varlen_func).parameters
         return
     except Exception:
         pass
@@ -86,16 +90,18 @@ def varlen_attention(
     _select_backend()
 
     if _BACKEND == "fa3":
-        out = _flash_varlen(
-            q,
-            k,
-            v,
-            cu_seqlens_q=cu_seqlens_q,
-            cu_seqlens_k=cu_seqlens_k,
-            max_seqlen_q=int(max_seqlen_q),
-            max_seqlen_k=int(max_seqlen_k),
-            causal=causal,
-        )
+        kwargs = {
+            "cu_seqlens_q": cu_seqlens_q,
+            "cu_seqlens_k": cu_seqlens_k,
+            "max_seqlen_q": int(max_seqlen_q),
+            "max_seqlen_k": int(max_seqlen_k),
+            "causal": causal,
+        }
+        if _fa3_has_seqused:
+            # Current Hopper wheels expose these as required positional
+            # parameters even when no per-sequence truncation is requested.
+            kwargs.update(seqused_q=None, seqused_k=None)
+        out = _flash_varlen(q, k, v, **kwargs)
         return out[0] if isinstance(out, tuple) else out
 
     if _BACKEND == "fa2":

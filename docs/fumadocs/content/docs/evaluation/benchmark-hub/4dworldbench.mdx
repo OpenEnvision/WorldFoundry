@@ -1,200 +1,39 @@
 ---
 title: 4DWorldBench
-description: 3D/4D world generation evaluation with in-tree metrics, dataset schema, checkpoints, and run commands.
+description: "CVPR 2026 3D/4D world-generation bench: perceptual quality, Condition-4D alignment, physics, 4D consistency. WorldFoundry ships the official runtime; it does not invent a board."
 ---
 
-## About
+4DWorldBench (USTC, with ZJU and BJZGCA; CVPR 2026) scores **3D/4D world generators** — Image-to-3D/4D, Video-to-4D, Text-to-3D/4D — by mapping every conditioning modality into one evaluation space. Four axes roll into `four_d_worldbench_average`:
 
-4DWorldBench is a comprehensive benchmark for 3D/4D world generation models. The paper and project page position world generation as a step beyond 2D video synthesis: a model should build a realistic, dynamic, physically plausible world from text, image, or video conditions while staying coherent over space, time, camera motion, and physical interactions.
+- **Perceptual quality** — CLIP-IQA, CLIP-aesthetic, FastVQA.
+- **Condition-4D alignment** — Keye-VL yes/no judges for attribute / relationship / motion / event / scene control, plus DROID-SLAM camera error (raw error is lower-better, then inverted).
+- **Physical realism** — LLM-assisted physics reasoning.
+- **4D consistency** — DROID-SLAM reprojection, VFIMamba interpolation, motion QA, VGG style.
 
-WorldFoundry vendors the runnable evaluation code in tree at `worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench`. The official repository is only a protocol reference; benchmark execution in this project uses the checked-in runtime and does not require an external GitHub checkout.
+Paper: [4DWorldBench](https://arxiv.org/pdf/2511.19836). Project: [yeppp27.github.io/4DWorldBench.github.io](https://yeppp27.github.io/4DWorldBench.github.io/). Code: [yeppp27/4dworldbench_code](https://github.com/yeppp27/4dworldbench_code).
 
-Official references:
+WorldFoundry **hosts the official runtime** (`run_four_d_worldbench_official_runner.py`) and scores one `--dimension` at a time over a dataset JSON in the official schema. Official dataset download is not published; you supply the JSON plus generated videos.
 
-- Project page: [yeppp27.github.io/4DWorldBench.github.io](https://yeppp27.github.io/4DWorldBench.github.io/)
-- Paper: [arXiv:2511.19836](https://arxiv.org/abs/2511.19836)
-- Local runner: `worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py`
-- In-tree runtime: `worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/runtime/four_d_worldbench`
+<BenchmarkPageSections id="4dworldbench" locale="en" />
 
-## Evaluation Protocol
-
-4DWorldBench scores generated 3D/4D world videos along four groups. WorldFoundry keeps the original metric IDs so that imported official results and newly computed results map to the same scorecard.
-
-| Group | WorldFoundry metrics | What it checks |
-| --- | --- | --- |
-| Perceptual Quality | `perceptual_clip_iqa_metrics`, `perceptual_clip_aesthetic_metrics`, `perceptual_fastvqa` | Frame quality, aesthetics, and temporal video quality. |
-| Condition-4D Alignment | `alignment_attribute_control`, `alignment_relationship_control`, `alignment_motion_control`, `alignment_event_control`, `alignment_scene_control`, `alignment_camera_error_metrics` | Whether generated worlds follow object attributes, relationships, motion, events, scenes, and camera constraints. |
-| Physical Realism | `physics_realism` | Whether visible dynamics are physically plausible under the prompt or input condition. |
-| 4D Consistency | `consistency_viewpoint`, `consistency_motion_smoothness`, `consistency_motion_qa`, `consistency_style` | Viewpoint consistency, smooth motion, motion QA, and style stability. |
-
-The primary metric is `four_d_worldbench_average`. Intermediate aggregates are `perceptual_quality`, `condition_4d_alignment`, `physical_realism_score`, and `four_d_consistency`.
-
-## Data Preparation
-
-The benchmark is driven by an official dataset JSON. Each JSON file describes one evaluation split and one or more candidate models. The runner looks up the model by `models[].model_name`, then evaluates the `generated_videos` listed under that model.
-
-Minimal structure:
-
-```json
-{
-  "dataset_info": {
-    "base_path": "/path/to/4DWorldBench",
-    "model_type": "text-to-3D | image-to-4D | video-to-4D",
-    "condition_type": "text | image | video"
-  },
-  "models": [
-    {
-      "model_name": "your_model_name",
-      "conditions": [
-        {
-          "condition_meta_info": "alignment_motion_control",
-          "prompts": [
-            {
-              "prompt_id": "sample_0001",
-              "prompt_key": "sample_0001",
-              "condition_content": "/path/to/condition/file.txt",
-              "condition_caption": "Text description of the condition",
-              "generated_videos": [
-                "your_model_name/sample_0001.mp4"
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-Video paths can be absolute. Relative `generated_videos` are resolved against `--generated-video-dir`, then `dataset_info.base_path`, then the dataset JSON directory. For a clean run, keep the official JSON unchanged except for adding or updating the candidate model entry and generated-video paths.
-
-## Checkpoints And Dependencies
-
-Start from the unified CUDA environment, then install the benchmark-specific metric dependencies:
+## How to run
 
 ```bash
-cd /path/to/WorldFoundry
-bash scripts/setup/model_env_install.sh --model 4dworldbench
-```
-
-The exact assets depend on which dimensions you run:
-
-| Dimension | Required assets |
-| --- | --- |
-| CLIP-IQA / CLIP-Aesthetic | `pyiqa`, `opencv-python`, generated videos. |
-| FastVQA | FAST-VQA/FasterVQA weights, usually `FAST_VQA_3D_1_1_Scr.pth`. |
-| Keye-VL alignment and motion QA | `Kwai-Keye/Keye-VL-1_5-8B` or a local HF mirror. |
-| Camera/viewpoint metrics | WorldFoundry DROID-SLAM base model, DROID checkpoint, and importable `lietorch` / `droid_backends` extensions. |
-| Motion smoothness | WorldFoundry VFIMamba base model and checkpoint. |
-| Physical realism | Keye-VL captioning plus `OPENAI_API_KEY` for the LLM reasoning step. |
-
-Useful environment variables:
-
-```bash
-export WORLDFOUNDRY_4DWORLDBENCH_KEYE_MODEL=/path/to/Kwai-Keye--Keye-VL-1_5-8B
-export WORLDFOUNDRY_4DWORLDBENCH_FASTVQA_CKPT=/path/to/FAST_VQA_3D_1_1_Scr.pth
-export WORLDFOUNDRY_4DWORLDBENCH_DROID_CKPT=/path/to/droid.pth
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/4dworldbench/generated_videos
-export OPENAI_API_KEY=...
-```
-
-`OPENAI_API_KEY` is only needed for `physics_realism`; the perceptual metrics do not need it.
-
-## Generate Candidate Videos
-
-4DWorldBench does not train or run the candidate generator. Train and run the generator through its own WorldFoundry model package or your external inference script, then write the resulting videos into the paths referenced by `generated_videos`.
-
-For a leaderboard-style run, prepare one dataset JSON per official split/task and make sure:
-
-- `--model-name` exactly matches `models[].model_name`.
-- Each selected prompt has at least one video in `generated_videos`.
-- The generated videos are readable by the active Python environment.
-
-## Run One Dimension
-
-Run a single official dimension from the in-tree runtime:
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py \
   --run-official \
-  --dataset-json /path/to/4dworldbench_dataset.json \
-  --model-name your_model_name \
+  --dataset-json <dataset.json> \
+  --model-name <model_name> \
   --dimension perceptual_clip_iqa_metrics \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/4dworldbench/your_model_name/perceptual_clip_iqa_metrics \
+  --generated-video-dir <generated_artifacts> \
+  --output-dir tmp/4dworldbench/official \
   --json
 ```
 
-The upstream metric result is written under `tmp/4dworldbench/your_model_name/perceptual_clip_iqa_metrics/upstream/4dworldbench_results.json`; the normalized WorldFoundry scorecard is written to `scorecard.json`.
+Model-backed dims resolve `WORLDFOUNDRY_4DWORLDBENCH_KEYE_MODEL`, `WORLDFOUNDRY_4DWORLDBENCH_DROID_CKPT`, and `OPENAI_API_KEY`. Pixel-level dims run without them. Shared stacks: `keye_vl`, `droid_slam`, `vfimamba`, `fastvqa`. Default import path: `WORLDFOUNDRY_4DWORLDBENCH_RESULTS_PATH`.
 
-## Run A Full Metric Set
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/4dworldbench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench`.
 
-Run the dimensions that are required for your split and asset set. This shell loop is useful when all dependencies are installed:
+Outputs include `scorecard.json` (primary `four_d_worldbench_average`) and `raw_metric_table.jsonl`.
 
-```bash
-cd /path/to/WorldFoundry
-
-export DATASET_JSON=/path/to/4dworldbench_dataset.json
-export MODEL_NAME=your_model_name
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/4dworldbench/generated_videos
-
-for DIMENSION in \
-  perceptual_clip_iqa_metrics \
-  perceptual_clip_aesthetic_metrics \
-  perceptual_fastvqa \
-  alignment_attribute_control \
-  alignment_relationship_control \
-  alignment_motion_control \
-  alignment_event_control \
-  alignment_scene_control \
-  alignment_camera_error_metrics \
-  physics_realism \
-  consistency_viewpoint \
-  consistency_motion_smoothness \
-  consistency_motion_qa \
-  consistency_style
-do
-  PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-    worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py \
-    --run-official \
-    --dataset-json "${DATASET_JSON}" \
-    --model-name "${MODEL_NAME}" \
-    --dimension "${DIMENSION}" \
-    --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-    --output-dir "tmp/4dworldbench/${MODEL_NAME}/${DIMENSION}" \
-    --json
-done
-```
-
-If you only want perceptual results, run the perceptual dimensions. If you want the full average, stage the judge/checkpoint assets for all four groups and run all dimensions.
-
-## Import Existing Results
-
-If you already have official 4DWorldBench result JSON files, import them into the unified WorldFoundry scorecard format:
-
-```bash
-cd /path/to/WorldFoundry
-
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id 4dworldbench \
-  --mode official-validation \
-  --official-results-path /path/to/4dworldbench_results.json \
-  --output-dir tmp/4dworldbench/imported \
-  --json
-```
-
-The importer accepts a single result JSON or a directory containing result JSON files.
-
-## Outputs
-
-Each run writes:
-
-- `scorecard.json`: WorldFoundry scorecard with normalized metrics and aggregates.
-- `raw_metric_table.jsonl`: one row per metric.
-- `per_sample_scores.jsonl`: per-sample rows when the upstream result includes sample detail.
-- `upstream/4dworldbench_results.json`: raw official runtime output when `--run-official` is used.
-
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

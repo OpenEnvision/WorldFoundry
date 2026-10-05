@@ -1,11 +1,13 @@
 """Aesthetic quality metric — LAION aesthetic predictor on CLIP ViT-L/14 features."""
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image
 
 from worldfoundry.base_models.perception_core.general_perception import openai_clip
+from worldfoundry.evaluation.tasks.metrics._shared.aesthetic import (
+    load_laion_aesthetic_linear_head,
+)
 
 from ..base import BaseMetric
 from ..weight_utils import wbench_asset_path
@@ -23,12 +25,8 @@ class AestheticQualityMetric(BaseMetric):
         return "aesthetic_quality"
 
     def _get_aesthetic_model(self):
-        path_to_model = wbench_asset_path("wbench_aesthetic_linear_checkpoint")
-        model = nn.Linear(768, 1)
-        state_dict = torch.load(path_to_model, map_location="cpu")
-        model.load_state_dict(state_dict)
-        model.to(self.device).eval()
-        return model
+        checkpoint = wbench_asset_path("wbench_aesthetic_linear_checkpoint")
+        return load_laion_aesthetic_linear_head(checkpoint).to(self.device)
 
     def compute(self, frames, first_frame=None, prompt=None, **kwargs):
         scores = []

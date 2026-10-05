@@ -1,5 +1,7 @@
 id: t2v-safety-bench
 name: T2VSafetyBench
+publisher: Chinese Academy of Sciences
+publisher_kind: institute
 benchmark_kind:
 - text-to-video
 - safety
@@ -137,6 +139,16 @@ metrics:
   output_unit: rate
   primary: true
 runner:
+  scoring:
+    engines: [in_tree]
+    hooks:
+      in_tree: worldfoundry.evaluation.tasks.execution.runners.t2v_safety_bench.t2v_safety_bench_in_tree_evaluator:IN_TREE_CONFIG
+  official_script: worldfoundry/evaluation/tasks/execution/runners/t2v_safety_bench/run_t2v_safety_bench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.t2v_safety_bench.run_t2v_safety_bench_official_runner
+    limit_arg: --limit
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:T2VSafetyBenchContract
   validation_command:
   - worldfoundry-eval
@@ -173,6 +185,7 @@ runner:
   required_env: []
 integration:
   status: integrated
+  tier: model_backed
   blocked_reasons:
   - Real judge execution was not run during release validation because it requires user credentials.
   - Full validation requires every generated video in all official prompt classes.

@@ -7,7 +7,10 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
-from worldfoundry.synthesis.visual_generation.lyra_2 import SOURCE_PACKAGE_ROOT as LYRA2_SOURCE_PACKAGE_ROOT
+from worldfoundry.core.io.paths import checkpoint_root_candidates
+from worldfoundry.synthesis.visual_generation.lyra_2 import (
+    SOURCE_PACKAGE_ROOT as LYRA2_SOURCE_PACKAGE_ROOT,
+)
 
 DEFAULT_DA3_MODEL_NAME = "depth-anything/DA3NESTED-GIANT-LARGE-1.1"
 DEFAULT_WEIGHT_DTYPE = "bfloat16"
@@ -236,21 +239,56 @@ class Lyra2Runtime:
         source_checkpoint_dir = checkpoint_root / "checkpoints"
         if not source_checkpoint_dir.is_dir():
             return
-        if runtime_checkpoint_dir.exists() or runtime_checkpoint_dir.is_symlink():
-            return
-        try:
-            runtime_checkpoint_dir.symlink_to(source_checkpoint_dir, target_is_directory=True)
-        except FileExistsError:
-            pass
+        if not runtime_checkpoint_dir.exists() and not runtime_checkpoint_dir.is_symlink():
+            try:
+                runtime_checkpoint_dir.symlink_to(source_checkpoint_dir, target_is_directory=True)
+            except FileExistsError:
+                pass
 
         shared_root = checkpoint_root.parent
+        tokenizer_roots = tuple(dict.fromkeys((shared_root, *checkpoint_root_candidates())))
+        umt5_candidates = []
+        xlm_candidates = []
+        for root in tokenizer_roots:
+            umt5_candidates.extend(
+                (
+                    root / "umt5-xxl",
+                    root / "google" / "umt5-xxl",
+                    root / "google--umt5-xxl",
+                    root / "Wan-AI--Wan2.1-T2V-1.3B" / "google" / "umt5-xxl",
+                    root / "Wan-AI" / "Wan2.1-T2V-1.3B" / "google" / "umt5-xxl",
+                )
+            )
+            xlm_candidates.extend(
+                (
+                    root / "xlm-roberta-large",
+                    root / "FacebookAI--xlm-roberta-large",
+                )
+            )
+        umt5_tokenizer = next(
+            (
+                candidate
+                for candidate in umt5_candidates
+                if (candidate / "tokenizer_config.json").is_file()
+                and ((candidate / "spiece.model").is_file() or (candidate / "tokenizer.json").is_file())
+            ),
+            None,
+        )
+        xlm_tokenizer = next(
+            (
+                candidate
+                for candidate in xlm_candidates
+                if (candidate / "tokenizer_config.json").is_file()
+            ),
+            None,
+        )
         for env_name, candidate in {
             "LYRA2_IMAGE_ENCODER_CKPT": source_checkpoint_dir / "image_encoder" / "model.pth",
             "LYRA2_TEXT_ENCODER_CKPT": source_checkpoint_dir / "text_encoder" / "encoder.pth",
-            "LYRA2_CLIP_TOKENIZER": shared_root / "xlm-roberta-large",
-            "LYRA2_UMT5_TOKENIZER": shared_root / "umt5-xxl",
+            "LYRA2_CLIP_TOKENIZER": xlm_tokenizer,
+            "LYRA2_UMT5_TOKENIZER": umt5_tokenizer,
         }.items():
-            if candidate.exists():
+            if candidate is not None and candidate.exists():
                 os.environ.setdefault(env_name, candidate.as_posix())
 
     @staticmethod
@@ -258,7 +296,7 @@ class Lyra2Runtime:
         import sys
         import types
 
-        from worldfoundry.core.distributed import megatron_compat
+        from worldfoundry.core.distributed.model_parallel import megatron_compat
 
         parallel_state_module = sys.modules.get("megatron.core.parallel_state")
         if parallel_state_module is None:
@@ -314,7 +352,9 @@ class Lyra2Runtime:
         """
         import torch
 
-        from worldfoundry.pipelines.lyra.lyra_utils import working_directory
+        from worldfoundry.base_models.three_dimensions.point_clouds.lyra.utils import (
+            working_directory,
+        )
 
         if not str(self.device).startswith("cuda"):
             raise ValueError("Lyra-2 runtime loading requires a CUDA device.")
@@ -350,7 +390,9 @@ class Lyra2Runtime:
         )
         self._install_checkpoint_aliases(checkpoint_root)
 
-        from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.inference.depth_utils import load_da3_model
+        from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.inference.depth_utils import (
+            load_da3_model,
+        )
         from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.utils.model_loader import (
             load_model_from_checkpoint,
         )
@@ -447,7 +489,9 @@ class Lyra2Runtime:
             offload_when_prompt: Whether to use the offloaded embedding helper.
         """
         self._install_runtime_aliases()
-        from worldfoundry.pipelines.lyra.lyra_utils import working_directory
+        from worldfoundry.base_models.three_dimensions.point_clouds.lyra.utils import (
+            working_directory,
+        )
 
         desired_device = self.model.tensor_kwargs.get("device", self.device)
         desired_dtype = self.model.tensor_kwargs.get("dtype", self.weight_dtype)
@@ -644,7 +688,8 @@ class Lyra2Runtime:
         import numpy as np
         import torch
 
-        from worldfoundry.pipelines.lyra.lyra_utils import load_pil_image, video_tensor_to_uint8_frames
+        from worldfoundry.core.io import video_tensor_to_uint8_frames
+        from worldfoundry.core.media.codecs.image import load_pil_image
 
         self._install_runtime_aliases()
         with torch.no_grad() if hasattr(torch, "no_grad") else contextlib.nullcontext():
@@ -661,7 +706,7 @@ class Lyra2Runtime:
         desired_device = self.model.tensor_kwargs.get("device", self.device)
         desired_dtype = self.model.tensor_kwargs.get("dtype", self.weight_dtype)
 
-        from worldfoundry.core.utils import inference_runtime as misc
+        from worldfoundry.core.execution import inference_runtime as misc
         from worldfoundry.synthesis.visual_generation.lyra_2.lyra_2._src.inference.lyra2_ar_inference import (
             run_lyra2_sample,
             safe_to,

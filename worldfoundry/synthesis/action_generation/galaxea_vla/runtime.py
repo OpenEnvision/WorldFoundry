@@ -86,7 +86,7 @@ class GalaxeaVLARuntime:
     def _resolve_checkpoint(self) -> tuple[Path, Path]:
         if self._checkpoint_root is not None and self._checkpoint_file is not None:
             return self._checkpoint_root, self._checkpoint_file
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         direct = self._local_path(self.config.checkpoint_location)
         if direct is not None and direct.is_file():
@@ -140,7 +140,7 @@ class GalaxeaVLARuntime:
     def _resolve_tokenizer(self) -> Path:
         if self._tokenizer_root is not None:
             return self._tokenizer_root
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         direct = self._local_path(self.config.tokenizer_location)
         source = str(direct) if direct is not None else self.config.tokenizer_location
@@ -186,7 +186,7 @@ class GalaxeaVLARuntime:
             return self._model
         import torch
 
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         from .modeling import GalaxeaZero
         from .preprocessing import PaliGemmaTokenizer

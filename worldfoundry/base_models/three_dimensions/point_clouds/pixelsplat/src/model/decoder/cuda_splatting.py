@@ -4,6 +4,16 @@ from math import isqrt
 from typing import Literal
 
 import torch
+
+from worldfoundry.base_models.three_dimensions.three_d_four_d.runtime_extension_overlay import (
+    add_runtime_extension_overlay,
+)
+
+add_runtime_extension_overlay(
+    "diff_gaussian_rasterization",
+    environment_variable="WORLDFOUNDRY_DIFF_GAUSSIAN_RASTERIZATION_EXTENSION_DIR",
+)
+
 from diff_gaussian_rasterization import (
     GaussianRasterizationSettings,
     GaussianRasterizer,

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path
 from worldfoundry.evaluation.tasks.execution.runners.worldreasonbench.worldreasonbench_metrics import (
     METRIC_ORDER,
     metric_rows,
@@ -53,13 +54,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def _resolve_upstream_root(args: argparse.Namespace) -> Path:
-    root = args.worldreasonbench_root or _env_path("WORLDFOUNDRY_WORLDREASONBENCH_ROOT")
+    root = args.worldreasonbench_root or resolve_env_path("WORLDFOUNDRY_WORLDREASONBENCH_ROOT")
     if root is None or not root.is_dir():
         raise FileNotFoundError(
             "WorldReasonBench checkout is required for --run-official; pass --worldreasonbench-root "
@@ -74,8 +72,8 @@ def _official_command(args: argparse.Namespace, root: Path) -> tuple[list[str], 
         raise ValueError("--run-official requires one explicit --protocol")
     python = os.environ.get("WORLDFOUNDRY_UNIFIED_PYTHON", sys.executable)
     if protocol == "qa":
-        qa_json = args.qa_json or _env_path("WORLDFOUNDRY_WORLDREASONBENCH_QA_JSON")
-        video_dir = args.video_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+        qa_json = args.qa_json or resolve_env_path("WORLDFOUNDRY_WORLDREASONBENCH_QA_JSON")
+        video_dir = args.video_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
         if qa_json is None or video_dir is None:
             raise ValueError("QA execution requires --qa-json and --video-dir")
         result_dir = args.output_dir / "qa"
@@ -100,7 +98,7 @@ def _official_command(args: argparse.Namespace, root: Path) -> tuple[list[str], 
             command.extend(["--limit", str(args.limit)])
         return command, result_dir
 
-    pairs = args.pairs_json or _env_path("WORLDFOUNDRY_WORLDREASONBENCH_PAIRS_JSON")
+    pairs = args.pairs_json or resolve_env_path("WORLDFOUNDRY_WORLDREASONBENCH_PAIRS_JSON")
     if pairs is None:
         pairs = root / "data/statistics_model_pairs_by_task_stratified_balanced_tie_v2.json"
     output = args.output_dir / f"{protocol}_eval.jsonl"
@@ -220,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
             results_path, runtime = _run_upstream(args)
             protocol = args.protocol
         else:
-            results_path = args.official_results_path or _env_path("WORLDFOUNDRY_WORLDREASONBENCH_RESULTS_PATH")
+            results_path = args.official_results_path or resolve_env_path("WORLDFOUNDRY_WORLDREASONBENCH_RESULTS_PATH")
             if results_path is None:
                 raise ValueError("--official-results-path or WORLDFOUNDRY_WORLDREASONBENCH_RESULTS_PATH is required")
             protocol = args.protocol

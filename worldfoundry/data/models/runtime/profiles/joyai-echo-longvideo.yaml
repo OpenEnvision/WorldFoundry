@@ -1,0 +1,49 @@
+schema_version: 2
+model_id: joyai-echo-longvideo
+display_name: JoyAI-Echo 1.5 / Echo-LongVideo
+task_family: video_generation
+groups:
+- video
+- audio
+- long_horizon
+- reference_conditioning
+source_repos:
+- url: https://github.com/jd-opensource/JoyAI-Echo
+  revision: 0b931fd42f5ef51410019ae41b261eb3b8936410
+  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/jd-opensource--JoyAI-Echo
+  subdir: echo_longvideo
+checkpoints:
+- repo_id: jdopensource/JoyAI-Echo
+  revision: 9ec5d876c4ac73e2912a18e11c03fb03489d0903
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/jdopensource--JoyAI-Echo
+  role: echo15_bf16_fp8_fp4
+- repo_id: google/gemma-3-12b-it
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/google--gemma-3-12b-it
+  role: gated_text_encoder
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  memory_slots: true
+artifact_kind: generated_video
+artifact_filename: joyai-echo-longvideo.mp4
+execution:
+  environment: joyai-echo-longvideo
+  backend_stage: official_external_runtime
+  runtime_status: command_contract_validated_gpu_blocked_gated_encoder_and_environment
+  integration_status: integrated
+  pipeline_binding: joyai-echo-longvideo
+  defaults:
+    precision: bf16
+    num_frames: 241
+    width: 1280
+    height: 736
+    fps: 25
+    max_memory_slots: 7
+integration:
+  status: integrated
+notes:
+- Echo-LongVideo and Echo-WM deliberately use different upstream Python environments.
+- Prediction never clones source or downloads checkpoints; source_root, checkpoint_dir, and gemma_path are preflighted.
+- Director Agent, local-server, Gradio, training, and evaluation surfaces are outside this inference-only integration.
+- The upstream license marks this release for academic research and non-commercial use.

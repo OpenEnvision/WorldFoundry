@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from worldfoundry.core.nn.layers import Mlp
+from worldfoundry.core.nn.blocks.layers import Mlp
 from ..layers.block import Block
 from .head_act import activate_pose
 

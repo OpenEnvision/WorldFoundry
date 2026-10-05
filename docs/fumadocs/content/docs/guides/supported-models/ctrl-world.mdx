@@ -1,0 +1,52 @@
+---
+title: "Ctrl-World"
+description: "Ctrl-World from Tsinghua University / Stanford University: interactive-world-model and game-world-model; Runner parity pending."
+modelId: "ctrl-world"
+pageSource: authored
+---
+
+Ctrl-World is a controllable generative world model for robot manipulation: conditioned on robot actions, it predicts future observation video so policies can be evaluated or improved inside the model. In this catalog the official WorldArena-listed source is vendored in-tree; execution waits on the Ctrl-World, Stable Video Diffusion, and CLIP checkpoints plus task assets.
+
+<ModelPaperFigures modelId="ctrl-world" locale="en" />
+
+Code: [Robert-gyj/Ctrl-World](https://github.com/Robert-gyj/Ctrl-World).
+
+No paper URL is recorded on this card. Code: [Robert-gyj/Ctrl-World](https://github.com/Robert-gyj/Ctrl-World). Weights: `yjguo/Ctrl-World` plus `stabilityai/stable-video-diffusion-img2vid` and `openai/clip-vit-base-patch32`. Publisher: Tsinghua / Stanford. Catalog license is unset.
+
+The compatibility launcher runs the released checkpoint with local SVD and CLIP. Default views are synchronized **ALOHA** high / left-wrist / right-wrist — the runtime does **not** synthesize cameras. Checkpoint-matched **DROID** views and actions are still required for action-quality parity. Until those assets are staged, the pipeline returns **blocked** diagnostics.
+
+<ModelCommandBuilder modelId="ctrl-world" locale="en" />
+
+## What it is for
+
+Use `ctrl-world` for catalog world-model inference. Choose it when you need action-conditioned future frames rather than a standalone clip generator.
+
+The recorded checkpoints tell the design: a Stable Video Diffusion image-to-video backbone (stabilityai/stable-video-diffusion-img2vid) with CLIP conditioning (openai/clip-vit-base-patch32) and Ctrl-World's own action-conditioning weights (yjguo/Ctrl-World). Internals beyond this are not recorded in this repository. It is published by Tsinghua University / Stanford University.
+
+Catalog tasks include interactive-world-model, game-world-model, and action-conditioned-video. Catalog aliases include `ctrl_world` and `ctrlworld`.
+
+Recorded evaluation entry points include [WorldArena](/docs/evaluation/benchmark-hub/worldarena) (The entry is listed on WorldArena for robot world-model evaluation).
+
+## Runtime contract
+
+Optional `input_path`, `prompt`, `load.checkpoint_path`, `load.base_model_dir`, and `load.clip_model_dir`; artifacts `ctrl-world.mp4`.
+
+CLI task profiles: `robot-action-video`. WorldFoundry binds `CtrlWorldPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `robot-action-video` defaults: height=192, width=320, num_frames=5, num_inference_steps=4, guidance_scale=1.0, fps=4.
+
+The pipeline resolves the vendored rollout entrypoint and returns blocked runtime diagnostics until checkpoints and task assets are staged. Stage all three recorded checkpoint sets before submitting jobs.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run ctrl-world --pipeline.task-profile robot-action-video` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `yjguo/Ctrl-World`, `stabilityai/stable-video-diffusion-img2vid`, and `openai/clip-vit-base-patch32`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh ctrl-world`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="ctrl-world" locale="en" />

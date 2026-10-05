@@ -1,5 +1,7 @@
 id: worldscore
 name: WorldScore
+publisher: Stanford University
+publisher_kind: university
 benchmark_kind:
 - world-generation
 - image-to-video
@@ -117,6 +119,16 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/worldscore/run_worldscore_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.worldscore.run_worldscore_official_runner
+    generated_arg: --stage-dynamic-source
+    dataset_root_arg: --data-path
+    model_arg: --model-name
+    supports_run_official: false
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    input_kind: worldscore_output_dir_or_official_results
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldScoreContract
   repo_url: https://github.com/haoyi-duan/WorldScore
   repo_revision: 344983c1be7d515c1e4ecb167d40d622adf502bc
@@ -190,6 +202,8 @@ runner:
     eligibility.leaderboard_valid stays false unless full evidence is recorded.
 integration:
   status: integrated
+  tier: in_tree
+  hf_dataset_id: Howieeeee/WorldScore
   evidence:
     official_benchmark_verified: false
     integration_evidence: false

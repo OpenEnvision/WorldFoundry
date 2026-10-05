@@ -1,0 +1,38 @@
+---
+title: "VideoCrafter"
+description: "腾讯 AI Lab 的 VideoCrafter 系列页。默认是 VideoCrafter2 文生视频（512×320 / 16 帧 / 28 fps / 50 步 DDIM）；VC1 文生与图生是另外两条待验证路径。"
+modelId: "videocrafter"
+pageSource: authored
+---
+
+目录里没有 `cogvideo`（更晚的 [CogVideoX](/zh/docs/guides/supported-models/cogvideox) 是另一家族）。本页是未占用的 VideoCrafter 系列条目——腾讯 AI Lab 的 U-Net 潜空间视频工具箱。它聚合三条树内**仅推理**运行时：[VideoCrafter2 T2V](/zh/docs/guides/supported-models/videocrafter2-t2v)（默认启动）、[VideoCrafter1 T2V](/zh/docs/guides/supported-models/videocrafter1-t2v)、[VideoCrafter1 I2V](/zh/docs/guides/supported-models/videocrafter1-i2v)。checkpoint 溯源集中在本页，避免兄弟页重复 Hugging Face 别名。训练、数据集与下载辅助脚本未打包。
+
+<ModelPaperFigures modelId="videocrafter" locale="zh" />
+
+论文字段是 [VideoCrafter2: Overcoming Data Limitations for High-Quality Video Diffusion Models](https://arxiv.org/abs/2401.09047)。项目页：[ailab-cvc.github.io/videocrafter2](https://ailab-cvc.github.io/videocrafter2/)。代码：[VideoCrafter/VideoCrafter](https://github.com/VideoCrafter/VideoCrafter)。`paper.png` 只作标题缩略图。
+
+<ModelCommandBuilder modelId="videocrafter" locale="zh" />
+
+## 它用来做什么
+
+从 VideoCrafter2 文生视频入手（`VideoCrafter2T2VPipeline`）：必填 `prompt`，产物 `videocrafter2-t2v.mp4`。这是许可最干净的卡片（**Apache-2.0**），也是系列默认（`worldfoundry-eval run videocrafter`）。
+
+旧版 1024×576 文生视频走 [videocrafter1-t2v](/zh/docs/guides/supported-models/videocrafter1-t2v)，给静帧加运动走 [videocrafter1-i2v](/zh/docs/guides/supported-models/videocrafter1-i2v)。**没有 V2V**。配套评测看 [EvalCrafter](/zh/docs/evaluation/benchmark-hub/evalcrafter)，通用文生视频质量看 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)——列出的指针，不是已摄入排名。
+
+## 推理
+
+采样器是 **DDIM**（除非覆盖，否则 `ddim_steps=50`、`ddim_eta=1.0`、`unconditional_guidance_scale=12.0`）。高宽须能被 16 整除。帧数默认取 U-Net 的 `temporal_length`，即 **16**。
+
+| 路径 | 任务 | 分辨率 / 帧数 / fps | Checkpoint | 一致性 |
+| --- | --- | --- | --- | --- |
+| `videocrafter2-t2v`（默认） | 文生视频 | **512×320**，16 帧，**28** fps | `VideoCrafter/VideoCrafter2` | pending |
+| `videocrafter1-t2v` | 文生视频 | **1024×576**，16 帧，**8** fps | `VideoCrafter/Text2Video-1024` | pending |
+| `videocrafter1-i2v` | 图生视频 | **512×320**，16 帧，**8** fps | `VideoCrafter/Image2Video-512` | pending |
+
+catalog 未记录显存。系列级 I2V 任务仍把产物写成 `videocrafter2-t2v.mp4`——这是 catalog 笔误；图生视频实际走 `videocrafter1-i2v` pipeline。
+
+## 在 WorldFoundry 中运行
+
+统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。在 `$WORLDFOUNDRY_HFD_ROOT` 下就位对应的 `model.ckpt`（`VideoCrafter--VideoCrafter2`、`VideoCrafter--Text2Video-1024` 或 `VideoCrafter--Image2Video-512`）。较早的 Text2Video / Image2Video 卡片在 `cardData` 里**没有 license**——不要从组织名推断 Apache-2.0。状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="videocrafter" locale="zh" />

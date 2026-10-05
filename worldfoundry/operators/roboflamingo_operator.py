@@ -44,11 +44,16 @@ class RoboFlamingoOperator(EmbodiedActionOperator):
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """Process perception inputs like images, videos, and reference frames."""
-        visual_history = video or kwargs.get("image_sequence") or kwargs.get("visual_history") or images
+        visual_history = _first_present(
+            {"video": video, "image_sequence": kwargs.get("image_sequence"),
+             "visual_history": kwargs.get("visual_history"), "images": images},
+            "video", "image_sequence", "visual_history", "images",
+        )
         observation = _compact_dict(
             {
                 "visual_history": visual_history,
                 "current_image": images,
+                "gripper_image": _first_present(kwargs, "gripper_image", "wrist_image", "gripper"),
                 "proprio": _first_present(kwargs, "proprio", "robot_state"),
                 "gripper_state": kwargs.get("gripper_state"),
             }

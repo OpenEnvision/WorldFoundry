@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 
-from torch_fidelity.helpers import get_kwarg, vprint
-from torch_fidelity.utils import (
+from .helpers import get_kwarg, vprint
+from .utils import (
     extract_featuresdict_from_input_id_cached,
     create_feature_extractor,
     resolve_feature_extractor,

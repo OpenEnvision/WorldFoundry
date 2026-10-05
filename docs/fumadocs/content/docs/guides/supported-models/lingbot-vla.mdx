@@ -1,0 +1,54 @@
+---
+title: "LingBot-VLA"
+description: "LingBot-VLA from Robbyant (Ant Group): vla and vla action prediction; Static load only; 3 variants."
+modelId: "lingbot-vla"
+pageSource: authored
+---
+
+LingBot-VLA is Robbyant's 4B vision-language-action policy line: a pretrained base plus RoboTwin post-trained and depth-enhanced RoboTwin variants, all Apache-2.0 with pinned revisions on Hugging Face and ModelScope. WorldFoundry integrates the official policy, feature transforms, robot mapping, and normalization assets directly in-tree as an in-process runtime.
+
+<ModelPaperFigures modelId="lingbot-vla" locale="en" />
+
+The recorded paper is [arXiv 2508.02317](https://arxiv.org/abs/2508.02317).
+
+Code: [Robbyant/lingbot-vla](https://github.com/Robbyant/lingbot-vla).
+
+<ModelCommandBuilder modelId="lingbot-vla" locale="en" />
+
+## What it is for
+
+Pick `lingbot-vla-4b` when you want the catalog VLA policy: instruction and observation in, an action trace out. Use it to roll the recorded policy, not to train a new one.
+
+A 4B policy backbone with feature transforms and per-robot mappings; the runtime uses shared WorldFoundry core device selection, compile dispatch, Hugging Face snapshot coordination, and streaming safetensors loading. Further internals are not recorded in this repository. It is published by Robbyant (Ant Group).
+
+Catalog tasks include vla, vla action prediction, vla policy rollout, and robot policy. Catalog aliases include `lingbot-vla-4b`, `lingbot-vla-4b-posttrain-robotwin`, and `lingbot-vla-4b-depth-posttrain-robotwin`. Also recorded: `lingbot-vla-4b-posttrain-robotwin`, `lingbot-vla-4b-depth-posttrain-robotwin`.
+
+Recorded evaluation entry points include [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin) (Dedicated RoboTwin post-trained checkpoints).
+
+LingBot VLA rollout. v2 is a sibling card.
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `lingbot_vla_action_trace.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `LingBotVLAPipeline`.
+
+Start on `lingbot-vla-4b`. The family registers 3 catalog variants (cards above): `lingbot-vla-4b` (`vla.pretraining`) — Runner parity pending; `lingbot-vla-4b-posttrain-robotwin` (`vla.policy_rollout`) — Runner parity pending; `lingbot-vla-4b-depth-posttrain-robotwin` (`vla.policy_rollout`) — Runner parity pending. Family status: **Static load only**.
+
+Use the RoboTwin post-train for simulator benchmarks (the depth variant adds depth input) and the base for fine-tuning. For the newer 6B generation see lingbot-vla-v2.
+
+Official policy/model, feature transforms, robot mapping, and normalization assets are integrated directly in-tree.
+
+Runnable / integrated: `lingbot-vla-4b`, `lingbot-vla-4b-posttrain-robotwin`, and `lingbot-vla-4b-depth-posttrain-robotwin`.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run lingbot-vla-4b --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the dedicated environment `worldfoundry-lingbot-vla-v1-cu128` (Python 3.11, CUDA 12.8, torch==2.8.0).
+
+Recorded weight repositories include `robbyant/lingbot-vla-4b`, `robbyant/lingbot-vla-4b-posttrain-robotwin`, and `robbyant/lingbot-vla-4b-depth-posttrain-robotwin` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lingbot-vla-4b`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; status: **Static load only**.
+
+<ModelRelatedRecipes modelId="lingbot-vla" locale="en" />

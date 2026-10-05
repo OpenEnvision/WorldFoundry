@@ -1,103 +1,188 @@
 ---
-title: Studio Internals
+title: Studio internals
 description: How Studio discovers models, drives pipelines, materializes runs, and keeps UI separate from execution.
 ---
 
-Studio is a catalog-driven shell over the same pipeline and artifact contracts used by CLI inference and evaluation. It does not own model weights, scoring logic, or benchmark manifests. Its job is to discover runnable entries, prepare inputs, invoke the right runtime driver, write a `RunRecord`, and pick preview assets for the UI. The same execution core can serve Gradio (`app.py`), Workspace jobs, conda child processes, and torchrun workers; only the presentation layer changes.
+Studio is a catalog-driven shell over the same pipeline and artifact contracts used by CLI inference and evaluation. It does not own model weights, scoring logic, or benchmark manifests. Its job is to discover runnable entries, prepare inputs, invoke the right runtime driver, write a `RunRecord`, and pick preview assets for the UI. The same execution core serves the `world` realtime frontend, Workspace jobs, conda child processes, and torchrun workers.
 
-```text
-launch args
-  -> StudioLaunchConfig
-  -> discover_catalog()
-  -> StudioManager
-  -> prepare_inputs()
-  -> runtime_driver_for()
-  -> run()
-  -> materialize_run()
-  -> pick_preview_assets()
-  -> Gradio / Workspace UI update
-```
+<ArchDiagram id="studio" />
 
-Keep inference semantics in `studio/execution.py` and catalog discovery in `studio/catalog.py`. `studio/app.py` should stay thin: layout, callbacks, and Gradio component updates. If a change must also work from `runtime_job.py` or `workspace_app.py` without Gradio, it belongs in execution, not in the UI file.
+Keep inference semantics in `studio/inference/execution.py` and catalog discovery in `studio/inference/catalog.py`. `studio/ui/launcher.py` routes standalone frontends, and `studio/ui/launch_config.py` parses launch options. Page layout, fullscreen, and keyboard controls live in `studio/visualization/backends/world.py` and `world_realtime_client.py`; inference semantics belong in the shared execution core.
 
 ## Files
 
-| File | Role | Important symbols |
-| --- | --- | --- |
-| `studio/catalog.py` | Discovers model entries from pipeline files, canonical runtime entries, and overrides. | `CatalogEntry`, `discover_catalog()`, `filter_catalog()`, `find_entry()`, `catalog_stats()`. |
-| `studio/execution.py` | Prepares inputs, loads pipeline classes, chooses runtime driver strategy, writes run records, exports previews. | `PreparedInputs`, `RunRecord`, `PipelineContext`, `BaseRuntimeDriver`, `StudioManager`. |
-| `studio/app.py` | Gradio UI, launch config, preset handling, callbacks, run buttons, recent-run loading. | `StudioLaunchConfig`, `parse_launch_config()`, `build_demo()`, `main()`. |
-| `studio/theme.py` | Theme constants and UI styling hooks. | Used only by the app shell. |
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>File</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>studio/inference/catalog.py</code>
+          </div>
+        </div>
+        <p>Discovers model entries from pipeline files, canonical runtime entries, and overrides.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>CatalogEntry</code>, <code>discover_catalog()</code>, <code>filter_catalog()</code>, <code>find_entry()</code>, <code>catalog_stats()</code>.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>studio/inference/execution.py</code>
+          </div>
+        </div>
+        <p>Prepares inputs, loads pipeline classes, chooses runtime driver strategy, writes run records, exports previews.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>PreparedInputs</code>, <code>RunRecord</code>, <code>PipelineContext</code>, <code>BaseRuntimeDriver</code>, <code>StudioManager</code>.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>studio/ui/launcher.py</code>
+          </div>
+        </div>
+        <p>Standalone frontend launch and routing; shared options are parsed by `ui/launch_config.py`.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>StudioLaunchConfig</code>, <code>parse_launch_config()</code>, <code>main()</code>.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>studio/visualization/backends/world.py</code>
+          </div>
+        </div>
+        <p>Realtime page layout, styles, fullscreen controls, and browser script wiring.</p>
+        <p className="pi-kv-read"><span>First file</span> Browser controls are implemented by `world_realtime_client.py`.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>studio/serving/realtime/</code>
+          </div>
+        </div>
+        <p>Transport-neutral input resampling, RGB normalization, JPEG encoding, and bounded frame queues.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>RealtimeControlResampler</code>, <code>FrameQueuePolicy</code>, <code>LatestFrameBuffer</code>.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>studio/visualization/backends/world_realtime.py</code>
+          </div>
+        </div>
+        <p>Owns the resident model thread and WebRTC/WebSocket session lifecycle.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>ResidentWorldRuntime</code>, <code>RealtimePeerManager</code>.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>core/media/processing/postprocess.py</code>
+          </div>
+        </div>
+        <p>Stateful, chainable output processing outside the model's encode/diffuse/decode contract.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>VideoPostprocessStream</code>, <code>VideoPostProcessorSession</code>.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>core/media/processing/rtx.py</code>
+          </div>
+        </div>
+        <p>Optional layout-preserving NVIDIA VFX adapter and preflight diagnosis; imports the proprietary runtime only after explicit selection.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>RTXVideoSuperResolutionPostProcessor</code>, <code>inspect_rtx_vfx_capability()</code>.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>runtime/realtime_regression.py</code>
+          </div>
+        </div>
+        <p>Evaluates canonical chunk-timing JSONL against explicit performance limits.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>RealtimeRegressionManifest</code>, <code>evaluate_realtime_manifest()</code>.</p>
+      </li>
+    </ul>
+  </section>
+</div>
 
-## Catalog Discovery
+## Catalog discovery
 
 Catalog build is intentionally static. `discover_catalog()` walks pipeline modules with AST helpers so Studio can list models without importing heavy CUDA stacks or optional dependencies. It merges three sources: `pipeline_*.py` classes, component-pipeline factories, and action-synthesis classes, then overlays curated overrides and canonical runtime entries (aliases, default kwargs, checkpoints, `runtime_kind`). Dedup keys are `(module_path, class_name)`. Hidden or abstract ids stay out of the UI list.
 
 Import happens later, only when a run needs a concrete class: `StudioManager.import_pipeline_class()` loads `module_path` / `class_name` from the selected `CatalogEntry`. That split is why a model can appear in the catalog yet still fail at LOAD if the current environment lacks its runtime imports or local checkpoint.
 
-| Step | Function | Meaning |
-| --- | --- | --- |
-| Find project root | `_project_root()` / `_project_root_candidates()` | Allows Studio to run from repo root or package context. |
-| Inspect pipelines | AST helpers around `_AstPipelineInfo` | Reads pipeline modules without importing heavy model dependencies. |
-| Normalize ids | `_normalize_model_id()` | Stable lookup key for UI, CLI launch args, and recent runs. |
-| Build entries | `discover_catalog()` | Produces `CatalogEntry[]` with family, class path, category, backend, aliases, examples. |
-| Filter entries | `filter_catalog()` | Applies search and category filters for the UI list. |
+- **Find project root** (`_project_root()` / `_project_root_candidates()`) — Allows Studio to run from repo root or package context.
+- **Inspect pipelines** (AST helpers around `_AstPipelineInfo`) — Reads pipeline modules without importing heavy model dependencies.
+- **Normalize ids** (`_normalize_model_id()`) — Stable lookup key for UI, CLI launch args, and recent runs.
+- **Build entries** (`discover_catalog()`) — Produces `CatalogEntry[]` with family, class path, category, backend, aliases, examples.
+- **Filter entries** (`filter_catalog()`) — Applies search and category filters for the UI list.
 
-## Execution Core
+## Execution core
 
 `StudioManager` is the orchestration hub. A typical `run` / `stream` / `init` / `reset` path prepares a request, stages inputs into a run directory, selects a driver from `entry.runtime_kind`, loads the pipeline (LRU-cached), invokes the driver, then materializes a `RunRecord`. Drivers exist because not every family is a single `__call__`: two-stage 3DGS reconstructs then orbits, point-cloud nav reconstructs then renders views, WorldFM needs custom camera and panorama handling. Everything else uses `BaseRuntimeDriver`.
 
 `PreparedInputs` is the normalized payload after staging prompts, images, videos, interactions, and runtime kwargs. `PipelineContext` holds the loaded class, device, variant, and output root. `RunRecord` is the durable unit the UI reloads: ids, inputs, outputs, artifact paths, preview picks, status, and manifest JSON. Workspace inference may also pass an `infer_metadata` contract so materialization can enforce required output kinds (video, image, splat, and so on).
 
-| Class / function | Role |
-| --- | --- |
-| `PreparedInputs` | Captures staged prompt, images, videos, interactions, runtime kwargs, and metadata. |
-| `RunRecord` | Stores run id, model id, inputs, outputs, artifacts, preview paths, status, and manifest export. |
-| `PipelineContext` | Keeps imported pipeline class, model ref, device, variant, load kwargs, and output root. |
-| `BaseRuntimeDriver` | Default driver: load pipeline, run fresh request, optionally initialize/continue streaming, reset state. |
-| `TwoStage3DGSRuntimeDriver` | Specialized driver for two-stage 3DGS flows. |
-| `PointCloudNavRuntimeDriver` | Specialized driver for point-cloud/navigation previews. |
-| `WorldFMRuntimeDriver` | Specialized driver for WorldFM camera pose and panorama workflow. |
-| `StudioManager` | Orchestrates import, driver selection, input preparation, run execution, recent-run storage, unload/reset. |
+- `PreparedInputs` — Captures staged prompt, images, videos, interactions, runtime kwargs, and metadata.
+- `RunRecord` — Stores run ID, model ID, inputs, outputs, artifacts, preview paths, status, and manifest export.
+- `PipelineContext` — Keeps imported pipeline class, model ref, device, variant, load kwargs, and output root.
+- `BaseRuntimeDriver` — Default driver: load pipeline, run fresh request, optionally initialize/continue streaming, reset state.
+- `TwoStage3DGSRuntimeDriver` — Specialized driver for two-stage 3DGS flows.
+- `PointCloudNavRuntimeDriver` — Specialized driver for point-cloud/navigation previews.
+- `WorldFMRuntimeDriver` — Specialized driver for WorldFM camera pose and panorama workflow.
+- `StudioManager` — Orchestrates import, driver selection, input preparation, run execution, recent-run storage, unload/reset.
 
-## Preview and Artifact Helpers
+## Preview and artifact helpers
 
 After the driver returns, `materialize_run()` turns a heterogeneous result into files under the run directory: metadata JSON, known artifact keys, optional frame-to-video export, mesh conversion, and optional Rerun recordings. When previews are still empty, Studio may scan the output directory depending on `WORLDFOUNDRY_STUDIO_ARTIFACT_SCAN_MODE`. `pick_preview_assets()` then ranks artifacts for the UI—preferring generated videos and named previews over staged inputs—and returns the primary video, image, splat/model, gallery, and optional `.rrd`.
 
 Blank previews usually mean the pipeline wrote files outside expected keys, returned an in-memory object without `save()`, or produced a video the decoder rejects. Fix the pipeline contract first; only then widen scan mode or conversion helpers.
 
-| Function | Purpose |
-| --- | --- |
-| `export_frames_to_video()` | Converts frame sequences into a preview video. |
-| `collect_artifact_paths()` | Finds generated files under the output directory. |
-| `pick_preview_assets()` | Chooses primary video/image/model/json assets for UI preview. |
-| `maybe_extract_video_preview_image()` | Saves a representative image from a video preview. |
-| `convert_model_for_preview()` | Converts 3D assets when browser preview needs a different format. |
-| `maybe_build_rerun_rrd()` | Builds a Rerun recording when available. |
-| `write_json()` | Writes run manifests and input/output records. |
+- `export_frames_to_video()` — Converts frame sequences into a preview video.
+- `collect_artifact_paths()` — Finds generated files under the output directory.
+- `pick_preview_assets()` — Chooses primary video/image/model/json assets for UI preview.
+- `maybe_extract_video_preview_image()` — Saves a representative image from a video preview.
+- `convert_model_for_preview()` — Converts 3D assets when browser preview needs a different format.
+- `maybe_build_rerun_rrd()` — Builds a Rerun recording when available.
+- `write_json()` — Writes run manifests and input/output records.
 
-## UI File Boundaries
+## UI file boundaries
 
-Treat `app.py` as presentation glue. Launch flags that only affect Gradio stay there; values that change non-UI execution belong in `StudioLaunchConfig` consumption inside execution. HTML status blocks and tray cards stay in the UI. Button handlers may call `StudioManager`, but they should not load pipelines, stage files, or invent artifact layouts themselves. Presets that are purely demo defaults can live in the UI; presets that must match evaluation or Workspace contracts should be shared data, not Gradio-only strings.
+Standalone browser frontends own launch and presentation. Shared inference modules own model loading, normalized inputs, runtime drivers, and artifact contracts; page and transport handlers call `StudioManager`.
 
-| Area | Keep in `app.py` | Move to `execution.py` if |
-| --- | --- | --- |
-| Launch parsing | CLI flags, default UI selections, gradio launch parameters. | The value affects non-UI execution. |
-| HTML helpers | Header, tray, cards, status blocks, summaries. | The same output is needed by tests or CLI. |
-| Callback glue | Button handlers and component updates. | It loads models, touches files, or transforms artifacts. |
-| Presets | UI-specific prompt/interactions defaults. | Preset semantics must be shared with evaluation. |
+- **Launch parsing** — `ui/launch_config.py` parses CLI flags and environment defaults into `StudioLaunchConfig`.
+- **Frontend routing** — `ui/launcher.py` and `visualization/backends/frontends.py` select `world`, Viser, Spark, or another frontend from model or artifact metadata.
+- **Browser UI** — `visualization/backends/world.py` and `world_realtime_client.py` own layout, fullscreen, keyboard, and joystick controls.
+- **Realtime transport** — `visualization/backends/world_realtime.py` owns resident sessions, calls `StudioManager.run_realtime()`, and transports frames and controls over WebRTC/WebSocket.
+- **Shared execution** — `inference/execution.py` owns models and drivers; realtime interaction transports frames in memory without exporting an MP4 for each control event.
 
-## Debug Path
+## Realtime serving boundaries
 
-Most Studio bugs are contract mismatches, not Gradio bugs. A missing model is almost always catalog discovery, aliases, or a hidden id. Wrong device or variant usually means launch config and `PipelineContext` overrides. Inputs that never reach the model fail in `prepare_inputs()` or driver kwargs binding. Streaming failures often mean `init`/`stream` was called without memory state or without a prior reconstruction for two-stage drivers. Recent-run reload failures mean the manifest or artifact paths drifted after `materialize_run()`.
+The realtime path deliberately separates model state from presentation state:
 
-| Symptom | Check |
-| --- | --- |
-| Model missing from UI | `discover_catalog()` output, `CatalogEntry.aliases`, category filter, pipeline file naming. |
-| Wrong variant/device | `StudioLaunchConfig`, `_variant_payload()`, `_apply_variant_runtime_overrides()`, `PipelineContext`. |
-| Input not reaching model | `prepare_inputs()`, `PreparedInputs`, driver `run_fresh()` kwargs. |
-| Preview blank | `collect_artifact_paths()`, `pick_preview_assets()`, conversion helpers, generated file extension. |
-| Streaming broken | `BaseRuntimeDriver.run_init()`, `BaseRuntimeDriver.run_continue()`, pipeline `stream()`, memory state. |
-| Recent run cannot reload | `RunRecord.to_manifest()`, `materialize_run()`, `load_run()`, artifact paths. |
+<ArchDiagram id="studio-realtime" />
 
-For end-user launch and frontend routing, see [Studio](/docs/guides/studio). For the pipeline / operator / `GenerationResult` contract Studio sits on, see [Model Runtime](/docs/maintainers/architecture/model-runtime).
+Models own causal cadence through `RealtimeSpec`; transports must not infer
+latent strides or silently change exact segment counts. `latest-interactive`
+may evict stale frames after bounded backpressure to protect control latency.
+`ordered-quality` never drops and is mandatory for prompt-scheduled or queued
+segments whose `chunk_done` frame count is a playback contract.
+
+Post-processors live after decoded RGB extraction, own isolated per-session
+state, may buffer a chunk, and flush tails in chain order. The default identity
+processor runs through the same production boundary without changing output,
+so future VSR, denoise, or interpolation adapters do not enter model-specific
+inference loops. The RTX adapter preserves layout/container/dtype/range, owns
+one VFX effect per stream, clones borrowed DLPack output before reuse, and is
+gated behind the separately licensed `rtx_postprocess` extra. Every completed
+chunk records normalized stage timings; use
+`runtime/realtime_regression.py` to gate p50/p90, throughput, queue depth, and
+drops from those traces.
+
+## Debug path
+
+Most Studio bugs originate in catalog, input, runtime, or artifact contract mismatches. A missing model is almost always catalog discovery, aliases, or a hidden id. Wrong device or variant usually means launch config and `PipelineContext` overrides. Inputs that never reach the model fail in `prepare_inputs()` or driver kwargs binding. Streaming failures often mean `init`/`stream` was called without memory state or without a prior reconstruction for two-stage drivers. Recent-run reload failures mean the manifest or artifact paths drifted after `materialize_run()`.
+
+- **Model missing from UI** — `discover_catalog()` output, `CatalogEntry.aliases`, category filter, pipeline file naming.
+- **Wrong variant/device** — `StudioLaunchConfig`, `resolve_cli_variant_id()`, `PipelineContext`.
+- **Input not reaching model** — `prepare_inputs()`, `PreparedInputs`, driver `run_fresh()` kwargs.
+- **Preview blank** — `collect_artifact_paths()`, `pick_preview_assets()`, conversion helpers, generated file extension.
+- **Streaming broken** — `BaseRuntimeDriver.run_init()`, `BaseRuntimeDriver.run_continue()`, pipeline `stream()`, memory state.
+- **Recent run cannot reload** — `RunRecord.to_manifest()`, `materialize_run()`, `load_run()`, artifact paths.
+
+For end-user launch and frontend routing, see [Studio](/docs/guides/studio). For how Studio as a surface compiles user intent into the same requests as CLI and MCP, see [Surfaces and orchestration](/docs/maintainers/architecture/surfaces-orchestration). For the pipeline / operator / `GenerationResult` contract Studio sits on, see [Model runtime](/docs/maintainers/architecture/model-runtime).

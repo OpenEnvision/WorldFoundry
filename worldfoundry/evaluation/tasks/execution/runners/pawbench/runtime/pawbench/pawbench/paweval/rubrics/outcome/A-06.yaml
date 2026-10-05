@@ -1,0 +1,51 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A-06
+track: calibration
+title_en: Two-peg Galton board
+outcome_question: Which label in ['left', 'middle', 'right'] is visible as the first
+  decisive post-action result?
+readout_policy: Read after the requested release has actually occurred. The readout
+  does not have to be the final video frame; use the first short readable window
+  where the ball is clearly contained in one of the three bottom bins and is no longer
+  crossing between bins. Later same-bin bounce, brief airborne frames, occlusion,
+  or video-end artifacts do not relabel the outcome.
+canonical_labels:
+- left
+- middle
+- right
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['left', 'middle', 'right'] can be decisively identified
+  within the readout window.
+- The ball is occluded or goes off-screen before a decisive side / bin / path can
+  be identified. If a visible off-support exit is established, use out-of-schema
+  instead.
+out_of_schema_rules:
+- Ball visibly stops on top of a peg or exits the board before reaching the bottom
+  row; this is out-of-schema.
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'First-decisive-window rule: use the earliest post-release frame/window where the
+  ball has committed to a bottom bin; do not require the terminal frame and do not
+  re-label from later same-bin bounce, occlusion, or transient states.'
+- If the ball briefly touches or enters a bin but remains in continuous motion that
+  carries it to another bin, read the later committed bin rather than the transient
+  bin.
+- Normal continuous bounce/cross-bin motion before commitment means keep waiting;
+  impossible crossing to a different bin after commitment belongs to trustworthiness.
+notes:
+- 'Three terminal labels: left, middle, right.'
+- 'Scene title: Two-peg Galton board.'
+- 'Calibration support: canonical labels are the reference-probability-bearing support
+  of the intended experiment. Visibly stuck, exited, outside-region, or no-committed-region
+  terminal states are out-of-schema/invalid rather than extra outcome labels.'
+geometry_policy: Three terminal labels. Left is the bin at the left-third of the bottom
+  row; middle is the centered bin under the top release; right is the bin at the right-third.
+  Bin is decided at the first frame/window where the ball has committed to one of
+  the three bottom bins.

@@ -1,131 +1,27 @@
 ---
 title: SimplerEnv
-description: SimplerEnv — metrics, requirements, and run commands.
+description: "Real-to-sim evaluation of real-robot policies (SIMPLER). Google Robot and WidowX/Bridge scenes; WorldFoundry imports official rollouts."
 ---
 
-## About
+SimplerEnv (SIMPLER — Simulated Manipulation Policy Evaluation for Real Robot Setups) is a **real-to-sim** bench from UC San Diego and Google DeepMind (with Stanford and UC Berkeley). ManiSkill2 / SAPIEN scenes are calibrated so that policies such as **RT-1**, **RT-1-X**, and **Octo** rank in simulation the way they rank on the corresponding **Google Robot** and **WidowX / Bridge** real setups. The point of the suite is that correlation, not a new kitchen asset pack.
 
+Paper: [OpenReview](https://openreview.net/forum?id=LZh48DTg71). Project: [simpler-env.github.io](https://simpler-env.github.io/). Code: [simpler-env/SimplerEnv](https://github.com/simpler-env/SimplerEnv) (MIT).
 
+WorldFoundry **does not run** those scenes. It normalizes official rollout exports into the scorecard. Upstream rollouts still need the ManiSkill2/SAPIEN stack and the embodiment assets. Repo mirror: `cache/vla_va_wam/repos/simpler-env--SimplerEnv`.
 
-SimplerEnv provides simulation-based embodied evaluation for real-to-sim policy testing and task-success mapping.
+<BenchmarkPageSections id="simpler-env" locale="en" />
 
-
-
-## Metrics
-
-SimplerEnv external benchmark task manifest for simulator-backed VLA policy rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/simpler-env.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `episode_success` | Share of episodes or tasks that complete successfully. |
-| `reward` | Real-to-sim bridge reward on SimplerEnv visual-matching manipulation evaluation episodes. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `giga-world-policy-py311`.
-- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
-- SimplerEnv source/runtime import 可见；完整状态需要 embodiment assets、policy wrapper 和 rollout 结果。
-
-### Evaluation data
-
-- SimplerEnv evaluates policy rollouts in simulator; generated result files and rollout logs are normalized by WorldFoundry.
-- Candidate model outputs: set `WORLDFOUNDRY_SIMPLERENV_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/simpler-env--SimplerEnv`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_SIMPLERENV_ROOT`
-- `WORLDFOUNDRY_SIMPLERENV_RESULTS_PATH`
-
-### Verify setup
-
-```bash
-PYTHONPATH=${WORLDFOUNDRY_CACHE_DIR}/repos/simpler-env--SimplerEnv:src ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-giga-world-policy-py311/bin/python -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile simpler-env --manifest worldfoundry/data/benchmarks/runtime_profiles/official/simpler-env.yaml --output-dir tmp/worldfoundry_preflight/simpler-env --json
-```
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id simpler-env \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/simpler-env/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/simpler-env/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id simpler-env \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/simpler-env/official-run \
-  --json
-```
-
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id simpler-env --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official SimplerEnv repository checkout
-- ManiSkill2/SAPIEN simulator stack
-- Selected robot embodiment assets
-- Benchmark-specific policy checkpoint
-
-### Environment
-
-- `WORLDFOUNDRY_SIMPLERENV_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-
-
+Default import path: `WORLDFOUNDRY_SIMPLERENV_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/simpler-env.yaml`. Outputs: `scorecard.json` (primary `success_rate`) and `raw_results.jsonl`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

@@ -1,5 +1,5 @@
 import os
-import clip
+from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
 import pdb
 import json
 import math
@@ -24,16 +24,11 @@ import tqdm
 import pandas as pd
 from metrics_utils.cal_ssim import cal_ssim_dist, cal_ssim_dist_chunk
 from metrics_utils.standard_video_dataset import StandardVidoDataset, standard_collate_fn
-from vbench.third_party.RAFT.core.raft import RAFT
-from vbench.third_party.RAFT.core.utils_core.utils import InputPadder
+from worldfoundry.base_models.perception_core.optical_flow.raft.raft import RAFT
+from worldfoundry.base_models.perception_core.optical_flow.raft.utils.utils import InputPadder
 from viclip import get_viclip, retrieve_text, _frame_from_video, frames2tensor, get_vid_feat
 from PIL import Image
 import subprocess
-import pandas as pd
-import json
-
-import numpy as np
-import torch
 from sklearn.linear_model import LinearRegression
 
 import random

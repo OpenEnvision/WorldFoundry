@@ -42,7 +42,7 @@ from torch.nn import Parameter
 from inference.common.config import EngineConfig, ModelConfig
 from worldfoundry.core import InferenceParams, ModelMetaArgs, PackedCrossAttnParams, divide
 from worldfoundry.core.attention import CSOHelper, UlyssesScheduler, cso_communication
-from worldfoundry.core.distributed import model_parallel_groups as parallel_state
+from worldfoundry.core.distributed.model_parallel import groups as parallel_state
 
 
 ##########################################################

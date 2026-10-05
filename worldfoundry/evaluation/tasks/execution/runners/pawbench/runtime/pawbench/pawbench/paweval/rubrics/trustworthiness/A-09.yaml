@@ -1,0 +1,44 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: A-09
+track: calibration
+title_en: Vertical pencil fall
+scene_grounding:
+- 'Initial state must match: One pencil is balanced perfectly upright on the tabletop.'
+- Apparatus geometry in the opening frames must match the source image.
+action_execution:
+- 'Required action: Move the hand upward once and let the pencil fall.'
+- Action must happen exactly once in the expected direction / region.
+- The pencil must actually fall after release; an unchanged upright pencil is not
+  a valid executed fall even if a left/right label is guessed.
+target_requirements:
+- Scene-defining target, subject, and readout evidence must remain visible throughout the action.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-readout state/region change: subject moves between label-defining states or regions after the first decisive readout.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Vertical pencil fall.'
+- Left/right are image/viewer coordinates relative to the initial upright base line.

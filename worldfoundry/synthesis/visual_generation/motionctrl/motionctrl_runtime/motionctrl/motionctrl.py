@@ -1,12 +1,12 @@
 import torch.nn as nn
 from einops import rearrange
 
-from worldfoundry.base_models.diffusion_model.video.lvdm.models.ddpm3d import LatentDiffusion
+from worldfoundry.base_models.diffusion_model.models.networks.lvdm.latent_diffusion import LatentDiffusion
 from worldfoundry.synthesis.visual_generation.motionctrl.motionctrl_runtime.motionctrl.lvdm_modified_modules import (
     TemporalTransformer_forward, selfattn_forward_unet,
     spatial_forward_BasicTransformerBlock,
     temporal_selfattn_forward_BasicTransformerBlock)
-from worldfoundry.base_models.diffusion_model.video.lvdm.utils import instantiate_from_config
+from worldfoundry.core.model_loading.factory import instantiate_from_config
 
 
 class MotionCtrl(LatentDiffusion):

@@ -17,7 +17,7 @@ from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers.pipelines.stable_diffusion.convert_from_ckpt import convert_ldm_vae_checkpoint, \
     convert_ldm_clip_checkpoint
 
-from worldfoundry.core.io.video import save_videos_grid
+from worldfoundry.core.media.codecs.video import save_videos_grid
 from .models.unet import UNet3DConditionModelPoseCond
 from .models.pose_adaptor import CameraPoseEncoder
 from .pipelines.pipeline_animation import CameraCtrlPipeline
@@ -48,7 +48,11 @@ def load_personalized_base_model(pipeline, personalized_base_model):
             for key in f.keys():
                 dreambooth_state_dict[key] = f.get_tensor(key)
     elif personalized_base_model.endswith(".ckpt"):
-        dreambooth_state_dict = torch.load(personalized_base_model, map_location="cpu")
+        dreambooth_state_dict = torch.load(
+            personalized_base_model,
+            map_location="cpu",
+            weights_only=True,
+        )
 
     # 1. vae
     converted_vae_checkpoint = convert_ldm_vae_checkpoint(dreambooth_state_dict, pipeline.vae.config)
@@ -63,14 +67,80 @@ def load_personalized_base_model(pipeline, personalized_base_model):
     return pipeline
 
 
+def fuse_motion_adapter(unet, motion_adapter_ckpt, scale=1.0):
+    """Fuse the official AnimateDiff V3 spatial LoRA into a CameraCtrl UNet.
+
+    CameraCtrl's official setup script creates ``unet_webvidlora_v3`` by
+    applying this adapter to the SD1.5 UNet before inference.  Applying the
+    same update in memory keeps the runtime self-contained and prevents a
+    silent fallback to an unfused SD1.5 UNet when that generated directory is
+    absent.
+    """
+    adapter_state = torch.load(
+        motion_adapter_ckpt,
+        map_location="cpu",
+        weights_only=True,
+    )
+    if "state_dict" in adapter_state:
+        adapter_state = adapter_state["state_dict"]
+    if not isinstance(adapter_state, dict):
+        raise TypeError("CameraCtrl motion adapter checkpoint must contain a tensor state dict.")
+
+    parameters = dict(unet.named_parameters())
+    consumed = set()
+    fused_count = 0
+    down_suffix = "_lora.down.weight"
+    for down_key, down_weight in adapter_state.items():
+        if not down_key.endswith(down_suffix):
+            continue
+        prefix, lora_name = down_key.rsplit(".processor.", 1)
+        projection = lora_name[: -len(down_suffix)]
+        up_key = f"{prefix}.processor.{projection}_lora.up.weight"
+        if up_key not in adapter_state:
+            raise KeyError(f"CameraCtrl motion adapter is missing paired weight: {up_key}")
+
+        target_key = f"{prefix}.{projection}"
+        target_key += ".0.weight" if projection == "to_out" else ".weight"
+        if target_key not in parameters:
+            raise KeyError(f"CameraCtrl UNet is missing adapter target: {target_key}")
+
+        parameter = parameters[target_key]
+        up_weight = adapter_state[up_key]
+        update = torch.mm(
+            up_weight.to(device=parameter.device, dtype=parameter.dtype),
+            down_weight.to(device=parameter.device, dtype=parameter.dtype),
+        )
+        if update.shape != parameter.shape:
+            raise ValueError(
+                f"CameraCtrl adapter shape mismatch for {target_key}: "
+                f"adapter={tuple(update.shape)} unet={tuple(parameter.shape)}"
+            )
+        with torch.no_grad():
+            parameter.add_(update, alpha=float(scale))
+        consumed.update((down_key, up_key))
+        fused_count += 1
+
+    unused = set(adapter_state) - consumed
+    if fused_count == 0 or unused:
+        raise ValueError(
+            "CameraCtrl motion adapter was not fully consumed: "
+            f"fused_pairs={fused_count}, unused_keys={len(unused)}"
+        )
+    return fused_count
+
+
 def get_pipeline(ori_model_path, unet_subfolder, image_lora_rank, image_lora_ckpt, unet_additional_kwargs,
-                 unet_mm_ckpt, pose_encoder_kwargs, attention_processor_kwargs,
+                 unet_mm_ckpt, motion_adapter_ckpt, pose_encoder_kwargs, attention_processor_kwargs,
                  noise_scheduler_kwargs, pose_adaptor_ckpt, personalized_base_model, gpu_id):
     vae = AutoencoderKL.from_pretrained(ori_model_path, subfolder="vae")
     tokenizer = CLIPTokenizer.from_pretrained(ori_model_path, subfolder="tokenizer")
     text_encoder = CLIPTextModel.from_pretrained(ori_model_path, subfolder="text_encoder")
     unet = UNet3DConditionModelPoseCond.from_pretrained_2d(ori_model_path, subfolder=unet_subfolder,
                                                            unet_additional_kwargs=unet_additional_kwargs)
+    if motion_adapter_ckpt is not None:
+        print(f"Fusing the AnimateDiff V3 adapter from {motion_adapter_ckpt}")
+        fused_count = fuse_motion_adapter(unet, motion_adapter_ckpt)
+        print(f"Fused {fused_count} AnimateDiff V3 adapter weight pairs")
     pose_encoder = CameraPoseEncoder(**pose_encoder_kwargs)
     print(f"Setting the attention processors")
     unet.set_all_attn_processor(add_spatial_lora=image_lora_ckpt is not None,
@@ -81,7 +151,11 @@ def get_pipeline(ori_model_path, unet_subfolder, image_lora_rank, image_lora_ckp
 
     if image_lora_ckpt is not None:
         print(f"Loading the lora checkpoint from {image_lora_ckpt}")
-        lora_checkpoints = torch.load(image_lora_ckpt, map_location=unet.device)
+        lora_checkpoints = torch.load(
+            image_lora_ckpt,
+            map_location=unet.device,
+            weights_only=True,
+        )
         if 'lora_state_dict' in lora_checkpoints.keys():
             lora_checkpoints = lora_checkpoints['lora_state_dict']
         _, lora_u = unet.load_state_dict(lora_checkpoints, strict=False)
@@ -90,13 +164,21 @@ def get_pipeline(ori_model_path, unet_subfolder, image_lora_rank, image_lora_ckp
 
     if unet_mm_ckpt is not None:
         print(f"Loading the motion module checkpoint from {unet_mm_ckpt}")
-        mm_checkpoints = torch.load(unet_mm_ckpt, map_location=unet.device)
+        mm_checkpoints = torch.load(
+            unet_mm_ckpt,
+            map_location=unet.device,
+            weights_only=True,
+        )
         _, mm_u = unet.load_state_dict(mm_checkpoints, strict=False)
         assert len(mm_u) == 0
         print("Loading done")
 
     print(f"Loading pose adaptor")
-    pose_adaptor_checkpoint = torch.load(pose_adaptor_ckpt, map_location='cpu')
+    pose_adaptor_checkpoint = torch.load(
+        pose_adaptor_ckpt,
+        map_location='cpu',
+        weights_only=True,
+    )
     pose_encoder_state_dict = pose_adaptor_checkpoint['pose_encoder_state_dict']
     pose_encoder_m, pose_encoder_u = pose_encoder.load_state_dict(pose_encoder_state_dict)
     assert len(pose_encoder_u) == 0 and len(pose_encoder_m) == 0
@@ -139,7 +221,7 @@ def main(args):
 
     print(f'Constructing pipeline')
     pipeline = get_pipeline(args.ori_model_path, args.unet_subfolder, args.image_lora_rank, args.image_lora_ckpt,
-                            unet_additional_kwargs, args.motion_module_ckpt, pose_encoder_kwargs, attention_processor_kwargs,
+                            unet_additional_kwargs, args.motion_module_ckpt, None, pose_encoder_kwargs, attention_processor_kwargs,
                             noise_scheduler_kwargs, args.pose_adaptor_ckpt,
                             args.personalized_base_model, f"cuda:{gpu_id}")
     device = torch.device(f"cuda:{gpu_id}")

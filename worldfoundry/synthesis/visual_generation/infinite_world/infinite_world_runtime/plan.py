@@ -99,6 +99,7 @@ def resolve_in_tree_model_root(pretrained_model_path: Any = None) -> Path:
     if isinstance(pretrained_model_path, Mapping):
         candidate_value = (
             pretrained_model_path.get("pretrained_model_path")
+            or pretrained_model_path.get("model_path")
             or pretrained_model_path.get("model_root")
             or pretrained_model_path.get("checkpoint_dir")
         )

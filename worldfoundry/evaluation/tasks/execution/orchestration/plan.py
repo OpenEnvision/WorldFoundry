@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from worldfoundry.evaluation.api import GenerationRequest
+from worldfoundry.evaluation.tasks.catalog.benchmark_id import normalize_benchmark_id
 from worldfoundry.evaluation.tasks.catalog.registry import TaskRegistryEntry, load_task_registry_from_paths
 from worldfoundry.evaluation.tasks.datasets import (
     load_dataset_manifest,
@@ -21,7 +22,7 @@ from worldfoundry.evaluation.tasks.datasets import (
     resolve_dataset_samples_path,
     validate_dataset_manifest,
 )
-from worldfoundry.evaluation.tasks.execution.framework.in_tree_registry import target_benchmark_metrics
+from worldfoundry.evaluation.tasks.execution.framework.scoring_registry import target_benchmark_metrics
 from worldfoundry.evaluation.tasks.metrics.registry import validate_metric_ids
 from worldfoundry.evaluation.utils import jsonable, read_json_or_jsonl, write_json
 
@@ -246,7 +247,7 @@ def load_run_plan(path: str | Path) -> RunPlan:
 def write_run_plan(plan: RunPlan, path: str | Path) -> Path:
     """Writes a RunPlan instance to a specified JSON file on disk."""
     destination = Path(path)
-    write_json(destination, plan.to_dict(), atomic=False)
+    write_json(destination, plan.to_dict())
     return destination
 
 
@@ -459,7 +460,7 @@ def validate_run_plan(plan: RunPlan | Mapping[str, Any]) -> dict[str, Any]:
             benchmark_id = item or task_config.get("benchmark_name")
         if benchmark_id is None and isinstance(run_plan.task, Mapping):
             benchmark_id = run_plan.task.get("benchmark_name")
-        benchmark_key = None if benchmark_id is None else str(benchmark_id).strip().lower()
+        benchmark_key = None if benchmark_id is None else normalize_benchmark_id(str(benchmark_id))
         in_tree_metrics = target_benchmark_metrics().get(benchmark_key or "", ())
         regular_metrics = tuple(metric for metric in run_plan.metrics if metric not in in_tree_metrics)
         in_tree_resolved = [

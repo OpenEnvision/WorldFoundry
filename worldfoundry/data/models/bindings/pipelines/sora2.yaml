@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: sora2
+model_id: sora2
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.sora.pipeline_sora2:Sora2Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

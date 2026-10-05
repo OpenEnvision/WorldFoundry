@@ -9,9 +9,10 @@ from __future__ import annotations
 import logging
 import math
 import os
+import sys
 from copy import copy
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import numpy as np
 
@@ -36,6 +37,52 @@ os.environ.setdefault("EGL_PLATFORM", "device")
 
 EP_LEN = 360
 NUM_SUBTASKS = 5
+CALVIN_ROOT_ENV = "WORLDFOUNDRY_CALVIN_ROOT"
+CALVIN_DATASET_ROOT_ENV = "WORLDFOUNDRY_CALVIN_DATASET_ROOT"
+CALVIN_SPLIT_ENV = "WORLDFOUNDRY_CALVIN_SPLIT"
+CALVIN_TASK_DIRECTORY_PRIORITY = ("task_D_D", "task_ABC_D", "task_ABCD_D")
+
+
+def _prepend_calvin_source_paths(root: Path) -> tuple[str, ...]:
+    """Expose both official CALVIN Python package roots from a source checkout."""
+
+    paths = (root, root / "calvin_models", root / "calvin_env")
+    inserted: list[str] = []
+    for path in paths:
+        path_text = str(path)
+        if path_text not in sys.path:
+            sys.path.insert(0, path_text)
+            inserted.append(path_text)
+    return tuple(inserted)
+
+
+def _resolve_calvin_dataset_path(
+    dataset_path: str | os.PathLike[str] | None,
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> Path:
+    """Resolve either an exact validation path or the documented dataset root layout."""
+
+    if dataset_path is not None:
+        return Path(dataset_path).expanduser()
+    env = os.environ if environ is None else environ
+    configured_root = env.get(CALVIN_DATASET_ROOT_ENV)
+    if not configured_root:
+        raise ValueError(
+            "CALVIN dataset path is required; pass dataset_path or set "
+            f"{CALVIN_DATASET_ROOT_ENV}"
+        )
+    root = Path(configured_root).expanduser()
+    split = str(env.get(CALVIN_SPLIT_ENV) or "validation").strip() or "validation"
+    for task_directory in CALVIN_TASK_DIRECTORY_PRIORITY:
+        task_root = root / task_directory
+        split_root = task_root / split
+        if split_root.is_dir():
+            return split_root
+        if task_root.is_dir():
+            return task_root
+    direct_split = root / split
+    return direct_split if direct_split.is_dir() else root
 
 
 # Language annotations for each task (from new_playtable_validation.yaml)
@@ -194,16 +241,19 @@ class CALVINBenchmark(BaseSimulator):
 
     def __init__(
         self,
-        dataset_path: str = "/data/calvin/dataset/validation",
+        dataset_path: str | os.PathLike[str] | None = None,
         num_sequences: int = 1000,
         seed: int = 0,
         send_wrist_image: bool = False,
         send_state: bool = False,
         absolute_action: bool = False,
         ep_len: int | None = None,
+        calvin_root: str | os.PathLike[str] | None = None,
     ) -> None:
         super().__init__()
-        self.dataset_path = dataset_path
+        self.dataset_path = str(_resolve_calvin_dataset_path(dataset_path))
+        resolved_root = calvin_root if calvin_root is not None else os.getenv(CALVIN_ROOT_ENV)
+        self.calvin_root = Path(resolved_root).expanduser() if resolved_root else None
         self.num_sequences = num_sequences
         self.seed = seed
         self.send_wrist_image = send_wrist_image
@@ -236,6 +286,9 @@ class CALVINBenchmark(BaseSimulator):
         """Lazily initialize CALVIN environment and task oracle."""
         if self._env is not None:
             return
+
+        if self.calvin_root is not None:
+            _prepend_calvin_source_paths(self.calvin_root)
 
         import pytorch_lightning as pl
         import torch

@@ -1,168 +1,41 @@
 ---
 title: VBench++
-description: VBench++ I2V, long-video, and trustworthiness evaluation with in-tree runtime and variant-specific commands.
+description: "VBench extensions: I2V, long-video, trustworthiness. WorldFoundry vendors the runtime; it does not invent a board. Distinct from VBench and VBench-2.0."
 ---
 
-## About
+VBench++ (S-Lab, NTU and Shanghai AI Laboratory) extends [VBench](/docs/evaluation/benchmark-hub/vbench) with three tracks. It is **not** [VBench-2.0](/docs/evaluation/benchmark-hub/vbench-2.0). Same upstream repo: [Vchitect/VBench](https://github.com/Vchitect/VBench) (Apache-2.0).
 
-VBench++ extends the VBench series beyond short text-to-video scoring. It adds image-to-video evaluation, long-video evaluation, and trustworthiness dimensions covering fairness, bias, and safety. The TPAMI 2025 paper frames it as a versatile benchmark suite for video generation models across generation conditions and risk dimensions.
+- **Image-to-video** — I2V subject / background consistency and camera motion on the official crop-ready image suite.
+- **Long-video** — temporal-window scoring; the catalog-bounded command uses `temporal_flickering` / `long_custom_input`.
+- **Trustworthiness** — fairness, bias, safety probes (some need extra face / attribute models).
 
-WorldFoundry integrates the VBench++ runtime in tree at `worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus`. The official VBench project is a protocol reference; WorldFoundry runs the checked-in variant runtimes.
+`--variant` selects `i2v`, `long`, or `trustworthiness`. Per-variant averages plus `vbench_plus_plus_average` (WorldFoundry mean over available dims).
 
-Official references:
+Paper: [VBench++](https://arxiv.org/abs/2411.13503). Project: [vchitect.github.io/VBench-project](https://vchitect.github.io/VBench-project/).
 
-- VBench series project: [vchitect.github.io/VBench-project](https://vchitect.github.io/VBench-project/)
-- Paper: [arXiv:2411.13503](https://arxiv.org/abs/2411.13503)
-- VBench-I2V Arena: [Vchitect/VBenchI2V_Video_Arena](https://huggingface.co/spaces/Vchitect/VBenchI2V_Video_Arena)
-- In-tree runner: `worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py`
-- In-tree runtime: `worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime`
+WorldFoundry **vendors the VBench++ runtime**. A bounded long-video component is verified; the complete suite is not.
 
-## Variants
+<BenchmarkPageSections id="vbench-plus-plus" locale="en" />
 
-The runner requires `--variant`.
-
-| Variant | Purpose | Runtime entry |
-| --- | --- | --- |
-| `i2v` | Image-to-video evaluation with reference images and generated videos. | `runtime/entrypoints/i2v.py` |
-| `long` | Long-video evaluation with long temporal consistency and quality dimensions. | `runtime/entrypoints/long.py` |
-| `trustworthiness` | Culture/fairness, gender bias, skin bias, and safety dimensions. | `runtime/entrypoints/trustworthiness.py` |
-
-WorldFoundry aggregates variant results into:
-
-- `vbench_plus_plus_i2v_average`
-- `vbench_plus_plus_long_average`
-- `vbench_plus_plus_trustworthiness_average`
-- `vbench_plus_plus_average`
-
-## Assets And Generated Outputs
-
-Prompt and metadata assets are checked in:
-
-- I2V: `worldfoundry/data/benchmarks/assets/vbench-plus-plus/i2v/vbench2_i2v_full_info.json`
-- Long video: `worldfoundry/data/benchmarks/assets/vbench-plus-plus/long/VBench_full_info.json`
-- Trustworthiness: `worldfoundry/data/benchmarks/assets/vbench-plus-plus/trustworthiness/vbench2_trustworthy.json`
-
-Generated videos are supplied by the candidate model:
+## How to run
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/vbench-plus-plus/generated_videos
-```
-
-For I2V, also provide the reference image folder when running custom-image evaluation:
-
-```bash
-export WORLDFOUNDRY_VBENCH_I2V_IMAGE_FOLDER=/path/to/vbench-plus-plus/reference_images
-```
-
-For long-video custom input, put the long videos directly under the generated artifact root:
-
-```text
-/path/to/vbench-plus-plus/generated_videos/
-  long_video_0001.mp4
-  long_video_0002.mp4
-```
-
-The long-video runner prepares the split-clip layout expected by the upstream metric code inside the output directory or generated-video root when needed.
-
-Candidate model training and inference are not part of VBench++. Generate videos with the model package, then export them into the layout required by the selected variant.
-
-## Checkpoints And Runtime
-
-VBench++ reuses the VBench metric stack and adds variant-specific perception/judge assets. Stage the same evaluator cache used by VBench:
-
-```bash
-export WORLDFOUNDRY_VBENCH_CACHE_DIR=/path/to/cache/models/vbench
-export VBENCH_CACHE_DIR="${WORLDFOUNDRY_VBENCH_CACHE_DIR}"
-```
-
-Common dependencies include CLIP/DINO, RAFT, GroundingDINO, SAM-family segmentation, image-quality models, face detection for some trustworthiness dimensions, and any variant-specific scorer weights. Reusable code lives under `worldfoundry/base_models`; checkpoint files remain local assets.
-
-## Run I2V
-
-Use `--variant i2v` for image-to-video scoring. `--ratio` should match the evaluated image/video aspect ratio when required by the selected dimension.
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py \
-  --variant i2v \
-  --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --full-json-dir "$PWD/worldfoundry/data/benchmarks/assets/vbench-plus-plus/i2v/vbench2_i2v_full_info.json" \
-  --dimension i2v_subject \
-  --mode custom_input \
-  --custom-image-folder "${WORLDFOUNDRY_VBENCH_I2V_IMAGE_FOLDER}" \
-  --ratio 16-9 \
-  --output-dir tmp/vbench-plus-plus/i2v_subject \
-  --json
-```
-
-Typical I2V dimensions include `i2v_subject`, `i2v_background`, and `camera_motion`.
-
-## Run Long-Video Metrics
-
-Use `--variant long` for long-video evaluation:
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py \
+  --benchmark-id vbench-plus-plus \
   --variant long \
   --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --full-json-dir "$PWD/worldfoundry/data/benchmarks/assets/vbench-plus-plus/long/VBench_full_info.json" \
   --dimension temporal_flickering \
   --mode long_custom_input \
-  --output-dir tmp/vbench-plus-plus/long_temporal_flickering \
-  --timeout 7200 \
+  --python "${WORLDFOUNDRY_UNIFIED_PYTHON}" \
+  --output-dir tmp/vbench-plus-plus/long \
   --json
 ```
 
-Long-video dimensions reuse many VBench dimension names, including `subject_consistency`, `background_consistency`, `temporal_flickering`, `motion_smoothness`, `dynamic_degree`, `aesthetic_quality`, `imaging_quality`, and semantic alignment dimensions.
+I2V uses official image-suite naming. Optional checkout override: `WORLDFOUNDRY_VBENCH_PLUS_PLUS_ROOT`. Shared stack: `vbench_perception_metric_stack`. Prompt / image suites live in the public VBench repo.
 
-## Run Trustworthiness Metrics
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/vbench-plus-plus.yaml`, `worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime`.
 
-Use `--variant trustworthiness` for fairness, bias, and safety:
+Outputs include `scorecard.json` (primary `vbench_plus_plus_average`) and `dimension_scores.json`.
 
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py \
-  --variant trustworthiness \
-  --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --full-json-dir "$PWD/worldfoundry/data/benchmarks/assets/vbench-plus-plus/trustworthiness/vbench2_trustworthy.json" \
-  --dimension safety \
-  --custom-input \
-  --output-dir tmp/vbench-plus-plus/trustworthiness_safety \
-  --json
-```
-
-Trustworthiness dimensions include `culture_fairness`, `gender_bias`, `skin_bias`, and `safety`. Face-related dimensions require a RetinaFace-compatible checkpoint and face runtime dependencies.
-
-## Import Existing Results
-
-Import an official-compatible VBench++ result JSON by selecting the matching variant:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py \
-  --variant long \
-  --official-results-path /path/to/vbenchpp_eval_results.json \
-  --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/vbench-plus-plus/imported_long \
-  --json
-```
-
-## Outputs
-
-Each run writes:
-
-- `scorecard.json`: WorldFoundry scorecard with variant dimension scores and VBench++ aggregate.
-- `raw_metric_table.jsonl`: metric rows used by the scorecard.
-- `dimension_scores.json`: dimension-score summary.
-- `upstream/*_eval_results.json`: official runtime output when metrics are computed.
-- `upstream_stdout.log` and `upstream_stderr.log`: logs from the in-tree runtime.
-- `vbenchpp_long_presplit_manifest.json`: long-video split preparation metadata when `long_custom_input` is used.
-
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

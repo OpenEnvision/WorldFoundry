@@ -6,8 +6,9 @@
 *.bin filter=lfs diff=lfs merge=lfs -text
 *.mp4 filter=lfs diff=lfs merge=lfs -text
 docs/fumadocs/public/home-demos/*.mp4 -filter -diff -merge -text
-docs/fumadocs/public/readme-demos/*.mp4 -filter -diff -merge -text
-docs/fumadocs/public/cover_4x4_hero.mp4 -filter -diff -merge -text
+worldfoundry/data/test_cases/**/*.mp4 -filter -diff -merge -text
 *.mov filter=lfs diff=lfs merge=lfs -text
 *.pt filter=lfs diff=lfs merge=lfs -text
 *.pth filter=lfs diff=lfs merge=lfs -text
+# Retained license texts preserve upstream whitespace byte for byte.
+THIRD-PARTY-NOTICES -text whitespace=-blank-at-eol

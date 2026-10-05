@@ -130,6 +130,8 @@ add_default_world_repos() {
     "TencentARC/Open-MAGVIT2=Open-MAGVIT2"
     "TencentARC/MotionCtrl=MotionCtrl"
     "showlab/show-o=show-o"
+    "showlab/magvitv2=magvitv2"
+    "microsoft/phi-1_5=phi-1_5"
     "guoyww/animatediff=animatediff"
     "guoyww/animatediff-motion-adapter-v1-5-2=animatediff-motion-adapter-v1-5-2"
     "stable-diffusion-v1-5/stable-diffusion-v1-5=stable-diffusion-v1-5"

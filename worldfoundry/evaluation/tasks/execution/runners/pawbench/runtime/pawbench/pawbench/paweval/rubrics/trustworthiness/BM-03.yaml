@@ -1,0 +1,53 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BM-03
+track: coverage
+title_en: Fried Egg Flip on Spatula
+scene_grounding:
+- 'Initial state must match: A fried egg sits on a spatula in a pan.'
+- The egg, yolk side, spatula support, and pan surface must be visible before the flip begins.
+action_execution:
+- 'Required action: Flip the egg once with the spatula.'
+- The spatula must visibly contact/lift/turn the egg for any legal outcome except action-execution failure.
+- A failed lift/turn or sliding no-flip after visible spatula contact is a legal spatula_contact_no_flip
+  outcome; a complete no-contact miss is ACTION_EXECUTION_FAIL.
+- The flip/contact attempt must happen once and keep the egg in view through the orientation/integrity
+  readout.
+target_requirements:
+- Target material is the fried egg; yolk orientation, folding, white tearing, yolk rupture, and contact-without-flip
+  must be visible enough for the selected label.
+- Pre-existing broken yolk or torn egg white before the spatula action must not be counted as action-caused
+  tearing.
+- Yolk rupture and egg-white tearing must be visually separable; if hidden, mark READOUT_AMBIGUITY rather
+  than guessing.
+object_continuity:
+- The same egg must stay continuous from spatula lift through landing; yolk/white regions cannot duplicate,
+  vanish, or switch sides without visible rotation.
+- The pan and spatula may move, but their identities and contact relationship to the egg must remain readable.
+apparatus_stability:
+- Pan geometry and spatula scale must remain stable enough to judge whether the egg was flipped, folded,
+  torn, or merely slid.
+motion_hard_failures:
+- 'Flip discontinuity: egg orientation changes from yolk-up to yolk-down without continuous rotation/lift.'
+- 'Material teleport: yolk or egg-white tears appear/disappear without visible stress during the flip.'
+- 'Target miss: spatula never contacts/lifts the egg but the video claims a flip.'
+post_result_consistency:
+- Landed orientation and integrity must remain consistent after the first decisive readout; a ruptured
+  yolk cannot become intact again.
+- If the egg slides after landing, do not change the already readable orientation label unless a new visible
+  tear/rupture is caused by continuous contact.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Fried Egg Flip on Spatula.'
+- 'Track B family: material_response.'

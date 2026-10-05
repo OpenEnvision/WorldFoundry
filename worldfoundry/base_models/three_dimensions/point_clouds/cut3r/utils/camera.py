@@ -14,6 +14,7 @@ inf = float("inf")
 
 class PoseDecoder(nn.Module):
     """Pose decoder implementation."""
+
     def __init__(
         self,
         hidden_size=768,
@@ -55,6 +56,7 @@ class PoseDecoder(nn.Module):
 
 class PoseEncoder(nn.Module):
     """Pose encoder implementation."""
+
     def __init__(
         self,
         hidden_size=768,
@@ -108,6 +110,7 @@ class PoseEncoder(nn.Module):
 
 class HarmonicEmbedding(torch.nn.Module):
     """Harmonic embedding implementation."""
+
     def __init__(
         self,
         n_harmonic_functions: int = 6,
@@ -216,9 +219,7 @@ class HarmonicEmbedding(torch.nn.Module):
         )
         self.append_input = append_input
 
-    def forward(
-        self, x: torch.Tensor, diag_cov: Optional[torch.Tensor] = None, **kwargs
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, diag_cov: Optional[torch.Tensor] = None, **kwargs) -> torch.Tensor:
         """
         Args:
             x: tensor of shape [..., dim]
@@ -249,9 +250,7 @@ class HarmonicEmbedding(torch.nn.Module):
         return embed
 
     @staticmethod
-    def get_output_dim_static(
-        input_dims: int, n_harmonic_functions: int, append_input: bool
-    ) -> int:
+    def get_output_dim_static(input_dims: int, n_harmonic_functions: int, append_input: bool) -> int:
         """
         Utility to help predict the shape of the output of `forward`.
 
@@ -271,13 +270,12 @@ class HarmonicEmbedding(torch.nn.Module):
         which use harmonic embedding for positional encoding,
         so the input might be xyz.
         """
-        return self.get_output_dim_static(
-            input_dims, len(self._frequencies), self.append_input
-        )
+        return self.get_output_dim_static(input_dims, len(self._frequencies), self.append_input)
 
 
 class PoseEmbedding(nn.Module):
     """Pose embedding implementation."""
+
     def __init__(self, target_dim, out_dim, n_harmonic_functions=10, append_input=True):
         """Init.
 
@@ -289,9 +287,7 @@ class PoseEmbedding(nn.Module):
         """
         super().__init__()
 
-        self._emb_pose = HarmonicEmbedding(
-            n_harmonic_functions=n_harmonic_functions, append_input=append_input
-        )
+        self._emb_pose = HarmonicEmbedding(n_harmonic_functions=n_harmonic_functions, append_input=append_input)
 
         self.out_dim = self._emb_pose.get_output_dim(target_dim)
 
@@ -330,9 +326,7 @@ def matrix_to_quaternion(matrix: torch.Tensor) -> torch.Tensor:
         raise ValueError(f"Invalid rotation matrix shape {matrix.shape}.")
 
     batch_dim = matrix.shape[:-2]
-    m00, m01, m02, m10, m11, m12, m20, m21, m22 = torch.unbind(
-        matrix.reshape(batch_dim + (9,)), dim=-1
-    )
+    m00, m01, m02, m10, m11, m12, m20, m21, m22 = torch.unbind(matrix.reshape(batch_dim + (9,)), dim=-1)
 
     q_abs = _sqrt_positive_part(
         torch.stack(
@@ -359,9 +353,7 @@ def matrix_to_quaternion(matrix: torch.Tensor) -> torch.Tensor:
     flr = torch.tensor(0.1).to(dtype=q_abs.dtype, device=q_abs.device)
     quat_candidates = quat_by_rijk / (2.0 * q_abs[..., None].max(flr))
 
-    out = quat_candidates[
-        F.one_hot(q_abs.argmax(dim=-1), num_classes=4) > 0.5, :
-    ].reshape(batch_dim + (4,))
+    out = quat_candidates[F.one_hot(q_abs.argmax(dim=-1), num_classes=4) > 0.5, :].reshape(batch_dim + (4,))
     return standardize_quaternion(out)
 
 
@@ -390,7 +382,6 @@ def camera_to_pose_encoding(
     camera: opencv, cam2world
     """
     if pose_encoding_type == "absT_quaR":
-
         quaternion_R = matrix_to_quaternion(camera[:, :3, :3])
 
         pose_encoding = torch.cat([camera[:, :3, 3], quaternion_R], dim=-1)
@@ -444,7 +435,6 @@ def pose_encoding_to_camera(
     """
 
     if pose_encoding_type == "absT_quaR":
-
         abs_T = pose_encoding[:, :3]
         quaternion_R = pose_encoding[:, 3:7]
         R = quaternion_to_matrix(quaternion_R)

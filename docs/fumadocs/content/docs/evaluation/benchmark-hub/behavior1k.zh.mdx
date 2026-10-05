@@ -1,126 +1,27 @@
 ---
 title: BEHAVIOR-1K
-description: BEHAVIOR-1K — 指标、依赖与运行命令。
+description: "OmniGibson 中的 1000 项家务活动，用 BDDL 描述。WorldFoundry 导入官方结果导出；不跑 OmniGibson。"
 ---
 
-## 简介
+BEHAVIOR-1K 是斯坦福 Vision & Learning Lab 的人本具身评测：从人类时间使用调查里选出 **1000** 项日常活动（清洁、烹饪、整理），用 **BDDL** 谓词语言书写，在 **OmniGibson** 里仿真，带流体、物体状态和家居物理。成功是**逻辑目标是否满足**，不是像素分。**子目标**满足率是部分分。
 
+论文：[BEHAVIOR-1K](https://arxiv.org/abs/2403.09227)。项目：[behavior.stanford.edu](https://behavior.stanford.edu/)。模拟器 / 代码：[StanfordVL/OmniGibson](https://github.com/StanfordVL/OmniGibson)（本 catalog 记为 `upstream_terms`）。
 
+WorldFoundry **导入**官方 OmniGibson 结果导出。它不内置 OmniGibson、那 1000 项活动定义或策略 checkpoint。那些遵循斯坦福文档。
 
-BEHAVIOR-1K external benchmark manifest for household embodied policy rollouts.
+<BenchmarkPageSections id="behavior1k" locale="zh" />
 
-
-
-## 指标
-
-BEHAVIOR-1K external benchmark manifest for household embodied policy rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/behavior1k.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `episode_success` | episode / task 是否成功完成的比例或成功率。 |
-| `subgoal_success` | episode / task 是否成功完成的比例或成功率。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `worldfoundry-unified-cu128`。
-- **单独配置：** 需要 benchmark 专用 conda 环境，不要与统一 runtime 混用。
-- WorldFoundry provides the native contract, result normalizer, and in-tree simulator wrapper; full rollout execution still depends on the upstream OmniGibson runtime.
-
-### 测评数据
-
-- 待测模型输出目录：设置 `WORLDFOUNDRY_BEHAVIOR1K_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/behavior1k`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/StanfordVL--OmniGibson`
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_BEHAVIOR1K_ROOT`
-- `WORLDFOUNDRY_BEHAVIOR1K_RESULTS_PATH`
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id behavior1k \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/behavior1k/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/behavior1k/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id behavior1k \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/behavior1k/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id behavior1k --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_BEHAVIOR1K_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+可选的 `WORLDFOUNDRY_BEHAVIOR1K_ROOT` 指向本地 OmniGibson / 活动根目录。默认导入路径：`WORLDFOUNDRY_BEHAVIOR1K_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/behavior1k.yaml`。产物：`scorecard.json`（主键 `success_rate`；另有 `subgoal_success`）、`raw_results.jsonl`、`evaluation/summary.json`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

@@ -3,32 +3,23 @@ title: Metrics
 description: In-tree metric registry and distribution/perceptual compute APIs.
 ---
 
-import { MetricQuickNav } from '@/components/metric-quick-nav';
 import MetricsSetup from '../../../../mdx/partials/metrics-usage-setup.mdx';
 
-Quantitative evaluation sits at the center of progress in generative modeling. As systems move from single-frame synthesis toward video, editing, embodied rollouts, and long-horizon world simulation, the space of plausible outputs expands faster than human inspection can scale. Metrics provide the compression layer: they turn high-dimensional artifacts into scalar or vector summaries that can be compared across models, checkpoints, ablations, and benchmark suites. WorldFoundry ships an in-tree metric layer—a registry of scorers and distribution/perceptual compute routines that runners invoke through a stable contract. This hub is not a survey paper of every published score; it documents what the repository actually implements, how those implementations are discovered, and where their assumptions break down.
+WorldFoundry ships an in-tree metric layer — a registry of scorers and distribution/perceptual compute routines that runners invoke through a stable contract. Benchmarks decide *what* to measure on *which* data; metrics decide *how* to turn predictions into numbers. Each entry declares inputs, optional checkpoint dependencies, and output shape; runners reference metric IDs and the registry resolves aliases, validates availability, and routes to the right `compute_*`. This keeps model code out of scoring while making scoring reproducible across machines. This hub documents what the repository actually implements — it is not a survey of every published score.
 
-Benchmarks answer *what* to measure on *which* data; metrics answer *how* to turn predictions into numbers. In practice the boundary blurs: the same FID routine may appear in a video benchmark, a standalone ablation script, and a scorecard field named `distribution.fid`. Without a shared registry, teams re-implement preprocessing, checkpoint paths, and aggregation rules—and small divergences produce large leaderboard gaps that are impossible to attribute. We treat metrics as first-class artifacts, not ad hoc notebook cells. Each entry declares inputs (images, videos, feature arrays, text prompts), optional checkpoint dependencies, and the shape of its output. Runners reference metric ids; the registry resolves aliases, validates availability, and routes to the appropriate `compute_*` implementation. That separation keeps model code ignorant of scoring details while keeping scoring reproducible across machines.
-
-The in-tree catalog spans four families, reflected in the sidebar. Multimodal scorers and quality metrics encode semantic agreement between conditioning and generation—CLIP-family, VQA, ITM, face, art, and open S2V judges. Distribution metrics (FID, IS, KID, FVD, JEDi, CMMD, Clean-FID, and feature-array variants) summarize population-level statistics rather than per-sample correctness. Perceptual pairwise metrics (LPIPS, SSIM, DINO similarity, mask accuracy, layout quality) measure local fidelity when paired supervision exists. Editing and layout metrics (SemSR, IRS, CAS, manipulation direction, object-wise consistency) target structured edits where the instruction, mask, or layout constraint is part of the evaluation contract. A fifth page, [Registry & reference](/docs/evaluation/metrics/reference), documents discovery (`worldfoundry-eval metric list`), parameterized ids, checkpoint staging, and package layout—consult it when registering a new metric or debugging why a run skipped a score.
-
-Metrics that depend on pretrained backbones declare those dependencies explicitly; missing checkpoints fail loudly rather than silently substituting proxies. Registry keys normalize case and hyphenation so runners and scorecards store canonical ids while implementations evolve behind a stable contract. Benchmark manifests choose *which* metrics apply to *which* task; this hub describes *how* each metric behaves when invoked. For benchmark-specific evaluator assets and commands, use [Benchmark Hub](/docs/evaluation/benchmark-hub). Not every leaderboard number in the literature has an in-tree implementation; individual pages call out approximations, unsupported modes, and cases where official benchmark scripts must be used instead of the generic compute API.
+The in-tree catalog spans four families: **scorers & quality** (CLIP, VQA, ITM, face, art, S2V judges), **distribution** (FID, IS, KID, FVD, JEDi, CMMD, Clean-FID), **perceptual pairwise** (LPIPS, SSIM, DINO, mask, layout), and **editing & layout** (SemSR, IRS, CAS, manipulation). Metrics that need pretrained backbones declare those dependencies explicitly — missing checkpoints fail loudly, never silently substitute a proxy. A fifth page, [Registry & reference](/docs/evaluation/metrics/reference), covers discovery (`worldfoundry-eval metric list`), parameterized ids, checkpoint staging, and package layout. For benchmark-specific evaluator assets and commands, see [Benchmark Hub](/docs/evaluation/benchmark-hub); individual pages call out approximations and cases where official scripts must be used instead of the generic compute API.
 
 ## Getting started
 
 <MetricsSetup />
 
-<MetricQuickNav locale="en" variant="hub" />
-
 ## Pages
 
-| Page | What you will find |
-| --- | --- |
-| [Scorers & quality](/docs/evaluation/metrics/scorers) | CLIPScore, VQAScore, ITMScore, FaceScore, ArtScore, OpenS2V reward metrics. |
-| [Distribution](/docs/evaluation/metrics/distribution) | FID, IS, KID, FVD, JEDi, CMMD, Clean-FID, and feature-array metrics. |
-| [Perceptual pairwise](/docs/evaluation/metrics/perceptual) | LPIPS, SSIM, DINO similarity, mask accuracy, layout quality. |
-| [Editing & layout](/docs/evaluation/metrics/editing) | SemSR, IRS, CAS, manipulation direction, object-wise consistency. |
-| [Registry & reference](/docs/evaluation/metrics/reference) | `MetricRegistry`, registered-metric tables, CLI surface, checkpoints, architecture. |
+- [Scorers & quality](/docs/evaluation/metrics/scorers) — CLIPScore, VQAScore, ITMScore, FaceScore, ArtScore, OpenS2V reward metrics.
+- [Distribution](/docs/evaluation/metrics/distribution) — FID, IS, KID, FVD, JEDi, CMMD, Clean-FID, and feature-array metrics.
+- [Perceptual pairwise](/docs/evaluation/metrics/perceptual) — LPIPS, SSIM, DINO similarity, mask accuracy, layout quality.
+- [Editing & layout](/docs/evaluation/metrics/editing) — SemSR, IRS, CAS, manipulation direction, object-wise consistency.
+- [Registry & reference](/docs/evaluation/metrics/reference) — `MetricRegistry`, registered-metric tables, CLI surface, checkpoints, architecture.
 
 ## Related pages
 

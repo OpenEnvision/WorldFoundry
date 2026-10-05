@@ -1,0 +1,44 @@
+---
+title: "HyperFlow for MiniMax-H3"
+description: "HyperFlow for MiniMax-H3（Video Rebirth）：文生视频、图生视频；Runner 一致性待确认; 独立环境 `hyperflow`。"
+modelId: "hyperflow"
+pageSource: generated
+---
+
+MiniMax-H3 的八步推理适配器，支持联合音视频、首尾帧条件与有序多模态参考。
+
+<ModelPaperFigures modelId="hyperflow" locale="zh" />
+
+代码：[Video-Rebirth/hyperflow](https://github.com/Video-Rebirth/hyperflow)。
+
+<ModelCommandBuilder modelId="hyperflow" locale="zh" />
+
+## 用来做什么
+
+用 `hyperflow` 跑本系列联合 T2V/I2V 推理路径。本页记录了这两种任务 profile。
+
+该模型由Video Rebirth发布。
+
+catalog 记录的任务包括 文生视频、图生视频、参考图生成视频、音视频联合生成。别名包括 `hyperflow-h3`、`minimax-h3-hyperflow`。模态上，它接受文本、图像，输出视频。
+
+## 运行时契约
+
+可选 `prompt`、`num_frames`、`height`、`width`、`seed`；产物 `generated_video`、`hyperflow.mp4`。
+
+CLI task profile：`t2va`、`fl2va`、`ref2va`。绑定的 pipeline 类是 `HyperFlowPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+`t2va` 记录默认值：seed=42；`fl2va` 记录默认值：seed=42。
+
+提供完整的本地 Diffusers 格式 MiniMax-H3 权重快照、weights_path 和专用 Python 可执行文件。 上游加载器使用固定网格；num_inference_steps 必须为 8，输出帧率必须为 24 fps。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run hyperflow --pipeline.task-profile t2va` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+记录的权重仓库包括 `videorebirth/hyperflow`、`MiniMaxAI/MiniMax-H3`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh hyperflow`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="hyperflow" locale="zh" />

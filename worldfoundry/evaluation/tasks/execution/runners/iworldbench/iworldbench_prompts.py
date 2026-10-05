@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import csv
-import os
 from pathlib import Path
 from typing import Any
 
 from worldfoundry.evaluation.api import GenerationRequest
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
+    first_existing_dir,
+    resolve_env_path,
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
 )
@@ -25,30 +26,22 @@ SPLIT_TASK_NAMES = {
     "camera_following": "CameraFollowing",
 }
 
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
-
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def resolve_iworldbench_root(explicit: Path | None = None) -> Path | None:
-    for candidate in (
+    return first_existing_dir(
         explicit,
-        _env_path("WORLDFOUNDRY_IWORLD_BENCH_ROOT"),
+        resolve_env_path("WORLDFOUNDRY_IWORLD_BENCH_ROOT"),
         IN_TREE_IWORLD_BENCH_ROOT,
         bundled_benchmark_assets_root(BENCHMARK_ID),
-    ):
-        if candidate is not None and candidate.is_dir():
-            return candidate.expanduser().resolve()
-    return None
+    )
 
 
 def resolve_dataset_root(*, explicit: Path | None = None, repo_root: Path | None = None) -> Path | None:
     for candidate in (
         explicit,
-        _env_path("WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT"),
+        resolve_env_path("WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT"),
         repo_root,
         resolve_iworldbench_root(),
     ):
@@ -100,12 +93,12 @@ def resolve_metadata_csv_path(
         # A caller-selected dataset must never be silently shadowed by the tiny
         # checked-in contract fixture.
         return _metadata_under_root(Path(dataset_root), relative, source="dataset_root")
-    env_manifest = _env_path("WORLDFOUNDRY_IWORLD_BENCH_PROMPT_MANIFEST")
+    env_manifest = resolve_env_path("WORLDFOUNDRY_IWORLD_BENCH_PROMPT_MANIFEST")
     if env_manifest is not None:
         if not env_manifest.is_file():
             raise FileNotFoundError(f"iWorld-Bench metadata CSV not found: {env_manifest}")
         return env_manifest
-    env_dataset_root = _env_path("WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT")
+    env_dataset_root = resolve_env_path("WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT")
     if env_dataset_root is not None:
         return _metadata_under_root(env_dataset_root, relative, source="WORLDFOUNDRY_IWORLD_BENCH_DATASET_ROOT")
     if repo_root is not None:

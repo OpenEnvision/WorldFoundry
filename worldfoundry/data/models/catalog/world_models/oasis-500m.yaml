@@ -30,16 +30,37 @@ integration:
     dependency environment, checkpoints, prompt image/video, and action tensors.
   notes:
   - WorldFoundry registers an in-tree runtime manifest pipeline for the vendored Open-Oasis source.
-  - A model-specific WorldFoundry pipeline is registered against the independent in-tree Open-Oasis source package; real upstream
-    inference remains checkpoint/environment gated.
+  - The model-specific pipeline completed checkpoint-backed GPU inference with the official sample image and camera action contrast.
+    Local execution requires the released checkpoint, runtime dependencies, a prompt image or video, and action tensors.
 runner_parity:
-  status: implemented_checkpoint_pending
+  status: checkpoint_gpu_validated
   notes:
-  - The pipeline resolves the official Open-Oasis generate entrypoint and returns blocked runtime diagnostics until checkpoints
-    and action assets are staged.
+  - The pipeline resolves the official Open-Oasis generate entrypoint and completed a 49-frame GPU sample with released weights.
+  - A positive/zero/negative cameraX contrast verified vertical viewpoint response; independent upstream pixel parity and gameplay
+    physics were not measured. Missing local assets still return blocked runtime diagnostics.
 runtime_profile: runtime-profile:oasis-500m
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: oasis-500m
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes; blocked entries retain
   upstream provenance without runnable backends.
+docs:
+  publisher: Etched / Decart
+  publisher_kind: company
+  publisher_zh: Etched / Decart
+  overview: 'Oasis 500M (open-oasis) is the open release of the playable-Minecraft world model: an action-conditioned diffusion transformer that renders the next game frame from context frames and keyboard/mouse actions. The in-tree runtime has completed checkpoint-backed GPU inference; each installation must stage the Etched/oasis-500m checkpoint plus prompt image/video and action tensors.'
+  overview_zh: Oasis 500M（open-oasis）是「可游玩 Minecraft」世界模型的开源版本：动作条件扩散 Transformer，从上下文帧与键鼠动作渲染下一游戏帧。树内运行时已通过真实权重 GPU 推理；使用时仍需就位 Etched/oasis-500m 权重、提示图像或视频以及动作张量。
+  architecture: Per the upstream release, a ViT VAE compresses frames and a 500M diffusion transformer generates the next frame conditioned on past frames and actions (MIT license). Internals beyond this are not recorded here.
+  architecture_zh: 按上游发布，ViT VAE 压缩帧，500M 扩散 Transformer 以历史帧与动作为条件生成下一帧（MIT 许可）。除此之外的内部细节此处未记录。
+  usage_notes: 'Supply 25-column action tensors in the official Open-Oasis format. The upstream converter maps cameraX from MineRL camera[0] and cameraY from camera[1], then normalizes each as (raw-40)/40. MineRL defines camera[0] as vertical pitch and camera[1] as horizontal yaw, so cameraX is pitch despite its name. Sources: https://github.com/etched-ai/open-oasis/blob/f59deef2c019c212bd0c5a3a5b986a51f3701847/utils.py and https://github.com/minerllabs/minerl/blob/cdeae668c2f334e3c9117adf651b5a94436b45f8/minerl/herobraine/hero/handlers/agent/actions/camera.py. Set WORLDFOUNDRY_CKPT_DIR to the directory containing Etched--oasis-500m when using local weights; missing assets return blocked diagnostics.'
+  usage_notes_zh: '按官方 Open-Oasis 格式提供 25 列动作张量。上游转换器把 MineRL camera[0] 映射为 cameraX、camera[1] 映射为 cameraY，再分别按 (raw-40)/40 归一化。MineRL 定义 camera[0] 为垂直俯仰、camera[1] 为水平偏航，因此 cameraX 虽名为 X，实际是俯仰。依据：https://github.com/etched-ai/open-oasis/blob/f59deef2c019c212bd0c5a3a5b986a51f3701847/utils.py 和 https://github.com/minerllabs/minerl/blob/cdeae668c2f334e3c9117adf651b5a94436b45f8/minerl/herobraine/hero/handlers/agent/actions/camera.py。使用本地权重时，WORLDFOUNDRY_CKPT_DIR 应指向包含 Etched--oasis-500m 的目录；缺少资产会返回 blocked 诊断。'
+  limitations:
+  - Execution is checkpoint/environment/action-asset gated.
+  - '500M research model: short-horizon drift and low resolution versus commercial demos.'
+  limitations_zh:
+  - 执行受 checkpoint/环境/动作资产限制。
+  - 500M 研究模型：相较商业 demo 存在短时漂移与低分辨率。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Action-conditioned game-world rollout quality.
+    reason_zh: 动作条件游戏世界滚动生成质量。

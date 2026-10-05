@@ -180,6 +180,14 @@ _ADAPTER_ROWS: dict[str, tuple[Any, ...]] = {
         "set WORLDFOUNDRY_PHYGROUND_DATA_ROOT or WORLDFOUNDRY_PHYGROUND_PROMPT_MANIFEST",
         True,
     ),
+    "sana-wm-bench": (
+        "sana_wm_bench.sana_wm_bench_prompts",
+        "sana_wm_bench",
+        "set WORLDFOUNDRY_SANA_WM_BENCH_DATASET_ROOT to the public Efficient-Large-Model/SANA-WM-Bench download",
+        True,
+        "dataset_root",
+        "split",
+    ),
     "physics-iq": (
         "physics_iq.physics_iq_prompts",
         "physics_iq",

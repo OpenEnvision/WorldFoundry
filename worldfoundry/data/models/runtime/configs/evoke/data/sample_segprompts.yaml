@@ -1,0 +1,31 @@
+# Segmented-prompt version of sample.yaml, for the recipes that consume per-section prompts
+# (use_full_rollout_interleave). Same bundled clip, different caption field.
+#
+# caption_key: segments reads the caption file's per-segment entries instead of the whole-clip
+# description; the bundled clip carries 4 of them. segment_text_key / strip_camera_tags match what the
+# teacher was fine-tuned on -- tag-free short_prompt -- so the text conditioning is not OOD; a source
+# whose captions carry camera tags has to keep strip_camera_tags on or the conditioning goes OOD.
+#
+# One clip is enough to exercise the segmented-prompt path end to end, not to train anything useful.
+# For a real run, copy this file and point `datasets` at your own segmented-caption sources.
+
+defaults:
+  require_full_length: true
+  segment_text_key: short_prompt
+  strip_camera_tags: true
+
+datasets:
+  sample:
+    jsonl: examples/data/cases.jsonl
+    video_dir: examples/data
+    caption_dir: examples/data
+    pose_dir: examples/data
+    source_fps: null              # taken from the jsonl's video_fps (30.0)
+    source_resolution: [720, 1280]
+    caption_key: segments
+
+select: [sample]
+# One epoch has to cover a full update step on every rank: 8 GPUs x train_batch_size x
+# gradient_accumulation_steps is 16 at the largest of the four recipes. A single copy of the clip
+# leaves every rank but the first with an empty dataloader, so the clip is repeated instead.
+ratio:  [32.0000]

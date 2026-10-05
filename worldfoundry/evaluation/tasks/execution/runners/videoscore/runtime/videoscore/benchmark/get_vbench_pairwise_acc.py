@@ -1,3 +1,4 @@
+import ast
 import os
 import json
 import fire
@@ -132,7 +133,7 @@ def main(
                 if idx not in data_map:
                     data_map[idx] = {"model_scores": {}}
                 assert item['text'] == ref_data_map[idx]["prompt"], f"{item['text']} != {ref_data_map[idx]['prompt']}"
-                scores = eval(item['ans'])
+                scores = ast.literal_eval(item['ans'])
                 data_map[idx]["model_scores"][model_name] = {
                     aspects[i]: scores[i] for i in range(len(aspects))
                 }

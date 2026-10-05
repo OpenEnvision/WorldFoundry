@@ -10,6 +10,8 @@ from typing import Any, Mapping
 
 from worldfoundry.evaluation.api import GenerationRequest
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
+    first_existing_dir,
+    resolve_env_path,
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
 )
@@ -39,20 +41,13 @@ CANONICAL_AEQA_PROMPT_COUNT = 184
 DEFAULT_TASK = "AEQA"
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
-
 
 def resolve_world_in_world_root(explicit: Path | None = None) -> Path | None:
-    for candidate in (
+    return first_existing_dir(
         explicit,
-        _env_path("WORLDFOUNDRY_WORLD_IN_WORLD_ASSETS_ROOT"),
+        resolve_env_path("WORLDFOUNDRY_WORLD_IN_WORLD_ASSETS_ROOT"),
         bundled_benchmark_assets_root(BENCHMARK_ID),
-    ):
-        if candidate is not None and candidate.is_dir():
-            return candidate.expanduser().resolve()
-    return None
+    )
 
 
 def resolve_episode_source(
@@ -65,10 +60,10 @@ def resolve_episode_source(
         path = explicit.expanduser().resolve()
         return path if path.exists() else None
     env_key = f"WORLDFOUNDRY_WORLD_IN_WORLD_{task.upper()}_EPISODES"
-    env_path = _env_path(env_key)
+    env_path = resolve_env_path(env_key)
     if env_path is not None:
         return env_path if env_path.exists() else None
-    env_manifest = _env_path("WORLDFOUNDRY_WORLD_IN_WORLD_PROMPT_MANIFEST")
+    env_manifest = resolve_env_path("WORLDFOUNDRY_WORLD_IN_WORLD_PROMPT_MANIFEST")
     if env_manifest is not None:
         return env_manifest if env_manifest.exists() else None
     for relative in TASK_EPISODE_PATHS.get(task.upper(), ()):

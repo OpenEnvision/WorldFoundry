@@ -1,131 +1,27 @@
 ---
 title: SimplerEnv
-description: SimplerEnv — 指标、依赖与运行命令。
+description: "真机策略的 real-to-sim 评测（SIMPLER）。Google Robot 与 WidowX/Bridge 场景；WorldFoundry 导入官方 rollout。"
 ---
 
-## 简介
+SimplerEnv（SIMPLER — Simulated Manipulation Policy Evaluation for Real Robot Setups）是加州大学圣迭戈分校与 Google DeepMind（联合斯坦福、伯克利）的 **real-to-sim** 评测。ManiSkill2 / SAPIEN 场景经过标定，让 **RT-1**、**RT-1-X**、**Octo** 等策略在仿真里的排序，尽量对上对应的 **Google Robot** 与 **WidowX / Bridge** 真机排序。套件的要点是那份相关性，不是又一套厨房资产。
 
+论文：[OpenReview](https://openreview.net/forum?id=LZh48DTg71)。项目：[simpler-env.github.io](https://simpler-env.github.io/)。代码：[simpler-env/SimplerEnv](https://github.com/simpler-env/SimplerEnv)（MIT）。
 
+WorldFoundry **不跑**这些场景。它把官方 rollout 导出归一进 scorecard。上游 rollout 仍需要 ManiSkill2/SAPIEN 栈和本体资产。仓库镜像：`cache/vla_va_wam/repos/simpler-env--SimplerEnv`。
 
-SimplerEnv 提供基于仿真的 embodied evaluation，用于 real-to-sim 策略测试与 task-success mapping。
+<BenchmarkPageSections id="simpler-env" locale="zh" />
 
-
-
-## 指标
-
-SimplerEnv external benchmark task manifest for simulator-backed VLA policy rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/simpler-env.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `episode_success` | episode / task 是否成功完成的比例或成功率。 |
-| `reward` | SimplerEnv 视觉匹配操作评估 episode 上的 real-to-sim bridge reward。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `giga-world-policy-py311`。
-- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
-- SimplerEnv source/runtime import 可见；完整状态需要 embodiment assets、policy wrapper 和 rollout 结果。
-
-### 测评数据
-
-- SimplerEnv evaluates policy rollouts in simulator; generated result files and rollout logs are normalized by WorldFoundry.
-- 待测模型输出目录：设置 `WORLDFOUNDRY_SIMPLERENV_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/simpler-env--SimplerEnv`
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_SIMPLERENV_ROOT`
-- `WORLDFOUNDRY_SIMPLERENV_RESULTS_PATH`
-
-### 环境检查
-
-```bash
-PYTHONPATH=${WORLDFOUNDRY_CACHE_DIR}/repos/simpler-env--SimplerEnv:src ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-giga-world-policy-py311/bin/python -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile simpler-env --manifest worldfoundry/data/benchmarks/runtime_profiles/official/simpler-env.yaml --output-dir tmp/worldfoundry_preflight/simpler-env --json
-```
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id simpler-env \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/simpler-env/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/simpler-env/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id simpler-env \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/simpler-env/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id simpler-env --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official SimplerEnv repository checkout
-- ManiSkill2/SAPIEN simulator stack
-- Selected robot embodiment assets
-- Benchmark-specific policy checkpoint
-
-### Environment
-
-- `WORLDFOUNDRY_SIMPLERENV_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-
-
+默认导入路径：`WORLDFOUNDRY_SIMPLERENV_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/simpler-env.yaml`。产物：`scorecard.json`（主键 `success_rate`）与 `raw_results.jsonl`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

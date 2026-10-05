@@ -25,7 +25,6 @@ from transformers.utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
-    LossKwargs,
     can_return_tuple,
 )
 from transformers.utils.deprecation import deprecate_kwarg
@@ -776,7 +775,8 @@ class Qwen2Model(Qwen2PreTrainedModel):
         return causal_mask
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+class KwargsForCausalLM(FlashAttentionKwargs):
+    """Attention keyword annotations for the inference-only causal LM."""
 class Qwen2ForCausalLM(Qwen2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}

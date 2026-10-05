@@ -1,0 +1,29 @@
+model:
+  checkpoint: checkpoints/echo-wm-base.safetensors
+  gemma_path: checkpoints/gemma-3
+
+video:
+  width: 1280
+  height: 704
+  num_frames: 241
+  fps: 24
+  steps: 30
+  video_cfg: 4.0
+  audio_cfg: 2.0
+  stg_scale: 1.0
+  stg_blocks: [29]
+  seed: 42
+
+action:
+  enabled: true
+  ucpe: true
+  translation_speed: 0.05
+  rotation_speed_deg: 0.5
+  pitch_limit_deg: 60.0
+  fov_deg: 70.0
+
+negative_prompt: >-
+  worst quality, inconsistent motion, blurry, jittery, distorted, game UI,
+  video game interface, HUD, heads-up display, menu, status bar, health bar,
+  score, minimap, crosshair, reticle, buttons, icons, subtitles, captions,
+  watermark, logo, text overlay, user interface

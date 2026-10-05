@@ -12,4 +12,4 @@ from .ffn_layers import ListForwardMixin, SwiGLUFFN
 from .rms_norm import RMSNorm
 from .rope_position_encoding import RopePositionEmbedding
 
-from worldfoundry.core.nn.layers import DropPath, LayerScale, Mlp, PatchEmbed
+from worldfoundry.core.nn.blocks.layers import DropPath, LayerScale, Mlp, PatchEmbed

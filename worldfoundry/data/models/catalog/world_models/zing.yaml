@@ -1,0 +1,72 @@
+schema_version: 2
+model_id: zing
+name: Zing-0.5
+family: Wan2.2
+domain: world
+aliases:
+- zing-0.5
+- zing-world-model
+tasks:
+- text-to-video
+- image-to-video
+- interactive-world-model
+output_artifacts:
+- generated_world
+capabilities:
+  task_family: world_model
+  modalities:
+  - text-to-video
+  - image-to-video
+  - interactive-world-model
+availability:
+  source: open_source
+  license: apache-2.0
+  requires_auth: false
+sources:
+  github:
+    url: https://github.com/seedleap/zing-world-model
+    revision: 11212da06f63290f4d354cdc0324241ba6eac356
+  huggingface:
+  - repo_id: seedleap/zing-0.5
+    revision: b9ca1ed1de750bf19a0e6562c6cd71fa7ef35648
+    type: model
+checkpoints:
+  primary:
+    repo_id: seedleap/zing-0.5
+    revision: b9ca1ed1de750bf19a0e6562c6cd71fa7ef35648
+    type: model
+integration:
+  status: integrated
+  runtime_profile: zing
+  pipeline_binding: zing
+  runner: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: zing
+runtime_profile: runtime-profile:zing
+evidence:
+  notes:
+  - Tiny CPU transformer state-dict and FP32/BF16 rollout parity checked against upstream, including eviction and prompt switches.
+  - Checkpoint-backed GPU generation and native auxiliary-model parity are pending.
+runner_parity:
+  status: pending
+  notes:
+  - GPU/checkpoint-backed artifact parity has not been run in this workspace.
+catalog_category: world_models
+docs:
+  publisher: seedleap
+  publisher_kind: lab
+  publisher_zh: seedleap
+  overview: Zing-0.5 generates video with frame-aligned keyboard control and prompt switching.
+  overview_zh: Zing-0.5 支持按帧键盘控制和提示词切换的视频生成。
+  architecture: Native Wan2.2 TI2V-5B layers, UMT5, VAE38 and attention are reused. Only the keyboard convolution and prompt-switching
+    causal cache are model-specific.
+  architecture_zh: 复用原生 Wan2.2 TI2V-5B 层、UMT5、VAE38 和注意力实现，新增键盘卷积和支持提示词切换的因果缓存。
+  usage_notes: Use ZingPipeline.from_pretrained(checkpoint_dir). num_frames includes the optional reference and must be 1+4*N;
+    height/width are multiples of 32. Keyboard controls contain N-1 rows of eight values for a total N-frame result.
+  usage_notes_zh: 通过 ZingPipeline.from_pretrained 加载。num_frames 包含可选参考帧，必须为 1+4*N；宽高为 32 的倍数。总长 N 帧时键盘控制为 N-1 行、每行八个值。
+  limitations:
+  - Tiny CPU transformer state-dict and FP32/BF16 rollout parity checked against upstream, including eviction and prompt switches.
+  - Checkpoint-backed GPU generation and native auxiliary-model parity are pending.
+  limitations_zh:
+  - 当前工作区仅完成 CPU 可执行的检查，GPU 推理和 checkpoint 产物仍待验证。
+  recommended_benchmarks: []

@@ -10,6 +10,8 @@ source:
   official_repo_url: https://github.com/LiheYoung/Depth-Anything
   license: apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2401.10891
+  project_page: https://depth-anything.github.io/
   github:
     url: https://github.com/LiheYoung/Depth-Anything
   huggingface:
@@ -23,7 +25,7 @@ official_sources:
     type: model
     status: confirmed
 integration:
-  status: verified
+  status: integrated
   notes:
   - In-tree Depth Anything V1 pipeline is registered for relative depth and geometry artifact export.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -34,3 +36,19 @@ runner_parity:
   - Per-run validation evidence is tracked outside the model catalog.
 catalog_category: three_d_four_d
 catalog_scope: Independent geometric prior integrations used by 3D and world-model runtimes.
+docs:
+  publisher: TikTok / The University of Hong Kong
+  publisher_kind: company
+  publisher_zh: TikTok / 香港大学
+  overview: 'Depth Anything V1 is the foundation model for relative monocular depth that popularized large-scale unlabeled-data depth training. In this catalog both integration and runner status are verified: the in-tree pipeline exports relative depth and geometry artifacts, and the Studio route produced a visually validated nonblank depth map on 2026-07-10.'
+  overview_zh: Depth Anything V1 是让「大规模无标注数据训练深度」流行起来的相对单目深度基础模型。本 catalog 中其集成与 runner 状态均为 verified：树内 pipeline 导出相对深度与几何产物，Studio 路径已于 2026-07-10 产出并通过视觉验证的非空深度图。
+  architecture: A DINOv2 ViT backbone with a DPT-style depth head, trained on ~62M unlabeled images with a teacher-student scheme (per the publication). This entry serves relative depth; its metric siblings are the separate *-prior entries.
+  architecture_zh: DINOv2 ViT 主干加 DPT 式深度头，用约 6200 万张无标注图像以师生方案训练（见论文）。本条目提供相对深度；米制版本是独立的 *-prior 条目。
+  usage_notes: A verified, dependable prior — good default for relative depth. For metric depth choose depth-anything-v2-prior or depth-anything-v3-prior instead.
+  usage_notes_zh: 已验证、可信赖的先验——相对深度的默认选择。需要米制深度时请改用 depth-anything-v2-prior 或 depth-anything-v3-prior。
+  limitations:
+  - Relative depth only — no metric scale on this route.
+  - 'Single-image estimation: temporal flicker on video (use video-depth-anything-prior for video).'
+  limitations_zh:
+  - 仅相对深度——该路径没有米制尺度。
+  - 单帧估计：视频上会闪烁（视频请用 video-depth-anything-prior）。

@@ -16,6 +16,8 @@ integration:
   status: integrated
 name: StarVLA
 official_sources:
+  paper: https://arxiv.org/abs/2604.05014
+  project_page: https://starvla.github.io/contributors
   github:
     head_sha: 5ce9e2ed59dc94de926c335d36a3681c243a58f7
     url: https://github.com/starVLA/starVLA
@@ -68,3 +70,23 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records. Runner or pipeline targets are present
   only after a complete in-tree WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'StarVLA is a Lego-like modular VLA framework; this catalog entry is GPU-validated: the official QwenOFT predict_action ran on an 80GB CUDA GPU with the local Qwen3-VL-OFT-LIBERO-4in1 checkpoint and Qwen3-VL-4B base VLM. A WM4A world-action checkpoint (Wan2.2-based) is also staged with tensor/import probes but is not promoted by the policy run.'
+  overview_zh: StarVLA 是乐高式模块化 VLA 框架；本 catalog 条目已 GPU 验证：官方 QwenOFT predict_action 在 80GB CUDA GPU 上以本地 Qwen3-VL-OFT-LIBERO-4in1 checkpoint 与 Qwen3-VL-4B 基座 VLM 运行。另有基于 Wan2.2 的 WM4A 世界-动作 checkpoint 已就位并通过张量/导入探针，但未被策略运行提升状态。
+  architecture: 'The validated path is QwenOFT: a Qwen3-VL-4B backbone with OFT-style parallel action decoding, fine-tuned on four LIBERO suites in one checkpoint (4in1). The WM4A variant couples the policy with a Wan2.2 world model and remains probe-level.'
+  architecture_zh: 已验证路径为 QwenOFT：Qwen3-VL-4B 骨干配 OFT 式并行动作解码，单 checkpoint 微调四个 LIBERO 套件（4in1）。WM4A 变体将策略与 Wan2.2 世界模型耦合，目前仅探针级验证。
+  usage_notes: Use the QwenOFT 4in1 checkpoint for LIBERO evaluation; treat WM4A as staged-but-unvalidated. Stage the Qwen3-VL-4B-Instruct base alongside the policy checkpoint.
+  usage_notes_zh: LIBERO 评测用 QwenOFT 4in1 checkpoint；WM4A 视为已就位但未验证。策略 checkpoint 需与 Qwen3-VL-4B-Instruct 基座一同就位。
+  limitations:
+  - The WM4A world-action route is not promoted; only QwenOFT is GPU-verified.
+  - No license is recorded for the QwenOFT checkpoint (WM4A is MIT).
+  limitations_zh:
+  - WM4A 世界-动作路由未提升状态；仅 QwenOFT 通过 GPU 验证。
+  - QwenOFT checkpoint 未记录许可证（WM4A 为 MIT）。
+  recommended_benchmarks:
+  - id: libero
+    reason: The 4in1 checkpoint covers four LIBERO suites.
+    reason_zh: 4in1 checkpoint 覆盖四个 LIBERO 套件。

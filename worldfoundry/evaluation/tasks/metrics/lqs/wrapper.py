@@ -3,40 +3,30 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from itertools import combinations, permutations
+from itertools import combinations
 from typing import Any
 
 import numpy as np
 
+from worldfoundry.evaluation.tasks.metrics._shared.bbox import bbox_xyxy
+
 
 def _bbox_center(box: Sequence[float]) -> tuple[float, float]:
-    if len(box) == 4:
-        x1, y1, x2, y2 = box
-        return (float(x1 + x2) / 2.0, float(y1 + y2) / 2.0)
-    if len(box) == 5:
-        x, y, w, h = box
-        return (float(x + w / 2.0), float(y + h / 2.0))
-    raise ValueError(f"bbox must have 4 or 5 values, got {box!r}")
+    x1, y1, x2, y2 = bbox_xyxy(box)
+    return (x1 + x2) / 2.0, (y1 + y2) / 2.0
 
 
 def _bbox_area(box: Sequence[float]) -> float:
-    if len(box) == 4:
-        x1, y1, x2, y2 = box
-        return float(abs(x2 - x1) * abs(y2 - y1))
-    if len(box) == 5:
-        _, _, w, h = box
-        return float(abs(w) * abs(h))
-    raise ValueError(f"bbox must have 4 or 5 values, got {box!r}")
-
-
-def _labels(layout: Sequence[dict[str, Any]]) -> set[str]:
-    return {str(item["label"]) for item in layout}
+    x1, y1, x2, y2 = bbox_xyxy(box)
+    return abs(x2 - x1) * abs(y2 - y1)
 
 
 def _match_boxes(
     groundtruth: Sequence[dict[str, Any]],
     predicted: Sequence[dict[str, Any]],
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    from scipy.optimize import linear_sum_assignment
+
     gt_by_label: dict[str, list[dict[str, Any]]] = {}
     pred_by_label: dict[str, list[dict[str, Any]]] = {}
     for item in groundtruth:
@@ -45,29 +35,17 @@ def _match_boxes(
         pred_by_label.setdefault(str(item["label"]), []).append(item)
     shared = set(gt_by_label) & set(pred_by_label)
     pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    for label in shared:
+    for label in sorted(shared):
         gt_items = gt_by_label[label]
         pred_items = pred_by_label[label]
         if len(gt_items) == 1 and len(pred_items) == 1:
             pairs.append((gt_items[0], pred_items[0]))
             continue
-        best_perm: tuple[int, ...] | None = None
-        best_alc = float("inf")
-        for perm in permutations(range(len(pred_items))):
-            if len(perm) != len(gt_items):
-                continue
-            alc = 0.0
-            for gt_item, pred_index in zip(gt_items, perm, strict=False):
-                g = _bbox_center(gt_item["bbox"])
-                p = _bbox_center(pred_items[pred_index]["bbox"])
-                alc += float(np.linalg.norm(np.array(g) - np.array(p)))
-            alc /= max(1, len(gt_items))
-            if alc < best_alc:
-                best_alc = alc
-                best_perm = perm
-        if best_perm is not None:
-            for gt_item, pred_index in zip(gt_items, best_perm, strict=False):
-                pairs.append((gt_item, pred_items[pred_index]))
+        gt_centers = np.array([_bbox_center(item["bbox"]) for item in gt_items])
+        pred_centers = np.array([_bbox_center(item["bbox"]) for item in pred_items])
+        costs = np.linalg.norm(gt_centers[:, None] - pred_centers[None, :], axis=-1)
+        gt_indices, pred_indices = linear_sum_assignment(costs)
+        pairs.extend((gt_items[i], pred_items[j]) for i, j in zip(gt_indices, pred_indices))
     return pairs
 
 
@@ -80,15 +58,12 @@ def compute_lqs(
     gamma_lc: float = 0.25,
     gamma_ac: float = 0.25,
 ) -> dict[str, float]:
-    """Compute Layout Quality Score and components (LayoutTransformer paper)."""
-    gt_labels = _labels(groundtruth_layout)
-    pred_labels = _labels(predicted_layout)
-    intersection = gt_labels & pred_labels
+    """Compute LQS using ``(x1, y1, x2, y2)`` or ``(x, y, w, h, extra)`` boxes."""
     if not groundtruth_layout:
         raise ValueError("groundtruth_layout must be non-empty")
-    lr = len(intersection) / len(gt_labels)
-    lp = len(intersection) / len(pred_labels) if pred_labels else 0.0
     pairs = _match_boxes(groundtruth_layout, predicted_layout)
+    lr = len(pairs) / len(groundtruth_layout)
+    lp = len(pairs) / len(predicted_layout) if predicted_layout else 0.0
     if not pairs:
         return {"lqs": lr + lp, "lr": lr, "lp": lp, "lc": 0.0, "ac": 0.0}
     alc_values = []

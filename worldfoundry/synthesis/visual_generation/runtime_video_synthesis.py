@@ -9,18 +9,19 @@ utility functions for path resolution and data type conversions.
 
 from __future__ import annotations
 
-import tempfile
 import inspect
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
 import numpy as np
 import torch
 
-from ..base_synthesis import BaseSynthesis
-from ...pipelines.lyra.lyra_utils import load_pil_image, materialize_image_input
 from worldfoundry.core.io import load_serialized, resolve_data_path
+from worldfoundry.core.media.codecs.image import load_pil_image, materialize_image_input
 from worldfoundry.runtime.assets import expand_worldfoundry_path
+
+from ..base_synthesis import BaseSynthesis
 
 
 def _frames_to_uint8_array(frames) -> np.ndarray:
@@ -430,17 +431,25 @@ class RuntimeVideoSynthesis(BaseSynthesis):
         aliases = {
             "fps": ("fps", "frame_rate"),
             "frame_rate": ("frame_rate", "fps"),
-            "num_frames": ("frames", "num_frames"),
-            "frame_num": ("frames", "num_frames"),
-            "max_frames": ("frames", "num_frames"),
-            "video_length": ("frames", "num_frames"),
-            "steps": ("sample_steps", "num_inference_steps"),
-            "num_steps": ("sample_steps", "num_inference_steps"),
-            "num_inference_steps": ("sample_steps", "num_inference_steps"),
-            "infer_steps": ("sample_steps", "num_inference_steps"),
-            "sampling_steps": ("sample_steps", "num_inference_steps"),
-            "guidance_scale": ("sample_guide_scale", "guidance_scale"),
-            "cfg_scale": ("sample_guide_scale", "guidance_scale"),
+            "num_frames": ("frames", "num_frames", "video_length"),
+            "frame_num": ("frames", "num_frames", "video_length"),
+            "max_frames": ("frames", "num_frames", "video_length"),
+            "video_length": ("frames", "num_frames", "video_length"),
+            "steps": ("sample_steps", "num_inference_steps", "ddim_steps"),
+            "num_steps": ("sample_steps", "num_inference_steps", "ddim_steps"),
+            "num_inference_steps": ("sample_steps", "num_inference_steps", "ddim_steps"),
+            "infer_steps": ("sample_steps", "num_inference_steps", "ddim_steps"),
+            "sampling_steps": ("sample_steps", "num_inference_steps", "ddim_steps"),
+            "guidance_scale": (
+                "sample_guide_scale",
+                "guidance_scale",
+                "unconditional_guidance_scale",
+            ),
+            "cfg_scale": (
+                "sample_guide_scale",
+                "guidance_scale",
+                "unconditional_guidance_scale",
+            ),
             "seed": ("base_seed", "seed"),
             "shift": ("sample_shift", "time_shift"),
             "time_shift": ("sample_shift", "time_shift"),

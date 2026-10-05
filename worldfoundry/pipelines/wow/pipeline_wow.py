@@ -13,7 +13,7 @@ from ..pipeline_utils import PipelineABC
 
 
 class WoWArgs:
-    """Parameter container matching the official WoW demo surfaces."""
+    """Parameters shared by the native WoW Wan and Cosmos2 routes."""
 
     def __init__(
         self,
@@ -102,7 +102,7 @@ class WoWArgs:
 
 
 class WoWPipeline(PipelineABC):
-    """Pipeline implementation for official WoW inference demos."""
+    """Public WoW pipeline backed by canonical diffusion runtimes."""
 
     MODEL_ID = "wow"
 
@@ -125,7 +125,7 @@ class WoWPipeline(PipelineABC):
         cls,
         model_path: Optional[Union[str, Mapping[str, Any]]] = None,
         required_components: Optional[Dict[str, Any]] = None,
-        synthesis_model_path: str = "WoW-world-model/WoW-1-Wan-14B-600k",
+        synthesis_model_path: str = "X-Humanoid/WoW-1-Wan-14B-600k",
         synthesis_args: Optional[WoWArgs] = None,
         device: Optional[str] = None,
         model_id: str | None = None,
@@ -142,7 +142,9 @@ class WoWPipeline(PipelineABC):
                 or component_options.pop("checkpoint_folder", None)
                 or component_options.pop("repo_root", None)
             )
-        synthesis_model_path = str(model_path or component_options.pop("synthesis_model_path", None) or synthesis_model_path)
+        synthesis_model_path = str(
+            model_path or component_options.pop("synthesis_model_path", None) or synthesis_model_path
+        )
         synthesis_args = component_options.pop("synthesis_args", synthesis_args)
         component_options.update(kwargs)
         component_options = cls._strip_framework_loading_options(component_options)

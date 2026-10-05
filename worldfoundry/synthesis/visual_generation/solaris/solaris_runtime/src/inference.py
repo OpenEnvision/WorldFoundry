@@ -3,10 +3,11 @@ from absl import logging
 
 from src.utils.config import instantiate_from_config, resolve_device_paths
 from src.utils.jax import init_jax_distributed
+from worldfoundry.core.io.paths import package_data_path
 
 
 @hydra.main(
-    config_path="../config", config_name="inference", version_base=None
+    config_path=str(package_data_path('models', 'runtime', 'configs', 'solaris')), config_name="inference", version_base=None
 )  # no version to avoid warnings in cli
 def main(cfg):
     # Hydra changes cwd, so resolve relative paths before anything else.

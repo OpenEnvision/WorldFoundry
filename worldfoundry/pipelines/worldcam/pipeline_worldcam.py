@@ -235,7 +235,6 @@ class WorldCamPipeline(PipelineABC):
         return_dict: bool = False,
     ):
         """Execute the complete pipeline generation flow."""
-        del output_path, fps
         if self.synthesis_model is None:
             raise RuntimeError("Synthesis model is not loaded. Use from_pretrained() first.")
         source_video = self._first_present(video, video_path, input_path)
@@ -274,11 +273,16 @@ class WorldCamPipeline(PipelineABC):
         )
         result.update(
             {
-                "num_output_frames": max(1, int(num_ar_steps)) * int(getattr(self.synthesis_model, "frames_per_latent", 4) or 4),
+                "num_output_frames": len(result["video"]),
                 "conditioning_frames": int(conditioning_frames),
                 "official_demo": True,
             }
         )
+        if output_path is not None:
+            from worldfoundry.core.io import write_video
+
+            write_video(result["video"], output_path, fps=int(fps) if fps is not None else 30)
+            result["artifact_path"] = str(output_path)
         if return_dict:
             return result
         return result["video"]

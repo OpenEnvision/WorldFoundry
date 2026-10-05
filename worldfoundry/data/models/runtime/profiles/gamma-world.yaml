@@ -41,12 +41,10 @@ input_schema:
   - guidance
   - num_steps
   - seed
-  - nproc_per_node
-  - context_parallel_size
 artifact_kind: generated_video
 artifact_filename: gamma-world.mp4
 execution:
-  backend_stage: official_in_tree_inference
+  backend_stage: native_diffusion
   runtime_status: checkpoint_environment_required
   integration_status: integrated
   pipeline_binding: gamma-world
@@ -54,4 +52,7 @@ integration:
   status: integrated
 notes:
 - causal_few_step is the default four-step streaming model.
+- All released variants require exactly 189 output frames per player view (`num_frames=189`, official `state_t=48`); shorter causal clips are outside the upstream inference contract.
 - Pass a sequence of per-player images plus one action JSON/mapping per player, or pass a compatible eval_dir.
+- Causal and causal-few-step checkpoints require one action stream per player view; missing actions are rejected before sampling.
+- DiT, Reason1 conditioning, Wan VAE, scheduler, and window execution are assembled through the shared native diffusion roles.

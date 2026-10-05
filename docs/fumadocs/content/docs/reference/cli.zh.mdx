@@ -23,6 +23,8 @@ conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 worldfoundry-eval --help
 ```
 
+`bootstrap_worldfoundry.sh` 是[快速开始](/zh/docs/quickstart)、TUI、Studio 共用的官方首次 clone 脚本。
+
   </Tab>
   <Tab>
 
@@ -55,14 +57,15 @@ python -m worldfoundry zoo models --json
 
 ## 命令入口
 
-| 入口 | 用途 |
-| --- | --- |
-| `worldfoundry-eval` | 文档统一使用的标准 CLI。 |
-| `worldfoundry` | `worldfoundry-eval` 的别名，调用同一个 `main()`。 |
-| `python -m worldfoundry` | Editable install 或 console-script `PATH` 尚未生效时的 module 备用入口。 |
-| `worldfoundry-tui` | TUI 专用别名，等价于 `worldfoundry-eval tui`。 |
-| `worldfoundry-mcp` | MCP server 专用入口；也可以用 `worldfoundry-eval mcp`。 |
-| `worldfoundry-studio` | 独立的 Studio launcher。详见 [Studio 指南](/zh/docs/guides/studio)。 |
+- **`worldfoundry-eval`** — 文档统一使用的标准 CLI。
+- **`worldfoundry`** — `worldfoundry-eval` 的别名，调用同一个 `main()`。
+- **`python -m worldfoundry`** — Editable install 或 console-script `PATH` 尚未生效时的 module 备用入口。
+- **`worldfoundry-tui`** — TUI 专用别名，等价于 `worldfoundry-eval tui`。
+- **`worldfoundry-mcp`** — MCP server 专用入口；也可以用 `worldfoundry-eval mcp`。
+- **`worldfoundry-studio`** — 独立的 Studio launcher。详见 [Studio 指南](/zh/docs/guides/studio)。
+- **`python -m worldfoundry.studio.workspace_job infer`** — Workspace 视觉冒烟（与 Studio UI 提交的是同一条 job 路径）。不是文档里的第一次推理命令。
+
+**选哪条命令。** 日常可复现 / 模型页命令用 `worldfoundry-eval run <id> --pipeline.task-profile …`。只有 Workspace 视觉冒烟才用 `python -m worldfoundry.studio.workspace_job infer`。状态用词见 [运行状态](/zh/docs/guides/run-status)。
 
 下面统一写 `worldfoundry-eval`，便于 shell history、job script 和问题报告保持一致。
 
@@ -79,9 +82,11 @@ worldfoundry-eval run --help
 
 ![worldfoundry-eval --help 的终端输出](/images/cli/worldfoundry-eval-help.png)
 
-<p className="text-sm text-fd-muted-foreground">
-  截图来自当前 CLI；可在 <code>docs/fumadocs</code> 中运行 <code>npm run cli:screenshots</code> 重新生成。
-</p>
+<div className="text-sm text-fd-muted-foreground">
+
+截图来自当前 CLI；可在 `docs/fumadocs` 中运行 `npm run cli:screenshots` 重新生成。
+
+</div>
 
 ### 模型专属 Help
 
@@ -104,62 +109,229 @@ worldfoundry-eval run self-forcing --print-config --json
 
 多个命令最终都能进入 evaluation core，但它们面向的起始输入不同。
 
-| 目标 | 优先使用 | 原因 |
-| --- | --- | --- |
-| 浏览稳定的模型或 benchmark ID | `zoo models`、`zoo benchmarks`、`zoo model-show`、`zoo benchmark-show` | 读取 release catalog，展示 readiness、alias、needs 与 next action。 |
-| 直接运行一个模型 | `run MODEL` | 提供模型专属的强类型推理参数。 |
-| 运行一个或多个 model × benchmark cell | `run --model ... --benchmark ...` | 统一处理单 cell、重复 ID、命名 suite、resume、cache 和 plan-only。 |
-| 用 benchmark 为 artifact 目录打分 | `score --benchmark ... --artifacts ...` | 面向用户的评分 intent，执行该 benchmark 的完整 protocol。 |
-| 用指定 metric 评估 WorldFoundry result rows | `score --results ... --metric ...` | 简洁的 existing-results 工作流。 |
-| 执行已经物化的 run plan，或直接使用 eval-core 字段 | `evaluate`（别名 `eval`） | 面向 requests/results ledger 与 model-mode evaluation 的底层确定性路径。 |
-| 从 dataset manifest 生成再评分 | `generate-score` | 一个 intent 统一负责 dataset 物化、生成、cache 与 metric。 |
-| 导入或执行某个 benchmark 的官方界面 | `zoo benchmark-run` | 暴露 benchmark 专属 mode 与参数；应配合对应 Benchmark Hub 页面。 |
-| 复现仓内 profile 或 recipe | `reproduce` | 解析命名 profile、benchmark 默认配置或 recipe YAML。 |
-| 创建索引、比较或做契约检查 | `index-runs`、`compare-runs`、`validate-artifact` | 对持久化 run 输出操作，不重新运行模型。 |
+- **浏览稳定的模型或 benchmark ID** — 优先使用 `zoo models`、`zoo benchmarks`、`zoo model-show`、`zoo benchmark-show`。读取 release catalog，展示 readiness、alias、needs 与 next action。
+- **直接运行一个模型** — 优先使用 `run MODEL`。提供模型专属的强类型推理参数。
+- **运行一个或多个 model × benchmark cell** — 优先使用 `run --model ... --benchmark ...`。统一处理单 cell、重复 ID、命名 suite、resume、cache 和 plan-only。
+- **用 benchmark 为 artifact 目录打分** — 优先使用 `score --benchmark ... --artifacts ...`。面向用户的评分 intent，执行该 benchmark 的完整 protocol。
+- **用指定 metric 评估 WorldFoundry result rows** — 优先使用 `score --results ... --metric ...`。简洁的 existing-results 工作流。
+- **执行已经物化的 run plan，或直接使用 eval-core 字段** — 优先使用 `evaluate`（别名 `eval`）。面向 requests/results ledger 与 model-mode evaluation 的底层确定性路径。
+- **从 dataset manifest 生成再评分** — 优先使用 `generate-score`。一个 intent 统一负责 dataset 物化、生成、cache 与 metric。
+- **导入或执行某个 benchmark 的官方界面** — 优先使用 `zoo benchmark-run`。暴露 benchmark 专属 mode 与参数；应配合对应 Benchmark Hub 页面。
+- **复现钉死的 model × benchmark 配方** — 优先使用 `reproduce`。解析 recipe YAML。
+- **创建索引、比较或做契约检查** — 优先使用 `index-runs`、`compare-runs`、`validate-artifact`。对持久化 run 输出操作，不重新运行模型。
 
 ## 完整命令地图
 
-### Discovery 与交互界面
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>Discovery 与交互界面</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>tui</code>
+          </div>
+        </div>
+        <p>交互式 catalog 浏览器和命令生成器。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>zoo</code>
+          </div>
+        </div>
+        <p><code>models</code>、<code>model-specs</code>、<code>model-show</code>、<code>model-download</code>、<code>embodied-assets</code>、<code>benchmarks</code>、<code>benchmark-specs</code>、<code>benchmark-show</code>、<code>benchmark-run</code>。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>tasks</code>
+          </div>
+        </div>
+        <p><code>list</code>、<code>show</code>、<code>catalog</code>，用于已注册 benchmark task。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>suites</code>
+          </div>
+        </div>
+        <p><code>list</code>、<code>show</code>，用于命名 model × benchmark preset。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>models</code>
+          </div>
+        </div>
+        <p><code>list</code>、<code>runtime-runners</code>、<code>visualizations</code>、<code>assets</code>、<code>visualize</code>。</p>
+      </li>
+    </ul>
+  </section>
+  <section className="pi-kv-group">
+    <h3>执行与评分</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>run</code>
+          </div>
+        </div>
+        <p>直接强类型推理、单个 model × benchmark cell，或 suite / matrix。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>score</code>
+          </div>
+        </div>
+        <p>用 benchmark 评估 artifact 目录，或用指定 metric 评估 result rows。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>generate-score</code>
+          </div>
+        </div>
+        <p>在 dataset manifest 上运行仓内模型并为结果打分。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>reproduce</code>
+          </div>
+        </div>
+        <p>执行 recipe YAML。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>evaluate</code>
+            <code>eval</code>
+          </div>
+        </div>
+        <p>对物化结果、run plan 或 model mode 执行确定性 eval-core。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>embodied</code>
+          </div>
+        </div>
+        <p><code>plan</code>、<code>run</code>、<code>serve</code>、<code>merge</code>，用于 simulator-backed closed-loop evaluation。</p>
+      </li>
+    </ul>
+  </section>
+  <section className="pi-kv-group">
+    <h3>数据、计划与验证</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>task</code>
+          </div>
+        </div>
+        <p>对 filesystem task YAML 执行 <code>list</code>、<code>show</code>、<code>validate</code>、<code>materialize</code>。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>dataset</code>
+          </div>
+        </div>
+        <p>对 sample manifest 执行 <code>create</code>、<code>show</code>、<code>validate</code>、<code>materialize</code>；用 <code>locate</code>、<code>plan</code> 定位或规划本地/HF 数据资产。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>config</code>
+          </div>
+        </div>
+        <p><code>list</code>、<code>run</code> 仓内 workflow template。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>plan</code>
+          </div>
+        </div>
+        <p><code>create</code>、<code>show</code>、<code>validate</code> 稳定的 <code>worldfoundry-run-plan</code> JSON。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>metric</code>
+          </div>
+        </div>
+        <p><code>list</code>、<code>show</code>、<code>validate</code> 可执行 metric ID。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>preflight runtime</code>
+          </div>
+        </div>
+        <p>不运行 benchmark，检查 import、环境变量、路径、CUDA 和声明的 validation 缺口。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>validate</code>
+          </div>
+        </div>
+        <p>使用具体 task / data selector 验证旧版 benchmark metadata 加载。</p>
+      </li>
+    </ul>
+  </section>
+  <section className="pi-kv-group">
+    <h3>报告与集成</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>index-runs</code>
+          </div>
+        </div>
+        <p>构建 <code>index.json</code>、<code>index.jsonl</code> 与可选的无依赖 HTML 浏览器。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>compare-runs</code>
+          </div>
+        </div>
+        <p>比较明确指定的 run 目录，或从 index 中筛选 run。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>validate-artifact</code>
+          </div>
+        </div>
+        <p>验证 summary、scorecard、index、comparison 和 suite schema。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>mcp</code>
+          </div>
+        </div>
+        <p>启动 MCP server（<code>--transport stdio|sse</code>，默认 <code>stdio</code>）。</p>
+      </li>
+    </ul>
+  </section>
+</div>
 
-| 命令 | 子命令 / 作用 |
-| --- | --- |
-| `tui` | 交互式 catalog 浏览器和命令生成器。 |
-| `zoo` | `models`、`model-specs`、`model-show`、`model-download`、`embodied-assets`、`benchmarks`、`benchmark-specs`、`benchmark-show`、`benchmark-run`。 |
-| `tasks` | `list`、`show`、`catalog`，用于已注册 benchmark task。 |
-| `suites` | `list`、`show`，用于命名 model × benchmark preset。 |
-| `models` | `list`、`runtime-runners`、`visualizations`、`assets`、`visualize`。 |
+### MCP 工具
 
-### 执行与评分
+`worldfoundry-eval mcp` 与 `worldfoundry-mcp` 启动同一个 FastMCP server（`worldfoundry/mcp/server.py`）。先安装 `python -m pip install -e ".[mcp]"`：
 
-| 命令 | 作用 |
-| --- | --- |
-| `run` | 直接强类型推理、单个 model × benchmark cell，或 suite / matrix。 |
-| `score` | 用 benchmark 评估 artifact 目录，或用指定 metric 评估 result rows。 |
-| `generate-score` | 在 dataset manifest 上运行仓内模型并为结果打分。 |
-| `reproduce` | 执行仓内 profile、benchmark 默认 profile 或自定义 recipe YAML。 |
-| `evaluate` / `eval` | 对物化结果、run plan 或 model mode 执行确定性 eval-core。 |
-| `embodied` | `plan`、`run`、`serve`、`merge`，用于 simulator-backed closed-loop evaluation。 |
+```bash
+worldfoundry-eval mcp --transport stdio
+worldfoundry-eval mcp --transport sse
+```
 
-### 数据、计划与验证
-
-| 命令 | 子命令 / 作用 |
-| --- | --- |
-| `task` | 对 filesystem task YAML 执行 `list`、`show`、`validate`、`materialize`。 |
-| `dataset` | 对 dataset manifest 和 request rows 执行 `create`、`show`、`validate`、`materialize`。 |
-| `config` | `list`、`run` 仓内 workflow template。 |
-| `plan` | `create`、`show`、`validate` 稳定的 `worldfoundry-run-plan` JSON。 |
-| `metric` | `list`、`show`、`validate` 可执行 metric ID。 |
-| `preflight runtime` | 不运行 benchmark，检查 import、环境变量、路径、CUDA 和声明的 validation 缺口。 |
-| `validate` | 使用具体 task / data selector 验证旧版 benchmark metadata 加载。 |
-
-### 报告与集成
-
-| 命令 | 作用 |
-| --- | --- |
-| `index-runs` | 构建 `index.json`、`index.jsonl` 与可选的无依赖 HTML 浏览器。 |
-| `compare-runs` | 比较明确指定的 run 目录，或从 index 中筛选 run。 |
-| `validate-artifact` | 验证 summary、scorecard、index、comparison 和 suite schema。 |
-| `mcp` | 启动 agent-driven discovery 与 evaluation 使用的 MCP server。 |
+Server 注册 27 个工具：`server_info`；discovery（`list_models`、`get_model_info`、`list_benchmarks`、`get_benchmark_info`、`list_tasks`、`get_task_info`、`list_metrics`、`show_metric`、`check_benchmark_datasets`）；run 生命周期（`preview_run`、`evaluate`、`list_runs`、`get_run_status`、`get_run_result`、`get_run_samples`、`cancel_run`）；以及 Studio workspace（`list_studio_models`、`get_studio_model_info`、`submit_studio_inference`、`list_studio_jobs`、`get_studio_job`、`wait_for_studio_job`、`stop_studio_job`、`get_studio_job_logs`、`list_studio_artifacts`、`get_studio_manifest`）。Studio 工具默认访问 `WORLDFOUNDRY_STUDIO_WORKSPACE_URL`（通常是 `http://127.0.0.1:7870`）。Run 文件写到 `WORLDFOUNDRY_MCP_RUN_ROOT`；未设置时为 `runs/mcp`。
 
 Parser 才是 flag 的事实来源。请使用 `worldfoundry-eval <command> [<subcommand>] --help`，不要从无关模型或 benchmark recipe 复制参数。
 
@@ -294,12 +466,10 @@ Data root、score directory、prompt manifest、judge credential、metric subset
 
 ## Benchmark mode
 
-| Mode | 含义 |
-| --- | --- |
-| `official-run` | 对准备好的 artifact 执行 manifest 声明的 benchmark runtime。只有 evaluator、数据、checkpoint 与服务都就绪后才使用。 |
-| `official-validation` | 通过 benchmark runner 导入官方形态结果，记录 framework integration evidence。 |
-| `normalizer` | 把已有 result file 归一化为 WorldFoundry artifact，但不声称 WorldFoundry 执行了 official scorer。 |
-| `contract` | 只检查 wiring / contract；它不是评分证据，也不能成为 leaderboard evidence。 |
+- **`official-run`** — 对准备好的 artifact 执行 manifest 声明的 benchmark runtime。只有 evaluator、数据、checkpoint 与服务都就绪后才使用。
+- **`official-validation`** — 通过 benchmark runner 导入官方形态结果，记录 framework integration evidence。
+- **`normalizer`** — 把已有 result file 归一化为 WorldFoundry artifact，但不声称 WorldFoundry 执行了 official scorer。
+- **`contract`** — 只检查 wiring / contract；它不是评分证据，也不能成为 leaderboard evidence。
 
 <Callout type="warn" title="命令成功不等于 leaderboard 结果有效">
   请读取 `scorecard.json` 中的 `score_valid`、`leaderboard_valid`、`normalizer_only`、fidelity 与 blocker。Exit code 0 只表示请求的 CLI 操作按其契约完成。
@@ -307,17 +477,72 @@ Data root、score directory、prompt manifest、judge credential、metric subset
 
 ## 输出与可复现性
 
+全局日志标志可放在 subcommand 前后，并覆盖
+[环境 → 日志](/zh/docs/reference/environments#日志) 中对应的环境变量：
+
+```bash
+worldfoundry-eval --log-level DEBUG --log-json \
+  --log-file tmp/worldfoundry.log zoo models --json
+```
+
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>标志</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>--log-level</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>环境变量</span>
+            WORLDFOUNDRY_LOG_LEVEL
+          </span>
+        </div>
+        <p>可选 <code>DEBUG</code>、<code>INFO</code>、<code>WARNING</code>、<code>ERROR</code> 或 <code>CRITICAL</code>；默认 <code>INFO</code>。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>--log-file</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>环境变量</span>
+            WORLDFOUNDRY_LOG_FILE
+          </span>
+        </div>
+        <p>可选旋转文件 sink。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>--log-json</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>环境变量</span>
+            WORLDFOUNDRY_LOG_JSON
+          </span>
+        </div>
+        <p>文件 sink 使用 JSON Lines；控制台仍为文本。</p>
+      </li>
+    </ul>
+  </section>
+</div>
+
+拥有输出目录的命令会创建 run id；未显式选择文件 sink 时，生命周期事件写入
+每次 run 的 `events.jsonl`。它通常位于 `<output-dir>/logs/<run-id>/`；需要独占
+认领输出目录的命令则使用隔离的 sibling 日志目录。框架托管的子进程继承结构化的
+`WORLDFOUNDRY_LOG_CONTEXT` 值。
+
 Evaluation 命令把持久化文件写入 `--output-dir`。各 benchmark 可能追加自己的文件，但共享 run surface 使用下列 artifact：
 
-| Artifact | 用途 |
-| --- | --- |
-| `run_manifest.json` | 最终 run identity、status、计数、路径、cache evidence 与执行元数据。 |
-| `requests.jsonl` / `results.jsonl` | Runner 物化 ledger 时写出的逐样本输入与归一化 generation result。 |
-| `metrics/summary.json` | 聚合 metric 与失败计数。 |
-| `artifacts.jsonl` | 可选的生成 artifact 索引；支持时可用 `--no-artifacts-index` 关闭。 |
-| `scorecard.json` | Metric、fidelity、eligibility、leaderboard 状态与 blocker。 |
-| `summary.json` / `report.md` | 所选 runner 支持时写出的紧凑报告视图。 |
-| `suite_manifest.json` / `suite_report.md` | Suite 的 matrix identity 与聚合报告，另为每个 cell 写一个子目录。 |
+- **`run_manifest.json`** — 最终 run identity、status、计数、路径、cache evidence 与执行元数据。
+- **`requests.jsonl` / `results.jsonl`** — Runner 物化 ledger 时写出的逐样本输入与归一化 generation result。
+- **`metrics/summary.json`** — 聚合 metric 与失败计数。
+- **`artifacts.jsonl`** — 可选的生成 artifact 索引；支持时可用 `--no-artifacts-index` 关闭。
+- **`scorecard.json`** — Metric、fidelity、eligibility、leaderboard 状态与 blocker。
+- **`summary.json` / `report.md`** — 所选 runner 支持时写出的紧凑报告视图。
+- **`suite_manifest.json` / `suite_report.md`** — Suite 的 matrix identity 与聚合报告，另为每个 cell 写一个子目录。
 
 复现分数时，应把命令、环境 / profile identity、catalog revision 与输出目录一起保存。Schema 检查与 release evidence 见[验证](/zh/docs/reference/validation)。
 
@@ -346,12 +571,10 @@ Cache 使用 SQLite 与 `audit.jsonl`，命中会写入 run manifest。复用 ca
 
 ### Exit status
 
-| Code | 一般含义 |
-| --- | --- |
-| `0` | 请求的操作完成；分数与 leaderboard 是否有效仍以输出契约为准。 |
-| `1` | 某个能区分 domain failure 的命令发现 validation、metric、sample、prepared intent 或 run result 失败。 |
-| `2` | CLI 输入无效、必要文件 / 环境缺失、preflight 失败，或其他执行 / setup 错误。 |
-| `130` | 被 `Ctrl+C` 中断。 |
+- **`0`** — 请求的操作完成；分数与 leaderboard 是否有效仍以输出契约为准。
+- **`1`** — 某个能区分 domain failure 的命令发现 validation、metric、sample、prepared intent 或 run result 失败。
+- **`2`** — CLI 输入无效、必要文件 / 环境缺失、preflight 失败，或其他执行 / setup 错误。
+- **`130`** — 被 `Ctrl+C` 中断。
 
 更严格的行为以各命令 `--help` 为准。`--fail-on-issue`、`--fail-on-sample-error`、`--fail-on-skipped` 等 flag 会有意改变非成功退出的条件。
 
@@ -363,3 +586,5 @@ Cache 使用 SQLite 与 `audit.jsonl`，命中会写入 run manifest。复用 ca
   <Card title="TUI" description="在终端中交互式构建同样的命令。" href="/zh/docs/guides/tui" />
   <Card title="验证" description="验证 artifact 与 release evidence。" href="/zh/docs/reference/validation" />
 </Cards>
+
+HarnessEval-W 的 `--result-model-id` 用于选择模型，并保留官方共同 case 范围；Python 执行、缓存评分与模型依赖见 [HarnessEval-W](/docs/evaluation/benchmark-hub/harnesseval-w)。

@@ -8,7 +8,8 @@ from easydict import EasyDict as edict
 from .utils import load_dimension_info
 from worldfoundry.base_models.perception_core.optical_flow.raft import RAFT
 from worldfoundry.base_models.perception_core.optical_flow.raft.utils.utils import InputPadder
-from .distributed import (
+from worldfoundry.core.execution.device import get_current_torch_device
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     distribute_list_to_rank,
@@ -105,7 +106,7 @@ def flow_score(flow_scorer, video_list):
 
 
 def compute_flow_score(json_dir, submodules_list, **kwargs):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = get_current_torch_device()
     model_path = submodules_list.get("model")
     if model_path is None:
         raise ValueError("flow_score requires raft checkpoint from config")

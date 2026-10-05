@@ -1,23 +1,25 @@
 Screen {
     layout: vertical;
-    background: $surface;
+    background: $background;
+    color: $text;
     /* Nerd Font icons: configure terminal font (see docs/guides/tui), not Textual CSS */
 }
 
 Header {
-    background: $surface-darken-1;
+    background: $surface;
     color: $text;
     text-style: bold;
     dock: top;
     height: 1;
-    border-bottom: solid $primary 30%;
+    border: none;
 }
 
 Footer {
     background: $surface;
     dock: bottom;
+    height: 1;
     color: $text-muted;
-    border-top: solid $primary 30%;
+    border-top: none;
 }
 
 /* ── Status Pane (Top Left) ── */
@@ -26,13 +28,15 @@ Footer {
     padding: 1;
     margin-bottom: 1;
     background: $panel;
-    border: round $primary 50%;
+    border: round $border-blurred;
     border-title-color: $text;
 }
 
-#status-pane.mode-infer { border: round $primary 50%; border-title-color: $primary; }
-#status-pane.mode-eval { border: round $secondary 50%; border-title-color: $secondary; }
-#status-pane.mode-ui { border: round $success 50%; border-title-color: $success; }
+#status-pane.mode-infer,
+#status-pane.mode-eval,
+#status-pane.mode-ui {
+    border-title-color: $text;
+}
 
 #brand-collapse {
     border: none;
@@ -63,7 +67,7 @@ Footer {
 
 #status-divider {
     margin: 0;
-    color: $text-muted 30%;
+    color: $border-blurred;
 }
 
 #action-label {
@@ -79,7 +83,7 @@ Footer {
     height: 3;
     border: none;
     background: transparent;
-    border-bottom: tall $accent 40%;
+    border-bottom: tall $border-blurred;
 }
 
 #conda-status {
@@ -94,7 +98,7 @@ Footer {
 /* ── Main layout ── */
 #main-content {
     height: 1fr;
-    min-height: 16;
+    min-height: 0;
     padding: 1 1;
 }
 
@@ -110,7 +114,7 @@ Screen.-narrow #left-column {
 }
 
 Screen.-narrow #catalogs-pane {
-    height: 18;
+    height: 12;
 }
 
 Screen.-narrow #right-column {
@@ -121,6 +125,36 @@ Screen.-narrow #right-column {
     margin-top: 1;
 }
 
+Screen.-compact #main-content,
+Screen.-short #main-content {
+    padding: 0 1;
+}
+
+Screen.-hide-brand #brand-collapse,
+Screen.-hide-brand #status-divider,
+Screen.-compact #brand-collapse,
+Screen.-short #brand-collapse,
+Screen.-compact #status-divider,
+Screen.-short #status-divider {
+    display: none;
+}
+
+Screen.-hide-brand #status-pane,
+Screen.-compact #status-pane,
+Screen.-short #status-pane {
+    padding: 0 1;
+}
+
+Screen.-compact #search-row,
+Screen.-short #search-row {
+    margin-bottom: 0;
+}
+
+Screen.-compact #catalogs-pane,
+Screen.-short.-narrow #catalogs-pane {
+    height: 10;
+}
+
 #left-column {
     width: 2fr;
     height: 100%;
@@ -129,11 +163,11 @@ Screen.-narrow #right-column {
 
 #catalogs-pane {
     height: 1fr;
-    border: round $primary 40%;
-    border-title-color: $text 70%;
+    border: round $border-blurred;
+    border-title-color: $text;
     background: $panel;
     padding: 0 1;
-    overflow-y: auto;
+    overflow-y: hidden;
 }
 
 #right-column {
@@ -147,20 +181,20 @@ Screen.-narrow #right-column {
 
 #search-row {
     height: 3;
-    margin-bottom: 1;
+    margin-bottom: 0;
 }
 
 #filter {
     width: 1fr;
     border: none;
-    border-bottom: tall $primary 50%;
-    background: $boost;
+    border-bottom: tall $border-blurred;
+    background: $surface;
     color: $text;
 }
 
 #filter:focus {
     border-bottom: tall $accent;
-    background: $surface-lighten-1;
+    background: $surface-active;
 }
 
 #catalogs {
@@ -178,24 +212,26 @@ Screen.-narrow #right-column {
 }
 
 #models-pane, #benchmarks-pane {
-    height: auto;
-    min-height: 10;
+    height: 1fr;
+    min-height: 4;
 }
 
 .pane-title {
     height: 1;
     text-style: bold;
     color: $text;
-    padding: 1 0 0 0;
+    padding: 0;
     margin-bottom: 0;
 }
 
 DataTable {
-    height: auto;
-    min-height: 5;
+    height: 1fr;
+    min-height: 2;
     border: none;
-    scrollbar-background: $surface-darken-1;
-    scrollbar-color: $primary 40%;
+    background: $panel;
+    color: $text;
+    scrollbar-background: $scrollbar-background;
+    scrollbar-color: $scrollbar;
 }
 
 DataTable:focus {
@@ -203,23 +239,33 @@ DataTable:focus {
 }
 
 DataTable > .datatable--cursor {
-    background: $accent 50%;
-    color: $text;
+    background: $block-cursor-background;
+    color: $block-cursor-foreground;
     text-style: bold;
 }
 
 DataTable > .datatable--header {
-    background: $surface-darken-1;
+    background: $surface;
     text-style: bold;
-    color: $text 80%;
+    color: $text-muted;
 }
 
 DataTable > .datatable--hover {
-    background: $surface-lighten-1 30%;
+    background: $block-hover-background;
 }
 
 DataTable > .datatable--odd-row {
-    background: $surface 30%;
+    background: $panel;
+}
+
+DataTable > .datatable--even-row {
+    background: $surface;
+}
+
+.catalog-empty {
+    height: auto;
+    padding: 1 0;
+    color: $text-muted;
 }
 
 #summary-row {
@@ -242,31 +288,70 @@ DataTable > .datatable--odd-row {
     min-height: 4;
     padding: 0 1;
     margin-bottom: 1;
-    border: round $accent 30%;
-    border-title-color: $accent;
+    border: round $border-blurred;
+    border-title-color: $text-muted;
     background: transparent;
 }
 
 #run-builder {
     height: auto;
-    border: round $secondary 40%;
-    border-title-color: $secondary;
+    border: round $border-blurred;
+    border-title-color: $text;
     background: $panel;
     padding: 0;
 }
 
 #run-controls {
-    height: 3;
+    layout: grid;
+    grid-size: 3;
+    grid-columns: 10 10 1fr;
+    grid-rows: 3;
+    height: 4;
     padding: 0 1;
-    border-bottom: solid $surface-lighten-1;
+    border-bottom: solid $border-blurred;
     align: left middle;
     background: transparent;
 }
 
 #secondary-actions {
-    width: auto;
+    layout: grid;
+    grid-size: 6;
+    grid-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
+    width: 1fr;
     height: 3;
-    margin-left: 1;
+    margin-left: 0;
+}
+
+Screen.-stack-actions #run-controls {
+    grid-size: 2;
+    grid-columns: 10 1fr;
+    grid-rows: 3 3;
+    height: 7;
+}
+
+Screen.-stack-actions #secondary-actions {
+    column-span: 2;
+}
+
+Screen.-compact #secondary-actions {
+    grid-size: 3;
+    grid-columns: 1fr 1fr 1fr;
+    grid-rows: 3 3;
+    height: 6;
+}
+
+Screen.-compact #run-controls {
+    grid-rows: 3 6;
+    height: 10;
+}
+
+Screen.-compact .field-grid {
+    grid-size: 1;
+    grid-columns: 1fr;
+}
+
+Screen.-compact .full-width {
+    column-span: 1;
 }
 
 Button {
@@ -279,38 +364,42 @@ Button {
     text-style: bold;
 }
 
-Button.success {
+Button.-success {
     min-width: 8;
-    background: $success 40%;
-    color: $success-lighten-3;
+    background: $primary;
+    color: $background;
 }
-Button.success:hover { background: $success 50%; }
+Button.-success:hover { background: $primary-lighten-1; }
 
-Button.error {
+Button.-error {
     min-width: 8;
-    background: $error 40%;
-    color: $error-lighten-3;
+    background: $surface-lighten-1;
+    color: $error;
 }
-Button.error:hover { background: $error 50%; }
+Button.-error:hover { background: $error-muted; }
 
-Button.primary {
-    background: $primary 40%;
-    color: $primary-lighten-3;
+Button.-primary {
+    background: $surface-lighten-1;
+    color: $text;
 }
-Button.primary:hover { background: $primary 50%; }
+Button.-primary:hover { background: $surface-lighten-2; }
 
 Button:disabled {
-    opacity: 0.35;
+    opacity: 0.5;
 }
 
 Button:hover {
     background: $surface-lighten-2;
 }
 
+Button:focus {
+    border-bottom: tall $accent;
+}
+
 /* ── Config tabs ── */
 #config-tabs {
     height: auto;
-    min-height: 10;
+    min-height: 0;
     border: none;
     background: transparent;
 }
@@ -320,26 +409,26 @@ TabbedContent > ContentSwitcher {
     padding: 1 1 0 1;
 }
 
-TabbedContent Underline > Tabs {
-    background: $surface-darken-1;
-    border-bottom: solid $surface-lighten-1;
+TabbedContent Tabs {
+    background: $panel;
+    border: none;
     padding: 0 1;
 }
 
 TabbedContent Tab {
     color: $text-muted;
-    padding: 1 2;
+    padding: 0 1;
+    border: none;
 }
 
 TabbedContent Tab.-active {
-    color: $text;
+    color: $accent;
     text-style: bold;
     background: transparent;
-    border-bottom: tall $accent;
 }
 
 TabbedContent Tab:disabled {
-    opacity: 0.3;
+    opacity: 0.5;
 }
 
 TabPane {
@@ -353,15 +442,15 @@ TabPane {
 }
 
 .section-title {
-    height: 1;
+    height: auto;
     text-style: bold;
-    color: $text 80%;
-    padding: 1 0 0 0;
+    color: $text;
+    padding: 0;
 }
 
 .section-rule {
-    margin: 0 0 1 0;
-    color: $primary 25%;
+    margin: 0;
+    color: $border-blurred;
 }
 
 /* ── Form fields ── */
@@ -373,10 +462,6 @@ TabPane {
     height: auto;
     padding: 0;
     margin-bottom: 0;
-}
-
-.full-width {
-    column-span: 2;
 }
 
 .field-group {
@@ -391,8 +476,8 @@ TabPane {
 }
 
 .field-caption {
-    height: 1;
-    color: $text 70%;
+    height: auto;
+    color: $text-muted;
     text-style: bold;
     padding: 0 0 0 0;
 }
@@ -404,9 +489,9 @@ TabPane {
     width: 1fr;
     height: 3;
     margin: 0;
-    background: $surface-darken-1;
+    background: $surface;
     border: none;
-    border-bottom: tall $surface-lighten-1;
+    border-bottom: tall $border-blurred;
     color: $text;
 }
 
@@ -414,7 +499,7 @@ Input:focus,
 Select:focus {
     border: none;
     border-bottom: tall $accent;
-    background: $surface;
+    background: $surface-active;
 }
 
 .tab-empty {
@@ -427,19 +512,20 @@ Select:focus {
 
 /* ── Studio panel ── */
 #studio-panel {
-    height: 1fr;
+    height: auto;
+    min-height: 6;
     margin-top: 1;
     border: none;
-    border-left: thick $success;
-    background: $boost;
+    border-left: thick $accent;
+    background: $panel;
     padding: 1 2;
 }
 
 #studio-help-title {
     text-style: bold;
-    color: $success;
-    height: 1;
-    padding-bottom: 1;
+    color: $text;
+    height: auto;
+    padding-bottom: 0;
 }
 
 #studio-help {
@@ -451,27 +537,43 @@ Select:focus {
 #status-bar {
     height: auto;
     padding: 1 1 0 1;
-    border-top: solid $surface-lighten-1;
+    border-top: solid $border-blurred;
 }
 
 #selection-status {
-    height: 1;
+    height: auto;
+    min-height: 1;
     color: $text-muted;
     text-style: italic;
 }
 
+#command-validation {
+    display: none;
+    height: auto;
+    margin: 0 1 1 1;
+    padding: 0 1;
+    border-left: solid $warning;
+    color: $warning;
+}
+
 /* ── Command preview ── */
 #command-preview {
-    margin-top: 1;
+    margin-top: 0;
+    margin-bottom: 1;
+    padding: 0 1;
     border: none;
-    border-top: solid $surface-lighten-1;
-    background: $surface-darken-1;
+    background: $surface;
+}
+
+#command-preview.-collapsed {
+    background: transparent;
 }
 
 #command {
     height: auto;
     max-height: 8;
-    padding: 1;
+    overflow-y: auto;
+    padding: 0 1;
     background: transparent;
 }
 
@@ -489,12 +591,12 @@ CollapsibleTitle {
 
 /* ── Log panel ── */
 #log-panel {
-    height: auto;
-    min-height: 15;
+    height: 8;
+    min-height: 6;
     margin: 1 0 0 0;
-    border: round $panel-lighten-1;
+    border: round $border-blurred;
     border-title-color: $text-muted;
-    background: $surface-darken-1;
+    background: $surface;
     padding: 0 1;
 }
 
@@ -509,7 +611,21 @@ CollapsibleTitle {
     height: 1fr;
     border: none;
     background: transparent;
-    padding-top: 1;
-    scrollbar-background: $surface-darken-2;
-    scrollbar-color: $primary 30%;
+    padding-top: 0;
+    scrollbar-background: $scrollbar-background;
+    scrollbar-color: $scrollbar;
+}
+
+Screen.-compact #log-panel,
+Screen.-short #log-panel {
+    height: 8;
+}
+
+Screen.-compact #selection-summary {
+    margin-bottom: 0;
+}
+
+Screen.-compact #search-row,
+Screen.-short #search-row {
+    height: 3;
 }

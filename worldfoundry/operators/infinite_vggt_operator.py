@@ -153,9 +153,3 @@ class InfiniteVGGTOperator(BaseOperator):
         if num_frames is not None:
             out["num_frames"] = num_frames
         return out
-
-    def delete_last_interaction(self):
-        """Remove the last item from current_interaction."""
-        if not self.current_interaction:
-            raise ValueError("No interaction to delete.")
-        self.current_interaction = self.current_interaction[:-1]

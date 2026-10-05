@@ -1,0 +1,48 @@
+---
+title: "LagrNVS"
+description: "LagrNVS from Meta AI (FAIR): novel-view-synthesis and 3d-scene-rendering; Runner parity pending."
+modelId: "lagernvs"
+pageSource: generated
+---
+
+LagrNVS is Meta's novel-view-synthesis model for rendering new camera paths through a scene (facebook/lagernvs_general_512). WorldFoundry wraps the upstream minimal_inference.py command with an in-tree adapter; the checkpoint is gated on Hugging Face and missing HF_TOKEN access is reported at inference time.
+
+<ModelPaperFigures modelId="lagernvs" locale="en" />
+
+The recorded paper is [arXiv 2603.20176](https://arxiv.org/abs/2603.20176).
+
+Project page: [szymanowiczs.github.io/lagernvs](https://szymanowiczs.github.io/lagernvs). Code: [facebookresearch/lagernvs](https://github.com/facebookresearch/lagernvs).
+
+<ModelCommandBuilder modelId="lagernvs" locale="en" />
+
+## What it is for
+
+Use `lagernvs` for catalog geometry inference. Choose it when the artifact is a reconstruction, not a generated video.
+
+The catalog records a novel-view/camera-path rendering model at 512 resolution; internals are not recorded in this repository. License is the FAIR non-commercial research license. It is published by Meta AI (FAIR).
+
+Catalog tasks include novel-view-synthesis, 3d-scene-rendering, and camera-path-rendering. Catalog aliases include `lager-nvs`, `facebook/lagernvs_general_512`, and `facebookresearch/lagernvs`.
+
+## Runtime contract
+
+Optional `input_path`, `frames`, `fps`, `model_repo`, and `python_executable`; artifacts `generated_video` and `lagernvs.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `LagrNVSPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `default` defaults: frames=16, fps=25.
+
+Accept the gated terms and set HF_TOKEN before running.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run lagernvs --pipeline.task-profile default` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `facebook/lagernvs_general_512`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lagernvs`. Add `--download` to fetch missing public checkpoints.
+
+Gated `facebook/lagernvs_general_512` — accept upstream terms before download; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="lagernvs" locale="en" />

@@ -92,7 +92,7 @@ class LDA1BRuntime:
         revision: str | None,
         required_files: Sequence[str] = (),
     ) -> Path:
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         direct = self._local_path(location)
         source = str(direct) if direct is not None else location
@@ -176,7 +176,7 @@ class LDA1BRuntime:
         from transformers import AutoConfig, AutoImageProcessor, AutoProcessor
 
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         from .dinov3_configuration import DINOv3ViTConfig
         from .modeling import LDAInferenceModel

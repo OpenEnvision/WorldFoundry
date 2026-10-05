@@ -212,7 +212,17 @@ export default function DefaultSearchDialog(props: SharedProps) {
     <I18nProvider
       locale={locale}
       locales={i18n.languages.map((item) => ({ locale: item, name: localeNames[item] }))}
-      translations={locale === 'zh' ? { search: '搜索文档', searchNoResult: '没有找到结果' } : undefined}
+      translations={
+        locale === 'zh'
+          ? {
+              search: '搜索文档',
+              searchNoResult: '没有找到结果',
+              'Search(search dialog)': '搜索文档',
+              'Search(search trigger)': '搜索',
+              'No results found(search dialog)': '没有找到结果',
+            }
+          : undefined
+      }
     >
       <SearchDialog search={search} onSearchChange={setSearch} isLoading={query.isLoading} {...props}>
         <SearchDialogOverlay />

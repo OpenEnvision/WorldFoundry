@@ -1,8 +1,12 @@
+import logging
+
+from worldfoundry.core.io.paths import package_data_path
+
 from .xbert import BertConfig, BertForMaskedLM, BertLMHeadModel, BertModel
 
-import logging
 logger = logging.getLogger(__name__)
 import os
+
 
 def build_bert(model_config, pretrain, checkpoint):
     """build text encoder.
@@ -15,7 +19,7 @@ def build_bert(model_config, pretrain, checkpoint):
     Returns: TODO
 
     """
-    current_dir = os.path.dirname(os.path.abspath(__file__))  # Get the current script's directory
+    current_dir = str(package_data_path('models', 'runtime', 'configs', 'umt', 'bert'))
     target_file = os.path.join(current_dir, model_config.text_encoder.config)  # Construct the new file path
     bert_config = BertConfig.from_json_file(target_file)
     target_file
@@ -54,7 +58,7 @@ def build_bert_decoder(model_config, checkpoint):
     Returns: TODO
 
     """
-    current_dir = os.path.dirname(os.path.abspath(__file__))  # Get the current script's directory
+    current_dir = str(package_data_path('models', 'runtime', 'configs', 'umt', 'bert'))
     target_file = os.path.join(current_dir, model_config.text_encoder.config)  # Construct the new file path
     bert_config = BertConfig.from_json_file(target_file)
     bert_config.encoder_width = model_config.vision_encoder.d_model

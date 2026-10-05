@@ -77,6 +77,7 @@ class HydraRuntime:
         fps: int = 15,
         width: int = 832,
         height: int = 480,
+        cfg_scale: float = 5.0,
         num_inference_steps: int = 50,
         seed: int = 42,
         return_dict: bool = True,
@@ -122,6 +123,8 @@ class HydraRuntime:
             str(fps),
             "--num_inference_steps",
             str(num_inference_steps),
+            "--cfg_scale",
+            str(cfg_scale),
             "--seed",
             str(seed),
         ]

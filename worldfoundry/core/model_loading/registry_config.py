@@ -1,4 +1,13 @@
-"""Data-backed model-loader registries."""
+"""Data-backed model-loader registries.
+
+Checkpoint identity (key-hash, Hugging Face architecture, patch hash)
+is mapped to a loader class by YAML under the package data tree.
+:func:`load_model_loader_registry` validates the file and resolves
+class names through a caller-supplied mapping into a frozen
+:class:`ModelLoaderRegistry`.
+
+The registry does not download weights or instantiate models.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +16,10 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.core.io import load_serialized, resolve_data_path
+
+# ──────────────────────────────────────────────────────────────────────────
+# Frozen routing table — hashes / architectures / patches → loader classes
+# ──────────────────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
@@ -32,6 +45,11 @@ class ModelLoaderRegistry:
     preset_model_websites: tuple[str, ...]
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# YAML load — validate lists/mappings; resolve class names through the caller map
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def load_model_loader_registry(
     config_path: str | Path,
     model_classes: Mapping[str, type],
@@ -55,6 +73,7 @@ def load_model_loader_registry(
 
 
 def _resolve_registry_config_path(config_path: str | Path) -> Path:
+    """Absolute paths stay as-is; relative paths resolve under the package data tree."""
     path = Path(config_path)
     if path.is_absolute():
         return path
@@ -66,6 +85,7 @@ def _single_file_loader_configs(
     model_classes: Mapping[str, type],
     source: str | Path,
 ) -> list[tuple[Any, str, list[str], list[type], str]]:
+    """Parse single-file hash rules; unknown ``model_classes`` names fail closed."""
     configs = []
     for entry in _entries(payload, "model_loader_configs", source):
         model_names = _string_list(entry, "model_names", source)
@@ -83,6 +103,7 @@ def _single_file_loader_configs(
 
 
 def _huggingface_loader_configs(payload: Mapping[str, Any]) -> list[tuple[str, str, str, Any]]:
+    """Architecture → Hugging Face library routing; missing section is an empty list."""
     configs = []
     for entry in payload.get("huggingface_model_loader_configs") or ():
         configs.append(
@@ -101,6 +122,7 @@ def _patch_loader_configs(
     model_classes: Mapping[str, type],
     source: str | Path,
 ) -> list[tuple[str, list[str], list[type], dict[str, Any]]]:
+    """Parse patch/adaptor hash rules; accept singular or plural name/class keys."""
     configs = []
     for entry in _entries(payload, "patch_model_loader_configs", source):
         model_names = (
@@ -121,6 +143,7 @@ def _patch_loader_configs(
 
 
 def _entries(payload: Mapping[str, Any], key: str, source: str | Path) -> tuple[Mapping[str, Any], ...]:
+    """Require *key* to be a list of mappings; ``None`` is treated as empty."""
     value = payload.get(key, [])
     if value is None:
         value = []
@@ -133,6 +156,7 @@ def _entries(payload: Mapping[str, Any], key: str, source: str | Path) -> tuple[
 
 
 def _string_list(entry: Mapping[str, Any], key: str, source: str | Path) -> list[str]:
+    """Coerce a required list field to strings; a non-list is a config error."""
     value = entry.get(key)
     if not isinstance(value, list):
         raise ValueError(f"{key} must be a list in {source}")
@@ -140,6 +164,7 @@ def _string_list(entry: Mapping[str, Any], key: str, source: str | Path) -> list
 
 
 def _resolve_model_class(name: str, model_classes: Mapping[str, type], source: str | Path) -> type:
+    """Look up *name* in the caller-supplied map; list known keys on failure."""
     try:
         return model_classes[name]
     except KeyError as exc:

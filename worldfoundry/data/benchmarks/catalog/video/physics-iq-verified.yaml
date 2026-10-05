@@ -1,5 +1,7 @@
 id: physics-iq-verified
 name: Physics-IQ Verified
+publisher: Google DeepMind
+publisher_kind: company
 benchmark_kind: [image-to-video, physical-understanding, video-generation-quality]
 domains: [physics, solid-mechanics, fluid-dynamics, optics, thermodynamics, magnetism]
 modalities: [image, video]
@@ -49,6 +51,18 @@ metrics:
   higher_is_better: true
   aggregator: mean
 runner:
+  normalization:
+    artifact_official_run: true
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.physics_iq.run_physics_iq_official_runner
+    generated_arg: --generated-artifact-dir
+    dataset_root_arg: --dataset-root
+    limit_arg: --limit
+    benchmark_id_arg: --benchmark-id
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicsIQVerifiedContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py
   run_command: >-
@@ -69,12 +83,13 @@ runner:
   required_env: [WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_ROOT, WORLDFOUNDRY_GENERATED_ARTIFACT_DIR]
 integration:
   status: integrated
+  tier: in_tree
   notes:
   - Shares the official mask/raw-metric engine with Original and selects only the Verified score adapter.
   - The bundled default is the upstream base best-practice prompt; model-specific prompt files may override it.
   - End-to-end execution evidence is pending a complete authorized download of the Verified media and masks.
 release_status: experimental
-maturity: official_runtime_integrated_data_required
+maturity: contract_ready
 open_source_status: in_tree_runtime
 official_benchmark_verified: false
 integration_evidence: false
@@ -91,8 +106,18 @@ official_runner_script: worldfoundry/evaluation/tasks/execution/runners/physics_
 runner_availability:
   available: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicsIQVerifiedContract
+  runner_script_available: true
+  task_yaml_available: true
   runtime_verified: false
+  full_suite_verified: false
+  normalizer_verified: true
+  surface: physics_iq_verified_official_in_tree
 dataset:
   hf_dataset_id: Anates-Labs-Research/Physics-IQ-Verified
 validation_command: [worldfoundry-eval, zoo, benchmark-run, --benchmark-id, physics-iq-verified, --mode, official-validation, --official-results-path, <raw_metrics.csv>, --output-dir, <out>, --json]
 checkpoint_refs: []
+artifact_layout:
+  generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  dataset_root_env: WORLDFOUNDRY_PHYSICS_IQ_VERIFIED_ROOT
+  output_artifact: benchmark_scorecard
+  filename_template: scorecard.json

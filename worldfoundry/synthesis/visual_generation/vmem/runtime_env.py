@@ -11,6 +11,9 @@ import sys
 from pathlib import Path
 from typing import Iterable, Optional
 
+from worldfoundry.core.io.paths import package_data_path
+
+
 def project_root() -> Path:
     """
     Identifies the root directory of the current project by searching for a 'pyproject.toml' file.
@@ -107,7 +110,11 @@ def default_config_path(runtime_override: Optional[str | Path] = None) -> Path:
     Returns:
         Path: The absolute path to the default inference.yaml configuration file.
     """
-    return runtime_root(runtime_override) / "configs" / "inference" / "inference.yaml"
+    if runtime_override is not None or os.environ.get("VMEM_RUNTIME_ROOT"):
+        custom = runtime_root(runtime_override) / "configs" / "inference" / "inference.yaml"
+        if custom.is_file():
+            return custom
+    return package_data_path('models', 'runtime', 'configs', 'vmem', 'inference/inference.yaml')
 
 
 def canonical_cut3r_parent() -> Path:

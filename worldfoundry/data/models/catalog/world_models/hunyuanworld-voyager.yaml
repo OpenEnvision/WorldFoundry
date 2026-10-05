@@ -6,9 +6,13 @@ family: Tencent Hunyuan / HY-World
 id: hunyuanworld-voyager
 integration:
   notes:
-  - Existing in-tree runtime is now exposed through a BaseSynthesis subclass.
-  - The WorldFoundry runner follows the official case1 conditioned-video demo and
-    upstream single-GPU command shape.
+  - >-
+    The public pipeline bridges to an external, pinned official Voyager checkout
+    and a dedicated Python environment. The independent official CLI and public
+    runner both produced decodable RGB-D video at eight inference steps. The
+    public runner also completed the upstream case1 default of 50 steps with
+    45 decoded output frames. The licensed upstream source and weights are not
+    redistributed here.
   status: integrated
 license: other:tencent-hunyuanworld-community
 modalities:
@@ -19,6 +23,8 @@ modalities:
 name: HunyuanWorld-Voyager
 pipeline_binding: hunyuanworld-voyager
 official_sources:
+  project_page: https://3d-models.hunyuan.tencent.com/world/
+  paper: https://arxiv.org/abs/2405.07719
   github:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
@@ -33,14 +39,18 @@ runtime_profile: runtime-profile:hunyuanworld-voyager
 starred: true
 runner_parity:
   notes:
-  - HunyuanWorldVoyagerPipeline is registered against the in-tree Voyager runtime
-    and no external repo checkout is required at import or inference time.
-  - >-
-    The official README case1 defaults are represented in the runtime profile:
-    num_frames=49, infer_steps=50, flow_shift=7.0, seed=0,
-    embedded_cfg_scale=6.0, i2v_stability=true, ulysses_degree=1, and ring_degree=1.
-  - Per-run visual QA and artifact checks are tracked outside the catalog.
-  status: verified
+  - The independent official CLI and public WorldFoundryPipelineRunner each ran
+    the same official case1 conditions with the checkpoint on H100 GPU3 at eight
+    inference steps. Both outputs fully decoded as 45-frame, 768x1024, 24 fps
+    H.264 RGB-D video; key frames were visually reviewed.
+  - The public runner also completed the upstream single-GPU 50-step case1
+    default on H100 GPU2, requesting 49 frames and emitting 45 after dropping
+    four I2V conditioning frames. The RGB-D video fully decoded, retained the
+    village and well, and visibly advanced toward the well.
+  - Validation covers this case1 configuration only; arbitrary camera paths,
+    long-range extension, independent 50-step output parity, and quantitative
+    depth or camera fidelity have not been validated.
+  status: verified_configuration
 catalog_category: world_models
 catalog_scope: world-model/interactive starred models
 catalog_policy:
@@ -51,3 +61,26 @@ catalog_policy:
   open_source_rule: Only mark open_source when an official GitHub repository or official
     Hugging Face model page was confirmed. Do not infer checkpoint availability from
     papers, demos, or third-party mirrors.
+docs:
+  publisher: Tencent (Hunyuan)
+  publisher_kind: company
+  publisher_zh: 腾讯（混元）
+  overview: HunyuanWorld-Voyager generates RGB-D video along camera paths. WorldFoundry's public runner has generated the official case1 example through a bridge to the licensed upstream checkout.
+  overview_zh: HunyuanWorld-Voyager 沿相机路径生成 RGB-D 视频。WorldFoundry 的公开 runner 已通过外部官方源码桥接成功生成 case1 示例。
+  architecture: 'Per the upstream release, Voyager combines a HunyuanVideo-based generator with joint RGB-D output and a world-cache mechanism for long-range consistency. The official case1 defaults are recorded in the runtime profile: num_frames=49, infer_steps=50, flow_shift=7.0, embedded_cfg_scale=6.0, i2v_stability=true.'
+  architecture_zh: 按上游发布，Voyager 将基于 HunyuanVideo 的生成器与 RGB-D 联合输出及世界缓存机制结合，实现长程一致性。运行时档案记录官方 case1 默认值：num_frames=49、infer_steps=50、flow_shift=7.0、 embedded_cfg_scale=6.0、i2v_stability=true。
+  usage_notes: Provide a separate official checkout at revision 6218ccd36df77d0254dcf24ad1fb77312f75b04a, the checkpoint, an official-dependency Python environment, and a 49-frame rendered condition directory. Set WORLDFOUNDRY_VOYAGER_SOURCE_ROOT and WORLDFOUNDRY_VOYAGER_PYTHON. The public runner completed the official case1 50-step default; the 49-frame request saves 45 RGB-D frames. The Tencent community license restricts use by region and redistribution.
+  usage_notes_zh: 需提供固定版本 6218ccd36df77d0254dcf24ad1fb77312f75b04a 的外部官方源码、权重、官方依赖环境及含 49 帧的已渲染条件目录，并设置 WORLDFOUNDRY_VOYAGER_SOURCE_ROOT 和 WORLDFOUNDRY_VOYAGER_PYTHON。公开 runner 已完成官方 case1 默认 50 步配置；请求 49 帧后保存 45 帧 RGB-D 视频。腾讯社区许可证限制使用地域及再分发。
+  limitations:
+  - 'The official case1 requests 49 frames but the latent-concat I2V pipeline discards four conditioning frames, yielding 45 video frames; longer voyages need iterative extension.'
+  - Depth quality is generative, not sensor-grade — validate before metric use.
+  limitations_zh:
+  - 官方 case1 请求 49 帧，但 latent-concat I2V 流程丢弃 4 帧条件帧，最终视频为 45 帧；更长的游走需要迭代扩展。
+  - 深度是生成式的、非传感器级——用于米制用途前请先验证。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Scoring for camera-navigable generated worlds.
+    reason_zh: 相机可游走生成世界的评分。
+  - id: camerabench
+    reason: Camera-path adherence evaluation.
+    reason_zh: 相机路径贴合度评测。

@@ -1,135 +1,45 @@
 ---
 title: LIBERO
-description: LIBERO — metrics, requirements, and run commands.
+description: "Lifelong robot-learning benchmark with four tabletop suites. WorldFoundry can import official results or wire closed-loop execution — no invented ranks."
 ---
 
-## About
+LIBERO (NeurIPS 2023 Datasets & Benchmarks) is the University of Texas at Austin's lifelong manipulation benchmark, with Tsinghua and Sony AI. A Franka on a **robosuite / MuJoCo** table must transfer **declarative** and **procedural** knowledge across tasks. The four official suites isolate what transfers:
 
+- **LIBERO-Spatial** — same objects, different spatial relations / layouts.
+- **LIBERO-Object** — same skills, different object identities.
+- **LIBERO-Goal** — same scene, different goal language.
+- **LIBERO-100** — LIBERO-10 short plus LIBERO-90 longer-horizon mix.
 
+It has become the default VLA report card. The paper is [LIBERO: Benchmarking Knowledge Transfer for Lifelong Robot Learning](https://arxiv.org/abs/2306.03310). Project: [libero-project.github.io](https://libero-project.github.io/). Code: [Lifelong-Robot-Learning/LIBERO](https://github.com/Lifelong-Robot-Learning/LIBERO) (MIT).
 
-LIBERO is a lifelong robot manipulation benchmark with language-conditioned tasks across spatial, object, goal, and long-horizon suites.
+WorldFoundry supports **two** paths. Official `eval_result` trees (or structured exports) go through `worldfoundry.evaluation.tasks.embodied.normalizer`. Closed-loop execution is wired via `worldfoundry-eval embodied run` and needs the upstream simulator, suite assets, and the policy the official script expects. Dataset snapshots `yifengzhu-hf/LIBERO-datasets` and `lerobot/libero` are tracked as staged assets. Models such as [Being-H0.5](/docs/guides/supported-models/being-h05) expose a LIBERO specialist checkpoint; that is a model-card fact, not a hub leaderboard row.
 
+<BenchmarkPageSections id="libero" locale="en" />
 
+## How to run
 
-## Metrics
-
-LIBERO external benchmark task manifest for language-conditioned robot manipulation policy rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/libero.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `episode_success` | Share of episodes or tasks that complete successfully. |
-| `action_accuracy` | Correctness of predicted actions, states, or outcomes against the benchmark success criterion. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `giga-world-policy-py311`.
-- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
-- LIBERO Python 包可见；完整状态还需要 policy checkpoint、suite 选择和官方 rollout 结果。
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_LIBERO_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_HFD_DATASET_ROOT}/yifengzhu-hf__LIBERO-datasets`
-- `${WORLDFOUNDRY_HFD_DATASET_ROOT}/lerobot__libero`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/Lifelong-Robot-Learning--LIBERO`
-
-### Checkpoints & assets
-
-- Base-model / metric dependencies: `libero_source_assets`, `libero_dataset_assets`.
-- Default metric-checkpoint paths and override env vars are listed in the [local assets guide](/docs/guides/local-assets).
-
-### Key environment variables
-
-- `WORLDFOUNDRY_LIBERO_ROOT`
-- `WORLDFOUNDRY_LIBERO_RESULTS_PATH`
-
-### Verify setup
-
-```bash
-PYTHONPATH=${WORLDFOUNDRY_CACHE_DIR}/repos/Lifelong-Robot-Learning--LIBERO:src ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-giga-world-policy-py311/bin/python -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile libero --manifest worldfoundry/data/benchmarks/runtime_profiles/official/libero.yaml --output-dir tmp/worldfoundry_preflight/libero --json
-```
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+Import an official result tree (no simulator):
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id libero \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/libero/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
+Closed-loop execution needs `WORLDFOUNDRY_LIBERO_ROOT` (optional override of the runtime/repo root), suite assets, and a matching policy. Default import path when you omit `--official-results-path` is `WORLDFOUNDRY_LIBERO_RESULTS_PATH`. Shared asset stacks: `libero_source_assets`, `libero_dataset_assets`.
 
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id libero \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero/official-run \
-  --json
+In-tree pointers:
+
+```text
+worldfoundry/data/benchmarks/tasks/external/libero.yaml
+cache/worldfoundry/data/hfd_datasets/yifengzhu-hf__LIBERO-datasets
+cache/worldfoundry/data/hfd_datasets/lerobot__libero
+cache/vla_va_wam/repos/Lifelong-Robot-Learning--LIBERO
 ```
 
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval embodied run --config worldfoundry/data/benchmarks/eval_configs/embodied/libero/spatial.yaml
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Upstream SAPIEN/Curobo simulator runtime
-- RoboTwin simulator assets
-- Policy checkpoint for selected upstream eval script
-- Official eval_result tree or structured result export
-
-### Environment
-
-- `WORLDFOUNDRY_LIBERO_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `run_manifest.json`
-- `results.jsonl`
-- `metrics/summary.json`
-
-
+Outputs under `--output-dir` include `scorecard.json` (primary key `success_rate`), `run_manifest.json`, `results.jsonl`, and `metrics/summary.json`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

@@ -5,8 +5,11 @@ import pathlib
 import re
 from copy import deepcopy
 from pathlib import Path
-from typing import Optional, Tuple, Union, Dict, Any
+from typing import Any, Dict, Optional, Tuple, Union
+
 import torch
+
+from worldfoundry.core.io.paths import package_data_path
 
 try:
     import deepspeed
@@ -14,15 +17,14 @@ except ImportError:
     deepspeed = None
 
 from .constants import OPENAI_DATASET_MEAN, OPENAI_DATASET_STD
-from .model import CLIP, CustomCLIP, convert_weights_to_lp, convert_to_custom_text_state_dict, get_cast_dtype
+from .model import CLIP, CustomCLIP, convert_to_custom_text_state_dict, convert_weights_to_lp, get_cast_dtype
 from .openai import load_openai_model
-from .pretrained import is_pretrained_cfg, get_pretrained_cfg, download_pretrained, list_pretrained_tags_by_model
-from .transform import image_transform
+from .pretrained import download_pretrained, get_pretrained_cfg, is_pretrained_cfg, list_pretrained_tags_by_model
 from .tokenizer import HFTokenizer, tokenize
-from .utils import resize_clip_pos_embed, resize_evaclip_pos_embed, resize_visual_pos_embed, resize_eva_pos_embed
+from .transform import image_transform
+from .utils import resize_clip_pos_embed, resize_eva_pos_embed, resize_evaclip_pos_embed, resize_visual_pos_embed
 
-
-_MODEL_CONFIG_PATHS = [Path(__file__).parent / f"model_configs/"]
+_MODEL_CONFIG_PATHS = [package_data_path('models', 'runtime', 'configs', 'llava_next/dev_eva_clip')]
 _MODEL_CONFIGS = {}  # directory (model_name: config) of model architecture configs
 
 

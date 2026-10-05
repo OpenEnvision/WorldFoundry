@@ -1,5 +1,5 @@
 id: video-depth-anything-prior
-name: Video Depth Anything Prior
+name: Video Depth Anything
 aliases:
 - video-depth-anything
 - vda-prior
@@ -16,6 +16,9 @@ source:
 checkpoint_refs:
 - repo_id: depth-anything/Video-Depth-Anything-Large
   filename: video_depth_anything_vitl.pth
+official_sources:
+  project_page: https://videodepthanything.github.io/
+  paper: https://arxiv.org/abs/2501.12375
 integration:
   kind: pipeline_runner
   status: integrated
@@ -35,3 +38,19 @@ catalog_category: three_d_four_d
 catalog_scope: Independent geometric prior integrations used by 3D and world-model
   runtimes.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+docs:
+  publisher: ByteDance
+  publisher_kind: company
+  publisher_zh: 字节跳动
+  overview: 'Video Depth Anything brings temporal consistency to the Depth Anything family: it estimates depth over arbitrarily long videos without the flicker of frame-by-frame estimation. In this catalog it is an independent temporal depth prior that VIPE pipeline profiles can select through shared runtime config without owning the code.'
+  overview_zh: Video Depth Anything 为 Depth Anything 家族带来时序一致性：在任意长度的视频上估计深度，避免逐帧估计的闪烁。本 catalog 中它是独立的时序深度先验，VIPE pipeline 档案可通过共享运行时配置选用它，而无需持有其代码。
+  architecture: Per the upstream release, a spatiotemporal head with a temporal-gradient consistency objective extends Depth Anything V2 to video, plus a keyframe strategy for long sequences. The recorded checkpoint is depth-anything/Video-Depth-Anything-Large (apache-2.0); registered at base_models/three_dimensions/depth/videodepthanything.
+  architecture_zh: 按上游发布，时空头加时间梯度一致性目标把 Depth Anything V2 扩展到视频，并用关键帧策略处理长序列。记录的 checkpoint 为 depth-anything/Video-Depth-Anything-Large（apache-2.0）；注册于 base_models/three_dimensions/depth/videodepthanything。
+  usage_notes: It is integrated as an independent geometry prior under worldfoundry/base_models and exposed through the shared geometry-prior pipeline/operator contract. Higher-level pipelines (e.g. ViPE) import it from this canonical owner instead of keeping private copies. Config resolution and pipeline/operator import are expected to pass; real prior inference remains checkpoint-gated.
+  usage_notes_zh: 它作为独立几何先验集成在 worldfoundry/base_models 下，通过共享的 geometry-prior pipeline/operator 契约对外暴露。上层管线（如 ViPE）从这一规范位置导入它，而不是各自保留私有副本。配置解析与 pipeline/operator 导入预期可通过；真实先验推理仍受 checkpoint 限制。
+  limitations:
+  - 'Checkpoint-gated: real inference needs the staged Video-Depth-Anything-Large weights.'
+  - Relative depth focus — pair with a metric prior when metric scale is required.
+  limitations_zh:
+  - 受 checkpoint 限制：真实推理需要就位的 Video-Depth-Anything-Large 权重。
+  - 以相对深度为主——需要米制尺度时请与米制先验配合。

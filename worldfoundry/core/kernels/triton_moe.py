@@ -1,4 +1,17 @@
-"""Generic packed SwiGLU routed-MoE inference kernel for Triton-capable GPUs."""
+"""Packed SwiGLU routed-MoE Triton kernel.
+
+Public entry is :func:`worldfoundry.core.kernels.moe.routed_swiglu_moe`
+(lazy ``routed_swiglu_moe_triton``). Header-only file: autotune tables
+stay here.
+
+Not this module:
+    Portable PyTorch reference and registry registration live in :mod:`.moe`.
+    Callers must not import this file from a DiT block.
+
+Public surface:
+
+- :func:`routed_swiglu_moe_triton` — grouped gate/up then down; optional workspace.
+"""
 
 import torch
 import triton
@@ -7,14 +20,23 @@ import triton.language as tl
 from worldfoundry.core.kernels.capabilities import triton_tensor_eligible
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Workspace init / pack — atomic counts so experts do not share a token twice
+# ──────────────────────────────────────────────────────────────────────────
+
+
 @triton.jit
 def _zero_i32_kernel(out_ptr, N: tl.constexpr, BLOCK: tl.constexpr):
+    """Clear *N* int32 counts; ``BLOCK`` must be ``next_power_of_2(N)``."""
+
     offs = tl.arange(0, BLOCK)
     tl.store(out_ptr + offs, tl.zeros((BLOCK,), dtype=tl.int32), mask=offs < N)
 
 
 @triton.jit
 def _zero_fp32_kernel(out_ptr, N: tl.constexpr, BLOCK: tl.constexpr):
+    """Zero the fp32 accumulator so ``atomic_add`` down-proj starts from a known base."""
+
     pid = tl.program_id(0)
     offs = pid * BLOCK + tl.arange(0, BLOCK)
     tl.store(out_ptr + offs, tl.zeros((BLOCK,), dtype=tl.float32), mask=offs < N)
@@ -32,6 +54,13 @@ def _moe_pack_selected_kernel(
     MAX_ROUTES: tl.constexpr,
     BLOCK_K: tl.constexpr,
 ):
+    """Scatter each token's top-k routes into per-expert packed row/slot tables.
+
+    ``atomic_add`` on ``counts_ptr`` assigns a unique packed index. Routes that
+    overflow ``MAX_ROUTES`` are dropped so a corrupt top-k cannot write past
+    the workspace.
+    """
+
     row = tl.program_id(0)
     slots = tl.arange(0, BLOCK_K)
     mask = slots < TOPK
@@ -63,6 +92,12 @@ def _moe_gate_up_grouped_kernel(
     BLOCK_I: tl.constexpr,
     BLOCK_D: tl.constexpr,
 ):
+    """Grouped ``silu(x @ W_gate) * (x @ W_up) * route`` into ``[T, K, I]``.
+
+    Grid is ``(E, cdiv(MAX_ROUTES, BLOCK_M=16), cdiv(I, BLOCK_I=32))``.
+    ``BLOCK_D=64`` tiles the hidden reduction. Empty expert tiles return early.
+    """
+
     expert = tl.program_id(0)
     bid_m = tl.program_id(1)
     bid_i = tl.program_id(2)
@@ -125,6 +160,12 @@ def _moe_down_grouped_kernel(
     BLOCK_D: tl.constexpr,
     BLOCK_I: tl.constexpr,
 ):
+    """Grouped down-proj; ``atomic_add`` merges tokens that hit several experts.
+
+    Grid is ``(E, cdiv(MAX_ROUTES, BLOCK_M=16), cdiv(D, BLOCK_D=64))``.
+    Accumulator is fp32 regardless of activation dtype.
+    """
+
     expert = tl.program_id(0)
     bid_m = tl.program_id(1)
     bid_d = tl.program_id(2)
@@ -160,6 +201,11 @@ def _moe_down_grouped_kernel(
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Public launcher — workspace shapes are part of the CUDA Graph contract
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def routed_swiglu_moe_triton(
     hidden_states: torch.Tensor,
     routing_weights: torch.Tensor,
@@ -169,7 +215,15 @@ def routed_swiglu_moe_triton(
     down_weight: torch.Tensor,
     workspace: dict[str, torch.Tensor] | None = None,
 ) -> torch.Tensor:
-    """Evaluate packed routed SwiGLU experts with grouped Triton matmuls."""
+    """Evaluate packed routed SwiGLU experts with grouped Triton matmuls.
+
+    Launch assumptions: ``BLOCK_M=16``, gate/up ``BLOCK_I=32`` / ``BLOCK_D=64``,
+    down ``BLOCK_D=64`` / ``BLOCK_I=64``, ``num_warps=4``. Workspace tensors
+    must match ``(E,)`` counts, ``(E, T*K)`` rows/slots, ``(T, K, I)`` inter,
+    and fp32 ``(T, D)`` out. Failure: shape/device/dtype/contiguity mismatches
+    raise :class:`ValueError` so the registry can quarantine this signature.
+    """
+
     if hidden_states.ndim != 2:
         raise ValueError(f"hidden_states must be 2D, got {tuple(hidden_states.shape)}")
     if selected_experts.ndim != 2 or routing_weights.ndim != 2:

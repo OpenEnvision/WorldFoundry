@@ -1,5 +1,5 @@
 ---
-title: CLI Reference
+title: CLI reference
 description: Complete command map, execution modes, output contracts, and automation conventions for worldfoundry-eval.
 ---
 
@@ -22,6 +22,8 @@ source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 worldfoundry-eval --help
 ```
+
+`bootstrap_worldfoundry.sh` is the official first-clone script used in the [Quickstart](/docs/quickstart), TUI, and Studio pages.
 
   </Tab>
   <Tab>
@@ -55,14 +57,15 @@ Running `worldfoundry-eval` with no arguments prints a short first-run banner. A
 
 ## Entrypoints
 
-| Entrypoint | Use |
-| --- | --- |
-| `worldfoundry-eval` | Canonical CLI used throughout the documentation. |
-| `worldfoundry` | Alias of `worldfoundry-eval`; it dispatches to the same `main()` function. |
-| `python -m worldfoundry` | Module fallback when an editable install or console-script `PATH` is unavailable. |
-| `worldfoundry-tui` | Dedicated alias for the terminal UI; equivalent to `worldfoundry-eval tui`. |
-| `worldfoundry-mcp` | Dedicated MCP server entrypoint; `worldfoundry-eval mcp` reaches the same surface. |
-| `worldfoundry-studio` | Separate Studio launcher. See the [Studio guide](/docs/guides/studio). |
+- **`worldfoundry-eval`** — Canonical CLI used throughout the documentation.
+- **`worldfoundry`** — Alias of `worldfoundry-eval`; it dispatches to the same `main()` function.
+- **`python -m worldfoundry`** — Module fallback when an editable install or console-script `PATH` is unavailable.
+- **`worldfoundry-tui`** — Dedicated alias for the terminal UI; equivalent to `worldfoundry-eval tui`.
+- **`worldfoundry-mcp`** — Dedicated MCP server entrypoint; `worldfoundry-eval mcp` reaches the same surface.
+- **`worldfoundry-studio`** — Separate Studio launcher. See the [Studio guide](/docs/guides/studio).
+- **`python -m worldfoundry.studio.workspace_job infer`** — Workspace visual smoke (the same job path the Studio UI submits). Not the documented first-run command.
+
+**Which command.** Everyday reproducible / model-page commands use `worldfoundry-eval run <id> --pipeline.task-profile …`. Use `python -m worldfoundry.studio.workspace_job infer` only for Workspace visual smoke. Run-status labels are in [Run status](/docs/guides/run-status).
 
 Examples below use `worldfoundry-eval` so shell history, job scripts, and bug reports share one spelling.
 
@@ -79,9 +82,11 @@ worldfoundry-eval run --help
 
 ![Terminal output of worldfoundry-eval --help](/images/cli/worldfoundry-eval-help.png)
 
-<p className="text-sm text-fd-muted-foreground">
-  Captured from the current CLI. The screenshot can be regenerated with <code>npm run cli:screenshots</code> in <code>docs/fumadocs</code>.
-</p>
+<div className="text-sm text-fd-muted-foreground">
+
+Captured from the current CLI. The screenshot can be regenerated with `npm run cli:screenshots` in `docs/fumadocs`.
+
+</div>
 
 ### Model-specific help
 
@@ -104,62 +109,229 @@ worldfoundry-eval run self-forcing --print-config --json
 
 Several commands can reach the evaluation core, but they start from different user inputs.
 
-| Goal | Prefer | Why |
-| --- | --- | --- |
-| Browse stable model or benchmark IDs | `zoo models`, `zoo benchmarks`, `zoo model-show`, `zoo benchmark-show` | Reads the release catalogs and surfaces readiness, aliases, needs, and next actions. |
-| Run one model directly | `run MODEL` | Adds model-specific typed inference flags. |
-| Run one or many model × benchmark cells | `run --model ... --benchmark ...` | Unified facade for a cell, repeated IDs, named suites, resume, cache, and plan-only execution. |
-| Score an artifact directory with a benchmark | `score --benchmark ... --artifacts ...` | User-oriented scoring intent with a complete benchmark protocol. |
-| Score WorldFoundry result rows with explicit metrics | `score --results ... --metric ...` | Compact existing-results workflow. |
-| Execute a materialized run plan or use eval-core fields directly | `evaluate` (alias `eval`) | Lower-level deterministic path for requests/results ledgers and model-mode evaluation. |
-| Generate from a dataset manifest, then score | `generate-score` | One intent owns dataset materialization, generation, cache, and metrics. |
-| Import or execute one benchmark's official surface | `zoo benchmark-run` | Exposes benchmark-specific modes and parameters. Follow that benchmark's Hub page. |
-| Re-run a checked-in profile or recipe | `reproduce` | Resolves a named profile, benchmark default, or recipe YAML. |
-| Build indexes, comparisons, or contract checks | `index-runs`, `compare-runs`, `validate-artifact` | Operates on durable run outputs without rerunning a model. |
+- **Browse stable model or benchmark IDs** — prefer `zoo models`, `zoo benchmarks`, `zoo model-show`, `zoo benchmark-show`. Reads the release catalogs and surfaces readiness, aliases, needs, and next actions.
+- **Run one model directly** — prefer `run MODEL`. Adds model-specific typed inference flags.
+- **Run one or many model × benchmark cells** — prefer `run --model ... --benchmark ...`. Unified facade for a cell, repeated IDs, named suites, resume, cache, and plan-only execution.
+- **Score an artifact directory with a benchmark** — prefer `score --benchmark ... --artifacts ...`. User-oriented scoring intent with a complete benchmark protocol.
+- **Score WorldFoundry result rows with explicit metrics** — prefer `score --results ... --metric ...`. Compact existing-results workflow.
+- **Execute a materialized run plan or use eval-core fields directly** — prefer `evaluate` (alias `eval`). Lower-level deterministic path for requests/results ledgers and model-mode evaluation.
+- **Generate from a dataset manifest, then score** — prefer `generate-score`. One intent owns dataset materialization, generation, cache, and metrics.
+- **Import or execute one benchmark's official surface** — prefer `zoo benchmark-run`. Exposes benchmark-specific modes and parameters. Follow that benchmark's Hub page.
+- **Re-run a pinned model × benchmark recipe** — prefer `reproduce`. Resolves a recipe YAML.
+- **Build indexes, comparisons, or contract checks** — prefer `index-runs`, `compare-runs`, `validate-artifact`. Operates on durable run outputs without rerunning a model.
 
 ## Complete command map
 
-### Discovery and interactive surfaces
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>Discovery and interactive surfaces</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>tui</code>
+          </div>
+        </div>
+        <p>Interactive catalog browser and command builder.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>zoo</code>
+          </div>
+        </div>
+        <p><code>models</code>, <code>model-specs</code>, <code>model-show</code>, <code>model-download</code>, <code>embodied-assets</code>, <code>benchmarks</code>, <code>benchmark-specs</code>, <code>benchmark-show</code>, <code>benchmark-run</code>.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>tasks</code>
+          </div>
+        </div>
+        <p><code>list</code>, <code>show</code>, <code>catalog</code> for registered benchmark tasks.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>suites</code>
+          </div>
+        </div>
+        <p><code>list</code>, <code>show</code> for named model × benchmark presets.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>models</code>
+          </div>
+        </div>
+        <p><code>list</code>, <code>runtime-runners</code>, <code>visualizations</code>, <code>assets</code>, <code>visualize</code>.</p>
+      </li>
+    </ul>
+  </section>
+  <section className="pi-kv-group">
+    <h3>Execution and scoring</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>run</code>
+          </div>
+        </div>
+        <p>Direct typed inference, one model × benchmark cell, or a suite/matrix.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>score</code>
+          </div>
+        </div>
+        <p>Score an artifact directory with a benchmark, or result rows with selected metrics.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>generate-score</code>
+          </div>
+        </div>
+        <p>Run an in-tree model over a dataset manifest and score the results.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>reproduce</code>
+          </div>
+        </div>
+        <p>Execute a recipe YAML.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>evaluate</code>
+            <code>eval</code>
+          </div>
+        </div>
+        <p>Deterministic eval-core execution for materialized results, run plans, or model mode.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>embodied</code>
+          </div>
+        </div>
+        <p><code>plan</code>, <code>run</code>, <code>serve</code>, <code>merge</code> for simulator-backed closed-loop evaluation.</p>
+      </li>
+    </ul>
+  </section>
+  <section className="pi-kv-group">
+    <h3>Data, plans, and validation</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>task</code>
+          </div>
+        </div>
+        <p><code>list</code>, <code>show</code>, <code>validate</code>, <code>materialize</code> filesystem task YAML.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>dataset</code>
+          </div>
+        </div>
+        <p><code>create</code>, <code>show</code>, <code>validate</code>, <code>materialize</code> sample manifests; <code>locate</code>, <code>plan</code> local/HF dataset assets.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>config</code>
+          </div>
+        </div>
+        <p><code>list</code>, <code>run</code> checked-in workflow templates.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>plan</code>
+          </div>
+        </div>
+        <p><code>create</code>, <code>show</code>, <code>validate</code> stable <code>worldfoundry-run-plan</code> JSON.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>metric</code>
+          </div>
+        </div>
+        <p><code>list</code>, <code>show</code>, <code>validate</code> executable metric IDs.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>preflight runtime</code>
+          </div>
+        </div>
+        <p>Check imports, environment variables, paths, CUDA, and declared validation gaps without running a benchmark.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>validate</code>
+          </div>
+        </div>
+        <p>Validate legacy benchmark metadata loading with a concrete task/data selector.</p>
+      </li>
+    </ul>
+  </section>
+  <section className="pi-kv-group">
+    <h3>Reports and integrations</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>index-runs</code>
+          </div>
+        </div>
+        <p>Build <code>index.json</code>, <code>index.jsonl</code>, and an optional dependency-free HTML browser.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>compare-runs</code>
+          </div>
+        </div>
+        <p>Compare explicit run directories or select runs from an index.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>validate-artifact</code>
+          </div>
+        </div>
+        <p>Validate summary, scorecard, index, comparison, and suite schemas.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>mcp</code>
+          </div>
+        </div>
+        <p>Start the MCP server (<code>--transport stdio|sse</code>, default <code>stdio</code>).</p>
+      </li>
+    </ul>
+  </section>
+</div>
 
-| Command | Subcommands / role |
-| --- | --- |
-| `tui` | Interactive catalog browser and command builder. |
-| `zoo` | `models`, `model-specs`, `model-show`, `model-download`, `embodied-assets`, `benchmarks`, `benchmark-specs`, `benchmark-show`, `benchmark-run`. |
-| `tasks` | `list`, `show`, `catalog` for registered benchmark tasks. |
-| `suites` | `list`, `show` for named model × benchmark presets. |
-| `models` | `list`, `runtime-runners`, `visualizations`, `assets`, `visualize`. |
+### MCP tools
 
-### Execution and scoring
+`worldfoundry-eval mcp` and `worldfoundry-mcp` start the same FastMCP server (`worldfoundry/mcp/server.py`). After `python -m pip install -e ".[mcp]"`:
 
-| Command | Role |
-| --- | --- |
-| `run` | Direct typed inference, one model × benchmark cell, or a suite/matrix. |
-| `score` | Score an artifact directory with a benchmark, or result rows with selected metrics. |
-| `generate-score` | Run an in-tree model over a dataset manifest and score the results. |
-| `reproduce` | Execute a checked-in profile, a benchmark default profile, or custom recipe YAML. |
-| `evaluate` / `eval` | Deterministic eval-core execution for materialized results, run plans, or model mode. |
-| `embodied` | `plan`, `run`, `serve`, `merge` for simulator-backed closed-loop evaluation. |
+```bash
+worldfoundry-eval mcp --transport stdio
+worldfoundry-eval mcp --transport sse
+```
 
-### Data, plans, and validation
-
-| Command | Subcommands / role |
-| --- | --- |
-| `task` | `list`, `show`, `validate`, `materialize` filesystem task YAML. |
-| `dataset` | `create`, `show`, `validate`, `materialize` dataset manifests and request rows. |
-| `config` | `list`, `run` checked-in workflow templates. |
-| `plan` | `create`, `show`, `validate` stable `worldfoundry-run-plan` JSON. |
-| `metric` | `list`, `show`, `validate` executable metric IDs. |
-| `preflight runtime` | Check imports, environment variables, paths, CUDA, and declared validation gaps without running a benchmark. |
-| `validate` | Validate legacy benchmark metadata loading with a concrete task/data selector. |
-
-### Reports and integrations
-
-| Command | Role |
-| --- | --- |
-| `index-runs` | Build `index.json`, `index.jsonl`, and an optional dependency-free HTML browser. |
-| `compare-runs` | Compare explicit run directories or select runs from an index. |
-| `validate-artifact` | Validate summary, scorecard, index, comparison, and suite schemas. |
-| `mcp` | Start the MCP server for agent-driven discovery and evaluation. |
+The server registers 27 tools: `server_info`; discovery (`list_models`, `get_model_info`, `list_benchmarks`, `get_benchmark_info`, `list_tasks`, `get_task_info`, `list_metrics`, `show_metric`, `check_benchmark_datasets`); run lifecycle (`preview_run`, `evaluate`, `list_runs`, `get_run_status`, `get_run_result`, `get_run_samples`, `cancel_run`); and Studio workspace (`list_studio_models`, `get_studio_model_info`, `submit_studio_inference`, `list_studio_jobs`, `get_studio_job`, `wait_for_studio_job`, `stop_studio_job`, `get_studio_job_logs`, `list_studio_artifacts`, `get_studio_manifest`). Studio tools default to `WORLDFOUNDRY_STUDIO_WORKSPACE_URL` (typically `http://127.0.0.1:7870`). Run files land under `WORLDFOUNDRY_MCP_RUN_ROOT`, or `runs/mcp` when that variable is unset.
 
 The parser is the source of truth for flags. Use `worldfoundry-eval <command> [<subcommand>] --help` instead of copying flags from an unrelated model or benchmark recipe.
 
@@ -292,14 +464,14 @@ worldfoundry-eval zoo benchmark-run \
 
 Benchmark-specific inputs such as data roots, score directories, prompt manifests, judge credentials, and metric subsets live on the corresponding [Benchmark Hub](/docs/evaluation/benchmark-hub) page.
 
+For HarnessEval-W, `--result-model-id` selects a model without changing the official common-case cohort. See [HarnessEval-W](/docs/evaluation/benchmark-hub/harnesseval-w) for Python execution, cached scoring and model prerequisites.
+
 ## Benchmark modes
 
-| Mode | Meaning |
-| --- | --- |
-| `official-run` | Execute the benchmark runtime declared by the manifest against prepared artifacts. Use only when the required evaluator, data, checkpoints, and services are ready. |
-| `official-validation` | Import official-shaped results through the benchmark runner and record framework integration evidence. |
-| `normalizer` | Normalize provided result files into WorldFoundry artifacts without claiming that WorldFoundry executed the official scorer. |
-| `contract` | Exercise wiring/contracts only. It is not scoring evidence and cannot be leaderboard evidence. |
+- **`official-run`** — Execute the benchmark runtime declared by the manifest against prepared artifacts. Use only when the required evaluator, data, checkpoints, and services are ready.
+- **`official-validation`** — Import official-shaped results through the benchmark runner and record framework integration evidence.
+- **`normalizer`** — Normalize provided result files into WorldFoundry artifacts without claiming that WorldFoundry executed the official scorer.
+- **`contract`** — Exercise wiring/contracts only. It is not scoring evidence and cannot be leaderboard evidence.
 
 <Callout type="warn" title="A successful command is not automatically a leaderboard result">
   Read `score_valid`, `leaderboard_valid`, `normalizer_only`, fidelity, and blocker fields in `scorecard.json`. Exit code 0 only means the requested CLI operation completed under its contract.
@@ -307,17 +479,75 @@ Benchmark-specific inputs such as data roots, score directories, prompt manifest
 
 ## Outputs and reproducibility
 
+Global logging flags are accepted before or after the subcommand. They override
+the corresponding environment values described in
+[Environments → Logging](/docs/reference/environments#logging):
+
+```bash
+worldfoundry-eval --log-level DEBUG --log-json \
+  --log-file tmp/worldfoundry.log zoo models --json
+```
+
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>Flag</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>--log-level</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>Env</span>
+            WORLDFOUNDRY_LOG_LEVEL
+          </span>
+        </div>
+        <p>One of <code>DEBUG</code>, <code>INFO</code>, <code>WARNING</code>, <code>ERROR</code>, or <code>CRITICAL</code>; default <code>INFO</code>.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>--log-file</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>Env</span>
+            WORLDFOUNDRY_LOG_FILE
+          </span>
+        </div>
+        <p>Optional rotating file sink.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>--log-json</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>Env</span>
+            WORLDFOUNDRY_LOG_JSON
+          </span>
+        </div>
+        <p>JSON Lines for the file sink; console output stays text.</p>
+      </li>
+    </ul>
+  </section>
+</div>
+
+Commands that own an output directory create a run id and, unless a file sink
+was selected explicitly, write lifecycle events to a per-run `events.jsonl`.
+This is normally below `<output-dir>/logs/<run-id>/`; commands that exclusively
+claim their output directory use an isolated sibling log directory instead.
+Framework-owned child processes inherit the structured
+`WORLDFOUNDRY_LOG_CONTEXT` value.
+
 Evaluation commands write durable files below `--output-dir`. Exact benchmark-owned extras vary, but the shared run surface uses these artifacts:
 
-| Artifact | Purpose |
-| --- | --- |
-| `run_manifest.json` | Resolved run identity, status, counts, paths, cache evidence, and execution metadata. |
-| `requests.jsonl` / `results.jsonl` | Per-sample inputs and normalized generation results when that runner materializes ledgers. |
-| `metrics/summary.json` | Aggregate metrics and failure counts. |
-| `artifacts.jsonl` | Optional index of generated artifacts; disable with `--no-artifacts-index` where supported. |
-| `scorecard.json` | Metrics, fidelity, eligibility, leaderboard state, and blockers. |
-| `summary.json` / `report.md` | Compact reporting views when the selected runner emits them. |
-| `suite_manifest.json` / `suite_report.md` | Matrix identity and aggregate report for suite runs, plus one child directory per cell. |
+- **`run_manifest.json`** — Resolved run identity, status, counts, paths, cache evidence, and execution metadata.
+- **`requests.jsonl` / `results.jsonl`** — Per-sample inputs and normalized generation results when that runner materializes ledgers.
+- **`metrics/summary.json`** — Aggregate metrics and failure counts.
+- **`artifacts.jsonl`** — Optional index of generated artifacts; disable with `--no-artifacts-index` where supported.
+- **`scorecard.json`** — Metrics, fidelity, eligibility, leaderboard state, and blockers.
+- **`summary.json` / `report.md`** — Compact reporting views when the selected runner emits them.
+- **`suite_manifest.json` / `suite_report.md`** — Matrix identity and aggregate report for suite runs, plus one child directory per cell.
 
 Keep the command, environment/profile identity, catalog revision, and output directory together when reproducing a score. See [Validation](/docs/reference/validation) for schema checks and release evidence.
 
@@ -346,12 +576,10 @@ The cache uses SQLite plus `audit.jsonl`; hits are recorded in the run manifest.
 
 ### Exit status
 
-| Code | General meaning |
-| --- | --- |
-| `0` | The requested operation completed. Inspect the output contract for score/leaderboard validity. |
-| `1` | A validation, metric, sample, prepared intent, or run result failed under a command that distinguishes domain failure. |
-| `2` | Invalid CLI input, missing required files/environment, preflight failure, or another execution/setup error. |
-| `130` | Interrupted with `Ctrl+C`. |
+- **`0`** — The requested operation completed. Inspect the output contract for score/leaderboard validity.
+- **`1`** — A validation, metric, sample, prepared intent, or run result failed under a command that distinguishes domain failure.
+- **`2`** — Invalid CLI input, missing required files/environment, preflight failure, or another execution/setup error.
+- **`130`** — Interrupted with `Ctrl+C`.
 
 Individual commands document stricter behavior in `--help`. Flags such as `--fail-on-issue`, `--fail-on-sample-error`, and `--fail-on-skipped` intentionally change when non-success exits are returned.
 

@@ -1,0 +1,53 @@
+---
+title: "Echo-Memory"
+description: "JD Echo-Memory identity permanently pinned to context_k1 (K=1). Wan2.1-1.3B. CC-BY-4.0. 2026-07-20 A100 clip is historical — native CUDA artifact pending."
+modelId: "echo-memory-context-k1"
+pageSource: authored
+---
+
+Echo-Memory Context K=1 is **one identity** in JD's Echo-Memory family: a Wan2.1-T2V-1.3B interactive world that differs from siblings **only** in memory. This card is permanently bound to `context_k1/epoch-0.safetensors` — each new chunk conditions on **K=1** context frame. You do **not** pick a memory method at runtime. Pipeline: `EchoMemoryContextK1Pipeline`. Aliases `echo-context-k1` and `echo-memory` resolve here.
+
+<ModelPaperFigures modelId="echo-memory-context-k1" locale="en" />
+
+Paper: [arXiv 2606.09803](https://arxiv.org/abs/2606.09803). Project: [echo-team-joy-future-academy-jd.github.io/Echo-Memory](https://echo-team-joy-future-academy-jd.github.io/Echo-Memory/). Code: [Echo-Team-Joy-Future-Academy-JD/Echo-Memory](https://github.com/Echo-Team-Joy-Future-Academy-JD/Echo-Memory). Weights: `Echo-Team/Echo-Memory` (**cc-by-4.0**) plus `Wan-AI/Wan2.1-T2V-1.3B` (**apache-2.0**).
+
+A **2026-07-20** A100 artifact **predates** the NativeDiffusionPipeline cutover and is **historical only**. Fresh CUDA artifact, official sample parity, and bench scoring are **pending**. Visual quality is research-preview (1.3B).
+
+<ModelCommandBuilder modelId="echo-memory-context-k1" locale="en" />
+
+## What it is for
+
+Echo memory-context K1 slots, not the Infinity long-video card.
+
+Launch `worldfoundry-eval run echo-memory-context-k1`.
+
+Score on [MemoBench](/docs/evaluation/benchmark-hub/memobench) — purpose-built for evaluating long-horizon memory in interactive world models.
+
+## Runtime contract
+
+Required: `prompt` and `image`; optional: `video`; `actions`: camera_trajectory; artifacts: `generated_world_video` and `echo-memory-context-k1.mp4`.
+
+| Knob | Default |
+| --- | --- |
+| Size | **640×352** |
+| Frames | **81** |
+| FPS | **15** |
+| Chunks | **2** |
+| Context frames | **1** |
+| Sample steps | **50** |
+| Sample shift | **5.0** |
+| Camera trajectory | `z*80` (stationary) |
+| Camera translation step | **0.00125** per frame (`w*80` moves +Y 0.1 per chunk) |
+| Camera rotation step | **0.5625°** per frame (`left*80` turns 45° per chunk) |
+| Finetune | `Echo-Team/Echo-Memory` (`cc-by-4.0`) |
+| Backbone | `Wan-AI/Wan2.1-T2V-1.3B` (`apache-2.0`) |
+
+Pass `camera_trajectory="w*80"` to request the published forward action scale, or `"left*80"` for a 45° turn. A camera move mentioned only in the prompt does not replace the default stationary action. `camera_translation_step` and `camera_rotation_step_degrees` can override the per-frame distances.
+
+## Run in WorldFoundry
+
+Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `Echo-Team/Echo-Memory`, `Wan-AI/Wan2.1-T2V-1.3B`, and `Echo-Team/Echo-Memory` among others locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run echo-memory-context-k1`. License: CC-BY-4.0 and apache-2.0. Catalog VRAM is unset.
+
+`worldfoundry/base_models/diffusion_model/models/networks/echo_memory` holds checkpoint-specific network blocks only. It is not a CLI. Memory lifecycle, model assembly, and the runtime contract stay in the shared diffusion infrastructure. How to add a new immutable recipe is on the [inference guide](/docs/guides/inference#echo-memory-context-k1). Checkpoint staging is on [local assets](/docs/guides/local-assets).
+
+<ModelRelatedRecipes modelId="echo-memory-context-k1" locale="en" />

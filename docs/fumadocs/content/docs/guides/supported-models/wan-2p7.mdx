@@ -1,0 +1,32 @@
+---
+title: "Wan 2.7 API"
+description: "Wan 2.7 API from Alibaba (Tongyi Lab): hosted API — no local weights; requests hit the provider endpoint."
+modelId: "wan-2p7"
+pageSource: authored
+---
+
+Wan 2.7 API is the newest DashScope-hosted Wan endpoint in this catalog, recorded for image-to-video. It follows the same integration pattern as the Wan 2.5/2.6 entries — WorldFoundry submits the start image to Alibaba Cloud and archives the returned clip — and carries aliases wan2.7 and wan-2.7. Keep in mind the exact served model revision is controlled by Alibaba, not this repo.
+
+<ModelPaperFigures modelId="wan-2p7" locale="en" />
+
+Project page: [dashscope.aliyun.com](https://dashscope.aliyun.com).
+
+<ModelCommandBuilder modelId="wan-2p7" locale="en" />
+
+## What it is for
+
+Wan 2.7 on this card is DashScope **image-to-video** — send a start image, archive the returned clip. It is not local [Wan2.2](/docs/guides/supported-models/wan2.2) and not [Wan 2.6 API](/docs/guides/supported-models/wan-2p6).
+
+Launch `worldfoundry-eval run wan-2p7`. Aliases `wan2.7` and `wan-2.7` resolve here. For hosted text-to-video use [Wan 2.5](/docs/guides/supported-models/wan-2p5).
+
+Related suites: [VBench](/docs/evaluation/benchmark-hub/vbench) and [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq).
+
+## Runtime contract
+
+Hosted I2V only. No local resolution, frame, or step table — those knobs live on the DashScope request. Status: **Runner parity pending** (hosted; runner is not applicable locally). Bring your own provider key. Alibaba controls the served revision.
+
+## Running in WorldFoundry
+
+No GPU environment is provisioned. Issue a DashScope key at dashscope.aliyun.com, then launch `worldfoundry-eval run wan-2p7`. Cost, quota, and content policy follow your Alibaba Cloud account.
+
+<ModelRelatedRecipes modelId="wan-2p7" locale="en" />

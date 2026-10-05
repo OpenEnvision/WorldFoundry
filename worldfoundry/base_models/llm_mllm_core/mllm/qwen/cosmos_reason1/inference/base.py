@@ -10,7 +10,7 @@ from torch.nn.modules.module import _IncompatibleKeys
 from worldfoundry.base_models.llm_mllm_core.mllm.qwen.cosmos_reason1.inference.config import FSDP2ModelConfig
 from worldfoundry.base_models.llm_mllm_core.mllm.qwen.cosmos_reason1.inference.parallel_dims import ParallelDims
 from worldfoundry.base_models.llm_mllm_core.mllm.qwen.cosmos_reason1.inference.tokenizer import Processor
-from worldfoundry.core.distributed import torch_process_group as distributed
+from worldfoundry.core.distributed.runtime import torch_process_group as distributed
 
 
 class VLMBaseModel(torch.nn.Module):

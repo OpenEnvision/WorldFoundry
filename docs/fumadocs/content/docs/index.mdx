@@ -1,54 +1,93 @@
 ---
 title: WorldFoundry
-description: Unified World Model Inference & Evaluation Infrastructure
+description: Toward a general infrastructure for world intelligence
 ---
 
-WorldFoundry is open-source infrastructure for running and evaluating world models. It does not propose one new model architecture. It brings model discovery, runtime preparation, inference, artifact inspection, benchmark execution, and evidence reporting into one workflow across video, 3D/4D, interactive-world, and embodied systems:
+WorldFoundry is open-source infrastructure for world intelligence. World intelligence is not a single generation task: a system has to infer structured state from observations, predict how that state evolves, express the consequences in task-specific outputs, and use those predictions during interaction. Video generators, neural scene representations, 4D models, and embodied policies each cover part of this problem.
 
-> Discover a model, prepare its runtime and assets, generate inspectable artifacts, evaluate those artifacts, and preserve the result as reviewable evidence.
+Discovery, runtime and asset preparation, inference, artifact inspection, and benchmark evidence share one workflow across those families — **without forcing them into one representation, task, or metric**.
 
-That distinction matters. A model catalog is not the same thing as a working runtime. A convincing demo is not the same thing as benchmark evidence. A successfully imported score is not automatically leaderboard parity. WorldFoundry keeps those states separate and visible.
+## A first run
 
-It is built for a practical research problem: every upstream project can produce something useful, but each uses different environments, checkpoints, inputs, launch commands, output layouts, and evaluation protocols. WorldFoundry preserves those native differences while standardizing the boundaries around them.
-
-<TeaserImage alt="WorldFoundry unifies world-model discovery, inference, inspection, and evaluation" />
-
-## The problem it solves
-
-World-model projects usually arrive as independent repositories. Each one makes different choices for environments, checkpoints, input schemas, launch scripts, output layouts, preview tools, and evaluation code. A team that wants to compare several systems ends up rebuilding the same integration layer for every model.
-
-The fragmentation begins with discovery. The same model may be referred to by a paper name, a repository name, a checkpoint name, or a local folder. WorldFoundry gives models and benchmarks stable IDs and declarative manifests so the source, intended capability, runtime binding, required assets, and known blockers can be inspected before anything expensive runs.
-
-It continues through execution. Instead of placing checkpoints and datasets wherever an upstream script happens to expect them, WorldFoundry defines reusable local asset roots and model-specific runtime profiles. Pipelines and operators keep native model differences explicit while presenting a consistent request, result, and artifact boundary to the rest of the system.
-
-Finally, it affects evaluation. Videos, meshes, actions, and traces should not disappear into custom folders or one-off notebooks. WorldFoundry preserves what was requested, what ran, what was produced, how it was scored, which samples were covered, and which conditions still block an official claim.
-
-The goal is not to hide every model difference behind one tiny API. The goal is to keep those differences in the correct layer while making the end-to-end research workflow consistent.
-
-## How the project works
-
-<WorldFoundryWorkflow />
-
-The central boundary is the **artifact**. A model runner turns a normalized request into a result containing videos, geometry, action traces, or other outputs. A benchmark runner consumes those outputs and produces metrics and evidence. This separation lets one model output be inspected, reused, or scored by more than one compatible benchmark without coupling the model implementation to evaluator internals.
-
-Catalogs form the control plane around that boundary. They describe what exists, where it came from, what it needs, how it can be dispatched, and what evidence supports its current readiness. TUI, CLI, Studio, Python, and MCP are different ways to operate the same underlying system rather than separate implementations.
-
-### A concrete run: Matrix-Game 2
-
-For a first `matrix-game-2` run, let catalog and local-asset checks answer which model is selected and whether its checkpoint is ready, then generate one small result:
+After the [Quickstart](/docs/quickstart) environment is sourced, generate one inspectable artifact for `matrix-game-2`:
 
 ```bash
 bash scripts/inference/prepare_model_infer.sh matrix-game-2 --download
-python -m worldfoundry.evaluation zoo model-download \
-  --model-id matrix-game-2 --check-local --json
-
-bash scripts/inference/test_nav_video_gen.sh matrix-game-2 \
-  --output-dir tmp/matrix_game2_first_run
+worldfoundry-eval run matrix-game-2-universal-action-validation \
+  --pipeline.task-profile official-universal-image
 ```
 
-The last command runs the model with action-conditioned input and writes the video plus its run records to the selected directory. At this point the justified claim is that this configuration produced an inspectable artifact. The motion and continuity can be reviewed in Studio or a local player, and compatible metrics can consume the artifact. One video alone does not establish that a complete benchmark ran. This is why WorldFoundry separates generation, inspection, scoring, and eligibility.
+That run justifies one claim: this configuration produced an inspectable artifact. It does not mean a benchmark completed. Everyday commands use `worldfoundry-eval run`. Layers and inventory are in [Design](/docs/overview/design).
 
-Read [Design](/docs/overview/design) for the layers, contracts, and rationale behind this workflow.
+<h2 id="operational-definition">Operational definition</h2>
+
+Visual plausibility measures observation quality. It is not sufficient evidence of world modeling. A photorealistic video can still lose object identity, violate dynamics, or ignore an intervention.
+
+We therefore treat a **generative world model** as a learned, history- and control-conditioned latent dynamical system. It infers and maintains a persistent environmental state, evolves that state under endogenous dynamics and external interventions, and assimilates new observations so later predictions remain accountable to what just happened.
+
+<DocsImage
+  src="/paper/operational-definition.webp"
+  alt="Operational definition of a world model: state inference, forward simulation, and interactive response, closed by observation feedback"
+  width={1800}
+  height={739}
+/>
+
+Three coupled operations make the definition usable:
+
+1. **State inference** — estimate a task-relevant latent state from the interaction history.
+2. **Forward simulation** — predict how that state evolves under autonomous dynamics, physical constraints, and actions.
+3. **Interactive response** — produce distinct, coherent futures under alternative interventions, then fold observed outcomes back into the maintained state.
+
+A compact, modality-agnostic form is
+
+<MathBlock tex={'z_t \\sim q(z_t \\mid h_t),\\qquad z_{t+1} \\sim p(z_{t+1} \\mid z_t, c_t),\\qquad \\hat{o}_{t+1} \\sim g(o_{t+1} \\mid z_{t+1}).'} />
+
+Here <MathInline tex="h_t" /> is the observation–control history, <MathInline tex="c_t" /> is an action or intervention (including a null control), <MathInline tex="z_t" /> is the inferred environment state, and <MathInline tex={'\\hat{o}_{t+1}'} /> is a visual, geometric, or task-specific output. The formulation is functional rather than architectural: <MathInline tex="z_t" /> may be recurrent, object-centric, geometric, token-based, or otherwise structured.
+
+<Callout type="info">
+  From the same inferred state, controls with different environmental consequences should induce distinct but coherent rollouts. Factors outside the intervention should continue to follow the same conditional dynamics. New observations must update the state used thereafter.
+</Callout>
+
+<h2 id="capability-progression">Capability progression</h2>
+
+WorldFoundry does not assign every model a single discrete level. It records a **capability profile**: which functions a system actually supports, and whether those functions are coupled.
+
+<DocsImage
+  src="/paper/capability-progression.webp"
+  alt="Capability progression from perceptual grounding through the world-model spine of persistent state, dynamics, and closed-loop interaction, with controllable transformation as an orthogonal capability"
+  width={1800}
+  height={1012}
+/>
+
+<WorldModelProgression locale="en" />
+
+**Perceptual grounding** supplies observational evidence. The **world-model spine** is the coupling that matters: persistent state, intervention-conditioned dynamics, and feedback-driven updating. **Controllable transformation** can sit beside any of those stages — editing a couch color or deleting a shelf does not, by itself, prove that the system can roll the scene forward or close an interaction loop.
+
+<h2 id="foundation-and-world-models">Foundation models and generative world models</h2>
+
+The taxonomy is functional, not a ranking of visual quality.
+
+**Foundation generative models** learn visual, geometric, or spatiotemporal priors for synthesis, reconstruction, and controllable manipulation. They may be excellent at appearance, short-horizon coherence, or selective edits. They do not integrate state, dynamics, and feedback into a complete world-modeling loop.
+
+**Generative world models** do integrate that loop. Intervention effects persist across subsequent transitions, and new observations revise the state that governs later predictions. Higher fidelity, broader prompting, or larger scale does not by itself promote a system from the first class to the second.
+
+That is why WorldFoundry separates catalog inclusion, runnable inference, inspectable artifacts, and benchmark-eligible evidence. A convincing demo can still be only perceptual grounding. The [model catalog](/docs/guides/supported-models) and [benchmark hub](/docs/evaluation/benchmark-hub) show current coverage and readiness. Catalog inclusion is not a runnable runtime. A demo is not benchmark evidence. An ingested score is not official leaderboard parity. Those states stay separate, with provenance.
+
+<h2 id="why-a-shared-workflow">Why a shared workflow</h2>
+
+WorldFoundry is most useful when work spans **more than one model, benchmark, or execution surface**. The technical report calls this *commensurability without homogenization*: heterogeneous systems stay inspectable under shared operational and evidential contracts, without being forced into a single representation, task, or metric.
+
+That is why the shared workflow exists:
+
+- **One operational vocabulary.** Stable model and benchmark IDs, plus request, result, artifact, manifest, and scorecard records, replace repository nicknames and handwritten paths. You can ask whether a model was only cataloged or actually executed, which checkpoint and runtime ran, whether samples were covered, and whether a score was normalized, officially computed, or validated for a leaderboard.
+- **Shared glue.** Environment bootstrap, checkpoint lookup, input shaping, output naming, job records, previews, and metric aggregation stay shared. Model-specific code lives in pipelines and operators; benchmark-specific code stays in runners and metrics.
+- **Reusable artifacts.** Generated output is not trapped in a UI session. The same artifacts can be inspected, rescored, converted, compared, or audited later without loading the model again.
+- **Evidence beyond a command.** The same command can change meaning after a checkpoint, package, dataset, or evaluator changes. Ledgers, identities, blockers, and scorecards record both what ran and what the result is allowed to claim.
+- **Multiple interfaces, one backend.** TUI, CLI, Studio, Python, and MCP reuse the same catalogs and contracts. The interface can change; the run identity and durable outputs do not.
+
+This fits teams that maintain or compare several world-model families, separate generation from evaluation, reuse expensive artifacts, or need stable machine-readable discovery for people and agents. The more models, benchmarks, machines, and reviewers you have, the more those contracts repay their setup cost.
+
+<TeaserImage alt="WorldFoundry unifies world-model discovery, inference, inspection, and evaluation" />
 
 ## Acknowledgements
 

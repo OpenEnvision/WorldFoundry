@@ -12,10 +12,10 @@ from diffusers.video_processor import VideoProcessor
 from diffusers.image_processor import PipelineImageInput
 from transformers import AutoTokenizer, UMT5EncoderModel
 
-from worldfoundry.base_models.diffusion_model.video.cosmos.shared.scheduling_flow_match_euler_discrete import FlowMatchEulerDiscreteScheduler
+from .scheduling_flow_match_euler import FlowMatchEulerDiscreteScheduler
 from .modules.autoencoder_kl_wan import AutoencoderKLWan
 from .modules.longcat_video_dit import LongCatVideoTransformer3DModel
-from worldfoundry.core.distributed import context_parallel_util
+from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
 from .utils.bukcet_config import get_bucket_config
 
 import ftfy
@@ -86,6 +86,49 @@ class LongCatVideoPipeline:
 
         self._num_timesteps = 1000
         self._num_distill_sample_steps = 50
+        self._t2v_cpu_offload = False
+
+    @staticmethod
+    def _normalize_device(device: str | int | torch.device) -> torch.device:
+        if isinstance(device, int):
+            return torch.device("cuda", device)
+        return torch.device(device)
+
+    def _move_module(self, name: str, device: str | int | torch.device) -> None:
+        module = getattr(self, name, None)
+        if module is None:
+            return
+        target = self._normalize_device(device)
+        setattr(self, name, module.to(target, non_blocking=True))
+        if name == "dit":
+            for lora_network in getattr(module, "lora_dict", {}).values():
+                for lora in lora_network.loras:
+                    lora.to(target, non_blocking=True)
+        if target.type == "cpu":
+            gc.collect()
+            torch.cuda.empty_cache()
+
+    def enable_t2v_cpu_offload(self, device: str | int | torch.device = "cuda"):
+        """Keep inactive T2V modules on CPU so 80 GB GPUs retain activation headroom."""
+        self.device = self._normalize_device(device)
+        self._t2v_cpu_offload = True
+        for name in ("text_encoder", "dit", "vae"):
+            self._move_module(name, "cpu")
+        return self
+
+    def _transition_t2v_modules(
+        self,
+        *,
+        activate: str | None = None,
+        deactivate: tuple[str, ...] = (),
+    ) -> None:
+        """Move only the module needed by the next CPU-offloaded T2V stage."""
+        if not self._t2v_cpu_offload:
+            return
+        for name in deactivate:
+            self._move_module(name, "cpu")
+        if activate is not None:
+            self._move_module(activate, self.device)
 
     def _get_t5_prompt_embeds(
         self,
@@ -491,6 +534,8 @@ class LongCatVideoPipeline:
         dit_dtype = self.dit.dtype
 
         if context_parallel_util.get_cp_rank() == 0:
+            if self._t2v_cpu_offload:
+                self._move_module("text_encoder", device)
             (
                 prompt_embeds, 
                 prompt_attention_mask, 
@@ -526,6 +571,10 @@ class LongCatVideoPipeline:
         if self.do_classifier_free_guidance:
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
             prompt_attention_mask = torch.cat([negative_prompt_attention_mask, prompt_attention_mask], dim=0)
+
+        if self._t2v_cpu_offload:
+            self._move_module("text_encoder", "cpu")
+            self._move_module("dit", device)
 
         # 4. Prepare timesteps
         sigmas = self.get_timesteps_sigmas(num_inference_steps, use_distill=use_distill)
@@ -599,12 +648,19 @@ class LongCatVideoPipeline:
         self._current_timestep = None
 
         if not output_type == "latent":
+            if self._t2v_cpu_offload:
+                self._move_module("dit", "cpu")
+                self._move_module("vae", device)
             latents = latents.to(self.vae.dtype)
             latents = self.denormalize_latents(latents)
             output_video = self.vae.decode(latents, return_dict=False)[0]
             output_video = self.video_processor.postprocess_video(output_video, output_type=output_type)
+            if self._t2v_cpu_offload:
+                self._move_module("vae", "cpu")
         else:
             output_video = latents
+            if self._t2v_cpu_offload:
+                self._move_module("dit", "cpu")
 
         return output_video 
     
@@ -1187,6 +1243,7 @@ class LongCatVideoPipeline:
         dit_dtype = self.dit.dtype
 
         if context_parallel_util.get_cp_rank() == 0:
+            self._transition_t2v_modules(activate="text_encoder")
             (
                 prompt_embeds, 
                 prompt_attention_mask, 
@@ -1209,6 +1266,11 @@ class LongCatVideoPipeline:
             prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
             context_parallel_util.cp_broadcast(prompt_embeds)
             context_parallel_util.cp_broadcast(prompt_attention_mask)
+
+        self._transition_t2v_modules(
+            activate="vae",
+            deactivate=("text_encoder",),
+        )
         
         # 4. Prepare timesteps
         sigmas = self.get_timesteps_sigmas(num_inference_steps)
@@ -1259,6 +1321,11 @@ class LongCatVideoPipeline:
         latent_up = (1 - t_thresh) * latent_up + t_thresh * torch.randn_like(latent_up).contiguous()
         del video_DOWN, video_UP, stage1_video
         torch_gc()
+
+        self._transition_t2v_modules(
+            activate="dit",
+            deactivate=("vae",),
+        )
 
         num_channels_latents = self.dit.config.in_channels
 
@@ -1326,13 +1393,19 @@ class LongCatVideoPipeline:
         self._current_timestep = None
 
         if not output_type == "latent":
+            self._transition_t2v_modules(
+                activate="vae",
+                deactivate=("dit",),
+            )
             latents = latents.to(self.vae.dtype)
             latents = self.denormalize_latents(latents)
             output_video = self.vae.decode(latents, return_dict=False)[0]
             output_video = self.video_processor.postprocess_video(output_video, output_type=output_type)
             output_video = output_video[:, num_cond_frames_added: new_frame_size+num_cond_frames_added]
+            self._transition_t2v_modules(deactivate=("vae",))
         else:
             output_video = latents
+            self._transition_t2v_modules(deactivate=("dit",))
 
         return output_video
     

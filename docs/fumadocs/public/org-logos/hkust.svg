@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Hong Kong University of Science and Technology">
+  <circle cx="64" cy="64" r="58" fill="#003366"/>
+  <circle cx="64" cy="64" r="50" fill="none" stroke="#c4a35a" stroke-width="3"/>
+  <path fill="#c4a35a" d="M64 28 36 78h56L64 28z"/>
+  <circle cx="64" cy="72" r="10" fill="#003366"/>
+  <path fill="#c4a35a" d="M58 86h12v14H58z"/>
+</svg>

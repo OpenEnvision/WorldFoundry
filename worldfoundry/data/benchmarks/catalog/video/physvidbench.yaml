@@ -1,5 +1,7 @@
 id: physvidbench
 name: PhysVidBench
+publisher: Koç University
+publisher_kind: university
 benchmark_kind:
 - text-to-video
 - physical-commonsense
@@ -28,8 +30,7 @@ official_sources:
     gated: false
     license: cc-by-4.0
   license: cc-by-4.0
-  access_notes: Official code and prompt/question data are public; captioning and QA still require external
-    model/runtime assets.
+  access_notes: Official code and prompt/question data are public; captioning and QA still require external model/runtime assets.
 dataset:
   hf_dataset_id: Anonymousny/PhysVidBench
   revision: c62f83821cb0f67e37bb6f2872e3719ebb588bf0
@@ -90,9 +91,15 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  normalization:
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.physvidbench.run_physvidbench_official_runner
+    generated_arg: null
+    limit_arg: --limit
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysVidBenchContract
-  official_runner_script:
-    worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py
+  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py
   validation_command:
   - worldfoundry-eval
   - zoo
@@ -142,15 +149,16 @@ runner:
   - WORLDFOUNDRY_PHYSVIDBENCH_STRICT
 integration:
   status: integrated
+  tier: model_backed
+  judge_model_id: models/gemini-2.0-flash
   evidence:
-    framework_validation: worldfoundry-eval zoo benchmark-run --benchmark-id physvidbench --mode official-validation
-      --official-results-path <output.csv> --generated-artifact-dir <generated_videos> --output-dir <out> --json
+    framework_validation: worldfoundry-eval zoo benchmark-run --benchmark-id physvidbench --mode official-validation --official-results-path <output.csv> --generated-artifact-dir <generated_videos> --output-dir <out> --json
     normalizer_surface: in_tree_result_importer
     bounded_component_surface: gemini_qa_over_supplied_caption_tracks
     dataset_readiness: prompts_questions.csv
 release_status: experimental
 maturity: contract_ready
-open_source_status: in_tree_result_importer_and_bounded_caption_qa
+open_source_status: in_tree_artifact_scores_ready
 official_benchmark_verified: false
 integration_evidence: false
 leaderboard_valid: false

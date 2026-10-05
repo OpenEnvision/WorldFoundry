@@ -1,131 +1,44 @@
 ---
 title: PhysVidBench
-description: "PhysVidBench in WorldFoundry: assets, runners, metrics, and limits."
+description: "Caption-mediated T2V QA: 383 prompts, physics yes/no questions about AuroraCap captions. WorldFoundry imports output.csv or runs Gemini on captions you supply."
 ---
 
-## About
+PhysVidBench (Koç University / Cyberiada) is **caption-mediated QA**, not pixel matching and not PhyGenEval. A T2V model generates a video; upstream **AuroraCap** captions it; an LLM answers physics **yes/no** questions about that caption (affordance, tool use, materials, temporal dynamics). Catalog records **383 prompts** and **4123 questions** (`cc-by-4.0`).
 
-PhysVidBench evaluates physical commonsense in everyday text-to-video scenarios. The local source README describes a three-step flow: generate videos from prompts, extract eight AuroraCap caption tracks per video, then answer physical commonsense questions over those captions with Gemini.
+[PhyGenBench](/docs/evaluation/benchmark-hub/phygenbench) judges the video with VQAScore/VLM stages. [PhyGround](/docs/evaluation/benchmark-hub/phyground) applies 1–5 law criteria. PhysVidBench never looks at pixels in tree — only captions + questions.
 
-WorldFoundry includes the runnable PhysVidBench runner under `worldfoundry/evaluation/tasks/execution/runners/physvidbench`. Do not clone the upstream code repositories for WorldFoundry runs. Downloading the Hugging Face dataset `Anonymousny/PhysVidBench` is fine for the full prompt/question data; code execution should still go through the in-tree runner.
+Paper: [PhysVidBench](https://arxiv.org/abs/2507.15824). Project: [cyberiada.github.io/PhysVidBench](https://cyberiada.github.io/PhysVidBench/). Code: [ensanli/PhysVidBenchCode](https://github.com/ensanli/PhysVidBenchCode). Data: [Anonymousny/PhysVidBench](https://huggingface.co/datasets/Anonymousny/PhysVidBench).
 
+WorldFoundry bundles `prompts_questions.csv` and caption tracks. It **imports** upstream `output.csv`, or runs **bounded Gemini QA** on captions you supply. It does **not** run AuroraCap on your videos and cannot prove those captions came from them.
 
-## Official References
+<BenchmarkPageSections id="physvidbench" locale="en" />
 
-| Resource | Link |
-| --- | --- |
-| Project page | [cyberiada.github.io/PhysVidBench](https://cyberiada.github.io/PhysVidBench/) |
-| Paper | [arXiv:2507.15824](https://arxiv.org/abs/2507.15824) |
-| GitHub | [github.com/ensanli/PhysVidBenchCode](https://github.com/ensanli/PhysVidBenchCode) |
-| HF dataset | [Anonymousny/PhysVidBench](https://huggingface.co/datasets/Anonymousny/PhysVidBench) |
-| In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py` |
+## How to run
 
-## Prepare Assets
-
-- Prompt/question CSV: bundled fixture at `worldfoundry/data/benchmarks/assets/physvidbench/prompts_questions.csv`; override with `WORLDFOUNDRY_PHYSVIDBENCH_PROMPT_MANIFEST` or `--prompt-manifest`.
-- Caption tracks: eight text files with base name `cogvideo2b` and suffixes `_FP`, `_OP`, `_SR`, `_TD`, `_AU`, `_MT`, `_FM`, and no suffix. Override with `WORLDFOUNDRY_PHYSVIDBENCH_CAPTIONS_DIR`, `WORLDFOUNDRY_PHYSVIDBENCH_CAPTION_BASE`, `--captions-dir`, or `--caption-base`.
-- Full dataset: use the HF dataset `Anonymousny/PhysVidBench` or your own materialized prompt/question CSV when running beyond the bundled fixture.
-- Candidate videos: set `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` to generated videos.
-- Gemini judge: set `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `WORLDFOUNDRY_PHYSVIDBENCH_GEMINI_API_KEY`; install `google-genai`. For local fixture checks, set `WORLDFOUNDRY_PHYSVIDBENCH_JUDGE_BACKEND=mock`.
-
-## Generated Artifact Layout
-
-PhysVidBench prompt IDs are numeric. Generated videos should be flat files using zero-padded names:
-
-```text
-generated_videos/
-  0000.mp4
-  0001.mp4
-  ...
-```
-
-The runner strips numeric leading zeroes during coverage checks, so `0.mp4` and `0000.mp4` both map to prompt ID `0`. Caption files are line-indexed by `PromptID`, so each caption track must contain enough lines for the prompt IDs you evaluate.
-
-## Run With WorldFoundry
-
-Import an existing PhysVidBench QA result CSV through the public CLI:
+Import an upstream QA export:
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id physvidbench \
   --mode official-validation \
-  --official-results-path /path/to/output.csv \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/physvidbench/validation \
+  --official-results-path <output.csv> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/physvidbench/official-validation \
   --json
 ```
 
-Run the in-tree Gemini QA path through the public CLI:
+Bounded Gemini QA over supplied (or bundled) captions — not official pipeline evidence:
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-export GEMINI_API_KEY=...
-
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id physvidbench \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/physvidbench/run \
-  --json
-```
-
-Direct in-tree runner:
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-export WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR=tmp/physvidbench/direct
-export GEMINI_API_KEY=...
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" \
+  --captions-dir worldfoundry/data/benchmarks/assets/physvidbench/captions \
+  --output-dir tmp/physvidbench/official \
   --json
 ```
 
-Direct result import:
+Select the judge with `WORLDFOUNDRY_PHYSVIDBENCH_JUDGE_BACKEND`. Outputs include `scorecard.json` (primary `physvidbench_average`) and `output.csv`.
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py \
-  --official-results-path /path/to/output.csv \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/physvidbench/direct-validation \
-  --json
-```
-
-For a bounded local fixture run without Gemini:
-
-```bash
-WORLDFOUNDRY_PHYSVIDBENCH_JUDGE_BACKEND=mock \
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py \
-  --run-official \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/physvidbench/mock \
-  --json
-```
-
-## Metrics
-
-| Metric ID | Meaning |
-| --- | --- |
-| `physical_commonsense_accuracy` | Overall yes/no QA accuracy over all answered questions. |
-| `affordance_understanding` | Accuracy for `Object Properties & Affordances` questions. |
-| `tool_use_consistency` | Accuracy for `Action & Procedural Understanding` questions. |
-| `material_property_consistency` | Accuracy for `Material Interaction & Transformation` questions. |
-| `temporal_dynamics_consistency` | Accuracy for `Temporal Dynamics` questions. |
-| `physvidbench_average` | Primary WorldFoundry metric. Mean of available category accuracies, or overall accuracy if no category buckets are available. |
-
-All metrics are higher-is-better and are reported as `0..1` accuracies.
-
-## Outputs
-
-The output directory contains:
-
-- `scorecard.json`: run status, metrics, prompt/video coverage, QA backend, and leaderboard-validity flags.
-- `output.csv`: written by the in-tree QA path, with `PromptID`, `Question`, `Types`, `Model_Answer`, and `Match`.
-- `raw_metric_table.jsonl`: one row per declared metric.
-- `per_sample_scores.jsonl`: question-level rows copied from the QA result.
-- `specialized_normalizer_stdout.log` and `specialized_normalizer_stderr.log` when invoked through `worldfoundry-eval zoo benchmark-run`.
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

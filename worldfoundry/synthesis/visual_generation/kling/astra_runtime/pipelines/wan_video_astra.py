@@ -1,12 +1,10 @@
-# from worldfoundry.base_models.diffusion_model.diffsynth.models.model_manager import ModelManager
 from ..models.model_manager import ModelManager
 from ..models.wan_video_dit import WanModel, RMSNorm, sinusoidal_embedding_1d
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_text_encoder import WanTextEncoder,T5RelativeEmbedding, T5LayerNorm
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_vae import WanVideoVAE,RMS_norm, CausalConv3d, Upsample
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_image_encoder import WanImageEncoder
-from worldfoundry.base_models.diffusion_model.diffsynth.schedulers.flow_match import FlowMatchScheduler
-from worldfoundry.base_models.diffusion_model.diffsynth.diffusion.base_pipeline import BasePipeline
-from worldfoundry.base_models.diffusion_model.diffsynth.prompters import WanPrompter
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import WanTextEncoder, T5RelativeEmbedding, T5LayerNorm
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import WanVideoVAE, RMS_norm, CausalConv3d, Upsample
+from worldfoundry.base_models.diffusion_model.models.encoders.wan import WanImageEncoder, WanPrompter
+from worldfoundry.core.nn import FlowMatchScheduler
+from worldfoundry.base_models.diffusion_model.runners import StagedDiffusionPipeline
 from worldfoundry.core.vram import enable_vram_management, AutoWrappedModule, AutoWrappedLinear
 import torch, os
 from einops import rearrange
@@ -17,7 +15,7 @@ from typing import Optional
 
 
 
-class WanVideoAstraPipeline(BasePipeline):
+class WanVideoAstraPipeline(StagedDiffusionPipeline):
 
     def __init__(self, device="cuda", torch_dtype=torch.float16, tokenizer_path=None,condition_frames=None,target_frames=None):
         super().__init__(device=device, torch_dtype=torch_dtype)

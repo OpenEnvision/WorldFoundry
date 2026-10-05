@@ -41,7 +41,7 @@ runtime:
     num_frames: 240
     fps: 24
     num_inference_steps: 50
-    pyramid_num_inference_steps_list: [2, 2, 2]
+    pyramid_num_inference_steps_list: auto
     guidance_scale: auto
     seed: 42
     weight_dtype: bf16

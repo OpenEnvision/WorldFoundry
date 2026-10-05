@@ -23,19 +23,19 @@ try:
 except ModuleNotFoundError:
     SAGE_ATTN_AVAILABLE = False
     
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_dit import (
-    flash_attention,
-    modulate,
-    sinusoidal_embedding_1d,
-    precompute_freqs_cis_3d,
-    precompute_freqs_cis,
-    rope_apply,
-    RMSNorm,
+from worldfoundry.core.attention import (
+    apply_complex_rotary_embedding as rope_apply,
+    complex_rotary_frequencies as precompute_freqs_cis,
+    complex_rotary_frequencies_3d as precompute_freqs_cis_3d,
+    packed_sequence_attention as flash_attention,
+)
+from worldfoundry.core.nn import RMSNorm, scale_shift as modulate, sinusoidal_embedding_1d
+from worldfoundry.base_models.diffusion_model.models.networks.wan import (
     AttentionModule,
     CrossAttention,
-    MLP,
     Head,
-    WanModelStateDictConverter
+    MLP,
+    WanModelStateDictConverter,
 )
 
 class SelfAttention(nn.Module):

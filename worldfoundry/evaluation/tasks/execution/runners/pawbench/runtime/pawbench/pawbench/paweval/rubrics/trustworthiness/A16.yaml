@@ -1,0 +1,52 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: A16
+track: calibration
+title_en: Roulette Ball Settling
+scene_grounding:
+- 'Initial state must match: One ball is positioned at the entrance of a roulette-like
+  wheel with four color groups.'
+- Apparatus geometry in the opening frames must match the source image.
+- The roulette-like wheel pockets/sectors and color groups must match the source
+  image; color counts and sizes must not change mid-run.
+action_execution:
+- 'Required action: Release the ball once.'
+- Action must happen exactly once in the expected direction / region.
+target_requirements:
+- The ball, entry path, wheel pockets/sectors, and color-group boundaries must remain
+  visible enough to audit the ball settling into one group.
+- A trusted color-group outcome requires the ball to enter and settle by continuous
+  motion; a ball appearing in a pocket without visible approach is a trajectory or
+  continuity failure.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+apparatus_stability:
+- Static apparatus (wheel pockets, dividers, rails, color groups, and table geometry)
+  must not drift, resize, or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-readout state/region change: subject moves between label-defining states or regions after the first decisive readout.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+- After the ball first settles into a readable color group, it must not move to a
+  different group. If the ball continues normal visible rolling/bouncing between
+  groups, the earlier frame was not yet a settled readout.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Roulette Ball Settling.'

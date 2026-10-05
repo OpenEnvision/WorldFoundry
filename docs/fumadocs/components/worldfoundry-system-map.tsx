@@ -94,6 +94,7 @@ const architectureCopy = {
     aria: 'WorldFoundry architecture layers',
     caption:
       'Each layer owns one kind of change. Serializable contracts keep model-specific code, benchmark-specific code, and user interfaces from leaking into one another.',
+    handoffs: ['intent / catalog query', 'request / run plan', 'GenerationResult / scorecard'],
     layers: [
       {
         label: 'Surfaces',
@@ -125,6 +126,7 @@ const architectureCopy = {
     aria: 'WorldFoundry 架构分层',
     caption:
       '每一层只拥有一类变化。可序列化契约阻止模型专属代码、benchmark 专属代码和用户界面相互渗透。',
+    handoffs: ['intent / catalog 查询', 'request / run plan', 'GenerationResult / scorecard'],
     layers: [
       {
         label: '使用界面',
@@ -174,6 +176,7 @@ export function WorldFoundryWorkflow({
           <li
             className="wf-system-workflow-stage"
             key={label}
+            data-wf-stage={isHome ? index : undefined}
             style={isHome ? ({ '--wf-stage-index': index } as React.CSSProperties) : undefined}
           >
             <div className="wf-system-workflow-stage-head">
@@ -199,24 +202,37 @@ export function WorldFoundryArchitecture({ locale = 'en' }: { locale?: SystemMap
   const copy = architectureCopy[locale];
 
   return (
-    <figure className="wf-system-architecture" aria-label={copy.aria}>
+    <figure className="wf-system-architecture not-prose" aria-label={copy.aria}>
       <div className="wf-system-architecture-stack">
         {copy.layers.map(({ label, purpose, items, Icon }, index) => (
-          <section className="wf-system-architecture-layer" key={label}>
-            <div className="wf-system-architecture-heading">
-              <span>{String(index + 1).padStart(2, '0')}</span>
-              <Icon aria-hidden="true" size={20} strokeWidth={1.7} />
-              <div>
-                <h3>{label}</h3>
-                <p>{purpose}</p>
+          <div className="wf-system-architecture-unit" key={label}>
+            {index > 0 && copy.handoffs[index - 1] ? (
+              <div className="wf-system-architecture-handoff" aria-hidden="true">
+                <span className="wf-system-architecture-handoff-label">
+                  {copy.handoffs[index - 1]}
+                </span>
               </div>
-            </div>
-            <ul>
-              {items.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </section>
+            ) : null}
+            <section className="wf-system-architecture-layer">
+              <div className="wf-system-architecture-heading">
+                <span className="wf-system-architecture-index">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <Icon aria-hidden="true" size={20} strokeWidth={1.7} />
+                <div>
+                  <span className="wf-system-architecture-title">{label}</span>
+                  <span className="wf-system-architecture-purpose">{purpose}</span>
+                </div>
+              </div>
+              <div className="wf-system-architecture-chips">
+                {items.map((item) => (
+                  <span className="wf-system-architecture-chip" key={item}>
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </section>
+          </div>
         ))}
       </div>
       <figcaption>{copy.caption}</figcaption>

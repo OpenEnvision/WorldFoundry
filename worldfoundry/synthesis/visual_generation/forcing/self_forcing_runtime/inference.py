@@ -13,7 +13,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 from pipeline.causal_inference import CausalInferencePipeline
 from eval_inputs import TextDataset, TextImagePairDataset
-from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 
 from runtime_utils.memory import gpu, get_cuda_free_memory_gb, DynamicSwapInstaller
 
@@ -71,7 +71,7 @@ else:
     pipeline = CausalDiffusionInferencePipeline(config, device=device)
 
 if args.checkpoint_path:
-    state_dict = torch.load(args.checkpoint_path, map_location="cpu")
+    state_dict = torch.load(args.checkpoint_path, map_location="cpu", weights_only=True)
     pipeline.generator.load_state_dict(state_dict['generator' if not args.use_ema else 'generator_ema'])
 
 pipeline = pipeline.to(dtype=torch.bfloat16)

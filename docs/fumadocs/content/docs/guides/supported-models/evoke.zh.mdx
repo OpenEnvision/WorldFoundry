@@ -1,0 +1,92 @@
+---
+title: "Evoke"
+description: "AlayaLab 的相机可控世界 / 文生-图生-视频到视频。官方源码打在 revision 74d26851。独立树内运行时；checkpoint GPU 一致性待验证。"
+modelId: "evoke"
+pageSource: authored
+---
+
+Evoke 在 catalog 里是**相机可控世界**，同时列出文生视频、图生视频和视频到视频。WorldFoundry 把官方源码打在 revision `74d268516d95c8fceadd2378f91a73f9f187042b`，独立树内运行时对外是 `EvokePipeline`。外部源码 checkout 会被拒绝；checkpoint 只从本地 WorldFoundry / Hugging Face 存储解析，Hub 客户端离线。
+
+<ModelPaperFigures modelId="evoke" locale="zh" />
+
+已发布的**后蒸馏** checkpoint 是按 **v2v** 条件训练的。catalog 里的 i2v / t2v 是上游写明的**零样本**能力，不是说这两条路径已经对齐训练过的 v2v。传入相机轨迹会打开几何状态，并且**必须另备 ViGeo1.1**（`pkqbajng/ViGeo1.1`，CC-BY-NC-4.0）。这是共享环境下的推理兼容移植，不是 Evoke 锁定训练栈的 parity。
+
+论文：[arXiv 2608.13546](https://arxiv.org/abs/2608.13546)。项目页：[evoke-world.github.io/Evoke](https://evoke-world.github.io/Evoke/)。代码：[AlayaLab/Evoke](https://github.com/AlayaLab/Evoke)。权重：`AlayaLab/Evoke`（revision `7fa34ecef`）。源码许可：**Apache-2.0**。状态：**Runner 一致性待验证**。官方三步后蒸馏命令已接通；本树**没有**验证过 H200 级 checkpoint 执行。
+
+<ModelCommandBuilder modelId="evoke" locale="zh" />
+
+## 用来做什么
+
+走已接通的三步后蒸馏路径。这不是 AlayaWorld。
+
+启动 `worldfoundry-eval run evoke`。
+
+## 运行时契约
+
+必填 `prompt`、`image`、`video`；`actions`：trajectory_npz, pose_path, camera_trajectory；产物 `evoke.mp4`。
+
+| 旋钮 | 默认 |
+| --- | --- |
+| 模式 | **auto** |
+| 尺寸 | **640×384** |
+| Chunk 数 | **4** |
+| FPS | **24** |
+| 步数 | **3**（后蒸馏） |
+| Guidance | **1.0** |
+| 源码 | 捆绑 revision `74d268516d95c8fceadd2378f91a73f9f187042b`（拒绝外部 checkout） |
+| 权重 | `AlayaLab/Evoke` revision `7fa34ecef` — `evoke-base/{vae,scheduler,text_encoder,tokenizer}` 以及 `evoke/stage3_post_distillation/transformer` |
+| 相机几何 | 另备 `pkqbajng/ViGeo1.1`（`vigeo.pt`，CC-BY-NC-4.0） |
+
+## 在 WorldFoundry 中运行
+
+状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `AlayaLab/Evoke`、`pkqbajng/ViGeo1.1` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run evoke`。许可证：CC-BY-NC-4.0。catalog 未记录 VRAM。
+
+## 捆绑 runtime 说明
+
+WorldFoundry 的公开入口是 `EvokePipeline` / `worldfoundry-eval run evoke`。捆绑的推理脚本位于 `worldfoundry/synthesis/visual_generation/evoke/evoke_runtime/scripts/inference/`：`infer_single.py` 执行推理，`postprocess_viz.py` 准备可视化产物。上游文档中的 shell launcher 属于官方仓库。
+
+学生模型按 latent chunk 自回归（`latent_window_size = 9`）。每个 chunk 在 RoPE 帧索引上排成 `prefix | long(16) | mid(2) | warp(W) | prev_short(1) | noise(W)`：
+
+| 层 | 作用 |
+| --- | --- |
+| `prefix` | 第 0 帧全局锚点（i2v：输入图；v2v：参考视频第一个 latent） |
+| `long` / `mid` | 多项参数记忆（`history_sizes = [16, 2, 1]`），更粗的 patch kernel——long `(4,8,8)`，mid `(2,4,4)`，其余 `(1,2,2)` |
+| `warp` | 世界状态库渲染到当前视角；RoPE 与噪声窗重叠 |
+| `prev_short` | 上一 chunk 的最后一个 latent |
+
+各层分辨率相同（`res/8`）。世界状态库 **write** 把单目深度估进持久点云，**read** 用当前位姿寻址（最多融合 8 个共视源，z-buffer 散射加可见性 mask），可选窗口 **evict**。warp / attention 旋钮必须训练与推理一致，对不上会静默掉质量。宽度保持 64 的倍数，long 层和 1/4 金字塔才能整除。
+
+发布目录都是 `transformer/` 的**父目录**（`from_pretrained(path, subfolder="transformer")`）：
+
+```text
+models/
+  evoke-base/                 vae / text_encoder / tokenizer / scheduler
+  ViGeo1.1/vigeo.pt           必需的深度后端
+  DA3/                        可选；只有 DEPTH_BACKEND=da3 才要
+  evoke/stage1_camera_control/transformer/
+  evoke/stage2_few_step_training/transformer/
+  evoke/stage3_long_distillation/transformer/
+  evoke/stage3_post_distillation/transformer/   catalog 用的出货权重
+  evoke/evoke_teacher/{high,low}_noise/         仅训练用的 DMD expert
+```
+
+两个深度后端都是 **CC-BY-NC-4.0**，比 Evoke 源码的 Apache-2.0 更严。改 `DEPTH_BACKEND` 是配方变更，不是速度旋钮。
+
+一个 chunk 是 **36 帧 = 1.5 秒 @24 fps**。长度用 `NUM_CHUNKS`（`NUM_CHUNKS=20` 即 30 秒）。`NUM_FRAMES` 只用来推 chunk 数，不会裁结果：`chunks = ceil(NUM_FRAMES / 33)`，persistent decode 得到 `36 * chunks - 3`（t2v 再丢掉第 0 帧，所以是 `-4`）。`NUM_FRAMES=721` 是 22 个 chunk / 789 帧，不是 30 秒。t2v 会从最终 `geo_pred.mp4` 丢掉第 0 帧（chunk 0 第一个像素是 I 帧偏色）；该帧仍在 `segments/segment_000_pred.mp4`。
+
+| 模式 | 输入 | 相机 |
+| --- | --- | --- |
+| `v2v` | 参考视频 + 位姿轨 | 有；在 `REF_VIDEO_SEC`（默认 5 秒）之后继续生成 |
+| `i2v` | 首帧 + 位姿轨 | 有；`START_SECONDS` 也会平移位姿轨 |
+| `t2v` | 只有 prompt | 无——引擎禁止 warp + t2v |
+| `segment` | i2v 加 per-chunk prompt 日程 | 有；滚动中途可改 prompt |
+
+后蒸馏 / 长蒸馏权重只在 **v2v** 上训练，所以这些 checkpoint 上的 catalog i2v / t2v 是零样本。`stage1_camera_control` 是多步模型（50 步，CFG 5.0），三种模式都在分布内。不要把 stage-1 YAML 里的 `validation_config.num_inference_steps=8` 抄到推理。蒸馏的 3 步 / 关 CFG 是权重属性；加大 `NUM_INFERENCE_STEPS` 无效。
+
+仅 i2v 的尺度旋钮（v2v / t2v 忽略）：`GEO_CHUNK0_TARGET_DISP_PX`（默认 135 px）重标定 chunk 0 深度，让命令视差落在像素预算内（`0` 恢复旧的约 6 倍摆动）；`VIGEO_DEPTH_MEDIAN_TARGET`（默认 5）用位姿单位钉场景中位深度。看每 chunk 的 `cov=`——低于约 0.35 时模型在用 prompt 补洞。
+
+超过 7200 帧必须显式选择：`STREAM_LONG=1` 按 chunk 解码再从 `segments/` 拼 `geo_pred.mp4`（需要 `VAE_DECODE_TYPE=persistent`）；`GEO_HIST_MAX_FRAMES` 滑动点云（这是配方变更，必须远大于 `WARP_LAG * 36`）。自定义案例照抄 `examples/{t2v,i2v,v2v,segment_prompts}/cases.jsonl`。位姿是 vipe `.npz`（`cam_c2w [T,4,4]` + `intrinsics`）；与 i2v 默认（24 / `[480, 832]`）不同时要声明 `pose_fps` 和 `pose_source_resolution`。
+
+上游 launcher 的产物约定：`<OUT_ROOT>/<case>/geo_pred.mp4`，可选 HUD / 分段 / v2v 四宫格，以及 `_logs/<case>.log` 和 `run_info.json`。已完成的 case 重跑会跳过。`infer_evoke_teacher.sh` 只是示例，不是受支持入口：无相机、无序列并行，bf16 约 56 GB，除非 `--offload`。
+
+<ModelRelatedRecipes modelId="evoke" locale="zh" />

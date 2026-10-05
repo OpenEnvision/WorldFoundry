@@ -13,14 +13,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
+from worldfoundry.studio.inference.catalog import CatalogEntry
+from worldfoundry.studio.ui.interfaces import StudioInterfaceSpec, interface_spec_for_entry
+
 from .artifacts import StudioVisualizationArtifact, infer_visualization_artifact
 from .scene import VisualizationScene
 
-from worldfoundry.studio.catalog import CatalogEntry
-from worldfoundry.studio.interfaces import StudioInterfaceSpec, interface_spec_for_entry
-
 if TYPE_CHECKING:
-    from worldfoundry.studio.launch_config import StudioLaunchConfig
+    from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
 
 
 INTERACTIVE_WORLD_VISUALIZATION = "world"
@@ -29,7 +29,6 @@ SPARK_VISUALIZATION = "spark"
 MEDIA_VISUALIZATION = "media"
 RERUN_VISUALIZATION = "rerun"
 EMBODIED_VISUALIZATION = "embodied"
-UNIFIED_VISUALIZATION = "unified"
 AUTO_VISUALIZATION = "auto"
 
 ARTIFACT_DOMAIN_WORLD = "interactive_world"
@@ -158,7 +157,7 @@ class StudioVisualizationBackend:
         title: Human-readable backend name.
         default_port: Preferred port when no explicit port is supplied.
         aliases: Additional mode tokens accepted by the registry.
-        native: Whether the backend is usable without the Gradio unified UI.
+        native: Whether the backend exposes a standalone server.
         match: Predicate used when resolving ``auto``.
         serve: Blocking or non-blocking launcher for the backend.
     """
@@ -450,7 +449,6 @@ __all__ = [
     "MEDIA_VISUALIZATION",
     "RERUN_VISUALIZATION",
     "SPARK_VISUALIZATION",
-    "UNIFIED_VISUALIZATION",
     "VISER_VISUALIZATION",
     "StudioVisualizationArtifact",
     "StudioVisualizationBackend",

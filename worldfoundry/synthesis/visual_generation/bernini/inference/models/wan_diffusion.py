@@ -15,6 +15,7 @@
 
 """Wan2.2 dual-expert diffusion sampler with APG / chained guidance."""
 
+import gc
 import json
 import os
 from typing import List, Optional
@@ -151,10 +152,23 @@ class GEN_Wanx22(nn.Module):
             use_src_id_rotary_emb=config.use_src_id_rotary_emb,
             torch_dtype=torch.bfloat16,
         )
+        self._expert_load_kwargs = common
+        self._lazy_expert_loading = bool(getattr(config, "lazy_expert_loading", False))
+        self._expert_device = getattr(config, "expert_device", None)
+        self._num_channels_latents = None
         # from_pretrained loads the Wan2.2 base transformer (bf16, with the
         # precision-sensitive modules kept in fp32); the Bernini checkpoint is
         # applied afterwards by bernini.weights.load_weights.
-        if config.skip_transformer_1:
+        if self._lazy_expert_loading:
+            transformer_config = WanTransformer3DModel.load_config(
+                self.model_id_or_path,
+                subfolder="transformer",
+            )
+            self._num_channels_latents = int(transformer_config["in_channels"])
+            self.config.text_dim = int(transformer_config["text_dim"])
+            self.transformer = None
+            self.transformer_2 = None
+        elif config.skip_transformer_1:
             self.transformer = None
         else:
             if getattr(config, "scratch", False):
@@ -169,7 +183,9 @@ class GEN_Wanx22(nn.Module):
                 )
             self.config.text_dim = self.transformer.config.text_dim
             self.rope = self.transformer.rope
-        if config.skip_transformer_2:
+        if self._lazy_expert_loading:
+            pass
+        elif config.skip_transformer_2:
             self.transformer_2 = None
         else:
             if getattr(config, "scratch", False):
@@ -197,6 +213,41 @@ class GEN_Wanx22(nn.Module):
 
         self.vae_scale_factor_temporal = 4
         self.vae_scale_factor_spatial = 8
+
+    def _load_expert(self, subfolder: str, device: str):
+        load_kwargs = dict(self._expert_load_kwargs)
+        load_kwargs.update(device_map={"": device}, low_cpu_mem_usage=True)
+        return WanTransformer3DModel.from_pretrained(
+            self.model_id_or_path,
+            subfolder=subfolder,
+            **load_kwargs,
+        )
+
+    def _activate_initial_expert(self, device: str) -> None:
+        if self._lazy_expert_loading and self.transformer is None:
+            self.transformer = self._load_expert("transformer", device)
+
+    def _switch_to_low_expert(self, device: str) -> None:
+        if self._lazy_expert_loading:
+            high_expert = self.transformer
+            self.transformer = None
+            del high_expert
+            gc.collect()
+            torch.cuda.empty_cache()
+            self.transformer_2 = self._load_expert("transformer_2", device)
+            return
+        self.transformer.to("cpu")
+        torch.cuda.empty_cache()
+        self.transformer_2.to(device)
+
+    def release_lazy_experts(self) -> None:
+        if not self._lazy_expert_loading:
+            return
+        self.transformer = None
+        self.transformer_2 = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def shared_step(self, model_id, noisy_latents, timesteps, cond_embeds, rotary_embs,
                     batch_vae_seqlen=None, batch_text_seqlen=None, **kwargs):
@@ -279,7 +330,8 @@ class GEN_Wanx22(nn.Module):
         timesteps = self.scheduler.timesteps.to(device)
         boundary_timestep = self.switch_dit_boundary * self.scheduler.num_train_timesteps
 
-        num_channels_latents = (
+        self._activate_initial_expert(device)
+        num_channels_latents = self._num_channels_latents or (
             self.transformer.config.in_channels
             if self.transformer is not None
             else self.transformer_2.config.in_channels
@@ -322,10 +374,10 @@ class GEN_Wanx22(nn.Module):
             cond_text = prompt_embeds_t1 if t >= boundary_timestep else prompt_embeds_t2
             uncond_text = uncond_embeds_t1 if t >= boundary_timestep else uncond_embeds_t2
 
-            if t < boundary_timestep and not switched and self.transformer_2 is not None:
-                self.transformer.to("cpu")
-                torch.cuda.empty_cache()
-                self.transformer_2.to(device)
+            if t < boundary_timestep and not switched and (
+                self.transformer_2 is not None or self._lazy_expert_loading
+            ):
+                self._switch_to_low_expert(device)
                 switched = True
                 omega_vid *= omega_scale
                 omega_img *= omega_scale

@@ -1,0 +1,59 @@
+schema: worldfoundry-post-training
+execution_owner: worldfoundry-native
+run:
+  id: cosmos-predict2p5-2b-ddrl-stack
+  output_dir: runs/cosmos-predict2p5-2b-ddrl-stack
+model:
+  recipe: cosmos-predict2.5-2b
+  checkpoint: default
+tuning:
+  mode: full
+data:
+  manifest: data/post_training/cosmos-ddrl-prompts.jsonl
+  split: train
+  shuffle: true
+  shuffle_seed: 42
+  tail_policy: pad
+algorithm:
+  type: ddrl
+  train_on: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
+  clip_range: 0.0001
+  loss_scale: 10.0
+  advantage_epsilon: 0.0001
+  advantage_normalization: group-sample-std
+  advantage_clip_min: -5.0
+  advantage_clip_max: 5.0
+  exponential_advantage: false
+  kl_beta: 0.0
+  data_beta: 0.01
+  data_on_first_step_only: false
+  reward_weights:
+    video_quality: 1.0
+    motion_quality: 1.0
+    text_alignment: 1.0
+  reward_model:
+    type: videoalign
+optimizer:
+  type: adamw
+  learning_rate: 0.00001
+  weight_decay: 0.0001
+  betas: [0.9, 0.99]
+  epsilon: 0.00000001
+  max_grad_norm: 1.0
+runtime:
+  param_dtype: bfloat16
+  reduce_dtype: float32
+  activation_checkpoint: full
+  compile: false
+distributed:
+  backend: fsdp2
+  dp_replicate: 1
+  dp_shard: auto
+  cp: 1
+  tp: 1
+checkpoint:
+  save_every_steps: 50
+  async: true
+  export_every_steps: 50
+export:
+  format: distributed-checkpoint

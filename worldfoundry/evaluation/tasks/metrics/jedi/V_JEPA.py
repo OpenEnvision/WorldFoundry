@@ -8,30 +8,17 @@
 
 import math
 from functools import partial
-import socket
 import yaml, os
 
 import torch
 import torch.nn as nn
-from torch.nn.parallel import DistributedDataParallel
-import torch.distributed as dist
-
-from vjepa.utils.distributed import init_distributed
 from vjepa.models import vit_tiny, vit_small, vit_base, vit_large, vit_huge, vit_giant, vit_gigantic
 from vjepa.models.attentive_pooler import AttentiveClassifier
 
 from .V_JEPA_utils import *
 
 import logging
-logging.basicConfig()
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-
-def find_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('', 0))
-        return s.getsockname()[1]
+logger = logging.getLogger(__name__)
 
 
 class VJEPA:
@@ -56,11 +43,11 @@ class VJEPA:
     
     @torch.no_grad()
     def get_feats(self, videos):
-        videos = torch.stack([self.transforms(videos[i]) for i in range(videos.shape[0])])
         videos = videos.permute(0, 2, 1, 3, 4)
+        videos = torch.stack([self.transforms(videos[i]) for i in range(videos.shape[0])])
         encoded_videos = self.encoder([[videos]])[0]
         if self.finetuned:
-            return self.classifier.module.pooler(encoded_videos).squeeze(1).cpu().numpy()
+            return self.classifier.pooler(encoded_videos).squeeze(1).cpu().numpy()
         else:
             return encoded_videos.mean(dim=1).cpu().numpy()
 
@@ -126,18 +113,12 @@ def load_pretrained(
     checkpoint = torch.load(pretrained, map_location='cpu')
     try:
         pretrained_dict = checkpoint[checkpoint_key]
-    except Exception:
+    except KeyError:
         pretrained_dict = checkpoint['encoder']
 
     pretrained_dict = {k.replace('module.', ''): v for k, v in pretrained_dict.items()}
     pretrained_dict = {k.replace('backbone.', ''): v for k, v in pretrained_dict.items()}
-    for k, v in encoder.state_dict().items():
-        if k not in pretrained_dict:
-            logger.info(f'key "{k}" could not be found in loaded state dict')
-        elif pretrained_dict[k].shape != v.shape:
-            logger.info(f'key "{k}" is of different shape in model and loaded state dict')
-            pretrained_dict[k] = v
-    msg = encoder.load_state_dict(pretrained_dict, strict=False)
+    msg = encoder.load_state_dict(pretrained_dict)
     print(encoder)
     logger.info(f'loaded pretrained model with msg: {msg}')
     logger.info(f'loaded pretrained encoder from epoch: {checkpoint["epoch"]}\n path: {pretrained}')
@@ -149,21 +130,11 @@ def load_checkpoint(
     r_path,
     classifier,
 ):
-    try:
-        checkpoint = torch.load(r_path, map_location=device)
-        epoch = checkpoint['epoch']
-
-        # -- loading encoder
-        pretrained_dict = checkpoint['classifier']
-        msg = classifier.load_state_dict(pretrained_dict)
-        logger.info(f'loaded pretrained classifier from epoch {epoch} with msg: {msg}')
-
-        del checkpoint
-
-    except Exception as e:
-        logger.info(f'Encountered exception when loading checkpoint {e}')
-        epoch = 0
-
+    checkpoint = torch.load(r_path, map_location=device)
+    epoch = checkpoint['epoch']
+    pretrained_dict = {key.removeprefix('module.'): value for key, value in checkpoint['classifier'].items()}
+    msg = classifier.load_state_dict(pretrained_dict)
+    logger.info(f'loaded pretrained classifier from epoch {epoch} with msg: {msg}')
     return classifier
 
 def get_default_vjepa(
@@ -246,16 +217,6 @@ def get_default_vjepa(
         device = torch.device('cuda:0')
         torch.cuda.set_device(device)
     
-    world_size, rank = init_distributed()
-    def setup(rank, world_size):
-        os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = str(find_free_port())
-
-        # initialize the process group
-        dist.init_process_group("gloo", rank=rank, world_size=world_size)
-    setup(rank, world_size)
-    logger.info(f'Initialized (rank/world-size) {rank}/{world_size}')
-    
     # Initialize model
 
     # -- pretrained encoder (frozen)
@@ -295,11 +256,10 @@ def get_default_vjepa(
             depth=1,
             num_classes=num_classes,
         ).to(device)
-        classifier = DistributedDataParallel(classifier, static_graph=True)
-
         classifier = load_checkpoint(
             device=device,
             r_path=f'{model_dir}/ssv2-probe.pth.tar',
             classifier=classifier
         )
+        classifier.eval()
     return encoder, classifier

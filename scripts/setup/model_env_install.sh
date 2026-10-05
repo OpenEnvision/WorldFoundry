@@ -408,23 +408,15 @@ bootstrap_pip_package() {
   printf '%s\n' "$resolved"
 }
 
-append_pip_index_options() {
-  local -n target_args="$1"
-  target_args+=(--index-url "${WORLDFOUNDRY_PIP_INDEX_URL:-https://pypi.org/simple}")
-  if [[ -n "${WORLDFOUNDRY_PIP_TRUSTED_HOST:-}" ]]; then
-    target_args+=(--trusted-host "$WORLDFOUNDRY_PIP_TRUSTED_HOST")
-  fi
-}
-
-append_pip_find_links_options() {
-  local -n target_args="$1"
-  shift
-  local link
-  for link in "$@"; do
-    [[ -n "$link" ]] || continue
-    target_args+=(--find-links "$link")
-  done
-}
+# Bash 4.2 is still common on production CentOS hosts and does not implement
+# nameref declarations. Keep these immutable pip arguments in a normal global
+# array so dedicated-environment installs work on that supported shell tier.
+WORLDFOUNDRY_PIP_INDEX_ARGS=(
+  --index-url "${WORLDFOUNDRY_PIP_INDEX_URL:-https://pypi.org/simple}"
+)
+if [[ -n "${WORLDFOUNDRY_PIP_TRUSTED_HOST:-}" ]]; then
+  WORLDFOUNDRY_PIP_INDEX_ARGS+=(--trusted-host "$WORLDFOUNDRY_PIP_TRUSTED_HOST")
+fi
 
 patch_transformer_engine_links() {
   local env_prefix="$1"
@@ -466,7 +458,7 @@ install_transformer_engine_official() {
     return
   fi
   local pip_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install)
-  append_pip_index_options pip_args
+  pip_args+=("${WORLDFOUNDRY_PIP_INDEX_ARGS[@]}")
   pip_args+=(--no-cache-dir "transformer-engine[pytorch]==1.12.0")
   CUDA_HOME="$env_prefix" \
   LD_LIBRARY_PATH="$(runtime_ld_library_path "$env_prefix")" \
@@ -491,7 +483,7 @@ install_four_d_worldbench_aux_stack() {
   fi
 
   local pip_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install --no-cache-dir)
-  append_pip_index_options pip_args
+  pip_args+=("${WORLDFOUNDRY_PIP_INDEX_ARGS[@]}")
   pip_args+=(keye-vl-utils qwen-vl-utils openai scikit-video)
   "${pip_args[@]}"
 }
@@ -508,8 +500,27 @@ PY
     return
   fi
   local pip_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install)
-  append_pip_index_options pip_args
+  pip_args+=("${WORLDFOUNDRY_PIP_INDEX_ARGS[@]}")
   pip_args+=(--no-cache-dir --no-build-isolation "flash-attn==2.6.3")
+  CUDA_HOME="$env_prefix" \
+  LD_LIBRARY_PATH="$(runtime_ld_library_path "$env_prefix")" \
+  "${pip_args[@]}"
+}
+
+install_solarwm_flash_attn() {
+  local env_prefix="$1"
+  if CUDA_HOME="$env_prefix" \
+    LD_LIBRARY_PATH="$(runtime_ld_library_path "$env_prefix")" \
+    "$env_prefix/bin/python" - <<'PY' >/dev/null 2>&1
+import flash_attn
+PY
+  then
+    echo "==> SolarWM: flash-attn already importable"
+    return
+  fi
+  local pip_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install)
+  pip_args+=("${WORLDFOUNDRY_PIP_INDEX_ARGS[@]}")
+  pip_args+=(--no-cache-dir --no-build-isolation "flash-attn==2.8.3")
   CUDA_HOME="$env_prefix" \
   LD_LIBRARY_PATH="$(runtime_ld_library_path "$env_prefix")" \
   "${pip_args[@]}"
@@ -532,6 +543,10 @@ post_install_model_env() {
       echo "==> Hunyuan GameCraft: building the pinned released flash-attn package"
       install_gamecraft_flash_attn "$env_prefix"
       ;;
+    solarwm)
+      echo "==> SolarWM: building the pinned official flash-attn package"
+      install_solarwm_flash_attn "$env_prefix"
+      ;;
   esac
 }
 
@@ -550,6 +565,14 @@ install_dedicated_env() {
   mapfile -t pythonpath_dirs < <(json_array_lines "$spec_json" pythonpath_dirs)
   mapfile -t validation_imports < <(json_array_lines "$spec_json" validation_imports)
   mapfile -t pip_find_links < <(json_array_lines "$spec_json" pip_find_links)
+  local pip_find_link_args=()
+  local pip_find_link
+  if [[ "${#pip_find_links[@]}" -gt 0 ]]; then
+    for pip_find_link in "${pip_find_links[@]}"; do
+      [[ -n "$pip_find_link" ]] || continue
+      pip_find_link_args+=(--find-links "$pip_find_link")
+    done
+  fi
   mapfile -t channels < <(json_array_lines "$spec_json" channels)
   mapfile -t resolved_conda_packages < <(filter_bootstrap_conda_packages "${conda_packages[@]}")
   local pip_package
@@ -588,43 +611,55 @@ install_dedicated_env() {
     fi
     if [[ "$pip_package" == "pip" ]]; then
       local pip_upgrade_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install)
-      append_pip_index_options pip_upgrade_args
+      pip_upgrade_args+=("${WORLDFOUNDRY_PIP_INDEX_ARGS[@]}")
       pip_upgrade_args+=(--upgrade pip)
       "${pip_upgrade_args[@]}"
     fi
     if [[ "${#pip_packages[@]}" -gt 0 ]]; then
       local pip_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install --no-cache-dir)
-      append_pip_index_options pip_args
-      append_pip_find_links_options pip_args "${pip_find_links[@]}"
+      pip_args+=("${WORLDFOUNDRY_PIP_INDEX_ARGS[@]}")
+      if [[ "${#pip_find_link_args[@]}" -gt 0 ]]; then
+        pip_args+=("${pip_find_link_args[@]}")
+      fi
       if [[ -n "$pip_extra_index" ]]; then
         pip_args+=(--extra-index-url "$pip_extra_index")
       fi
       pip_args+=("${pip_packages[@]}")
       "${pip_args[@]}"
     fi
-    for req in "${requirement_files[@]}"; do
-      local req_pip_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install --no-cache-dir)
-      append_pip_index_options req_pip_args
-      append_pip_find_links_options req_pip_args "${pip_find_links[@]}"
-      req_pip_args+=(-r "$req")
-      "${req_pip_args[@]}"
-    done
-    for edit_dir in "${editable_dirs[@]}"; do
-      local edit_pip_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install --no-cache-dir)
-      append_pip_index_options edit_pip_args
-      append_pip_find_links_options edit_pip_args "${pip_find_links[@]}"
-      edit_pip_args+=(-e "$edit_dir")
-      "${edit_pip_args[@]}"
-    done
+    if [[ "${#requirement_files[@]}" -gt 0 ]]; then
+      for req in "${requirement_files[@]}"; do
+        local req_pip_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install --no-cache-dir)
+        req_pip_args+=("${WORLDFOUNDRY_PIP_INDEX_ARGS[@]}")
+        if [[ "${#pip_find_link_args[@]}" -gt 0 ]]; then
+          req_pip_args+=("${pip_find_link_args[@]}")
+        fi
+        req_pip_args+=(-r "$req")
+        "${req_pip_args[@]}"
+      done
+    fi
+    if [[ "${#editable_dirs[@]}" -gt 0 ]]; then
+      for edit_dir in "${editable_dirs[@]}"; do
+        local edit_pip_args=("$CONDA_EXE_PATH" run -p "$env_prefix" python -m pip install --no-cache-dir)
+        edit_pip_args+=("${WORLDFOUNDRY_PIP_INDEX_ARGS[@]}")
+        if [[ "${#pip_find_link_args[@]}" -gt 0 ]]; then
+          edit_pip_args+=("${pip_find_link_args[@]}")
+        fi
+        edit_pip_args+=(-e "$edit_dir")
+        "${edit_pip_args[@]}"
+      done
+    fi
     if [[ "${#pythonpath_dirs[@]}" -gt 0 || -d "$WORLDFOUNDRY_SOURCE_ROOT" ]]; then
       local site_packages
       site_packages="$(find "$env_prefix/lib" -name site-packages -type d | head -1)"
       if [[ -n "$site_packages" ]]; then
         {
           printf '%s\n' "$WORLDFOUNDRY_SOURCE_ROOT"
-          for path in "${pythonpath_dirs[@]}"; do
-            printf '%s\n' "$ROOT/$path"
-          done
+          if [[ "${#pythonpath_dirs[@]}" -gt 0 ]]; then
+            for path in "${pythonpath_dirs[@]}"; do
+              printf '%s\n' "$ROOT/$path"
+            done
+          fi
         } >"$site_packages/worldfoundry.pth"
       fi
     fi

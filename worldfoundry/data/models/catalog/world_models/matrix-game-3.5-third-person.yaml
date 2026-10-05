@@ -1,0 +1,134 @@
+family: Matrix-Game
+id: matrix-game-3.5-third-person
+provider: Riemann Dynamics
+name: Matrix-Game 3.5 Third-Person Base
+aliases:
+- matrix-game-3.5-tp
+- matrix-game-35-third-person
+tasks:
+- image-to-video
+- camera-controlled-video
+- subject-reference-video
+- interactive-world-model
+- long-horizon-generation
+modalities:
+- image
+- text
+- camera-trajectory
+- subject-reference-images
+- video
+output_artifacts:
+- generated_world_video
+checkpoint_refs:
+- repo_id: RiemannDynamics/Matrix-Game-3.5-Base
+  revision: 40c172355efa32d4e2a44076569e310807788f8a
+  filename: third-person.safetensors
+  license: apache-2.0
+  gated: false
+- repo_id: Wan-AI/Wan2.2-TI2V-5B
+  revision: 921dbaf3f1674a56f47e83fb80a34bac8a8f203e
+  license: apache-2.0
+  gated: false
+- repo_id: depth-anything/DA3NESTED-GIANT-LARGE-1.1
+  revision: b2359bdf726fb44ef62acca04d629dcf158053e7
+  license: cc-by-nc-4.0
+  gated: false
+official_sources:
+  project_page: https://matrix-game-v3-5.github.io/
+  technical_report: https://matrix-game-v3-5.github.io/paper/Matrix-Game-3.5.pdf
+  github:
+    url: https://github.com/Riemann-Dynamics/Matrix-Game-3.5
+    revision: 6c94dd787659aa19fac22581cd8bea54e65d813f
+  model_hub:
+    url: https://huggingface.co/RiemannDynamics/Matrix-Game-3.5-Base
+    repo_id: RiemannDynamics/Matrix-Game-3.5-Base
+    filename: third-person.safetensors
+    dependencies:
+    - repo_id: Wan-AI/Wan2.2-TI2V-5B
+      role: backbone
+    - repo_id: depth-anything/DA3NESTED-GIANT-LARGE-1.1
+      role: depth_estimator
+  huggingface:
+  - repo_id: RiemannDynamics/Matrix-Game-3.5-Base
+    revision: 40c172355efa32d4e2a44076569e310807788f8a
+    status: confirmed
+    type: model
+  - repo_id: Wan-AI/Wan2.2-TI2V-5B
+    revision: 921dbaf3f1674a56f47e83fb80a34bac8a8f203e
+    status: confirmed
+    type: model
+  - repo_id: depth-anything/DA3NESTED-GIANT-LARGE-1.1
+    revision: b2359bdf726fb44ef62acca04d629dcf158053e7
+    status: confirmed
+    type: model
+runtime_profile: runtime-profile:matrix-game-3.5-third-person
+pipeline_binding: matrix-game-3.5-third-person
+release_type: code_and_base_weights
+license: apache-2.0
+integration:
+  status: integrated
+  notes:
+  - Revision-pinned inference behavior is integrated through the canonical NativeDiffusionPipeline; no DiffSynth Matrix pipeline remains.
+  - This model ID is permanently bound to third-person.safetensors; its checkpoint has four subject-reference embedding slots and the released runtime accepts at most two references per request.
+  - Checkpoints remain external assets; the shared resolver prefers staged local files and can materialize missing Hub files.
+  - The DA3NESTED-GIANT-LARGE-1.1 dependency is CC-BY-NC-4.0; users must follow its separate non-commercial checkpoint license.
+native_diffusion:
+  recipe_id: matrix-game-3.5-third-person
+  status: assembly_and_checkpoint_structure_verified
+  strategy: standard
+  components:
+  - conditioner
+  - latent_initializer
+  - scheduler
+  - denoiser
+  - decoder
+  checkpoint_key_validation:
+    dit: 829
+    text_encoder: 242
+    vae: 196
+  subject_reference_embedding_capacity: 4
+  artifact_parity: pending_after_native_cutover
+  notes: Mosaic, PRoPE, and subject memory are denoiser conditions; loading, scheduling, CFG, and execution are shared infrastructure.
+runner_parity:
+  status: pending_default_25_step_and_official_sample_parity
+  notes:
+  - CPU contract validation covers model identity, asset resolution, camera NPZ validation, command construction, subject-reference wiring, and result normalization.
+  - On 2026-07-20, the pinned third-person checkpoint and one protagonist reference completed a one-step, one-block A100 80GB smoke run and exported 85 non-empty 1280x704 frames at 16 fps (sha256 5fc946910e815d8e5989fb4f843901880c227aec8b32cf56afb27df5083901b6).
+  - The smoke run validates strict checkpoint loading, subject-reference installation, Mosaic rollout, decoding, and result materialization only.
+  - The recorded A100 artifact predates the final NativeDiffusionPipeline cutover and must be regenerated before native artifact parity can be claimed.
+  - A default 25-step third-person run, reproduction against an upstream official sample, and benchmark scoring remain pending.
+starred: true
+catalog_category: world_models
+catalog_scope: Matrix-Game independent inference models
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+availability:
+  status: open_source
+  open_source: true
+  code: in_tree_native_infer
+  weights: public_upstream
+  license: apache-2.0
+docs:
+  publisher: Riemann Dynamics
+  publisher_kind: company
+  publisher_zh: Riemann Dynamics（黎曼动力）
+  overview: 'Matrix-Game 3.5 Third-Person Base adds subject-reference control to the 3.5 family: alongside camera-NPZ control it accepts up to two protagonist reference images so a consistent character appears in the generated world. This model id is permanently bound to third-person.safetensors; a one-step smoke run with one protagonist reference passed on A100, while the default 25-step run and official sample parity remain pending.'
+  overview_zh: Matrix-Game 3.5 Third-Person Base 为 3.5 家族增加主体参照控制：在 camera NPZ 控制之外，它接受最多两张主角参照图，使生成世界中出现一致的角色。该模型 id 永久绑定 third-person.safetensors；带一张主角参照的单步冒烟运行已在 A100 通过，默认 25 步运行与官方样例一致性仍待验证。
+  architecture: 'Same recorded stack as the first-person profile (Wan2.2-TI2V-5B + Matrix-Game-3.5-Base + DA3 depth, CC-BY-NC-4.0 for the depth dependency), with a difference: the checkpoint has four subject-reference embedding slots, of which the released runtime accepts at most two per request.'
+  architecture_zh: 与第一人称档案相同的记录栈（Wan2.2-TI2V-5B + Matrix-Game-3.5-Base + DA3 深度，深度依赖为 CC-BY-NC-4.0），差异在于：checkpoint 有四个主体参照嵌入槽位，发布的运行时每次请求最多接受两个。
+  usage_notes: Subject references are optional — paths may name an official export directory, one image, or a sequence of zero to four crops (two used). Memory visualization, subject-reference previews, and logs are persisted beside the primary video when produced.
+  usage_notes_zh: 主体参照可选——路径可指向官方导出目录、单张图，或零到四张裁剪图的序列（实际使用两张）。记忆可视化、主体参照预览与日志在生成时保存在主视频旁。
+  limitations:
+  - The default 25-step route and official sample parity are pending (only a one-step smoke passed).
+  - At most two subject references per request in the released runtime.
+  - The DA3 depth dependency is CC-BY-NC-4.0 (non-commercial).
+  limitations_zh:
+  - 默认 25 步路径与官方样例一致性待验证（仅单步冒烟通过）。
+  - 发布运行时每次请求最多两个主体参照。
+  - DA3 深度依赖为 CC-BY-NC-4.0（非商用）。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Long-horizon interactive world-rollout quality.
+    reason_zh: 长时程交互世界滚动生成质量。
+  - id: camerabench
+    reason: Camera-NPZ trajectory adherence.
+    reason_zh: camera NPZ 轨迹贴合度。

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from worldfoundry.evaluation.api import BenchmarkSpec, MetricSpec, WorldTaskConfig
+
 from .schema import BenchmarkZooEntry, load_entries
 
 
@@ -474,7 +475,8 @@ def build_benchmark_zoo_catalog_registry(
     manifest_dir: str | Path | None = None,
 ):
     """Build a CatalogRegistry view over benchmark-zoo BenchmarkSpec objects."""
-    from . import BenchmarkSpec as CatalogBenchmarkSpec, CatalogRegistry
+    from . import BenchmarkSpec as CatalogBenchmarkSpec
+    from . import CatalogRegistry
     from .zoo_registry import load_benchmark_zoo_registry
 
     registry = load_benchmark_zoo_registry(manifest_dir)

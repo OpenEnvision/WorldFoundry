@@ -9,6 +9,18 @@ source_repos:
 - url: https://github.com/wow-world-model/wow-world-model
   revision: 08b010597b69b5e1fde5f69ba44da85aff05bf62
 checkpoints:
+- repo_id: X-Humanoid/WoW-1-Wan-1.3B-2M
+  revision: 2a35e8dd9c17e83fa7eabcb15d79bf26da9cdb17
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/WoW-1-Wan-1.3B-2M
+  role: native_wan_1p3b_structurally_validated_checkpoint
+  required_paths:
+  - config.json
+  - diffusion_pytorch_model.safetensors
+  - WoW_video_dit.pt
+  - models_t5_umt5-xxl-enc-bf16.pth
+  - Wan2.1_VAE.pth
+  - google/umt5-xxl/spiece.model
+  - google/umt5-xxl/tokenizer_config.json
 - repo_id: X-Humanoid/WoW-1-Wan-14B-600k
   revision: 07fbad1a088b85d6977ab3985e354d16f8837253
   local_dir: ${WORLDFOUNDRY_CKPT_DIR}/huggingface/hub/models--WoW-world-model--WoW-1-Wan-14B-600k/snapshots/07fbad1a088b85d6977ab3985e354d16f8837253
@@ -52,9 +64,9 @@ input_schema:
 artifact_kind: generated_video
 artifact_filename: wow.mp4
 execution:
-  backend_stage: official_in_tree_runtime
-  runtime_status: official_wan_14b_workspace_verified
-  integration_status: verified
+  backend_stage: native_wan_and_native_cosmos2
+  runtime_status: native_wan_structurally_validated_dit2b_checkpoint_pending
+  integration_status: runtime_ported
   pipeline_binding: wow
   default_parameters:
     runtime_backend: wan
@@ -74,13 +86,18 @@ execution:
     disable_guardrail: true
     disable_prompt_refiner: true
 integration:
-  status: verified
+  status: runtime_ported
 notes:
-- Official WoW Wan demo is the default backend; it consumes image/video first-frame
-  conditioning plus a text prompt.
-- The vendored WoW DiT 2B runtime is exposed with runtime_backend=dit2b and local
-  dit_path/model_path checkpoint files.
+- The WoW Wan route is assembled from canonical Wan roles; checkpoint structure
+  determines whether first-frame conditioning is VAE-only or also uses CLIP.
+- The local 1.3B 2M release matches the native graph exactly for 825/825 tensors.
+- The WoW DiT 2B route uses the canonical Cosmos Predict2 recipe with the WoW
+  transformer supplied through dit_path/model_path; no copied Cosmos runtime remains.
+- The pinned DiT 2B Hub snapshot does not contain the expected wow_dit_2b.pt file,
+  so callers must provide that local checkpoint and checkpoint-backed validation is pending.
+- Native DiT 2B currently supports one process; canonical Cosmos2 context parallelism,
+  prompt refinement, and guardrails remain explicit pending capabilities.
 - WoWPipeline accepts native Hugging Face repo ids or local checkpoint directories.
 - >
-  Workspace CLI validation uses the official Wan 14B 600k default and expects 41
-  non-empty 832x480 frames at 16 fps with coherent robot/red-bottle visual QA.
+  The recorded Wan 14B 600k Workspace artifact predates the native cutover. A fresh
+  native CUDA run is required before artifact parity can be promoted.

@@ -100,7 +100,7 @@ def _tokenizer_directory(location: str) -> Path:
 def _component_device(requested: str, policy_device: str, minimum_gib: float) -> str:
     import torch
 
-    from worldfoundry.core.device import resolve_inference_device
+    from worldfoundry.core.execution.device import resolve_inference_device
 
     choice = str(requested).strip().lower()
     if choice in {"policy", "same"}:
@@ -135,7 +135,7 @@ def _resize(value: Any, width: int, height: int) -> Any:
     import numpy as np
     from PIL import Image
 
-    from worldfoundry.core.utils.image_utils import load_pil_image
+    from worldfoundry.core.media.processing.image_utils import load_pil_image
 
     image = load_pil_image(value, first_sequence_item=False)
     return np.asarray(image.resize((width, height), resample=Image.Resampling.BILINEAR), dtype=np.uint8)
@@ -234,7 +234,7 @@ class AHAWAMRuntime:
 
         import torch
 
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         from .modeling import restore_ahawam_model
 

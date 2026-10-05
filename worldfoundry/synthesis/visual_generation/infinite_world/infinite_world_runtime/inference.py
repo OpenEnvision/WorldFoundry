@@ -132,7 +132,7 @@ def _load_dit_state_dict(checkpoint_path: str, model_root: str):
 
 
 def _set_single_process_context_parallel():
-    from worldfoundry.core.distributed import context_parallel_util as cp_util
+    from worldfoundry.core.distributed.model_parallel import context_state as cp_util
 
     cp_util.dp_rank = 0
     cp_util.dp_size = 1

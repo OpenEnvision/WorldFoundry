@@ -5,7 +5,7 @@ from collections import defaultdict
 import torch
 from safetensors.torch import load_file
 
-from worldfoundry.core.checkpoint import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 from videox_fun.utils.group_offload import (
     _is_group_offload_enabled,

@@ -1,6 +1,6 @@
 schema_version: 2
 model_id: video-depth-anything-prior
-display_name: Video Depth Anything Prior
+display_name: Video Depth Anything
 task_family: three_dimension
 groups:
 - 3d

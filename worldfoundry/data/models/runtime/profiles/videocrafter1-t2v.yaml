@@ -11,7 +11,7 @@ source_repos:
 checkpoints:
 - role: text_to_video_checkpoint
   repo_id: VideoCrafter/Text2Video-1024
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/video_models/videocrafter_t2v_1024_v1.ckpt
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/VideoCrafter--Text2Video-1024/model.ckpt
 input_schema:
   prompt: true
   image: false

@@ -10,12 +10,15 @@ that heterogeneous YAML manifests can be coerced into a consistent typed shape.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
 from ...api.json_contract import JsonContract, require_mapping, to_plain
 from ...utils import load_manifest
+
+LOGGER = logging.getLogger(__name__)
 
 
 # ── Canonical status sets ────────────────────────────────────
@@ -54,12 +57,117 @@ _UNKNOWN_SOURCE_ALIASES = frozenset(
 )
 _API_ALIASES = frozenset({"api", "api_or_closed", "commercial_api", "restricted_api"})
 _CLOSED_ALIASES = frozenset({"closed", "closed_source", "proprietary"})
-_INTEGRATED_INTEGRATION_ALIASES = frozenset({"runtime_ported", "route_ready", "runner_ready"})
+# Registered integration-status vocabulary.  ``integrated`` means the in-tree
+# integration surface (runner/pipeline wiring) exists; how far it has been
+# validated is tracked separately by ``demo_parity``/``runner_parity``.  The
+# checked-in catalog records that evidence directly in ``integration.status``
+# strings, so every status that asserts an existing (at least statically
+# validated) in-tree surface normalizes to ``integrated`` instead of silently
+# degrading to ``planned`` and dropping the model from runnable listings.
+_INTEGRATED_INTEGRATION_ALIASES = frozenset(
+    {
+        "runtime_ported",
+        "route_ready",
+        "runner_ready",
+        "verified",
+        "runnable",
+        "component_verified",
+        "checkpoint_gpu_validated",
+        "all_released_checkpoints_gpu_validated",
+        "checkpoint_backed_runtime_ready",
+        "implemented_checkpoint_pending",
+        "in_tree_checkpoint_gated_runtime",
+        "in_tree_checkpoint_runtime",
+        "in_tree_checkpoint_runtime_checkpoint_gpu_probe_verified",
+        "in_tree_checkpoint_runtime_gpu_forward_server_init_verified",
+        "in_tree_checkpoint_runtime_gpu_server_init_verified_rollout_pending",
+        "in_tree_checkpoint_runtime_static_validated",
+        "in_tree_checkpoint_runtime_static_verified",
+        "in_tree_in_process_checkpoint_runtime",
+        "in_tree_runtime_selected_checkpoint_gpu_validated",
+        "in_tree_vendored_import_verified",
+        "in_tree_vendored_checkpoint_pending",
+        "in_tree_checkpoint_validation_pending",
+        "in_tree_runtime_checkpoint_validation_pending",
+    }
+)
 
 # ── Alias normalisation sets ─────────────────────────────────
 
-_PENDING_INTEGRATION_ALIASES = frozenset({"pending", "todo", "not_started", "not_applicable"})
-_PENDING_DEMO_ALIASES = frozenset({"pending_checkpoint_and_demo", "pending_demo", "pending_parity"})
+_PENDING_INTEGRATION_ALIASES = frozenset(
+    {
+        "pending",
+        "todo",
+        "not_started",
+        "not_applicable",
+        # Metadata/staging states: catalog entry exists but no runnable
+        # in-tree surface has landed (or its static validation is still in
+        # progress), so they stay in the ``planned`` bucket.
+        "metadata_only",
+        "metadata_only_post_training_base",
+        "checkpoint_asset_only",
+        "checkpoint_assets_staged_cpu_schema_validated_gpu_pending",
+        "entrypoint_profiled_runtime_port_pending",
+        "in_tree_import_verification_in_progress",
+    }
+)
+_PENDING_DEMO_ALIASES = frozenset(
+    {
+        "pending_checkpoint_and_demo",
+        "pending_demo",
+        "pending_parity",
+        # Registered staging/component-level demo states from the checked-in
+        # catalog.  They record partial evidence (implemented code, staged or
+        # statically validated checkpoints, component-level checks) but NOT a
+        # completed end-to-end demo parity run, so they normalize to
+        # ``pending`` without triggering the unregistered-status warning.
+        "checkpoint_environment_required",
+        "checkpoint_required",
+        "component_verified_worldgen_pending",
+        "configured",
+        "implemented",
+        "implemented_checkpoint_pending",
+        "implemented_hidden_weights_pending",
+        "implemented_local_extension_pending",
+        "implemented_pending_gpu_parity",
+        "implemented_pending_native_gpu_parity",
+        "implemented_public_checkpoint_not_staged",
+        "in_tree_checkpoint_runtime",
+        "in_tree_inference_ready_checkpoint_pending",
+        "in_tree_vendor_ready_checkpoint_pending",
+        "integrated",
+        "native_checkpoint_layout_validated",
+        "native_checkpoint_validated",
+        "native_pipeline_cuda_artifact_pending",
+        "not_recorded",
+        "official_in_process_runtime_static_checkpoint_validation_complete",
+        "partial",
+        "partial_studio_visual_validation_verified",
+        "planned",
+        "runtime_ported",
+        "static_runtime_verified",
+        "static_runtime_verified_checkpoint_assets_staged",
+        "structural_validation_passed",
+    }
+)
+# Demo states that record a completed checkpoint-backed GPU demo/parity run in
+# the catalog.  Only statuses that explicitly claim that end-to-end evidence
+# normalize to ``verified``; component/static validation stays ``pending``.
+_VERIFIED_DEMO_ALIASES = frozenset(
+    {
+        "full_demo_verified",
+        "full_default_gpu_parity_verified",
+        "passed",
+        "checkpoint_verified",
+        "checkpoint_backed_verified",
+        "checkpoint_gpu_validated",
+        "selected_checkpoint_gpu_validated",
+        "all_declared_variants_checkpoint_gpu_validated",
+        "all_released_checkpoints_gpu_validated",
+        "robotwin_and_umi_checkpoints_gpu_validated",
+        "converted_checkpoint_strict_restore_and_gpu_action_probe_validated",
+    }
+)
 
 # ── Type aliases and shared helpers ──────────────────────────
 
@@ -159,14 +267,50 @@ def _normalize_source_status(value: Any) -> str:
         return "api"
     if normalized in _CLOSED_ALIASES:
         return "closed"
+    _warn_unknown_status_once("source_status", normalized, "unknown")
     return "unknown"
+
+
+_WARNED_UNKNOWN_STATUSES: set[tuple[str, str]] = set()
+
+
+def _warn_unknown_status_once(kind: str, raw_value: str, fallback: str) -> None:
+    """Surface unknown status literals without flooding the log.
+
+    The checked-in catalog currently carries dozens of freeform status strings
+    (data cleanup is owned by the catalog data track), so the first unknown
+    value logs a WARNING pointing at DEBUG for the full list; every unique
+    value is logged once at DEBUG.
+    """
+    key = (kind, raw_value)
+    if key in _WARNED_UNKNOWN_STATUSES:
+        return
+    first_unknown = not _WARNED_UNKNOWN_STATUSES
+    _WARNED_UNKNOWN_STATUSES.add(key)
+    if first_unknown:
+        LOGGER.warning(
+            "Model catalog contains unregistered status values (first: %s %r, normalized to %r). "
+            "Enable DEBUG logging for the full list; register intentional values in schema.py.",
+            kind,
+            raw_value,
+            fallback,
+        )
+    LOGGER.debug(
+        "Unknown %s %r in model catalog; normalizing to %r.",
+        kind,
+        raw_value,
+        fallback,
+    )
 
 
 def _normalize_integration_status(value: Any) -> str:
     """Normalize and map varying integration status strings/aliases to canonical states.
 
     Accepts raw strings, nested mappings, and aliases like ``"runtime_ported"``
-    → ``"integrated"``, ``"pending"`` → ``"planned"``.
+    → ``"integrated"``, ``"pending"`` → ``"planned"``.  Unregistered values
+    fall back to ``"planned"`` and are logged (see
+    :func:`_warn_unknown_status_once`) so a typo cannot make a model silently
+    disappear from runnable listings.
     """
     if isinstance(value, Mapping):
         value = value.get("status", "planned")
@@ -179,6 +323,7 @@ def _normalize_integration_status(value: Any) -> str:
         return "blocked"
     if normalized in _PENDING_INTEGRATION_ALIASES or normalized.startswith("pending"):
         return "planned"
+    _warn_unknown_status_once("integration_status", normalized, "planned")
     return "planned"
 
 
@@ -186,15 +331,19 @@ def _normalize_demo_status(value: Any) -> str:
     """Normalize and map varying demo parity status strings/aliases to canonical states.
 
     Accepts raw strings, nested mappings, and aliases like
-    ``"pending_demo"`` → ``"pending"``.
+    ``"pending_demo"`` → ``"pending"``.  Unregistered values fall back to
+    ``"pending"`` and are logged (see :func:`_warn_unknown_status_once`).
     """
     if isinstance(value, Mapping):
         value = value.get("status", "not_applicable")
     normalized = str(value or "not_applicable").strip().lower()
     if normalized in DEMO_PARITY_STATUSES:
         return normalized
+    if normalized in _VERIFIED_DEMO_ALIASES:
+        return "verified"
     if normalized in _PENDING_DEMO_ALIASES or normalized.startswith("pending"):
         return "pending"
+    _warn_unknown_status_once("demo_status", normalized, "pending")
     return "pending"
 
 
@@ -334,25 +483,13 @@ def _hf_repo_ids_from_entry(entry: Mapping[str, Any]) -> list[str]:
         else:
             add(checkpoint_item)
 
-    official_sources = entry.get("official_sources")
-    if isinstance(official_sources, Mapping):
-        huggingface = official_sources.get("huggingface")
-        if isinstance(huggingface, (list, tuple)):
-            for item in huggingface:
-                if isinstance(item, Mapping):
-                    if _hf_source_status_allows_checkpoint(item):
-                        add(item.get("repo_id") or item.get("url"))
-                else:
-                    add(item)
-        elif isinstance(huggingface, Mapping):
-            if _hf_source_status_allows_checkpoint(huggingface):
-                add(huggingface.get("repo_id") or huggingface.get("url"))
-        else:
-            add(huggingface)
-
-    sources = entry.get("sources")
-    if isinstance(sources, Mapping):
-        huggingface = sources.get("huggingface")
+    # official_sources and sources share the same HF payload shape; keep the
+    # precedence order (official first) while parsing both with one code path.
+    for source_key in ("official_sources", "sources"):
+        container = entry.get(source_key)
+        if not isinstance(container, Mapping):
+            continue
+        huggingface = container.get("huggingface")
         if isinstance(huggingface, (list, tuple)):
             for item in huggingface:
                 if isinstance(item, Mapping):
@@ -587,10 +724,17 @@ def _checkpoint_refs_from_entry(entry: Mapping[str, Any], checkpoint_data: Mappi
         else:
             refs.append(CheckpointRef(hf_repo_id=str(item)))
 
-    official_sources = entry.get("official_sources")
-    if isinstance(official_sources, Mapping):
-        for key in ("huggingface", "huggingface_models", "hf_models", "models"):
-            values = official_sources.get(key)
+    # official_sources historically accepts more HF key spellings than sources;
+    # both share one parsing path with their accepted keys parameterized.
+    for source_key, hf_keys in (
+        ("official_sources", ("huggingface", "huggingface_models", "hf_models", "models")),
+        ("sources", ("huggingface",)),
+    ):
+        container = entry.get(source_key)
+        if not isinstance(container, Mapping):
+            continue
+        for key in hf_keys:
+            values = container.get(key)
             items = values if isinstance(values, (list, tuple)) else (values,)
             for item in items:
                 if isinstance(item, Mapping):
@@ -598,17 +742,6 @@ def _checkpoint_refs_from_entry(entry: Mapping[str, Any], checkpoint_data: Mappi
                         refs.append(_checkpoint_ref_from_repo_mapping(item))
                 elif item is not None:
                     refs.append(CheckpointRef(hf_repo_id=_repo_id_from_hf_url(item) or str(item)))
-
-    sources = entry.get("sources")
-    if isinstance(sources, Mapping):
-        values = sources.get("huggingface")
-        items = values if isinstance(values, (list, tuple)) else (values,)
-        for item in items:
-            if isinstance(item, Mapping):
-                if _hf_source_status_allows_checkpoint(item):
-                    refs.append(_checkpoint_ref_from_repo_mapping(item))
-            elif item is not None:
-                refs.append(CheckpointRef(hf_repo_id=_repo_id_from_hf_url(item) or str(item)))
 
     if entry.get("hf_repo_id"):
         refs.append(CheckpointRef(hf_repo_id=str(entry["hf_repo_id"])))
@@ -1094,9 +1227,19 @@ def iter_model_zoo_payloads(payload: Any) -> list[Mapping[str, Any]]:
 
 
 def load_entries(path: str | Path) -> tuple[ModelZooEntry, ...]:
-    """Load, parse, and return all ModelZooEntry definitions from a manifest file."""
-    payload = load_manifest(Path(path))
-    return tuple(ModelZooEntry.from_dict(item) for item in iter_model_zoo_payloads(payload))
+    """Load, parse, and return all ModelZooEntry definitions from a manifest file.
+
+    Schema validation errors are re-raised with the manifest path prepended.
+    """
+    resolved = Path(path)
+    payload = load_manifest(resolved)
+    entries: list[ModelZooEntry] = []
+    for item in iter_model_zoo_payloads(payload):
+        try:
+            entries.append(ModelZooEntry.from_dict(item))
+        except (TypeError, ValueError) as exc:
+            raise type(exc)(f"{resolved}: {exc}") from exc
+    return tuple(entries)
 
 
 def select_default_variant(

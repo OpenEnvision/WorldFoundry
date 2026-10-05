@@ -50,8 +50,12 @@ def _ray_condition(
     columns = columns.reshape(1, 1, height * width).expand(batch, 1, -1) + 0.5
     rows = rows.reshape(1, 1, height * width).expand(batch, 1, -1) + 0.5
     fx, fy, cx, cy = intrinsics.chunk(4, dim=-1)
-    z = torch.ones_like(columns)
-    directions = torch.stack(((columns - cx) / fx * z, (rows - cy) / fy * z, z.expand_as(rows)), dim=-1)
+    # Broadcasting the per-frame intrinsics expands x/y from [B, 1, HW] to
+    # [B, F, HW].  Build z from that expanded shape as well; using
+    # ``ones_like(columns)`` leaves z at [B, 1, HW] and makes torch.stack fail
+    # for multi-frame camera trajectories.
+    z = torch.ones_like((columns - cx) / fx)
+    directions = torch.stack(((columns - cx) / fx, (rows - cy) / fy, z), dim=-1)
     directions = directions / directions.norm(dim=-1, keepdim=True)
     rays_d = directions @ c2w[..., :3, :3].transpose(-1, -2)
     rays_o = c2w[..., :3, 3][:, :, None].expand_as(rays_d)

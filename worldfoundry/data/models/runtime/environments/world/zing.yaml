@@ -1,0 +1,32 @@
+schema_version: 2
+model_id: zing
+env_name: zing
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+conda_packages:
+- python
+- pip
+- ffmpeg
+pip_packages:
+- torch>=2.6
+- torchvision
+- transformers>=4.49
+- safetensors
+- accelerate
+- einops
+- numpy
+- pillow
+- pyyaml
+- imageio
+- imageio-ffmpeg
+- sentencepiece
+- ftfy
+validation_imports:
+- torch
+- yaml
+- ftfy
+- worldfoundry.base_models.diffusion_model.loaders.wan_interactive
+- worldfoundry.synthesis.visual_generation.zing
+notes:
+- CUDA inference dependencies are optional and separate from the CPU catalog installation.

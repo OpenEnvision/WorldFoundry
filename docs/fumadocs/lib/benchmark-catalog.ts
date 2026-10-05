@@ -25,9 +25,8 @@ const catalog = catalogStatus as Record<string, BenchmarkCatalogEntry>;
 
 export type BenchmarkCatalogItem = BenchmarkCatalogEntry & { id: string };
 
-export const benchmarkCatalogEntries: BenchmarkCatalogItem[] = Object.entries(catalog).map(
-  ([id, entry]) => ({ id, ...entry }),
-);
+export const benchmarkCatalogEntries: BenchmarkCatalogItem[] = Object.entries(catalog)
+  .map(([id, entry]) => ({ id, ...entry }));
 
 export function getBenchmarkCatalogEntry(benchmarkId: string): BenchmarkCatalogEntry | undefined {
   return catalog[benchmarkId];

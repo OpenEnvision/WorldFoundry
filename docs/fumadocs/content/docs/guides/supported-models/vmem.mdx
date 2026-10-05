@@ -1,0 +1,50 @@
+---
+title: "VMem"
+description: "VMem from University of Oxford: video-generation and memory; Verified."
+modelId: "vmem"
+pageSource: generated
+---
+
+VMem is an interactive video scene generation model with a surfel-indexed view memory: as you navigate a scene, it remembers which surfaces were seen from where, keeping new views consistent with the past. Both integration and runner status are verified — Studio/API visual validation ran the in-tree runtime with staged VMem and CUT3R checkpoints, reproducing the official navigation demo.
+
+<ModelPaperFigures modelId="vmem" locale="en" />
+
+The recorded paper is [VMem: Consistent Interactive Video Scene Generation with Surfel-Indexed View Memory](https://arxiv.org/abs/2506.18903) (ICCV 2025 highlight, 2025).
+
+Project page: [v-mem.github.io](https://v-mem.github.io/). Code: [runjiali-rl/vmem](https://github.com/runjiali-rl/vmem).
+
+<ModelCommandBuilder modelId="vmem" locale="en" />
+
+## What it is for
+
+Use `vmem` for catalog world-model inference. Choose it when you need action-conditioned future frames rather than a standalone clip generator.
+
+VMem indexes past views by surface elements (surfels) and retrieves only the relevant ones to condition generation of the next view (per the publication, arXiv 2506.18903). The route depends on CUT3R as its geometry backbone; both checkpoints must be staged. It is published by University of Oxford.
+
+Catalog tasks include video-generation, memory, stream, and interactive-world-model. Documented outputs include video.
+
+Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Scores camera-navigable generated scenes).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, and `reset_state`; artifacts `vmem.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `VMemPipeline`.
+
+Family status: **Verified**.
+
+One of the few fully verified interactive routes in the video category — the in-tree Studio/API route produced and visually validated the official-style navigation demo on 2026-06-27. Inputs cover prompt/image/video/actions; outputs are generated_video artifacts.
+
+In-tree VMem runtime at worldfoundry/synthesis/visual_generation/vmem/vmem_runtime; no external checkout is required.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run vmem --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `liguang0115/vmem`, `liguang0115/cut3r`, and `SagiPolaczek/stable-diffusion-2-1-base` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh vmem`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="vmem" locale="en" />

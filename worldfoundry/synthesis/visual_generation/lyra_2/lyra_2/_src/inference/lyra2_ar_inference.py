@@ -26,9 +26,9 @@ from lyra_2._src.utils.forward_warp_utils_pytorch import (
     reliable_depth_mask_range_batch,
 )
 
-from worldfoundry.core.distributed.logging import log
-from worldfoundry.core.distributed.megatron_compat import parallel_state
-from worldfoundry.core.utils import inference_runtime as misc
+from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.distributed.model_parallel.megatron_compat import parallel_state
+from worldfoundry.core.execution import inference_runtime as misc
 from worldfoundry.data.io import save_img_or_video
 
 torch.enable_grad(False)

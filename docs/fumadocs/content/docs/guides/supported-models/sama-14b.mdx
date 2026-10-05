@@ -1,0 +1,48 @@
+---
+title: "SAMA"
+description: "SAMA: video-editing; Runner parity pending."
+modelId: "sama-14b"
+pageSource: generated
+---
+
+SAMA 14B is an open instruction-guided video editing model: it takes a source video and a text instruction. The released inference route does not accept a spatial mask or separate reference image. WorldFoundry reports missing checkpoints at runtime; weights are apache-2.0 at syxbb/SAMA-14B.
+
+<ModelPaperFigures modelId="sama-14b" locale="en" />
+
+The recorded paper is [arXiv 2603.19228](https://arxiv.org/abs/2603.19228).
+
+Project page: [cynthiazxy123.github.io/SAMA](https://cynthiazxy123.github.io/SAMA/). Code: [Cynthiazxy123/SAMA](https://github.com/Cynthiazxy123/SAMA).
+
+<ModelCommandBuilder modelId="sama-14b" locale="en" />
+
+## What it is for
+
+Use `sama-14b` for catalog video-to-video inference. Start here when the input is already a video.
+
+The catalog records a 14B-parameter editing model with a prompt/image/video input contract; the publishing institution and architecture internals are not recorded in this repository — consult the upstream GitHub (Cynthiazxy123/SAMA) for details.
+
+Catalog tasks include video-editing.
+
+## Runtime contract
+
+Optional `prompt`, `negative_prompt`, `input_path`, `frames`, and `fps`; artifacts `sama-14b.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `SAMA14BPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `interactive-video` defaults: fps=16, height=480, width=832, seed=1.
+
+Supply a source video and edit instruction. A checkpoint-backed 17-frame run was compared with the official implementation; broader editing quality remains unverified.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run sama-14b --pipeline.task-profile interactive-video` to edit the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `syxbb/SAMA-14B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh sama-14b`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="sama-14b" locale="en" />

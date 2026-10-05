@@ -48,6 +48,22 @@ from diffusers.schedulers import (
     UnCLIPScheduler,
 )
 from diffusers.utils.import_utils import BACKENDS_MAPPING
+from worldfoundry.core.io.paths import checkpoint_root_path
+
+
+def _local_clip_text_model_path():
+    root = checkpoint_root_path()
+    for name in ("openai--clip-vit-large-patch14", "clip-vit-large-patch14"):
+        candidate = root / name
+        if (candidate / "config.json").is_file() and any(
+            (candidate / filename).is_file()
+            for filename in ("model.safetensors", "pytorch_model.bin")
+        ):
+            return candidate.resolve()
+    raise FileNotFoundError(
+        "AnimateDiff requires openai/clip-vit-large-patch14 under "
+        "$WORLDFOUNDRY_CKPT_DIR/openai--clip-vit-large-patch14"
+    )
 
 
 def shave_segments(path, n_shave_prefix_segments=1):
@@ -714,7 +730,7 @@ def convert_ldm_bert_checkpoint(checkpoint, config):
 
 
 def convert_ldm_clip_checkpoint(checkpoint):
-    text_model = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14")
+    text_model = CLIPTextModel.from_pretrained(str(_local_clip_text_model_path()), local_files_only=True)
     keys = list(checkpoint.keys())
 
     text_model_dict = {}
@@ -925,7 +941,7 @@ def stable_unclip_image_noising_components(
             if clip_stats_path is None:
                 raise ValueError("This stable unclip config requires a `clip_stats_path`")
 
-            clip_mean, clip_std = torch.load(clip_stats_path, map_location=device)
+            clip_mean, clip_std = torch.load(clip_stats_path, map_location=device, weights_only=True)
             clip_mean = clip_mean[None, :]
             clip_std = clip_std[None, :]
 

@@ -1,0 +1,30 @@
+---
+title: "Cosmos Transfer 2.5"
+description: "NVIDIA sim-to-real arm: control video in, photoreal world video out. Native VACE on the Predict 2.5 runner; 2B edge is the recorded route."
+modelId: "cosmos-transfer-2.5"
+pageSource: authored
+---
+
+Cosmos Transfer 2.5 is the **sim-to-real / world-to-world** arm of the Cosmos 2.5 generation. A **control video** (raw RGB, edge map, or simulation render) plus a prompt go in; a photoreal world video that **follows that control** comes out. This card is **not** [Predict 2](/docs/guides/supported-models/cosmos-predict-2), **not** [Predict 2.5](/docs/guides/supported-models/cosmos-predict-2.5), and **not** [Cosmos 3](/docs/guides/supported-models/cosmos3). Predict cards synthesize future world video from text/image/video. Transfer **translates** an already-structured control signal.
+
+<ModelPaperFigures modelId="cosmos-transfer-2.5" locale="en" />
+
+It reuses Predict 2.5's **native** stack — Reason1 conditioner, flow-UniPC, shared Wan VAE, same loader — and adds only the checkpoint-shaped **VACE** control branch (four blocks at base layers 0/7/14/21, plus an 8-modality control embedder on the 28-layer base). **No Diffusers**, no ControlNet backend, no NVIDIA runtime package. Paper: [World Simulation with Video Foundation Models for Physical AI](https://arxiv.org/abs/2511.00062) (the same 2.5 write-up that covers Predict 2.5). Code: [nvidia-cosmos/cosmos-transfer2.5](https://github.com/nvidia-cosmos/cosmos-transfer2.5).
+
+The recorded WorldFoundry variant is **`cosmos-transfer-2.5-2b`** only. Catalog notes a checkpoint-backed 2B **edge** run at **1280×704, 93 frames, 35 steps**. A 14B Hugging Face card exists (`nvidia/Cosmos-Transfer2.5-14B`) but is access-gated and **not** a verified WorldFoundry route here. Weights use the gated `nvidia-open-model-license`.
+
+<ModelCommandBuilder modelId="cosmos-transfer-2.5" locale="en" />
+
+## What it is for
+
+Turn structured control into photoreal world video. Launch `worldfoundry-eval run cosmos-transfer-2.5-2b`. Required inputs: `prompt`, `image`, `video`. The `actions` field is **`control_video`**. Artifact: `cosmos-transfer2.5-2b-controlled-video.mp4`.
+
+Give the native route a **raw RGB** control clip and it extracts **Canny** edges itself. Set `control_is_preprocessed` only when the clip is already an edge map. This is not text-to-world (Predict 2.5) and not T5-conditioned video2world (Predict 2).
+
+Score controlled world video on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) and [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq). Those are catalog entry points, not ingested WorldFoundry scores.
+
+## Running in WorldFoundry
+
+`CosmosTransfer2p5Pipeline` runs in `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage the official 2B **edge** checkpoint `nvidia/Cosmos-Transfer2.5-2B` **and** the Predict 2.5 VAE plus Reason1 text encoder. If those gated files are missing, the runtime profile still marks exact checkpoint-key / GPU parity as pending even though the catalog records the 2B edge geometry above.
+
+<ModelRelatedRecipes modelId="cosmos-transfer-2.5" locale="en" />

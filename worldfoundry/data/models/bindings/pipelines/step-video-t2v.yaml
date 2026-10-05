@@ -3,7 +3,7 @@ binding_id: step-video-t2v
 model_id: step-video-t2v
 runner: worldfoundry.pipeline
 pipeline:
-  target: worldfoundry.pipelines.component_pipelines:StepVideoT2VPipeline
+  target: worldfoundry.pipelines.step_video.pipeline_step_video_t2v:StepVideoT2VPipeline
   loading:
     method: from_pretrained
     signature: unified

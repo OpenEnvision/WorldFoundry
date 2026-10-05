@@ -1,0 +1,48 @@
+---
+title: "Kairos Sensenova"
+description: "Kairos Sensenova from SenseTime (SenseNova): text-to-video and image-to-video; Verified; dedicated `kairos-sensenova`."
+modelId: "kairos-sensenova"
+pageSource: generated
+---
+
+Kairos Sensenova is SenseTime's embodied world-model video generator: a 4B model covering text-, image-, and text+image-to-video with a robot-oriented distilled recipe. In this catalog both integration and runner are verified — the default robot 4B 480P DMD text-to-video recipe runs through the in-tree Apache-2.0 torchrun runtime with 8 ranks.
+
+<ModelPaperFigures modelId="kairos-sensenova" locale="en" />
+
+The recorded paper is [arXiv 2606.16533](https://arxiv.org/abs/2606.16533).
+
+Code: [kairos-agi/kairos-sensenova](https://github.com/kairos-agi/kairos-sensenova).
+
+<ModelCommandBuilder modelId="kairos-sensenova" locale="en" />
+
+## What it is for
+
+`kairos-sensenova` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+
+The default runnable variant follows the official robot 4B 480P distilled recipe (kairos_4b_config_DMD.py): 81 frames, 480x640, cfg_scale 5, tiled VAE decode, no CFG-parallel. Recorded checkpoints cover the robot 480P distilled, 480P pretrained, and 720P variants; the config layout expects Kairos, Qwen, and Wan2.1-T2V-14B subdirectories. It is published by SenseTime (SenseNova).
+
+Catalog tasks include text-to-video, image-to-video, text-image-to-video, and embodied-world-model. Catalog aliases include `Kairos`, `Kairos Sensenova`, `kairos-4b`, and `kairos-sensenova-4b`. Documented modalities: text and image in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Video quality for text/image-to-video output), [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) (Embodied world-model prediction quality).
+
+## Runtime contract
+
+Optional `prompt`, `negative_prompt`, `frames`, `height`, and `width`; artifacts `kairos-sensenova.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `KairosPipeline`.
+
+Family status: **Verified**.
+
+Recorded `default` defaults: frames=81, height=480, width=640, seed=0.
+
+Set WORLDFOUNDRY_KAIROS_MODELS_ROOT (or models_root) to a directory matching the official config layout. 720P and non-distilled variants need the corresponding checkpoint paths and config override.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run kairos-sensenova --pipeline.task-profile default` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+Recorded weight repositories include `kairos-agi/kairos-sensenova-robot-4B-480P-distilled`, `kairos-agi/kairos-sensenova-4B-480P-pretrained`, and `kairos-agi/kairos-sensenova-4B-720P`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh kairos-sensenova`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="kairos-sensenova" locale="en" />

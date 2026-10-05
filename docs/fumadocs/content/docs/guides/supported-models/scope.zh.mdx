@@ -1,0 +1,32 @@
+---
+title: "SCOPE"
+description: "SCOPE：`image`、`prompt` 进，`generated_video`、`scope.mp4` 出；runner 已验证。"
+modelId: "scope"
+pageSource: authored
+---
+
+SCOPE 是基于 Wan 基座的交互式游戏世界模型：输入图像与逐步动作，输出游戏世界视频（论文 arXiv 2605.23345）。本 catalog 中集成与 runner 均已验证——图像+动作到视频的 demo 经 Workspace 推理路径运行，使用就位的 zizhaotong/SCOPE 权重、树内示例图与动作 parquet。
+
+<ModelPaperFigures modelId="scope" locale="zh" />
+
+论文是 [SCOPE: Simulating Cross-game Operations in Playable Environments for FPS World Models](https://arxiv.org/abs/2605.23345)。项目页：[z2tong.github.io/SCOPE](https://z2tong.github.io/SCOPE)。代码：[z2tong/SCOPE](https://github.com/z2tong/SCOPE)。
+
+别名包括 `scope-world-model`、`zizhaotong/SCOPE`。
+
+<ModelCommandBuilder modelId="scope" locale="zh" />
+
+## 用来做什么
+
+把 SCOPE 当动作条件世界路径来跑。启动 `worldfoundry-eval run scope`，任务 profile 为 `interactive-world-model`——必填 `image`、`prompt`；产物 `generated_video`、`scope.mp4`。
+
+评测看 [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)。
+
+## 运行时契约
+
+必填：`image`、`prompt`。 可选：`video`。 动作字段：action_parquet。 产物：`generated_video`、`scope.mp4`。 状态：**Verified**。 SCOPEPipeline 在未提供 execute=True 时快速失败，提供后调用树内原生组装。权重保持为外部 HF 资产，通过 model_dir/checkpoint_root 或 SCOPE_MODEL_DIR 注入。
+
+## 在 WorldFoundry 中运行
+
+跑在统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。 把 `zizhaotong/SCOPE` 就位到本地——运行时不代下权重。 启动 `worldfoundry-eval run scope`，任务 profile 为 `interactive-world-model`。
+
+<ModelRelatedRecipes modelId="scope" locale="zh" />

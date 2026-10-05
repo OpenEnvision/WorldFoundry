@@ -1,15 +1,3 @@
-"""Migrated Studio visualization plugin group.
+"""Perception output rendering and Wan Animate pose conditioning."""
 
-Concrete helpers live in submodules so optional visualization dependencies stay lazy.
-"""
-
-from __future__ import annotations
-
-__all__ = [
-    "hed_annotator",
-    "human_pose",
-    "optical_flow",
-    "render",
-    "sky_segmentation",
-    "tracks",
-]
+__all__ = ["human_pose", "render"]

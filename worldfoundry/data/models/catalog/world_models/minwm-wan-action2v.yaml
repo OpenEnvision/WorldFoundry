@@ -9,6 +9,8 @@ source:
 runtime_profile: runtime-profile:minwm-wan-action2v
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: minwm-wan-action2v
+official_sources:
+  paper: https://arxiv.org/abs/2605.30263
 integration:
   status: integrated
   notes: [Official source is vendored at revision df522a26cd4409d3e3e8f269cc98eac069b5df47.]
@@ -16,3 +18,23 @@ runner_parity:
   status: pending
   notes: [Dedicated Wan2.1 Action2V DMD entrypoint and native action-token route are wired.]
 catalog_category: world_models
+docs:
+  publisher: Shengshu Technology
+  publisher_kind: company
+  publisher_zh: 生数科技（Shengshu AI）
+  overview: 'minWM Wan Action2V is the Wan2.1 sibling of Shengshu''s minimal world-model recipe: trajectory in, action-conditioned camera-controllable video out, through a distilled DMD entrypoint. In this catalog the dedicated Wan2.1 Action2V route and native action-token path are wired; runner parity waits on the checkpoint.'
+  overview_zh: minWM Wan Action2V 是生数科技极简世界模型配方的 Wan2.1 同门：输入轨迹，经蒸馏 DMD 入口输出动作条件、相机可控的视频。本 catalog 中专用 Wan2.1 Action2V 路径与原生动作 token 路径已接通； runner parity 待 checkpoint 就位。
+  architecture: The official source is vendored at a pinned revision (apache-2.0). Only Wan21/Action2V/dmd/model.pt is required from the 384.97 GB upstream minWM repository.
+  architecture_zh: 官方源码以固定 revision 内置（apache-2.0）。上游 384.97 GB minWM 仓库中仅需 Wan21/Action2V/dmd/model.pt。
+  usage_notes: Inputs are prompt and trajectory. Stage the single required model.pt before expecting artifacts; the HunyuanVideo sibling is minwm-hy-action2v.
+  usage_notes_zh: 输入为提示词与轨迹。期望得到产物前请先就位唯一所需的 model.pt；HunyuanVideo 同门为 minwm-hy-action2v。
+  limitations:
+  - Runner parity is pending the staged model.pt.
+  - Prompt+trajectory input only — no image conditioning on this route.
+  limitations_zh:
+  - runner parity 待 model.pt 就位。
+  - 仅提示词+轨迹输入——该路径无图像条件。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera/motion-trajectory adherence.
+    reason_zh: 相机/运动轨迹贴合度。

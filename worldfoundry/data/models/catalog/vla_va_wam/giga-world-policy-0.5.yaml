@@ -8,6 +8,8 @@ availability: open_source
 provider: official_repo
 license: apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2607.13960
+  project_page: https://open-gigaai.github.io/giga-world-policy/
   github:
     url: https://github.com/open-gigaai/giga-world-policy
     head_sha: 3c36880111d3dd422c9d4ac1a26c3154f8922538
@@ -23,7 +25,7 @@ checkpoint:
   required_task_assets:
   - task-specific norm_stats_delta.json
 integration:
-  status: in_tree_checkpoint_gated_runtime
+  status: integrated
   notes:
   - Exact released action-centered Mixture-of-Transformers and official action-only diffusion loop execute in process.
   - The released transformer is a pretrained initialization; task deployment additionally requires local post-training statistics and, when applicable, a task-finetuned transformer directory.
@@ -38,3 +40,19 @@ pipeline_binding: giga-world-policy-0.5
 runtime_profile: runtime-profile:giga-world-policy-0.5
 catalog_category: vla_va_wam
 schema_version: 2
+docs:
+  publisher: GigaAI
+  publisher_kind: company
+  publisher_zh: 极佳科技（GigaAI）
+  overview: 'GigaWorld-Policy-0.5 is GigaAI''s world-action policy: an action-centered Mixture-of-Transformers released as a pretrained initialization (Apache-2.0), riding on Wan2.2-TI2V-5B components for VAE, text encoder, and tokenizer. WorldFoundry executes the exact released MoT and the official action-only diffusion loop in process.'
+  overview_zh: GigaWorld-Policy-0.5 是极佳科技（GigaAI）的世界-动作策略：以动作为中心的 Mixture-of-Transformers，作为预训练初始化发布（Apache-2.0），VAE、文本编码器与 tokenizer 复用 Wan2.2-TI2V-5B 组件。WorldFoundry 在进程内执行精确的已发布 MoT 与官方仅动作扩散环路。
+  architecture: 'An action-centered Mixture-of-Transformers over a Wan2.2-TI2V-5B base: the released sharded-safetensors transformer initializes the policy, and diffusion runs on the action stream only.'
+  architecture_zh: Wan2.2-TI2V-5B 基座上的动作中心 Mixture-of-Transformers：发布的分片 safetensors transformer 用于策略初始化，扩散只在动作流上进行。
+  usage_notes: 'The released transformer is a pretrained initialization: task deployment additionally requires local post-training statistics (task-specific norm_stats_delta.json) and, when applicable, a task-finetuned transformer directory. All Hub assets must be staged locally; runtime network access is disabled.'
+  usage_notes_zh: 发布的 transformer 是预训练初始化：任务部署还需本地后训练统计（任务专用 norm_stats_delta.json），以及适用时的任务微调 transformer 目录。所有 Hub 资产需本地就位；运行时禁用网络访问。
+  limitations:
+  - Pretrained initialization only — task use requires your own post-training statistics/fine-tune.
+  - No GPU rollout validation is recorded in this repository.
+  limitations_zh:
+  - 仅为预训练初始化——任务使用需自备后训练统计/微调。
+  - 仓库未记录 GPU rollout 验证。

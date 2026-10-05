@@ -1,0 +1,44 @@
+---
+title: "GEN3C"
+description: "英伟达带显式 3D 缓存的相机可控视频（CVPR 2025）。原生 Cosmos Predict1 栈。结构与相机几何已验证；全分辨率 GPU 输出一致性待验证。"
+modelId: "gen3c"
+pageSource: authored
+---
+
+GEN3C 用显式 **3D 缓存**生成**相机可控**视频：先从输入图（借助深度）搭出粗略 3D 场景，沿目标相机路径扭曲该缓存，再让视频模型补全其余部分。catalog 场地：**CVPR 2025**。WorldFoundry 按 Cosmos Predict1 家族同一套去噪器、T5 条件器、潜变量初始化、**Karras x0 AB2** 调度器、编解码器和加载器契约原生组装。Pipeline：`Gen3CPipeline`。**没有**拷贝 Cosmos Predict1 运行时，也**没有**外部 GEN3C checkout。
+
+<ModelPaperFigures modelId="gen3c" locale="zh" />
+
+命名相机轨迹、**MoGe** 深度和 RGBD 前向扭曲在潜变量初始化角色内。调用方也可以直接提供预渲染的 3D 缓存张量。Transformer / T5 结构、原生相机几何、注册表和调度器契约已通过本地验证。**全分辨率原生 GPU 输出一致性仍 pending**——早期官方运行时的 demo 证据**不能**带到这条原生路径。
+
+论文：[arXiv 2503.03751](https://arxiv.org/abs/2503.03751)。项目页：[research.nvidia.com/labs/toronto-ai/GEN3C](https://research.nvidia.com/labs/toronto-ai/GEN3C/)。代码：[nv-tlabs/GEN3C](https://github.com/nv-tlabs/GEN3C)（**nvidia-source-code**）。权重：`nvidia/GEN3C-Cosmos-7B` 加 `Ruicheng/moge-vitl`。状态：**Runner 一致性待验证**。
+
+<ModelCommandBuilder modelId="gen3c" locale="zh" />
+
+## 用来做什么
+
+NVIDIA GEN3C 相机条件世界视频。权重有门控。
+
+启动 `worldfoundry-eval run gen3c --pipeline.task-profile official-single-image`。
+
+评测入口：[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（受控生成的相机轨迹贴合度）。
+
+## 运行时契约
+
+必填 `prompt`、`image`；可选 `video`；`actions`：camera_trajectory；产物 `gen3c.mp4`。
+
+| 旋钮 | 默认 |
+| --- | --- |
+| 尺寸 | **1280×704** |
+| 帧数 | **121** |
+| FPS | **24** |
+| 步数 | **35** |
+| Guidance | **1.0** |
+| 轨迹 | `left`、`center_facing`，距离 **0.3** |
+| Seed | **1** |
+
+## 在 WorldFoundry 中运行
+
+状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `nvidia/GEN3C-Cosmos-7B`、`Ruicheng/moge-vitl` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run gen3c --pipeline.task-profile official-single-image`。catalog 未记录 VRAM。
+
+<ModelRelatedRecipes modelId="gen3c" locale="zh" />

@@ -47,7 +47,8 @@ class HydraPipeline(PipelineABC):
         return_dict: bool = False,
         **kwargs: Any,
     ) -> Any:
-        video_path = video or kwargs.pop("video_path", None)
+        kw_video_path = kwargs.pop("video_path", None)
+        video_path = video or kw_video_path
         result = self.synthesis_model.predict(
             prompt=prompt,
             video_path=video_path,

@@ -217,7 +217,7 @@ class Mem0Runtime:
         import torch
 
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         from .modeling import Mem0Policy
         from .normalization import load_stats
@@ -367,8 +367,8 @@ class Mem0Runtime:
         import numpy as np
         import torch
 
-        from worldfoundry.core.utils.image_utils import load_pil_image
-        from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
+        from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 
         from .normalization import normalize
 

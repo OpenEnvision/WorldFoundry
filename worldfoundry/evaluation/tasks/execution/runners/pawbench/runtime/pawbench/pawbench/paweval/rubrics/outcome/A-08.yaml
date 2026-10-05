@@ -1,0 +1,51 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A-08
+track: calibration
+title_en: Isosceles triangle ball roll
+outcome_question: Which label in ['left', 'right'] is visible as the first decisive
+  post-action result?
+readout_policy: Read after the requested release has actually occurred. The readout
+  does not have to be the final video frame; use the first short readable window
+  where the ball has left the apex/middle, is clearly on the left or right side/tray,
+  and is no longer crossing between sides. Later same-side bounce, brief airborne
+  frames, occlusion, or video-end artifacts do not relabel the outcome.
+canonical_labels:
+- left
+- right
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['left', 'right'] can be decisively identified within
+  the readout window.
+- The ball is occluded or goes off-screen before a decisive side / bin / path can
+  be identified. If a visible off-support exit is established, use out-of-schema
+  instead.
+out_of_schema_rules:
+- Ball visibly rests or exits at the apex / middle of the triangle without committing
+  to left or right; this is out-of-schema, not nearest-legal.
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'First-decisive-window rule: use the earliest frame where the post-action result
+  has committed; do not re-label from later transient states.'
+- If the ball briefly touches or enters a side/tray but remains in continuous motion
+  that carries it to the opposite side, read the later committed side rather than
+  the transient side.
+- Committed left/right side is the readout; transient rolls at the apex do not decide
+  the label, and later same-side bounce does not relabel it.
+- Normal continuous bounce/cross-side motion before commitment means keep waiting;
+  impossible crossing to the opposite side after commitment belongs to trustworthiness.
+notes:
+- Triangle apex is out-of-schema, not coerced to left or right.
+- 'Scene title: Isosceles triangle ball roll.'
+- 'Calibration support: canonical labels are the reference-probability-bearing support
+  of the intended experiment. Visibly stuck, exited, outside-region, or no-committed-region
+  terminal states are out-of-schema/invalid rather than extra outcome labels.'
+geometry_policy: Left and right are the two equal sides of the isosceles triangle
+  apparatus, relative to the apex. Middle (i.e., the ball resting at or exiting the
+  apex) is OUT-OF-SCHEMA, not nearest-legal. Side is decided at the first frame/window
+  where the ball has committed to one side/tray.

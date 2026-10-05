@@ -4,8 +4,8 @@ import warnings
 
 import torch
 
-from torch_fidelity.defaults import DEFAULTS
-from torch_fidelity.deprecations import DEPRECATIONS
+from .defaults import DEFAULTS
+from .deprecations import DEPRECATIONS
 
 
 def vassert(truecond, message):

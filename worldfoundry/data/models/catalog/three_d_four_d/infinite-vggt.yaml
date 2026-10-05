@@ -32,3 +32,21 @@ runner_parity:
   - Checkpoint-backed inference depends on staged StreamVGGT weights.
 catalog_category: three_d_four_d
 catalog_scope: Official-source manifest for 3D, 4D, and camera-controlled world/model generation projects.
+docs:
+  publisher: Tsinghua University
+  publisher_kind: university
+  publisher_zh: 清华大学
+  overview: 'Infinite VGGT (StreamVGGT) turns the feed-forward VGGT reconstructor into a streaming model: it processes incoming frames causally with cached tokens, so reconstruction extends indefinitely instead of being bounded by a fixed window. The in-tree pipeline is registered for streaming 3D reconstruction.'
+  overview_zh: Infinite VGGT（StreamVGGT）把前馈重建器 VGGT 改造成流式模型：用缓存 token 因果地处理到来的帧，使重建可以无限延伸而不受固定窗口限制。树内 pipeline 已按流式 3D 重建注册。
+  architecture: A causal transformer with cached-token knowledge distillation from VGGT (per arXiv 2507.11539). License is CC-BY-NC-4.0 — non-commercial.
+  architecture_zh: 带缓存 token 的因果 Transformer，从 VGGT 进行知识蒸馏（见 arXiv 2507.11539）。许可为 CC-BY-NC-4.0——非商用。
+  usage_notes: 'Runner parity is pending: checkpoint-backed inference depends on staged StreamVGGT weights. Use the vggt entry for offline reconstruction and this one when frames arrive as a stream.'
+  usage_notes_zh: runner parity 为 pending：checkpoint 加载推理依赖就位的 StreamVGGT 权重。离线重建请用 vggt 条目；帧以流形式到达时用本条目。
+  limitations:
+  - 'CC-BY-NC-4.0: non-commercial license.'
+  - Checkpoint-backed parity is pending.
+  - Causal streaming accumulates drift relative to offline joint reconstruction.
+  limitations_zh:
+  - CC-BY-NC-4.0：非商用许可。
+  - checkpoint 一致性待验证。
+  - 因果流式处理相对离线联合重建会累积漂移。

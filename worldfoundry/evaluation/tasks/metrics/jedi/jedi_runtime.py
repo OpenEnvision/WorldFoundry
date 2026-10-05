@@ -59,7 +59,7 @@ def _load_feature_array(value: Any) -> np.ndarray | None:
     return None
 
 
-def score_from_feature_payload(payload: Mapping[str, Any] | None) -> float | None:
+def _feature_arrays_from_payload(payload: Mapping[str, Any] | None) -> tuple[np.ndarray, np.ndarray] | None:
     if not isinstance(payload, Mapping):
         return None
     train = _load_feature_array(payload.get("train_features"))
@@ -77,7 +77,12 @@ def score_from_feature_payload(payload: Mapping[str, Any] | None) -> float | Non
             test = _load_feature_array(test_path)
     if train is None or test is None:
         return None
-    return compute_jedi_from_features(train, test)
+    return train, test
+
+
+def score_from_feature_payload(payload: Mapping[str, Any] | None) -> float | None:
+    features = _feature_arrays_from_payload(payload)
+    return compute_jedi_from_features(*features) if features is not None else None
 
 
 def run_jedi_scorer(
@@ -89,10 +94,13 @@ def run_jedi_scorer(
     cfg = config or scorer_config_from_env()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    precomputed = score_from_feature_payload(feature_payload)
-    if precomputed is not None:
-        score = precomputed
+    features = _feature_arrays_from_payload(feature_payload)
+    if features is not None:
+        train, test = features
+        score = compute_jedi_from_features(train, test)
         backend = "precomputed_features"
+        reference_num_samples, generated_num_samples = len(train), len(test)
+        feature_dim = train.shape[1]
     elif cfg.backend == "mock":
         score = compute_mock_jedi(
             train_seed=cfg.train_seed,
@@ -101,6 +109,8 @@ def run_jedi_scorer(
             feature_dim=cfg.feature_dim,
         )
         backend = "mock"
+        reference_num_samples = generated_num_samples = cfg.num_samples
+        feature_dim = cfg.feature_dim
     elif cfg.backend in {"official", "videojedi", "vjepa"}:
         raise NotImplementedError(
             "Official JEDi feature extraction requires V-JEPA dataloaders and GPU weights. "
@@ -113,8 +123,10 @@ def run_jedi_scorer(
         "metric_id": "jedi_score",
         "score": score,
         "backend": backend,
-        "num_samples": cfg.num_samples,
-        "feature_dim": cfg.feature_dim,
+        "num_samples": reference_num_samples if reference_num_samples == generated_num_samples else None,
+        "reference_num_samples": reference_num_samples,
+        "generated_num_samples": generated_num_samples,
+        "feature_dim": feature_dim,
     }
     results_path = output_dir / "jedi_score.json"
     results_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

@@ -1,15 +1,14 @@
 # Inference-only OpenVLA source retained in-tree.
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
-
 
 SYSTEM_PROMPT = (
     "A chat between a curious user and an artificial intelligence assistant. "
@@ -60,8 +59,9 @@ def select_openvla_checkpoint(
 ) -> Path:
     if checkpoint_dir:
         explicit_path = _expand_runtime_path(checkpoint_dir)
-        if explicit_path.exists():
-            return explicit_path
+        if not explicit_path.is_dir():
+            raise FileNotFoundError(f"OpenVLA checkpoint directory does not exist: {explicit_path}")
+        return explicit_path
 
     candidates: list[Mapping[str, Any]] = []
     candidates.extend(dict(item) for item in checkpoints)
@@ -309,7 +309,7 @@ class OpenVLARuntime:
             "duration_seconds": round(time.monotonic() - started, 3),
         }
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        artifact_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+        artifact_hash = file_sha256(target)
         return {
             "status": "success",
             "model_id": "openvla",

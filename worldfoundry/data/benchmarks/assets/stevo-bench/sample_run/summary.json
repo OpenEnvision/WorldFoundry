@@ -1,0 +1,55 @@
+{
+  "num_tasks": 4,
+  "task_root": "benchmark/tasks",
+  "outputs": "outputs/sample_model_sample_run",
+  "tasks": [
+    {
+      "task_id": "ice_cube_melt_00",
+      "task_level": "scalar_process",
+      "llm_evals": {
+        "gemini__gemini-3-1-pro-preview": {
+          "occlusion_done": false,
+          "trigger_applied": true,
+          "physical_inaccuracy": false,
+          "state_evol": true
+        }
+      }
+    },
+    {
+      "task_id": "ice_cube_melt_01",
+      "task_level": "scalar_process",
+      "llm_evals": {
+        "gemini__gemini-3-1-pro-preview": {
+          "occlusion_done": true,
+          "trigger_applied": true,
+          "physical_inaccuracy": false,
+          "state_evol": true
+        }
+      }
+    },
+    {
+      "task_id": "ball_roll_ramp_01",
+      "task_level": "kinematics",
+      "llm_evals": {
+        "gemini__gemini-3-1-pro-preview": {
+          "occlusion_done": true,
+          "trigger_applied": true,
+          "physical_inaccuracy": true,
+          "state_evol": false
+        }
+      }
+    },
+    {
+      "task_id": "candle_burn_01",
+      "task_level": "irreversible_transformation",
+      "llm_evals": {
+        "gemini__gemini-3-1-pro-preview": {
+          "occlusion_done": true,
+          "trigger_applied": true,
+          "physical_inaccuracy": false,
+          "state_evol": null
+        }
+      }
+    }
+  ]
+}

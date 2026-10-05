@@ -1,4 +1,15 @@
-"""Tensor, PIL, and video helpers for memory artifact normalization."""
+"""Tensor, PIL, and video helpers for memory artifact normalization.
+
+Memory records accept paths, PIL images, numpy arrays, or torch
+tensors. This module converts those shapes into RGB PIL frames (or
+frame lists) so :mod:`worldfoundry.core.memory.store` never has to
+know about CHW vs HWC, ``[-1, 1]`` vs ``[0, 1]``, or video layouts.
+
+Public helpers: :func:`to_pil_image`, :func:`extract_video_frames`,
+:func:`extract_last_frame`, :func:`infer_content_type`, and
+:func:`release_accelerator_cache`. Optional deps (numpy, imageio,
+torch) are imported at use time.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +18,17 @@ from typing import Any
 
 from PIL import Image
 
+# ──────────────────────────────────────────────────────────────────────────
+# Suffix tables — store never needs to know CHW vs HWC or video layouts
+# ──────────────────────────────────────────────────────────────────────────
+
 IMAGE_EXTENSIONS = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
 VIDEO_EXTENSIONS = {".avi", ".mkv", ".mov", ".mp4", ".webm"}
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Image / array coercion — optional numpy and torch imported at use time
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def is_tensor_like(value: Any) -> bool:
@@ -44,6 +64,7 @@ def to_pil_image(value: Any) -> Image.Image:
 
 
 def to_numpy(value: Any):
+    """Detach / CPU / ``.numpy()`` a tensor-like value, then ``np.asarray``."""
     try:
         import numpy as np
     except ImportError as exc:  # pragma: no cover - optional runtime dependency.
@@ -60,6 +81,7 @@ def to_numpy(value: Any):
 
 
 def normalize_uint8_array(array: Any):
+    """Map float arrays in ``[-1, 1]`` or ``[0, 1]`` to ``uint8``; pass uint8 through."""
     import numpy as np
 
     array = np.asarray(array)
@@ -76,12 +98,19 @@ def normalize_uint8_array(array: Any):
 
 
 def move_channel_first_to_last(array: Any):
+    """Move axis 0 to the end (CHW → HWC)."""
     import numpy as np
 
     return np.moveaxis(np.asarray(array), 0, -1)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Video frames — path / sequence / [T,H,W,C]; last-frame is best-effort
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def extract_video_frames(video_data: Any, *, copy: bool = True) -> list[Any]:
+    """Return a list of frames from a path, sequence, or ``[T,H,W,C]`` array."""
     if isinstance(video_data, (str, Path)):
         path = Path(video_data).expanduser()
         if path.suffix.lower() not in VIDEO_EXTENSIONS or not path.is_file():
@@ -106,6 +135,7 @@ def extract_video_frames(video_data: Any, *, copy: bool = True) -> list[Any]:
 
 
 def normalize_video_array(array: Any):
+    """Squeeze a leading batch dim and move channels last when they are first."""
     import numpy as np
 
     array = np.asarray(array)
@@ -123,6 +153,7 @@ def normalize_video_array(array: Any):
 
 
 def extract_last_frame(video_data: Any) -> Image.Image | None:
+    """Best-effort last-frame PIL image; returns ``None`` on any failure."""
     try:
         frames = extract_video_frames(video_data)
     except Exception:  # noqa: BLE001 - selection should degrade gracefully.
@@ -130,6 +161,11 @@ def extract_last_frame(video_data: Any) -> Image.Image | None:
     if not frames:
         return None
     return to_pil_image(frames[-1])
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Type inference and accelerator cache — degrade to "other" / no-op on ImportError
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def infer_content_type(data: Any) -> str:

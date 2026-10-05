@@ -1,11 +1,11 @@
-import apiReference from '@/generated/python-api.json';
 import { createElement, type ReactNode } from 'react';
 import type { TOCItemType } from 'fumadocs-core/toc';
+import { readSiteJson } from '@/lib/read-site-json';
 
 type ApiSymbol = {
   name: string;
   kind: string;
-  methods: Array<{ name: string; kind: string }>;
+  methods: Array<{ name: string; kind: string; line?: number }>;
 };
 
 type ApiReferenceData = {
@@ -13,24 +13,31 @@ type ApiReferenceData = {
   symbols: Record<string, ApiSymbol>;
 };
 
-const data = apiReference as ApiReferenceData;
+const data = readSiteJson<ApiReferenceData>('generated/python-api.json');
 
 const KIND_ABBR: Record<string, string> = {
   class: 'cls',
-  function: 'func',
+  function: 'fn',
   protocol: 'prot',
   method: 'meth',
   property: 'prop',
-  classmethod: 'cmeth',
-  staticmethod: 'smeth',
+  classmethod: 'cm',
+  staticmethod: 'sm',
 };
 
 export function symbolAnchor(symbol: string) {
   return `api-${symbol.replace(/[^a-zA-Z0-9_-]+/g, '-')}`;
 }
 
-export function methodAnchor(symbol: string, methodName: string) {
-  return `${symbolAnchor(symbol)}--${methodName}`;
+export function methodAnchor(
+  symbol: string,
+  method: { name: string; kind?: string } | string,
+) {
+  if (typeof method === 'string') {
+    return `${symbolAnchor(symbol)}--${method}`;
+  }
+  const kind = method.kind || 'method';
+  return `${symbolAnchor(symbol)}--${kind}-${method.name}`;
 }
 
 function TocBadge({ kind }: { kind: string }) {
@@ -45,6 +52,8 @@ function TocBadge({ kind }: { kind: string }) {
   );
 }
 
+type LabeledTocItem = TOCItemType & { label?: string };
+
 function tocTitle(kind: string, name: string): ReactNode {
   return createElement(
     'span',
@@ -52,6 +61,20 @@ function tocTitle(kind: string, name: string): ReactNode {
     createElement(TocBadge, { kind }),
     createElement('code', null, name),
   );
+}
+
+function labeledTocItem(
+  kind: string,
+  name: string,
+  url: string,
+  depth: number,
+): LabeledTocItem {
+  return {
+    title: tocTitle(kind, name),
+    url,
+    depth,
+    label: name,
+  };
 }
 
 function plainTitle(title: TOCItemType['title']): string {
@@ -73,18 +96,17 @@ function buildSymbolTocItems(symbols: string[]): TOCItemType[] {
   for (const qualified of symbols) {
     const entry = data.symbols[qualified];
     if (!entry) continue;
-    apiItems.push({
-      title: tocTitle(entry.kind, entry.name),
-      url: `#${symbolAnchor(qualified)}`,
-      depth: 3,
-    });
+    apiItems.push(labeledTocItem(entry.kind, entry.name, `#${symbolAnchor(qualified)}`, 3));
     for (const method of entry.methods) {
       if (method.name.startsWith('_') && method.name !== '__call__') continue;
-      apiItems.push({
-        title: tocTitle(method.kind || 'method', method.name),
-        url: `#${methodAnchor(qualified, method.name)}`,
-        depth: 4,
-      });
+      apiItems.push(
+        labeledTocItem(
+          method.kind || 'method',
+          method.name,
+          `#${methodAnchor(qualified, method)}`,
+          4,
+        ),
+      );
     }
   }
   return apiItems;
@@ -105,6 +127,7 @@ function decorateProseToc(page: string, toc: TOCItemType[]): TOCItemType[] {
     return {
       ...item,
       title: tocTitle(entry.kind, entry.name),
+      label: entry.name,
     };
   });
 }

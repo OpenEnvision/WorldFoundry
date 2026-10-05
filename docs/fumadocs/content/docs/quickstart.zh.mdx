@@ -3,16 +3,16 @@ title: 快速开始
 description: 配置环境、准备资产、使用 TUI 或 CLI，然后运行推理与评测。
 ---
 
-本指南覆盖从 clone 到一条可 review WorldFoundry run 的最短完整路径：
+本指南给出从 clone 到一次可 review 的 WorldFoundry run 的最短完整路径：
 
 - [环境配置](#1-环境配置)
 - [资产准备](#2-资产准备)
 - [TUI](#3-tui)
-- [CLI 推理](#4-cli)
-- [产物检查](#5-推理)
+- [CLI](#4-cli)
+- [推理](#5-推理)
 - [评测](#6-评测)
 
-大多数运行虽然模型和 benchmark 不同，但流程是一样的：先让 Python 环境可 import，再发现稳定 ID，只准备必要 checkpoint 与 benchmark 资产，生成并检查 artifact，最后才对 artifact 打分。
+换了模型或 benchmark，大多数 run 的形状仍然一样：先让 Python 环境可 import，再发现稳定 ID，只准备必要的 checkpoint 与 benchmark 资产，生成并检查 artifact，最后才对 artifact 打分。
 
 <Callout type="idea" title="提示">
   浏览 catalog 和检查 readiness 不需要 GPU 或模型权重。如果你只是判断 WorldFoundry 是否覆盖目标系统，可以完成环境与 discovery 检查、阅读 blocker，然后在下载资产之前停止。
@@ -38,7 +38,8 @@ description: 配置环境、准备资产、使用 TUI 或 CLI，然后运行推�
 ## 前置条件
 
 - **操作系统：** 推荐 Linux，用于 GPU 推理和大多数 benchmark runner
-- **Python：** 通过 WorldFoundry 统一 conda 环境使用 3.10+
+- **安装路径：** 轻量 CPU catalog/CLI/TUI 工作使用 `python -m pip install -e ".[tui]"`；CUDA conda runtime 使用 `bash scripts/setup/bootstrap_worldfoundry.sh`。这是文档用户的官方首次 clone 脚本；它已经会调用 `scripts/setup/unified_install.sh` 创建统一 GPU 环境，因此不要从 `unified_install.sh` 起步，除非你只是在刷新该环境。可选 extras 不会自动选择 CUDA PyTorch wheel index。
+- **Python：** 3.10+；GPU 路径由 WorldFoundry 统一 conda 环境管理
 - **可选：** 支持 CUDA 的 GPU、用于 gated checkpoint 的 Hugging Face token
 
 <Callout type="info" title="说明">
@@ -47,15 +48,15 @@ description: 配置环境、准备资产、使用 TUI 或 CLI，然后运行推�
 
 ## 1. 环境配置
 
-Bootstrap 会创建默认 WorldFoundry runtime，并写出一份本地 shell 文件，里面包含 CLI、Studio 和评测 runner 会用到的路径。每次打开新 shell 后都应该先 source 这个文件。
+下面的命令描述 GPU runtime 路径。官方首次 clone 命令是 `bash scripts/setup/bootstrap_worldfoundry.sh`。它会创建默认 WorldFoundry runtime，并写出一份本地 shell 文件，里面包含 CLI、Studio 和评测 runner 会用到的路径。每次打开新 shell 后都应该先 source 这个文件。
 
 <Tabs items={['默认安装', '共享路径', '运行前检查']}>
   <Tab>
 
-在仓库根目录执行：
+在仓库根目录执行。模型演示视频由 GitHub CDN 提供，文档开发不需要执行 `git lfs pull`。
 
 ```bash
-git clone https://github.com/OpenEnvision/WorldFoundry.git
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenEnvision/WorldFoundry.git
 cd WorldFoundry
 
 bash scripts/setup/bootstrap_worldfoundry.sh
@@ -90,12 +91,12 @@ worldfoundry-eval --help
 </Tabs>
 
 <Callout title="下一步">
-  按模型和 benchmark 拆分的环境映射见 [环境配置](/zh/docs/reference/environments)。当某个模型需要额外 conda profile，或者某个 benchmark evaluator 依赖统一环境之外的 metric package 时，到那一页查。
+  按模型和 benchmark 拆分的环境映射见[环境配置](/zh/docs/reference/environments)。当某个模型需要额外 conda profile，或某个 benchmark evaluator 依赖统一环境之外的 metric package 时，参见该页。
 </Callout>
 
 ## 2. 资产准备
 
-WorldFoundry 的可执行代码在仓内。Checkpoint、dataset、metric 权重、reference 文件和生成输出放在本地，默认优先走 Hugging Face。
+WorldFoundry 只把可执行代码放在仓库里。Checkpoint、dataset、metric 权重、reference 文件与生成输出都放在本地，默认优先走 Hugging Face。
 
 <Callout type="warn" title="重要">
   模型资产和 benchmark 资产是两类东西。模型 checkpoint 用来生成候选 artifact；benchmark 资产定义要生成什么、输出应该怎么命名、以及计算分数需要哪些文件或 metric 权重。
@@ -131,7 +132,7 @@ source "${WORLDFOUNDRY_HOME:-${HOME}/.cache/worldfoundry}/<benchmark-id>.env"
   </Tab>
 </Tabs>
 
-只有 gated 资产已经接受条款后，才设置 Hugging Face token：
+仅当 gated 资产的使用条款已经接受时，才设置 Hugging Face token：
 
 ```bash
 export HF_TOKEN=<your-huggingface-token>
@@ -141,7 +142,7 @@ export HF_TOKEN=<your-huggingface-token>
 
 ## 3. TUI
 
-不想记模型 id、benchmark id 和命令参数时，先用 TUI。它读取的就是 CLI 使用的同一套 manifest，会展示可选项，并且可以在真正启动昂贵任务前打印最终命令。
+不想记 model ID、benchmark ID 和命令参数时，用 TUI。它读取的就是 CLI 使用的同一套 manifest，会展示可选项，并且可以在真正启动昂贵任务前打印最终命令。
 
 ```bash
 python -m pip install -e ".[tui]"
@@ -163,7 +164,7 @@ worldfoundry-eval tui \
 
 ## 4. CLI
 
-CLI 适合脚本、批量任务和可复现记录。不要手写猜测 id，先跑 discovery 命令：
+CLI 适合脚本、批量任务和可复现记录。不要靠猜 ID，先跑 discovery 命令：
 
 ```bash
 worldfoundry-eval zoo models --json
@@ -171,7 +172,17 @@ worldfoundry-eval zoo benchmarks --json
 worldfoundry-eval zoo model-download --model-id <model-id> --check-local --json
 ```
 
-命令行推理：
+可复现、写进文档的第一次推理命令是 `worldfoundry-eval run <id> --pipeline.task-profile …`。`<id>` 和 task profile 从模型页复制；`worldfoundry-eval run <id> --help` 会列出该模型的 typed flag。
+
+```bash
+worldfoundry-eval run <model-id> \
+  --pipeline.task-profile <task-profile> \
+  --output-dir tmp/worldfoundry_infer/<model-id>
+```
+
+**选哪条命令。** 日常可复现运行、以及模型页上的命令，用 `worldfoundry-eval run`。只有 Workspace 视觉冒烟才用 `python -m worldfoundry.studio.workspace_job infer`。入口对照见 [CLI 命令入口](/zh/docs/reference/cli#命令入口)。
+
+Workspace 视觉冒烟（与 Studio UI 提交的是同一条 job 路径）：
 
 ```bash
 python -m worldfoundry.studio.workspace_job infer \
@@ -181,20 +192,7 @@ python -m worldfoundry.studio.workspace_job infer \
   --device cuda
 ```
 
-图生视频或其他条件生成模型：
-
-```bash
-python -m worldfoundry.studio.workspace_job infer \
-  --model-id <model-id> \
-  --input-path /path/to/input.png \
-  --prompt "camera moves forward through the scene" \
-  --frames 81 \
-  --steps 30 \
-  --seed 42 \
-  --output-dir tmp/worldfoundry_infer/<model-id>
-```
-
-完整命令说明见 [CLI](/zh/docs/reference/cli)。
+完整命令说明见 [CLI](/zh/docs/reference/cli)。状态用词见 [运行状态](/zh/docs/guides/run-status)。
 
 ## 5. 推理
 
@@ -224,11 +222,9 @@ find tmp/worldfoundry_infer/<model-id> -maxdepth 2 -type f | head
 
 一个 benchmark run 需要三个具体输入。如果缺少任何一个，runner 应该产出 blocked scorecard，而不是静默给出看似能上 leaderboard 的分数。
 
-| Input | 含义 |
-| --- | --- |
-| Benchmark assets | Prompt/task metadata、reference 文件、official result、judge credentials、simulator assets 或 metric checkpoints。 |
-| Candidate artifacts | 模型产出的 videos、frames、rollouts、traces，或 official-shaped result dump。 |
-| Runner mode | `official-validation` 导入已有 official-shaped 结果；`official-run` 从生成产物计算分数。 |
+- **Benchmark assets** — Prompt/task metadata、reference 文件、official result、judge credentials、simulator assets 或 metric checkpoints。
+- **Candidate artifacts** — 模型产出的 videos、frames、rollouts、traces，或 official-shaped result dump。
+- **Runner mode** — `official-validation` 导入已有 official-shaped 结果；`official-run` 从生成产物计算分数。
 
 <Tabs items={['Official validation', 'Official run', '一条命令']}>
   <Tab>
@@ -287,5 +283,6 @@ worldfoundry-eval run \
   <Card title="本地资产" description="Checkpoint 来源、Hugging Face cache 路径和 readiness 检查。" href="/zh/docs/guides/local-assets" />
   <Card title="TUI" description="交互式选择模型和 benchmark，并打印可运行命令。" href="/zh/docs/guides/tui" />
   <Card title="CLI" description="发现、推理、评分和报告的完整命令参考。" href="/zh/docs/reference/cli" />
+  <Card title="运行状态" description="Verified、Runner parity pending、Static load only、Planned 的读者标签。" href="/zh/docs/guides/run-status" />
   <Card title="Benchmark Hub" description="每个 benchmark 的数据布局、metric assets 和运行命令。" href="/zh/docs/evaluation/benchmark-hub" />
 </Cards>

@@ -1,0 +1,50 @@
+---
+title: "VLANeXt"
+description: "VLANeXt（Nanyang Technological University (S-Lab)）：视觉-语言-动作（VLA）、VLA 动作预测；仅静态加载。"
+modelId: "vlanext"
+pageSource: generated
+---
+
+VLANeXt 是以 S-Lab License 1.0（源码可得、面向研究）发布的新一代 VLA，官方 LIBERO 与 LIBERO-plus checkpoint 收录于 DravenALG/VLANeXt 集合。WorldFoundry 从内置推理子集在进程内调用官方 get_vla/get_processor/get_vla_action 契约。
+
+<ModelPaperFigures modelId="vlanext" locale="zh" />
+
+记录论文为[arXiv 2602.18532](https://arxiv.org/abs/2602.18532)。
+
+项目页：[dravenalg.github.io/VLANeXt](https://dravenalg.github.io/VLANeXt)。代码：[DravenALG/VLANeXt](https://github.com/DravenALG/VLANeXt)。
+
+<ModelCommandBuilder modelId="vlanext" locale="zh" />
+
+## 用来做什么
+
+用 `vlanext-libero` 做本卡的视觉-语言-动作推理。这条配方用来启动已记录的策略 profile。
+
+公开 checkpoint 覆盖 LIBERO 各套件（VLANeXt_libero_spatial.pt、_object.pt 等）。官方仓库指针之外的架构内部细节仓库未记录。该模型由南洋理工大学（S-Lab）发布。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测、VLA 策略执行。别名包括 `vlanext-libero`、`vla-next`。
+
+记录的评测入口包括[LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（官方 LIBERO checkpoint 集合）、[LIBERO-Plus](/zh/docs/evaluation/benchmark-hub/libero-plus)（记录了 LIBERO-plus 契约）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`vlanext_action_trace.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `VLANeXtPipeline`。
+
+系列状态：**仅静态加载**。
+
+解析器、运行时导入与 compileall 检查无需外部 checkout 即通过；声称 demo parity 前仍需 checkpoint 驱动的动作块验证。 注意 S-Lab-1.0 许可限制商业使用。
+
+S-Lab-1.0 许可：源码可得但限制研究用途。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run vlanext-libero --pipeline.task-profile default` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch==2.4.0）。
+
+记录的权重仓库包括 `DravenALG/VLANeXt`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh vlanext-libero`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 s-lab-1.0；状态：**仅静态加载**。
+
+<ModelRelatedRecipes modelId="vlanext" locale="zh" />

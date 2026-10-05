@@ -1,5 +1,10 @@
 id: ltx-2.x
 name: LTX-2.x
+description: >-
+  Native WorldFoundry integration for the official distilled LTX-2 and LTX-2.3
+  image-to-video and text-to-video paths, plus official IC-LoRA control-video
+  adapters for video-to-video. Per-configuration inference validation is tracked
+  separately from integration status.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: ltx-2.x
 runtime_profile: runtime-profile:ltx-2.3-i2v
@@ -8,13 +13,20 @@ tasks:
   - image-to-video
   - video-to-video
   - audio-video-generation
+official_sources:
+  paper: https://arxiv.org/abs/2601.03233
+  project_page: https://ltx.video
+  github:
+    url: https://github.com/Lightricks/LTX-2
+  docs:
+    url: https://github.com/Lightricks/LTX-2/tree/main/packages/ltx-pipelines/docs
 source_status:
   status: confirmed_official_github
   github:
-    url: https://github.com/Lightricks/LTX-Video
-    verified_by: git ls-remote --symref https://github.com/Lightricks/LTX-Video.git HEAD
+    url: https://github.com/Lightricks/LTX-2
+    verified_by: git ls-remote --symref https://github.com/Lightricks/LTX-2.git HEAD
     default_branch: main
-    head_sha: 4b2d053057623ddd4d0a1d3e9cd28890e9ef487f
+    head_sha: a95ab856bf29407b6b066ede0abe1846050db56c
 checkpoint:
   status: confirmed_public_hf
   verified_by: GET https://huggingface.co/api/models/<repo_id>
@@ -37,7 +49,21 @@ checkpoint:
         - text-to-video
         - image-to-video
         - video-to-video
-  notes: Official Lightricks LTX-2.x HF base repos were confirmed. Gated LoRA or community variants are not included.
+    - id: Lightricks/LTX-2-19b-IC-LoRA-Pose-Control
+      sha: ecdabfb03acd2e807c90ea260ccc136140e7ac80
+      license: other
+      private: false
+      gated: false
+      tasks:
+        - video-to-video
+    - id: Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control
+      sha: b4d1c4d8c9e544e9bbbd6811bb4363708b6093ff
+      license: other
+      private: false
+      gated: false
+      tasks:
+        - video-to-video
+  notes: The V2V control variants require version-matched public IC-LoRA weights and distilled base checkpoints.
 variants:
   - id: ltx-2-t2v
     task: text-to-video
@@ -52,7 +78,11 @@ variants:
     demo_parity:
       status: pending_demo
     runner_parity:
-      status: planned
+      status: pending
+    runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+    pipeline_binding: ltx-2-t2v
+    integration:
+      status: integrated
   - id: ltx-2-i2v
     task: image-to-video
     provider: official_repo
@@ -66,7 +96,7 @@ variants:
     demo_parity:
       status: pending
       notes:
-        - The in-tree LTX-2 I2V route is wired with the local LTX-2 checkpoint,
+        - The native LTX-2 I2V route is wired with the local LTX-2 checkpoint,
           reference image, fps, guidance_scale, resolution, frame count, step
           count, and seed controls.
         - Full official parity remains pending; per-run artifact checks are
@@ -86,11 +116,24 @@ variants:
         license: other
         private: false
         gated: false
+      - repo_id: Lightricks/LTX-2-19b-IC-LoRA-Pose-Control
+        revision: ecdabfb03acd2e807c90ea260ccc136140e7ac80
+        license: other
+        private: false
+        gated: false
     runtime_profile: ltx-2-v2v
     demo_parity:
       status: pending_demo
     runner_parity:
-      status: planned
+      status: pending
+      notes:
+        - The official Pose-Control IC-LoRA path and public binding produced a
+          17-frame 256x256 artifact from a static synthetic pose reference.
+          Dynamic motion and default-resolution quality are not yet validated.
+    runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+    pipeline_binding: ltx-2-v2v
+    integration:
+      status: integrated
   - id: ltx-2.3-t2v
     task: text-to-video
     provider: official_repo
@@ -104,7 +147,11 @@ variants:
     demo_parity:
       status: pending_demo
     runner_parity:
-      status: planned
+      status: pending
+    runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+    pipeline_binding: ltx-2.3-t2v
+    integration:
+      status: integrated
   - id: ltx-2.3-i2v
     task: image-to-video
     provider: official_repo
@@ -118,7 +165,7 @@ variants:
     demo_parity:
       status: pending
       notes:
-        - The in-tree LTX-2.3 I2V route is wired with local checkpoint assets,
+        - The native LTX-2.3 I2V route is wired with local checkpoint assets,
           reference image, fps, guidance_scale, resolution, frame count, step
           count, and seed controls.
         - Full upstream parity remains pending; per-run artifact checks are
@@ -138,19 +185,36 @@ variants:
         license: other
         private: false
         gated: false
+      - repo_id: Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control
+        revision: b4d1c4d8c9e544e9bbbd6811bb4363708b6093ff
+        license: other
+        private: false
+        gated: false
     runtime_profile: ltx-2.3-v2v
     demo_parity:
       status: pending_demo
     runner_parity:
-      status: planned
+      status: pending
+      notes:
+        - The official IC-LoRA control path and public binding produced a 17-frame
+          256x256 artifact from a synthetic Canny reference. Natural-video
+          semantics and default-resolution quality are not yet validated.
+    runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+    pipeline_binding: ltx-2.3-v2v
+    integration:
+      status: integrated
 demo_parity:
   status: pending
   notes:
-    - LTX-2 and LTX-2.3 I2V routes are wired through the in-tree runtime.
-    - LTX-2.x T2V and V2V variants remain planned/profile-only.
+    - LTX-2 and LTX-2.3 I2V routes share WorldFoundry's native diffusion infrastructure.
+    - LTX-2 and LTX-2.3 V2V use the official IC-LoRA pipeline with typed control videos; only small synthetic control cases have been visually checked.
     - Full upstream parity remains pending; per-run artifact checks are tracked
       outside the model catalog.
-notes: Tracked separately from LTX-Video 0.9.x because upstream publishes LTX-2.x under distinct HF repo ids.
+notes:
+  - Tracked separately from LTX-Video 0.9.x because upstream publishes LTX-2.x under distinct Hugging Face repository ids.
+  - The runnable V2V variants require Pose-Control or Union-Control IC-LoRA and a corresponding pose, Canny, or depth reference video; arbitrary RGB video is not equivalent.
+  - I2V uses the official Spatial Upscaler as the boundary between two denoising stages. It is loaded automatically from spatial_upsampler_path; Studio does not expose it as an independent refiner toggle.
+  - The current native distilled schedule is 8 first-stage steps plus 3 second-stage steps (11 total). The upstream DistilledPipeline documentation currently records 8 plus 4, so this integration must not be described as exact upstream pipeline parity until that difference is reconciled and checkpoint-backed validation is recorded.
 catalog_category: video
 catalog_scope: Official GitHub and/or Hugging Face confirmed open-source or open-weight video generation models. Checkpoints are not tracked in git; local validation may download selected repos under cache/hfd.
 catalog_policy:
@@ -160,7 +224,8 @@ catalog_policy:
 integration:
   status: integrated
   notes:
-    - WorldFoundry wraps the in-tree LTX-2.x I2V runtimes; T2V/V2V variants remain profile-only until scoped wrappers exist.
+    - WorldFoundry implements LTX-2.x I2V and LTX-2.3 T2V with native components and the generic joint multi-stage runner.
+    - The controlled V2V routes invoke the version-matched official IC-LoRA pipeline through a dedicated Python environment.
 runner_parity:
   status: partial_studio_visual_validation_verified
   notes:
@@ -168,4 +233,26 @@ runner_parity:
       Studio demo artifact recorded above.
     - WorldFoundry LTX-2.3 I2V pipeline target is registered and produced the
       nonblank Studio demo artifact recorded above.
-    - T2V/V2V variants still need scoped wrappers and checkpoint-backed validation.
+    - Both V2V control bindings completed checkpoint-backed 17-frame synthetic-reference inference; natural-video semantic quality and default-resolution parity remain pending.
+docs:
+  publisher: Lightricks
+  publisher_kind: company
+  publisher_zh: Lightricks
+  overview: LTX-2.x is Lightricks' current video model family. WorldFoundry provides native distilled I2V routes and official IC-LoRA control-video routes for LTX-2 and LTX-2.3. The controlled V2V routes completed small synthetic-reference inference; broader quality remains unverified.
+  overview_zh: LTX-2.x 是 Lightricks 当前的视频模型系列。WorldFoundry 提供原生蒸馏版 I2V 路径，以及 LTX-2 和 LTX-2.3 的官方 IC-LoRA 控制视频路径。V2V 已通过小尺寸合成控制输入推理，尚未验证更广泛的质量。
+  architecture: 'The I2V route is a two-stage denoise with the official Spatial Upscaler as the boundary, loaded automatically from spatial_upsampler_path (not a separate Studio refiner toggle). Assembly uses the shared NativeDiffusionPipeline, joint multi-stage runner, and optimization policies — no Diffusers pipeline or copied upstream pipeline. Note the recorded schedule caveat: the native distilled schedule is 8+3 steps while upstream documents 8+4, so exact upstream parity must not be claimed until reconciled.'
+  architecture_zh: I2V 路径为两段去噪，以官方 Spatial Upscaler 为分界，从 spatial_upsampler_path 自动加载（不是独立的 Studio 细化开关）。装配使用共享 NativeDiffusionPipeline、联合多段 runner 与优化策略——不使用 Diffusers pipeline 或复制的上游 pipeline。注意记录在案的调度差异：原生蒸馏调度为 8+3 步，而上游文档为 8+4 步，在差异调和并完成 checkpoint 验证前不得宣称与上游完全一致。
+  usage_notes: Select the matching distilled checkpoint and IC-LoRA, provide a pose control video for LTX-2 or a Canny/depth/pose control video for LTX-2.3, and use a Python environment with official ltx-pipelines. The recorded 256px runs establish inference structure only.
+  usage_notes_zh: 选择与版本匹配的蒸馏权重和 IC-LoRA；LTX-2 输入姿态控制视频，LTX-2.3 输入 Canny、深度或姿态控制视频，并使用安装官方 ltx-pipelines 的 Python 环境。已记录的 256px 运行只证明推理结构通过。
+  limitations:
+  - V2V has only been checked with synthetic pose/Canny controls at 256px; natural-video semantics, dynamic motion, and default-resolution quality remain unverified.
+  - The 8+3 vs 8+4 distilled-schedule difference means exact upstream parity is not yet claimable.
+  - Visual validation is partial (Studio demo artifacts), not full checkpoint-backed parity.
+  limitations_zh:
+  - V2V 仅用 256px 合成姿态/Canny 控制输入验证；自然视频语义、动态运动及默认分辨率质量仍未验证。
+  - 蒸馏调度 8+3 与上游 8+4 的差异未调和前，不能宣称与上游精确一致。
+  - 视觉验证为部分性（Studio demo 产物），并非完整 checkpoint 一致性。
+  recommended_benchmarks:
+  - id: aigcbench
+    reason: I2V-focused benchmark for the runnable routes.
+    reason_zh: 针对可运行 I2V 路径的图生视频评测。

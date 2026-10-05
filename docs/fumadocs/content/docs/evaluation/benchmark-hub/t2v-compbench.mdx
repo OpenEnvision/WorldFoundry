@@ -1,213 +1,56 @@
 ---
 title: T2V-CompBench
-description: Compositional text-to-video benchmark with seven in-tree category evaluators and runnable CSV/import workflows.
+description: "CVPR 2025 compositional T2V bench: 1,400 prompts over seven binding axes. WorldFoundry ships the runtime; it does not invent a board."
 ---
 
-## About
+T2V-CompBench (HKU, with CUHK and Huawei Noah's Ark Lab) asks whether a text-to-video model **binds the right attributes, actions, and motions to the right objects**. It is a composition test, not a single aesthetic score. The official suite has **1,400 prompts** (200 × 7):
 
-T2V-CompBench is a CVPR 2025 benchmark for compositional text-to-video generation. It tests whether generated videos bind the right attributes to the right objects, preserve dynamic attributes over time, satisfy spatial relationships, bind motion and actions correctly, model object interactions, and generate the requested object counts. The official prompt suite contains 1,400 prompts across seven categories, with 200 prompts per category.
+- **Consistent / dynamic attribute binding** — static properties, then temporal changes, on the correct object.
+- **Spatial relationships** — 2D / 3D layout (detection + depth / SAM).
+- **Motion binding** — foreground vs background motion (DOT tracking).
+- **Action binding** and **object interactions** — MLLM (LLaVA-style) judges.
+- **Generative numeracy** — object counts via GroundingDINO. This is the bounded official component WorldFoundry has executed on a real MP4.
 
-WorldFoundry integrates the official evaluation scripts in tree. The runner is `worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py`; the vendored runtime code is `worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench`; prompt and metadata assets live under `worldfoundry/data/benchmarks/assets/t2v-compbench`.
+Paper: [T2V-CompBench](https://arxiv.org/abs/2407.14505). Project: [t2v-compbench-2025.github.io](https://t2v-compbench-2025.github.io/). Code: [KaiyueSun98/T2V-CompBench](https://github.com/KaiyueSun98/T2V-CompBench). Reference videos: [`Kaiyue/T2V-CompBench-Videos`](https://huggingface.co/datasets/Kaiyue/T2V-CompBench-Videos) (25,200 rows).
 
-Official references:
+WorldFoundry **vendors the official runtime** and a strict manifest bridge that stages generated videos into `category/NNNN.mp4`. Import official CSV / JSON, or run a category when its metric assets are staged. `t2v_compbench_average` is emitted only when all seven category scores exist.
 
-- Project page: [t2v-compbench-2025.github.io](https://t2v-compbench-2025.github.io/)
-- Paper: [arXiv:2407.14505](https://arxiv.org/abs/2407.14505)
-- Leaderboard: [Kaiyue/T2V-CompBench_Leaderboard](https://huggingface.co/spaces/Kaiyue/T2V-CompBench_Leaderboard)
-- Released videos dataset: [Kaiyue/T2V-CompBench-Videos](https://huggingface.co/datasets/Kaiyue/T2V-CompBench-Videos)
-- Official source reference: [KaiyueSun98/T2V-CompBench](https://github.com/KaiyueSun98/T2V-CompBench)
+<BenchmarkPageSections id="t2v-compbench" locale="en" />
 
-## Evaluation Protocol
+## How to run
 
-Primary metric: `t2v_compbench_average`.
+Import official category scores:
 
-| Metric | Evaluator family | Video subdirectory |
-| --- | --- | --- |
-| `consistent_attribute_binding` | MLLM | `consistent_attr/` |
-| `dynamic_attribute_binding` | MLLM | `dynamic_attr/` |
-| `spatial_relationships` | Detection + depth | `spatial_relationships/` |
-| `motion_binding` | Segmentation + DOT tracking | `motion_binding/` |
-| `action_binding` | MLLM | `action_binding/` |
-| `object_interactions` | MLLM | `interaction/` |
-| `generative_numeracy` | Detection | `generative_numeracy/` |
-| `t2v_compbench_average` | Aggregate | Mean over available category scores. |
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id t2v-compbench \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/t2v-compbench/official-validation \
+  --json
+```
 
-Each category expects 200 generated videos named like the official prompts:
+Recompute a category from staged videos (numeracy needs GroundingDINO + a BERT-compatible encoder):
+
+```bash
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
+  --generated-video-dir <generated_videos_with_t2v_compbench_generation_manifest.jsonl> \
+  --category generative_numeracy \
+  --output-dir tmp/t2v-compbench/numeracy \
+  --json
+```
+
+`--preflight` checks assets before a run. MLLM categories need `WORLDFOUNDRY_T2V_COMPBENCH_LLAVA_MODEL_PATH`; motion binding needs DOT; spatial categories need Depth-Anything / SAM (`WORLDFOUNDRY_T2V_COMPBENCH_SAM_CKPT`). Shared stack: `grounded_depth_segmentation_stack`. Default import path: `WORLDFOUNDRY_T2V_COMPBENCH_RESULTS_PATH`. Optional runtime root: `WORLDFOUNDRY_T2V_COMPBENCH_ROOT`.
+
+In-tree pointers:
 
 ```text
-/path/to/t2v-compbench/videos/
-  consistent_attr/
-    0001.mp4
-    ...
-    0200.mp4
-  dynamic_attr/
-    0001.mp4
-    ...
-  spatial_relationships/
-  motion_binding/
-  action_binding/
-  interaction/
-  generative_numeracy/
+worldfoundry/data/benchmarks/tasks/external/t2v-compbench.yaml
+worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
 ```
 
-The runner also accepts common official dataset aliases such as `consistent_attr_1`, `dynamic_attr_2`, `spatial_3`, `motion_4`, `interaction_6`, and `numeracy_7`.
+Outputs include `scorecard.json` (primary `t2v_compbench_average` when complete), `raw_metric_table.jsonl`, and per-sample rows when the source exposes them.
 
-## Data And Checkpoint Preparation
-
-Start from the WorldFoundry repository root:
-
-```bash
-cd /path/to/WorldFoundry
-export WORLDFOUNDRY_T2V_COMPBENCH_ASSETS="$PWD/worldfoundry/data/benchmarks/assets/t2v-compbench"
-export WORLDFOUNDRY_T2V_COMPBENCH_ROOT="$PWD/worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench"
-```
-
-Download the released reference video dataset if you need official comparison assets:
-
-```bash
-hf download Kaiyue/T2V-CompBench-Videos \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/T2V-CompBench-Videos
-
-export WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT=/path/to/datasets/T2V-CompBench-Videos
-```
-
-Prepare metric model checkpoints:
-
-```bash
-export WORLDFOUNDRY_T2V_COMPBENCH_LLAVA_MODEL_PATH=/path/to/llava-v1.6-34b
-export WORLDFOUNDRY_T2V_COMPBENCH_GROUNDINGDINO_CKPT=/path/to/groundingdino_swint_ogc.pth
-export WORLDFOUNDRY_T2V_COMPBENCH_SAM_CKPT=/path/to/sam_vit_h_4b8939.pth
-```
-
-For `motion_binding`, stage the DOT checkpoints expected by the official DOT script under:
-
-```text
-worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench/dot/checkpoints/
-```
-
-The LLaVA, GroundingDINO, SAM, depth, and DOT code paths reuse WorldFoundry base-model packages instead of external source trees. Checkpoint files can still be downloaded or staged locally.
-
-## Generate Candidate Videos
-
-Use the prompt files under `WORLDFOUNDRY_T2V_COMPBENCH_ASSETS/prompts/` to run your candidate text-to-video model. Put outputs into the category layout shown above, then set:
-
-```bash
-export WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT=/path/to/t2v-compbench/videos
-export WORLDFOUNDRY_T2V_COMPBENCH_MODEL_NAME=my_t2v_model
-```
-
-Candidate model inference and training are model-specific. For a WorldFoundry-integrated generator, run the model's synthesis workflow on each category prompt file, then export the final videos into the expected category folders.
-
-## Run Category Scoring
-
-Run an MLLM category:
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
-  --video-root "${WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT}" \
-  --dataset-root "${WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT}" \
-  --model-name "${WORLDFOUNDRY_T2V_COMPBENCH_MODEL_NAME}" \
-  --category consistent_attribute_binding \
-  --llava-model-path "${WORLDFOUNDRY_T2V_COMPBENCH_LLAVA_MODEL_PATH}" \
-  --output-dir tmp/t2v-compbench/consistent-attribute \
-  --json
-```
-
-Run a detection/depth category:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
-  --video-root "${WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT}" \
-  --dataset-root "${WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT}" \
-  --model-name "${WORLDFOUNDRY_T2V_COMPBENCH_MODEL_NAME}" \
-  --category spatial_relationships \
-  --grounded-checkpoint "${WORLDFOUNDRY_T2V_COMPBENCH_GROUNDINGDINO_CKPT}" \
-  --sam-checkpoint "${WORLDFOUNDRY_T2V_COMPBENCH_SAM_CKPT}" \
-  --device cuda \
-  --output-dir tmp/t2v-compbench/spatial \
-  --json
-```
-
-Run motion binding with the required two-stage path:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
-  --video-root "${WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT}" \
-  --dataset-root "${WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT}" \
-  --model-name "${WORLDFOUNDRY_T2V_COMPBENCH_MODEL_NAME}" \
-  --category motion_binding \
-  --run-motion-two-stage \
-  --grounded-checkpoint "${WORLDFOUNDRY_T2V_COMPBENCH_GROUNDINGDINO_CKPT}" \
-  --sam-checkpoint "${WORLDFOUNDRY_T2V_COMPBENCH_SAM_CKPT}" \
-  --device cuda \
-  --output-dir tmp/t2v-compbench/motion \
-  --json
-```
-
-Once all assets and metric dependencies are staged, you can run the full suite:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
-  --video-root "${WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT}" \
-  --dataset-root "${WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT}" \
-  --model-name "${WORLDFOUNDRY_T2V_COMPBENCH_MODEL_NAME}" \
-  --category all \
-  --run-motion-two-stage \
-  --llava-model-path "${WORLDFOUNDRY_T2V_COMPBENCH_LLAVA_MODEL_PATH}" \
-  --grounded-checkpoint "${WORLDFOUNDRY_T2V_COMPBENCH_GROUNDINGDINO_CKPT}" \
-  --sam-checkpoint "${WORLDFOUNDRY_T2V_COMPBENCH_SAM_CKPT}" \
-  --device cuda \
-  --output-dir tmp/t2v-compbench/official-run \
-  --json
-```
-
-## Import Existing CSV Results
-
-The official leaderboard submission is a folder or zip containing up to eight CSV files:
-
-```text
-my_t2v_model_consistent_attr_score.csv
-my_t2v_model_dynamic_attr_score.csv
-my_t2v_model_spatial_score.csv
-my_t2v_model_motion_score.csv
-my_t2v_model_motion_back_fore.csv
-my_t2v_model_action_binding_score.csv
-my_t2v_model_object_interactions_score.csv
-my_t2v_model_numeracy_video.csv
-```
-
-To convert those CSVs into a WorldFoundry scorecard:
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
-  --csv-dir /path/to/t2v-compbench/eval_results_csv \
-  --video-root "${WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT}" \
-  --dataset-root "${WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT}" \
-  --model-name "${WORLDFOUNDRY_T2V_COMPBENCH_MODEL_NAME}" \
-  --output-dir tmp/t2v-compbench/imported \
-  --json
-```
-
-## Outputs
-
-The run writes:
-
-- `scorecard.json`: WorldFoundry scorecard with seven category metrics and `t2v_compbench_average`.
-- `raw_metric_table.jsonl`: normalized metric rows.
-- `per_sample_scores.jsonl`: per-video rows parsed from category CSVs when available.
-- `leaderboard_csv_manifest.json`: discovered official CSV files and checksums.
-- `generated_video_manifest.json`: category video coverage summary.
-- `dataset_manifest.json`: local reference dataset summary.
-- `upstream_stdout.log` and `upstream_stderr.log`: logs from in-tree category scripts.
-
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

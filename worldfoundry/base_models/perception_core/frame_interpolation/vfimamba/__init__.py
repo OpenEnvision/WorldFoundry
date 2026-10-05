@@ -9,7 +9,7 @@ __all__ = ["InputPadder", "MODEL_CONFIG", "Model", "checkpoint_path", "init_mode
 
 def __getattr__(name: str):
     if name == "Model":
-        from .Trainer_finetune import Model
+        from .inference import Model
 
         return Model
     if name == "InputPadder":

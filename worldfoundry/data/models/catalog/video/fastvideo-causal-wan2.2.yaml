@@ -1,0 +1,78 @@
+id: fastvideo-causal-wan2.2
+name: FastVideo CausalWan2.2
+aliases:
+- fastvideo-causal-wan
+- FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers
+tasks:
+- image-to-video
+- causal-video-generation
+provider: official_repo
+source:
+  status: open_source
+  official_repo_url: https://github.com/NVIDIA/FlashDreams
+  revision: 289da6f1d232de5abaa30d686c977b9c0040fe76
+  license: apache-2.0
+official_sources:
+  paper: https://arxiv.org/abs/2606.03159
+  project_page: https://nvidia.github.io/flashdreams/main/index.html
+  github:
+    url: https://github.com/NVIDIA/FlashDreams
+    revision: 289da6f1d232de5abaa30d686c977b9c0040fe76
+  huggingface:
+  - repo_id: FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers
+    revision: 0977572ccf137da5e577d62e3231ca840151af38
+checkpoints:
+- repo_id: FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers
+  revision: 0977572ccf137da5e577d62e3231ca840151af38
+  license: apache-2.0
+  role: dual_expert_transformers_text_encoder_vae
+variants:
+- id: fastvideo-causal-wan2.2-i2v-14b
+  task: image-to-video
+  provider: official_repo
+  runtime_profile: fastvideo-causal-wan2.2-i2v-14b
+  pipeline_binding: fastvideo-causal-wan2.2-i2v-14b
+  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  integration:
+    status: integrated
+  runner_parity:
+    status: pending
+    notes: CPU contract tests and checkpoint-backed GPU inference validate the
+      schedule, image first-frame seeding, expert routing, cache separation,
+      and 81-frame block traversal at 848x464. With the same image and prompt,
+      FastVideo's official 81-frame request emitted 73 frames because its
+      denoiser discards the final two latent frames. The shared 73 frames have
+      matching composition and forward motion, but numerical parity remains
+      pending because the random generators and latent precision differ.
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runtime_profile: runtime-profile:fastvideo-causal-wan2.2-i2v-14b
+pipeline_binding: fastvideo-causal-wan2.2-i2v-14b
+integration:
+  status: integrated
+  notes:
+  - Native roles cover both Wan2.2 experts, T5 conditioning, a required input image,
+    VAE first-frame seeding, the fixed shifted schedule, and cache traversal.
+runner_parity:
+  status: pending
+catalog_category: video
+catalog_scope: Video-generation catalog entries with in-tree WorldFoundry pipeline bindings.
+docs:
+  publisher: NVIDIA / FastVideo
+  publisher_kind: company
+  publisher_zh: 英伟达 / FastVideo
+  overview: FastVideo CausalWan2.2 is an eight-step causal Wan2.2 rollout that emits
+    video in three-latent-frame blocks while routing between high- and low-noise experts.
+  overview_zh: FastVideo CausalWan2.2 是八步因果 Wan2.2 生成模型，以每块三个潜帧推进，并在高、低噪声专家之间切换。
+  architecture: WorldFoundry keeps expert KV/cross-attention caches independent and owns
+    self-forcing re-noise on the fixed shifted flow schedule.
+  architecture_zh: WorldFoundry 独立维护两个专家的 KV/交叉注意力缓存，并在固定移位 flow schedule 上执行 self-forcing 重加噪。
+  usage_notes: An input image is required. The default 832x480 is an area budget;
+    the 16-pixel-aligned output canvas follows the source aspect ratio (a 1280x704
+    image yields 848x464). Defaults are 81 requested frames, eight steps, guidance
+    1, and 16 FPS.
+  usage_notes_zh: 必须提供输入图像。默认 832x480 是面积预算，实际画布按输入图像比例调整并对齐到 16 像素（1280x704 输入得到 848x464）。
+    默认请求 81 帧、八步、guidance 1、16 FPS。
+  limitations:
+  - Checkpoint-backed 81-frame inference passed at 848x464 on an H100. FastVideo's official 81-frame request emitted 73 frames; shared-frame numerical parity remains unverified because RNG and latent precision differ.
+  limitations_zh:
+  - 已在 H100 上完成 848x464、81 帧真实权重推理。FastVideo 官方入口请求 81 帧实际输出 73 帧；随机数生成器和潜变量精度不同，公共帧的逐像素数值一致性尚未验证。

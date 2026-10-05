@@ -14,11 +14,12 @@ import shlex
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from worldfoundry.cli.tui_discovery import build_model_benchmark_command, build_suite_command
 from worldfoundry.runtime.jobs import python_module_command
 
-from .context import DEFAULT_CONTEXT, MCPToolContext
+from .context import MCPToolContext, get_default_context
 
 # ── Preview and submission ──────────────────────────────────────────────
 
@@ -77,7 +78,7 @@ def preview_run_payload(
         Dictionary with ``command``, ``command_text``, ``run_command`,
         ``run_command_text``, ``output_dir``, and ``plan_only`` keys.
     """
-    ctx = context or DEFAULT_CONTEXT
+    ctx = context or get_default_context()
     selected_benchmarks = _benchmark_ids(benchmark=benchmark, benchmarks=benchmarks)
     resolved_output_dir = (
         Path(output_dir) if output_dir is not None else _default_output_dir(ctx.output_root, model, selected_benchmarks)
@@ -183,11 +184,17 @@ async def run_evaluation_payload(
     if wait not in {"auto", "async", "sync"}:
         raise ValueError("wait must be one of: auto, async, sync")
     selected_benchmarks = _benchmark_ids(benchmark=benchmark, benchmarks=benchmarks or tasks)
-    ctx = context or DEFAULT_CONTEXT
+    ctx = context or get_default_context()
+    job_id = uuid4().hex[:12]
+    resolved_output_dir = (
+        output_dir
+        if output_dir is not None
+        else _default_output_dir(ctx.output_root, model, selected_benchmarks, job_id=job_id)
+    )
     preview = preview_run_payload(
         model=model,
         benchmarks=selected_benchmarks,
-        output_dir=output_dir,
+        output_dir=resolved_output_dir,
         suite_ids=suite_ids,
         plan_only=plan_only,
         resume=resume,
@@ -215,6 +222,7 @@ async def run_evaluation_payload(
             "plan_only": plan_only,
             "surface": "mcp",
         },
+        job_id=job_id,
     )
     if wait == "async":
         return _submitted(job.to_summary())
@@ -239,7 +247,7 @@ def list_runs_payload(
 
     if limit < 1 or limit > 500:
         raise ValueError("limit must be between 1 and 500")
-    ctx = context or DEFAULT_CONTEXT
+    ctx = context or get_default_context()
     matched = [
         job.to_summary(log_tail=0)
         for job in ctx.job_store.list()
@@ -269,7 +277,7 @@ def get_run_status_payload(run_id: str, *, context: MCPToolContext | None = None
     Returns:
         Run summary dictionary with a ``log_tail`` of the last 20 log lines.
     """
-    ctx = context or DEFAULT_CONTEXT
+    ctx = context or get_default_context()
     job = ctx.job_store.get(run_id)
     if job is None:
         raise ValueError(f"run not found: {run_id}")
@@ -295,7 +303,7 @@ def get_run_result_payload(
     Returns:
         Run result dictionary, optionally including log lines.
     """
-    ctx = context or DEFAULT_CONTEXT
+    ctx = context or get_default_context()
     job = ctx.job_store.get(run_id)
     if job is None:
         raise ValueError(f"run not found: {run_id}")
@@ -338,7 +346,7 @@ def get_run_samples_payload(
     if task_name is not None and any(separator in task_name for separator in ("/", "\\")):
         raise ValueError("task_name cannot contain path separators")
 
-    ctx = context or DEFAULT_CONTEXT
+    ctx = context or get_default_context()
     job = ctx.job_store.get(run_id)
     if job is None:
         raise ValueError(f"run not found: {run_id}")
@@ -365,7 +373,7 @@ async def cancel_run_payload(run_id: str, *, context: MCPToolContext | None = No
     Returns:
         Dictionary with ``success``, ``run_id``, and ``message`` keys.
     """
-    ctx = context or DEFAULT_CONTEXT
+    ctx = context or get_default_context()
     success, message = await ctx.job_store.cancel(run_id)
     return {"success": success, "run_id": run_id, "message": message}
 
@@ -471,7 +479,13 @@ def _benchmark_ids(*, benchmark: str | None, benchmarks: Sequence[str] | None) -
     return tuple(deduped)
 
 
-def _default_output_dir(root: Path, model: str, benchmarks: Sequence[str]) -> Path:
+def _default_output_dir(
+    root: Path,
+    model: str,
+    benchmarks: Sequence[str],
+    *,
+    job_id: str | None = None,
+) -> Path:
     """Resolve a default output directory from model and benchmark identifiers.
 
     Joins up to two benchmark labels with the model label; appends a
@@ -480,7 +494,8 @@ def _default_output_dir(root: Path, model: str, benchmarks: Sequence[str]) -> Pa
     label = "__".join((_safe_path_label(model), *(_safe_path_label(item) for item in benchmarks[:2])))
     if len(benchmarks) > 2:
         label = f"{label}__plus_{len(benchmarks) - 2}"
-    return root / label
+    output_dir = root / label
+    return output_dir if job_id is None else output_dir / _safe_path_label(job_id)
 
 
 def _safe_path_label(value: str) -> str:

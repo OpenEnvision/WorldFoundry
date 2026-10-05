@@ -4,6 +4,16 @@ These operators intentionally favor correctness and broad device support over
 specialized grouped-GEMM performance.  Model integrations can keep their
 checkpoint-compatible packed expert weights and use this module when an
 optional CUDA/Triton kernel is unavailable on the current GPU.
+
+Not this module:
+    Grouped Triton matmuls live in :mod:`.triton_moe` and are imported only
+    after the registry predicate passes. Capability probing lives in
+    :mod:`.capabilities`.
+
+Public surface:
+
+- :func:`routed_swiglu_moe` — registry dispatch; Triton when eligible.
+- :func:`routed_swiglu_moe_pytorch` — exact per-expert ``index_select`` path.
 """
 
 from __future__ import annotations
@@ -16,6 +26,11 @@ import torch.nn.functional as F
 
 from worldfoundry.core.kernels.capabilities import triton_tensor_eligible
 from worldfoundry.core.kernels.registry import KERNEL_REGISTRY
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Portable reference — evaluate only routed tokens so unused experts stay cold
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def routed_swiglu_moe_pytorch(
@@ -99,6 +114,11 @@ def routed_swiglu_moe_pytorch(
     return output
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Registry adapters — lazy Triton import; signature keys exclude workspace
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _triton_candidate_eligible(
     hidden_states: torch.Tensor,
     routing_weights: torch.Tensor,
@@ -110,6 +130,12 @@ def _triton_candidate_eligible(
     workspace: Any = None,
     allow_triton: bool = True,
 ) -> bool:
+    """Return whether packed weights and activations may enter the Triton path.
+
+    Routing tensors are ignored here: packing validates them inside the kernel
+    wrapper. Workspace is optional and checked only after launch is chosen.
+    """
+
     del routing_weights, selected_experts, workspace
     return (
         allow_triton
@@ -138,6 +164,8 @@ def _routed_swiglu_moe_triton_candidate(
     workspace: dict[str, torch.Tensor] | Callable[[], dict[str, torch.Tensor]] | None = None,
     allow_triton: bool = True,
 ) -> torch.Tensor:
+    """Import and launch the grouped Triton MoE after the predicate has passed."""
+
     del allow_triton
     from worldfoundry.core.kernels.triton_moe import routed_swiglu_moe_triton
 
@@ -164,6 +192,8 @@ def _routed_swiglu_moe_fallback(
     workspace: Any = None,
     allow_triton: bool = True,
 ) -> torch.Tensor:
+    """Drop dispatch-only kwargs and run the portable PyTorch reference."""
+
     del workspace, allow_triton
     return routed_swiglu_moe_pytorch(
         hidden_states,
@@ -183,6 +213,11 @@ KERNEL_REGISTRY.register(
     predicate=_triton_candidate_eligible,
     priority=100,
 )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Public dispatch — disable Triton under autograd; cache key is shape/dtype
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def routed_swiglu_moe(

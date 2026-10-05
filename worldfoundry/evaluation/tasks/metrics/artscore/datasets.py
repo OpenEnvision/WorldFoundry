@@ -1,3 +1,4 @@
+import ast
 import torch
 from os.path import splitext, join
 from os import listdir
@@ -23,7 +24,7 @@ def get_dataset(args, dataset_class):
 
     try:
         drop_ratio = args.drop_ratio
-    except:
+    except Exception:
         drop_ratio = 0
     for idx, line in enumerate(table):
         if idx > 0:
@@ -144,7 +145,7 @@ class TrainDatasetShuffled(Dataset):
         if os.path.exists(f'label_files/{mode}_file_pths') and os.path.exists(f'label_files/{mode}_paintings.npy'):
             with open(f'label_files/{mode}_file_pths') as f:
                 dummy = f.readlines()
-            dummy = [eval(d) for d in dummy]
+            dummy = [ast.literal_eval(d) for d in dummy]
             self.file_pths = dummy
             self.paintings = list(np.load(f'label_files/{mode}_paintings.npy'))
             self.assigned = True

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Huazhong University of Science and Technology">
+  <circle cx="64" cy="64" r="58" fill="#0b3d91"/>
+  <circle cx="64" cy="64" r="50" fill="none" stroke="#ffffff" stroke-width="3"/>
+  <path fill="#ffffff" d="M36 78 64 30l28 48H84L64 46 44 78H36z"/>
+  <rect x="58" y="70" width="12" height="22" fill="#ffffff"/>
+</svg>

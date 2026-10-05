@@ -1,0 +1,52 @@
+---
+title: "Allegro"
+description: "Allegro（Rhymes AI）：文生视频、图生视频；Runner 一致性待确认。"
+modelId: "allegro"
+pageSource: authored
+---
+
+Allegro 是开源的文生视频/图生视频模型，本 catalog 通过其 TI2V（文本+图像生成视频）路径接入。 WorldFoundry 封装了树内 Allegro TI2V 运行时：一条提示词（可选配一张起始图）经标准 pipeline 契约产出视频产物。该条目同时解析别名 allegro_ti2v 与 allegro-ti2v。
+
+<ModelPaperFigures modelId="allegro" locale="zh" />
+
+记录论文为[arXiv 2410.15458](https://arxiv.org/abs/2410.15458)。
+
+代码：[rhymes-ai/Allegro](https://github.com/rhymes-ai/Allegro)。
+
+<ModelCommandBuilder modelId="allegro" locale="zh" />
+
+## 用来做什么
+
+`allegro` 是记录的文本/图像到视频线。需要同一张卡片上同时有 prompt 与静帧条件时用它。
+
+Allegro 是 Rhymes AI 发布的扩散 Transformer 视频生成模型；manifest 记录了树内运行时封装与 TI2V 条件路径（输入 schema 含 prompt、image、video、actions），本地 checkpoint 属外部资产。更底层的架构细节仓库未记录——请查阅上游发布说明。该模型由Rhymes AI发布。
+
+catalog 记录的任务包括 文生视频、图生视频。别名包括 `allegro_ti2v`、`allegro-ti2v`。模态上，它接受文本、图像，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（多维视频生成质量评测，适配 Allegro 的文生/图生视频输出）。
+
+只走提示词条件 TI2V，不是未收录的 `rhymes-ai/Allegro-I2V` 线。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`input_path`、`frames`、`fps`；产物 `allegro-ti2v.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `AllegroTi2VPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+Catalog 将集成状态记录为 integrated、runner parity 为 pending：pipeline target 已注册，但与官方 demo 配置的产物一致性仍需一次完整官方运行来确认。 启动前请先在本地就位 Allegro checkpoint，并可用本页的 model-show 命令查看已记录契约。
+
+GitHub verification succeeded after retry; the first attempt hit a transient TLS error.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run allegro --pipeline.task-profile interactive-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `rhymes-ai/Allegro`、`rhymes-ai/Allegro-TI2V`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh allegro`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="allegro" locale="zh" />

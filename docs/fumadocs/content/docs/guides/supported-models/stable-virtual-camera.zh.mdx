@@ -1,0 +1,50 @@
+---
+title: "Stable Virtual Camera"
+description: "Stable Virtual Camera（Stability AI）：3D 与 4D；Runner 一致性待确认。"
+modelId: "stable-virtual-camera"
+pageSource: generated
+---
+
+Stable Virtual Camera（SEVA）把一张或几张 2D 图像变成沿用户自定义相机路径的新视角视频。本 catalog 中 WorldFoundry 用树内适配器封装上游 demo.py 入口；由于 Stability AI checkpoint 为 gated 且官方 demo 运行尚待复核，runner parity 为 pending。
+
+<ModelPaperFigures modelId="stable-virtual-camera" locale="zh" />
+
+记录论文为[Stable Virtual Camera: Generative View Synthesis with Diffusion Models](https://arxiv.org/abs/2503.14489)（2025）。
+
+项目页：[stable-virtual-camera.github.io](https://stable-virtual-camera.github.io/)。代码：[Stability-AI/stable-virtual-camera](https://github.com/Stability-AI/stable-virtual-camera)。
+
+<ModelCommandBuilder modelId="stable-virtual-camera" locale="zh" />
+
+## 用来做什么
+
+用 `stable-virtual-camera` 做 catalog 几何推理。产物是重建而不是生成视频时选它。
+
+按论文（arXiv 2503.14489），多视角扩散模型以两阶段程序化方式在采样相机位姿处生成目标视图，在轨迹通用性与一致性之间取得平衡。除已记录任务外的细节仓库未存。
+
+catalog 记录的任务包括 generative novel view synthesis with camera control。别名包括 `SEVA`。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（评估生成视图的相机路径控制质量）。
+
+## 运行时契约
+
+可选 `input_path`、`steps`、`seed`、`version`、`task`；产物 `generated_video`、`stable_virtual_camera.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `StableVirtualCameraPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+`default` 记录默认值：seed=23。
+
+运行前请在 Hugging Face 接受 gated checkpoint 条款并设置 HF_TOKEN；gated 权限缺失会在推理时报告。 适配器驱动上游 demo.py 的 Fire 入口。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run stable-virtual-camera --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `stabilityai/stable-virtual-camera`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh stable-virtual-camera`；下载缺失的公开权重时加 `--download`。
+
+gated `stabilityai/stable-virtual-camera`，下载前需在上游接受条款；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="stable-virtual-camera" locale="zh" />

@@ -35,3 +35,19 @@ runner_parity:
   - Checkpoint numerical parity remains pending because no official model weights are released.
 catalog_category: vla_va_wam
 catalog_scope: In-tree inference runtime and checkpoint metadata for embodied policies.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'Dexora 1B is a dexterous bimanual manipulation VLA built on a 1B RDT policy backbone (paper: arXiv 2605.18722, MIT license). WorldFoundry keeps the full inference stack in-tree — SigLIP/T5 encoders, strict checkpoint loader, diffusion sampler, and a 36-DoF action contract — but the authors publish data and training code without official policy weights.'
+  overview_zh: Dexora 1B 是灵巧双臂操作 VLA，基于 1B RDT 策略骨干（论文：arXiv 2605.18722，MIT 许可）。 WorldFoundry 将完整推理栈内置树内——SigLIP/T5 编码器、严格 checkpoint 加载器、扩散采样器与 36 自由度动作契约——但作者只发布了数据与训练代码，无官方策略权重。
+  architecture: A 1B-parameter RDT (robotics diffusion transformer) policy with SigLIP vision and T5 language encoding, sampling 36-DoF bimanual dexterous actions through a diffusion sampler. Source-level checkpoint and inference contracts match the official 1B configuration.
+  architecture_zh: 1B 参数的 RDT（机器人扩散 transformer）策略，SigLIP 视觉与 T5 语言编码，经扩散采样器输出 36 自由度双臂灵巧动作。源码级 checkpoint 与推理契约与官方 1B 配置一致。
+  usage_notes: You must train your own Stage-1 or Stage-3 checkpoint with the official pipeline before the runtime can execute; training, datasets, teleoperation, ZMQ services, robot SDKs, and simulator code are excluded from the tree.
+  usage_notes_zh: 需先用官方流程训练自己的 Stage-1 或 Stage-3 checkpoint，运行时才能执行；训练、数据集、遥操作、ZMQ 服务、机器人 SDK 与模拟器代码均不在树内。
+  limitations:
+  - No official policy weights are released; checkpoint numerical parity is pending.
+  - 36-DoF dexterous action space requires matching hardware or simulation.
+  limitations_zh:
+  - 官方未发布策略权重；checkpoint 数值 parity 待定。
+  - 36 自由度灵巧动作空间需匹配的硬件或仿真。

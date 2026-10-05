@@ -154,6 +154,8 @@ def _workload_type(category: str, call_params: Sequence[str]) -> str:
 
 def _field_kind(name: str, default: Any = None) -> str:
     normalized = _normalise(name)
+    if normalized == "operator-kwargs":
+        return "json"
     if isinstance(default, bool):
         return "boolean"
     if isinstance(default, int) and not isinstance(default, bool):
@@ -266,13 +268,14 @@ def _default_for_call_key(defaults: Mapping[str, Any], key: str, fallback: Any) 
     return fallback
 
 
-def _input_key(field_id: str, call_params: Sequence[str]) -> str:
+def _input_key(field_id: str, call_params: Sequence[str], *, label: str = "") -> str:
     normalized = _normalise(field_id)
+    normalized_label = _normalise(label)
     if normalized == "prompt":
         return "prompt"
-    if "video" in normalized:
+    if "video" in normalized or "video" in normalized_label:
         return "video"
-    if "image" in normalized:
+    if "image" in normalized or "image" in normalized_label:
         return "image"
     params = {_normalise(item) for item in call_params}
     if params & {"image", "images", "image-path"}:
@@ -297,7 +300,7 @@ def _field_description(label: str, description: str, *, scope: str, display_name
 def _suggestions(model_id: str) -> str:
     ids: list[str] = []
     try:
-        from worldfoundry.studio.catalog import discover_catalog
+        from worldfoundry.studio.inference.catalog import discover_catalog
 
         ids.extend(entry.model_id for entry in discover_catalog())
     except Exception:
@@ -344,10 +347,7 @@ def _runtime_profile_id(value: Any) -> str:
 
 @lru_cache(maxsize=1)
 def _runtime_profile_paths_by_stem() -> Mapping[str, tuple[Any, ...]]:
-    try:
-        from worldfoundry.evaluation.models.runtime.profiles import DEFAULT_RUNTIME_PROFILES_ROOT
-    except Exception:
-        return {}
+    from worldfoundry.evaluation.models.runtime.profiles import DEFAULT_RUNTIME_PROFILES_ROOT
     paths: dict[str, list[Any]] = {}
     for path in DEFAULT_RUNTIME_PROFILES_ROOT.rglob("*.y*ml"):
         if path.is_file():
@@ -365,17 +365,11 @@ def _load_catalog_runtime_profile(entry: Any, variant: Any | None) -> tuple[Any 
             getattr(entry, "model_id", None),
         )
     )
-    try:
-        from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile_manifests
-    except Exception:
-        return None, candidates[0] if candidates else ""
+    from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile_manifests
     paths_by_stem = _runtime_profile_paths_by_stem()
     for candidate in candidates:
         for path in paths_by_stem.get(_normalise(candidate), ()):
-            try:
-                profiles = load_runtime_profile_manifests(path)
-            except Exception:
-                continue
+            profiles = load_runtime_profile_manifests(path)
             exact = next(
                 (
                     profile
@@ -762,11 +756,12 @@ def load_model_run_schema(
     task_id: str | None = None,
 ) -> ModelRunSchema:
     """Resolve one model into a Studio contract or Model Zoo/runtime fallback."""
-    from worldfoundry.core.inference import model_inference_spec
     from worldfoundry.evaluation.models.catalog.schema import select_default_variant
     from worldfoundry.evaluation.models.catalog.zoo_registry import load_model_zoo_registry
     from worldfoundry.evaluation.utils import MODEL_ZOO_DIR
-    from worldfoundry.studio.catalog import find_entry
+    from worldfoundry.runtime.inference_catalog import model_inference_spec
+    from worldfoundry.runtime.interactive_inference_catalog import interactive_task_for_variant
+    from worldfoundry.studio.inference.catalog import find_entry
 
     canonical_model_id = model_id
     catalog_variant_id: str | None = None
@@ -828,11 +823,9 @@ def load_model_run_schema(
         selected_catalog_variant = next(
             (
                 item
+                for requested_variant in requested_variants
                 for item in catalog_entry.variants
-                if any(
-                    _normalise(item.variant_id) == _normalise(requested_variant)
-                    for requested_variant in requested_variants
-                )
+                if _normalise(item.variant_id) == _normalise(requested_variant)
             ),
             None,
         )
@@ -873,11 +866,18 @@ def load_model_run_schema(
         supported_call_params=entry.call_params,
     )
     try:
-        variant = spec.variant(None if catalog_variant_id else variant_id)
+        # A catalog variant may also be a concrete shared inference variant.
+        # Preserve its runtime settings instead of silently selecting the default.
+        try:
+            variant = spec.variant(catalog_variant_id or variant_id)
+        except ValueError:
+            if not catalog_variant_id:
+                raise
+            variant = spec.variant()
     except ValueError as exc:
         raise ModelRunSchemaError(str(exc)) from exc
     try:
-        task = spec.task(task_id)
+        task = interactive_task_for_variant(spec, variant, spec.task(task_id))
     except ValueError as exc:
         raise ModelRunSchemaError(str(exc)) from exc
 
@@ -897,37 +897,49 @@ def load_model_run_schema(
 
     fields: list[ModelRunField] = []
     seen_options: set[str] = set()
+    normalized_model_id = _normalise(entry.model_id)
+    normalized_task_type = _normalise(entry.default_task_type)
+    text_to_video_entry = (
+        ("t2v" in normalized_model_id and "i2v" not in normalized_model_id)
+        or normalized_task_type in {"t2v", "text-to-video"}
+        or "text-to-video" in {_normalise(tag) for tag in entry.tags}
+    )
     for input_field in task.inputs:
         field_id = _normalise(input_field.field_id)
         if field_id in _SKIPPED_CALL_FIELDS:
             continue
         if (
             field_id == "input-path"
-            and "t2v" in _normalise(entry.model_id)
-            and "i2v" not in _normalise(entry.model_id)
+            and text_to_video_entry
         ):
             continue
         target = _normalise(input_field.target)
-        scope = "input" if target in {"prompt", "input-path"} else "call"
-        key = _call_key(field_id, entry.call_params)
-        default = _default_for_call_key(call_defaults, key, input_field.default)
+        scope = "input" if target in {"prompt", "input-path"} else "load" if target == "load-kwargs" else "call"
+        key = input_field.field_id if scope == "load" else _call_key(field_id, entry.call_params)
+        defaults = load_defaults if scope == "load" else call_defaults
+        default = _default_for_call_key(defaults, key, input_field.default)
         if field_id == "prompt" and default in (None, ""):
             default = entry.default_prompt or None
-        if scope == "input" and field_id != "prompt" and entry.default_input_path:
+        if (
+            scope == "input"
+            and field_id != "prompt"
+            and entry.default_input_path
+            and (task.task_id == spec.default_task_id or input_field.default is None)
+        ):
             default = entry.default_input_path
         inferred_kind = _field_kind(key, default)
         kind = input_field.kind
         if _normalise(kind) == "string" and inferred_kind != "string":
             kind = inferred_kind
         option_name = field_id
-        option = f"--pipeline.{option_name}"
+        option = f"--pipeline.load.{option_name}" if scope == "load" else f"--pipeline.{option_name}"
         if option in seen_options:
             continue
         seen_options.add(option)
         fields.append(
             ModelRunField(
                 option=option,
-                dest=f"model_run__call__{option_name.replace('-', '_')}",
+                dest=f"model_run__{scope}__{option_name.replace('-', '_')}",
                 scope=scope,
                 key_path=(key,),
                 kind=kind or inferred_kind,
@@ -941,7 +953,7 @@ def load_model_run_schema(
                     display_name=entry.display_name,
                 ),
                 label=input_field.label,
-                input_key=_input_key(field_id, entry.call_params),
+                input_key=_input_key(field_id, entry.call_params, label=input_field.label),
             )
         )
 

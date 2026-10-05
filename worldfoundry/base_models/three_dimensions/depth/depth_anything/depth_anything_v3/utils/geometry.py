@@ -20,7 +20,7 @@ import numpy as np
 import torch
 from einops import einsum
 
-from worldfoundry.core.geometry import (
+from worldfoundry.core.geometry.transforms import (
     quaternion_xyzw_to_rotation_matrix as quat_to_mat,
     rotation_matrix_to_quaternion_xyzw as mat_to_quat,
     standardize_quaternion_xyzw as standardize_quaternion,

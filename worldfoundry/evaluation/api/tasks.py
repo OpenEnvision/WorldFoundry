@@ -7,7 +7,6 @@ from worldfoundry.evaluation.api.json_contract import JsonContract, copy_mapping
 
 from .metrics import MetricSpec
 
-
 EVALUATION_PROTOCOL_SCHEMA_VERSION = "worldfoundry-evaluation-protocol"
 WORLD_TASK_CONFIG_SCHEMA_VERSION = "worldfoundry-task"
 BENCHMARK_SPEC_SCHEMA_VERSION = "worldfoundry-benchmark"

@@ -6,7 +6,7 @@ can help improve startup performance by deferring imports until they are truly
 needed.
 """
 
-__all__ = ["InspatioWorldSynthesis"]
+__all__ = ["InspatioWorldSynthesis", "InspatioWorldV15Synthesis"]
 
 
 def __getattr__(name):
@@ -26,6 +26,10 @@ def __getattr__(name):
     Raises:
         AttributeError: If the requested `name` is not 'InspatioWorldSynthesis'.
     """
+    if name == "InspatioWorldV15Synthesis":
+        from .inspatio_world_v15_synthesis import InspatioWorldV15Synthesis
+
+        return InspatioWorldV15Synthesis
     if name == "InspatioWorldSynthesis":
         # Import the InspatioWorldSynthesis class only when it's explicitly requested
         from .inspatio_world_synthesis import InspatioWorldSynthesis

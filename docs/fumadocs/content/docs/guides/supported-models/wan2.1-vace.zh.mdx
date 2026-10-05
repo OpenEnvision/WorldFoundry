@@ -1,0 +1,28 @@
+---
+title: "Wan2.1 VACE"
+description: "Wan2.1 的一体创建/编辑成员：参考图、视频到视频与 mask/控制，走原生 Wan 组装。"
+modelId: "wan2.1-vace"
+pageSource: authored
+---
+
+Wan2.1 VACE 是 Wan2.1 系列中「创作与编辑一体」的成员：参考图引导、视频到视频编辑与掩码/控制条件生成集于一个 checkpoint。WorldFoundry 用规范化 Wan 角色装配它；图像参考、源视频/掩码条件与预计算的 VACE 上下文张量均受支持，无需官方运行时后端。
+
+<ModelPaperFigures modelId="wan2.1-vace" locale="zh" />
+
+<ModelCommandBuilder modelId="wan2.1-vace" locale="zh" />
+
+## 用来做什么
+
+从 `wan2.1-vace` 开始。启动 `worldfoundry-eval run wan2.1-vace`。参考图创建/编辑、V2V 与 mask/控制走本卡，不要当成普通 Wan2.1 文生视频骨干。
+
+列出的质量评测：[VBench](/zh/docs/evaluation/benchmark-hub/vbench)。
+
+## 运行时契约
+
+必填 `prompt`；可选 `image` / `video`。原生默认：**1280×720、81 帧、50 步、guidance 5.0**。产物：`wan2.1-vace.mp4`。支持参考图、源视频/mask 条件以及预计算 VACE context tensor，不依赖官方 runtime 后端。
+
+## 在 WorldFoundry 中运行
+
+统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。就位 `Wan-AI/Wan2.1-VACE-14B` 或 `Wan-AI/Wan2.1-VACE-1.3B-diffusers`。状态：完整 checkpoint 视觉一致性为 **Runner 一致性待确认**。启动前准备 mask 与参考图。
+
+<ModelRelatedRecipes modelId="wan2.1-vace" locale="zh" />

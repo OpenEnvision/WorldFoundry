@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="The University of Hong Kong">
+  <path fill="#016936" d="M64 6 16 28v44c0 28 20 44 48 50 28-6 48-22 48-50V28Z"/>
+  <path fill="#f4e6b2" d="M64 16 28 34v36c0 21 15 34 36 39 21-5 36-18 36-39V34Z"/>
+  <path fill="#016936" d="M64 26 40 38v28c0 14 10 23 24 26 14-3 24-12 24-26V38Z"/>
+  <path fill="#f4e6b2" d="M52 48h24v4H52zm2 8h20v14H54z"/>
+  <path fill="#f4e6b2" d="M58 54h12l-2 16h-8z"/>
+</svg>

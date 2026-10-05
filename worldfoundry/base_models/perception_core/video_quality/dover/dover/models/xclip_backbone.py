@@ -3,7 +3,6 @@ import math
 from collections import OrderedDict
 from typing import Tuple, Union
 
-import clip
 import numpy as np
 import torch
 import torch.nn.functional as F

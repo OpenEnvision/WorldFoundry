@@ -22,8 +22,7 @@ from typing import Any, Mapping, Sequence
 import imageio.v3 as iio
 import numpy as np
 
-from worldfoundry.core.io.paths import checkpoint_root_path
-
+from worldfoundry.core.io.paths import checkpoint_root_path, package_data_path
 
 DEFAULT_NEGATIVE_PROMPT = (
     "bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, "
@@ -85,6 +84,8 @@ def _models_root_candidates() -> tuple[Path, ...]:
     """
     values = [
         os.environ.get("WORLDFOUNDRY_KAIROS_MODELS_ROOT"),
+        str(checkpoint_root_path("kairos-agi--kairos-sensenova-4B-480P-pretrained")),
+        str(checkpoint_root_path("kairos-agi--kairos-sensenova-4B-720P")),
         str(checkpoint_root_path("kairos-sensenova")),
         str(checkpoint_root_path("Kairos-model")),
     ]
@@ -155,19 +156,7 @@ def _default_config_path(runtime_root: str | Path, variant: str) -> str:
         root / "configs" / name,
     )
     existing = _first_existing(candidates)
-    return str(existing or candidates[0])
-
-
-def _valid_runtime_root(path: str | Path | None) -> str | None:
-    """Return a runtime root only when it contains the Kairos inference entrypoint."""
-    if not path:
-        return None
-    root = Path(path).expanduser()
-    if (root / "examples" / "inference.py").is_file() and (
-        (root / "kairos" / "configs").is_dir() or (root / "Kairos" / "configs").is_dir()
-    ):
-        return str(root)
-    return None
+    return str(existing or package_data_path('models', 'runtime', 'configs', 'kairos') / name)
 
 
 def _load_video_frames(video_path: str | Path) -> np.ndarray:
@@ -250,7 +239,7 @@ class KairosRuntime:
         variant: str = "robot-480p-distilled",
         device: str = "cuda",
         python_executable: str | None = None,
-        torchrun_executable: str = "torchrun",
+        torchrun_executable: str | None = None,
         defaults: Mapping[str, Any] | None = None,
     ) -> None:
         """
@@ -268,7 +257,10 @@ class KairosRuntime:
             device: The compute device to use (e.g., "cuda", "cuda:0").
             python_executable: The path to the Python executable to use for subprocesses.
                                If None, `sys.executable` is used.
-            torchrun_executable: The command to invoke `torchrun`. Defaults to "torchrun".
+            torchrun_executable: Optional standalone ``torchrun`` command. When omitted,
+                                 the current Python interpreter launches
+                                 ``torch.distributed.run`` so subprocesses stay in the
+                                 same environment.
             defaults: A dictionary of default parameters for video generation, which can be
                       overridden during `predict` calls.
         """
@@ -282,7 +274,7 @@ class KairosRuntime:
         self.config_path = str(config_path or _default_config_path(self.runtime_root, self.variant))
         self.device = device
         self.python_executable = python_executable or sys.executable
-        self.torchrun_executable = torchrun_executable
+        self.torchrun_executable = str(torchrun_executable) if torchrun_executable else None
         # Define default generation parameters that can be overridden
         self.defaults = {
             "negative_prompt": DEFAULT_NEGATIVE_PROMPT,
@@ -361,13 +353,16 @@ class KairosRuntime:
         }
         return cls(
             model_id=str(options.get("model_id") or options.get("profile_id") or model_id or cls.MODEL_ID),
-            runtime_root=_valid_runtime_root(options.get("runtime_root")) or _valid_runtime_root(options.get("repo_root")),
+            # Explicit runtime paths are part of the public loading contract and
+            # must not be replaced merely because they are staged after pipeline
+            # construction (or represented by a test/dry-run path).
+            runtime_root=options.get("runtime_root") or options.get("repo_root"),
             models_root=options.get("models_root") or options.get("checkpoint_dir"),
             config_path=options.get("config_path"),
             variant=str(options.get("variant") or "robot-480p-distilled"),
             device=str(device or options.get("device") or "cuda"),
             python_executable=options.get("python_executable"),
-            torchrun_executable=str(options.get("torchrun_executable") or "torchrun"),
+            torchrun_executable=options.get("torchrun_executable"),
             defaults=defaults,
         )
 
@@ -431,6 +426,10 @@ class KairosRuntime:
         env.setdefault("TOKENIZERS_PARALLELISM", "false")
         env.setdefault("PYTHONUNBUFFERED", "1")
         env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+        # NumExpr otherwise detects every host core and emits an error when
+        # its requested thread count exceeds the package safety cap.
+        env.setdefault("NUMEXPR_MAX_THREADS", "64")
+        env.setdefault("NUMEXPR_NUM_THREADS", "64")
         env["WORLDFOUNDRY_KAIROS_ENABLE_TORCH_COMPILE"] = (
             "1" if _as_bool(options.get("enable_torch_compile", False)) else "0"
         )
@@ -557,9 +556,14 @@ class KairosRuntime:
         Args:
             env: The environment variables to pass to the subprocess.
         """
-        manage_libs = Path(self.runtime_root) / "kairos" / "manage_libs.py"
-        if not manage_libs.is_file():
-            raise FileNotFoundError(f"Kairos manage_libs.py not found: {manage_libs}")
+        candidates = (
+            Path(self.runtime_root) / "kairos" / "manage_libs.py",
+            Path(self.runtime_root) / "kairos" / "third_party" / "manage_libs.py",
+        )
+        manage_libs = next((path for path in candidates if path.is_file()), None)
+        if manage_libs is None:
+            searched = ", ".join(str(path) for path in candidates)
+            raise FileNotFoundError(f"Kairos manage_libs.py not found; searched: {searched}")
         subprocess.run(
             [self.python_executable, str(manage_libs)],
             check=True,
@@ -579,8 +583,13 @@ class KairosRuntime:
         Returns:
             A list of strings representing the `torchrun` command and its arguments.
         """
+        launcher = (
+            [self.torchrun_executable]
+            if self.torchrun_executable
+            else [self.python_executable, "-m", "torch.distributed.run"]
+        )
         return [
-            self.torchrun_executable,
+            *launcher,
             "--nnodes=1",
             "--master_port",
             str(int(options.get("master_port", 29556))),

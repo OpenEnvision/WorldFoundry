@@ -60,6 +60,6 @@ def prediction_per_rank(preds, labels, paintings):
     pred_mean_rank = torch.mean(pred_rank.float(), axis=0)
     try:
         painting_score = torch.sum(sorted_all_preds[:, -1]*paintings)/(torch.sum(paintings))
-    except:
+    except Exception:
         painting_score = 0.0
     return pred_mean_rank, pred_mean_score, painting_score

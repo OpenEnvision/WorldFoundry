@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
+
 
 def _jsonable(value: Any) -> Any:
     """Recursively converts a value to a JSON-serializable type.
@@ -353,8 +354,12 @@ def build_being_h05_observation(
         if value is None:
             # If the full key (e.g., 'robot_state.eef_position') is not found,
             # try looking for a 'short key' (e.g., 'eef_position').
-            short_key = key.split(".", 1)[1]
+            namespace, short_key = key.split(".", 1)
             value = source.get(short_key)
+            if value is None:
+                nested_state = source.get(namespace)
+                if isinstance(nested_state, Mapping):
+                    value = nested_state.get(short_key)
         if value is None:
             # If still not found, provide a default zero-filled array.
             value = _default_state_array(key)
@@ -477,7 +482,7 @@ class BeingH05Runtime:
             "model_id": "being-h05",
             "artifact_kind": "action_trace",
             "artifact_path": str(target),
-            "artifact_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "artifact_sha256": file_sha256(target),
             "duration_seconds": round(time.monotonic() - start, 3),
             "runtime": trace["runtime"],
             "prediction": trace["prediction"],

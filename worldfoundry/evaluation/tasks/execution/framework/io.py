@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from worldfoundry.core.io.serialization import (
+from worldfoundry.core.io.formats.serialization import (
     append_jsonl,
     jsonable,
     read_json as load_json,
@@ -23,7 +23,7 @@ from worldfoundry.core.io.serialization import (
     write_json,
     write_jsonl,
 )
-from worldfoundry.core.time import utc_now_iso
+from worldfoundry.core.observability.time import utc_now_iso
 
 
 # Typed dictionary format for general JSON-like data mappings
@@ -153,6 +153,33 @@ def scalar_number(
     return None
 
 
+def coerce_unit_score(
+    value: Any,
+    *,
+    scale_max: float | None = None,
+    allow_bool: bool = False,
+) -> float | None:
+    """Normalize a raw official score onto ``[0, 1]``.
+
+    Rejects values above 100 when ``scale_max`` is unset (percent vs unit).
+    Booleans are accepted only when ``allow_bool`` is true.
+    """
+    if isinstance(value, bool):
+        if not allow_bool:
+            return None
+        return 1.0 if value else 0.0
+    numeric = optional_float(value)
+    if numeric is None or numeric < 0:
+        return None
+    if scale_max is not None:
+        return min(1.0, max(0.0, numeric / scale_max))
+    if numeric <= 1:
+        return numeric
+    if numeric <= 100:
+        return numeric / 100.0
+    return None
+
+
 def normalize_unit_score(raw_score: float | None) -> float | None:
     """Normalizes raw scores into the standard [0.0, 1.0] unit interval.
 
@@ -195,6 +222,7 @@ __all__ = [
     "DEFAULT_SCORE_KEYS",
     "JsonMapping",
     "append_jsonl",
+    "coerce_unit_score",
     "env_path",
     "jsonable",
     "load_json",

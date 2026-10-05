@@ -1,0 +1,50 @@
+---
+title: "InternVLA-A1-3B"
+description: "InternVLA-A1-3B（Shanghai AI Laboratory (InternRobotics)）：视觉-语言-动作（VLA）、机器人策略；仅静态加载; 独立环境 `worldfoundry-vla-internvla-a1`。"
+modelId: "internvla-a1"
+pageSource: generated
+---
+
+InternVLA-A1-3B 是 InternRobotics InternVLA 系列的 A1 世代：3B 策略，Qwen3-VL-2B 骨干搭配动作专家与 NVIDIA Cosmos tokenizer 封装。base 与 RoboTwin 两个 checkpoint 已确认（InternVLA-A1-3B、InternVLA-A1-3B-RoboTwin），CC-BY-NC-SA-4.0 许可，完整计算图在树内运行，静态验证已完成。
+
+<ModelPaperFigures modelId="internvla-a1" locale="zh" />
+
+记录论文为[arXiv 2607.04988](https://arxiv.org/abs/2607.04988)。
+
+项目页：[internrobotics.github.io/internvla-a15.github.io](https://internrobotics.github.io/internvla-a15.github.io)。代码：[InternRobotics/InternVLA-A-series](https://github.com/InternRobotics/InternVLA-A-series)。
+
+<ModelCommandBuilder modelId="internvla-a1" locale="zh" />
+
+## 用来做什么
+
+需要 catalog 上的 VLA 策略时选 `internvla-a1`：指令与观测进、动作轨迹出。用来滚动已记录策略，不是用来训练新策略。
+
+A1-3B 计算图将 Qwen3-VL-2B 视觉-语言编码与专家动作头、Cosmos-Tokenizer-CI8x8 封装、flow 采样与归一化路由耦合——全部树内、仅本地，无远程 checkpoint 代码。该模型由上海人工智能实验室（InternRobotics）发布。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、机器人策略、策略执行、具身评测。
+
+记录的评测入口包括[RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin)（有专门的 InternVLA-A1-3B-RoboTwin checkpoint）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`internvla_a1_action_trace.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `InternVLAA1Synthesis`。
+
+系列状态：**仅静态加载**。
+
+在本地就位 A1-3B（或 RoboTwin）checkpoint、Qwen3-VL-2B-Instruct 与 Cosmos tokenizer。 注意非商用许可。
+
+CC-BY-NC-SA-4.0：仅限非商用。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run internvla-a1 --pipeline.task-profile default` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-vla-internvla-a1`（Python 3.10，CUDA 12.8，torch>=2.7,\<2.8）。
+
+记录的权重仓库包括 `InternRobotics/InternVLA-A1-3B`、`InternRobotics/InternVLA-A1-3B-RoboTwin`、`Qwen/Qwen3-VL-2B-Instruct` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh internvla-a1`；下载缺失的公开权重时加 `--download`。
+
+状态：**仅静态加载**。
+
+<ModelRelatedRecipes modelId="internvla-a1" locale="zh" />

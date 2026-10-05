@@ -1,0 +1,50 @@
+---
+title: "StarWM"
+description: "StarWM：动作条件视频；Runner 一致性待确认。"
+modelId: "starwm"
+pageSource: generated
+---
+
+StarWM 是面向星际争霸类环境的多智能体世界模型：在大量交互单位下预测动作条件的游戏视频。 WorldFoundry 将官方离线推理客户端内置树内；作业通过 OpenAI 兼容的 StarWM 端点交互，使用官方 prompt fixture 格式，Hugging Face 上的 yxzhang2024/StarWM checkpoint 已确认。
+
+<ModelPaperFigures modelId="starwm" locale="zh" />
+
+记录论文为[arXiv 2602.14857](https://arxiv.org/abs/2602.14857)。
+
+项目页：[star-wm.github.io](https://star-wm.github.io/)。代码：[yxzzhang/StarWM](https://github.com/yxzzhang/StarWM)。
+
+<ModelCommandBuilder modelId="starwm" locale="zh" />
+
+## 用来做什么
+
+`starwm` 是记录的交互世界线。要用动作推进世界时从这里起步。
+
+运行时为端点-客户端设计：路由构建官方 run_inference_client.py 命令，执行前校验 input_file、mode 与 served_model_id/api_model_id。模型架构内部细节仓库未记录。
+
+catalog 记录的任务包括 multi-agent-world-model、starcraft-world-model、动作条件视频。
+
+记录的评测入口包括[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（动作条件游戏世界滚动生成质量）。
+
+## 运行时契约
+
+可选 `load.input_file`、`load.served_model_id`、`plan_only`、`timeout_seconds`；产物 `generated_world`、`starwm_predictions.jsonl`。
+
+CLI task profile：`starcraft-offline-client`。绑定的 pipeline 类是 `StarWMPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+真实生成需要一个运行中的 OpenAI 兼容 StarWM 端点；catalog 路由只负责构建并校验客户端命令。
+
+依赖外部部署的 StarWM 端点；树内没有独立可跑的后端。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run starwm --pipeline.task-profile starcraft-offline-client` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `yxzhang2024/StarWM`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh starwm`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="starwm" locale="zh" />

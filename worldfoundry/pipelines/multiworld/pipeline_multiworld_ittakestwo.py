@@ -48,8 +48,11 @@ class MultiWorldItTakesTwoPipeline(PipelineABC):
             runtime_root=required_components.get("runtime_root"),
             config_path=required_components.get("config_path"),
             checkpoint_path=required_components.get("checkpoint_path") or model_path,
+            base_model_root=required_components.get("base_model_root"),
+            vggt_root=required_components.get("vggt_root"),
             python_executable=required_components.get("python_executable"),
             derive_env_obv_from_image=required_components.get("derive_env_obv_from_image", True),
+            weight_dtype=weight_dtype,
             **kwargs,
         )
         return cls(

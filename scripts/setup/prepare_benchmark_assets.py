@@ -25,7 +25,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path, worldfoundry_path_tokens
-from worldfoundry.core.io.serialization import load_serialized
+from worldfoundry.core.io.formats.serialization import load_serialized
 
 ENV_RE = re.compile(r"\b(?:WORLDFOUNDRY_[A-Z0-9_]+|OPENAI_API_KEY|DASHSCOPE_API_KEY|HF_TOKEN|HUGGINGFACE_HUB_TOKEN|GOOGLE_API_KEY|GEMINI_API_KEY)\b")
 SECRET_RE = re.compile(r"(?:API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)", re.IGNORECASE)

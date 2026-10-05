@@ -58,12 +58,12 @@ eval_dataset_config:
 simulator_config:
   load_env_encoder: true
   env_encoder_config:
-    target: diffsynth.models.wan_env_encoder.WanEnvEncoder
+    role: wan_vggt_environment_encoder
     params:
       input_dim: 2048
       output_dim: 3072
   dit_config:
-    target: diffsynth.models.wan_video_multiworld_dit.WanModel
+    role: multiworld_wan
     model_path:
     - ./models/Wan-AI/Wan2.2-TI2V-5B/diffusion_pytorch_model-00001-of-00003.safetensors
     - ./models/Wan-AI/Wan2.2-TI2V-5B/diffusion_pytorch_model-00002-of-00003.safetensors
@@ -71,7 +71,7 @@ simulator_config:
     params:
       action_injection: bidi_cross_attention
       action_encoder_config:
-        target: diffsynth.models.wan_video_ittakestwo_action.WanActionEncoder
+        role: ittakestwo_action
         params:
           discrete_dim: 10
           continuous_dim: 2
@@ -110,26 +110,3 @@ inference_config:
   num_inference_steps: 35
   guidance_scale: 1.0
   sigma_shift: 5.0
-trainer_config:
-  learning_rate: 0.0001
-  batch_size: 4
-  num_epochs: 20
-  save_steps: 2000
-  find_unused_parameters: false
-  gradient_accumulation_steps: 1
-  dataset_num_workers: 16
-  validation_interval: 1000
-  optimizer_config:
-    target_class: torch.optim.AdamW
-    optimizer_state_path: null
-    params:
-      lr: ${trainer_config.learning_rate}
-      betas:
-      - 0.9
-      - 0.999
-      weight_decay: 0.01
-  scheduler_config:
-    target_class: torch.optim.lr_scheduler.CosineAnnealingLR
-    params:
-      T_max: 10000
-      eta_min: 1.0e-05

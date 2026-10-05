@@ -20,7 +20,7 @@ checkpoints:
   size_bytes: 7578837308
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Orange-3DV-Team--MoVerse
   role: moverse_components
-  status: checkpoint_download_in_progress
+  status: checkpoint_hash_verified
   required_paths:
   - gimbal360/autolevel.pth
   - gimbal360/pytorch_lora_weights.safetensors
@@ -67,7 +67,7 @@ artifact_filename: moverse.mp4
 execution:
   environment: moverse
   backend_stage: official_in_tree_headless_runtime
-  runtime_status: in_tree_runtime_assets_pending
+  runtime_status: checkpoint_backed_gpu_verified
   integration_status: runtime_ported
   pipeline_binding: moverse
 integration:
@@ -75,3 +75,5 @@ integration:
 notes:
 - Execution is offline and requires four pre-staged Hugging Face snapshots plus ffmpeg, gsplat, and compatible CUDA kernels.
 - The MoVerse-specific runtime is in-tree and reuses WorldFoundry's shared GeoCalib AutoLevel, Depth Anything 3, SHARP panorama, Wan, and TAEHV implementations.
+- Local H100 validation exercised the public image-to-panorama-to-Gaussians-to-video path at 161 frames, 832x480, 16 fps; calibrated camera accuracy and full upstream pipeline parity remain unmeasured.
+- The MoVerse Wan variant preserves native-dtype LayerNorm and cached text cross-attention while reusing shared projections and attention kernels.

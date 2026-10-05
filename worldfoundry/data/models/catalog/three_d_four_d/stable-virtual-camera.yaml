@@ -56,3 +56,23 @@ catalog_policy:
   - open_weights_restricted
   - api_or_closed
   - unknown
+docs:
+  publisher: Stability AI
+  publisher_kind: company
+  publisher_zh: Stability AI
+  overview: Stable Virtual Camera (SEVA) turns one or a few 2D images into a novel-view video along a user-defined camera path. In this catalog WorldFoundry wraps the upstream demo.py entrypoint with an in-tree adapter; runner parity is pending because the Stability AI checkpoint is gated and a reviewed official demo run is still needed.
+  overview_zh: Stable Virtual Camera（SEVA）把一张或几张 2D 图像变成沿用户自定义相机路径的新视角视频。本 catalog 中 WorldFoundry 用树内适配器封装上游 demo.py 入口；由于 Stability AI checkpoint 为 gated 且官方 demo 运行尚待复核，runner parity 为 pending。
+  architecture: Per the paper (arXiv 2503.14489), a multi-view diffusion model generates target views at sampled camera poses in a two-pass procedural manner, trading generality across trajectories for consistency. Details beyond the recorded tasks are not stored in this repository.
+  architecture_zh: 按论文（arXiv 2503.14489），多视角扩散模型以两阶段程序化方式在采样相机位姿处生成目标视图，在轨迹通用性与一致性之间取得平衡。除已记录任务外的细节仓库未存。
+  usage_notes: Accept the gated checkpoint terms on Hugging Face and set HF_TOKEN before running; missing gated access is reported at inference time. The adapter drives the upstream demo.py Fire entrypoint.
+  usage_notes_zh: 运行前请在 Hugging Face 接受 gated checkpoint 条款并设置 HF_TOKEN；gated 权限缺失会在推理时报告。适配器驱动上游 demo.py 的 Fire 入口。
+  limitations:
+  - 'Gated checkpoint: Stability AI community-license terms apply.'
+  - Full official-gallery artifact parity is pending gated access and a reviewed demo run.
+  limitations_zh:
+  - checkpoint 为 gated：适用 Stability AI 社区许可条款。
+  - 完整的官方画廊产物一致性待 gated 权限与复核的 demo 运行。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Evaluates camera-path control quality of generated views.
+    reason_zh: 评估生成视图的相机路径控制质量。

@@ -91,18 +91,12 @@ def collate_with_cat(whatever, lists=False):
         if isinstance(elem, tuple):
             return T(collate_with_cat(x, lists=lists) for x in zip(*whatever))
         if isinstance(elem, dict):
-            return {
-                k: collate_with_cat([e[k] for e in whatever], lists=lists) for k in elem
-            }
+            return {k: collate_with_cat([e[k] for e in whatever], lists=lists) for k in elem}
 
         if isinstance(elem, torch.Tensor):
             return listify(whatever) if lists else torch.cat(whatever)
         if isinstance(elem, np.ndarray):
-            return (
-                listify(whatever)
-                if lists
-                else torch.cat([torch.from_numpy(x) for x in whatever])
-            )
+            return listify(whatever) if lists else torch.cat([torch.from_numpy(x) for x in whatever])
 
         return sum(whatever, T())
 

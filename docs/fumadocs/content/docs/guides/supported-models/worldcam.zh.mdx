@@ -1,0 +1,50 @@
+---
+title: "WorldCam"
+description: "WorldCam（KAIST / Adobe Research / MAUM AI）：世界模型、相机控制；已验证。"
+modelId: "worldcam"
+pageSource: generated
+---
+
+WorldCam 由 KAIST CV Lab 联合 Adobe Research 与 MAUM AI 发布，是支持相机位姿控制的交互式世界模型，面向长时程游戏视频。本 catalog 中集成状态为 verified：运行时代码已内置树内，wrapper 支持 load_model=False 规划、无外部 checkout 依赖，runner 支持统一环境 profile 下官方风格的条件视频 demo。
+
+<ModelPaperFigures modelId="worldcam" locale="zh" />
+
+记录论文为[arXiv 2603.16871](https://arxiv.org/abs/2603.16871)。
+
+项目页：[cvlab-kaist.github.io/WorldCam](https://cvlab-kaist.github.io/WorldCam/)。代码：[cvlab-kaist/WorldCam](https://github.com/cvlab-kaist/WorldCam)。
+
+<ModelCommandBuilder modelId="worldcam" locale="zh" />
+
+## 用来做什么
+
+用 `worldcam` 做相机条件视频推理。配方绑定了已记录的相机控制 profile。
+
+树内 runner 遵循官方条件视频路径，使用本地 WorldCam/Wan 资产，表明其为基于 Wan 的扩散骨干加相机位姿条件。除此之外的架构内部细节仓库未记录。该模型由KAIST（韩国科学技术院）/ Adobe Research / MAUM AI发布。
+
+catalog 记录的任务包括 世界模型、相机控制。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（相机位姿控制的滚动生成跟随度）、[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（长时程交互世界质量）。
+
+## 运行时契约
+
+必填 `input_path`；可选 `prompt`、`negative_prompt`、`fps`、`height`、`width`；产物 `worldcam.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `WorldCamPipeline`。
+
+系列状态：**已验证**。
+
+`interactive-video` 记录默认值：fps=30, height=480, width=832, seed=0。
+
+该发布为 code-only（无已确认的官方 checkpoint），需自行就位本地 WorldCam/Wan 资产； wrapper 的 load_model=False 模式可在无权重时验证规划。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run worldcam --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `worldcam/worldcam`、`Wan-AI/Wan2.1-T2V-1.3B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh worldcam`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="worldcam" locale="zh" />

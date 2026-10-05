@@ -1,0 +1,895 @@
+# Ported from SandAI MAGI-2-preview (Apache-2.0): TurboVAED decode-only student.
+"""TurboVAED (TurboV3-Wan22-TinyShallow) video decoder.
+
+decode(z [B,48,T,H/16,W/16]) -> [B,3,~4T,H,W] via sliding-window temporal decode
+(first_chunk_size=3, step_size=5, overlap = 1 latent frame * temporal ratio),
+depthwise-separable convs and pixel-shuffle upsampling.
+
+Single-GPU port of ``<SG>/model/turbo_vaed.py``. The upstream graph-compiler
+dependency is removed: its ``decode`` decorator is replaced by a no-op
+passthrough (``_eager_decode``) so ``decode`` runs eagerly. diffusers
+ModelMixin/ConfigMixin are kept.
+"""
+
+from typing import Optional, Tuple, Union
+
+import json
+
+import torch
+import torch.nn as nn
+from diffusers.configuration_utils import ConfigMixin, register_to_config
+from diffusers.models.modeling_utils import ModelMixin
+from einops import rearrange
+
+from .config import WAN22_LATENTS_MEAN, WAN22_LATENTS_STD
+
+
+__all__ = ["TurboVAED", "get_turbo_vaed"]
+
+
+def _eager_decode(*_args, **_kwargs):
+    """No-op replacement for the upstream graph-compiler decode wrapper.
+
+    Upstream applies a graph-compilation wrapper to ``TurboVAED.decode``. Here we
+    strip that coupling and return the function unchanged so it runs eagerly.
+    Supports both ``@_eager_decode`` and ``@_eager_decode(...)`` usage.
+    """
+    if len(_args) == 1 and callable(_args[0]) and not _kwargs:
+        return _args[0]
+
+    def _decorator(fn):
+        return fn
+
+    return _decorator
+
+
+ACT2CLS = {
+    "swish": nn.SiLU,
+    "silu": nn.SiLU,
+    "mish": nn.Mish,
+    "gelu": nn.GELU,
+    "relu": nn.ReLU,
+}
+
+
+def get_activation(act_fn: str) -> nn.Module:
+    act_fn = act_fn.lower()
+    if act_fn in ACT2CLS:
+        return ACT2CLS[act_fn]()
+    else:
+        raise ValueError(
+            f"activation function {act_fn} not found in ACT2CLS mapping {list(ACT2CLS.keys())}"
+        )
+
+
+def _turbo_unpatchify(x, patch_size):
+    """Unpatchify: convert patched representation back to original spatial resolution.
+
+    Args:
+        x: [batch_size, (channels * patch_size * patch_size), frame, height, width]
+        patch_size: The patch size used during patchification
+
+    Returns:
+        [batch_size, channels, frame, height * patch_size, width * patch_size]
+    """
+    if patch_size == 1:
+        return x
+
+    if x.dim() != 5:
+        raise ValueError(f"Invalid input shape: {x.shape}")
+
+    batch_size, c_patches, frames, height, width = x.shape
+    channels = c_patches // (patch_size * patch_size)
+
+    x = x.view(batch_size, channels, patch_size, patch_size, frames, height, width)
+
+    x = x.permute(0, 1, 4, 5, 3, 6, 2).contiguous()
+    x = x.view(batch_size, channels, frames, height * patch_size, width * patch_size)
+
+    return x
+
+
+class RMSNorm(nn.Module):
+    r"""RMS Norm (https://huggingface.co/papers/1910.07467)."""
+
+    def __init__(
+        self, dim, eps: float, elementwise_affine: bool = True, bias: bool = False
+    ):
+        super().__init__()
+
+        self.eps = eps
+        self.elementwise_affine = elementwise_affine
+
+        if isinstance(dim, int):
+            dim = (dim,)
+
+        self.dim = torch.Size(dim)
+
+        self.weight = None
+
+        if elementwise_affine:
+            self.weight = nn.Parameter(torch.ones(dim))
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        variance = hidden_states.to(torch.float32).pow(2).mean(1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.eps)
+
+        if self.weight is not None:
+            # convert into half-precision if necessary
+            if self.weight.dtype in [torch.float16, torch.bfloat16]:
+                hidden_states = hidden_states.to(self.weight.dtype)
+            hidden_states = hidden_states * self.weight
+        else:
+            hidden_states = hidden_states.to(input_dtype)
+
+        return hidden_states
+
+
+class TurboVAEDConv2dSplitUpsampler(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        kernel_size: Union[int, Tuple[int, int]] = 3,
+        stride: Union[int, Tuple[int, int]] = 1,
+        upscale_factor: int = 1,
+        padding_mode: str = "zeros",
+    ):
+        super().__init__()
+
+        self.in_channels = in_channels
+        self.stride = stride if isinstance(stride, tuple) else (stride, stride)
+        self.upscale_factor = upscale_factor
+
+        out_channels = in_channels
+
+        self.kernel_size = (
+            kernel_size
+            if isinstance(kernel_size, tuple)
+            else (kernel_size, kernel_size)
+        )
+
+        height_pad = self.kernel_size[0] // 2
+        width_pad = self.kernel_size[1] // 2
+        padding = (height_pad, width_pad)
+
+        self.conv = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=self.kernel_size,
+            stride=1,
+            padding=padding,
+            padding_mode=padding_mode,
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv(hidden_states)
+        hidden_states = torch.nn.functional.pixel_shuffle(hidden_states, self.stride[0])
+
+        return hidden_states
+
+
+class TurboVAEDCausalConv3d(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: Union[int, Tuple[int, int, int]] = 3,
+        stride: Union[int, Tuple[int, int, int]] = 1,
+        dilation: Union[int, Tuple[int, int, int]] = 1,
+        groups: int = 1,
+        padding_mode: str = "zeros",
+        is_causal: bool = False,
+    ):
+        super().__init__()
+
+        assert is_causal == False
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.is_causal = is_causal
+        self.kernel_size = (
+            kernel_size
+            if isinstance(kernel_size, tuple)
+            else (kernel_size, kernel_size, kernel_size)
+        )
+
+        dilation = dilation if isinstance(dilation, tuple) else (dilation, 1, 1)
+        stride = stride if isinstance(stride, tuple) else (stride, stride, stride)
+        height_pad = self.kernel_size[1] // 2
+        width_pad = self.kernel_size[2] // 2
+        padding = (0, height_pad, width_pad)
+
+        self.conv = nn.Conv3d(
+            in_channels,
+            out_channels,
+            self.kernel_size,
+            stride=stride,
+            dilation=dilation,
+            groups=groups,
+            padding=padding,
+            padding_mode=padding_mode,
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        time_kernel_size = self.kernel_size[0]
+
+        if time_kernel_size > 1:
+            pad_left = hidden_states[:, :, :1, :, :].repeat(
+                (1, 1, (time_kernel_size - 1) // 2, 1, 1)
+            )
+            pad_right = hidden_states[:, :, -1:, :, :].repeat(
+                (1, 1, (time_kernel_size - 1) // 2, 1, 1)
+            )
+            hidden_states = torch.cat([pad_left, hidden_states, pad_right], dim=2)
+
+        hidden_states = self.conv(hidden_states)
+        return hidden_states
+
+
+class TurboVAEDCausalDepthwiseSeparableConv3d(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: Union[int, Tuple[int, int, int]] = 3,
+        stride: Union[int, Tuple[int, int, int]] = 1,
+        dilation: Union[int, Tuple[int, int, int]] = 1,
+        padding_mode: str = "zeros",
+        is_causal: bool = True,
+    ):
+        super().__init__()
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.is_causal = is_causal
+        self.kernel_size = (
+            kernel_size
+            if isinstance(kernel_size, tuple)
+            else (kernel_size, kernel_size, kernel_size)
+        )
+        self.stride = stride if isinstance(stride, tuple) else (stride, stride, stride)
+        self.dilation = dilation if isinstance(dilation, tuple) else (dilation, 1, 1)
+
+        # Calculate padding for height and width dimensions
+        height_pad = self.kernel_size[1] // 2
+        width_pad = self.kernel_size[2] // 2
+        self.padding = (0, height_pad, width_pad)
+
+        # Depthwise Convolution
+        self.depthwise_conv = nn.Conv3d(
+            in_channels,
+            in_channels,
+            self.kernel_size,
+            stride=self.stride,
+            dilation=self.dilation,
+            groups=in_channels,  # Each input channel is convolved separately
+            padding=self.padding,
+            padding_mode=padding_mode,
+        )
+
+        # Pointwise Convolution
+        self.pointwise_conv = nn.Conv3d(
+            in_channels, out_channels, kernel_size=1
+        )  # 1x1x1 convolution to mix channels
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        time_kernel_size = self.kernel_size[0]
+        if time_kernel_size > 1:
+            pad_count = (time_kernel_size - 1) // 2
+            pad_left = hidden_states[:, :, :1, :, :].repeat((1, 1, pad_count, 1, 1))
+            pad_right = hidden_states[:, :, -1:, :, :].repeat((1, 1, pad_count, 1, 1))
+            hidden_states = torch.cat([pad_left, hidden_states, pad_right], dim=2)
+
+        # Apply depthwise convolution
+        hidden_states = self.depthwise_conv(hidden_states)
+        # Apply pointwise convolution
+        hidden_states = self.pointwise_conv(hidden_states)
+
+        return hidden_states
+
+
+class TurboVAEDResNetBlock3d(nn.Module):
+    r"""A 3D ResNet block used in the TurboVAED model."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: Optional[int] = None,
+        eps: float = 1e-6,
+        elementwise_affine: bool = False,
+        non_linearity: str = "swish",
+        is_causal: bool = True,
+        is_upsampler_modified: bool = False,
+        is_dw_conv: bool = False,
+        dw_kernel_size: int = 3,
+    ) -> None:
+        super().__init__()
+
+        out_channels = out_channels or in_channels
+
+        self.nonlinearity = get_activation(non_linearity)
+
+        self.conv_operation = (
+            TurboVAEDCausalConv3d
+            if not is_dw_conv
+            else TurboVAEDCausalDepthwiseSeparableConv3d
+        )
+        self.kernel_size = 3 if not is_dw_conv else dw_kernel_size
+
+        self.is_upsampler_modified = is_upsampler_modified
+        self.replace_nonlinearity = get_activation("relu")
+
+        self.norm1 = RMSNorm(
+            in_channels, eps=1e-8, elementwise_affine=elementwise_affine
+        )
+        self.conv1 = self.conv_operation(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=self.kernel_size,
+            is_causal=is_causal,
+        )
+
+        self.norm2 = RMSNorm(
+            out_channels, eps=1e-8, elementwise_affine=elementwise_affine
+        )
+        self.conv2 = self.conv_operation(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=self.kernel_size,
+            is_causal=is_causal,
+        )
+
+        self.norm3 = None
+        self.conv_shortcut = None
+        if in_channels != out_channels:
+            self.norm3 = RMSNorm(
+                in_channels, eps=eps, elementwise_affine=elementwise_affine
+            )
+            self.conv_shortcut = self.conv_operation(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=1,
+                stride=1,
+                is_causal=is_causal,
+            )
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        hidden_states = inputs
+
+        hidden_states = self.norm1(hidden_states)
+
+        if self.is_upsampler_modified:
+            hidden_states = self.replace_nonlinearity(hidden_states)
+        else:
+            hidden_states = self.nonlinearity(hidden_states)
+
+        hidden_states = self.conv1(hidden_states)
+
+        hidden_states = self.norm2(hidden_states)
+
+        hidden_states = self.nonlinearity(hidden_states)
+
+        hidden_states = self.conv2(hidden_states)
+
+        if self.norm3 is not None:
+            inputs = self.norm3(inputs)
+
+        if self.conv_shortcut is not None:
+            inputs = self.conv_shortcut(inputs)
+
+        hidden_states = hidden_states + inputs
+        return hidden_states
+
+
+class WanUpsample(nn.Upsample):
+    r"""Upsample while ensuring the output tensor keeps the input's data type."""
+
+    def forward(self, x):
+        return super().forward(x.float()).type_as(x)
+
+
+class WanResample(nn.Module):
+    r"""A custom resampling module for 2D and 3D data."""
+
+    def __init__(self, dim: int, mode: str, upsample_out_dim: int = None) -> None:
+        super().__init__()
+        self.dim = dim
+        self.mode = mode
+
+        # default to dim //2
+        if upsample_out_dim is None:
+            upsample_out_dim = dim // 2
+
+        # layers
+        if mode == "upsample2d":
+            self.resample = nn.Sequential(
+                WanUpsample(scale_factor=(2.0, 2.0), mode="nearest-exact"),
+                nn.Conv2d(dim, upsample_out_dim, 3, padding=1),
+            )
+        elif mode == "upsample3d":
+            self.resample = nn.Sequential(
+                WanUpsample(scale_factor=(2.0, 2.0), mode="nearest-exact"),
+                nn.Conv2d(dim, upsample_out_dim, 3, padding=1),
+            )
+            self.time_conv = TurboVAEDCausalConv3d(dim, dim * 2, (3, 1, 1))
+        else:
+            self.resample = nn.Identity()
+
+    def forward(self, x, is_first_chunk: bool = True):
+        b, c, t, h, w = x.shape
+        if self.mode == "upsample3d":
+            x = self.time_conv(x)
+            x = rearrange(x, "b (n_split c) t h w -> b c (t n_split) h w", n_split=2)
+            assert x.shape == (b, c, t * 2, h, w), "x.shape: {}, expected: {}".format(
+                x.shape, (b, c, t * 2, h, w)
+            )
+            if is_first_chunk:
+                x = x[:, :, 1:]
+
+        x = rearrange(x, "b c t h w -> (b t) c h w")
+        x = self.resample(x)
+        x = rearrange(x, "(b t) c h w -> b c t h w", b=b)
+
+        return x
+
+
+class TurboVAEDMidBlock3d(nn.Module):
+    r"""A middle block used in the TurboVAED model."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        num_layers: int = 1,
+        resnet_eps: float = 1e-6,
+        resnet_act_fn: str = "swish",
+        is_causal: bool = True,
+        is_dw_conv: bool = False,
+        dw_kernel_size: int = 3,
+    ) -> None:
+        super().__init__()
+
+        resnets = []
+        for _ in range(num_layers):
+            resnets.append(
+                TurboVAEDResNetBlock3d(
+                    in_channels=in_channels,
+                    out_channels=in_channels,
+                    eps=resnet_eps,
+                    non_linearity=resnet_act_fn,
+                    is_causal=is_causal,
+                    is_dw_conv=is_dw_conv,
+                    dw_kernel_size=dw_kernel_size,
+                )
+            )
+        self.resnets = nn.ModuleList(resnets)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        for resnet in self.resnets:
+            hidden_states = resnet(hidden_states)
+
+        return hidden_states
+
+
+class TurboVAEDUpBlock3d(nn.Module):
+    r"""Up block used in the TurboVAED model."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: Optional[int] = None,
+        num_layers: int = 1,
+        resnet_eps: float = 1e-6,
+        resnet_act_fn: str = "swish",
+        spatio_temporal_scale: bool = True,
+        is_causal: bool = True,
+        is_dw_conv: bool = False,
+        dw_kernel_size: int = 3,
+        spatio_only: bool = False,
+    ):
+        super().__init__()
+
+        out_channels = out_channels or in_channels
+
+        self.conv_in = None
+        if in_channels != out_channels:
+            self.conv_in = TurboVAEDResNetBlock3d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                eps=resnet_eps,
+                non_linearity=resnet_act_fn,
+                is_causal=is_causal,
+                is_dw_conv=is_dw_conv,
+                dw_kernel_size=dw_kernel_size,
+            )
+
+        self.upsamplers = None
+        if spatio_temporal_scale:
+            self.upsamplers = nn.ModuleList(
+                [
+                    WanResample(
+                        dim=out_channels,
+                        mode="upsample2d" if spatio_only else "upsample3d",
+                        upsample_out_dim=out_channels,
+                    )
+                ]
+            )
+
+        resnets = []
+        for _ in range(num_layers):
+            resnets.append(
+                TurboVAEDResNetBlock3d(
+                    in_channels=out_channels,
+                    out_channels=out_channels,
+                    eps=resnet_eps,
+                    non_linearity=resnet_act_fn,
+                    is_causal=is_causal,
+                    is_dw_conv=is_dw_conv,
+                    dw_kernel_size=dw_kernel_size,
+                    is_upsampler_modified=(spatio_temporal_scale),
+                )
+            )
+        self.resnets = nn.ModuleList(resnets)
+
+    def forward(
+        self, hidden_states: torch.Tensor, is_first_chunk: bool
+    ) -> torch.Tensor:
+        if self.conv_in is not None:
+            hidden_states = self.conv_in(hidden_states)
+
+        if self.upsamplers is not None:
+            for upsampler in self.upsamplers:
+                hidden_states = upsampler(hidden_states, is_first_chunk=is_first_chunk)
+
+        for resnet in self.resnets:
+            hidden_states = resnet(hidden_states)
+
+        return hidden_states
+
+
+class TurboVAEDDecoder3d(nn.Module):
+    r"""Decoder that maps latents into an output sample."""
+
+    def __init__(
+        self,
+        in_channels: int = 128,
+        out_channels: int = 3,
+        block_out_channels: Tuple[int, ...] = (128, 256, 512, 512),
+        spatio_temporal_scaling: Tuple[bool, ...] = (True, True, True, False),
+        layers_per_block: Tuple[int, ...] = (4, 3, 3, 3, 4),
+        patch_size: int = 4,
+        patch_size_t: int = 1,
+        resnet_norm_eps: float = 1e-6,
+        is_causal: bool = False,
+        decoder_is_dw_conv: Tuple[bool, ...] = (False, False, False, False, False),
+        decoder_dw_kernel_size: int = 3,
+        spatio_only: Tuple[bool, ...] = (False, False, False, False),
+        upsampling: bool = False,
+        use_unpatchify: bool = False,
+    ) -> None:
+        super().__init__()
+
+        self.patch_size = patch_size
+        self.patch_size_t = patch_size_t
+        self.out_channels = out_channels
+
+        self.upsampling = upsampling
+        self.use_unpatchify = use_unpatchify
+
+        block_out_channels = tuple(reversed(block_out_channels))
+        spatio_temporal_scaling = tuple(reversed(spatio_temporal_scaling))
+        layers_per_block = tuple(reversed(layers_per_block))
+        decoder_is_dw_conv = tuple(reversed(decoder_is_dw_conv))
+        spatio_only = tuple(reversed(spatio_only))
+        output_channel = block_out_channels[0]
+
+        self.conv_in = TurboVAEDCausalConv3d(
+            in_channels=in_channels,
+            out_channels=output_channel,
+            kernel_size=3,
+            stride=1,
+            is_causal=is_causal,
+        )
+
+        self.mid_block = TurboVAEDMidBlock3d(
+            in_channels=output_channel,
+            num_layers=layers_per_block[0],
+            resnet_eps=resnet_norm_eps,
+            is_causal=is_causal,
+            is_dw_conv=decoder_is_dw_conv[0],
+            dw_kernel_size=decoder_dw_kernel_size,
+        )
+
+        # up blocks
+        num_block_out_channels = len(block_out_channels)
+        self.up_blocks = nn.ModuleList([])
+        for i in range(num_block_out_channels):
+            input_channel = output_channel
+            output_channel = block_out_channels[i]
+
+            up_block = TurboVAEDUpBlock3d(
+                in_channels=input_channel,
+                out_channels=output_channel,
+                num_layers=layers_per_block[i + 1],
+                resnet_eps=resnet_norm_eps,
+                spatio_temporal_scale=spatio_temporal_scaling[i],
+                is_causal=is_causal,
+                is_dw_conv=decoder_is_dw_conv[i + 1],
+                dw_kernel_size=decoder_dw_kernel_size,
+                spatio_only=spatio_only[i],
+            )
+
+            self.up_blocks.append(up_block)
+
+        # out
+        assert self.patch_size == 2
+        if not self.use_unpatchify:
+            self.norm_up_1 = RMSNorm(output_channel, eps=1e-8, elementwise_affine=False)
+            self.upsampler2d_1 = TurboVAEDConv2dSplitUpsampler(
+                in_channels=output_channel, kernel_size=3, stride=(2, 2)
+            )
+            output_channel = output_channel // (2 * 2)
+
+        self.conv_act = nn.SiLU()
+
+        # When use_unpatchify=True, conv_out outputs more channels (out_channels * patch_size^2)
+        # and unpatchify will recover the spatial resolution
+        conv_out_channels = self.out_channels
+        if self.use_unpatchify and self.patch_size >= 2:
+            conv_out_channels = self.out_channels * self.patch_size * self.patch_size
+
+        self.conv_out = TurboVAEDCausalConv3d(
+            in_channels=output_channel,
+            out_channels=conv_out_channels,
+            kernel_size=3,
+            stride=1,
+            is_causal=is_causal,
+        )
+
+    def forward(
+        self, hidden_states: torch.Tensor, is_first_chunk: bool
+    ) -> torch.Tensor:
+        hidden_states = self.conv_in(hidden_states)
+
+        hidden_states = self.mid_block(hidden_states)
+
+        for up_block in self.up_blocks:
+            hidden_states = up_block(hidden_states, is_first_chunk=is_first_chunk)
+
+        if not self.use_unpatchify:
+            hidden_states = self.norm_up_1(hidden_states)
+            hidden_states = self.conv_act(hidden_states)
+
+            hidden_states_array = []
+            for t in range(hidden_states.shape[2]):
+                h = self.upsampler2d_1(hidden_states[:, :, t, :, :])
+                hidden_states_array.append(h)
+            hidden_states = torch.stack(hidden_states_array, dim=2)
+
+        # RMSNorm
+        input_dtype = hidden_states.dtype
+        variance = hidden_states.to(torch.float32).pow(2).mean(1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + 1e-8)
+        hidden_states = hidden_states.to(input_dtype)
+
+        hidden_states = self.conv_act(hidden_states)
+
+        hidden_states = self.conv_out(hidden_states)
+
+        if self.use_unpatchify:
+            hidden_states = _turbo_unpatchify(hidden_states, self.patch_size)
+
+        return hidden_states
+
+
+class TurboVAED(ModelMixin, ConfigMixin):
+    """Decode-only student VAE (TurboV3-Wan22-TinyShallow).
+
+    decode(z [B,48,T,H/16,W/16]) -> [B,3,~4T,H,W] via sliding-window temporal decode.
+    """
+
+    @register_to_config
+    def __init__(
+        self,
+        in_channels: int = 3,  # useless arg for compatibility, we only use latent channels
+        out_channels: int = 3,
+        latent_channels: int = 128,
+        decoder_block_out_channels: Tuple[int, ...] = (128, 256, 512, 512),
+        decoder_layers_per_block: Tuple[int, ...] = (4, 3, 3, 3, 4),
+        decoder_spatio_temporal_scaling: Tuple[bool, ...] = (True, True, True, False),
+        patch_size: int = 4,
+        patch_size_t: int = 1,
+        resnet_norm_eps: float = 1e-6,
+        scaling_factor: float = 1.0,
+        decoder_causal: bool = False,
+        decoder_is_dw_conv: Tuple[bool, ...] = (False, False, False, False, False),
+        decoder_dw_kernel_size: int = 3,
+        decoder_spatio_only: Tuple[bool, ...] = (False, False, False, False),
+        first_chunk_size: int = 3,
+        step_size: int = 5,
+        spatial_compression_ratio: int = 16,
+        temporal_compression_ratio: int = 4,
+        use_unpatchify: bool = False,
+        **kwargs,  # absorb unused config keys (e.g. training-only params)
+    ):
+        super().__init__()
+
+        self.decoder = TurboVAEDDecoder3d(
+            in_channels=latent_channels,
+            out_channels=out_channels,
+            block_out_channels=decoder_block_out_channels,
+            spatio_temporal_scaling=decoder_spatio_temporal_scaling,
+            layers_per_block=decoder_layers_per_block,
+            patch_size=patch_size,
+            patch_size_t=patch_size_t,
+            resnet_norm_eps=resnet_norm_eps,
+            is_causal=decoder_causal,
+            decoder_is_dw_conv=decoder_is_dw_conv,
+            decoder_dw_kernel_size=decoder_dw_kernel_size,
+            spatio_only=decoder_spatio_only,
+            use_unpatchify=use_unpatchify,
+        )
+
+        self.first_chunk_size = first_chunk_size
+        self.step_size = step_size
+        print(
+            f"[Turbo VAE Decoder] init with first_chunk_size: {first_chunk_size}, step_size: {step_size}"
+        )
+
+        self.spatial_compression_ratio = spatial_compression_ratio
+        self.temporal_compression_ratio = temporal_compression_ratio
+
+        self.z_dim = latent_channels
+        # Latent de-normalization stats (48-dim Wan2.2 video latent). Upstream
+        # hardcodes device="cuda"; we default to cuda when available so this stays
+        # importable / usable on CPU. Move with `.set_scale_device()` if needed.
+        stats_device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.mean = torch.tensor(
+            WAN22_LATENTS_MEAN, dtype=torch.float32, device=stats_device
+        )
+        self.std = torch.tensor(
+            WAN22_LATENTS_STD, dtype=torch.float32, device=stats_device
+        )
+        self.scale = [self.mean, 1.0 / self.std]
+
+    def set_scale_device(self, device, dtype=None):
+        """Move the (non-buffer) latent-normalization tensors to ``device``.
+
+        These are plain attributes, so ``nn.Module.to`` does not move them; call
+        this after moving the module if the scale tensors must match the latents.
+        """
+        self.mean = self.mean.to(device=device, dtype=dtype)
+        self.std = self.std.to(device=device, dtype=dtype)
+        self.scale = [self.mean, 1.0 / self.std]
+        return self
+
+    def _sliding_window_decode(self, z, output_offload=False):
+        z_dtype = z.dtype
+        scale = self.scale
+        assert isinstance(scale[0], torch.Tensor), "scale[0] must be a tensor"
+        z = z / scale[1].view(1, self.z_dim, 1, 1, 1) + scale[0].view(
+            1, self.z_dim, 1, 1, 1
+        )
+        z = z.to(z_dtype)
+
+        first_chunk_size = self.first_chunk_size
+        step = self.step_size
+
+        # Context mapping: 1 latent frame context -> temporal_compression_ratio pixel frames overlap
+        num_overlap_pixel_frames = 1 * self.temporal_compression_ratio
+
+        _, _, num_frames, _, _ = z.shape
+
+        # 1. Pad frames to satisfy chunking requirements
+        #     The total number of frames must follow the formula:
+        #     num_frames = first_chunk_size + n * step_size
+        num_padding_frames = 0
+
+        if num_frames < first_chunk_size:
+            # if input is shorter than first_chunk_size
+            num_padding_frames = first_chunk_size - num_frames
+        elif (num_frames - first_chunk_size) % step != 0:
+            num_padding_frames = step - (num_frames - first_chunk_size) % step
+
+        if num_padding_frames > 0:
+            z = torch.cat(
+                [z, z[:, :, -1:].repeat(1, 1, num_padding_frames, 1, 1)], dim=2
+            )
+            num_frames = num_frames + num_padding_frames
+
+        # 2. Decode with overlapping windows
+        # Collect chunks on CPU to avoid GPU OOM for high resolution (e.g., 1080P) when output_offload=True
+        out_chunks = []
+
+        if num_frames == first_chunk_size:
+            # if only one chunk, decode directly
+            out = self.decoder(z, is_first_chunk=True)
+            out_chunks.append(out.cpu() if output_offload else out)
+            del out
+        else:
+            # first chunk: attach the right frame
+            out = self.decoder(
+                z[:, :, 0 : first_chunk_size + 1, :, :], is_first_chunk=True
+            )
+            out = out[:, :, :-num_overlap_pixel_frames]
+            out_chunks.append(out.cpu() if output_offload else out)
+            del out
+
+            # middle chunk: attach the left and right frames
+            # last chunk: attach the left frame
+            for i in range(first_chunk_size, num_frames, step):
+                is_last_chunk = i + step == num_frames
+                left = i - 1
+                right = i + step + 1 if not is_last_chunk else i + step
+
+                assert left >= 0 and right <= num_frames, (
+                    f"left: {left}, right: {right}, num_frames: {num_frames}"
+                )
+
+                out_ = self.decoder(z[:, :, left:right, :, :], is_first_chunk=False)
+
+                if is_last_chunk:
+                    out_ = out_[:, :, num_overlap_pixel_frames:]
+                else:
+                    out_ = out_[
+                        :, :, num_overlap_pixel_frames:-num_overlap_pixel_frames
+                    ]
+
+                out_chunks.append(out_.cpu() if output_offload else out_)
+                del out_
+
+        # Concatenate chunks (on CPU if output_offload, otherwise on GPU)
+        out = torch.cat(out_chunks, dim=2)
+        del out_chunks
+
+        # 3. Remove padded frames
+        if num_padding_frames > 0:
+            out = out[:, :, : -num_padding_frames * self.temporal_compression_ratio]
+
+        return out
+
+    @_eager_decode(dynamic_arg_dims=({"z": [3, 4]}))
+    def decode(self, z: torch.Tensor, output_offload: bool = False):
+        return self._sliding_window_decode(z, output_offload=output_offload)
+
+
+# Alias matching the destination package naming convention.
+Magi2TurboDecoder = TurboVAED
+
+
+def get_turbo_vaed(
+    config_path, ckpt_path, device="cuda", weight_dtype=torch.float32
+) -> TurboVAED:
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = json.load(f)
+    student = TurboVAED.from_config(config)
+
+    ckpt = torch.load(ckpt_path, map_location="cpu")
+
+    if "ema_state_dict" in ckpt:
+        state_dict = ckpt["ema_state_dict"]
+    elif "state_dict" in ckpt:
+        state_dict = ckpt["state_dict"]
+    else:
+        state_dict = ckpt
+    new_state_dict = {}
+    for key, value in state_dict.items():
+        if key.startswith("module."):
+            new_state_dict[key[7:]] = value
+        else:
+            new_state_dict[key] = value
+    state_dict = new_state_dict
+
+    missing, unexpected = student.load_state_dict(state_dict, strict=False)
+    if len(missing) > 0:
+        sample_key = next(iter(state_dict.keys()))
+        if not sample_key.startswith("decoder.") and not sample_key.startswith(
+            "encoder."
+        ):
+            print("Attempting to load state_dict directly into student.decoder...")
+            student.decoder.load_state_dict(state_dict, strict=False)
+
+    student = student.to(device, dtype=weight_dtype)
+    student.set_scale_device(device, dtype=weight_dtype)
+    student.eval()
+    student.requires_grad_(False)
+    return student

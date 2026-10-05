@@ -1,131 +1,44 @@
 ---
 title: PhysVidBench
-description: PhysVidBench 在 WorldFoundry 中的资产、runner、指标与限制。
+description: "字幕中介的 T2V QA：383 条 prompt，针对 AuroraCap 字幕问物理是/否。WorldFoundry 导入 output.csv，或对你提供的字幕跑 Gemini。"
 ---
 
+PhysVidBench（Koç University / Cyberiada）是**字幕中介 QA**，不是像素对齐，也不是 PhyGenEval。T2V 模型先生成视频；上游 **AuroraCap** 出字幕；LLM 针对字幕回答物理**是/否**（可供性、工具使用、材料、时序动力学）。目录记录 **383 条 prompt** 与 **4123 道问题**（`cc-by-4.0`）。
 
-## 官方参考
+[PhyGenBench](/zh/docs/evaluation/benchmark-hub/phygenbench) 用 VQAScore/VLM 阶段直接评视频。[PhyGround](/zh/docs/evaluation/benchmark-hub/phyground) 套 1–5 定律准则。PhysVidBench 在仓内不看像素——只看字幕 + 问题。
 
-| 资源 | 链接 |
-| --- | --- |
-| 项目页 | [cyberiada.github.io/PhysVidBench](https://cyberiada.github.io/PhysVidBench/) |
-| 论文 | [arXiv:2507.15824](https://arxiv.org/abs/2507.15824) |
-| GitHub | [github.com/ensanli/PhysVidBenchCode](https://github.com/ensanli/PhysVidBenchCode) |
-| HF 数据集 | [Anonymousny/PhysVidBench](https://huggingface.co/datasets/Anonymousny/PhysVidBench) |
-| 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py` |
+论文：[PhysVidBench](https://arxiv.org/abs/2507.15824)。项目：[cyberiada.github.io/PhysVidBench](https://cyberiada.github.io/PhysVidBench/)。代码：[ensanli/PhysVidBenchCode](https://github.com/ensanli/PhysVidBenchCode)。数据：[Anonymousny/PhysVidBench](https://huggingface.co/datasets/Anonymousny/PhysVidBench)。
 
-## 简介
+WorldFoundry 捆绑 `prompts_questions.csv` 与字幕轨道。它**导入**上游 `output.csv`，或对你提供的字幕跑**有界 Gemini QA**。它**不**对你的视频跑 AuroraCap，也无法证明这些字幕来自那些视频。
 
-PhysVidBench 评估日常 text-to-video 场景中的物理常识。本地源 README 描述了三步流程：根据 prompt 生成视频、为每个视频提取八条 AuroraCap caption track、再用 Gemini 基于这些 caption 回答物理常识问题。
+<BenchmarkPageSections id="physvidbench" locale="zh" />
 
-WorldFoundry 已经在 `worldfoundry/evaluation/tasks/execution/runners/physvidbench` 中包含可运行的 PhysVidBench runner。运行 WorldFoundry 时不要克隆上游代码仓库。完整 prompt/question 数据可以下载 Hugging Face dataset `Anonymousny/PhysVidBench`；代码执行仍应走仓内 runner。
+## 如何运行
 
-## 准备资产
-
-- Prompt/question CSV：仓内 fixture 位于 `worldfoundry/data/benchmarks/assets/physvidbench/prompts_questions.csv`；可用 `WORLDFOUNDRY_PHYSVIDBENCH_PROMPT_MANIFEST` 或 `--prompt-manifest` 覆盖。
-- Caption tracks：八个文本文件，base name 为 `cogvideo2b`，suffix 分别为 `_FP`、`_OP`、`_SR`、`_TD`、`_AU`、`_MT`、`_FM` 和无 suffix。可用 `WORLDFOUNDRY_PHYSVIDBENCH_CAPTIONS_DIR`、`WORLDFOUNDRY_PHYSVIDBENCH_CAPTION_BASE`、`--captions-dir` 或 `--caption-base` 覆盖。
-- 完整数据：超出仓内 fixture 时，使用 HF dataset `Anonymousny/PhysVidBench` 或你自己物化的 prompt/question CSV。
-- 候选视频：将 `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` 指向生成视频。
-- Gemini judge：设置 `GEMINI_API_KEY`、`GOOGLE_API_KEY` 或 `WORLDFOUNDRY_PHYSVIDBENCH_GEMINI_API_KEY`，并安装 `google-genai`。本地 fixture 检查可设置 `WORLDFOUNDRY_PHYSVIDBENCH_JUDGE_BACKEND=mock`。
-
-## 生成产物布局
-
-PhysVidBench prompt ID 是数字。生成视频应为 zero-padded 扁平文件：
-
-```text
-generated_videos/
-  0000.mp4
-  0001.mp4
-  ...
-```
-
-覆盖率检查会去掉数字文件名开头的零，因此 `0.mp4` 和 `0000.mp4` 都映射到 prompt ID `0`。Caption 文件按 `PromptID` 行号索引，所以每条 caption track 都必须包含足够行数。
-
-## 用 WorldFoundry 运行
-
-通过公开 CLI 导入已有 PhysVidBench QA 结果 CSV：
+导入上游 QA 导出：
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id physvidbench \
   --mode official-validation \
-  --official-results-path /path/to/output.csv \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/physvidbench/validation \
+  --official-results-path <output.csv> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/physvidbench/official-validation \
   --json
 ```
 
-通过公开 CLI 运行仓内 Gemini QA 路径：
+对所供（或捆绑）字幕跑有界 Gemini QA——不是官方全流水线证据：
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-export GEMINI_API_KEY=...
-
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id physvidbench \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/physvidbench/run \
-  --json
-```
-
-直接调用仓内 runner：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-export WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR=tmp/physvidbench/direct
-export GEMINI_API_KEY=...
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" \
+  --captions-dir worldfoundry/data/benchmarks/assets/physvidbench/captions \
+  --output-dir tmp/physvidbench/official \
   --json
 ```
 
-直接导入结果：
+用 `WORLDFOUNDRY_PHYSVIDBENCH_JUDGE_BACKEND` 选择 judge。产物包括 `scorecard.json`（主键 `physvidbench_average`）与 `output.csv`。
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py \
-  --official-results-path /path/to/output.csv \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/physvidbench/direct-validation \
-  --json
-```
-
-无 Gemini 的本地小规模 fixture 路径：
-
-```bash
-WORLDFOUNDRY_PHYSVIDBENCH_JUDGE_BACKEND=mock \
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py \
-  --run-official \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/physvidbench/mock \
-  --json
-```
-
-## 指标
-
-| Metric ID | 含义 |
-| --- | --- |
-| `physical_commonsense_accuracy` | 所有 yes/no QA 的总体准确率。 |
-| `affordance_understanding` | `Object Properties & Affordances` 问题准确率。 |
-| `tool_use_consistency` | `Action & Procedural Understanding` 问题准确率。 |
-| `material_property_consistency` | `Material Interaction & Transformation` 问题准确率。 |
-| `temporal_dynamics_consistency` | `Temporal Dynamics` 问题准确率。 |
-| `physvidbench_average` | WorldFoundry 主指标。优先取可用类别准确率均值；没有类别 bucket 时使用总体准确率。 |
-
-所有指标都是越高越好，并以 `0..1` accuracy 输出。
-
-## 输出
-
-输出目录包含：
-
-- `scorecard.json`：运行状态、指标、prompt/video 覆盖率、QA backend 与 leaderboard 有效性标记。
-- `output.csv`：仓内 QA 路径写出，字段包括 `PromptID`、`Question`、`Types`、`Model_Answer` 和 `Match`。
-- `raw_metric_table.jsonl`：每个声明指标一行。
-- `per_sample_scores.jsonl`：从 QA 结果复制出的 question-level 行。
-- 通过 `worldfoundry-eval zoo benchmark-run` 调用时，还会写出 `specialized_normalizer_stdout.log` 与 `specialized_normalizer_stderr.log`。
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

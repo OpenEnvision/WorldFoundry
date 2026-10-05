@@ -8,23 +8,28 @@ groups:
 - policy_rollout
 source_repos:
 - url: https://github.com/CHEN-H01/LaST-R1
+  revision: ba4e939632427e066f734bf9f7abfa11cc4911f6
 checkpoints:
 - repo_id: chenhao01/LaST-R1
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/chenhao01--LaST-R1
-  role: last_r1_checkpoint
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/chenhao01--LaST-R1/LaST-R1-RL/last-r1-rl-libero_10
+  role: libero_10_rl_checkpoint
 input_schema:
   model_id: last-r1
   image: true
   prompt: true
-  state: true
+  state: false
   policy_family: rl_refined_vla_policy
   action_representation: vla_action_trace
 artifact_kind: action_trace
 artifact_filename: last-r1_action_trace.json
 execution:
-  backend_stage: official_in_tree_runtime
-  runtime_status: official_runtime_route_ready_checkpoint_required
-  integration_status: runtime_ported
+  backend_stage: official_latent_action_token_rollout
+  runtime_status: verified_inference_only
+  integration_status: integrated
   pipeline_binding: last-r1
 integration:
-  status: runtime_ported
+  status: integrated
+notes:
+- The model-specific adapter performs offline image-and-instruction inference with the libero_10 RL checkpoint and pinned official Qwen3-VL source.
+- The returned eight-action trace was checked for finite values; no LIBERO environment rollout or task success rate has been measured.
+- Install the pinned LaST-R1 source and set WORLDFOUNDRY_LAST_R1_SOURCE_DIR, or provide source_root to LastR1Pipeline.from_pretrained.

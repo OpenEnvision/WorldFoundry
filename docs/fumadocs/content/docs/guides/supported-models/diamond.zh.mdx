@@ -1,0 +1,49 @@
+---
+title: "DIAMOND"
+description: "复用共享推理组件的本地 Atari 与 CS:GO 扩散世界模型。"
+modelId: "diamond"
+pageSource: authored
+---
+
+DIAMOND 根据历史画面和动作预测游戏帧。WorldFoundry 支持官方 Atari 智能体及 CS:GO 去噪器与空间超分辨率模型，两者复用 UNet 模块和 EDM 采样器。
+
+<ModelPaperFigures modelId="diamond" locale="zh" />
+
+[论文](https://arxiv.org/abs/2405.12399) · [项目](https://diamond-wm.github.io/) · [源码](https://github.com/eloialonso/diamond)
+
+## 本地运行
+
+从 `eloialonso/diamond` 准备对应文件，运行时禁用网络下载。Atari 需要对应游戏权重、两个 `atari_100k/config` 文件、项目内配置以及已安装的 Atari 环境和 ROM。CS:GO 需要 `csgo/model/csgo.pt`、`csgo/config/agent/csgo.yaml`，以及包含 `low_res.npy`、`full_res.npy`、`act.npy` 的官方 spawn 目录。
+
+```python
+from worldfoundry.pipelines.world_model.pipeline_runtime_manifest import (
+    DIAMONDPipeline, DIAMONDCsgoPipeline,
+)
+
+atari = DIAMONDPipeline.from_pretrained(
+    pretrained=True, pretrained_game="Pong",
+    pretrained_dir="/path/to/eloialonso--diamond", device="cuda",
+)
+atari(execute=True, headless_steps=100, num_steps_initial_collect=200,
+      fps=15, output_path="pong.mp4")
+
+csgo = DIAMONDCsgoPipeline.from_pretrained(
+    pretrained_dir="/path/to/eloialonso--diamond", device="cuda",
+)
+csgo(execute=True, spawn_id=0, action="forward", headless_steps=24,
+     sampler="higher_quality", seed=42, fps=16, output_path="csgo.mp4")
+```
+
+也可使用 `DIAMONDPipeline.from_pretrained(variant="csgo", ...)`。`diamond-csgo` binding 直接选择 `DIAMONDCsgoPipeline`。无需传入 `prompt`、`image`、`video`：Atari 从真实环境采集初始化观测，CS:GO 从指定 spawn 的历史帧开始。
+
+CS:GO 支持 `idle`、`forward`、`backward`、`left`、`right`、`jump`、`turn-left`、`turn-right`。也可用 `actions_path` 传入形状为 `[headless_steps, 51]` 的 JSON/NPY 动作数组，按官方多热编码排列：11 个键盘位、2 个鼠标点击位、23 个水平鼠标分箱、15 个垂直鼠标分箱。每个鼠标轴必须恰有一个有效分箱。提供动作文件时优先采用文件；`spawn_dir` 优先于 `spawn_id`。
+
+官方 `higher_quality` 预设每帧运行 3 步去噪、10 步超分辨率；`fast` 各运行 1 步。两者均按指定播放帧率写出 H.264。N 步滚动输出 N+1 帧，包含初始观测。Atari 在 horizon=50 或预测终止时重置，因此视频可能包含上下文重启；CS:GO 执行连续的有限步滚动。
+
+## 验证范围
+
+26 个官方 Atari 权重均完成本地 H100 推理、严格加载、裁剪前有限值检查、完整视频解码及实际画面审核。共享采样器调整后，针对这些权重的 52 组 Euler/Heun 对照与调整前实现逐值一致。另有相同观测和随机种子的 Pong 相反动作测试，确认球拍响应方向相反。
+
+CS:GO 从 spawn 0 进行 `higher_quality` 前进、后退各 24 步滚动，低分辨率预测与超分辨率输出均和官方实现逐值一致，裁剪前输出均有限。快速预设另有前进、后退各 6 步的两条对照，同样逐值一致。短程验证不能代表长程物理、奖励准确率或游戏通关效果。许可与来源集中在根 `THIRD-PARTY-NOTICES`。
+
+<ModelRelatedRecipes modelId="diamond" locale="zh" />

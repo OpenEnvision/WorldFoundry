@@ -1,0 +1,82 @@
+family: Echo-Memory
+id: echo-memory-context-k1
+provider: Echo Team at Joy Future Academy, JD
+name: Echo-Memory
+aliases:
+- echo-context-k1
+- echo-memory
+tasks:
+- image-to-video
+- action-conditioned-video
+- interactive-world-model
+- memory-research
+modalities:
+- image
+- text
+- camera-trajectory
+- video
+output_artifacts:
+- generated_world_video
+checkpoint_refs:
+- repo_id: Echo-Team/Echo-Memory
+  revision: 7645f33efbfd02c58dc471570d0c7bd6a50eec83
+  filename: context_k1/epoch-0.safetensors
+  license: cc-by-4.0
+  gated: false
+  notes:
+  - This is the only Echo-Memory checkpoint file currently served by the official Hugging Face main branch.
+- repo_id: Wan-AI/Wan2.1-T2V-1.3B
+  revision: 37ec512624d61f7aa208f7ea8140a131f93afc9a
+  license: apache-2.0
+  gated: false
+official_sources:
+  paper: https://arxiv.org/abs/2606.09803
+  project_page: https://echo-team-joy-future-academy-jd.github.io/Echo-Memory/
+  github:
+    url: https://github.com/Echo-Team-Joy-Future-Academy-JD/Echo-Memory
+    revision: 30eaffb55b264e1d8dfef70a8934d34c86e29947
+runtime_profile: runtime-profile:echo-memory-context-k1
+pipeline_binding: echo-memory-context-k1
+release_type: code_and_weights
+license: cc-by-4.0
+integration:
+  status: integrated
+  notes:
+  - This is an independent WorldFoundry model identity pinned to context_k1/epoch-0.safetensors; users do not select a memory method at runtime.
+  - The independent recipe is assembled by NativeDiffusionPipeline from shared Wan components and the framework-owned frozen-context strategy; it does not use an external backend.
+  - Checkpoint headers are inspected before construction and full DiT tensors are loaded with exact key and shape coverage.
+runner_parity:
+  status: native_pipeline_cuda_artifact_pending
+  notes:
+  - The 2026-07-20 A100 artifact (sha256 c263b8c0e0e83aa6417a201aaac59b0cd961c305610b09d5f4df78eecc3a5001) predates the NativeDiffusionPipeline cutover and is retained only as historical evidence.
+  - Native structural loading covers the released 1185-tensor K=1 DiT; a fresh two-chunk CUDA artifact, official sample parity, and benchmark scoring remain pending.
+starred: true
+catalog_category: world_models
+catalog_scope: Echo-Memory independent inference models
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+availability:
+  status: open_source
+  open_source: true
+  code: native_worldfoundry
+  weights: public_huggingface_current_main
+  license: cc-by-4.0
+docs:
+  publisher: JD.com (Joy Future Academy)
+  publisher_kind: company
+  publisher_zh: 京东（Joy Future Academy）
+  overview: 'Echo-Memory Context K=1 is one identity in JD''s Echo-Memory family — a controlled study of how memory mechanisms affect interactive, action-conditioned world models. This identity is permanently bound to the context_k1/epoch-0.safetensors checkpoint in the paper-primary release tier: it is the minimal context baseline — each new chunk conditions on only K=1 context frame. In this catalog it is the one Echo-Memory identity whose checkpoint is served from the official Hugging Face main branch; native structural loading covers the released 1185-tensor DiT, and a fresh two-chunk CUDA artifact remains pending after the NativeDiffusionPipeline cutover.'
+  overview_zh: Echo-Memory Context K=1（单帧上下文）是京东 Echo-Memory 家族中的一个身份——该家族对「记忆机制如何影响交互式动作条件世界模型」做受控研究。此身份永久绑定 paper_primary 发布层级的 context_k1/epoch-0.safetensors checkpoint：它是最小上下文基线——每个新 chunk 仅以 K=1 帧上下文为条件。在本 catalog 中，它是唯一由官方 Hugging Face main 分支提供 checkpoint 的 Echo-Memory 身份；原生结构化加载覆盖已发布的 1185 张量 DiT，NativeDiffusionPipeline 切换后的全新两 chunk CUDA 产物验证仍为 pending。
+  architecture: 'Per the Echo-Memory release (arXiv 2606.09803), every variant is a Wan2.1-T2V-1.3B-based interactive world model that differs only in its memory mechanism. In WorldFoundry each variant is an independent model identity pinned to one checkpoint: the recipe is assembled by NativeDiffusionPipeline from shared Wan components plus the framework-owned frozen-context strategy — no external backend. The sampler uses target-noise plus clean-context suffix, target-only CFG, context relocking after every solver step, and target-only decode.'
+  architecture_zh: 按 Echo-Memory 发布（arXiv 2606.09803），所有 variant 都是基于 Wan2.1-T2V-1.3B 的交互式世界模型，差异只在记忆机制。在 WorldFoundry 中，每个 variant 是绑定单一 checkpoint 的独立模型身份：配方由 NativeDiffusionPipeline 从共享 Wan 组件加框架自有的 frozen-context 策略组装——不使用外部后端。采样器采用「目标噪声+干净上下文后缀」、仅目标 CFG、每个求解步后重锁上下文、仅解码目标帧。
+  usage_notes: The checkpoint downloads from Echo-Team/Echo-Memory (cc-by-4.0) with the Wan2.1-T2V-1.3B base (apache-2.0). The 2026-07-20 A100 artifact predates the NativeDiffusionPipeline cutover and is retained as historical evidence only — treat fresh CUDA artifact validation as pending. Users do not select a memory method at runtime — each method is its own catalog identity.
+  usage_notes_zh: checkpoint 从 Echo-Team/Echo-Memory（cc-by-4.0）下载，基座为 Wan2.1-T2V-1.3B（apache-2.0）。2026-07-20 的 A100 产物早于 NativeDiffusionPipeline 切换，仅作为历史证据保留——全新 CUDA 产物验证应视为 pending。运行时用户不选择记忆方法——每种方法都是独立的 catalog 身份。
+  limitations:
+  - Fresh native CUDA artifact, official sample parity, and benchmark scoring are pending after the pipeline cutover.
+  - 'Research-scale backbone (Wan2.1 1.3B): expect research-preview visual quality, not production output.'
+  limitations_zh:
+  - pipeline 切换后，全新原生 CUDA 产物、官方样例一致性与 benchmark 打分均为 pending。
+  - 研究规模基座（Wan2.1 1.3B）：视觉质量属研究预览级，而非生产级输出。
+  recommended_benchmarks:
+  - id: memobench
+    reason: Purpose-built for evaluating long-horizon memory in interactive world models.
+    reason_zh: 专为评估交互式世界模型的长时程记忆而设。

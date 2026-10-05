@@ -1,6 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # adapted from vllm: https://github.com/vllm-project/vllm/blob/v0.7.3/vllm/logger.py
-"""Logging configuration for sp (shared parallel infra)."""
+"""Logging configuration for sequence-parallel infrastructure.
+
+Isolated from the app logger so NCCL debug lines do not drown model
+logs. Rank prefixes come from ``logging_utils.formatter``.
+
+Not the WorldFoundry loguru / ``logging_setup`` path. Importing this
+module configures the ``trainer`` stdlib root unless
+``TRAINER_CONFIGURE_LOGGING=0``.
+
+Public surface: :func:`init_logger`, :func:`enable_trace_function_call`.
+"""
 
 import datetime
 import json
@@ -14,7 +24,7 @@ from os import path
 from types import MethodType
 from typing import Any, cast
 
-from . import envs
+import worldfoundry.core.distributed.sequence_parallel.envs as envs
 from .logging_utils import NewLineFormatter
 
 TRAINER_CONFIGURE_LOGGING = envs.TRAINER_CONFIGURE_LOGGING
@@ -31,6 +41,11 @@ _warned_main_process = False
 
 _FORMAT = f"{TRAINER_LOGGING_PREFIX}%(levelname)s %(asctime)s [%(filename)s:%(lineno)d] %(message)s"
 _DATE_FORMAT = "%m-%d %H:%M:%S"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Default dictConfig — stdout StreamHandler, NewLineFormatter, no propagate
+# ──────────────────────────────────────────────────────────────────────────
 
 
 DEFAULT_LOGGING_CONFIG = {
@@ -56,23 +71,26 @@ DEFAULT_LOGGING_CONFIG = {
             "propagate": False,
         },
     },
-    "root": {
-        "handlers": ["trainer"],
-        "level": "DEBUG",
-    },
     "version": 1,
     "disable_existing_loggers": False,
 }
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Rank-aware logging — LOCAL_RANK=0 by default so NCCL ranks do not flood
+# ──────────────────────────────────────────────────────────────────────────
+
+
 @lru_cache
 def _print_info_once(logger: Logger, msg: str) -> None:
+    """Log ``msg`` at INFO once per process; ``stacklevel=2`` keeps the caller site."""
     # Set the stacklevel to 2 to print the original caller's line info
     logger.info(msg, stacklevel=2)
 
 
 @lru_cache
 def _print_warning_once(logger: Logger, msg: str) -> None:
+    """Log ``msg`` at WARNING once per process; ``stacklevel=2`` keeps the caller site."""
     # Set the stacklevel to 2 to print the original caller's line info
     logger.warning(msg, stacklevel=2)
 
@@ -171,6 +189,7 @@ class _TRAINERLogger(Logger):
         local_main_process_only: bool = True,
         **kwargs: Any,
     ) -> None:
+        """INFO with rank gates; see :func:`_info` for the LOCAL_RANK default."""
         _info(
             self,
             msg,
@@ -182,6 +201,13 @@ class _TRAINERLogger(Logger):
 
 
 def _configure_trainer_root_logger() -> None:
+    """Install the ``trainer`` dictConfig, or a JSON file, before any SP logger is used.
+
+    ``TRAINER_LOGGING_CONFIG_PATH`` without ``TRAINER_CONFIGURE_LOGGING``
+    is a contract error: a path implies configuration. A ``root`` key in
+    a custom file is stripped so we do not hijack the application logger.
+    Missing / non-dict JSON raises :class:`RuntimeError` / :class:`ValueError`.
+    """
     logging_config = dict[str, Any]()
 
     if not TRAINER_CONFIGURE_LOGGING and TRAINER_LOGGING_CONFIG_PATH:
@@ -211,6 +237,9 @@ def _configure_trainer_root_logger() -> None:
             formatter["class"] = "worldfoundry.core.distributed.sequence_parallel.logging_utils.NewLineFormatter"
 
     if logging_config:
+        if "root" in logging_config:
+            logging_config = dict(logging_config)
+            logging_config.pop("root", None)
         dictConfig(logging_config)
 
 
@@ -241,7 +270,13 @@ _configure_trainer_root_logger()
 logger = init_logger(__name__)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# sys.settrace hang/crash dump — thread-local; skip frames outside root_dir
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _trace_calls(log_path, root_dir, frame, event, arg=None):
+    """Append call/return lines under ``root_dir``; ignore shutdown ``NameError``."""
     if event in ["call", "return"]:
         # Extract the filename, line number, function name, and the code object
         filename = frame.f_code.co_filename

@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: inspatio-world-1p5
+model_id: inspatio-world-1p5
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.inspatio_world.pipeline_inspatio_world_v15:InspatioWorldV15Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

@@ -10,7 +10,7 @@ import torch
 import yaml
 
 from worldfoundry.core.io.paths import resolve_data_path
-from worldfoundry.core.io.python_config import EasyDict
+from worldfoundry.core.configuration.python import EasyDict
 
 
 _CONFIG_ROOT = resolve_data_path("models", "runtime", "configs", "wan_va")

@@ -2,16 +2,34 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from worldfoundry.core.io import file_sha256
+
+from .jobs import _decode_process_text, _kill_process_group
 
 MEDIA_SUFFIXES = frozenset({".mp4", ".mov", ".webm", ".gif", ".png", ".jpg", ".jpeg"})
+
+# Opt-in global default for ``execute_in_tree(timeout=...)``; unset means no timeout.
+IN_TREE_CLI_TIMEOUT_ENV = "WORLDFOUNDRY_IN_TREE_CLI_TIMEOUT_SECONDS"
+
+
+def _default_cli_timeout() -> float | None:
+    """Read the opt-in in-tree CLI timeout from the environment."""
+    raw = os.environ.get(IN_TREE_CLI_TIMEOUT_ENV, "").strip()
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    return value if value > 0 else None
 
 
 def require_path(value: Any, label: str, *, kind: str | None = None) -> Path:
@@ -44,28 +62,37 @@ def newest_media(
     preferred_names: Sequence[str] = (),
 ) -> Path | None:
     """Return the newest fresh media artifact from model-owned output roots."""
-    candidates: list[Path] = []
+    # Cache (mtime, size) at collection time: files can disappear between the
+    # scan and the sort, and re-stating every file during sorting both raced
+    # with cleanup (unhandled OSError) and doubled the stat traffic.
+    candidates: list[tuple[float, int, Path]] = []
     for raw_root in roots:
         root = Path(raw_root).expanduser()
         if not root.exists():
             continue
         if root.is_file():
-            candidates.append(root)
+            try:
+                stat = root.stat()
+            except OSError:
+                continue
+            candidates.append((stat.st_mtime, stat.st_size, root))
             continue
         for path in root.rglob("*"):
             if not path.is_file() or path.suffix.lower() not in MEDIA_SUFFIXES:
                 continue
             try:
-                if path.stat().st_mtime >= since - 1.0:
-                    candidates.append(path)
+                stat = path.stat()
             except OSError:
                 continue
-    candidates.sort(key=lambda item: (item.stat().st_mtime, item.stat().st_size), reverse=True)
+            if stat.st_mtime >= since - 1.0:
+                candidates.append((stat.st_mtime, stat.st_size, path))
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    ordered = [item[2] for item in candidates]
     for name in preferred_names:
-        for path in candidates:
+        for path in ordered:
             if path.name == name:
                 return path
-    return candidates[0] if candidates else None
+    return ordered[0] if ordered else None
 
 
 def execute_in_tree(
@@ -77,8 +104,16 @@ def execute_in_tree(
     env: Mapping[str, Any] | None = None,
     python_paths: Sequence[str | Path] = (),
     preferred_names: Sequence[str] = (),
+    timeout: float | None = None,
 ) -> dict[str, Any]:
-    """Run one model-owned CLI and normalize its generated artifact."""
+    """Run one model-owned CLI and normalize its generated artifact.
+
+    ``timeout`` bounds the model CLI in seconds; on expiry the whole process
+    group is killed and a structured ``failed`` result is returned. When it is
+    omitted, the ``WORLDFOUNDRY_IN_TREE_CLI_TIMEOUT_SECONDS`` environment
+    variable supplies an opt-in default; otherwise the CLI may run unbounded
+    (legacy behaviour).
+    """
     workdir = require_path(cwd, "in-tree runtime root", kind="dir")
     output = Path(output_path).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -95,21 +130,68 @@ def execute_in_tree(
     if env:
         process_env.update({str(key): str(value) for key, value in env.items()})
     rendered = [str(item) for item in command]
+    effective_timeout = timeout if timeout is not None else _default_cli_timeout()
     started = time.time()
-    completed = subprocess.run(
-        rendered,
-        cwd=workdir,
-        env=process_env,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
-    log_path.write_text(completed.stdout + "\n" + completed.stderr, encoding="utf-8")
-    if completed.returncode != 0:
+    timed_out = False
+    if effective_timeout is None:
+        completed = subprocess.run(
+            rendered,
+            cwd=workdir,
+            env=process_env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        stdout, stderr = completed.stdout, completed.stderr
+        returncode = completed.returncode
+    else:
+        # Model CLIs are the subprocesses most likely to hang (CUDA deadlocks,
+        # NCCL waits, stuck downloads). Run them in their own session so the
+        # whole process group can be killed on timeout.
+        process = subprocess.Popen(
+            rendered,
+            cwd=workdir,
+            env=process_env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=sys.platform != "win32",
+        )
+        try:
+            stdout, stderr = process.communicate(timeout=effective_timeout)
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            _kill_process_group(process)
+            try:
+                stdout, stderr = process.communicate(timeout=5)
+            except subprocess.TimeoutExpired as kill_exc:
+                stdout = _decode_process_text(kill_exc.stdout or exc.stdout)
+                stderr = _decode_process_text(kill_exc.stderr or exc.stderr)
+        stdout = _decode_process_text(stdout)
+        stderr = _decode_process_text(stderr)
+        returncode = 124 if timed_out else process.returncode
+    log_path.write_text(stdout + "\n" + stderr, encoding="utf-8")
+    if timed_out:
         return {
             "status": "failed",
-            "error": f"in-tree model CLI exited with code {completed.returncode}; see {log_path}",
+            "error": (
+                f"in-tree model CLI timed out after {effective_timeout}s and its "
+                f"process group was killed; see {log_path}"
+            ),
+            "artifact_path": str(output),
+            "metadata": {
+                "command": rendered,
+                "cwd": str(workdir),
+                "log_path": str(log_path),
+                "timed_out": True,
+                "timeout_seconds": effective_timeout,
+            },
+        }
+    if returncode != 0:
+        return {
+            "status": "failed",
+            "error": f"in-tree model CLI exited with code {returncode}; see {log_path}",
             "artifact_path": str(output),
             "metadata": {"command": rendered, "cwd": str(workdir), "log_path": str(log_path)},
         }
@@ -137,7 +219,7 @@ def execute_in_tree(
         "status": "succeeded",
         "video": str(output),
         "artifact_path": str(output),
-        "artifact_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
+        "artifact_sha256": file_sha256(output),
         "backend_quality": "in_tree_official_runtime",
         "metadata": {
             "command": rendered,

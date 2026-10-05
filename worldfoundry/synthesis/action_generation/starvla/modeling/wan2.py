@@ -62,7 +62,7 @@ class Wan2Interface(nn.Module):
         )
         self.config = config
 
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
         from worldfoundry.core.io.paths import resolve_local_hf_model_path
 
         probe_device = resolve_inference_device(

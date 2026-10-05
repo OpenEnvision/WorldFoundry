@@ -8,33 +8,45 @@ groups:
 source_repos:
 - url: https://github.com/eloialonso/diamond
   revision: 5bcd1599755b4f2fae8e5e079e02f0728e174965
+- url: https://github.com/eloialonso/diamond
+  revision: 851cefb497733d27f1b85c804104638765860fca
+  branch: csgo
 checkpoints:
 - repo_id: eloialonso/diamond
   revision: 5d4abca9af6ab1b3ab1c6fc228cacb7281130f7f
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/diamond
-  role: atari_100k_pretrained_bundle
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/eloialonso--diamond
+  role: atari_and_csgo_pretrained_bundle
   required_paths:
   - atari_100k/models/Pong.pt
   - atari_100k/config/agent/default.yaml
   - atari_100k/config/env/atari.yaml
+  - csgo/model/csgo.pt
+  - csgo/config/agent/csgo.yaml
+  - csgo/spawn/0/low_res.npy
+  - csgo/spawn/0/full_res.npy
+  - csgo/spawn/0/act.npy
 input_schema:
-  prompt: true
-  image: true
-  video: true
+  prompt: false
+  image: false
+  video: false
   actions:
   - game_action
   - atari_action
+  - csgo_action
 artifact_kind: generated_world
 artifact_filename: diamond.mp4
 execution:
   backend_stage: in_tree_runtime_manifest
-  runtime_status: in_tree_runtime_manifest_command_preflight_ready
+  runtime_status: checkpoint_backed_gpu_verified
   integration_status: integrated
   pipeline_binding: diamond
 integration:
   status: integrated
 notes:
-- DIAMOND official play/inference source is vendored directly under synthesis/visual_generation/world_model/diamond.
-- Runtime configs live under data/models/runtime/configs/diamond/config; execution
-  uses either a local weights file or pretrained=true with a non-interactive pretrained_game
-  from the pinned local snapshot. Runtime network downloads are disabled.
+- Runtime gates check only assets needed by the chosen variant; no network downloads.
+- CS:GO uses variant=csgo or DIAMONDCsgoPipeline; named action or actions_path (JSON/NPY
+  T-by-51 multi-hot), spawn_id/spawn_dir, sampler=fast|higher_quality.
+- headless_steps N produces N+1 frames including the initial observation. Atari uses
+  horizon50/terminal resets; CS:GO runs a finite continuous rollout.
+- H100 validation:26 Atari checkpoints and short paired CS:GO rollouts. Long-horizon
+  quality and game success are not established.

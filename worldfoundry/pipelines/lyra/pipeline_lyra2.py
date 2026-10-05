@@ -2,24 +2,27 @@
 
 from __future__ import annotations
 
-from ..pipeline_utils import PipelineABC
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Union
 
 import torch
 from PIL import Image
 
-from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
-from ...operators.lyra_operator import LyraOperator
-from ...representations.point_clouds_generation.lyra.lyra2_representation import (
+from worldfoundry.base_models.three_dimensions.point_clouds.lyra.runtime_v2 import (
     Lyra2Representation,
 )
+from worldfoundry.core.io import save_video_frames
+from worldfoundry.core.media.codecs.image import load_pil_image
+
+from ...operators.lyra_operator import LyraOperator
 from ...synthesis.visual_generation.lyra_2.synthesis import Lyra2Synthesis
-from .lyra_utils import load_pil_image, save_video_frames
+from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
+from ..pipeline_utils import PipelineABC
 
 
 class Lyra2Pipeline(PipelineABC):
     """Lyra-2 pipeline for action-conditioned navigation video and optional 3D reconstruction."""
+
     MODEL_ID = "lyra-2"
 
     def __init__(
@@ -113,14 +116,30 @@ class Lyra2Pipeline(PipelineABC):
     def process(
         self,
         images,
-        interactions: Sequence[Union[str, Dict[str, str]]],
+        interactions: Optional[Sequence[Union[str, Dict[str, str]]]] = None,
         prompt: str = "",
+        camera_path: Optional[Dict[str, Any]] = None,
+        region_hint: str = "",
     ) -> Dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
         if self.synthesis_model is None:
             raise RuntimeError("Synthesis model is not loaded. Use from_pretrained() first.")
 
         image = self.operator.process_perception(images)
+        if camera_path is not None:
+            operator_condition = self.operator.process_camera_path(
+                camera_path,
+                prompt=prompt,
+                region_hint=region_hint,
+            )
+            return {
+                "image": image,
+                "prompt": prompt or "",
+                "region_hint": region_hint or "",
+                **operator_condition,
+            }
+        if not interactions:
+            raise ValueError("Provide interactions or a camera_path.")
         self.operator.get_interaction(interactions)
         try:
             operator_condition = self.operator.process_interaction(prompt=prompt)
@@ -136,8 +155,10 @@ class Lyra2Pipeline(PipelineABC):
     def __call__(
         self,
         images,
-        interactions: Sequence[Union[str, Dict[str, str]]],
+        interactions: Optional[Sequence[Union[str, Dict[str, str]]]] = None,
         prompt: str = "",
+        camera_path: Optional[Dict[str, Any]] = None,
+        region_hint: str = "",
         fps: int = 16,
         resolution: Sequence[int] = (480, 832),
         reconstruct_3d: bool = False,
@@ -152,6 +173,8 @@ class Lyra2Pipeline(PipelineABC):
             images=images,
             interactions=interactions,
             prompt=prompt,
+            camera_path=camera_path,
+            region_hint=region_hint,
         )
 
         synthesis_result = self.synthesis_model.predict(
@@ -206,6 +229,8 @@ class Lyra2Pipeline(PipelineABC):
             "camera_w2c": processed["camera_w2c"],
             "zoom_factors": processed["zoom_factors"],
             "chunk_captions": processed["chunk_captions"],
+            "camera_path": processed.get("camera_path"),
+            "region_hint": processed.get("region_hint", ""),
         }
         if reconstruct_3d or return_dict:
             return result
@@ -213,9 +238,11 @@ class Lyra2Pipeline(PipelineABC):
 
     def stream(
         self,
-        interactions: Sequence[Union[str, Dict[str, str]]],
+        interactions: Optional[Sequence[Union[str, Dict[str, str]]]] = None,
         images: Optional[Union[Image.Image, Any]] = None,
         prompt: str = "",
+        camera_path: Optional[Dict[str, Any]] = None,
+        region_hint: str = "",
         fps: int = 16,
         resolution: Sequence[int] = (480, 832),
         reconstruct_3d: bool = False,
@@ -240,6 +267,8 @@ class Lyra2Pipeline(PipelineABC):
             images=current_image,
             interactions=interactions,
             prompt=prompt,
+            camera_path=camera_path,
+            region_hint=region_hint,
             fps=fps,
             resolution=resolution,
             reconstruct_3d=reconstruct_3d,

@@ -1,0 +1,52 @@
+---
+title: "LongCat-Video"
+description: "LongCat-Video（Meituan (LongCat)）：文生视频、图生视频；Runner 一致性待确认。"
+modelId: "longcat-video"
+pageSource: authored
+---
+
+LongCat-Video 是美团开源的视频生成模型，主打长视频：文生视频、图生视频与原生视频续写集于一个模型。WorldFoundry 注册了模型专属 pipeline，运行树内内置的 demo 脚本——并有一个刻意的安全设计：不显式传入 execute=True 就不会执行。权重为 MIT 许可，位于 meituan-longcat/LongCat-Video。
+
+<ModelPaperFigures modelId="longcat-video" locale="zh" />
+
+记录论文为[arXiv 2510.22200](https://arxiv.org/abs/2510.22200)。
+
+项目页：[meituan-longcat.github.io/LongCat-Video](https://meituan-longcat.github.io/LongCat-Video/)。代码：[meituan-longcat/LongCat-Video](https://github.com/meituan-longcat/LongCat-Video)。
+
+<ModelCommandBuilder modelId="longcat-video" locale="zh" />
+
+## 用来做什么
+
+`longcat-video` 是记录的文本/图像到视频线。需要同一张卡片上同时有 prompt 与静帧条件时用它。
+
+上游将 LongCat-Video 定位为统一的 DiT 系生成器，视频续写是一等任务，可生成分钟级视频。本仓库记录了使用本地 checkpoint 的统一环境路径与 image/prompt/video 输入契约；层级细节仓库未记录。该模型由美团（LongCat 团队）发布。
+
+catalog 记录的任务包括 文生视频、图生视频、video-continuation、长视频生成。模态上，它接受文本、图像，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（基础文生视频质量评测）、[ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench)（长时程生成评测，契合其续写定位）。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`task_type`、`num_frames`、`fps`；产物 `generated_video`、`longcat_video.mp4`。
+
+CLI task profile：`official-t2v`。绑定的 pipeline 类是 `LongCatVideoPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+`official-t2v` 记录默认值：negative_prompt=Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards, num_frames=93, fps=15, height=480, width=832, num_inference_steps=50。
+
+Runner parity 为 pending——官方 93 帧 / 50 步的完整质量一致性尚未记录。 记住 execute=True 这道门：默认调用会按设计快速失败。 运行前先在本地就位 LongCat checkpoint。
+
+默认旋钮：negative_prompt=Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards，num_frames=93，fps=15，height=480，width=832，num_inference_steps=50。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run longcat-video --pipeline.task-profile official-t2v` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `meituan-longcat/LongCat-Video`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh longcat-video`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 mit；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="longcat-video" locale="zh" />

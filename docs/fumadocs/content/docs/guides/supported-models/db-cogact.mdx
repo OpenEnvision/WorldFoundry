@@ -1,0 +1,54 @@
+---
+title: "DB-CogACT / Dexbotic"
+description: "DB-CogACT / Dexbotic from Dexmal: vla and vla action prediction; Runner parity pending."
+modelId: "db-cogact"
+pageSource: authored
+---
+
+DB-CogACT is the CogACT recipe rebuilt inside Dexmal's Dexbotic framework, with an unusually complete released checkpoint zoo: single-arm and dual-arm foundations plus task checkpoints for LIBERO, CALVIN, and SimplerEnv, all Apache-2.0. WorldFoundry constructs the official Dexbotic policy in-process from a vendored inference subset and emits LIBERO action traces without an external checkout.
+
+<ModelPaperFigures modelId="db-cogact" locale="en" />
+
+The recorded paper is [arXiv 2510.23511](https://arxiv.org/abs/2510.23511).
+
+Code: [Dexmal/dexbotic](https://github.com/Dexmal/dexbotic).
+
+This is **not** Microsoft [CogACT](/docs/guides/supported-models/cogact). Paper: [arXiv 2510.23511](https://arxiv.org/abs/2510.23511). Code: [Dexmal/dexbotic](https://github.com/Dexmal/dexbotic). Weights: `Dexmal/Dexbotic-CogACT-SArm`, `Dexbotic-CogACT-HArm`, `libero-db-cogact`, `calvin-db-cogact`, `simpler-db-cogact`.
+
+<ModelCommandBuilder modelId="db-cogact" locale="en" />
+
+## What it is for
+
+`db-cogact-libero` is the recorded instruction-to-action line. Start here when you need a WorldFoundry VLA rollout rather than a video generator.
+
+The Dexbotic v1 inference contract is recorded: requests carry observation.prompt and observation images, and the policy follows the CogACT VLM-plus-DiT-action design re-implemented in Dexbotic. The vendored infer subset lives under worldfoundry/synthesis/action_generation/db_cogact/db_cogact_runtime.
+
+Catalog tasks include vla, vla action prediction, and vla policy rollout. Catalog aliases include `dexbotic`, `db_cogact`, and `dexbotic-cogact`.
+
+Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub/libero) (Dedicated libero-db-cogact checkpoint), [CALVIN](/docs/evaluation/benchmark-hub/calvin) (Dedicated calvin-db-cogact checkpoint), [SimplerEnv](/docs/evaluation/benchmark-hub/simpler-env) (Dedicated simpler-db-cogact checkpoint).
+
+DB-CogACT LIBERO specialist. Broader CogACT is the sibling.
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `db-cogact_action_trace.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `DBCogACTPipeline`.
+
+Family status: **Runner parity pending**.
+
+Pick the checkpoint matching your benchmark: libero-db-cogact, calvin-db-cogact, or simpler-db-cogact; SArm/HArm foundations serve fine-tuning. Integration status is Runner parity pending.
+
+WorldFoundry records the Dexbotic v1 inference contract with an independent DB-CogACT synthesis entrypoint.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run db-cogact-libero --pipeline.task-profile default` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch>=2.6.0).
+
+Recorded weight repositories include `Dexmal/libero-db-cogact`, `Dexmal/Dexbotic-CogACT-SArm`, and `Dexmal/Dexbotic-CogACT-HArm` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh db-cogact-libero`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="db-cogact" locale="en" />

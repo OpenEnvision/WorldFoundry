@@ -1,126 +1,37 @@
 ---
 title: LIBERO-Plus
-description: LIBERO-Plus — 指标、依赖与运行命令。
+description: "CVPR 2026 鲁棒性套件：七个因子上 10,030 个扰动后的 LIBERO 实例。WorldFoundry 导入官方 rollout——不跑该 fork。"
 ---
 
-## 简介
+LIBERO-Plus（CVPR 2026，复旦 / FudanNLP）是叠在原始 LIBERO Spatial / Object / Goal / Long 任务上的**仅评测**鲁棒性层，不是第五个终身学习套件。作者用受控扰动生成 **10,030** 个实例，覆盖 **七** 个因子（**21** 个子维）：
 
+- **物体布局** — 目标位移、干扰物（1,525）。
+- **相机视角** — 位姿与视场（1,599）。
+- **机器人初始状态** — 起始位姿（1,550）。
+- **语言指令** — LLM 改写（1,537）。
+- **光照** — 强度、方向、颜色、阴影（1,142）。
+- **背景纹理** — 场景 / 表面外观（1,076）。
+- **传感器噪声** — 光度退化（1,601）。
 
+实例按四个参考模型做成几个，分成 **L1–L5**（L1 = 四个都能做，L5 = 四个都不能）。论文对十个 VLA 的扫描报告：干净 LIBERO 约 **95%**，在不大的相机或初始状态扰动下掉到 **30% 以下**——这是上游结论，不是 Hub 分数。
 
-LIBERO-Plus external benchmark manifest for extended language-conditioned manipulation suites.
+论文：[LIBERO-Plus](https://arxiv.org/abs/2510.13626)。项目：[sylvestf.github.io/LIBERO-plus](https://sylvestf.github.io/LIBERO-plus/)。代码：[sylvestf/LIBERO-plus](https://github.com/sylvestf/LIBERO-plus)（MIT；可替换的 `libero` fork）。
 
+WorldFoundry **只导入官方结果**。你在上游跑该 fork，再经 `official-validation` 归一化导出。仓内不跑 robosuite，也不带 Plus 资产。[基础 LIBERO](/zh/docs/evaluation/benchmark-hub/libero) 可以接线闭环；本页不行。
 
+<BenchmarkPageSections id="libero-plus" locale="zh" />
 
-## 指标
-
-LIBERO-Plus external benchmark manifest for extended language-conditioned manipulation suites.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/libero-plus.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `episode_success` | episode / task 是否成功完成的比例或成功率。 |
-| `action_accuracy` | 预测动作、状态或结果相对 benchmark 成功标准的正确性。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `libero-plus-runtime`。
-- **单独配置：** 需要 benchmark 专用 conda 环境，不要与统一 runtime 混用。
-- LIBERO and LIBERO-Plus package constraints may conflict; use a separate environment if the unified runtime cannot satisfy both.
-
-### 测评数据
-
-- 待测模型输出目录：设置 `WORLDFOUNDRY_LIBERO_PLUS_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/libero-plus`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/Lifelong-Robot-Learning--LIBERO`
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_LIBERO_PLUS_ROOT`
-- `WORLDFOUNDRY_LIBERO_PLUS_RESULTS_PATH`
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id libero-plus \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero-plus/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/libero-plus/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id libero-plus \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero-plus/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id libero-plus --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_LIBERO_PLUS_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+可选 `WORLDFOUNDRY_LIBERO_PLUS_ROOT` 指向 `sylvestf/LIBERO-plus` 检出。默认导入路径：`WORLDFOUNDRY_LIBERO_PLUS_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/libero-plus.yaml`。输出：`scorecard.json`（主键 `success_rate`）、`raw_results.jsonl`、`evaluation/summary.json`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

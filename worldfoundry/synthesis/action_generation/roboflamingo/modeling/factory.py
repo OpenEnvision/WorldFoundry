@@ -1,11 +1,39 @@
 # Inference-only RoboFlamingo source retained in-tree.
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import json
+from pathlib import Path
+
 import open_clip
-from .flamingo_bc import BCFlamingo
-from .flamingo_mpt import MPTFlamingo
+from open_flamingo.src.factory import _infer_decoder_layers_attr_name
 from open_flamingo.src.flamingo_lm import FlamingoLMMixin
 from open_flamingo.src.utils import extend_instance
-from open_flamingo.src.factory import _infer_decoder_layers_attr_name
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from .flamingo_bc import BCFlamingo
+from .flamingo_mpt import MPTFlamingo
+
+
+def _trusted_staged_mpt_code(lang_encoder_path: str) -> bool:
+    """Allow the released RoboFlamingo MPT code only from its staged local layout."""
+    model_dir = Path(lang_encoder_path).expanduser().resolve()
+    if model_dir.name != "anas-awadalla--mpt-1b-redpajama-200b-dolly":
+        return False
+    official_dir = Path(__file__).resolve().parents[6] / "ckpts" / model_dir.name
+    code_files = (
+        "config.json", "attention.py", "configuration_mosaic_gpt.py", "gpt_blocks.py",
+        "low_precision_layernorm.py", "mosaic_gpt.py", "param_init_fns.py",
+    )
+    if model_dir != official_dir and any(
+        (model_dir / name).resolve() != official_dir / name for name in code_files
+    ):
+        return False
+    config_path = model_dir / "config.json"
+    if not config_path.is_file():
+        return False
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    return config.get("model_type") == "mosaic_gpt" and config.get("auto_map") == {
+        "AutoConfig": "configuration_mosaic_gpt.MosaicGPTConfig",
+        "AutoModelForCausalLM": "mosaic_gpt.MosaicGPT",
+    }
 
 
 
@@ -86,7 +114,7 @@ def create_model_and_transforms(
     lang_encoder = AutoModelForCausalLM.from_pretrained(
         lang_encoder_path,
         local_files_only=True,
-        trust_remote_code=False,
+        trust_remote_code=_trusted_staged_mpt_code(lang_encoder_path),
     )
     # hacks for MPT-1B, which doesn't have a get_input_embeddings method
     if "mpt-1b-redpajama-200b" in lang_encoder_path:

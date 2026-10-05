@@ -5,8 +5,8 @@
 import numpy as np
 import torch
 
-from torch_fidelity.helpers import get_kwarg, vprint
-from torch_fidelity.utils import (
+from .helpers import get_kwarg, vprint
+from .utils import (
     get_cacheable_input_name,
     cache_lookup_one_recompute_on_miss,
     extract_featuresdict_from_input_id_cached,

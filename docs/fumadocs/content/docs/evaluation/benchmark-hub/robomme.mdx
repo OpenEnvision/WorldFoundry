@@ -1,127 +1,27 @@
 ---
 title: RoboMME
-description: RoboMME — metrics, requirements, and run commands.
+description: "ICML 2026 memory-augmented manipulation: 16 tasks in Counting, Permanence, Reference, and Imitation. WorldFoundry imports suite success; it does not run the sim."
 ---
 
-## About
+RoboMME (University of Michigan with Stanford and Figure AI; ICML 2026) is a standardized bench for **memory-augmented** VLAs. **16** long-horizon tasks sit in four cognitive suites — **Counting** (temporal: exact event counts), **Permanence** (spatial: occlusion and swaps), **Reference** (object identity from an earlier cue), **Imitation** (procedural: copy a demonstrated trajectory) — four tasks each. The release includes **1,600** demonstrations and **770k** training timesteps, plus **14** memory-augmented variants on a **π0.5** backbone. The paper reports per-suite success, not a single pick-and-place bit.
 
+Paper: [RoboMME](https://arxiv.org/abs/2603.04639). Project: [robomme.github.io](https://robomme.github.io/). Code: [RoboMME/robomme_policy_learning](https://github.com/RoboMME/robomme_policy_learning).
 
+WorldFoundry **imports** official rollout exports and normalizes overall plus per-suite rates. It does **not** run the RoboMME simulator or those π0.5 variants. Name the suite (`counting` / `permanence` / `reference` / `imitation`) on the export.
 
-RoboMME external benchmark manifest for memory and multimodal embodied policy evaluation.
+<BenchmarkPageSections id="robomme" locale="en" />
 
-
-
-## Metrics
-
-RoboMME external benchmark manifest for memory and multimodal embodied policy evaluation.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/robomme.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `counting_success_rate` | Share of episodes or tasks that complete successfully. |
-| `permanence_success_rate` | Share of episodes or tasks that complete successfully. |
-| `reference_success_rate` | Share of episodes or tasks that complete successfully. |
-| `imitation_success_rate` | Share of episodes or tasks that complete successfully. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `worldfoundry-unified-cu128`.
-- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
-- WorldFoundry provides contract and official result normalization for caller-provided RoboMME outputs.
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_ROBOMME_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/robomme`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/RoboMME--robomme_policy_learning`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_ROBOMME_ROOT`
-- `WORLDFOUNDRY_ROBOMME_RESULTS_PATH`
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id robomme \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robomme/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/robomme/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id robomme \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robomme/official-run \
-  --json
-```
-
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id robomme --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_ROBOMME_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+Optional `WORLDFOUNDRY_ROBOMME_ROOT` points at a local runtime/repo. Default import path: `WORLDFOUNDRY_ROBOMME_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/robomme.yaml`. Outputs: `scorecard.json` (primary `success_rate`; also `counting_success_rate`, `permanence_success_rate`, `reference_success_rate`, `imitation_success_rate`), `raw_results.jsonl`, `evaluation/summary.json`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

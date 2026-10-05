@@ -81,14 +81,17 @@ class VGGTOperator(BaseOperator):
                 image_rgb = input_signal.permute(1, 2, 0).cpu().numpy()
             else:
                 image_rgb = input_signal[0].permute(1, 2, 0).cpu().numpy()
-            if image_rgb.max() > 1.0:
+            # Integer dtypes are always 0-255; the value-range check is only a
+            # fallback for float inputs whose scale is ambiguous.
+            if np.issubdtype(image_rgb.dtype, np.integer) or image_rgb.max() > 1.0:
                 image_rgb = image_rgb / 255.0
             return image_rgb
         elif isinstance(input_signal, np.ndarray):
-            image_rgb = input_signal / 255.0 if input_signal.max() > 1.0 else input_signal
-            if len(image_rgb.shape) == 3 and image_rgb.shape[2] == 3:
-                if image_rgb[..., 0].mean() > image_rgb[..., 2].mean():
-                    image_rgb = image_rgb[..., ::-1]
+            # Array inputs are expected in RGB channel order.
+            if np.issubdtype(input_signal.dtype, np.integer) or input_signal.max() > 1.0:
+                image_rgb = input_signal / 255.0
+            else:
+                image_rgb = input_signal
             return image_rgb
         else:
             raise ValueError(f"Unsupported input type: {type(input_signal)}")
@@ -188,10 +191,3 @@ class VGGTOperator(BaseOperator):
             result["num_frames"] = num_frames
         
         return result
-    
-    def delete_last_interaction(self):
-        """Delete the last interaction from current_interaction list."""
-        if len(self.current_interaction) > 0:
-            self.current_interaction = self.current_interaction[:-1]
-        else:
-            raise ValueError("No interaction to delete.")

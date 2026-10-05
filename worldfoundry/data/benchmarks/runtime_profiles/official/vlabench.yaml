@@ -6,8 +6,10 @@ environment_id: vlabench-runtime
 id: vlabench
 name: VLABench
 docker:
-  image: ghcr.io/allenai/vla-evaluation-harness/vlabench:latest
-  source_image: ghcr.io/allenai/vla-evaluation-harness/vlabench:latest
+  image: ghcr.io/allenai/vla-evaluation-harness/vlabench@sha256:024e6df076ea8231f2ffd1d8f5394390905212177bc5f45e5269b1f259a6eac0
+  digest: sha256:024e6df076ea8231f2ffd1d8f5394390905212177bc5f45e5269b1f259a6eac0
+  source_image: ghcr.io/allenai/vla-evaluation-harness/vlabench@sha256:024e6df076ea8231f2ffd1d8f5394390905212177bc5f45e5269b1f259a6eac0
+  platform: linux/amd64
   python_env: vlabench
   gpus: all
 needs_new_env: true

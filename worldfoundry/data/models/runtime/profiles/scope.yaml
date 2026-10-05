@@ -1,6 +1,6 @@
 artifact_filename: scope.mp4
 artifact_kind: generated_video
-backend_stage: in_tree_official_cli
+backend_stage: native_wan_runtime
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/SCOPE
   repo_id: zizhaotong/SCOPE
@@ -15,8 +15,9 @@ input_schema:
   video: false
 integration_status: verified
 notes:
-- WorldFoundry vendors the official SCOPE inference source and DiffSynth fork under worldfoundry/synthesis/visual_generation/scope/scope_runtime.
-- SCOPEPipeline fails fast unless execute=True is supplied, then runs the in-tree
-  inference.py subprocess with staged z2tong/SCOPE weights.
+- SCOPE reuses the canonical Wan encoder, VAE, loader, scheduler, and staged runner;
+  only its checkpoint-shaped action-conditioned network remains model-specific.
+- SCOPEPipeline fails fast unless execute=True is supplied, then invokes the in-tree
+  native assembly with staged z2tong/SCOPE weights.
 runtime_status: in_tree_scope_runtime_checkpoint_pending
 task_family: world_model

@@ -1,0 +1,54 @@
+---
+title: "Depth Anything V1"
+description: "Depth Anything V1（TikTok / The University of Hong Kong）：深度估计、几何估计；已验证。"
+modelId: "depth-anything-v1"
+pageSource: authored
+---
+
+Depth Anything V1 是让「大规模无标注数据训练深度」流行起来的相对单目深度基础模型。本 catalog 中其集成与 runner 状态均为 verified：树内 pipeline 导出相对深度与几何产物，Studio 路径已于 2026-07-10 产出并通过视觉验证的非空深度图。
+
+<ModelPaperFigures modelId="depth-anything-v1" locale="zh" />
+
+记录论文为[arXiv 2401.10891](https://arxiv.org/abs/2401.10891)。
+
+项目页：[depth-anything.github.io](https://depth-anything.github.io/)。代码：[LiheYoung/Depth-Anything](https://github.com/LiheYoung/Depth-Anything)。
+
+官方论文见 [arXiv 2401.10891](https://arxiv.org/abs/2401.10891)。项目页：[depth-anything.github.io](https://depth-anything.github.io/)。代码：[LiheYoung/Depth-Anything](https://github.com/LiheYoung/Depth-Anything)。权重：`LiheYoung/depth-anything-small-hf`、`base-hf`、`large-hf`。发布方：TikTok / 港大。catalog 未记许可证。
+
+这张卡**不是** [Depth Anything V2 prior](/zh/docs/guides/supported-models/depth-anything-v2-prior)（米制），也不是 [DAP](/zh/docs/guides/supported-models/dap)（360° 全景）。
+
+<ModelCommandBuilder modelId="depth-anything-v1" locale="zh" />
+
+## 用来做什么
+
+做前馈几何时选 `depth-anything-v1`：视图进、重建/轨迹/点云出。需要 catalog 的 3D 路由、而不是仅深度先验时用它。
+
+DINOv2 ViT 主干加 DPT 式深度头，用约 6200 万张无标注图像以师生方案训练（见论文）。本条目提供相对深度；米制版本是独立的 *-prior 条目。该模型由TikTok / 香港大学发布。
+
+catalog 记录的任务包括 深度估计、几何估计、单目深度估计。模态上，它接受图像，输出深度。
+
+## 运行时契约
+
+可选 `input_path`、`grayscale`、`operator_kwargs`；产物 `depth-anything-v1.png`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `DepthAnything1Pipeline`。
+
+系列状态：**已验证**。
+
+已验证、可信赖的先验——相对深度的默认选择。 需要米制深度时请改用 depth-anything-v2-prior 或 depth-anything-v3-prior。
+
+仅相对深度——该路径没有米制尺度。
+
+记录的权重族：`LiheYoung/depth-anything-small-hf`、`base-hf`、`large-hf`。已验证的 Studio 路径走树内官方运行时，在 **2026-07-10** 产出并通过视觉检查的非空图。主干：DINOv2 ViT + DPT 式头。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run depth-anything-v1 --pipeline.task-profile default` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `LiheYoung/depth-anything-large-hf`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh depth-anything-v1`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="depth-anything-v1" locale="zh" />

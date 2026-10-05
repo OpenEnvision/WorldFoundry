@@ -1,0 +1,30 @@
+---
+title: "WorldGen"
+description: "ZiYang Xie 的 WorldGen：文本或图像入，可遍历 3D splat/mesh 出。树内适配器；FLUX 基座 gated；runner 一致性仍为 pending。"
+modelId: "worldgen"
+pageSource: authored
+---
+
+本卡片上的 WorldGen 是 **ZiYang Xie** 的开源 3D 世界生成器（[github.com/ZiYang-xie/WorldGen](https://github.com/ZiYang-xie/WorldGen)，项目页 [worldgen.github.io](https://worldgen.github.io/)）。运行时把**文本提示**和 / 或**单张图**变成 **3D 场景**——默认高斯溅射 `worldgen.ply`，打开 `return_mesh` 则写网格 `worldgen.glb`。它**不**输出世界视频。
+
+<ModelPaperFigures modelId="worldgen" locale="zh" />
+
+catalog 的论文链接和标题旁封面是 Meta Reality Labs 的 [WorldGen: From Text to Traversable and Interactive 3D Worlds](https://arxiv.org/abs/2511.16825)。那是**同名的另一个项目**。本页写的是 WorldFoundry 实际接好的 **LeoXie/WorldGen** 适配器，不是 Meta 的发布。也**不是** [Hunyuan World worldgen](/zh/docs/guides/supported-models/hyworld-worldgen)。
+
+<ModelCommandBuilder modelId="worldgen" locale="zh" />
+
+## 用来做什么
+
+做可走的 3D 资产，不是短片。启动 `worldfoundry-eval run worldgen`，任务 profile 为 `3d-world-generation`。记录输入：`prompt` 与 `image`。可选 `actions.camera_path`。视频**不是**必填。树内流程是文生场景（`t2s`）或图生场景（`i2s`）：FLUX 先画全景，适配器再重建 splat 或 mesh。也可以直接给现成全景，跳过 FLUX 生成。
+
+内置脚本默认推理分辨率是 **1600**。显存低于 24 GB 会自动开低显存模式。背景 inpaint 不能与 `return_mesh` 同时用。
+
+生成 3D 世界的评测入口是 [WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)。那是 catalog 入口，不是已摄入的 WorldFoundry 分数。
+
+## 在 WorldFoundry 中运行
+
+`WorldGenPipeline` 是 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）里的树内子进程适配器。就位 `LeoXie/WorldGen`，并接受 gated 的 **FLUX.1-dev**（文生全景）与 **FLUX.1-Fill-dev**（图生全景）条款。缺基座会在推理时报告。**Runner / 官方场景质量一致性仍为 pending。**
+
+本地 512×256、50 步的文生场景运行生成了数值正常的高斯场景，反投影中可见提示要求的家具。一张裁剪后的透视房间照片用于图生场景时，虽然生成了有效 PLY，却没有保留原房间。当前上游图像路径在未指定相机视场角的情况下，把单张输入映射到球面全景光线。另用完整的 2:1 全景测试时，发现轮廓填充会在输入覆盖全景时清空所有条件像素；树内修复现已保留完整掩码。用该全景重跑 50 步得到有效 PLY，其恢复的 RGB 与输入平均相差 1.44/255。完整全景没有待扩展的区域，因此这只验证条件保留与场景转换，不能证明从透视照片生成新内容的能力。
+
+<ModelRelatedRecipes modelId="worldgen" locale="zh" />

@@ -13,30 +13,17 @@ from torch.utils.data import DataLoader, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
-try:
-    from torchvision.io import write_video as _torchvision_write_video
-except ImportError:
-    _torchvision_write_video = None
-
+from worldfoundry.core.media.codecs.video import write_video_torchvision
 from worldfoundry.core.vram import DynamicSwapInstaller, get_cuda_free_memory_gb, gpu
 from pipeline import CausalInferencePipeline
 from pipeline.causal_inference import denoise_block
-from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 from utils.render_warper import convert_mask_video
+from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.reproducibility import seed_for_rank
 
 
 def write_video(filename, video_array, fps):
-    if _torchvision_write_video is not None:
-        _torchvision_write_video(filename, video_array, fps=fps)
-        return
-
-    import imageio.v2 as imageio
-
-    if torch.is_tensor(video_array):
-        frames = video_array.detach().cpu().clamp(0, 255).to(torch.uint8).numpy()
-    else:
-        frames = np.asarray(video_array).clip(0, 255).astype(np.uint8)
-    imageio.mimwrite(filename, frames, fps=fps, macro_block_size=None)
+    write_video_torchvision(filename, video_array, fps=fps)
 
 # ============================================================================
 # Argument parsing
@@ -47,6 +34,7 @@ parser.add_argument("--checkpoint_path", type=str, help="Path to the checkpoint 
 parser.add_argument("--output_folder", type=str, help="Output folder")
 parser.add_argument("--num_samples", type=int, default=1, help="Number of samples to generate per prompt")
 parser.add_argument("--seed", type=int, default=0, help="Random seed")
+parser.add_argument("--deterministic", action="store_true", help="Require deterministic algorithms")
 parser.add_argument("--json_path", type=str, help="Path to the json file")
 parser.add_argument("--version", type=str, default="version_0", help="Output version subfolder name")
 
@@ -67,13 +55,13 @@ if "LOCAL_RANK" in os.environ:
     device = torch.device(f"cuda:{local_rank}")
     world_size = dist.get_world_size()
     rank = dist.get_rank()
-    set_seed_everywhere(args.seed + local_rank)
+    set_seed_everywhere(seed_for_rank(args.seed, local_rank), deterministic=args.deterministic)
 else:
     device = torch.device("cuda")
     local_rank = 0
     world_size = 1
     rank = 0
-    set_seed_everywhere(args.seed)
+    set_seed_everywhere(seed_for_rank(args.seed, 0), deterministic=args.deterministic)
 
 print(f'[Rank {rank}] Free VRAM {get_cuda_free_memory_gb(gpu)} GB')
 low_memory = get_cuda_free_memory_gb(gpu) < 40

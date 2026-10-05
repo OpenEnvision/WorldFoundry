@@ -3,8 +3,9 @@ from tqdm import tqdm
 from torchvision import transforms
 from pyiqa.archs.musiq_arch import MUSIQ
 from .utils import load_video, load_dimension_info
+from worldfoundry.core.execution.device import get_current_torch_device
 
-from .distributed import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     all_gather,
@@ -57,7 +58,7 @@ def technical_quality(model, video_list, device, **kwargs):
 
 
 def compute_imaging_quality(json_dir, submodules_list, **kwargs):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = get_current_torch_device()
     model_path = submodules_list['model_path']
 
     model = MUSIQ(pretrained_model_path=model_path)

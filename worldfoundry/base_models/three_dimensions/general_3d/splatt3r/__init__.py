@@ -26,5 +26,14 @@ __all__ = [
     "DEFAULT_SPLATT3R_LOCAL_CKPT",
     "DEFAULT_SPLATT3R_REPO",
     "Splatt3RRuntime",
+    "Splatt3RSynthesis",
     "runtime_root",
 ]
+
+
+def __getattr__(name: str):
+    if name == "Splatt3RSynthesis":
+        from .splatt3r_synthesis import Splatt3RSynthesis
+
+        return Splatt3RSynthesis
+    raise AttributeError(name)

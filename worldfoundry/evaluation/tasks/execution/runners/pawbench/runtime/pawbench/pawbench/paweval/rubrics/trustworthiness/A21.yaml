@@ -1,0 +1,50 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: A21
+track: calibration
+title_en: Two-Dice Sum
+scene_grounding:
+- 'Initial state must match: Exactly two dice are held at the release point above
+  a tabletop.'
+- Apparatus geometry in the opening frames must match the source image.
+- Exactly two dice must be visible at the start; no missing or extra dice.
+action_execution:
+- 'Required action: Roll both dice once.'
+- Action must happen exactly once in the expected direction / region.
+- Both dice must be thrown together in a single action; sequential throws are a failure.
+target_requirements:
+- Scene-defining target, subject, and readout evidence must remain visible throughout the action.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+- Neither die may disappear or duplicate mid-throw; both must remain trackable until
+  settled.
+- The two top faces used for the sum must belong to the two continuous dice; side
+  faces are not outcome evidence.
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-readout state/region change: subject moves between label-defining states or regions after the first decisive readout.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Two-Dice Sum.'
+- Sum labels are direct top-face readouts; parity or distributional metrics are
+  derived downstream from the summed label.

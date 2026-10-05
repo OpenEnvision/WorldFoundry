@@ -5,8 +5,10 @@ benchmark_ids:
 environment_id: docker:robotwin
 needs_new_env: false
 docker:
-  image: ghcr.io/allenai/vla-evaluation-harness/robotwin:latest
-  source_image: ghcr.io/allenai/vla-evaluation-harness/robotwin:latest
+  image: ghcr.io/allenai/vla-evaluation-harness/robotwin@sha256:8b6216418255ab563104c052388eed12af2dcf3a8984a8b69fb14bbe2f29d691
+  digest: sha256:8b6216418255ab563104c052388eed12af2dcf3a8984a8b69fb14bbe2f29d691
+  source_image: ghcr.io/allenai/vla-evaluation-harness/robotwin@sha256:8b6216418255ab563104c052388eed12af2dcf3a8984a8b69fb14bbe2f29d691
+  platform: linux/amd64
   python_env: robotwin
   gpus: all
 blocked_reason: Full official status requires the RoboTwin simulator Docker image, staged assets, checkpoints, and upstream policy evaluation artifacts.

@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.core.io import materialize_file
+
 OFFICIAL_RUNTIME_ROOT = Path(__file__).resolve().parent / "runtime" / "official"
 
 METRIC_FILE_NAMES = {
@@ -123,7 +125,7 @@ def run_official_world_in_world_runtime(
             "world_in_world_metrics.json under --generated-artifact-dir."
         )
     results_path.parent.mkdir(parents=True, exist_ok=True)
-    results_path.write_bytes(source_path.read_bytes())
+    materialize_file(source_path, results_path)
     return {
         "backend": "official_runtime",
         "runtime_root": str(OFFICIAL_RUNTIME_ROOT),

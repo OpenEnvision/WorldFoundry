@@ -1,0 +1,32 @@
+---
+title: "Wan 2.5 API"
+description: "Wan 2.5 API from Alibaba (Tongyi Lab): hosted API — no local weights; requests hit the provider endpoint."
+modelId: "wan-2p5"
+pageSource: authored
+---
+
+Wan 2.5 API is the hosted DashScope endpoint for Alibaba's Wan 2.5 video generation model, recorded for text-to-video and image-to-video. Unlike the open-weight Wan releases that WorldFoundry runs locally elsewhere in this catalog, this entry covers the provider-hosted generation path: requests go to Alibaba Cloud DashScope and finished clips come back as artifacts. Aliases wan2.5 and wan-2.5 also resolve here.
+
+<ModelPaperFigures modelId="wan-2p5" locale="en" />
+
+Project page: [dashscope.aliyun.com](https://dashscope.aliyun.com).
+
+<ModelCommandBuilder modelId="wan-2p5" locale="en" />
+
+## What it is for
+
+Use Wan 2.5 when you want Alibaba's hosted DashScope clip, not the local [Wan2.1](/docs/guides/supported-models/wan2.1) weights. Prompt (T2V) or start image (I2V) goes to the provider; a finished video comes back as a WorldFoundry artifact.
+
+Launch `worldfoundry-eval run wan-2p5`. Aliases `wan2.5` and `wan-2.5` resolve here. Later hosted cards: [Wan 2.6 API](/docs/guides/supported-models/wan-2p6), [Wan 2.7 API](/docs/guides/supported-models/wan-2p7).
+
+Related suites: [VBench](/docs/evaluation/benchmark-hub/vbench) and [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq).
+
+## Runtime contract
+
+No local checkpoint, resolution, frame count, or step table is pinned on this card — those knobs live on the DashScope request. Recorded tasks: text-to-video and image-to-video. Status: **Runner parity pending** (hosted; runner is not applicable locally). Bring your own provider key.
+
+## Running in WorldFoundry
+
+No GPU environment is provisioned. Issue a DashScope key at dashscope.aliyun.com, then launch `worldfoundry-eval run wan-2p5`. Cost, quota, and content policy follow your Alibaba Cloud account.
+
+<ModelRelatedRecipes modelId="wan-2p5" locale="en" />

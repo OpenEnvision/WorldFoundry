@@ -1,0 +1,48 @@
+---
+title: "LTX-Video"
+description: "Lightricks LTX-Video 0.9.8 蒸馏图生视频，走共享 LTX 原生栈。系列级文生视频标签是上游元数据，不是 WorldFoundry 本地路径。"
+modelId: "ltx-video"
+pageSource: authored
+---
+
+LTX-Video 是 Lightricks 较早的实时潜空间扩散视频模型。本卡片是 **0.9.8 蒸馏图生视频** 路径——不是 [LTX-2.x](/zh/docs/guides/supported-models/ltx-2.x)，也不是 [LTX-2.5](/zh/docs/guides/supported-models/ltx-2.5)。唯一可运行 variant 是 `ltx-video-i2v`。系列级文生视频标签描述的是上游能力；原生运行时若被要求做 T2V 会直接报错。
+
+<ModelPaperFigures modelId="ltx-video" locale="zh" />
+
+论文是 [LTX-Video: Realtime Video Latent Diffusion](https://arxiv.org/abs/2501.00103)。代码在 [Lightricks/LTX-Video](https://github.com/Lightricks/LTX-Video)。项目站是 [ltx.video](https://ltx.video)。`paper.png` 只作标题缩略图。
+
+<ModelCommandBuilder modelId="ltx-video" locale="zh" />
+
+## 它用来做什么
+
+在 `ltx-video-i2v` 上给静帧加运动：必填 `prompt` + `image`，可选 `video`，seed 记在 `actions`，经 `LTXVideoI2VPipeline` 写出 `ltx-video-i2v.mp4`。Diffusers **不是** 推理后端。T5 经 `NativeModuleLoader` 以 Transformers 架构加载；DiT、Video-VAE、Euler 调度器、空间上采样器和联合状态 runner 与后续 LTX-2.x 卡片共用同一套原生栈。
+
+本页**没有本地 T2V 或 V2V**。列出的图生视频评测是 [AIGCBench](/zh/docs/evaluation/benchmark-hub/aigcbench)——只是套件指针，不是已摄入分数。
+
+## 推理
+
+WorldFoundry 钉死蒸馏版的**两段**配方：**7 + 3 = 10** 步固定 sigma 的 **Euler**，**guidance 1.0**（改步数或 CFG 会被运行时拒绝）。空间上采样器在两段之间自动跑，第一段尺度 **2/3**；它不是 Studio 的独立超分开关。采样器是 checkpoint / 固定 sigma 的 Euler 对，不是 UniPC。
+
+`runtime_defaults.yaml` 记录的默认值：
+
+| 旋钮 | WorldFoundry 默认 | 约束 |
+| --- | --- | --- |
+| 分辨率 | **768×512** | 高宽须能被 32 整除 |
+| 帧数 | **121** | 上游还要求帧数 = 8k+1 |
+| FPS | **30** | `frame_rate` |
+| 步数 | **10**（先 7 后 3） | 必填 |
+| Guidance | **1.0** | 必填 |
+| 图像噪声 | `image_cond_noise_scale=0.15` | 首帧条件 |
+| Offload | `cpu_offload=true` | block offload |
+
+上游 0.9.8 卡片宣传 **1216×704 @ 30 fps**，并在 *dev*（非蒸馏）线上建议 guidance 3–3.5。那些数字不是本封装的默认。catalog 未记录显存——不要编造下限。
+
+## 在 WorldFoundry 中运行
+
+在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）中启动 `worldfoundry-eval run ltx-video-i2v`。把 `$WORLDFOUNDRY_HFD_ROOT/Lightricks--LTX-Video` 就位，目录里需要 `ltxv-13b-0.9.8-distilled.safetensors`、`ltxv-spatial-upscaler-0.9.8.safetensors` 以及 T5 encoder/tokenizer 分片。权重缺失会在运行时报告。
+
+记录的 Hugging Face 仓库：`Lightricks/LTX-Video`（WorldFoundry 实际打开的 0.9.8 蒸馏文件），以及 `Lightricks/LTX-Video-0.9.5`、`Lightricks/LTX-Video-0.9.7-dev`、`Lightricks/LTX-Video-0.9.8-13B-distilled`。卡片许可均为 **`other`**。GitHub 树是 Apache-2.0——商用前请审阅 HF 卡片。
+
+集成已记录。状态：**仅静态加载**——checkpoint 结构已校验，不是本工作区已验证的 GPU 产物。
+
+<ModelRelatedRecipes modelId="ltx-video" locale="zh" />

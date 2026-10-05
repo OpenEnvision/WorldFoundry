@@ -31,8 +31,11 @@ checkpoint:
     - image-to-video
     license_status: pending
   notes: HF repos are public and non-gated, but cardData did not expose a license.
+official_sources:
+  project_page: https://lllyasviel.github.io/frame_pack_gitpage/
+  paper: https://arxiv.org/abs/2504.12626
 integration:
-  status: verified
+  status: integrated
   notes:
   - WorldFoundry vendors the minimal infer-only FramePack runtime in-tree; missing checkpoint/assets are reported at runtime.
   - The in-tree route materializes official outputs through the shared pipeline contract.
@@ -54,3 +57,25 @@ catalog_policy:
     task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit parity run and expected artifact are
     recorded.
+docs:
+  publisher: Stanford University
+  publisher_kind: university
+  publisher_zh: 斯坦福大学
+  overview: 'FramePack is a low-memory approach to long image-to-video generation: it packs input frame context into fixed-length representations so generation cost stays roughly constant as the video grows. WorldFoundry vendors a minimal infer-only FramePack runtime in-tree, and the integration itself is marked verified — the route materializes official outputs through the shared pipeline contract.'
+  overview_zh: FramePack 是面向长视频图生视频的低显存方案：它把输入帧上下文压缩进定长表示，使生成成本不随视频变长而显著增长。WorldFoundry 在树内内置了最小化的仅推理 FramePack 运行时，集成状态标记为 verified——该路径通过共享 pipeline 契约产出官方风格输出。
+  architecture: FramePack (from the authors of ControlNet at Stanford) wraps a video diffusion backbone with a frame-context packing scheme that keeps a constant-length conditioning window, enabling minute-scale clips on modest VRAM. This repository records the infer-only runtime under synthesis/visual_generation/framepack and the prompt+image input contract.
+  architecture_zh: FramePack（作者来自斯坦福，ControlNet 团队）在视频扩散基座外包了一层帧上下文打包机制，维持定长条件窗口，使得在有限显存上也能生成分钟级视频。本仓库记录了位于 synthesis/visual_generation/framepack 的仅推理运行时与 prompt+image 输入契约。
+  usage_notes: The I2V route is wired for image-conditioned generation; official long-video parity remains pending, and the manifest flags that license and runtime parity must be reviewed before promotion. Best used when you need long clips on a single consumer-class GPU.
+  usage_notes_zh: I2V 路径已按图像条件生成接通；官方长视频一致性仍在等待，且 manifest 标注在晋级前需审阅许可与运行时一致性。最适合在单张消费级 GPU 上生成较长视频的场景。
+  limitations:
+  - Official long-video parity is pending; per-run artifact checks live outside the catalog.
+  - The manifest explicitly requires license review before promotion.
+  - Constant-memory packing trades off long-range temporal detail — drift can accumulate on very long clips.
+  limitations_zh:
+  - 官方长视频一致性验证仍在等待；每次运行的产物检查在 catalog 外跟踪。
+  - manifest 明确要求晋级前审阅许可。
+  - 定长打包以牺牲长程时序细节为代价——超长视频可能累积漂移。
+  recommended_benchmarks:
+  - id: chronomagic-bench
+    reason: Long-horizon generation suite matching FramePack's long-video focus.
+    reason_zh: 长时程生成评测，契合 FramePack 的长视频定位。

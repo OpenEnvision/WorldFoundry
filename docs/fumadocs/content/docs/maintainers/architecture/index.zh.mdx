@@ -1,56 +1,77 @@
 ---
 title: 架构
-description: 解释 WorldFoundry workflow、模型 runtime、benchmark 执行和证据追踪的基本原理。
+description: 一次运行如何从命令走到产物、分数和证据，以及每一步由哪一层负责。
 ---
 
-## 目的
+WorldFoundry 把 **模型执行** 和 **benchmark 评分** 拆开，再用进程退出后仍能打开的文件把两边接住。
 
-架构文档用于解释这个仓库在子系统层面如何工作，不作为逐文件源码索引。阅读它是为了理解概念、选择正确工作流，并判断某个改动属于哪一层。正文以段落说明为主：先讲职责边界和数据流，再在必要时引用关键路径；端到端运行流与评测 internals 请从 [Workflow](/zh/docs/maintainers/architecture/workflow) 与 [评测核心](/zh/docs/maintainers/architecture/evaluation-core) 入手。
+模型写出归一化 artifact。Benchmark 只评这些文件，不碰 checkpoint。Runner 记录实际发生了什么。所以视频模型和视觉-语言-动作（VLA）策略可以共用同一套 `GenerationResult` 行和 `scorecard.json`，哪怕推理完全不在同一个 runtime。也因此你可以先生成、先目检，再另开一次评分，而不必重新加载模型。
 
-**适合谁读：** 添加模型或 benchmark 的维护者、需要从 CLI 追到 scorecard 的 reviewer，以及排查「catalog 显示 supported 但 run 仍失败」的人。**何时从这里开始：** 完成 [快速开始](/zh/docs/quickstart) 且第一次 run 成功后，若需要命令背后的整体模型再读本文——不必在第一次 run 之前通读。确定要改哪一层后，从下方卡片进入对应子页。
+<ArchDiagram id="system" locale="zh" />
+
+图上是一次运行：界面把意图收成请求，执行侧生成或评分（或两者都做），reporting 写下证据。Catalog、原生 diffusion 内核和 Studio 在这条脊线*旁边*：它们有自己的归属规则，但不是图上多出来的方块。
+
+第一次 [快速开始](/zh/docs/quickstart) 跑通之后再读这页，用来建立命令背后的心智模型。[设计](/zh/docs/overview/design) 是更粗的四层地图；改动涉及「归谁」时，以下面这份清单为准。
+
+一次 evaluate 跑完，输出目录本身就是契约。你应能打开 `requests.jsonl` 和 `results.jsonl`（每条样本一行）、`metrics/summary.json`、`scorecard.json`（资格记录；`report.md` 由它派生）以及 `run_manifest.json`（身份和状态）。缺文件时，[工作流](/zh/docs/maintainers/architecture/workflow) 标明该由哪一阶段写出。
+
+## 谁负责什么
+
+层与层只通过可序列化契约说话：`GenerationRequest`、`GenerationResult`、`BenchmarkSpec` 和 scorecard 字段。不要共享全局状态，也不要把机器本地路径当成接口。若改动属于模型运行时，就不要把打分逻辑塞进 runner；若属于 reporting，就不要假设某种 checkpoint 布局。
+
+- **使用界面与编排** — 命令、运行模式、resume、输出位置。不管模型内部怎么推理。
+- **模型运行时** — pipeline、operator、本地 runtime、托管 API，以及归一化生成结果。不管 benchmark 怎么打分。
+- **原生 Diffusion** — `worldfoundry/base_models/diffusion_model` 里的采样循环和本地 diffusion 契约。不依赖上游 pipeline 框架，也不反向依赖编排和评测。
+- **Benchmark 运行时** — manifest、数据集、evaluator、指标和结果归一化。不负责加载模型或摆 checkpoint。
+- **Catalog 与就绪** — 元数据、来源、资产、环境、blocker 和支持状态。不写代码里跑不起来的 runtime 行为。
+- **Reporting** — manifest、摘要、`report.md`、`scorecard.json` 和榜单资格。不把缺失资产或跳过的步骤藏起来。
+- **Studio** — 同一套 catalog 与 runtime 契约上的交互预览。不把只能在 UI 里工作的核心逻辑藏进界面。
+
+## 拍板时用的原则
+
+日常 review 里常见的分岔都在这里：为什么 catalog 可以先写意图、代码后落地；为什么 official validation 不等于一次正式 benchmark；为什么只做 artifact 检查也要写 manifest。
+
+- **统一的公开 runner 契约** — 每条模型路径最终都落到同一种结果形态，benchmark 不必关心文件是哪个 runtime 写的。
+- **Operator 加 pipeline** — 可运行方法两边都要有，输入才明确、才可复现。
+- **证据先于声明** — Catalog 可以描述意图；支持状态必须对得上真正能跑的东西。
+- **外部代码先当出处** — 官方仓库和 checkpoint 要记录。本机 checkout 路径不是 runtime 依赖。
+- **只有一份原生 diffusion 内核** — 上游树是实现参考，不是 backend。可复用的采样算法在仓库里只留一份。
+- **Official validation 不是 benchmark 对齐** — 导入官方文件只证明结果链路通。Benchmark-ready 还要有真实数据、指标和 scorecard。
+
+## 接下来读哪页
+
+多数事情会跨两页。加模型要看 [模型运行时](/zh/docs/maintainers/architecture/model-runtime) 和 [评测核心](/zh/docs/maintainers/architecture/evaluation-core)。加 benchmark 要看 [基准和数据](/zh/docs/maintainers/architecture/benchmarks-data) 和 [工作流](/zh/docs/maintainers/architecture/workflow)。
+
+**跟着一次运行走**
 
 <Cards>
-  <Card title="Workflow" description="从 CLI 输入追踪到产物、指标、scorecard 和报告。" href="/zh/docs/maintainers/architecture/workflow" />
-  <Card title="评测核心" description="理解 requests、runners、metrics、reports 和 scorecards。" href="/zh/docs/maintainers/architecture/evaluation-core" />
-  <Card title="模型运行时" description="以段落说明 pipeline、operator、runtime 与 artifact contract 如何协作；OpenVLA 作为参考实现。" href="/zh/docs/maintainers/architecture/model-runtime" />
-  <Card title="基准和数据" description="理解 benchmark manifests、datasets、官方 evaluator 和 readiness checks。" href="/zh/docs/maintainers/architecture/benchmarks-data" />
-  <Card title="Studio 内部" description="理解交互式预览界面如何复用同一套 runtime contract。" href="/zh/docs/maintainers/architecture/studio-internals" />
+  <Card title="工作流" description="从 CLI 到产物、指标、scorecard 和报告的一条评测。" href="/zh/docs/maintainers/architecture/workflow" />
+  <Card title="使用界面与编排" description="CLI、TUI、MCP 如何把意图收成 runner 能执行的请求。" href="/zh/docs/maintainers/architecture/surfaces-orchestration" />
+  <Card title="评测核心" description="分发、三条运行路径、指标和 scorecard。" href="/zh/docs/maintainers/architecture/evaluation-core" />
 </Cards>
 
-## 核心思想
+**改模型或 benchmark**
 
-WorldFoundry 将模型执行和 benchmark 评分分开。模型负责产出归一化 artifact，benchmark 负责评价 artifact，runner 负责记录真实发生了什么。这个分层让同一套框架可以覆盖视频生成、3D/4D 资产、world-action rollout、托管 API 和 embodied policy，而不需要为每个模型族重写每个 benchmark。
+<Cards>
+  <Card title="模型运行时" description="pipeline、operator 与 artifact 契约。OpenVLA 是完整例子。" href="/zh/docs/maintainers/architecture/model-runtime" />
+  <Card title="Runtime 组装" description="pipeline、operator、synthesis、representation、memory 的基类职责。" href="/zh/docs/maintainers/architecture/runtime-assembly" />
+  <Card title="原生 Diffusion" description="框架自有的采样内核，以及研究扩展往哪里接。" href="/zh/docs/maintainers/architecture/native-diffusion" />
+  <Card title="核心基础设施" description="worldfoundry/core 里共享的加载、attention、分布式、VRAM、kernel 和 memory。" href="/zh/docs/maintainers/architecture/core-infrastructure" />
+  <Card title="基准和数据" description="manifest、数据集、官方 evaluator 和就绪检查。" href="/zh/docs/maintainers/architecture/benchmarks-data" />
+  <Card title="Studio 内部" description="预览壳，执行契约与 CLI 相同。" href="/zh/docs/maintainers/architecture/studio-internals" />
+</Cards>
 
-例如，视频模型 run 和 VLA policy run 最终都会写出 `GenerationResult` 行和 `scorecard.json`，尽管推理发生在完全不同的 runtime 里。Benchmark 不会直接 import 模型 checkpoint——它们消费 runner 写入磁盘的归一化 artifact 契约。
+**查路径**
 
-## 主要层级
+<Cards>
+  <Card title="代码地图" description="目录对应职责，以及每个包该先打开的文件。" href="/zh/docs/maintainers/architecture/file-index" />
+</Cards>
 
-改行为前先问该改哪一层。若属于 model runtime，就不应把 scoring logic 塞进 runner；若属于 reporting，就不应假设某种 checkpoint 布局。层与层之间通过可序列化契约（`GenerationRequest`、`GenerationResult`、`BenchmarkSpec`、scorecard 字段）通信，而不是共享全局状态或机器本地路径。
+如果是带着具体任务进来的：
 
-- **CLI 与编排** 负责用户命令、运行模式、suite、resume 行为和输出位置，不应承担模型特定推理细节。
-- **Model runtime** 负责 pipeline、operator、本地 runtime、hosted API wrapper 和归一化生成结果，不应承担 benchmark scoring logic。
-- **Benchmark runtime** 负责 benchmark manifest、dataset、evaluator、metric 和结果归一化，不应承担模型加载或 checkpoint-specific setup。
-- **Catalog 与 readiness** 负责模型/benchmark metadata、source provenance、资产、环境要求、blocker 和支持状态，不应描述没有代码证据支撑的 runtime 行为。
-- **Reporting** 负责 manifest、summary、report、scorecard 和 leaderboard eligibility，不应隐藏缺失资产或 skipped work。
-- **Studio** 负责基于同一套 catalog 和 runtime contract 的交互式预览和检查，不应包含只有 UI 内才能工作的核心逻辑。
-
-## 设计原则
-
-这些原则用于日常取舍：为何 official validation 与 official benchmark run 分开、为何 catalog metadata 可以在代码落地前描述意图、以及为何即使只做 artifact check 也要写 manifest 和 ledger。
-
-- **统一公开 runner contract** — 每条模型路径最终都应产出同一种归一化结果形态。
-- **Operator plus pipeline** — 可运行方法需要同时具备 pipeline 和 operator，让输入处理明确且可复现。
-- **证据优先于声明** — Catalog entry 可以描述意图，但支持状态必须匹配真实可运行证据。
-- **外部代码先作为 provenance** — 官方仓库和 checkpoint 可以记录，但机器本地路径不能成为 runtime dependency。
-- **Official validation 不等于 benchmark parity** — Official-validation import 用真实文件证明结果归一化链路；benchmark-ready 需要真实数据、指标和 scorecard。
-
-## 常见阅读路径
-
-多数任务会跨两层。添加模型既要读 [模型运行时](/zh/docs/maintainers/architecture/model-runtime)，也要读 [评测核心](/zh/docs/maintainers/architecture/evaluation-core)。添加 benchmark 则要结合 [基准和数据](/zh/docs/maintainers/architecture/benchmarks-data) 与 [Workflow](/zh/docs/maintainers/architecture/workflow)。
-
-- **跑一次评测** — 从 [快速开始](/zh/docs/quickstart) 入手，再看 [评测指南](/zh/docs/evaluation) 和 [CLI 参考](/zh/docs/reference/cli)。
-- **选择模型** — 从 [支持的模型](/zh/docs/guides/supported-models) 入手，再用 `worldfoundry-eval zoo model-show`、`zoo model-download --check-local` 和单 profile 的 `preflight runtime --profile <benchmark-id>`。
-- **添加模型** — 从 [添加模型](/zh/docs/guides/add-model) 入手，再看 [模型运行时](/zh/docs/maintainers/architecture/model-runtime)。
-- **添加 benchmark** — 从 [添加基准](/zh/docs/guides/add-benchmark) 入手，再看 [基准和数据](/zh/docs/maintainers/architecture/benchmarks-data)。
-- **理解输出产物** — 从 [评测核心](/zh/docs/maintainers/architecture/evaluation-core) 入手，再查看真实 run 产出的 `report.md`、`scorecard.json` 和 metrics summary。
-- **查看支持状态** — 从 [支持的模型](/zh/docs/guides/supported-models) 入手，再用 `zoo model-show` / `zoo benchmark-show`。
+- **跑一次评测** — [快速开始](/zh/docs/quickstart)，再看 [评测](/zh/docs/evaluation) 和 [CLI 参考](/zh/docs/reference/cli)。
+- **选模型** — [支持的模型](/zh/docs/guides/supported-models)，然后 `worldfoundry-eval zoo model-show` 和 `preflight runtime --profile <benchmark-id>`。
+- **加模型** — [添加模型](/zh/docs/guides/add-model)，再看 [模型运行时](/zh/docs/maintainers/architecture/model-runtime)。
+- **加 benchmark** — [添加基准](/zh/docs/guides/add-benchmark)，再看 [基准和数据](/zh/docs/maintainers/architecture/benchmarks-data)。
+- **读一次运行留下的文件** — [评测核心](/zh/docs/maintainers/architecture/evaluation-core)，再打开真实输出目录里的 `report.md`、`scorecard.json` 和 metrics summary。
+- **看支持状态** — [支持的模型](/zh/docs/guides/supported-models)，然后 `zoo model-show` / `zoo benchmark-show`。

@@ -1,7 +1,7 @@
 /**
  * This file includes code originally from the Pytorch Scatter repository:
  * https://github.com/rusty1s/pytorch_scatter
- * Licensed under the MIT License. See THIRD_PARTY_LICENSES.md for details.
+ * Licensed under the MIT License.
  */
 
 #pragma once

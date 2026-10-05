@@ -1,0 +1,62 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A18
+track: calibration
+title_en: Spinning Top Settling
+outcome_question: Which colored sector contains the spinning top's contact point or
+  center in the first committed readable post-action sector relation, using the color names
+  ['red_sector', 'blue_sector', 'green_sector', 'yellow_sector']?
+readout_policy: Read the first decisive post-action result window after the spinning
+  top is spun and its contact point/center has visibly committed to one colored
+  sector. Qualifying frames must show the top and sector boundaries clearly enough
+  to identify one canonical color sector. The top does not need to be fully stopped,
+  but an instantaneous readable frame while the top is still normally crossing sector
+  boundaries is not yet a committed result. Commitment means the top remains in
+  the same sector across a short contiguous readable window. Once that committed
+  sector is readable, later occlusion or video end does not relabel the outcome.
+canonical_labels:
+- red_sector
+- blue_sector
+- green_sector
+- yellow_sector
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['red_sector', 'blue_sector', 'green_sector', 'yellow_sector']
+  can be decisively identified within the readout window.
+- The top's contact point/center is on a sector boundary or hidden such that no single
+  colored sector can be identified.
+- The top is too blurred or moving too fast in every sampled post-action frame to
+  identify its containing sector.
+- The top never reaches a committed readable sector relation; it keeps crossing
+  sector boundaries through every readable post-action frame.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- The top leaves the colored tray entirely or never has a readable post-spin relation
+  to the colored sectors.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'First-decisive-window rule: use the earliest frame where the post-action result
+  has committed; do not re-label from later transient states.'
+- The judged object is the spinning top, not a fixed pointer. Select the colored
+  sector containing the top's contact point/center in the first committed readable
+  post-spin sector relation.
+- Do not require a full stop when a committed readable top-over-sector relation is
+  already visible; pre-commit normal wobble/crossing is not the outcome, while later
+  impossible movement belongs to the trustworthiness axis.
+- If the top later crosses sector boundaries by continuous normal motion, the earlier
+  frame was not a committed readout; keep waiting for the first committed sector.
+notes:
+- Color is canonical. Letter labels (A/B/C) are only allowed when a deterministic
+  color-letter crosswalk is documented.
+- No fixed pointer is used for this scene; pointer-style spinner rules do not apply.
+- 'Scene title: Spinning Top Settling.'
+- 'Calibration support: canonical labels are the reference-probability-bearing support
+  of the intended experiment. Visible terminal states outside the colored-sector
+  support are out-of-schema/invalid rather than extra outcome labels.'
+- 'Boundary policy: if the top is visible but no single sector contains its contact
+  point/center because it is on a boundary or the containing sector cannot be read,
+  return unreadable rather than inventing a new outcome.'

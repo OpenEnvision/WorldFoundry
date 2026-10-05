@@ -186,8 +186,11 @@ class VLA(PreTrainedModel):
         action_head = _action_head_config(config)
         # PEFT modules must exist before loading adapter-shaped checkpoint keys.
         action_head["defer_lora_injection"] = False
-        if load_base_components:
-            action_head["skip_component_loading"] = False
+        # Full DreamZero checkpoints already contain DiT, text/image encoders,
+        # and VAE. Older DROID configs omit this flag; loading those large base
+        # assets first is redundant and can exhaust host memory. Adapter-only
+        # checkpoints, by contrast, do need the frozen base components.
+        action_head["skip_component_loading"] = not load_base_components
 
         model = cls(config)
         incompatible = model.load_state_dict(

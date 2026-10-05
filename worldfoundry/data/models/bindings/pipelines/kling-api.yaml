@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: kling-api
+model_id: kling-api
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.kling.pipeline_kling_api:KlingApiPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

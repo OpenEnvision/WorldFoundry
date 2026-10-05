@@ -1,0 +1,44 @@
+---
+title: "Astronex-World"
+description: "Astronex-World from Astronex-Robotics: text-to-video and image-to-video; Runner parity pending; dedicated `astronex-world`."
+modelId: "astronex-world"
+pageSource: generated
+---
+
+Astronex-World exposes causal and bidirectional camera/action-conditioned video inference.
+
+<ModelPaperFigures modelId="astronex-world" locale="en" />
+
+Code: [Astronex-Robotics/Astronex-World](https://github.com/Astronex-Robotics/Astronex-World).
+
+<ModelCommandBuilder modelId="astronex-world" locale="en" />
+
+## What it is for
+
+Use `astronex-world` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+
+Wan2.2 TI2V-5B with PRoPE camera conditioning, 64-dimensional actions and embodiment conditioning. The official sampler remains external; no Wan backbone is copied into this integration. It is published by Astronex-Robotics.
+
+Catalog tasks include text-to-video, image-to-video, camera-controlled-video, and interactive-world-model. Catalog aliases include `astronex`. Documented modalities: text and image in, video out.
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `load.checkpoint_dir`, `latent_frames`, and `trajectory`; artifacts `generated_world` and `astronex-world.mp4`.
+
+CLI task profiles: `interactive-world-model`. WorldFoundry binds `AstronexWorldPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `interactive-world-model` defaults: fps=24, seed=0.
+
+Select mode=causal or bidirectional; supply source_root and checkpoint_dir. execute=True runs inference. latent_frames counts generated latent frames, not video frames; causal blocks require (latent_frames + reference_count) % 8 == 0.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run astronex-world --pipeline.task-profile interactive-world-model`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+Recorded weight repositories include `Astronex-Lab/Astronex-World`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh astronex-world`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="astronex-world" locale="en" />

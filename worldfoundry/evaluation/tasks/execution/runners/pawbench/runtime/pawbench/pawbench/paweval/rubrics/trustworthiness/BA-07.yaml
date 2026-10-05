@@ -1,0 +1,74 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BA-07
+track: coverage
+title_en: Leashed Dog Bowl Reaction
+scene_grounding:
+- 'Initial state must match: A leashed dog is eating from a bowl while a person holds
+  the leash.'
+- Opening frames must show the dog eating at the bowl, the leash connected to the
+  dog, and the person's pulling hand in the same general geometry as the source image.
+action_execution:
+- 'Required action: Gently pull the leash once while the dog is eating.'
+- Action must happen exactly once in the expected direction / region.
+- Action target must be identifiable in the same frame as the action onset (Track
+  B target acquisition).
+- The action must be visible as a single continuous event from the described initial
+  state; cuts, hidden starts, or repeated attempts are action-execution failures.
+- For reaction labels, the stimulus timing must be visible before the animal/person
+  reaction is scored.
+- A legal continues-eating or pause-near-bowl outcome still requires the leash pull
+  and readout window to be visible; absence of the pull is an action-execution failure,
+  not a valid low-reaction outcome.
+target_requirements:
+- Dog, bowl/food, leash, and person/hand pulling the leash must remain visible enough
+  to audit eating, pause/lift-head, taut-leash near-bowl resistance, step-back, bowl
+  movement, and food spill/bowl tip.
+- Dog reaction must be attributable to the visible leash pull. Bowl or food movement
+  must be caused by visible dog/leash interaction; spontaneous spills, off-screen
+  causes, non-dog actors, or teleport are POST_RESULT_INCONSISTENCY or OBJECT_CONTINUITY_FAIL.
+- Bowl shift without spill and food spill/bowl tip must be visually separable. If
+  the bowl moves but spill/tip state is hidden or ambiguous, mark readout ambiguity
+  rather than guessing.
+- Leash tension must be visible when scoring `dog_resists_taut_leash_stays_near_bowl`.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+- 'Identity continuity is fatal: the judged subject, target, and key apparatus must
+  not swap appearance, duplicate, vanish, or re-enter as a different object/person/animal.'
+- Dog body/head position, leash identity, pulling hand identity, bowl identity, and
+  food identity must remain trackable across the reaction window.
+apparatus_stability:
+- Static apparatus (ground plane, bowl, food, and leash layout before the pull) must
+  not drift, resize, or change color mid-run.
+- Bowl/food/leash layout must stay fixed except for visible dog or leash interaction.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Uncaused bowl/food motion: bowl or food moves, tips, or spills without visible
+  dog/leash interaction or another physically continuous cause allowed by the prompt.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Leashed Dog Bowl Reaction.'
+- 'Fatal severity cue: target/stimulus acquisition failure, impossible trajectory,
+  identity discontinuity, or post-result contradiction excludes strict trusted metrics
+  even if the outcome is readable.'
+- 'BA-07 trust cue: dog/bowl/food/leash/hand visibility, attribution to the visible
+  leash pull, off-screen-cause rejection, and identity continuity are mandatory.'

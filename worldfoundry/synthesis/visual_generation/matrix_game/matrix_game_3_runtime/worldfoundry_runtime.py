@@ -96,10 +96,6 @@ def runtime_root() -> Path:
     return package_root("worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_3_runtime")
 
 
-def wan_runtime_root() -> Path:
-    return package_root("worldfoundry.base_models.diffusion_model.video.wan")
-
-
 def _validate_runtime_root(path_value: Path) -> Path:
     sentinels = [("generate.py",), ("pipeline", "inference_pipeline.py")]
     missing = ["/".join(parts) for parts in sentinels if not path_value.joinpath(*parts).is_file()]
@@ -401,7 +397,7 @@ class MatrixGame3Runtime:
         from .worldfoundry_runner import patch_torch_dynamo_config_aliases
 
         patch_torch_dynamo_config_aliases()
-        from worldfoundry.base_models.diffusion_model.video.wan.configs.action_wan2p2 import (
+        from worldfoundry.base_models.diffusion_model.recipes.wan_configs.action_22 import (
             WAN_CONFIGS,
         )
         import pipeline.inference_interactive_pipeline as native_runtime
@@ -520,5 +516,4 @@ __all__ = [
     "project_root",
     "resolve_checkpoint_dir",
     "runtime_root",
-    "wan_runtime_root",
 ]

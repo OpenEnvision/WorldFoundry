@@ -7,6 +7,8 @@ aliases:
 availability: open_source
 provider: official_repo
 official_sources:
+  project_page: https://rmbench.github.io/
+  paper: https://arxiv.org/abs/2603.01229
   github:
     url: https://github.com/RoboTwin-Platform/RMBench
     revision: 87e0498891073d483d330195c0f160709bd92ff5
@@ -33,3 +35,23 @@ runtime_profile: runtime-profile:mem-0
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata,
   and executable runtime records.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'Mem-0 ("Memory Matters") is a memory-augmented manipulation policy from the RoboTwin RMBench line: an episodic memory bank lets the policy execute multi-task sequences that depend on what happened earlier. The confirmed qiuly/Mem-0-m1mix-RMBench checkpoint targets the published M1 multi-task execution setting; the full runtime is in-tree and statically verified.'
+  overview_zh: Mem-0（“Memory Matters”）是 RoboTwin RMBench 线的记忆增强操作策略：情节记忆库使策略能执行依赖既往事件的多任务序列。已确认的 qiuly/Mem-0-m1mix-RMBench checkpoint 面向已发表的 M1 多任务执行设定；完整运行时内置树内并通过静态验证。
+  architecture: The in-tree runtime contains the episodic memory bank, a Qwen feature path, a task classifier, and a flow-matching action decoder. Output matches the official 14-value dual-arm joint adapter, excluding the two model-only padding channels.
+  architecture_zh: 树内运行时包含情节记忆库、Qwen 特征路径、任务分类器与 flow-matching 动作解码器。输出匹配官方 14 值双臂关节适配器，排除两个仅模型内部的填充通道。
+  usage_notes: This entry targets the M1 multi-task execution checkpoint and does not require the high-level planning server. The published checkpoint is byte-split — the runtime reads its contiguous parts directly without assembling another copy.
+  usage_notes_zh: 本条目面向 M1 多任务执行 checkpoint，无需高层规划服务。发布的 checkpoint 为字节分片——运行时直接读取其连续分片，无需另行拼装副本。
+  limitations:
+  - No license is recorded in this repository.
+  - GPU rollout validation is not recorded (static verification only).
+  limitations_zh:
+  - 仓库未记录许可证。
+  - 仓库未记录 GPU rollout 验证（仅静态验证）。
+  recommended_benchmarks:
+  - id: robotwin
+    reason: Built on the RoboTwin platform's RMBench memory tasks.
+    reason_zh: 构建于 RoboTwin 平台的 RMBench 记忆任务。

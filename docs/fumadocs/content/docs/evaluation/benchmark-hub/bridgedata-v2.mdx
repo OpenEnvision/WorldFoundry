@@ -1,132 +1,27 @@
 ---
 title: BridgeData V2
-description: BridgeData V2 — metrics, requirements, and run commands.
+description: "Berkeley RAIL real-robot set: 60,096 WidowX trajectories in 24 environments. WorldFoundry imports policy evals; it does not teleop the arm."
 ---
 
-## About
+BridgeData V2 (UC Berkeley RAIL) is a **real-robot** manipulation dataset for open-vocabulary, multi-task policies. Official numbers: **60,096** trajectories on a **WidowX 250** 6-DoF arm across **24** environments (**13** skills) — **50,365** VR teleop demos and **9,731** scripted pick-and-place rollouts. Seven toy kitchens dominate; the rest are tabletops, sinks, and similar. Control is **5 Hz** (mean length ~38 steps). Sensing is 640×480: fixed RGB-D over-the-shoulder, two randomized RGB views, and a wrist camera. Every trajectory has a language label; eval is **language-conditioned** (`eval_lc`) or **goal-image-conditioned** (`eval_gc`).
 
+Paper: [BridgeData V2](https://arxiv.org/abs/2308.12952). Project: [rail-berkeley.github.io/bridgedata](https://rail-berkeley.github.io/bridgedata/). Code: [rail-berkeley/bridge_data_v2](https://github.com/rail-berkeley/bridge_data_v2) (MIT). Official media are HTTP / project-page downloads, not a single Hugging Face table.
 
+WorldFoundry **imports** policy-evaluation exports (task / goal success, offline action accuracy, rollout success). It does **not** materialize the dataset, run WidowX inference, or execute real-robot rollouts. Stage data under `${WORLDFOUNDRY_DATA_DIR}/datasets/bridgedata-v2` if you need it locally.
 
-BridgeData V2 external benchmark task manifest for real-robot dataset and offline policy result normalization.
+<BenchmarkPageSections id="bridgedata-v2" locale="en" />
 
-
-
-## Metrics
-
-BridgeData V2 external benchmark task manifest for real-robot dataset and offline policy result normalization.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/bridgedata-v2.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `goal_success` | Share of episodes or tasks that complete successfully. |
-| `action_accuracy` | Correctness of predicted actions, states, or outcomes against the benchmark success criterion. |
-| `rollout_success` | Share of episodes or tasks that complete successfully. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `worldplay-core`.
-- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
-- BridgeData V2 需要已物化的评测 split 和 policy-result import；当前只配置通用 Python 环境。
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_BRIDGEDATA_V2_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/bridgedata-v2`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/rail-berkeley--bridge_data_v2`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_BRIDGEDATA_V2_DATASET_ROOT`
-- `WORLDFOUNDRY_BRIDGEDATA_V2_RESULTS_PATH`
-
-### Verify setup
-
-```bash
-PYTHONPATH=${WORLDFOUNDRY_CACHE_DIR}/repos/rail-berkeley--bridge_data_v2:src ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile bridgedata-v2 --manifest worldfoundry/data/benchmarks/runtime_profiles/official/bridgedata-v2.yaml --output-dir tmp/worldfoundry_preflight/bridgedata-v2 --json
-```
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id bridgedata-v2 \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/bridgedata-v2/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/bridgedata-v2/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id bridgedata-v2 \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/bridgedata-v2/official-run \
-  --json
-```
-
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id bridgedata-v2 --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- BridgeData V2 dataset materialization
-- Eval split definition
-- Policy checkpoint or offline prediction dump
-- Action normalization and task-goal mapping
-
-### Environment
-
-- `WORLDFOUNDRY_BRIDGEDATA_V2_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-
-
+Default import path: `WORLDFOUNDRY_BRIDGEDATA_V2_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/bridgedata-v2.yaml`. Declare language vs goal-image (and teleop vs scripted) with the export. Outputs: `scorecard.json` (primary `success_rate`; also `goal_success`, `action_accuracy`, `rollout_success`) and `raw_results.jsonl`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

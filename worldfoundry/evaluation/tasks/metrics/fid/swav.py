@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -20,21 +21,21 @@ def _swav_fid_module() -> Any:
 
 
 def compute_swav_fid(
-    reference_dir: str | Path,
-    generated_dir: str | Path,
+    reference_dir: str | Path | Sequence[str | Path],
+    generated_dir: str | Path | Sequence[str | Path],
     *,
     batch_size: int = 50,
     max_size: str = "all",
     device: str | None = None,
 ) -> float:
-    """Compute SwAV ResNet50 FID between two image directories."""
+    """Compute SwAV ResNet50 FID between image directories or explicit file lists."""
     import torch
 
     mod = _swav_fid_module()
     dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
     return float(
         mod.calculate_fid_given_paths(
-            [str(reference_dir), str(generated_dir)],
+            [reference_dir, generated_dir],
             batch_size,
             max_size,
             dev,

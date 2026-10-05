@@ -10,10 +10,39 @@ checkpoint: Jinjing713/Spatia
 runtime_profile: runtime-profile:spatia
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: spatia
+official_sources:
+  project_page: https://zhaojingjing713.github.io/Spatia/
+  paper: https://arxiv.org/abs/2512.15716
 integration:
   status: integrated
   notes: [Official source is vendored at revision f75b10c9bb5f6b0cd779ec8c41ab33dd8382dba3.]
 runner_parity:
-  status: pending
-  notes: [In-tree Spatia inference and dense W2C trajectory route are wired.]
+  status: verified_inference_only
+  notes:
+  - A 2026-09-24 single-GPU checkpoint-backed run generated 17/17 decodable
+    832x480 frames at 40 denoising steps from one image and a synthetic dense W2C path.
+  - The local torch point-rendering fallback differs from official PyTorch3D alpha
+    compositing; camera adherence and output parity remain unverified.
 catalog_category: world_models
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'Spatia is a camera-controlled video-to-video world model: given source video and a target camera trajectory it re-renders the scene along the new viewpoint path. WorldFoundry vendors the official source in-tree (revision f75b10c9) and exposes it through the shared pipeline runner with the Jinjing713/Spatia checkpoint reference, released under Apache-2.0.'
+  overview_zh: Spatia 是相机控制的 video-to-video 世界模型：给定源视频与目标相机轨迹，沿新视角路径重新渲染场景。WorldFoundry 已将官方源码内置树内（revision f75b10c9），通过共享 pipeline runner 暴露， checkpoint 引用为 Jinjing713/Spatia，以 Apache-2.0 许可发布。
+  architecture: 'The in-tree route wires Spatia inference with a dense world-to-camera (W2C) trajectory input: per-frame camera extrinsics drive the re-rendering. Architecture internals beyond the vendored source are not recorded in this repository.'
+  architecture_zh: 树内路由接入 Spatia 推理与稠密 world-to-camera（W2C）轨迹输入：逐帧相机外参驱动重渲染。除内置源码外的架构内部细节仓库未记录。
+  usage_notes: Provide a source image or video and a dense per-frame W2C camera trajectory. Optional mask_path passes one foreground mask matching the original source-frame size to reconstruction; set force_rebuild_intermediate when changing cached inputs. A local image-input run completed 17 frames at 832x480 and 40 steps; camera adherence has not been established.
+  usage_notes_zh: 提供源图像或视频及逐帧稠密 W2C 相机轨迹。可选 mask_path 将一张与原始源帧尺寸一致的前景掩码传入重建阶段；改变缓存输入时设置 force_rebuild_intermediate。本地图像输入已完成 832x480、40 步、17 帧推理；相机轨迹遵循性尚未确立。
+  limitations:
+  - A local checkpoint-backed GPU inference run is recorded; official PyTorch3D renderer parity and camera-control accuracy remain unverified.
+  - Requires dense per-frame camera trajectories, not sparse keyframe poses.
+  - The default MapAnything checkpoint has a non-commercial license.
+  limitations_zh:
+  - 已记录本地真实权重 GPU 推理；官方 PyTorch3D 渲染器一致性及相机控制精度尚未验证。
+  - 需要逐帧稠密相机轨迹，而非稀疏关键帧位姿。
+  - 默认 MapAnything 权重使用非商业许可。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-trajectory adherence for controlled re-rendering.
+    reason_zh: 相机轨迹跟随与受控重渲染质量。

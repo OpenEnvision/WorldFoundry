@@ -2,7 +2,7 @@
 
 import torch
 import torch.nn as nn
-from worldfoundry.base_models.diffusion_model.diffsynth.models.sd3_dit import RMSNorm
+from worldfoundry.core.nn import RMSNorm
 from worldfoundry.core.model_loading import hash_state_dict_keys
 
 

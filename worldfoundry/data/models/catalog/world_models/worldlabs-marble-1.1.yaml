@@ -27,3 +27,23 @@ runner_parity:
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry
   runtimes; blocked entries retain upstream provenance without runnable backends.
+docs:
+  publisher: World Labs
+  publisher_kind: company
+  publisher_zh: World Labs（世界实验室）
+  overview: 'World Labs Marble 1.1 is a commercial API for 3D world generation: it produces explorable 3D worlds from prompts, accessed through api.worldlabs.ai. In this catalog it is exposed through the existing in-tree WorldLabs API pipeline with the marble-1.1 model id; integration is planned and no local weights exist.'
+  overview_zh: World Labs Marble 1.1 是 3D 世界生成的商业 API：从提示生成可探索的 3D 世界，经 api.worldlabs.ai 访问。本 catalog 中通过既有的树内 WorldLabs API pipeline 以 marble-1.1 模型 id 暴露；集成状态为 planned，且不存在本地权重。
+  architecture: 'Closed API service: no architecture details are recorded in this repository. The recorded official sources are the release notes and the API endpoint.'
+  architecture_zh: 闭源 API 服务：仓库未记录任何架构细节。记录的官方来源为发布说明与 API 端点。
+  usage_notes: Requires World Labs API credentials; requests route through the in-tree WorldLabs API pipeline using model id marble-1.1. Runner parity is pending.
+  usage_notes_zh: 需要 World Labs API 凭证；请求经树内 WorldLabs API pipeline 发出，模型 id 为 marble-1.1。 runner parity 仍为 pending。
+  limitations:
+  - 'API-only: closed weights, closed architecture, external service dependency.'
+  - Integration is planned; runner parity is pending.
+  limitations_zh:
+  - 仅 API：权重与架构均闭源，依赖外部服务。
+  - 集成状态为 planned；runner parity 为 pending。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Explorable 3D world generation quality.
+    reason_zh: 可探索 3D 世界生成质量。

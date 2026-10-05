@@ -17,6 +17,8 @@ from worldfoundry.base_models.llm_mllm_core.mllm.videocon_physics.constants impo
     PROMPT_PHYSICS,
     PROMPT_VTA,
 )
+from worldfoundry.evaluation.tasks.execution.framework.official_runner import default_benchmark_timeout
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path, VIDEO_SUFFIXES
 from worldfoundry.evaluation.tasks.execution.runners.videophy.videophy_prompts import (
     load_prompt_records,
     official_video_filename_for_record,
@@ -25,7 +27,6 @@ from worldfoundry.evaluation.tasks.execution.runners.videophy.videophy_prompts i
     unique_generation_records,
 )
 
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
 
 @dataclass(frozen=True)
@@ -42,9 +43,6 @@ class VideoPhyJudgeConfig:
     strict: bool = False
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def judge_config_from_env(
@@ -79,7 +77,7 @@ def judge_config_from_env(
     return VideoPhyJudgeConfig(
         backend=backend,
         runtime_root=videocon_runtime_root(),
-        checkpoint=checkpoint or _env_path("WORLDFOUNDRY_VIDEOPHY_VIDEOCON_CKPT"),
+        checkpoint=checkpoint or resolve_env_path("WORLDFOUNDRY_VIDEOPHY_VIDEOCON_CKPT"),
         prompts_json_path=prompts_json_path,
         sa_threshold=(
             float(sa_threshold)
@@ -245,6 +243,7 @@ def _run_videocon_entailment(
             stdout=log_handle,
             stderr=subprocess.STDOUT,
             check=False,
+            timeout=default_benchmark_timeout(),
         )
     if process.returncode != 0:
         raise RuntimeError(f"VideoPhy VideoCon-Physics inference failed with code {process.returncode}; log: {log_path}")

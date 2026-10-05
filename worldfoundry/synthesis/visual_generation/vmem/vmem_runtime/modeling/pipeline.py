@@ -876,7 +876,7 @@ class VMemPipeline:
             
         # Create mask for valid points
         # depth threshold is the 95 percentile of the depth map
-        depth_threshold = torch.quantile(depths, 0.999)
+        depth_threshold = torch.quantile(depths.float(), 0.999)
         valid_mask = (depths <= depth_threshold) & (confs >= self.config.surfel.conf_thresh)
         
         # Get positions, normals and depths for valid points
@@ -1104,7 +1104,7 @@ class VMemPipeline:
             dim=-1,
         )
         valid_mask = camera_dist_2med <= torch.clamp(
-            torch.quantile(camera_dist_2med, 0.97) * 10,
+            torch.quantile(camera_dist_2med.float(), 0.97) * 10,
             max=1e6,
         )
         c2ws[:, :3, 3] -= ref_c2ws[valid_mask, :3, 3].mean(0, keepdim=True)
@@ -1129,7 +1129,9 @@ class VMemPipeline:
         
         # batch_size = context_latents.shape[0]
         all_c2ws[:, :, [1, 2]] *= -1
-        all_w2cs = torch.linalg.inv(all_c2ws)
+        # CUDA's matrix inverse does not support fp16, and camera geometry
+        # benefits from retaining fp32 precision before rasterization.
+        all_w2cs = torch.linalg.inv(all_c2ws.float())
         all_c2ws[:, :3, 3] *= translation_scaling_factor
         all_w2cs[:, :3, 3] *= translation_scaling_factor
         num_cameras = all_w2cs.shape[0]
@@ -1140,7 +1142,7 @@ class VMemPipeline:
             extrinsics=all_w2cs,
             intrinsics=all_Ks.float().clone(),
             target_size=(context_latents.shape[-2], context_latents.shape[-1]),
-        ) # [B, 3, 6, H, W]
+        ).to(dtype=context_latents.dtype) # [B, 3, 6, H, W]
         
         target_latents = torch.nn.functional.pad(
             torch.zeros(self.config.model.num_frames - context_latents.shape[0], *context_latents.shape[1:]), (0, 0, 0, 0, 0, 1), value=0
@@ -1153,7 +1155,7 @@ class VMemPipeline:
         # c_crossattn = repeat(context_encoder_embeddings, "b 1 d -> b n 1 d", n=num_cameras)
  
         uc_crossattn = torch.zeros_like(c_crossattn)
-        c_replace = torch.zeros((num_cameras, *context_latents.shape[1:])).to(self.device)
+        c_replace = context_latents.new_zeros((num_cameras, *context_latents.shape[1:]))
         c_replace[input_masks] = context_latents
         c_replace[~input_masks] = target_latents
         uc_replace = torch.zeros_like(c_replace)
@@ -1170,7 +1172,7 @@ class VMemPipeline:
             1,
         )
         uc_concat = torch.cat(
-            [torch.zeros((num_cameras, 1, *pluckers.shape[-2:])).to(self.device), pluckers], 1
+            [torch.zeros_like(pluckers[:, :1]), pluckers], 1
         )
         c_dense_vector = pluckers
         uc_dense_vector = c_dense_vector

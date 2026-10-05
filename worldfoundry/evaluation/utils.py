@@ -1,15 +1,43 @@
-"""Shared evaluation utilities."""
+"""Shared evaluation utilities.
+
+Sections: JSON/text IO re-exports, YAML manifest loading, repository/data
+paths, and version/fingerprint capture.  Importing this module has no global
+side effects (notably, it does not touch ``sys.path``; see
+:func:`ensure_repo_root_on_sys_path` for the explicit opt-in).
+"""
 
 from __future__ import annotations
 
-
-
-# io.py
+import hashlib
 import json
+import os
+import platform
+import subprocess
+import sys
+import tempfile
+from functools import lru_cache
+from importlib import metadata
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io.serialization import (
+from worldfoundry.core.io.manifests import (
+    MANIFEST_SUFFIXES,
+    load_manifest,
+    load_manifest_collection,
+    manifest_paths,
+)
+from worldfoundry.core.io.paths import (
+    BENCHMARKS_DATA_ROOT,
+    DATA_ROOT,
+    REPO_ROOT,
+    hfd_dataset_root_path,
+    package_data_path,
+    package_data_root,
+    package_root,
+    project_root,
+    resolve_worldfoundry_path,
+)
+from worldfoundry.core.io.formats.serialization import (
     append_jsonl,
     jsonable,
     read_json,
@@ -21,7 +49,21 @@ from worldfoundry.core.io.serialization import (
     write_jsonl,
     write_text_file,
 )
-from worldfoundry.core.io.paths import resolve_worldfoundry_path
+from worldfoundry.evaluation.api import (
+    AGGREGATE_RESULT_SCHEMA_VERSION,
+    ARTIFACT_REF_SCHEMA_VERSION,
+    BENCHMARK_SPEC_SCHEMA_VERSION,
+    GENERATION_REQUEST_SCHEMA_VERSION,
+    GENERATION_RESULT_SCHEMA_VERSION,
+    METRIC_RESULT_SCHEMA_VERSION,
+    METRIC_SPEC_SCHEMA_VERSION,
+    WORLD_MODEL_CONFIG_SCHEMA_VERSION,
+    WORLD_MODEL_MANIFEST_SCHEMA_VERSION,
+    WORLD_TASK_CONFIG_SCHEMA_VERSION,
+)
+from worldfoundry.evaluation.api.json_contract import sha256_file, to_plain
+
+# ── JSON / text formatting helpers ─────────────────────────────────────
 
 
 def mapping_or_empty(value: Any) -> dict[str, Any]:
@@ -58,151 +100,37 @@ def write_text(path: str | Path, payload: str, *, atomic: bool = True) -> Path:
     return write_text_file(path, payload, atomic=atomic)
 
 
-# manifest.py
-from pathlib import Path
-from typing import Any
-
-import yaml
-
-
-MANIFEST_SUFFIXES = (".yaml", ".yml")
-
-
-def load_manifest(path: str | Path) -> Any:
-    """Load a checked-in YAML WorldFoundry manifest."""
-
-    resolved = Path(path)
-    suffix = resolved.suffix.lower()
-    if suffix not in MANIFEST_SUFFIXES:
-        raise ValueError(f"unsupported manifest suffix for {resolved}: expected .yaml or .yml")
-    return yaml.safe_load(resolved.read_text(encoding="utf-8"))
+# ── YAML manifest loading ──────────────────────────────────────────────
+#
+# ``MANIFEST_SUFFIXES`` / ``load_manifest`` / ``manifest_paths`` /
+# ``load_manifest_collection`` are re-exported above from
+# ``worldfoundry.core.io.manifests`` (single canonical implementation; SA-10
+# moved it below the evaluation layer so ``worldfoundry.runtime`` no longer
+# imports this module).  Behavior and error messages are unchanged.
 
 
-def manifest_paths(root: str | Path) -> tuple[Path, ...]:
-    """Return YAML manifest files under a directory tree."""
+# ── Repository / data paths ────────────────────────────────────────────
 
-    path = Path(root)
-    if not path.exists():
-        raise FileNotFoundError(f"manifest directory does not exist: {path}")
-    if not path.is_dir():
-        raise NotADirectoryError(f"manifest path is not a directory: {path}")
-
-    return tuple(sorted(candidate for suffix in MANIFEST_SUFFIXES for candidate in path.rglob(f"*{suffix}")))
-
-
-def load_manifest_collection(root: str | Path, *, item_key: str) -> dict[str, Any]:
-    """Load a manifest file or a directory of one-item YAML manifests."""
-
-    path = Path(root)
-    if path.is_file():
-        payload = load_manifest(path)
-        return payload if isinstance(payload, dict) else {item_key: payload}
-    if not path.is_dir():
-        raise FileNotFoundError(f"manifest path does not exist: {path}")
-
-    meta_path = path / "_manifest.yaml"
-    payload: dict[str, Any] = {}
-    if meta_path.is_file():
-        meta = load_manifest(meta_path)
-        if isinstance(meta, dict):
-            payload.update(meta)
-
-    items: list[Any] = []
-    for manifest_path in manifest_paths(path):
-        if manifest_path.name == "_manifest.yaml":
-            continue
-        entry = load_manifest(manifest_path)
-        if isinstance(entry, dict) and item_key in entry:
-            values = entry[item_key]
-            if isinstance(values, list):
-                items.extend(values)
-            elif values is not None:
-                items.append(values)
-        elif isinstance(entry, list):
-            items.extend(entry)
-        elif entry is not None:
-            items.append(entry)
-
-    payload[item_key] = items
-    return payload
-
-
-# resources.py
-import os
-import sysconfig
-from pathlib import Path
-
-
-WORLDFOUNDRY_PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-
-
-def worldfoundry_repository_root() -> Path:
-    """Resolve the source repository root when it is available.
-
-    Args:
-        None.
-    """
-
-    current = Path(__file__).resolve()
-    for parent in current.parents:
-        if (parent / "pyproject.toml").is_file():
-            return parent
-    return WORLDFOUNDRY_PACKAGE_ROOT
-
-
-def _data_root_candidates() -> tuple[Path, ...]:
-    """Return ordered locations for bundled WorldFoundry data files.
-
-    Args:
-        None.
-    """
-
-    install_data_root = Path(sysconfig.get_path("data")) / "worldfoundry" / "data"
-    package_data_root = WORLDFOUNDRY_PACKAGE_ROOT / "data"
-    return (package_data_root, install_data_root)
-
-
-def worldfoundry_data_root() -> Path:
-    """Resolve the bundled benchmark and model metadata root.
-
-    Args:
-        None.
-    """
-
-    candidates = _data_root_candidates()
-    for candidate in candidates:
-        if (candidate / "benchmarks").exists() or (candidate / "models").exists():
-            return candidate
-    return candidates[0]
-
-
-def worldfoundry_data_path(*parts: str | Path) -> Path:
-    """Resolve a path under the bundled WorldFoundry data root.
-
-    Args:
-        parts: Path components below the data root.
-    """
-
-    path = worldfoundry_data_root()
-    for part in parts:
-        path /= part
-    return path
-
-
-# paths.py
-import sys
-from pathlib import Path
-
+WORLDFOUNDRY_PACKAGE_ROOT = package_root()
+worldfoundry_repository_root = project_root
+worldfoundry_data_root = package_data_root
+worldfoundry_data_path = package_data_path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
-REPO_ROOT = worldfoundry_repository_root()
 SRC_ROOT = REPO_ROOT
-DATA_ROOT = worldfoundry_data_root()
-BENCHMARKS_DATA_ROOT = DATA_ROOT / "benchmarks"
 BENCHMARK_ZOO_DIR = BENCHMARKS_DATA_ROOT / "catalog"
 BENCHMARK_TASK_ROOT = BENCHMARKS_DATA_ROOT / "tasks" / "external"
 BENCHMARK_ASSETS_ROOT = BENCHMARKS_DATA_ROOT / "assets"
 BENCHMARK_RUNTIME_PROFILE_DIR = BENCHMARKS_DATA_ROOT / "runtime_profiles"
+MODEL_ZOO_DIR = DATA_ROOT / "models" / "catalog"
+MODEL_RUNTIME_ROOT = DATA_ROOT / "models" / "runtime"
+MODEL_RUNTIME_PROFILES_ROOT = MODEL_RUNTIME_ROOT / "profiles"
+MODEL_RUNTIME_CONFIGS_ROOT = MODEL_RUNTIME_ROOT / "configs"
+MODEL_RUNTIME_ENVIRONMENTS_ROOT = MODEL_RUNTIME_ROOT / "environments"
+MODEL_RUNTIME_ASSETS_ROOT = MODEL_RUNTIME_ROOT / "assets"
+TMP_ROOT = REPO_ROOT / "tmp"
+CACHE_ROOT = REPO_ROOT / "cache"
+HFD_DATASET_CACHE_ROOT = hfd_dataset_root_path()
 
 
 def benchmark_task_sample_path(benchmark_id: str) -> Path | None:
@@ -216,15 +144,6 @@ def benchmark_task_sample_path(benchmark_id: str) -> Path | None:
         if path.is_file():
             return path
     return None
-MODEL_ZOO_DIR = DATA_ROOT / "models" / "catalog"
-MODEL_RUNTIME_ROOT = DATA_ROOT / "models" / "runtime"
-MODEL_RUNTIME_PROFILES_ROOT = MODEL_RUNTIME_ROOT / "profiles"
-MODEL_RUNTIME_CONFIGS_ROOT = MODEL_RUNTIME_ROOT / "configs"
-MODEL_RUNTIME_ENVIRONMENTS_ROOT = MODEL_RUNTIME_ROOT / "environments"
-MODEL_RUNTIME_ASSETS_ROOT = MODEL_RUNTIME_ROOT / "assets"
-TMP_ROOT = REPO_ROOT / "tmp"
-CACHE_ROOT = REPO_ROOT / "cache"
-HFD_DATASET_CACHE_ROOT = resolve_worldfoundry_path("${WORLDFOUNDRY_CACHE_DIR}/data/hfd_datasets")
 
 
 def worldfoundry_hfd_dataset_root() -> Path:
@@ -234,55 +153,33 @@ def worldfoundry_hfd_dataset_root() -> Path:
     only for defaults shared by benchmark download, data probes, and audits.
     """
 
-    for name in (
-        "WORLDFOUNDRY_BENCHMARK_DATA_ROOT",
-        "WORLDFOUNDRY_LOCAL_DATA_ROOT",
-        "WORLDFOUNDRY_LOCAL_CACHE_DATA_ROOT",
-    ):
-        value = os.environ.get(name)
-        if value:
-            return Path(value).expanduser()
-
-    data_dir = os.environ.get("WORLDFOUNDRY_DATA_DIR")
-    if data_dir:
-        root = Path(data_dir).expanduser()
-        return root if root.name == "hfd_datasets" else root / "hfd_datasets"
-
-    return HFD_DATASET_CACHE_ROOT
-
-# Side effect: benchmarks and model-registry discovery rely on repo-root imports.
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+    return hfd_dataset_root_path()
 
 
-# versioning.py
-from functools import lru_cache
-import hashlib
-import json
-from importlib import metadata
-import platform
-import subprocess
-import sys
-from pathlib import Path
-from typing import Any, Mapping, Sequence
+def ensure_repo_root_on_sys_path() -> Path:
+    """Explicitly put the repository root on ``sys.path`` and return it.
 
-from worldfoundry.evaluation.api import (
-    AGGREGATE_RESULT_SCHEMA_VERSION,
-    ARTIFACT_REF_SCHEMA_VERSION,
-    BENCHMARK_SPEC_SCHEMA_VERSION,
-    GENERATION_REQUEST_SCHEMA_VERSION,
-    GENERATION_RESULT_SCHEMA_VERSION,
-    METRIC_RESULT_SCHEMA_VERSION,
-    METRIC_SPEC_SCHEMA_VERSION,
-    WORLD_MODEL_CONFIG_SCHEMA_VERSION,
-    WORLD_MODEL_MANIFEST_SCHEMA_VERSION,
-    WORLD_TASK_CONFIG_SCHEMA_VERSION,
-)
+    This used to happen implicitly whenever this module was imported, which
+    polluted host processes embedding the evaluation framework (and, in
+    installed deployments, could promote the site-packages parent directory to
+    ``sys.path[0]``).  Callers that resolve repo-relative dynamic imports
+    (benchmark/model discovery from a source checkout) must now opt in.
+    """
+    root_text = str(REPO_ROOT)
+    if root_text not in sys.path:
+        sys.path.insert(0, root_text)
+    return REPO_ROOT
 
 
-VERSION_CONTEXT_SCHEMA_VERSION = "worldfoundry-version-context"
+# ── Version / fingerprint capture ──────────────────────────────────────
+
+VERSION_CONTEXT_SCHEMA_VERSION = "worldfoundry-version-context-v2"
 RUN_FINGERPRINT_SCHEMA_VERSION = "worldfoundry-run-fingerprint"
-EVALUATION_ENGINE_VERSION = "worldfoundry-eval-engine"
+# Explicit engine revision: bump the numeric suffix when evaluation-engine
+# behavior changes in a way that affects results, so run manifests written by
+# different engine revisions are distinguishable (the package version alone is
+# "unknown" in source checkouts).
+EVALUATION_ENGINE_VERSION = "worldfoundry-eval-engine/1"
 
 
 def _repo_root() -> Path:
@@ -290,6 +187,7 @@ def _repo_root() -> Path:
     return worldfoundry_repository_root()
 
 
+@lru_cache(maxsize=32)
 def package_version(distribution: str = "worldfoundry") -> str:
     """Retrieve the installed package version of the given distribution."""
     try:
@@ -315,27 +213,65 @@ def _run_git(root: Path, *args: str) -> str | None:
     return result.stdout.strip()
 
 
-@lru_cache(maxsize=16)
-def _git_metadata_cached(root_key: str) -> tuple[bool, str | None, bool | None]:
-    """Retrieve and cache git repository metadata (existence, commit hash, and dirty status)."""
-    root = Path(root_key)
-    commit = _run_git(root, "rev-parse", "HEAD")
-    status = _run_git(root, "status", "--porcelain", "--untracked-files=no")
-    if commit is None:
-        return False, None, None
-    return True, commit, None if status is None else bool(status)
+def _git_diff_sha256(root: Path) -> str | None:
+    """Hash the tracked working-tree diff without buffering it in memory.
+
+    Untracked files are intentionally excluded.  A bounded probe keeps version
+    capture from stalling runs on large or remote filesystems; callers retain
+    ``dirty=True`` and record a null digest when the diff cannot be captured.
+    """
+
+    command = (
+        "git",
+        "-C",
+        str(root),
+        "diff",
+        "--binary",
+        "--full-index",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--no-color",
+        "HEAD",
+        "--",
+    )
+    try:
+        with tempfile.TemporaryFile() as diff_stream:
+            result = subprocess.run(
+                command,
+                stdout=diff_stream,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=5,
+            )
+            if result.returncode != 0:
+                return None
+            diff_stream.seek(0)
+            digest = hashlib.sha256()
+            while chunk := diff_stream.read(1024 * 1024):
+                digest.update(chunk)
+            return digest.hexdigest()
+    except (OSError, subprocess.SubprocessError):
+        return None
 
 
 def git_metadata(repo_root: str | Path | None = None) -> dict[str, Any]:
-    """Get status and commit metadata of the current git repository."""
+    """Get status and commit metadata of the current git repository.
+
+    Captured fresh on every call (no caching): version contexts and run
+    manifests must record the git state at run time, and a long-lived process
+    (service, notebook) may commit or dirty the tree between runs.
+    """
     root = Path(repo_root) if repo_root is not None else _repo_root()
-    available, commit, dirty = _git_metadata_cached(str(root.resolve()))
-    if not available:
-        return {"available": False, "commit": None, "dirty": None}
+    commit = _run_git(root, "rev-parse", "HEAD")
+    if commit is None:
+        return {"available": False, "commit": None, "dirty": None, "dirty_diff_sha256": None}
+    status = _run_git(root, "status", "--porcelain", "--untracked-files=no")
+    dirty = None if status is None else bool(status)
     return {
         "available": True,
         "commit": commit,
         "dirty": dirty,
+        "dirty_diff_sha256": _git_diff_sha256(root) if dirty else None,
     }
 
 
@@ -349,8 +285,13 @@ def _callable_reference(value: Any) -> str:
 
 
 def stable_json_dumps(value: Any) -> str:
-    """Serialize a JSON-safe dictionary with stable key-sorting and no extra whitespace."""
-    return json.dumps(jsonable(value), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    """Serialize a JSON-safe dictionary with stable key-sorting and no extra whitespace.
+
+    Canonicalizes through :func:`~worldfoundry.evaluation.api.json_contract.to_plain`
+    first so ``set``/``frozenset`` members are deterministically ordered (plain
+    ``jsonable`` preserves set iteration order, which varies across processes).
+    """
+    return json.dumps(jsonable(to_plain(value)), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def sha256_text(text: str) -> str:
@@ -364,12 +305,12 @@ def stable_hash(value: Any) -> str:
 
 
 def file_sha256(path: str | Path) -> str:
-    """Calculate the SHA-256 hash of a file on disk by reading in chunks."""
-    hasher = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
+    """Calculate the SHA-256 hash of a file on disk.
+
+    Delegates to :func:`worldfoundry.evaluation.api.json_contract.sha256_file`
+    (single canonical chunked implementation).
+    """
+    return sha256_file(path)
 
 
 def contract_versions() -> dict[str, str]:
@@ -403,6 +344,8 @@ def model_runner_fingerprint(model_runner: Any | None) -> dict[str, Any] | None:
         "model_id": str(getattr(model_runner, "model_id", "")),
         "runner_version": str(getattr(model_runner, "runner_version", getattr(model_runner, "version", ""))),
         "capabilities": sorted(str(item) for item in getattr(model_runner, "capabilities", ()) or ()),
+        "parameters": jsonable(getattr(model_runner, "parameters", None)),
+        "config": jsonable(getattr(model_runner, "config", None)),
     }
     describe = getattr(model_runner, "describe_capabilities", None)
     if callable(describe):
@@ -419,8 +362,11 @@ def metric_fingerprint(metric: Any) -> dict[str, Any]:
     """Generate a stable metadata fingerprint dictionary for a metric object."""
     return {
         "class": _class_reference(metric),
-        "name": str(getattr(metric, "name", "") or metric.__class__.__name__),
+        "name": str(getattr(metric, "name", "") or getattr(metric, "__name__", "") or metric.__class__.__name__),
         "version": str(getattr(metric, "version", "")),
+        "parameters": jsonable(getattr(metric, "parameters", None)),
+        "config": jsonable(getattr(metric, "config", None)),
+        "metric_ids": jsonable(getattr(metric, "metric_ids", None)),
         "required_artifacts": tuple(str(item) for item in getattr(metric, "required_artifacts", ()) or ()),
         "higher_is_better": getattr(metric, "higher_is_better", None),
     }
@@ -450,6 +396,7 @@ def build_version_context(
     engine_version: str = EVALUATION_ENGINE_VERSION,
     extra: Mapping[str, Any] | None = None,
     repo_root: str | Path | None = None,
+    git_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Construct a comprehensive version context dictionary capturing engine, runtime, and git state."""
     return {
@@ -459,9 +406,8 @@ def build_version_context(
         "worldfoundry_version": package_version(),
         "python": {
             "version": platform.python_version(),
-            "executable": sys.executable,
         },
-        "git": git_metadata(repo_root),
+        "git": dict(git_context) if git_context is not None else git_metadata(repo_root),
         "contract_versions": contract_versions(),
         "benchmark": jsonable(benchmark or {}),
         "model": jsonable(model or {}),

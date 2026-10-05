@@ -234,13 +234,9 @@ def compute_video_warping_error(video_path, model):
             
             _, fw_flow = model(img1, img2, iters=20, test_mode=True) # with optical flow model: RAFT
             fw_flow = tensor2img(fw_flow)
-            # Clear cache and temporary data
-            torch.cuda.empty_cache()
-
             ### compute bw flow
             _, bw_flow = model(img2, img1, iters=20, test_mode=True) # with optical flow model: RAFT
             bw_flow = tensor2img(bw_flow)
-            torch.cuda.empty_cache()
 
             ### compute occlusion
             fw_occ, warp_img2 = detect_occlusion(bw_flow, fw_flow, img2)

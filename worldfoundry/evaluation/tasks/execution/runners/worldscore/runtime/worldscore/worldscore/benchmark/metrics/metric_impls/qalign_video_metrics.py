@@ -2,7 +2,6 @@ from typing import Union, List
 import torch
 import torch.nn.functional as F
 
-import clip
 from PIL import Image
 from transformers import AutoModelForCausalLM
 

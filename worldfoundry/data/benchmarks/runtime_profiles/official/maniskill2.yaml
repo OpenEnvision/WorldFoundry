@@ -6,8 +6,10 @@ environment_id: worldfoundry-unified-cu128
 id: maniskill2
 name: ManiSkill2
 docker:
-  image: ghcr.io/allenai/vla-evaluation-harness/maniskill2:latest
-  source_image: ghcr.io/allenai/vla-evaluation-harness/maniskill2:latest
+  image: ghcr.io/allenai/vla-evaluation-harness/maniskill2@sha256:710ebca79942e8c580af36cc71f7dacc340ba535f2be4efb17141d526ef4794a
+  digest: sha256:710ebca79942e8c580af36cc71f7dacc340ba535f2be4efb17141d526ef4794a
+  source_image: ghcr.io/allenai/vla-evaluation-harness/maniskill2@sha256:710ebca79942e8c580af36cc71f7dacc340ba535f2be4efb17141d526ef4794a
+  platform: linux/amd64
   python_env: maniskill2
   gpus: all
 needs_new_env: false

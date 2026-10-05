@@ -8,7 +8,7 @@ groups:
 source_repos:
 - url: https://github.com/NVIDIA/cosmos
   revision: aefdf852c16237039785d84ab3327167cb0ec07f
-  in_tree_path: worldfoundry/base_models/diffusion_model/video/cosmos3
+  in_tree_path: worldfoundry/base_models/diffusion_model/models/networks/cosmos3
 checkpoints:
 - repo_id: nvidia/Cosmos3-Nano
   revision: 411f42a8fdfb8c5b2583cb8786e0938f49796eaa
@@ -24,10 +24,10 @@ input_schema:
 artifact_kind: generated_world
 artifact_filename: cosmos3.mp4
 execution:
-  backend_stage: in_tree_diffusers_inference
+  backend_stage: native_diffusion_inference
   checkpoint_revision_policy: exact_sha_for_verified_runs
   load_sound_tokenizer: true
-  runtime_status: nano_exact_revision_workspace_matrix_and_safety_smoke_passed_parity_pending
+  runtime_status: native_structure_and_scheduler_parity_validated_gpu_parity_pending
   integration_status: integrated
   pipeline_binding: cosmos3
   environment: cosmos3
@@ -39,16 +39,11 @@ notes:
   sound, and structured policy, forward-dynamics, and inverse-dynamics action inference.
 - Cosmos3 Reasoner, training, and vLLM/vLLM-Omni serving workflows are intentionally
   outside this infer-only integration.
-- Exact-revision Nano Workspace smokes passed on A100 for T2I, T2V, I2V, V2V, synchronized
-  sound, and policy/forward/inverse action inference. All three independent action profiles passed
-  with the official 16-action/17-frame/30-step defaults. A separate safety-enabled 20-step visual
-  demo completed. These are not full-resolution official-output parity evidence.
-- The dedicated Cosmos3 environment passed its declared imports, both FFmpeg paths, Workspace
-  discovery, and real exact-revision T2I, synchronized-sound, policy, forward-dynamics, and
-  inverse-dynamics runs.
+- Native transformer loading is structurally exact (814/814 keys for Nano), the shared Wan
+  VAE38 mapping is exact (196/196), and the AVAE decoder is exact (182/182).
+- The native 35-step Karras flow-UniPC schedule and numerical updates match the official
+  scheduler exactly. End-to-end GPU output parity for this new native path remains pending.
 - Use prepare_model_infer.sh to emit a revision report and an explicit pinned snapshot model-ref;
   an existing unverified or older Cosmos3-Nano directory is not evidence for this profile revision.
-- The default safety path passed offline GPU construction and a real Nano Workspace run with
-  nvidia/Cosmos-1.0-Guardrail@cf03c0395fac8c4de386c0bdab12cc4fc8d66362 and
-  Qwen/Qwen3Guard-Gen-0.6B@fada3b2f655b89601929198343c94cd2f64d93cc. The NVIDIA repository
-  remains gated; missing authorization is reported before generator checkpoint loading.
+- Safety screening is an orchestration extension rather than part of the native diffusion
+  model runtime; the generator itself has no guardrail framework dependency.

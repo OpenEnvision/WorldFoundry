@@ -16,21 +16,21 @@ from tqdm import tqdm
 warnings.filterwarnings("ignore", message="The argument 'device' of Tensor", category=DeprecationWarning)
 warnings.filterwarnings("ignore", message="Caught DeprecationWarning in pin memory thread", category=DeprecationWarning)
 
-from torch_fidelity import GenerativeModelModuleWrapper
-from torch_fidelity.datasets import ImagesPathDataset, TransformPILtoRGBTensor
-from torch_fidelity.defaults import DEFAULTS
-from torch_fidelity.feature_extractor_base import FeatureExtractorBase
-from torch_fidelity.generative_model_base import GenerativeModelBase
-from torch_fidelity.generative_model_onnx import GenerativeModelONNX
-from torch_fidelity.helpers import get_kwarg, vassert, vprint
-from torch_fidelity.registry import (
+from . import GenerativeModelModuleWrapper
+from .datasets import ImagesPathDataset, TransformPILtoRGBTensor
+from .defaults import DEFAULTS
+from .feature_extractor_base import FeatureExtractorBase
+from .generative_model_base import GenerativeModelBase
+from .generative_model_onnx import GenerativeModelONNX
+from .helpers import get_kwarg, vassert, vprint
+from .registry import (
     DATASETS_REGISTRY,
     FEATURE_EXTRACTORS_REGISTRY,
     SAMPLE_SIMILARITY_REGISTRY,
     INTERPOLATION_REGISTRY,
     NOISE_SOURCE_REGISTRY,
 )
-from torch_fidelity.utils_torch import torch_maybe_compile, torch_atomic_save
+from .utils_torch import torch_maybe_compile, torch_atomic_save
 
 DEFAULT_FEATURE_EXTRACTOR = {
     "isc": "inception-v3-compat",

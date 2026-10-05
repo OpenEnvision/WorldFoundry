@@ -15,7 +15,7 @@ from worldfoundry.core.action_normalization import (
     select_modality_statistics,
     unnormalize_action_values,
 )
-from worldfoundry.core.utils.image_utils import load_pil_image
+from worldfoundry.core.media.processing.image_utils import load_pil_image
 
 from .action import ActionModel
 

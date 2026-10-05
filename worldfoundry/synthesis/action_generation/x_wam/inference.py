@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io.media import MediaKind, infer_media_kind
+from worldfoundry.core.media.types import MediaKind, infer_media_kind
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
 from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
 
@@ -430,12 +430,12 @@ def _runner_class() -> type[Any]:
     import torch
     from einops import rearrange
 
-    from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.t5 import umt5_xxl
-    from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.tokenizers import HuggingfaceTokenizer
-    from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers_unipc import (
+    from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import umt5_xxl
+    from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import HuggingfaceTokenizer
+    from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import (
         FlowUniPCMultistepScheduler,
     )
-    from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.vae2_2 import WanVAE_
+    from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_22 import WanVAE_
 
     from .modeling import XWAMModel
 
@@ -873,8 +873,8 @@ class XWAMRuntime:
             return
         import torch
 
-        from worldfoundry.core.checkpoint import assign_state_dict_strict
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.model_loading.checkpoints import assign_state_dict_strict
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         _variant_root, config_path, weight_path = _resolve_policy_assets(self.config, self.variant)
         base_root, model_config_path, tokenizer_path = _resolve_base_assets(self.config)
@@ -900,12 +900,16 @@ class XWAMRuntime:
             tokenizer_path=tokenizer_path,
             dtype=dtype,
         )
-        checkpoint = torch.load(
-            weight_path,
-            map_location="cpu",
-            mmap=True,
-            weights_only=True,
-        )
+        # The official DeepSpeed bundle stores a built-in set alongside the
+        # tensor state. Keep restricted loading enabled and allow only that
+        # audited built-in type instead of unpickling arbitrary objects.
+        with torch.serialization.safe_globals([set]):
+            checkpoint = torch.load(
+                weight_path,
+                map_location="cpu",
+                mmap=True,
+                weights_only=True,
+            )
         state_dict = checkpoint.get("module") if isinstance(checkpoint, Mapping) else None
         if not isinstance(state_dict, Mapping):
             raise TypeError(f"X-WAM DeepSpeed checkpoint has no mapping-valued 'module' state: {weight_path}")
@@ -1039,7 +1043,7 @@ class XWAMRuntime:
                 raise ValueError(
                     "X-WAM generate_world=True requires world_video_path to avoid embedding video in JSON"
                 )
-            from worldfoundry.core.io.video import write_video
+            from worldfoundry.core.media.codecs.video import write_video
 
             video_path = Path(self.config.world_video_path).expanduser().resolve()
             video_path.parent.mkdir(parents=True, exist_ok=True)

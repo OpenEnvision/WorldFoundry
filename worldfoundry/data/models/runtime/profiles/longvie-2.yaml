@@ -23,14 +23,19 @@ input_schema:
   image: true
   prompt: true
   video: true
-integration_status: runtime_ported
+integration_status: integrated
 notes:
-- WorldFoundry vendors the official LongVie DiffSynth runtime under worldfoundry/synthesis/visual_generation/longvie/longvie_runtime.
+- LongVie 2 runs on canonical Wan components and the shared staged diffusion runner;
+  its synthesis package owns only product assembly and LongVie-specific conditioning.
 - Each queued segment requires a non-empty prompt plus user-provided dense depth and
   sparse pointmap/track control videos. The first segment also requires an image.
 - The LongVie 2 adapter loads both control.safetensors and dit.safetensors and preserves
   the official previous-final-frame, eight-frame-history, and noise continuation loop.
 - Quality defaults are 81 frames at 16 FPS with 50 steps. The Studio profile uses
-  four-rank USP and only rank zero materializes the output artifact.
-runtime_status: checkpoint_assets_pending_not_runnable_until_staged
+  four-rank USP, keeps the complete model resident on each supported 80GB rank,
+  and only rank zero materializes the output artifact.
+- Workspace full-quality verification completed on 2026-07-28 with the staged
+  LongVie 2 control/DiT weights; 81/81 frames decoded at 640x352 and 16 FPS,
+  with all 50 denoising steps and the four-rank USP topology.
+runtime_status: checkpoint_backed_full_quality_verified
 task_family: video_generation

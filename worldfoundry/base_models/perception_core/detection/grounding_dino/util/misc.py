@@ -8,7 +8,6 @@ import colorsys
 import datetime
 import functools
 import io
-import json
 import os
 import pickle
 import subprocess
@@ -705,7 +704,6 @@ def init_distributed_mode(args):
                 args.world_size, args.rank, args.local_rank
             )
         )
-        print(json.dumps(dict(os.environ), indent=2))
     elif "SLURM_PROCID" in os.environ:
         args.rank = int(os.environ["SLURM_PROCID"])
         args.gpu = args.local_rank = int(os.environ["SLURM_LOCALID"])

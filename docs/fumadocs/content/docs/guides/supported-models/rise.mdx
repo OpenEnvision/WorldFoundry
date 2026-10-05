@@ -1,0 +1,32 @@
+---
+title: "RISE"
+description: "OpenDriveLab Pi0.5 action policy: three RGB views plus 14-D state in, 50×14 action chunk out. Apache-2.0 in-tree runtime; no public trained action checkpoint."
+modelId: "rise"
+pageSource: authored
+---
+
+RISE is OpenDriveLab's **Pi0.5-architecture action policy**. The paper is [RISE: Self-Improving Robot Policy with Compositional World Model](https://arxiv.org/abs/2602.11075) (arXiv 2602.11075). The project page is [opendrivelab.com/RISE](https://opendrivelab.com/RISE). WorldFoundry keeps an inference-only route under `worldfoundry/synthesis/action_generation/rise`: official AgileX transforms, three-camera mapping, quantile normalization, and a **50×14** absolute action contract all run in process. Aliases `rise-policy` and `rise-pi05` resolve here.
+
+<ModelPaperFigures modelId="rise" locale="en" />
+
+The paper's training story is imagination RL on a compositional world model. This card is the **deployed policy infer** path. Required inputs are a language `prompt` and RGB `image`; a **14-D** robot `state` is required by the runtime. Three views are expected — head, left wrist, right wrist (`cam_high`, `cam_left_wrist`, `cam_right_wrist`) — resized to **320×240** before the Pi0.5 stack. The policy emits one **50-step × 14-D** action chunk through **10** flow-matching steps (`num_inference_steps=10`, seed `42`). License on the GitHub tree is **Apache-2.0**.
+
+<ModelCommandBuilder modelId="rise" locale="en" />
+
+## What it is for
+
+Roll out a compatible Pi0.5 action checkpoint: `prompt` + `image` (+ 14-D `state` and three cameras) in; `action_trace` / `rise_action_trace.json` out through `RisePipeline`. Task profiles are `vla`, `vla.action_prediction`, and `embodied_policy`. Default launch is `worldfoundry-eval run rise`.
+
+The public Hugging Face repo `OpenDriveLab-org/RISE_Assets` ships the **dynamics model and sample data only**. You must stage trained action-policy weights (`model.safetensors` or JAX Orbax `params/`), quantile `norm_stats.json`, a local PaliGemma SentencePiece tokenizer, and the FAST tokenizer. Construction fails early if any of those are missing. No source checkout or runtime network access is used.
+
+The paper's real-robot write-up uses a dual 7-DoF AgileX platform at **30 Hz**. That is upstream hardware context, not a WorldFoundry control-rate measurement.
+
+## Runtime contract
+
+Accepted local formats are PyTorch safetensors and JAX Orbax params. Auto precision follows compute capability: **fp16** on Turing, **bf16** on Ampere / Ada / Hopper / Blackwell, **fp32** on CPU. PyTorch checkpoints may use `torch.compile`; JAX keeps the architecture-native compiled path. Catalog `action_advantage` defaults to `1.0` with `advantage_bin=10`. The internal Pi0.5 action dim is 32; the emitted contract is 14-D AgileX.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run rise` in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, `torch>=2.5`). Integration is recorded as **integrated**; runner / demo status is **not recorded**, and no public trained action checkpoint id is on this card. Stage weights locally before you expect a `get_action` artifact.
+
+<ModelRelatedRecipes modelId="rise" locale="en" />

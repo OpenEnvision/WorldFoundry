@@ -8,6 +8,8 @@ aliases:
 availability: open_source
 provider: official_repo
 official_sources:
+  paper: https://arxiv.org/abs/2410.07864
+  project_page: https://rdt-robotics.github.io/rdt-robotics/
   github:
     url: https://github.com/thu-ml/RoboticsDiffusionTransformer
     revision: cd79363a1387e8f81c7724d070ef7e45fd23150f
@@ -32,3 +34,19 @@ runtime_profile: runtime-profile:rdt-1b
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata,
   and executable runtime records.
+docs:
+  publisher: Tsinghua University (thu-ml)
+  publisher_kind: university
+  publisher_zh: 清华大学（thu-ml 团队）
+  overview: 'RDT-1B from Tsinghua''s thu-ml group is the Robotics Diffusion Transformer: a 1B diffusion policy pretrained on large multi-robot data with a native 128-dimensional unified action space covering many embodiments. The confirmed robotics-diffusion-transformer/rdt-1b pretrained policy is recorded, and the unified action model, two-frame three-camera preprocessing, and DPM inference run in-tree.'
+  overview_zh: 清华大学 thu-ml 团队的 RDT-1B 即 Robotics Diffusion Transformer：1B 扩散策略，在大规模多机器人数据上预训练，原生 128 维统一动作空间覆盖多种本体。已确认的 robotics-diffusion-transformer/rdt-1b 预训练策略有记录，统一动作模型、两帧三相机预处理与 DPM 推理在树内运行。
+  architecture: A diffusion transformer over a 128D unified action encoding that maps heterogeneous robot action spaces into one vocabulary; prompt encoding uses the official T5 checkpoint, and precomputed embeddings are accepted to lower peak memory.
+  architecture_zh: 在 128 维统一动作编码上的扩散 transformer，将异构机器人动作空间映射进同一词表；提示编码使用官方 T5 checkpoint，并接受预计算 embedding 以降低峰值内存。
+  usage_notes: The released checkpoint is a pretraining checkpoint and may require embodiment/task fine-tuning for deployment. Use precomputed T5 embeddings on memory-constrained hosts.
+  usage_notes_zh: 发布的 checkpoint 为预训练版本，部署可能需按本体/任务微调。内存受限主机建议使用预计算的 T5 embedding。
+  limitations:
+  - Pretraining checkpoint only — deployment typically needs fine-tuning.
+  - No GPU rollout validation is recorded in this repository.
+  limitations_zh:
+  - 仅预训练 checkpoint——部署通常需要微调。
+  - 仓库未记录 GPU rollout 验证。

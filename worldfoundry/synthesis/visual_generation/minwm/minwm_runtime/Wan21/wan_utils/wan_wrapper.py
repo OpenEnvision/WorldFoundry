@@ -3,12 +3,12 @@ import os
 from typing import Optional
 import torch
 
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.action_model import WanModel
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.causal_model import CausalWanModel
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.t5 import umt5_xxl
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.tokenizers import HuggingfaceTokenizer
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.vae import _video_vae
-from worldfoundry.core.nn.diffusion_schedulers import FlowMatchScheduler, SchedulerInterface
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.minwm.action import WanModel
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.minwm.causal import CausalWanModel
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import umt5_xxl
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import HuggingfaceTokenizer
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import _video_vae
+from worldfoundry.core.nn.diffusion.schedulers import FlowMatchScheduler, SchedulerInterface
 
 
 _BASE_MODEL_ROOT = os.environ.get(
@@ -259,5 +259,5 @@ class WanDiffusionWrapper(torch.nn.Module):
 
         # Add PRoPE parameters if camera control is enabled
         if self.use_camera:
-            from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.prope import add_prope_parameters
+            from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.minwm.prope import add_prope_parameters
             add_prope_parameters(self.model)

@@ -22,6 +22,17 @@ from worldfoundry.synthesis.action_generation.roboflamingo.runtime import (
 )
 
 
+def _first_observation_value(*values: Any) -> Any:
+    """Select an input without evaluating a NumPy array as a boolean."""
+    for value in values:
+        if value is None or (isinstance(value, str) and not value):
+            continue
+        if isinstance(value, (list, tuple)) and not value:
+            continue
+        return value
+    return None
+
+
 class RoboFlamingoSynthesis(ActionModelSynthesis):
     """Action synthesis wrapper for the RoboFlamingo model.
 
@@ -189,9 +200,10 @@ class RoboFlamingoSynthesis(ActionModelSynthesis):
         # Otherwise, construct the observation dictionary by mapping various input keys
         # to RoboFlamingo's expected observation keys, with fallback logic.
         return {
-            "visual_history": video or kwargs.get("visual_history") or images,
-            "current_image": images or kwargs.get("image") or kwargs.get("image_path") or kwargs.get("ref_image_path"),
-            "proprio": kwargs.get("proprio") or kwargs.get("robot_state"),
+            "visual_history": _first_observation_value(video, kwargs.get("visual_history"), images),
+            "current_image": _first_observation_value(images, kwargs.get("image"), kwargs.get("image_path"), kwargs.get("ref_image_path")),
+            "gripper_image": _first_observation_value(kwargs.get("gripper_image"), kwargs.get("wrist_image"), kwargs.get("gripper")),
+            "proprio": _first_observation_value(kwargs.get("proprio"), kwargs.get("robot_state")),
             "gripper_state": kwargs.get("gripper_state"),
         }
 

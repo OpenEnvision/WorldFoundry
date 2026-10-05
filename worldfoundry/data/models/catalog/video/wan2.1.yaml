@@ -64,17 +64,30 @@ variants:
         gated: false
     runtime_profile: wan2.1-t2v-1.3b-832x480-81f
     integration:
-      status: planned
+      status: integrated
       scope: variant_only
       evidence:
         - tmp/model_zoo/validation/wan2.1/report.json
         - tmp/model_zoo/validation/official_parity/wan2.1/report.json
         - tmp/model_zoo/validation/runner_parity/wan2.1/report.json
+    native_diffusion:
+      recipe_id: wan2.1-t2v-1.3b
+      status: assembly_and_checkpoint_structure_verified
+      strategy: standard
+      components:
+        - conditioner
+        - latent_initializer
+        - scheduler
+        - denoiser
+        - decoder
+      checkpoint_key_validation:
+        dit: 825
+        text_encoder: 242
+        vae: 194
+      artifact_parity: pending
+      notes: The native recipe no longer imports DiffSynth, Diffusers, or the legacy image/video packages; public CUDA artifact parity is still required before replacing the existing catalog pipeline binding.
     demo_parity:
       status: verified
-      demo_command:
-        - bash
-        - scripts/model_zoo/run_wan21_t2v_1p3b_official_demo.sh
       expected_artifacts:
         - path: wan21_t2v_1p3b_seed42_832x480_81f.mp4
           video_probe:
@@ -85,12 +98,9 @@ variants:
             fps_tolerance: 0.01
             expected_duration_seconds: 5.0625
             duration_tolerance_seconds: 0.05
-      notes: Verified with the official Wan2.1 T2V-1.3B demo command only.
+      notes: A prior local official Wan2.1 T2V-1.3B run produced the recorded artifact; no public demo script is packaged.
     runner_parity:
       status: verified
-      demo_command:
-        - python
-        - scripts/model_zoo/run_wan21_t2v_1p3b_worldfoundry_runner_demo.py
       expected_artifacts:
         - path: wan21_t2v_1p3b_worldfoundry_seed42_832x480_81f.mp4
           video_probe:
@@ -101,7 +111,7 @@ variants:
             fps_tolerance: 0.01
             expected_duration_seconds: 5.0625
             duration_tolerance_seconds: 0.05
-      notes: Verified with the WorldFoundry vendored Wan2.1 T2V runtime using the same prompt, seed, checkpoint, resolution, frame count, shift, and CFG scale as the official demo command.
+      notes: A prior local WorldFoundry Wan2.1 T2V run used the same prompt, seed, checkpoint, resolution, frame count, shift, and CFG scale as the official run; no public demo script is packaged.
     runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
     pipeline_binding: wan2.1-t2v-1.3b
   - id: wan2.1-t2v-14b
@@ -154,9 +164,6 @@ variants:
       status: integrated
 demo_parity:
   status: verified
-  demo_command:
-    - bash
-    - scripts/model_zoo/run_wan21_t2v_1p3b_official_demo.sh
   expected_artifacts:
     - path: wan21_t2v_1p3b_seed42_832x480_81f.mp4
       video_probe:
@@ -170,12 +177,9 @@ demo_parity:
   official_repo_dir: tmp/model_zoo/repos/github.com_Wan-Video_Wan2.1
   checkpoint_repo_id: Wan-AI/Wan2.1-T2V-1.3B
   checkpoint_snapshot: 37ec512624d61f7aa208f7ea8140a131f93afc9a
-  notes: Verified for Wan2.1 T2V-1.3B only ; other Wan2.1 T2V-14B and I2V variants remain pending and keep the family-level integration_status planned.
+  notes: A local 81-frame result was recorded for Wan2.1 T2V-1.3B only; parity for the T2V-14B and I2V variants remains pending.
 runner_parity:
   status: verified
-  demo_command:
-    - python
-    - scripts/model_zoo/run_wan21_t2v_1p3b_worldfoundry_runner_demo.py
   expected_artifacts:
     - path: wan21_t2v_1p3b_worldfoundry_seed42_832x480_81f.mp4
       video_probe:
@@ -187,17 +191,43 @@ runner_parity:
         expected_duration_seconds: 5.0625
         duration_tolerance_seconds: 0.05
   notes:
-    - WorldFoundry pipeline target is registered; generated artifact parity still requires the staged checkpoint/runtime environment.
+    - A prior local 81-frame WorldFoundry artifact is recorded above; reproducing it requires the staged checkpoint and runtime environment.
 notes:
   - Only official Wan-Video GitHub and Wan-AI Hugging Face repos are listed.
-  - Family-level integration_status remains planned because T2V-14B and I2V variants have not passed checkpoint, official demo, and WorldFoundry runner parity.
+  - Wan2.1 T2V 1.3B now has an independent canonical native diffusion recipe; its public catalog binding remains unchanged until CUDA artifact parity passes.
+  - T2V-14B and I2V variants remain parity-pending; their runtime integration does not imply validated output parity.
 catalog_category: video
 catalog_scope: Official GitHub and/or Hugging Face confirmed open-source or open-weight video generation models. Checkpoints are not tracked in git; local validation may download selected repos under cache/hfd.
 catalog_policy:
   github: Validated with git ls-remote, preferring git ls-remote --symref <repo>.git HEAD for default branch and HEAD SHA.
   huggingface: Validated with the Hugging Face /api/models endpoint. Recorded repo id, sha, private, gated, license, and selected task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit parity run and expected artifact are recorded.
+official_sources:
+  paper: https://arxiv.org/abs/2503.20314
 integration:
   status: integrated
   notes:
     - WorldFoundry wraps the in-tree Wan2.1 T2V/I2V runtimes.
+docs:
+  publisher: Alibaba (Tongyi Lab)
+  publisher_kind: company
+  publisher_zh: 阿里巴巴（通义实验室）
+  overview: 'Wan2.1 is Alibaba Tongyi Lab''s open video generation family and the backbone of a large part of this catalog — many world-model and control entries build on it. Four variants are recorded here: T2V 1.3B, T2V 14B, and I2V 14B at 480p and 720p. Only official Wan-Video GitHub and Wan-AI Hugging Face repositories are listed as sources.'
+  overview_zh: Wan2.1 是阿里通义实验室的开源视频生成系列，也是本 catalog 相当一部分条目的基座——许多世界模型与控制类条目都构建在它之上。此处记录四个 variant：T2V 1.3B、T2V 14B，以及 480p 与 720p 的 I2V 14B。来源只列官方 Wan-Video GitHub 与 Wan-AI Hugging Face 仓库。
+  architecture: Wan2.1 is a diffusion transformer with a spatio-temporal Wan-VAE and UMT5 text encoding (per the upstream release). In this repository the 1.3B T2V has an independent canonical native diffusion recipe; the recorded contract exposes prompt/image/video/actions inputs and a generated_video artifact.
+  architecture_zh: Wan2.1 是扩散 Transformer，配时空 Wan-VAE 与 UMT5 文本编码（见上游发布）。在本仓库中， 1.3B T2V 拥有独立的规范化原生扩散配方；记录契约为 prompt/image/video/actions 输入与 generated_video 产物。
+  usage_notes: 'The family is integrated, and a prior local 81-frame artifact is recorded for T2V-1.3B. Output parity for T2V-14B and I2V remains pending. The independent native 1.3B recipe will not replace the current public binding until CUDA artifact parity passes.'
+  usage_notes_zh: 系列已集成，T2V-1.3B 已记录一次本地 81 帧产物；T2V-14B 与 I2V 的输出一致性仍待验证。独立的原生 1.3B 路径通过 CUDA 产物一致性验证前，不会替换现有公开绑定。
+  limitations:
+  - 'Family-level parity is incomplete: T2V-14B and I2V variants lack full checkpoint/demo/runner parity.'
+  - Reproducing the recorded T2V-1.3B artifact requires the staged checkpoint and runtime environment.
+  limitations_zh:
+  - 系列级一致性未完成：T2V-14B 与 I2V variant 缺少完整的 checkpoint/demo/runner 一致性。
+  - 复现已记录的 T2V-1.3B 产物需要就位的 checkpoint 和运行时环境。
+  recommended_benchmarks:
+  - id: vbench
+    reason: The suite Wan releases are commonly compared on.
+    reason_zh: Wan 系列发布常用的对比评测。
+  - id: physics-iq
+    reason: Physical plausibility probe.
+    reason_zh: 物理合理性检验。

@@ -4,7 +4,13 @@ Closed-loop embodied benchmarks use in-tree simulators and ``worldfoundry-eval e
 Upstream harness code will be vendored under ``thirdparty/vla-evaluation-harness/``.
 """
 
+
+# ruff: noqa: F822 - rollout exports are loaded by __getattr__.
+
 from __future__ import annotations
+
+from importlib import import_module
+from typing import Any
 
 from .contracts import (
     CAPABILITY_MULTIMODAL_OBSERVATION,
@@ -51,13 +57,28 @@ from .metrics import (
     metric_suite,
 )
 from .normalizer import normalize_results as normalize_vla_va_wam_results
-from .rollout_runner import (
-    EmbodiedClosedLoopRunner,
-    build_ai2thor_closed_loop_runner,
-    build_embodied_closed_loop_runner,
-    build_libero_closed_loop_runner,
-    validate_policy_simulator_specs,
-)
+
+# Rollout imports require simulator dependencies; offline scoring does not.
+_ROLLOUT_EXPORTS = {
+    "EmbodiedClosedLoopRunner",
+    "build_ai2thor_closed_loop_runner",
+    "build_embodied_closed_loop_runner",
+    "build_libero_closed_loop_runner",
+    "validate_policy_simulator_specs",
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name not in _ROLLOUT_EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(import_module(f"{__name__}.rollout_runner"), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | _ROLLOUT_EXPORTS)
+
 
 __all__ = [
     "CAPABILITY_MULTIMODAL_OBSERVATION",

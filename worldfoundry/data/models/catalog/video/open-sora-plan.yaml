@@ -28,6 +28,8 @@ checkpoint:
     WorldFoundry GPU route uses v1.3.0 plus google/mt5-xxl. The text encoder is
     staged by scripts/inference/prepare_model_infer.sh to avoid duplicating the
     50GB checkpoint inside both WORLDFOUNDRY_CKPT_DIR and WORLDFOUNDRY_HFD_ROOT.
+official_sources:
+  paper: https://arxiv.org/abs/2412.00131
 integration:
   status: integrated
   notes:
@@ -55,3 +57,23 @@ catalog_policy:
     id, sha, private, gated, license, and selected task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit
     parity run and expected artifact are recorded.
+docs:
+  publisher: Peking University (Yuan Group)
+  publisher_kind: university
+  publisher_zh: 北京大学（袁粒课题组）
+  overview: Open-Sora-Plan is Peking University Yuan Group's open text-to-video effort (HF releases under the LanguageBind org), developed independently from HPC-AI Tech's Open-Sora despite the similar name. The WorldFoundry route is complete and reports missing checkpoints at runtime.
+  overview_zh: Open-Sora-Plan 是北京大学袁粒课题组的开源文生视频项目（HF 发布在 LanguageBind 组织下），虽与潞晨的 Open-Sora 同名相近，但相互独立。WorldFoundry 路径已完备，checkpoint 缺失会在运行时报告。
+  architecture: The project pairs a video VAE (WF-VAE in later versions) with a diffusion transformer denoiser, per upstream releases. This repository records the prompt-only contract and generated_video artifact; the specific version internals are not recorded here.
+  architecture_zh: 该项目将视频 VAE（后期版本为 WF-VAE）与扩散 Transformer 去噪器配对，见上游发布。本仓库记录仅 prompt 的契约与 generated_video 产物；具体版本内部细节仓库未记录。
+  usage_notes: No runner-parity record exists yet. Official GitHub is PKU-YuanGroup; checkpoints live under LanguageBind on Hugging Face — use those exact orgs when staging weights.
+  usage_notes_zh: 尚无 runner parity 记录。官方 GitHub 为 PKU-YuanGroup；checkpoint 在 Hugging Face 的 LanguageBind 组织下——就位权重时请使用这两个准确的组织名。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard open T2V quality suite.
+    reason_zh: 标准开源文生视频质量评测。

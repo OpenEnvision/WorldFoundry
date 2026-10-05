@@ -1,0 +1,52 @@
+schema_version: 2
+model_id: inspatio-world-1p5
+display_name: InSpatio World 1.5
+task_family: world_model
+groups: [world, video, camera_control]
+source_repos:
+- url: https://github.com/inspatio/inspatio-world-v1.5
+  revision: dd3561f544053fe22d739b6b2f8461c9c97bf8cb
+  in_tree_path: worldfoundry/synthesis/visual_generation/inspatio_world
+checkpoints:
+- repo_id: inspatio/world-1.5
+  revision: 6a5cf5e27b8a05930911a5416fa8c68eabdda414
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/inspatio--world-1.5
+  role: inspatio_world_v15_checkpoint
+  required_paths: [InSpatio-World-1.5-1.3B.safetensors]
+  metadata:
+    sha256: 44f121356f81b7d1651f7878540a53b3becc2814307497d8f7a54e8687df25f9
+- repo_id: Wan-AI/Wan2.1-T2V-1.3B
+  revision: 37ec512624d61f7aa208f7ea8140a131f93afc9a
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Wan-AI--Wan2.1-T2V-1.3B
+  role: wan_text_vae_architecture
+  required_paths:
+  - config.json
+  - Wan2.1_VAE.pth
+  - models_t5_umt5-xxl-enc-bf16.pth
+  - google/umt5-xxl/tokenizer_config.json
+  - google/umt5-xxl/spiece.model
+- repo_id: depth-anything/DA3NESTED-GIANT-LARGE-1.1
+  revision: b2359bdf726fb44ef62acca04d629dcf158053e7
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1
+  role: optional_direct_input_geometry
+  required_paths: [config.json, model.safetensors]
+input_schema:
+  prompt: true
+  image: true
+  video: true
+  actions: [camera_path]
+artifact_kind: generated_world
+artifact_filename: inspatio-world-1p5.mp4
+execution:
+  environment: _unified
+  backend_stage: native_in_tree_runtime
+  runtime_status: verified
+  integration_status: verified
+  pipeline_binding: inspatio-world-1p5
+integration:
+  status: verified
+notes:
+- Prepared scenes follow the official scene.json, RGB/depth and row-major OpenCV Tcw contract.
+- Direct input resolves DA3 locally. Prepared scenes do not need DA3; inference does not download models or modify checkpoint directories.
+- Version 1.5 uses the existing Wan2.1 components and a distinct fine-tuned checkpoint.
+- Verified on six short BF16/SDPA generation cases against pinned upstream, including native DA3 direct inputs replayed with the same estimated geometry.

@@ -1,29 +1,58 @@
-"""WorldFoundry Path and Directory Resolution Engine.
+"""WorldFoundry path and directory resolution engine.
 
-This module provides unified, robust path resolution utilities that completely decouple the
-WorldFoundry runtime and evaluation benchmarks from host-specific, hardcoded absolute directory paths.
+Runtimes and benchmarks must not hard-code host absolute paths. Logical
+tokens (``${WORLDFOUNDRY_CACHE_DIR}``, checkpoint roots, hfd, conda) expand
+the same way on PAI DLC, a laptop, or a container.
 
-By using logical placeholders and environment-variable expansion tokens (e.g., `${WORLDFOUNDRY_CACHE_DIR}`),
-this engine guarantees:
-1. Portability: Evaluator runners, dataset manifests, and experiment checkpoints can run unmodified
-   across different systems (e.g., Aliyun PAI DLC jobs, local workstations, or Docker containers).
-2. Predictability: Explicit fallback patterns resolve logical paths to project-relative paths (e.g. searching
-   upward for a `pyproject.toml` descriptor) when specific environment variables are missing.
-3. Hermetic Cache Boundaries: Prevents external caches or standard system temp folders from being contaminated
-   unless explicitly overridden.
+Why a single resolver:
+
+- Portability: manifests and evaluators stay unmodified across hosts.
+- Predictability: if an env var is missing, walk up to ``pyproject.toml``
+  instead of silently using ``/tmp``.
+- Hermetic caches: Hugging Face / scratch stay inside WorldFoundry roots
+  unless the caller overrides them — otherwise a job contaminates the
+  shared user cache.
+
+Prefer :func:`resolve_worldfoundry_path` / :func:`resolve_hf_path` (in
+``hf``) over concatenating strings in model code.
 """
 
 from __future__ import annotations
 
 import os
+import sysconfig
+import tempfile
 from importlib.util import find_spec
 from pathlib import Path
 from typing import Mapping, Sequence
+
+# ──────────────────────────────────────────────────────────────────────────
+# Package / repo roots — walk to pyproject.toml; never hard-code host paths
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def package_root() -> Path:
     """Returns the resolved absolute path of the installed `worldfoundry` package root."""
     return Path(__file__).resolve().parents[2]
+
+
+def package_data_root() -> Path:
+    """Resolve bundled WorldFoundry model and benchmark metadata."""
+
+    candidates = (
+        package_root() / "data",
+        Path(sysconfig.get_path("data")) / "worldfoundry" / "data",
+    )
+    for candidate in candidates:
+        if (candidate / "models").is_dir() or (candidate / "benchmarks").is_dir():
+            return candidate
+    return candidates[0]
+
+
+def package_data_path(*parts: str | Path) -> Path:
+    """Resolve a path below the bundled WorldFoundry data root."""
+
+    return package_data_root().joinpath(*(Path(part) for part in parts))
 
 
 def package_module_root(package: str) -> Path:
@@ -88,6 +117,15 @@ def worldfoundry_path_tokens(env: Mapping[str, str] | None = None) -> dict[str, 
         or environ.get("WORLDFOUNDRY_BENCHMARK_DATA_ROOT")
         or (home / "data" if explicit_home else cache / "data")
     ).expanduser()
+    default_hfd_dataset_root = (
+        data_dir if data_dir.name in {"datasets", "hfd_datasets"} else data_dir / "datasets"
+    )
+    hfd_dataset_root = Path(
+        environ.get("WORLDFOUNDRY_HFD_DATASET_ROOT")
+        or environ.get("WORLDFOUNDRY_LOCAL_DATA_ROOT")
+        or environ.get("WORLDFOUNDRY_LOCAL_CACHE_DATA_ROOT")
+        or default_hfd_dataset_root
+    ).expanduser()
     artifact_dir = Path(
         environ.get("WORLDFOUNDRY_ARTIFACT_DIR")
         or environ.get("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
@@ -99,18 +137,27 @@ def worldfoundry_path_tokens(env: Mapping[str, str] | None = None) -> dict[str, 
     default_model_source = cache / "official_runtime_repos"
     model_source = Path(environ.get("WORLDFOUNDRY_MODEL_SOURCE_DIR") or default_model_source).expanduser()
     default_ckpt_dir = (
-        adjacent_ckpt if adjacent_ckpt.is_dir() else (home / "checkpoints" if explicit_home else cache / "checkpoints")
+        home / "checkpoints"
+        if explicit_home
+        else (adjacent_ckpt if adjacent_ckpt.is_dir() else cache / "checkpoints")
     )
     ckpt_dir = Path(environ.get("WORLDFOUNDRY_CKPT_DIR") or default_ckpt_dir).expanduser()
     hfd_root = Path(environ.get("WORLDFOUNDRY_HFD_ROOT") or ckpt_dir / "hfd").expanduser()
+    ckpt_sibling = (
+        ckpt_dir.with_name("ckpts" if ckpt_dir.name == "ckpt" else "ckpt")
+        if ckpt_dir.name in {"ckpt", "ckpts"}
+        else ckpt_dir
+    )
     default_conda_root = (
-        adjacent_conda if adjacent_conda.is_dir() else (home / "conda" if explicit_home else cache / "conda")
+        home / "conda"
+        if explicit_home
+        else (adjacent_conda if adjacent_conda.is_dir() else cache / "conda")
     )
     conda_root = Path(environ.get("WORLDFOUNDRY_CONDA_ROOT") or default_conda_root).expanduser()
     default_conda_envs_root = (
-        adjacent_conda_envs
-        if adjacent_conda_envs.is_dir()
-        else (home / "conda_envs" if explicit_home else cache / "conda_envs")
+        home / "conda_envs"
+        if explicit_home
+        else (adjacent_conda_envs if adjacent_conda_envs.is_dir() else cache / "conda_envs")
     )
     conda_envs_root = Path(
         environ.get("WORLDFOUNDRY_CONDA_ENVS_ROOT")
@@ -120,14 +167,16 @@ def worldfoundry_path_tokens(env: Mapping[str, str] | None = None) -> dict[str, 
     return {
         "WORLDFOUNDRY_REPO_ROOT": str(root),
         "WORLDFOUNDRY_PACKAGE_ROOT": str(package),
-        "WORLDFOUNDRY_DATA_ROOT": str(package / "data"),
+        "WORLDFOUNDRY_DATA_ROOT": str(package_data_root()),
         "WORLDFOUNDRY_CACHE_DIR": str(cache),
         "WORLDFOUNDRY_HOME": str(home),
         "WORLDFOUNDRY_DATA_DIR": str(data_dir),
+        "WORLDFOUNDRY_HFD_DATASET_ROOT": str(hfd_dataset_root),
         "WORLDFOUNDRY_ARTIFACT_DIR": str(artifact_dir),
         "WORLDFOUNDRY_MODEL_DIR": str(model_dir),
         "WORLDFOUNDRY_MODEL_SOURCE_DIR": str(model_source),
         "WORLDFOUNDRY_CKPT_DIR": str(ckpt_dir),
+        "WORLDFOUNDRY_CKPT_SIBLING_DIR": str(ckpt_sibling),
         "WORLDFOUNDRY_HFD_ROOT": str(hfd_root),
         "WORLDFOUNDRY_CONDA_ROOT": str(conda_root),
         "WORLDFOUNDRY_CONDA_ENVS_ROOT": str(conda_envs_root),
@@ -181,9 +230,26 @@ def model_source_root_path(env: Mapping[str, str] | None = None) -> Path:
     return resolve_worldfoundry_path("${WORLDFOUNDRY_MODEL_SOURCE_DIR}", env)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Cache / checkpoint / hfd tokens — env first, then repo-relative fallback
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def cache_root_path(env: Mapping[str, str] | None = None) -> Path:
     """Resolves the standard WorldFoundry cached download directory."""
     return resolve_worldfoundry_path("${WORLDFOUNDRY_CACHE_DIR}", env)
+
+
+def scratch_directory(prefix: str, env: Mapping[str, str] | None = None) -> Path:
+    """Create a unique directory under ``${WORLDFOUNDRY_CACHE_DIR}/scratch``.
+
+    Prefer this over ``tempfile.mkdtemp()`` for generated videos and run
+    artifacts so long-lived jobs do not fill ``/tmp`` (XC-17).
+    """
+
+    root = cache_root_path(env) / "scratch"
+    root.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix=prefix, dir=str(root)))
 
 
 def local_data_root_path(env: Mapping[str, str] | None = None) -> Path:
@@ -227,15 +293,46 @@ def checkpoint_root_path(
     return root.joinpath(*(Path(part) for part in parts))
 
 
+def checkpoint_root_candidates(
+    *parts: str | Path,
+    specific_env: str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> tuple[Path, ...]:
+    """Return the configured checkpoint root and its conventional singular/plural sibling.
+
+    Existing WorldFoundry installations use both ``ckpt`` and ``ckpts`` next
+    to the repository. Keep the configured root first, then allow strictly
+    local discovery in the sibling without changing the meaning of
+    :func:`checkpoint_root_path` for callers that need one write target.
+    """
+
+    primary = checkpoint_root_path(specific_env=specific_env, env=env)
+    roots = [primary]
+    if primary.name in {"ckpt", "ckpts"}:
+        sibling_name = "ckpts" if primary.name == "ckpt" else "ckpt"
+        roots.append(primary.with_name(sibling_name))
+    suffix = tuple(Path(part) for part in parts)
+    return tuple(root.joinpath(*suffix) for root in dict.fromkeys(roots))
+
+
 def hfd_root_path(*parts: str | Path, env: Mapping[str, str] | None = None) -> Path:
     """Resolves the hfd-style local downloader checkpoint directory."""
     return resolve_worldfoundry_path("${WORLDFOUNDRY_HFD_ROOT}", env).joinpath(*(Path(part) for part in parts))
+
+
+def hfd_dataset_root_path(*parts: str | Path, env: Mapping[str, str] | None = None) -> Path:
+    """Resolve the canonical local root for Hugging Face benchmark datasets."""
+
+    return resolve_worldfoundry_path("${WORLDFOUNDRY_HFD_DATASET_ROOT}", env).joinpath(
+        *(Path(part) for part in parts)
+    )
 
 
 def resolve_local_hf_model_path(
     model_id_or_path: str | Path,
     *,
     required_files: Sequence[str] = (),
+    revision: str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> Path:
     """Resolve a Hugging Face model strictly from WorldFoundry-local storage.
@@ -251,6 +348,11 @@ def resolve_local_hf_model_path(
 
         try:
             for candidate in directory.rglob("*"):
+                # Direct hfd exports retain Hugging Face download metadata in
+                # ``.cache``.  A stale partial there does not make the fully
+                # materialized file in the export root incomplete.
+                if ".cache" in candidate.relative_to(directory).parts:
+                    continue
                 if candidate.name.endswith((".aria2", ".incomplete", ".gstmp")):
                     return False
                 if (
@@ -280,26 +382,39 @@ def resolve_local_hf_model_path(
     direct = resolve_worldfoundry_path(value, env)
 
     environ = dict(os.environ if env is None else env)
-    ckpt_root = checkpoint_root_path(env=environ)
-    hf_home = Path(environ["HF_HOME"]).expanduser() if environ.get("HF_HOME") else None
-    hf_hub_cache = Path(environ["HF_HUB_CACHE"]).expanduser() if environ.get("HF_HUB_CACHE") else None
-    roots = [
-        hfd_root_path(env=environ),
-        ckpt_root / "hfd_models",
-        ckpt_root / "hfd",
-        ckpt_root / "huggingface" / "hub",
-        ckpt_root / "hf_cache" / "hub",
-        ckpt_root,
-    ]
-    if hf_hub_cache is not None:
-        roots.insert(0, hf_hub_cache)
-    if hf_home is not None:
-        roots.insert(0, hf_home / "hub")
+    ckpt_roots = checkpoint_root_candidates(env=environ)
+    injected_home = Path(environ.get("HOME") or Path.home()).expanduser()
+    xdg_cache_home = Path(
+        environ.get("XDG_CACHE_HOME") or injected_home / ".cache"
+    ).expanduser()
+    hf_home = Path(
+        environ.get("HF_HOME") or xdg_cache_home / "huggingface"
+    ).expanduser()
+    hf_hub_cache = Path(
+        environ.get("HF_HUB_CACHE")
+        or environ.get("HUGGINGFACE_HUB_CACHE")
+        or hf_home / "hub"
+    ).expanduser()
+    roots = [hfd_root_path(env=environ)]
+    for local_root in ckpt_roots:
+        roots.extend(
+            (
+                local_root / "hfd_models",
+                local_root / "hfd",
+                local_root / "huggingface" / "hub",
+                local_root / "hf_cache" / "hub",
+                local_root,
+            )
+        )
+    roots.insert(0, hf_home / "hub")
+    roots.insert(0, hf_hub_cache)
     normalized = value.replace("/", "--")
     leaf = value.rsplit("/", 1)[-1]
     names = tuple(dict.fromkeys((normalized, f"models--{normalized}", value, leaf)))
 
     def usable(directory: Path) -> Path | None:
+        """Accept a Hub-style cache dir only when the download marker and snapshot exist."""
+
         if not directory.is_dir():
             return None
         if not hfd_download_complete(directory):
@@ -307,17 +422,26 @@ def resolve_local_hf_model_path(
         snapshots = directory / "snapshots"
         if snapshots.is_dir():
             revisions: list[Path] = []
-            main_ref = directory / "refs" / "main"
-            if main_ref.is_file():
-                revision = main_ref.read_text(encoding="utf-8").strip()
-                if revision:
-                    revisions.append(snapshots / revision)
-            revisions.extend(sorted(snapshots.iterdir(), reverse=True))
-            for revision in revisions:
-                if revision.is_dir() and all(
-                    (revision / name).is_file() for name in required_files
-                ):
-                    return revision.resolve()
+            if revision is not None:
+                requested = str(revision).strip()
+                if not requested:
+                    raise ValueError("Hugging Face revision cannot be empty")
+                revisions.append(snapshots / requested)
+                revision_ref = directory / "refs" / requested
+                if revision_ref.is_file():
+                    resolved_ref = revision_ref.read_text(encoding="utf-8").strip()
+                    if resolved_ref:
+                        revisions.append(snapshots / resolved_ref)
+            else:
+                main_ref = directory / "refs" / "main"
+                if main_ref.is_file():
+                    main_revision = main_ref.read_text(encoding="utf-8").strip()
+                    if main_revision:
+                        revisions.append(snapshots / main_revision)
+                revisions.extend(sorted(snapshots.iterdir(), reverse=True))
+            for snapshot in dict.fromkeys(revisions):
+                if snapshot.is_dir() and all((snapshot / name).is_file() for name in required_files):
+                    return snapshot.resolve()
             return None
         if all((directory / name).is_file() for name in required_files):
             return directory.resolve()
@@ -343,9 +467,7 @@ def resolve_local_hf_model_path(
                     return resolved
 
     locations = "\n".join(f"  - {path}" for path in checked)
-    raise FileNotFoundError(
-        f"Local Hugging Face assets for {value!r} are missing. Checked:\n{locations}"
-    )
+    raise FileNotFoundError(f"Local Hugging Face assets for {value!r} are missing. Checked:\n{locations}")
 
 
 def resolve_local_checkpoint_file(
@@ -367,8 +489,7 @@ def resolve_local_checkpoint_file(
         if direct.name.endswith((".aria2", ".incomplete", ".gstmp")):
             raise FileNotFoundError(f"Checkpoint transfer is incomplete: {direct}")
         partial_markers = tuple(
-            direct.with_name(f"{direct.name}{suffix}")
-            for suffix in (".aria2", ".incomplete", ".gstmp", "_.gstmp")
+            direct.with_name(f"{direct.name}{suffix}") for suffix in (".aria2", ".incomplete", ".gstmp", "_.gstmp")
         )
         if direct.stat().st_size <= 0 or any(marker.exists() for marker in partial_markers):
             raise FileNotFoundError(f"Checkpoint transfer is incomplete: {direct}")
@@ -417,12 +538,24 @@ def repo_relative_path(path: str | Path, *, root: str | Path | None = None) -> s
         return resolved.as_posix()
 
 
+# Canonical roots consumed by runtime/evaluation. Kept here so lower layers
+# do not import ``worldfoundry.evaluation.utils``.
+REPO_ROOT = project_root()
+DATA_ROOT = package_data_root()
+BENCHMARKS_DATA_ROOT = DATA_ROOT / "benchmarks"
+
+
 __all__ = [
+    "checkpoint_root_candidates",
     "checkpoint_root_path",
     "artifact_root_path",
+    "BENCHMARKS_DATA_ROOT",
+    "DATA_ROOT",
+    "REPO_ROOT",
     "cache_root_path",
     "conda_envs_root_path",
     "conda_root_path",
+    "hfd_dataset_root_path",
     "hfd_root_path",
     "local_data_root_path",
     "local_model_root_path",

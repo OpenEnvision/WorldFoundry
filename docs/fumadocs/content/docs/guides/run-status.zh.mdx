@@ -1,0 +1,15 @@
+---
+title: 运行状态
+description: 已记录路径证据的读者标签。不要直接使用 profile_resolves_* 字符串。
+---
+
+模型页或 catalog 说明某条路径有没有跑通时，用下面这些标签。不要把 YAML 里的 `profile_resolves_*` 或其他 `runtime_status` 原样抄进文档或工单，当成产品徽章。
+
+- **Verified** — 该路径已记录 GPU 产物或官方 demo 一致性。复制模型页命令，可以预期得到已记录的 artifact。
+- **Runner parity pending** — 仓内 pipeline 或 catalog variant 能解析，但 WorldFoundry 尚未记录 runner / 官方 demo 一致性。可以跑；输出应视为未验证。
+- **Static load only** — 只通过了 checkpoint 结构、import 或 schema 检查。这不是 GPU run，也不是官方 demo 证据。
+- **Planned** — 只记录了意向和上游来源。目前没有可运行内容。
+
+例如 `profile_resolves_catalog_variant_runner_parity_pending` 应读成 **Runner parity pending**。[模型中心](/zh/docs/guides/supported-models) 上的 catalog 就绪度徽章（Runner verified、Integrated 等）是另一套计算结果；本页不替换它们。
+
+日常可复现命令用 `worldfoundry-eval run <id> --pipeline.task-profile …`。入口对照见 [CLI 命令入口](/zh/docs/reference/cli#命令入口)。

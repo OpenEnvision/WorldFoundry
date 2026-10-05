@@ -4,8 +4,8 @@ runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipel
 pipeline_binding: hunyuanvideo
 runtime_profile: runtime-profile:hunyuanvideo-t2v
 tasks:
-  - text-to-video
-  - image-to-video
+- text-to-video
+- image-to-video
 source_status:
   status: confirmed_official_github
   github:
@@ -17,173 +17,139 @@ checkpoint:
   status: confirmed_public_hf
   verified_by: GET https://huggingface.co/api/models/<repo_id>
   repos:
-    - id: tencent/HunyuanVideo
-      sha: 6204ad6aea1a77ff5aba337c88278bb9500eb37d
-      license: other
-      private: false
-      gated: false
-      tasks:
-        - text-to-video
-    - id: tencent/HunyuanVideo-I2V
-      sha: 3914f209367854b5e470f062c33159d5ab139e1e
-      license: other
-      private: false
-      gated: false
-      tasks:
-        - image-to-video
+  - id: tencent/HunyuanVideo
+    sha: 6204ad6aea1a77ff5aba337c88278bb9500eb37d
+    license: other
+    private: false
+    gated: false
+    tasks:
+    - text-to-video
+  - id: tencent/HunyuanVideo-I2V
+    sha: 3914f209367854b5e470f062c33159d5ab139e1e
+    license: other
+    private: false
+    gated: false
+    tasks:
+    - image-to-video
   notes: HF cardData reports license as 'other'; review upstream license terms before redistribution.
 variants:
-  - id: hunyuanvideo-t2v
-    task: text-to-video
-    provider: official_repo
-    checkpoint_refs:
-      - repo_id: tencent/HunyuanVideo
-        revision: 6204ad6aea1a77ff5aba337c88278bb9500eb37d
-        license: other
-        private: false
-        gated: false
-    runtime_profile: hunyuanvideo-t2v
-    demo_parity:
-      status: verified
-      demo_command:
-        - bash
-        - scripts/model_zoo/run_hunyuanvideo_t2v_official_demo.sh
-      expected_artifacts:
-        - path: hunyuanvideo_t2v_official_cat_grass_1280x720_129f.mp4
-          video_probe:
-            expected_width: 1280
-            expected_height: 720
-            expected_frames: 129
-            expected_fps: 24
-            fps_tolerance: 0.01
-            expected_duration_seconds: 5.375
-            duration_tolerance_seconds: 0.05
-      notes:
-        - >-
-          Native in-tree HunyuanVideo `sample_video.py` T2V uses
-          `torchrun --nproc_per_node=8`, local `HunyuanVideo` assets, prompt
-          "A cat walks on the grass, realistic style.", `video-size=720 1280`,
-          `video-length=129`, `infer-steps=50`, `ulysses-degree=8`,
-          `ring-degree=1`, and `seed=42`.
-        - Per-run visual QA and artifact checks are tracked outside the model catalog.
-    runner_parity:
-      status: verified
-      demo_command:
-        - bash
-        - scripts/model_zoo/run_hunyuanvideo_t2v_worldfoundry_runner_demo.sh
-      expected_artifacts:
-        - path: hunyuanvideo_t2v_worldfoundry_cat_grass_1280x720_129f.mp4
-          video_probe:
-            expected_width: 1280
-            expected_height: 720
-            expected_frames: 129
-            expected_fps: 24
-            fps_tolerance: 0.01
-            expected_duration_seconds: 5.375
-            duration_tolerance_seconds: 0.05
+- id: hunyuanvideo-t2v
+  task: text-to-video
+  provider: official_repo
+  checkpoint_refs:
+  - repo_id: tencent/HunyuanVideo
+    revision: 6204ad6aea1a77ff5aba337c88278bb9500eb37d
+    license: other
+    private: false
+    gated: false
+  runtime_profile: hunyuanvideo-t2v
+  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  pipeline_binding: hunyuanvideo-t2v
+  integration:
+    status: integrated
+  demo_parity:
+    status: pending
     notes:
-      - HF license metadata is 'other'; require manual license review before redistribution.
-    runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
-    pipeline_binding: hunyuanvideo-t2v
-    integration:
-      status: integrated
-  - id: hunyuanvideo-i2v
-    task: image-to-video
-    provider: official_repo
-    checkpoint_refs:
-      - repo_id: tencent/HunyuanVideo-I2V
-        revision: 3914f209367854b5e470f062c33159d5ab139e1e
-        license: other
-        private: false
-        gated: false
-    runtime_profile: hunyuanvideo-i2v
-    demo_parity:
-      status: verified
-      demo_command:
-        - bash
-        - scripts/model_zoo/run_hunyuanvideo_i2v_official_demo.sh
-      expected_artifacts:
-        - path: hunyuanvideo_i2v_official_firework_864x1024_129f.mp4
-          video_probe:
-            expected_width: 864
-            expected_height: 1024
-            expected_frames: 129
-            expected_fps: 24
-            fps_tolerance: 0.01
-            expected_duration_seconds: 5.375
-            duration_tolerance_seconds: 0.05
-      notes:
-        - >-
-          Native in-tree HunyuanVideo I2V `sample_image2video.py` uses
-          `torchrun --nproc_per_node=8`, local `HunyuanVideo-I2V` assets,
-          the upstream firework portrait image, `i2v-resolution=720p`,
-          `i2v-stability`, `video-length=129`, `infer-steps=50`,
-          `ulysses-degree=8`, `ring-degree=1`, and `seed=0`.
-    runner_parity:
-      status: verified
-      demo_command:
-        - bash
-        - scripts/model_zoo/run_hunyuanvideo_i2v_worldfoundry_runner_demo.sh
-      expected_artifacts:
-        - path: hunyuanvideo_i2v_worldfoundry_firework_864x1024_129f.mp4
-          video_probe:
-            expected_width: 864
-            expected_height: 1024
-            expected_frames: 129
-            expected_fps: 24
-            fps_tolerance: 0.01
-            expected_duration_seconds: 5.375
-            duration_tolerance_seconds: 0.05
+    - The earlier 129-frame official-runtime artifact is retained as historical evidence only; it predates the native diffusion cutover.
+  runner_parity:
+    status: pending
     notes:
-      - HF license metadata is 'other'; require manual license review before redistribution.
-    runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
-    pipeline_binding: hunyuanvideo-i2v
-    integration:
-      status: integrated
-demo_parity:
-  status: verified
-  demo_command:
-    - bash
-    - scripts/model_zoo/run_hunyuanvideo_t2v_official_demo.sh
-  expected_artifacts:
-    - path: hunyuanvideo_t2v_official_cat_grass_1280x720_129f.mp4
-      video_probe:
-        expected_width: 1280
-        expected_height: 720
-        expected_frames: 129
-        expected_fps: 24
-        fps_tolerance: 0.01
-        expected_duration_seconds: 5.375
-        duration_tolerance_seconds: 0.05
-  notes:
-    - T2V uses the official multi-GPU cat-on-grass demo recipe.
-    - I2V uses the official multi-GPU firework portrait stability demo recipe.
-notes: Tencent-Hunyuan GitHub and tencent Hugging Face repos were both reachable.
-catalog_category: video
-catalog_scope: Official GitHub and/or Hugging Face confirmed open-source or open-weight video generation models. Checkpoints are not tracked in git; local validation may download selected repos under cache/hfd.
-catalog_policy:
-  github: Validated with git ls-remote, preferring git ls-remote --symref <repo>.git HEAD for default branch and HEAD SHA.
-  huggingface: Validated with the Hugging Face /api/models endpoint. Recorded repo id, sha, private, gated, license, and selected task tags only.
-  parity: This manifest does not claim WorldFoundry runtime parity unless an explicit parity run and expected artifact are recorded.
+    - Native registry assembly and the local VAE checkpoint structure pass; end-to-end CUDA artifact parity must be repeated through NativeDiffusionPipeline.
+- id: hunyuanvideo-i2v
+  task: image-to-video
+  provider: official_repo
+  checkpoint_refs:
+  - repo_id: tencent/HunyuanVideo-I2V
+    revision: 3914f209367854b5e470f062c33159d5ab139e1e
+    license: other
+    private: false
+    gated: false
+  runtime_profile: hunyuanvideo-i2v
+  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  pipeline_binding: hunyuanvideo-i2v
+  integration:
+    status: integrated
+  demo_parity:
+    status: pending
+    notes:
+    - The earlier 129-frame official-runtime artifact is retained as historical evidence only; it predates the native diffusion cutover.
+  runner_parity:
+    status: pending
+    notes:
+    - Native registry assembly passes; end-to-end CUDA artifact parity must be repeated through NativeDiffusionPipeline.
+official_sources:
+  project_page: https://aivideo.hunyuan.tencent.com
+  paper: https://arxiv.org/abs/2412.03603
 integration:
   status: integrated
   notes:
-    - WorldFoundry wraps the in-tree HunyuanVideo T2V and I2V official runtimes.
-runner_parity:
-  status: verified
-  demo_command:
-    - bash
-    - scripts/model_zoo/run_hunyuanvideo_t2v_worldfoundry_runner_demo.sh
-  expected_artifacts:
-    - path: hunyuanvideo_t2v_worldfoundry_cat_grass_1280x720_129f.mp4
-      video_probe:
-        expected_width: 1280
-        expected_height: 720
-        expected_frames: 129
-        expected_fps: 24
-        fps_tolerance: 0.01
-        expected_duration_seconds: 5.375
-        duration_tolerance_seconds: 0.05
+  - T2V and I2V are declarative recipes assembled by the shared native diffusion runner; the former upstream CLI runtime is not a backend.
+  - The canonical PyTorch network, prompt encoders, causal 3D VAE, scheduler, and loaders live in role-based diffusion_model packages.
+native_diffusion:
+  recipe_ids:
+  - hunyuanvideo-t2v
+  - hunyuanvideo-i2v
+  status: assembly_and_checkpoint_structure_verified
+  strategy: standard
+  components:
+  - conditioner
+  - latent_initializer
+  - scheduler
+  - denoiser
+  - latent_encoder
+  - decoder
+  checkpoint_validation:
+    original_t2v_source_keys: 856
+    original_t2v_converted_keys: 976
+    original_t2v_model_keys: 976
+    original_i2v_checkpoint_keys: 856
+    original_i2v_model_keys: 856
+    vae_checkpoint_keys: 248
+    vae_model_keys: 248
+    missing_keys: 0
+    unexpected_keys: 0
+    shape_mismatches: 0
+    method: local checkpoint mmap key-and-shape comparison on meta-constructed native modules
+  artifact_parity: pending_after_native_cutover
+demo_parity:
+  status: pending
   notes:
-    - WorldFoundry pipeline targets are registered and use the same official runtime configs as Studio.
-    - Original HunyuanVideo T2V and I2V scripted runner parity is verified.
+  - Historical upstream-runtime artifacts are not evidence for the new native execution path.
+runner_parity:
+  status: pending
+  notes:
+  - Registry resolution and checkpoint structure are verified; native CUDA artifact parity remains pending.
+notes:
+- Tencent-Hunyuan GitHub and tencent Hugging Face repositories were confirmed.
+- Checkpoints are external assets and HF license metadata is 'other'.
+catalog_category: video
+catalog_scope: Official GitHub and/or Hugging Face confirmed open-source or open-weight video generation models.
+catalog_policy:
+  github: Validate with git ls-remote and record the official default branch revision.
+  huggingface: Record official repo id, revision, access state, license metadata, and task tags.
+  parity: A pre-cutover official-runtime artifact does not establish NativeDiffusionPipeline parity.
+docs:
+  publisher: Tencent (Hunyuan)
+  publisher_kind: company
+  publisher_zh: 腾讯（混元）
+  overview: HunyuanVideo is Tencent's large open video generation model, recorded here with T2V and I2V variants. In WorldFoundry both are declarative recipes assembled by the shared native diffusion runner — the canonical PyTorch network, prompt encoders, causal 3D VAE, scheduler, and loaders live in role-based diffusion_model packages, and the former upstream CLI runtime is deliberately not a backend.
+  overview_zh: HunyuanVideo 是腾讯的大规模开源视频生成模型，本条目记录 T2V 与 I2V 两个 variant。在 WorldFoundry 中，两者都是由共享原生扩散 runner 装配的声明式配方——规范化的 PyTorch 网络、文本编码器、因果 3D VAE、调度器与加载器分布在按角色划分的 diffusion_model 包中，原上游 CLI 运行时被有意排除在后端之外。
+  architecture: 'Upstream HunyuanVideo is a ~13B diffusion transformer with a causal 3D VAE and dual text encoders (per Tencent''s public release). This repository records the native re-assembly: role-based network/conditioner/VAE/scheduler components with registry-verified checkpoint structure.'
+  architecture_zh: 上游 HunyuanVideo 是约 13B 的扩散 Transformer，配因果 3D VAE 与双文本编码器（见腾讯公开发布）。本仓库记录的是原生重装配方案：按角色划分的网络/条件器/VAE/调度器组件，checkpoint 结构已经注册表验证。
+  usage_notes: Registry resolution and checkpoint structure are verified; native CUDA artifact parity remains pending. Checkpoints are external and their HF license metadata is 'other' — review before commercial use. Choose hunyuanvideo-t2v or hunyuanvideo-i2v as the variant.
+  usage_notes_zh: 注册表解析与 checkpoint 结构已验证；原生 CUDA 产物一致性仍在等待。checkpoint 为外部资产且 HF 许可元数据为“other”——商用前请审阅。variant 二选一：hunyuanvideo-t2v 或 hunyuanvideo-i2v。
+  limitations:
+  - Native CUDA artifact parity is pending — structural verification only so far.
+  - Checkpoint license metadata is 'other'; commercial review required.
+  - 'Large model: expect high VRAM demands typical of 13B-class video DiTs.'
+  limitations_zh:
+  - 原生 CUDA 产物一致性尚未完成——目前只有结构层验证。
+  - checkpoint 许可元数据为“other”，商用需审阅。
+  - 大模型：显存需求高，属 13B 级视频 DiT 的典型水平。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard open T2V quality suite.
+    reason_zh: 标准开源文生视频质量评测。
+  - id: physics-iq
+    reason: Physical-plausibility probe for large video models.
+    reason_zh: 针对大视频模型的物理合理性检验。

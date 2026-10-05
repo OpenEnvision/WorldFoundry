@@ -12,7 +12,16 @@ Payloads are grouped by responsibility:
 from __future__ import annotations
 
 # ── Shared context ─────────────────────────────────────────────
-from .context import DEFAULT_CONTEXT, DEFAULT_MCP_OUTPUT_ROOT, MCPToolContext
+from .context import (
+    DEFAULT_CONTEXT,
+    DEFAULT_MCP_MAX_TRACKED_JOBS,
+    DEFAULT_MCP_OUTPUT_ROOT,
+    MCP_JOB_INDEX_FILENAME,
+    MCPToolContext,
+    get_default_context,
+    resolve_mcp_output_root,
+    set_default_context,
+)
 
 # ── Discovery payloads ─────────────────────────────────────────
 from .discovery import (
@@ -62,14 +71,17 @@ from .studio import (
 
 __all__ = [
     "DEFAULT_CONTEXT",
+    "DEFAULT_MCP_MAX_TRACKED_JOBS",
     "DEFAULT_MCP_OUTPUT_ROOT",
     "DEFAULT_STUDIO_WORKSPACE_URL",
     "MCPToolContext",
+    "MCP_JOB_INDEX_FILENAME",
     "MCP_TOOL_NAMES",
     "cancel_run_payload",
     "check_benchmark_datasets_payload",
     "get_benchmark_info_payload",
     "get_model_info_payload",
+    "get_default_context",
     "get_run_result_payload",
     "get_run_samples_payload",
     "get_run_status_payload",
@@ -88,7 +100,9 @@ __all__ = [
     "list_tasks_payload",
     "preview_run_payload",
     "register_tools",
+    "resolve_mcp_output_root",
     "run_evaluation_payload",
+    "set_default_context",
     "server_info_payload",
     "show_metric_payload",
     "stop_studio_job_payload",

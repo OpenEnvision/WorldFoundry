@@ -1,0 +1,32 @@
+---
+title: "Cosmos Predict 2"
+description: "Previous-generation NVIDIA video2world WFM: T5 + Rectified Flow AB2, native 2B/14B recipes, gated NVIDIA license. Structure validated; GPU parity pending."
+modelId: "cosmos-predict-2"
+pageSource: authored
+---
+
+Cosmos Predict 2 is NVIDIA's **previous-generation** world foundation model for **image/video-to-world**. Text plus a first frame or video prefix go in; a future world video comes out. This card is **not** [Predict 2.5](/docs/guides/supported-models/cosmos-predict-2.5), **not** [Transfer 2.5](/docs/guides/supported-models/cosmos-transfer-2.5), and **not** [Cosmos 3](/docs/guides/supported-models/cosmos3).
+
+WorldFoundry assembles it **natively** — framework-owned denoiser, **T5-11B** conditioner, Rectified Flow **AB2** scheduler, Wan codec, shared loader. **No Diffusers pipeline** and no NVIDIA runtime package. Recipe defaults are **1280×704, 93 frames, 16 fps, 35 steps**. Variants are only `cosmos-predict2-2b-video2world` and `cosmos-predict2-14b-video2world`. Aliases `cosmos-predict2` and `cosmos2` resolve here.
+
+<ModelPaperFigures modelId="cosmos-predict-2" locale="en" />
+
+The official Predict 2 project is [research.nvidia.com/labs/dir/cosmos-predict2](https://research.nvidia.com/labs/dir/cosmos-predict2/). The catalog paper URL is the 2025 [Cosmos World Foundation Model Platform](https://arxiv.org/abs/2501.03575) write-up (Predict1-era platform). That is lineage, not the Predict 2.5 paper.
+
+What this repository actually checked: native **2B** architecture **567** checkpoint tensors (no synthetic cross-attention projection), **14B** **727** tensors, plus registry, conditioning masks, and AB2 numerics. **GPU output parity is pending** — the official Video2World weights are **gated** (`nvidia-open-model-license`) and were not in the authenticated cache used for that check.
+
+<ModelCommandBuilder modelId="cosmos-predict-2" locale="en" />
+
+## What it is for
+
+Stay on this card only when you need the **T5-conditioned v2** recipe. New world-video work should start on [Predict 2.5](/docs/guides/supported-models/cosmos-predict-2.5): Reason1 conditioner, flow-UniPC, and a **verified 2B text-to-world** route at the same 1280×704 / 93-frame / 35-step geometry.
+
+Launch `worldfoundry-eval run cosmos-predict2-2b-video2world`. Required inputs: `prompt`, `image`, `video`. Artifact: `cosmos-predict2-2b-video2world.mp4` (14B writes `cosmos-predict2-14b-video2world.mp4`). There is **no** control-video / VACE branch here — that is Transfer 2.5. There is **no** joint sound or policy head — that is Cosmos 3.
+
+Score predicted world video on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) and [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq). Those are catalog entry points, not ingested WorldFoundry scores.
+
+## Running in WorldFoundry
+
+`CosmosPredict2Pipeline` runs in `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `nvidia/Cosmos-Predict2-2B-Video2World` or the 14B twin, plus `google-t5/t5-11b`, after accepting NVIDIA's gated terms. Predict 2 and Predict 2.5 share one checkpoint-shaped transformer implementation in-tree; version-specific architecture and sampling live in the recipes.
+
+<ModelRelatedRecipes modelId="cosmos-predict-2" locale="en" />

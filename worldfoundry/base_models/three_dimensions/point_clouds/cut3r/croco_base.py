@@ -3,28 +3,25 @@
 
 
 # --------------------------------------------------------
-# CroCo model during pretraining
+# CroCo backbone construction for CUT3R inference
 # --------------------------------------------------------
 
 
 """Module for base_models -> three_dimensions -> point_clouds -> cut3r -> croco_base.py functionality."""
 
-import torch
-import torch.nn as nn
-
-torch.backends.cuda.matmul.allow_tf32 = True  # for gpu >= Ampere and pytorch >= 1.12
 from functools import partial
 
-from .blocks import Block, DecoderBlock, PatchEmbed
-from .pos_embed import get_2d_sincos_pos_embed, RoPE2D
-from worldfoundry.base_models.three_dimensions.general_3d.dust3r.croco.models.masking import RandomMask
+import torch
+import torch.nn as nn
+from transformers import PretrainedConfig, PreTrainedModel
 
-from transformers import PretrainedConfig
-from transformers import PreTrainedModel
+from .blocks import Block, DecoderBlock, PatchEmbed
+from .pos_embed import RoPE2D, get_2d_sincos_pos_embed
 
 
 class CrocoConfig(PretrainedConfig):
     """Croco config implementation."""
+
     model_type = "croco"
 
     def __init__(
@@ -94,9 +91,6 @@ class CroCoNet(PreTrainedModel):
         # patch embeddings  (with initialization done as in MAE)
         self._set_patch_embed(config.img_size, config.patch_size, config.enc_embed_dim)
 
-        # mask generations
-        self._set_mask_generator(self.patch_embed.num_patches, config.mask_ratio)
-
         self.pos_embed = config.pos_embed
         if config.pos_embed == "cosine":
             # positional embedding of the encoder
@@ -105,27 +99,21 @@ class CroCoNet(PreTrainedModel):
                 int(self.patch_embed.num_patches**0.5),
                 n_cls_token=0,
             )
-            self.register_buffer(
-                "enc_pos_embed", torch.from_numpy(enc_pos_embed).float()
-            )
+            self.register_buffer("enc_pos_embed", torch.from_numpy(enc_pos_embed).float())
             # positional embedding of the decoder
             dec_pos_embed = get_2d_sincos_pos_embed(
                 config.dec_embed_dim,
                 int(self.patch_embed.num_patches**0.5),
                 n_cls_token=0,
             )
-            self.register_buffer(
-                "dec_pos_embed", torch.from_numpy(dec_pos_embed).float()
-            )
+            self.register_buffer("dec_pos_embed", torch.from_numpy(dec_pos_embed).float())
             # pos embedding in each block
             self.rope = None  # nothing for cosine
         elif config.pos_embed.startswith("RoPE"):  # eg RoPE100
             self.enc_pos_embed = None  # nothing to add in the encoder with RoPE
             self.dec_pos_embed = None  # nothing to add in the decoder with RoPE
             if RoPE2D is None:
-                raise ImportError(
-                    "Cannot find cuRoPE2D, please install it following the README instructions"
-                )
+                raise ImportError("Cannot find cuRoPE2D, please install it following the README instructions")
             freq = float(config.pos_embed[len("RoPE") :])
             self.rope = RoPE2D(freq=freq)
         else:
@@ -179,23 +167,6 @@ class CroCoNet(PreTrainedModel):
             enc_embed_dim: The enc embed dim.
         """
         self.patch_embed = PatchEmbed(img_size, patch_size, 3, enc_embed_dim)
-
-    def _set_mask_generator(self, num_patches, mask_ratio):
-        """Helper function to set mask generator.
-
-        Args:
-            num_patches: The num patches.
-            mask_ratio: The mask ratio.
-        """
-        self.mask_generator = RandomMask(num_patches, mask_ratio)
-
-    def _set_mask_token(self, dec_embed_dim):
-        """Helper function to set mask token.
-
-        Args:
-            dec_embed_dim: The dec embed dim.
-        """
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, dec_embed_dim))
 
     def _set_decoder(
         self,
@@ -273,125 +244,3 @@ class CroCoNet(PreTrainedModel):
         elif isinstance(m, nn.LayerNorm):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
-
-    def _encode_image(self, image, do_mask=False, return_all_blocks=False):
-        """
-        image has B x 3 x img_size x img_size
-        do_mask: whether to perform masking or not
-        return_all_blocks: if True, return the features at the end of every block
-                           instead of just the features from the last block (eg for some prediction heads)
-        """
-        # embed the image into patches  (x has size B x Npatches x C)
-        # and get position if each return patch (pos has size B x Npatches x 2)
-        x, pos = self.patch_embed(image)
-        # add positional embedding without cls token
-        if self.enc_pos_embed is not None:
-            x = x + self.enc_pos_embed[None, ...]
-        # apply masking
-        B, N, C = x.size()
-        if do_mask:
-            masks = self.mask_generator(x)
-            x = x[~masks].view(B, -1, C)
-            posvis = pos[~masks].view(B, -1, 2)
-        else:
-            B, N, C = x.size()
-            masks = torch.zeros((B, N), dtype=bool)
-            posvis = pos
-        # now apply the transformer encoder and normalization
-        if return_all_blocks:
-            out = []
-            for blk in self.enc_blocks:
-                x = blk(x, posvis)
-                out.append(x)
-            out[-1] = self.enc_norm(out[-1])
-            return out, pos, masks
-        else:
-            for blk in self.enc_blocks:
-                x = blk(x, posvis)
-            x = self.enc_norm(x)
-            return x, pos, masks
-
-    def _decoder(self, feat1, pos1, masks1, feat2, pos2, return_all_blocks=False):
-        """
-        return_all_blocks: if True, return the features at the end of every block
-                           instead of just the features from the last block (eg for some prediction heads)
-
-        masks1 can be None => assume image1 fully visible
-        """
-        # encoder to decoder layer
-        visf1 = self.decoder_embed(feat1)
-        f2 = self.decoder_embed(feat2)
-        # append masked tokens to the sequence
-        B, Nenc, C = visf1.size()
-        if masks1 is None:  # downstreams
-            f1_ = visf1
-        else:  # pretraining
-            Ntotal = masks1.size(1)
-            f1_ = self.mask_token.repeat(B, Ntotal, 1).to(dtype=visf1.dtype)
-            f1_[~masks1] = visf1.view(B * Nenc, C)
-        # add positional embedding
-        if self.dec_pos_embed is not None:
-            f1_ = f1_ + self.dec_pos_embed
-            f2 = f2 + self.dec_pos_embed
-        # apply Transformer blocks
-        out = f1_
-        out2 = f2
-        if return_all_blocks:
-            _out, out = out, []
-            for blk in self.dec_blocks:
-                _out, out2 = blk(_out, out2, pos1, pos2)
-                out.append(_out)
-            out[-1] = self.dec_norm(out[-1])
-        else:
-            for blk in self.dec_blocks:
-                out, out2 = blk(out, out2, pos1, pos2)
-            out = self.dec_norm(out)
-        return out
-
-    def patchify(self, imgs):
-        """
-        imgs: (B, 3, H, W)
-        x: (B, L, patch_size**2 *3)
-        """
-        p = self.patch_embed.patch_size[0]
-        assert imgs.shape[2] == imgs.shape[3] and imgs.shape[2] % p == 0
-
-        h = w = imgs.shape[2] // p
-        x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
-        x = torch.einsum("nchpwq->nhwpqc", x)
-        x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
-
-        return x
-
-    def unpatchify(self, x, channels=3):
-        """
-        x: (N, L, patch_size**2 *channels)
-        imgs: (N, 3, H, W)
-        """
-        patch_size = self.patch_embed.patch_size[0]
-        h = w = int(x.shape[1] ** 0.5)
-        assert h * w == x.shape[1]
-        x = x.reshape(shape=(x.shape[0], h, w, patch_size, patch_size, channels))
-        x = torch.einsum("nhwpqc->nchpwq", x)
-        imgs = x.reshape(shape=(x.shape[0], channels, h * patch_size, h * patch_size))
-        return imgs
-
-    # def forward(self, img1, img2):
-    # """
-    # img1: tensor of size B x 3 x img_size x img_size
-    # img2: tensor of size B x 3 x img_size x img_size
-
-    # out will be    B x N x (3*patch_size*patch_size)
-    # masks are also returned as B x N just in case
-    # """
-    # # encoder of the masked first image
-    # feat1, pos1, mask1 = self._encode_image(img1, do_mask=True)
-    # # encoder of the second image
-    # feat2, pos2, _ = self._encode_image(img2, do_mask=False)
-    # # decoder
-    # decfeat = self._decoder(feat1, pos1, mask1, feat2, pos2)
-    # # prediction head
-    # out = self.prediction_head(decfeat)
-    # # get target
-    # target = self.patchify(img1)
-    # return out, mask1, target

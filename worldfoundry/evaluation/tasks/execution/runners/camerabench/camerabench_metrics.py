@@ -13,7 +13,7 @@ import os
 import string
 import time
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -105,7 +105,7 @@ def evaluate_camerabench_binary(
             "evaluated_splits": len(average_precisions),
         }
     summary = {
-        "evaluation_timestamp": datetime.now().isoformat(),
+        "evaluation_timestamp": datetime.now(timezone.utc).isoformat(),
         "overall_average_precision": None if overall is None else overall["mean_average_precision"],
         "overall_roc_auc": None if overall is None else overall["mean_roc_auc"],
         "total_splits": len(results),
@@ -187,7 +187,7 @@ def evaluate_camerabench_vqa_retrieval(
             }
 
     summary = {
-        "evaluation_timestamp": datetime.now().isoformat(),
+        "evaluation_timestamp": datetime.now(timezone.utc).isoformat(),
         "evaluation_mode": mode,
         "total_splits": len(results),
         "evaluated_splits": len(valid_results),
@@ -401,7 +401,7 @@ def evaluate_camerabench_caption(
     files = score_files or (find_caption_score_files(score_dir) if score_dir is not None else [])
     results = [result for score_file in files if score_file.is_file() for result in [evaluate_caption_file(score_file, api_key=api_key)] if result]
     summary = {
-        "evaluation_timestamp": datetime.now().isoformat(),
+        "evaluation_timestamp": datetime.now(timezone.utc).isoformat(),
         "evaluated_files": len(files),
         "total_models": len(results),
         "gpt_judge_enabled": bool(api_key),

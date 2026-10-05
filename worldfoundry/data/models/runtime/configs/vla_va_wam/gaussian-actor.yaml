@@ -1,8 +1,0 @@
-backend: lerobot_policy
-checkpoint_path: ${WORLDFOUNDRY_CKPT_DIR}/lerobot--gaussian_actor
-source_repo: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/lerobot
-source_subdir: src
-policy_target: lerobot.policies.gaussian_actor.modeling_gaussian_actor:GaussianActorPolicy
-predict_method: predict_action_chunk
-action_contract: gaussian_actor_policy_action
-runtime_backend: lerobot_gaussian_actor_policy

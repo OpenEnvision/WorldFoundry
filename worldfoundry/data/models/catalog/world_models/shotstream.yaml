@@ -15,9 +15,11 @@ source:
   hf_repo_id: KlingTeam/ShotStream
   license: manual_review:missing_root_license
 official_sources:
+  paper: https://arxiv.org/abs/2603.25746
+  project_page: https://luo0207.github.io/ShotStream/
   github:
     url: https://github.com/KlingAIResearch/ShotStream
-    head_sha: 7ddcfaef6cf303966351c4640269897181bb009d
+    head_sha: 917a0478fe47d71ddcf3269d052cbe3be2ae10e8
   huggingface:
   - repo_id: KlingTeam/ShotStream
     type: model
@@ -26,15 +28,30 @@ runtime_profile: runtime-profile:shotstream
 integration:
   status: runtime_ported
   notes:
-  - ShotStream official inference route is registered; checkpoint/streaming assets
-    are runtime-gated.
+  - ShotStream official causal inference is bound through a user-staged source checkout and local checkpoint directories.
 runner_parity:
-  status: implemented_checkpoint_pending
+  status: implemented
   notes:
-  - resolve_model_zoo_config and pipeline import are expected to pass; real generation
-    emits a runtime plan until required checkpoints/assets are staged.
+  - The wrapper runs the official 4-step causal generator and normalizes its generated MP4 to the requested artifact path.
+  - Real GPU validation evidence is tracked per run rather than embedded as a machine-local catalog path.
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry
   runtimes; blocked entries retain upstream provenance without runnable backends.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: shotstream
+docs:
+  publisher: Kuaishou (Kling Team)
+  publisher_kind: company
+  publisher_zh: 快手（可灵团队）
+  overview: 'ShotStream is Kling AI Research''s real-time interactive streaming video generator: it targets continuous, interactively steered video streams rather than fixed clips. In this catalog the official inference route is registered with the source bound at a pinned commit; checkpoint and streaming assets stay runtime-gated.'
+  overview_zh: ShotStream 是快手可灵研究团队的实时交互流式视频生成器：目标是连续、可交互操控的视频流，而非固定片段。本 catalog 中官方推理路径已注册、源码绑定在固定 commit；checkpoint 与流式资产保持运行时限制。
+  architecture: Architecture internals beyond the recorded tasks are not stored in this repository (weights at KlingTeam/ShotStream). The upstream repository lacks a root license and is flagged for manual review.
+  architecture_zh: 除已记录任务外的架构内部细节仓库未存（权重位于 KlingTeam/ShotStream）。上游仓库缺少根许可文件，已标记需人工审查。
+  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
+  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。
+  limitations:
+  - 'Missing root license upstream: legal review required.'
+  - Real generation is checkpoint/asset gated.
+  limitations_zh:
+  - 上游缺少根许可：需要法律审查。
+  - 真实生成受 checkpoint/资产限制。

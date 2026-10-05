@@ -86,13 +86,9 @@ def video_detection(io_args, segtracker_args, sam_args, aot_args, grounding_capt
                 frame = cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
                 if frame_idx == 0:
                     pred_mask, _, _ = segtracker.detect_and_seg(frame, grounding_caption, box_threshold, text_threshold, box_size_threshold, reset_image)
-                    torch.cuda.empty_cache()
-                    gc.collect()
                     segtracker.add_reference(frame, pred_mask)
                 elif (frame_idx_processed % (sam_gap//Num)) == 0:
                     seg_mask, _, _ = segtracker.detect_and_seg(frame, grounding_caption, box_threshold, text_threshold, box_size_threshold, reset_image)
-                    torch.cuda.empty_cache()
-                    gc.collect()
                     track_mask = segtracker.track(frame)
                     new_obj_mask, _ = segtracker.find_new_objs(track_mask, seg_mask)
                     if np.sum(new_obj_mask > 0) >  frame.shape[0] * frame.shape[1] * 0.4:
@@ -101,9 +97,6 @@ def video_detection(io_args, segtracker_args, sam_args, aot_args, grounding_capt
                     segtracker.add_reference(frame, pred_mask)
                 else:
                     pred_mask = segtracker.track(frame,update_memory=True)
-                torch.cuda.empty_cache()
-                gc.collect()
-                
                 pred_list.append(pred_mask)
                 frames.append(frame)
 

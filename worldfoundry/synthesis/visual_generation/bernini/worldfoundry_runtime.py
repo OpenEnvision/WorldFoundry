@@ -184,6 +184,10 @@ COMMON_DEFAULTS = {
     "height": 480,
     "width": 848,
     "num_inference_steps": 40,
+    "omega_vid": 1.25,
+    "omega_img": 4.5,
+    "omega_txt": 4.0,
+    "omega_scale": 0.8,
     "flow_shift": 5.0,
     "seed": 42,
     "fps": 16,
@@ -366,6 +370,16 @@ def checkpoint_resource_estimate(checkpoint_path: Path) -> dict[str, int | None]
         if ".cache" not in path.parts
     ]
     host_weight_bytes = sum(path.stat().st_size for path in shards)
+    stage_sizes: Counter[str] = Counter()
+    largest_shard_bytes = 0
+    for path in shards:
+        relative = path.relative_to(checkpoint_path)
+        stage = relative.parts[0] if len(relative.parts) > 1 else "root"
+        size = path.stat().st_size
+        stage_sizes[stage] += size
+        largest_shard_bytes = max(largest_shard_bytes, size)
+    expert_bytes = stage_sizes["transformer"] + stage_sizes["transformer_2"]
+    streaming_host_weight_bytes = host_weight_bytes - expert_bytes + largest_shard_bytes
 
     group_sizes: Counter[str] = Counter()
     indexed_totals: list[int] = []
@@ -382,26 +396,49 @@ def checkpoint_resource_estimate(checkpoint_path: Path) -> dict[str, int | None]
         if total_size:
             indexed_totals.append(total_size)
 
-    peak_cuda_weight_bytes = max(group_sizes.values(), default=0)
-    if not peak_cuda_weight_bytes and indexed_totals:
-        peak_cuda_weight_bytes = max(indexed_totals)
+    # A combined Bernini index contains several stages which are moved to CUDA
+    # sequentially (planner, T5, then the two diffusion experts).  Treating the
+    # index's aggregate total as one resident stage incorrectly reports 168 GiB
+    # for a checkpoint whose largest stage is about 53 GiB.  Fall back to the
+    # aggregate only when tensor group information could not be read.
+    peak_cuda_weight_bytes = (
+        max(group_sizes.values())
+        if group_sizes
+        else max(indexed_totals, default=0)
+    )
     return {
         "host_weight_bytes_per_rank": host_weight_bytes or None,
+        "streaming_host_weight_bytes_per_rank": streaming_host_weight_bytes or None,
+        "largest_checkpoint_shard_bytes": largest_shard_bytes or None,
         "peak_cuda_weight_bytes": peak_cuda_weight_bytes or None,
     }
 
 
 def _cgroup_memory_available_bytes() -> int | None:
-    """Read the effective cgroup memory headroom for v1 or v2 containers."""
+    """Read reclaim-aware cgroup memory headroom for v1 or v2 containers.
+
+    Both cgroup versions charge file cache to ``memory.current``/``usage``.
+    Checkpoint scans can therefore make raw headroom look nearly exhausted even
+    though inactive file pages are reclaimable by model parameters.  Count only
+    ``inactive_file`` as reclaimable; active cache remains a conservative safety
+    margin for the multi-rank Bernini preflight.
+    """
 
     candidates = (
-        (Path("/sys/fs/cgroup/memory.current"), Path("/sys/fs/cgroup/memory.max")),
+        (
+            Path("/sys/fs/cgroup/memory.current"),
+            Path("/sys/fs/cgroup/memory.max"),
+            Path("/sys/fs/cgroup/memory.stat"),
+            ("inactive_file",),
+        ),
         (
             Path("/sys/fs/cgroup/memory/memory.usage_in_bytes"),
             Path("/sys/fs/cgroup/memory/memory.limit_in_bytes"),
+            Path("/sys/fs/cgroup/memory/memory.stat"),
+            ("total_inactive_file", "inactive_file"),
         ),
     )
-    for current_path, limit_path in candidates:
+    for current_path, limit_path, stat_path, inactive_keys in candidates:
         try:
             current_text = current_path.read_text(encoding="utf-8").strip()
             limit_text = limit_path.read_text(encoding="utf-8").strip()
@@ -413,7 +450,21 @@ def _cgroup_memory_available_bytes() -> int | None:
         # Very large v1 values represent an unlimited cgroup.
         if limit >= 1 << 60:
             return None
-        return max(limit - current, 0)
+        inactive_file = 0
+        try:
+            stat_values = {
+                key: int(value)
+                for line in stat_path.read_text(encoding="utf-8").splitlines()
+                if len((parts := line.split())) == 2
+                for key, value in (parts,)
+            }
+            inactive_file = next(
+                (stat_values[key] for key in inactive_keys if key in stat_values),
+                0,
+            )
+        except (OSError, ValueError):
+            inactive_file = 0
+        return min(limit, max(limit - current, 0) + max(inactive_file, 0))
     return None
 
 
@@ -544,7 +595,12 @@ class BerniniRuntime:
             return {"ready": False, "blockers": ["checkpoint is unavailable"]}
         estimate = checkpoint_resource_estimate(self.checkpoint_path)
         blockers: list[str] = []
-        host_per_rank = estimate["host_weight_bytes_per_rank"]
+        streaming_experts = self.variant.model_id == "bernini-r-14b"
+        host_per_rank = estimate[
+            "streaming_host_weight_bytes_per_rank"
+            if streaming_experts
+            else "host_weight_bytes_per_rank"
+        ]
         host_available = _cgroup_memory_available_bytes()
         if host_per_rank and host_available is not None:
             host_required = int(host_per_rank) * nproc_per_node
@@ -602,6 +658,7 @@ class BerniniRuntime:
             "cuda_free_bytes": gpu_free,
             "cuda_workspace_reserve_bytes": CUDA_WORKSPACE_RESERVE_BYTES,
             "nproc_per_node": nproc_per_node,
+            "expert_loading": "streamed" if streaming_experts else "resident",
         }
 
     def _require_resources(self, *, nproc_per_node: int) -> None:
@@ -627,7 +684,7 @@ class BerniniRuntime:
                     "A WorldFoundry Bernini request uses one Ulysses group; "
                     "ulysses_size must equal the torchrun world size."
                 )
-            from worldfoundry.core.distributed.torch_process_group import init as init_process_group
+            from worldfoundry.core.distributed.runtime.torch_process_group import init as init_process_group
 
             init_process_group()
             self.device = f"cuda:{torch.cuda.current_device() if torch.cuda.is_available() else local_rank}"
@@ -642,6 +699,12 @@ class BerniniRuntime:
         if self.variant.family == "renderer":
             # Public Bernini-R repos already contain transformer/transformer_2.
             load_options["load_ckpt_weights"] = False
+        if self.variant.model_id == "bernini-r-14b":
+            # The two 14B experts cannot coexist in this cgroup. Load the
+            # active expert directly onto CUDA and replace it at the scheduler
+            # boundary instead of materializing both in host memory.
+            load_options["lazy_expert_loading"] = True
+            load_options["expert_device"] = self.device
         self._pipeline = pipeline_cls.from_pretrained(
             str(self.checkpoint_path),
             device=self.device,
@@ -711,7 +774,7 @@ class BerniniRuntime:
             env.setdefault("NCCL_NET_PLUGIN", "none")
             env.setdefault("NCCL_DEBUG", "WARN")
             env.setdefault("TOKENIZERS_PARALLELISM", "false")
-            from worldfoundry.core.process import run_torchrun_module
+            from worldfoundry.core.execution.process import run_torchrun_module
 
             completed = run_torchrun_module(
                 "worldfoundry.synthesis.visual_generation.bernini.distributed_infer",
@@ -797,10 +860,12 @@ class BerniniRuntime:
                 from .inference.parallel import get_parallel_state
 
                 write_output = get_parallel_state().ulysses_rank == 0
-            if self.variant.family == "planner_renderer":
-                from .inference.system_prompts import get_system_prompt_for_task
+            # The official CLI selects a task-specific prefix for both the
+            # planner and renderer pipelines. Keep an explicit override intact.
+            from .inference.system_prompts import get_system_prompt_for_task
 
-                defaults.setdefault("system_prompt", get_system_prompt_for_task(task_type))
+            defaults.setdefault("system_prompt", get_system_prompt_for_task(task_type))
+            if self.variant.family == "planner_renderer":
                 pipeline(
                     task_type,
                     prompt,

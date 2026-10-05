@@ -3,14 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Collection, Mapping, Protocol, Sequence, runtime_checkable
 
+from worldfoundry.evaluation.api.json_contract import JsonContract, copy_mapping
 from worldfoundry.evaluation.api.world_model_manifest import (
-    WORLD_MODEL_MANIFEST_SCHEMA_VERSION,
     WorldModelManifest,
 )
-from worldfoundry.evaluation.api.json_contract import JsonContract, copy_mapping
 
 from .generation import GenerationRequest, GenerationResult
-
 
 WORLD_MODEL_CONFIG_SCHEMA_VERSION = "worldfoundry-world-model-config"
 

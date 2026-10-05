@@ -20,10 +20,10 @@ import ffmpeg
 import torch
 from einops import rearrange
 
-import worldfoundry.core.distributed.model_parallel_groups as mpu
+import worldfoundry.core.distributed.model_parallel.groups as mpu
 from inference.common.config import MagiConfig
 from inference.model.vae import AutoModel, DiagonalGaussianDistribution, VideoTokenizerABC
-from worldfoundry.core.distributed.logging import distributed_logger as magi_logger
+from worldfoundry.core.distributed.runtime.logging import distributed_logger as magi_logger
 
 
 ############################################
@@ -375,7 +375,12 @@ def decode_chunk(chunk, vae_ckpt, scale_factor, tile_sample_min_length, parallel
 
 
 def post_chunk_process(chunk: torch.Tensor, config: MagiConfig):
-    tile_sample_min_length = config.runtime_config.fps // 2
+    # A one-latent VAE tile is decoded as a still image. Keep decode tiles at
+    # least two latents long even for low output frame rates.
+    tile_sample_min_length = max(
+        config.runtime_config.fps // 2,
+        2 * config.runtime_config.temporal_downsample_factor,
+    )
     chunk = decode_chunk(
         chunk,
         config.runtime_config.vae_pretrained,

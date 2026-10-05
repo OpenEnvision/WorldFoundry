@@ -1,31 +1,32 @@
 """Vggt visual generation pipeline module."""
 
-from ..pipeline_utils import PipelineABC
+import json
 import os
-from typing import List, Optional, Union, Dict, Any
+from typing import Any, Dict, List, Optional, Union
 
-import numpy as np
 import cv2
+import numpy as np
 import torch
 from PIL import Image
-import json
 
-from worldfoundry.core.io import write_video
-from worldfoundry.core.io.artifacts import depths_to_pil_images
-
-from ...operators.vggt_operator import VGGTOperator
-from ...representations.point_clouds_generation.vggt.vggt_representation import (
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt.runtime import (
     VGGTRepresentation,
-    _opencv_world_to_opengl,
     _opencv_w2c_to_opengl_c2w,
+    _opencv_world_to_opengl,
 )
-from ...base_models.three_dimensions.point_clouds.gaussian_splatting.scene.dataset_readers import (
-    storePly,
-    fetchPly,
+from worldfoundry.core.io import artifact_root_path, write_video
+from worldfoundry.core.media.artifacts import depths_to_pil_images
+
+from ...base_models.three_dimensions.point_clouds.ply_io import (
+    write_point_cloud as storePly,
 )
-from ...base_models.three_dimensions.point_clouds.flash_world.render import (
-    gaussian_render,
-)
+from ...operators.vggt_operator import VGGTOperator
+from ..pipeline_utils import PipelineABC
+
+
+def _default_output_dir(name: str = "vggt_output") -> str:
+    """Resolve a stable default output directory instead of writing to the CWD."""
+    return str(artifact_root_path() / name)
 
 
 class VGGTResult:
@@ -53,14 +54,18 @@ class VGGTResult:
         return {
             'image': self.images[idx],
             'camera_params': self.camera_params[idx] if idx < len(self.camera_params) else None,
-            'numpy_data': {k: v[idx] if isinstance(v, np.ndarray) and v.ndim > len(self.images) else v 
-                          for k, v in self.numpy_data.items()}
+            'numpy_data': {
+                k: v[idx]
+                if isinstance(v, np.ndarray) and v.ndim > 0 and v.shape[0] == len(self.images)
+                else v
+                for k, v in self.numpy_data.items()
+            }
         }
     
     def save(self, output_dir: Optional[str] = None) -> List[str]:
         """Save VGGT results to files."""
         if output_dir is None:
-            output_dir = "./vggt_output"
+            output_dir = _default_output_dir()
         
         os.makedirs(output_dir, exist_ok=True)
         saved_files: List[str] = []
@@ -409,7 +414,7 @@ class VGGTPipeline(PipelineABC):
             raise RuntimeError("No valid points after confidence filtering.")
 
         if ply_path is None:
-            output_dir = "./vggt_output"
+            output_dir = _default_output_dir()
             os.makedirs(output_dir, exist_ok=True)
             ply_path = os.path.join(output_dir, "pointcloud.ply")
         else:
@@ -676,7 +681,7 @@ class VGGTPipeline(PipelineABC):
         image_path: Union[str, np.ndarray, List[str], List[np.ndarray]],
         interactions: Optional[Union[str, List[str]]] = None,
         frames_per_interaction: int = 10,
-        output_dir: str = "./vggt_output",
+        output_dir: Optional[str] = None,
         point_conf_threshold: float = 0.2,
         resolution: int = 518,
         preprocess_mode: str = "crop",
@@ -684,13 +689,13 @@ class VGGTPipeline(PipelineABC):
         camera_yaw: Optional[float] = None,
         camera_pitch: Optional[float] = None,
         camera_view: Optional[List[float]] = None,
-        camera_trajectory: Any = None,
         image_width: int = 704,
         image_height: int = 480,
         output_name: str = "vggt_3dgs_demo.mp4",
         fps: int = 12,
     ) -> str:
         """Run two stage 3dgs video for VGGTPipeline."""
+        output_dir = output_dir or _default_output_dir()
         os.makedirs(output_dir, exist_ok=True)
         recon_info = self.reconstruct_ply(
             input_=image_path,
@@ -748,12 +753,11 @@ class VGGTPipeline(PipelineABC):
         recon_info: Dict[str, Any],
         interactions: Optional[Union[str, List[str]]] = None,
         frames_per_interaction: int = 10,
-        output_dir: str = "./vggt_output",
+        output_dir: Optional[str] = None,
         camera_radius: Optional[float] = None,
         camera_yaw: Optional[float] = None,
         camera_pitch: Optional[float] = None,
         camera_view: Optional[List[float]] = None,
-        camera_trajectory: Any = None,
         image_width: int = 704,
         image_height: int = 480,
         output_name: str = "vggt_3dgs_demo.mp4",
@@ -762,6 +766,7 @@ class VGGTPipeline(PipelineABC):
         """
         Stage 2 only: render video from existing reconstruction info.
         """
+        output_dir = output_dir or _default_output_dir()
         os.makedirs(output_dir, exist_ok=True)
 
         ply_path = recon_info["ply_path"]
@@ -808,7 +813,7 @@ class VGGTPipeline(PipelineABC):
     def run_two_stage_3dgs_stream_cli(
         self,
         image_path: Union[str, np.ndarray, List[str], List[np.ndarray]],
-        output_dir: str = "./vggt_stream_output",
+        output_dir: Optional[str] = None,
         point_conf_threshold: float = 0.2,
         resolution: int = 518,
         preprocess_mode: str = "crop",
@@ -818,6 +823,7 @@ class VGGTPipeline(PipelineABC):
         output_name: str = "vggt_stream_demo.mp4",
     ) -> str:
         """Run two stage 3dgs stream cli for VGGTPipeline."""
+        output_dir = output_dir or _default_output_dir("vggt_stream_output")
         os.makedirs(output_dir, exist_ok=True)
         recon_info = self.reconstruct_ply(
             input_=image_path,
@@ -927,13 +933,17 @@ class VGGTPipeline(PipelineABC):
     ):
         """
         Stream interface. Input: image_path or images; interactions (for fallback process).
-        task_type: \"vggt_two_stage_3dgs_stream_cli\" -> output_video_path; else yield image tensors.
+        task_type: \"vggt_two_stage_3dgs_stream_cli\" -> yields the output video path
+        as a single element; else yields image tensors.
         """
         data = images if images is not None else image_path
         if data is None:
             raise ValueError("Provide image_path or images.")
         if task_type == "vggt_two_stage_3dgs_stream_cli":
-            return self.run_two_stage_3dgs_stream_cli(image_path=data, **kwargs)
+            # ``stream`` is a generator function, so a ``return <value>`` here would
+            # silently discard the path inside StopIteration. Yield it instead.
+            yield self.run_two_stage_3dgs_stream_cli(image_path=data, **kwargs)
+            return
 
         result = self.process(input_=data, interaction=interactions, **kwargs)
         for img in result.images:
@@ -942,7 +952,7 @@ class VGGTPipeline(PipelineABC):
     def run_official_scene_export(
         self,
         image_path: Union[str, List[str]],
-        output_dir: str = "./vggt_output",
+        output_dir: Optional[str] = None,
         preprocess_mode: str = "crop",
         conf_thres: float = 3.0,
         frame_filter: str = "All",
@@ -957,10 +967,13 @@ class VGGTPipeline(PipelineABC):
         if self.representation_model is None or self.representation_model.model is None:
             raise RuntimeError("Representation model not loaded. Use from_pretrained() first.")
 
+        output_dir = output_dir or _default_output_dir()
         if output_name is not None and not output_name.lower().endswith(".glb"):
             output_name = os.path.splitext(output_name)[0] + ".glb"
 
-        from .official_runtime import run_official_scene_export as _run_official_scene_export
+        from .official_runtime import (
+            run_official_scene_export as _run_official_scene_export,
+        )
 
         return _run_official_scene_export(
             input_source=image_path,

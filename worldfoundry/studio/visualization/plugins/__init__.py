@@ -1,5 +1,3 @@
-"""Studio visualization extension packages."""
+"""Rendering helpers used by model exports and the Studio CLI."""
 
-from __future__ import annotations
-
-__all__ = ["media", "perception", "robotics", "scene3d", "styles"]
+__all__ = ["perception", "scene3d", "styles"]

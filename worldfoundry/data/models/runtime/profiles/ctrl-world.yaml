@@ -11,6 +11,13 @@ source_repos:
 checkpoints:
 - repo_id: yjguo/Ctrl-World
   role: ctrl_world_checkpoint
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/yjguo--Ctrl-World/checkpoint-10000.pt
+- repo_id: stabilityai/stable-video-diffusion-img2vid
+  role: svd_base_model
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/stabilityai--stable-video-diffusion-img2vid
+- repo_id: openai/clip-vit-base-patch32
+  role: clip_text_model
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openai--clip-vit-base-patch32
 input_schema:
   prompt: true
   image: true
@@ -18,15 +25,20 @@ input_schema:
   actions:
   - world_action
   - robot_action
-artifact_kind: generated_world
+artifact_kind: generated_video
 artifact_filename: ctrl-world.mp4
 execution:
   backend_stage: in_tree_runtime_manifest
-  runtime_status: in_tree_runtime_manifest_checkpoint_env_pending
+  runtime_status: checkpoint_backed_gpu_inference_verified_real_views
   integration_status: runtime_ported
   pipeline_binding: ctrl-world
 integration:
   status: runtime_ported
 notes:
 - Ctrl-World source is vendored in-tree under synthesis/visual_generation/ctrl_world/ctrl_world_runtime.
-- The pipeline resolves a vendored rollout entrypoint; execution remains checkpoint and task-asset gated.
+- The compatibility launcher uses the official action-conditioned model and locally staged SVD/CLIP components.
+- Physical action conditioning requires the initial seven-value DROID Cartesian pose corresponding to the synchronized camera views; the official DROID action statistics are bundled in action_stats.json.
+- The default ALOHA high/left-wrist/right-wrist images are demonstration inputs, not checkpoint-matched DROID observations.
+- The old zero-history normalized action input remains available only as explicit synthetic-zero-smoke conditioning.
+- A local five-frame, 25-step synthetic-three-view run retained detail in all three panels; the four-step smoke default blurred the third panel severely.
+- End-to-end physical action-quality parity requires synchronized checkpoint-matched DROID observations and measured pose.

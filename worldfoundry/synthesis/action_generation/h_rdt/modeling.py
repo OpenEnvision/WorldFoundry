@@ -20,6 +20,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from worldfoundry.core.attention import native_sdpa_priority, scaled_dot_product_attention
+from worldfoundry.core.utils.python.misc_utils import env_is_true
 
 
 def _one_dimensional_embedding(embed_dim: int, positions: np.ndarray) -> np.ndarray:
@@ -116,10 +117,35 @@ def _attention_backends(requested: str | None, device: torch.device, *, has_mask
     return (normalized,)
 
 
+def _grouped_key_value(key, value, repeats, backends, mask=None, *, enabled=False):
+    if not enabled:
+        return _repeat_kv(key, repeats).transpose(1, 2), _repeat_kv(value, repeats).transpose(1, 2), False
+    # cuDNN-only/mixed cuDNN+efficient requests keep the expanded-head
+    # contract: these providers need not accept native GQA. Efficient alone
+    # has the core's grouped-view compatibility path.
+    legacy_provider = backends and backends != ("efficient",) and not {"flash", "math"}.intersection(backends)
+    # Per-example masks already require head expansion in that compatibility
+    # path, so retain the original preparation without an extra small V copy.
+    batch_mask = backends == ("efficient",) and mask is not None and mask.ndim > 2
+    if repeats > 1 and (legacy_provider or batch_mask):
+        return _repeat_kv(key, repeats).transpose(1, 2), _repeat_kv(value, repeats).transpose(1, 2), False
+    if repeats > 1:
+        # wkv interleaves K and V in the last dimension. Materialize only the
+        # small KV-head tensor so fused SDPA gets unit-stride feature channels.
+        value = value.contiguous()
+    return key.transpose(1, 2), value.transpose(1, 2), repeats > 1
+
+
 class Attention(nn.Module):
     """Official grouped-query self-attention using WorldFoundry core SDPA."""
 
-    def __init__(self, config: Mapping[str, Any], *, attention_backend: str = "auto") -> None:
+    def __init__(
+        self,
+        config: Mapping[str, Any],
+        *,
+        attention_backend: str = "auto",
+        enable_gqa_optimization: bool | None = None,
+    ) -> None:
         super().__init__()
         self.n_heads = int(config["num_heads"])
         configured_kv = config.get("num_kv_heads")
@@ -139,6 +165,12 @@ class Attention(nn.Module):
         self.norm_k = RMSNorm(self.head_size, eps=eps)
         self.attn_scale = 1.0 / math.sqrt(self.head_size)
         self.attention_backend = attention_backend
+        # Snapshot at construction; explicit False overrides a process opt-in.
+        self.enable_gqa_optimization = (
+            env_is_true("WORLDFOUNDRY_HRDT_GQA_OPTIMIZATION")
+            if enable_gqa_optimization is None
+            else enable_gqa_optimization
+        )
 
     def forward(self, values: torch.Tensor) -> torch.Tensor:
         batch, sequence, _ = values.shape
@@ -147,9 +179,11 @@ class Attention(nn.Module):
         key, value = key_value.unbind(-1)
         query = self.norm_q(query)
         key = self.norm_k(key)
-        key = _repeat_kv(key, self.n_rep).transpose(1, 2)
-        value = _repeat_kv(value, self.n_rep).transpose(1, 2)
         query = query.transpose(1, 2)
+        backends = _attention_backends(self.attention_backend, query.device, has_mask=False)
+        key, value, enable_gqa = _grouped_key_value(
+            key, value, self.n_rep, backends, enabled=self.enable_gqa_optimization
+        )
         output = scaled_dot_product_attention(
             query,
             key,
@@ -157,7 +191,8 @@ class Attention(nn.Module):
             dropout_p=0.0,
             is_causal=False,
             scale=self.attn_scale,
-            backends=_attention_backends(self.attention_backend, query.device, has_mask=False),
+            enable_gqa=enable_gqa,
+            backends=backends,
         )
         return self.wo(output.transpose(1, 2).contiguous().view(batch, sequence, -1))
 
@@ -165,7 +200,13 @@ class Attention(nn.Module):
 class CrossAttention(nn.Module):
     """Official grouped-query cross-attention using WorldFoundry core SDPA."""
 
-    def __init__(self, config: Mapping[str, Any], *, attention_backend: str = "auto") -> None:
+    def __init__(
+        self,
+        config: Mapping[str, Any],
+        *,
+        attention_backend: str = "auto",
+        enable_gqa_optimization: bool | None = None,
+    ) -> None:
         super().__init__()
         self.n_heads = int(config["num_heads"])
         configured_kv = config.get("num_kv_heads")
@@ -185,6 +226,11 @@ class CrossAttention(nn.Module):
         self.norm_k = RMSNorm(self.head_size, eps=eps)
         self.attn_scale = 1.0 / math.sqrt(self.head_size)
         self.attention_backend = attention_backend
+        self.enable_gqa_optimization = (
+            env_is_true("WORLDFOUNDRY_HRDT_GQA_OPTIMIZATION")
+            if enable_gqa_optimization is None
+            else enable_gqa_optimization
+        )
 
     def forward(
         self,
@@ -204,12 +250,19 @@ class CrossAttention(nn.Module):
         )
         key, value = key_value.unbind(-1)
         query = self.norm_q(query).transpose(1, 2)
-        key = _repeat_kv(self.norm_k(key), self.n_rep).transpose(1, 2)
-        value = _repeat_kv(value, self.n_rep).transpose(1, 2)
+        backends = _attention_backends(self.attention_backend, query.device, has_mask=mask is not None)
+        key = self.norm_k(key)
         attention_mask = None
         if mask is not None:
             attention_mask = mask.to(torch.bool).reshape(batch, 1, 1, condition_length)
             attention_mask = attention_mask.expand(-1, -1, sequence, -1)
+            if self.enable_gqa_optimization and batch == 1:
+                # A single example's padding mask is shared by all heads.
+                # Keep that contract visible to the core grouped-view path.
+                attention_mask = attention_mask[0, 0]
+        key, value, enable_gqa = _grouped_key_value(
+            key, value, self.n_rep, backends, attention_mask, enabled=self.enable_gqa_optimization
+        )
         output = scaled_dot_product_attention(
             query,
             key,
@@ -218,7 +271,8 @@ class CrossAttention(nn.Module):
             dropout_p=0.0,
             is_causal=False,
             scale=self.attn_scale,
-            backends=_attention_backends(self.attention_backend, query.device, has_mask=mask is not None),
+            enable_gqa=enable_gqa,
+            backends=backends,
         )
         return self.wo(output.transpose(1, 2).contiguous().view(batch, sequence, -1))
 
@@ -249,9 +303,7 @@ class TimestepEmbedder(nn.Module):
     def forward(self, timesteps: torch.Tensor) -> torch.Tensor:
         half = self.frequency_embedding_size // 2
         frequencies = torch.exp(
-            -math.log(10000)
-            * torch.arange(half, dtype=torch.float32, device=timesteps.device)
-            / half
+            -math.log(10000) * torch.arange(half, dtype=torch.float32, device=timesteps.device) / half
         )
         values = timesteps[:, None].float() * frequencies[None]
         embedding = torch.cat([torch.cos(values), torch.sin(values)], dim=-1)
@@ -338,9 +390,7 @@ class HRDTBlock(nn.Module):
             scale_mlp,
             gate_mlp,
         ) = self.adaLN_modulation(timestep).chunk(9, dim=1)
-        hidden = values + gate_attn.unsqueeze(1) * self.attn(
-            _modulate(self.attn_norm(values), shift_attn, scale_attn)
-        )
+        hidden = values + gate_attn.unsqueeze(1) * self.attn(_modulate(self.attn_norm(values), shift_attn, scale_attn))
         image = contexts.get("img_c")
         if image is not None:
             hidden = hidden + gate_cross.unsqueeze(1) * self.img_cross_attn(
@@ -354,9 +404,7 @@ class HRDTBlock(nn.Module):
                 self.lang_cond_norm(language),
                 contexts.get("lang_attn_mask"),
             )
-        return hidden + gate_mlp.unsqueeze(1) * self.ffn(
-            _modulate(self.ffn_norm(hidden), shift_mlp, scale_mlp)
-        )
+        return hidden + gate_mlp.unsqueeze(1) * self.ffn(_modulate(self.ffn_norm(hidden), shift_mlp, scale_mlp))
 
 
 class _OutputMLP(nn.Module):
@@ -428,19 +476,13 @@ class HRDT(nn.Module):
         self.img_pos_emb = nn.Parameter(torch.zeros(1, int(max_img_len), hidden_size))
         if self.x_pos_emb.device.type != "meta":
             self.x_pos_emb.data.copy_(
-                torch.from_numpy(multimodal_position_embedding(hidden_size, act_pos_emb_config))
-                .float()
-                .unsqueeze(0)
+                torch.from_numpy(multimodal_position_embedding(hidden_size, act_pos_emb_config)).float().unsqueeze(0)
             )
             self.lang_pos_emb.data.copy_(
-                torch.from_numpy(multimodal_position_embedding(hidden_size, lang_pos_emb_config))
-                .float()
-                .unsqueeze(0)
+                torch.from_numpy(multimodal_position_embedding(hidden_size, lang_pos_emb_config)).float().unsqueeze(0)
             )
             self.img_pos_emb.data.copy_(
-                torch.from_numpy(multimodal_position_embedding(hidden_size, img_pos_emb_config))
-                .float()
-                .unsqueeze(0)
+                torch.from_numpy(multimodal_position_embedding(hidden_size, img_pos_emb_config)).float().unsqueeze(0)
             )
 
     def forward(
@@ -568,9 +610,7 @@ class HRDTRunner(nn.Module):
         if state_tokens.shape[-1] != self.state_dim:
             raise ValueError(f"H-RDT expects {self.state_dim} state values, got {state_tokens.shape[-1]}")
         if image_tokens.ndim != 3 or image_tokens.shape[-1] != self.image_feature_dim:
-            raise ValueError(
-                f"H-RDT image_tokens must have shape [batch, tokens, {self.image_feature_dim}]"
-            )
+            raise ValueError(f"H-RDT image_tokens must have shape [batch, tokens, {self.image_feature_dim}]")
         if lang_tokens is not None and lang_tokens.shape[-1] != self.language_feature_dim:
             raise ValueError(
                 f"H-RDT language tokens must end in {self.language_feature_dim}, got {lang_tokens.shape[-1]}"

@@ -1,5 +1,5 @@
 import torch
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.model import WanModel
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import WanModel
 
 
 class GeneralLoRAFromPeft:

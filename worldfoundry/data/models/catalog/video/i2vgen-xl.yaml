@@ -25,6 +25,9 @@ checkpoint:
     tasks:
     - image-to-video
     - text-to-video
+official_sources:
+  project_page: https://i2vgen-xl.github.io/
+  paper: https://arxiv.org/abs/2311.04145
 integration:
   status: integrated
   notes:
@@ -45,3 +48,23 @@ catalog_policy:
     id, sha, private, gated, license, and selected task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit
     parity run and expected artifact are recorded.
+docs:
+  publisher: Alibaba (Tongyi Lab)
+  publisher_kind: company
+  publisher_zh: 阿里巴巴（通义实验室）
+  overview: I2VGen-XL is Alibaba ali-vilab's cascaded image-to-video model, one of the earlier high-resolution open I2V releases. It turns a still image (with optional text) into a short video through a two-stage generate-then-refine cascade. The WorldFoundry route is complete and reports missing checkpoint assets at runtime.
+  overview_zh: I2VGen-XL 是阿里 ali-vilab 的级联式图生视频模型，属较早的高分辨率开源 I2V 发布。它通过「先生成、再细化」的两级级联，把静态图（可附文本）变成短视频。WorldFoundry 路径已完备，checkpoint 缺失时会在运行时报告。
+  architecture: Per the upstream publication, I2VGen-XL uses a base stage for semantic coherence and a refinement stage for detail/resolution, both latent diffusion models. This repository records the prompt+image contract and environment/checkpoint assumptions in the runtime profile; run readiness is kept in release run manifests, not here.
+  architecture_zh: 按上游论文，I2VGen-XL 由保证语义连贯的基础级与提升细节/分辨率的细化级组成，均为潜空间扩散模型。本仓库在 runtime profile 中记录 prompt+image 契约与环境/checkpoint 假设；运行就绪状态保存在发布 run manifest 中，不在此处。
+  usage_notes: Integration is complete; no runner parity record exists yet in this manifest. Both the official GitHub and ali-vilab HF repos are confirmed reachable. Treat it as a legacy-quality baseline next to newer DiT-based I2V models in this catalog.
+  usage_notes_zh: 集成已完成；本 manifest 中还没有 runner parity 记录。官方 GitHub 与 ali-vilab 的 HF 仓库均确认可达。相对 catalog 中较新的 DiT 系 I2V 模型，它更适合作为老一代质量基线。
+  limitations:
+  - No runner-parity evidence is recorded — treat end-to-end GPU validation as not yet done.
+  - As an older cascade, fidelity trails current DiT-based I2V models.
+  limitations_zh:
+  - 没有 runner parity 证据记录——应视为尚未完成端到端 GPU 验证。
+  - 作为较早的级联方案，保真度落后于当前 DiT 系图生视频模型。
+  recommended_benchmarks:
+  - id: aigcbench
+    reason: I2V-focused benchmark suite.
+    reason_zh: 面向图生视频的评测集。

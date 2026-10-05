@@ -6,6 +6,8 @@ export type CatalogEntry = {
   status?: string | null;
   /** Variant / catalog ids collapsed into this display row. */
   aliases?: string[];
+  /** Human-readable version labels for a grouped model family. */
+  versions?: string[];
 };
 
 export type CatalogFamily = {
@@ -31,7 +33,7 @@ export type CatalogCoverageData = {
   benchmarkGroups: CatalogBenchmarkGroup[];
 };
 
-export const catalogCoverage = catalogCoverageData as CatalogCoverageData;
+export const catalogCoverage: CatalogCoverageData = catalogCoverageData as CatalogCoverageData;
 
 /** Benchmark Hub pages currently missing from docs (catalog still lists them). */
 export const benchmarkHubMissingIds = new Set(['worldreasonbench', 'wrbench']);

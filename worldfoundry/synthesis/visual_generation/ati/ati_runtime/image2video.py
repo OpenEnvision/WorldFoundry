@@ -18,29 +18,30 @@ import torch.distributed as dist
 import torchvision.transforms.functional as TF
 from tqdm import tqdm
 
-from worldfoundry.base_models.diffusion_model.video.wan.official_wan2_1_runtime.wan.distributed.fsdp import (
+from worldfoundry.core.distributed.sharding.block_fsdp import (
     shard_model,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.official_wan2_1_runtime.wan.modules.clip import (
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.clip import (
     CLIPModel,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.official_wan2_1_runtime.wan.modules.model import (
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import (
     WanModel,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.official_wan2_1_runtime.wan.modules.t5 import (
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import (
     T5EncoderModel,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.official_wan2_1_runtime.wan.modules.vae import (
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import (
     WanVAE,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.official_wan2_1_runtime.wan.utils.fm_solvers import (
+from worldfoundry.base_models.diffusion_model.schedulers.flow_dpm import (
     FlowDPMSolverMultistepScheduler,
     get_sampling_sigmas,
     retrieve_timesteps,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.official_wan2_1_runtime.wan.utils.fm_solvers_unipc import (
+from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import (
     FlowUniPCMultistepScheduler,
 )
+from worldfoundry.base_models.diffusion_model.loaders.wan_variant import load_wan_transformer
 
 from .motion_patch import patch_motion
 
@@ -114,7 +115,11 @@ class WanATI:
             tokenizer_path=os.path.join(checkpoint_dir, config.clip_tokenizer))
 
         logging.info(f"Creating WanModel from {checkpoint_dir}")
-        self.model = WanModel.from_pretrained(checkpoint_dir)
+        self.model = load_wan_transformer(
+            WanModel,
+            checkpoint_dir,
+            torch_dtype=self.param_dtype,
+        )
         self.model.eval().requires_grad_(False)
 
         if t5_fsdp or dit_fsdp or use_usp:
@@ -123,7 +128,7 @@ class WanATI:
         if use_usp:
             from xfuser.core.distributed import get_sequence_parallel_world_size
 
-            from worldfoundry.core.attention.video_xdit_context_parallel import (
+            from worldfoundry.core.attention.parallel.video_xdit_context_parallel import (
                 usp_attn_forward,
                 usp_dit_forward,
             )

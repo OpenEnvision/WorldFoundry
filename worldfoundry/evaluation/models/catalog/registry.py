@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Iterable
 
-from ...utils import REPO_ROOT  # noqa: F401 - ensures repo root is importable
 from ...api.registry import lookup_key
 from ..pipelines.bindings import resolve_pipeline_route
 from .schema import ModelZooEntry
@@ -141,7 +140,12 @@ def _catalog_definitions() -> tuple[ModelDefinition, ...]:
 
 @lru_cache(maxsize=1)
 def discover_model_registry() -> ModelRegistry:
-    """Discover, construct, and return the cached global ModelRegistry."""
+    """Discover, construct, and return the cached global ModelRegistry.
+
+    ``ModelRegistry`` has no public ``register`` path.  Call
+    :func:`clear_model_registry_cache` after catalog edits in a long-lived
+    process.
+    """
     definitions_by_id: dict[str, ModelDefinition] = {}
     for definition in _catalog_definitions():
         existing = definitions_by_id.get(definition.model_type)
@@ -150,8 +154,14 @@ def discover_model_registry() -> ModelRegistry:
     return ModelRegistry(definitions_by_id.values())
 
 
+def clear_model_registry_cache() -> None:
+    """Clear the cached :func:`discover_model_registry` instance."""
+    discover_model_registry.cache_clear()
+
+
 __all__ = [
     "ModelDefinition",
     "ModelRegistry",
+    "clear_model_registry_cache",
     "discover_model_registry",
 ]

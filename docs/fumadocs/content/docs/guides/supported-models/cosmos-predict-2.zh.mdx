@@ -1,0 +1,32 @@
+---
+title: "Cosmos Predict 2"
+description: "上一代 NVIDIA video2world 世界基础模型：T5 + Rectified Flow AB2，原生 2B/14B 配方，NVIDIA 许可 gated。结构已校验；GPU 一致性仍为 pending。"
+modelId: "cosmos-predict-2"
+pageSource: authored
+---
+
+Cosmos Predict 2 是英伟达**上一代**世界基础模型，做 **image/video-to-world**：文本加上首帧或视频前缀进，未来世界视频出。本卡片**不是** [Predict 2.5](/zh/docs/guides/supported-models/cosmos-predict-2.5)，**不是** [Transfer 2.5](/zh/docs/guides/supported-models/cosmos-transfer-2.5)，也**不是** [Cosmos 3](/zh/docs/guides/supported-models/cosmos3)。
+
+WorldFoundry **原生组装**：框架自有去噪器、**T5-11B** 条件器、Rectified Flow **AB2** 调度器、Wan 编解码器、共享加载器。**不走 Diffusers pipeline**，也不调用英伟达运行时包。配方默认是 **1280×704、93 帧、16 fps、35 步**。variant 只有 `cosmos-predict2-2b-video2world` 与 `cosmos-predict2-14b-video2world`。别名 `cosmos-predict2`、`cosmos2` 解析到这里。
+
+<ModelPaperFigures modelId="cosmos-predict-2" locale="zh" />
+
+官方 Predict 2 项目页是 [research.nvidia.com/labs/dir/cosmos-predict2](https://research.nvidia.com/labs/dir/cosmos-predict2/)。catalog 论文链接是 2025 年的 [Cosmos World Foundation Model Platform](https://arxiv.org/abs/2501.03575)（Predict1 时代的平台文）。那是谱系，不是 Predict 2.5 论文。
+
+本仓库实际核对过的：原生 **2B** 架构 **567** 个 checkpoint 张量（无合成交叉注意力投影）、**14B** **727** 个张量，以及注册表、条件掩码与 AB2 数值。**GPU 输出一致性仍为 pending**——官方 Video2World 权重 **gated**（`nvidia-open-model-license`），当时用于检查的已认证缓存里没有这套权重。
+
+<ModelCommandBuilder modelId="cosmos-predict-2" locale="zh" />
+
+## 用来做什么
+
+只有需要 **T5 条件的 v2** 配方时才停在本页。新的世界视频工作应从 [Predict 2.5](/zh/docs/guides/supported-models/cosmos-predict-2.5) 开始：Reason1 条件器、flow-UniPC，以及已验证的 **2B 文生世界** 路径（同样是 1280×704 / 93 帧 / 35 步）。
+
+启动 `worldfoundry-eval run cosmos-predict2-2b-video2world`，任务 profile 为 `image/video-to-world`。必填输入：`prompt`、`image`、`video`。产物：`cosmos-predict2-2b-video2world.mp4`（14B 写 `cosmos-predict2-14b-video2world.mp4`）。这里**没有** control-video / VACE 分支——那是 Transfer 2.5。也**没有**联合声音或 policy 头——那是 Cosmos 3。
+
+预测世界视频的评测入口是 [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench) 与 [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq)。那是 catalog 入口，不是已摄入的 WorldFoundry 分数。
+
+## 在 WorldFoundry 中运行
+
+`CosmosPredict2Pipeline` 跑在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。按 NVIDIA gated 条款就位 `nvidia/Cosmos-Predict2-2B-Video2World` 或 14B 对应仓库，外加 `google-t5/t5-11b`。Predict 2 与 Predict 2.5 在树内共享同一按 checkpoint 形状实现的 transformer；版本差异的架构与采样值放在配方里。
+
+<ModelRelatedRecipes modelId="cosmos-predict-2" locale="zh" />

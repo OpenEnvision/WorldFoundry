@@ -1,6 +1,6 @@
 schema_version: 2
 model_id: depth-anything-v3-prior
-display_name: Depth Anything 3 Prior
+display_name: Depth Anything 3
 task_family: three_dimension
 groups:
 - 3d

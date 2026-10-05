@@ -1,8 +1,25 @@
-artifact_filename: shotstream_runtime_plan.json
-artifact_kind: generated_video
-backend_stage: worldfoundry_runtime_plan
+schema_version: 2
+model_id: shotstream
 display_name: ShotStream
-id: shotstream
+task_family: video_generation
+groups:
+- world
+- streaming
+source_repos:
+- url: https://github.com/KlingAIResearch/ShotStream
+  revision: 917a0478fe47d71ddcf3269d052cbe3be2ae10e8
+  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/ShotStream
+  role: official_inference_checkout
+  required_paths:
+  - Inference_Causal.py
+  - pipeline/causal_inference_ar.py
+checkpoints:
+- repo_id: KlingTeam/ShotStream
+  role: causal_shotstream_checkpoint
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/KlingTeam--ShotStream
+- repo_id: Wan-AI/Wan2.1-T2V-1.3B
+  role: wan_base_model
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Wan-AI--Wan2.1-T2V-1.3B
 input_schema:
   actions:
   - stream_control
@@ -10,18 +27,17 @@ input_schema:
   image: true
   prompt: true
   video: true
-integration_status: runtime_ported
-notes:
-- ShotStream official inference route is registered; checkpoint/streaming assets are
-  runtime-gated.
-- Missing checkpoints/assets are reported by the runtime plan and are not catalog
-  blockers.
-- WorldFoundry tracks upstream source and checkpoint metadata only; no runnable pipeline
-  is registered.
-- Official source is bound from ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/ShotStream at 7ddcfaef6cf303966351c4640269897181bb009d.
-runtime_status: route_ready_assets_pending
-task_family: video_generation
+artifact_kind: generated_video
+artifact_filename: shotstream.mp4
 execution:
   pipeline_binding: shotstream
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending
+  backend_stage: in_tree_runtime_manifest
+  runtime_status: official_runtime_checkpoint_bound
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
+notes:
+- WorldFoundry launches the user-staged official source through a narrow compatibility wrapper; upstream source is not vendored.
+- The wrapper creates a per-run symlink workspace for the ShotStream and Wan2.1 checkpoints, converts a plain prompt into the official one-shot CSV/JSON fixture, and preserves the official 4-step causal generator.
+- FlashAttention 3 signature drift and torchvision/PyAV encoding drift are handled without modifying the official checkout.
+- A full multi-shot official CSV can be supplied with data_path/input_csv.

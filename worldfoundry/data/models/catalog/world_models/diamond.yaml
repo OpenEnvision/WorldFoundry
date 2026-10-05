@@ -2,7 +2,6 @@ id: diamond
 name: DIAMOND
 aliases:
 - diamond-atari
-- diamond-csgo
 tasks:
 - diffusion-world-model
 - reinforcement-learning-world-model
@@ -15,6 +14,7 @@ source:
   official_repo_url: https://github.com/eloialonso/diamond
   license: mit
 official_sources:
+  paper: https://arxiv.org/abs/2405.12399
   project_page: https://diamond-wm.github.io/
   github:
     url: https://github.com/eloialonso/diamond
@@ -23,28 +23,70 @@ variants:
   task: atari-world-model
   provider: official_repo
   integration:
-    status: planned
+    status: integrated
+  pipeline_binding: diamond
 - id: diamond-csgo
   task: game-world-model
   provider: official_repo
   integration:
-    status: planned
+    status: integrated
+  pipeline_binding: diamond-csgo
 integration:
   status: integrated
   notes:
-  - WorldFoundry vendors the official DIAMOND play/inference stack directly under synthesis/visual_generation/world_model/diamond.
-  - Runtime configs are packaged under worldfoundry/data/models/runtime/configs/diamond/config.
-  - Lightweight game/RL world-model candidate; upstream runtime downloads Atari assets on demand.
-  - Jobs can run with a local checkpoint or pretrained=true plus a non-interactive pretrained_game value.
+  - Atari and CS:GO use shared DIAMOND UNet blocks, output quantization and EDM solver;
+    CS:GO adds history-noise conditioning and the released spatial upsampler.
+  - 'Atari: local pretrained game checkpoint and real emulator initialization. CS:GO:
+    local csgo checkpoint/config/spawn and named actions or a T-by-51 action file.
+    No runtime downloads or training.'
 runner_parity:
-  status: pending
+  status: verified
   notes:
-  - The pipeline resolves the in-tree official play.py entrypoint and constructs the same pretrained/checkpoint command route used by the official repo.
-  - Full generation parity requires staged Atari assets/checkpoints; per-run
-    validation evidence is tracked outside the model catalog.
+  - CS:GO higher_quality forward/backward24-step rollouts match upstream low/high-resolution
+    outputs bitwise on H100; this is a short spawn0 test, not long-horizon physics
+    validation.
+  - All26 Atari checkpoints completed public GPU rollouts;52 Euler/Heun sampler regressions
+    match pre-change code bitwise. Only Pong opposite-action semantics received a
+    controlled check.
 runtime_profile: runtime-profile:diamond
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: diamond
 catalog_category: world_models
-catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes; blocked
-  entries retain upstream provenance without runnable backends.
+catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry
+  runtimes; blocked entries retain upstream provenance without runnable backends.
+docs:
+  publisher: University of Geneva / University of Edinburgh / Microsoft Research
+  publisher_kind: university
+  publisher_zh: 日内瓦大学 / 爱丁堡大学 / 微软研究院
+  overview: DIAMOND (DIffusion As a Model Of eNvironment Dreams) trains reinforcement-learning
+    agents entirely inside a diffusion world model — its Atari agents and playable
+    CS:GO world model made diffusion world models famous (NeurIPS 2024). In this catalog
+    the official play/inference stack is vendored in-tree with diamond-atari and diamond-csgo
+    variants.
+  overview_zh: DIAMOND（DIffusion As a Model Of eNvironment Dreams）让强化学习智能体完全在扩散世界模型内训练——其
+    Atari 智能体与可游玩的 CS:GO 世界模型让扩散世界模型声名大噪（NeurIPS 2024）。本 catalog 中官方 play/推理栈已内置树内，含
+    diamond-atari 与 diamond-csgo 两个 variant。
+  architecture: Per the publication, frame prediction uses an EDM-style diffusion
+    model over recent frames and actions, keeping visual detail that latent world
+    models lose. Runtime configs are packaged under data/models/runtime/configs/diamond/config;
+    the MIT-licensed upstream downloads Atari assets on demand (disabled here — runtime
+    network downloads are off).
+  architecture_zh: 按论文，帧预测使用基于近期帧与动作的 EDM 式扩散模型，保留了潜空间世界模型会丢失的视觉细节。运行时配置打包于 data/models/runtime/configs/diamond/config；MIT
+    许可的上游按需下载 Atari 资产（此处已禁用——运行时网络下载关闭）。
+  usage_notes: Use DIAMONDPipeline(pretrained=True, pretrained_game=...) for Atari
+    or DIAMONDCsgoPipeline for CS:GO; then execute=True and headless_steps. Inputs
+    come from real Atari initialization or the released CS:GO spawn. Prompt/image/video
+    are not required.
+  usage_notes_zh: Atari 使用 DIAMONDPipeline(pretrained=True, pretrained_game=...)；CS:GO
+    使用 DIAMONDCsgoPipeline。调用时设置 execute=True 与 headless_steps。输入来自真实 Atari 初始化或官方
+    CS:GO spawn，无需 prompt/image/video。
+  limitations:
+  - Game-specific world models, not general text-to-video.
+  - Validation covers short rollouts. Long-horizon physics, reward accuracy and general
+    game success remain unverified.
+  - CS:GO requires local checkpoint/config/spawn assets; runtime network downloads
+    are disabled.
+  limitations_zh:
+  - 游戏专用世界模型。
+  - 仅验证短程推理；长程物理、奖励准确率和通关效果尚未验证。
+  - CS:GO 需要本地 checkpoint/config/spawn，推理时禁用网络下载。

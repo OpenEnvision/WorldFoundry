@@ -3,7 +3,7 @@ runtime: hunyuan_worldplay
 description: Public Hunyuan WorldPlay pipeline defaults; source code should only contain inference logic.
 defaults:
   model_path: ${WORLDFOUNDRY_CKPT_DIR}/HY-WorldPlay
-  video_model_path: ${WORLDFOUNDRY_CKPT_DIR}/HunyuanVideo-1.5
+  video_model_path: ${WORLDFOUNDRY_CKPT_DIR}/tencent--HunyuanVideo-1.5
   mode: 480p_i2v
   device: cuda
   create_sr_pipeline: false

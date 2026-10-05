@@ -16,10 +16,10 @@ from einops import rearrange
 from tqdm import tqdm
 
 from .configuration import VA_CONFIGS
-from worldfoundry.core.device import resolve_inference_dtype
+from worldfoundry.core.execution.device import resolve_inference_dtype
 from worldfoundry.core.io.paths import resolve_worldfoundry_path
-from worldfoundry.core.distributed.fsdp2_sharding import shard_model
-from worldfoundry.core.distributed.runtime_setup import _configure_model, init_distributed
+from worldfoundry.core.distributed.sharding.fsdp2_sharding import shard_model
+from worldfoundry.core.distributed.runtime.runtime_setup import _configure_model, init_distributed
 from .loading import (
     WanVAEStreamingWrapper,
     load_text_encoder,

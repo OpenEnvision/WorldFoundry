@@ -20,7 +20,7 @@ notes:
 - 'The metadata records DreamDojo''s 384-dimensional unified action contract: GR-1 [0,58), G1 [58,101), YAM [101,147), AgiBot
   [147,169), MANO [220,352), latent actions [352,384).'
 - WorldFoundry vendors the DreamDojo action-conditioned Cosmos Predict runtime, Groot Dreams dataloader, cosmos_oss helpers,
-  and LAM modules under worldfoundry/synthesis/visual_generation/dreamdojo/dreamdojo_runtime.
+  and LAM modules under worldfoundry/synthesis/action_generation/dreamdojo/dreamdojo_runtime.
 - nvidia/DreamDojo checkpoints are staged at ${WORLDFOUNDRY_HFD_ROOT}/nvidia--DreamDojo, including the 2B_GR1_post-train iter_000050000
   directory. Full parity still requires converted model_ema_bf16.pt, the GR-1 evaluation dataset, and a CUDA 12.8-class host.
 runtime_status: in_tree_dreamdojo_runtime_ported_dataset_and_gpu_parity_pending

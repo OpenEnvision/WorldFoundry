@@ -1,0 +1,52 @@
+---
+title: "HY-World 2.0"
+description: "HY-World 2.0 from Tencent (Hunyuan); Planned."
+modelId: "hy-world-2.0"
+pageSource: authored
+---
+
+HY-World 2.0 is Tencent's second-generation world stack, recorded here as components: HY-Pano 2.0 panorama generation (supported in-tree), WorldMirror 2.0 reconstruction (verified through the Workspace infer path), and full text/image-to-3D-world generation (open upstream, migration pending in WorldFoundry). The verified reconstruction path exports depth, normals, point cloud, Gaussian splat, cameras, COLMAP files, and RRD scene metadata.
+
+<ModelPaperFigures modelId="hy-world-2.0" locale="en" />
+
+The recorded paper is [arXiv 2604.14268](https://arxiv.org/abs/2604.14268).
+
+Project page: [3d-models.hunyuan.tencent.com/world](https://3d-models.hunyuan.tencent.com/world/). Code: [Tencent-Hunyuan/HY-World-2.0](https://github.com/Tencent-Hunyuan/HY-World-2.0).
+
+<ModelCommandBuilder modelId="hy-world-2.0" locale="en" />
+
+## What it is for
+
+Pick `hy-world-2.0` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+
+The upstream five-stage world generation chains WorldNav trajectory generation, trajectory rendering, video generation, GS data preparation, and 3DGS composition (traj_generate.py through world_gs_trainer.py) plus a VLM endpoint. WorldFoundry wraps HY-Pano 2.0 and WorldMirror 2.0 in-tree; the remaining stages are not yet migrated. It is published by Tencent (Hunyuan).
+
+Catalog tasks include default. Catalog aliases include `hyworld2.0`, `hyworld-2.0`, `hy-world2.0`, and `hy-world-2p0` among others.
+
+Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Standard scoring for generated explorable worlds).
+
+## Runtime contract
+
+Optional `input_path`, `task`, `confidence_percentile`, `edge_normal_threshold`, and `edge_depth_threshold`; artifacts `hy-world-2.0.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `HYWorld2Pipeline`.
+
+Family status: **Planned**.
+
+Use the verified WorldMirror 2.0 reconstruction path today; treat full world generation as upstream-only until the five-stage runtime is migrated and verified. The trajectory-render stage is separately cataloged as hyworld-worldgen.
+
+WorldFoundry wraps HY-Pano 2.0 panorama generation and WorldMirror 2.0 reconstruction in-tree.
+
+Official HY-World 2.0 now ships full World Generation inference code; WorldFoundry still needs to migrate WorldNav, WorldStereo 2.0, and World Composition before exposing a full text/image-to-3D-world Studio path.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run hy-world-2.0 --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `tencent/HY-World-2.0`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh hy-world-2.0`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Planned**.
+
+<ModelRelatedRecipes modelId="hy-world-2.0" locale="en" />

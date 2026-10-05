@@ -13,6 +13,7 @@ source:
   hf_repo_id: nvidia/PointWorld_models
   license: apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2601.03782
   github:
     url: https://github.com/NVlabs/PointWorld
     head_sha: 05484826dfef74cbe278a3974179a5a16705d35d
@@ -36,3 +37,23 @@ catalog_scope: World-model catalog entries. Integrated entries expose in-tree Wo
   runtimes; blocked entries retain upstream provenance without runnable backends.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: pointworld
+docs:
+  publisher: NVIDIA
+  publisher_kind: company
+  publisher_zh: 英伟达（NVIDIA）
+  overview: 'PointWorld is NVIDIA''s point-cloud world model for robotics: instead of predicting pixels it predicts future 3D point-cloud states under actions, giving geometry-native world modeling. In this catalog the official source route is registered at a pinned commit; checkpoint and point-cloud assets stay runtime-gated.'
+  overview_zh: PointWorld 是英伟达面向机器人的点云世界模型：不预测像素，而是在动作条件下预测未来 3D 点云状态，实现几何原生的世界建模。本 catalog 中官方源码路径以固定 commit 注册；checkpoint 与点云资产保持运行时限制。
+  architecture: Architecture internals beyond the recorded tasks are not stored in this repository (apache-2.0; checkpoints at nvidia/PointWorld_models). The recorded artifact type is generated_3d_asset.
+  architecture_zh: 除已记录任务外的架构内部细节仓库未存（apache-2.0；checkpoint 位于 nvidia/PointWorld_models）。记录的产物类型为 generated_3d_asset。
+  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. Inputs include point clouds alongside the usual prompt/image/video/actions.
+  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。输入除常规的提示词/图像/视频/动作外还包括点云。
+  limitations:
+  - Real generation is checkpoint/point-cloud-asset gated.
+  - Point-cloud outputs need downstream rendering for visual inspection.
+  limitations_zh:
+  - 真实生成受 checkpoint/点云资产限制。
+  - 点云输出需要下游渲染才能可视化检查。
+  recommended_benchmarks:
+  - id: ewmbench
+    reason: Embodied world-model prediction quality.
+    reason_zh: 具身世界模型预测质量。

@@ -1,0 +1,54 @@
+---
+title: "FlashWorld"
+description: "FlashWorld from Xiamen University / Tencent: fast 3D scene generation from image or text; Verified."
+modelId: "flashworld"
+pageSource: authored
+---
+
+FlashWorld generates 3D scenes in seconds: from one image (plus optional prompt) it produces a camera-navigable 3D scene rather than a flat clip. In this catalog the in-tree pipeline, operator, and representation runtime are exposed and runner status is Verified for the image-conditioned camera-scene demo with local FlashWorld/Wan assets.
+
+<ModelPaperFigures modelId="flashworld" locale="en" />
+
+The recorded paper is [FlashWorld: High-quality 3D Scene Generation within Seconds](https://arxiv.org/abs/2510.13678) (2025).
+
+Project page: [imlixinyang.github.io/FlashWorld-Project-Page](https://imlixinyang.github.io/FlashWorld-Project-Page/). Code: [imlixinyang/FlashWorld](https://github.com/imlixinyang/FlashWorld).
+
+Paper: [FlashWorld: High-quality 3D Scene Generation within Seconds](https://arxiv.org/abs/2510.13678) (arXiv 2510.13678). Project: [imlixinyang.github.io/FlashWorld-Project-Page](https://imlixinyang.github.io/FlashWorld-Project-Page/). Code: [imlixinyang/FlashWorld](https://github.com/imlixinyang/FlashWorld) (**Apache-2.0**). Weights: `imlixinyang/FlashWorld` — Hugging Face model metadata is **CC-BY-NC-SA-4.0**, so honor the artifact-specific license. Institutions: Xiamen University / Tencent.
+
+The stack distills a Wan-based video generator into a fast Gaussian-style scene generator. Runtime needs FlashWorld, **Wan2.2** (`Wan-AI/Wan2.2-TI2V-5B-Diffusers`), diffusers / transformers, and CUDA assets.
+
+<ModelCommandBuilder modelId="flashworld" locale="en" />
+
+## What it is for
+
+`flashworld` is the recorded reconstruction line. Start here to emit geometry from the documented views.
+
+FlashWorld distills a Wan-based video generator into a fast 3D-scene generator with Gaussian-style scene representations (per arXiv 2510.13678). Execution requires FlashWorld, Wan2.2, diffusers/transformers, and CUDA assets; no empty runner shim is registered. It is published by Xiamen University / Tencent.
+
+Catalog tasks include fast 3D scene generation from image or text.
+
+Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Standard scoring for navigable generated scenes).
+
+## Runtime contract
+
+Optional `input_path`, `prompt`, `interactions`, `num_frames`, and `fps`; artifacts `generated_3d_asset`, `generated_video`, and `flashworld.ply`.
+
+CLI task profiles: `official-camera-scene`. WorldFoundry binds `FlashWorldPipeline`.
+
+Family status: **Verified**.
+
+Recorded `official-camera-scene` defaults: num_frames=16, fps=15.
+
+Execution remains checkpoint/GPU/dependency gated — stage all recorded assets first.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run flashworld --pipeline.task-profile official-camera-scene` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `imlixinyang/FlashWorld` and `Wan-AI/Wan2.2-TI2V-5B-Diffusers`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh flashworld`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="flashworld" locale="en" />

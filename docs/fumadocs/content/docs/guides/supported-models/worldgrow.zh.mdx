@@ -1,0 +1,50 @@
+---
+title: "WorldGrow"
+description: "WorldGrow：世界生成、交互式世界模型；Runner 一致性待确认。"
+modelId: "worldgrow"
+pageSource: generated
+---
+
+WorldGrow 以扩张方式生成世界：从种子场景出发逐步生长出连贯的 3D 世界块，面向交互式世界生成与场景扩展。Hugging Face 上的 UranusITS/WorldGrow checkpoint 已确认；WorldFoundry 树内注册了官方源码路由，checkpoint 与 TRELLIS 资产为运行时门控。
+
+<ModelPaperFigures modelId="worldgrow" locale="zh" />
+
+记录论文为[arXiv 2510.21682](https://arxiv.org/abs/2510.21682)。
+
+项目页：[world-grow.github.io](https://world-grow.github.io/)。代码：[world-grow/WorldGrow](https://github.com/world-grow/WorldGrow)。
+
+<ModelCommandBuilder modelId="worldgrow" locale="zh" />
+
+## 用来做什么
+
+需要动作条件世界步进时选 `worldgrow`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
+
+对 TRELLIS 资产的运行时依赖表明其以结构化 3D 隐变量生成为骨干、叠加分块场景生长。官方仓库指针（world-grow/WorldGrow，锁定 head 1f2ac49c）之外的架构内部细节仓库未记录。
+
+catalog 记录的任务包括 世界生成、交互式世界模型、scene-expansion。
+
+记录的评测入口包括[WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)（可生长 3D 世界的连贯性与质量）。
+
+## 运行时契约
+
+产物 `generated_world`、`worldgrow_runtime_plan.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `WorldGrowPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。 缺失资产由计划报告，不视为 catalog 阻塞。 真实运行前需同时就位 WorldGrow checkpoint 与 TRELLIS 资产。
+
+WorldFoundry tracks upstream source and checkpoint 计划中; no runnable pipeline is registered.
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run worldgrow --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `UranusITS/WorldGrow`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh worldgrow`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="worldgrow" locale="zh" />

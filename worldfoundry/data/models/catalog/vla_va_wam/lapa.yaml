@@ -18,6 +18,7 @@ integration:
 license: mit
 name: Latent Action Pretraining
 official_sources:
+  paper: https://arxiv.org/abs/2410.11758
   github:
     head_sha: 46aca51d7faebcec02d7d323bbb3820c2df07bc6
     url: https://github.com/LatentActionPretraining/LAPA
@@ -49,3 +50,19 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records. Runner or pipeline targets are present
   only after a complete in-tree WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'LAPA (Latent Action Pretraining) learns actions without action labels: it pretrains a video-action model on unlabeled video by discovering latent actions, then transfers to real robot control. The MIT-licensed LAPA-7B-openx checkpoint is confirmed and pinned; WorldFoundry vendors the latent-action inference runtime in-tree.'
+  overview_zh: LAPA（Latent Action Pretraining）无需动作标签学习动作：在无标注视频上通过发现隐式动作预训练视频-动作模型，再迁移到真实机器人控制。MIT 许可的 LAPA-7B-openx checkpoint 已确认并锁定 revision；WorldFoundry 将隐式动作推理运行时内置树内。
+  architecture: A 7B video-action model trained on Open X-Embodiment scale data with latent action quantization. The in-tree runtime passed py_compile, from_pretrained, plan-only execution, and alias validation.
+  architecture_zh: 7B 视频-动作模型，在 Open X-Embodiment 规模数据上以隐式动作量化训练。树内运行时通过了 py_compile、from_pretrained、仅计划执行与别名校验。
+  usage_notes: 'Real 7B inference is currently blocked by environment issues: the prepare environment lacks tux and the gpu-jax0325 environment has incompatible JAX. Plan-only execution works; full inference needs a compatible JAX environment.'
+  usage_notes_zh: 真实 7B 推理目前受环境限制：prepare 环境缺少 tux，gpu-jax0325 环境的 JAX 不兼容。仅计划执行可用；完整推理需要兼容的 JAX 环境。
+  limitations:
+  - Real inference is blocked by JAX/tux environment incompatibilities.
+  - JAX/Flax stack, not PyTorch — environment setup differs from most catalog entries.
+  limitations_zh:
+  - 真实推理被 JAX/tux 环境不兼容阻塞。
+  - JAX/Flax 栈而非 PyTorch——环境配置与多数 catalog 条目不同。

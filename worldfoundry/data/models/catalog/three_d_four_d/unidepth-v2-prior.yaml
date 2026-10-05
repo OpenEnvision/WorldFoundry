@@ -1,5 +1,5 @@
 id: unidepth-v2-prior
-name: UniDepth V2 Prior
+name: UniDepth V2
 aliases:
 - unidepth-v2
 - unidepth-v2-vitl14
@@ -17,13 +17,19 @@ source:
 checkpoint_refs:
 - repo_id: lpiccinelli/unidepth-v2-vitl14
   filename: model.safetensors
+  revision: 1d0d3c52f60b5164629d279bb9a7546458e6dcc4
+official_sources:
+  project_page: https://lpiccinelli-eth.github.io/pub/unidepth/
+  paper: https://arxiv.org/abs/2502.20110
 integration:
   kind: pipeline_runner
   status: integrated
   notes:
   - Integrated as an independent geometric prior at worldfoundry/base_models/three_dimensions/depth/unidepth.
-  - The default checkpoint is resolved through Hugging Face from lpiccinelli/unidepth-v2-vitl14
-    or an explicit local model_path override.
+  - The shared loader uses the registered local model directory or HF snapshot
+    1d0d3c52f60b5164629d279bb9a7546458e6dcc4 with the matching upstream V2 compatibility
+    decoder and canonical DINOv2 backbone; weight loading is strict.
+  - The pinned decoder requires xformers.components.attention; tested with xformers 0.0.28.post3.
   - The upstream release is CC-BY-NC-4.0; downstream users must respect the non-commercial
     license terms when enabling this prior.
 base_model_target: worldfoundry.base_models.three_dimensions.depth.unidepth
@@ -37,3 +43,19 @@ catalog_category: three_d_four_d
 catalog_scope: Independent geometric prior integrations used by 3D and world-model
   runtimes.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+docs:
+  publisher: ETH Zurich
+  publisher_kind: university
+  publisher_zh: 苏黎世联邦理工学院（ETH Zurich）
+  overview: 'UniDepth V2 is a universal monocular metric-depth model: from a single image of any camera it predicts a metric 3D point cloud directly, without external intrinsics. In this catalog it is a checkpoint-verified geometry prior — real checkpoint inference and official point export are verified through the shared geometry-prior contract and Workspace route.'
+  overview_zh: UniDepth V2 是通用单目米制深度模型：对任意相机的单张图像直接预测米制 3D 点云，无需外部内参。本 catalog 中它是 checkpoint 已验证的几何先验——真实 checkpoint 推理与官方点云导出已通过共享 geometry-prior 契约与 Workspace 路径验证。
+  architecture: Per the upstream publication, a camera self-prompting module predicts a dense camera representation that conditions depth decoding, enabling cross-camera generalization. The default checkpoint resolves from lpiccinelli/unidepth-v2-vitl14 (or a local model_path override); registered at base_models/three_dimensions/depth/unidepth.
+  architecture_zh: 按上游论文，相机自提示模块预测稠密相机表示并条件化深度解码，实现跨相机泛化。默认 checkpoint 从 lpiccinelli/unidepth-v2-vitl14 解析（或用本地 model_path 覆盖）；注册于 base_models/three_dimensions/depth/unidepth。
+  usage_notes: 'It is integrated as an independent geometry prior under worldfoundry/base_models and exposed through the shared geometry-prior pipeline/operator contract. Higher-level pipelines (e.g. ViPE) import it from this canonical owner instead of keeping private copies. Mind the license: the upstream release is CC-BY-NC-4.0, so respect non-commercial terms when enabling this prior.'
+  usage_notes_zh: 它作为独立几何先验集成在 worldfoundry/base_models 下，通过共享的 geometry-prior pipeline/operator 契约对外暴露。上层管线（如 ViPE）从这一规范位置导入它，而不是各自保留私有副本。注意许可：上游发布为 CC-BY-NC-4.0，启用该先验时需遵守非商用条款。
+  limitations:
+  - 'CC-BY-NC-4.0: non-commercial license terms apply downstream.'
+  - Single-image estimation; temporal stability on video is out of scope.
+  limitations_zh:
+  - CC-BY-NC-4.0：下游适用非商用许可条款。
+  - 单帧估计；视频时序稳定性不在其范围内。

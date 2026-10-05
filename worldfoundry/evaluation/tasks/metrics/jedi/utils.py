@@ -4,13 +4,8 @@
 
 import torch
 
-def model_cleanup(model):
-    del model
-    try:
-        import torch.distributed as dist
-        dist.destroy_process_group()
-    except:
-        pass
+def model_cleanup():
+    """Release unused memory after the metric drops its local model reference."""
     import gc         # garbage collect library
     gc.collect()
     torch.cuda.empty_cache()

@@ -50,9 +50,9 @@ Options:
   --pytorch-bundle NAME Accepted for older command lines; currently ignored.
   --transformers NAME   Accepted for older command lines; currently ignored.
   --skip-flash-attn     Skip flash-attn install.
-  --torch SPEC          Torch package spec. Default: torch>=2.7,<2.12.0.
-  --torchvision SPEC    Torchvision package spec. Default: torchvision>=0.22,<0.27.0.
-  --torchaudio SPEC     Torchaudio package spec. Default: torchaudio>=2.7,<2.12.0.
+  --torch SPEC          Torch package spec. Default: selected CUDA tier range.
+  --torchvision SPEC    Torchvision package spec. Default: selected tier range.
+  --torchaudio SPEC     Torchaudio package spec. Default: selected tier range.
   --allow-no-cuda       Do not fail verification when CUDA is not visible.
   --verify-only         Only verify imports/CUDA in the env.
   -h, --help            Show this help.

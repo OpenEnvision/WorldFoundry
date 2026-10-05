@@ -23,14 +23,44 @@ official_sources:
     type: model
     status: confirmed
 integration:
-  status: runtime_ported
+  status: integrated
   notes:
-  - In-tree T2V-Turbo VC2 runtime is registered; VideoCrafter2 base weights and T2V-Turbo LoRA assets are runtime-gated.
+  - Uses the shared WorldFoundry native diffusion assembler, runner, checkpoint loader, offload policy, and LVDM components.
+  - The VideoCrafter2 base model and ordered T2V-Turbo LoRA remain separate declarative checkpoint inputs.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: t2v_turbo_t2v
 runner_parity:
-  status: implemented_checkpoint_pending
+  status: native_checkpoint_validated
   notes:
-  - resolve_model_zoo_config and pipeline import are expected to pass; vendored runtime source completion and checkpoint staging remain pending.
+  - Local VideoCrafter2 and T2V-Turbo VC2 assets are available for strict component and LoRA validation.
+native_diffusion:
+  recipe_id: t2v_turbo_t2v
+  architecture: lvdm-videocrafter2
+  backend: worldfoundry-native-diffusion
+  shared_components:
+  - native checkpoint loader
+  - native LCM scheduler
+  - LVDM UNet and autoencoder
+  - ordered LoRA merger
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries expose WorldFoundry pipeline targets; metadata-only entries retain upstream provenance without runnable WorldFoundry backends.
+docs:
+  publisher: University of California, Santa Barbara
+  publisher_kind: university
+  publisher_zh: 加州大学圣塔芭芭拉分校（UCSB）
+  overview: 'T2V-Turbo is a fast text-to-video model distilled from VideoCrafter2 with consistency distillation plus reward feedback, generating watchable clips in 4-8 steps. In this catalog it is assembled from the shared native diffusion components: the VideoCrafter2 base model and the ordered T2V-Turbo LoRA remain separate declarative checkpoint inputs.'
+  overview_zh: T2V-Turbo 是从 VideoCrafter2 蒸馏出的快速文生视频模型，结合一致性蒸馏与奖励反馈，4-8 步即可生成可看的视频。在本 catalog 中它由共享原生扩散组件装配：VideoCrafter2 基座与有序的 T2V-Turbo LoRA 是两个独立的声明式 checkpoint 输入。
+  architecture: 'Base: VideoCrafter2''s U-Net latent video diffusion. On top: a consistency-distilled LoRA trained with mixed reward feedback (per the publication, arXiv 2405.18750). WorldFoundry uses the shared native assembler, runner, checkpoint loader, offload policy, and LVDM components.'
+  architecture_zh: 基座：VideoCrafter2 的 U-Net 潜空间视频扩散。之上：以混合奖励反馈训练的一致性蒸馏 LoRA（见论文 arXiv 2405.18750）。WorldFoundry 使用共享原生装配器、runner、checkpoint 加载器、offload 策略与 LVDM 组件。
+  usage_notes: 'Runner status records native checkpoint validation: local VideoCrafter2 and T2V-Turbo VC2 assets are available for strict component and LoRA checks. Use it when you need many quick T2V drafts rather than maximum quality.'
+  usage_notes_zh: runner 状态记录了原生 checkpoint 验证：本地 VideoCrafter2 与 T2V-Turbo VC2 资产可用于严格的组件与 LoRA 校验。适合需要大量快速文生视频草稿、而非极致质量的场景。
+  limitations:
+  - Few-step generation trades detail for speed — quality ceiling is the VideoCrafter2 base.
+  - Requires both the base checkpoint and the ordered LoRA; they are separate inputs.
+  limitations_zh:
+  - 少步生成以细节换速度——质量上限受 VideoCrafter2 基座限制。
+  - 需要基座 checkpoint 与有序 LoRA 两个独立输入。
+  recommended_benchmarks:
+  - id: vbench
+    reason: T2V-Turbo was tuned for exactly this suite's dimensions.
+    reason_zh: T2V-Turbo 的优化目标正是该评测的各维度。

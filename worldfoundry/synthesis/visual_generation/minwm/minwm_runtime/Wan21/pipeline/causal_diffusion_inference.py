@@ -3,12 +3,12 @@ from tqdm import tqdm
 from typing import List, Optional
 import torch
 
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers import (
+from worldfoundry.base_models.diffusion_model.schedulers.flow_dpm import (
     FlowDPMSolverMultistepScheduler,
     get_sampling_sigmas,
     retrieve_timesteps,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
+from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import FlowUniPCMultistepScheduler
 
 from ..wan_utils.wan_wrapper import WanDiffusionWrapper, WanTextEncoder, WanVAEWrapper
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -16,7 +16,6 @@ from .runner import (
     run_model_benchmark,
     run_model_benchmark_suite,
 )
-
 
 WORLDFOUNDRY_RUN_RESULT_SCHEMA_VERSION = "worldfoundry-run-result"
 
@@ -37,6 +36,8 @@ class WorldFoundryRunRequest:
     engine: str = "auto"
     benchmark_mode: str = "official-run"
     execute: bool = True
+    model_workers: int = 1
+    worker_cuda_devices: Sequence[str] = ()
     resume: bool = False
     skip_incompatible: bool = True
     fail_on_skipped: bool = False
@@ -115,9 +116,7 @@ def _coerce_request(
     if isinstance(request, WorldFoundryRunRequest):
         if not kwargs:
             return request
-        payload = asdict(request)
-        payload.update(kwargs)
-        return WorldFoundryRunRequest(**payload)
+        return replace(request, **kwargs)
     payload = dict(kwargs)
     if isinstance(request, Mapping):
         payload = {**dict(request), **payload}
@@ -236,38 +235,49 @@ def _suite_ids(request: WorldFoundryRunRequest) -> tuple[str, ...]:
 
 
 def _canonical_model_id_or_self(value: str, manifest_dir: str | Path | None) -> str:
-    """Lookup and return the canonical model ID from the model-zoo registry, falling back to original value."""
+    """Lookup and return the canonical model ID from the model-zoo registry.
+
+    Unknown IDs pass through unchanged so the downstream runner can report
+    them; genuine catalog loading failures (corrupt YAML, schema errors)
+    propagate instead of silently disabling alias resolution.
+    """
     if manifest_dir is None:
         return value
     root = Path(manifest_dir)
     if not root.exists() or not root.is_dir():
         return value
-    try:
-        from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
+    from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
+    from worldfoundry.evaluation.models.catalog.zoo_registry import UnknownModelZooKeyError
 
+    try:
         return load_model_zoo_registry(root).get(value).model_id
-    except (KeyError, TypeError, ValueError):
+    except UnknownModelZooKeyError:
         return value
 
 
 def _canonical_benchmark_id_or_self(value: str, manifest_dir: str | Path | None) -> str:
-    """Lookup and return the canonical benchmark ID from the benchmark-zoo registry, falling back to original value."""
+    """Lookup and return the canonical benchmark ID from the benchmark-zoo registry.
+
+    Unknown IDs pass through unchanged; catalog loading failures propagate
+    (see :func:`_canonical_model_id_or_self`).
+    """
     if manifest_dir is None:
         return value
     root = Path(manifest_dir)
     if not root.exists():
         return value
-    try:
-        from worldfoundry.evaluation.tasks.catalog.schema import load_entries
-        from worldfoundry.evaluation.tasks.catalog.zoo_registry import (
-            BenchmarkZooRegistry,
-            load_benchmark_zoo_registry,
-        )
+    from worldfoundry.evaluation.tasks.catalog.schema import load_entries
+    from worldfoundry.evaluation.tasks.catalog.zoo_registry import (
+        BenchmarkZooRegistry,
+        UnknownBenchmarkZooKeyError,
+        load_benchmark_zoo_registry,
+    )
 
+    try:
         if root.is_file():
             return BenchmarkZooRegistry(load_entries(root)).get(value).benchmark_id
         return load_benchmark_zoo_registry(root).get(value).benchmark_id
-    except (KeyError, TypeError, ValueError):
+    except UnknownBenchmarkZooKeyError:
         return value
 
 
@@ -335,7 +345,8 @@ def _model_manifest_dir_for(request: WorldFoundryRunRequest, model_id: str | Non
 
         if model_id == CONTRACT_VALIDATION_ID:
             return None
-    except Exception:  # noqa: BLE001 - fallback to normal model-zoo resolution.
+    except ImportError:
+        # Orchestration extras unavailable — fall back to model-zoo resolution.
         pass
     return request.model_manifest_dir
 
@@ -360,6 +371,7 @@ def _run_existing_or_model(request: WorldFoundryRunRequest) -> WorldFoundryRunRe
             **_runner_kwargs(request),
             dataset_id=request.dataset_id,
             run_id=request.run_id,
+            resume=request.resume,
             fail_on_sample_error=request.fail_on_sample_error,
             write_artifacts_index=request.write_artifacts_index,
             generation_cache_dir=request.generation_cache_dir,
@@ -404,6 +416,8 @@ def _run_suite(request: WorldFoundryRunRequest, model_ids: Sequence[str], benchm
             benchmark_ids=tuple(benchmark_ids),
             mode=request.benchmark_mode,
             execute=request.execute,
+            model_workers=request.model_workers,
+            worker_cuda_devices=tuple(request.worker_cuda_devices),
             resume=request.resume,
             skip_incompatible=request.skip_incompatible,
             fail_on_skipped=request.fail_on_skipped,
@@ -423,7 +437,13 @@ def _should_run_suite(
     benchmark_ids: Sequence[str],
 ) -> bool:
     """Determine whether the requested parameters necessitate executing a multi-benchmark suite."""
-    if _suite_ids(request) or len(model_ids) > 1 or len(benchmark_ids) > 1:
+    if (
+        _suite_ids(request)
+        or len(model_ids) > 1
+        or len(benchmark_ids) > 1
+        or request.model_workers != 1
+        or bool(request.worker_cuda_devices)
+    ):
         return True
     return bool(benchmark_ids) and not request.execute
 

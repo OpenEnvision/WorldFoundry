@@ -14,6 +14,8 @@ source:
   notes:
   - The public causal student checkpoint and inference source are available.
 official_sources:
+  paper: https://arxiv.org/abs/2607.19191
+  project_page: https://amap-cvlab.github.io/ABot-World/
   github:
     url: https://github.com/amap-cvlab/ABot-World
     revision: e2a406a176195d994bcaf5ebb92b2047edcd3c2b
@@ -44,3 +46,23 @@ output_artifacts:
 - generated_world_video
 catalog_category: world_models
 catalog_scope: World-model catalog entries with in-tree inference runtimes.
+docs:
+  publisher: Alibaba (Amap)
+  publisher_kind: company
+  publisher_zh: 阿里巴巴（高德地图 AMAP-CVLab）
+  overview: 'ABot-World-0-5B-LF is Amap''s interactive world model: give it an image plus actions and it rolls out world video block by block, keeping causal KV state resident between action blocks. In this catalog it is checkpoint/GPU validated — real A100 Workspace inference produced a fully decodable 1280x704 nine-frame H.264 artifact from the public 0.5B-LF checkpoint at the official resolution.'
+  overview_zh: ABot-World-0-5B-LF 是高德的交互式世界模型：输入一张图加动作序列，它逐块滚动生成世界视频，并在动作块之间保持因果 KV 状态常驻。本 catalog 中它已通过 checkpoint/GPU 验证——真实 A100 Workspace 推理用公开的 0.5B-LF checkpoint 在官方 1280x704 分辨率下产出完全可解码的九帧 H.264 产物。
+  architecture: Only causal inference and resident interactive rollout are integrated; Wan attention, T5, the Wan2.2 VAE, scheduler, media I/O, and FP8 support are reused in-tree, while training, Gradio, benchmark, and experimental quantizer sources are excluded. The recorded checkpoint is acvlab/ABot-World-0-5B-LF (causal student).
+  architecture_zh: 仅集成因果推理与常驻交互滚动；Wan 注意力、T5、Wan2.2 VAE、调度器、媒体 I/O 与 FP8 支持在树内复用，训练、Gradio、benchmark 与实验性量化器源码被排除。记录的 checkpoint 为 acvlab/ABot-World-0-5B-LF（causal student）。
+  usage_notes: Runtime execution is offline-first and requires a local checkpoint directory. The resident API keeps causal KV state between action blocks; the first block returns 9 RGB frames and subsequent blocks return 12 — plan client-side buffering accordingly.
+  usage_notes_zh: 运行为离线优先，需要本地 checkpoint 目录。常驻 API 在动作块之间保持因果 KV 状态；首个块返回 9 帧 RGB，后续块返回 12 帧——客户端缓冲请按此规划。
+  limitations:
+  - 'Offline-first: no runtime downloads, all assets must be staged locally.'
+  - The 0.5B-LF checkpoint is a small causal student — quality trails larger world models.
+  limitations_zh:
+  - 离线优先：不做运行时下载，所有资产必须本地就位。
+  - 0.5B-LF 是小型 causal student checkpoint——质量弱于更大的世界模型。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: General world-model rollout quality evaluation.
+    reason_zh: 世界模型滚动生成质量的通用评测。

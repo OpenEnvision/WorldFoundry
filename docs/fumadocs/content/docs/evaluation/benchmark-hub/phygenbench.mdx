@@ -1,115 +1,43 @@
 ---
 title: PhyGenBench
-description: "PhyGenBench in WorldFoundry: assets, runners, metrics, and limits."
+description: "T2V physical-commonsense generation: 160 prompts over 27 laws, scored by PhyGenEval. WorldFoundry imports results or runs overall.py — not the stage judges."
 ---
 
-## About
+PhyGenBench (Shanghai AI Lab / OpenGVLab) asks whether a **text-to-video generator** respects physical commonsense. It ships **160 prompts** spanning **27 claimed laws** in four domains (mechanics, optics, thermal, materials). Upstream scoring is **PhyGenEval**: VQAScore, GPT-4o/LLaVA-style order checks, and InternVideo2 naturalness, then `overall.py`.
 
-PhyGenBench evaluates text-to-video physical commonsense with 160 prompts spanning 27 physical laws and four physics domains. The local source README describes PhyGenEval as a staged evaluator: key physical-phenomena checks, order verification, and full-video naturalness scoring.
+This is **generation + hierarchical judges**, not [PhyGround](/docs/evaluation/benchmark-hub/phyground) (TI2V law-criteria 1–5), not [PhysVidBench](/docs/evaluation/benchmark-hub/physvidbench) (caption QA), and not [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq) (filmed continuation).
 
-WorldFoundry includes the runnable PhyGenBench code under `worldfoundry/evaluation/tasks/execution/runners/phygenbench`. Runtime code such as `PhyGenEval/overall.py` stays with the runner, while prompt/question assets live under `worldfoundry/data/benchmarks/assets/phygenbench`. Do not clone the upstream repository for WorldFoundry runs. Downloading Hugging Face judge checkpoints is fine when you choose the full upstream-style judge path; the benchmark code stays in-tree.
+Paper: [PhyGenBench](https://arxiv.org/abs/2410.05363). Project: [phygenbench123.github.io](https://phygenbench123.github.io/). Code: [OpenGVLab/PhyGenBench](https://github.com/OpenGVLab/PhyGenBench).
 
+WorldFoundry bundles `prompts.json` and PhyGenEval `overall.py`. It **imports** an official result file, or runs **bounded** `overall.py` over already-prepared stage outputs. It does **not** run VQAScore, GPT-4o/LLaVA, or InternVideo2.
 
-## Official References
+<BenchmarkPageSections id="phygenbench" locale="en" />
 
-| Resource | Link |
-| --- | --- |
-| Project page | [phygenbench123.github.io](https://phygenbench123.github.io/) |
-| Paper | [arXiv:2410.05363](https://arxiv.org/abs/2410.05363) |
-| GitHub | [github.com/OpenGVLab/PhyGenBench](https://github.com/OpenGVLab/PhyGenBench) |
-| In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py` |
+## How to run
 
-## Prepare Assets
-
-- Prompt suite: bundled at `worldfoundry/data/benchmarks/assets/phygenbench/PhyGenBench/prompts.json`.
-- Optional prompt override: pass `--prompt-manifest` or set `WORLDFOUNDRY_PHYGENBENCH_PROMPT_MANIFEST`.
-- Candidate videos: set `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` to generated videos.
-- Existing result import: pass `--official-results-path` or set `WORLDFOUNDRY_PHYGENBENCH_RESULTS_PATH`. JSON, JSONL, CSV, and YAML-like official dimension rows are accepted by the metric loader.
-- Full judge assets: the README names VQAScore / CLIP-FlanT5, GPT-4o or LLaVA-Interleave, and InternVideo2 for the staged evaluator. WorldFoundry does not bundle those model weights or API credentials.
-
-## Generated Artifact Layout
-
-The expected generated videos are flat files named by prompt index:
-
-```text
-generated_videos/
-  output_video_1.mp4
-  output_video_2.mp4
-  ...
-  output_video_160.mp4
-```
-
-WorldFoundry also accepts bare numeric stems such as `1.mp4` for coverage checks, but materialized WorldFoundry model runs are copied into `output_video_{id}.mp4`.
-
-## Run With WorldFoundry
-
-Import an existing PhyGenEval result file through the public CLI:
+Import an official result export:
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id phygenbench \
   --mode official-validation \
-  --official-results-path /path/to/phygenbench_results.json \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/phygenbench/validation \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/phygenbench/official-validation \
   --json
 ```
 
-Run the in-tree scorer wrapper through the public CLI. By default this uses the deterministic local fixture backend; set `WORLDFOUNDRY_PHYGENBENCH_JUDGE_BACKEND=official` only after placing the staged PhyGenEval outputs where `overall.py` expects them:
+Aggregate prepared stage outputs with in-tree `overall.py` (not a substitute for the full judge stack):
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id phygenbench \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/phygenbench/run \
-  --json
-```
-
-Direct in-tree runner:
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-export WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR=tmp/phygenbench/direct
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" \
+  --output-dir tmp/phygenbench/official \
   --json
 ```
 
-Direct result import:
+Outputs include `scorecard.json` (primary `phygenbench_average`).
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py \
-  --official-results-path /path/to/phygenbench_results.json \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/phygenbench/direct-validation \
-  --json
-```
-
-## Metrics
-
-| Metric ID | Meaning |
-| --- | --- |
-| `physical_commonsense` | Mean of available PhyGenEval single-image, multi-frame, and video-stage physical plausibility scores. |
-| `physical_law_adherence` | Mean of the single-image and multi-frame checks for the prompt's physical law. |
-| `semantic_adherence` | Semantic alignment score from result rows, or the video-stage score when no separate semantic score is present. |
-| `phygenbench_average` | Primary WorldFoundry metric. Uses the explicit average field when present; otherwise averages the three component metrics when all are available. |
-
-Scores are higher-is-better. Stage scores on `0..3`, semantic scores on `0..5`, and percentage-like rows are normalized into `0..1`.
-
-## Outputs
-
-The output directory contains:
-
-- `scorecard.json`: run status, metric table, coverage, selected backend, and leaderboard-validity flags.
-- `raw_metric_table.jsonl`: one row per declared metric.
-- `per_sample_scores.jsonl`: prompt-level rows with stage scores when available.
-- `phygenbench_results.json`: written by the in-tree scoring wrapper.
-- `specialized_normalizer_stdout.log` and `specialized_normalizer_stderr.log` when invoked through `worldfoundry-eval zoo benchmark-run`.
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

@@ -1,0 +1,50 @@
+---
+title: "Dexora 1B"
+description: "Dexora 1B：视觉-语言-动作（VLA）、VLA 策略执行；仅静态加载; 独立环境 `worldfoundry-vla-dexora`。"
+modelId: "dexora-1b"
+pageSource: authored
+---
+
+Dexora 1B 是灵巧双臂操作 VLA，基于 1B RDT 策略骨干（论文：arXiv 2605.18722，MIT 许可）。 WorldFoundry 将完整推理栈内置树内——SigLIP/T5 编码器、严格 checkpoint 加载器、扩散采样器与 36 自由度动作契约——但作者只发布了数据与训练代码，无官方策略权重。
+
+<ModelPaperFigures modelId="dexora-1b" locale="zh" />
+
+记录论文为[Dexora: Open-source VLA for High-DoF Bimanual Dexterity](https://arxiv.org/abs/2605.18722)（ICRA 2026, 2026）。
+
+项目页：[dexoravla.github.io](https://dexoravla.github.io)。代码：[dexoravla/Dexora](https://github.com/dexoravla/Dexora)。
+
+论文：[arXiv 2605.18722](https://arxiv.org/abs/2605.18722)。项目页：[dexoravla.github.io](https://dexoravla.github.io)。代码：[dexoravla/Dexora](https://github.com/dexoravla/Dexora)。许可证：**MIT**。未记录机构。作者发布了**数据和训练代码**，没有官方策略权重。状态：**仅静态加载**。静态运行时已验证；**数值一致性待**你自己训的 Stage-1 / Stage-3 checkpoint。
+
+<ModelCommandBuilder modelId="dexora-1b" locale="zh" />
+
+## 用来做什么
+
+`dexora-1b` 是记录的指令到动作线。需要 WorldFoundry VLA rollout 而不是视频生成时从这里起步。
+
+1B 参数的 RDT（机器人扩散 transformer）策略，SigLIP 视觉与 T5 语言编码，经扩散采样器输出 36 自由度双臂灵巧动作。源码级 checkpoint 与推理契约与官方 1B 配置一致。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、dexterous_manipulation、bimanual_robot_policy、VLA 策略执行。别名包括 `dexora`、`dexora_vla`。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`dexora_action_trace.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `DexoraPipeline`。
+
+系列状态：**仅静态加载**。
+
+需先用官方流程训练自己的 Stage-1 或 Stage-3 checkpoint，运行时才能执行；训练、数据集、遥操作、ZMQ 服务、机器人 SDK 与模拟器代码均不在树内。
+
+官方未发布策略权重；checkpoint 数值 parity 待定。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run dexora-1b --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-vla-dexora`（Python 3.10，Cu121 Or Newer，torch>=2.2）。
+
+记录的权重仓库包括 `google/siglip-so400m-patch14-384`、`google/t5-v1_1-xxl`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh dexora-1b`；下载缺失的公开权重时加 `--download`。
+
+状态：**仅静态加载**。
+
+<ModelRelatedRecipes modelId="dexora-1b" locale="zh" />

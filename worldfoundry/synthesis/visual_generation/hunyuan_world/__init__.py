@@ -80,7 +80,7 @@ def __getattr__(name):
         globals()[name] = value
         return value
     if name == "resize_and_center_crop":
-        from worldfoundry.core.utils.image_utils import resize_and_center_crop
+        from worldfoundry.core.media.processing.image_utils import resize_and_center_crop
 
         globals()[name] = resize_and_center_crop
         return resize_and_center_crop

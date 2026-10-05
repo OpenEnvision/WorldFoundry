@@ -1,0 +1,26 @@
+---
+title: "Being-H0.7"
+description: "Being-H0.7（BeingBeyond）：视觉-语言-动作（VLA）、wam。"
+modelId: "being-h07"
+pageSource: authored
+---
+
+Being-H0.7 是 BeingBeyond Being-H 家族的后继线，在本 catalog 中记录为隐式世界-动作模型（WAM）加机器人策略。WorldFoundry 经树内官方策略动作运行时路由，源码来自官方仓库的 Being-H07 子目录；尚未记录 checkpoint。
+
+<ModelPaperFigures modelId="being-h07" locale="zh" />
+
+<ModelCommandBuilder modelId="being-h07" locale="zh" />
+
+## 用来做什么
+
+从 `being-h07` 开始。启动 `worldfoundry-eval run being-h07 --pipeline.task-profile vla`。需要 GPU 已验证的 BeingBeyond 路径时改走 [Being-H0.5](/zh/docs/guides/supported-models/being-h05)。
+
+## 运行时契约
+
+必填 `image`、`prompt`、`state`。产物：`action_trace`、`being-h07_action_trace.json`。
+
+## 在 WorldFoundry 中运行
+
+统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。权重 `BeingBeyond/Being-H07` 就位前运行只出 runtime plan，不是 catalog 阻塞。未记录 license。状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="being-h07" locale="zh" />

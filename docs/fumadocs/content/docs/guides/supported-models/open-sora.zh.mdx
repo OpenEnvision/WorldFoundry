@@ -1,0 +1,48 @@
+---
+title: "Open-Sora"
+description: "潞晨科技 Open-Sora v1.2 文生视频（STDiT-v3）。WorldFoundry 固定 480p / 51 帧 / 24 fps / 30 步 rectified flow；尚未记录 runner 一致性。"
+modelId: "open-sora"
+pageSource: authored
+---
+
+Open-Sora 是潞晨科技（HPC-AI Tech）的开源文生视频栈。本卡片是 **v1.2 STDiT-v3** 推理路径——输入 prompt，写出 `open-sora.mp4`——不是 [Open-Sora-Plan](/zh/docs/guides/supported-models/open-sora-plan)。WorldFoundry 走 `worldfoundry/synthesis/visual_generation/open_sora` 下的官方 CLI 桥。权重缺失会在运行时报告，不会自动下载。
+
+<ModelPaperFigures modelId="open-sora" locale="zh" />
+
+catalog 的论文字段指向 [Open-Sora 2.0: Training a Commercial-Level Video Generation Model in $200k](https://arxiv.org/abs/2503.09642)。那是后续报告。本页实际就位的 checkpoint 是 **Open-Sora v1.2**：`hpcai-tech/OpenSora-STDiT-v3` 加 `hpcai-tech/OpenSora-VAE-v1.2`。项目页：[hpcaitech.github.io/Open-Sora](https://hpcaitech.github.io/Open-Sora/)。代码：[hpcaitech/Open-Sora](https://github.com/hpcaitech/Open-Sora)。`paper.png` 只作标题缩略图。
+
+<ModelCommandBuilder modelId="open-sora" locale="zh" />
+
+## 它用来做什么
+
+只做文生视频。`OpenSoraPipeline` 必填 `prompt`，写出 `open-sora.mp4`。本卡片**没有本地图生视频或视频到视频**（上游 1.3 / 2.0 线宣传过这些能力，这里没有绑定）。漏掉视频 VAE 是最常见的失败。画质可对照 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)——Open-Sora 发布惯常引用的套件，不是本仓库已摄入的表。
+
+## 推理
+
+官方 CLI 封装会把 vendored 的 `sample.py` 覆盖成 Hugging Face demo 的质量预设：
+
+| 旋钮 | WorldFoundry 启动 | 覆盖前的 `sample.py` |
+| --- | --- | --- |
+| 分辨率 | **480p** | 240p |
+| 宽高比 | **9:16** | 9:16 |
+| 帧数 | **51**（约 2 秒） | 51 |
+| FPS / 保存 FPS | **24** | 24 |
+| 采样器 | **rectified flow**（`rflow`，开启 timestep transform） | 相同 |
+| 步数 | **30** | 30 |
+| Guidance | **7.0**（`--cfg-scale`） | 7.0 |
+| 美学分 | **6.5**（`--aes`）；不强制 motion score | 6.5，`flow=None` |
+| Seed | **1024** | 42 |
+
+记录命令会强制关闭 flash-attn 与 layernorm kernel。catalog 未记录显存。另有较旧的 `hpcai-tech/OpenSora-STDiT-v1-HQ-16x512x512`，不是默认 STDiT-v3 路径。STDiT-v2 候选曾返回 401，未列入。
+
+## 在 WorldFoundry 中运行
+
+在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）中运行 `worldfoundry-eval run open-sora`。启动前就位三个公开的 Apache-2.0 仓库：
+
+- `hpcai-tech/OpenSora-STDiT-v3`（`config.json` + `model.safetensors`）
+- `hpcai-tech/OpenSora-VAE-v1.2`（同样一对文件）
+- `DeepFloyd/t5-v1_1-xxl`（index + 两个 `.bin` 分片 + `spiece.model`）
+
+状态：**Runner 一致性待确认**。启动成功不等于本工作区已有 checkpoint 级 GPU 产物。
+
+<ModelRelatedRecipes modelId="open-sora" locale="zh" />

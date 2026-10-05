@@ -14,13 +14,14 @@ checkpoints: []
 execution:
   environment: _unified
   backend_stage: independent_in_tree_trajectory_render
-  runtime_status: requires_materialized_scene
-  integration_status: integrated
+  runtime_status: requires_in_tree_official_source_and_materialized_scene
+  integration_status: runtime_ported
   pipeline_binding: hyworld-worldgen
-integration: {status: integrated}
+integration: {status: runtime_ported}
 notes:
 - This trajectory-render route intentionally loads no model checkpoint.
-- The unified runtime includes an in-tree torch point-splat fallback and does not require PyTorch3D.
-- The only missing model/scene asset for Workspace rendering is a pre-materialized local HY-World
-  scene containing render_results/global_pcd.ply; image and camera JSON are normal invocation inputs.
+- The trajectory-render adapter is present, but the pinned official runtime source is not bundled
+  in the public tree. Install it at the configured in-tree path before invoking the binding.
+- Rendering also requires a pre-materialized local HY-World scene containing
+  render_results/global_pcd.ply; image and camera JSON are normal invocation inputs.
 - Scene materialization belongs to the separate full HY-World generation pipeline.

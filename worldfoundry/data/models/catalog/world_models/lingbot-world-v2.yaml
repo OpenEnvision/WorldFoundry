@@ -15,6 +15,8 @@ source:
   notes:
   - Source and weights are public but restricted to non-commercial use with share-alike terms.
 official_sources:
+  project_page: https://technology.robbyant.com/lingbot-world-v2
+  paper: https://arxiv.org/abs/2607.07534
   github:
     url: https://github.com/Robbyant/lingbot-world-v2
     revision: 94f43115de8d4a4f9f282126528c300a0b232c5f
@@ -33,7 +35,7 @@ availability:
   license: CC-BY-NC-SA-4.0
 integration:
   kind: pipeline_runner
-  status: implemented_checkpoint_pending
+  status: implemented_checkpoint_manifest_validated
   notes:
   - Only the released causal-fast inference route is integrated in-tree.
   - Common Wan, T5, VAE, scheduler, FSDP, collective, geometry and media code is reused from WorldFoundry.
@@ -42,11 +44,36 @@ runtime_profile: runtime-profile:lingbot-world-v2
 pipeline_binding: lingbot-world-v2
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 runner_parity:
-  status: implemented_checkpoint_pending
+  status: short_single_gpu_verified_official_8gpu_pending
   notes:
-  - Static imports, runtime planning and command construction are covered locally.
-  - Official 8-GPU artifact parity remains pending a staged 14B checkpoint and CUDA run.
+  - The staged 14B causal-fast checkpoint generated a decodable 9-frame 848x464 video at 16 FPS on one 80 GB CUDA GPU.
+  - Official 8-GPU 361-frame artifact parity and camera-control scoring remain pending.
 output_artifacts:
 - generated_world_video
 catalog_category: world_models
 catalog_scope: World-model catalog entries with in-tree inference runtimes.
+docs:
+  publisher: Robbyant (Ant Group)
+  publisher_kind: company
+  publisher_zh: 蚂蚁灵波科技（Robbyant，蚂蚁集团）
+  overview: 'LingBot-World-V2 (also aliased lingbot-world-infinity) is the second generation of Robbyant''s world model: a 14B causal-fast model for image-to-world video with camera control. The released causal-fast route is integrated and has produced a short, decodable single-GPU video from the staged checkpoint; official 8-GPU artifact parity remains pending.'
+  overview_zh: LingBot-World-V2（别名 lingbot-world-infinity）是蚂蚁灵波世界模型的第二代：14B causal-fast 模型，用于带相机控制的图到世界视频。已集成的 causal-fast 路径使用本地权重生成了可解码的单卡短视频；官方 8 卡产物一致性仍待验证。
+  architecture: Common Wan, T5, VAE, scheduler, FSDP, collective, geometry, and media code is reused from WorldFoundry; training, example assets, and unreleased causal-pretrain/bidirectional routes are excluded. The recorded checkpoint is robbyant/lingbot-world-v2-14b-causal-fast.
+  architecture_zh: 通用的 Wan、T5、VAE、调度器、FSDP、集合通信、几何与媒体代码从 WorldFoundry 复用；训练、示例资产与未发布的 causal-pretrain/双向路径被排除。记录的 checkpoint 为 robbyant/lingbot-world-v2-14b-causal-fast。
+  usage_notes: 'Execution is offline-first with no runtime downloads. Eight GPUs are the official causal-fast recipe; Workspace also exposes a four-GPU compact topology. When Workspace already owns the torchrun process group, inference runs in that group without nested torchrun workers. Note the license: the integrated code is CC BY-NC-SA 4.0 — not for commercial use.'
+  usage_notes_zh: 执行为离线优先、无运行时下载。官方 causal-fast 配方为八卡；Workspace 亦提供四卡紧凑拓扑。当 Workspace 已持有 torchrun 进程组时，推理直接在该组内运行、不再嵌套启动 torchrun。注意许可：集成代码为 CC BY-NC-SA 4.0——不可商用。
+  limitations:
+  - 'CC BY-NC-SA 4.0: non-commercial license.'
+  - Official 8-GPU 361-frame artifact parity and camera-control scoring remain pending.
+  - '14B model: high GPU memory requirements.'
+  limitations_zh:
+  - CC BY-NC-SA 4.0：非商用许可。
+  - 官方 8 卡 361 帧产物一致性和相机控制评分仍待验证。
+  - 14B 模型：显存需求高。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-control adherence of world rollouts.
+    reason_zh: 世界滚动生成的相机控制贴合度。
+  - id: worldmodelbench
+    reason: General world-rollout quality.
+    reason_zh: 世界滚动生成的总体质量。

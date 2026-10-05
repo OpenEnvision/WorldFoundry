@@ -22,11 +22,12 @@ artifact_kind: generated_world
 artifact_filename: oasis-500m.mp4
 execution:
   backend_stage: in_tree_runtime_manifest
-  runtime_status: in_tree_runtime_manifest_checkpoint_env_pending
+  runtime_status: in_tree_checkpoint_gpu_validated_official_sample_camera_pitch
   integration_status: runtime_ported
   pipeline_binding: oasis-500m
 integration:
   status: runtime_ported
 notes:
-- Open-Oasis source is vendored in-tree under synthesis/visual_generation/world_model/open_oasis.
-- The pipeline resolves the official generate entrypoint; execution remains checkpoint, environment, and input-action gated.
+- Open-Oasis source is vendored in-tree under synthesis/visual_generation/open_oasis.
+- The pipeline resolves the official generate entrypoint; GPU inference was validated with the staged Etched checkpoint and official sample image. Other installations still need checkpoints, runtime dependencies, and action tensors.
+- Official Open-Oasis maps cameraX from MineRL camera[0] and cameraY from camera[1]; MineRL orders these as pitch then yaw. Thus cameraX controls vertical pitch despite its X label.

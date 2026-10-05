@@ -24,6 +24,8 @@ modalities:
 - video-to-3d
 name: HunyuanWorld-Mirror
 official_sources:
+  project_page: https://3d-models.hunyuan.tencent.com/world/
+  paper: https://arxiv.org/abs/2510.10726
   github:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
@@ -55,3 +57,19 @@ catalog_policy:
   open_source_rule: Only mark open_source when an official GitHub repository or official
     Hugging Face model page was confirmed. Do not infer checkpoint availability from
     papers, demos, or third-party mirrors.
+docs:
+  publisher: Tencent (Hunyuan)
+  publisher_kind: company
+  publisher_zh: 腾讯（混元）
+  overview: 'HunyuanWorld-Mirror is Tencent''s universal 3D reconstruction model: feed it images and it returns point clouds, Gaussian splats, depth, normals, and camera parameters in one pass. In this catalog it is verified — GPU inference with local tencent/HunyuanWorld-Mirror assets produced point-cloud PLY, Gaussian-splat PLY, depth maps, normal maps, and a scene.rrd.'
+  overview_zh: HunyuanWorld-Mirror 是腾讯的通用 3D 重建模型：输入图像，一次前向返回点云、高斯泼溅、深度、法线与相机参数。本 catalog 中它已验证——使用本地 tencent/HunyuanWorld-Mirror 资产的 GPU 推理产出点云 PLY、高斯泼溅 PLY、深度图、法线图与 scene.rrd。
+  architecture: WorldFoundry routes inference through the in-tree HunyuanMirrorPipeline and vendored inference-only WorldMirror model code; the official repository serves as provenance for parity checks, not a runtime dependency. Third-party packages (onnxruntime, pycolmap, open3d, gsplat) are environment dependencies, not catalog blockers.
+  architecture_zh: WorldFoundry 通过树内 HunyuanMirrorPipeline 与内置的仅推理 WorldMirror 模型代码执行推理；官方仓库仅作一致性核对的溯源，不是运行时依赖。第三方包（onnxruntime、pycolmap、open3d、gsplat）是环境依赖，不是 catalog 阻塞。
+  usage_notes: HunyuanMirrorPipeline accepts image, input, images, or image_path payloads from the standard pipeline runner and writes reconstruction artifacts to the sample output directory. Real inference needs the configured Python environment, local checkpoints, and GPU-compatible torch/gsplat.
+  usage_notes_zh: HunyuanMirrorPipeline 接受标准 pipeline runner 传入的 image、input、images 或 image_path 负载，并把重建产物写入样例输出目录。真实推理需要配置好的 Python 环境、本地 checkpoint 与 GPU 兼容的 torch/gsplat。
+  limitations:
+  - Requires GPU-compatible torch/gsplat packages in the runtime environment.
+  - 'Reconstruction-oriented: it does not generate new content, it reconstructs what it sees.'
+  limitations_zh:
+  - 运行环境需要 GPU 兼容的 torch/gsplat 包。
+  - 面向重建：它不生成新内容，只重建所见。

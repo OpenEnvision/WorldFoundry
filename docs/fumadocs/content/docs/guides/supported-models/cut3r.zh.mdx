@@ -1,0 +1,50 @@
+---
+title: "CUT3R"
+description: "CUT3R（UC Berkeley）：3D 重建、3dgs；Runner 一致性待确认。"
+modelId: "cut3r"
+pageSource: authored
+---
+
+CUT3R 是带持久状态的连续 3D 感知模型：接收图像流并持续更新米制尺度的 3D 重建，无需离线捆绑优化。本 catalog 中已通过 Studio 发现机制注册了树内点云与两段式 3DGS 路径。CUT3R 同时是 video 类别中已验证的 VMem 条目的几何主干。
+
+<ModelPaperFigures modelId="cut3r" locale="zh" />
+
+记录论文为[arXiv 2501.12387](https://arxiv.org/abs/2501.12387)。
+
+项目页：[cut3r.github.io](https://cut3r.github.io/)。代码：[CUT3R/CUT3R](https://github.com/CUT3R/CUT3R)。
+
+Runner 一致性**待验证**。路径已注册；checkpoint 驱动的推理等本地或 Hugging Face 权重就位。本卡片没有记录环境 / VRAM / 输入契约行——就位后用 `worldfoundry-eval zoo model-show --model-id cut3r`。
+
+<ModelCommandBuilder modelId="cut3r" locale="zh" />
+
+## 用来做什么
+
+用 `cut3r` 做 catalog 几何推理。产物是重建而不是生成视频时选它。
+
+循环 Transformer 维护持久场景状态；每帧新图像更新状态并在线输出点图与相机参数（见上游论文）。已记录路径覆盖点云导出与两段式 3DGS pipeline；权重为 apache-2.0。该模型由加州大学伯克利分校（UC Berkeley）发布。
+
+catalog 记录的任务包括 3D 重建、3dgs、点云。输出模态为点云。
+
+## 运行时契约
+
+可选 `input_path`、`size`、`vis_threshold`、`revisit`。
+
+CLI task profile：`official-export`、`two-stage-3dgs`。绑定的 pipeline 类是 `CUT3RPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+`official-export` 记录默认值：size=512；`two-stage-3dgs` 记录默认值：size=512, width=704, height=480。
+
+提交 Studio 任务前请先就位权重。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run cut3r --pipeline.task-profile official-export`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境未记录。
+
+记录的权重仓库包括 `liguang0115/cut3r`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh cut3r`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="cut3r" locale="zh" />

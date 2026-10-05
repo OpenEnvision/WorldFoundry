@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 import shutil
 import subprocess
@@ -9,8 +8,8 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from worldfoundry.core import jsonable
+from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import package_module_root as package_root
-
 
 DEFAULT_MODEL_DIR_CANDIDATES = (
     "${WORLDFOUNDRY_HFD_ROOT}/SCOPE",
@@ -31,10 +30,6 @@ def runtime_root() -> Path:
     """Return the in-tree SCOPE runtime source root."""
 
     return package_root("worldfoundry.synthesis.visual_generation.scope.scope_runtime")
-
-
-def diffsynth_runtime_root() -> Path:
-    return package_root("worldfoundry.base_models.diffusion_model.diffsynth")
 
 
 def _project_root() -> Path:
@@ -155,8 +150,8 @@ class SCOPERuntime:
                 raise FileNotFoundError(f"SCOPE input image not found: {path}")
             return path.resolve()
 
-        from PIL import Image
         import numpy as np
+        from PIL import Image
 
         work_dir.mkdir(parents=True, exist_ok=True)
         target = work_dir / "input_image.png"
@@ -196,7 +191,21 @@ class SCOPERuntime:
         if self.device.startswith("cuda:"):
             cuda_index = self.device.split(":", 1)[1].strip()
             if cuda_index.isdigit():
-                env["CUDA_VISIBLE_DEVICES"] = cuda_index
+                # CUDA device indices are relative to the caller's visible set.
+                # The subprocess uses its own cuda:0 after narrowing that set.
+                visible = env.get("CUDA_VISIBLE_DEVICES")
+                if visible is None:
+                    selected = cuda_index
+                else:
+                    devices = [value.strip() for value in visible.split(",") if value.strip()]
+                    index = int(cuda_index)
+                    if index >= len(devices):
+                        raise ValueError(
+                            f"SCOPE device {self.device!r} is outside "
+                            f"CUDA_VISIBLE_DEVICES={visible!r}"
+                        )
+                    selected = devices[index]
+                env["CUDA_VISIBLE_DEVICES"] = selected
                 env["SCOPE_DEVICE"] = "cuda"
             else:
                 env["SCOPE_DEVICE"] = self.device
@@ -244,7 +253,7 @@ class SCOPERuntime:
 
     @staticmethod
     def _sha256(path: Path) -> str:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        return file_sha256(path)
 
     def predict(
         self,
@@ -344,6 +353,5 @@ class SCOPERuntime:
 __all__ = [
     "DEFAULT_MODEL_DIR",
     "SCOPERuntime",
-    "diffsynth_runtime_root",
     "runtime_root",
 ]

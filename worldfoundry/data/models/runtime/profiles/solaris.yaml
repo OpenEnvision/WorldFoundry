@@ -10,7 +10,7 @@ source_repos:
 checkpoints:
 - repo_id: nyu-visionx/solaris
   revision: 92424fb882be0056f5dbf223770769d2ebdf306e
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/solaris
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/nyu-visionx--solaris
   role: orbax_world_model_checkpoint
   status: checkpoint_manifest_validated
   required_paths:
@@ -23,7 +23,7 @@ checkpoints:
 datasets:
 - repo_id: nyu-visionx/solaris-eval-datasets
   revision: 136ed8683de570a9e88b1f54cab1ffbf50744297
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/solaris/datasets
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/nyu-visionx--solaris-eval-datasets
   role: official_eval_inputs
   status: dataset_snapshot_validated
   required_paths:

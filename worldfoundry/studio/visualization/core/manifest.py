@@ -1,4 +1,4 @@
-"""Viewport manifest payload shared by manifests, router, and Gradio shells."""
+"""Viewport manifest payload shared by Studio manifests, routing, and viewers."""
 
 
 from dataclasses import dataclass, field
@@ -17,7 +17,7 @@ class ViewportKind(str, Enum):
 
 @dataclass(frozen=True)
 class WorldViewportAssets:
-    """Pointers to media shown in the Gradio-centric world viewport."""
+    """Pointers to media shown in the world viewport."""
 
     preview_video: str | None = None
     preview_image: str | None = None
@@ -26,7 +26,7 @@ class WorldViewportAssets:
 
 @dataclass(frozen=True)
 class SplatViewportAssets:
-    """Gaussian splat URIs surfaced by Spark or Gradio `/file=` routes."""
+    """Gaussian splat paths and URLs surfaced by Studio viewers."""
 
     primary_path: str | None = None
     primary_url: str | None = None
@@ -200,7 +200,7 @@ def _int_or_default(value: Any, default: int) -> int:
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
-from worldfoundry.studio.catalog import CatalogEntry
+from worldfoundry.studio.inference.catalog import CatalogEntry
 from worldfoundry.studio.visualization.providers.run_record import (
     first_embodied_trace_candidate,
     first_episode_metadata_candidate,

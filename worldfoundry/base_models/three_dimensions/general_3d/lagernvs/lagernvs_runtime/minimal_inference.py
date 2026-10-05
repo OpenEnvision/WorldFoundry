@@ -18,7 +18,7 @@ Prerequisites:
   - GPU with CUDA support (bfloat16 on Ampere+ GPUs, float16 otherwise)
   - HuggingFace token with access to the gated model repo.
     Set via: export HF_TOKEN=hf_your_token_here
-    See README.md "Model Access" section for details.
+    See the LagerNVS supported-model page for gated Hugging Face access.
   - Internet access for downloading VGGT (~4GB) and the LagerNVS checkpoint.
     On Meta devvms, prefix the command with `with-proxy`.
 

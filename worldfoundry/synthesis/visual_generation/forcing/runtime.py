@@ -118,6 +118,7 @@ def _ckpt_root_candidates(model_id: str) -> tuple[Path, ...]:
     if model_id == "rolling-forcing":
         return (
             checkpoint_root_path("RollingForcing", specific_env="WORLDFOUNDRY_ROLLING_FORCING_CKPT_ROOT"),
+            checkpoint_root_path("TencentARC--RollingForcing"),
             hfd_root_path("TencentARC--RollingForcing"),
         )
     ckpt_name = "Causal-Forcing" if model_id == "causal-forcing" else "Self-Forcing"
@@ -126,7 +127,15 @@ def _ckpt_root_candidates(model_id: str) -> tuple[Path, ...]:
         if model_id == "causal-forcing"
         else "WORLDFOUNDRY_SELF_FORCING_CKPT_ROOT"
     )
-    return (checkpoint_root_path(ckpt_name, specific_env=env_name),)
+    owner_layout = (
+        "zhuhz22--Causal-Forcing"
+        if model_id == "causal-forcing"
+        else "gdhe17--Self-Forcing"
+    )
+    return (
+        checkpoint_root_path(ckpt_name, specific_env=env_name),
+        checkpoint_root_path(owner_layout),
+    )
 
 
 def _wan_root_candidates() -> tuple[Path, ...]:
@@ -203,15 +212,19 @@ def _default_wan_models_root() -> str:
     return str(local or _wan_root_candidates()[0])
 
 
-def _canonical_wan_variant_parent(model_id: str, runtime_root: str | Path) -> str:
-    if model_id == "self-forcing":
-        variant = "self_forcing"
-    elif model_id == "rolling-forcing" or Path(runtime_root).expanduser().name == "long_video":
-        variant = "causal_forcing_long_video"
-    else:
-        variant = "causal_forcing"
-    package = f"worldfoundry.base_models.diffusion_model.video.wan.variants.{variant}.wan"
-    return str(package_root(package).parent)
+def _wan_model_dir(root: str | Path, model_name: str) -> Path:
+    """Resolve canonical and flat-HFD Wan checkpoint directory layouts."""
+
+    root = Path(root).expanduser()
+    if root.name in {model_name, f"Wan-AI--{model_name}"}:
+        return root
+    canonical = root / model_name
+    if canonical.exists():
+        return canonical
+    hfd_flat = root / f"Wan-AI--{model_name}"
+    if hfd_flat.exists():
+        return hfd_flat
+    return canonical
 
 
 def _load_video_frames(video_path: str | Path) -> np.ndarray:
@@ -305,8 +318,6 @@ def _install_write_video() -> None:
         import torchvision.io as tv_io
     except Exception:
         return
-    if hasattr(tv_io, "write_video"):
-        return
 
     def write_video(
         filename: str,
@@ -353,7 +364,7 @@ class _ForcingRuntime:
     def __init__(
         self,
         *,
-        model_id: str = "self-forcing",
+        model_id: str | None = None,
         runtime_root: str | Path | None = None,
         checkpoint_path: str | Path | None = None,
         config_path: str | Path | None = None,
@@ -362,7 +373,7 @@ class _ForcingRuntime:
         python_executable: str | None = None,
         defaults: Mapping[str, Any] | None = None,
     ) -> None:
-        resolved_model_id = _canonical_model_id(model_id or self.MODEL_ID)
+        resolved_model_id = _canonical_model_id(model_id or self.MODEL_ID or "self-forcing")
         if self.MODEL_ID is not None and resolved_model_id != self.MODEL_ID:
             raise ValueError(f"{self.__class__.__name__} cannot load {resolved_model_id!r}.")
         resolved_runtime_root = str(Path(runtime_root or _default_repo_root(resolved_model_id)).expanduser())
@@ -372,7 +383,19 @@ class _ForcingRuntime:
             "text_to_video" if resolved_model_id == "rolling-forcing" else "text_or_image_to_video"
         )
         self.runtime_root = resolved_runtime_root
-        self.checkpoint_path = str(checkpoint_path or _default_checkpoint_path(resolved_model_id))
+        configured_checkpoint = Path(
+            checkpoint_path or _default_checkpoint_path(resolved_model_id)
+        ).expanduser()
+        stale_directory = (
+            "Causal-Forcing"
+            if resolved_model_id == "causal-forcing"
+            else "Self-Forcing"
+        )
+        if not configured_checkpoint.is_file() and stale_directory in configured_checkpoint.parts:
+            staged_checkpoint = Path(_default_checkpoint_path(resolved_model_id))
+            if staged_checkpoint.is_file():
+                configured_checkpoint = staged_checkpoint
+        self.checkpoint_path = str(configured_checkpoint)
         self.config_path = str(config_path or _default_config_path(resolved_model_id, resolved_runtime_root))
         self.wan_models_root = str(Path(wan_models_root or _default_wan_models_root()).expanduser())
         self.device = device
@@ -444,8 +467,12 @@ class _ForcingRuntime:
             "checkpoint_path": self.checkpoint_path,
             "checkpoint_exists": Path(self.checkpoint_path).is_file(),
             "wan_models_root": self.wan_models_root,
-            "wan_1_3b_exists": (Path(self.wan_models_root) / "Wan2.1-T2V-1.3B").is_dir(),
-            "wan_14b_exists": (Path(self.wan_models_root) / "Wan2.1-T2V-14B").is_dir(),
+            "wan_1_3b_exists": _wan_model_dir(
+                self.wan_models_root, "Wan2.1-T2V-1.3B"
+            ).is_dir(),
+            "wan_14b_exists": _wan_model_dir(
+                self.wan_models_root, "Wan2.1-T2V-14B"
+            ).is_dir(),
             "python_executable": self.python_executable,
             "i2v": bool(options.get("i2v", False)),
             "license": (
@@ -463,7 +490,7 @@ class _ForcingRuntime:
         _symlink_dir(_forcing_prompt_root(), cwd / "prompts")
         wan_dir = cwd / "wan_models"
         for name in ("Wan2.1-T2V-1.3B", "Wan2.1-T2V-14B"):
-            _symlink_dir(Path(self.wan_models_root) / name, wan_dir / name)
+            _symlink_dir(_wan_model_dir(self.wan_models_root, name), wan_dir / name)
         return cwd
 
     def _subprocess_env(self, *, compat_dir: Path | None = None) -> dict[str, str]:
@@ -471,7 +498,6 @@ class _ForcingRuntime:
         pythonpath = [
             str(compat_dir) if compat_dir is not None else "",
             str(package_root("worldfoundry").parent),
-            _canonical_wan_variant_parent(self.model_id, self.runtime_root),
             self.runtime_root,
             env.get("PYTHONPATH", ""),
         ]
@@ -479,6 +505,7 @@ class _ForcingRuntime:
         env["WORLDFOUNDRY_WAN_MODELS_ROOT"] = str(
             Path(self.wan_models_root).expanduser().resolve()
         )
+        env["WORLDFOUNDRY_FORCING_VARIANT"] = self.model_id
         env.setdefault("TOKENIZERS_PARALLELISM", "false")
         env.setdefault("PYTHONUNBUFFERED", "1")
         if self.device.startswith("cuda:"):
@@ -603,6 +630,17 @@ class _ForcingRuntime:
             raise ValueError(
                 "RollingForcing's released checkpoint and official inference route are text-to-video only."
             )
+        if self.model_id in {"self-forcing", "causal-forcing"}:
+            num_output_frames = int(options.get("num_output_frames", 21))
+            generated_latent_frames = num_output_frames - 1 if i2v else num_output_frames
+            if generated_latent_frames <= 0 or generated_latent_frames % 3:
+                mode = "I2V" if i2v else "T2V"
+                rule = "1 + 3k" if i2v else "3k"
+                raise ValueError(
+                    f"{self.model_name} {mode} num_output_frames must follow {rule}; "
+                    f"got {num_output_frames}. The released causal checkpoint generates "
+                    "three latent frames per block."
+                )
 
         with tempfile.TemporaryDirectory(prefix=f"worldfoundry_{self.model_id}_") as temp_dir_raw:
             temp_dir = Path(temp_dir_raw)

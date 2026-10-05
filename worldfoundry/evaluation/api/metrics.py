@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field
+from numbers import Real
 from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
 from worldfoundry.evaluation.api.json_contract import JsonContract, copy_mapping, tuple_of_str
 
 from .artifacts import ArtifactRef, coerce_artifact_refs
 from .generation import GenerationRequest, GenerationResult
-
 
 METRIC_SPEC_SCHEMA_VERSION = "worldfoundry-metric-spec"
 METRIC_RESULT_SCHEMA_VERSION = "worldfoundry-metric-result"
@@ -226,6 +228,28 @@ class AggregateResult(JsonContract):
         )
 
 
+def aggregate_mean(metric_id: str, rows: Sequence[MetricResult]) -> AggregateResult:
+    """Mean numeric metric values while retaining validity and skip counts."""
+    raw = [
+        float(row.raw_value)
+        for row in rows
+        if row.valid and isinstance(row.raw_value, Real) and not isinstance(row.raw_value, bool)
+    ]
+    normalized = [float(row.normalized_value) for row in rows if row.valid and row.normalized_value is not None]
+    values = (row.normalized_value if row.normalized_value is not None else row.raw_value for row in rows if row.valid)
+    n_valid = sum(isinstance(value, Real) and not isinstance(value, bool) for value in values)
+    return AggregateResult(
+        metric_id=metric_id,
+        n_total=len(rows),
+        n_valid=n_valid,
+        n_skipped=len(rows) - n_valid,
+        valid=bool(raw or normalized),
+        raw_stats={"mean": sum(raw) / len(raw)} if raw else {},
+        normalized_stats={"mean": sum(normalized) / len(normalized)} if normalized else {},
+        skip_breakdown=dict(Counter(row.skip_reason or "invalid" for row in rows if not row.valid)),
+    )
+
+
 @runtime_checkable
 class Metric(Protocol):
     """Minimum metric implementation surface."""
@@ -240,3 +264,40 @@ class Metric(Protocol):
 
     def aggregate(self, results: Sequence[MetricResult]) -> AggregateResult:
         ...
+
+
+@runtime_checkable
+class BatchMetric(Metric, Protocol):
+    """Optional metric extension for accelerator-efficient sample batches."""
+
+    def compute_batch(
+        self,
+        requests: Sequence[GenerationRequest],
+        results: Sequence[GenerationResult],
+    ) -> Sequence[Any] | Mapping[str, Any]:
+        """Return one metric output per request, in order or keyed by sample id."""
+        ...
+
+
+def align_batch_metric_outputs(outputs: Any, sample_ids: Sequence[str]) -> tuple[Any, ...]:
+    """Validate and align ordered or sample-id-keyed batch metric outputs."""
+
+    expected_ids = tuple(str(sample_id) for sample_id in sample_ids)
+    if isinstance(outputs, Mapping):
+        keyed = {str(sample_id): value for sample_id, value in outputs.items()}
+        missing = [sample_id for sample_id in expected_ids if sample_id not in keyed]
+        unexpected = sorted(set(keyed).difference(expected_ids))
+        if missing or unexpected:
+            raise ValueError(
+                "batch metric output sample ids do not match requests: "
+                f"missing={missing}, unexpected={unexpected}"
+            )
+        return tuple(keyed[sample_id] for sample_id in expected_ids)
+    if not isinstance(outputs, Iterable) or isinstance(outputs, (str, bytes, bytearray)):
+        raise TypeError("batch metric output must be an iterable or a sample-id mapping")
+    aligned = tuple(outputs)
+    if len(aligned) != len(expected_ids):
+        raise ValueError(
+            f"batch metric returned {len(aligned)} outputs for {len(expected_ids)} requests"
+        )
+    return aligned

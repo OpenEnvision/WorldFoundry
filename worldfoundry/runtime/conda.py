@@ -17,32 +17,33 @@ from typing import Any, Mapping, Sequence
 
 from packaging.version import InvalidVersion, Version
 
-from worldfoundry.core.io.paths import conda_envs_root_path, resolve_worldfoundry_path, worldfoundry_path_tokens
-from worldfoundry.evaluation.utils import DATA_ROOT, REPO_ROOT
-from worldfoundry.evaluation.utils import load_manifest, load_manifest_collection
+from worldfoundry.core.io.manifests import load_manifest, load_manifest_collection
+from worldfoundry.core.io.paths import (
+    conda_envs_root_path,
+    package_data_root,
+    project_root,
+    resolve_worldfoundry_path,
+    worldfoundry_path_tokens,
+)
+
 from .cuda_tiers import (
+    SUPPORTED_CUDA_TIERS,
     cuda_version_tuple,
     detect_nvidia_driver_cuda,
     preferred_unified_tier,
     resolve_cuda_tier,
-    SUPPORTED_CUDA_TIERS,
     unified_env_enabled,
     unified_env_exists,
     unified_env_name,
 )
 from .env import resolve_ckpt_dir, resolve_hfd_root
 
-
 # ── Defaults ─────────────────────────────────────────────────────────────────
 
-def project_root() -> Path:
-    """Resolve the project root by searching for ``pyproject.toml`` upwards."""
-    current = Path(__file__).resolve()
-    for parent in current.parents:
-        if (parent / "pyproject.toml").is_file():
-            return parent
-    return current.parents[5]
-
+# Same values evaluation.utils derives; resolved from core so the runtime
+# layer never imports worldfoundry.evaluation (SA-10).
+REPO_ROOT = project_root()
+DATA_ROOT = package_data_root()
 
 DEFAULT_ENV_MANIFEST = DATA_ROOT / "models" / "runtime" / "environments"
 DEFAULT_ENV_ROOT = conda_envs_root_path()
@@ -299,6 +300,14 @@ def unified_env_blocker(spec: RuntimeCondaEnvSpec) -> str | None:
             for operator, version in version_specs:
                 if operator in {"==", "===", ">=", "~="} and version >= major_cap:
                     return f"{name}_{version}_requires_new_major"
+                # A strict upper bound is an ABI/API compatibility contract,
+                # not merely a minimum-feature hint.  Routing it into a shared
+                # environment lets an unrelated upgrade (for example
+                # Transformers 5.x) silently violate the model profile.
+                if operator == "<" and version <= major_cap:
+                    return f"{name}_upper_bound_{version}_requires_isolated_env"
+                if operator == "<=" and version < major_cap:
+                    return f"{name}_upper_bound_{version}_requires_isolated_env"
     return None
 
 
@@ -368,7 +377,7 @@ def _load_runtime_conda_env_specs_uncached(
             driver_status=str(item.get("driver_status") or "compatible"),
             conda_packages=_tuple_of_str(item.get("conda_packages")),
             pip_packages=_tuple_of_str(item.get("pip_packages")),
-            pip_extra_index_url="" if pip_extra_index is None else str(pip_extra_index),
+            pip_extra_index_url=None if pip_extra_index is None else str(pip_extra_index),
             pip_find_links=_tuple_of_str(item.get("pip_find_links") or item.get("pip_find_links_url")),
             channels=_tuple_of_str(item.get("channels")) or default_channels,
             validation_imports=_tuple_of_str(item.get("validation_imports")),

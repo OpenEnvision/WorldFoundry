@@ -16,20 +16,24 @@ source:
   status: open_source
   official_repo_url: https://github.com/Vchitect/LongVie
 official_sources:
+  paper: https://arxiv.org/abs/2512.13604
   project_page: https://vchitect.github.io/LongVie2-project/
   github:
     url: https://github.com/Vchitect/LongVie
 integration:
   status: integrated
   notes:
-  - WorldFoundry vendors the official LongVie DiffSynth runtime under worldfoundry/synthesis/visual_generation/longvie/longvie_runtime.
-  - The LongVie-1 adapter uses the control-weight path without the optional LongVie
-    2 DiT attention override; pass execute=True to run the checkpoint-backed GPU path.
+  - WorldFoundry implements LongVie over the canonical Wan model, encoders, VAE,
+    VACE/control roles, checkpoint loaders, and shared staged runner.
+  - The LongVie-1 adapter accepts an explicitly staged first-generation control
+    weight and never loads the LongVie 2 DiT attention override.
+  - Upstream has not published a first-generation checkpoint. Vchitect/LongVie2
+    is a different variant and is deliberately rejected by this entry.
 runner_parity:
   status: pending
   notes:
-  - The runner preserves the official LongVie direct DiffSynth pipeline, target 640x352
-    segment size, history/noise continuation state, VRAM management, and optional
+  - The native runner preserves the official target 640x352 segment size,
+    history/noise continuation state, VRAM management, and optional
     USP ring/ulysses controls.
   - Official release-parity evidence remains pending; per-run artifact checks are
     tracked outside the model catalog.
@@ -40,3 +44,26 @@ catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries
   expose WorldFoundry pipeline targets; metadata-only entries retain upstream provenance
   without runnable WorldFoundry backends.
+docs:
+  publisher: Shanghai AI Laboratory (Vchitect)
+  publisher_kind: lab
+  publisher_zh: 上海人工智能实验室（Vchitect 团队）
+  overview: 'LongVie is a controllable ultra-long video generation framework from the Vchitect team: it drives a Wan-based diffusion backbone with dense depth and sparse point/track control videos to keep minute-scale videos consistent. This entry retains the first-generation adapter, but upstream has not published first-generation weights; the public Vchitect/LongVie2 checkpoint is not interchangeable.'
+  overview_zh: LongVie 是 Vchitect 团队的可控超长视频生成框架：用稠密深度与稀疏点/轨迹控制视频来驱动基于 Wan 的扩散基座，使分钟级视频保持一致。本条目保留第一代适配器，但上游尚未发布第一代权重；公开的 Vchitect/LongVie2 checkpoint 不能混用。
+  architecture: LongVie-1 = canonical Wan model + encoders + VAE + VACE/control roles + checkpoint loaders + the shared staged runner. The native runner preserves the official 640x352 segment size and the history/noise continuation state, with optional USP ring/ulysses distributed controls. Its synthesis package is a thin product assembly boundary, not a separate engine.
+  architecture_zh: LongVie-1 = 规范化 Wan 模型 + 编码器 + VAE + VACE/控制角色 + checkpoint 加载器 + 共享分段 runner。原生 runner 保留官方 640x352 分段尺寸与历史/噪声续写状态，并支持可选的 USP ring/ulysses 分布式控制。其 synthesis 包只是薄薄的产品装配层，不是独立引擎。
+  usage_notes: Default calls fail fast unless execute=True. Execution additionally requires an explicitly staged first-generation control checkpoint because no official LongVie-1 weights are published. For the public checkpoint-backed route, use longvie-2.
+  usage_notes_zh: 默认调用在未传 execute=True 时快速失败。由于官方尚未发布 LongVie-1 权重，执行时还必须显式提供第一代 control checkpoint。需要公开 checkpoint 支持的路径时请使用 longvie-2。
+  limitations:
+  - 'Runner parity is pending: no official first-generation checkpoint is published, so this entry cannot currently produce a release-parity demo from public assets.'
+  - LongVie2 weights are rejected; using them here would mislabel a second-generation output as LongVie-1.
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  - Requires user-provided depth and point/track control videos — it is not a plain I2V model.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  - 需要用户提供深度与点/轨迹控制视频——它不是普通的图生视频模型。
+  recommended_benchmarks:
+  - id: chronomagic-bench
+    reason: Long-horizon suite for minute-scale generation.
+    reason_zh: 面向分钟级生成的长时程评测。

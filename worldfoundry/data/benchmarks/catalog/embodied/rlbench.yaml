@@ -1,5 +1,7 @@
 id: rlbench
 name: RLBench
+publisher: Imperial College London
+publisher_kind: university
 benchmark_kind:
 - embodied-action
 - robot-manipulation
@@ -35,6 +37,9 @@ dataset:
   reason: RLBench is simulator-backed; WorldFoundry normalizes policy rollout results while CoppeliaSim/PyRep execution 
     remains explicit.
 runner:
+  normalization:
+    dispatch: embodied
+    embodied_track: vla
   runner_target: worldfoundry.evaluation.tasks.contracts.external:RLBenchContract
   verification_status: normalizer_only
   validation_command:

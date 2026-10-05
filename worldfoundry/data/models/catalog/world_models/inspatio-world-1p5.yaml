@@ -1,0 +1,43 @@
+id: inspatio-world-1p5
+name: InSpatio World 1.5
+aliases: [inspatio-world-v1.5, inspatio-world-1.5]
+tasks: [image-to-video, video-to-video, trajectory-conditioned-video, novel-view-synthesis]
+provider: official_repo
+source:
+  status: open_source
+  official_repo_url: https://github.com/inspatio/inspatio-world-v1.5
+  hf_repo_id: inspatio/world-1.5
+  license: apache-2.0
+official_sources:
+  paper: https://arxiv.org/abs/2604.07209
+  project_page: https://inspatio.github.io/inspatio-world-1.5/
+  github:
+    url: https://github.com/inspatio/inspatio-world-v1.5
+    head_sha: dd3561f544053fe22d739b6b2f8461c9c97bf8cb
+  huggingface:
+  - repo_id: inspatio/world-1.5
+    revision: 6a5cf5e27b8a05930911a5416fa8c68eabdda414
+    type: model
+    status: confirmed
+checkpoints:
+- repo_id: inspatio/world-1.5
+  revision: 6a5cf5e27b8a05930911a5416fa8c68eabdda414
+runtime_profile: runtime-profile:inspatio-world-1p5
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: inspatio-world-1p5
+catalog_category: world_models
+integration:
+  status: verified
+  notes:
+  - Native inference reuses the existing causal Wan graph, UMT5 encoder, Wan VAE, causal sampler and in-tree DA3.
+  - Prepared scenes support one image, four images or video; target poses use row-major OpenCV world-to-camera matrices.
+  - The released checkpoint uses resolution 480x832, three latent frames per block and four denoising calls.
+  - Original InSpatio World remains a separate model and checkpoint.
+runner_parity:
+  status: verified
+  upstream_revision: dd3561f544053fe22d739b6b2f8461c9c97bf8cb
+  test: tests/manual/inspatio_v15_regression.py
+  notes:
+  - Exact BF16/SDPA parity on two causal blocks for prepared single-image, four-image and 21-frame video scenes.
+  - Direct single-image, four-image and video inputs generated successfully with in-tree DA3; replaying the estimated geometry through upstream also matched latents and decoded frames exactly.
+  - Direct replay verifies generation from the same geometry; it does not independently certify DA3 reconstruction quality or long-horizon generation.

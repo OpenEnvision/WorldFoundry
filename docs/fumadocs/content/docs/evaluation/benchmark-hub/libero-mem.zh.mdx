@@ -1,126 +1,34 @@
 ---
 title: LIBERO-Mem
-description: LIBERO-Mem — 指标、依赖与运行命令。
+description: "非马尔可夫 LIBERO 套件：10 个物体记忆任务（OM / OS / OR / OO）。WorldFoundry 导入官方 rollout——不跑模拟器。"
 ---
 
-## 简介
+LIBERO-Mem（AAAI 2026）**不是** Spatial / Object / Goal / LIBERO-100 那四个终身学习套件。FPT Software AI Center（联合阿肯色、斯图加特、CMU、奥尔堡与利物浦）在 LIBERO / robosuite 栈上新建了 **10** 个桌面任务，使策略无法只靠当前帧成功。线索在**物体历史**里：动过什么、做了几次、什么顺序，或被什么挡住。四条官方记忆轴：
 
+- **物体运动 (OM)** — 在歧义场景里回忆上一次抓 / 放。
+- **物体序列 (OS)** — 统计重复抓放次数（3× / 5× / 7×）。
+- **物体关系 (OR)** — 在相同碗盘间交换或轮转。
+- **物体遮挡 (OO)** — 记住哪个篮子藏了哪个物体。
 
+每任务 **120** 条轨迹（100 训练 / 20 验证）、**200–700** 帧，带实例 ID、掩码与符号化子目标（`→`、`∨`）。官方计分报告**任务成功**与**子目标完成**。Embodied-SlotSSM 是作者的配套 VLA——模型卡片事实，不是 WorldFoundry 的榜单行。
 
-LIBERO-Mem external benchmark manifest for memory-dependent language-conditioned manipulation.
+论文：[Rethinking Progression of Memory State in Robotic Manipulation](https://arxiv.org/abs/2511.11478)。项目：[libero-mem.github.io](https://libero-mem.github.io/)。代码：[libero-mem/libero-mem](https://github.com/libero-mem/libero-mem)。
 
+WorldFoundry **只导入官方结果**。你在上游跑评测器，再经 `official-validation` 把 JSON/CSV 归一化进 scorecard。仓内不跑模拟器，也不带 Embodied-SlotSSM 权重。这与可接线闭环的[基础 LIBERO](/zh/docs/evaluation/benchmark-hub/libero) 不同。
 
+<BenchmarkPageSections id="libero-mem" locale="zh" />
 
-## 指标
-
-LIBERO-Mem external benchmark manifest for memory-dependent language-conditioned manipulation.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/libero-mem.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `memory_success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `action_accuracy` | 预测动作、状态或结果相对 benchmark 成功标准的正确性。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `worldfoundry-unified-cu128`。
-- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
-- WorldFoundry provides contract and official result normalization for caller-provided LIBERO-Mem outputs.
-
-### 测评数据
-
-- 待测模型输出目录：设置 `WORLDFOUNDRY_LIBERO_MEM_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/libero-mem`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/Lifelong-Robot-Learning--LIBERO`
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_LIBERO_MEM_ROOT`
-- `WORLDFOUNDRY_LIBERO_MEM_RESULTS_PATH`
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id libero-mem \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero-mem/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/libero-mem/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id libero-mem \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero-mem/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id libero-mem --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_LIBERO_MEM_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+可选 `WORLDFOUNDRY_LIBERO_MEM_ROOT` 指向本地工具包 / 仓库根。省略 `--official-results-path` 时，默认导入路径是 `WORLDFOUNDRY_LIBERO_MEM_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/libero-mem.yaml`。输出：`scorecard.json`（主键 `success_rate`；导出含该字段时还有 `memory_success_rate`）、`raw_results.jsonl`、`evaluation/summary.json`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

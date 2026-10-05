@@ -15,3 +15,23 @@ integration:
   notes: [VideoX-Fun source is vendored at revision 403f1f7b78dcafccc4f6606dda4ec28e16e667dc.]
 runner_parity: {status: pending, notes: [Dedicated Wan2.2 A14B camera checkpoint route is wired.]}
 catalog_category: world_models
+docs:
+  publisher: Alibaba PAI (VideoX-Fun)
+  publisher_kind: company
+  publisher_zh: 阿里云 PAI（VideoX-Fun）
+  overview: 'Wan2.2-Fun A14B Control Camera is the largest Wan2.2-generation camera-control checkpoint in the VideoX-Fun family: an A14B (mixture-of-experts style) diffusion backbone steered by explicit camera pose sequences for image-to-video. WorldFoundry vendors VideoX-Fun in-tree (revision 403f1f7b) and wires a dedicated route for alibaba-pai/Wan2.2-Fun-A14B-Control-Camera under Apache-2.0.'
+  overview_zh: Wan2.2-Fun A14B Control Camera 是 VideoX-Fun 家族中 Wan2.2 世代最大的相机控制 checkpoint：A14B（专家混合式）扩散骨干，由显式相机位姿序列操控图生视频。WorldFoundry 将 VideoX-Fun 内置树内（revision 403f1f7b），并为 alibaba-pai/Wan2.2-Fun-A14B-Control-Camera 接通专用路由， Apache-2.0 许可。
+  architecture: An A14B Wan2.2 diffusion backbone with the VideoX-Fun Control-Camera conditioning pathway. Further internals are not recorded in this repository.
+  architecture_zh: A14B 规模的 Wan2.2 扩散骨干，叠加 VideoX-Fun Control-Camera 条件通路。更多内部细节仓库未记录。
+  usage_notes: Reserve this variant for maximum-quality camera-controlled generation once your pipeline is proven on the GPU-validated 1.3B sibling; A14B checkpoints demand the largest VRAM budget in the family. Runner parity is pending.
+  usage_notes_zh: 建议在 GPU 已验证的 1.3B 同门版本上跑通流程后，再用此变体追求最高质量的相机控制生成；A14B checkpoint 是家族中显存需求最大的。runner parity 仍为 pending。
+  limitations:
+  - Runner parity is pending; no GPU validation is recorded for this variant.
+  - Largest VRAM footprint in the VideoX-Fun camera family.
+  limitations_zh:
+  - runner parity 为 pending；此变体仓库未记录 GPU 验证。
+  - VideoX-Fun 相机家族中显存占用最大。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-pose adherence for controlled i2v generation.
+    reason_zh: 受控图生视频的相机位姿跟随。

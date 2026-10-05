@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .compute import compute_ppl
+compute_ppl = lazy_export(f"{__name__}.compute", "compute_ppl", owner=__name__)
 
 METRIC_ID = "ppl"
 ALIASES = ("perceptual-path-length", "perceptual_path_length")

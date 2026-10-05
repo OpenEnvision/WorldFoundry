@@ -1,0 +1,56 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BC-03-I1
+track: coverage
+title_en: Cued Seven-Pin Bowling Roll
+scene_grounding:
+- 'Initial state must match: A bowling setup matching `BC-03`, with a visible text cue on the bowling
+  ball.'
+- Apparatus geometry in the opening frames must match the source image.
+action_execution:
+- 'Required action: Roll the bowling ball once down the lane.'
+- Action must happen exactly once in the expected direction / region.
+- Action target must be identifiable in the same frame as the action onset (Track B target acquisition).
+- The action must be visible as a single continuous event from the described initial state; cuts, hidden
+  starts, or repeated attempts are action-execution failures.
+- For contact labels, the object trajectory from release/kick/throw/roll to target or miss must be continuous
+  enough to audit contact.
+target_requirements:
+- The cued bowling ball and seven-pin rack must remain identifiable; the cue text must stay on the same
+  ball and not create extra balls.
+- A pin-count label requires the cued ball to roll continuously down the lane and collide with the rack
+  or visibly miss it.
+- Exact pin count must be auditable in the first stable readout frame; hidden decisive pins are READOUT_AMBIGUITY.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout window.
+- Color / identity of the subject must remain consistent across frames.
+- 'Identity continuity is fatal: the judged subject, target, and key apparatus must not swap appearance,
+  duplicate, vanish, or re-enter as a different object/person/animal.'
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-result side change: label-defining region changes after the first decisive post-action frame.'
+- Outcome label changes (e.g., from miss to score) via a non-physical motion after the first decisive
+  contact frame.
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after the readout window.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Cued Seven-Pin Bowling Roll.'
+- 'Fatal severity cue: target/stimulus acquisition failure, impossible trajectory, identity discontinuity,
+  or post-result contradiction excludes strict trusted metrics even if the outcome is readable.'
+- 'BC contact trust cue: target contact/hit/miss geometry, continuous trajectory, collision consistency,
+  and apparatus stability are mandatory.'

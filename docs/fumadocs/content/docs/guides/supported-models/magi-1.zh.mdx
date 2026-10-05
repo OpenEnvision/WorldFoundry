@@ -1,0 +1,50 @@
+---
+title: "MAGI-1"
+description: "MAGI-1（Sand AI）：图生视频、视频生成；Runner 一致性待确认; 独立环境 `magi-official-cu124`。"
+modelId: "magi-1"
+pageSource: generated
+---
+
+MAGI-1 是 Sand AI 开源的自回归视频生成模型，catalog 记录其图生视频与通用视频生成任务，并作为 Apache-2.0 元数据的高优先级开源候选跟踪。WorldFoundry 路径已完备，checkpoint 缺失会在运行时报告。
+
+<ModelPaperFigures modelId="magi-1" locale="zh" />
+
+记录论文为[arXiv 2505.13211](https://arxiv.org/abs/2505.13211)。
+
+代码：[SandAI-org/MAGI-1](https://github.com/SandAI-org/MAGI-1)。
+
+<ModelCommandBuilder modelId="magi-1" locale="zh" />
+
+## 用来做什么
+
+`magi-1` 是记录的文本/图像到视频线。需要同一张卡片上同时有 prompt 与静帧条件时用它。
+
+上游将 MAGI-1 描述为按块自回归生成、使用因果注意力的大型视频模型，支持流式续写。本仓库仅记录 prompt+image 输入契约与 generated_video 产物；规模与内部细节仓库未记录。
+
+catalog 记录的任务包括 图生视频、视频生成。模态上，它接受图像，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（基础视频生成质量评测）。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`input_path`、`frames`、`fps`；产物 `magi-1.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `MAGI1Pipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+尚无 runner parity 记录——应视为未完成 GPU 验证。 先就位 MAGI-1 权重；缺失时路径会给出明确报错。
+
+Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run magi-1 --pipeline.task-profile interactive-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `magi-official-cu124`（Python 3.10.12，CUDA 12.4）。
+
+记录的权重仓库包括 `sand-ai/MAGI-1`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh magi-1`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="magi-1" locale="zh" />

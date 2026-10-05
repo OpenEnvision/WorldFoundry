@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Sequence, Union
+from typing import Any, Dict, Sequence, Union
 
 import numpy as np
 import torch
 
+from worldfoundry.core.geometry.path import sample_camera_path
+from worldfoundry.core.media.codecs.image import load_pil_image
+
 from .base_operator import BaseOperator
-from ..pipelines.lyra.lyra_utils import load_pil_image
 
 
 class LyraOperator(BaseOperator):
@@ -99,6 +101,29 @@ class LyraOperator(BaseOperator):
     def process_perception(self, images):
         """Process perception inputs like images, videos, and reference frames."""
         return load_pil_image(images)
+
+    def process_camera_path(
+        self,
+        camera_path: Dict[str, Any],
+        *,
+        prompt: str = "",
+        region_hint: str = "",
+    ) -> Dict[str, Any]:
+        """Convert the shared camera-path schema into the Lyra trajectory."""
+
+        sampled = sample_camera_path(camera_path, frame_stride=self.chunk_stride)
+        chunk_captions = dict(sampled["chunk_captions"])
+        fallback_caption = (region_hint or prompt or "").strip()
+        if fallback_caption and not chunk_captions:
+            chunk_captions["0"] = fallback_caption
+        return {
+            "actions": ["camera_path"] * (len(sampled["camera_path"]["keyframes"]) - 1),
+            "camera_path": sampled["camera_path"],
+            "camera_w2c": torch.from_numpy(sampled["camera_w2c"]),
+            "zoom_factors": torch.from_numpy(sampled["zoom_factors"]),
+            "chunk_captions": chunk_captions,
+            "num_frames": int(sampled["frame_count"]),
+        }
 
     def _normalize_interaction(self, interaction: Union[str, Dict[str, Any]]) -> Dict[str, str]:
         """Normalize interaction implementation."""

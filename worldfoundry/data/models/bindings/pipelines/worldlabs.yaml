@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: worldlabs
+model_id: worldlabs
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.worldlabs.pipeline_worldlabs:WorldLabsPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

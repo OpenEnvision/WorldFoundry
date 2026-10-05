@@ -1,0 +1,55 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BS-01
+track: coverage
+title_en: Bottle Flip Landing on Table
+scene_grounding:
+- 'Initial state must match: A hand holds a water bottle above a table.'
+- The bottle, hand, table surface, and any visible support objects must be visible
+  before the flip begins.
+action_execution:
+- 'Required action: Flip the bottle once.'
+- The hand must release/flip the bottle itself once; the video must show continuous
+  bottle rotation or travel from hand to landing.
+- A static final bottle pose without a visible flip is action execution failure.
+target_requirements:
+- Target object is the bottle; base, cap, side surface, and any leaning support must
+  remain visible enough to audit the final support contact.
+- Landing pose must be caused by the flip, not by an inserted/repainted bottle at
+  the end.
+object_continuity:
+- The same bottle must remain continuous through flight, bounce, and final rest;
+  no disappearance, duplication, or identity swap is allowed.
+- Cap/base orientation may rotate but must be physically continuous.
+- A readable upright/base/side result remains relaxed-readable, but strict trust
+  requires a physically plausible intermediate flip/landing process.
+apparatus_stability:
+- Table plane and support objects must not drift, resize, or appear only after the
+  landing pose is known.
+motion_hard_failures:
+- 'Bottle teleport: final pose appears without continuous flip/landing trajectory.'
+- 'Support hallucination: a wall/object appears after landing to justify a leaning
+  support label.'
+- 'Post-settle pose change: base/cap/side support changes after the bottle has
+  visibly settled without continuous motion.'
+- 'Physically impossible process: readable terminal support with discontinuous
+  intermediate motion is strict-excluding rather than TRUSTED.'
+post_result_consistency:
+- After the first stable landing, support contact must remain consistent with the
+  selected label; a side-lying bottle cannot snap upright without motion.
+- Minor wobble is allowed only before the first stable readout.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Bottle Flip Landing on Table.'
+- 'Track B family: stability_stack.'

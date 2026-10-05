@@ -44,27 +44,22 @@ variants:
     notes:
     - The WorldFoundry route is wired with the local genmo/mochi-1-preview checkpoint.
     - Full official 31-frame / 64-step Mochi preview parity remains pending.
-    demo_command:
-    - bash
-    - scripts/model_zoo/run_mochi1_preview_official_demo.sh
     expected_artifacts:
     - mochi1_preview_seed12345_848x480_31f.mp4
   runner_parity:
     status: pending
 demo_parity:
   status: pending
-  demo_command:
-  - bash
-  - scripts/model_zoo/run_mochi1_preview_official_demo.sh
   expected_artifacts:
   - mochi1_preview_seed12345_848x480_31f.mp4
   official_repo_dir: tmp/model_zoo/repos/github.com_genmoai_models
   checkpoint_repo_id: genmo/mochi-1-preview
   checkpoint_snapshot: 14be5fcea23095ed330cb214647916a451e38b6e
   notes:
-  - Official Mochi-1 preview CLI parity command is wired with fixed prompt, seed,
-    resolution, frame count, CFG scale, and step count, but the full 31-frame /
-    64-step official quality run remains pending.
+  - Full 31-frame / 64-step official quality parity remains pending. No public
+    demo reproduction script is packaged with this catalog entry.
+official_sources:
+  project_page: https://www.genmo.ai/blog
 integration:
   status: integrated
   notes:
@@ -86,3 +81,23 @@ catalog_policy:
     id, sha, private, gated, license, and selected task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit
     parity run and expected artifact are recorded.
+docs:
+  publisher: Genmo
+  publisher_kind: company
+  publisher_zh: Genmo
+  overview: Mochi-1 is Genmo's open text-to-video model, released as a preview checkpoint and known for strong motion quality among open models at its release. The catalog records one runnable variant, mochi-1-preview-t2v; the WorldFoundry runner path is wired for the official preview checkpoint.
+  overview_zh: Mochi-1 是 Genmo 开源的文生视频模型，以 preview checkpoint 形式发布，发布时在开源模型中以运动质量见长。catalog 记录一个可运行 variant：mochi-1-preview-t2v；WorldFoundry runner 路径已按官方 preview checkpoint 接好。
+  architecture: Upstream describes Mochi-1 as a 10B-parameter Asymmetric Diffusion Transformer (AsymmDiT) with a dedicated video VAE. This repository records the runner wiring and the standard prompt/image/video/actions input schema; further internals are not recorded here.
+  architecture_zh: 上游将 Mochi-1 描述为 100 亿参数的非对称扩散 Transformer（AsymmDiT），配专用视频 VAE。本仓库记录 runner 接线与标准 prompt/image/video/actions 输入 schema；更多内部细节仓库未记录。
+  usage_notes: 'Runner parity is pending: the path is wired, but full 31-frame / 64-step official quality parity has not been recorded. No public demo reproduction script is packaged. GitHub uses genmoai while Hugging Face uses genmo; stage the preview checkpoint before running.'
+  usage_notes_zh: Runner parity 仍待验证：路径已接好，但完整 31 帧、64 步的官方画质一致性尚未记录，且未提供公开 demo 复现脚本。GitHub 组织名为 genmoai，Hugging Face 为 genmo；运行前需就位 preview checkpoint。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard T2V quality suite.
+    reason_zh: 标准文生视频质量评测。

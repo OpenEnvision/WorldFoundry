@@ -3,7 +3,7 @@ import tempfile
 
 import torch
 
-from torch_fidelity.helpers import vprint
+from .helpers import vprint
 
 
 def torch_maybe_compile(module, dummy_input, verbose):

@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -23,6 +24,7 @@ WORKSPACE_ROOT = REPO_ROOT.parent
 MODEL_CATALOG_ROOT = REPO_ROOT / "worldfoundry" / "data" / "models" / "catalog" / "vla_va_wam"
 MODEL_PROFILE_ROOT = REPO_ROOT / "worldfoundry" / "data" / "models" / "runtime" / "profiles"
 BENCHMARK_PROFILE_ROOT = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "runtime_profiles" / "official"
+BENCHMARK_CATALOG_ROOT = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "catalog" / "embodied"
 LOCAL_ASSETS_TEMPLATE = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "local_assets.example.yaml"
 
 ACTIVE_BENCHMARK_IDS: tuple[str, ...] = (
@@ -66,6 +68,7 @@ BENCHMARK_REPO_URLS: dict[str, str] = {
 }
 
 TOKEN_RE = re.compile(r"\$(?P<brace>\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)\})|\$(?P<plain>[A-Za-z_][A-Za-z0-9_]*)")
+HF_REVISION_MARKER_SCHEMA = "worldfoundry-embodied-hf-revision-v1"
 
 
 @dataclass(frozen=True)
@@ -117,6 +120,11 @@ def github_slug(repo_url: str) -> str:
     if url.endswith(".git"):
         url = url[:-4]
     return url.replace("https://github.com/", "").replace("/", "--")
+
+
+def normalized_repo_url(repo_url: str) -> str:
+    url = repo_url.rstrip("/")
+    return url[:-4] if url.endswith(".git") else url
 
 
 def target_env(data_root: Path, ckpt_root: Path, hfd_root: Path, hfd_dataset_root: Path) -> dict[str, str]:
@@ -309,6 +317,105 @@ def load_template_benchmark_assets() -> dict[str, list[Mapping[str, Any]]]:
     return result
 
 
+def template_repo_revisions(template_assets: Mapping[str, list[Mapping[str, Any]]]) -> dict[str, str]:
+    revisions: dict[str, str] = {}
+    for assets in template_assets.values():
+        for asset in assets:
+            repo_url = asset.get("repo_url")
+            revision = asset.get("revision")
+            if isinstance(repo_url, str) and repo_url and isinstance(revision, str) and revision:
+                revisions[normalized_repo_url(repo_url)] = revision
+    return revisions
+
+
+def load_benchmark_catalog_revisions() -> dict[str, dict[tuple[str, str], str]]:
+    """Load canonical source and dataset pins from embodied catalog entries."""
+
+    result: dict[str, dict[tuple[str, str], str]] = {}
+    for benchmark_id in ACTIVE_BENCHMARK_IDS:
+        path = BENCHMARK_CATALOG_ROOT / f"{benchmark_id}.yaml"
+        if not path.is_file():
+            continue
+        payload = load_yaml(path)
+        pins: dict[tuple[str, str], str] = {}
+
+        def add_pin(kind: str, asset_id: str, revision: object) -> None:
+            if not isinstance(revision, str) or not revision.strip():
+                return
+            key = (kind, asset_id)
+            normalized_revision = revision.strip()
+            previous = pins.get(key)
+            if previous is not None and previous != normalized_revision:
+                raise ValueError(
+                    f"conflicting {benchmark_id} catalog revisions for {asset_id}: "
+                    f"{previous} != {normalized_revision}"
+                )
+            pins[key] = normalized_revision
+
+        official_sources = payload.get("official_sources") or {}
+        if isinstance(official_sources, Mapping):
+            github = official_sources.get("github") or {}
+            if isinstance(github, Mapping) and isinstance(github.get("url"), str):
+                add_pin("git", normalized_repo_url(str(github["url"])), github.get("head_sha"))
+            for dataset in official_sources.get("huggingface_datasets") or []:
+                if isinstance(dataset, Mapping) and isinstance(dataset.get("repo_id"), str):
+                    add_pin("hf", str(dataset["repo_id"]), dataset.get("revision"))
+        for dataset in payload.get("dataset_refs") or []:
+            if isinstance(dataset, Mapping) and isinstance(dataset.get("repo_id"), str):
+                add_pin("hf", str(dataset["repo_id"]), dataset.get("revision"))
+        result[benchmark_id] = pins
+    return result
+
+
+def resolved_catalog_revision(
+    *,
+    benchmark_id: str,
+    kind: str,
+    asset_id: str,
+    explicit_revision: object,
+    catalog_revisions: Mapping[str, Mapping[tuple[str, str], str]],
+) -> str | None:
+    explicit = str(explicit_revision).strip() if explicit_revision else None
+    catalog = catalog_revisions.get(benchmark_id, {}).get((kind, asset_id))
+    if explicit is not None and catalog is not None and explicit != catalog:
+        raise ValueError(
+            f"{benchmark_id} revision for {asset_id} conflicts with catalog: {explicit} != {catalog}"
+        )
+    return explicit or catalog
+
+
+def benchmark_environment_defaults(
+    env: Mapping[str, str],
+    selected_benchmarks: set[str] | None,
+) -> dict[str, str]:
+    """Resolve runtime environment variables declared by the asset template."""
+
+    selected = set(ACTIVE_BENCHMARK_IDS) if selected_benchmarks is None else selected_benchmarks
+    defaults: dict[str, str] = {}
+    for benchmark_id, assets in load_template_benchmark_assets().items():
+        if benchmark_id not in selected:
+            continue
+        for asset in assets:
+            env_name = asset.get("env")
+            path_raw = asset.get("path") or asset.get("local_path")
+            if (
+                isinstance(env_name, str)
+                and re.fullmatch(r"[A-Z_][A-Z0-9_]*", env_name)
+                and isinstance(path_raw, str)
+                and path_raw
+            ):
+                defaults.setdefault(env_name, str(env.get(env_name) or expand_path(path_raw, env)))
+            split_env = asset.get("split_env")
+            default_split = asset.get("default_split")
+            if (
+                isinstance(split_env, str)
+                and re.fullmatch(r"[A-Z_][A-Z0-9_]*", split_env)
+                and isinstance(default_split, (str, int, float))
+            ):
+                defaults.setdefault(split_env, str(env.get(split_env) or default_split))
+    return defaults
+
+
 def discover_benchmark_items(env: Mapping[str, str], selected_benchmarks: set[str] | None) -> list[PrepareItem]:
     benchmark_ids = list(ACTIVE_BENCHMARK_IDS)
     if selected_benchmarks:
@@ -318,6 +425,8 @@ def discover_benchmark_items(env: Mapping[str, str], selected_benchmarks: set[st
         benchmark_ids = [benchmark_id for benchmark_id in benchmark_ids if benchmark_id in selected_benchmarks]
 
     template_assets = load_template_benchmark_assets()
+    repo_revisions = template_repo_revisions(template_assets)
+    catalog_revisions = load_benchmark_catalog_revisions()
     items: list[PrepareItem] = []
     for benchmark_id in benchmark_ids:
         profile_path = BENCHMARK_PROFILE_ROOT / f"{benchmark_id}.yaml"
@@ -329,6 +438,7 @@ def discover_benchmark_items(env: Mapping[str, str], selected_benchmarks: set[st
             local_path = expand_path(path_raw, env)
             kind = str(asset.get("kind") or "asset")
             if kind == "repo" and isinstance(asset.get("repo_url"), str):
+                repo_url = str(asset["repo_url"])
                 items.append(
                     PrepareItem(
                         "benchmark",
@@ -336,21 +446,34 @@ def discover_benchmark_items(env: Mapping[str, str], selected_benchmarks: set[st
                         benchmark_id,
                         str(asset.get("id") or "official_repo"),
                         local_path,
-                        source=str(asset["repo_url"]),
-                        revision=str(asset.get("revision")) if asset.get("revision") else None,
+                        source=repo_url,
+                        revision=resolved_catalog_revision(
+                            benchmark_id=benchmark_id,
+                            kind="git",
+                            asset_id=normalized_repo_url(repo_url),
+                            explicit_revision=asset.get("revision"),
+                            catalog_revisions=catalog_revisions,
+                        ),
                         metadata=dict(asset),
                     )
                 )
             elif kind in {"dataset", "simulator_asset"} and isinstance(asset.get("hf_dataset_id"), str):
+                dataset_id = str(asset["hf_dataset_id"])
                 items.append(
                     PrepareItem(
                         "benchmark",
                         "hf_dataset",
                         benchmark_id,
-                        str(asset["hf_dataset_id"]),
+                        dataset_id,
                         local_path,
-                        source=str(asset["hf_dataset_id"]),
-                        revision=str(asset.get("revision")) if asset.get("revision") else None,
+                        source=dataset_id,
+                        revision=resolved_catalog_revision(
+                            benchmark_id=benchmark_id,
+                            kind="hf",
+                            asset_id=dataset_id,
+                            explicit_revision=asset.get("revision"),
+                            catalog_revisions=catalog_revisions,
+                        ),
                         metadata=dict(asset),
                     )
                 )
@@ -400,7 +523,15 @@ def discover_benchmark_items(env: Mapping[str, str], selected_benchmarks: set[st
                     repo_url = BENCHMARK_REPO_URLS.get(benchmark_id)
                     if repo_url:
                         items.append(
-                            PrepareItem("benchmark", "git_repo", benchmark_id, "required_repo", local_path, source=repo_url)
+                            PrepareItem(
+                                "benchmark",
+                                "git_repo",
+                                benchmark_id,
+                                "required_repo",
+                                local_path,
+                                source=repo_url,
+                                revision=repo_revisions.get(normalized_repo_url(repo_url)),
+                            )
                         )
                     else:
                         items.append(PrepareItem("benchmark", "manual_asset", benchmark_id, "required_repo", local_path))
@@ -409,7 +540,17 @@ def discover_benchmark_items(env: Mapping[str, str], selected_benchmarks: set[st
         repo_url = BENCHMARK_REPO_URLS.get(benchmark_id)
         repo_path = expand_path("${WORLDFOUNDRY_CACHE_DIR}", env) / "repos" / github_slug(repo_url) if repo_url else None
         if repo_url and repo_path and repo_path not in seen_paths:
-            items.append(PrepareItem("benchmark", "git_repo", benchmark_id, "official_repo", repo_path, source=repo_url))
+            items.append(
+                PrepareItem(
+                    "benchmark",
+                    "git_repo",
+                    benchmark_id,
+                    "official_repo",
+                    repo_path,
+                    source=repo_url,
+                    revision=repo_revisions.get(normalized_repo_url(repo_url)),
+                )
+            )
             seen_paths.add(repo_path)
     return dedupe_items(items)
 
@@ -447,6 +588,41 @@ def run_command(command: list[str], *, env: Mapping[str, str], log_path: Path, t
     return completed.returncode, duration
 
 
+def hf_revision_marker_path(item: PrepareItem) -> Path:
+    return item.local_path.parent / f".{item.local_path.name}.worldfoundry-hf-revision.json"
+
+
+def hf_revision_marker_matches(item: PrepareItem, repo_type: str) -> bool:
+    if not item.revision:
+        return True
+    try:
+        payload = json.loads(hf_revision_marker_path(item).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return False
+    return payload == {
+        "schema": HF_REVISION_MARKER_SCHEMA,
+        "repo_id": item.asset_id,
+        "repo_type": repo_type,
+        "revision": item.revision,
+    }
+
+
+def write_hf_revision_marker(item: PrepareItem, repo_type: str) -> Path:
+    if not item.revision:
+        raise ValueError("a pinned Hugging Face revision is required")
+    marker = hf_revision_marker_path(item)
+    write_json(
+        marker,
+        {
+            "schema": HF_REVISION_MARKER_SCHEMA,
+            "repo_id": item.asset_id,
+            "repo_type": repo_type,
+            "revision": item.revision,
+        },
+    )
+    return marker
+
+
 def prepare_hf_item(item: PrepareItem, args: argparse.Namespace, env: Mapping[str, str], log_dir: Path) -> dict[str, Any]:
     hf = tool_path("hfd") if args.hf_tool == "hfd" else (tool_path("hf") or tool_path("huggingface-cli"))
     repo_type = "dataset" if item.kind == "hf_dataset" else "model"
@@ -454,13 +630,14 @@ def prepare_hf_item(item: PrepareItem, args: argparse.Namespace, env: Mapping[st
     row = base_row(item, log_path)
     row["repo_type"] = repo_type
     row["ready_before"] = asset_ready(item.local_path)
-    if args.skip_existing and row["ready_before"]:
+    row["revision_matches_before"] = hf_revision_marker_matches(item, repo_type)
+    if args.skip_existing and row["ready_before"] and row["revision_matches_before"]:
         row["status"] = "ready"
         row["ready"] = True
         return row
     if args.plan_only:
         row["status"] = "planned"
-        row["ready"] = row["ready_before"]
+        row["ready"] = row["ready_before"] and row["revision_matches_before"]
         row["command"] = hf_download_command(hf or args.hf_tool, item, repo_type, args)
         return row
     if not hf:
@@ -481,6 +658,15 @@ def prepare_hf_item(item: PrepareItem, args: argparse.Namespace, env: Mapping[st
     row["returncode"] = returncode
     row["duration_seconds"] = round(duration, 3)
     row["ready"] = asset_ready(item.local_path)
+    if returncode == 0 and row["ready"] and item.revision:
+        try:
+            marker = write_hf_revision_marker(item, repo_type)
+        except OSError as exc:
+            row["ready"] = False
+            row["reason"] = f"could not record pinned Hugging Face revision: {exc}"
+        else:
+            row["revision_marker"] = str(marker)
+            row["revision_matches"] = True
     row["status"] = "ready" if returncode == 0 and row["ready"] else "failed"
     return row
 
@@ -530,18 +716,38 @@ def hf_download_command(hf: str, item: PrepareItem, repo_type: str, args: argpar
     return command
 
 
+def git_head_revision(path: Path, git: str = "git") -> str | None:
+    try:
+        completed = subprocess.run(
+            [git, "-C", str(path), "rev-parse", "HEAD"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    revision = (completed.stdout or "").strip()
+    return revision if completed.returncode == 0 and revision else None
+
+
 def prepare_git_item(item: PrepareItem, args: argparse.Namespace, env: Mapping[str, str], log_dir: Path) -> dict[str, Any]:
     log_path = log_dir / item.category / item.owner_id / f"{item.local_path.name}.git.log"
     row = base_row(item, log_path)
-    row["ready_before"] = (item.local_path / ".git").is_dir()
-    if args.skip_existing and row["ready_before"]:
-        row["status"] = "ready"
-        row["ready"] = True
-        return row
+    repo_exists = (item.local_path / ".git").is_dir()
+    head_before = git_head_revision(item.local_path) if repo_exists and item.revision else None
+    row["head_before"] = head_before
+    row["revision_matches_before"] = not item.revision or head_before == item.revision
+    row["ready_before"] = repo_exists
     if args.plan_only:
         row["status"] = "planned"
-        row["ready"] = row["ready_before"]
-        row["command"] = git_command(item)
+        row["ready"] = row["ready_before"] and row["revision_matches_before"]
+        if not repo_exists:
+            row["command"] = git_command(item)
+        if item.revision:
+            row["fetch_command"] = git_fetch_command(item)
+            row["checkout_command"] = git_checkout_command(item)
         return row
     git = tool_path("git")
     if not git:
@@ -549,29 +755,89 @@ def prepare_git_item(item: PrepareItem, args: argparse.Namespace, env: Mapping[s
         row["ready"] = False
         row["reason"] = "git is not installed"
         return row
-    item.local_path.parent.mkdir(parents=True, exist_ok=True)
-    command = git_command(item, git=git)
-    row["command"] = command
-    try:
-        returncode, duration = run_command(command, env=env, log_path=log_path, timeout=args.timeout_seconds)
-    except subprocess.TimeoutExpired:
-        row["status"] = "failed"
-        row["ready"] = (item.local_path / ".git").is_dir()
-        row["reason"] = f"timeout after {args.timeout_seconds}s"
+    if repo_exists:
+        try:
+            checkout_clean = git_checkout_is_clean(
+                git,
+                item.local_path,
+                env=env,
+                timeout=args.timeout_seconds,
+            )
+        except subprocess.TimeoutExpired:
+            row["status"] = "failed"
+            row["ready"] = False
+            row["reason"] = f"timeout checking git checkout after {args.timeout_seconds}s"
+            return row
+        except RuntimeError as exc:
+            row["status"] = "failed"
+            row["ready"] = False
+            row["reason"] = str(exc)
+            return row
+        row["checkout_clean_before"] = checkout_clean
+        if not checkout_clean:
+            row["status"] = "blocked_dirty_checkout"
+            row["ready"] = False
+            row["reason"] = (
+                "git checkout contains tracked or untracked changes; "
+                "clean or move them manually before preparing this pinned asset"
+            )
+            return row
+    if args.skip_existing and row["ready_before"] and row["revision_matches_before"]:
+        row["status"] = "ready"
+        row["ready"] = True
         return row
+    if repo_exists:
+        returncode, duration = 0, 0.0
+        row["reused_existing_repo"] = True
+    else:
+        item.local_path.parent.mkdir(parents=True, exist_ok=True)
+        command = git_command(item, git=git)
+        row["command"] = command
+        try:
+            returncode, duration = run_command(command, env=env, log_path=log_path, timeout=args.timeout_seconds)
+        except subprocess.TimeoutExpired:
+            row["status"] = "failed"
+            row["ready"] = (item.local_path / ".git").is_dir()
+            row["reason"] = f"timeout after {args.timeout_seconds}s"
+            return row
     row["returncode"] = returncode
     row["duration_seconds"] = round(duration, 3)
     if returncode == 0 and item.revision:
+        fetch_log = log_path.with_suffix(".fetch.log")
+        fetch_command = git_fetch_command(item, git=git)
+        row["fetch_command"] = fetch_command
+        try:
+            fetch_returncode, fetch_duration = run_command(
+                fetch_command, env=env, log_path=fetch_log, timeout=args.timeout_seconds
+            )
+        except subprocess.TimeoutExpired:
+            row["status"] = "failed"
+            row["ready"] = (item.local_path / ".git").is_dir()
+            row["reason"] = f"revision fetch timeout after {args.timeout_seconds}s"
+            return row
+        row["fetch_returncode"] = fetch_returncode
+        row["fetch_duration_seconds"] = round(fetch_duration, 3)
+        returncode = fetch_returncode
+
+    if returncode == 0 and item.revision:
         checkout_log = log_path.with_suffix(".checkout.log")
-        checkout_command = [git, "-C", str(item.local_path), "checkout", item.revision]
+        checkout_command = git_checkout_command(item, git=git)
         row["checkout_command"] = checkout_command
-        checkout_returncode, checkout_duration = run_command(
-            checkout_command, env=env, log_path=checkout_log, timeout=args.timeout_seconds
-        )
+        try:
+            checkout_returncode, checkout_duration = run_command(
+                checkout_command, env=env, log_path=checkout_log, timeout=args.timeout_seconds
+            )
+        except subprocess.TimeoutExpired:
+            row["status"] = "failed"
+            row["ready"] = (item.local_path / ".git").is_dir()
+            row["reason"] = f"revision checkout timeout after {args.timeout_seconds}s"
+            return row
         row["checkout_returncode"] = checkout_returncode
         row["checkout_duration_seconds"] = round(checkout_duration, 3)
         returncode = checkout_returncode
-    row["ready"] = (item.local_path / ".git").is_dir()
+    row["head_after"] = git_head_revision(item.local_path, git=git) if item.revision else None
+    row["revision_matches"] = not item.revision or row["head_after"] == item.revision
+    row["ready"] = (item.local_path / ".git").is_dir() and row["revision_matches"]
     row["status"] = "ready" if returncode == 0 and row["ready"] else "failed"
     return row
 
@@ -580,6 +846,40 @@ def git_command(item: PrepareItem, git: str = "git") -> list[str]:
     if not item.source:
         return [git, "clone", str(item.local_path)]
     return [git, "clone", "--depth", "1", item.source, str(item.local_path)]
+
+
+def git_fetch_command(item: PrepareItem, git: str = "git") -> list[str]:
+    if not item.revision:
+        raise ValueError("git fetch command requires a pinned revision")
+    return [git, "-C", str(item.local_path), "fetch", "--depth", "1", "origin", item.revision]
+
+
+def git_checkout_command(item: PrepareItem, git: str = "git") -> list[str]:
+    if not item.revision:
+        raise ValueError("git checkout command requires a pinned revision")
+    return [git, "-C", str(item.local_path), "checkout", "--detach", "FETCH_HEAD"]
+
+
+def git_checkout_is_clean(
+    git: str,
+    checkout: Path,
+    *,
+    env: Mapping[str, str],
+    timeout: int,
+) -> bool:
+    completed = subprocess.run(
+        [git, "-C", str(checkout), "status", "--porcelain=v1", "--untracked-files=normal"],
+        env=dict(env),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=timeout,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or "unknown git status error"
+        raise RuntimeError(f"could not inspect existing git checkout: {detail}")
+    return not completed.stdout.strip()
 
 
 def prepare_gcs_item(item: PrepareItem, args: argparse.Namespace, env: Mapping[str, str], log_dir: Path) -> dict[str, Any]:
@@ -665,8 +965,13 @@ def prepare_one(item: PrepareItem, args: argparse.Namespace, env: Mapping[str, s
     return prepare_manual_item(item, args, log_dir)
 
 
-def write_env_file(path: Path, env: Mapping[str, str]) -> None:
-    keys = (
+def write_env_file(
+    path: Path,
+    env: Mapping[str, str],
+    *,
+    benchmark_keys: Iterable[str] = (),
+) -> None:
+    generic_keys = (
         "WORLDFOUNDRY_REPO_ROOT",
         "WORLDFOUNDRY_DATA_DIR",
         "WORLDFOUNDRY_MODEL_DIR",
@@ -682,14 +987,14 @@ def write_env_file(path: Path, env: Mapping[str, str]) -> None:
         "HF_HOME",
         "HF_HUB_ENABLE_HF_TRANSFER",
     )
+    keys = (*generic_keys, *sorted(set(benchmark_keys) - set(generic_keys)))
     lines = [
         "# Source this before running WorldFoundry embodied evaluations.",
         f"# Generated at {utc_now_iso()}",
         "export PATH=\"$HOME/.local/bin:$PATH\"",
     ]
     for key in keys:
-        value = env[key].replace('"', '\\"')
-        lines.append(f"export {key}=\"{value}\"")
+        lines.append(f"export {key}={shlex.quote(str(env[key]))}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -757,7 +1062,7 @@ def main(argv: list[str] | None = None) -> int:
     data_root = args.data_root.resolve()
     ckpt_root = args.ckpt_root.resolve()
     hfd_root = (args.hfd_root or ckpt_root / "hfd_models").resolve()
-    hfd_dataset_root = (args.hfd_dataset_root or data_root / "hfd_datasets").resolve()
+    hfd_dataset_root = (args.hfd_dataset_root or data_root / "datasets").resolve()
     report_dir = (args.report_dir or data_root / "embodied_prepare_reports").resolve()
     env = target_env(data_root, ckpt_root, hfd_root, hfd_dataset_root)
     if args.hf_endpoint:
@@ -772,6 +1077,9 @@ def main(argv: list[str] | None = None) -> int:
 
     selected_models = parse_csv(args.model)
     selected_benchmarks = parse_csv(args.benchmark)
+    benchmark_env = benchmark_environment_defaults(env, selected_benchmarks)
+    for key, value in benchmark_env.items():
+        env.setdefault(key, value)
     items: list[PrepareItem] = []
     if not args.no_models:
         items.extend(discover_model_items(env, selected_models))
@@ -783,7 +1091,7 @@ def main(argv: list[str] | None = None) -> int:
     manifest_path = report_dir / "asset_manifest.json"
     report_jsonl_path = report_dir / "asset_prepare_report.jsonl"
     summary_path = report_dir / "asset_prepare_summary.json"
-    write_env_file(env_path, env)
+    write_env_file(env_path, env, benchmark_keys=benchmark_env)
     write_json(
         manifest_path,
         {

@@ -11,6 +11,9 @@ provider: official_repo
 source:
   status: open_source
   official_repo_url: https://github.com/bytedance/IRASim
+official_sources:
+  project_page: https://gen-irasim.github.io/
+  paper: https://arxiv.org/abs/2406.14540
 integration:
   status: planned
   notes:
@@ -26,3 +29,23 @@ runner_parity:
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes; blocked entries retain
   upstream provenance without runnable backends.
+docs:
+  publisher: ByteDance
+  publisher_kind: company
+  publisher_zh: 字节跳动
+  overview: IRASim (Interactive Real-Robot Action Simulator) generates realistic robot-arm videos from an initial frame plus an action trajectory — a learned simulator for robot data. In this catalog the model, diffusion, and inference pipeline modules are vendored in-tree; real generation waits on manually staged official checkpoint archives.
+  overview_zh: IRASim（交互式真实机器人动作模拟器）从初始帧加动作轨迹生成逼真的机械臂视频——机器人数据的学习型模拟器。本 catalog 中其模型、扩散与推理 pipeline 模块已内置树内；真实生成待手动就位官方 checkpoint 归档。
+  architecture: Per the upstream release, a DiT video diffusion model conditions on per-frame action tokens for trajectory-accurate robot video. Training dataloaders, evaluation scripts, and interactive demos are pruned from the packaged runtime under synthesis/visual_generation/irasim/irasim_runtime.
+  architecture_zh: 按上游发布，DiT 视频扩散模型以逐帧动作 token 为条件，生成轨迹精确的机器人视频。打包在 synthesis/visual_generation/irasim/irasim_runtime 的运行时已裁剪训练数据加载器、评估脚本与交互 demo。
+  usage_notes: Published checkpoint archives are not HF model repos staged by the current downloader — supply checkpoints and task fixtures manually before expecting real video.
+  usage_notes_zh: 发布的 checkpoint 归档不是当前下载器支持的 HF 模型仓库——期望得到真实视频前请手动提供 checkpoint 与任务 fixture。
+  limitations:
+  - Checkpoints must be manually staged (non-HF archives).
+  - 'Robot-domain simulator: not a general video generator.'
+  limitations_zh:
+  - checkpoint 需手动就位（非 HF 归档）。
+  - 机器人领域模拟器：不是通用视频生成器。
+  recommended_benchmarks:
+  - id: ewmbench
+    reason: Embodied world-model video prediction quality.
+    reason_zh: 具身世界模型视频预测质量。

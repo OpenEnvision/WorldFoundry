@@ -18,6 +18,8 @@ modalities:
 name: LingBot-World
 pipeline_binding: lingbot-world
 official_sources:
+  project_page: https://technology.robbyant.com/lingbot-world
+  paper: https://arxiv.org/abs/2601.20540
   github:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
@@ -25,6 +27,10 @@ official_sources:
   huggingface:
   - confirmed_by: https://huggingface.co/api/models/robbyant/lingbot-world-base-cam
     repo_id: robbyant/lingbot-world-base-cam
+    status: confirmed
+    type: model
+  - confirmed_by: https://huggingface.co/api/models/robbyant/lingbot-world-fast
+    repo_id: robbyant/lingbot-world-fast
     status: confirmed
     type: model
 release_type: partial_weights
@@ -38,26 +44,42 @@ variants:
     status: verified
     notes:
     - The base-cam checkpoint is wired through the in-tree LingBot-World runner.
-    - Per-run artifact checks are tracked outside the model catalog.
+    - A 2026-07-28 checkpoint-backed full run completed with 161 frames and 70
+      denoising steps; all frames decoded at 832x464 and 16 FPS with valid motion.
+    - A four-A100 Workspace run also completed the same full setting with
+      adaptive T5-FSDP, replicated/offloaded DiTs, and Ulysses size 4.
 - availability: open_source
   checkpoint: robbyant/lingbot-world-base-act-preview
   name: LingBot-World-Base (Act)
   pipeline_binding: lingbot-world-act
   runtime_profile: runtime-profile:lingbot-world-act
   runner_parity:
-    status: pending
+    status: verified_configuration
     notes:
     - The public Base-Act preview checkpoint is independently routed through the in-tree action-conditioned runtime.
-    - Full GPU artifact parity requires locally staged weights.
-- availability: unknown
+    - Dedicated-environment GPU runs generated non-black 49-frame/40-step and 17-frame/8-step action-conditioned MP4s; the public runner was also verified for the 17-frame/8-step configuration. Action-only adherence remains untested.
+- availability: open_source
+  checkpoint: robbyant/lingbot-world-fast
   name: LingBot-World-Fast
-  reason: No official public checkpoint was confirmed in this audit.
+  pipeline_binding: lingbot-world
+  runtime_profile: runtime-profile:lingbot-world
+  runner_parity:
+    status: verified_configuration
+    notes:
+    - The official public Fast checkpoint was confirmed at revision b7a1db2da9bd3ba675ee01c228f41db0309b981e.
+    - The public lingbot-world binding loaded independent WanI2VFast weights plus Base-Cam shared T5/VAE assets on H100 GPU3 and generated a 21-frame, 544x720, 16 fps MP4. Full decode and first/middle/last visual review passed; long-form Fast quality and camera adherence were not measured.
 runner_parity:
   notes:
   - LingBotPipeline is registered against the in-tree LingBot world runtime.
   - The base-cam checkpoint is wired through the Studio/API route and dedicated conda environment profile.
-  - Base-Act is independently cataloged against the public preview checkpoint; only the Fast checkpoint remains unavailable.
-  - Per-run artifact checks are tracked outside the model catalog.
+  - Base-Act is independently cataloged against the public preview checkpoint. The official Fast checkpoint is separately validated through the public binding for a 21-frame camera-controlled clip.
+  - Base-cam full-quality artifact validation completed on 2026-07-28 using the
+    official 161-frame, 70-step camera-control demo settings.
+  - The shared timestep embedding preserves floating precision for integer
+    scheduler timesteps, preventing distributed sequence-parallel output corruption.
+  - The public lingbot-world binding also ran the independent Fast checkpoint
+    with Base-Cam shared T5/VAE assets, producing 21 decodable frames at
+    544x720 and 16 fps on one H100; this validates only that short configuration.
   status: verified
 catalog_category: world_models
 catalog_scope: world-model/interactive starred models
@@ -67,3 +89,26 @@ catalog_policy:
     available.
   open_source_rule: Only mark open_source when an official GitHub repository or official Hugging Face model page was confirmed.
     Do not infer checkpoint availability from papers, demos, or third-party mirrors.
+docs:
+  publisher: Robbyant (Ant Group)
+  publisher_kind: company
+  publisher_zh: 蚂蚁灵波科技（Robbyant，蚂蚁集团）
+  overview: 'LingBot-World is Robbyant''s camera-controlled world video model. In this catalog it is fully verified: the base-cam checkpoint completed full-quality artifact validation on 2026-07-28 using the official 161-frame, 70-step camera-control demo — including a four-A100 compact topology that adapted FSDP/Ulysses settings and produced a coherent artifact.'
+  overview_zh: LingBot-World 是蚂蚁灵波的相机可控世界视频模型。本 catalog 中它已完整验证：base-cam checkpoint 于 2026-07-28 按官方 161 帧、70 步相机控制 demo 完成全质量产物验证——包括一个四张 A100 的紧凑拓扑，自适应调整 FSDP/Ulysses 设置并产出连贯产物。
+  architecture: The official base-cam recipe uses eight GPUs with DiT/T5 FSDP plus Ulysses sequence parallelism; Workspace also supports a four-GPU compact topology (both 4 and 8 divide the model's 40 attention heads). A shared timestep embedding preserves floating precision for integer scheduler timesteps, preventing distributed sequence-parallel output corruption.
+  architecture_zh: 官方 base-cam 配方使用八卡，DiT/T5 FSDP 加 Ulysses 序列并行；Workspace 亦支持四卡紧凑拓扑（4 与 8 都能整除模型的 40 个注意力头）。共享的时间步嵌入为整数调度时间步保留浮点精度，避免分布式序列并行的输出损坏。
+  usage_notes: The wrapper resolves only local HFD or explicit checkpoint directories — no runtime downloads. Base-cam runs in the dedicated lingbot-world environment; Base-Act is separately cataloged. The official Fast checkpoint uses Base-Cam's T5/VAE assets plus its own 16 shards; pass runtime_variant=fast and fast_model_path, and request 9, 21, 33, ... frames. The public binding was validated at 21 frames only.
+  usage_notes_zh: 封装仅解析本地 HFD 或显式 checkpoint 目录，不在运行时下载。Base-Cam 使用专属 lingbot-world 环境，Base-Act 单独记录。官方 Fast 权重复用 Base-Cam 的 T5/VAE 组件，并使用独立的 16 个分片；需传入 runtime_variant=fast、fast_model_path，帧数取 9、21、33 等。公开 binding 仅验证了 21 帧配置。
+  limitations:
+  - Dedicated conda environment for base-cam inference.
+  - Official full-length Base-Cam inference needs 4-8 A100-class GPUs; short Fast inference was validated on one H100.
+  limitations_zh:
+  - base-cam 推理需要专属 conda 环境。
+  - 官方完整长度的 Base-Cam 推理需要 4-8 张 A100 级 GPU；Fast 短片段已在单张 H100 上验证。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-control adherence of world rollouts.
+    reason_zh: 世界滚动生成的相机控制贴合度。
+  - id: worldmodelbench
+    reason: General world-rollout quality.
+    reason_zh: 世界滚动生成的总体质量。

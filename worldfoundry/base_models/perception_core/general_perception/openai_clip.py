@@ -1,8 +1,7 @@
-"""Vendored OpenAI CLIP runtime helpers."""
+"""Canonical access to WorldFoundry's in-tree OpenAI CLIP runtime."""
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -10,16 +9,40 @@ RUNTIME_ROOT = Path(__file__).resolve().parent / "openai_clip_runtime"
 
 
 def add_runtime_to_path() -> Path:
-    if str(RUNTIME_ROOT) not in sys.path:
-        sys.path.insert(0, str(RUNTIME_ROOT))
+    """Return the compatibility runtime root without mutating ``sys.path``."""
+
     return RUNTIME_ROOT
 
 
 def load(*args: Any, **kwargs: Any):
-    add_runtime_to_path()
-    import clip
+    from .openai_clip_runtime.clip import load as runtime_load
 
-    return clip.load(*args, **kwargs)
+    return runtime_load(*args, **kwargs)
 
 
-__all__ = ["RUNTIME_ROOT", "add_runtime_to_path", "load"]
+def tokenize(*args: Any, **kwargs: Any):
+    from .openai_clip_runtime.clip import tokenize as runtime_tokenize
+
+    return runtime_tokenize(*args, **kwargs)
+
+
+def available_models() -> list[str]:
+    from .openai_clip_runtime.clip import available_models as runtime_available_models
+
+    return runtime_available_models()
+
+
+def clear_checkpoint_cache() -> None:
+    from .openai_clip_runtime.clip import clear_checkpoint_cache as runtime_clear_checkpoint_cache
+
+    runtime_clear_checkpoint_cache()
+
+
+__all__ = [
+    "RUNTIME_ROOT",
+    "add_runtime_to_path",
+    "available_models",
+    "clear_checkpoint_cache",
+    "load",
+    "tokenize",
+]

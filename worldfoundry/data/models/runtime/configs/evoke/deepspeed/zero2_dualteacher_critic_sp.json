@@ -1,0 +1,26 @@
+{
+    "_comment": "ZeRO-2 config for the sequence-parallel (SP) critic. Why ZeRO-2 and not ZeRO-3: 2D SP x ZeRO-3 deadlocks during backward because the reduce-scatter hook cannot be deferred out of backward -- five smoke runs all hung in the critic backward (diagnostics confirmed every rank finished the forward gather, then backward stalled and engine.step was never reached). The fix is ZeRO-2 plus manually interleaved reduction: at the SP-critic backward, bypass accelerate and wrap engine.backward with set_gradient_accumulation_boundary(False) + enable_backward_allreduce=False (so only SP collectives run during backward, no ZeRO reduction), then enable_backward_allreduce=True + allreduce_gradients() (the ZeRO-2 gradient reduction as its own separate step, never interleaved with SP collectives), then engine.step(). overlap_comm=false: with the reduction already separated, false buys determinism. Gradient semantics: on the non-decoupled path, one clip per group means the SP-partial gradient gets an extra division by G when averaged over WORLD, hence critic_loss is multiplied by sp_size; on the decoupled path the owner loop has already accumulated G distinct clips and must NOT multiply by G again (verified at 4 GPUs, norm ratio 1.000006). stage=2 (asserted identical for generator and critic).",
+    "fp16": {
+        "enabled": false,
+        "loss_scale": 0,
+        "loss_scale_window": 1000,
+        "initial_scale_power": 16,
+        "hysteresis": 2,
+        "min_loss_scale": 1
+    },
+    "bf16": {
+        "enabled": "auto"
+    },
+    "communication_data_type": "fp32",
+    "gradient_clipping": 1.0,
+    "train_micro_batch_size_per_gpu": "auto",
+    "train_batch_size": "auto",
+    "gradient_accumulation_steps": "auto",
+    "zero_optimization": {
+        "stage": 2,
+        "overlap_comm": false,
+        "contiguous_gradients": true,
+        "reduce_bucket_size": 200000000,
+        "allgather_bucket_size": 200000000
+    }
+}

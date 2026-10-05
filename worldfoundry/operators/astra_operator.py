@@ -1,5 +1,7 @@
 """Module for the Astra operator implementation."""
 
+import logging
+
 import torch
 import numpy as np
 from PIL import Image
@@ -10,6 +12,8 @@ from pathlib import Path
 from torchvision.transforms import v2
 
 from .base_operator import BaseOperator
+
+logger = logging.getLogger(__name__)
 
 
 IMAGE_CONDITION_FRAME_COUNT = 10
@@ -144,10 +148,6 @@ class AstraOperator(BaseOperator):
             interpolation=v2.InterpolationMode.BILINEAR,
         )
 
-    def delete_last_interaction(self):
-        """Remove the last recorded interaction from the current list."""
-        self.current_interaction = self.current_interaction[:-1]
-    
     def compute_relative_pose(self, pose_a, pose_b, use_torch=False):
         """Compute relative pose matrix of camera B with respect to camera A"""
         assert pose_a.shape == (4, 4), f"Camera A extrinsic matrix should be (4,4), got {pose_a.shape}"
@@ -274,7 +274,7 @@ class AstraOperator(BaseOperator):
         max_needed_frames = self._needed_frame_count(start_frame, initial_condition_frames, new_frames)
         
         if use_real_poses and cam_data is not None and 'extrinsic' in cam_data:
-            print("Using real Sekai camera data")
+            logger.info("Using real Sekai camera data")
             cam_extrinsic = cam_data['extrinsic']
             relative_poses = self._relative_pose_rows_from_extrinsics(
                 cam_extrinsic,
@@ -287,7 +287,7 @@ class AstraOperator(BaseOperator):
                 start_frame + initial_condition_frames,
             )
         else:
-            print(f"Generating Sekai synthetic camera frames: {max_needed_frames}, direction: {direction}")
+            logger.info("Generating Sekai synthetic camera frames: %s, direction: %s", max_needed_frames, direction)
             stage_1 = new_frames // 2
             stage_2 = new_frames - stage_1
             relative_poses = [
@@ -314,7 +314,7 @@ class AstraOperator(BaseOperator):
         max_needed_frames = self._needed_frame_count(start_frame, initial_condition_frames, new_frames)
         
         if use_real_poses and encoded_data is not None and 'cam_emb' in encoded_data and 'extrinsic' in encoded_data['cam_emb']:
-            print("Using OpenX real camera data")
+            logger.info("Using OpenX real camera data")
             cam_extrinsic = encoded_data['cam_emb']['extrinsic']
             relative_poses = self._relative_pose_rows_from_extrinsics(
                 cam_extrinsic,
@@ -327,7 +327,7 @@ class AstraOperator(BaseOperator):
                 start_frame + initial_condition_frames,
             )
         else:
-            print("Using OpenX synthetic camera data")
+            logger.info("Using OpenX synthetic camera data")
             relative_poses = [
                 torch.as_tensor(self._openx_synthetic_pose())
                 for _ in range(max_needed_frames)
@@ -343,7 +343,7 @@ class AstraOperator(BaseOperator):
         max_needed_frames = max(FRAMEPACK_CONTEXT_FRAMES + new_frames, 30)
         
         if scene_info is not None and 'keyframe_poses' in scene_info:
-            print("Using NuScenes real pose data")
+            logger.info("Using NuScenes real pose data")
             keyframe_poses = scene_info['keyframe_poses']
             if len(keyframe_poses) == 0:
                 pose_sequence = torch.zeros(max_needed_frames, 7, dtype=torch.float32)
@@ -370,7 +370,7 @@ class AstraOperator(BaseOperator):
                 start_frame + initial_condition_frames,
             )
         else:
-            print("Using NuScenes synthetic pose data")
+            logger.info("Using NuScenes synthetic pose data")
             pose_vecs = []
             for i in range(max_needed_frames):
                 angle = i * 0.04; radius = 15.0

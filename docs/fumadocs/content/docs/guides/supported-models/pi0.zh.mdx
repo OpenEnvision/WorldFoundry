@@ -1,0 +1,29 @@
+---
+title: "π0"
+description: "Physical Intelligence 的 flow-matching VLA：PaliGemma 加动作专家。WorldFoundry 复用树内 OpenPI 运行时；权重只在 GCS。"
+modelId: "pi0"
+pageSource: authored
+---
+
+π0（pi0）是 Physical Intelligence 的 flow-matching 视觉-语言-动作模型：一条 **PaliGemma** 视觉-语言骨干，加上更小的 **动作专家**，输出连续动作块。论文是 [π0: A Vision-Language-Action Flow Model for General Robot Control](https://arxiv.org/abs/2410.24164)。本 catalog 卡片是具体的 π0 算法路由——不是 LeRobot policy-zoo 条目——复用 `worldfoundry/synthesis/action_generation/openpi` 下扁平化的树内 OpenPI 运行时。
+
+<ModelPaperFigures modelId="pi0" locale="zh" />
+
+设计面向灵巧、高频率控制。Flow matching 让动作专家表示复杂的连续分布。运行时论文描述最高 **50 Hz** 的 **动作分块**，地平线大约 **H = 50** 步。VLM 负责图像和语言；专家看本体感觉和带噪动作。本条目**没有 Hugging Face checkpoint**：权重在 `gs://openpi-assets`，必须用 gsutil / gcloud 就位。
+
+<ModelCommandBuilder modelId="pi0" locale="zh" />
+
+## 用来做什么
+
+跑 π0 算法：`image`、`instruction`、`prompt` 进，经 `OpenPIPipeline` 写出 `pi0_action_trace.json`。可选：`video`。`actions` 字段记录为 `robot_action`、`proprio`、`action_space`。别名 `openpi-pi0` 解析到这里。默认运行时配置用树内 `pi0_droid` policy config；声明的 Orbax checkpoint 必须已经在本地。
+
+本仓库的 LIBERO 证据在 openpi 家族的 **pi05_libero** 路径上，不是单独的 π0 LIBERO 卡片。不要把本页当成 LIBERO scorecard。
+
+## 运行时契约
+一份 checkpoint 通过动作专家解码连续控制，覆盖单臂、双臂和移动操作臂（PaliGemma 图像通常是 **224×224**）。这不是离散 FAST 分词——那是 [pi0-FAST](/zh/docs/guides/supported-models/pi0-fast) 卡片。
+
+## 在 WorldFoundry 中运行
+
+运行时已**移植**；本卡片**没有**记录已验证的端到端 GPU 产物。数值一致性只取决于这些 GCS 资产是否就位。在独立环境 `worldfoundry-openpi-cu12`（Python 3.11，CUDA 12.4 或更新，JAX CUDA 12）里跑 `worldfoundry-eval run pi0`。共享 OpenPI 基础设施在 `openpi` 条目下验证。
+
+<ModelRelatedRecipes modelId="pi0" locale="zh" />

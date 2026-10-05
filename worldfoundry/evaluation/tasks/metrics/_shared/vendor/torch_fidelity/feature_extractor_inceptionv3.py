@@ -10,9 +10,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.hub import load_state_dict_from_url
 
-from torch_fidelity.feature_extractor_base import FeatureExtractorBase
-from torch_fidelity.helpers import vassert, text_to_dtype, get_kwarg
-from torch_fidelity.interpolate_compat_tensorflow import interpolate_bilinear_2d_like_tensorflow1x
+from .feature_extractor_base import FeatureExtractorBase
+from .helpers import vassert, text_to_dtype, get_kwarg
+from .interpolate_compat_tensorflow import interpolate_bilinear_2d_like_tensorflow1x
 
 # InceptionV3 weights converted from the official TensorFlow weights using utils/util_convert_inception_weights.py
 #   Original weights distributed under Apache License 2.0: https://github.com/tensorflow/models/blob/master/LICENSE

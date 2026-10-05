@@ -10,6 +10,9 @@ provider: official_repo
 source:
   status: open_source
   official_repo_url: https://github.com/maitrix-org/Pandora
+official_sources:
+  project_page: https://world-model.maitrix.org/
+  paper: https://arxiv.org/abs/2406.09401
 integration:
   status: planned
   notes:
@@ -25,3 +28,23 @@ runner_parity:
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes; blocked entries retain
   upstream provenance without runnable backends.
+docs:
+  publisher: Maitrix.org (UC San Diego / MBZUAI)
+  publisher_kind: lab
+  publisher_zh: Maitrix.org（加州大学圣迭戈分校 / MBZUAI）
+  overview: 'Pandora is an early general world model with natural-language actions and video states: it simulates world states as video and lets you steer the simulation with free-text actions at any step. In this catalog the model, ChatUniVi, and DynamiCrafter runtime modules are vendored in-tree; full generation stays blocked because the official weights are hidden by data-license constraints.'
+  overview_zh: Pandora 是较早的通用世界模型，采用自然语言动作与视频状态：把世界状态模拟成视频，并允许在任意步骤用自由文本动作操控模拟。本 catalog 中其模型、ChatUniVi 与 DynamiCrafter 运行时模块已内置树内；由于官方权重因数据许可限制未公开，完整生成保持 blocked。
+  architecture: Per the upstream release, an autoregressive LLM backbone (ChatUniVi-family) connects to a video diffusion decoder (DynamiCrafter-family) so language actions steer video-state rollouts. The vendored runtime lives under synthesis/visual_generation/pandora/pandora_runtime.
+  architecture_zh: 按上游发布，自回归 LLM 主干（ChatUniVi 系）连接视频扩散解码器（DynamiCrafter 系），使语言动作操控视频状态滚动。内置运行时位于 synthesis/visual_generation/pandora/pandora_runtime。
+  usage_notes: PandoraSynthesis provides a runtime-plan wrapper; real generation requires caller-provided official-compatible checkpoints, since official weights are hidden or unavailable.
+  usage_notes_zh: PandoraSynthesis 提供运行时计划封装；由于官方权重隐藏或不可得，真实生成需要调用方提供官方兼容的 checkpoint。
+  limitations:
+  - Official weights are hidden by data-license constraints — caller-provided checkpoints required.
+  - 'Research prototype: quality trails newer world models.'
+  limitations_zh:
+  - 官方权重因数据许可限制未公开——需调用方提供 checkpoint。
+  - 研究原型：质量弱于较新的世界模型。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Language-action world-rollout quality.
+    reason_zh: 语言动作世界滚动生成质量。

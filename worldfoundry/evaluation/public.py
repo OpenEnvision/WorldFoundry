@@ -33,13 +33,15 @@ from worldfoundry.evaluation.runner import (
     run_model_benchmark_suite,
 )
 from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import run_benchmark_execution
-from worldfoundry.evaluation.tasks.execution.framework.integration import (
+from worldfoundry.evaluation.tasks.catalog.dispatch import (
     BENCHMARK_INTEGRATION_REGISTRY,
     BenchmarkIntegrationSpec,
     IntegrationTier,
+    VIDEO_RUNNER_REGISTRY,
+    VideoRunnerSpec,
     integration_spec,
+    video_runner_spec as _video_runner_spec,
 )
-from worldfoundry.evaluation.tasks.execution.framework.runner_registry import VIDEO_RUNNER_REGISTRY, VideoRunnerSpec
 from worldfoundry.evaluation.utils import BENCHMARK_ZOO_DIR, REPO_ROOT
 
 
@@ -51,7 +53,7 @@ def list_video_benchmarks(*, catalog_dir: str | Path | None = None) -> list[str]
 
 def video_runner_spec(benchmark_id: str) -> VideoRunnerSpec | None:
     """Return the registered official runner spec for a video benchmark, if any."""
-    return VIDEO_RUNNER_REGISTRY.get(benchmark_id)
+    return _video_runner_spec(benchmark_id)
 
 
 def run_benchmark(

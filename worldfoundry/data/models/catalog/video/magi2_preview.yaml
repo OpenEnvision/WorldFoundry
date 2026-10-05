@@ -1,0 +1,43 @@
+id: magi2-preview
+name: MAGI-2 Preview
+aliases:
+  - magi2
+  - magi2_preview
+  - magi-2-preview
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: magi2-preview
+tasks:
+  - text-to-video
+provider: official_repo
+runtime_profile: runtime-profile:magi2-preview
+min_vram_gb: 80
+source_status:
+  status: ported_from_sandai
+  github:
+    url: https://github.com/SandAI-org/MAGI-2-preview
+    default_branch: main
+checkpoint:
+  status: confirmed_public_hf
+  repos:
+    - id: sand-ai/MAGI-2-preview
+      license: apache-2.0
+      private: false
+      gated: false
+      tasks:
+        - text-to-video
+        - image-to-video
+variants:
+  - id: magi2-preview
+    task: text-to-video
+    provider: official_repo
+    checkpoint_refs:
+      - repo_id: sand-ai/MAGI-2-preview
+    native_diffusion:
+      recipe_id: null
+      strategy: bespoke_pipeline
+      note: >-
+        MAGI-2 uses a bespoke PipelineABC subclass for preview-only text-to-video
+        with joint audio. Image conditioning and the refiner are not implemented.
+notes:
+  - 114B-parameter MoE (256 experts, top-6), ~6B active per token; 10-second preview video at 12.5 fps with 44.1kHz audio.
+  - Ported faithfully from SandAI MAGI-2-preview (Apache-2.0), single-GPU PyTorch (cp/ep/dp collapsed).

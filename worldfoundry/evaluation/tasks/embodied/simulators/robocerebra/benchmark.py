@@ -23,6 +23,7 @@ from worldfoundry.evaluation.tasks.embodied.simulators.specs import (
 )
 
 logger = logging.getLogger(__name__)
+ROBOCEREBRA_ROOT_ENV = "WORLDFOUNDRY_ROBOCEREBRA_ROOT"
 
 # Set EGL and PyOpenGL platforms for offscreen rendering, ensuring compatibility
 # with environments like Docker or remote servers without a display.
@@ -64,7 +65,7 @@ class RoboCerebraBenchmark(BaseSimulator):
 
     def __init__(
         self,
-        robocerebra_root: str = "/workspace/RoboCerebra_Bench",
+        robocerebra_root: str | os.PathLike[str] | None = None,
         task_types: list[str] | None = None,
         seed: int = 7,
         num_steps_wait: int = 15,
@@ -76,7 +77,13 @@ class RoboCerebraBenchmark(BaseSimulator):
         Configures paths, task types, rendering options, and internal states.
         """
         super().__init__()
-        self.robocerebra_root = robocerebra_root
+        resolved_root = robocerebra_root if robocerebra_root is not None else os.getenv(ROBOCEREBRA_ROOT_ENV)
+        if not resolved_root:
+            raise ValueError(
+                "RoboCerebra root is required; pass robocerebra_root or set "
+                f"{ROBOCEREBRA_ROOT_ENV} (the docker profile passes it explicitly)."
+            )
+        self.robocerebra_root = Path(resolved_root).expanduser()
         self.task_types = task_types or ["Ideal"]
         self.seed = seed
         self.num_steps_wait = num_steps_wait

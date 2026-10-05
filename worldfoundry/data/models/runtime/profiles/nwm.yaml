@@ -27,5 +27,5 @@ execution:
 integration:
   status: runtime_ported
 notes:
-- NWM source is vendored in-tree under synthesis/visual_generation/world_model/nwm.
+- NWM source is vendored in-tree under synthesis/visual_generation/nwm.
 - The pipeline resolves the official isolated inference entrypoint; execution remains checkpoint, environment, and dataset gated.

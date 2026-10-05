@@ -5,7 +5,6 @@ from torch import nn
 from timm.models.layers import trunc_normal_
 from torch.utils.checkpoint import checkpoint_sequential
 
-import clip
 
 import numpy as np
 
@@ -17,7 +16,6 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch.utils.checkpoint import checkpoint_sequential
 import math
-import clip
 
 def drop_path(x, drop_prob: float = 0., training: bool = False):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -686,5 +684,3 @@ def build_x_clip_model(pretrained_path="./pretrained_weights/k400_32_8.pth", dro
     msg = model.load_state_dict(state_dict,strict=False)
     
     return model.eval()
-
-

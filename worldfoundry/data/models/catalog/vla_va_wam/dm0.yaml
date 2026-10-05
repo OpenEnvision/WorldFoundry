@@ -8,6 +8,7 @@ availability: open_source
 provider: official_repo
 license: mit
 official_sources:
+  paper: https://arxiv.org/abs/2510.23511
   github:
     url: https://github.com/Dexmal/dexbotic
     head_sha: 0f5ae6382bf0bc6196120f0930ce342ae54e7354
@@ -37,3 +38,23 @@ pipeline_binding: dm0
 runtime_profile: runtime-profile:dm0
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile planning records.
+docs:
+  publisher: Dexmal
+  publisher_kind: company
+  publisher_zh: Dexmal（原力灵机）
+  overview: 'DM0 is Dexmal''s Dexbotic-family flow-matching VLA: a Qwen3 flow action expert with merged prefix/suffix attention and triple-view preprocessing. Base and LIBERO checkpoints are recorded (Dexmal/DM0-base, Dexmal/DM0-libero, CC license) and the full inference loop — normalization plus Euler sampler — runs in process from local checkpoints.'
+  overview_zh: DM0 是 Dexmal 的 Dexbotic 家族 flow-matching VLA：Qwen3 flow 动作专家，合并前后缀注意力与三视角预处理。仓库记录 base 与 LIBERO 两个 checkpoint（Dexmal/DM0-base、Dexmal/DM0-libero，CC 许可），完整推理环路——归一化加 Euler 采样器——在进程内从本地 checkpoint 运行。
+  architecture: A Qwen3-based flow action expert decodes actions with an Euler sampler; the Perception Encoder and multimodal base are reused from the compatible in-tree DB-CogACT implementation, keeping the Dexbotic family consistent.
+  architecture_zh: 基于 Qwen3 的 flow 动作专家配 Euler 采样器解码动作；Perception Encoder 与多模态基座复用兼容的树内 DB-CogACT 实现，保持 Dexbotic 家族一致性。
+  usage_notes: Use DM0-libero for LIBERO evaluation and DM0-base for initialization. Training, datasets, servers, benchmark launchers, and the optional Triton realtime backend are excluded.
+  usage_notes_zh: LIBERO 评测用 DM0-libero，初始化用 DM0-base。训练、数据集、服务、基准启动器与可选的 Triton 实时后端均被排除。
+  limitations:
+  - Checkpoints carry a CC license — review terms before commercial deployment.
+  - No GPU rollout validation is recorded in this repository.
+  limitations_zh:
+  - checkpoint 为 CC 许可——商业部署前请审查条款。
+  - 仓库未记录 GPU rollout 验证。
+  recommended_benchmarks:
+  - id: libero
+    reason: Dedicated DM0-libero policy checkpoint.
+    reason_zh: 有专门的 DM0-libero 策略 checkpoint。

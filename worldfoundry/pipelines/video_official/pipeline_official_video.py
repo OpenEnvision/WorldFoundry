@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
-from worldfoundry.evaluation.models.pipelines.invocation import PipelineInvocation
-from worldfoundry.synthesis.visual_generation.memory.video import VideoArtifactMemory
+from worldfoundry.core.io import artifact_root_path
+from worldfoundry.core.media.codecs.image import load_pil_image, materialize_image_input
 from worldfoundry.operators.runtime_video_operator import RuntimeVideoOperator
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
-from worldfoundry.pipelines.lyra.lyra_utils import load_pil_image, materialize_image_input
-from worldfoundry.synthesis.visual_generation.official_video_runtime import OfficialVideoRuntime
+from worldfoundry.synthesis.visual_generation.memory.video import VideoArtifactMemory
+from worldfoundry.synthesis.visual_generation.official_video_runtime import (
+    OfficialVideoRuntime,
+)
+
+if TYPE_CHECKING:
+    from worldfoundry.core.contracts import PipelineInvocation
 
 
 class OfficialVideoPipeline(PipelineABC):
@@ -45,7 +50,7 @@ class OfficialVideoPipeline(PipelineABC):
         **kwargs: Any,
     ) -> "OfficialVideoPipeline":
         """Load the pipeline from pretrained checkpoints and configurations."""
-        resolved_model_id = model_id or cls.MODEL_ID
+        resolved_model_id = cls.MODEL_ID or model_id
         runtime_kwargs: dict[str, Any] = {}
         if isinstance(model_path, Mapping):
             runtime_kwargs.update(model_path)
@@ -56,6 +61,7 @@ class OfficialVideoPipeline(PipelineABC):
         for key in (*PipelineABC.FRAMEWORK_LOADING_OPTION_KEYS, "model_id", "pipeline_target", "runtime_profile"):
             runtime_kwargs.pop(key, None)
         runtime = OfficialVideoRuntime.from_model_id(resolved_model_id, device=device, **runtime_kwargs)
+        runtime.prepare()
         return cls(model_id=resolved_model_id, runtime=runtime, device=device)
 
     def process(self, prompt: str, images: Any = None, video: Any = None, **kwargs: Any) -> dict[str, Any]:
@@ -94,7 +100,7 @@ class OfficialVideoPipeline(PipelineABC):
         **kwargs: Any,
     ) -> Any:
         """Execute the complete pipeline generation flow."""
-        target = Path(output_path or f"tmp/pipeline_eval/{self.model_id}.mp4")
+        target = Path(output_path) if output_path else artifact_root_path() / "pipeline_eval" / f"{self.model_id}.mp4"
         processed = self.process(prompt=prompt, images=images, video=video)
         runtime_kwargs = dict(kwargs)
         if num_frames is not None:
@@ -156,24 +162,6 @@ class FramePackPipeline(OfficialVideoPipeline):
     GENERATION_TYPE = "i2v"
 
 
-class HunyuanVideo15T2VPipeline(OfficialVideoPipeline):
-    """Pipeline implementation for HunyuanVideo15T2V visual generation."""
-    MODEL_ID = "hunyuanvideo-1.5-t2v"
-    GENERATION_TYPE = "t2v"
-
-
-class HunyuanVideo15I2VPipeline(OfficialVideoPipeline):
-    """Pipeline implementation for HunyuanVideo15I2V visual generation."""
-    MODEL_ID = "hunyuanvideo-1.5-i2v"
-    GENERATION_TYPE = "i2v"
-
-
-class HunyuanVideoI2VPipeline(OfficialVideoPipeline):
-    """Pipeline implementation for HunyuanVideo I2V visual generation."""
-    MODEL_ID = "hunyuanvideo-i2v"
-    GENERATION_TYPE = "i2v"
-
-
 class I2VGenXLPipeline(OfficialVideoPipeline):
     """Pipeline implementation for I2VGenXL visual generation."""
     MODEL_ID = "i2vgen-xl"
@@ -210,18 +198,6 @@ class OpenSoraPipeline(OfficialVideoPipeline):
     GENERATION_TYPE = "t2v"
 
 
-class SkyReelsV2Pipeline(OfficialVideoPipeline):
-    """Pipeline implementation for SkyReelsV2 visual generation."""
-    MODEL_ID = "skyreels-v2"
-    GENERATION_TYPE = "t2v"
-
-
-class Emu35Pipeline(OfficialVideoPipeline):
-    """Pipeline implementation for Emu35 visual generation."""
-    MODEL_ID = "emu3.5"
-    GENERATION_TYPE = "multimodal"
-
-
 class KreaRealtimeVideoPipeline(OfficialVideoPipeline):
     """Pipeline implementation for KreaRealtimeVideo visual generation."""
     MODEL_ID = "krea-realtime-video"
@@ -251,6 +227,61 @@ class SAMA14BPipeline(OfficialVideoPipeline):
     MODEL_ID = "sama-14b"
     GENERATION_TYPE = "v2v"
 
+    def __call__(
+        self,
+        prompt: str,
+        images: Any = None,
+        video: Any = None,
+        num_frames: int | None = None,
+        fps: int | None = None,
+        output_path: str | Path | None = None,
+        return_dict: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        unsupported_conditions = (
+            "image",
+            "image_path",
+            "mask",
+            "mask_path",
+            "mask_image",
+            "mask_video",
+            "reference",
+            "reference_image",
+            "reference_image_path",
+            "ref_image_path",
+        )
+        unsupported = [name for name in unsupported_conditions if kwargs.get(name) is not None]
+        operator_kwargs = kwargs.get("operator_kwargs")
+        if isinstance(operator_kwargs, Mapping):
+            unsupported.extend(
+                f"operator_kwargs.{name}"
+                for name in unsupported_conditions
+                if operator_kwargs.get(name) is not None
+            )
+        if images is not None:
+            unsupported.append("images")
+        if unsupported:
+            raise ValueError(
+                "SAMA-14B's released inference route accepts a source video and text prompt, "
+                f"not {', '.join(unsupported)}."
+            )
+        return super().__call__(
+            prompt=prompt,
+            video=video,
+            num_frames=num_frames,
+            fps=fps,
+            output_path=output_path,
+            return_dict=return_dict,
+            **kwargs,
+        )
+
+    def run_pipeline_invocation(self, invocation: PipelineInvocation) -> Mapping[str, Any]:
+        if invocation.ref_image_path not in (None, ""):
+            raise ValueError(
+                "SAMA-14B's released inference route does not accept a separate reference image."
+            )
+        return super().run_pipeline_invocation(invocation)
+
 
 class SpatialLadderPipeline(OfficialVideoPipeline):
     """Pipeline implementation for SpatialLadder visual generation."""
@@ -264,29 +295,14 @@ class SpatialReasonerPipeline(OfficialVideoPipeline):
     GENERATION_TYPE = "multimodal"
 
 
-class ThinkSoundPipeline(OfficialVideoPipeline):
-    """Pipeline implementation for ThinkSound visual generation."""
-    MODEL_ID = "thinksound"
-    GENERATION_TYPE = "v2a"
-
-
 class UniAnimateDiTPipeline(OfficialVideoPipeline):
     """Pipeline implementation for UniAnimateDiT visual generation."""
     MODEL_ID = "unianimate-dit"
     GENERATION_TYPE = "i2v"
 
 
-class Wan21VACEPipeline(OfficialVideoPipeline):
-    """Pipeline implementation for Wan21VACE visual generation."""
-    MODEL_ID = "wan2.1-vace"
-    GENERATION_TYPE = "v2v"
-
-
 __all__ = [
-    "Emu35Pipeline",
     "FramePackPipeline",
-    "HunyuanVideo15I2VPipeline",
-    "HunyuanVideo15T2VPipeline",
     "I2VGenXLPipeline",
     "KreaRealtimeVideoPipeline",
     "MAGI1Pipeline",
@@ -299,10 +315,7 @@ __all__ = [
     "OfficialVideoPipeline",
     "Qwen25OmniPipeline",
     "SAMA14BPipeline",
-    "SkyReelsV2Pipeline",
     "SpatialLadderPipeline",
     "SpatialReasonerPipeline",
-    "ThinkSoundPipeline",
     "UniAnimateDiTPipeline",
-    "Wan21VACEPipeline",
 ]

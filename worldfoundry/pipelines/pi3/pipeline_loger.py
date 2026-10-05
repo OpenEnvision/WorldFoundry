@@ -1,17 +1,32 @@
-"""Loger visual generation pipeline module."""
+"""LoGeR (Pi3-based long-sequence geometry reconstruction) pipeline module.
 
-from ..pipeline_utils import PipelineABC
-import os
+Note: "loger" in this filename refers to the LoGeR model, not a logging utility.
+"""
+
 import json
+import logging
 import math
-from typing import List, Optional, Union, Dict, Any
+import os
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 from PIL import Image
 
+from worldfoundry.base_models.three_dimensions.point_clouds.loger.runtime import (
+    LoGeRRepresentation,
+)
+from worldfoundry.core.io import artifact_root_path
+from worldfoundry.core.media.artifacts import render_point_cloud
+
 from ...operators.pi3_operator import Pi3Operator
-from ...representations.point_clouds_generation.pi3.loger_representation import LoGeRRepresentation
-from worldfoundry.core.io.artifacts import render_point_cloud
+from ..pipeline_utils import PipelineABC
+
+logger = logging.getLogger(__name__)
+
+
+def _default_output_dir(name: str = "loger_output") -> str:
+    """Resolve a stable default output directory instead of writing to the CWD."""
+    return str(artifact_root_path() / name)
 
 
 def _apply_camera_delta(c2w: np.ndarray, delta: List[float]) -> np.ndarray:
@@ -70,7 +85,7 @@ class LoGeRResult:
     def save(self, output_dir: Optional[str] = None) -> List[str]:
         """Save for LoGeRResult."""
         if output_dir is None:
-            output_dir = "./loger_output"
+            output_dir = _default_output_dir()
         os.makedirs(output_dir, exist_ok=True)
         saved_files: List[str] = []
 
@@ -471,7 +486,7 @@ class LoGeRPipeline(PipelineABC):
 
         # ── 有新输入：先做重建 ──
         if visual_input is not None:
-            print("--- Stream: reconstructing scene ---")
+            logger.info("--- Stream: reconstructing scene ---")
             processed = self.process(images=visual_input, interval=kwargs.get("interval", -1))
             result = self._run_inference(processed, **kwargs)
             self._cached_result = result

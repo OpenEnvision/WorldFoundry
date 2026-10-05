@@ -1,0 +1,56 @@
+schema_version: 2
+model_id: ltx-2.5
+display_name: LTX-2.5 Distilled
+task_family: video_generation
+groups:
+- video
+- audio
+- image_conditioning
+source_repos:
+- url: https://github.com/Lightricks/LTX-2
+  revision: a95ab856bf29407b6b066ede0abe1846050db56c
+  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/Lightricks--LTX-2
+checkpoints:
+- repo_id: Lightricks/LTX-2.5
+  revision: bf86adedf518142442575d1ce2e767b7d01c8c76
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Lightricks--LTX-2.5
+  role: distilled_split_components
+  files:
+  - diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors
+  - text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors
+  - vae/ltx-2.5-video-vae-bf16.safetensors
+  - vae/ltx-2.5-audio-vae-bf16.safetensors
+  - latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors
+input_schema:
+  prompt: true
+  image: optional
+  video: false
+  actions:
+  - seed
+  - height
+  - width
+  - num_frames
+  - fps
+  - offload_mode
+  - quantization
+artifact_kind: generated_video
+artifact_filename: ltx-2.5.mp4
+execution:
+  environment: ltx-2.5
+  backend_stage: official_external_runtime
+  runtime_status: command_contract_validated_checkpoint_gpu_pending
+  integration_status: integrated
+  pipeline_binding: ltx-2.5
+  defaults:
+    num_frames: 121
+    width: 768
+    height: 512
+    fps: 24
+    seed: 42
+    offload_mode: cpu
+integration:
+  status: integrated
+notes:
+- Prediction never clones source or downloads checkpoints; all source and component paths are preflighted.
+- Uses the official split-checkpoint DistilledPipeline and preserves its joint audio-video output.
+- DFR, dev checkpoint pipelines, LoRAs, editing, training, UI, server, and upstream evaluation are intentionally excluded.

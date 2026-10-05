@@ -6,24 +6,38 @@ groups:
 - world
 - video
 source_repos:
-- url: https://github.com/multimodal-art-projection/MultiWorld
+- url: https://github.com/CIntellifusion/MultiWorld
 checkpoints:
 - role: multiworld_checkpoint
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/multiworld
+  repo_id: Haoyuwu/MultiWorldCheckpoint
+  revision: 4bb57a0ab390f7555c39996a50a2e93c10d7cfc3
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Haoyuwu--MultiWorldCheckpoint
+  required_paths:
+  - multiworld_480p_toydata.safetensors
+- role: wan2.2_ti2v_5b_base_and_vae
+  repo_id: Wan-AI/Wan2.2-TI2V-5B
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Wan-AI--Wan2.2-TI2V-5B
+- role: vggt_environment_encoder
+  repo_id: facebook/VGGT-1B
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/facebook--VGGT-1B
 input_schema:
-  prompt: true
+  prompt: false
   image: true
-  video: true
+  video: false
   actions:
-  - trajectory
-artifact_kind: generated_world
+  - two_player_discrete_and_continuous_actions
+artifact_kind: generated_video
 artifact_filename: multiworld.mp4
 execution:
-  backend_stage: in_tree_runtime_plan
-  runtime_status: in_tree_runtime_checkpoint_and_gpu_readiness_pending
-  integration_status: planned
+  backend_stage: in_tree_native_diffusion
+  runtime_status: checkpoint_backed_gpu_inference_verified
+  integration_status: integrated
   pipeline_binding: multiworld
 integration:
-  status: planned
+  status: integrated
 notes:
-- Runtime profile added for the existing MultiWorldItTakesTwoPipeline catalog binding.
+- The public MultiWorldItTakesTwoPipeline loaded the local toydata checkpoint, Wan
+  2.2 TI2V 5B base, and VGGT encoder on a single GPU and generated 81/81 decodable
+  480x480 frames at 35 steps on 2026-09-24.
+- The synthetic two-player action sequence and out-of-domain cat image validate
+  inference only; game-domain action fidelity and world dynamics remain untested.

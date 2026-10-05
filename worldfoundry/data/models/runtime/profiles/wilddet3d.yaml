@@ -1,27 +1,44 @@
-artifact_filename: wilddet3d_runtime_plan.json
+artifact_filename: wilddet3d_predictions.npz
 artifact_kind: generated_3d_asset
-backend_stage: worldfoundry_runtime_plan
+backend_stage: in_tree_runtime_manifest
 display_name: WildDet3D
 id: wilddet3d
+schema_version: 2
+model_id: wilddet3d
+groups:
+- world
+- perception
+source_repos:
+- url: https://github.com/allenai/WildDet3D
+  revision: 1b8aa52b6ff3f00d0ebfa07175efc0c0c440964a
+  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/WildDet3D
+  role: official_inference_checkout
+  required_paths:
+  - wilddet3d/inference.py
+  - third_party/sam3/sam3/model_builder.py
+  - third_party/lingbot_depth/mdm/model/v2.py
+checkpoints:
+- repo_id: allenai/WildDet3D
+  role: trained_detector
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/allenai--WildDet3D
+- repo_id: robbyant/lingbot-depth-postrain-dc-vitl14
+  role: geometry_architecture_config
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/robbyant--lingbot-depth-postrain-dc-vitl14
 input_schema:
   actions:
   - detection_query
   image: true
   prompt: true
-  video: true
+  video: false
 integration_status: runtime_ported
 notes:
-- WildDet3D official inference route is registered; detector assets are runtime-gated.
-- Missing checkpoints/assets are reported by the runtime plan and are not catalog
-  blockers.
-- WorldFoundry tracks upstream source and checkpoint metadata only; no runnable pipeline
-  is registered.
-- Official source is bound from ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/WildDet3D at 1b8aa52b6ff3f00d0ebfa07175efc0c0c440964a.
-- Real 3D detection remains blocked until allenai/WildDet3D assets and official inference
-  parity are staged.
-runtime_status: route_ready_assets_pending
+- Runs the pinned official checkout through a small WorldFoundry launcher; upstream SAM-licensed source is not vendored.
+- Set WORLDFOUNDRY_WILDDET3D_SOURCE to the cloned checkout with SAM3 and LingBot-Depth submodules, or stage it under the configured model source root.
+- Requires the full detector checkpoint and official robbyant/lingbot-depth-postrain-dc-vitl14/model.pt for geometry architecture construction.
+- Pass image_path and a comma-separated class prompt; optional intrinsics_path is a 3x3 NumPy matrix. Output is a NumPy archive of detections and depth.
+runtime_status: official_runtime_checkpoint_bound
 task_family: three_dimension
 execution:
   pipeline_binding: wilddet3d
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending
+  backend_stage: in_tree_runtime_manifest
+  runtime_status: official_runtime_checkpoint_bound

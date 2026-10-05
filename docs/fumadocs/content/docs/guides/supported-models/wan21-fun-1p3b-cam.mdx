@@ -1,0 +1,50 @@
+---
+title: "Wan2.1-Fun V1.1 1.3B Control Camera"
+description: "Wan2.1-Fun V1.1 1.3B Control Camera from Alibaba PAI (VideoX-Fun): camera-controlled-video and image-to-video; Verified."
+modelId: "wan21-fun-1p3b-cam"
+pageSource: authored
+---
+
+Wan2.1-Fun V1.1 1.3B Control Camera is the GPU-validated camera-control entry of the VideoX-Fun family in this catalog: the complete 1.3B camera checkpoint and split Wan components passed real A100 inference in the WorldFoundry workspace. The official pose-conditioned route emitted nine coherent H.264 frames at 672x384 after four denoising steps, with all 989 transformer tensors matched without fallback.
+
+<ModelPaperFigures modelId="wan21-fun-1p3b-cam" locale="en" />
+
+Code: [aigc-apps/VideoX-Fun](https://github.com/aigc-apps/VideoX-Fun).
+
+<ModelCommandBuilder modelId="wan21-fun-1p3b-cam" locale="en" />
+
+## What it is for
+
+`wan21-fun-1p3b-cam` is the recorded camera-control route. Start here to follow a catalog camera path.
+
+A 1.3B-parameter Wan2.1 diffusion transformer with the VideoX-Fun Control+i2v camera conditioning pathway. The checkpoint matched all 989 in-tree transformer tensors without fallback or skipped camera weights, confirming the conversion is exact. It is published by Alibaba PAI (VideoX-Fun).
+
+Catalog tasks include camera-controlled-video and image-to-video. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-pose adherence for controlled i2v generation).
+
+Not [Wan2.1](/docs/guides/supported-models/wan2.1) and [Wan2.1 Fun 14B Cam](/docs/guides/supported-models/wan21-fun-14b-cam). Score on [CameraBench](/docs/evaluation/benchmark-hub/camerabench).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `frames`, `fps`, and `height`; artifacts `wan21-fun-1p3b-cam.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `Wan21Fun1P3BCameraPipeline`.
+
+Family status: **Verified**.
+
+This is the recommended starting point for VideoX-Fun camera control: smallest footprint and the only variant with recorded real-GPU validation. Supply explicit camera pose sequences; scale up to the 14B/Wan2.2 variants once your pipeline works here.
+
+VideoX-Fun source is vendored at revision 403f1f7b78dcafccc4f6606dda4ec28e16e667dc.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run wan21-fun-1p3b-cam --pipeline.task-profile default` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `alibaba-pai/Wan2.1-Fun-V1.1-1.3B-Control-Camera`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh wan21-fun-1p3b-cam`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="wan21-fun-1p3b-cam" locale="en" />

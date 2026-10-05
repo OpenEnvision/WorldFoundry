@@ -1,10 +1,14 @@
 """Module for the TrajectoryGenerator operator implementation."""
 
+import logging
+
 from .base_operator import BaseOperator
 import torch
 import numpy as np
 import os
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 
 def interpolate_camera_poses(
@@ -210,7 +214,7 @@ class TrajectoryGenerator:
                 delta_vec += self.COMMAND_MAPPING[action]
                 valid_cmds += 1
             else:
-                print(f"[Warning] Unknown action command: {action}")
+                logger.warning("Unknown action command: %s", action)
         
         if valid_cmds == 0:
             pass 
@@ -306,7 +310,7 @@ class LingBotOperator(BaseOperator):
         
         # Branch 1: Generate from command list
         if action_list is not None and isinstance(action_list, list):
-            print(f"Generating trajectory from commands: {action_list}")
+            logger.info("Generating trajectory from commands: %s", action_list)
             c2ws, Ks_np = self.traj_generator.generate(action_list, num_frames, resize_H, resize_W)
             Ks = torch.from_numpy(Ks_np).float()
         

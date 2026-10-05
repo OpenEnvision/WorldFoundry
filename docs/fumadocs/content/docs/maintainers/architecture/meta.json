@@ -3,9 +3,14 @@
   "defaultOpen": true,
   "pages": [
     "index",
+    "file-index",
     "workflow",
+    "surfaces-orchestration",
     "evaluation-core",
     "model-runtime",
+    "runtime-assembly",
+    "native-diffusion",
+    "core-infrastructure",
     "benchmarks-data",
     "studio-internals"
   ]

@@ -7,18 +7,19 @@ and de-duplicating entries across multiple YAML sources.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
 
-from .manifest import model_zoo_entries_to_world_model_manifests
-from .schema import ModelVariantSpec, ModelZooEntry, iter_model_zoo_payloads, load_entries
 from ...api import WorldModelManifest
 from ...api.registry import AliasRegistryStore, lookup_key
-from ...utils import load_manifest, manifest_paths
-from ...utils import MODEL_ZOO_DIR
+from ...utils import MODEL_ZOO_DIR, load_manifest, manifest_paths
+from .manifest import model_zoo_entries_to_world_model_manifests
+from .schema import ModelVariantSpec, ModelZooEntry, iter_model_zoo_payloads
 
+LOGGER = logging.getLogger(__name__)
 
 # ── Custom exceptions ────────────────────────────────────────
 
@@ -81,17 +82,24 @@ def _entry_tasks(entry: ModelZooEntry) -> tuple[str, ...]:
     return tuple(tasks)
 
 
-def _entry_aliases(entry: ModelZooEntry) -> tuple[str, ...]:
-    """Compile all unique names, repositories, and variant IDs as aliases for an entry."""
+def _entry_aliases(
+    entry: ModelZooEntry,
+    *,
+    excluded_hf_repo_aliases: frozenset[str] = frozenset(),
+) -> tuple[str, ...]:
+    """Compile unambiguous names, repositories, and variant IDs for an entry."""
     aliases: list[str] = []
     for value in (
         *entry.aliases,
         entry.name,
-        entry.hf_repo_id,
         *(variant.variant_id for variant in entry.variants),
     ):
         if value and value != entry.model_id and value not in aliases:
             aliases.append(value)
+    if entry.hf_repo_id:
+        repo_key = _normalise_key(entry.hf_repo_id)
+        if repo_key not in excluded_hf_repo_aliases and entry.hf_repo_id not in aliases:
+            aliases.append(entry.hf_repo_id)
     return tuple(aliases)
 
 
@@ -101,12 +109,20 @@ def _entry_mapping_priority(data: Mapping[str, Any]) -> int:
 
 
 def _load_entries_with_priority(path: str | Path) -> tuple[tuple[int, ModelZooEntry], ...]:
-    """Load model entries along with their schema priorities from a file."""
-    payload = load_manifest(Path(path))
-    return tuple(
-        (_entry_mapping_priority(item), ModelZooEntry.from_dict(item))
-        for item in iter_model_zoo_payloads(payload)
-    )
+    """Load model entries along with their schema priorities from a file.
+
+    Schema validation errors are re-raised with the manifest path prepended so
+    a broken file inside a large zoo directory is directly locatable.
+    """
+    resolved = Path(path)
+    payload = load_manifest(resolved)
+    entries: list[tuple[int, ModelZooEntry]] = []
+    for item in iter_model_zoo_payloads(payload):
+        try:
+            entries.append((_entry_mapping_priority(item), ModelZooEntry.from_dict(item)))
+        except (TypeError, ValueError) as exc:
+            raise type(exc)(f"{resolved}: {exc}") from exc
+    return tuple(entries)
 
 
 # ── Pipeline route hydration ─────────────────────────────────
@@ -201,18 +217,30 @@ def _dedupe_entries_by_target_priority(paths: Iterable[str | Path]) -> tuple[Mod
 
     Hydrates pipeline routes before de-duplication, then keeps the entry with
     the highest priority for each ``model_id``, preserving first-seen order.
+    A higher schema-version priority silently supersedes (that is the
+    documented v2-wins mechanism); a duplicate at the *same* priority keeps the
+    first-seen entry and logs a warning with both file paths so accidental
+    copies stay visible.
     """
-    selected: dict[str, tuple[int, int, ModelZooEntry]] = {}
+    selected: dict[str, tuple[int, int, ModelZooEntry, str]] = {}
     sequence = 0
     for path in paths:
+        path_text = str(path)
         for priority, entry in _load_entries_with_priority(path):
             entry = _hydrate_pipeline_routes(entry)
             existing = selected.get(entry.model_id)
             if existing is None:
-                selected[entry.model_id] = (priority, sequence, entry)
+                selected[entry.model_id] = (priority, sequence, entry, path_text)
                 sequence += 1
             elif priority > existing[0]:
-                selected[entry.model_id] = (priority, existing[1], entry)
+                selected[entry.model_id] = (priority, existing[1], entry, path_text)
+            elif priority == existing[0]:
+                LOGGER.warning(
+                    "Duplicate model_id %r at equal schema priority: keeping entry from %s, ignoring duplicate in %s.",
+                    entry.model_id,
+                    existing[3],
+                    path_text,
+                )
     return tuple(item[2] for item in sorted(selected.values(), key=lambda value: value[1]))
 
 
@@ -227,12 +255,14 @@ class ModelZooRegistry:
 
     def __init__(self, entries: Iterable[ModelZooEntry] = ()) -> None:
         """Initialize the ModelZooRegistry with optional model entries."""
+        self._frozen = False
         self._store = AliasRegistryStore[ModelZooEntry](
             item_name=lambda entry: entry.model_id,
             duplicate_error=DuplicateModelZooKeyError,
             unknown_error=lambda key: UnknownModelZooKeyError(f"unknown model-zoo entry: {key!r}"),
             field_name="model-zoo lookup key",
         )
+        self._ambiguous_hf_repo_aliases: set[str] = set()
         for entry in entries:
             self.register(entry)
 
@@ -272,9 +302,39 @@ class ModelZooRegistry:
 
     def register(self, entry: ModelZooEntry) -> ModelZooEntry:
         """Register a single model entry and its aliases in the registry."""
+        if self._frozen:
+            raise RuntimeError(
+                "cannot register on a cached ModelZooRegistry; "
+                "construct a new instance or call clear_model_zoo_registry_cache()"
+            )
         if not isinstance(entry, ModelZooEntry):
             raise TypeError(f"expected ModelZooEntry, got {type(entry).__name__}")
-        registered, alias, existing = self._store.register_with_conflict(entry.model_id, _entry_aliases(entry), entry)
+        if entry.hf_repo_id:
+            repo_key = _normalise_key(entry.hf_repo_id)
+            if repo_key not in self._ambiguous_hf_repo_aliases:
+                try:
+                    repo_owner = self._store.get(entry.hf_repo_id)
+                except UnknownModelZooKeyError:
+                    repo_owner = None
+                if (
+                    repo_owner is not None
+                    and repo_owner.model_id != entry.model_id
+                    and repo_owner.hf_repo_id
+                    and _normalise_key(repo_owner.hf_repo_id) == repo_key
+                ):
+                    # One HF repository may intentionally host multiple immutable
+                    # model recipes (for example first- and third-person weights).
+                    # A shared repository identifier is not a resolvable model alias.
+                    self._store.discard_alias(entry.hf_repo_id)
+                    self._ambiguous_hf_repo_aliases.add(repo_key)
+        registered, alias, existing = self._store.register_with_conflict(
+            entry.model_id,
+            _entry_aliases(
+                entry,
+                excluded_hf_repo_aliases=frozenset(self._ambiguous_hf_repo_aliases),
+            ),
+            entry,
+        )
         if existing is not None:
             raise DuplicateModelZooKeyError(
                 f"duplicate model-zoo alias {_normalise_key(str(alias))!r}: "
@@ -305,7 +365,10 @@ class ModelZooRegistry:
     def aliases_for(self, key: str) -> tuple[str, ...]:
         """Get all resolved aliases for a given model ID."""
         entry = self.get(key)
-        return _entry_aliases(entry)
+        return _entry_aliases(
+            entry,
+            excluded_hf_repo_aliases=frozenset(self._ambiguous_hf_repo_aliases),
+        )
 
     def by_integration_status(self, status: str) -> tuple[ModelZooEntry, ...]:
         """Filter entries by their integration status."""
@@ -392,11 +455,20 @@ class ModelZooRegistry:
 @lru_cache(maxsize=32)
 def _load_model_zoo_registry_cached(resolved_root: str) -> ModelZooRegistry:
     """Load the model zoo registry into memory and cache the registry instance."""
-    return ModelZooRegistry.from_directory(Path(resolved_root))
+    registry = ModelZooRegistry.from_directory(Path(resolved_root))
+    registry._frozen = True
+    return registry
 
 
 def load_model_zoo_registry(path: str | Path | None = None) -> ModelZooRegistry:
-    """Load and cache the ModelZooRegistry from a directory path."""
+    """Load and cache the ModelZooRegistry from a directory path.
+
+    The returned object is the process-wide cached instance and is frozen:
+    ``register`` raises so callers cannot pollute later lookups.  Overlay
+    extra entries on ``ModelZooRegistry(load_model_zoo_registry(...).list())``.
+    Call :func:`clear_model_zoo_registry_cache` after editing YAML in a
+    long-lived process.
+    """
     root = Path(path) if path is not None else default_model_zoo_dir()
     return _load_model_zoo_registry_cached(str(root.resolve()))
 

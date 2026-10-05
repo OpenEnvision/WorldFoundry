@@ -1,139 +1,57 @@
 ---
 title: WRBench
-description: WRBench — 指标、依赖与运行命令。
+description: "中科大 / X-Humanoid 持久状态评测：Natural-25，D1–D6 相机转开链。WorldFoundry 检入整包；完整 D1–D6 未验证。"
 ---
 
-## 简介
+WRBench（“Current World Models Lack a Persistent State Core”；中科大与 X-Humanoid / 北京人形机器人创新中心）把相机运动当成 **可观测性干预**：事件开始，相机转开，回来时问目标是 **推进到终点还是冻在离开时的状态**。**Natural-25** 交叉 25 个场景族与四级事件设计（空间变化 × 状态变化）。标准相机轨把 **100 个语义变体 × 五种相机控制** 展开成 **500 条请求**。
 
-Natural-25 camera intervention benchmark for persistent visual world state.
+分层 **D1–D6**：
 
-**WorldFoundry 评测路径:** 通过仓内 vendored official pipeline，对生成产物执行或归一化官方 benchmark 流程。 候选模型输出从 generated-artifact 目录读取。
+- **D1** — 请求相机精度 / prompt-相机对齐
+- **D2** — 视觉完整性
+- **D3 / D4** — 可见时的空间 / 状态一致性
+- **D5 / D6** — 再观察时的空间 / 状态一致性（**只**在可判定的隐藏-返回证据上聚合）
 
-## 集成状态
+`wrbench_average` 汇总 D1–D6。论文：[WRBench](https://arxiv.org/abs/2606.20545)。项目：[jinplu.github.io/WRBench](https://jinplu.github.io/WRBench/)。代码：[JinPLu/WRBench](https://github.com/JinPLu/WRBench)。数据：[`WRBench/wrbench-natural25`](https://huggingface.co/datasets/WRBench/wrbench-natural25)。
 
-| 项目 | 当前状态 |
-| --- | --- |
-| Catalog integration | `integrated` |
-| Runner verification | `pending` |
-| Leaderboard | 暂不可用于 leaderboard 声明 |
+WorldFoundry **检入完整包装与 Natural-25 资产**。Natural-25 请求物化与结果归一化可用；**完整 D1–D6 执行未验证**。打分器：VGGT-Omega、DINOv2、Qwen3.5、Qwen3-VL。
 
-## 指标
+<BenchmarkPageSections id="wrbench" locale="zh" />
 
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/wrbench.yaml`
-
-### Primary
-
-- `wrbench_average`
-
-| Metric | 关注点 |
-| --- | --- |
-| `d1_cam_prec` | 官方 Requested-camera precision (D1-CamPrec) 指标在 benchmark 协议中的计分结果。 |
-| `d1_cam_align_common_yaw` | 官方 Prompt-camera alignment (common yaw) 指标在 benchmark 协议中的计分结果。 |
-| `d1_cam_align_static_hold` | 官方 Prompt-camera alignment (static hold) 指标在 benchmark 协议中的计分结果。 |
-| `d2_visual_integrity` | 官方 Visual integrity (D2) 指标在 benchmark 协议中的计分结果。 |
-| `d3_visible_spatial_consistency` | 官方 Visible spatial consistency (D3) 指标在 benchmark 协议中的计分结果。 |
-| `d4_visible_state_consistency` | 官方 Visible state consistency (D4) 指标在 benchmark 协议中的计分结果。 |
-| `d5_reobservation_spatial_consistency` | 官方 Re-observation spatial consistency (D5) 指标在 benchmark 协议中的计分结果。 |
-| `d6_reobservation_state_consistency` | 官方 Re-observation state consistency (D6) 指标在 benchmark 协议中的计分结果。 |
-| `wrbench_average` | 汇总 WRBench diagnostic average 相关子指标后的 benchmark 总分。 |
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `worldfoundry-unified-cu128`。
-- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
-- Contract, Natural-25 request materialization, published-result normalization, and WRBench source are available in-tree.
-- Full D1-D6 execution requires external checkpoint paths in WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG.
-
-### 测评数据
-
-- `worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench`
-- `worldfoundry/data/benchmarks/assets/wrbench/natural25`
-- `worldfoundry/data/benchmarks/tasks/external/wrbench.yaml`
-
-### Checkpoint 与资产
-
-- Base-model / metric 依赖：`vggt_omega`, `dinov2`, `qwen3_5_vl`, `qwen3_vl`。
-- Metric / evaluator checkpoint 默认路径与覆盖变量见 [local assets 指南](/zh/docs/guides/local-assets)。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_WRBENCH_ROOT`
-- `WORLDFOUNDRY_WRBENCH_ASSETS_ROOT`
-- `WORLDFOUNDRY_WRBENCH_RESULTS_PATH`
-- `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`
-- `WORLDFOUNDRY_WRBENCH_VIDEO_MANIFEST`
-- `WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG`
-
-### 环境检查
-
-```bash
-PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py --run-fixture --output-dir tmp/worldfoundry_preflight/wrbench --json
-```
-
-## 运行评测
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id wrbench \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/wrbench/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json_or_csv> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/wrbench/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
+`--run-official` 对照 Natural-25 给生成视频加相机 sidecar 打分（`--scorer-profile`、`--sidecar-profile-gate`）。没有再观察支持的行从 D5/D6 **排除**，不记失败。环境变量：`WORLDFOUNDRY_WRBENCH_RESULTS_PATH`、`WORLDFOUNDRY_WRBENCH_ROOT`。共享栈：`vggt_omega`、`dinov2`、`qwen3_5_vl`、`qwen3_vl`。
 
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id wrbench \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/wrbench/official-run \
-  --json
-```
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/wrbench.yaml`，`worldfoundry/data/benchmarks/assets/wrbench`，`worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench`。
 
-### 直接调用仓内 runner
+产物包括 `scorecard.json`（主键 `wrbench_average`，榜单键 `Avg`）与 `generation_requests.jsonl`。
 
-```bash
-${WORLDFOUNDRY_UNIFIED_PYTHON:-python} worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py --benchmark-id wrbench --run-official --output-dir "$WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR" --generated-artifact-dir "$WORLDFOUNDRY_GENERATED_ARTIFACT_DIR" --json
-```
+## 仓内 Natural-25 资产
 
-## 依赖与产物
+`worldfoundry/data/benchmarks/assets/wrbench/natural25/` 是 WorldFoundry 物化请求用的 prompt 网格（与本仓库一样 Apache-2.0）。Hugging Face 镜像：[合集](https://huggingface.co/collections/WRBench/wrbench-current-world-models-lack-a-persistent-state-core-6a365c717251293c9fc2cc26)、[`WRBench/wrbench-natural25`](https://huggingface.co/datasets/WRBench/wrbench-natural25)、[`WRBench/wrbench-videos`](https://huggingface.co/datasets/WRBench/wrbench-videos)、[榜单](https://huggingface.co/spaces/WRBench/wrbench-leaderboard)。
 
-### Inputs
+| 文件 | 作用 |
+| --- | --- |
+| `scene_events_25x4.csv` | 25 个场景族 × 4 个事件轴（无 / 空间 / 状态 / 全） |
+| `families.jsonl` | 场景族元数据与 prompt 变体 |
+| `variants.jsonl` | 确定性 TI2V 变体：25 族 × 4 事件档 × 4 相机间隔。`ti2v_prompt` 是锚定首帧的正式 prompt |
+| `variants.legacy_pronoun_20260620.jsonl` | 冻结的 provenance 快照；目前与 `variants.jsonl` 字节相同 |
+| `t2v_layout_anchors.jsonl` | 纯文本布局事实（主体在左、交互者在右、开放表面、背景） |
+| `t2v_event_tails.jsonl` | 按 `variant_id` 的纯文本事件 / 动作尾巴 |
+| `prompt_profiles/t2v_layout_anchor.json` | 纯文本 prompt profile；禁止 T2I/TI2V 风格词 |
+| `camera_scopes/t2v_rotation_stress_30_60.json` | 仅 T2V 的旋转压力范围（`static`、`yaw30_LR`、`yaw30_RL`、`yaw60_LR`、`yaw60_RL`） |
+| `first_frames/` + `first_frames_manifest.json` | 已发布的 PNG 首帧，每个 `family_id` 一张 |
 
-- in-tree WRBench runtime and Natural-25 assets
-- generated videos and camera sidecars for a new model evaluation
-- WRBench scorer runtime configuration for full D1-D6 execution
-
-### Outputs
-
-- `scorecard.json`
-- `benchmark_contract.json`
-- `raw_metric_table.jsonl`
-- `per_sample_scores.jsonl`
-- `generation_requests.jsonl`
-
-## 官方资料
-
-- [GitHub](https://github.com/JinPLu/WRBench)
-- [Paper](https://arxiv.org/abs/2606.20545)
-- [Project page](https://jinplu.github.io/WRBench/)
-- [Hugging Face dataset](https://huggingface.co/datasets/WRBench/wrbench-natural25)
+可以用 `wrbench firstframe` 重生成首帧，或换成自己的 T2I 图。人工标注另行发布。纯文本榜单条目应物化 `t2v_layout_anchor` 和旋转压力范围，而不是主 TI2V/TV2V 面。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

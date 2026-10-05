@@ -1,0 +1,91 @@
+upstream_revision: 2fe1ea9aca072f787bbba07ee9380b0e1ea7563b
+default_variant: wan-5b-dmd
+variants:
+  wan-5b-dmd:
+    config: configs/examples/wan22_ti2v_5b/infer_stage2_sgf_camera_length.yaml
+    family: wan22_ti2v_5b
+    processes: 1
+    checkpoint_subdir: SolarWM-5B-sgf-stage2-81f
+    repo_id: junchaoh-cs/SolarWM
+    base_key: model.base_path
+    checkpoint_key: checkpoint.path
+  wan-5b-dmd-237f:
+    config: configs/examples/wan22_ti2v_5b/infer_stage2_sgf_81f.yaml
+    family: wan22_ti2v_5b
+    processes: 1
+    checkpoint_subdir: SolarWM-5B-sgf-stage2-81f
+    repo_id: junchaoh-cs/SolarWM
+    base_key: model.base_path
+    checkpoint_key: checkpoint.path
+  wan-5b-ar:
+    config: configs/examples/wan22_ti2v_5b/infer_stage1_tf_anyflow_v1_5_81f.yaml
+    family: wan22_ti2v_5b
+    processes: 8
+    checkpoint_subdir: SolarWM-5B-tf-stage1-81f
+    repo_id: junchaoh-cs/SolarWM
+    base_key: model.base_path
+    checkpoint_key: checkpoint.path
+  wan-5b-bidirectional:
+    config: configs/examples/wan22_ti2v_5b/infer_stage0p5_fm_81f.yaml
+    family: wan22_ti2v_5b
+    processes: 8
+    checkpoint_subdir: SolarWM-5B-bid-stage0p5-81f
+    repo_id: junchaoh-cs/SolarWM
+    base_key: model.base_path
+    checkpoint_key: checkpoint.path
+  wan-5b-bidirectional-153f:
+    config: configs/examples/wan22_ti2v_5b/infer_stage0p5_fm_153f.yaml
+    family: wan22_ti2v_5b
+    processes: 8
+    checkpoint_subdir: SolarWM-5B-bid-stage0p5-153f
+    repo_id: junchaoh-cs/SolarWM
+    base_key: model.base_path
+    checkpoint_key: checkpoint.path
+  wan-14b:
+    config: configs/examples/wan22_i2v_a14b/infer_stage0p5_fm_81f.yaml
+    family: wan22_i2v_a14b
+    processes: 8
+    checkpoint_subdir: SolarWM-14B-bid-stage0p5-81f
+    repo_id: junchaoh-cs/SolarWM
+    base_key: model.base_path
+    checkpoint_key: checkpoint.path
+  ltx:
+    config: configs/examples/ltx25/stage0p5-infer-153f.yaml
+    family: ltx25_video
+    processes: 2
+    checkpoint_subdir: SolarWM-ltx-22B-bid-stage0p5-153f
+    repo_id: junchaoh-cs/SolarWM
+    base_key: model.checkpoint_path
+    checkpoint_key: model.adapter_checkpoint_path
+  h3-dmd:
+    config: configs/examples/minimax_h3/infer-stage2-158f-sp4.yaml
+    family: minimax_h3
+    processes: 8
+    checkpoint_subdir: SolarWM-h3-33B-sgf-stage2-158f
+    repo_id: junchaoh-cs/SolarWM-H3-33B
+    base_key: model.checkpoint_path
+    checkpoint_key: checkpoint.resume_from
+  h3-dmd-long:
+    config: configs/examples/minimax_h3/infer-stage2-source-length-sp8.yaml
+    family: minimax_h3
+    processes: 8
+    checkpoint_subdir: SolarWM-h3-33B-sgf-stage2-158f
+    repo_id: junchaoh-cs/SolarWM-H3-33B
+    base_key: model.checkpoint_path
+    checkpoint_key: checkpoint.resume_from
+  h3-ar:
+    config: configs/examples/minimax_h3/infer-stage1-158f-sp2.yaml
+    family: minimax_h3
+    processes: 8
+    checkpoint_subdir: SolarWM-h3-33B-tf-stage1-158f
+    repo_id: junchaoh-cs/SolarWM-H3-33B
+    base_key: model.checkpoint_path
+    checkpoint_key: checkpoint.resume_from
+  h3-bidirectional:
+    config: configs/examples/minimax_h3/infer-158f-lora384-sp2.yaml
+    family: minimax_h3
+    processes: 8
+    checkpoint_subdir: SolarWM-h3-33B-bid-stage0p5-158f
+    repo_id: junchaoh-cs/SolarWM-H3-33B
+    base_key: model.checkpoint_path
+    checkpoint_key: checkpoint.resume_from

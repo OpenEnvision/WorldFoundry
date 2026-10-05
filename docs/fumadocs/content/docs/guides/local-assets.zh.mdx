@@ -7,7 +7,7 @@ description: 从哪里查来源、下载到哪里、用什么命令准备 checkp
 
 当命令提示缺 checkpoint、dataset、metric 权重、生成输出或官方结果文件时，优先看这一页。WorldFoundry 把这些大型或带 license 的文件放在 git 外；仓库内保存代码和 manifest，本机或共享存储保存 manifest 引用的资产。
 
-典型路径：用 `worldfoundry-eval zoo ... --json` 查看模型或 benchmark id；评测时再生成单个 benchmark 的 asset plan；只补齐本次运行需要的路径。使用框架不需要提前准备所有 benchmark 资产。统一 conda 环境见 [环境配置](/zh/docs/reference/environments)。
+典型路径：用 `worldfoundry-eval zoo ... --json` 查看模型或 benchmark ID；评测时再生成单个 benchmark 的 asset plan；只补齐本次运行需要的路径。使用框架不需要提前准备所有 benchmark 资产。统一 conda 环境见 [环境配置](/zh/docs/reference/environments)。
 
 安装 Hugging Face Hub 包。`hf` / `huggingface-cli` 是可选入口；下载脚本会优先用 CLI，缺少时回退到 `huggingface_hub.snapshot_download`：
 
@@ -26,16 +26,22 @@ export HF_TOKEN="hf_..."   # 或 huggingface-cli login
 ```bash
 wget https://hf-mirror.com/hfd/hfd.sh
 chmod a+x hfd.sh
-export HF_ENDPOINT=https://hf-mirror.com
+export WORLDFOUNDRY_HF_ENDPOINT=https://hf-mirror.com
+export HF_ENDPOINT="${WORLDFOUNDRY_HF_ENDPOINT}"
 
 ./hfd.sh Skywork/Matrix-Game-2.0 \
   --local-dir "${WORLDFOUNDRY_HFD_ROOT:-${HOME}/.cache/worldfoundry/models/checkpoints/hfd}/Skywork--Matrix-Game-2.0"
 
 ./hfd.sh BestWishYsh/ChronoMagic-Pro --dataset \
-  --local-dir "${WORLDFOUNDRY_HFD_DATASET_ROOT:-${HOME}/.cache/worldfoundry/cache/data/datasets}/BestWishYsh__ChronoMagic-Pro"
+  --local-dir "${WORLDFOUNDRY_HFD_DATASET_ROOT:-${WORLDFOUNDRY_DATA_DIR:-${HOME}/.cache/worldfoundry/data}/datasets}/BestWishYsh__ChronoMagic-Pro"
 ```
 
-也可设置 `HF_ENDPOINT=https://hf-mirror.com` 后继续用 `hf download`。Gated repo 需先在 Hugging Face 官网申请许可，再用 `--hf_token "${HF_TOKEN}"`。
+Studio 默认不选择任何第三方镜像；如需让 Studio 子进程使用镜像，请显式设置
+`WORLDFOUNDRY_HF_ENDPOINT`。直接运行 Hugging Face 工具时仍使用上例的
+`HF_ENDPOINT`。Gated repo 需先在 Hugging Face 官网申请许可，再用
+`--hf_token "${HF_TOKEN}"`。
+
+镜像始终需要显式启用。Studio 派发的子进程会继承 shell 中已有的 `HF_ENDPOINT`，默认不会重定向到第三方镜像。若只想覆盖 WorldFoundry 管理的子进程，导出 `WORLDFOUNDRY_HF_ENDPOINT`；它优先于继承的 `HF_ENDPOINT`。
 
 ## 1. 初始化目录与环境变量
 
@@ -88,15 +94,13 @@ bash scripts/workspace/run_workspace.sh \
 
 ### 路径命名约定
 
-| 来源 | 本地目录名规则 | 示例 |
-| --- | --- | --- |
-| HF 模型 `org/name` | `org--name` | `Skywork/Matrix-Game-2.0` → `Skywork--Matrix-Game-2.0` |
-| HF 数据集 `org/name` | `org__name` | `lerobot/libero` → `lerobot__libero` |
-| GitHub `owner/repo` | 常见为 `owner--repo` | `Lifelong-Robot-Learning/LIBERO` → `Lifelong-Robot-Learning--LIBERO` |
+- **HF 模型 `org/name`** — 本地目录 `org--name`。示例：`Skywork/Matrix-Game-2.0` → `Skywork--Matrix-Game-2.0`。
+- **HF 数据集 `org/name`** — 本地目录 `org__name`。示例：`lerobot/libero` → `lerobot__libero`。
+- **GitHub `owner/repo`** — 常见为 `owner--repo`。示例：`Lifelong-Robot-Learning/LIBERO` → `Lifelong-Robot-Learning--LIBERO`。
 
 **以 catalog 或 `local_assets.example.yaml` 里的 `path` 为准。** 部分具身 benchmark 仍引用 legacy 路径如 `cache/vla_va_wam/hf_datasets/org--name`，可按同样结构放置，或在 manifest 里改路径。
 
-## 2. 去哪里查「要下载什么」
+## 2. 去哪里查“要下载什么”
 
 资产需求写在 manifest 里，docs / TUI / CLI / runner 才能描述同一件事。优先看 CLI summary；需要核对准确来源时再打开 YAML。
 
@@ -186,14 +190,91 @@ python scripts/setup/prepare_benchmark_assets.py \
 
 以下仓内 runtime 通过统一 base-model asset registry 解析 checkpoint；源码不依赖某台机器的绝对路径。
 
-| Capability | 官方来源 | 文件名 | 默认位置 | 覆盖变量 |
-| --- | --- | --- | --- | --- |
-| `sam2` | HF [`facebook/sam2.1-hiera-base-plus`](https://huggingface.co/facebook/sam2.1-hiera-base-plus) | `sam2.1_hiera_base_plus.pt` | `${WORLDFOUNDRY_HFD_ROOT}/facebook--sam2.1-hiera-base-plus/` | `WORLDFOUNDRY_SAM2_CKPT` |
-| `mobile_sam` | GitHub [`ChaoningZhang/MobileSAM` 的 `weights/`](https://github.com/ChaoningZhang/MobileSAM/tree/master/weights) | `mobile_sam.pt` | `${WORLDFOUNDRY_CKPT_DIR}/MobileSAM/` | `WORLDFOUNDRY_MOBILE_SAM_CKPT` |
-| `repvit_sam` | GitHub [`THU-MIG/RepViT` 的 `v1.0` release](https://github.com/THU-MIG/RepViT/releases/tag/v1.0) | `repvit_sam.pt` | `${WORLDFOUNDRY_CKPT_DIR}/RepViT/` | `WORLDFOUNDRY_REPVIT_SAM_CKPT` |
-| `midas_v21_small_256` | GitHub [`isl-org/MiDaS` 的 `v2_1` release](https://github.com/isl-org/MiDaS/releases/tag/v2_1) | `midas_v21_small_256.pt` | `${WORLDFOUNDRY_CKPT_DIR}/` | `WORLDFOUNDRY_MIDAS_V21_SMALL_CKPT` |
-| `unidepth_v2_vitl14` | HF [`lpiccinelli/unidepth-v2-vitl14`](https://huggingface.co/lpiccinelli/unidepth-v2-vitl14) | `config.json`、`model.safetensors` | `${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unidepth-v2-vitl14/` | `WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR` |
-| `unik3d_vitl` | HF [`lpiccinelli/unik3d-vitl`](https://huggingface.co/lpiccinelli/unik3d-vitl) | `config.json`、`model.safetensors` | `${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unik3d-vitl/` | `WORLDFOUNDRY_UNIK3D_VITL_MODEL_DIR` |
+<div className="pi-kv-catalog is-vars not-prose">
+  <section className="pi-kv-group">
+    <h3>能力</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>sam2</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>覆盖变量</span>
+            <code>WORLDFOUNDRY_SAM2_CKPT</code>
+          </span>
+        </div>
+        <p>官方来源：HF <a href="https://huggingface.co/facebook/sam2.1-hiera-base-plus">facebook/sam2.1-hiera-base-plus</a>。文件名：<code>sam2.1_hiera_base_plus.pt</code></p>
+        <p className="pi-kv-read"><span>默认位置</span> <code>{'${WORLDFOUNDRY_HFD_ROOT}/facebook--sam2.1-hiera-base-plus/'}</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>mobile_sam</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>覆盖变量</span>
+            <code>WORLDFOUNDRY_MOBILE_SAM_CKPT</code>
+          </span>
+        </div>
+        <p>官方来源：GitHub <a href="https://github.com/ChaoningZhang/MobileSAM/tree/master/weights">ChaoningZhang/MobileSAM</a> 的 <code>weights/</code>。文件名：<code>mobile_sam.pt</code></p>
+        <p className="pi-kv-read"><span>默认位置</span> <code>{'${WORLDFOUNDRY_CKPT_DIR}/MobileSAM/'}</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>repvit_sam</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>覆盖变量</span>
+            <code>WORLDFOUNDRY_REPVIT_SAM_CKPT</code>
+          </span>
+        </div>
+        <p>官方来源：GitHub <a href="https://github.com/THU-MIG/RepViT/releases/tag/v1.0">THU-MIG/RepViT</a> 的 <code>v1.0</code> release。文件名：<code>repvit_sam.pt</code></p>
+        <p className="pi-kv-read"><span>默认位置</span> <code>{'${WORLDFOUNDRY_CKPT_DIR}/RepViT/'}</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>midas_v21_small_256</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>覆盖变量</span>
+            <code>WORLDFOUNDRY_MIDAS_V21_SMALL_CKPT</code>
+          </span>
+        </div>
+        <p>官方来源：GitHub <a href="https://github.com/isl-org/MiDaS/releases/tag/v2_1">isl-org/MiDaS</a> 的 <code>v2_1</code> release。文件名：<code>midas_v21_small_256.pt</code></p>
+        <p className="pi-kv-read"><span>默认位置</span> <code>{'${WORLDFOUNDRY_CKPT_DIR}/'}</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>unidepth_v2_vitl14</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>覆盖变量</span>
+            <code>WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR</code>
+          </span>
+        </div>
+        <p>官方来源：HF <a href="https://huggingface.co/lpiccinelli/unidepth-v2-vitl14">lpiccinelli/unidepth-v2-vitl14</a>。文件名：<code>config.json</code>、<code>model.safetensors</code></p>
+        <p className="pi-kv-read"><span>默认位置</span> <code>{'${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unidepth-v2-vitl14/'}</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>unik3d_vitl</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>覆盖变量</span>
+            <code>WORLDFOUNDRY_UNIK3D_VITL_MODEL_DIR</code>
+          </span>
+        </div>
+        <p>官方来源：HF <a href="https://huggingface.co/lpiccinelli/unik3d-vitl">lpiccinelli/unik3d-vitl</a>。文件名：<code>config.json</code>、<code>model.safetensors</code></p>
+        <p className="pi-kv-read"><span>默认位置</span> <code>{'${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unik3d-vitl/'}</code></p>
+      </li>
+    </ul>
+  </section>
+</div>
 
 UniDepth V2 与 UniK3D 权重采用 CC-BY-NC-4.0；下载或再分发前需要核对上游的非商业使用条款。
 
@@ -250,9 +331,162 @@ bash scripts/inference/prepare_model_infer.sh matrix-game-2 --download
 hf download Skywork/Matrix-Game-2.0 \
   --revision f1729d99a80e0f07993a77d7dad4a3190e23c2c8 \
   --local-dir "${WORLDFOUNDRY_HFD_ROOT}/Skywork--Matrix-Game-2.0"
-
-bash scripts/download_hfd_models.sh matrix-game-2
 ```
+
+### 走读示例：Echo-Memory
+
+Echo recipes 共用 Wan2.1 T2V 1.3B backbone，但分别要求
+`Echo-Team/Echo-Memory` 下的不同文件。截至 2026-07-20，官方 HF `main`
+只保留 `context_k1/epoch-0.safetensors`。其他 Echo model ID 仍以精确预期
+文件名保留在 catalog 中，但上游状态是 `unreleased_by_upstream` 或
+`retracted_misaligned_by_upstream`；不能用 K=1 权重代替它们。
+
+将当前公开 recipe 与钉定的 backbone 放入 runtime layout，再创建正常 HFD
+alias，全程不复制 tensor：
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+
+hf download Echo-Team/Echo-Memory \
+  context_k1/epoch-0.safetensors \
+  --revision 7645f33efbfd02c58dc471570d0c7bd6a50eec83 \
+  --local-dir "${WORLDFOUNDRY_CKPT_DIR}/Echo-Memory"
+
+hf download Wan-AI/Wan2.1-T2V-1.3B \
+  --revision 37ec512624d61f7aa208f7ea8140a131f93afc9a \
+  --local-dir "${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-1.3B"
+
+bash scripts/setup/link_hf_checkpoints.sh \
+  --repo Echo-Team/Echo-Memory=Echo-Memory \
+  --repo Wan-AI/Wan2.1-T2V-1.3B=Wan2.1-T2V-1.3B
+```
+
+标准 checker 现在同时检查 recipe-specific filename 与仓库，因此只有 K=1
+的 cache 不会把 K=20 或 SSM 模型误报为 ready：
+
+```bash
+worldfoundry-eval zoo model-download \
+  --model-id echo-memory-context-k1 \
+  --check-local \
+  --json
+```
+
+研究者若有未公开 checkpoint，可放到对应 runtime profile 声明的精确
+`checkpoint_path`，再建立相同 HFD alias。在严格 checkpoint 加载与 CUDA
+artifact validation 通过前，catalog entry 应继续保持 blocked。
+
+### 走读示例：Matrix-Game 3.5
+
+第一、第三人称模型 ID 共用 Wan2.2、UMT5 与 DA3 资产，但分别绑定
+`RiemannDynamics/Matrix-Game-3.5-Base` 中的不同文件。一次下载两个人称权重，
+两个不可变 recipe 就都能通过标准 HFD alias 解析。使用 HF-Mirror 时先设置
+`HF_ENDPOINT=https://hf-mirror.com`。DA3 checkpoint 有独立的
+CC-BY-NC-4.0 license，而 Matrix-Game 与 Wan checkpoint 是 Apache-2.0；
+使用时需要分别遵守各依赖的上游条款。
+
+```bash
+hf download RiemannDynamics/Matrix-Game-3.5-Base \
+  --revision 40c172355efa32d4e2a44076569e310807788f8a \
+  --include first-person.safetensors \
+  --include third-person.safetensors \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/RiemannDynamics--Matrix-Game-3.5-Base"
+
+hf download Wan-AI/Wan2.2-TI2V-5B \
+  --revision 921dbaf3f1674a56f47e83fb80a34bac8a8f203e \
+  --include 'diffusion_pytorch_model*.safetensors' \
+  --include models_t5_umt5-xxl-enc-bf16.pth \
+  --include Wan2.2_VAE.pth \
+  --include 'google/umt5-xxl/*' \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/Wan-AI--Wan2.2-TI2V-5B"
+
+hf download depth-anything/DA3NESTED-GIANT-LARGE-1.1 \
+  --revision b2359bdf726fb44ef62acca04d629dcf158053e7 \
+  --include config.json \
+  --include model.safetensors \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1"
+```
+
+不加载模型张量即可检查两个 recipe 的本地资产：
+
+```bash
+worldfoundry-eval zoo model-download \
+  --model-id matrix-game-3.5-first-person \
+  --check-local \
+  --json
+
+worldfoundry-eval zoo model-download \
+  --model-id matrix-game-3.5-third-person \
+  --check-local \
+  --json
+```
+
+### 走读示例：Cosmos 1 与 Cosmos 2
+
+GEN3C 显式依赖四组资产：7B transformer、Tokenize1 codec、T5-11B 与 MoGe
+depth model。Cosmos Predict2 使用所选 Video2World transformer、
+`tokenizer/tokenizer.pth` 和同一个 T5-11B encoder。Predict2 repo 受 gated
+限制，使用镜像前仍需先完成鉴权。
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+
+hf download nvidia/GEN3C-Cosmos-7B \
+  --revision 9bcfdb4f3924f41376daeadf6200826c12a3bf8e \
+  --include model.pt \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/nvidia--GEN3C-Cosmos-7B"
+
+hf download nvidia/Cosmos-Predict2-2B-Video2World \
+  --revision f50c09f5d8ab133a90cac3f4886a6471e9ba3f18 \
+  --include model-720p-16fps.pt \
+  --include tokenizer/tokenizer.pth \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/nvidia--Cosmos-Predict2-2B-Video2World"
+
+hf download google-t5/t5-11b \
+  --revision 90f37703b3334dfe9d2b009bfcbfbf1ac9d28ea3 \
+  --include pytorch_model.bin --include config.json \
+  --include spiece.model --include tokenizer.json \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/google-t5--t5-11b"
+```
+
+GEN3C 还需按 runtime profile 下载 `nvidia/Cosmos-Tokenize1-CV8x8x8-720p`
+与 `Ruicheng/moge-vitl`。Predict2 14B 切换为
+`nvidia/Cosmos-Predict2-14B-Video2World` revision
+`03b03a377fede782647afac998f674d9f358e319`。
+
+### 走读示例：Cosmos 2.5
+
+Cosmos Predict 与 Transfer 共用 Predict 2B 的 `tokenizer.pth` Wan codec 和
+Reason1 language model，只需要下载所选 transformer 与这两组共享资产。
+Transfer 当前固定官方 `general/edge` 精确 revision；目录存在但缺少该文件
+不能算 ready。需要镜像时先设置 `HF_ENDPOINT=https://hf-mirror.com`。
+
+```bash
+hf download nvidia/Cosmos-Predict2.5-2B \
+  --revision f176dc95b4a70f53ce01c4b302851595e7322b00 \
+  --include tokenizer.pth \
+  --include 'base/post-trained/81edfebe-bd6a-4039-8c1d-737df1a790bf_ema_bf16.pt' \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/nvidia--Cosmos-Predict2.5-2B"
+
+hf download nvidia/Cosmos-Reason1-7B \
+  --revision 375e24000b24baed78f4618d3dd779e47cd96323 \
+  --include 'model*.safetensors' \
+  --include model.safetensors.index.json \
+  --include tokenizer.json \
+  --include tokenizer_config.json \
+  --include chat_template.json \
+  --include config.json \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/nvidia--Cosmos-Reason1-7B"
+
+hf download nvidia/Cosmos-Transfer2.5-2B \
+  --revision bd963eabcfc2d61dc4ea365cacf41d45ac480aa5 \
+  --include 'general/edge/ecd0ba00-d598-4f94-aa09-e8627899c431_ema_bf16.pt' \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/nvidia--Cosmos-Transfer2.5-2B"
+```
+
+Predict 14B 应改为下载 `nvidia/Cosmos-Predict2.5-14B` revision
+`71ebf3e8af30ecfe440bf0481115975fcc052b46` 下的
+`base/post-trained/e21d2a49-4747-44c8-ba44-9f6f9243715f_ema_bf16.pt`，
+Reason1 与 VAE 资产保持不变。
 
 其他模型按各自 catalog 里的 `repo_id` / `revision` 同样下载。共享机器上若已有 snapshot，设置 `WORLDFOUNDRY_MODEL_DIR` 并用软链镜像 HF cache 名，不要复制权重：
 
@@ -305,12 +539,10 @@ cp worldfoundry/data/benchmarks/local_assets.example.yaml \
 export WORLDFOUNDRY_LOCAL_ASSET_MANIFEST="${WORLDFOUNDRY_HOME}/local_assets.yaml"
 ```
 
-| `kind` | 你要准备 | 典型命令 |
-| --- | --- | --- |
-| `repo` | 已有 source/runtime root | 设置 `WORLDFOUNDRY_<BENCHMARK>_ROOT=<path>` |
-| `dataset` | HF dataset snapshot | `hf download <id> --repo-type dataset --local-dir <path>` |
-| `checkpoint` | 模型权重 | `hf download <id> --local-dir <path>` |
-| `simulator_asset` | 仿真器文件 | 按各 benchmark 文档手动安装 |
-| `result_dump` | 上游官方结果 | 跑完上游 evaluator 后拷贝 |
+- **`repo`** — 已有 source/runtime root。典型命令：设置 `WORLDFOUNDRY_<BENCHMARK>_ROOT=<path>`。
+- **`dataset`** — HF dataset snapshot。典型命令：`hf download <id> --repo-type dataset --local-dir <path>`。
+- **`checkpoint`** — 模型权重。典型命令：`hf download <id> --local-dir <path>`。
+- **`simulator_asset`** — 仿真器文件。典型命令：按各 benchmark 文档手动安装。
+- **`result_dump`** — 上游官方结果。典型命令：跑完上游 evaluator 后拷贝。
 
 具身仿真器 root 与 helper 脚本见 [Embodied official runtime](/zh/docs/evaluation/embodied-official-runtime)。

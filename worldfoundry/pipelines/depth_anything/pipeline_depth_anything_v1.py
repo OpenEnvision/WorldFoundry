@@ -1,20 +1,30 @@
 """Depth Anything V1 visual generation pipeline module."""
 
-from ..pipeline_utils import PipelineABC
+import logging
 import os
-from typing import Any, List, Optional, Union, Dict
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
 import cv2
 import numpy as np
 import torch
 from tqdm import tqdm
 
-from worldfoundry.core.io import read_video, write_video
-
-from ...operators.depth_anything_operator import DepthAnythingOperator
-from ...representations.depth_generation.depth_anything.depth_anything_v1_representation import (
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.runtime_v1 import (
     DepthAnything1Representation,
 )
+from worldfoundry.core.io import artifact_root_path, read_video, write_video
+
+from ...operators.depth_anything_operator import DepthAnythingOperator
+from ..pipeline_utils import PipelineABC
+
+logger = logging.getLogger(__name__)
+
+
+def _default_output_dir(name: str = "vis_depth") -> str:
+    """Resolve a stable default output directory instead of writing to the CWD."""
+    return str(artifact_root_path() / name)
 
 
 class DepthResult:
@@ -45,7 +55,9 @@ class DepthResult:
             List of saved file paths
         """
         if output_dir is None:
-            output_dir = "./vis_depth" if self.data_type == "image" else "./vis_video_depth"
+            output_dir = _default_output_dir(
+                "vis_depth" if self.data_type == "image" else "vis_video_depth"
+            )
         
         os.makedirs(output_dir, exist_ok=True)
         saved_files: List[str] = []
@@ -213,8 +225,8 @@ class DepthAnything1Pipeline(PipelineABC):
                     'filename': filename,
                     'stem': stem,
                 })
-            except Exception as e:
-                print(f"Error processing {filename}: {e}")
+            except Exception:
+                logger.warning("Skipping image %s after processing failure", filename, exc_info=True)
                 continue
         
         return DepthResult(results, data_type="image")
@@ -238,6 +250,8 @@ class DepthAnything1Pipeline(PipelineABC):
             try:
                 raw_frames, metadata = read_video(filename)
             except Exception:
+                # Skipped samples silently distort benchmark counts, so record them.
+                logger.warning("Skipping unreadable video %s", filename, exc_info=True)
                 continue
 
             frame_height, frame_width = raw_frames.shape[1:3]
@@ -266,10 +280,16 @@ class DepthAnything1Pipeline(PipelineABC):
     
     def __call__(
         self,
-        data_path: str,
+        data_path: str | None = None,
         grayscale: bool = False,
-        **kwargs
-    ) -> DepthResult:
+        *,
+        images: Any = None,
+        video: Any = None,
+        output_path: str | Path | None = None,
+        return_dict: bool = False,
+        operator_kwargs: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> DepthResult | dict[str, Any]:
         """
         Main call interface for the pipeline.
         
@@ -281,10 +301,35 @@ class DepthAnything1Pipeline(PipelineABC):
         Returns:
             DepthResult object containing processed depth results
         """
-        if self.data_type == "image":
-            return self.run_image(data_path, grayscale=grayscale)
+        del kwargs
+        routed_inputs = dict(operator_kwargs or {})
+        source = data_path or images or video
+        if source is None:
+            source = routed_inputs.get("input") or routed_inputs.get("input_path")
+        if source is None:
+            raise ValueError("Depth Anything V1 requires an image or video input path")
+
+        result = (
+            self.run_image(str(source), grayscale=grayscale)
+            if self.data_type == "image"
+            else self.run_video(str(source))
+        )
+        if not return_dict:
+            return result
+        if output_path is None:
+            output_dir = _default_output_dir(
+                "vis_depth" if self.data_type == "image" else "vis_video_depth"
+            )
         else:
-            return self.run_video(data_path)
+            output_dir = str(Path(output_path).expanduser().parent)
+        artifacts = result.save(output_dir)
+        if not artifacts:
+            raise RuntimeError("Depth Anything V1 produced no output artifacts")
+        return {
+            "status": "succeeded",
+            "artifact_path": artifacts[0],
+            "artifacts": artifacts,
+        }
 
 
 __all__ = ["DepthAnything1Pipeline", "DepthResult"]

@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: pi3
+model_id: pi3
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.pi3.pipeline_pi3:Pi3Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

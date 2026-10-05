@@ -1,0 +1,54 @@
+---
+title: "Sana"
+description: "Sana（NVIDIA）：文生图、文生视频；Runner 一致性待确认; 20 个 variant。"
+modelId: "sana"
+pageSource: authored
+---
+
+Sana 是英伟达的高效生成系列，也是 video 类别中 variant 最多的条目：二十个已记录 variant，覆盖文生图（600M–4.8B，最高 4K）、ControlNet 条件图像生成、Sana-Video 2B 的 480p/720p 文生视频、LongSANA 长视频，以及 SANA-Streaming 的视频到视频（长时与双向）。checkpoint 数学分布在树内按角色划分的规范化扩散组件中。
+
+<ModelPaperFigures modelId="sana" locale="zh" />
+
+记录论文为[SANA: Efficient High-Resolution Image Synthesis with Linear Diffusion Transformers](https://arxiv.org/abs/2410.10629)（2024）。
+
+项目页：[nvlabs.github.io/Sana](https://nvlabs.github.io/Sana/)。代码：[NVlabs/Sana](https://github.com/NVlabs/Sana)。
+
+<ModelCommandBuilder modelId="sana" locale="zh" />
+
+## 用来做什么
+
+任务是 catalog 静帧而不是视频时，用 `sana-600m-512px`。
+
+Sana 的高效来自深压缩自编码器（32x）、线性注意力 DiT 块与小型 LLM 文本编码器，见论文（arXiv 2410.10629）。记录的流式路径使用内置官方 BF16 CLI、混合 DiT 块、融合 GDN 核与因果 LTX-2 VAE 封装，源码同步自固定的 NVlabs/Sana commit；论文中的 MPQ 部署路径不在公开 BF16 配方内。该模型由英伟达（NVIDIA）发布。
+
+catalog 记录的任务包括 文生图、文生视频、视频到视频、image-conditioned-generation。别名包括 `sana-video`、`longsana-video`、`sana-streaming`、`sana-streaming-bidirectional`。模态上，它接受文本、视频，输出图像、视频。同系列还有 `sana-600m-1024px`、`sana-1600m-512px`、`sana-1600m-512px-multiling`。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（Sana-Video 文生视频路径的质量评测）、[SANA-WM 80-Scene Benchmark](/zh/docs/evaluation/benchmark-hub/sana-wm-bench)（本仓库中针对 Sana 的世界模型评测）。
+
+不是 [SANA-WM](/zh/docs/guides/supported-models/sana-wm)。 评测看 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)、[SANA-WM 80-Scene Benchmark](/zh/docs/evaluation/benchmark-hub/sana-wm-bench)。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`input_path`、`interactions`、`frames`；产物 `sana.png`。
+
+CLI task profile：`interactive-video`、`video-to-video`。绑定的 pipeline 类是 `SanaPipeline`。
+
+起步 variant 是 `sana-600m-512px`。catalog 登记了 20 个 variant（上方卡片）：`sana-600m-512px`（`text-to-image`）：Runner 一致性待确认、`sana-600m-1024px`（`text-to-image`）：Runner 一致性待确认、`sana-1600m-512px`（`text-to-image`）：Runner 一致性待确认、`sana-1600m-512px-multiling`（`text-to-image`）：Runner 一致性待确认、`sana-1600m-1024px`（`text-to-image`）：Runner 一致性待确认 等。系列状态：**Runner 一致性待确认**。
+
+SANA-Streaming 接受源视频路径或 hf:// URI。 完整 50 步/更长帧数的官方质量一致性仍在等待。
+
+官方长配置的质量一致性仍在等待——已记录的 A100 运行验证的是链路而非完整一致性。
+
+集成状态为 Runner 一致性待确认、runner parity 为 pending，但注意已记录证据：long-streaming checkpoint 在真实 A100 上完成一次运行，81 帧 1280x704、16 FPS 全部解码（产物 SHA256 记录在 profile 中）。 SANA-Streaming 接受源视频路径或 hf:// URI。 完整 50 步/更长帧数的官方质量一致性仍在等待。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run sana-600m-512px --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `Efficient-Large-Model/Sana_600M_512px`、`Efficient-Large-Model/Sana_600M_1024px`、`Efficient-Large-Model/Sana_1600M_512px` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh sana-600m-512px`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="sana" locale="zh" />

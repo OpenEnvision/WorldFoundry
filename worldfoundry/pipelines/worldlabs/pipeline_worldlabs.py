@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from PIL import Image
+
+from worldfoundry.core.io import artifact_root_path
 
 from ..pipeline_utils import PipelineABC
 from ...operators.worldlabs_operator import WorldLabsOperator
@@ -17,6 +20,13 @@ from ...synthesis.visual_generation.worldlabs.worldlabs_synthesis import WorldLa
 _DEFAULT_ENDPOINT = "https://api.worldlabs.ai"
 _API_KEY_ENV = ("WORLDLABS_API_KEY", "WLT_API_KEY")
 _PLACEHOLDER_KEYS = {"your_api_key", "your api key"}
+
+logger = logging.getLogger(__name__)
+
+
+def _default_output_dir(name: str = "worldlabs_assets") -> str:
+    """Resolve a stable default output directory instead of writing to the CWD."""
+    return str(artifact_root_path() / name)
 
 
 def _resolve_api_key(api_key: Optional[str]) -> str:
@@ -250,7 +260,7 @@ class WorldLabsPipeline(PipelineABC):
 
         for _ in range(max_retries):
             operation = self.synthesis_model.get_operation(operation_id)
-            print(f"World Labs operation {operation_id}: done={operation.get('done', False)}")
+            logger.info("World Labs operation %s: done=%s", operation_id, operation.get("done", False))
             if self._extract_done(operation):
                 return operation
             time.sleep(poll_interval)
@@ -389,7 +399,7 @@ class WorldLabsPipeline(PipelineABC):
 
         if download_assets and result.get("world") is not None:
             target_dir = assets_dir or str(
-                Path(output_path).with_suffix("") if output_path else Path("./output/worldlabs_assets")
+                Path(output_path).with_suffix("") if output_path else Path(_default_output_dir())
             )
             result["asset_paths"] = self.download_assets(result["world"], target_dir)
 

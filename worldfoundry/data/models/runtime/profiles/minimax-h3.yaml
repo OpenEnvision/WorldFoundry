@@ -1,0 +1,45 @@
+schema_version: 2
+model_id: minimax-h3
+display_name: MiniMax H3 (audio-video)
+task_family: video_generation
+groups:
+- video
+- audio
+source_repos:
+- url: https://github.com/sgl-project/sglang
+checkpoints:
+- repo_id: MiniMaxAI/MiniMax-H3
+  revision: main
+  role: transformer
+- repo_id: MiniMaxAI/MiniMax-H3
+  revision: main
+  role: video_vae
+- repo_id: MiniMaxAI/MiniMax-H3
+  revision: main
+  role: audio_vae
+- repo_id: MiniMaxAI/MiniMax-H3
+  revision: main
+  role: text_encoder
+input_schema:
+  prompt: true
+  image: true
+  video: true
+  audio: true
+  actions:
+  - seed
+  - task
+  - flow_shift
+  - audio_flow_shift
+artifact_kind: generated_video
+artifact_filename: minimax-h3.mp4
+execution:
+  backend_stage: in_tree_runtime_plan
+  runtime_status: checkpoint_runtime_required
+  integration_status: planned
+  pipeline_binding: minimax-h3
+integration:
+  status: planned
+notes:
+- MiniMax H3 joint audio+video DiT ported from SGLang multimodal_gen (Apache-2.0).
+- Tasks t2va / fl2va (keyframe) / ref2va (reference); coupled rectified-flow denoise.
+- Checkpoint repo id is a placeholder; supply the real MiniMax H3 weights path at load.

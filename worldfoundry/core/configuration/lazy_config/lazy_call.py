@@ -13,10 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Deferred constructor calls for editable inference configuration trees.
+
+:class:`LazyCall` wraps a callable (or its import path) so that invoking
+it records ``_target_`` plus keyword arguments in an OmegaConf
+``DictConfig`` instead of constructing the object. The resulting tree is
+mutable — later code can override ``out_channels`` or swap a nested
+module — and :func:`~worldfoundry.core.configuration.lazy_config.instantiate.instantiate`
+materializes it when a real instance is needed.
+
+This is the Detectron2 / fvcore LazyCall contract used by Cosmos-family
+inference configs. Positional arguments are intentionally unsupported at
+call time so the stored mapping stays keyword-only and editable.
+"""
+
 import collections.abc as abc
 import inspect
 from dataclasses import is_dataclass
-from typing import ClassVar
 
 import attrs
 from omegaconf import DictConfig
@@ -25,14 +38,24 @@ from worldfoundry.core.configuration.lazy_config.registry import convert_target_
 
 __all__ = ["LazyCall"]
 
+# ──────────────────────────────────────────────────────────────────────────
+# Defaults + call recording — inspect never imports a string _target_
+# ──────────────────────────────────────────────────────────────────────────
+
 
 def get_default_params(cls_or_func):
+    """Return the target's keyword defaults, or ``{}`` when they can't be inspected.
+
+    Classes are callable, so both functions and classes take the first branch
+    (``inspect.signature`` already resolves a class to its ``__init__``).
+    String import targets are *not* resolved here: their defaults are
+    intentionally skipped so that building a config never imports the target
+    module.
+    """
     if callable(cls_or_func):
-        # inspect signature for function
         signature = inspect.signature(cls_or_func)
     else:
-        # inspect signature for class
-        signature = inspect.signature(cls_or_func.__init__)
+        return {}
     params = signature.parameters
     default_params = {
         name: param.default for name, param in params.items() if param.default is not inspect.Parameter.empty
@@ -40,8 +63,10 @@ def get_default_params(cls_or_func):
     return default_params
 
 
-_CONVERT_TARGET_TO_STRING: ClassVar[bool] = False
-"""Used by tests to enforce conversion of target to string."""
+# Used by tests to enforce conversion of target to string (module-level flag,
+# not a ClassVar; the previous ClassVar annotation is only meaningful inside a
+# class body).
+_CONVERT_TARGET_TO_STRING = False
 
 
 class LazyCall:

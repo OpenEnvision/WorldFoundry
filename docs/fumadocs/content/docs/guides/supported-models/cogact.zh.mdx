@@ -1,0 +1,54 @@
+---
+title: "CogACT"
+description: "CogACT（Microsoft）：视觉-语言-动作（VLA）、VLA 动作预测；Runner 一致性待确认。"
+modelId: "cogact"
+pageSource: authored
+---
+
+微软的 CogACT 是组件化 VLA：Prismatic 式 Llama-2 VLM 负责认知，专用 DiT 动作模块负责控制，按 Small/Base/Large 三档发布，MIT 许可。WorldFoundry 拥有独立的树内 synthesis 入口与严格本地 checkpoint 映射器；checkpoint 驱动的 Workspace 推理无需外部 checkout 即可通过。
+
+<ModelPaperFigures modelId="cogact" locale="zh" />
+
+记录论文为[arXiv 2411.19650](https://arxiv.org/abs/2411.19650)。
+
+项目页：[cogact.github.io/CogACT_paper.pdf](https://cogact.github.io/CogACT_paper.pdf)。代码：[microsoft/CogACT](https://github.com/microsoft/CogACT)。
+
+checkpoint 驱动的 Workspace 推理**能通过**，不需要外部 checkout（已验证）。没有门控 Llama-2 镜像时，加载器复用已安装的 OpenVLA Llama tokenizer。VLM 权重仍全部从 CogACT checkpoint 自己加载。
+
+<ModelCommandBuilder modelId="cogact" locale="zh" />
+
+## 用来做什么
+
+`cogact-base` 是记录的指令到动作线。需要 WorldFoundry VLA rollout 而不是视频生成时从这里起步。
+
+认知与动作分离：VLM 编码图像+指令，DiT（扩散 transformer）动作模型预测 16x7 动作块。官方 demo 契约为 load_vla(...).predict_action(image, prompt, unnorm_key, cfg_scale, use_ddim, num_ddim_steps)。该模型由微软（Microsoft）发布。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测、VLA 策略执行。别名包括 `cogact-base`、`cogact-small`、`cogact-large`。
+
+记录的评测入口包括[SimplerEnv](/zh/docs/evaluation/benchmark-hub/simpler-env)（官方归一化面向 SimplerEnv 配置）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`cogact_action_trace.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `CogACTPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+默认 SimplerEnv 配置使用 bridge_orig 或 fractal20220817_data 归一化键。 当门控的 Llama 2 镜像不可用时，推理加载器复用已安装的 OpenVLA Llama tokenizer。 FSDP 训练、RLDS 加载器、部署服务与 SimplerEnv 适配器均被排除。
+
+Llama-2 tokenizer 依赖可能需要门控镜像或 OpenVLA 回退。
+
+必填 `image`、`prompt`；可选 `model_id`、`state`、`policy_setup`、`policy_family`、`action_representation`；产物 `action_trace`、`cogact_action_trace.json`。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run cogact-base --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch>=2.7.0）。
+
+记录的权重仓库包括 `CogACT/CogACT-Base`、`meta-llama/Llama-2-7b-hf`、`CogACT/CogACT-Small` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh cogact-base`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 mit；gated `meta-llama/Llama-2-7b-hf`，下载前需在上游接受条款；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="cogact" locale="zh" />

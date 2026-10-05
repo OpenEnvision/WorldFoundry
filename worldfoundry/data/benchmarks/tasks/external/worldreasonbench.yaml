@@ -31,8 +31,7 @@ metadata:
   benchmark_id: worldreasonbench
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldReasonBenchContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/worldreasonbench/run_worldreasonbench_official_runner.py
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldreasonbench --mode normalizer
-    --output-dir tmp/benchmark_zoo/benchmark_contract/worldreasonbench --json
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldreasonbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/worldreasonbench --json
   runtime:
     kind: in_tree_protocol_runtime_external_assets
     root: worldfoundry/evaluation/tasks/execution/runners/worldreasonbench
@@ -40,7 +39,7 @@ metadata:
     results_path_env: WORLDFOUNDRY_WORLDREASONBENCH_RESULTS_PATH
   release_status: experimental
   maturity: verified_runner
-  open_source_status: in_tree_result_normalizer
+  open_source_status: normalizer_only
   official_benchmark_verified: false
   integration_evidence: false
   leaderboard_valid: false
@@ -58,8 +57,8 @@ metadata:
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
-    normalizer_verified: true
     surface: worldreasonbench_official_in_tree
+    normalizer_verified: true
   local_evaluator:
     target: worldfoundry.evaluation.tasks.execution.runners.worldreasonbench.run_worldreasonbench_official_runner:main
     status: implemented
@@ -69,6 +68,23 @@ metadata:
     - pairwise
   integration_status: integrated
   checkpoint_refs: []
+  validation_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - worldreasonbench
+  - --mode
+  - official-validation
+  - --official-results-path
+  - <official_results_dir>
+  - --output-dir
+  - <out>
+  - --json
+  artifact_layout:
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+    output_artifact: benchmark_scorecard
+    filename_template: scorecard.json
 tasks:
   worldreasonbench_standard:
     benchmark_name: worldreasonbench
@@ -120,13 +136,38 @@ tasks:
         input_image: {kind: image}
     evaluation_protocol:
     - name: qa_process_reasoning
-      metric_ids: [score_pr, qa_accuracy, state_score, process_score, fidelity_score, mechanism_score,
-        static_outcome_score, dynamic_reasoning_score, reasoning_gap]
+      metric_ids: [score_pr, qa_accuracy, state_score, process_score, fidelity_score, mechanism_score, static_outcome_score, dynamic_reasoning_score, reasoning_gap]
     - name: pointwise_reward
-      metric_ids: [pointwise_score, reasoning_correctness, content_fidelity, visual_aesthetics,
-        pointwise_spearman, induced_pairwise_accuracy]
+      metric_ids: [pointwise_score, reasoning_correctness, content_fidelity, visual_aesthetics, pointwise_spearman, induced_pairwise_accuracy]
     - name: pairwise_reward
       metric_ids: [pairwise_accuracy_with_ties, pairwise_accuracy_without_ties]
+    - name: external_official_runner
+      metric_ids:
+      - score_pr
+      - qa_accuracy
+      - state_score
+      - process_score
+      - fidelity_score
+      - mechanism_score
+      - static_outcome_score
+      - dynamic_reasoning_score
+      - reasoning_gap
+      - pointwise_score
+      - reasoning_correctness
+      - content_fidelity
+      - visual_aesthetics
+      - pointwise_spearman
+      - induced_pairwise_accuracy
+      - pairwise_accuracy_with_ties
+      - pairwise_accuracy_without_ties
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldReasonBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/worldreasonbench/run_worldreasonbench_official_runner.py
     runtime_requirements:
       root_env: WORLDFOUNDRY_WORLDREASONBENCH_ROOT
       results_path_env: WORLDFOUNDRY_WORLDREASONBENCH_RESULTS_PATH
+    metadata:
+      source_kind: benchmark_zoo
+      benchmark_id: worldreasonbench
+      official_benchmark_verified: false
+      integration_evidence: false
+      leaderboard_valid: false

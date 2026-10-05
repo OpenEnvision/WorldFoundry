@@ -1,0 +1,47 @@
+id: minimax-h3
+name: MiniMax H3
+aliases:
+  - minimax_h3
+  - minimax-h3-t2va
+  - minimax-h3-fl2va
+  - minimax-h3-ref2va
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: minimax-h3
+tasks:
+  - text-to-video
+  - image-to-video
+  - reference-to-video
+provider: official_repo
+runtime_profile: runtime-profile:minimax-h3
+min_vram_gb: 80
+source_status:
+  status: ported_from_sglang
+  github:
+    url: https://github.com/sgl-project/sglang
+    default_branch: main
+checkpoint:
+  status: placeholder_supply_at_load
+  repos:
+    - id: MiniMaxAI/MiniMax-H3
+      license: apache-2.0
+      private: false
+      gated: false
+      tasks:
+        - text-to-video
+        - image-to-video
+        - reference-to-video
+variants:
+  - id: minimax-h3
+    task: text-to-video
+    provider: official_repo
+    checkpoint_refs:
+      - repo_id: MiniMaxAI/MiniMax-H3
+    native_diffusion:
+      recipe_id: null
+      strategy: bespoke_pipeline
+      note: >-
+        MiniMax H3 uses a bespoke PipelineABC subclass (coupled video+audio
+        packed denoise), not the declarative native-diffusion recipe path.
+notes:
+  - Joint audio+video generation; 32kHz stereo audio track muxed into the mp4.
+  - Ported faithfully from SGLang multimodal_gen (Apache-2.0), single-GPU PyTorch.

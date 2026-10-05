@@ -1,0 +1,41 @@
+---
+title: "OpenVLA"
+description: "开放 7B VLA：Prismatic VLM 输出 7 维动作 token；WorldFoundry 在 base 路由上以 unnorm_key=bridge_orig 验证。"
+modelId: "openvla"
+pageSource: authored
+---
+
+OpenVLA 是 7B 视觉-语言-动作策略：Prismatic VLM 把一帧 RGB 和一条语言指令变成离散动作 token，再反解成连续 **7 自由度** 控制。官方论文是 [OpenVLA: An Open-Source Vision-Language-Action Model](https://arxiv.org/abs/2406.09246)（arXiv 2406.09246）。项目页：[openvla.github.io](https://openvla.github.io/)。代码在 [openvla/openvla](https://github.com/openvla/openvla)。权重是 **MIT**。
+
+<ModelPaperFigures modelId="openvla" locale="zh" />
+
+WorldFoundry 把 Hugging Face 架构（`configuration_prismatic.py`、`modeling_prismatic.py`、`processing_prismatic.py`）内置在 `worldfoundry/synthesis/action_generation/openvla`，推理不依赖远程代码。catalog 两个 variant：`openvla-7b` 与 `openvla-libero-10`。树内 runner 在基座卡片上以 `unnorm_key=bridge_orig` **已验证**。LIBERO-10 微调是同一 runner 上锁定、已就位的 checkpoint；专用 zoo 参数仍标为 planned。
+
+<ModelCommandBuilder modelId="openvla" locale="zh" />
+
+## 用来做什么
+
+从 `openvla-7b` 开始。必填 `image`、`instruction`、`prompt`。`OpenVLAPipeline` 写出 `openvla_action_trace.json`（另有 `actions` / `rollout_metrics`）。默认反归一化键是 `bridge_orig`——这是已验证的 Bridge 风格路由。对应评测页是 [BridgeData V2](/zh/docs/evaluation/benchmark-hub/bridgedata-v2)。
+
+只有目标套件是 [LIBERO](/zh/docs/evaluation/benchmark-hub/libero) 时，才切到 `openvla-libero-10` 并设 `unnorm_key=libero_10`。更快的连续 / 分块 OpenVLA 线看兄弟页 [OpenVLA-OFT](/zh/docs/guides/supported-models/openvla-oft)——不要把本页当成那条运行时。
+
+## 运行时契约
+
+默认视觉骨干是 **SigLIP 224px** 与 DINOv2 融合；语言侧是 Llama-2 7B。动作 token 用 **256 bin**（\([-1, 1]\)），再按数据集键反归一化成 7 自由度。本机走 **fp16**，因为记录的 CUDA 11.3 / torch 1.12 栈没有所需的 bf16 算子。`video` 可选，已记录 predict 不用。
+
+锁定 revision：
+
+- `openvla/openvla-7b` @ `47a0ec7fc4ec123775a391911046cf33cf9ed83f` → `${WORLDFOUNDRY_HFD_ROOT}/openvla--openvla-7b`
+- `openvla/openvla-7b-finetuned-libero-10` @ `80970322773f81baa2e22fe495d0487b93a05cfa` → `${WORLDFOUNDRY_HFD_ROOT}/openvla--openvla-7b-finetuned-libero-10`
+
+## 在 WorldFoundry 中运行
+
+统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 11.3）。两套 Hugging Face 树都要本地就位，然后：
+
+```
+worldfoundry-eval run openvla-7b
+```
+
+`unnorm_key` 必须匹配该 checkpoint 的数据契约。两套记录仓库的许可都是 **MIT**。
+
+<ModelRelatedRecipes modelId="openvla" locale="zh" />

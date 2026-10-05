@@ -6,9 +6,6 @@ import sentencepiece
 
 from worldfoundry.core.io.paths import resolve_local_hf_model_path, resolve_worldfoundry_path
 
-from .action_tokenizer import UniversalActionTokenizer
-
-
 _PALIGEMMA_TOKENIZER_LOCATION: str | None = None
 _FAST_TOKENIZER_LOCATION: str | None = None
 
@@ -100,6 +97,8 @@ class FASTTokenizer:
             raise FileNotFoundError(
                 "OpenPI FAST requires a local action tokenizer path; set fast_tokenizer_path in the runtime YAML"
             )
+        from .action_tokenizer import UniversalActionTokenizer
+
         self._fast_tokenizer = UniversalActionTokenizer.from_pretrained(fast_location)
         self._fast_skip_tokens = 128  # Skip last 128 tokens in PaliGemma vocab since they are special tokens
 

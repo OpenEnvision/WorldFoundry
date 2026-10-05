@@ -1,5 +1,7 @@
 id: worldmodelbench
 name: WorldModelBench
+publisher: NVIDIA
+publisher_kind: company
 benchmark_kind:
 - world-model
 - image-to-video
@@ -112,6 +114,14 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.worldmodelbench.run_worldmodelbench_official_runner
+    generated_arg: --video-dir
+    dataset_root_arg: --data-root
+    supports_run_official: false
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldModelBenchContract
   repo_url: https://github.com/WorldModelBench-Team/WorldModelBench
   repo_revision: 00b7aa17a05f9fd1ab5c8f66bcf476d04c9c33bf
@@ -172,6 +182,7 @@ runner:
     non-leaderboard evidence.
 integration:
   status: integrated
+  tier: model_backed
   evidence:
     framework_validation: worldfoundry-eval zoo benchmark-run --benchmark-id worldmodelbench --mode official-validation
       --official-results-path <official_results.json> --benchmark-data-root <worldmodelbench_data_root>

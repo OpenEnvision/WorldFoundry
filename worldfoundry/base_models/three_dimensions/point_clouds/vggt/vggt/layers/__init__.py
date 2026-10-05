@@ -6,7 +6,7 @@
 
 """Module for base_models -> three_dimensions -> point_clouds -> vggt -> vggt -> layers -> __init__.py functionality."""
 
-from worldfoundry.core.nn.layers import (
+from worldfoundry.core.nn.blocks.layers import (
     DropPath,
     LayerScale,
     Mlp,

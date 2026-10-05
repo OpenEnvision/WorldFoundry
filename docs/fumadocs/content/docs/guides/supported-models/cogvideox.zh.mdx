@@ -1,0 +1,27 @@
+---
+title: "CogVideoX"
+description: "智谱 THUDM 的开源文生 / 图生视频系列。2B T2V、5B T2V 与 5B I2V 路径均已在树内通过 runner 验证。"
+modelId: "cogvideox"
+pageSource: authored
+---
+
+CogVideoX 是智谱 AI / THUDM 的开源视频系列，也仍是被引用最多的开源文生 / 图生视频基线之一。论文是 [CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer](https://arxiv.org/abs/2408.06072)。本 catalog 卡片通过树内运行时提供三个可跑 variant：**2B 文生视频**、**5B 文生视频**、**5B 图生视频**。runner 与 demo 一致性均已**验证**。
+
+<ModelPaperFigures modelId="cogvideox" locale="zh" />
+
+生成器是 **3D 因果 VAE** 潜空间上的扩散 Transformer，用 **专家 Transformer** 做文本（和图像）条件。T2V 暴露 `num_inference_steps`、`num_frames`、`height`、`width`、`fps`；I2V 另加 `guidance_scale`。图生视频配置遵循官方风格的 **49 帧、50 步** Diffusers 配方。权重从 THUDM 的 Hugging Face 仓库加载（`THUDM/CogVideoX-2b`、`CogVideoX-5b`、`CogVideoX-5b-I2V`），或用本地 `model_path`。许可元数据：2B 为 **Apache-2.0**，若干 5B 卡片为 `other`——商用前要审。路径都是**离线批生成**：没有流式或交互控制。
+
+<ModelCommandBuilder modelId="cogvideox" locale="zh" />
+
+## 用来做什么
+
+快速试 prompt 用 `cogvideox-2b-t2v`，要更大的文生视频卡片用 `cogvideox-5b-t2v`，给静帧加运动用 `cogvideox-5b-i2v`。必填：`prompt`（文生视频）或 `prompt` + `image`（图生视频）。可选：`video`。`actions` 是 seed。5B 文生视频默认产物：`cogvideox-5b-t2v.mp4`。片段质量对照 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)，组合式提示对照 [T2V-CompBench](/zh/docs/evaluation/benchmark-hub/t2v-compbench)。那是 CogVideoX 结果通常被报告的套件——不是已收录的 WorldFoundry 排名。
+
+## 运行时契约
+默认 5B 文生视频类是 `CogVideoX5bT2VPipeline`；2B 文生视频与 5B 图生视频有对应 sibling pipeline。相对普通 T5 条件 U-Net，专家条件设计是论文的主要结构主张——运行时就是文本（和图像）token 在 3D VAE 潜空间里引导 DiT。`THUDM/CogVideoX1.5-5B` 与 `CogVideoX1.5-5B-I2V` 登记为额外 checkpoint，不是已验证的 Studio 路径。
+
+## 在 WorldFoundry 中运行
+
+默认启动是 `worldfoundry-eval run cogvideox-2b-t2v`，环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。换成 `cogvideox-5b-t2v` 或 `cogvideox-5b-i2v` 即可。runner parity 已验证；逐次视觉 QA 在 catalog 外。
+
+<ModelRelatedRecipes modelId="cogvideox" locale="zh" />

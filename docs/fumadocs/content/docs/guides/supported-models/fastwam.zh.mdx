@@ -1,0 +1,52 @@
+---
+title: "FastWAM"
+description: "FastWAM：wam、机器人策略；已验证; 独立环境 `worldfoundry-vla-fastwam`。"
+modelId: "fastwam"
+pageSource: authored
+---
+
+FastWAM 是基于 Wan 视频栈的 GPU 已验证世界-动作模型：mixture-of-transformers（MoT）动作推理图构建在 Wan2.1-T2V-1.3B 组件之上。官方 LIBERO 与 RoboTwin 两个 checkpoint 变体均按官方相机/状态契约在真实 A100 上通过推理，输出有限的 32 步动作块——catalog 状态为 已验证（MIT 许可）。
+
+<ModelPaperFigures modelId="fastwam" locale="zh" />
+
+记录论文为[arXiv 2603.16666](https://arxiv.org/abs/2603.16666)。
+
+项目页：[yuantianyuan01.github.io/FastWAM](https://yuantianyuan01.github.io/FastWAM/)。代码：[yuantianyuan01/FastWAM](https://github.com/yuantianyuan01/FastWAM)。
+
+官方 **LIBERO** 和 **RoboTwin** 变体都在真实 **A100** Workspace 上跑通，按官方相机/状态契约给出有限的 **32 步**动作块。catalog runner 仍是 未记录——那是 GPU 验证过的块，不是闭环套件分数。
+
+<ModelCommandBuilder modelId="fastwam" locale="zh" />
+
+## 用来做什么
+
+用 `fastwam` 做本卡的视觉-语言-动作推理。这条配方用来启动已记录的策略 profile。
+
+发布的 MoT 动作推理图、Wan VAE、UMT5 编码器、调度器、预处理与归一化全部内置树内。运行时执行绝不导入相邻的 FastWAM 源码 checkout，也不启用远程 checkpoint 代码。
+
+catalog 记录的任务包括 wam、机器人策略、策略执行、具身评测。
+
+记录的评测入口包括[LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（GPU 已验证的 LIBERO checkpoint 变体）、[RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin)（GPU 已验证的 RoboTwin checkpoint 变体）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`steps`、`seed`、`state`；产物 `action_trace`、`fastwam_action_trace.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `FastWAMPipeline`。
+
+系列状态：**已验证**。
+
+LIBERO 与 RoboTwin 变体均已在运行时数据配置中声明——按基准选择。 需在本地就位 yuanty/fastwam、Wan 系列转换 safetensors 与 Wan2.1-T2V-1.3B 基座。
+
+按官方契约，动作块固定为 32 步。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run fastwam --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-vla-fastwam`（Python 3.10，Cu121 Or Newer，torch>=2.2）。
+
+记录的权重仓库包括 `yuanty/fastwam`、`DiffSynth-Studio/Wan-Series-Converted-Safetensors`、`Wan-AI/Wan2.1-T2V-1.3B` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh fastwam`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="fastwam" locale="zh" />

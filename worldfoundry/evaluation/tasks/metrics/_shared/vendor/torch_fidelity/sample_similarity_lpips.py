@@ -9,9 +9,9 @@ import torch
 import torch.nn as nn
 from torch.hub import load_state_dict_from_url
 
-from torch_fidelity.helpers import vassert, text_to_dtype
-from torch_fidelity.sample_similarity_base import SampleSimilarityBase
-from torch_fidelity.utils_torchvision import torchvision_load_pretrained_vgg16
+from .helpers import vassert, text_to_dtype
+from .sample_similarity_base import SampleSimilarityBase
+from .utils_torchvision import torchvision_load_pretrained_vgg16
 
 # VGG16 LPIPS original weights re-uploaded from the following location:
 #   https://github.com/richzhang/PerceptualSimilarity/blob/master/lpips/weights/v0.1/vgg.pth

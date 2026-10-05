@@ -12,13 +12,36 @@ from typing import Any, Mapping, Sequence
 
 from worldfoundry.evaluation.utils import (
     escape_markdown_cell as _escape_markdown_cell,
+)
+from worldfoundry.evaluation.utils import (
     format_value as _format_value,
+)
+from worldfoundry.evaluation.utils import (
+    mapping_or_empty as _mapping,
+)
+from worldfoundry.evaluation.utils import (
     write_json,
     write_text,
 )
 
 from .comparison_identity import compare_identities, comparison_identity_from_summary
-from .run_report import _dedupe_labels, _mapping, _number_or_none, _row_from_summary, _run_summary_path, load_run_summary
+from .run_report import (
+    MOCK_BACKEND_BLOCKING_REASON,
+    is_mock_backend,
+    load_run_summary,
+)
+from .run_report import (
+    dedupe_labels as _dedupe_labels,
+)
+from .run_report import (
+    number_or_none as _number_or_none,
+)
+from .run_report import (
+    resolve_run_summary_path as _run_summary_path,
+)
+from .run_report import (
+    row_from_summary as _row_from_summary,
+)
 
 RUN_COMPARISON_SCHEMA_VERSION = "worldfoundry-run-comparison"
 
@@ -32,6 +55,7 @@ def build_markdown_comparison(comparison: Mapping[str, Any]) -> str:
         "",
         f"- Runs: {_format_value(comparison.get('run_count'))}",
         f"- Benchmarks: {_format_value(comparison.get('benchmarks') or [])}",
+        f"- Backends: {_format_value(comparison.get('backends') or [])}",
         f"- Metrics: {_format_value(metric_ids)}",
         f"- Compatibility: {_format_value(_mapping(comparison.get('compatibility')).get('status'))}",
         "",
@@ -42,6 +66,7 @@ def build_markdown_comparison(comparison: Mapping[str, Any]) -> str:
         "Status",
         "Benchmark",
         "Model",
+        "Backend",
         "Samples",
         "Failed",
         "Score Valid",
@@ -70,6 +95,7 @@ def build_markdown_comparison(comparison: Mapping[str, Any]) -> str:
             row.get("status"),
             row.get("benchmark"),
             row.get("model_id") or row.get("model_name"),
+            row.get("backend"),
             row.get("sample_count"),
             row.get("failed_samples"),
             row.get("score_valid"),
@@ -104,21 +130,25 @@ def build_markdown_comparison(comparison: Mapping[str, Any]) -> str:
         lines.extend(["", "## Compatibility Warnings", ""])
         lines.extend(f"- {_format_value(warning)}" for warning in compatibility_warnings)
 
+    issues = [str(issue) for issue in comparison.get("issues") or ()]
+    if issues:
+        lines.extend(["", "## Issues", ""])
+        lines.extend(f"- {_format_value(issue)}" for issue in issues)
+
     return "\n".join(lines).rstrip() + "\n"
 
 # ── Internal helpers ─────────────────────────────────────────
-def _higher_is_better(summaries: Sequence[Mapping[str, Any]], metric_id: str) -> bool:
+def _higher_is_better(summaries: Sequence[Mapping[str, Any]], metric_id: str) -> bool | None:
     """Determine whether higher values are better for *metric_id* across *summmaries*."""
     values: list[bool] = []
     for summary in summaries:
         per_metric = _mapping(_mapping(summary.get("metrics")).get("per_metric"))
         metric_payload = _mapping(per_metric.get(metric_id))
         value = metric_payload.get("higher_is_better")
-        if isinstance(value, bool):
-            values.append(value)
-    if values and all(value is False for value in values):
-        return False
-    return True
+        if not isinstance(value, bool):
+            return None
+        values.append(value)
+    return values[0] if values and all(value == values[0] for value in values) else None
 
 def _best_by_metric(
     *,
@@ -129,13 +159,23 @@ def _best_by_metric(
     """Identify the best run for each metric, respecting higher/lower-is-better semantics."""
     best: dict[str, dict[str, Any]] = {}
     for metric_id in metric_ids:
-        higher_is_better = _higher_is_better(summaries, metric_id)
         candidates = []
-        for row in rows:
+        candidate_summaries = []
+        for row, summary in zip(rows, summaries):
+            metric = _mapping(_mapping(_mapping(summary.get("metrics")).get("per_metric")).get(metric_id))
+            if row.get("score_valid") is False or metric.get("valid") is False:
+                continue
+            if metric.get("n_total") is not None and metric.get("n_valid") is not None:
+                if metric["n_valid"] < metric["n_total"]:
+                    continue
             value = _number_or_none(_mapping(row.get("metrics")).get(metric_id))
             if value is not None:
                 candidates.append((float(value), row))
+                candidate_summaries.append(summary)
         if not candidates:
+            continue
+        higher_is_better = _higher_is_better(candidate_summaries, metric_id)
+        if higher_is_better is None:
             continue
         best_value, best_row = (
             max(candidates, key=lambda item: item[0])
@@ -240,10 +280,6 @@ def build_run_comparison(
         ]
     )
     identities = [comparison_identity_from_summary(summary) for summary in summaries]
-    incompatibilities, compatibility_warnings = compare_identities(identities)
-    if incompatibilities:
-        raise ValueError("runs are not comparable: " + "; ".join(incompatibilities))
-
     metric_ids_by_run = [set(map(str, _mapping(row.get("metrics")))) for row in rows]
     available_metric_ids = set().union(*metric_ids_by_run)
     common_metric_ids = set.intersection(*metric_ids_by_run) if metric_ids_by_run else set()
@@ -252,6 +288,9 @@ def build_run_comparison(
         if metric_ids is not None
         else sorted(common_metric_ids)
     )
+    incompatibilities, compatibility_warnings = compare_identities(identities, metric_ids=selected_metric_ids)
+    if incompatibilities:
+        raise ValueError("runs are not comparable: " + "; ".join(incompatibilities))
     unknown_metric_ids = sorted(set(selected_metric_ids).difference(available_metric_ids))
     partially_available_metric_ids = sorted(
         set(selected_metric_ids).intersection(available_metric_ids).difference(common_metric_ids)
@@ -268,6 +307,12 @@ def build_run_comparison(
             }
     benchmarks = sorted({str(row["benchmark"]) for row in rows if row.get("benchmark")})
     datasets = sorted({str(row["dataset_id"]) for row in rows if row.get("dataset_id")})
+    backends = sorted({str(row["backend"]) for row in rows if row.get("backend")})
+    mock_backend_issues = [
+        f"mock backend: {row.get('label')} ({MOCK_BACKEND_BLOCKING_REASON})"
+        for row in rows
+        if is_mock_backend(row.get("backend"))
+    ]
     comparison_keys = sorted(
         {str(identity["comparison_key"]) for identity in identities if identity.get("comparison_key")}
     )
@@ -278,6 +323,7 @@ def build_run_comparison(
         "baseline": baseline_label,
         "benchmarks": benchmarks,
         "datasets": datasets,
+        "backends": backends,
         "metric_ids": selected_metric_ids,
         "available_metric_ids": sorted(available_metric_ids),
         "common_metric_ids": sorted(common_metric_ids),
@@ -292,6 +338,7 @@ def build_run_comparison(
         "metrics": metric_matrix,
         "best_by_metric": _best_by_metric(rows=rows, summaries=summaries, metric_ids=selected_metric_ids),
         "issues": [
+            *mock_backend_issues,
             *[f"metric not found in any run: {metric_id}" for metric_id in unknown_metric_ids],
             *[
                 f"metric not found in every run: {metric_id}"

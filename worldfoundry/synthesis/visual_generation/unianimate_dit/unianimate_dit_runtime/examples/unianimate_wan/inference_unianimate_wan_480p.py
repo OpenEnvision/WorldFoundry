@@ -1,24 +1,16 @@
-import torch
-from diffsynth import ModelManager, WanVideoPipeline, WanUniAnimateVideoPipeline
-from worldfoundry.core.io import VideoData, save_video
-from modelscope import snapshot_download, dataset_snapshot_download
-from PIL import Image
 import os
-import pickle
-from PIL import Image
-import numpy as np
 import random
-import pickle
-import torch
-from io import BytesIO
-import torchvision
-import torch.nn.functional as F
-import torchvision.transforms as T
-from PIL import Image, ImageFilter
-import  torch.nn  as nn
+
 import cv2
-import sys  
-sys.path.append("../../")  
+import numpy as np
+import torch
+import torchvision
+from PIL import Image
+
+from worldfoundry.core.io import save_video
+from worldfoundry.synthesis.visual_generation.unianimate_dit.native_pipeline import (
+    load_unianimate_pipeline,
+)
 
 # define hight and width
 height = 832
@@ -39,53 +31,28 @@ test_list_path= [
 
 misc_size = [height,width]
 
-# Download models
-# snapshot_download("Wan-AI/Wan2.1-I2V-14B-720P", local_dir="./Wan2.1-I2V-14B-720P")
+use_usp = os.getenv("WORLDFOUNDRY_UNIANIMATE_USE_USP", "0") == "1"
+device = "cuda"
+if use_usp:
+    import torch.distributed as dist
+    from xfuser.core.distributed import init_distributed_environment, initialize_model_parallel
 
-# Load models
-model_manager = ModelManager(device="cpu")
-model_manager.load_models(
-    ["./Wan2.1-I2V-14B-720P/models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"],
-    torch_dtype=torch.float32, # Image Encoder is loaded with float32
+    dist.init_process_group(backend="nccl", init_method="env://")
+    init_distributed_environment(rank=dist.get_rank(), world_size=dist.get_world_size())
+    initialize_model_parallel(
+        sequence_parallel_degree=dist.get_world_size(),
+        ring_degree=1,
+        ulysses_degree=dist.get_world_size(),
+    )
+    torch.cuda.set_device(dist.get_rank())
+    device = f"cuda:{dist.get_rank()}"
+
+pipe = load_unianimate_pipeline(
+    "./Wan2.1-I2V-14B-720P",
+    "./checkpoints/UniAnimate-Wan2.1-14B-Lora-12000.ckpt",
+    device=device,
+    use_usp=use_usp,
 )
-model_manager.load_models(
-    [
-        [
-            
-            "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00001-of-00007.safetensors",
-            "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00002-of-00007.safetensors",
-            "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00003-of-00007.safetensors",
-            "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00004-of-00007.safetensors",
-            "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00005-of-00007.safetensors",
-            "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00006-of-00007.safetensors",
-            "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00007-of-00007.safetensors",
-
-        ],
-        "./Wan2.1-I2V-14B-720P/models_t5_umt5-xxl-enc-bf16.pth",
-        "./Wan2.1-I2V-14B-720P/Wan2.1_VAE.pth",
-    ],
-    torch_dtype=torch.bfloat16, # You can set `torch_dtype=torch.float8_e4m3fn` to enable FP8 quantization.
-)
-
-model_manager.load_lora_v2("./checkpoints/UniAnimate-Wan2.1-14B-Lora-12000.ckpt", lora_alpha=1.0)
-
-# if you use deepspeed to train UniAnimate-Wan2.1, multiple checkpoints may be need to load, use the following form:
-# model_manager.load_lora_v2([
-#             "./models/lightning_logs/version_0/checkpoints/epoch=2-step=3.ckpt/output_dir/model-00001-of-00011.safetensors",
-#             "./models/lightning_logs/version_0/checkpoints/epoch=2-step=3.ckpt/output_dir/model-00002-of-00011.safetensors",
-#             "./models/lightning_logs/version_0/checkpoints/epoch=2-step=3.ckpt/output_dir/model-00003-of-00011.safetensors",
-#             "./models/lightning_logs/version_0/checkpoints/epoch=2-step=3.ckpt/output_dir/model-00004-of-00011.safetensors",
-#             "./models/lightning_logs/version_0/checkpoints/epoch=2-step=3.ckpt/output_dir/model-00005-of-00011.safetensors",
-#             "./models/lightning_logs/version_0/checkpoints/epoch=2-step=3.ckpt/output_dir/model-00006-of-00011.safetensors",
-#             "./models/lightning_logs/version_0/checkpoints/epoch=2-step=3.ckpt/output_dir/model-00007-of-00011.safetensors",
-#             "./models/lightning_logs/version_0/checkpoints/epoch=2-step=3.ckpt/output_dir/model-00008-of-00011.safetensors",
-#             "./models/lightning_logs/version_0/checkpoints/epoch=2-step=3.ckpt/output_dir/model-00009-of-00011.safetensors",
-#             "./models/lightning_logs/version_0/checkpoints/epoch=2-step=3.ckpt/output_dir/model-00010-of-00011.safetensors",
-#             "./models/lightning_logs/version_0/checkpoints/epoch=2-step=3.ckpt/output_dir/model-00011-of-00011.safetensors",
-#             ], lora_alpha=1.0)
-
-pipe = WanUniAnimateVideoPipeline.from_model_manager(model_manager, torch_dtype=torch.bfloat16, device="cuda")
-pipe.enable_vram_management(num_persistent_param_in_dit=6*10**9) # You can set `num_persistent_param_in_dit` to a small number to reduce VRAM required.
 
 
 def resize(image):
@@ -238,8 +205,10 @@ for path_dir_per in test_list_path:
     for ii in range(len(video)):
         ss = video[ii]
         video_out.append(image_compose_width(video_out_condition[ii], ss))
-    os.makedirs("./outputs", exist_ok=True)
-    save_video(video_out, "outputs/video_480P_{}_{}.mp4".format(ref_image_path.split('/')[-1], pose_file_path.split('/')[-1]), fps=15, quality=5)
+    is_writer = not use_usp or torch.distributed.get_rank() == 0
+    if is_writer:
+        os.makedirs("./outputs", exist_ok=True)
+        save_video(video_out, "outputs/video_480P_{}_{}.mp4".format(ref_image_path.split('/')[-1], pose_file_path.split('/')[-1]), fps=15, quality=5)
 
 
     # CUDA_VISIBLE_DEVICES="0" python examples/unianimate_wan/inference_unianimate_wan_480p.py

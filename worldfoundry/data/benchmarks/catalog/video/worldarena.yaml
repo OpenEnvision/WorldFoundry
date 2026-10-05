@@ -1,5 +1,7 @@
 id: worldarena
 name: WorldArena
+publisher: Tsinghua University
+publisher_kind: university
 benchmark_kind:
 - embodied-world-model
 - video-generation-quality
@@ -122,6 +124,15 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  scoring:
+    engines: [in_tree]
+    hooks:
+      in_tree: worldfoundry.evaluation.tasks.execution.runners.worldarena.worldarena_in_tree_evaluator:IN_TREE_CONFIG
+  official_script: worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.worldarena.run_worldarena_official_runner
+    generated_arg: null
+    dimension_arg: --dimension
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldArenaContract
   validation_command:
   - worldfoundry-eval
@@ -162,6 +173,7 @@ runner:
   - WORLDFOUNDRY_WORLDARENA_RESULTS_PATH
 integration:
   status: integrated
+  tier: in_tree
   blocked_reasons:
   - Official repository/source metadata, result normalization, and video-quality runtime are integrated.
   - Full validation requires generated videos or rollouts for the official prompt/task suite.

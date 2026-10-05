@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+
+
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+
 import argparse
 import csv
 import json
@@ -36,7 +40,6 @@ from worldfoundry.evaluation.utils import benchmark_task_sample_path
 
 RUNNER_ROOT = Path(__file__).resolve().parent
 DEFAULT_VMBENCH_ROOT = resolve_vmbench_root()
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 COMPONENT_METRICS = (
     "perceptible_amplitude_score",
     "object_integrity_score",

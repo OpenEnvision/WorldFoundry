@@ -1,5 +1,5 @@
 id: geocalib-prior
-name: GeoCalib Prior
+name: GeoCalib
 aliases:
 - geocalib
 - cvg-geocalib
@@ -15,6 +15,9 @@ source:
 checkpoint_refs:
 - path: https://github.com/cvg/GeoCalib/releases/download/v1.0/geocalib-pinhole.tar
   filename: geocalib-pinhole.tar
+official_sources:
+  project_page: https://www.cvg.ethz.ch/research/geocalib/
+  paper: https://arxiv.org/abs/2409.06704
 integration:
   kind: pipeline_runner
   status: integrated
@@ -36,3 +39,17 @@ catalog_category: three_d_four_d
 catalog_scope: Independent geometric prior integrations used by 3D and world-model
   runtimes.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+docs:
+  publisher: ETH Zurich (CVG)
+  publisher_kind: university
+  publisher_zh: 苏黎世联邦理工学院（CVG 组）
+  overview: GeoCalib estimates camera calibration and the gravity direction from a single image by combining geometric optimization with deep learning. In this catalog it is a verified camera-calibration prior consumed by higher-level pipelines (notably VIPE) through the shared geometry-prior contract.
+  overview_zh: GeoCalib 通过几何优化与深度学习结合，从单张图像估计相机标定与重力方向。本 catalog 中它是已验证的相机标定先验，由上层管线（尤其是 VIPE）通过共享 geometry-prior 契约调用。
+  architecture: A neural network predicts geometric cues which a differentiable optimization layer turns into focal length and gravity estimates (per the upstream ECCV 2024 release). Registered at base_models/three_dimensions/general_3d/geocalib; apache-2.0.
+  architecture_zh: 神经网络预测几何线索，可微优化层将其转化为焦距与重力估计（见上游 ECCV 2024 发布）。注册于 base_models/three_dimensions/general_3d/geocalib；apache-2.0。
+  usage_notes: It is integrated as an independent geometry prior under worldfoundry/base_models and exposed through the shared geometry-prior pipeline/operator contract. Higher-level pipelines (e.g. ViPE) import it from this canonical owner instead of keeping private copies. Runner parity is verified through the shared contract.
+  usage_notes_zh: 它作为独立几何先验集成在 worldfoundry/base_models 下，通过共享的 geometry-prior pipeline/operator 契约对外暴露。上层管线（如 ViPE）从这一规范位置导入它，而不是各自保留私有副本。runner parity 已通过共享契约验证。
+  limitations:
+  - 'Single-image estimation: degrades on images without clear geometric cues (e.g. pure sky or texture-less walls).'
+  limitations_zh:
+  - 单图估计：在缺乏几何线索的图像（如纯天空、无纹理墙面）上会退化。

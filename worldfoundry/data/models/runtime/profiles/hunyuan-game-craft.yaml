@@ -2,11 +2,14 @@ schema_version: 2
 model_id: hunyuan-game-craft
 display_name: Hunyuan GameCraft
 task_family: world_model
-groups: [world, interactive, camera_control]
+groups:
+- world
+- interactive
+- camera_control
 source_repos:
 - url: https://github.com/Tencent-Hunyuan/Hunyuan-GameCraft-1.0
   revision: 9a35ecf495a1b97b4929524fff442481069ecdc2
-  in_tree_path: worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft
+  in_tree_path: worldfoundry/synthesis/visual_generation/hunyuan_world/gamecraft_inference
 checkpoints:
 - repo_id: tencent/Hunyuan-GameCraft-1.0
   revision: 022caa8698ea7134cd7823875757e7322fe894d6
@@ -15,7 +18,6 @@ checkpoints:
   status: checkpoint_manifest_validated
   required_paths:
   - gamecraft_models/mp_rank_00_model_states.pt
-  - gamecraft_models/mp_rank_00_model_states_distill.pt
   - stdmodels/llava-llama-3-8b-v1_1-transformers/model.safetensors.index.json
   - stdmodels/openai_clip-vit-large-patch14/model.safetensors
   - stdmodels/vae_3d/hyvae/pytorch_model.pt
@@ -23,16 +25,21 @@ input_schema:
   prompt: true
   image: true
   video: false
-  actions: [camera_path, navigation_action]
+  actions:
+  - camera_path
+  - navigation_action
 artifact_kind: generated_world
 artifact_filename: hunyuan-game-craft.mp4
 execution:
   environment: hunyuan-game-craft
   backend_stage: official_in_tree_runtime
-  runtime_status: official_torchrun_contract
+  runtime_status: gpu_inference_validated
   integration_status: integrated
   pipeline_binding: hunyuan-game-craft
-integration: {status: integrated}
+integration:
+  status: integrated
 notes:
-- The infer-only Hunyuan GameCraft runtime is retained in tree and rejects external source roots.
-- Its Python 3.10 / torch 2.5.1 stack remains isolated in the documented HYGameCraft environment.
+- 'Validated on a single H100 with CPU offload: one forward action, 33 frames, 1216x704, 50 steps.'
+- Each action generates 33 frames. Explicit num_frames must match the action count.
+- The inference-only runtime reuses shared transformer layers, geometry, VAE, encoder foundations and scheduler.
+- The dedicated Python 3.10 / torch 2.5.1 environment remains isolated from the unified profile.

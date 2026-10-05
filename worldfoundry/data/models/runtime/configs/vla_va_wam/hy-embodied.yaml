@@ -1,8 +1,0 @@
-backend: hf_image_text_to_text
-checkpoint_path: ${WORLDFOUNDRY_CKPT_DIR}/tencent--HY-Embodied-0.5
-source_repo: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/HY-Embodied
-torch_dtype: bfloat16
-trust_remote_code: false
-predict_method: generate
-action_contract: hy_embodied_image_text_action_reasoning
-runtime_backend: hy_embodied_transformers_image_text_to_text

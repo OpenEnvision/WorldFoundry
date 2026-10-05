@@ -21,8 +21,8 @@ from torch.nn.init import trunc_normal_
 
 from .layers import MemEffAttention, NestedTensorBlock as Block
 from worldfoundry.core.nn import SwiGLUFFN
-from worldfoundry.core.nn.layers import Mlp, PatchEmbed
-from worldfoundry.core.nn.module_utils import named_apply
+from worldfoundry.core.nn.blocks.layers import Mlp, PatchEmbed
+from worldfoundry.core.nn.blocks.module_utils import named_apply
 
 logger = logging.getLogger(__name__)
 

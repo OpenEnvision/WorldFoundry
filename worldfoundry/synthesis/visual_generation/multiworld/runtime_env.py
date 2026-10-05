@@ -29,7 +29,7 @@ WAN_TI2V_DIT_FILENAMES = (
     "diffusion_pytorch_model-00003-of-00003.safetensors",
 )
 WAN_TI2V_REQUIRED_FILENAMES = (*WAN_TI2V_DIT_FILENAMES, "Wan2.2_VAE.pth")
-IN_TREE_RUNTIME_ROOT = Path(__file__).resolve().parent / "multiworld_runtime"
+IN_TREE_RUNTIME_ROOT = Path(__file__).resolve().parent
 MULTIWORLD_CONFIG_DIR = package_root("worldfoundry") / "data" / "models" / "runtime" / "configs" / "multiworld"
 
 
@@ -64,14 +64,12 @@ def _candidate_runtime_root(path_value: Path) -> Optional[Path]:
     Returns:
         Optional[Path]: The validated runtime root path if found, otherwise None.
     """
-    sentinels = [
-        ("ittakestwo", "parallel_inference.py"),
-    ]
+    sentinels = [("runtime_env.py",)]
     # Check if the sentinel files/directories exist directly under path_value
     if all(path_value.joinpath(*parts).is_file() for parts in sentinels):
         return path_value
 
-    nested = path_value / "MultiWorld"
+    nested = path_value / "worldfoundry" / "synthesis" / "visual_generation" / "multiworld"
     # Check if the sentinel files/directories exist under a nested 'MultiWorld' directory
     if all(nested.joinpath(*parts).is_file() for parts in sentinels):
         return nested
@@ -154,7 +152,7 @@ def resolve_runtime_root(runtime_root: Optional[str | Path]) -> str:
     if resolved is None:
         raise FileNotFoundError(
             f"MultiWorld runtime not found at '{runtime_root}'. "
-            "Expected a directory containing 'ittakestwo/parallel_inference.py'."
+            "Expected the native WorldFoundry multiworld package."
         )
     return str(resolved.resolve())
 
@@ -401,11 +399,8 @@ def build_subprocess_env(runtime_root: str | Path) -> dict[str, str]:
                         for a subprocess.
     """
     env = os.environ.copy()
-    # Determine the parent directory of the 'diffsynth' package for PYTHONPATH inclusion.
-    diffsynth_parent = package_root("worldfoundry.base_models.diffusion_model.diffsynth").parent
     pythonpath_entries = [
         str(project_root().resolve()),
-        str(diffsynth_parent.resolve()),
         str(Path(runtime_root).expanduser().resolve()),
     ]
     # Append existing PYTHONPATH entries to maintain current environment's Python paths.

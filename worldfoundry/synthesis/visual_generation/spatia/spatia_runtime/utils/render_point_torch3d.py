@@ -1,18 +1,80 @@
 import logging
 
 import torch
-from pytorch3d.ops import sample_farthest_points
-from pytorch3d.renderer import (
-    AlphaCompositor,
-    PerspectiveCameras,
-    PointsRasterizationSettings,
-    PointsRasterizer,
-    PointsRenderer,
-)
-from pytorch3d.structures import Pointclouds
+try:
+    from pytorch3d.ops import sample_farthest_points
+    from pytorch3d.renderer import (
+        AlphaCompositor,
+        PerspectiveCameras,
+        PointsRasterizationSettings,
+        PointsRasterizer,
+        PointsRenderer,
+    )
+    from pytorch3d.structures import Pointclouds
+except (ImportError, OSError) as exc:
+    # Some otherwise valid environments ship a PyTorch3D extension compiled
+    # against a different torch ABI. The basic point splat below remains usable.
+    sample_farthest_points = None
+    PointsRenderer = None
+    _pytorch3d_import_error = exc
 
 
 logger = logging.getLogger(__name__)
+
+
+def _render_torch_zbuffer(
+    points_xyz_rgb: torch.Tensor,
+    w2c_matrices: torch.Tensor,
+    intrinsics: list | tuple,
+    image_size: tuple[int, int],
+    radius: float,
+    max_points: int | None,
+) -> torch.Tensor:
+    """Render OpenCV-camera point splats when the PyTorch3D extension cannot load."""
+    height, width = image_size
+    points = points_xyz_rgb[:, :3]
+    colors = points_xyz_rgb[:, 3:6].clamp(0, 1)
+    if max_points is not None and max_points < len(points):
+        keep = torch.linspace(0, len(points) - 1, max_points, device=points.device).long()
+        points, colors = points[keep], colors[keep]
+    points_h = torch.cat((points, torch.ones_like(points[:, :1])), dim=1)
+    fx, fy, cx, cy = (float(value) for value in intrinsics)
+    splat_radius = max(1, int(round(float(radius) * min(height, width) / 2)))
+    offset = torch.arange(-splat_radius, splat_radius + 1, device=points.device)
+    delta_y, delta_x = torch.meshgrid(offset, offset, indexing="ij")
+    disk = delta_x.square() + delta_y.square() <= splat_radius * splat_radius
+    delta_x, delta_y = delta_x[disk], delta_y[disk]
+    outputs = []
+    for camera in w2c_matrices:
+        cam = points_h @ camera[:3].T
+        depth = cam[:, 2]
+        visible = torch.isfinite(cam).all(dim=1) & (depth > 1e-4)
+        if not bool(visible.any()):
+            outputs.append(torch.zeros((height, width, 3), device=points.device, dtype=colors.dtype))
+            continue
+        cam, depth = cam[visible], depth[visible]
+        visible_colors = colors[visible]
+        x = torch.round(fx * cam[:, 0] / depth + cx).long()
+        y = torch.round(fy * cam[:, 1] / depth + cy).long()
+        x = x[:, None] + delta_x[None, :]
+        y = y[:, None] + delta_y[None, :]
+        inside = (x >= 0) & (x < width) & (y >= 0) & (y < height)
+        pixel = (y * width + x)[inside]
+        if not pixel.numel():
+            outputs.append(torch.zeros((height, width, 3), device=points.device, dtype=colors.dtype))
+            continue
+        point_index = torch.arange(len(cam), device=points.device)[:, None].expand_as(x)[inside]
+        point_depth = depth[:, None].expand_as(x)[inside]
+        nearest_depth = torch.full((height * width,), float("inf"), device=points.device)
+        nearest_depth.scatter_reduce_(0, pixel, point_depth, reduce="amin", include_self=True)
+        front = point_depth <= nearest_depth[pixel] + 1e-5
+        nearest_point = torch.full((height * width,), len(cam), device=points.device, dtype=torch.long)
+        nearest_point.scatter_reduce_(0, pixel[front], point_index[front], reduce="amin", include_self=True)
+        image = torch.zeros((height * width, 3), device=points.device, dtype=colors.dtype)
+        filled = nearest_point < len(cam)
+        image[filled] = visible_colors[nearest_point[filled]]
+        outputs.append(image.reshape(height, width, 3))
+    return torch.stack(outputs)
 
 
 def opencv_to_pytorch3d_transform(w2c_opencv):
@@ -74,6 +136,17 @@ def render_multi_view_pointcloud(
     H, W = image_size
     points_xyz = points_xyz_rgb[:, :3]
     points_rgb = points_xyz_rgb[:, 3:6]
+
+    if PointsRenderer is None:
+        logger.warning("PyTorch3D unavailable (%s); using Torch point z-buffer", _pytorch3d_import_error)
+        return _render_torch_zbuffer(
+            points_xyz_rgb,
+            w2c_matrices,
+            normalized_intrinsics,
+            image_size,
+            point_radius,
+            max_points_to_render,
+        )
 
     if max_points_to_render is not None and max_points_to_render < points_xyz.shape[0]:
         sampled_points, sampled_indices = sample_farthest_points(points_xyz.unsqueeze(0), K=max_points_to_render)

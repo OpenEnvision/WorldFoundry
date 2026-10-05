@@ -1,0 +1,43 @@
+---
+title: "Being-H0.5"
+description: "BeingBeyond 的 2B 跨本体 VLA：RGB、语言和状态进，get_action 出。WorldFoundry 已 GPU 验证的是 LIBERO 专家线。"
+modelId: "being-h05"
+pageSource: authored
+---
+
+Being-H0.5 是 BeingBeyond 的 2B 参数视觉-语言-动作（VLA）策略，目标是**跨本体**控制。运行时它把 RGB、语言指令和机器人状态映射到同一套 **200 维统一动作空间**（末端、关节、夹爪或手指、底盘），让一份 checkpoint 能说不同机器人的控制语言，而不是堆出一堆按机器人定制的头。
+
+<ModelPaperFigures modelId="being-h05" locale="zh" />
+
+官方论文是 [Being-H0.5: Scaling Human-Centric Robot Learning for Cross-Embodiment Generalization](https://arxiv.org/abs/2601.12993)（arXiv 2601.12993）。项目说明见 [BeingBeyond Research](https://research.beingbeyond.com/being-h05)。catalog 里仍把一篇更晚的 Being-H0.7 arXiv 当作 paper URL，那是另一个模型。
+
+WorldFoundry 在 `worldfoundry/synthesis/action_generation/being_h05` 下保留推理专用运行时。Hugging Face 上登记了四条线：基座、LIBERO 专家、RoboCasa 专家，以及 LIBERO+RoboCasa 通才。本仓库里只有 LIBERO 专家完成了 checkpoint 驱动的 GPU `get_action` 验证，并写出 `action_trace`。
+
+<ModelCommandBuilder modelId="being-h05" locale="zh" />
+
+## 用来做什么
+
+从 `being-h05-2b-libero` 开始。这是 WorldFoundry 真正跑通的线：多视角 RGB、语言指令和机器人状态进，`being_h05_action_trace.json` 出，在 80 GB GPU 上用 memory-efficient SDPA。官方 BeingHPolicy 还会在开启 RTC 时额外写出本体动作和 `action_unified`。默认 profile 固定 `data_config_name=libero_nonorm`、`dataset_name=libero_posttrain`、`embodiment_tag=libero`，以及 `$WORLDFOUNDRY_HFD_ROOT/BeingBeyond--Being-H05-2B_libero`。论文评测用的是 **仅 RGB、224×224**。
+
+厨房套件用 `being-h05-2b-robocasa`。合并线 `being-h05-2b-libero-robocasa` 的张量探针能在 GPU 上加载，但一次真实 `get_action` 超出单张 80 GB 卡——不要把它当成已验证的 rollout 路径。
+
+基座 `being-h05-2b` 是未特化预览，不是套件专家。和已发布专家线对齐的仿真套件，下一页看 [LIBERO](/zh/docs/evaluation/benchmark-hub/libero) 与 [RoboCasa](/zh/docs/evaluation/benchmark-hub/robocasa)。
+
+## 运行时契约
+WorldFoundry 必填输入：`image`、`instruction`、`prompt`、`state`。可选：`video`。`actions` 字段记录为 `robot_action`、`action_unified`、`proprio`、`action_space`。Pipeline 类：`BeingH05Pipeline`。启动 `worldfoundry-eval run being-h05-2b`；除非你在对比 checkpoint，否则选 LIBERO variant。
+
+随权重一起生效的还有两块推理设计。**Manifold-Preserving Gating** 在感知偏移时丢掉不可靠上下文，让 flow 更新停在稳定的动作流形上。**Universal Async Chunking** 让动作块在不同控制频率和延迟下仍保持一致。
+
+论文报告 LIBERO 专家设定 **98.9%**、通才设定 **97.6%**，RoboCasa Human-50 为 **53.9% / 53.3%**。这些是上游数字，不是 WorldFoundry scorecard。论文里的真机结果覆盖五个本体、十个任务（空间、长时程、双臂、泛化）；本 catalog 不声称跑过那些 rollout。
+
+## 在 WorldFoundry 中运行
+
+使用独立环境 `worldfoundry-being-h05`（Python 3.10，CUDA 11.8 或更新）。权重必须事先就位——运行时不会下载。优先 safetensors；旧的 `.bin` / `.pt` 按严格键匹配加载。
+
+GitHub 树是 Apache-2.0。记录在案的 Hugging Face 仓库均为 `manual_review:missing_hf_license`——生产使用前请核对该卡片。
+
+## 最小评测
+
+`being-h05-2b-libero` 是 GPU 已验证的 `get_action` 线。action trace 不是套件分数。用 `worldfoundry-eval zoo benchmark-run --benchmark-id libero --mode official-validation` 导入官方 `eval_result`，读 `success_rate`。闭环已接线；本仓库没有 Being-H0.5 leaderboard。
+
+<ModelRelatedRecipes modelId="being-h05" locale="zh" />

@@ -1,0 +1,17 @@
+# 1 node x 8 GPUs = 8 processes, ZeRO-2, standard (RDZV) launcher. Single-node training / smoke runs.
+compute_environment: LOCAL_MACHINE
+distributed_type: DEEPSPEED
+deepspeed_config:
+ deepspeed_config_file: ../deepspeed/zero2.json
+ deepspeed_multinode_launcher: standard
+fsdp_config: {}
+machine_rank: 0
+num_machines: 1
+num_processes: 8
+main_training_function: main
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false

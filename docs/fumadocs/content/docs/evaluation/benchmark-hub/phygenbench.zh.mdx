@@ -1,115 +1,43 @@
 ---
 title: PhyGenBench
-description: PhyGenBench 在 WorldFoundry 中的资产、runner、指标与限制。
+description: "T2V 物理常识生成：160 条 prompt 覆盖 27 条定律，由 PhyGenEval 打分。WorldFoundry 导入结果或跑 overall.py，不跑各阶段 judge。"
 ---
 
+PhyGenBench（上海人工智能实验室 / OpenGVLab）问的是**文生视频生成器**是否遵守物理常识。它提供 **160 条 prompt**，声称覆盖力学、光学、热学、材料四大领域的 **27 条定律**。上游打分是 **PhyGenEval**：VQAScore、GPT-4o/LLaVA 风格顺序校验、InternVideo2 自然度，再交给 `overall.py`。
 
-## 官方参考
+这是**生成 + 分层 judge**，不是 [PhyGround](/zh/docs/evaluation/benchmark-hub/phyground)（TI2V 定律准则 1–5），不是 [PhysVidBench](/zh/docs/evaluation/benchmark-hub/physvidbench)（字幕 QA），也不是 [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq)（实拍续写）。
 
-| 资源 | 链接 |
-| --- | --- |
-| 项目页 | [phygenbench123.github.io](https://phygenbench123.github.io/) |
-| 论文 | [arXiv:2410.05363](https://arxiv.org/abs/2410.05363) |
-| GitHub | [github.com/OpenGVLab/PhyGenBench](https://github.com/OpenGVLab/PhyGenBench) |
-| 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py` |
+论文：[PhyGenBench](https://arxiv.org/abs/2410.05363)。项目：[phygenbench123.github.io](https://phygenbench123.github.io/)。代码：[OpenGVLab/PhyGenBench](https://github.com/OpenGVLab/PhyGenBench)。
 
-## 简介
+WorldFoundry 捆绑 `prompts.json` 与 PhyGenEval `overall.py`。它**导入**官方结果文件，或对已准备好的 stage 输出跑**有界** `overall.py`。它**不**运行 VQAScore、GPT-4o/LLaVA 或 InternVideo2。
 
-PhyGenBench 用 160 条 prompt 评估 text-to-video 物理常识，覆盖 27 条物理规律与四个物理领域。本地源 README 将 PhyGenEval 描述为分阶段 evaluator：关键物理现象检查、顺序验证、整段视频自然性评分。
+<BenchmarkPageSections id="phygenbench" locale="zh" />
 
-WorldFoundry 已经在 `worldfoundry/evaluation/tasks/execution/runners/phygenbench` 中包含可运行的 PhyGenBench 代码。`PhyGenEval/overall.py` 这类 runtime 代码保留在 runner 中，prompt/question 资产放在 `worldfoundry/data/benchmarks/assets/phygenbench`。运行 WorldFoundry 时不要克隆上游仓库。选择完整上游风格 judge 路径时，可以下载 Hugging Face judge checkpoint；benchmark 代码仍使用仓内实现。
+## 如何运行
 
-## 准备资产
-
-- Prompt suite：仓内路径为 `worldfoundry/data/benchmarks/assets/phygenbench/PhyGenBench/prompts.json`。
-- 可选 prompt 覆盖：传入 `--prompt-manifest` 或设置 `WORLDFOUNDRY_PHYGENBENCH_PROMPT_MANIFEST`。
-- 候选视频：将 `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` 指向生成视频目录。
-- 已有结果导入：传入 `--official-results-path` 或设置 `WORLDFOUNDRY_PHYGENBENCH_RESULTS_PATH`。metric loader 接受 JSON、JSONL、CSV 和 YAML-like official dimension rows。
-- 完整 judge 资产：README 提到分阶段 evaluator 需要 VQAScore / CLIP-FlanT5、GPT-4o 或 LLaVA-Interleave、InternVideo2。WorldFoundry 不随包提供这些模型权重或 API 凭据。
-
-## 生成产物布局
-
-期望的生成视频是按 prompt index 命名的扁平文件：
-
-```text
-generated_videos/
-  output_video_1.mp4
-  output_video_2.mp4
-  ...
-  output_video_160.mp4
-```
-
-覆盖率检查也接受 `1.mp4` 这样的纯数字 stem；不过 WorldFoundry model run 物化时会复制为 `output_video_{id}.mp4`。
-
-## 用 WorldFoundry 运行
-
-通过公开 CLI 导入已有 PhyGenEval 结果文件：
+导入官方结果导出：
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id phygenbench \
   --mode official-validation \
-  --official-results-path /path/to/phygenbench_results.json \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/phygenbench/validation \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/phygenbench/official-validation \
   --json
 ```
 
-通过公开 CLI 运行仓内评分包装器。默认使用确定性的本地 fixture backend；只有在按 `overall.py` 期望位置准备好分阶段 PhyGenEval 输出后，才设置 `WORLDFOUNDRY_PHYGENBENCH_JUDGE_BACKEND=official`：
+用仓内 `overall.py` 聚合已备 stage 输出（不能替代完整 judge 栈）：
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id phygenbench \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/phygenbench/run \
-  --json
-```
-
-直接调用仓内 runner：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-export WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR=tmp/phygenbench/direct
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" \
+  --output-dir tmp/phygenbench/official \
   --json
 ```
 
-直接导入结果：
+产物包括 `scorecard.json`（主键 `phygenbench_average`）。
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py \
-  --official-results-path /path/to/phygenbench_results.json \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/phygenbench/direct-validation \
-  --json
-```
-
-## 指标
-
-| Metric ID | 含义 |
-| --- | --- |
-| `physical_commonsense` | 可用 PhyGenEval 单帧、多帧、视频阶段物理 plausibility 分数的均值。 |
-| `physical_law_adherence` | 单帧与多帧检查对 prompt 中物理规律遵守情况的均值。 |
-| `semantic_adherence` | 结果行中的语义对齐分；没有单独语义分时使用 video-stage 分数。 |
-| `phygenbench_average` | WorldFoundry 主指标。有显式 average 字段时直接使用；否则在三个组件都可用时取均值。 |
-
-所有分数都是越高越好。`0..3` 阶段分、`0..5` 语义分和百分制结果都会归一化到 `0..1`。
-
-## 输出
-
-输出目录包含：
-
-- `scorecard.json`：运行状态、指标表、覆盖率、所选 backend 与 leaderboard 有效性标记。
-- `raw_metric_table.jsonl`：每个声明指标一行。
-- `per_sample_scores.jsonl`：可用时写出包含阶段分的 prompt 级结果。
-- `phygenbench_results.json`：仓内评分包装器写出的结果。
-- 通过 `worldfoundry-eval zoo benchmark-run` 调用时，还会写出 `specialized_normalizer_stdout.log` 与 `specialized_normalizer_stderr.log`。
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

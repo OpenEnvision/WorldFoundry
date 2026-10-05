@@ -1,0 +1,50 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BC-03
+track: coverage
+title_en: Seven-Pin Bowling Roll
+outcome_question: Which seven-pin bowling outcome in ['all_7_pins_down', 'six_pins_down', 'five_pins_down',
+  'four_pins_down', 'three_pins_down', 'two_pins_down', 'one_pin_down', 'zero_pins_down_after_contact',
+  'no_pin_contact'] is visible as the first decisive result?
+readout_policy: Read the first stable visible pin-down count after the bowling ball contacts or misses
+  the seven-pin rack. Count pins that are clearly down, not pins still wobbling. Distinguish zero pins
+  after visible rack contact from no pin contact.
+canonical_labels:
+- all_7_pins_down
+- six_pins_down
+- five_pins_down
+- four_pins_down
+- three_pins_down
+- two_pins_down
+- one_pin_down
+- zero_pins_down_after_contact
+- no_pin_contact
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- One or more decisive pins are hidden when the pin-down count would need to be read.
+- None of the canonical labels ['all_7_pins_down', 'six_pins_down', 'five_pins_down', 'four_pins_down',
+  'three_pins_down', 'two_pins_down', 'one_pin_down', 'zero_pins_down_after_contact', 'no_pin_contact']
+  can be decisively identified within the readout window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's reference protocol;
+  record it as out-of-schema.
+priority_rules:
+- First decisive readout is the exact visible pin-down count after the bowling ball makes or misses the
+  seven-pin rack.
+- Use all_7_pins_down when all seven pins are clearly down; otherwise use the exact count label for six
+  through one pins down.
+- Use zero_pins_down_after_contact when the ball visibly contacts the rack or a pin but no pin is clearly
+  knocked down.
+- Use no_pin_contact when the ball visibly misses the rack/pins entirely, including gutter-like misses.
+- Visible pin count determines the outcome; collision/path plausibility is audited on the trustworthiness
+  axis. If decisive pins are hidden, return unreadable rather than guessing a count.
+notes:
+- Outcome set uses exact seven-pin counts rather than broad buckets because each count is a distinct terminal
+  physical future in this setup.
+- 'Contact/trajectory scene: outcome label uses first decisive visible target interaction or miss geometry.'
+- 'Scene title: Seven-Pin Bowling Roll.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules are authored from
+  STAGBench metadata/action protocol.'

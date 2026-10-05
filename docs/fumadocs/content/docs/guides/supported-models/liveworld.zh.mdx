@@ -1,0 +1,50 @@
+---
+title: "LiveWorld"
+description: "LiveWorld：相机可控视频、视频到视频；Runner 一致性待确认。"
+modelId: "liveworld"
+pageSource: generated
+---
+
+LiveWorld 是相机可控的视频到视频世界模型，采用以监控画面为中心的工作流：输入视频加几何 NPZ，在新的相机行为下重新渲染场景。本 catalog 中官方源码以固定 revision 内置，专用几何 NPZ 路径已接通；预测待四个缺失的 checkpoint snapshot 就位。
+
+<ModelPaperFigures modelId="liveworld" locale="zh" />
+
+记录论文为[arXiv 2404.05072](https://arxiv.org/abs/2404.05072)。
+
+项目页：[zichengduan.github.io/LiveWorld](https://zichengduan.github.io/LiveWorld)。代码：[ZichengDuan/LiveWorld](https://github.com/ZichengDuan/LiveWorld)。
+
+<ModelCommandBuilder modelId="liveworld" locale="zh" />
+
+## 用来做什么
+
+需要相机可控视频时选 `liveworld`：相机轨迹进、受控视频出。视角必须跟随路径时，用它而不是无约束 T2V。
+
+记录的栈固定 Wan2.1-T2V-14B 与 SAM3，两者均已本地结构验证（apache-2.0）。除已记录结构外的架构内部细节仓库未存。
+
+catalog 记录的任务包括 相机可控视频、视频到视频、世界模型。模态上，它接受视频，输出视频。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（重渲染视频的相机行为贴合度）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`；产物 `liveworld.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `LiveWorldPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+运行时解析仅限本地；在四个缺失的 checkpoint snapshot 就位前预测保持受限。 输入为提示词、视频与 geometry_npz。
+
+预测受四个缺失 checkpoint snapshot 限制。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run liveworld --pipeline.task-profile default` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `ZichengD/LiveWorld`、`Wan-AI/Wan2.1-T2V-14B`、`Qwen/Qwen3-VL-8B-Instruct` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh liveworld`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="liveworld" locale="zh" />

@@ -3,7 +3,7 @@ title: Run inference
 description: Run model demos, inspect generated artifacts, and validate release readiness — scoring belongs in Evaluation.
 ---
 
-WorldFoundry inference covers environment setup, checkpoint staging, model launch, and artifact review. Benchmark scoring and scorecards belong in [Evaluation](/docs/evaluation). To pick a model id and read readiness labels, start with [Models](/docs/guides/supported-models).
+WorldFoundry inference covers environment setup, checkpoint staging, model launch, and artifact review. Benchmark scoring and scorecards belong in [Evaluation](/docs/evaluation). To pick a model ID and read readiness labels, start with [Models](/docs/guides/supported-models).
 
 ## Quick path
 
@@ -12,15 +12,16 @@ bash scripts/setup/bootstrap_worldfoundry.sh
 source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 
-bash scripts/inference/test_nav_video_gen.sh matrix-game-2 \
-  --output-dir tmp/matrix_game2_first_run
+worldfoundry-eval run <model-id> \
+  --pipeline.task-profile <task-profile> \
+  --output-dir tmp/worldfoundry_infer/<model-id>
 ```
 
-Inspect the generated video and run metadata under `tmp/matrix_game2_first_run`. That output is inference evidence only — not benchmark or leaderboard evidence. For checkpoints and cache layout, see [Local assets](/docs/guides/local-assets); for the web workspace, see [Studio](/docs/guides/studio).
+Copy `<model-id>` and `<task-profile>` from the model page. Inspect the generated artifacts under `tmp/worldfoundry_infer/<model-id>`. That output is inference evidence only — not benchmark or leaderboard evidence. For checkpoints and cache layout, see [Local assets](/docs/guides/local-assets); for the web workspace, see [Studio](/docs/guides/studio). Run-status labels are in [Run status](/docs/guides/run-status).
 
 ## Environment
 
-Create and activate the unified inference environment:
+Create and activate the unified inference environment. The official first-clone command is `bash scripts/setup/bootstrap_worldfoundry.sh` (same as [Quickstart](/docs/quickstart)):
 
 ```bash
 bash scripts/setup/bootstrap_worldfoundry.sh
@@ -58,7 +59,7 @@ Hugging Face cache aliases such as
 `refs/main` pointing at that local revision. New users do not need this step;
 they can let Hugging Face download into the default `HF_HOME` cache normally.
 
-The public default is still the Hugging Face repo id. Local symlinks only
+The public default is still the Hugging Face repo ID. Local symlinks only
 simulate that cache layout for machines that already have downloaded weights.
 
 For a single model, the release-facing helper wires those steps together:
@@ -72,7 +73,7 @@ It resolves the conda profile, checks or downloads declared Hugging Face
 checkpoints through the native HF cache or documented HFD aliases, runs
 `zoo model-download --check-local`, and prints the next inference command.
 
-## Reproducible Model Setup
+## Reproducible model setup
 
 Use the same sequence for local release validation and public user
 reproduction:
@@ -95,12 +96,22 @@ compatibility reason, for example pinned torch/CUDA ABI, JAX/TensorFlow
 isolation, or simulator dependencies.
 
 Do not copy private cache paths into public guides. Public checkpoint paths
-should be Hugging Face repo ids, native HF cache locations, or documented
+should be Hugging Face repo IDs, native HF cache locations, or documented
 `WORLDFOUNDRY_CKPT_DIR` aliases.
 
-## CLI Inference
+## CLI inference
 
-The shared command-line inference entrypoint is the Studio workspace job runner:
+The canonical command for everyday reproducible and documented runs is `worldfoundry-eval run`. This is the same shape as the commands on model pages:
+
+```bash
+worldfoundry-eval run <model-id> \
+  --pipeline.task-profile <task-profile> \
+  --output-dir tmp/worldfoundry_infer/<model-id>
+```
+
+**Which command.** Everyday reproducible / model-page commands use `worldfoundry-eval run`. Use `python -m worldfoundry.studio.workspace_job infer` only for Workspace visual smoke. See [CLI entrypoints](/docs/reference/cli#entrypoints).
+
+Workspace visual smoke (the same job path the Studio UI submits):
 
 ```bash
 python -m worldfoundry.studio.workspace_job infer \
@@ -133,6 +144,200 @@ python -m worldfoundry.studio.workspace_job infer \
   --output-dir tmp/worldfoundry_infer/<model-id>
 ```
 
+### Echo-Memory Context-K1
+
+WorldFoundry integrates `echo-memory-context-k1` with a fixed model recipe,
+checkpoint filename, and sampler layout. Structural loading covers the released
+1,185-tensor DiT; fresh two-chunk CUDA validation after the native pipeline
+cutover, official-sample parity, and benchmark scoring remain pending. Unreleased and retracted Echo-Memory variants are outside the
+integration scope.
+
+The runtime extends WorldFoundry's canonical Wan 2.1 model directly and does
+not invoke DiffSynth. No architecture is ever selected implicitly from a
+checkpoint header: the fixed model recipe is constructed first, and loading
+requires full key and shape coverage. The public K=1 model uses the normal
+pipeline interface:
+
+```python
+from worldfoundry.pipelines.echo_memory.pipeline_echo_memory import (
+    EchoMemoryContextK1Pipeline,
+)
+
+pipe = EchoMemoryContextK1Pipeline.from_pretrained(device="cuda")
+result = pipe(
+    "The camera moves forward through a quiet forest trail.",
+    images="/path/to/anchor.png",
+    camera_trajectory="z*80",
+    output_path="tmp/echo_memory/context_k1.mp4",
+    return_dict=True,
+)
+print(result["generated_video_path"])
+```
+
+For research extensions, keep four concerns separate:
+
+1. Add an immutable `EchoMemoryRecipe` and `EchoMemoryModelSpec` for model
+   identity and reproducible comparison.
+2. Implement checkpoint-specific tensor math below `models/networks`.
+3. Put state-dict conversion and the shared `Denoiser` adapter in
+   `models/denoisers`, then compose the framework-owned `frozen-context`
+   execution strategy.
+4. Implement history retention/retrieval through `BaseMemory` (the released
+   rollout uses `EchoRolloutMemory`) without changing the canonical Wan path.
+
+New recipes also need strict checkpoint-structure invariants, a fixed public
+model ID, catalog/binding/profile entries, and real CUDA
+validation before promotion. Public usage and checkpoint identity are on the
+[Echo-Memory model card](/docs/guides/supported-models/echo-memory-context-k1).
+Training and unvalidated FSDP/USP execution are outside this infer-only surface.
+
+### Matrix-Game 3.5 native models
+
+Matrix-Game 3.5 is registered as two immutable model recipes:
+
+- `matrix-game-3.5-first-person` always loads `first-person.safetensors`.
+- `matrix-game-3.5-third-person` always loads `third-person.safetensors`. Its checkpoint architecture contains four subject-reference embedding slots; the released inference profile deliberately bounds each request to two references.
+
+Both recipes use the same native `DiffusionRequest` → `NativeDiffusionPipeline`
+path and reuse canonical Wan components plus Depth Anything 3. They require an anchor
+image, a camera NPZ with `extrinsics_c2w` (or `extrinsics`) shaped `(N,4,4)`,
+and pixel intrinsics shaped `(4,)`, `(N,4)`, `(3,3)`, or `(N,3,3)`. A one-block
+run needs at least 86 poses and exports the anchor plus 84 generated frames at
+704×1280 and 16 FPS. The released base checkpoints use 25 denoising steps by
+default.
+
+Their declarative inference profiles live under
+`worldfoundry/data/models/runtime/configs/matrix_game_3p5`; the runtime package
+contains the product inference path and injectable memory-research factories
+only. Profile overrides use `num_inference_blocks`, `num_inference_steps`,
+`guidance_scale`, `inference_seed`, and `candidates_per_query_group`. The
+upstream validation runner, GT/candidate panels, per-section debug videos,
+latent dumps, online YOLO branch, and alternate VGGT registration branch are
+not shipped in this infer-only runtime.
+
+```python
+from worldfoundry.pipelines.matrix_game.pipeline_matrix_game_3p5 import (
+    MatrixGame35FirstPersonPipeline,
+)
+
+pipe = MatrixGame35FirstPersonPipeline.from_pretrained(device="cuda")
+result = pipe(
+    image_path="/path/to/anchor.png",
+    camera_path="/path/to/camera_c2w.npz",
+    prompt="The camera tracks right through a cinematic city street.",
+    output_path="tmp/matrix_game_3p5/first_person.mp4",
+    return_dict=True,
+)
+print(result["artifact_path"])
+```
+
+For the third-person recipe, use `MatrixGame35ThirdPersonPipeline` and pass
+`refs=["/path/to/subject_crop.png"]` when subject memory is needed. Checkpoint
+layout is documented in [Local assets](/docs/guides/local-assets).
+Memory-retrieval and fusion experiments should extend
+`build_mosaic_inference_dataset(..., dataset_cls=...)` and
+`build_mosaic_pipeline_module(..., module_cls=...)` instead of copying the
+runtime or native diffusion infrastructure.
+
+### Cosmos 1 and 2 native models
+
+GEN3C/Cosmos Predict1 and Cosmos Predict2 are regular native recipes, not
+family backends. GEN3C maps a named camera trajectory through MoGe depth and
+core RGBD warping before the shared denoising loop. Predict2 2B and 14B share
+the native Predict backbone and Wan codec implementation, then select T5-11B
+and Rectified Flow AB2 in their recipes.
+
+```python
+from worldfoundry.pipelines.cosmos.pipeline_cosmos_predict2 import CosmosPredict2Pipeline
+from worldfoundry.pipelines.gen3c.pipeline_gen3c import Gen3CPipeline
+
+predict2 = CosmosPredict2Pipeline.from_pretrained(model_id="cosmos-predict2", device="cuda")
+predict2(
+    "The camera advances through a robotics lab.",
+    image="/path/to/first_frame.png",
+    output_path="tmp/cosmos/predict2.mp4",
+)
+
+gen3c = Gen3CPipeline.from_pretrained(device="cuda")
+gen3c(
+    images="/path/to/first_frame.png",
+    trajectory="left",
+    output_path="tmp/cosmos/gen3c.mp4",
+)
+```
+
+Both wrappers invoke `NativeDiffusionPipeline`. Predict2 checkpoint access is
+gated; registry and structural validation do not imply full-resolution GPU
+artifact parity.
+
+### Cosmos 2.5 native models
+
+`cosmos-predict2.5-2b`, `cosmos-predict2.5-14b`, and
+`cosmos-transfer2.5-2b-controlled-video` are native recipes in the same
+registry. Predict accepts text, image, or short video conditioning. Transfer's
+`video`/`control_video` argument is the edge-control sequence; an optional
+`image` anchors the first generated frame. Both public pipelines use 93 frames,
+35 Karras flow-UniPC steps, 16 FPS, and positive guidance by default.
+
+```python
+from worldfoundry.pipelines.cosmos.pipeline_cosmos_transfer2p5 import (
+    CosmosTransfer2p5Pipeline,
+)
+
+pipe = CosmosTransfer2p5Pipeline.from_pretrained(device="cuda")
+result = pipe(
+    "A robot moves through a bright workshop.",
+    control_video="/path/to/edge_control.mp4",
+    image="/path/to/first_frame.png",
+    output_path="tmp/cosmos/transfer2p5.mp4",
+    return_dict=True,
+)
+print(result["artifact_path"])
+```
+
+The native path does not import Diffusers or the deleted
+`base_models/diffusion_model/video/cosmos2p5` package. Transfer currently pins
+the official `general/edge` checkpoint; other control variants must be added as
+separate, checkpoint-specific recipes after validation.
+
+### HunyuanVideo native models
+
+The original and 1.5 T2V/I2V releases are four independent recipes on the same
+native pipeline. Selecting a model changes checkpoint-compatible components,
+not the runner architecture:
+
+```python
+from worldfoundry.pipelines.hunyuan_video.pipeline_hunyuan_video import (
+    HunyuanVideo15I2VPipeline,
+)
+
+pipe = HunyuanVideo15I2VPipeline.from_pretrained(device="cuda")
+result = pipe(
+    "Fireworks illuminate a city street at night.",
+    image="/path/to/reference.png",
+    output_path="tmp/hunyuanvideo-1.5-i2v.mp4",
+    return_dict=True,
+)
+print(result["artifact_path"])
+```
+
+`hunyuanvideo-t2v`, `hunyuanvideo-i2v`, `hunyuanvideo-1.5-t2v`, and
+`hunyuanvideo-1.5-i2v` reuse the framework loader, scheduler, offload policy,
+standard denoising runner, and media writer. The old upstream CLI runtime is not
+a backend. To run generated artifacts through an integrated benchmark, use the
+public CLI with the model catalog ID and a benchmark ID:
+
+```bash
+worldfoundry run --benchmark vbench \
+  --model hunyuanvideo-1.5-t2v \
+  --generated-artifact-dir /path/to/generated-videos \
+  --mode official-run \
+  --output-dir tmp/bench/hunyuanvideo-1.5-t2v
+```
+
+Registry and checkpoint-structure validation pass; fresh native CUDA artifact
+parity is still required and is not implied by the historical CLI artifacts.
+
 The compatibility bridge also exists:
 
 ```bash
@@ -142,7 +347,7 @@ bash scripts/inference/run_infer.sh \
   --output-dir tmp/worldfoundry_infer/<model-id>
 ```
 
-## Workspace Inference
+## Workspace inference
 
 For multi-model validation, run the workspace UI and submit jobs from the browser:
 
@@ -156,10 +361,9 @@ Open:
 http://127.0.0.1:7870/
 ```
 
-The workspace is the preferred surface for checking release readiness.
-
-Use it to inspect model-specific input forms, official-demo defaults, generated
-files, gallery previews, and visual regressions before recording model readiness.
+The workspace is the preferred surface for checking release readiness. Use it to
+inspect model-specific input forms, official-demo defaults, generated files,
+gallery previews, and visual regressions before recording model readiness.
 
 Per-model viewer routing and the Visualizers tab are documented in the
 [Studio guide](/docs/guides/studio#workspace-visualizers).
@@ -167,26 +371,22 @@ Per-model viewer routing and the Visualizers tab are documented in the
 Create Job fields, runtime checks, default values, and optional persisted defaults
 are documented in the [Studio guide](/docs/guides/studio#create-job-configuration).
 
-## Output Contract
+## Output contract
 
 Each inference run should produce a manifest-like JSON record and one or more artifacts:
 
-| Output | Expected use |
-| --- | --- |
-| Generated video/image/3D/action artifact | Primary demo output to inspect visually or structurally. |
-| Job manifest or run record | Model id, variant, backend, parameters, paths, timings, status, and errors. |
-| Logs | Runtime import, checkpoint, CUDA, and model-specific call details. |
-| Gallery/files entry in Studio | Human review surface for release validation. |
+- **Generated video/image/3D/action artifact** — Primary demo output to inspect visually or structurally.
+- **Job manifest or run record** — Model ID, variant, backend, parameters, paths, timings, status, and errors.
+- **Logs** — Runtime import, checkpoint, CUDA, and model-specific call details.
+- **Gallery/files entry in Studio** — Human review surface for release validation.
 
-Do not treat existence of a video file as success by itself.
-
-Check that the input contract, prompt/camera/action controls, frame count,
-resolution, and artifact content match the intended official demo or model
-profile.
+A video file existing is not success on its own. Check that the input contract,
+prompt/camera/action controls, frame count, resolution, and artifact content
+match the intended official demo or model profile.
 
 ## Next steps
 
-When generated outputs look correct, continue in a separate docs section:
+When the generated outputs look correct, continue here:
 
 <Cards>
   <Card title="Evaluation" description="Run benchmarks, score outputs, and read scorecards." href="/docs/evaluation" />

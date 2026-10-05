@@ -1,0 +1,52 @@
+---
+title: "Déjà View Looping Transformer"
+description: "Déjà View Looping Transformer（NVIDIA）：3D 重建、depth-estimation；Runner 一致性待确认。"
+modelId: "dvlt"
+pageSource: authored
+---
+
+Déjà View Looping Transformer（DVLT）是英伟达的多视图重建模型，覆盖 3D 重建、相机位姿估计与深度估计，输出 GLB 场景。WorldFoundry 的封装是惰性的：仅当 CUDA、依赖、源码、输入与权重全部本地就位时，才运行外部 DVLT 的 GLB 导出路径。
+
+<ModelPaperFigures modelId="dvlt" locale="zh" />
+
+记录论文为[Déjà View: Looping Transformers for Multi-View 3D Reconstruction](https://arxiv.org/abs/2605.30215)（2026）。
+
+项目页：[research.nvidia.com/labs/dvl/projects/dvlt](https://research.nvidia.com/labs/dvl/projects/dvlt/)。代码：[nv-tlabs/dvlt](https://github.com/nv-tlabs/dvlt)。
+
+论文：[arXiv 2605.30215](https://arxiv.org/abs/2605.30215)。项目页：[research.nvidia.com/labs/dvl/projects/dvlt](https://research.nvidia.com/labs/dvl/projects/dvlt/)。代码：[nv-tlabs/dvlt](https://github.com/nv-tlabs/dvlt)。checkpoint 许可：**NVIDIA 非商用研究/评测**。运行时源码从公开树**外置**——由你就位。缺前提时 `DVLTSynthesis` 快速失败。GPU 一致性**待验证**。
+
+<ModelCommandBuilder modelId="dvlt" locale="zh" />
+
+## 用来做什么
+
+`dvlt` 是记录的重建线。从记录的视图写出几何时从这里起步。
+
+catalog 记录其为面向多视图几何的 looping-transformer 设计（论文 arXiv 2605.30215）；运行时源码不在公开发布树内，除已记录任务外的架构细节此处未存。该模型由英伟达（NVIDIA）发布。
+
+catalog 记录的任务包括 3D 重建、multi-view-reconstruction、camera-pose-estimation、depth-estimation。别名包括 `deja-view`、`dejaview`、`deja-view-looping-transformer`、`nvidia/dvlt`。模态上，它接受图像，输出深度。
+
+## 运行时契约
+
+可选 `input_path`、`execute`、`max_points`、`focal_length`；产物 `dvlt_reconstruction.glb`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `DVLTPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+runner 注册已接好；GPU 一致性待 checkpoint 与环境验证。 nvidia/dvlt checkpoint 使用英伟达非商用研究/评估许可——使用前请核对条款。 DVLTSynthesis 在前置条件缺失时快速失败。
+
+checkpoint 许可仅限英伟达非商用研究/评估用途。
+
+必填 `image`、`video`；可选 `prompt`；`actions`：view_sequence, reference_frame, reconstruction_options；产物 `dvlt_reconstruction.glb`。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run dvlt --pipeline.task-profile default` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `nvidia/dvlt`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh dvlt`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 nvidia-noncommercial-research-evaluation；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="dvlt" locale="zh" />

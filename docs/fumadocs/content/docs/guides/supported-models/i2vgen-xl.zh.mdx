@@ -1,0 +1,50 @@
+---
+title: "I2VGen-XL"
+description: "I2VGen-XL（Alibaba (Tongyi Lab)）：图生视频、文生视频；Runner 一致性待确认。"
+modelId: "i2vgen-xl"
+pageSource: generated
+---
+
+I2VGen-XL 是阿里 ali-vilab 的级联式图生视频模型，属较早的高分辨率开源 I2V 发布。它通过「先生成、再细化」的两级级联，把静态图（可附文本）变成短视频。WorldFoundry 路径已完备，checkpoint 缺失时会在运行时报告。
+
+<ModelPaperFigures modelId="i2vgen-xl" locale="zh" />
+
+记录论文为[arXiv 2311.04145](https://arxiv.org/abs/2311.04145)。
+
+项目页：[i2vgen-xl.github.io](https://i2vgen-xl.github.io/)。代码：[ali-vilab/i2vgen-xl](https://github.com/ali-vilab/i2vgen-xl)。
+
+<ModelCommandBuilder modelId="i2vgen-xl" locale="zh" />
+
+## 用来做什么
+
+用 `i2vgen-xl` 跑本系列联合 T2V/I2V 推理路径。本页记录了这两种任务 profile。
+
+按上游论文，I2VGen-XL 由保证语义连贯的基础级与提升细节/分辨率的细化级组成，均为潜空间扩散模型。本仓库在 runtime profile 中记录 prompt+image 契约与环境/checkpoint 假设；运行就绪状态保存在发布 run manifest 中，不在此处。该模型由阿里巴巴（通义实验室）发布。
+
+catalog 记录的任务包括 图生视频、文生视频。模态上，它接受图像、文本，输出视频。
+
+记录的评测入口包括[AIGCBench](/zh/docs/evaluation/benchmark-hub/aigcbench)（面向图生视频的评测集）。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`input_path`、`frames`、`fps`；产物 `i2vgen-xl.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `I2VGenXLPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+`interactive-video` 记录默认值：frames=16, height=704, width=1280, seed=8888。
+
+集成已完成；本 manifest 中还没有 runner parity 记录。 官方 GitHub 与 ali-vilab 的 HF 仓库均确认可达。 相对 catalog 中较新的 DiT 系 I2V 模型，它更适合作为老一代质量基线。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run i2vgen-xl --pipeline.task-profile interactive-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `ali-vilab/i2vgen-xl`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh i2vgen-xl`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 mit；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="i2vgen-xl" locale="zh" />

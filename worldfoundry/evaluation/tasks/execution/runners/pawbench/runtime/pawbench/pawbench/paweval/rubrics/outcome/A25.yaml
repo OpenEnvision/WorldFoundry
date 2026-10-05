@@ -1,0 +1,52 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A25
+track: calibration
+title_en: Left-Leaning Pencil Fall
+outcome_question: Which label in ['falls_left', 'falls_right'] is visible as the first
+  decisive post-action result?
+readout_policy: Read the first decisive post-action result window after the requested
+  release has actually occurred. Use image/viewer coordinates, not the pencil's own
+  orientation. In the source/initial frame, identify the sharpened tip's table-contact
+  point as the reference pivot and the eraser end as the free moving end. Use the
+  image-vertical line through that initial pivot as the left/right boundary. After
+  visible release, wait until the pencil has decisively fallen away from its initial
+  pose. Then falls_left means the eraser end is committed to or settled on viewer-left
+  of that boundary; falls_right means viewer-right. Do not determine direction from
+  the sharpened contact tip. The readout frame is the first frame/window where the
+  observed fall direction is physically committed.
+canonical_labels:
+- falls_left
+- falls_right
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['falls_left', 'falls_right'] can be decisively identified
+  within the readout window.
+- The pencil remains in its initial lean or the final fall direction is hidden/ambiguous
+  in every post-action readout frame.
+- The eraser end or the sharpened tip's initial table-contact point cannot be identified
+  reliably enough to apply the geometry policy.
+- A horizontal mirror reverses viewer-left/right, or a camera cut, reorientation, or
+  loss of registration prevents locating the initial pivot boundary consistently
+  across the source/initial and readout frames.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'First-decisive-window rule: use the earliest frame where the post-action result
+  has committed; do not re-label from later transient states.'
+- 'Initial-state exclusion: the eraser end is already viewer-left in the source image,
+  so the initial lean alone is not falls_left evidence. Require visible post-release
+  falling motion and a decisive departure from the initial pose; otherwise return
+  unreadable.'
+notes:
+- 'Scene title: Left-Leaning Pencil Fall.'
+geometry_policy: Left/right are image/viewer left and right relative to the image-vertical
+  line through the sharpened tip's initial table-contact point. Determine the label
+  from the free eraser end, not the sharpened contact tip. The initial left lean is
+  scene grounding and bias, not outcome evidence by itself. Do not infer direction
+  from text, physical expectation, or the reference distribution.

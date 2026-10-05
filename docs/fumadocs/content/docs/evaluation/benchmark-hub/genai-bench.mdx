@@ -1,142 +1,38 @@
 ---
 title: GenAI-Bench
-description: Pairwise human-preference GenAI-Bench evaluation with WorldFoundry's checked-in runner, assets, commands, metrics, and current gaps.
+description: "TIGER-Lab judge-alignment bench: pairwise accuracy vs human preferences on image generation, editing, and video. WorldFoundry imports labels; it does not invent a board."
 ---
 
-## What It Measures
+GenAI-Bench (TIGER-Lab, University of Waterloo; released with GenAI-Arena) measures whether an **automatic judge matches human preference**, not whether a generator looks pretty. Each record pairs two outputs for the same prompt with a human label. WorldFoundry scores **pairwise accuracy** overall and on three tasks:
 
-GenAI-Bench evaluates whether a multimodal judge agrees with human pairwise preferences for generated content. The local GenAI-Bench README describes three preference tracks: image generation, image editing, and video generation. Each example asks the judge to choose between two generated artifacts with labels such as `A>B`, `B>A`, `A=B=Good`, and `A=B=Bad`.
+- **Image generation**
+- **Image editing**
+- **Video generation**
 
-WorldFoundry uses the checked-in runner at `worldfoundry/evaluation/tasks/execution/runners/genai_bench/run_genai_bench_official_runner.py`. Do not make a separate copy of the official repo for normal WorldFoundry use. Treat the upstream paper and official README as protocol references; the runnable WorldFoundry path is already in this tree.
+`genai_bench_average` is the mean of task accuracies when every task-level pair is present.
 
-## Prepare Data And Assets
+Paper: [GenAI-Bench](https://arxiv.org/abs/2406.04485). Code: [TIGER-AI-Lab/GenAI-Bench](https://github.com/TIGER-AI-Lab/GenAI-Bench). Dataset: [`TIGER-Lab/GenAI-Bench`](https://huggingface.co/datasets/TIGER-Lab/GenAI-Bench) (CC-BY-4.0).
 
-Use one of these input styles:
+WorldFoundry **normalizes official result rows**. A row must expose `task` (`image_generation` / `image_editing` / `video_generation`), a human label (`human_label` / `human_preference`), and a judge prediction (`prediction` / `judge_prediction`). It does not synthesize preference labels.
 
-- Imported preference results: JSONL, JSON, CSV, or TSV rows with `human_label` or `human_preference`, `prediction` or `judge_prediction`, and `task`.
-- In-tree scorer rows: a preference-pair JSONL file with `prompt`, `human_label`, optional `left_artifact` / `right_artifact`, and `task`.
-- Generated artifacts: a directory containing the candidate images or videos referenced by the preference pairs.
+<BenchmarkPageSections id="genai-bench" locale="en" />
 
-Checked-in assets:
-
-- `worldfoundry/data/benchmarks/assets/genai-bench/metadata.json`
-- `worldfoundry/data/benchmarks/assets/genai-bench/preference_pairs.fixture.jsonl`
-- `worldfoundry/data/benchmarks/assets/genai-bench/sample_results.jsonl`
-
-Optional downloads are fine when you want the HF data or scorer weights for your own run:
+## How to run
 
 ```bash
-hf download TIGER-Lab/GenAI-Bench \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/GenAI-Bench
-
-hf download zhiqiulin/clip-flant5-xxl \
-  --local-dir /path/to/checkpoints/clip-flant5-xxl
-```
-
-For VQAScore-style scoring, set the scorer backend and checkpoint cache:
-
-```bash
-export WORLDFOUNDRY_GENAI_BENCH_SCORER_BACKEND=vqascore
-export WORLDFOUNDRY_T2V_METRICS_MODEL=clip-flant5-xxl
-export WORLDFOUNDRY_T2V_METRICS_CACHE_DIR=/path/to/checkpoints
-export WORLDFOUNDRY_T2V_METRICS_DEVICE=cuda
-```
-
-## Input And Output Layout
-
-Example generated artifact layout:
-
-```text
-/path/to/genai/generated_artifacts/
-  video_left_001.mp4
-  video_right_001.mp4
-  image_left_002.png
-  image_right_002.png
-```
-
-Example preference-result JSONL:
-
-```jsonl
-{"task":"video_generation","human_label":"A>B","prediction":"A>B","pair_id":"video-001"}
-{"task":"image_generation","human_label":"B>A","judge_prediction":"A>B","pair_id":"image-002"}
-```
-
-WorldFoundry output layout:
-
-```text
-tmp/genai-bench/official-validation/
-  scorecard.json
-  raw_metric_table.jsonl
-  per_sample_scores.jsonl
-  runner_runtime_report.json
-  specialized_normalizer_stdout.log
-  specialized_normalizer_stderr.log
-```
-
-Direct runner output also includes `scorecard.json`, `raw_metric_table.jsonl`, and `per_sample_scores.jsonl`. When the scorer is launched, generated upstream rows are written under `upstream/`.
-
-## Public CLI
-
-The catalog-supported public command for this page is result import with `official-validation`:
-
-```bash
-cd /path/to/WorldFoundry
-
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id genai-bench \
   --mode official-validation \
-  --official-results-path /path/to/genai_preference_results.jsonl \
-  --generated-artifact-dir /path/to/genai/generated_artifacts \
+  --official-results-path <official_results.jsonl> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/genai-bench/official-validation \
   --json
 ```
 
-The public catalog entry does not publish a full `official-run` command for GenAI-Bench. Use the direct runner below when you need the checked-in scorer path.
+`--preference-pairs-path` supplies the pair inventory. Default import path: `WORLDFOUNDRY_GENAI_BENCH_RESULTS_PATH`. Shared assets: `genai_bench_dataset_assets`, `t2v_metrics_source_assets`.
 
-## Direct Runner
+In-tree pointer: `worldfoundry/data/benchmarks/tasks/external/genai-bench.yaml`.
 
-Import an existing preference-result file:
+Outputs include `scorecard.json` (primary `genai_bench_average`), `benchmark_contract.json`, and `raw_metric_table.jsonl`.
 
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/genai_bench/run_genai_bench_official_runner.py \
-  --official-results-path /path/to/genai_preference_results.jsonl \
-  --generated-artifact-dir /path/to/genai/generated_artifacts \
-  --output-dir tmp/genai-bench/direct-import \
-  --json
-```
-
-Run the checked-in scorer over a preference-pair file:
-
-```bash
-cd /path/to/WorldFoundry
-
-export WORLDFOUNDRY_GENAI_BENCH_SCORER_BACKEND=vqascore
-export WORLDFOUNDRY_T2V_METRICS_MODEL=clip-flant5-xxl
-export WORLDFOUNDRY_T2V_METRICS_CACHE_DIR=/path/to/checkpoints
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/genai_bench/run_genai_bench_official_runner.py \
-  --run-official \
-  --preference-pairs-path /path/to/preference_pairs.jsonl \
-  --generated-artifact-dir /path/to/genai/generated_artifacts \
-  --output-dir tmp/genai-bench/direct-run \
-  --json
-```
-
-For local wiring without GPU scoring, set `WORLDFOUNDRY_GENAI_BENCH_SCORER_BACKEND=mock`. Those scores are deterministic placeholders and are not leaderboard evidence.
-
-## Metrics
-
-| Metric ID | Meaning |
-| --- | --- |
-| `pairwise_accuracy` | Fraction of all imported pair rows where the judge prediction equals the human preference label. |
-| `image_generation_preference_accuracy` | Pairwise accuracy on rows whose task resolves to image generation. |
-| `image_editing_preference_accuracy` | Pairwise accuracy on rows whose task resolves to image editing. |
-| `video_preference_accuracy` | Pairwise accuracy on rows whose task resolves to video generation. |
-| `genai_bench_average` | Mean of available task-level preference accuracies; primary metric. |
-
-All metrics are normalized to `[0, 1]`, and higher is better.
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

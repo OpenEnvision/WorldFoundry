@@ -1,0 +1,75 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BA-03
+track: coverage
+title_en: Dog Route Choice Toward Toy
+scene_grounding:
+- 'Initial state must match: A dog faces a toy beyond a low obstacle.'
+- Opening frames must show the dog, toy, low obstacle, and left/right/middle route
+  affordances in the same general geometry as the source image.
+action_execution:
+- 'Required action surface: give the dog a visible opportunity to make one reach
+  attempt toward the toy.'
+- The toy-directed opportunity must happen once from the expected initial region;
+  repeated resets or multiple independent attempts are action-execution failures.
+- The toy target and obstacle must be identifiable when the dog either initiates
+  movement or remains without attempting (Track B target acquisition).
+- A legal `does_not_attempt` outcome still requires the opportunity/readout window
+  to be visible; absence of the setup/opportunity is an action-execution failure,
+  not a valid no-attempt outcome.
+- The route decision or no-attempt readout must be visible as one continuous event
+  from the described initial state; cuts, hidden starts, or off-screen route choices
+  are action-execution failures or readout ambiguity.
+target_requirements:
+- Dog, toy, low obstacle, and route space left/right/middle must remain visible through
+  the route decision or no-attempt readout.
+- The route must be caused by continuous dog motion toward the toy. Toy teleport,
+  obstacle disappearance, or off-screen/third-party movement of the toy or obstacle
+  invalidates trust.
+- Toy contact or retrieval after the route is readable is allowed as secondary motion
+  if identity and continuity remain clear; it must not be used to change the route
+  label.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+- 'Identity continuity is fatal: the judged subject, target, and key apparatus must
+  not swap appearance, duplicate, vanish, or re-enter as a different object/person/animal.'
+- Dog body position, toy identity, and obstacle identity must remain trackable across
+  the route/no-attempt window.
+apparatus_stability:
+- The low obstacle and route geometry must not drift, resize, open, or change color
+  before route commitment.
+- Minor physical contact with the obstacle or toy after the route label is already
+  readable is not fatal by itself, provided continuity remains plausible and the
+  route relative to the initial obstacle is still clear.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Route discontinuity: dog appears on the other side of the obstacle without a visible
+  left/right/over/under trajectory.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the route label via physically impossible motion after
+  the readout window.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Dog Route Choice Toward Toy.'
+- 'Fatal severity cue: target/stimulus acquisition failure, impossible trajectory,
+  identity discontinuity, or post-result contradiction excludes strict trusted metrics
+  even if the outcome is readable.'
+- 'BA-03 trust cue: visible opportunity, route-space readability, attribution to
+  continuous dog motion, off-screen-cause rejection, and identity continuity are
+  mandatory.'

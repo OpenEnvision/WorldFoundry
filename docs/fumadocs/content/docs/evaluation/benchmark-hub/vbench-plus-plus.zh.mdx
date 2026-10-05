@@ -1,168 +1,41 @@
 ---
 title: VBench++
-description: VBench++ I2V、long-video 和 trustworthiness 评测，包含仓内 runtime 和 variant-specific 命令。
+description: "VBench 扩展：I2V、长视频、可信度。WorldFoundry 内置 runtime，不编造榜单。与 VBench、VBench-2.0 不同。"
 ---
 
-## 简介
+VBench++（S-Lab、南洋理工与上海人工智能实验室）为 [VBench](/zh/docs/evaluation/benchmark-hub/vbench) 增加三条赛道。它 **不是** [VBench-2.0](/zh/docs/evaluation/benchmark-hub/vbench-2.0)。同一上游仓库：[Vchitect/VBench](https://github.com/Vchitect/VBench)（Apache-2.0）。
 
-VBench++ 将 VBench 系列从短 text-to-video 评分扩展到 image-to-video、long-video 和 trustworthiness 维度，覆盖 fairness、bias 和 safety。TPAMI 2025 论文把它定义为一个更通用的视频生成 benchmark suite，用于比较不同生成条件和风险维度下的模型能力。
+- **图像生成视频** — 官方可裁剪图像套件上的 I2V 主体 / 背景一致性与相机运动。
+- **长视频** — 时间窗口打分；目录记录的有界命令用 `temporal_flickering` / `long_custom_input`。
+- **可信度** — 公平、偏见、安全探针（部分需要额外人脸 / 属性模型）。
 
-WorldFoundry 已经把 VBench++ runtime 集成在 `worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus`。官方 VBench project 只作为 protocol 参考；WorldFoundry 运行的是仓内 variant runtimes。
+`--variant` 选择 `i2v`、`long` 或 `trustworthiness`。各变体平均分再加 `vbench_plus_plus_average`（WorldFoundry 对已有维度的均值）。
 
-官方参考：
+论文：[VBench++](https://arxiv.org/abs/2411.13503)。项目：[vchitect.github.io/VBench-project](https://vchitect.github.io/VBench-project/)。
 
-- VBench series project: [vchitect.github.io/VBench-project](https://vchitect.github.io/VBench-project/)
-- Paper: [arXiv:2411.13503](https://arxiv.org/abs/2411.13503)
-- VBench-I2V Arena: [Vchitect/VBenchI2V_Video_Arena](https://huggingface.co/spaces/Vchitect/VBenchI2V_Video_Arena)
-- 仓内 runner: `worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py`
-- 仓内 runtime: `worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime`
+WorldFoundry **仓内内置 VBench++ runtime**。有界长视频组件已验证；全套未验证。
 
-## Variants
+<BenchmarkPageSections id="vbench-plus-plus" locale="zh" />
 
-runner 必须传 `--variant`。
-
-| Variant | 用途 | Runtime entry |
-| --- | --- | --- |
-| `i2v` | Image-to-video 评测，输入 reference images 和生成视频。 | `runtime/entrypoints/i2v.py` |
-| `long` | Long-video 评测，关注更长时间范围内的质量和一致性。 | `runtime/entrypoints/long.py` |
-| `trustworthiness` | Culture/fairness、gender bias、skin bias 和 safety。 | `runtime/entrypoints/trustworthiness.py` |
-
-WorldFoundry 会聚合出：
-
-- `vbench_plus_plus_i2v_average`
-- `vbench_plus_plus_long_average`
-- `vbench_plus_plus_trustworthiness_average`
-- `vbench_plus_plus_average`
-
-## 资产与生成产物
-
-prompt 和 metadata assets 已经在仓内：
-
-- I2V: `worldfoundry/data/benchmarks/assets/vbench-plus-plus/i2v/vbench2_i2v_full_info.json`
-- Long video: `worldfoundry/data/benchmarks/assets/vbench-plus-plus/long/VBench_full_info.json`
-- Trustworthiness: `worldfoundry/data/benchmarks/assets/vbench-plus-plus/trustworthiness/vbench2_trustworthy.json`
-
-候选模型生成视频由用户提供：
+## 如何运行
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/vbench-plus-plus/generated_videos
-```
-
-I2V custom-image 评测还需要 reference image folder：
-
-```bash
-export WORLDFOUNDRY_VBENCH_I2V_IMAGE_FOLDER=/path/to/vbench-plus-plus/reference_images
-```
-
-Long-video custom input 建议把长视频直接放在生成产物根目录下：
-
-```text
-/path/to/vbench-plus-plus/generated_videos/
-  long_video_0001.mp4
-  long_video_0002.mp4
-```
-
-long-video runner 会在需要时准备 upstream metric code 期望的 split-clip layout。
-
-候选模型训练和推理不属于 VBench++ 本身。先用模型 package 生成视频，再导出到对应 variant 需要的 layout。
-
-## 权重与 Runtime
-
-VBench++ 复用 VBench metric stack，并增加 variant-specific perception/judge assets。先准备 VBench evaluator cache：
-
-```bash
-export WORLDFOUNDRY_VBENCH_CACHE_DIR=/path/to/cache/models/vbench
-export VBENCH_CACHE_DIR="${WORLDFOUNDRY_VBENCH_CACHE_DIR}"
-```
-
-常见依赖包括 CLIP/DINO、RAFT、GroundingDINO、SAM-family segmentation、image-quality models、部分 trustworthiness 维度需要的 face detection，以及各 variant scorer 权重。可复用代码在 `worldfoundry/base_models`，checkpoint 文件仍然是本地运行资产。
-
-## 运行 I2V
-
-`--variant i2v` 用于 image-to-video 评分。选中维度需要 aspect ratio 时，通过 `--ratio` 传入。
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py \
-  --variant i2v \
-  --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --full-json-dir "$PWD/worldfoundry/data/benchmarks/assets/vbench-plus-plus/i2v/vbench2_i2v_full_info.json" \
-  --dimension i2v_subject \
-  --mode custom_input \
-  --custom-image-folder "${WORLDFOUNDRY_VBENCH_I2V_IMAGE_FOLDER}" \
-  --ratio 16-9 \
-  --output-dir tmp/vbench-plus-plus/i2v_subject \
-  --json
-```
-
-常用 I2V 维度包括 `i2v_subject`、`i2v_background` 和 `camera_motion`。
-
-## 运行 Long-Video Metrics
-
-`--variant long` 用于 long-video 评测：
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py \
+  --benchmark-id vbench-plus-plus \
   --variant long \
   --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --full-json-dir "$PWD/worldfoundry/data/benchmarks/assets/vbench-plus-plus/long/VBench_full_info.json" \
   --dimension temporal_flickering \
   --mode long_custom_input \
-  --output-dir tmp/vbench-plus-plus/long_temporal_flickering \
-  --timeout 7200 \
+  --python "${WORLDFOUNDRY_UNIFIED_PYTHON}" \
+  --output-dir tmp/vbench-plus-plus/long \
   --json
 ```
 
-Long-video 维度复用很多 VBench 维度名，例如 `subject_consistency`、`background_consistency`、`temporal_flickering`、`motion_smoothness`、`dynamic_degree`、`aesthetic_quality`、`imaging_quality` 和 semantic alignment 维度。
+I2V 使用官方图像套件命名。可选 checkout 覆盖：`WORLDFOUNDRY_VBENCH_PLUS_PLUS_ROOT`。共享栈：`vbench_perception_metric_stack`。Prompt / 图像套件在公开 VBench 仓库中。
 
-## 运行 Trustworthiness Metrics
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/vbench-plus-plus.yaml`，`worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/runtime`。
 
-`--variant trustworthiness` 用于 fairness、bias 和 safety：
+产物包括 `scorecard.json`（主键 `vbench_plus_plus_average`）与 `dimension_scores.json`。
 
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py \
-  --variant trustworthiness \
-  --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --full-json-dir "$PWD/worldfoundry/data/benchmarks/assets/vbench-plus-plus/trustworthiness/vbench2_trustworthy.json" \
-  --dimension safety \
-  --custom-input \
-  --output-dir tmp/vbench-plus-plus/trustworthiness_safety \
-  --json
-```
-
-Trustworthiness 维度包括 `culture_fairness`、`gender_bias`、`skin_bias` 和 `safety`。Face-related 维度需要 RetinaFace-compatible checkpoint 和 face runtime dependencies。
-
-## 导入已有结果
-
-导入官方兼容的 VBench++ 结果 JSON 时，需要选择匹配的 variant：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py \
-  --variant long \
-  --official-results-path /path/to/vbenchpp_eval_results.json \
-  --videos-path "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/vbench-plus-plus/imported_long \
-  --json
-```
-
-## 输出文件
-
-每次运行会写出：
-
-- `scorecard.json`: WorldFoundry 统一 scorecard，包含 variant dimension scores 和 VBench++ aggregate。
-- `raw_metric_table.jsonl`: scorecard 使用的 metric rows。
-- `dimension_scores.json`: dimension-score summary。
-- `upstream/*_eval_results.json`: 重新计算 metric 时的官方 runtime 输出。
-- `upstream_stdout.log` 和 `upstream_stderr.log`: 仓内 runtime 日志。
-- `vbenchpp_long_presplit_manifest.json`: 使用 `long_custom_input` 时的 long-video split preparation metadata。
-
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

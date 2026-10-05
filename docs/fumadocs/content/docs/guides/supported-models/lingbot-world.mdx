@@ -1,0 +1,50 @@
+---
+title: "LingBot-World"
+description: "LingBot-World from Robbyant (Ant Group): world and camera control; Verified; dedicated `lingbot-world`."
+modelId: "lingbot-world"
+pageSource: authored
+---
+
+LingBot-World is Robbyant's camera-controlled world video model. In this catalog it is fully verified: the base-cam checkpoint completed full-quality artifact validation on 2026-07-28 using the official 161-frame, 70-step camera-control demo — including a four-A100 compact topology that adapted FSDP/Ulysses settings and produced a coherent artifact.
+
+<ModelPaperFigures modelId="lingbot-world" locale="en" />
+
+The recorded paper is [arXiv 2601.20540](https://arxiv.org/abs/2601.20540).
+
+Project page: [technology.robbyant.com/lingbot-world](https://technology.robbyant.com/lingbot-world). Code: [robbyant/lingbot-world](https://github.com/robbyant/lingbot-world).
+
+<ModelCommandBuilder modelId="lingbot-world" locale="en" />
+
+## What it is for
+
+`lingbot-world` is the recorded camera-control route. Start here to follow a catalog camera path.
+
+The official base-cam recipe uses eight GPUs with DiT/T5 FSDP plus Ulysses sequence parallelism; Workspace also supports a four-GPU compact topology (both 4 and 8 divide the model's 40 attention heads). A shared timestep embedding preserves floating precision for integer scheduler timesteps, preventing distributed sequence-parallel output corruption. It is published by Robbyant (Ant Group).
+
+Catalog tasks include world, camera control, and world model.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-control adherence of world rollouts), [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (General world-rollout quality).
+
+LingBot world + camera control. Video / VLA / map are sibling cards.
+
+## Runtime contract
+
+Optional `image`, `prompt`, `interactions`, `action_path`, and `frames`; artifacts `lingbot-world.mp4`.
+
+CLI task profiles: `image-navigation-video` and `image-action-video`. WorldFoundry binds `LingBotPipeline`.
+
+Family status: **Verified**.
+
+Recorded `image-navigation-video` defaults: frames=161, seed=42 Recorded `image-action-video` defaults: frames=21, seed=42.
+
+The wrapper resolves only local HFD or explicit checkpoint directories — no runtime downloads. Base-cam runs in the dedicated `lingbot-world` environment; Base-Act is separately cataloged. The official Fast checkpoint uses Base-Cam's shared T5/VAE assets plus its own 16 shards. The public binding produced a fully decodable 21-frame, 544 × 720, 16 fps Fast clip with changing content on one H100. Select it with `runtime_variant=fast` and `fast_model_path`; Fast frame counts must be 9, 21, 33, … because its three-latent-frame chunks otherwise truncate the clip. Longer Fast rollouts and camera adherence remain unmeasured.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run lingbot-world --pipeline.task-profile image-navigation-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+Recorded weight repositories include `robbyant/lingbot-world-base-cam`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lingbot-world`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="lingbot-world" locale="en" />

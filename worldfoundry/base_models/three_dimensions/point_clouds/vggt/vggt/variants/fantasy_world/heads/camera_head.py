@@ -16,7 +16,7 @@ import torch.nn.functional as F
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.layers import Mlp
 from ..layers.block import Block
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.head_act import activate_pose
-from worldfoundry.base_models.diffusion_model.video.wan.vae.geometry_bridge import (
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.geometry_bridge import (
     ChannelExpandAndReshape,
     WanVAE_,
 )

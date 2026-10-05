@@ -21,7 +21,7 @@ artifact_kind: generated_video
 artifact_filename: bernini.mp4
 execution:
   backend_stage: official_in_tree_runtime
-  runtime_status: checkpoint_assets_partial_not_runnable_until_staged
+  runtime_status: checkpoint_gpu_validated
   integration_status: runtime_ported
   pipeline_binding: bernini
 integration:
@@ -29,3 +29,4 @@ integration:
 notes:
 - The checkpoint contains the 7B semantic planner and 14B renderer; official recipes use 8-way Ulysses inference.
 - Set nproc_per_node=8 and ulysses_size=8 for the official multi-GPU route.
+- The staged checkpoint completed a real 81-frame rv2v run at 848x480/16fps and 40 steps; quality and upstream output parity remain under review.

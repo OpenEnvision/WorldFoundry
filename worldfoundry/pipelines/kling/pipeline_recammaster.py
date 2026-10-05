@@ -85,6 +85,9 @@ class ReCamMasterPipeline(PipelineABC):
                  video_path,
                  prompt,
                  num_frames=81,
+                 num_inference_steps=50,
+                 cfg_scale=5.0,
+                 fps=8,
                  max_num_frames=81,
                  frame_interval=1,
                  size=(480, 832),
@@ -107,5 +110,7 @@ class ReCamMasterPipeline(PipelineABC):
                                             cam_trajectory_emb,
                                             num_frames=num_frames,
                                             height=height,
-                                            width=width)
+                                            width=width,
+                                            num_inference_steps=num_inference_steps,
+                                            cfg_scale=cfg_scale)
         return output_video

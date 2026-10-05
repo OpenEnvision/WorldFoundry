@@ -44,19 +44,19 @@ class VMemPipeline(PipelineABC):
         **kwargs,
     ) -> "VMemPipeline":
         """Load the pipeline from pretrained checkpoints and configurations."""
-        required_components = required_components or {}
+        component_options = {**(required_components or {}), **kwargs}
         synthesis_model = VMemSynthesis.from_pretrained(
             pretrained_model_path=model_path or DEFAULT_VMEM_REPO,
-            surfel_model_path=required_components.get(
+            surfel_model_path=component_options.pop(
                 "surfel_model_path",
                 DEFAULT_VMEM_SURFEL_REPO,
             ),
-            config_path=required_components.get("config_path"),
-            runtime_root=required_components.get("runtime_root"),
-            visualization_dir=required_components.get("visualization_dir"),
+            config_path=component_options.pop("config_path", None),
+            runtime_root=component_options.pop("runtime_root", None),
+            visualization_dir=component_options.pop("visualization_dir", None),
             device=device,
             weight_dtype=weight_dtype,
-            **kwargs,
+            **component_options,
         )
         return cls(
             operator=VMemOperator(),

@@ -1,0 +1,41 @@
+---
+title: "AdaWorld"
+description: "AdaWorld 使用发布的潜在动作世界模型权重和源视频运行；短片推理已验证。"
+modelId: "adaworld"
+pageSource: authored
+---
+
+AdaWorld 从视频中提取潜在动作，用它们驱动可适配的世界模型。WorldFoundry 的公开 Pipeline 可使用发布权重和用户提供的源视频运行。
+
+<ModelPaperFigures modelId="adaworld" locale="zh" />
+
+项目论文为 [arXiv 2503.18938](https://arxiv.org/abs/2503.18938)。另见[项目主页](https://adaptable-world-model.github.io/)和[官方代码](https://github.com/Little-Podi/AdaWorld)。
+
+<ModelCommandBuilder modelId="adaworld" locale="zh" />
+
+## 模型用途
+
+AdaWorld 的潜在动作自编码器从视频中提取运动表示，用于条件化世界模型的生成帧。仓内运行时沿用官方 FDM 推理路径。Catalog 记录了 `latent-action-world-model`、`action-conditioned-video` 和 `multi-domain-world-model` 三个任务标签；已完成的 GPU 验证只覆盖短源视频滚动生成，不代表这些任务各自的基准测试已完成。
+
+## 输入与权重
+
+提供可读取的源 `video`。此推理路径不使用 `prompt` 或 `image`；直接输入动作 token 尚未验证。输出文件是 `adaworld.mp4`。
+
+将发布的 `Little-Podi/AdaWorld` 权重放在 `${WORLDFOUNDRY_CKPT_DIR}/Little-Podi--AdaWorld/adaworld.safetensors`，也可以像下面这样显式传入路径。主权重已经包含此推理路径使用的 CLIP 和 LAM 编码器参数，不需要额外的 `lam.ckpt`。
+
+```python
+from worldfoundry.pipelines.world_model.pipeline_runtime_manifest import AdaWorldPipeline
+
+pipeline = AdaWorldPipeline.from_pretrained(
+    {"checkpoint_path": "/path/to/adaworld.safetensors"}, device="cuda"
+)
+result = pipeline(video="/path/to/source.mp4", output_path="adaworld.mp4", start_index=0)
+```
+
+Catalog profile 标记的环境为 `worldfoundry-unified-cu128`（Python 3.11、CUDA 12.8）；本次 GPU 验证使用本机 CUDA 12.1 环境。使用短源视频时，将 `start_index` 设置为实际存在的帧；底层运行时默认从第 50 帧开始。
+
+## 验证范围
+
+公开 Pipeline 使用合成视频、两步采样，生成了可完整解码的 4 帧、256 × 256 MP4；输出文件与直接运行仓内官方入口的结果逐字节一致。这验证了权重加载和短片推理链路。任务效果、长时一致性与输出质量尚未评测。
+
+<ModelRelatedRecipes modelId="adaworld" locale="zh" />

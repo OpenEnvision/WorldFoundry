@@ -1,6 +1,7 @@
 """Hailuo 2P3 visual generation pipeline module."""
 
 from ..pipeline_utils import PipelineABC
+import logging
 import time
 from typing import Optional, Dict, Any, Union
 
@@ -8,10 +9,12 @@ from PIL import Image
 
 from ...operators.hailuo_2p3_operator import Hailuo2p3Operator
 from ...synthesis.visual_generation.minimax.hailuo_2p3_synthesis import Hailuo2p3Synthesis
-from ..api_runtime import resolve_api_key
+from ..api_runtime import load_api_pipeline_from_pretrained, resolve_api_key
 
 
 _API_KEY_ENV = ("MINIMAX_API_KEY", "HAILUO_API_KEY")
+
+logger = logging.getLogger(__name__)
 
 
 class Hailuo2p3Pipeline(PipelineABC):
@@ -32,6 +35,27 @@ class Hailuo2p3Pipeline(PipelineABC):
         self.api_key = api_key
         self.operator = operator
         self.synthesis_model = synthesis_model
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        model_path: Any = None,
+        required_components: Optional[Dict[str, Any]] = None,
+        device: str = "cuda",
+        model_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> "Hailuo2p3Pipeline":
+        """Build the API-only pipeline through the unified loader contract."""
+        return load_api_pipeline_from_pretrained(
+            cls,
+            model_path=model_path,
+            required_components=required_components,
+            device=device,
+            model_id=model_id,
+            default_endpoint="https://api.minimax.io/v1",
+            service_name="MiniMax Hailuo 2.3",
+            **kwargs,
+        )
 
     @classmethod
     def api_init(
@@ -117,7 +141,7 @@ class Hailuo2p3Pipeline(PipelineABC):
             task_status = self._extract_status(task_info).upper()
 
             if task_status and task_status != last_status:
-                print(f"Hailuo task {task_id}: {task_status}")
+                logger.info("Hailuo task %s: %s", task_id, task_status)
                 last_status = task_status
 
             if task_status in completed_statuses:

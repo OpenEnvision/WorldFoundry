@@ -1,0 +1,44 @@
+---
+title: "GEN3C"
+description: "NVIDIA camera-controlled video with an explicit 3D cache (CVPR 2025). Native Cosmos Predict1 stack. Structure and camera geometry validated; full-res GPU output parity pending."
+modelId: "gen3c"
+pageSource: authored
+---
+
+GEN3C generates **camera-controlled** video with an explicit **3D cache**: it builds a rough 3D scene from the input image via depth, warps that cache along the requested camera path, then lets the video model fill in the rest. Catalog venue: **CVPR 2025**. WorldFoundry assembles it natively on the same denoiser, T5 conditioner, latent initializer, **Karras x0 AB2** scheduler, codec, and loader contracts as the Cosmos Predict1 family. Pipeline: `Gen3CPipeline`. There is **no** copied Cosmos Predict1 runtime and **no** external GEN3C checkout.
+
+<ModelPaperFigures modelId="gen3c" locale="en" />
+
+Named camera trajectories, **MoGe** depth, and RGBD forward warping live inside the latent-initializer role. Callers may also supply pre-rendered 3D-cache tensors. Transformer / T5 structure, native camera geometry, registry, and scheduler contracts pass local validation. **Full-resolution native GPU output parity remains pending** — earlier official-runtime demo evidence does **not** carry over to this native path.
+
+Paper: [arXiv 2503.03751](https://arxiv.org/abs/2503.03751). Project: [research.nvidia.com/labs/toronto-ai/GEN3C](https://research.nvidia.com/labs/toronto-ai/GEN3C/). Code: [nv-tlabs/GEN3C](https://github.com/nv-tlabs/GEN3C) (**nvidia-source-code**). Weights: `nvidia/GEN3C-Cosmos-7B` plus `Ruicheng/moge-vitl`. Status: **Runner parity pending**.
+
+<ModelCommandBuilder modelId="gen3c" locale="en" />
+
+## What it is for
+
+NVIDIA GEN3C camera-conditioned world video. Weights are gated.
+
+Launch `worldfoundry-eval run gen3c` with `--pipeline.task-profile official-single-image`.
+
+Score on [CameraBench](/docs/evaluation/benchmark-hub/camerabench) — camera-trajectory adherence of controlled generation.
+
+## Runtime contract
+
+Required: `prompt` and `image`; optional: `video`; `actions`: camera_trajectory; artifacts: `gen3c.mp4`.
+
+| Knob | Default |
+| --- | --- |
+| Size | **1280×704** |
+| Frames | **121** |
+| FPS | **24** |
+| Steps | **35** |
+| Guidance | **1.0** |
+| Trajectory | `left`, `center_facing`, distance **0.3** |
+| Seed | **1** |
+
+## Run in WorldFoundry
+
+Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `nvidia/GEN3C-Cosmos-7B` and `Ruicheng/moge-vitl` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run gen3c` with `--pipeline.task-profile official-single-image`. Catalog VRAM is unset.
+
+<ModelRelatedRecipes modelId="gen3c" locale="en" />

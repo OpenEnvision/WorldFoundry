@@ -1,0 +1,50 @@
+---
+title: "PointWorld"
+description: "PointWorld（NVIDIA）：点云世界模型、机器人世界模型；Runner 一致性待确认。"
+modelId: "pointworld"
+pageSource: generated
+---
+
+PointWorld 是英伟达面向机器人的点云世界模型：不预测像素，而是在动作条件下预测未来 3D 点云状态，实现几何原生的世界建模。本 catalog 中官方源码路径以固定 commit 注册；checkpoint 与点云资产保持运行时限制。
+
+<ModelPaperFigures modelId="pointworld" locale="zh" />
+
+记录论文为[arXiv 2601.03782](https://arxiv.org/abs/2601.03782)。
+
+代码：[NVlabs/PointWorld](https://github.com/NVlabs/PointWorld)。
+
+<ModelCommandBuilder modelId="pointworld" locale="zh" />
+
+## 用来做什么
+
+用 `pointworld` 做 catalog 几何推理。产物是重建而不是生成视频时选它。
+
+除已记录任务外的架构内部细节仓库未存（apache-2.0；checkpoint 位于 nvidia/PointWorld_models）。记录的产物类型为 generated_3d_asset。该模型由英伟达（NVIDIA）发布。
+
+catalog 记录的任务包括 点云世界模型、机器人世界模型、3D 世界模型。输出模态为点云。
+
+记录的评测入口包括[EWMBench](/zh/docs/evaluation/benchmark-hub/ewmbench)（具身世界模型预测质量）。
+
+## 运行时契约
+
+产物 `generated_3d_asset`、`pointworld_runtime_plan.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `PointWorldPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。 缺失资产由计划报告，不视为 catalog 阻塞。 输入除常规的提示词/图像/视频/动作外还包括点云。
+
+WorldFoundry tracks upstream source and checkpoint 计划中; no runnable pipeline is registered.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run pointworld --pipeline.task-profile default` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `nvidia/PointWorld_models`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh pointworld`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="pointworld" locale="zh" />

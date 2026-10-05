@@ -162,13 +162,19 @@ class AstraSynthesis(BaseSynthesis):
         # 3. Load weights
         print(f"Loading DiT weights from: {resolved_astra_path} ...")
         # Construct the full path to the Astra-specific DiT checkpoint.
-        astra_dit_path = os.path.join(resolved_astra_path,
-                                      "models/Astra/checkpoints/diffusion_pytorch_model.ckpt")
+        astra_dit_path = Path(resolved_astra_path)
+        if astra_dit_path.is_dir():
+            candidates = [
+                astra_dit_path / "diffusion_pytorch_model.ckpt",
+                astra_dit_path / "models/Astra/checkpoints/diffusion_pytorch_model.ckpt",
+            ]
+            astra_dit_path = next((path for path in candidates if path.is_file()), candidates[-1])
+        if not astra_dit_path.is_file():
+            raise FileNotFoundError(f"Astra checkpoint not found: {astra_dit_path}")
         # Load the Astra DiT state dictionary, mapping to CPU first to avoid GPU memory issues.
         dit_state_dict = torch.load(astra_dit_path, map_location="cpu", weights_only=True)
-        # Load the weights into the pipeline's DiT model. `strict=False` allows for partial loading
-        # if the state dict does not perfectly match (e.g., new components added).
-        pipe.dit.load_state_dict(dit_state_dict, strict=False)
+        # The released Astra checkpoint includes the camera, FramePack and MoE weights.
+        pipe.dit.load_state_dict(dit_state_dict, strict=True)
         # Move the entire pipeline to the specified device.
         pipe = pipe.to(device)
         
@@ -235,7 +241,7 @@ class AstraSynthesis(BaseSynthesis):
         return condition_latents, encoded_data
 
     @torch.no_grad()
-    def predict(self, framepack_data, current_generation, prompt_emb_pos, prompt_emb_neg, args, camera_embedding_uncond=None):
+    def predict(self, framepack_data, current_generation, prompt_emb_pos, prompt_emb_neg, args, camera_embedding_uncond=None, generator=None):
         """
         Runs the diffusion denoising loop to generate new video latents.
 
@@ -292,7 +298,7 @@ class AstraSynthesis(BaseSynthesis):
         W = clean_latents.shape[4]
         
         # Initialize new latents with random noise, which will be denoised iteratively.
-        new_latents = torch.randn(1, C, current_generation, H, W, device=device, dtype=model_dtype)
+        new_latents = torch.randn(1, C, current_generation, H, W, device=device, dtype=model_dtype, generator=generator)
         # Prepare any additional input required by the pipeline.
         extra_input = self.pipe.prepare_extra_input(new_latents)
         timesteps = self.pipe.scheduler.timesteps

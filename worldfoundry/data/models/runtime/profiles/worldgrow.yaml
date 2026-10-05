@@ -3,6 +3,10 @@ artifact_kind: generated_world
 backend_stage: worldfoundry_runtime_plan
 display_name: WorldGrow
 id: worldgrow
+checkpoints:
+- repo_id: UranusITS/WorldGrow
+  role: world_checkpoint
+  local_dir: $WORLDFOUNDRY_HFD_ROOT/UranusITS--WorldGrow
 input_schema:
   actions:
   - camera_navigation

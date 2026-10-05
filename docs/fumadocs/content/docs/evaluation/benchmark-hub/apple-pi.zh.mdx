@@ -1,0 +1,42 @@
+---
+title: Apple-PI
+description: "定律锚定的物理智能：400 段 Orchard 力学视频上的 Perception → Formulation → Deduction。WorldFoundry 对 GT 与预测打分，不生成视频。"
+---
+
+Apple-π（南洋理工大学 S-Lab）问的是视频模型会不会**按物理定律推理**，不是像素好不好看。**Orchard** 是 **400** 段经典力学视频，覆盖 **10** 个标准任务（9 个单定律加 1 个多定律组合），来源含仿真、实验室自录与互联网片段。协议是在信息图标注的首帧上做 chain-of-frames：**Perception**（读物理量 / 定位物体）、**Formulation**（选定律 / 预测目标时刻状态）、**Deduction**（完整、符合定律的轨迹）。Perception 与 Formulation 各分文本与图形，共 **五个**子赛道。官方评分是混合式：Gemini 评审加 SAM3 / MoGe / 轨迹重叠 / 速度误差。预测要求每个 case、每个子赛道 **三次**独立 rollout；第 0 帧为条件帧。
+
+论文：[Apple-π](https://arxiv.org/abs/2607.16401)。项目：[21yrm.github.io/Apple-PI-homepage](https://21yrm.github.io/Apple-PI-homepage/)。代码：[21yrm/Apple-PI](https://github.com/21yrm/Apple-PI)（Apache-2.0）。格式：[GT_FORMAT.md](https://github.com/21yrm/Apple-PI/blob/main/docs/GT_FORMAT.md)、[PREDICTION_FORMAT.md](https://github.com/21yrm/Apple-PI/blob/main/docs/PREDICTION_FORMAT.md)。
+
+WorldFoundry **仓内评测**（`run_apple_pi_official_runner.py`）：读取上游布局的 GT 与预测目录。它**不跑**视频模型推理。也可以 **导入**已完成的 Apple-PI 结果 JSON。`apple_pi_average` 是 WorldFoundry 对可用子赛道的均值，不是官方综合分。
+
+<BenchmarkPageSections id="apple-pi" locale="zh" />
+
+## 如何运行
+
+对已就位的 GT 评测 deduction 子赛道（真实评审需要 Gemini key；SAM3 / MoGe-2 走现有 WorldFoundry 能力路径）：
+
+```bash
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py \
+  --run-official \
+  --gt-dir "${WORLDFOUNDRY_APPLE_PI_GT_DIR}" \
+  --pred-dir "${WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR}" \
+  --subtrack deduction \
+  --output-dir tmp/apple_pi/deduction \
+  --json
+```
+
+导入已有结果文件：
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id apple-pi \
+  --mode official-validation \
+  --official-results-path <apple_pi_results.json> \
+  --output-dir tmp/apple-pi/official-validation \
+  --json
+```
+
+`--no-foundation-models` 与 `--judge-backend mock` 只用于接线。环境变量：`WORLDFOUNDRY_APPLE_PI_GT_DIR`、`WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR`、`WORLDFOUNDRY_APPLE_PI_RESULTS_PATH`、`WORLDFOUNDRY_APPLE_PI_JUDGE_BACKEND`、`WORLDFOUNDRY_APPLE_PI_SAM3_CHECKPOINT`、`WORLDFOUNDRY_APPLE_PI_MOGE_CHECKPOINT`。清单：`worldfoundry/data/benchmarks/tasks/external/apple-pi.yaml`。产物：`scorecard.json`（主键 `deduction`）、`raw_metric_table.jsonl`、`per_sample_scores.jsonl`、`benchmark_contract.json`。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

@@ -52,5 +52,5 @@ integration:
 notes:
 - The policy requires three configured camera views and a 14D state for the bundled RoboTwin mapping; single-image replication is opt-in because it changes model semantics.
 - The model is constructed on the meta device and checkpoint tensors stream directly to the selected device/dtype, avoiding a second full FP32 model during startup.
-- Device and dtype selection is provided by worldfoundry.core.device across pre-Ampere, Ampere, Ada, Hopper, and newer CUDA architectures.
+- Device and dtype selection is provided by worldfoundry.core.execution.device across pre-Ampere, Ampere, Ada, Hopper, and newer CUDA architectures.
 - The selectable base policy was staged from ModelScope and its core blobs match the pinned Hugging Face revision by exact size and SHA-256; it is a pretraining checkpoint, so task-level numerical parity is not claimed.

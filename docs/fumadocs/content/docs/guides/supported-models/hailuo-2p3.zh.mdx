@@ -1,0 +1,48 @@
+---
+title: "Hailuo 2.3"
+description: "Hailuo 2.3（MiniMax）：audio-video、图生视频；Runner 一致性待确认。"
+modelId: "hailuo-2p3"
+pageSource: generated
+---
+
+Hailuo 2.3（海螺 2.3）是 MiniMax 的托管视频生成服务，本 catalog 将其记录为图生视频与音视频联合生成两类任务。你提供一张起始图（可附文本提示词），它在 MiniMax 的基础设施上渲染出成片—— WorldFoundry 本身不运行该模型。该条目还登记了 minimax-i2v、minimax_i2v 两个别名，旧配置可以继续解析。适合在不管理 GPU 的前提下，把 MiniMax 的生产级生成质量接入 WorldFoundry 的 Studio 工作流。
+
+<ModelPaperFigures modelId="hailuo-2p3" locale="zh" />
+
+项目页：[minimax.io](https://www.minimax.io/)。
+
+<ModelCommandBuilder modelId="hailuo-2p3" locale="zh" />
+
+## 用来做什么
+
+本卡是托管 API 而不是本地 checkpoint 时选 `hailuo-2p3`：走记录的提供商路由，而不是就位权重。
+
+这是由服务方托管运行的模型：厂商未公开其架构、参数规模或训练细节，本仓库也未记录这些信息。WorldFoundry 记录的只是集成层——一条向服务方端点提交请求并回收生成视频产物的 Studio pipeline。
+
+catalog 记录的任务包括 audio-video、图生视频、托管 API。别名包括 `minimax-i2v`、`minimax_i2v`。模态上，它接受图像，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（对比托管文/图生视频输出的标准多维质量评测）、[Physics-IQ Original](/zh/docs/evaluation/benchmark-hub/physics-iq)（检验服务方视频模型是否遵循基本物理合理性）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`task_type`、`model`、`resolution`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `Hailuo2p3Pipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。 本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。 启动任务前，请先在 pipeline 中配置你的 MiniMax 开放平台 key。
+
+需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run hailuo-2p3 --pipeline.task-profile default` 调托管接口。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境未记录。
+
+准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh hailuo-2p3`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="hailuo-2p3" locale="zh" />

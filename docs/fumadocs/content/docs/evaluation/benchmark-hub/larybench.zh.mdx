@@ -1,0 +1,68 @@
+---
+title: LARYBench
+description: "美团 LongCat 的 latent-action 探针：抽取、分类、回归机器人动作。WorldFoundry 内置三阶段 runtime，不编造榜单。"
+---
+
+LARYBench（美团 LongCat）问的是视频 / 世界模型的 **latent action** 还能否保住真实机器人动作信息，不是像素好不好看。官方流程对 **CALVIN**、**VLABench**、**AgiBot-Beta**、**RoboCOIN** 走三阶段：
+
+- **抽取** — 对一张元数据表跑表征模型，写出 latent-action CSV，打 `extraction_coverage`。
+- **分类** — 探测离散动作类别（`top1_accuracy`、`macro_f1`、`weighted_f1`）。
+- **回归** — 探测连续机器人动作（`val_seen_mse`、`val_unseen_mse`），`--action-mode absolute|relative`。
+
+论文：[LARYBench](https://arxiv.org/abs/2604.11689)。项目：[meituan-longcat.github.io/LARYBench](https://meituan-longcat.github.io/LARYBench/)。代码 / 数据：[meituan-longcat/LARYBench](https://github.com/meituan-longcat/LARYBench) 与 [`meituan-longcat/LARYBench`](https://huggingface.co/datasets/meituan-longcat/LARYBench)（MIT）。
+
+WorldFoundry **仓内内置各阶段驱动**（`cli.py`、`extract.py`、`classification.py`、`regression.py`、`run_larybench_official_runner.py`）。抽取阶段把一张元数据表按所选 GPU 分片并合并 CSV；分类阶段每 GPU 一个本地进程；回归阶段用 Accelerate 跨 `CUDA_VISIBLE_DEVICES`。官方 `classification_summary.json` / `best_result.json` 可在不加载数据集与权重的情况下直接导入。
+
+<BenchmarkPageSections id="larybench" locale="zh" />
+
+## 如何运行
+
+导入官方分类或回归导出：
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id larybench \
+  --mode official-validation \
+  --official-results-path /path/to/classification_summary.json \
+  --output-dir tmp/larybench/official-validation \
+  --json
+```
+
+回归任务改传官方 `best_result.json`；运行器根据文件名判断阶段。
+
+完整的 抽取 → 分类 → 回归 需要先就位数据分片。省略 `--official-results-path` 时，默认读 `WORLDFOUNDRY_LARYBENCH_RESULTS_PATH`。
+
+```bash
+export DATA_DIR=/path/to/larybench/shards
+export LARY_METADATA_DIR=/path/to/larybench/metadata
+export LARY_LA_DIR=/path/to/larybench/latent_actions
+export MODEL_DIR=/path/to/representation_checkpoints
+
+hf download meituan-longcat/LARYBench --repo-type dataset --local-dir "${DATA_DIR}"
+
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py \
+  --run-official \
+  --stage extract \
+  --dataset calvin \
+  --model <representation_model> \
+  --dataset-root "${DATA_DIR}" \
+  --metadata-root "${LARY_METADATA_DIR}" \
+  --latent-action-root "${LARY_LA_DIR}" \
+  --model-root "${MODEL_DIR}" \
+  --output-dir tmp/larybench/extract \
+  --json
+```
+
+分类需要 `--dim` 与 `--classes`。回归支持 `--action-mode absolute|relative`，以及可选的 `--global-stats-json` / `--val-unseen-csv`。布局环境变量：`DATA_DIR`、`LARY_METADATA_DIR`、`LARY_LA_DIR`、`MODEL_DIR`，可选 `WORLDFOUNDRY_LARYBENCH_ROOT`。
+
+仓内指针：
+
+```text
+worldfoundry/data/benchmarks/tasks/external/larybench.yaml
+worldfoundry/evaluation/tasks/execution/runners/larybench/
+```
+
+`--output-dir` 下会写出 `scorecard.json`（主键 `extraction_coverage`）、`benchmark_contract.json`、`raw_metric_table.jsonl`。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

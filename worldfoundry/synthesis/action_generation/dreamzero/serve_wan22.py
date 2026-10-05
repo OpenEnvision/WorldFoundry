@@ -280,6 +280,7 @@ class DreamZeroWan225BPolicy(BasePolicy):
             with torch.no_grad():
                 frames = action_head.vae.decode(
                     latents,
+                    device=latents.device,
                     tiled=action_head.tiled,
                     tile_size=(action_head.tile_size_height, action_head.tile_size_width),
                     tile_stride=(action_head.tile_stride_height, action_head.tile_stride_width),

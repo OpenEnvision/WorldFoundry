@@ -1,0 +1,46 @@
+---
+title: "Emu3.5"
+description: "Emu3.5（Beijing Academy of Artificial Intelligence (BAAI)）：图像生成；Runner 一致性待确认。"
+modelId: "emu3.5"
+pageSource: generated
+---
+
+Emu3.5 是北京智源（BAAI）面向交错文本与图像的原生多模态模型。WorldFoundry 调用固定版本的官方实现并输出其 protobuf 响应。权重支持的 GPU 推理已生成文本和可解码图像；不宣称视频输出。
+
+<ModelPaperFigures modelId="emu3.5" locale="zh" />
+
+代码：[BAAI/Emu3.5](https://huggingface.co/BAAI/Emu3.5)。代码：[baaivision/Emu3.5](https://github.com/baaivision/Emu3.5)。
+
+<ModelCommandBuilder modelId="emu3.5" locale="zh" />
+
+## 用来做什么
+
+本卡做文生图时选 `emu3.5`：prompt 进、图像出。catalog 任务是静帧而不是视频时用它。
+
+Emu3.5 预测统一的图文 token 序列，并以离散扩散生成视觉 token，再通过独立的视觉 tokenizer 解码。该模型由北京智源人工智能研究院（BAAI）发布。
+
+catalog 记录的任务包括 multimodal-generation、图像生成。别名包括 `emu3p5`、`emu3_5`、`BAAI/Emu3.5`。
+
+## 运行时契约
+
+可选 `prompt`、`image`、`seed`、`frames`、`fps`；产物 `emu3.5.pb`。
+
+CLI task profile：`multimodal-generation`、`image-generation`。绑定的 pipeline 类是 `Emu35Pipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+就位 BAAI/Emu3.5、BAAI/Emu3.5-VisionTokenizer 权重和固定版本的官方源码。 默认 story 和 howto 任务返回官方 protobuf 响应。
+
+本工作区尚未验证与官方 CLI 的逐字节一致性或更大尺寸图像。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run emu3.5 --pipeline.task-profile multimodal-generation`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `BAAI/Emu3.5`、`BAAI/Emu3.5-VisionTokenizer`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh emu3.5`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="emu3.5" locale="zh" />

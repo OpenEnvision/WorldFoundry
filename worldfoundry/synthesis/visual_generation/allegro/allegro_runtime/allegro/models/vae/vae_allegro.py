@@ -5,6 +5,7 @@ from einops import rearrange
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.modeling_utils import ModelMixin
@@ -13,6 +14,14 @@ from diffusers.models.autoencoders.vae import DecoderOutput, DiagonalGaussianDis
 from diffusers.models.attention_processor import SpatialNorm
 
 from allegro.models.vae.modules import DownEncoderBlock3D, UNetMidBlock3DConv, UpDecoderBlock3D
+
+
+def _pad_to_tiling_grid(tensor, kernel, stride):
+    """Cover partial boundary tiles while preserving the original sample extent."""
+    sizes = tensor.shape[-3:]
+    padded = [k + max(0, math.ceil((n - k) / s)) * s for n, k, s in zip(sizes, kernel, stride)]
+    padding = tuple(value for n, target in reversed(list(zip(sizes, padded))) for value in (0, target - n))
+    return F.pad(tensor, padding, mode="replicate") if any(padding) else tensor
 
 
 class Encoder3D(nn.Module):
@@ -379,6 +388,8 @@ class AllegroAutoencoderKL3D(ModelMixin, ConfigMixin):
         STRIDE = self.stride
         LOCAL_BS = local_batch_size
         OUT_C = 8
+        original_shape = input_imgs.shape[-3:]
+        input_imgs = _pad_to_tiling_grid(input_imgs, KERNEL, STRIDE)
 
         B, C, N, H, W = input_imgs.shape
         
@@ -429,6 +440,7 @@ class AllegroAutoencoderKL3D(ModelMixin, ConfigMixin):
                     latent_mean_blend = prepare_for_blend((i, out_n, OVERLAP[0]), (j, out_h, OVERLAP[1]), (k, out_w, OVERLAP[2]), out_latent[i*out_h*out_w+j*out_w+k].unsqueeze(0))
                     out_video_cube[:, :, n_start:n_end, h_start:h_end, w_start:w_end] += latent_mean_blend
         
+        out_video_cube = out_video_cube[:, :, :original_shape[0] // 4, :original_shape[1] // 8, :original_shape[2] // 8]
         ## final conv
         out_video_cube = rearrange(out_video_cube, 'b c n h w -> (b n) c h w')
         out_video_cube = self.quant_conv(out_video_cube)
@@ -451,6 +463,8 @@ class AllegroAutoencoderKL3D(ModelMixin, ConfigMixin):
         IN_KERNEL = KERNEL[0]//4, KERNEL[1]//8, KERNEL[2]//8
         IN_STRIDE = STRIDE[0]//4, STRIDE[1]//8, STRIDE[2]//8
 
+        original_shape = input_latents.shape[-3:]
+        input_latents = _pad_to_tiling_grid(input_latents, IN_KERNEL, IN_STRIDE)
         B, C, N, H, W = input_latents.shape
 
         ## post quant conv (a mapping)
@@ -498,6 +512,7 @@ class AllegroAutoencoderKL3D(ModelMixin, ConfigMixin):
                     out_video_blend = prepare_for_blend((i, out_n, OVERLAP[0]), (j, out_h, OVERLAP[1]), (k, out_w, OVERLAP[2]), decoded_cube[i*out_h*out_w+j*out_w+k].unsqueeze(0))
                     out_video[:, :, n_start:n_end, h_start:h_end, w_start:w_end] += out_video_blend
        
+        out_video = out_video[:, :, :original_shape[0] * 4, :original_shape[1] * 8, :original_shape[2] * 8]
         out_video = rearrange(out_video, 'b c t h w -> b t c h w').contiguous()
 
         decoded = out_video

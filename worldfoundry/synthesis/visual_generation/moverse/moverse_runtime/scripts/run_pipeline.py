@@ -151,7 +151,7 @@ def load_pipeline(args, config):
     # TAEHV lightweight VAE decoder
     if args.taehv:
         import types
-        from worldfoundry.base_models.diffusion_model.video.wan.utils.taehv import TAEHV
+        from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.taehv import TAEHV
 
         taehv_ckpt = args.taehv_checkpoint
         print(f"[init] Loading TAEHV lightweight VAE decoder: {taehv_ckpt} ...")

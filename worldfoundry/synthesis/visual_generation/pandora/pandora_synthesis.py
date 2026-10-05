@@ -85,21 +85,13 @@ class PandoraSynthesis(BaseSynthesis):
         """
         Calculates the absolute path to the Pandora runtime assets.
 
-        This method assumes a specific directory structure relative to the current file.
+        The vendored runtime is stored beside this synthesis module.
 
         Returns:
             The absolute Path object pointing to the Pandora runtime directory.
         """
-        # Navigate up three parent directories from the current file's location,
-        # then into the specified subdirectories to locate the vendored runtime.
-        return (
-            Path(__file__).resolve().parents[3]
-            / "base_models"
-            / "diffusion_model"
-            / "video"
-            / "pandora"
-            / "pandora_runtime"
-        )
+        # Resolve the vendored runtime relative to this module, independent of cwd.
+        return Path(__file__).resolve().parent / "pandora_runtime"
 
     def predict(
         self,
@@ -131,9 +123,6 @@ class PandoraSynthesis(BaseSynthesis):
             A dictionary summarizing the prepared plan, including its status, model ID,
             artifact kind, and the path to the generated plan file.
         """
-        # This import is placed here for lazy loading, as pandora_runtime is only needed within predict.
-        from worldfoundry.synthesis.visual_generation.pandora import pandora_runtime  # noqa: F401
-
         # Determine the target output path for the JSON plan.
         # If output_path is not provided, default to "pandora_plan.json" in the current working directory.
         target = Path(output_path) if output_path is not None else Path.cwd() / "pandora_plan.json"

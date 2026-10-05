@@ -11,7 +11,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.core.io.serialization import read_jsonl_objects, write_jsonl
+from worldfoundry.core.io.filesystem.file_utils import materialize_file
+from worldfoundry.core.io.formats.serialization import read_jsonl_objects, write_jsonl
 from worldfoundry.evaluation.api import (
     GenerationRequest,
     GenerationResult,
@@ -21,6 +22,8 @@ from worldfoundry.evaluation.api import (
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
     bundled_benchmark_assets_root,
 )
+
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import VIDEO_SUFFIXES
 
 BENCHMARK_ID = "t2v-compbench"
 PROMPTS_PER_CATEGORY = 200
@@ -68,7 +71,6 @@ CATEGORY_PROTOCOL: dict[str, dict[str, str]] = {
         "video_subdir": "generative_numeracy",
     },
 }
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"})
 
 
 def resolve_t2v_compbench_assets(explicit: Path | None = None) -> Path:
@@ -359,7 +361,7 @@ def copy_t2v_compbench_generated_videos(
             relative_path = Path(str(record["official_video_subdir"])) / str(record["official_video_name"])
             target = stage / relative_path
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
+            materialize_file(source, target, writable=False)
             _probe_decodable_mp4(target)
             manifest_rows.append(
                 _manifest_row_from_canonical(
@@ -585,12 +587,7 @@ def materialize_t2v_compbench_official_layout(
             relative_path = Path(str(row["official_video_subdir"])) / str(row["official_video_name"])
             target = stage / relative_path
             target.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                os.link(source, target)
-                materialization = "hardlink"
-            except OSError:
-                shutil.copy2(source, target)
-                materialization = "copy"
+            materialization = materialize_file(source, target, writable=False)
             _probe_decodable_mp4(target)
             staged_row = dict(row)
             staged_row["source_relative_path"] = row["relative_path"]

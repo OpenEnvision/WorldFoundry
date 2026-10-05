@@ -47,19 +47,48 @@ integration:
   status: integrated
   notes:
   - WorldFoundry ports the official SVI 2.0 inference-only conditioning path in-tree at the pinned upstream revision.
-  - The adapter reuses WorldFoundry's in-tree DiffSynth Wan2.1 implementation and preserves five-frame continuation,
-    per-clip seed changes, reference-frame padding, and prompt-stream repetition.
+  - The adapter reuses WorldFoundry's canonical Wan2.1 components and staged runner,
+    preserving five-frame continuation, per-clip seed changes, reference-frame padding,
+    and prompt-stream repetition.
+  - Released training-pipeline LoRA keys are normalized to bare Wan DiT module names, and runtime
+    loading fails unless every discovered LoRA pair is merged.
   - Training launchers, datasets, demo media, and checkpoints remain outside the source tree.
 runner_parity:
-  status: implemented_pending_gpu_parity
+  status: full_default_gpu_parity_verified
   notes:
   - Static and fake-runtime integration tests cover prompt streaming, frame overlap removal, seeds, and registry wiring.
-  - A checkpoint-backed A100 smoke run completed with the Wan2.1 14B base and SVI 2.0 LoRA, including FP32 VAE
-    conditioning, DiT denoising, decode, and H.264 output.
-  - Full default-resolution, 81-frame, 50-step visual parity with the official examples remains pending.
+  - A full A100 Workspace default run generated two linked 81-frame, 50-step clips at 832x544 and
+    emitted the expected 157-frame H.264 artifact after removing the five-frame overlap.
+  - Exact-setting parity against the pinned official native runtime reached 31.03 dB PSNR, 4.05 pixel MAE,
+    and 0.993 luma correlation across all 81 frames; visual contact-sheet review passed.
 runtime_profile: runtime-profile:stable-video-infinity
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: stable-video-infinity
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries expose WorldFoundry pipeline targets;
   metadata-only entries retain upstream provenance without runnable WorldFoundry backends.
+docs:
+  publisher: EPFL (VITA lab)
+  publisher_kind: university
+  publisher_zh: 洛桑联邦理工学院（EPFL VITA 实验室）
+  overview: 'Stable Video Infinity 2.0 (SVI) generates arbitrarily long videos by chaining clips with five-frame continuation and per-clip seed changes, driven by prompt streams. This is one of the strongest evidence entries in the catalog: runner status is full_default_gpu_parity_verified, with a recorded A100 run producing two linked 81-frame clips at 832x544 and a 157-frame H.264 artifact, plus 31.03 dB PSNR exact-setting parity against the pinned official runtime.'
+  overview_zh: Stable Video Infinity 2.0（SVI）通过五帧续接与逐段换种子来串联视频段，由提示词流驱动，可生成任意长度的视频。它是 catalog 中证据最充分的条目之一：runner 状态为 full_default_gpu_parity_verified，记录的 A100 运行生成两段相接的 81 帧 832x544 视频并输出 157 帧 H.264 产物；与固定官方运行时的同设置对比达到 31.03 dB PSNR。
+  architecture: 'SVI 2.0 is a LoRA on top of Wan2.1-I2V-14B-480P: the adapter reuses WorldFoundry''s canonical Wan components and staged runner, preserving five-frame continuation, reference-frame padding, and prompt-stream repetition. Released training-pipeline LoRA keys are normalized to bare Wan DiT module names, and loading fails unless every discovered LoRA pair merges.'
+  architecture_zh: SVI 2.0 是叠加在 Wan2.1-I2V-14B-480P 上的 LoRA：适配器复用 WorldFoundry 规范化 Wan 组件与分段 runner，保留五帧续接、参考帧填充与提示词流重复机制。发布的训练管线 LoRA 键会归一化为纯 Wan DiT 模块名，任何发现的 LoRA 对未合并成功都会导致加载失败。
+  usage_notes: 'Defaults follow the official recipe: five-motion-frame continuation, full reference padding, each clip a distinct seed, prompts repeated twice before advancing. The official 999-clip cap is bounded to two clips per prompt unless use_first_prompt_only is enabled. Stage both the SVI LoRA (vita-video-gen/svi-model, MIT) and the Wan2.1 base.'
+  usage_notes_zh: 默认值遵循官方配方：五运动帧续接、完整参考帧填充、每段独立种子、每条提示词重复两次后推进。除非启用 use_first_prompt_only，官方 999 段上限被限定为每条提示词两段。需同时就位 SVI LoRA （vita-video-gen/svi-model，MIT）与 Wan2.1 基座。
+  limitations:
+  - Requires both the SVI LoRA and the Wan2.1-I2V-14B base checkpoint.
+  - Long-video drift is mitigated, not eliminated — quality can still degrade over many chained clips.
+  - Training launchers and datasets are outside the source tree; this is an inference-only port.
+  limitations_zh:
+  - 需要同时就位 SVI LoRA 与 Wan2.1-I2V-14B 基座 checkpoint。
+  - 长视频漂移被缓解而非消除——多段串联后质量仍可能下降。
+  - 训练启动器与数据集不在源码树内；这是仅推理移植。
+  recommended_benchmarks:
+  - id: chronomagic-bench
+    reason: Long-horizon suite matching SVI's infinite-video goal.
+    reason_zh: 长时程评测，契合 SVI 的无限长视频目标。
+  - id: vbench
+    reason: Per-clip quality yardstick.
+    reason_zh: 单段质量标尺。

@@ -1,0 +1,7 @@
+include LICENSE
+include pyproject.toml
+include build_backend.py
+recursive-include python/fastvideo_kernel *.py
+recursive-include attn_qat_infer *.py *.cu *.cuh *.cpp *.h
+recursive-include csrc *.cu *.cuh *.cpp *.h
+recursive-include include/tk *.cu *.cuh *.cpp *.h *.src

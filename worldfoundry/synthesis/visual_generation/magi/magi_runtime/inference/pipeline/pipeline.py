@@ -55,6 +55,12 @@ class MagiPipeline:
             ],
             dim=0,
         )
+        requested_frames = self.config.runtime_config.num_frames
+        if videos.shape[0] < requested_frames:
+            raise RuntimeError(
+                f"MAGI decoded {videos.shape[0]} frames, fewer than the requested {requested_frames}"
+            )
+        videos = videos[:requested_frames]
         save_video_to_disk(videos, output_path, fps=self.config.runtime_config.fps)
 
         mem_allocated_gb = torch.cuda.max_memory_allocated() / 1024**3

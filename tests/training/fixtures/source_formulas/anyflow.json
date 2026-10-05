@@ -1,0 +1,37 @@
+{
+  "inputs": {
+    "shift_five": [0.0, 0.25, 0.5, 0.75, 1.0],
+    "beta_weight": {
+      "timesteps": [4.0, 3.0, 2.0, 1.0],
+      "num_train_timesteps": 4,
+      "shift": 1.0
+    },
+    "far": {
+      "chunk_partition": [1, 3, 3, 3, 3, 3, 3, 2],
+      "full_chunk_limit": 3,
+      "latent_height": 60,
+      "latent_width": 104
+    }
+  },
+  "expected": {
+    "shift_five": [0.0, 0.625, 0.8333333333333334, 0.9375, 1.0],
+    "inference_grid_two_steps": [1.0, 0.8333333333333334, 0.0],
+    "beta_weight": [
+      0.0,
+      1.5872012467240313,
+      1.4964276862217398,
+      0.916371067054229
+    ],
+    "far": {
+      "frame_count": 21,
+      "context_frames": 13,
+      "target_frames": 8,
+      "full_tokens_per_frame": 1560,
+      "compressed_tokens_per_frame": 390,
+      "full_capacity": 14040,
+      "compressed_capacity": 7020
+    }
+  },
+  "atol": 1e-7,
+  "rtol": 1e-6
+}

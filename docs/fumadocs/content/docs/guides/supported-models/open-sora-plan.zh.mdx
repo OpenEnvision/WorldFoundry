@@ -1,0 +1,42 @@
+---
+title: "Open-Sora-Plan"
+description: "北大袁粒课题组 Open-Sora-Plan v1.3 文生视频。Studio demo 已在 640×352 / 93 帧 / 18 fps / 100 步 Euler-ancestral 上通过；runner 一致性仍未记录。"
+modelId: "open-sora-plan"
+pageSource: authored
+---
+
+Open-Sora-Plan 是北京大学袁粒课题组的开源文生视频项目——虽与潞晨的 [Open-Sora](/zh/docs/guides/supported-models/open-sora) 名字相近，但是独立工作。Hugging Face 权重在 **LanguageBind** 下；GitHub 是 **PKU-YuanGroup**。本卡片是 **v1.3.0 GPU** 路径。WorldFoundry 桥接树内官方采样器（`OpenSoraPlanPipeline`），权重缺失会在运行时报告。
+
+<ModelPaperFigures modelId="open-sora-plan" locale="zh" />
+
+论文是 [Open-Sora Plan: Open-Source Large Video Generation Model](https://arxiv.org/abs/2412.00131)。代码：[PKU-YuanGroup/Open-Sora-Plan](https://github.com/PKU-YuanGroup/Open-Sora-Plan)。权重：[LanguageBind/Open-Sora-Plan-v1.3.0](https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.3.0)。`paper.png` 只作标题缩略图。
+
+<ModelCommandBuilder modelId="open-sora-plan" locale="zh" />
+
+## 它用来做什么
+
+只接受 prompt 的文生视频：必填 `prompt`，产物 `open-sora-plan.mp4`。本卡片**没有本地图生视频或视频到视频**（论文讨论过条件控制器，但不是本绑定）。GPU 请用 v1.3.0。LanguageBind 还发布了 v1.0.0–v1.2.0，以及面向昇腾 / MindSpeed 的 **v1.5.0**——后者不是已验证的 WorldFoundry GPU 路径。开源文生视频质量可对照 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)，不要当成已摄入排名。
+
+## 推理
+
+Studio/API 验证复现了官方 v1.3 GPU 脚本（`sample_t2v_v1_3.sh` / 东京街道）：
+
+| 旋钮 | 记录值 |
+| --- | --- |
+| 分辨率 | **640×352**（`any93x640x640`；解码为 93 帧非空 640×352） |
+| 帧数 | **93** |
+| FPS | **18** |
+| 采样器 | **EulerAncestralDiscrete**，`v_prediction`，`--rescale_betas_zero_snr` |
+| 步数 | **100** |
+| Guidance | **7.5** |
+| Seed | **1234** |
+| 文本编码器 | `google/mt5-xxl`（`max_sequence_length=512`） |
+| VAE | **WF-VAE** `WFVAEModel_D8_4x8x8`，在 checkpoint 的 `vae/` 子目录 |
+
+该 prompt 的视觉 QA 已记录。catalog 的 runner 证据仍未记录。封装默认单 prompt 用 `nproc_per_node=1`；官方多 prompt 脚本用 `torchrun --nproc_per_node=8`。catalog 未记录显存。
+
+## 在 WorldFoundry 中运行
+
+在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）中运行 `worldfoundry-eval run open-sora-plan`。就位 `LanguageBind/Open-Sora-Plan-v1.3.0` 与 `google/mt5-xxl`。`scripts/inference/prepare_model_infer.sh` 会把约 50 GB 的文本编码器只放一份，避免同时复制进 `WORLDFOUNDRY_CKPT_DIR` 和 `WORLDFOUNDRY_HFD_ROOT`。记录的 v1.3 卡片许可是 **MIT**。状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="open-sora-plan" locale="zh" />

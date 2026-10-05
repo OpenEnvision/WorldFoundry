@@ -1,5 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Adapted from https://github.com/vllm-project/vllm/blob/v0.7.3/vllm/distributed/device_communicators/base_device_communicator.py
+"""Abstract device communicator: all-reduce / all-gather / all-to-all.
+
+CUDA and CPU implementations share this interface so SP code does not
+branch on device type at every call site.
+
+Not a process-group factory — callers pass already-created ``cpu_group``
+/ ``device_group``. Autograd wrappers live here so attention kernels can
+``backward()`` through Ulysses without a custom Function per backend.
+
+Public surface: :class:`DistributedAutograd`, :class:`DeviceCommunicatorBase`.
+"""
 
 from typing import Any
 
@@ -7,6 +18,11 @@ import torch
 import torch.distributed as dist
 from torch import Tensor
 from torch.distributed import ProcessGroup, ReduceOp
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Autograd Functions — pair each collective with its algebraic inverse
+# ──────────────────────────────────────────────────────────────────────────
 
 
 class DistributedAutograd:
@@ -26,6 +42,7 @@ class DistributedAutograd:
 
         @staticmethod
         def forward(ctx: Any, group: ProcessGroup, input_: Tensor, op: dist.ReduceOp | None = None) -> Tensor:
+            """Clone then all-reduce so the autograd graph stays out-of-place."""
             ctx.group = group
             ctx.op = op
             output = input_.clone()
@@ -34,6 +51,7 @@ class DistributedAutograd:
 
         @staticmethod
         def backward(ctx: Any, grad_output: Tensor) -> tuple[None, Tensor, None]:
+            """All-reduce the incoming grad; ``group`` / ``op`` have no gradient."""
             grad_output = grad_output.clone()
             dist.all_reduce(grad_output, group=ctx.group, op=ctx.op)
             return None, grad_output, None
@@ -47,6 +65,7 @@ class DistributedAutograd:
 
         @staticmethod
         def forward(ctx: Any, group: ProcessGroup, input_: Tensor, world_size: int, dim: int) -> Tensor:
+            """Gather into a leading rank axis, then move that axis to ``dim``."""
             ctx.group = group
             ctx.world_size = world_size
             ctx.dim = dim
@@ -67,6 +86,7 @@ class DistributedAutograd:
 
         @staticmethod
         def backward(ctx: Any, grad_output: Tensor) -> tuple[None, Tensor, None, None]:
+            """Reduce-scatter the gathered-dim gradient back to each source rank."""
             # Split the gradient tensor along the gathered dimension
             dim_size = grad_output.size(ctx.dim) // ctx.world_size
             grad_chunks = grad_output.reshape(
@@ -95,6 +115,7 @@ class DistributedAutograd:
         def forward(
             ctx: Any, group: ProcessGroup, input_: Tensor, world_size: int, scatter_dim: int, gather_dim: int
         ) -> Tensor:
+            """Swap head and sequence shards; only the two Ulysses dim pairs are legal."""
             ctx.group = group
             ctx.world_size = world_size
             ctx.scatter_dim = scatter_dim
@@ -149,6 +170,7 @@ class DistributedAutograd:
 
         @staticmethod
         def backward(ctx: Any, grad_output: Tensor) -> tuple[None, Tensor, None, None, None]:
+            """Invert the Ulysses swap by exchanging ``scatter_dim`` and ``gather_dim``."""
             if ctx.world_size == 1:
                 return None, grad_output, None, None, None
 
@@ -157,6 +179,11 @@ class DistributedAutograd:
                 ctx.group, grad_output, ctx.world_size, ctx.gather_dim, ctx.scatter_dim
             )
             return None, output, None, None, None
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Device-agnostic collective surface — CUDA / CPU subclasses override paths
+# ──────────────────────────────────────────────────────────────────────────
 
 
 class DeviceCommunicatorBase:
@@ -174,6 +201,7 @@ class DeviceCommunicatorBase:
         device_group: ProcessGroup | None = None,
         unique_name: str = "",
     ):
+        """Bind CPU and device groups; ``rank_in_group`` is the local index, not WORLD rank."""
         self.device = device or torch.device("cpu")
         self.cpu_group = cpu_group
         self.device_group = device_group
@@ -242,4 +270,5 @@ class DeviceCommunicatorBase:
         return tensor
 
     def destroy(self) -> None:
+        """Release backend resources; the base class holds none."""
         pass

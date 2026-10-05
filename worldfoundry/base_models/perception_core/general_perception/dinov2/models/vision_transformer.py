@@ -20,8 +20,8 @@ import torch.utils.checkpoint
 from torch.nn.init import trunc_normal_
 
 from ..layers import MemEffAttention, NestedTensorBlock as Block
-from worldfoundry.core.nn.layers import Mlp, PatchEmbed, SwiGLUFFNFused
-from worldfoundry.core.nn.module_utils import named_apply
+from worldfoundry.core.nn.blocks.layers import Mlp, PatchEmbed, SwiGLUFFNFused
+from worldfoundry.core.nn.blocks.module_utils import named_apply
 
 
 logger = logging.getLogger("dinov2")

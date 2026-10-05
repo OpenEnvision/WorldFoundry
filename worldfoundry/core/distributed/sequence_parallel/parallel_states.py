@@ -14,11 +14,20 @@
 # of rights and permissions under this agreement.
 # See the License for the specific language governing permissions and limitations under the License.
 
-"""
-Compatibility shim for parallel_states API.
+"""Compatibility shim for the Hunyuan / CleanCode ``parallel_states`` API.
 
-This module provides a ParallelDims interface compatible with sub/CleanCode's attention.py,
-while delegating to the training framework's GroupCoordinator-based parallel state management.
+Attention kernels in sub/CleanCode import :func:`get_parallel_state` and
+read ``sp_enabled`` / ``sp_group`` / ``sp_rank``. This module maps those
+names onto :mod:`.parallel_state` :class:`GroupCoordinator` objects.
+
+Not a second source of truth — it never creates process groups.
+:func:`initialize_parallel_state` is a no-op; real init is
+:func:`~.parallel_state.maybe_init_distributed_environment_and_model_parallel`.
+Do not confuse with :mod:`worldfoundry.core.distributed.model_parallel.sequence_mesh_state`,
+which builds a DeviceMesh.
+
+Public surface: :class:`ParallelDims`, :func:`get_parallel_state`,
+:func:`initialize_parallel_state`.
 """
 
 from .parallel_state import (
@@ -27,6 +36,11 @@ from .parallel_state import (
     get_sp_world_size,
     model_parallel_is_initialized,
 )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Read-only view — properties fail closed (sp=1, rank=0) before init
+# ──────────────────────────────────────────────────────────────────────────
 
 
 class ParallelDims:

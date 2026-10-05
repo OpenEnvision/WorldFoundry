@@ -8,14 +8,16 @@ text-to-video generation.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
-from worldfoundry.synthesis.visual_generation.zeroscope.worldfoundry_runtime import ZeroScopeRuntime
 from worldfoundry.evaluation.models.runtime.profiles import RuntimeProfileSynthesis
 from worldfoundry.runtime.assets import expand_worldfoundry_path
 
+from ..runtime_facade import DelegatedPredictMixin
+from .worldfoundry_runtime import ZeroScopeRuntime
 
-class ZeroScopeSynthesis(RuntimeProfileSynthesis):
+
+class ZeroScopeSynthesis(DelegatedPredictMixin, RuntimeProfileSynthesis):
     """ZeroScope synthesis adapter, integrating with the worldfoundry runtime.
 
     This class extends `RuntimeProfileSynthesis` to provide a standardized
@@ -79,41 +81,3 @@ class ZeroScopeSynthesis(RuntimeProfileSynthesis):
         # Initialize the ZeroScope runtime with the current synthesis instance
         instance.runtime = ZeroScopeRuntime.from_synthesis(instance)
         return instance
-
-    def predict(
-        self,
-        prompt: str = "",
-        images: Any = None,
-        video: Any = None,
-        interactions: Sequence[str] = (),
-        output_path: str | Path | None = None,
-        fps: int | None = None,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        """Generates a video prediction using the ZeroScope model.
-
-        This method acts as a proxy, forwarding the prediction request to the
-        underlying `ZeroScopeRuntime` instance.
-
-        Args:
-            prompt: The text prompt for generating the video.
-            images: Optional input images for image-to-video tasks.
-            video: Optional input video for video-to-video tasks.
-            interactions: A sequence of interaction strings, if applicable.
-            output_path: The path where the generated video should be saved.
-            fps: The frames per second for the output video.
-            **kwargs: Additional keyword arguments specific to the ZeroScope prediction runtime.
-
-        Returns:
-            A dictionary containing the results of the prediction, typically
-            including the path to the generated video.
-        """
-        return self.runtime.predict(
-            prompt=prompt,
-            images=images,
-            video=video,
-            interactions=interactions,
-            output_path=output_path,
-            fps=fps,
-            **kwargs,
-        )

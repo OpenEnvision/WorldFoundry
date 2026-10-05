@@ -23,6 +23,7 @@
 
 import html
 import re
+from pathlib import Path
 
 import ftfy
 import torch
@@ -99,8 +100,8 @@ class T5Embedder:
         self.use_text_preprocessing = use_text_preprocessing
         self.hf_token = hf_token
 
-        if from_pretrained not in self.available_models and not isinstance(from_pretrained, str):
-            raise ValueError(f"Unsupported T5 checkpoint reference: {from_pretrained!r}")
+        if from_pretrained not in self.available_models and not Path(from_pretrained).is_dir():
+            raise ValueError(f"Unsupported T5 checkpoint: {from_pretrained}")
         self.tokenizer = AutoTokenizer.from_pretrained(
             from_pretrained,
             cache_dir=cache_dir,

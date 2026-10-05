@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
-VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".gif"})
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import VIDEO_EXTENSIONS
 MINIMAL_GIF_BYTES = (
     b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff"
     b"!\xf9\x04\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01"

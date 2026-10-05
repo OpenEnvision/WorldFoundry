@@ -1,5 +1,7 @@
 id: libero-pro
 name: LIBERO-Pro
+publisher: Huazhong University of Science and Technology
+publisher_kind: university
 benchmark_kind:
 - vla
 - embodied-action
@@ -20,6 +22,9 @@ official_sources:
     url: https://github.com/Lifelong-Robot-Learning/LIBERO
   license: mit
 runner:
+  normalization:
+    dispatch: embodied
+    embodied_track: vla
   runner_target: worldfoundry.evaluation.tasks.contracts.external:LIBEROProContract
   expected_artifacts:
   - scorecard.json

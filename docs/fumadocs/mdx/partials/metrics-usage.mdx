@@ -1,5 +1,3 @@
-import { MetricQuickNav } from '@/components/metric-quick-nav';
-
 ## How to use each metric
 
 Three steps:
@@ -9,8 +7,6 @@ Three steps:
 3. Copy the recipe below for your metric and run it
 
 Only **built-in existing-results** metrics use `worldfoundry-eval evaluate`; everything else is Python (`compute_*` or scorer classes).
-
-<MetricQuickNav locale="en" />
 
 Metric imports are lazy: checkpoints are required only when a metric loads a feature extractor, multimodal scorer, or API judge. Default caches follow Hugging Face / Torch / torchvision layout:
 

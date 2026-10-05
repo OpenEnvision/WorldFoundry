@@ -1,5 +1,5 @@
 import numpy as np
-import clip
+from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
 from tqdm import tqdm
 from PIL import Image
 

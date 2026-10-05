@@ -1,7 +1,8 @@
-import torch
-import numpy as np
-from typing import List, Tuple, Dict
 import math
+from typing import List, Tuple
+
+import numpy as np
+import torch
 
 
 def generate_points_in_sphere(n_points: int, radius: float) -> torch.Tensor:
@@ -88,7 +89,6 @@ def is_inside_fov_3d_hv(
     """
     if points.ndim == 2:  # N, 3
         vectors = points - center[None, :]
-        C = 1
     elif points.ndim == 3:  # N, B, 3
         vectors = points - center[None, ...]
         center_pitch = center_pitch[None, :] if center_pitch.ndim == 1 else center_pitch
@@ -245,9 +245,7 @@ def select_aligned_memory_frames(
         )
     )
 
-    historical_clip_indices = list(
-        range(4, current_frame_idx - temporal_context_size, 4)
-    )
+    historical_clip_indices = list(range(4, current_frame_idx - temporal_context_size, 4))
 
     memory_frames_indices = [0, 1, 2, 3]  # add the first chunk as context
     memory_frames = memory_frames - temporal_context_size

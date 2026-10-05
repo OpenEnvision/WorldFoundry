@@ -20,12 +20,12 @@ input_schema:
 artifact_kind: generated_video
 artifact_filename: hunyuanvideo-i2v.mp4
 execution:
-  backend_stage: in_tree_official_cli
-  runtime_status: checkpoint_verified
-  integration_status: verified
+  backend_stage: worldfoundry_native_diffusion
+  runtime_status: native_recipe_checkpoint_required
+  integration_status: integrated
   pipeline_binding: hunyuanvideo-i2v
 integration:
-  status: verified
+  status: integrated
 notes:
-- The official 8-rank I2V path is vendored in-tree and exposed through HunyuanVideoI2VPipeline.
-- Checkpoint-backed official firework demo evidence is recorded in the validation reference.
+- Uses the shared native diffusion runner with an explicit image latent encoder binding.
+- Historical upstream demo evidence does not constitute native-recipe checkpoint parity.

@@ -33,8 +33,8 @@ artifact_kind: generated_video
 artifact_filename: stable-video-infinity.mp4
 execution:
   backend_stage: official_in_tree_runtime
-  runtime_status: official_workspace_smoke_verified_a100
-  integration_status: checkpoint_gpu_validated
+  runtime_status: official_workspace_full_default_verified_a100
+  integration_status: checkpoint_gpu_validated_official_native_parity
   pipeline_binding: stable-video-infinity
   environment: stable-video-infinity
   defaults:
@@ -45,7 +45,7 @@ execution:
     cfg_scale_text: 5.0
     fps: 24
 integration:
-  status: checkpoint_gpu_validated
+  status: checkpoint_gpu_validated_official_native_parity
 license: mit
 gpu_targets:
 - NVIDIA Ampere A100/A800 80GB (A100 physically validated)
@@ -57,9 +57,13 @@ notes:
 - The official 999-clip cap is bounded to two clips per prompt unless use_first_prompt_only is explicitly enabled.
 - Each clip receives a distinct seed by default; prompt streams repeat each prompt twice before advancing.
 - The source tree contains inference code only. Wan and SVI weights are resolved from local checkpoint staging.
-- A real Workspace run on an A100 loaded all seven Wan2.1-I2V-14B DiT shards, the image encoder, T5,
-  VAE, and the SVI 2.0 LoRA, then generated five 256x256 frames with one denoising step.
-- The generated H.264 artifact fully decoded to a finite uint8 5x256x256x3 array; its SHA256 is
-  79f8e73d6d3e402ced49b452eb810cd0413a5bba1ce3e284feb99053e82dc465. Full 50-step, multi-clip
-  quality parity remains pending.
+- A full Workspace default run on an A100 loaded all seven Wan2.1-I2V-14B DiT shards, T5, CLIP,
+  the FP32 VAE path, and all 400 released SVI 2.0 LoRA pairs. It generated two linked 81-frame,
+  50-step clips and removed the five-frame overlap to produce 157 frames at 832x544 and 24 FPS.
+- The 157-frame H.264 artifact fully decoded to a finite uint8 array. Its SHA256 is
+  987a9fe3d938ed835ac6d64e45acb5921520741d51e8075b24aa1fe0d9320ee9; the segment seam temporal
+  MAE is 7.58, 0.9% above the official native clip's observed 7.51 maximum frame delta.
+- An exact-setting 81-frame comparison against the pinned official runtime reached 31.03 dB PSNR,
+  4.05 pixel MAE, and 0.993 luma correlation. The fixed single-clip artifact SHA256 is
+  7a5b542ec863180ef96a4ac478c6e557fa72613025d5223f09108c62e1e41b1e.
 - Hopper, Blackwell, and lower-memory offload configurations are explicit runtime targets, not hardware-validated claims.

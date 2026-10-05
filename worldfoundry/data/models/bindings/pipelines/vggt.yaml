@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: vggt
+model_id: vggt
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.vggt.pipeline_vggt:VGGTPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

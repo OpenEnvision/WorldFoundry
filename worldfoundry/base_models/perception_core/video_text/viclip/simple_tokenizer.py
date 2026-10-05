@@ -21,7 +21,9 @@ def default_bpe():
         if candidate and Path(candidate).expanduser().is_file():
             return str(Path(candidate).expanduser())
     try:
-        from clip.simple_tokenizer import default_bpe as clip_default_bpe
+        from worldfoundry.base_models.perception_core.general_perception.openai_clip_runtime.clip.simple_tokenizer import (
+            default_bpe as clip_default_bpe,
+        )
 
         clip_bpe = Path(clip_default_bpe()).expanduser()
         if clip_bpe.is_file():

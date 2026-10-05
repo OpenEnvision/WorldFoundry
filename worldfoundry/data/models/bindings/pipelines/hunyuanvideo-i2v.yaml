@@ -3,7 +3,7 @@ binding_id: hunyuanvideo-i2v
 model_id: hunyuanvideo-i2v
 runner: worldfoundry.pipeline
 pipeline:
-  target: worldfoundry.pipelines.video_official.pipeline_official_video:HunyuanVideoI2VPipeline
+  target: worldfoundry.pipelines.hunyuan_video.pipeline_hunyuan_video:HunyuanVideoI2VPipeline
   loading:
     method: from_pretrained
     signature: unified

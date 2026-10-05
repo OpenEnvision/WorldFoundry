@@ -9,7 +9,7 @@ from .base_metrics import BaseMetric
 from .utils import load_dimension_info
 
 from worldfoundry.base_models.perception_core.frame_interpolation.vfimamba import config as cfg
-from worldfoundry.base_models.perception_core.frame_interpolation.vfimamba.Trainer_finetune import Model
+from worldfoundry.base_models.perception_core.frame_interpolation.vfimamba.inference import Model
 from worldfoundry.base_models.perception_core.frame_interpolation.vfimamba.benchmark.utils.padder import InputPadder
 
 from .torchmetrics.lpips_metrics import LearnedPerceptualImagePatchSimilarityMetric

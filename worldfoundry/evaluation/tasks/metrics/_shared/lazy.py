@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from functools import lru_cache
 from importlib import import_module
@@ -12,7 +13,14 @@ from typing import Any
 
 @lru_cache(maxsize=None)
 def _load_module(module_path: str) -> ModuleType:
-    return import_module(module_path)
+    parent_name, _, _ = module_path.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    export = getattr(parent, "compute", None)
+    module = import_module(module_path)
+    # Importing compute.py must not replace the package's public compute() alias.
+    if callable(export):
+        parent.compute = export
+    return module
 
 
 def lazy_export(module_path: str, name: str, *, owner: str) -> Callable[..., Any]:

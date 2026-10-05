@@ -13,6 +13,9 @@ checkpoints:
 - repo_id: robbyant/lingbot-world-base-cam
   revision: 6fc824ffc338d64c97c77e2eb8c0f4cfc24d82bd
   role: lingbot_world_base_cam_checkpoint
+- repo_id: robbyant/lingbot-world-fast
+  revision: b7a1db2da9bd3ba675ee01c228f41db0309b981e
+  role: lingbot_world_fast_checkpoint
 input_schema:
   prompt: true
   image: true
@@ -25,7 +28,7 @@ artifact_filename: lingbot-world.mp4
 execution:
   environment: lingbot-world
   backend_stage: in_tree_runtime
-  runtime_status: base_cam_contract
+  runtime_status: checkpoint_backed_full_quality_verified
   integration_status: verified
   pipeline_binding: lingbot-world
   defaults:
@@ -41,3 +44,14 @@ notes:
 - LingBotPipeline wraps the in-tree LingBot world runtime.
 - The official base-cam recipe uses eight GPUs with both DiT/T5 FSDP and Ulysses sequence parallelism.
 - Workspace also supports a four-GPU compact topology; both 4 and 8 divide the model's 40 attention heads.
+- On four A100 80GB GPUs, Workspace adapts the catalog default to T5 FSDP,
+  replicated/offloaded DiTs, and Ulysses size 4. This exact topology completed
+  all 70 denoising steps and produced a coherent 161-frame artifact on 2026-07-28.
+- A checkpoint-backed single-GPU full-quality run completed on 2026-07-28 with
+  the official 161-frame, 70-step, 399360-pixel-area base-cam settings; all
+  161 frames decoded at 832x464 and 16 FPS with non-static, non-black content.
+- The public lingbot-world binding also validated the independent Fast weights
+  with runtime_variant=fast and fast_model_path in the dedicated environment.
+  The 21-frame output decoded at 544x720 and 16 FPS with changing content;
+  longer Fast rollouts and camera adherence were not measured. Fast frame counts
+  must be 12n-3 (9, 21, 33, ...) because upstream chunks three latent frames.

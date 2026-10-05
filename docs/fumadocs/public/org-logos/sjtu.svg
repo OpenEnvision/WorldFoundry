@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Shanghai Jiao Tong University">
+  <circle cx="64" cy="64" r="58" fill="#1b4f9c"/>
+  <circle cx="64" cy="64" r="50" fill="none" stroke="#f2d28a" stroke-width="3"/>
+  <circle cx="64" cy="44" r="12" fill="none" stroke="#f2d28a" stroke-width="4"/>
+  <path fill="#f2d28a" d="M40 72h48v8H40zm6 10h36v6H46z"/>
+  <path fill="#f2d28a" d="M58 54h12v18H58z"/>
+  <path fill="#f2d28a" d="M48 86h32v8H48z"/>
+</svg>

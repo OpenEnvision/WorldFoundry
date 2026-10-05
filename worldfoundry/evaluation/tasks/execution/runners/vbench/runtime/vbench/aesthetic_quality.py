@@ -1,59 +1,53 @@
-import os
-import clip
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from vbench.utils import load_video, load_dimension_info, clip_transform
 from tqdm import tqdm
+from vbench.utils import clip_transform, load_dimension_info, load_video
 
-from .distributed import (
-    get_world_size,
-    get_rank,
-    all_gather,
+from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
+from worldfoundry.core.distributed.collectives.evaluation import (
     barrier,
     distribute_list_to_rank,
     gather_list_of_dict,
+    get_rank,
+    get_world_size,
+)
+from worldfoundry.core.execution.inference_runtime import adaptive_batched_inference, resolve_inference_batch_size
+from worldfoundry.evaluation.tasks.metrics._shared.aesthetic import (
+    load_laion_aesthetic_linear_head as get_aesthetic_model,
 )
 
 batch_size = 32
 
 
-def get_aesthetic_model(cache_folder):
-    """load the aesthetic model"""
-    path_to_model = cache_folder if str(cache_folder).endswith(".pth") else os.path.join(cache_folder, "sa_0_4_vit_l_14_linear.pth")
-    if not os.path.exists(path_to_model):
-        raise FileNotFoundError(f"LAION aesthetic checkpoint is not staged: {path_to_model}")
-    m = nn.Linear(768, 1)
-    s = torch.load(path_to_model, map_location="cpu")
-    m.load_state_dict(s)
-    m.eval()
-    return m
-
-
 def laion_aesthetic(aesthetic_model, clip_model, video_list, device):
     aesthetic_model.eval()
     clip_model.eval()
+    resolved_batch_size = resolve_inference_batch_size(batch_size, device=device, scope="vbench_aesthetic")
+    image_transform = clip_transform(224)
     aesthetic_avg = 0.0
     num = 0
     video_results = []
+
+    def score_batch(image_batch):
+        image_feats = clip_model.encode_image(image_batch).to(torch.float32)
+        image_feats = F.normalize(image_feats, dim=-1, p=2)
+        return aesthetic_model(image_feats).squeeze(dim=-1)
+
     for video_path in tqdm(video_list, disable=get_rank() > 0):
         images = load_video(video_path)
-        image_transform = clip_transform(224)
+        images = image_transform(images)
+        if torch.device(device).type == "cuda":
+            images = images.pin_memory()
 
-        aesthetic_scores_list = []
-        for i in range(0, len(images), batch_size):
-            image_batch = images[i:i + batch_size]
-            image_batch = image_transform(image_batch)
-            image_batch = image_batch.to(device)
-
-            with torch.no_grad():
-                image_feats = clip_model.encode_image(image_batch).to(torch.float32)
-                image_feats = F.normalize(image_feats, dim=-1, p=2)
-                aesthetic_scores = aesthetic_model(image_feats).squeeze(dim=-1)
-
-            aesthetic_scores_list.append(aesthetic_scores)
-
-        aesthetic_scores = torch.cat(aesthetic_scores_list, dim=0)
+        aesthetic_scores = adaptive_batched_inference(
+            images,
+            score_batch,
+            batch_size=resolved_batch_size,
+            device=device,
+            pad_to_batch_size=True,
+            scope="vbench_aesthetic",
+            persistent_forward=True,
+        )
         normalized_aesthetic_scores = aesthetic_scores / 10
         cur_avg = torch.mean(normalized_aesthetic_scores, dim=0, keepdim=True)
         aesthetic_avg += cur_avg.item()

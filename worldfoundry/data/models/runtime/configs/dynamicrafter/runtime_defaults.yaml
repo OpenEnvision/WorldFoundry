@@ -2,11 +2,11 @@ schema_version: worldfoundry.runtime_defaults.v1
 defaults:
   dynamicrafter_512_i2v:
     model_name: dynamicrafter_512_i2v
-    ckpt_path: ${WORLDFOUNDRY_CKPT_DIR}/DynamiCrafter_512/model.ckpt
+    ckpt_path: ${WORLDFOUNDRY_CKPT_DIR}/Doubiiu--DynamiCrafter_512/model.ckpt
     config: runtime/configs/dynamicrafter/inference_512_v1.0.yaml
     height: 320
     width: 512
-    video_length: 50
+    video_length: 16
     frame_stride: 24
     guidance_rescale: 0.7
     timestep_spacing: uniform_trailing
@@ -19,7 +19,7 @@ defaults:
     config: runtime/configs/dynamicrafter/inference_1024_v1.0.yaml
     height: 576
     width: 1024
-    video_length: 50
+    video_length: 16
     frame_stride: 10
     guidance_rescale: 0.7
     timestep_spacing: uniform_trailing

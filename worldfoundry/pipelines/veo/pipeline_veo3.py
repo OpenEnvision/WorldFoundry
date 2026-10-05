@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 from PIL import Image
 
-from ..pipeline_utils import PipelineABC
 from ...operators.veo3_operator import Veo3Operator
 from ...synthesis.visual_generation.veo.veo3_synthesis import Veo3Synthesis
+from ..pipeline_utils import PipelineABC
 
-
-_API_KEY_ENV = ("VEO3_API_KEY", "VEO_API_KEY", "OPENAI_API_KEY")
-_ENDPOINT_ENV = ("VEO3_ENDPOINT", "VEO_ENDPOINT", "OPENAI_BASE_URL")
+_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com"
+_API_KEY_ENV = ("VEO3_API_KEY", "VEO_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY")
+_ENDPOINT_ENV = ("VEO3_ENDPOINT", "VEO_ENDPOINT", "GOOGLE_GEMINI_BASE_URL")
 _PLACEHOLDER_KEYS = {"your_api_key", "your api key"}
 
 
@@ -30,11 +30,11 @@ def _resolve_api_key(api_key: Optional[str]) -> str:
         env_value = os.getenv(env_name)
         if env_value and env_value.strip():
             return env_value.strip()
-    raise ValueError("Veo3 API key is required. Pass api_key or set VEO3_API_KEY/VEO_API_KEY/OPENAI_API_KEY.")
+    raise ValueError("Veo3 API key is required. Pass api_key or set VEO3_API_KEY/VEO_API_KEY/GEMINI_API_KEY/GOOGLE_API_KEY.")
 
 
 def _resolve_endpoint(endpoint: Optional[str]) -> str:
-    """Resolve the OpenAI-compatible Veo3 endpoint from input or environment.
+    """Resolve the Veo3 endpoint from explicit input, env, or the Gemini default.
 
     Args:
         endpoint: Optional endpoint URL passed by the caller.
@@ -46,12 +46,12 @@ def _resolve_endpoint(endpoint: Optional[str]) -> str:
         env_value = os.getenv(env_name)
         if env_value and env_value.strip():
             return env_value.strip()
-    raise ValueError("Veo3 endpoint is required. Pass endpoint or set VEO3_ENDPOINT/VEO_ENDPOINT/OPENAI_BASE_URL.")
+    return _DEFAULT_ENDPOINT
 
 
 class Veo3Pipeline(PipelineABC):
     """
-    使用 Chat Completions 端点实现的 Veo3 管线。
+    使用 Gemini 原生视频生成 API 实现的 Veo3 管线。
     通过检测是否携带图像自动区分 T2V / I2V。
     """
 
@@ -59,7 +59,7 @@ class Veo3Pipeline(PipelineABC):
         self,
         operator: Optional[Veo3Operator] = None,
         synthesis_model: Optional[Veo3Synthesis] = None,
-        endpoint: str = "",
+        endpoint: str = _DEFAULT_ENDPOINT,
         api_key: str = "your_api_key",
     ):
         """
@@ -105,6 +105,7 @@ class Veo3Pipeline(PipelineABC):
         return cls.api_init(
             endpoint=options.get("endpoint"),
             api_key=options.get("api_key"),
+            model=options.get("model"),
             logger=options.get("logger"),
         )
 
@@ -221,9 +222,7 @@ class Veo3Pipeline(PipelineABC):
             **kwargs
         )
 
-        processed_data['user_content'] = processed_perception['user_content']
-        processed_data['images'] = processed_perception['images']
-        processed_data['reference_images'] = processed_perception['reference_images']
+        processed_data.update(processed_perception)
 
         return processed_data
 

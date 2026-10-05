@@ -11,6 +11,7 @@ import importlib
 import os
 import traceback
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from importlib.metadata import entry_points
 from typing import Any, Mapping
 
@@ -56,25 +57,12 @@ def discover_model_runner_plugins(*, env: Mapping[str, str] | None = None) -> Mo
     """
 
     environment = os.environ if env is None else env
-    entries: list[ModelRunnerRegistryEntry] = []
-    issues: list[ModelRunnerRegistryIssue] = []
-
-    # ── Scan entry-points registered under worldfoundry.model_runners ──────
-    for ep in sorted(entry_points(group=ENTRY_POINT_GROUP), key=lambda item: item.name):
-        origin = f"entry point {ep.name!r} -> {ep.value}"
-        try:
-            entries.append(_coerce_plugin_entry(ep.load(), fallback_name=ep.name, origin=origin))
-        except Exception as exc:  # noqa: BLE001 - broken plugins must not break builtin runners.
-            issues.append(
-                ModelRunnerRegistryIssue(
-                    code="plugin_load_failed",
-                    message=f"{type(exc).__name__}: {exc}",
-                    severity="warning",
-                    name=ep.name,
-                    origin=origin,
-                    details={"traceback": traceback.format_exc()},
-                )
-            )
+    # Entry-points cannot change within a process, so the scan (and plugin
+    # module imports it triggers) is cached; env-var definitions are re-read
+    # on every call because the environment can change between calls.
+    ep_entries, ep_issues = _entry_point_discovery()
+    entries: list[ModelRunnerRegistryEntry] = list(ep_entries)
+    issues: list[ModelRunnerRegistryIssue] = list(ep_issues)
 
     # ── Parse WORLDFOUNDRY_MODEL_RUNNERS env-var definitions ────────────────
     raw = environment.get(ENV_VAR, "")
@@ -103,6 +91,32 @@ def discover_model_runner_plugins(*, env: Mapping[str, str] | None = None) -> Mo
         )
 
     return ModelRunnerPluginDiscovery(entries=tuple(entries), issues=tuple(issues))
+
+
+@lru_cache(maxsize=1)
+def _entry_point_discovery() -> tuple[tuple[ModelRunnerRegistryEntry, ...], tuple[ModelRunnerRegistryIssue, ...]]:
+    """Scan ``worldfoundry.model_runners`` entry-points once per process.
+
+    Use ``_entry_point_discovery.cache_clear()`` to force a re-scan (tests).
+    """
+    entries: list[ModelRunnerRegistryEntry] = []
+    issues: list[ModelRunnerRegistryIssue] = []
+    for ep in sorted(entry_points(group=ENTRY_POINT_GROUP), key=lambda item: item.name):
+        origin = f"entry point {ep.name!r} -> {ep.value}"
+        try:
+            entries.append(_coerce_plugin_entry(ep.load(), fallback_name=ep.name, origin=origin))
+        except Exception as exc:  # noqa: BLE001 - broken plugins must not break builtin runners.
+            issues.append(
+                ModelRunnerRegistryIssue(
+                    code="plugin_load_failed",
+                    message=f"{type(exc).__name__}: {exc}",
+                    severity="warning",
+                    name=ep.name,
+                    origin=origin,
+                    details={"traceback": traceback.format_exc()},
+                )
+            )
+    return tuple(entries), tuple(issues)
 
 
 def _coerce_plugin_entry(value: Any, *, fallback_name: str, origin: str) -> ModelRunnerRegistryEntry:

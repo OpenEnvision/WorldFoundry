@@ -4,7 +4,7 @@ from PIL import Image
 import numpy as np
 import torch
 import torchvision.transforms as transforms
-import clip
+from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
 from cleanfid.fid import compute_fid
 
 

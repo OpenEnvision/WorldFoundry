@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: depth-anything-v3
+model_id: depth-anything-v3
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.depth_anything.pipeline_depth_anything_v3:DepthAnything3Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

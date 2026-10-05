@@ -1,5 +1,7 @@
 id: phyground
 name: PhyGround
+publisher: Northeastern University
+publisher_kind: university
 benchmark_kind:
 - text-image-to-video
 - physical-reasoning
@@ -89,6 +91,20 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  scoring:
+    engines: [physics_contract]
+    hooks:
+      physics_contract: worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_contract_evaluator:write_phyground_evaluation
+  normalization:
+    artifact_official_run: true
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py
+  pass_benchmark_id: false
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.phyground.run_phyground_official_runner
+    generated_arg: null
+    limit_arg: --limit
+    supports_fixture: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGroundContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py
   validation_command:
@@ -125,11 +141,14 @@ runner:
   - PhyJudge/vLLM or cloud API judge execution is outside this runner; imported scores are not official benchmark evidence.
 integration:
   status: integrated
+  tier: model_backed
+  hf_dataset_id: NU-World-Model-Embodied-AI/phyground
+  judge_model_id: NU-World-Model-Embodied-AI/phyjudge-9B
   blocked_reasons:
   - Full leaderboard parity still requires complete PhyJudge/vLLM or cloud API judge scores for all 250 official prompts.
 release_status: experimental
 maturity: contract_ready
-open_source_status: in_tree_result_importer
+open_source_status: normalizer_only
 official_benchmark_verified: false
 integration_evidence: false
 leaderboard_valid: false
@@ -138,8 +157,7 @@ requires:
 - prompts/phyground.json or --prompt-manifest <path> when coverage validation is requested
 - --result-model-id <model_id> when annotations contain multiple model ids
 blockers:
-- WorldFoundry imports PhyGround judge outputs; provide official PhyGround annotations/results through 
-  --official-results-path or annotations/ under --benchmark-data-root.
+- WorldFoundry imports PhyGround judge outputs; provide official PhyGround annotations/results through --official-results-path or annotations/ under --benchmark-data-root.
 - The in-tree path does not execute PhyJudge or any cloud judge over candidate videos.
 data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/phyground.yaml

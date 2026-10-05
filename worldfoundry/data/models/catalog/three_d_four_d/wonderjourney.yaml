@@ -32,3 +32,23 @@ catalog_category: three_d_four_d
 catalog_scope: 3D Gaussian-splatting catalog entries. Integrated entries expose in-tree
   WorldFoundry runtimes; metadata-only entries retain upstream provenance without runnable
   backends.
+docs:
+  publisher: Stanford University / Google
+  publisher_kind: university
+  publisher_zh: 斯坦福大学 / Google
+  overview: 'WonderJourney generates a journey: starting from text or an image, it produces a sequence of connected 3D scenes you travel through — perpetual 3D scene generation rather than a single clip. In this catalog WorldFoundry runs the upstream run.py/example_config flow through an in-tree adapter; runner parity is pending runtime assets.'
+  overview_zh: WonderJourney 生成一段「旅程」：从文本或一张图出发，产出一串相互衔接、可穿行的 3D 场景——是持续的 3D 场景生成而非单个片段。本 catalog 中 WorldFoundry 通过树内适配器运行上游 run.py/example_config 流程；runner parity 待运行时资产就位。
+  architecture: Per the paper (arXiv 2312.03884), an LLM proposes upcoming scene descriptions, a point-cloud-and-inpainting visual module renders each new scene from the previous one, and a VLM verifies results. Missing assets or runtime dependencies are reported at inference time.
+  architecture_zh: 按论文（arXiv 2312.03884），LLM 提议后续场景描述，点云加图像修复的视觉模块从上一场景渲染新场景，VLM 负责校验结果。资产或运行时依赖缺失会在推理时报告。
+  usage_notes: Pipeline imports and plan-only inference are wired; full artifact parity needs the upstream assets (depth, inpainting, LLM access) staged locally before real journeys can be generated.
+  usage_notes_zh: pipeline 导入与 plan-only 推理已接通；完整产物一致性需要本地就位上游资产（深度、修复、LLM 访问）之后才能生成真实旅程。
+  limitations:
+  - Runner parity is pending staged runtime assets.
+  - Scene-to-scene generation accumulates style and geometry drift over long journeys.
+  limitations_zh:
+  - runner parity 待运行时资产就位。
+  - 场景到场景的生成在长旅程中会累积风格与几何漂移。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Standard scoring for generated navigable scene sequences.
+    reason_zh: 生成可游走场景序列的标准评分。

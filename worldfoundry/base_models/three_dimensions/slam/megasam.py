@@ -8,11 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
-import time
 from pathlib import Path
-
-import numpy as np
 
 from worldfoundry.base_models.capabilities import BASE_MODEL_CAPABILITIES
 
@@ -28,6 +24,7 @@ def _asset_path(asset_id: str) -> Path:
 
 
 def runtime_root() -> Path:
+    """Return the canonical MegaSAM runtime."""
     return RUNTIME_ROOT
 
 
@@ -72,38 +69,11 @@ def extract_frames(video_path: str | os.PathLike[str], frames_dir: Path, stride:
 
 
 def setup_env(device: str | int | None = None) -> dict[str, str]:
+    """Prepare a worker process without writing caches into the source tree."""
     env = os.environ.copy()
     if device is not None and "CUDA_VISIBLE_DEVICES" not in env:
         env["CUDA_VISIBLE_DEVICES"] = str(device)
-
-    runtime = runtime_root()
-    pythonpath = [
-        str(runtime / "UniDepth"),
-        str(runtime / "base" / "droid_slam"),
-        str(runtime / "base" / "thirdparty" / "lietorch"),
-        env.get("PYTHONPATH", ""),
-    ]
-    env["PYTHONPATH"] = os.pathsep.join(path for path in pythonpath if path)
-
-    weights = weights_dir()
-    torch_home = weights / "torch_home"
-    hub_dir = torch_home / "hub"
-    hub_dir.mkdir(parents=True, exist_ok=True)
-
-    dinov2_src = weights / "facebookresearch_dinov2_main"
-    dinov2_dst = hub_dir / "facebookresearch_dinov2_main"
-    if dinov2_src.exists() and not dinov2_dst.exists():
-        dinov2_dst.symlink_to(dinov2_src, target_is_directory=True)
-
-    ckpt_src = weights / "torch_hub_checkpoints"
-    ckpt_dst = hub_dir / "checkpoints"
-    if ckpt_src.exists() and not ckpt_dst.exists():
-        ckpt_dst.symlink_to(ckpt_src, target_is_directory=True)
-
-    env["TORCH_HOME"] = str(torch_home)
-    env["HF_HOME"] = str(weights / "huggingface")
-    env["HF_HUB_OFFLINE"] = env.get("HF_HUB_OFFLINE", "1")
-    env["TRANSFORMERS_OFFLINE"] = env.get("TRANSFORMERS_OFFLINE", "1")
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(Path(__file__).resolve().parents[4]), env.get("PYTHONPATH")]))
     return env
 
 
@@ -116,95 +86,18 @@ def run_single(
     cpu_list: str | None = None,
     n_threads: int = 4,
 ) -> None:
-    video_path = Path(video_path).resolve()
-    output_path = Path(output_path).resolve()
-    scene_name = video_path.stem
-    stride, orig_fps, eff_fps = compute_stride(video_path, target_fps)
-    print(f"[INFO] {scene_name}: {orig_fps:.0f}fps -> stride={stride} -> {eff_fps:.1f}fps")
-
+    """Run the shared resident pipeline in a GPU-isolated Python worker."""
     env = setup_env(device)
-    env["OMP_NUM_THREADS"] = str(n_threads)
-    env["MKL_NUM_THREADS"] = str(n_threads)
-    env["OPENBLAS_NUM_THREADS"] = str(n_threads)
-    env["NUMEXPR_NUM_THREADS"] = str(n_threads)
-
-    has_taskset = shutil.which("taskset") is not None
-    runtime = runtime_root()
-    t0 = time.time()
-
-    tmp_base = output_path.parent / "_megasam_tmp"
-    tmp_base.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=f"megasam_{scene_name}_", dir=str(tmp_base)) as td:
-        tmp = Path(td)
-        frames_dir = tmp / "frames" / scene_name
-        mono_root = tmp / "mono"
-        mono_dir = mono_root / scene_name
-        metric_root = tmp / "metric"
-
-        n_frames = extract_frames(video_path, frames_dir, stride)
-        print(f"[TIME] extract: {time.time() - t0:.1f}s ({n_frames} frames)")
-
-        def run_cmd(cmd: list[str]) -> None:
-            if has_taskset and cpu_list:
-                cmd = ["taskset", "-c", cpu_list] + cmd
-            subprocess.run(cmd, cwd=str(runtime), env=env, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-
-        run_cmd([
-            sys.executable,
-            "Depth-Anything/run_videos.py",
-            "--encoder",
-            "vitl",
-            "--load-from",
-            str(depth_anything_checkpoint_path()),
-            "--img-path",
-            str(frames_dir),
-            "--outdir",
-            str(mono_dir),
-            "--localhub",
-        ])
-        run_cmd([
-            sys.executable,
-            "UniDepth/scripts/demo_mega-sam.py",
-            "--scene-name",
-            scene_name,
-            "--img-path",
-            str(frames_dir),
-            "--outdir",
-            str(metric_root),
-        ])
-        run_cmd([
-            sys.executable,
-            "camera_tracking_scripts/test_demo.py",
-            "--datapath",
-            str(frames_dir),
-            "--weights",
-            str(checkpoint_path()),
-            "--scene_name",
-            scene_name,
-            "--mono_depth_path",
-            str(mono_root),
-            "--metric_depth_path",
-            str(metric_root),
-            "--disable_vis",
-        ])
-
-        npz_path = runtime / "outputs" / f"{scene_name}_droid.npz"
-        if not npz_path.exists():
-            raise FileNotFoundError(f"MegaSAM output not found: {npz_path}")
-
-        data = np.load(npz_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(
-            output_path,
-            cam_c2w=data["cam_c2w"],
-            camera_centers=data["cam_c2w"][:, :3, 3],
-            intrinsic=data["intrinsic"],
-            stride=stride,
-            original_fps=orig_fps,
-            effective_fps=eff_fps,
-        )
-        npz_path.unlink()
-        print(f"[DONE] {output_path} ({data['cam_c2w'].shape[0]} poses, {time.time() - t0:.1f}s)")
+    for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+        env[name] = str(n_threads)
+    command = [
+        sys.executable, "-m", "worldfoundry.base_models.three_dimensions.slam.megasam",
+        "--video", str(Path(video_path).resolve()), "--output", str(Path(output_path).resolve()),
+        "--target_fps", str(target_fps), "--worker",
+    ]
+    if cpu_list and shutil.which("taskset"):
+        command = ["taskset", "-c", cpu_list, *command]
+    subprocess.run(command, env=env, check=True)
 
 
 def _gpu_worker_process(gpu_id: int, worker_idx: int, n_workers: int, task_list: list[tuple[str, str]], target_fps: float) -> None:
@@ -303,11 +196,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--gpus", type=str, default="0", help="GPU IDs (comma-separated)")
     parser.add_argument("--target_fps", type=float, default=15.0)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
     if args.video:
         output = args.output or str(Path(args.video).with_suffix(".npz"))
-        run_single(args.video, output, device=args.gpus.split(",")[0], target_fps=args.target_fps)
+        if args.worker:
+            from worldfoundry.base_models.three_dimensions.slam.megasam_resident import ResidentMegaSamPipeline
+
+            ResidentMegaSamPipeline(target_fps=args.target_fps).evaluate(Path(args.video), Path(output))
+        else:
+            run_single(args.video, output, device=args.gpus.split(",")[0], target_fps=args.target_fps)
         return 0
 
     if args.video_dir:
@@ -332,3 +231,7 @@ __all__ = [
     "setup_env",
     "weights_dir",
 ]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

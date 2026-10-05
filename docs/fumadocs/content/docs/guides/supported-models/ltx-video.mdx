@@ -1,0 +1,48 @@
+---
+title: "LTX-Video"
+description: "Lightricks LTX-Video 0.9.8 distilled I2V on the shared native LTX stack. Local T2V labels are upstream metadata, not a WorldFoundry route."
+modelId: "ltx-video"
+pageSource: authored
+---
+
+LTX-Video is Lightricks' earlier realtime latent-diffusion video model. This catalog card is the **0.9.8 distilled image-to-video** route — not [LTX-2.x](/docs/guides/supported-models/ltx-2.x) and not [LTX-2.5](/docs/guides/supported-models/ltx-2.5). The single runnable variant is `ltx-video-i2v`. Family-level text-to-video tags describe upstream capability; the native runtime raises if you ask it for T2V.
+
+<ModelPaperFigures modelId="ltx-video" locale="en" />
+
+The paper is [LTX-Video: Realtime Video Latent Diffusion](https://arxiv.org/abs/2501.00103). Code lives at [Lightricks/LTX-Video](https://github.com/Lightricks/LTX-Video). The project site is [ltx.video](https://ltx.video). There is no official teaser or method figure checked into this docs tree — `paper.png` is the title thumb only.
+
+<ModelCommandBuilder modelId="ltx-video" locale="en" />
+
+## What it is for
+
+Animate a still on `ltx-video-i2v`: required `prompt` + `image`, optional `video`, seed in `actions`, artifact `ltx-video-i2v.mp4` through `LTXVideoI2VPipeline`. Diffusers is **not** the inference backend. T5 loads as a Transformers architecture via `NativeModuleLoader`; the DiT, Video-VAE, Euler schedulers, spatial upscaler, and joint-state runner are the same native stack later LTX-2.x cards reuse.
+
+There is **no local T2V or V2V** on this page. Listed I2V eval is [AIGCBench](/docs/evaluation/benchmark-hub/aigcbench) — a suite pointer, not an ingested score.
+
+## Inference
+
+WorldFoundry pins the distilled **two-pass** recipe: **7 + 3 = 10** fixed-sigma **Euler** steps, **guidance 1.0** (the runtime rejects any other step count or CFG). The spatial upscaler runs automatically between passes at first-stage scale **2/3**; it is not a Studio refiner toggle. Sampler is the checkpoint / fixed-sigma Euler pair, not UniPC.
+
+Recorded defaults from `runtime_defaults.yaml`:
+
+| Knob | WorldFoundry default | Constraint |
+| --- | --- | --- |
+| Size | **768×512** | height and width divisible by 32 |
+| Frames | **121** | upstream also wants frames = 8k+1 |
+| FPS | **30** | `frame_rate` |
+| Steps | **10** (7 then 3) | required |
+| Guidance | **1.0** | required |
+| Image noise | `image_cond_noise_scale=0.15` | first-frame conditioning |
+| Offload | `cpu_offload=true` | block offload |
+
+Upstream 0.9.8 cards advertise **1216×704 @ 30 fps** and recommend guidance 3–3.5 on the *dev* (non-distilled) line. Those numbers are not this wrapper's defaults. Catalog VRAM is unset — do not invent a floor.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run ltx-video-i2v` in `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `$WORLDFOUNDRY_HFD_ROOT/Lightricks--LTX-Video` with both `ltxv-13b-0.9.8-distilled.safetensors` and `ltxv-spatial-upscaler-0.9.8.safetensors` plus the T5 encoder/tokenizer shards. Missing weights are reported at runtime.
+
+Recorded Hugging Face repos: `Lightricks/LTX-Video` (the 0.9.8 distilled files WorldFoundry actually opens), plus `Lightricks/LTX-Video-0.9.5`, `Lightricks/LTX-Video-0.9.7-dev`, and `Lightricks/LTX-Video-0.9.8-13B-distilled`. Every card is tagged license **`other`**. The GitHub tree is Apache-2.0 — review the HF card before commercial use.
+
+Integration is recorded. Status: **Static load only** — checkpoint structure is validated, not a GPU artifact in this workspace.
+
+<ModelRelatedRecipes modelId="ltx-video" locale="en" />

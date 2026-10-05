@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -11,13 +10,18 @@ import numpy as np
 import torch
 from PIL import Image
 
-from worldfoundry.base_models.diffusion_model.diffsynth.pipelines.wan_video_dualcamctrl import (
-    ModelConfig,
+from worldfoundry.core.model_loading.checkpoints import load_weights_only
+from worldfoundry.synthesis.visual_generation.dualcamctrl.native_pipeline import (
     WanVideoCameraPipeline,
 )
-from worldfoundry.core.io.paths import checkpoint_root_path, local_model_root_path
-from worldfoundry.core.io.video import write_video
-from worldfoundry.core.model_loading import load_state_dict
+from worldfoundry.core.io import file_sha256
+from worldfoundry.core.io.paths import (
+    checkpoint_root_path,
+    local_model_root_path,
+    resolve_local_hf_model_path,
+)
+from worldfoundry.core.media.codecs.video import write_video
+from worldfoundry.core.model_loading import ModelConfig, load_state_dict
 from worldfoundry.evaluation.utils import worldfoundry_data_path
 
 MODEL_ID = "dualcamctrl"
@@ -252,6 +256,18 @@ class DualCamCtrlRuntime:
             if preferred.is_file():
                 return ModelConfig(path=str(preferred), offload_device=self.device, offload_dtype=self.torch_dtype)
             roots.append(preferred)
+        flat_name = model_id.replace("/", "--")
+        roots.extend(
+            (
+                checkpoint_root_path(flat_name),
+                checkpoint_root_path("hfd", flat_name),
+                checkpoint_root_path(Path(model_id).name),
+            )
+        )
+        try:
+            roots.append(resolve_local_hf_model_path(model_id))
+        except FileNotFoundError:
+            pass
         roots.extend(
             (
                 Path(self.local_model_path) / Path(model_id),
@@ -268,7 +284,9 @@ class DualCamCtrlRuntime:
         return ModelConfig(
             model_id=model_id,
             origin_file_pattern=file_pattern,
-            download_resource=self.download_resource,
+            download_source=("modelscope" if self.download_resource.lower() == "modelscope" else "huggingface"),
+            local_model_path=self.local_model_path,
+            skip_download=not self.allow_download,
             offload_device=self.device,
             offload_dtype=self.torch_dtype,
         )
@@ -292,11 +310,9 @@ class DualCamCtrlRuntime:
                 return str(path)
             raise FileNotFoundError(f"DualCamCtrl checkpoint not found: {path}")
         checkpoint_config = self._model_config(self.dualcamctrl_repo, self.checkpoint_name)
-        checkpoint_config.download_if_necessary(
-            self.local_model_path,
-            skip_download=not self.allow_download,
-            use_usp=self.use_usp,
-        )
+        checkpoint_config.local_model_path = self.local_model_path
+        checkpoint_config.skip_download = not self.allow_download
+        checkpoint_config.download_if_necessary(use_usp=self.use_usp)
         path = checkpoint_config.path[0] if isinstance(checkpoint_config.path, list) else checkpoint_config.path
         if not path or not Path(path).is_file():
             raise FileNotFoundError(
@@ -315,24 +331,116 @@ class DualCamCtrlRuntime:
     def _load_pipeline(self) -> WanVideoCameraPipeline:
         if str(self.device).startswith("cuda") and not torch.cuda.is_available():
             raise RuntimeError("DualCamCtrl requires CUDA for the official inference path.")
-        pipe = WanVideoCameraPipeline.from_pretrained(
-            self.config_path,
+        from worldfoundry.base_models.diffusion_model.models.autoencoders.wan import (
+            WanVideoVAE,
+            WanVideoVAEStateDictConverter,
+        )
+        from worldfoundry.base_models.diffusion_model.models.denoisers.wan import (
+            WAN21_T2V_1P3B_CONFIG,
+            WanModelStateDictConverter,
+        )
+        from worldfoundry.base_models.diffusion_model.models.encoders.wan import (
+            WanImageEncoder,
+            WanImageEncoderStateDictConverter,
+            WanTextEncoder,
+        )
+        from worldfoundry.base_models.diffusion_model.models.networks.wan import WanModel
+        from worldfoundry.core.model_loading import load_model
+
+        model_configs = self._base_model_configs()
+        for model_config in model_configs:
+            model_config.local_model_path = self.local_model_path
+            model_config.skip_download = not self.allow_download
+            model_config.download_if_necessary(use_usp=self.use_usp)
+            if not model_config.path:
+                raise FileNotFoundError(
+                    f"DualCamCtrl checkpoint asset is missing: {model_config.model_id} "
+                    f"({model_config.origin_file_pattern}). Set WORLDFOUNDRY_CKPT_DIR "
+                    "to the local checkpoint root or allow download."
+                )
+        tokenizer_config = self._model_config(self.tokenizer_repo, "google/*")
+        tokenizer_config.local_model_path = self.local_model_path
+        tokenizer_config.skip_download = not self.allow_download
+        tokenizer_config.download_if_necessary(use_usp=self.use_usp)
+
+        base_state = load_state_dict(model_configs[0].path, torch_dtype=self.torch_dtype, device="cpu")
+        wan_converter = WanModelStateDictConverter()
+        if any(".attn1." in name or name.startswith("condition_embedder.") for name in base_state):
+            base_state, base_config = wan_converter.from_diffusers(base_state)
+        else:
+            base_state, base_config = wan_converter.from_civitai(base_state)
+        if not base_config:
+            base_config = {
+                **WAN21_T2V_1P3B_CONFIG,
+                "has_image_input": True,
+                "in_dim": 32,
+                "add_control_adapter": True,
+                "in_dim_control_adapter": 24,
+            }
+        base_dit = load_model(
+            WanModel,
+            path=None,
+            config=base_config,
+            torch_dtype=self.torch_dtype,
+            device="cpu",
+            state_dict=base_state,
+        )
+        text_encoder = load_model(
+            WanTextEncoder,
+            model_configs[1].path,
+            torch_dtype=self.torch_dtype,
+            device="cpu",
+        )
+        vae = load_model(
+            WanVideoVAE,
+            model_configs[2].path,
+            torch_dtype=self.torch_dtype,
+            device="cpu",
+            state_dict_converter=WanVideoVAEStateDictConverter().from_civitai,
+        )
+        image_encoder = load_model(
+            WanImageEncoder,
+            model_configs[3].path,
+            torch_dtype=torch.float32,
+            device="cpu",
+            state_dict_converter=WanImageEncoderStateDictConverter().from_civitai,
+        )
+        tokenizer_path = tokenizer_config.path
+        if isinstance(tokenizer_path, list):
+            if not tokenizer_path:
+                raise FileNotFoundError("DualCamCtrl tokenizer files were not resolved")
+            tokenizer_path = tokenizer_path[0]
+        tokenizer_path = Path(tokenizer_path)
+        if tokenizer_path.is_file():
+            tokenizer_path = tokenizer_path.parent
+
+        pipe = WanVideoCameraPipeline.from_components(
+            config_path=self.config_path,
+            text_encoder=text_encoder,
+            base_dit=base_dit,
+            vae=vae,
+            image_encoder=image_encoder,
+            tokenizer_path=str(tokenizer_path),
             copy_control_weights=self.copy_control_weights,
             torch_dtype=self.torch_dtype,
             device=self.device,
-            model_configs=self._base_model_configs(),
-            tokenizer_config=self._model_config(self.tokenizer_repo, "google/*"),
-            local_model_path=self.local_model_path,
-            skip_download=not self.allow_download,
-            redirect_common_files=self.redirect_common_files,
             use_usp=self.use_usp,
         )
         checkpoint = self._resolve_checkpoint_path()
         state_dict = load_state_dict(checkpoint, torch_dtype=self.torch_dtype, device="cpu")
-        load_state = pipe.load_state_dict(self._strip_pipe_prefix(state_dict), strict=True)
+        state_dict = self._strip_pipe_prefix(state_dict)
+        dit_state = {
+            name.removeprefix("dit."): value
+            for name, value in state_dict.items()
+            if name.startswith("dit.")
+        }
+        if not dit_state:
+            dit_state = state_dict
+        load_state = pipe.dit.load_state_dict(dit_state, strict=False)
+        if load_state.unexpected_keys:
+            raise RuntimeError(f"DualCamCtrl checkpoint has unexpected keys: {load_state.unexpected_keys}")
         pipe.eval()
         pipe.to(self.device)
-        print(f"DualCamCtrl checkpoint loaded with {load_state}")
         return pipe
 
     def _ensure_pipeline(self) -> WanVideoCameraPipeline:
@@ -363,7 +471,7 @@ class DualCamCtrlRuntime:
         original_height: int = 360,
         original_width: int = 640,
     ) -> torch.Tensor:
-        data = torch.load(Path(camera_file).expanduser(), map_location="cpu")
+        data = load_weights_only(Path(camera_file).expanduser(), map_location="cpu")
         cameras_info = torch.as_tensor(data["cameras"], dtype=torch.float32)
         if cameras_info.shape[1] == 18:
             cameras_info = torch.cat([torch.zeros(cameras_info.shape[0], 1), cameras_info], dim=1)
@@ -455,14 +563,16 @@ class DualCamCtrlRuntime:
                 cfg_scale=float(kwargs.get("cfg_scale", 5.0)),
             )
 
-        frames = videos["images"][0]
+        # StagedDiffusionPipeline.vae_output_to_video returns the frame list
+        # directly, not a batch of frame lists.
+        frames = videos["images"]
         write_video(frames, target, fps=int(fps or kwargs.get("fps", 10)), quality=int(kwargs.get("quality", 5)))
         return {
             "status": "success",
             "model_id": self.model_id,
             "artifact_kind": "generated_video",
             "artifact_path": str(target),
-            "video_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "video_sha256": file_sha256(target),
             "runtime": "worldfoundry.dualcamctrl.in_tree_runtime",
             "backend_quality": "official_demo_contract",
             "image_path": str(image_path),

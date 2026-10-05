@@ -1,0 +1,56 @@
+{
+  "video": "cases/general/case_fixture_001/wf_fixture_gen_case_fixture_001.mp4",
+  "gt_video": "cases/general/case_fixture_001/ref_case_fixture_001.mp4",
+  "prompt": "Synthetic fixture prompt. Not an upstream WorldOlympiad record.",
+  "physical": {
+    "score": 0.72,
+    "score_scale": "0-1",
+    "default_if_no_related": 0.5,
+    "question_count": 4,
+    "related_question_count": 3,
+    "compliant_question_count": 2,
+    "dimension_scores": {
+      "mechanics": 0.8,
+      "thermotics": 0.6,
+      "material": null
+    },
+    "results": [
+      {"question_id": "fixture_mech_1", "dimension": "mechanics", "related": true, "compliant": true, "confidence": 0.9},
+      {"question_id": "fixture_mech_2", "dimension": "mechanics", "related": true, "compliant": false, "confidence": 0.7},
+      {"question_id": "fixture_thermo_1", "dimension": "thermotics", "related": true, "compliant": true, "confidence": 0.6},
+      {"question_id": "fixture_mat_1", "dimension": "material", "related": false, "compliant": null, "confidence": 0.0}
+    ]
+  },
+  "interaction": {
+    "summary": {
+      "chunk_mean": 3.6,
+      "transition_mean": 3.0,
+      "global_score": 3.3,
+      "overall": 3.4
+    },
+    "overall_raw": 3.4,
+    "overall_raw_scale": "0-5",
+    "score": 0.68,
+    "score_scale": "0-1"
+  },
+  "clip_interaction": {
+    "summary": {
+      "semantic_adherence": 0.27,
+      "num_scored_chunks": 2,
+      "num_chunks": 2,
+      "num_scored_frames": 16
+    }
+  },
+  "three_d": {
+    "video_id": 0,
+    "gs_score": 0.65,
+    "meta_score": 0.55,
+    "camera_motion_score": 0.45,
+    "final_score": 1.65,
+    "final_score_raw": 1.65,
+    "final_score_raw_scale": "0-3",
+    "final_score_normalized": 0.55,
+    "final_score_normalized_scale": "0-1"
+  },
+  "combined_score": 0.65
+}

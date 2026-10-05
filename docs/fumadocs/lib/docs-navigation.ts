@@ -28,7 +28,17 @@ export type DocsChromeLabels = {
   nav: string;
   navGroups: Record<DocsNavGroupId, string>;
   openEnvision: string;
+  blog: string;
+  events: string;
+  community: string;
+  search: string;
   onThisPage: string;
+  askAi: string;
+  askAiCopy: string;
+  askAiCopied: string;
+  askAiOpenMarkdown: string;
+  askAiChatGpt: string;
+  askAiHint: string;
   previousPage: string;
   nextPage: string;
   relatedPages: string;
@@ -70,10 +80,10 @@ export const docsNavPageLabels: Record<Locale, DocsNavPageLabels> = {
     'api-reference/runtime': 'Runtime & assets',
     '': 'Introduction',
     'overview/design': 'Design',
-    'overview/capabilities': "What's included",
-    'overview/why-worldfoundry': 'Why WorldFoundry',
     'reference/environments': 'Environment',
     'guides/inference': 'Run inference',
+    'guides/inference-optimization': 'Inference optimization',
+    'guides/run-status': 'Run status',
     'guides/supported-models': 'Models',
     'guides/local-assets': 'Local assets',
     'guides/tui': 'TUI',
@@ -111,10 +121,10 @@ export const docsNavPageLabels: Record<Locale, DocsNavPageLabels> = {
     'api-reference/runtime': 'Runtime 与资产',
     '': '简介',
     'overview/design': '设计',
-    'overview/capabilities': '包含什么',
-    'overview/why-worldfoundry': '为什么使用',
     'reference/environments': '环境配置',
     'guides/inference': '运行推理',
+    'guides/inference-optimization': '推理优化',
+    'guides/run-status': '运行状态',
     'guides/supported-models': '模型',
     'guides/local-assets': '本地资产',
     'guides/tui': 'TUI',
@@ -145,8 +155,6 @@ export const docsNavGroups = [
     slugs: [
       [],
       ['overview', 'design'],
-      ['overview', 'capabilities'],
-      ['overview', 'why-worldfoundry'],
     ],
   },
   {
@@ -157,12 +165,14 @@ export const docsNavGroups = [
       ['guides', 'local-assets'],
       ['guides', 'tui'],
       ['reference', 'cli'],
+      ['guides', 'run-status'],
     ],
   },
   {
     id: 'inference',
     slugs: [
       ['guides', 'inference'],
+      ['guides', 'inference-optimization'],
       ['guides', 'supported-models'],
       ['guides', 'studio'],
     ],
@@ -245,7 +255,18 @@ export const docsLabels: Record<Locale, DocsChromeLabels> = {
       training: 'Training',
     },
     openEnvision: 'OpenEnvision',
+    blog: 'Blog',
+    events: 'Events',
+    community: 'Community',
+    search: 'Search',
     onThisPage: 'On this page',
+    askAi: 'Ask AI',
+    askAiCopy: 'Copy page markdown',
+    askAiCopied: 'Copied',
+    askAiOpenMarkdown: 'Open markdown',
+    askAiChatGpt: 'Ask in ChatGPT',
+    askAiHint:
+      'Use this page as context for an AI assistant. No in-site chat backend is configured yet.',
     previousPage: 'Previous',
     nextPage: 'Next',
     relatedPages: 'Related',
@@ -282,7 +303,17 @@ export const docsLabels: Record<Locale, DocsChromeLabels> = {
       training: '训练',
     },
     openEnvision: 'OpenEnvision',
+    blog: '博客',
+    events: '活动',
+    community: '社区',
+    search: '搜索',
     onThisPage: '本页内容',
+    askAi: 'Ask AI',
+    askAiCopy: '复制本页 Markdown',
+    askAiCopied: '已复制',
+    askAiOpenMarkdown: '打开 Markdown',
+    askAiChatGpt: '在 ChatGPT 中提问',
+    askAiHint: '把本页当作 AI 上下文。站内对话后端尚未接入。',
     previousPage: '上一页',
     nextPage: '下一页',
     relatedPages: '相关页面',
@@ -316,6 +347,10 @@ export function isBenchmarkHubDocsPage(slugs: readonly string[]) {
 
 export function isMetricsDocsPage(slugs: readonly string[]) {
   return slugs[0] === 'evaluation' && slugs[1] === 'metrics';
+}
+
+export function isApiReferenceHubDocsPage(slugs: readonly string[]) {
+  return slugs[0] === 'api-reference' && slugs.length === 1;
 }
 
 export { getBenchmarkHubSectionLabel } from '@/lib/benchmark-catalog';

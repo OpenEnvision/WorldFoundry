@@ -8,50 +8,13 @@ import av
 import cv2
 import numpy as np
 import torch
-try:
-    from torchvision.io.video import (
-        _align_audio_frames,
-        _check_av_available,
-        _log_api_usage_once,
-        _read_from_stream,
-        _video_opt,
-    )
-except (ImportError, ModuleNotFoundError):
-    from torchvision.utils import _log_api_usage_once
-
-    class _VideoOptFallback:
-        default_timebase = Fraction(1, 1)
-
-        @staticmethod
-        def _read_video(*_args, **_kwargs):
-            raise RuntimeError("torchvision video backend is unavailable; use the PyAV backend instead")
-
-    _video_opt = _VideoOptFallback()
-
-    def _check_av_available():
-        return None
-
-    def _read_from_stream(container, start_pts, end_pts, pts_unit, stream, stream_name):
-        del stream_name
-        if pts_unit == "sec":
-            start_pts = int(math.floor(start_pts / stream.time_base))
-            if end_pts != float("inf"):
-                end_pts = int(math.ceil(end_pts / stream.time_base))
-        frames = []
-        container.seek(start_pts, any_frame=False, backward=True, stream=stream)
-        for frame in container.decode(stream):
-            if frame.pts is None:
-                continue
-            if frame.pts < start_pts:
-                continue
-            if end_pts != float("inf") and frame.pts > end_pts:
-                break
-            frames.append(frame)
-        return frames
-
-    def _align_audio_frames(aframes, audio_frames, start_pts, end_pts):
-        del audio_frames, start_pts, end_pts
-        return aframes
+from torchvision.io.video import (
+    _align_audio_frames,
+    _check_av_available,
+    _log_api_usage_once,
+    _read_from_stream,
+    _video_opt,
+)
 
 
 def read_video_av(

@@ -1,0 +1,50 @@
+---
+title: "WonderJourney"
+description: "WonderJourney from Stanford University / Google: 3d-world-generation and scene-expansion; Runner parity pending; dedicated `wonderworld`."
+modelId: "wonderjourney"
+pageSource: generated
+---
+
+WonderJourney generates a journey: starting from text or an image, it produces a sequence of connected 3D scenes you travel through — perpetual 3D scene generation rather than a single clip. In this catalog WorldFoundry runs the upstream run.py/example_config flow through an in-tree adapter; runner parity is pending runtime assets.
+
+<ModelPaperFigures modelId="wonderjourney" locale="en" />
+
+The recorded paper is [WonderJourney: Going from Anywhere to Everywhere](https://arxiv.org/abs/2312.03884) (2023).
+
+Project page: [kovenyu.com/WonderJourney](https://kovenyu.com/WonderJourney/). Code: [KovenYu/WonderJourney](https://github.com/KovenYu/WonderJourney).
+
+<ModelCommandBuilder modelId="wonderjourney" locale="en" />
+
+## What it is for
+
+`wonderjourney` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+
+Per the paper (arXiv 2312.03884), an LLM proposes upcoming scene descriptions, a point-cloud-and-inpainting visual module renders each new scene from the previous one, and a VLM verifies results. Missing assets or runtime dependencies are reported at inference time. It is published by Stanford University / Google.
+
+Catalog tasks include 3d-world-generation, scene-expansion, and image-to-3d-world. Documented modalities: image in, 3D scene and world state out.
+
+Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Standard scoring for generated navigable scene sequences).
+
+## Runtime contract
+
+Optional `prompt`, `frames`, `config`, `num_scenes`, and `num_keyframes`; artifacts `generated_world` and `wonderjourney.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `WonderJourneyPipeline`.
+
+Family status: **Runner parity pending**.
+
+Pipeline imports and plan-only inference are wired; full artifact parity needs the upstream assets (depth, inpainting, LLM access) staged locally before real journeys can be generated.
+
+WorldFoundry exposes an in-tree adapter that runs the upstream WonderJourney run.py/example_config flow.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run wonderjourney --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the dedicated environment `wonderworld` (Python 3.10, CUDA 12.4).
+
+No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh wonderjourney`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="wonderjourney" locale="en" />

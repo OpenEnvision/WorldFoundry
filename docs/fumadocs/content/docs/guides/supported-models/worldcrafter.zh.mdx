@@ -1,0 +1,36 @@
+---
+title: WorldCrafter
+description: 使用可查询 3D 记忆的相机可控场景探索。
+pageSource: authored
+---
+
+WorldCrafter Base 和 Fast 都支持图生视频、文生视频，分辨率固定为 **640 × 384**，每段 **33 帧**。多段生成通过 RepEncoder 从已有场景中查询目标视角的记忆。
+
+```python
+from worldfoundry.pipelines.worldcrafter import WorldCrafterPipeline
+
+pipe = WorldCrafterPipeline.from_pretrained(
+    model_id="worldcrafter-fast",
+    model_path="/checkpoints/TencentARC--WorldCrafter-Fast",
+    device="cuda:0",
+)
+result = pipe(
+    prompt="A bright living room with a wooden table.",
+    images="room.png",
+    actions="forward1 backward1",
+    output_path="worldcrafter.mp4",
+    return_dict=True,
+)
+```
+
+省略 `images` 即为文生视频。`actions`、`actions_file`、`camera_path` 三选一。相机文件是 `[T,3,4]` 或 `[T,4,4]` 的全局 **camera-to-world** 矩阵，平移单位为米，坐标轴为右/下/前，帧数须为 33 的整数倍。可以通过 `num_chunks` 截取已有轨迹。
+
+Base 使用 `model_id="worldcrafter-base"`，并需要 Fast 权重中的 RepEncoder、tokenizer、UMT5 和 Wan VAE。共享权重不在标准本地目录时可传 `shared_model_path`。集成复用 basemodel 的 Helios Transformer、调度器、潜变量准备和已有 VGGT 层，只保留 WorldCrafter 的相机残差、记忆查询与蒸馏分支路由。
+
+Base 默认 50 步、CFG 5。Fast 按官方三阶段 2/2/2 时间表运行，CFG 固定为 1；文生视频首段为 12 步，后续为 6 步。Fast 不接受任意步数或断点续推。Base 可使用 `chunk_output_dir`、`state_output_dir`、`resume_from`、`stop_after_chunk`，续推时提示词、图像和相机轨迹必须与原运行一致。
+
+Base 常规输出会按上游规则裁剪到 `33 × num_chunks - 1` 帧；Fast 保留 `33 × num_chunks` 帧。Base 断点续推拼接完整分段，因此也是 `33 × num_chunks` 帧。
+
+运行需要 CUDA、PyTorch 2.10、支持 Helios 的 Diffusers、Transformers 5.3、Accelerate、PEFT、Einops 和 safetensors。编译默认关闭。本地 H100 已验证 Base/Fast 发布权重的两块 I2V/T2V：严格加载、裁剪前解码数值有限、完整视频解码及画面审核均通过。Base 断点续推的裁剪前输出与连续运行逐值一致。这些短视频验证不代表长程记忆或相机控制质量。
+
+[官方源码](https://github.com/TencentARC/WorldCrafter) 固定版本为 `7e57e4d0448e8661eb6ae078f53e19638bd07102`。官方许可证仅允许**学术用途**；完整许可和第三方声明统一保留在仓库根目录的 `THIRD-PARTY-NOTICES`。

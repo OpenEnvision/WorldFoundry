@@ -1,0 +1,53 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BC-06
+track: coverage
+title_en: Dart Throw at Board
+outcome_question: Which dart throw outcome in ['bullseye', 'outer_bull', 'inner_single_hit', 'triple_ring_hit',
+  'outer_single_hit', 'double_ring_hit', 'board_bounce_out', 'off_board_miss'] is visible as the first
+  decisive result?
+readout_policy: Read the first decisive dart/board result after the single throw. Qualifying frames must
+  show the dartboard region and dart impact or miss clearly enough to distinguish retained board region,
+  board bounce-out, or off-board miss.
+canonical_labels:
+- bullseye
+- outer_bull
+- inner_single_hit
+- triple_ring_hit
+- outer_single_hit
+- double_ring_hit
+- board_bounce_out
+- off_board_miss
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- The dart impact point is hidden or too small to distinguish bull, single, triple, double, bounce-out,
+  or off-board miss.
+- None of the canonical labels ['bullseye', 'outer_bull', 'inner_single_hit', 'triple_ring_hit', 'outer_single_hit',
+  'double_ring_hit', 'board_bounce_out', 'off_board_miss'] can be decisively identified within the readout
+  window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's reference protocol;
+  record it as out-of-schema.
+priority_rules:
+- 'First decisive readout is the dart result after the single throw: retained hit region, board contact
+  with bounce-out, or off-board miss.'
+- bullseye is the inner center hit; outer_bull is the outer center ring around the bullseye.
+- inner_single_hit and outer_single_hit refer to retained hits in the inner or outer single-score regions;
+  triple_ring_hit and double_ring_hit require visible retained hit in those scoring rings.
+- board_bounce_out applies when the dart visibly contacts the dartboard but does not remain embedded/stuck
+  at a readable board region.
+- off_board_miss applies when the dart misses the board or hits the wall/off-board area without board
+  contact.
+- 'Priority: bounce-out overrides retained-region labels when the dart does not stay on the board; otherwise
+  choose the visible retained board region. If impact region is hidden, return unreadable rather than
+  using a broad inner/outer guess.'
+notes:
+- Outcome set separates readable dartboard regions rather than broad inner/outer hits when the impact
+  region is visible.
+- 'Contact/trajectory scene: outcome label uses first decisive visible target interaction or miss geometry.'
+- 'Scene title: Dart Throw at Board.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules are authored from
+  STAGBench metadata/action protocol.'

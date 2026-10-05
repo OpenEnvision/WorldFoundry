@@ -10,6 +10,12 @@ import skimage
 from PIL import Image
 from einops import rearrange
 from kornia.geometry import PinholeCamera
+from worldfoundry.base_models.three_dimensions.three_d_four_d.pytorch3d_compat import (
+    configure_pytorch3d_extension,
+)
+
+configure_pytorch3d_extension()
+
 from pytorch3d.renderer import (
     PerspectiveCameras,
     PointsRasterizationSettings,
@@ -18,7 +24,7 @@ from pytorch3d.renderer import (
 from pytorch3d.renderer.points.compositor import _add_background_color_to_images
 from pytorch3d.structures import Pointclouds
 from torchvision.transforms import ToTensor, ToPILImage, Resize
-from worldfoundry.synthesis.visual_generation.wonderworld.wonderworld_runtime.util.midas_utils import (
+from util.midas_utils import (
     dpt_512_transform,
     dpt_transform,
 )

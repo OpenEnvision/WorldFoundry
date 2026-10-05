@@ -1,120 +1,44 @@
 ---
-title: Physics-IQ
-description: "Physics-IQ in WorldFoundry: assets, runners, metrics, and limits."
+title: Physics-IQ Original
+description: "DeepMind physical-understanding bench: continue a real filmed scene for 5 seconds. WorldFoundry ships the scorer; it does not invent a board."
 ---
 
-## About
+Physics-IQ (Google DeepMind) asks whether a video model **continues real physics**, not whether the pixels look pretty. Each item shows a filmed scene; the model must generate the next **5 seconds**. The published protocol has **66 scenarios × 2 views** (396 items). WorldFoundry's contract tracks a **198-video single-pass** split. Scoring compares the continuation to the real future with motion-mask **spatial / spatiotemporal** agreement and an **MSE** penalty, then aggregates into `physics_iq_score` (official `final_score_orig`). The current official code also emits a component-clipped `physics_iq_stable_score`.
 
-Physics-IQ evaluates whether generated videos follow real physical behavior across solid mechanics, fluids, optics, thermodynamics, and magnetism. The source README describes real captured videos, three camera perspectives, and two takes per scenario. WorldFoundry uses the bundled take-1 prompt descriptions to generate or check the 198 candidate clips used by the in-tree runner.
+Paper: [Physics-IQ](https://arxiv.org/abs/2501.09038). Project: [physics-iq.github.io](https://physics-iq.github.io/). Code: [google-deepmind/physics-IQ-benchmark](https://github.com/google-deepmind/physics-IQ-benchmark).
 
-The benchmark code used by WorldFoundry is already in this repository under `worldfoundry/evaluation/tasks/execution/runners/physics_iq`. Do not clone the upstream repositories for a WorldFoundry run; use upstream project files only as data provenance or as the source of dataset assets. Downloading benchmark data from the project storage is fine when you need full leaderboard-style evaluation assets.
+Unlike the manipulation importers on this hub, WorldFoundry **ships the scoring runtime** in tree (`run_physics_iq_official_runner.py`, shared with `physics-iq-verified` via `--protocol`) plus prompt/scenario metadata under `worldfoundry/data/benchmarks/assets/physics-iq`. Official **media** (real videos, masks, conditioning frames) still download from DeepMind — they are not in the repo. [Physics-IQ Verified](/docs/evaluation/benchmark-hub/physics-iq-verified) uses a different dataset; the two are **not interchangeable**.
 
+<BenchmarkPageSections id="physics-iq" locale="en" />
 
-## Official References
+## How to run
 
-| Resource | Link |
-| --- | --- |
-| Project page | [physics-iq.github.io](https://physics-iq.github.io/) |
-| Paper | [arXiv:2501.09038](https://arxiv.org/abs/2501.09038) |
-| GitHub | [github.com/google-deepmind/physics-IQ-benchmark](https://github.com/google-deepmind/physics-IQ-benchmark) |
-| In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py` |
-
-## Prepare Assets
-
-- Prompt descriptions: bundled at `worldfoundry/data/benchmarks/assets/physics-iq/descriptions/descriptions.csv`; override with `WORLDFOUNDRY_PHYSICS_IQ_DESCRIPTIONS` or `--descriptions-file`.
-- Candidate videos: set `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` to a directory of `.mp4` files.
-- Full Physics-IQ scoring assets: the project dataset needs testing videos, switch frames, real/generated masks, and 5-second generated clips. WorldFoundry does not ship those media assets.
-- Result file for current WorldFoundry scoring: provide a CSV or JSON result file with summary metric rows or per-scenario rows. Set `WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH`, pass `--official-results-path`, or place a matching `physics_iq_results*.csv/json` or `results_summary.csv` under the generated-artifact directory.
-- Checkpoints: none are needed by the WorldFoundry result importer. Any segmentation or mask-generation stack required for full Physics-IQ parity must be prepared separately.
-
-## Generated Artifact Layout
-
-The generated-video directory is flat. Filenames are matched by stem against the `generated_video_name` values from the descriptions file:
-
-```text
-generated_videos/
-  0001_perspective-left_trimmed-ball-and-block-fall.mp4
-  0002_perspective-center_trimmed-ball-and-block-fall.mp4
-  ...
-  results_summary.csv
-```
-
-The runner checks coverage against the 198 take-1 stems. Physics-IQ videos should contain exactly the model-generated 5 seconds after the switch frame; extra conditioning time changes the meaning of the score.
-
-## Run With WorldFoundry
-
-Import an existing Physics-IQ result file through the public CLI:
+Import an existing `raw_metrics.csv`:
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id physics-iq \
   --mode official-validation \
-  --official-results-path /path/to/results_summary.csv \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/physics-iq/validation \
+  --official-results-path <raw_metrics.csv> \
+  --output-dir tmp/physics-iq/official-validation \
   --json
 ```
 
-Run the in-tree scoring wrapper through the public CLI. This path still needs a result CSV/JSON supplied by `WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH` or placed under the generated-artifact directory:
+Recompute from 198 generated continuations named by official scenario ids:
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-export WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH=/path/to/results_summary.csv
-
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id physics-iq \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/physics-iq/run \
-  --json
-```
-
-Call the direct in-tree runner for the same scoring path:
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-export WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR=tmp/physics-iq/direct
-export WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH=/path/to/results_summary.csv
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/physics-iq/generated_videos
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py \
+  --protocol physics-iq \
   --run-official \
+  --dataset-root /path/to/physics-iq-benchmark \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" \
+  --output-dir tmp/physics-iq/official-run \
+  --strict \
   --json
 ```
 
-Directly import a result file without executing the scoring wrapper:
+`--strict` fails on missing scenario videos. `--generated-mask-dir` can supply precomputed masks; otherwise masks come from the real videos. Outputs include `scorecard.json` (primary `physics_iq_score`), `raw_metrics.csv`, `official_metrics.json`, and per-sample rows when the source exposes them.
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py \
-  --official-results-path /path/to/results_summary.csv \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/physics-iq/direct-validation \
-  --json
-```
-
-## Metrics
-
-| Metric ID | Meaning |
-| --- | --- |
-| `physics_iq_score` | Overall normalized Physics-IQ score. In per-scenario imports, WorldFoundry derives it from the available category means. |
-| `solid_mechanics` | Mean score for solid-mechanics scenarios such as collisions, rigid-body motion, and stability. |
-| `fluid_dynamics` | Mean score for fluid-flow and liquid-interaction scenarios. |
-| `optics` | Mean score for light, reflection, shadow, and related optics scenarios. |
-| `thermodynamics` | Mean score for heat, phase-change, and thermal-process scenarios. |
-| `magnetism` | Mean score for magnetic attraction, repulsion, and field-interaction scenarios. |
-| `physics_iq_average` | Primary WorldFoundry metric. Uses `physics_iq_score` when present, otherwise the mean of available category scores. |
-
-All declared metrics are higher-is-better and normalized to the `0..1` range when result rows use percentages.
-
-## Outputs
-
-The output directory contains:
-
-- `scorecard.json`: WorldFoundry scorecard with run status, metrics, coverage, and leaderboard-validity flags.
-- `raw_metric_table.jsonl`: one row per declared metric.
-- `per_sample_scores.jsonl`: per-scenario rows when the input file contains scenario-level fields.
-- `physics_iq_results.csv` or `physics_iq_results.json`: copied result file when the scoring wrapper imports one.
-- `specialized_normalizer_stdout.log` and `specialized_normalizer_stderr.log` when invoked through `worldfoundry-eval zoo benchmark-run`.
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

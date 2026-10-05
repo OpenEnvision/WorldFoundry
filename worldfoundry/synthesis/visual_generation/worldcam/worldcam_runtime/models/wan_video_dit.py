@@ -5,7 +5,7 @@ import math
 from typing import Tuple, Optional
 from einops import rearrange, repeat
 from worldfoundry.core.model_loading import hash_state_dict_keys
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_camera_controller import SimpleAdapter
+from worldfoundry.base_models.diffusion_model.models.networks.wan import SimpleAdapter
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 try:
     import flash_attn_interface

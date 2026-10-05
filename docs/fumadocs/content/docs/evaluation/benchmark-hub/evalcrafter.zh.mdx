@@ -1,135 +1,56 @@
 ---
 title: EvalCrafter
-description: WorldFoundry 中的 EvalCrafter text-to-video 质量评测。
+description: "700 条 prompt 的 T2V 质量评测：视觉、对齐、运动、时序（17 项指标汇总为 Total）。WorldFoundry 可重算 CLIP 子集或导入，不编造榜单。"
 ---
 
-## 评测目标
+EvalCrafter（腾讯 AI Lab 与香港城市大学）是 **700 条 prompt** 的文生视频质量套件。17 项客观指标汇总为四个分面加 `evalcrafter_total`：
 
-EvalCrafter 是 700-prompt text-to-video benchmark，覆盖视觉质量、内容对齐、运动质量和时间一致性。原 benchmark 报告 17 个客观指标和人工反馈；WorldFoundry 通过仓内 EvalCrafter runner 和 `final_result.txt` parser 暴露这些客观指标。
+- **视觉质量** — DOVER 美学 / 技术 VQA、Inception Score。
+- **文本-视频对齐** — CLIP、BLIP-BLEU、SD 分、检测 / 颜色 / 计数、OCR 误差、名人身份误差。
+- **运动质量** — 动作识别、运动活跃度、光流。
+- **时序** — 时序 CLIP、warping 误差、人脸一致性。
 
-当你需要一个宽口径的视频生成诊断栈，而不是只评物理或只评 world model 时，可以使用 EvalCrafter。
+论文：[EvalCrafter](https://arxiv.org/abs/2310.11440)。项目：[evalcrafter.github.io](http://evalcrafter.github.io)。代码：[evalcrafter/EvalCrafter](https://github.com/evalcrafter/EvalCrafter)。Prompt：[`RaphaelLiu/EvalCrafter_T2V_Dataset`](https://huggingface.co/datasets/RaphaelLiu/EvalCrafter_T2V_Dataset)。仓内列表：`worldfoundry/data/benchmarks/assets/evalcrafter/prompt700.txt`。
 
-## 资产与数据
+WorldFoundry 保留 **仓内 CLIP 子集**（`clip_score`、`clip_temp_score`、`face_consistency_score`），以及官方 `final_result.txt` 的归一化器。视频必须按 prompt 序号命名（`0000.mp4` … `0699.mp4`）。内置 `sample_results.txt` 可供导入冒烟。主键：`evalcrafter_total`。
 
-WorldFoundry 已经把 prompt suite 和 runtime 放在仓内：
+<BenchmarkPageSections id="evalcrafter" locale="zh" />
 
-| 资产 | 路径 |
-| --- | --- |
-| Task YAML | `worldfoundry/data/benchmarks/tasks/external/evalcrafter.yaml` |
-| Prompt suite | `worldfoundry/data/benchmarks/assets/evalcrafter/prompt700.txt` |
-| Runner | `worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py` |
-| Runtime root | `worldfoundry/evaluation/tasks/execution/runners/evalcrafter/runtime/evalcrafter` |
+## 如何运行
 
-可选公开数据资产是 `RaphaelLiu/EvalCrafter_T2V_Dataset`，在 WorldFoundry 中记为 `evalcrafter_dataset_assets`。
-
-## 生成结果目录
-
-生成视频目录必须是直接包含 700 个 prompt 视频的内层目录：
-
-```text
-/path/to/evalcrafter/videos/
-  0000.mp4
-  0001.mp4
-  0002.mp4
-  ...
-  0699.mp4
-```
-
-不要传入上层 experiment 目录，除非 `0000.mp4` 到 `0699.mp4` 直接位于该目录下。runner 会用 `prompt700.txt` 中的 prompt id 检查直接 `.mp4` 文件名。
-
-## 依赖
-
-WorldFoundry runner 不再启动 EvalCrafter 的 benchmark-local shell pipeline。它读取由 WorldFoundry metric stack 或已有官方 EvalCrafter 运行产生的 `final_result.txt`，然后写出 WorldFoundry scorecard 和 metric rows。
-
-完整 metric 生产建议使用专用环境：
-
-```bash
-bash scripts/setup/model_env_install.sh --model evalcrafter
-```
-
-metric 资产放到 EvalCrafter checkpoint root，或设置 `WORLDFOUNDRY_EVALCRAFTER_CHECKPOINTS_DIR`。完整指标栈可能需要 DOVER、BLIP2、SDXL、Inception、VideoMAE、FlowNet2、VGG-Face、DeAOT/AOT、OCR、检测、分割和动作识别依赖。仅导入已有 `final_result.txt` 不需要所有重型 metric package。
-
-常用变量：
-
-| 变量 | 用途 |
-| --- | --- |
-| `WORLDFOUNDRY_EVALCRAFTER_ROOT` | 覆盖仓内 runtime root。 |
-| `WORLDFOUNDRY_EVALCRAFTER_RESULTS_PATH` | 指向 `final_result.txt` 或包含它的目录。 |
-| `WORLDFOUNDRY_EVALCRAFTER_PROMPT_MANIFEST` | 覆盖 `prompt700.txt`。 |
-| `WORLDFOUNDRY_EVALCRAFTER_SCORER_BACKEND` | 默认 `artifact`，读取已有 `final_result.txt`。 |
-
-## 命令
-
-先设置生成视频目录：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/evalcrafter/videos
-export WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR=tmp/evalcrafter/run
-```
-
-当 `final_result.txt` 已通过 `WORLDFOUNDRY_EVALCRAFTER_RESULTS_PATH` 提供，或已经放在生成目录内时，对生成视频目录计分：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py \
-  --evalcrafter-root worldfoundry/evaluation/tasks/execution/runners/evalcrafter/runtime/evalcrafter \
-  --videos-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" \
-  --run-official \
-  --json
-```
-
-导入已有 result 目录或 result 文件：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py \
-  --evalcrafter-root worldfoundry/evaluation/tasks/execution/runners/evalcrafter/runtime/evalcrafter \
-  --results-dir /path/to/final_result.txt \
-  --videos-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/evalcrafter/import \
-  --json
-```
-
-公共 wrapper 也可以通过 benchmark manifest 调起集成 runner：
+导入官方聚合（冒烟用内置样本）：
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id evalcrafter \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --official-results-path /path/to/final_result.txt \
-  --output-dir tmp/evalcrafter/zoo-run \
+  --mode official-validation \
+  --official-results-path worldfoundry/data/benchmarks/assets/evalcrafter/sample_results.txt \
+  --output-dir tmp/evalcrafter/official-validation \
   --json
 ```
 
-## Python 导入
+从编号 MP4 重算仓内 CLIP 子集：
 
-Python 侧复用：
-
-```python
-from worldfoundry.evaluation.tasks.execution.runners.evalcrafter.evalcrafter_metrics import (
-    load_upstream_results,
-    normalized_score,
-)
-from worldfoundry.evaluation.tasks.execution.runners.evalcrafter.evalcrafter_official_impl import (
-    normalize_evalcrafter_results,
-    run_official_evalcrafter,
-)
+```bash
+export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/evalcrafter/generated_videos
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id evalcrafter \
+  --mode official-run \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/evalcrafter/official-run \
+  --json
 ```
 
-## 输出
+CLIP ViT-B/32 通过 `WORLDFOUNDRY_CLIP_VIT_B32_MODEL_DIR` 或 `--clip-model` 解析。默认导入路径：`WORLDFOUNDRY_EVALCRAFTER_RESULTS_PATH`。可选根：`WORLDFOUNDRY_EVALCRAFTER_ROOT`。
 
-输出目录包含：
+仓内指针：
 
-| 文件 | 含义 |
-| --- | --- |
-| `scorecard.json` | 覆盖率、可比性信息和所有可用 EvalCrafter 指标。 |
-| `raw_metric_table.jsonl` | 每个指标一行。 |
-| `per_sample_metrics.jsonl` | 预留给 per-sample 行；当前 result-file 导入为空。 |
-| `input_validation.json` | `--run-official` 计分前写出。 |
-| `final_result.txt` | artifact backend 读取外部结果时会复制到输出目录。 |
+```text
+worldfoundry/data/benchmarks/tasks/external/evalcrafter.yaml
+worldfoundry/evaluation/tasks/execution/runners/evalcrafter/
+worldfoundry/data/benchmarks/assets/evalcrafter
+```
 
-主要指标是 `visual_quality`、`text_video_alignment`、`motion_quality`、`temporal_consistency`、`evalcrafter_total`。组件指标包括 `vqa_aesthetic`、`vqa_technical`、`inception_score`、`clip_temp_score`、`warping_error`、`face_consistency_score`、`action_score`、`motion_ac_score`、`flow_score`、`clip_score`、`blip_bleu`、`sd_score`、`detection_score`、`color_score`、`count_score`、`ocr_error`、`celebrity_id_error`。
+产物包括 `scorecard.json`（主键 `evalcrafter_total`）、`benchmark_contract.json`、`raw_metric_table.jsonl`。
 
-[← Benchmark Hub](/zh/docs/evaluation/benchmark-hub)
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

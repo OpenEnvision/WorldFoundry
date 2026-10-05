@@ -1,179 +1,38 @@
 ---
 title: VideoScience-Bench
-description: 使用 WorldFoundry 仓内 VideoScience runner、data assets、命令和指标评测科学推理视频生成。
+description: "UCSD Hao AI Lab 的科学理解 T2V 评测：五维 1-4 量表。WorldFoundry 接好 VLM 裁判，不编造榜单。"
 ---
 
-## 官方参考
+VideoScience-Bench（加州大学圣地亚哥分校 Hao AI Lab）问的是视频生成器是否 **理解科学**。Prompt 描述真实实验与现象。VLM 裁判按 **1–4 量表** 打五个维度；官方加权总分归一化到单位区间，即 `videoscience_average`：
 
-| 资源 | 链接 |
-| --- | --- |
-| 论文 | [arXiv:2512.02942](https://arxiv.org/abs/2512.02942) |
-| GitHub | [github.com/hao-ai-lab/VideoScience](https://github.com/hao-ai-lab/VideoScience) |
-| HF 数据集 | [lmgame/VideoScienceBench](https://huggingface.co/datasets/lmgame/VideoScienceBench) |
-| 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/videoscience_bench/run_videoscience_bench_official_runner.py` |
+- **Prompt 一致性**
+- **现象一致性** — 描绘的结果是否符合真实科学？
+- **正确动态**
+- **不变性** — 不变量是否保持不变？
+- **时空连贯**
 
-## 评测内容
+论文：[VideoScience-Bench](https://arxiv.org/abs/2512.02942)。空间：[lmgame/videoscience-bench](https://huggingface.co/spaces/lmgame/videoscience-bench/blob/main/README.md)。代码：[hao-ai-lab/VideoScience](https://github.com/hao-ai-lab/VideoScience)。目录发布状态：experimental。合同条目不要求 Hugging Face 数据集。
 
-VideoScience-Bench 评估生成视频是否科学正确，而不仅仅是视觉上可信。本地 VideoScience README 描述了 200 个本科水平物理和化学场景：160 个 text-to-video examples、40 个 image-to-video examples、12 个 topics、103 个 scientific concepts。每条 prompt 通常需要多个概念共同成立。
+WorldFoundry **归一化官方结果文件**，并在配置好提供方 / 模型 / 凭证时可对 experiments CSV 跑裁判。不声称已完成带凭证的完整上游运行。
 
-WorldFoundry 使用仓内 runner：`worldfoundry/evaluation/tasks/execution/runners/videoscience_bench/run_videoscience_bench_official_runner.py`，以及仓内 runtime：`worldfoundry/evaluation/tasks/execution/runners/videoscience_bench/runtime/videoscience_bench`。日常使用不需要为该 benchmark 另建官方 repo 副本。`/VideoScience` 和 `/videoscience-bench` 只作为协议参考。
+<BenchmarkPageSections id="videoscience-bench" locale="zh" />
 
-## 准备数据与资产
-
-仓内资产：
-
-- `worldfoundry/data/benchmarks/assets/videoscience-bench/database/data.csv`
-- `worldfoundry/data/benchmarks/assets/videoscience-bench/database/data_filtered.jsonl`
-- `worldfoundry/data/benchmarks/assets/videoscience-bench/database/annotations.json`
-- `worldfoundry/data/benchmarks/assets/videoscience-bench/database/annotations_analysis.json`
-- `worldfoundry/data/benchmarks/assets/videoscience-bench/sample_results.csv`
-
-可选 HF dataset mirror：
+## 如何运行
 
 ```bash
-hf download lmgame/VideoScienceBench \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/VideoScienceBench
-```
-
-设置生成视频目录和 experiments table：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/videoscience/generated_videos
-export WORLDFOUNDRY_VIDEOSCIENCE_EXPERIMENTS_CSV="$PWD/worldfoundry/data/benchmarks/assets/videoscience-bench/database/data.csv"
-```
-
-直接运行 VLM judge 时配置 provider：
-
-```bash
-export WORLDFOUNDRY_VIDEOSCIENCE_PROVIDER=openai
-export WORLDFOUNDRY_VIDEOSCIENCE_MODEL=gpt-4o
-export OPENAI_API_KEY=...
-```
-
-安装对应 package 和 API key 后，仓内 provider layer 也支持 Gemini 和 Anthropic。
-
-## 输入与输出布局
-
-runner 使用 `data.csv` 的 `Unique ID` 匹配生成视频。接受的文件名包括：
-
-```text
-vid_<id>_run_1.mp4
-vid_<id>.mp4
-<id>.mp4
-```
-
-也支持 `vid_094_run_1.mp4` 这种 zero-padded 形式。
-
-生成视频布局示例：
-
-```text
-/path/to/videoscience/generated_videos/
-  vid_94_run_1.mp4
-  vid_106_run_1.mp4
-  vid_101_run_1.mp4
-```
-
-公开 CLI 输出：
-
-```text
-tmp/videoscience-bench/official-validation/
-  scorecard.json
-  raw_metric_table.jsonl
-  per_sample_scores.jsonl
-  runner_runtime_report.json
-  specialized_normalizer_stdout.log
-  specialized_normalizer_stderr.log
-```
-
-直接 judge 输出：
-
-```text
-tmp/videoscience-bench/direct-run/
-  scorecard.json
-  raw_metric_table.jsonl
-  per_sample_scores.jsonl
-  upstream_stdout.log
-  upstream_stderr.log
-  upstream/
-    videoscience_judge_results.json
-    per_sample/
-```
-
-## 公开 CLI
-
-catalog 支持的公开命令是用 `official-validation` 导入结果：
-
-```bash
-cd "$WORLDFOUNDRY_REPO_ROOT"
-
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id videoscience-bench \
   --mode official-validation \
-  --official-results-path /path/to/videoscience_judge_results.json \
-  --generated-artifact-dir /path/to/videoscience/generated_videos \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/videoscience-bench/official-validation \
   --json
 ```
 
-## 直接 Runner
+运行时 CLI 接受 `--experiments-csv`、`--evaluation-results-dir`、可选 `--reference-videos-dir`，以及裁判标志（`--judge-provider`、`--judge-model`、`--judge-max-runs`、`--max-frames`、`--judge-fps`）。`--ready-only` 只评产物齐全的实验。默认导入：`WORLDFOUNDRY_VIDEOSCIENCE_BENCH_RESULTS_PATH`。
 
-导入已有 VideoScience judge JSON 或 CSV：
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/videoscience-bench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/videoscience_bench/runtime/videoscience_bench`。
 
-```bash
-cd "$WORLDFOUNDRY_REPO_ROOT"
+产物包括 `scorecard.json`（主键 `videoscience_average`）。
 
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videoscience_bench/run_videoscience_bench_official_runner.py \
-  --official-results-path /path/to/videoscience_judge_results.json \
-  --output-dir tmp/videoscience-bench/direct-import \
-  --json
-```
-
-对生成视频运行仓内 VLM judge：
-
-```bash
-cd "$WORLDFOUNDRY_REPO_ROOT"
-
-export OPENAI_API_KEY=...
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videoscience_bench/run_videoscience_bench_official_runner.py \
-  --run-official \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --experiments-csv "${WORLDFOUNDRY_VIDEOSCIENCE_EXPERIMENTS_CSV}" \
-  --judge-provider "${WORLDFOUNDRY_VIDEOSCIENCE_PROVIDER:-openai}" \
-  --judge-model "${WORLDFOUNDRY_VIDEOSCIENCE_MODEL:-gpt-4o}" \
-  --max-frames 24 \
-  --output-dir tmp/videoscience-bench/direct-run \
-  --json
-```
-
-本地小规模运行：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videoscience_bench/run_videoscience_bench_official_runner.py \
-  --run-official \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --experiments-csv "${WORLDFOUNDRY_VIDEOSCIENCE_EXPERIMENTS_CSV}" \
-  --judge-max-runs 10 \
-  --ready-only \
-  --output-dir tmp/videoscience-bench/direct-run-first10 \
-  --json
-```
-
-`--ready-only` 会限制到表格中标记为 `Done` 的行。
-
-## 指标
-
-| Metric ID | 含义 |
-| --- | --- |
-| `prompt_consistency` | 生成视频是否遵循要求的 setup 和 procedure。 |
-| `phenomenon_congruency` | 预期科学现象是否出现，并且是否科学正确。 |
-| `correct_dynamism` | 除主要现象外，运动和交互是否符合相关物理规律。 |
-| `immutability` | 除非 prompt 要求变化，否则物体是否保持 identity 和 attributes 稳定。 |
-| `spatio_temporal_coherence` | 是否避免 flicker、teleportation、identity swaps 和不自然 transitions。 |
-| `videoscience_average` | 可用 VideoScience metrics 的平均值；主指标。 |
-
-judge rubric 是 1-4 分。WorldFoundry 使用 `(score - 1) / 3` 归一到 `[0, 1]`，越高越好。
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

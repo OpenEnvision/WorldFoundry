@@ -1,0 +1,50 @@
+---
+title: "MVDiffusion"
+description: "MVDiffusion from Simon Fraser University: correspondence-aware multiview image generation and scene texturing; Runner parity pending."
+modelId: "mvdiffusion"
+pageSource: authored
+---
+
+MVDiffusion generates consistent multi-view images in one shot — panoramas from text or perspective views, and texture views for scenes — by letting diffusion branches attend to each other. In this catalog it runs through an in-tree runtime subprocess adapter; runner parity is pending runtime assets.
+
+<ModelPaperFigures modelId="mvdiffusion" locale="en" />
+
+The recorded paper is [MVDiffusion: Enabling Holistic Multi-view Image Generation with Correspondence-Aware Diffusion](https://arxiv.org/abs/2307.01097) (NeurIPS 2023 (spotlight), 2023).
+
+Project page: [mvdiffusion.github.io](https://mvdiffusion.github.io/). Code: [Tangshitao/MVDiffusion](https://github.com/Tangshitao/MVDiffusion).
+
+The paper is [MVDiffusion: Enabling Holistic Multi-view Image Generation with Correspondence-Aware Diffusion](https://arxiv.org/abs/2307.01097). Project page: [mvdiffusion.github.io](https://mvdiffusion.github.io). Code: [Tangshitao/MVDiffusion](https://github.com/Tangshitao/MVDiffusion).
+
+<ModelCommandBuilder modelId="mvdiffusion" locale="en" />
+
+## What it is for
+
+Pick `mvdiffusion` for feed-forward geometry: views in, reconstruction / trajectory / point cloud out. Use it when you need the catalog 3D route rather than a depth-only prior.
+
+Per the NeurIPS 2023 paper (arXiv 2307.01097), parallel diffusion-model branches generate all views simultaneously with correspondence-aware attention keeping them globally consistent. Missing source checkout, checkpoints, or CUDA dependencies are reported at inference time. It is published by Simon Fraser University.
+
+Catalog tasks include correspondence-aware multiview image generation and scene texturing. Catalog aliases include `MVDiffusion: Enabling Holistic Multi-view Image Generation`.
+
+## Runtime contract
+
+Required `prompt` and `image`; optional `video` and `actions`; artifacts `generated_3d_asset` and `mvdiffusion.png`.
+
+CLI task profiles: `default`. WorldFoundry binds `MVDiffusionPipeline`.
+
+Family status: **Runner parity pending**.
+
+Integration is wired for plan-only inference today; full artifact parity needs the upstream source checkout and checkpoints staged locally. Stage them before expecting real multi-view output.
+
+WorldFoundry exposes an in-tree runtime subprocess adapter for MVDiffusion.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run mvdiffusion --pipeline.task-profile default` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh mvdiffusion`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="mvdiffusion" locale="en" />

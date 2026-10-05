@@ -1,0 +1,103 @@
+id: warp-as-history
+name: Warp-as-History
+aliases:
+- wah
+- warp_as_history
+- yyfz233/warp-as-history
+tasks:
+- image-to-video
+- camera-controlled-video-generation
+provider: official_repo
+source:
+  status: open_source
+  official_repo_url: https://github.com/yyfz/Warp-as-History
+  license: apache-2.0
+official_sources:
+  paper: https://arxiv.org/abs/2605.15182
+  project_page: https://yyfz.github.io/warp-as-history
+  github:
+    url: https://github.com/yyfz/Warp-as-History
+  huggingface:
+  - repo_id: BestWishYsh/Helios-Distilled
+    status: confirmed
+  - repo_id: yyfz233/Pi3X
+    status: confirmed
+  - repo_id: yyfz233/warp-as-history
+    status: confirmed
+  license: apache-2.0
+checkpoint:
+  repos:
+  - id: yyfz233/warp-as-history
+    filename: visible_lora_state_step1000.safetensors
+    path: checkpoints/warp-as-history
+  - id: yyfz233/Pi3X
+    filename: model.safetensors
+    path: checkpoints/pi3x
+  - id: BestWishYsh/Helios-Distilled
+    path: checkpoints/helios-distilled
+integration:
+  status: integrated
+  notes:
+  - Official Warp-as-History source, Helios diffusers runtime, Pi3 submodule code,
+    CLI scripts, and demo assets are vendored under worldfoundry.synthesis.visual_generation.warp_as_history.warp_as_history_runtime.
+  - Large checkpoints remain external local-cache assets and are injected through
+    model_path/lora_path/pi3x_ckpt_path or WAH_HELIOS_DISTILLED_PATH/WAH_LORA_PATH/WAH_PI3X_CKPT_PATH.
+  - The vendored official BMX/graffiti warp-video demo uses the dedicated
+    warp-as-history conda environment.
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: warp-as-history
+runtime_profile: runtime-profile:warp-as-history
+runner_parity:
+  status: verified
+  notes:
+  - WarpAsHistorySynthesis plan-onlys and executes the official in-tree CLI script.
+    GPU parity passed with staged Helios-Distilled and LoRA checkpoints; Pi3X is
+    only needed for camera-pose-to-warp rendering.
+  - Per-run visual QA and artifact checks are tracked outside the model catalog.
+variants:
+- id: warp-as-history
+  task: image-to-video
+  integration_status: integrated
+  checkpoint_refs:
+  - repo_id: BestWishYsh/Helios-Distilled
+  - repo_id: yyfz233/Pi3X
+    filename: model.safetensors
+  - repo_id: yyfz233/warp-as-history
+    filename: visible_lora_state_step1000.safetensors
+  runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+  pipeline_binding: warp-as-history
+  runtime_profile: runtime-profile:warp-as-history
+  demo_parity:
+    status: verified
+    demo_command:
+    - python
+    - -c
+    - from worldfoundry.pipelines.warp_as_history.pipeline_warp_as_history import WarpAsHistoryPipeline;
+      pipe = WarpAsHistoryPipeline.from_pretrained(); pipe(prompt='camera controlled
+      demo', output_path='tmp/warp_as_history_demo.mp4')
+    expected_artifacts:
+    - tmp/warp_as_history_demo.mp4
+catalog_category: world_models
+catalog_scope: world-model/camera-control models
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'Warp-as-History (WAH) is a camera-controlled image-to-video method: it warps the input image along the requested camera path and treats those warps as the generation history that a video model then refines. Both integration and runner status are verified — GPU parity passed with staged Helios-Distilled and LoRA checkpoints, reproducing the official BMX/graffiti warp-video demo.'
+  overview_zh: Warp-as-History（WAH）是相机可控的图生视频方法：沿请求的相机轨迹对输入图像做 warp，并把这些 warp 当作「历史帧」交给视频模型细化。集成与 runner 状态均为 verified——使用就位的 Helios-Distilled 与 LoRA checkpoint 通过 GPU 一致性验证，复现了官方 BMX/涂鸦 warp 视频 demo。
+  architecture: WAH = geometric warping + a Helios-Distilled diffusers runtime + a task LoRA; Pi3 submodule code is vendored for camera-pose-to-warp rendering. Checkpoints stay external and are injected through model_path/lora_path/pi3x_ckpt_path or the corresponding WAH_* environment variables.
+  architecture_zh: WAH = 几何 warp + Helios-Distilled diffusers 运行时 + 任务 LoRA；Pi3 子模块代码被内置，用于相机位姿到 warp 的渲染。checkpoint 保持外部，通过 model_path/lora_path/pi3x_ckpt_path 或对应的 WAH_* 环境变量注入。
+  usage_notes: This model intentionally uses a dedicated conda environment because its official stack pins Python 3.10 and torch 2.5.0+cu121 — do not run it in the unified env. Pi3X is only needed when rendering warps from camera poses.
+  usage_notes_zh: 该模型有意使用专用 conda 环境：官方栈固定 Python 3.10 与 torch 2.5.0+cu121——请勿在统一环境中运行。只有从相机位姿渲染 warp 时才需要 Pi3X。
+  limitations:
+  - Dedicated environment required (Python 3.10 / torch 2.5.0+cu121); the unified env will not work.
+  - The publishing institution is not recorded in this repository.
+  - Camera paths far from the input viewpoint degrade the warp history and output quality.
+  limitations_zh:
+  - 需要专用环境（Python 3.10 / torch 2.5.0+cu121）；统一环境无法运行。
+  - 发表机构在本仓库中未记录。
+  - 相机轨迹偏离输入视角过远时，warp 历史与输出质量都会下降。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-motion evaluation matches WAH's core capability.
+    reason_zh: 相机运动评测正对应 WAH 的核心能力。

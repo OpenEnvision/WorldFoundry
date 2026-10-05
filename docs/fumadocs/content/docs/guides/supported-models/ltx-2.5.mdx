@@ -1,0 +1,48 @@
+---
+title: "LTX-2.5 Distilled"
+description: "LTX-2.5 Distilled from Lightricks: text-to-video and image-to-video; Runner parity pending; dedicated `ltx-2.5`."
+modelId: "ltx-2.5"
+pageSource: authored
+---
+
+LTX-2.5 is a 22B joint audio-video model. This inference-only integration exposes the official fast two-stage DistilledPipeline for text-to-video and image-to-video, including synchronized audio generation.
+
+<ModelPaperFigures modelId="ltx-2.5" locale="en" />
+
+Code: [Lightricks/LTX-2](https://github.com/Lightricks/LTX-2).
+
+<ModelCommandBuilder modelId="ltx-2.5" locale="en" />
+
+## What it is for
+
+`ltx-2.5` is the recorded text/image-to-video line. Use it when you want both prompt and still conditioning on the same catalog card.
+
+The official distilled path encodes prompts with the bundled Gemma 4 12B text encoder, jointly denoises video and audio at half resolution, applies the LTX-2.5 latent spatial upscaler, performs the short second-stage refinement, and decodes through separate video and audio VAEs. WorldFoundry calls that source directly instead of adapting the incompatible LTX-2.3 monolithic loader. It is published by Lightricks.
+
+Catalog tasks include text-to-video, image-to-video, and audio-video-generation. Catalog aliases include `ltx2.5`, `ltx25`, and `ltx-2.5-distilled`. Documented modalities: text and image in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Baseline text/image-to-video quality and motion evaluation).
+
+LTX-2.5 audio-video generation from a prompt. Sibling cards cover 2.x and LTX-Video.
+
+## Runtime contract
+
+Optional `prompt`, `frames`, `fps`, `height`, and `width`; artifacts `generated_video` and `ltx-2.5.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `LTX25Pipeline`.
+
+Family status: **Runner parity pending**.
+
+Accept the Hugging Face model terms, download the five required split components while preserving their repository folders, clone the recorded source revision, install its ltx-core and ltx-pipelines dependencies in the dedicated environment, and pass execute=True. The optional duration head enables prompt-based automatic duration.
+
+Command construction and official split-component mapping are validated without importing upstream CUDA code.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run ltx-2.5 --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+Recorded weight repositories include `Lightricks/LTX-2.5`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh ltx-2.5`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="ltx-2.5" locale="en" />

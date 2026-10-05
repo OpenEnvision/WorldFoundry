@@ -1,152 +1,68 @@
 ---
 title: WorldBench
-description: Import WorldBench scores or materialize in-tree artifact scores in WorldFoundry.
+description: "UCLA diagnostic physics bench: 425 Kubric scenes, SAM2 vs ground-truth physics, plus text QA. WorldFoundry implements an in-tree scorer; it does not invent a board."
 ---
 
-## About
+WorldBench (UCLA, with Sony AI, Yale, and DEVCOM ARL) diagnoses how close world models are to **physics**. **Kubric** (PyBullet + Blender) renders **425** physically accurate scenes across four concepts — motion physics, object permanence, support relations, scale / perspective — with ground-truth depth, normals, segmentation, and flow. Models generate continuations from initial frames; **SAM2** tracks first-frame boxes and masks are compared to simulation (foreground mIoU, background RMSE). A textual subset adds multiple-choice and yes/no QA.
 
-WorldBench is represented in WorldFoundry as a physical-understanding benchmark with video-based and text-based result components. The cataloged public dataset is `worldbenchmark/WorldBench`, which redirects to `worldbenchmark/IntuitivePhysics` in the recorded Hugging Face metadata. The catalog describes 425 video-based scenes with RGB, normal, depth, flow, and segmentation assets, plus 181 text-based videos with multiple-choice and binary questions.
+The public evaluator calls Dice “mIoU”. WorldFoundry reports **conventional `foreground_miou`** and the release’s **`foreground_dice` compatibility value** separately. The inspected HF tree currently has **375** scene directories (15 scenarios × 25) versus the paper’s 425.
 
-WorldFoundry already includes the WorldBench runner under `worldfoundry/evaluation/tasks/execution/runners/worldbench`. Do not clone official repos for this page. The current in-tree runner imports caller-provided JSON/JSONL/CSV/TSV results or materializes scores from a WorldFoundry artifact-score directory; no source-confirmed upstream evaluator was found in the local GitHub/Hugging Face references.
+Paper: [WorldBench](https://arxiv.org/abs/2601.21282). Project: [world-bench.github.io](https://world-bench.github.io/). Data: [`worldbenchmark/IntuitivePhysics`](https://huggingface.co/datasets/worldbenchmark/IntuitivePhysics). Dataset and evaluator declare **no redistribution license**.
 
-## What It Measures
+WorldFoundry implements an in-tree, model-backed runner. Runtime environments still record: **no confirmed redistributable official raw-video evaluator**, and **`official-run` from videos is not a release claim**. Import via `WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH` is the supported compatibility path.
 
-WorldBench asks how close generative world models are to the **physical world**. It evaluates video continuation from a short input clip and text-based physics reasoning, measuring whether models preserve object permanence, support relations, motion physics, and scale/perspective over time.
+<BenchmarkPageSections id="worldbench" locale="en" />
 
-## Benchmark Design
-
-| Track | Scenarios | Assets | Evaluation |
-| --- | --- | --- | --- |
-| Video-based | 425 Kubric/PyBullet scenes across 4 physics categories | RGB, normals, depth, flow, segmentation; 132-frame sequences | Foreground mIoU via SAM2 mask comparison |
-| Text-based | 181 videos with multiple-choice and binary questions | 9-frame input + VLM QA | Language QA accuracy |
-| Categories | Motion physics, object permanence, support relations, scale/perspective | Each case isolates one physical concept | Disentangled diagnostic probes |
-
-The official project uses Kubric (PyBullet + Blender) for physically accurate ground truth. Performance degrades with prediction horizon — the sharpest drop occurs after the first predicted frames.
-
-## Official References
-
-- Paper: [arXiv:2601.21282](https://arxiv.org/abs/2601.21282)
-- Project page: [world-bench.github.io](https://world-bench.github.io/)
-- Dataset: [worldbenchmark/WorldBench](https://huggingface.co/datasets/worldbenchmark/WorldBench) (redirects to `worldbenchmark/IntuitivePhysics`)
-- In-tree runner: `worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py`
-
-## Leaderboard Notes
-
-The official site reports per-category mIoU for world foundation models and per-category accuracy for vision-language models. WorldFoundry does not currently ship a source-confirmed upstream evaluator; it imports caller-provided result tables or materializes scores from artifact-score directories. Leaderboard parity remains pending until the complete upstream scoring workflow is audited.
-
-## Prepare Data And Assets
-
-Run from the WorldFoundry repository root:
+## How to run
 
 ```bash
-cd /path/to/WorldFoundry
-export PYTHONPATH="$PWD:${PYTHONPATH:-}"
-```
+hf download worldbenchmark/IntuitivePhysics --repo-type dataset \
+  --local-dir cache/worldfoundry/data/hfd_datasets/worldbenchmark/IntuitivePhysics
 
-Download or stage the public dataset if you need local prompts, videos, or labels:
-
-```bash
-export WORLDFOUNDRY_WORLDBENCH_DATA_ROOT=/path/to/worldbenchmark__WorldBench
-hf download worldbenchmark/WorldBench \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_WORLDBENCH_DATA_ROOT}"
-```
-
-Prepare one of these scoring inputs:
-
-```text
-existing result file:
-  results.json
-  results.jsonl
-  results.csv
-  results.tsv
-
-artifact-score directory:
-  <artifact_score_dir>/
-    one or more WorldFoundry metric artifacts that can be aggregated into
-    video_based_accuracy, text_based_accuracy, multiple_choice_accuracy,
-    binary_accuracy, or worldbench_average
-```
-
-The simplest supported result table is:
-
-```csv
-metric_id,score
-video_based_accuracy,0.75
-text_based_accuracy,0.75
-multiple_choice_accuracy,0.75
-binary_accuracy,0.75
-worldbench_average,0.75
-```
-
-Per-sample rows are also accepted when they contain recognizable fields such as `sample_id`, `component`, `question_type`, `prediction`, `answer`, `correct`, or `score`.
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/worldbench/generated_videos
-export WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH=/path/to/worldbench/results.csv
-export WORLDFOUNDRY_WORLDBENCH_ARTIFACT_SCORE_DIR=/path/to/worldbench/artifact_scores
-```
-
-## Run With WorldFoundry
-
-Public command for importing a completed WorldBench result file:
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id worldbench \
-  --mode official-validation \
-  --official-results-path "${WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/worldbench/official-validation \
-  --json
-```
-
-There is no public benchmark-zoo `official-run` command wired for WorldBench in this catalog entry. Use the direct runner when you want the in-tree artifact-score path.
-
-Direct runner command for importing results:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py \
-  --official-results-path "${WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH}" \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/worldbench/direct-import \
-  --json
-```
-
-Direct runner command for materializing scores from a WorldFoundry artifact-score directory:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py \
   --run-official \
-  --artifact-score-dir "${WORLDFOUNDRY_WORLDBENCH_ARTIFACT_SCORE_DIR}" \
+  --video-only \
+  --dataset-root "${WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT}" \
   --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/worldbench/direct-artifact-scores \
+  --sam2-checkpoint "${WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT}" \
+  --output-dir tmp/worldbench/video \
   --json
 ```
 
-The artifact-score command writes an intermediate result file at:
+`--predicted-mask-dir` skips SAM2 when masks already exist. `--text-only` plus `--answer-manifest` covers QA. Frame knobs: `--ground-truth-start-frame`, `--generated-skip-frames`. Shared assets: `worldbench_dataset_assets`, `facebook/sam2.1-hiera-large`.
+
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/worldbench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/worldbench`.
+
+Outputs include `scorecard.json` (primary `foreground_miou`) and `worldbench_evaluation.json`.
+
+## Dataset, videos, and frame alignment
+
+The in-tree runtime does **not** import an upstream checkout. SAM2 comes from `worldfoundry.base_models.perception_core.segment.sam2`. Dataset root must be the public HF layout:
 
 ```text
-tmp/worldbench/direct-artifact-scores/upstream/worldbench_results.json
+<dataset>/
+  scenes/<group>/<scenario>/<scene>/
+    rgba_00000.png
+    segmentation_00000.png
+    …
+  textual_questions/*.json
 ```
 
-## Metrics
+Generated continuations can mirror scene ids:
 
-| Metric ID | Meaning |
-| --- | --- |
-| `video_based_accuracy` | Accuracy on video-based physical prediction tasks. Fractions and percentages are normalized to a unit score. |
-| `text_based_accuracy` | Accuracy on text-question tasks. |
-| `multiple_choice_accuracy` | Accuracy for multiple-choice text questions when rows expose that question type. |
-| `binary_accuracy` | Accuracy for binary or yes/no text questions when rows expose that question type. |
-| `worldbench_average` | Primary aggregate, computed as the mean of available normalized WorldBench components when not supplied directly. |
+```text
+<generated>/<group>/<scenario>/<scene>.mp4
+<generated>/<group>/<scenario>/<scene>/output.mp4
+<generated>/<group>/<scenario>/<scene>/00000.png
+```
 
-## Outputs
+Any other video layout needs `--video-manifest` (JSON / JSONL / CSV / TSV) with `sample_id` and `video_path`. Text predictions use `--answer-manifest`. Stable `question_id` is `<question-file-stem>:<row>`; or include both `video_name` and `question` because some videos have two questions.
 
-WorldFoundry writes these files under `--output-dir`:
+The bench uses **nine conditioning frames**. By default, generated frame 0 aligns to GT frame 9 and **24 continuation frames** are scored. If the model prepends those nine frames, pass `--generated-skip-frames 9`. Defaults live in `worldfoundry/data/benchmarks/assets/worldbench/evaluator.yaml`.
 
-- `scorecard.json`: normalized WorldBench scorecard.
-- `per_sample_scores.jsonl`: normalized sample rows when present in the input.
-- `raw_metric_table.jsonl`: metric rows with raw and normalized scores.
-- `upstream/worldbench_results.json`: only when `--run-official` materializes artifact scores.
+Raw video scoring defaults to `facebook/sam2.1-hiera-large`. Set `WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT` to a local file, otherwise the HF cache resolver is used. Import-only path: `--official-results-path` without `--run-official`.
+
+Use `worldfoundry-unified-cu128`. A successful in-tree run is integration evidence, not `leaderboard_valid`, until full-dataset numerical parity is audited. The inspected upstream pin `WorldBenchmark/worldbench_eval@4575a164…` has no license file and a broken public evaluator; WorldFoundry keeps provenance in the catalog YAML, not a `SOURCE.json`.
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

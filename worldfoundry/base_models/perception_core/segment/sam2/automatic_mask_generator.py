@@ -13,6 +13,7 @@ import numpy as np
 import torch
 from torchvision.ops.boxes import batched_nms, box_area  # type: ignore
 
+from worldfoundry.base_models.perception_core.segment.mask_data import MaskData
 from worldfoundry.base_models.perception_core.segment.sam2.modeling.sam2_base import SAM2Base
 from worldfoundry.base_models.perception_core.segment.sam2.sam2_image_predictor import SAM2ImagePredictor
 from worldfoundry.base_models.perception_core.segment.sam2.utils.amg import (
@@ -32,7 +33,6 @@ from worldfoundry.base_models.perception_core.segment.sam2.utils.amg import (
     uncrop_masks,
     uncrop_points,
 )
-from worldfoundry.core.utils.mask_data import MaskData
 
 
 class SAM2AutomaticMaskGenerator:

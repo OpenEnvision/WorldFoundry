@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
-from ..pipeline_utils import PipelineABC
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Union
 
 import torch
 
-from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
-from ...operators.lyra1_operator import Lyra1Operator
-from ...representations.point_clouds_generation.lyra.lyra1_representation import (
+from worldfoundry.base_models.three_dimensions.point_clouds.lyra.runtime_v1 import (
     Lyra1Representation,
 )
+from worldfoundry.base_models.three_dimensions.point_clouds.lyra.utils import (
+    resolve_lyra1_repo_root,
+)
+from worldfoundry.core.io.paths import scratch_directory
+
+from ...operators.lyra1_operator import Lyra1Operator
 from ...synthesis.visual_generation.lyra_1.synthesis import Lyra1Synthesis
+from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
+from ..pipeline_utils import PipelineABC
+from .checkpoints import prepare_lyra1_checkpoint_root
 
 
 class Lyra1Pipeline(PipelineABC):
@@ -85,6 +90,10 @@ class Lyra1Pipeline(PipelineABC):
         if load_representation:
             representation_model = Lyra1Representation.from_pretrained(
                 pretrained_model_path=repo_root,
+                checkpoint_dir=prepare_lyra1_checkpoint_root(
+                    checkpoint_dir=required_components.get("checkpoint_dir") or synthesis_model.checkpoint_dir,
+                    repo_root=resolve_lyra1_repo_root(repo_root),
+                ),
                 device=device,
                 static_ckpt_path=required_components.get("static_ckpt_path"),
                 dynamic_ckpt_path=required_components.get("dynamic_ckpt_path"),
@@ -169,8 +178,8 @@ class Lyra1Pipeline(PipelineABC):
             generated_root = output_root / "generated"
             reconstruction_root = output_root / "reconstruction"
         else:
-            generated_root = Path(tempfile.mkdtemp(prefix=f"lyra1_{mode}_generated_"))
-            reconstruction_root = Path(tempfile.mkdtemp(prefix=f"lyra1_{mode}_recon_"))
+            generated_root = scratch_directory(f"lyra1_{mode}_generated_")
+            reconstruction_root = scratch_directory(f"lyra1_{mode}_recon_")
 
         synthesis_kwargs = dict(kwargs)
         multi_trajectory = bool(synthesis_kwargs.pop("multi_trajectory", reconstruct_3d))
@@ -183,6 +192,15 @@ class Lyra1Pipeline(PipelineABC):
             multi_trajectory=multi_trajectory,
             **synthesis_kwargs,
         )
+        if synthesis_result.get("status") == "planned":
+            return {
+                **synthesis_result,
+                "mode": mode,
+                "prompt": processed["prompt"],
+                "actions": processed["actions"],
+                "mapped_trajectories": processed["mapped_trajectories"],
+                "trajectory": processed["trajectory"],
+            }
 
         reconstruction_result = None
         if reconstruct_3d:

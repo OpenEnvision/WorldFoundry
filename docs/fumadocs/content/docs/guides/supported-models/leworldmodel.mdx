@@ -1,0 +1,48 @@
+---
+title: "LeWorldModel"
+description: "LeWorldModel from Mila – Quebec AI Institute / Université de Montréal: latent-world-model and jepa-world-model; Runner parity pending."
+modelId: "leworldmodel"
+pageSource: generated
+---
+
+LeWorldModel (le-wm) studies latent world models: JEPA-style and pixel-space world models trained and evaluated on control tasks such as PushT. In this catalog an infer-only wrapper for the official eval route is registered; execution needs stable-worldmodel packages, task datasets, and policy checkpoints when the policy is not random.
+
+<ModelPaperFigures modelId="leworldmodel" locale="en" />
+
+The recorded paper is [arXiv 2603.19312](https://arxiv.org/abs/2603.19312).
+
+Project page: [le-wm.github.io](https://le-wm.github.io/). Code: [lucas-maes/le-wm](https://github.com/lucas-maes/le-wm).
+
+<ModelCommandBuilder modelId="leworldmodel" locale="en" />
+
+## What it is for
+
+Pick `leworldmodel` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+
+The recorded structure spans latent (JEPA) and pixel world-model variants (checkpoints at eren23/lewm-models). Runtime eval configs live under data/models/runtime/configs/le_wm/config/eval; train configs are not required for inference. It is published by Mila – Quebec AI Institute / Université de Montréal.
+
+Catalog tasks include latent-world-model, jepa-world-model, and pixel-world-model.
+
+## Runtime contract
+
+Optional `plan_only` and `timeout_seconds`; artifacts `generated_world` and `leworldmodel_result.json`.
+
+CLI task profiles: `pusht-eval`. WorldFoundry binds `LeWorldModelPipeline`.
+
+Family status: **Runner parity pending**.
+
+The route matches the official eval.py config flow and reports missing stable-worldmodel packages, task datasets, or non-random policy checkpoints before execution. Official PushT evaluation parity remains pending.
+
+WorldFoundry exposes an infer-only wrapper for the official LeWorldModel eval route under synthesis/visual_generation/le_wm.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run leworldmodel --pipeline.task-profile pusht-eval` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `eren23/lewm-models`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh leworldmodel`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="leworldmodel" locale="en" />

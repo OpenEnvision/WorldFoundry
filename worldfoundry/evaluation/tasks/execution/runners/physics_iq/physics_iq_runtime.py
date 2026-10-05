@@ -13,8 +13,8 @@ from typing import Any, Iterable
 from .official.scoring import IQTable
 from .physics_iq_prompts import VIEWS, load_description_rows, unique_generation_records
 from .protocols import PhysicsIQProtocolSpec
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import VIDEO_SUFFIXES
 
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 UPSTREAM_REVISION = "b02cf26dc15d559d0ca4f63a6917070312dde185"
 
 

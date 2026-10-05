@@ -1,0 +1,50 @@
+---
+title: "LaST-R1"
+description: "LaST-R1：视觉-语言-动作（VLA）、策略执行；计划中。"
+modelId: "last-r1"
+pageSource: generated
+---
+
+LaST-R1 是 MIT 许可、以强化学习训练的 VLA 策略。libero_10 RL 权重已在本地就位，但 WorldFoundry 尚缺少推理所需的模型专用 rollout 适配器。
+
+<ModelPaperFigures modelId="last-r1" locale="zh" />
+
+记录论文为[arXiv 2604.28192](https://arxiv.org/abs/2604.28192)。
+
+项目页：[siriyep.github.io/last-r1](https://siriyep.github.io/last-r1/)。代码：[CHEN-H01/LaST-R1](https://github.com/CHEN-H01/LaST-R1)。
+
+<ModelCommandBuilder modelId="last-r1" locale="zh" />
+
+## 用来做什么
+
+用 `last-r1` 做本卡的视觉-语言-动作推理。这条配方用来启动已记录的策略 profile。
+
+任务标签记录其为 VLA 加强化学习设计。官方仓库指针（CHEN-H01/LaST-R1，锁定 head ba4e9396）之外的架构内部细节仓库未记录。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、reinforcement_learning、策略执行。
+
+记录的评测入口包括[LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（该模型 manifest 的证据记录中提到了这一评测）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`fps`；产物 `action_trace`、`last-r1_action_trace.json`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `LastR1Pipeline`。
+
+系列状态：**计划中**。
+
+本地 libero_10 checkpoint 两片权重齐全；libero_goal 尚未下载完整。 官方 latent/action-token rollout 完成适配和验证前不可推理。
+
+仓库未记录 LaST-R1 策略推理或 GPU 验证。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run last-r1 --pipeline.task-profile interactive-video` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `chenhao01/LaST-R1`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh last-r1`；下载缺失的公开权重时加 `--download`。
+
+状态：**计划中**。
+
+<ModelRelatedRecipes modelId="last-r1" locale="zh" />

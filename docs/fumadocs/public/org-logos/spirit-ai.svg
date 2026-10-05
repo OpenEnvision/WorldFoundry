@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Spirit AI">
+  <rect width="128" height="128" rx="28" fill="#3d2b8c"/>
+  <circle cx="64" cy="48" r="16" fill="none" stroke="#f4e8c1" stroke-width="6"/>
+  <path fill="none" stroke="#f4e8c1" stroke-width="6" stroke-linecap="round" d="M64 64v28M48 100h32"/>
+</svg>

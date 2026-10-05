@@ -1,118 +1,30 @@
 ---
 title: PhyEduVideo
-description: PhyEduVideo 在 WorldFoundry 中的资产、runner、指标与限制。
+description: "WACV 2026 物理教育 T2V：60 个概念、205 条教学点 prompt。WorldFoundry 导入 judge 文件并校验覆盖——不跑 InternVL。"
 ---
 
+PhyEduVideo（IIIT Hyderabad、Adobe、IISER Thiruvananthapuram；WACV 2026）问的是 T2V 模型能不能**画出一个教学点**，不是它是否遵守某套定律分类。捆绑的 `Prompts/Prompts.json` 有 **6 类 60 个概念**（力学、振动与波动、流体、热力学、电磁学、光学），拆成 **205** 条视觉描述型教学点 prompt。
 
-## 官方参考
+这是**教育**，不是 [PhyGenBench](/zh/docs/evaluation/benchmark-hub/phygenbench)（27 条定律常识生成），不是 [PhyGround](/zh/docs/evaluation/benchmark-hub/phyground)（TI2V 上 13 条定律准则），也不是 [PhyFPS-Bench-Gen](/zh/docs/evaluation/benchmark-hub/phyfps-bench-gen)（帧率审计）。
 
-| 资源 | 链接 |
-| --- | --- |
-| 项目页 | [meghamariamkm.github.io/phyeduvideo26](https://meghamariamkm.github.io/phyeduvideo26/) |
-| 论文 | [arXiv:2601.00943](https://arxiv.org/abs/2601.00943) |
-| GitHub | [github.com/meghamariamkm/PhyEduVideo](https://github.com/meghamariamkm/PhyEduVideo) |
-| 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/phyeduvideo/run_phyeduvideo_official_runner.py` |
+论文：[PhyEduVideo](https://arxiv.org/abs/2601.00943)。项目：[meghamariamkm.github.io/phyeduvideo26](https://meghamariamkm.github.io/phyeduvideo26/)。代码：[meghamariamkm/PhyEduVideo](https://github.com/meghamariamkm/PhyEduVideo)。
 
-## 简介
+WorldFoundry **导入**调用方提供的结果文件（JSON / JSONL / CSV），对照捆绑 manifest 校验 prompt/视频覆盖，并写出 scorecard。InternVL / CLIP / VQA 评审栈**不**在仓内运行。
 
-PhyEduVideo 将 text-to-video 模型作为物理教育视频生成器来评估。源 README 将任务定位为 curriculum-aligned visual explanations：每个物理概念被拆成多个教学点，每个教学点都有用于生成解释性短片的 prompt。
+<BenchmarkPageSections id="phyeduvideo" locale="zh" />
 
-WorldFoundry 已经在 `worldfoundry/evaluation/tasks/execution/runners/phyeduvideo` 中包含可运行的 PhyEduVideo 集成，并在 `worldfoundry/data/benchmarks/assets/phyeduvideo` 打包 prompt/rubric JSON。运行 WorldFoundry 时不要克隆上游仓库。若你选择运行外部 judge stack，可以下载 Hugging Face checkpoint；benchmark wrapper 代码仍使用仓内实现。
-
-## 准备资产
-
-- Prompt suite：`worldfoundry/data/benchmarks/assets/phyeduvideo/Prompts/Prompts.json` 包含 60 个概念和 205 个教学点 prompt。
-- Rubric 文件：仓内打包 `SA.json`、`PC-1.json`、`PC-2.json`、`PC-3.json` 和 `cap.json`。
-- 候选视频：将 `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` 指向按 prompt ID 命名的生成视频。
-- 已有结果导入：传入 `--official-results-path` 或设置 `WORLDFOUNDRY_PHYEDUVIDEO_RESULTS_PATH`。接受 CSV 和 JSON。
-- Judge / checkpoint 资产：要与 README 的完整流程 parity，需要上游 InternVL / CLIP 或 VQA / video-quality judging stack。WorldFoundry 目前导入这些分数，不完整执行每个上游 judge。
-
-## 生成产物布局
-
-Prompt ID 形如 `Id{concept_id}_{teaching_point_id}`。生成产物目录应为扁平目录：
-
-```text
-generated_videos/
-  Id1_1.mp4
-  Id1_2.mp4
-  ...
-  phyeduvideo_results.csv
-```
-
-WorldFoundry 会把集成模型输出物化到这一命名布局后再评分。覆盖率检查会用视频 stem 与 `Prompts.json` 中的 prompt ID 对齐。
-
-## 用 WorldFoundry 运行
-
-通过公开 CLI 导入已有 PhyEduVideo 结果文件：
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id phyeduvideo \
   --mode official-validation \
-  --official-results-path /path/to/phyeduvideo_results.csv \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/phyeduvideo/validation \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/phyeduvideo/official-validation \
   --json
 ```
 
-通过公开 CLI 运行仓内评分包装器。该路径需要通过 `WORLDFOUNDRY_PHYEDUVIDEO_RESULTS_PATH` 提供 CSV/JSON，或把结果文件放到生成产物目录下：
+专用 runner 上的 `--run-official` 对 WorldFoundry 生成产物走同一条导入路径。产物包括 `scorecard.json`（主键 `phyeduvideo_average`）、`results_summary.csv`，以及文件提供时的逐样本行。
 
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-export WORLDFOUNDRY_PHYEDUVIDEO_RESULTS_PATH=/path/to/phyeduvideo_results.csv
-
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id phyeduvideo \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/phyeduvideo/run \
-  --json
-```
-
-直接调用仓内 runner：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-export WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR=tmp/phyeduvideo/direct
-export WORLDFOUNDRY_PHYEDUVIDEO_RESULTS_PATH=/path/to/phyeduvideo_results.csv
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/phyeduvideo/run_phyeduvideo_official_runner.py \
-  --run-official \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" \
-  --json
-```
-
-直接导入结果：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/phyeduvideo/run_phyeduvideo_official_runner.py \
-  --official-results-path /path/to/phyeduvideo_results.csv \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/phyeduvideo/direct-validation \
-  --json
-```
-
-## 指标
-
-| Metric ID | 含义 |
-| --- | --- |
-| `semantic_adherence` | 与教学点 prompt 及 rubric 中物体/动作要求的语义匹配。 |
-| `physics_commonsense` | PC-1/PC-2/PC-3 正确性的聚合，衡量视频是否表现目标物理概念。 |
-| `motion_smoothness` | 解释性视频运动平滑度。 |
-| `temporal_flickering` | 帧间稳定性；越高表示可见闪烁越少。 |
-| `phyeduvideo_average` | WorldFoundry 主指标。若没有显式 average，则取可用组件指标均值。 |
-
-所有分数都是越高越好；源结果使用更大尺度时会归一化到 `0..1`。
-
-## 输出
-
-输出目录包含：
-
-- `scorecard.json`：运行状态、指标、prompt/video 覆盖率、所选 backend 与 leaderboard 有效性标记。
-- `raw_metric_table.jsonl`：每个声明指标一行。
-- `per_sample_scores.jsonl`：输入结果文件包含 sample-level 字段时写出的 concept/teaching-point 结果。
-- `phyeduvideo_results.csv` 或 `phyeduvideo_results.json`：仓内包装器导入结果时复制出的结果文件。
-- 通过 `worldfoundry-eval zoo benchmark-run` 调用时，还会写出 `specialized_normalizer_stdout.log` 与 `specialized_normalizer_stderr.log`。
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

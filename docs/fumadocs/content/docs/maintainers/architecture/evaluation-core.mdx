@@ -1,49 +1,27 @@
 ---
-title: Evaluation Core
+title: Evaluation core
 description: How requests, runners, metrics, catalogs, and reporting connect inside the evaluation package.
 ---
 
 ## Introduction
 
-This page explains how the evaluation package is wired—not as a file index, but as a sequence of responsibilities. Read [Workflow](/docs/maintainers/architecture/workflow) first for the end-to-end run story; use this page when you need to know which layer owns a change and what must stay stable across releases.
+This page is the evaluation package from the inside: which types stay stable, which function owns a run, and which files a reviewer can trust. Read [Workflow](/docs/maintainers/architecture/workflow) first if you only need the path from CLI to disk.
 
 The package flows in one direction: **public contracts** define JSON-safe shapes, **execution runners** produce side effects and artifacts, **catalog loaders** turn YAML into those contracts, and **reporting** turns metrics into scorecards. API modules should stay import-light; heavy runtime code should never leak backward into `evaluation/api/`.
 
-For module-level lookup, use the [Codebase Map](/docs/maintainers/architecture/file-index).
+For module-level lookup, use the [Codebase map](/docs/maintainers/architecture/file-index).
 
-## End-to-End Flow
+## End-to-end flow
 
-Every evaluation run—whether it loads a model or scores existing files—passes through the same high-level stages:
+Evaluate and model-only runs enter `run_evaluate()` in `evaluate.py`. Model mode generates and aligns results first; both modes then delegate scoring and artifact output to `ExistingResultsRunner`. Model-plus-benchmark runs enter `run_model_benchmark()` through `execute_prepared_evaluation()` and use `ManifestBenchmarkRunner` for official-suite scoring.
 
-```python
-# evaluation/tasks/execution/evaluate.py
-result = run_evaluate(request)
+<ArchDiagram id="evaluation-core" />
 
-# _mode() picks the delegate runner:
-if mode == "existing-results":
-    runner = ExistingResultsRunner(...)
-elif mode == "model" and uses_metric_objects:
-    runner = ContractRunner(...)      # model + Metric objects
-elif mode == "model" and uses_benchmark:
-    runner = ModelBenchmarkRunner(...)  # model + benchmark
-else:
-    runner = ExistingResultsRunner(...)  # model + metric ids
-
-# All paths converge on metrics + reporting:
-runner.generate(...)          # ContractRunner / ModelBenchmarkRunner only
-metrics = runner.compute_metrics(...)
-report = runner.write_scorecard_and_report(metrics)
-```
-
-The facade in `evaluate.py` stays thin: it validates input, picks a delegate, and converts the result. All file writing, sample ledgers, and manifest updates happen inside the delegate runners.
-
-User-facing CLI, TUI, and Workspace flows enter through `execution/orchestration/service.py`. That module validates one of five intent dataclasses and compiles it to either `ModelBenchmarkRunRequest` or `EvaluateRunRequest`. Frontends must not duplicate generation, artifact materialization, benchmark dispatch, or metric execution. New UX should normally add an intent-to-request mapping, not another runner.
-
-Keep the three planning boundaries distinct. `PreparedEvaluation` is the user-facing compiler result and owns preflight diagnostics plus protocol-fidelity policy. `RunPlan` is the lower-level plan for one generation/evaluate stage. `ModelBenchmarkRunRequest` is the two-stage generation-plus-official-evaluator request. Do not wrap these in a fourth recipe executor; reproduction profiles and UI intents must compile onto these existing request types.
+User-facing CLI, TUI, and Workspace flows compile into those request types through `execution/orchestration/service.py`. The five intent dataclasses, the three planning boundaries (`PreparedEvaluation`, `RunPlan`, `EvaluateRunRequest` / `ModelBenchmarkRunRequest`), and the compile entrypoints are mapped in [Surfaces and orchestration](/docs/maintainers/architecture/surfaces-orchestration). Frontends must not duplicate generation, artifact materialization, benchmark dispatch, or metric execution; new UX should add an intent-to-request mapping, not another runner. Do not wrap these in a fourth recipe executor.
 
 Prepared evaluations record orthogonal provenance for generation, data, evaluation, runtime, and reference fidelity. Claim level is derived from those fields: a fully pinned official run may be an `exact_reproduction`, unchanged official data and evaluation may be `benchmark_comparable`, and custom-data or metric-only runs are `diagnostic`. For model × benchmark plans, checked-in benchmark evidence is an additional upper bound: a bounded component runner remains executable, but the plan is downgraded to `diagnostic` until the catalog establishes full official-suite evidence. A caller flag can only narrow this policy, never promote a diagnostic run. `score_valid` records whether the selected evaluator produced a usable score; `leaderboard_valid` additionally requires comparable provenance and benchmark-runner evidence.
 
-## Public Contracts
+## Public contracts
 
 The `evaluation/api/` modules define the shapes shared by runners, CLI, tests, docs exports, and validation. Treat changes here as semver-sensitive: downstream code assumes `to_dict()` / `from_dict()` round-trips and stable field names on disk.
 
@@ -51,27 +29,41 @@ At the sample level, a **`GenerationRequest`** carries ids, task name, inputs, c
 
 These types are intentionally free of checkpoint paths, subprocess details, or vendor-specific imports. Runners translate catalog YAML into these contracts at run time.
 
-## Run Paths
+Keyword overrides on a run request replace fields without copying live runners, metrics, or nested configuration objects. The original request remains unchanged; execution and cleanup use the supplied instances.
 
-Three delegate runners cover the common execution shapes. Pick the path that matches your task—do not add conditional branches to the facade when a new delegate will do.
+## Run paths
 
-**ContractRunner** (`contract.py`) is the reference in-process path for model execution plus `Metric` objects. It normalizes requests, writes an execution plan, runs generation (with optional SQLite cache reuse), computes per-sample metrics, aggregates them, and emits scorecard and report artifacts. Use it when you need the strictest artifact layout and custom metric objects in the same process.
+Three run paths cover the common execution shapes. Pick the path that matches your task—do not add conditional branches to the dispatch when a new path will do.
 
-**ExistingResultsRunner** (`existing_results.py`) scores artifacts that already exist on disk. It loads results from a path or inline list, aligns them to requests, runs built-in metric ids or artifact checks, and writes the same summary and scorecard bundle as a full model run. Use it for hosted API batches, offline demos, or any workflow where generation happened outside WorldFoundry.
+**ContractRunner** (`contract.py`) normalizes requests and executes generation with optional cache reuse. It delegates scoring and report output to `ExistingResultsRunner`, so custom metrics use the same computation and aggregation logic online and offline.
 
-**ModelBenchmark runner** (`model_benchmark.py`) chains generation with a benchmark-zoo runner. It resolves the benchmark manifest, materializes requests from the task registry, runs the model, materializes generated artifacts for the external evaluator, and hands normalized metrics to reporting. Use it for end-to-end model-plus-benchmark runs.
+**ExistingResultsRunner** (`existing_results.py`) aligns existing results with requests and owns sample ledgers, scorecards, and reports. `scoring.py` executes bounded metric batches and calls each metric’s `aggregate()` while preserving direction, raw and normalized statistics, confidence intervals, and skip details. The evaluate facade accepts benchmark metric IDs, built-in offline metric IDs, and metric objects in the same run. Missing requested numeric fields produce invalid metric records with skip reasons.
 
-When model mode receives string metric ids instead of `Metric` objects, scoring falls through to the same path as `ExistingResultsRunner` even though generation already ran in-process. See [Workflow — Model Mode Detail](/docs/maintainers/architecture/workflow#model-mode-detail).
+`aggregate_mean(...)` accepts Python and NumPy real scalars, using the same numeric eligibility rule for means and valid counts. Scores returned directly and scores restored from checkpoints therefore aggregate identically.
 
-## Reproducible Planning
+Online and offline paths share result conversion, preserving top-level score fields and shorthand artifact paths. Raw fields are merged into `metadata.extra`, including fields within score mappings; existing metadata wins same-name conflicts. Each output metric ID belongs to one executor: overlapping declarations are rejected before generation when known, and duplicate dynamically emitted IDs fail scoring. Embodied metric suites use registered directions or explicit defaults for embodied success/reward metrics; unknown field metrics have no assumed direction.
 
-Before generation starts, task-driven runs fix sample ids, splits, and input keys through **`RunPlan`** in `plan.py`. The plan connects the task registry, optional dataset manifest, and evaluate facade: registry lookup → materialized requests → `EvaluateRunRequest`. Fingerprinting on the plan makes reruns and cache reuse deterministic across machines.
+The `numeric` wildcard expands to the union of fields in successful aligned results before scoring batches begin. Each field then uses the same definition and missing-value handling as an explicit `numeric:<field>` selection. Expansion is scoped to the run, so the caller can reuse the metric object with another dataset.
 
-Materialization in `materialize.py` turns dataset rows or task samples into `GenerationRequest` rows. Prove this step with `worldfoundry-eval task materialize` before spending GPU time—most "works locally, fails in CI" bugs trace to mismatched sample ids here, not to model loading.
+**`run_model_benchmark()`** (`model_benchmark.py:825`) chains generation with a benchmark-zoo runner. There is no `ModelBenchmarkRunner` class. It resolves the benchmark manifest, materializes requests from the task registry, runs the model, materializes artifacts for the external evaluator (`ManifestBenchmarkRunner` in `benchmark_runner.py:870`), and hands normalized metrics to reporting. Use it for end-to-end model-plus-benchmark runs.
 
-## Model Resolution
+Both model mode and direct `ContractRunner` calls hand generated results to the same scoring runner. Python requests expose `metric_batch_size` (default 32) and `resume`. Each completed metric batch writes `metrics/checkpoint.jsonl`; resume compares requests, results, metric implementation, version, and declared `parameters` / `config`. New or changed metrics run independently of completed generation. Unversioned legacy callables still execute, but their scores are recomputed on resume. Runner parameters and config participate in generation reuse, and local output files must still exist. Samples that need generation also discard their old metric checkpoints.
 
-Disk YAML becomes a runnable model through a single front door: `resolve_model_zoo_runner()` in `resolver.py`. CLI `--model-id` flags, Python callers, and Studio previews should all converge here before any checkpoint path is interpreted.
+Checkpoints record the executor's full metric selection; reports store each output metric's definition separately. Adding an unrelated metric preserves comparability, while changing the components of an aggregate changes its definition. Comparisons reject different definitions of the selected metrics. Winner selection requires valid scores, complete reported metric coverage, and a known direction; partial scores remain visible.
+
+If an executor returns only some of its declared output metrics, missing outputs receive invalid records with `metric_not_returned` and zero coverage. They remain in the sample denominator and count as skipped. Incomplete bundles are not checkpointed, and older checkpoints missing declared outputs are recomputed on resume.
+
+Embodied closed-loop runs save all planned requests before generation and flush each completed rollout to `results.jsonl`. Cancellation records an `interrupted` generation stage; completed results remain available. Shard merging requires every declared shard's results file and a result for every planned request. A completed empty shard is allowed. Across scoring entry points, failed generation contributes zero to `generation_success` and is skipped by quality metrics.
+
+## Reproducible planning
+
+Before generation starts, task-driven runs fix sample IDs, splits, and input keys through **`RunPlan`** in `plan.py`. The plan connects the task registry, optional dataset manifest, and evaluate facade: registry lookup → materialized requests → `EvaluateRunRequest`. Fingerprinting on the plan makes reruns and cache reuse deterministic across machines.
+
+Materialization in `materialize.py` turns dataset rows or task samples into `GenerationRequest` rows. Prove this step with `worldfoundry-eval task materialize` before spending GPU time—most "works locally, fails in CI" bugs trace to mismatched sample IDs here, not to model loading.
+
+## Model resolution
+
+Disk YAML becomes a runnable model through a single front door: `resolve_model_zoo_runner()` in `resolver.py` (`:386`). CLI `--model-id` flags, Python callers, and Studio previews should all converge here before any checkpoint path is interpreted.
 
 ```python
 # worldfoundry/data/models/catalog/*.yaml
@@ -84,9 +76,13 @@ runner = resolve_model_zoo_runner(manifest) # resolver.py
 
 Built-in runners register through `builtins.py` and `registry.py`; custom targets resolve from catalog `runner_target` strings. Catalog metadata in `manifest.py` and `schema.py` is provenance and readiness—not a substitute for a runnable runner.
 
-## Benchmark Integration
+The registry creates runners without installing inference settings or wrapping their methods. Configured runners are loaded inside the generation execution context only after resume and cache lookup identify pending samples.
 
-Benchmark metadata follows a parallel catalog path. Task YAML describes per-sample protocol; benchmark-zoo YAML describes integration status, external runners, and metric ids.
+`WorldFoundryPipelineRunner` retains its construction config and exposes current pipeline target, runtime profile, and generation defaults through `parameters`. Directly supplied runner objects use these settings for both resume and shared generation-cache lookup.
+
+## Benchmark integration
+
+Benchmark metadata follows a parallel catalog path. Task YAML describes per-sample protocol; benchmark-zoo YAML describes integration status, external runners, and metric IDs.
 
 ```python
 # Benchmark-zoo YAML + task YAML registry
@@ -100,7 +96,9 @@ metrics = official_normalizers.normalize(raw)
 
 External benchmarks stay behind the runner boundary: vendor evaluators produce raw output, normalizers convert it into stable metrics, and the shared reporting layer writes `metrics/summary.json` and `scorecard.json`.
 
-## Reporting Chain
+Metric packages keep declarations importable without optional computation dependencies. Public registry listing includes all built-in package declarations; compute exports use the shared `lazy_export` helper to load implementations on invocation. An unavailable compute dependency therefore does not hide the metric ID, aliases, or direction.
+
+## Reporting chain
 
 Reporting runs after metrics finish. Scorecards are the machine-readable eligibility record; Markdown reports are derived, not authoritative.
 
@@ -111,16 +109,16 @@ scorecard = build_scorecard(summary)      # → scorecard.json
 write_report_md(scorecard)                # → report.md (derived, not authoritative)
 ```
 
-Validation scripts and docs generators import `reporting/validation.py` and expect stable scorecard fields. Field renames here break release gates.
+Validation scripts and docs generators import `reporting/validation.py` and expect stable scorecard fields. Field renames here break release gates. The concrete entry points: `build_scorecard` at `reporting/scorecard.py:136`, `write_scorecard` at `:270`, `build_run_summary` at `reporting/run_report.py:208`, and `_validate_scorecard` at `reporting/validation.py:207`.
 
-## Change Rules
+For how CLI/TUI/MCP compile user intent into the `EvaluateRunRequest` / `ModelBenchmarkRunRequest` these runners consume, see [Surfaces and orchestration](/docs/maintainers/architecture/surfaces-orchestration).
+
+## Change rules
 
 Use this table before opening a PR that touches evaluation internals. It lists the compatibility surfaces other teams and automation depend on; breaking them requires coordinated updates to validation, docs exports, and example scorecards.
 
-| If changing | Keep stable |
-| --- | --- |
-| `api/*` dataclasses | `to_dict()` / `from_dict()` JSON-safe payloads. |
-| `evaluation/tasks/run_*` output writing | File names, JSONL row shape, `sample_id` alignment, final manifest status. |
-| `models/resolver.py` | Error messages, runner resolution, model-zoo variant selection. |
-| `evaluation/tasks/official/*` schema | Manifest parsing and alias lookup behavior. |
-| `reporting*.py` and `scorecard.py` | Scorecard fields used by validation, docs, and release reports. |
+- `api/*` dataclasses — `to_dict()` / `from_dict()` JSON-safe payloads.
+- `evaluation/tasks/run_*` output writing — File names, JSONL row shape, `sample_id` alignment, final manifest status.
+- `models/resolver.py` — Error messages, runner resolution, model-zoo variant selection.
+- `evaluation/tasks/official/*` schema — Manifest parsing and alias lookup behavior.
+- `reporting*.py` and `scorecard.py` — Scorecard fields used by validation, docs, and release reports.

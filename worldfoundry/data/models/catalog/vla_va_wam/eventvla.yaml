@@ -8,6 +8,8 @@ availability: open_source
 provider: official_repo
 license: mit
 official_sources:
+  paper: https://arxiv.org/abs/2606.20092
+  project_page: https://ganlin-yang.github.io/EventVLA.github.io/
   github:
     url: https://github.com/InternRobotics/EventVLA
     head_sha: 4b5b26030abddf83bc60e1a6b067de8f521fd0ec
@@ -37,3 +39,23 @@ pipeline_binding: eventvla
 runtime_profile: runtime-profile:eventvla
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile planning records.
+docs:
+  publisher: Shanghai AI Laboratory (InternRobotics)
+  publisher_kind: lab
+  publisher_zh: 上海人工智能实验室（InternRobotics）
+  overview: 'EventVLA from InternRobotics is a long-horizon-memory VLA: on top of a Qwen3-VL-4B base it adds an event head, temporal anchors, and a raw keyframe-image memory so the policy remembers what already happened in long tasks. The Apache-2.0 ganlinyang/EventVLA checkpoint collection is recorded with the RoboTwin-MeM subfolder as the default policy.'
+  overview_zh: InternRobotics 的 EventVLA 是长时程记忆 VLA：在 Qwen3-VL-4B 基座上增加事件头、时间锚点与原始关键帧图像记忆，使策略在长任务中记住已发生的事件。仓库记录 Apache-2.0 的 ganlinyang/EventVLA checkpoint 集合，默认策略为 RoboTwin-MeM 子目录。
+  architecture: Qwen3-VL encoding feeds action-token gathering and a checkpoint-compatible MLP action head; the event head plus temporal anchors maintain episodic structure while keyframe images form the memory. All of it runs in process in-tree.
+  architecture_zh: Qwen3-VL 编码馈入动作 token 收集与兼容 checkpoint 的 MLP 动作头；事件头与时间锚点维护情节结构，关键帧图像构成记忆。全部在树内进程内运行。
+  usage_notes: Stage the EventVLA checkpoint (subfolder RoboTwin-MeM) and the Qwen3-VL-4B-Instruct base locally. Training, datasets, simulators, benchmark launchers, and WebSocket transport are excluded.
+  usage_notes_zh: 在本地就位 EventVLA checkpoint（子目录 RoboTwin-MeM）与 Qwen3-VL-4B-Instruct 基座。训练、数据集、模拟器、基准启动器与 WebSocket 传输均被排除。
+  limitations:
+  - The released policy targets RoboTwin memory tasks; other suites need fine-tuning.
+  - No GPU rollout validation is recorded in this repository.
+  limitations_zh:
+  - 发布的策略面向 RoboTwin 记忆任务；其他套件需微调。
+  - 仓库未记录 GPU rollout 验证。
+  recommended_benchmarks:
+  - id: robotwin
+    reason: The RoboTwin-MeM checkpoint targets RoboTwin memory tasks.
+    reason_zh: RoboTwin-MeM checkpoint 面向 RoboTwin 记忆任务。

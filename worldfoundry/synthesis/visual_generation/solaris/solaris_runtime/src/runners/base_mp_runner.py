@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import torch
 from einops import rearrange, repeat
 from flax import nnx
-from worldfoundry.core.io.video import write_video as _worldfoundry_write_video
+from worldfoundry.core.media.codecs.video import write_video as _worldfoundry_write_video
 
 import src.data.utils as data_utils
 import src.utils.sharding as sharding_utils

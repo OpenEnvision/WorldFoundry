@@ -1,0 +1,6 @@
+# Immutable first-person inference profile.
+extends: infer_common.yaml
+model_id: matrix-game-3.5-first-person
+dataset_type: da3_video
+subject_ref_memory: true
+subject_num_refs_max: 2

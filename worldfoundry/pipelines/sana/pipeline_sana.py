@@ -1,284 +1,162 @@
-"""Sana visual generation pipeline module."""
+"""Public Sana products assembled by the unified native diffusion infra."""
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import ClassVar
 
-from ...synthesis.visual_generation.memory.video import VideoArtifactMemory
-from ...operators.runtime_video_operator import RuntimeVideoOperator
-from ...synthesis.visual_generation.sana.sana_synthesis import SanaSynthesis
-from ...base_models.diffusion_model.image.sana.variants import get_sana_variant
-from ..pipeline_utils import PipelineABC
+from worldfoundry.base_models.diffusion_model.recipes.sana_variants import get_sana_variant
+
+from ..native_diffusion import NativeVisualDiffusionPipeline
 
 
-class SanaPipeline(PipelineABC):
-    """WorldFoundry pipeline wrapper for the Sana family."""
+class SanaPipeline(NativeVisualDiffusionPipeline):
+    """Select Sana graph/checkpoints declaratively; reuse the shared runner."""
 
-    MODEL_ID = "sana"
-    SYNTHESIS_CLS = SanaSynthesis
+    MODEL_ID: ClassVar[str] = "sana"
+    OWNER: ClassVar[str] = "Sana"
+    CHECKPOINT_ROLES: ClassVar[tuple[str, ...]] = (
+        "dit",
+        "text-encoder",
+        "tokenizer",
+        "codec",
+    )
+    PRIMARY_CHECKPOINT_ROLE: ClassVar[str] = "dit"
+    ALLOW_MODEL_ID_OVERRIDE: ClassVar[bool] = True
+    NUM_INFERENCE_STEP_ALIASES: ClassVar[tuple[str, ...]] = ("step", "infer_steps")
+    SCHEDULER_OPTION_ALIASES: ClassVar[dict[str, str]] = {"flow_shift": "shift"}
+
+    def __init__(self, *, native_pipeline, device: str, model_id: str | None = None) -> None:
+        variant = get_sana_variant(model_id or self.MODEL_ID)
+        self.variant = variant
+        self.GENERATION_TYPE = (
+            "i2v" if variant.runner == "controlnet" else "v2v" if variant.runner == "streaming" else "t2v"
+        )
+        self.ACCEPTS_IMAGES = variant.runner == "controlnet"
+        self.REQUIRES_IMAGES = variant.runner == "controlnet"
+        self.ACCEPTS_VIDEO = variant.runner == "streaming"
+        self.DEFAULT_HEIGHT, self.DEFAULT_WIDTH = self._default_size(variant)
+        self.DEFAULT_NUM_FRAMES = variant.default_num_frames or (
+            81 if variant.task in {"text-to-video", "video-to-video"} else 1
+        )
+        self.DEFAULT_NUM_INFERENCE_STEPS = variant.default_steps or 50
+        self.DEFAULT_GUIDANCE_SCALE = variant.default_cfg_scale or 1.0
+        self.DEFAULT_FPS = variant.default_fps or 16
+        self.DEFAULT_NEGATIVE_PROMPT = ""
+        self.REQUEST_INPUT_DEFAULTS = (
+            {
+                "motion_score": 10 if variant.mode == "bidirectional_short" else 0,
+                "num_cached_blocks": 2,
+                "sink_token": True,
+            }
+            if variant.runner == "streaming"
+            else {}
+        )
+        if variant.runner == "sprint":
+            self.DEFAULT_SCHEDULER_OPTIONS = {}
+        else:
+            self.DEFAULT_SCHEDULER_OPTIONS = {
+                "shift": 8.0 if variant.resolution == "720p" else 7.0
+                if variant.resolution == "480p"
+                else 4.0 if "600m" in variant.model_id.split("-")
+                else 3.0
+            }
+        super().__init__(
+            native_pipeline=native_pipeline,
+            device=device,
+            model_id=variant.model_id,
+        )
+        self.model_name = variant.display_name
+        self.generation_type = variant.task
 
     @staticmethod
-    def _operator_generation_type(runner: str) -> str:
-        """Map Sana runtime routes to the shared operator input mode."""
-        if runner == "controlnet":
-            return "i2v"
-        if runner == "streaming":
-            return "v2v"
-        return "t2v"
-
-    def __init__(
-        self,
-        *,
-        model_id: str | None = None,
-        operator: Optional[RuntimeVideoOperator] = None,
-        synthesis_model: Optional[SanaSynthesis] = None,
-        memory_module: Optional[VideoArtifactMemory] = None,
-        device: str = "cuda",
-    ) -> None:
-        """Initialize the pipeline and configure runtime components."""
-        requested_model_id = model_id or self.MODEL_ID
-        self.variant = get_sana_variant(requested_model_id)
-        self.model_id = self.variant.model_id
-        self.synthesis_model = synthesis_model
-        self.generation_type = self.variant.task
-        self.model_name = self.variant.display_name
-        self.operator = operator or RuntimeVideoOperator(
-            generation_type=self._operator_generation_type(self.variant.runner)
-        )
-        self.operators = self.operator
-        self.memory_module = memory_module or VideoArtifactMemory(model_id=self.model_id)
-        self.device = device
-
-    @classmethod
-    def from_pretrained(
-        cls,
-        model_path: Any = None,
-        required_components: Optional[Dict[str, Any]] = None,
-        device: str = "cuda",
-        model_id: str | None = None,
-        lazy: bool = True,
-        **kwargs: Any,
-    ) -> "SanaPipeline":
-        """Load the pipeline from pretrained checkpoints and configurations."""
-        del lazy
-        options: Dict[str, Any] = {}
-        if isinstance(model_path, dict):
-            options.update(model_path)
-        elif model_path is not None:
-            options["model_path"] = str(model_path)
-        options.update(required_components or {})
-        options.update(kwargs)
-        resolved_model_id = str(
-            options.get("model_id")
-            or options.get("variant")
-            or options.get("profile_id")
-            or model_id
-            or cls.MODEL_ID
-        )
-        synthesis_model = cls.SYNTHESIS_CLS.from_pretrained(
-            {**options, "model_id": resolved_model_id},
-            device=device,
-        )
-        variant = get_sana_variant(resolved_model_id)
-        return cls(
-            model_id=resolved_model_id,
-            operator=RuntimeVideoOperator(generation_type=cls._operator_generation_type(variant.runner)),
-            synthesis_model=synthesis_model,
-            memory_module=VideoArtifactMemory(model_id=variant.model_id),
-            device=device,
-        )
-
-    def process(
-        self,
-        prompt: str | None = None,
-        images: Any = None,
-        video: Any = None,
-        **kwargs: Any,
-    ) -> Dict[str, Any]:
-        """Process and normalize input arguments and conditions for inference."""
-        if prompt is None:
-            prompt = ""
-        self.operator.get_interaction(prompt)
-        try:
-            interaction = self.operator.process_interaction()
-        finally:
-            self.operator.delete_last_interaction()
-        return {
-            "prompt": interaction["processed_prompt"],
-            "images": images,
-            "video": video,
-            "extra_inputs": dict(kwargs),
-        }
-
-    def __call__(
-        self,
-        prompt: str | None = None,
-        images: Any = None,
-        video: Any = None,
-        output_path: str | Path | None = None,
-        fps: int | None = None,
-        return_dict: bool = False,
-        **kwargs: Any,
-    ):
-        """Execute the complete pipeline generation flow."""
-        if self.synthesis_model is None:
-            raise RuntimeError("Sana synthesis model is not loaded. Use from_pretrained() first.")
-        processed = self.process(
-            prompt=prompt,
-            images=images,
-            video=video,
-            **kwargs.pop("operator_kwargs", {}),
-        )
-        result = self.synthesis_model.predict(
-            prompt=processed["prompt"],
-            images=processed["images"],
-            video=processed["video"],
-            output_path=output_path,
-            fps=fps,
-            **processed["extra_inputs"],
-            **kwargs,
-        )
-        self.memory_module.record(result, metadata={"type": "sana_result", "model_id": self.model_id})
-        if return_dict:
-            return result
-        return result.get("artifact_path") or result.get("generated_video_path") or result.get("generated_image_path") or result
-
-    def stream(
-        self,
-        prompt: str | None = None,
-        images: Any = None,
-        video: Any = None,
-        output_path: str | Path | None = None,
-        fps: int | None = None,
-        return_dict: bool = False,
-        **kwargs: Any,
-    ):
-        """Stream visual generation outputs chunk by chunk."""
-        if images is None and self.variant.runner == "controlnet":
-            previous = self.memory_module.select(prefer_type="image")
-            if previous is not None:
-                images = previous
-        return self(
-            prompt=prompt,
-            images=images,
-            video=video,
-            output_path=output_path,
-            fps=fps,
-            return_dict=return_dict,
-            **kwargs,
-        )
-
-    def get_operator(self) -> RuntimeVideoOperator:
-        """Get operator for SanaPipeline."""
-        return self.operator
-
-    def get_synthesis_model(self) -> SanaSynthesis:
-        """Get synthesis model for SanaPipeline."""
-        if self.synthesis_model is None:
-            raise RuntimeError("Sana synthesis model is not loaded.")
-        return self.synthesis_model
+    def _default_size(variant) -> tuple[int, int]:
+        if variant.default_height is not None and variant.default_width is not None:
+            return int(variant.default_height), int(variant.default_width)
+        if variant.resolution == "720p":
+            return 720, 1280
+        if variant.resolution == "480p":
+            return 480, 832
+        side = int(variant.resolution.removesuffix("px"))
+        return side, side
 
 
 class Sana600M512pxPipeline(SanaPipeline):
-    """Pipeline implementation for Sana600M512px visual generation."""
     MODEL_ID = "sana-600m-512px"
 
 
 class Sana600M1024pxPipeline(SanaPipeline):
-    """Pipeline implementation for Sana600M1024px visual generation."""
     MODEL_ID = "sana-600m-1024px"
 
 
 class Sana1600M512pxPipeline(SanaPipeline):
-    """Pipeline implementation for Sana1600M512px visual generation."""
     MODEL_ID = "sana-1600m-512px"
 
 
 class Sana1600M512pxMultilingPipeline(SanaPipeline):
-    """Pipeline implementation for Sana1600M512pxMultiling visual generation."""
     MODEL_ID = "sana-1600m-512px-multiling"
 
 
 class Sana1600M1024pxPipeline(SanaPipeline):
-    """Pipeline implementation for Sana1600M1024px visual generation."""
     MODEL_ID = "sana-1600m-1024px"
 
 
 class Sana1600M1024pxMultilingPipeline(SanaPipeline):
-    """Pipeline implementation for Sana1600M1024pxMultiling visual generation."""
     MODEL_ID = "sana-1600m-1024px-multiling"
 
 
 class Sana1600M1024pxBf16Pipeline(SanaPipeline):
-    """Pipeline implementation for Sana1600M1024pxBf16 visual generation."""
     MODEL_ID = "sana-1600m-1024px-bf16"
 
 
 class Sana1600M2kBf16Pipeline(SanaPipeline):
-    """Pipeline implementation for Sana1600M2kBf16 visual generation."""
     MODEL_ID = "sana-1600m-2k-bf16"
 
 
 class Sana1600M4kBf16Pipeline(SanaPipeline):
-    """Pipeline implementation for Sana1600M4kBf16 visual generation."""
     MODEL_ID = "sana-1600m-4k-bf16"
 
 
 class Sana1p51600M1024pxPipeline(SanaPipeline):
-    """Pipeline implementation for Sana1p51600M1024px visual generation."""
     MODEL_ID = "sana1p5-1600m-1024px"
 
 
 class Sana1p54800M1024pxPipeline(SanaPipeline):
-    """Pipeline implementation for Sana1p54800M1024px visual generation."""
     MODEL_ID = "sana1p5-4800m-1024px"
 
 
 class SanaSprint600M1024pxPipeline(SanaPipeline):
-    """Pipeline implementation for SanaSprint600M1024px visual generation."""
     MODEL_ID = "sana-sprint-600m-1024px"
 
 
 class SanaSprint1600M1024pxPipeline(SanaPipeline):
-    """Pipeline implementation for SanaSprint1600M1024px visual generation."""
     MODEL_ID = "sana-sprint-1600m-1024px"
 
 
 class SanaControlnet600M1024pxPipeline(SanaPipeline):
-    """Pipeline implementation for SanaControlnet600M1024px visual generation."""
     MODEL_ID = "sana-controlnet-600m-1024px"
 
 
 class SanaControlnet1600M1024pxBf16Pipeline(SanaPipeline):
-    """Pipeline implementation for SanaControlnet1600M1024pxBf16 visual generation."""
     MODEL_ID = "sana-controlnet-1600m-1024px-bf16"
 
 
 class SanaVideo2b480pPipeline(SanaPipeline):
-    """Pipeline implementation for SanaVideo2b480p visual generation."""
     MODEL_ID = "sana-video-2b-480p"
 
 
 class SanaVideo2b720pPipeline(SanaPipeline):
-    """Pipeline implementation for SanaVideo2b720p visual generation."""
     MODEL_ID = "sana-video-2b-720p"
 
 
 class LongsanaVideo2b480pPipeline(SanaPipeline):
-    """Pipeline implementation for LongsanaVideo2b480p visual generation."""
     MODEL_ID = "longsana-video-2b-480p"
 
 
 class SanaStreaming2b720pPipeline(SanaPipeline):
-    """Pipeline for minute-length SANA-Streaming video-to-video editing."""
-
     MODEL_ID = "sana-streaming-2b-720p"
 
 
 class SanaStreamingBidirectional2b720pPipeline(SanaPipeline):
-    """Pipeline for short-video bidirectional SANA-Streaming editing."""
-
     MODEL_ID = "sana-streaming-bidirectional-2b-720p"
 
 

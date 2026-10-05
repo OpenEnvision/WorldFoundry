@@ -3,15 +3,15 @@ import torch
 import os
 from omegaconf import OmegaConf
 from tqdm import tqdm
-from worldfoundry.core.io.video import write_video_torchvision as write_video
+from worldfoundry.core.media.codecs.video import write_video_torchvision as write_video
 from einops import rearrange
 import torch.distributed as dist
 from torch.utils.data import DataLoader, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from worldfoundry.core.camera_trajectory import camera_trajectory_tensors
+from worldfoundry.core.geometry.trajectory import camera_trajectory_tensors
 from worldfoundry.core.io import TextPromptDataset
-from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 from worldfoundry.core.vram import DynamicSwapInstaller, get_cuda_free_memory_gb, gpu
 
 parser = argparse.ArgumentParser()

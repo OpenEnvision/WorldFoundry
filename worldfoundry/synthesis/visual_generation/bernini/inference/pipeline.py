@@ -40,7 +40,6 @@ from .data.bernini_template import BerniniTemplate
 from .data.utils.video_utils import PathVideoReader, smart_video_nframes
 from .data_utils import make_divisible, preprocess_image, preprocess_video, tensor_to_bytes, get_vit_features, get_vae_features, FakeVideoReader, create_fake_image, VAEVideoTransform
 from .io_utils import save_output
-from .models import BerniniConfig, BerniniModel
 from .models import BerniniRendererConfig, BerniniRendererModel
 from .models.transformer_wan import WanRotaryPosEmbed
 from .weights import load_weights
@@ -412,6 +411,8 @@ class BerniniPipeline:
         device="cuda",
         **config_overrides,
     ) -> "BerniniPipeline":
+        from .models.bernini import BerniniConfig, BerniniModel
+
         config = BerniniConfig.from_pretrained(config_dir, **config_overrides)
         _localize_bernini_config(config, config_dir)
         if ckpt is None: ckpt = config_dir

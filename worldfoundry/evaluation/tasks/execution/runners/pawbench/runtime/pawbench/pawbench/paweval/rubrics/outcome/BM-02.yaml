@@ -1,0 +1,48 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BM-02
+track: coverage
+title_en: Chocolate Bar Bend and Break
+outcome_question: Which label in ['no_visible_break', 'single_clean_break', 'partial_crack_not_separated',
+  'multiple_piece_break', 'crumbs_or_small_fragment_break'] is visible as the first
+  decisive post-action result?
+readout_policy: Read after the single continuous bending action has settled or the
+  applied force visibly stops. Qualifying frames must show the chocolate response
+  clearly enough to choose no break, partial crack, clean break, multi-piece break,
+  or crumbs/fragments. Do not label an early crack if the same continuous bend later
+  separates or fragments the bar.
+canonical_labels:
+- no_visible_break
+- single_clean_break
+- partial_crack_not_separated
+- multiple_piece_break
+- crumbs_or_small_fragment_break
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['no_visible_break', 'single_clean_break', 'partial_crack_not_separated',
+  'multiple_piece_break', 'crumbs_or_small_fragment_break'] can be decisively identified
+  within the readout window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's
+  reference protocol; record it as out-of-schema.
+priority_rules:
+- 'Readout timing: use the first clear post-bend state after the continuous bend
+  settles or force stops; choose the strongest action-caused material outcome visible
+  in that response window.'
+- '`crumbs_or_small_fragment_break` has highest material threshold priority when
+  visible crumbs, flakes, or small fragments are newly created by the bend.'
+- '`multiple_piece_break` requires more than two separated large pieces; it overrides
+  `single_clean_break`, which requires one clean separation into two main pieces.'
+- '`partial_crack_not_separated` applies only when a crack line forms but the bar
+  remains materially connected; `no_visible_break` applies only when no new crack,
+  separation, crumb, or fragment is visible.'
+- 'Tie-break: ignore cracks or missing pieces already visible before the action;
+  if prior damage cannot be separated from action-caused response, return
+  `unreadable` rather than upgrading the break label.'
+notes:
+- 'Track B: use metadata-derived priority rules, not a family template.'
+- 'Scene title: Chocolate Bar Bend and Break.'

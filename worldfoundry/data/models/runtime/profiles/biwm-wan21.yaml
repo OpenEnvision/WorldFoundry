@@ -1,0 +1,42 @@
+schema_version: 2
+model_id: biwm-wan21
+display_name: BiWM Wan2.1
+task_family: world_model
+groups: [world, video, camera_control, autoregressive_video, text_to_video, image_to_video]
+source_repos:
+- url: https://github.com/LynnReal-AI/BiWM
+  revision: e546ae0a04a831c8a19aafa437b5662fffd92d67
+  in_tree_path: worldfoundry/base_models/diffusion_model/models/networks/wan/variants/biwm
+checkpoints:
+- role: trained_biwm_generator
+  availability: user_supplied
+  status: no_public_generator_checkpoint
+- repo_id: Wan-AI/Wan2.1-T2V-1.3B
+  role: base_architecture_vae_and_text_encoder_only
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions: [actions, action_label]
+artifact_kind: generated_world
+artifact_filename: biwm.mp4
+execution:
+  environment: _unified
+  backend_stage: shared_base_model_runtime
+  runtime_status: trained_generator_checkpoint_required
+  integration_status: integrated_checkpoint_gated
+  pipeline_binding: biwm-wan21
+  default_parameters:
+    height: 480
+    width: 832
+    fps: 24
+    num_chunks: 4
+    chunk_size: 4
+    max_chunks: 5
+    sink_chunks: 1
+license: apache-2.0
+notes:
+- Supply generator_ckpt and wan_base at loading; stage selects 1 (teacher) or 2 (distilled generator).
+- Camera action durations count latent frames; label zero is static at the initial frame.
+- HY15/LTX training recipes and compressed-history training are not standalone supported inference paths.
+- Full causal VAE decoding is performed once after generation.

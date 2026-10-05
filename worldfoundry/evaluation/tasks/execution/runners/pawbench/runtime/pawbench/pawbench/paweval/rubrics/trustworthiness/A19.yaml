@@ -1,0 +1,48 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: A19
+track: calibration
+title_en: Colored Ball Dispenser Release
+scene_grounding:
+- 'Initial state must match: A transparent dispenser contains exactly two red, two
+  green, two blue, and two yellow balls.'
+- Apparatus geometry in the opening frames must match the source image.
+action_execution:
+- 'Required action: Turn the side crank briefly and open the bottom gate once so exactly
+  one ball exits.'
+- Action must happen exactly once in the expected direction / region.
+- No ball exiting or multiple balls exiting together without an identifiable first
+  single emitted ball is an action/out-of-schema failure, not a color guess.
+target_requirements:
+- Scene-defining target, subject, and readout evidence must remain visible throughout the action.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+- The emitted ball must remain trackable from gate exit through the first readable
+  color frame; balls still inside the dispenser are not the outcome object.
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-readout state/region change: subject moves between label-defining states or regions after the first decisive readout.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Colored Ball Dispenser Release.'
+- Judge only the first single emitted/isolated ball color.

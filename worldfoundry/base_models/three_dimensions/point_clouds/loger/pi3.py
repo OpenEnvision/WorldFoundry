@@ -6,18 +6,18 @@ from functools import partial
 from copy import deepcopy
 from typing import Optional, Union, List
 
-from worldfoundry.core.nn.layers import Mlp
+from worldfoundry.core.nn.blocks.layers import Mlp
 from .utils.geometry import homogenize_points, robust_scale_estimation
-from worldfoundry.base_models.three_dimensions.point_clouds.pi3.pi3.models.layers.pos_embed import RoPE2D, PositionGetter
+from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.models.layers.pos_embed import RoPE2D, PositionGetter
 from .layers.block import BlockRope
 from .layers.attention import FlashAttentionRope
-from worldfoundry.base_models.three_dimensions.point_clouds.pi3.pi3.models.layers.transformer_head import (
+from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.models.layers.transformer_head import (
     ContextOnlyTransformerDecoder,
     LinearPts3d,
     TransformerDecoder,
 )
 from .layers.camera_head import CameraHead
-from worldfoundry.base_models.three_dimensions.point_clouds.pi3.pi3.models.layers.conv_head import ConvHead
+from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.models.layers.conv_head import ConvHead
 from worldfoundry.base_models.perception_core.general_perception.dinov2.hub.backbones import dinov2_vitl14, dinov2_vitl14_reg
 from huggingface_hub import PyTorchModelHubMixin
 from .ttt import FastWeightGluMLPMultihead, TTTOperator

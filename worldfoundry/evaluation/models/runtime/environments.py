@@ -4,29 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
-
-import yaml
+from typing import Any, Mapping
 
 from worldfoundry.evaluation.utils import (
-    DATA_ROOT,
     MODEL_RUNTIME_ENVIRONMENTS_ROOT,
 )
 from worldfoundry.runtime.conda import RuntimeCondaEnvSpec, load_runtime_conda_env_specs_with_overrides
 
+from ._shared import iter_manifest_mappings, schema_version_or_none, tuple_of_str, yaml_manifest_paths
+
 # Canonical directory containing per-model conda environment specification files.
 DEFAULT_RUNTIME_ENVIRONMENTS_ROOT = MODEL_RUNTIME_ENVIRONMENTS_ROOT
 
-
-def _tuple_of_str(value: Any) -> tuple[str, ...]:
-    """Coerce any scalar value or sequence into a tuple of strings."""
-    if value is None:
-        return ()
-    if isinstance(value, str):
-        return (value,)
-    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
-        return tuple(str(item) for item in value)
-    return (str(value),)
+# Module-local aliases for the shared runtime loader helpers.
+_tuple_of_str = tuple_of_str
 
 
 # ── Core data model ──────────────────────────────────────────
@@ -264,40 +255,24 @@ class RuntimeEnvironmentProfile:
         }
 
 
-# ── Schema version helper ─────────────────────────────────────
+# ── Schema version / manifest scanning (shared helpers) ───────
 
-
-def _schema_version(value: Any) -> int | None:
-    """Coerce any schema version value to int or return ``None``."""
-    if value in (None, ""):
-        return None
-    return int(value)
-
-
-# ── Manifest path discovery ──────────────────────────────────
+_schema_version = schema_version_or_none
 
 
 def _manifest_paths(root: str | Path | None) -> tuple[Path, ...]:
     """Retrieve all YAML manifest paths found under a root directory recursively."""
-    path = Path(root) if root is not None else DEFAULT_RUNTIME_ENVIRONMENTS_ROOT
-    if not path.exists():
-        return ()
-    if path.is_file():
-        return (path,)
-    return tuple(sorted(item for item in path.rglob("*.y*ml") if item.is_file()))
+    return yaml_manifest_paths(root, default_root=DEFAULT_RUNTIME_ENVIRONMENTS_ROOT)
 
 
 def _iter_environment_mappings(path: Path) -> tuple[Mapping[str, Any], ...]:
     """Load and iterate over environment mappings defined in a YAML manifest file."""
-    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    if not isinstance(payload, Mapping):
-        raise TypeError(f"runtime environment file must contain a mapping: {path}")
-    entries = payload.get("environments") or payload.get("envs")
-    if entries is None:
-        return (payload,) if payload.get("model_id") or payload.get("environment_id") or payload.get("id") else ()
-    if not isinstance(entries, Sequence) or isinstance(entries, (str, bytes, bytearray)):
-        raise TypeError(f"runtime environment collection must be a list: {path}")
-    return tuple(item for item in entries if isinstance(item, Mapping))
+    return iter_manifest_mappings(
+        path,
+        collection_keys=("environments", "envs"),
+        id_keys=("model_id", "environment_id", "id"),
+        kind="runtime environment",
+    )
 
 
 # ── Public loaders ────────────────────────────────────────────

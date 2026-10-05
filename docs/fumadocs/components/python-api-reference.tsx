@@ -1,5 +1,6 @@
-import apiReference from '@/generated/python-api.json';
+import { ApiCopyButton } from '@/components/api-copy-button';
 import { methodAnchor, symbolAnchor } from '@/lib/docs-api-toc';
+import { readSiteJson } from '@/lib/read-site-json';
 import { withBasePath } from '@/lib/site-path';
 import type { ReactNode } from 'react';
 
@@ -79,17 +80,21 @@ type ApiReferenceData = {
 
 type Locale = 'en' | 'zh';
 
-const data = apiReference as ApiReferenceData;
+const data = readSiteJson<ApiReferenceData>('generated/python-api.json');
 
 const labels = {
   en: {
     attributes: 'Attributes',
+    copy: 'Copy',
+    copied: 'Copied',
     count: 'public symbols',
     classmethod: 'class method',
     defaultValue: 'default',
     details: 'Source docstring',
+    import: 'Import',
     method: 'method',
     methods: 'Methods',
+    module: 'Module',
     onThisPage: 'On this page',
     overview: 'Overview',
     parameters: 'Parameters',
@@ -97,19 +102,24 @@ const labels = {
     notes: 'Notes',
     property: 'property',
     returns: 'Returns',
-    source: 'source',
+    source: 'Source',
     staticmethod: 'static method',
-    symbols: 'Symbols',
+    symbols: 'symbols',
+    guide: 'Guide',
     warnings: 'Warnings',
   },
   zh: {
     attributes: '属性',
+    copy: '复制',
+    copied: '已复制',
     count: '个公开符号',
     classmethod: '类方法',
     defaultValue: '默认值',
     details: '源码 docstring',
+    import: '导入',
     method: '方法',
     methods: '方法',
+    module: '模块',
     overview: '简介',
     parameters: '参数',
     raises: '异常',
@@ -118,10 +128,78 @@ const labels = {
     returns: '返回值',
     source: '源码',
     staticmethod: '静态方法',
-    symbols: '符号',
+    symbols: '个符号',
+    guide: '指南',
     warnings: '警告',
   },
 } as const;
+
+const catalogBlurbs: Record<string, LocalizedText> = {
+  core: {
+    en: 'How to pick attention, loading, I/O, and acceleration APIs.',
+    zh: '如何选择注意力、加载、I/O 与加速 API。',
+  },
+  'core-attention': {
+    en: 'SDPA dispatch, fused backends, RoPE, and KV cache.',
+    zh: 'SDPA 分发、融合后端、RoPE 与 KV cache。',
+  },
+  'core-configuration': {
+    en: 'LazyConfig and deferred object graphs.',
+    zh: 'LazyConfig 与延迟对象图。',
+  },
+  'core-io-media': {
+    en: 'Paths, URIs, images, video, and serialization.',
+    zh: '路径、URI、图像、视频与序列化。',
+  },
+  'core-model-loading': {
+    en: 'Checkpoints, state dicts, DiskMap, and construction.',
+    zh: 'Checkpoint、state dict、DiskMap 与构造。',
+  },
+  'core-distributed': {
+    en: 'Collectives and context-parallel split/gather.',
+    zh: '集合通信与 context-parallel 切分/聚合。',
+  },
+  'core-runtime': {
+    en: 'Process setup, compile, timers, and realtime.',
+    zh: '进程设置、编译、计时与 realtime。',
+  },
+  'core-nn-math': {
+    en: 'Shared tensor transforms and math helpers.',
+    zh: '共享张量变换与数学辅助。',
+  },
+  'core-acceleration-memory': {
+    en: 'Caches, offload, VRAM, and kernels.',
+    zh: 'Cache、offload、VRAM 与 kernels。',
+  },
+  'core-foundations': {
+    en: 'Registries, utilities, and safety contracts.',
+    zh: 'Registry、通用工具与安全契约。',
+  },
+  contracts: {
+    en: 'Artifact refs and generation request/result shapes.',
+    zh: 'Artifact 引用与生成 request/result 形态。',
+  },
+  models: {
+    en: 'World-model manifests, configs, and runners.',
+    zh: '世界模型 manifest、配置与 runner。',
+  },
+  'metrics-tasks': {
+    en: 'Metric specs, task configs, and benchmark contracts.',
+    zh: 'Metric spec、task 配置与 benchmark 契约。',
+  },
+  runs: {
+    en: 'Run requests and the public benchmark facade.',
+    zh: 'Run 请求与公开 benchmark facade。',
+  },
+  reporting: {
+    en: 'Scorecards, run manifests, and markdown reports.',
+    zh: 'Scorecard、run manifest 与 Markdown 报告。',
+  },
+  runtime: {
+    en: 'Env reports, local assets, and path expansion.',
+    zh: '环境报告、本地资产与路径展开。',
+  },
+};
 
 function sourceUrl(sourcePath: string, line: number) {
   return `${data.repository}/blob/${data.branch}/${sourcePath}#L${line}`;
@@ -261,11 +339,17 @@ function IntroBlock({
     !normalizedIntro.startsWith(normalizedDoc) &&
     docstring.includes('\n\n');
 
+  const shortIntro =
+    Boolean(text) &&
+    !showDetails &&
+    !text.includes('\n') &&
+    text.replace(/\s+/g, ' ').trim().length <= 180;
+
   return (
-    <div className="wf-api-overview">
+    <div className={`wf-api-overview${shortIntro ? ' is-lead' : ''}`}>
       {text ? (
         <div className="wf-api-intro">
-          <h4>{t.overview}</h4>
+          {shortIntro ? null : <h4>{t.overview}</h4>}
           <Description locale={locale} value={text} />
         </div>
       ) : (
@@ -281,12 +365,86 @@ function IntroBlock({
   );
 }
 
-function KindBadge({ kind }: { kind: string }) {
-  const label = KIND_ABBR[kind] ?? kind.slice(0, 4);
+const KIND_LABEL: Record<string, { en: string; zh: string }> = {
+  class: { en: 'class', zh: '类' },
+  function: { en: 'function', zh: '函数' },
+  protocol: { en: 'protocol', zh: '协议' },
+  method: { en: 'method', zh: '方法' },
+  property: { en: 'property', zh: '属性' },
+  classmethod: { en: 'classmethod', zh: '类方法' },
+  staticmethod: { en: 'staticmethod', zh: '静态方法' },
+};
+
+function KindBadge({
+  kind,
+  locale = 'en',
+  compact = false,
+}: {
+  kind: string;
+  locale?: Locale;
+  compact?: boolean;
+}) {
+  const label = compact
+    ? (KIND_ABBR[kind] ?? kind.slice(0, 4))
+    : (KIND_LABEL[kind]?.[locale] ?? KIND_ABBR[kind] ?? kind);
   return (
     <span className={`wf-api-kind wf-api-kind-${kind}`} title={kind}>
       {label}
     </span>
+  );
+}
+
+function SymbolMeta({
+  locale,
+  publicModule,
+  name,
+}: {
+  locale: Locale;
+  publicModule: string;
+  name: string;
+  qualifiedName?: string;
+}) {
+  const t = labels[locale];
+  const importStmt = `from ${publicModule} import ${name}`;
+  return (
+    <div className="wf-api-meta">
+      <code className="wf-api-meta-value" title={t.module}>
+        {publicModule}
+      </code>
+      <span className="wf-api-meta-sep" aria-hidden="true">
+        ·
+      </span>
+      <code className="wf-api-meta-value wf-api-meta-import">{importStmt}</code>
+      <ApiCopyButton value={importStmt} label={t.copy} doneLabel={t.copied} />
+    </div>
+  );
+}
+
+function ReturnBlock({
+  locale,
+  annotation,
+  description,
+  name,
+}: {
+  locale: Locale;
+  annotation: string | null;
+  description: string;
+  name: string;
+}) {
+  if (!annotation && !description) return null;
+  const t = labels[locale];
+  return (
+    <div className="wf-api-returns">
+      <h4>{t.returns}</h4>
+      <div className="wf-api-return-row">
+        {annotation ? <AnnotatedType locale={locale} value={annotation} /> : null}
+        {description ? (
+          <span className="wf-api-return-desc">
+            {renderInline(description, locale, `ret-${name}`)}
+          </span>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -345,8 +503,8 @@ function parseSignatureLead(signature: string) {
 }
 
 function shouldFormatMultiline(parameters: ApiParameter[], signature: string) {
-  if (signature.length > 88) return true;
-  if (parameters.length >= 3) return true;
+  if (signature.length > 72) return true;
+  if (parameters.length >= 2) return true;
   return parameters.some((param) => formatParamText(param).length > 44);
 }
 
@@ -515,26 +673,28 @@ function ParameterList({
   return (
     <div className="wf-api-parameters">
       <h4>{title}</h4>
-      <dl>
+      <div className="wf-api-param-list">
         {fields.map((field) => (
           <div className="wf-api-parameter" key={field.name} id={`param-${field.name}`}>
-            <dt>
-              <code>{field.name}</code>
-              {field.annotation ? <AnnotatedType locale={locale} value={field.annotation} /> : null}
-            </dt>
-            <dd>
-              {field.description ? (
-                <span>{renderInline(field.description, locale, `param-${field.name}`)}</span>
+            <div className="wf-api-parameter-head">
+              <code className="wf-api-parameter-name">{field.name}</code>
+              {field.annotation ? (
+                <AnnotatedType locale={locale} value={field.annotation} />
               ) : null}
               {field.default !== null ? (
                 <span className="wf-api-default">
-                  {t.defaultValue}: <code>{field.default}</code>
+                  {t.defaultValue} <code>{field.default}</code>
                 </span>
               ) : null}
-            </dd>
+            </div>
+            {field.description ? (
+              <div className="wf-api-parameter-desc">
+                {renderInline(field.description, locale, `param-${field.name}`)}
+              </div>
+            ) : null}
           </div>
         ))}
-      </dl>
+      </div>
     </div>
   );
 }
@@ -598,9 +758,9 @@ function MethodReference({
   const t = labels[locale];
   const methodKind = method.kind || 'method';
   return (
-    <div className="wf-api-method" id={methodAnchor(symbol, method.name)}>
+    <div className="wf-api-method" id={methodAnchor(symbol, method)}>
       <div className="wf-api-method-heading">
-        <KindBadge kind={methodKind} />
+        <KindBadge kind={methodKind} locale={locale} compact />
         <SignatureDisplay
           locale={locale}
           name={method.name}
@@ -609,27 +769,29 @@ function MethodReference({
           signature={method.signature}
           variant="compact"
         />
-        <a href={sourceUrl(method.source_path, method.line)} rel="noreferrer" target="_blank">
+        <a
+          className="wf-api-source-link"
+          href={sourceUrl(method.source_path, method.line)}
+          rel="noreferrer"
+          target="_blank"
+        >
           {t.source}
         </a>
       </div>
       <IntroBlock intro={method.intro} docstring={method.docstring} locale={locale} />
       <ParameterList fields={method.parameters} locale={locale} title={t.parameters} />
+      <ReturnBlock
+        annotation={method.return_annotation}
+        description={method.returns_description}
+        locale={locale}
+        name={method.name}
+      />
       <SupplementaryDocs
         locale={locale}
         notes={method.notes}
         raises={method.raises}
         warnings={method.warnings}
       />
-      {method.return_annotation ? (
-        <p className="wf-api-return">
-          <strong>{t.returns}:</strong>{' '}
-          <AnnotatedType locale={locale} value={method.return_annotation} />
-          {method.returns_description ? (
-            <> — {renderInline(method.returns_description, locale, `ret-${method.name}`)}</>
-          ) : null}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -653,19 +815,41 @@ export function PythonApiReference({
     entry.parameters.length > 0
       ? entry.parameters
       : entry.fields.map((field) => ({ ...field, kind: 'positional_or_keyword' }));
+  const paramFields =
+    entry.kind === 'function' || entry.fields.length === 0 ? entry.parameters : entry.fields;
+  const paramTitle =
+    entry.kind === 'function' || entry.fields.length === 0 ? t.parameters : t.attributes;
+  const showReturns = Boolean(entry.return_annotation || entry.returns_description);
 
   return (
-    <div className="wf-api-reference not-prose" id={heading ? undefined : anchor}>
-      {heading ? (
-        <div className="wf-api-symbol-heading">
-          <h3>
-            <a href={`#${anchor}`}>
+    <div
+      className={`wf-api-reference not-prose wf-api-kind-card-${entry.kind}`}
+      id={heading ? undefined : anchor}
+    >
+      <div className="wf-api-card-header">
+        <div className="wf-api-card-title">
+          <KindBadge kind={entry.kind} locale={locale} />
+          {heading ? (
+            <h3 className="wf-api-symbol-name">
+              <a href={`#${anchor}`}>
+                <code>{entry.name}</code>
+              </a>
+            </h3>
+          ) : (
+            <h3 className="wf-api-symbol-name">
               <code>{entry.name}</code>
-            </a>
-          </h3>
-          <KindBadge kind={entry.kind} />
+            </h3>
+          )}
         </div>
-      ) : null}
+        <a
+          className="wf-api-source-link"
+          href={sourceUrl(entry.source_path, entry.line)}
+          rel="noreferrer"
+          target="_blank"
+        >
+          {t.source}
+        </a>
+      </div>
 
       <div className="wf-api-signature">
         <pre>
@@ -677,50 +861,46 @@ export function PythonApiReference({
             signature={entry.signature}
           />
         </pre>
-        <div className="wf-api-source-row">
-          <div>
-            {!heading ? <KindBadge kind={entry.kind} /> : null}
-            <code>{entry.qualified_name}</code>
-            <code>
-              from {entry.public_module} import {entry.name}
-            </code>
-          </div>
-          <a href={sourceUrl(entry.source_path, entry.line)} rel="noreferrer" target="_blank">
-            {t.source}
-          </a>
-        </div>
       </div>
 
-      <IntroBlock intro={entry.intro} docstring={entry.docstring} locale={locale} />
-      <ParameterList
-        fields={entry.kind === 'function' || entry.fields.length === 0 ? entry.parameters : entry.fields}
+      <SymbolMeta
         locale={locale}
-        title={entry.kind === 'function' || entry.fields.length === 0 ? t.parameters : t.attributes}
+        name={entry.name}
+        publicModule={entry.public_module}
       />
-      <SupplementaryDocs
-        locale={locale}
-        notes={entry.notes}
-        raises={entry.raises}
-        warnings={entry.warnings}
-      />
-      {entry.kind === 'function' && entry.return_annotation ? (
-        <p className="wf-api-return">
-          <strong>{t.returns}:</strong>{' '}
-          <AnnotatedType locale={locale} value={entry.return_annotation} />
-          {entry.returns_description ? (
-            <> — {renderInline(entry.returns_description, locale, `ret-${entry.name}`)}</>
-          ) : null}
-        </p>
-      ) : null}
 
-      {entry.methods.length > 0 ? (
-        <div className="wf-api-methods">
-          <h4>{t.methods}</h4>
-          {entry.methods.map((method) => (
-            <MethodReference locale={locale} method={method} symbol={symbol} key={method.name} />
-          ))}
-        </div>
-      ) : null}
+      <div className="wf-api-body">
+        <IntroBlock intro={entry.intro} docstring={entry.docstring} locale={locale} />
+        <ParameterList fields={paramFields} locale={locale} title={paramTitle} />
+        {showReturns ? (
+          <ReturnBlock
+            annotation={entry.return_annotation}
+            description={entry.returns_description}
+            locale={locale}
+            name={entry.name}
+          />
+        ) : null}
+        <SupplementaryDocs
+          locale={locale}
+          notes={entry.notes}
+          raises={entry.raises}
+          warnings={entry.warnings}
+        />
+
+        {entry.methods.length > 0 ? (
+          <div className="wf-api-methods">
+            <h4>{t.methods}</h4>
+            {entry.methods.map((method) => (
+              <MethodReference
+                locale={locale}
+                method={method}
+                symbol={symbol}
+                key={`${method.kind}-${method.name}-${method.line}`}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -755,50 +935,61 @@ export function PythonApiGroupReference({
   );
 }
 
+const VISIBLE_CATALOG_CHIPS = 2;
+
+function catalogPreviewNames(page: CatalogPage) {
+  const qualified = page.symbols.length > 0 ? page.symbols : (data.groups[page.slug] ?? []);
+  return qualified.map((symbol) => data.symbols[symbol]?.name ?? symbol.split('.').pop() ?? symbol);
+}
+
 export function PythonApiCatalog({ locale = 'en' }: { locale?: Locale }) {
   const t = labels[locale];
   return (
     <div className="wf-api-catalog not-prose">
       {data.catalog.map((section) => (
         <section className="wf-api-catalog-section" key={section.id}>
-          <h2>{section.title[locale]}</h2>
-          <p>{section.description[locale]}</p>
-          {section.pages.map((page) => {
-            const href = withBasePath(`${docsPrefix(locale)}/api-reference/${page.slug}`) ??
-              `${docsPrefix(locale)}/api-reference/${page.slug}`;
-            return (
-              <div className="wf-api-catalog-page" key={page.slug}>
-                <h3>
-                  <a href={href}>{page.title[locale]}</a>
-                  {page.kind === 'reference' ? (
-                    <span className="wf-api-catalog-count">
-                      {page.symbol_count ?? page.symbols.length} {t.symbols}
-                    </span>
-                  ) : null}
-                </h3>
-                {page.symbols.length > 0 ? (
-                  <ul className="wf-api-catalog-symbols">
-                    {page.symbols.map((symbol) => {
-                      const entry = data.symbols[symbol];
-                      const symbolLink =
-                        withBasePath(
-                          `${docsPrefix(locale)}/api-reference/${page.slug}#${symbolAnchor(symbol)}`,
-                        ) ?? `${docsPrefix(locale)}/api-reference/${page.slug}#${symbolAnchor(symbol)}`;
-                      return (
-                        <li key={symbol}>
-                          <a href={symbolLink}>
-                            <code>
-                              {entry.public_module}.{entry.name}
-                            </code>
-                          </a>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : null}
-              </div>
-            );
-          })}
+          <header className="wf-api-catalog-section-head">
+            <h2>{section.title[locale]}</h2>
+            <p>{section.description[locale]}</p>
+          </header>
+          <div className="pi-kv-catalog wf-api-catalog-list">
+            <ul>
+              {section.pages.map((page) => {
+                const href =
+                  withBasePath(`${docsPrefix(locale)}/api-reference/${page.slug}`) ??
+                  `${docsPrefix(locale)}/api-reference/${page.slug}`;
+                const names = catalogPreviewNames(page);
+                const preview = names.slice(0, VISIBLE_CATALOG_CHIPS);
+                const count = page.symbol_count ?? page.symbols.length;
+                const extra = Math.max(0, count - preview.length);
+                const blurb = catalogBlurbs[page.slug]?.[locale];
+
+                return (
+                  <li key={page.slug}>
+                    <a
+                      className={['pi-kv-row', 'wf-api-catalog-card', page.kind === 'guide' ? 'is-guide' : '']
+                        .filter(Boolean)
+                        .join(' ')}
+                      href={href}
+                    >
+                      <div className="pi-kv-head">
+                        <div className="pi-kv-names">
+                          <strong>{page.title[locale]}</strong>
+                        </div>
+                      </div>
+                      {blurb ? <p>{blurb}</p> : page.kind === 'guide' ? <p>{t.guide}</p> : null}
+                      {preview.length > 0 ? (
+                        <p className="pi-kv-read wf-api-catalog-symbols">
+                          {preview.join(', ')}
+                          {extra > 0 ? ` +${extra}` : ''}
+                        </p>
+                      ) : null}
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </section>
       ))}
     </div>

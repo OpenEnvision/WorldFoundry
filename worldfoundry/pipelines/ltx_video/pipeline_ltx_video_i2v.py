@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from ...synthesis.visual_generation.memory.video import VideoArtifactMemory
 from ..pipeline_utils import PipelineABC
 from typing import Any, Dict, Optional
@@ -44,8 +46,18 @@ class LTXVideoI2VPipeline(PipelineABC):
         generator_overrides = dict(required_components)
         generator_overrides.update(kwargs)
 
+        # The model runner uses an options mapping as its unified loading
+        # boundary.  RuntimeVideoSynthesis, however, expects one filesystem
+        # path; forwarding the whole mapping eventually calls Path(mapping).
+        if isinstance(model_path, Mapping):
+            resolved_model_path = model_path.get("model_path") or model_path.get(
+                "pretrained_model_path"
+            )
+        else:
+            resolved_model_path = model_path
+
         synthesis_model = cls.SYNTHESIS_CLS.from_pretrained(
-            pretrained_model_path=model_path,
+            pretrained_model_path=resolved_model_path,
             device=device,
             lazy=lazy,
             generator_overrides=generator_overrides,

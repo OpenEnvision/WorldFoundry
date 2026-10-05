@@ -14,6 +14,7 @@ modalities:
 - long-horizon
 name: WorldCam
 official_sources:
+  paper: https://arxiv.org/abs/2603.16871
   github:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
@@ -36,3 +37,24 @@ catalog_policy:
     available.
   open_source_rule: Only mark open_source when an official GitHub repository or official Hugging Face model page was confirmed.
     Do not infer checkpoint availability from papers, demos, or third-party mirrors.
+docs:
+  publisher: KAIST / Adobe Research / MAUM AI
+  publisher_kind: university
+  publisher_zh: KAIST（韩国科学技术院）/ Adobe Research / MAUM AI
+  overview: 'WorldCam, from KAIST''s CV Lab with Adobe Research and MAUM AI, is an interactive world model with camera-pose control for long-horizon game video. In this catalog the integration is verified: the runtime code is in-tree, the wrapper supports load_model=False planning without external checkout dependency, and the runner supports the official-style conditioning-video demo in the unified environment profile.'
+  overview_zh: WorldCam 由 KAIST CV Lab 联合 Adobe Research 与 MAUM AI 发布，是支持相机位姿控制的交互式世界模型，面向长时程游戏视频。本 catalog 中集成状态为 verified：运行时代码已内置树内，wrapper 支持 load_model=False 规划、无外部 checkout 依赖，runner 支持统一环境 profile 下官方风格的条件视频 demo。
+  architecture: The in-tree runner follows the official conditioning-video path and consumes local WorldCam/Wan assets, indicating a Wan-based diffusion backbone with camera-pose conditioning. Architecture internals beyond this are not recorded in this repository.
+  architecture_zh: 树内 runner 遵循官方条件视频路径，使用本地 WorldCam/Wan 资产，表明其为基于 Wan 的扩散骨干加相机位姿条件。除此之外的架构内部细节仓库未记录。
+  usage_notes: The release is code-only (no confirmed official checkpoints), so stage local WorldCam/Wan assets yourself; the wrapper's load_model=False mode lets you validate planning without weights. Per-run artifact checks are tracked outside the catalog.
+  usage_notes_zh: 该发布为 code-only（无已确认的官方 checkpoint），需自行就位本地 WorldCam/Wan 资产； wrapper 的 load_model=False 模式可在无权重时验证规划。每次运行的产物检查在 catalog 外跟踪。
+  limitations:
+  - 'Code-only release: no official checkpoints are confirmed in this repository.'
+  limitations_zh:
+  - code-only 发布：仓库未确认任何官方 checkpoint。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-pose-controlled rollout adherence.
+    reason_zh: 相机位姿控制的滚动生成跟随度。
+  - id: worldmodelbench
+    reason: Long-horizon interactive world quality.
+    reason_zh: 长时程交互世界质量。

@@ -1,0 +1,54 @@
+import os
+import sys
+import cv2
+import numpy as np
+
+sys.path.append("..")
+
+from worldfoundry.pipelines.pi3.pipeline_loger import LoGeRPipeline
+
+MODE = "loger"  # or "loger_star"
+MODEL_PATH = {"loger": "Junyi42/LoGeR", "loger_star": "Junyi42/LoGeR_star"}[MODE]
+IMAGE_INPUT = "./worldfoundry/data/test_cases/test_image_case1/ref_image.png"
+VIDEO_INPUT = None
+OUTPUT_DIR = "output_loger"
+
+DATA_PATH = VIDEO_INPUT if VIDEO_INPUT is not None else IMAGE_INPUT
+
+pipeline = LoGeRPipeline.from_pretrained(model_path=MODEL_PATH, mode=MODE)
+
+if VIDEO_INPUT is not None:
+    result = pipeline(videos=VIDEO_INPUT, task_type="reconstruction", interval=10)
+else:
+    result = pipeline(images=IMAGE_INPUT, task_type="reconstruction", interval=10)
+result.save(OUTPUT_DIR)
+print(f"Mode: {MODE}")
+print(f"Input: {DATA_PATH}")
+print(f"Views: {result.camera_range['num_views']}")
+print(f"Camera range: {result.camera_range}")
+
+rendered = pipeline(task_type="render_view", camera_view=0)
+rendered.save(os.path.join(OUTPUT_DIR, "render_default.png"))
+
+interact_frames = pipeline(task_type="render_view", interactions=["forward", "left", "camera_r"])
+interact_video_path = os.path.join(OUTPUT_DIR, "interaction_video.mp4")
+interact_video = cv2.VideoWriter(
+    interact_video_path, cv2.VideoWriter_fourcc(*"mp4v"), 15, interact_frames[0].size,
+)
+for f in interact_frames:
+    interact_video.write(cv2.cvtColor(np.array(f), cv2.COLOR_RGB2BGR))
+interact_video.release()
+print(f"Interaction video saved: {interact_video_path} ({len(interact_frames)} frames)")
+
+frames = pipeline(task_type="render_trajectory")
+video_path = os.path.join(OUTPUT_DIR, "trajectory_video.mp4")
+video = cv2.VideoWriter(
+    video_path,
+    cv2.VideoWriter_fourcc(*"mp4v"),
+    15,
+    frames[0].size,
+)
+for frame in frames:
+    video.write(cv2.cvtColor(np.array(frame), cv2.COLOR_RGB2BGR))
+video.release()
+print(f"Trajectory video saved: {video_path}")

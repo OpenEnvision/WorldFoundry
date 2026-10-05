@@ -11,6 +11,7 @@ checkpoint:
   repo_id: robbyant/lingbot-vla-4b-posttrain-robotwin
   license: apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2508.02317
   github:
     url: https://github.com/Robbyant/lingbot-vla
     head_sha: 4eb34b7693a0
@@ -62,3 +63,21 @@ runner_parity:
   - Full demo parity requires staging the public checkpoint and its Qwen2.5-VL processor assets.
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile planning records.
+docs:
+  publisher: Robbyant (Ant Group)
+  publisher_kind: company
+  publisher_zh: 蚂蚁灵波科技（Robbyant，蚂蚁集团）
+  overview: 'LingBot-VLA is Robbyant''s 4B vision-language-action policy line: a pretrained base plus RoboTwin post-trained and depth-enhanced RoboTwin variants, all Apache-2.0 with pinned revisions on Hugging Face and ModelScope. WorldFoundry integrates the official policy, feature transforms, robot mapping, and normalization assets directly in-tree as an in-process runtime.'
+  overview_zh: LingBot-VLA 是蚂蚁灵波科技（Robbyant）的 4B 视觉-语言-动作策略线：预训练 base，加 RoboTwin 后训练与深度增强 RoboTwin 变体，全部 Apache-2.0，并在 Hugging Face 与 ModelScope 锁定 revision。WorldFoundry 将官方策略、特征变换、机器人映射与归一化资产直接内置树内，作为进程内运行时。
+  architecture: A 4B policy backbone with feature transforms and per-robot mappings; the runtime uses shared WorldFoundry core device selection, compile dispatch, Hugging Face snapshot coordination, and streaming safetensors loading. Further internals are not recorded in this repository.
+  architecture_zh: 4B 策略骨干，配特征变换与按机器人映射；运行时使用共享的 WorldFoundry 核心设备选择、编译调度、Hugging Face 快照协调与流式 safetensors 加载。更多内部细节仓库未记录。
+  usage_notes: Use the RoboTwin post-train for simulator benchmarks (the depth variant adds depth input) and the base for fine-tuning. For the newer 6B generation see lingbot-vla-v2.
+  usage_notes_zh: 模拟器基准用 RoboTwin 后训练版（depth 变体增加深度输入），微调用 base。更新的 6B 世代请见 lingbot-vla-v2。
+  limitations:
+  - GPU rollout validation is not recorded for this entry.
+  limitations_zh:
+  - 此条目仓库未记录 GPU rollout 验证。
+  recommended_benchmarks:
+  - id: robotwin
+    reason: Dedicated RoboTwin post-trained checkpoints.
+    reason_zh: 有专门的 RoboTwin 后训练 checkpoint。

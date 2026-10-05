@@ -1,0 +1,48 @@
+---
+title: "Luma Ray2"
+description: "Luma Ray2（Luma AI）：文生视频、图生视频；Runner 一致性待确认。"
+modelId: "luma-ray2"
+pageSource: generated
+---
+
+Luma Ray2 是 Luma AI 的托管视频生成模型，catalog 记录其文生视频与图生视频能力。 WorldFoundry 的 Studio pipeline 封装了 Luma API：一条提示词或一帧起始图，最终以标准 WorldFoundry 结果目录中的可下载视频呈现。模型本身完全不在本地运行；该条目承担的是托管路径的记录与管道工作。
+
+<ModelPaperFigures modelId="luma-ray2" locale="zh" />
+
+项目页：[lumalabs.ai](https://lumalabs.ai/)。
+
+<ModelCommandBuilder modelId="luma-ray2" locale="zh" />
+
+## 用来做什么
+
+本卡是托管 API 而不是本地 checkpoint 时选 `luma-ray2`：走记录的提供商路由，而不是就位权重。
+
+这是由服务方托管运行的模型：厂商未公开其架构、参数规模或训练细节，本仓库也未记录这些信息。WorldFoundry 记录的只是集成层——一条向服务方端点提交请求并回收生成视频产物的 Studio pipeline。
+
+catalog 记录的任务包括 文生视频、图生视频、托管 API。模态上，它接受文本、图像，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（对比托管文/图生视频输出的标准多维质量评测）、[Physics-IQ Original](/zh/docs/evaluation/benchmark-hub/physics-iq)（检验服务方视频模型是否遵循基本物理合理性）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`last_frame`、`start_generation_id`、`end_generation_id`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `LumaRay2Pipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。 本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。 API key 通过 Luma 开发者平台（lumalabs.ai）签发。
+
+需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run luma-ray2 --pipeline.task-profile default` 调托管接口。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境未记录。
+
+准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh luma-ray2`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="luma-ray2" locale="zh" />

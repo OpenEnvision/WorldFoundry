@@ -36,3 +36,27 @@ catalog_category: three_d_four_d
 catalog_scope: 3D Gaussian-splatting catalog entries. Integrated entries expose in-tree
   WorldFoundry runtimes; metadata-only entries retain upstream provenance without runnable
   backends.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: WorldGen turns a text prompt or an image into a full 3D world — text-to-3D-world and image-to-3D-world generation in one project. In this catalog WorldFoundry exposes an in-tree adapter that executes the WorldGen inference flow when assets are staged; runner parity is pending, and missing gated foundation models are reported at inference time.
+  overview_zh: WorldGen 把文本提示或一张图变成完整 3D 世界——文本到 3D 世界与图像到 3D 世界生成合于一个项目。本 catalog 中 WorldFoundry 暴露树内适配器，在资产就位时执行 WorldGen 推理流程；runner parity 为 pending，gated 基础模型缺失会在推理时报告。
+  architecture: The catalog records a generation stack that depends on gated FLUX foundation models plus WorldGen's own assets (apache-2.0 for the WorldGen release itself, paper arXiv 2511.16825). Architecture internals beyond the recorded tasks are not stored in this repository.
+  architecture_zh: catalog 记录其生成栈依赖 gated 的 FLUX 基础模型与 WorldGen 自身资产（WorldGen 本体为 apache-2.0，论文 arXiv 2511.16825）。除已记录任务外的架构内部细节仓库未存。
+  usage_notes: Accept the gated FLUX terms and stage the WorldGen assets before running; the in-tree adapter can then execute the inference flow. Full official scene-quality parity remains pending, with per-run artifact checks tracked outside the catalog.
+  usage_notes_zh: 运行前请接受 gated FLUX 条款并就位 WorldGen 资产；树内适配器随后即可执行推理流程。完整的官方场景质量一致性仍为 pending，每次运行的产物检查在 catalog 外跟踪。
+  limitations:
+  - Depends on gated FLUX foundation models — access must be granted upstream.
+  - Full official scene-quality parity is pending.
+  - A cropped perspective-photo image-to-scene run did not preserve its input; the upstream spherical-ray path does not specify an input camera field of view. A full 2:1 panorama is preserved after the in-tree full-mask fix, but leaves no area to expand.
+  - The publishing institution is not recorded in this repository.
+  limitations_zh:
+  - 依赖 gated 的 FLUX 基础模型——需先在上游获得访问权限。
+  - 完整的官方场景质量一致性待验证。
+  - 裁剪的透视照片用于图生场景时未能保留输入；上游球面光线路径未指定输入视场角。树内修复完整掩码后可保留 2:1 全景，但全景没有待扩展区域。
+  - 发表机构在本仓库中未记录。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Standard scoring for generated 3D worlds.
+    reason_zh: 生成 3D 世界的标准评分。

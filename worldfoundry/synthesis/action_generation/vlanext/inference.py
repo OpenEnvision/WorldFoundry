@@ -3,7 +3,7 @@ import numpy as np
 from PIL import Image
 from transformers import AutoProcessor, AutoTokenizer, SiglipImageProcessor
 from worldfoundry.core.attention import resolve_transformers_attention_implementation
-from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 from worldfoundry.core.vram import skip_model_initialization
 from .modeling.model import VLANeXt, LlamaProcessorWrapper
 from .modeling.rt2_baseline import RT2LikeBaseline

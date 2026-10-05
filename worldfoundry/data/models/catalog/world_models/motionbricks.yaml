@@ -12,6 +12,7 @@ source:
   official_repo_url: https://github.com/NVlabs/GR00T-WholeBodyControl
   license: apache-2.0
 official_sources:
+  project_page: https://nvlabs.github.io/motionbricks/
   paper: https://arxiv.org/pdf/2604.24833
   github:
     url: https://github.com/NVlabs/GR00T-WholeBodyControl
@@ -32,3 +33,19 @@ catalog_scope: World-model catalog entries. Integrated entries expose in-tree Wo
   runtimes; blocked entries retain upstream provenance without runnable backends.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: motionbricks
+docs:
+  publisher: NVIDIA
+  publisher_kind: company
+  publisher_zh: 英伟达（NVIDIA）
+  overview: 'MotionBricks is part of NVIDIA''s GR00T-WholeBodyControl stack: it generates humanoid whole-body motion — the action side of embodied world modeling, emitting action traces rather than video (paper arXiv 2604.24833). In this catalog the official source route is registered; motion/robot assets stay runtime-gated.'
+  overview_zh: MotionBricks 属于英伟达 GR00T-WholeBodyControl 栈：生成人形机器人全身运动——具身世界建模的动作侧，产物是动作轨迹而非视频（论文 arXiv 2604.24833）。本 catalog 中官方源码路径已注册；运动/机器人资产保持运行时限制。
+  architecture: Architecture internals beyond the recorded tasks are not stored in this repository (apache-2.0); the source is bound from the GR00T-WholeBodyControl repository at a pinned commit. The recorded artifact type is action_trace.
+  architecture_zh: 除已记录任务外的架构内部细节仓库未存（apache-2.0）；源码从 GR00T-WholeBodyControl 仓库以固定 commit 绑定。记录的产物类型为 action_trace。
+  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
+  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。
+  limitations:
+  - Emits action traces, not video artifacts.
+  - Real generation is checkpoint/robot-asset gated.
+  limitations_zh:
+  - 产物是动作轨迹，不是视频。
+  - 真实生成受 checkpoint/机器人资产限制。

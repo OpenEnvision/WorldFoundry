@@ -64,3 +64,28 @@ runner_parity:
 catalog_category: world_models
 catalog_scope: world-model/interactive starred models
 schema_version: 2
+docs:
+  publisher: Tencent (ARC Lab) / Nanyang Technological University
+  publisher_kind: company
+  publisher_zh: 腾讯（ARC Lab）/ 南洋理工大学
+  overview: 'RollingForcing streams minutes-long video autoregressively: rolling-window denoising with an attention sink lets it generate long text-to-video without the drift that kills naive streaming (paper arXiv 2509.25161). In this catalog the runner reached full_demo_verified — a full Workspace inference with the exact released checkpoint decoded 126 latent frames to 501 H.264 frames at 832x480, 16 fps, 31.31 seconds on A100.'
+  overview_zh: RollingForcing 自回归地流式生成数分钟长的视频：滚动窗口去噪加 attention sink，避免了朴素流式生成的漂移崩坏（论文 arXiv 2509.25161）。本 catalog 中 runner 达到 full_demo_verified——用发布的确切 checkpoint 完成完整 Workspace 推理，126 个潜帧解码为 501 帧 832x480、16 fps 的 H.264，A100 上耗时 31.31 秒的视频内容。
+  architecture: The in-tree inference-only runner reuses the existing forcing pipeline, causal Wan variant, attention sink/KV cache, core scheduler, attention dispatch, distributed helpers, and video I/O; execution never imports an external RollingForcing repository. The static integration follows the official five-step, three-latent-frame block configuration.
+  architecture_zh: 树内仅推理 runner 复用现有 forcing pipeline、因果 Wan variant、attention sink/KV 缓存、核心调度器、注意力分发、分布式辅助与视频 I/O；执行绝不导入外部 RollingForcing 仓库。静态集成遵循官方五步、三潜帧块配置。
+  usage_notes: The released route is text-to-video only — unverified I2V behavior is not advertised. BF16 and memory capacity are hardware requirements; the official 126 latent frames decode to a long 16 fps video, and smaller multiples of three are valid smoke runs. Upstream terms allow academic use only.
+  usage_notes_zh: 发布路径仅文生视频——未验证的图生视频行为不对外宣传。BF16 与显存容量是硬件要求；官方 126 潜帧解码为 16 fps 长视频，更小的三的倍数可作冒烟运行。上游条款仅允许学术使用。
+  limitations:
+  - 'Academic-use-only license: all commercial and production use is prohibited.'
+  - Text-to-video only in the released route.
+  - Functional demo verified; numerical pixel parity with an upstream reference is not claimed.
+  limitations_zh:
+  - 仅限学术使用的许可：禁止一切商用与生产用途。
+  - 发布路径仅支持文生视频。
+  - 已验证功能性 demo；不声称与上游参考产物的像素级数值一致。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Video quality for long text-to-video output.
+    reason_zh: 长文生视频输出的质量评测。
+  - id: chronomagic-bench
+    reason: Long-horizon temporal coherence.
+    reason_zh: 长时程时间连贯性评测。

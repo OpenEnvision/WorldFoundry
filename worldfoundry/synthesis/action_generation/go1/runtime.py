@@ -80,7 +80,7 @@ class GO1Runtime:
     def _resolve_snapshot(self) -> Path:
         if self._snapshot is not None:
             return self._snapshot
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         direct = self._existing_path(self.config.checkpoint_location)
         location = str(direct) if direct is not None else self.config.checkpoint_location
@@ -127,7 +127,7 @@ class GO1Runtime:
             return self._model
         import torch
 
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         from .configuration_go1 import GO1ModelConfig
         from .modeling_go1 import GO1Model
@@ -238,7 +238,13 @@ class GO1Runtime:
 
     def _camera_values(self, observation: Mapping[str, Any], image: Any) -> list[Any]:
         nested = observation.get("images")
+        wrapped = observation.get("observation")
         containers = [nested] if isinstance(nested, Mapping) else []
+        if isinstance(wrapped, Mapping):
+            wrapped_images = wrapped.get("images")
+            if isinstance(wrapped_images, Mapping):
+                containers.append(wrapped_images)
+            containers.append(wrapped)
         containers.append(observation)
         if isinstance(image, Mapping):
             containers.append(image)
@@ -247,7 +253,10 @@ class GO1Runtime:
             candidates = (key, *tuple(self.config.camera_aliases.get(key, ())))
             value = None
             for container in containers:
-                value = first_present(container, *candidates)
+                candidate = first_present(container, *candidates)
+                if isinstance(candidate, Mapping):
+                    candidate = first_present(candidate, *candidates)
+                value = candidate
                 if value is not None:
                     break
             if value is None and index == 0 and image is not None and not isinstance(image, Mapping):

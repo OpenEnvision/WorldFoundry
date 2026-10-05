@@ -1,0 +1,31 @@
+---
+title: "SmolVLA"
+description: "Hugging Face 的紧凑 VLA：SmolVLM2-500M 加 flow-matching 动作专家。LIBERO checkpoint 是 rollout 默认；独立环境。"
+modelId: "smolvla"
+pageSource: authored
+---
+
+SmolVLA 是 Hugging Face / LeRobot 的紧凑社区 VLA：**SmolVLM2-500M** 视觉-语言骨干加 flow-matching 动作专家，按消费级硬件设计。本卡片记录的论文是 [LeRobot: An Open-Source Library for End-to-End Robot Learning](https://arxiv.org/abs/2602.22818)（arXiv 2602.22818）——是库论文，不是 SmolVLA 专论。代码在 [huggingface/lerobot](https://github.com/huggingface/lerobot)。别名 `smolvla-libero`、`HuggingFaceVLA/smolvla_libero`、`smolvla-base`、`lerobot/smolvla_base` 解析到本页。
+
+<ModelPaperFigures modelId="smolvla" locale="zh" />
+
+记录了两个 variant。**`smolvla-libero`**（`HuggingFaceVLA/smolvla_libero`）是 rollout 默认：manifest 与归一化 schema 已验证，并带匹配的 **8 维状态**与 **7 维动作**统计。**`smolvla-base`**（`lerobot/smolvla_base`）是多机器人基座资产，没有完整的状态归一化契约——只作微调，不是 rollout 路径。本 catalog 未记录许可证。
+
+<ModelCommandBuilder modelId="smolvla" locale="zh" />
+
+## 用来做什么
+
+滚动 LIBERO 专家线：必填 `image`、`prompt`、`state` 进，经 `SmolVLAPipeline` 写出 `action_trace` / `smolvla_action_trace.json`。两路官方相机（`observation.images.image`、`observation.images.image2`）。动作契约是形状 **50×7** 的连续块。默认启动 `worldfoundry-eval run smolvla-libero`。
+
+LIBERO 专家线的评测看 [LIBERO](/zh/docs/evaluation/benchmark-hub/libero)。那是匹配套件，不是已收录的 WorldFoundry 排名。不要把 `smolvla-base` 送进同一条 rollout。
+
+工作区有一次记录的 GPU 运行：LIBERO checkpoint、扁平 8 维状态、两路相机，跑完 **10** 步去噪，返回有限的 **1×50×7** 块。该记录只验证这一份 checkpoint。catalog 的 runner 状态仍是 **未记录**。
+
+## 运行时契约
+仅本地加载，不引入外部源码 checkout。锁定骨干是 `HuggingFaceTB/SmolVLM2-500M-Video-Instruct`（checkpoint 里的 `SmolVLM2-500M-Instruct` id 解析到同一发布仓库）。自动精度在 Ampere / Ada / Hopper / Blackwell 上为 **bf16**，更旧的 CUDA 为 **fp16**。带掩码注意力走共享 SDPA 选择器。LIBERO 文件的 CPU BF16 严格恢复加载了全部 **788** 个 tensor，无缺失或多余键。
+
+## 在 WorldFoundry 中运行
+
+使用独立环境 `worldfoundry-vla-smolvla`（Python 3.11，CUDA 12.8，`torch>=2.8`）。集成为 Runner 一致性待确认。期望 `get_action` 产物前，先就位 `HuggingFaceVLA/smolvla_libero`。
+
+<ModelRelatedRecipes modelId="smolvla" locale="zh" />

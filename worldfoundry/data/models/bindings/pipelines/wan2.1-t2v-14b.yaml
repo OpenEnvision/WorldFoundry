@@ -3,9 +3,9 @@ binding_id: wan2.1-t2v-14b
 model_id: wan2.1-t2v-14b
 runner: worldfoundry.pipeline
 pipeline:
-  target: worldfoundry.pipelines.wan.pipeline_wan_2p1_t2v:Wan2p1T2VPipeline
+  target: worldfoundry.pipelines.wan.pipeline_wan_2p1_t2v:Wan2p1T2V14BPipeline
   loading:
     method: from_pretrained
     signature: unified
   invocation:
-    mode: native_or_standard_invocation
+    mode: native_diffusion_invocation

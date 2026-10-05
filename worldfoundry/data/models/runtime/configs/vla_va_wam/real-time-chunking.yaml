@@ -1,8 +1,0 @@
-backend: callable_entrypoint
-require_checkpoint: false
-source_repo: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/lerobot
-source_subdir: src
-policy_target: worldfoundry.synthesis.action_generation.official_policy.runtime:real_time_chunking_action
-predict_method: __call__
-action_contract: real_time_chunked_action_queue
-runtime_backend: lerobot_rtc_action_chunking

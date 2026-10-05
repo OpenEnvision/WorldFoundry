@@ -1,19 +1,16 @@
 from typing import Optional
 
-from einops import rearrange
 import torch
 import torch.nn as nn
+from einops import rearrange
 
-from worldfoundry.base_models.diffusion_model.video.hunyuan_video.modules.activation_layers import get_activation_layer
-from .attenion import attention
-from worldfoundry.base_models.diffusion_model.video.hunyuan_video.modules.norm_layers import get_norm_layer
-from .embed_layers import TimestepEmbedder, TextProjection
-from .attenion import attention
+from worldfoundry.core.nn import activation_layer as get_activation_layer
+from worldfoundry.core.nn import apply_gate
+from worldfoundry.core.nn import normalization_layer as get_norm_layer
+from worldfoundry.core.attention.backends.hybrid import attention
+
+from .embed_layers import TextProjection, TimestepEmbedder
 from .mlp_layers import MLP
-from worldfoundry.base_models.diffusion_model.video.hunyuan_video.modulate_layers_i2v import (
-    apply_gate,
-    modulate,
-)
 
 
 class IndividualTokenRefinerBlock(nn.Module):

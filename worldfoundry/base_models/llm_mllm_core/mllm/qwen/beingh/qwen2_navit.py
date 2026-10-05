@@ -26,9 +26,6 @@ from .qwen2.modeling_qwen2 import (
 )
 
 from .qwen2.configuration_qwen2 import Qwen2Config as _Qwen2Config
-from BeingH.model.cache_utils.taylorseer import (
-    cal_type, taylor_cache_init, derivative_approximation, taylor_formula,
-)
 
 
 torch._dynamo.config.cache_size_limit = 512
@@ -984,6 +981,11 @@ class Qwen2MoTDecoderLayer(nn.Module):
         
         enable_taylorseer = getattr(self, 'enable_taylorseer', False)
 
+        if enable_taylorseer:
+            from BeingH.model.cache_utils.taylorseer import (
+                taylor_cache_init, derivative_approximation, taylor_formula,
+            )
+
         if enable_taylorseer and self.current['type'] == 'full':
             self.current['module'] = 'total'
             taylor_cache_init(cache_dic=self.cache_dic, current=self.current)
@@ -1343,6 +1345,8 @@ class Qwen2Model(Qwen2PreTrainedModel):
         
         enable_taylorseer = getattr(self, 'enable_taylorseer', False)
         if enable_taylorseer:
+            from BeingH.model.cache_utils.taylorseer import cal_type
+
             cal_type(self.cache_dic, self.current)
             self.current['stream'] = 'layers_stream'
 

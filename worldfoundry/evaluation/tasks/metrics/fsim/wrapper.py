@@ -37,8 +37,7 @@ def compute_fsim(
 ) -> float:
     """Compute FSIM/FSIMc between two HxWxC images (higher is better)."""
     device_t = resolve_device(device)
-    if data_range is None:
-        data_range = default_data_range(reference, generated)
+    data_range = default_data_range(reference, generated) if data_range is None else data_range
     ref = to_tensor(reference, device_t)
     gen = to_tensor(generated, device_t)
     with __import__("torch").no_grad():

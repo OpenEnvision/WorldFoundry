@@ -1,0 +1,15 @@
+schema_version: 2
+binding_id: ltx-2.5
+model_id: ltx-2.5
+aliases:
+- ltx2.5
+- ltx25
+- ltx-2.5-distilled
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.ltx25.pipeline_ltx25:LTX25Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

@@ -22,7 +22,7 @@ pip_packages:
 - safetensors==0.5.3
 - huggingface-hub<1.0
 - accelerate
-- peft
+- peft==0.14.0
 - sentencepiece==0.2.0
 - protobuf==6.33.5
 - omegaconf==2.3.0
@@ -57,9 +57,10 @@ validation_imports:
 - transformers
 - worldfoundry.base_models.three_dimensions.general_3d.geocalib.autolevel
 - worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.api
-- worldfoundry.base_models.diffusion_model.video.wan.variants.moverse
+- worldfoundry.base_models.diffusion_model.models.networks.wan.variants.moverse
 - gsplat
 - cv2
 notes:
 - Mirrors the upstream Python 3.10, torch 2.6, CUDA 12.4 inference stack; flash-attn may be installed separately for the target GPU.
 - MoVerse-specific source and its shared WorldFoundry model dependencies are in-tree; checkpoints remain external local assets.
+- PEFT is pinned with Diffusers 0.32.2 to avoid newer optional torchao compatibility checks during non-quantized panorama LoRA loading.

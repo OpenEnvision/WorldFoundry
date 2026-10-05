@@ -1,0 +1,50 @@
+---
+title: "Solaris"
+description: "Solaris（New York University (VisionX)）：video_generation、交互式视频生成；已验证。"
+modelId: "solaris"
+pageSource: generated
+---
+
+Solaris 是纽约大学 VisionX 组的多智能体交互视频世界模型（论文 arXiv 2602.22208）：多个智能体在同一个生成世界中行动。本 catalog 中 runner 已验证——仅推理运行时内置树内，消费官方 Orbax checkpoint（nyu-visionx/solaris）与来自 Hugging Face 或本地镜像的评估数据集。
+
+<ModelPaperFigures modelId="solaris" locale="zh" />
+
+记录论文为[Solaris: Building a Multiplayer Video World Model in Minecraft](https://arxiv.org/abs/2602.22208)（2026）。
+
+项目页：[solaris-wm.github.io](https://solaris-wm.github.io/)。代码：[solaris-wm/solaris](https://github.com/solaris-wm/solaris)。
+
+<ModelCommandBuilder modelId="solaris" locale="zh" />
+
+## 用来做什么
+
+需要动作条件世界步进时选 `solaris`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
+
+按记录的 checkpoint 格式，运行时基于 JAX/Orbax；除已记录任务外的内部细节此处未存。上游许可已标记需人工审查。该模型由纽约大学（VisionX 实验室）发布。
+
+catalog 记录的任务包括 video_generation、multi-agent-world-model、交互式视频生成。别名包括 `solaris-wm`。输出模态为视频。
+
+记录的评测入口包括[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（多智能体世界滚动生成质量）。
+
+## 运行时契约
+
+可选 `eval_types`、`experiment_name`、`eval_num_samples`、`num_workers`、`num_frames_eval`；产物 `solaris.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `SolarisPipeline`。
+
+系列状态：**已验证**。
+
+推理按每张可见 GPU 启动一个样本——eval_num_samples 必须是可见 GPU 数的整数倍。 官方权重与评估数据集从 HF 或同布局本地镜像解析。
+
+上游许可在人工审查中。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run solaris --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `nyu-visionx/solaris`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh solaris`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="solaris" locale="zh" />

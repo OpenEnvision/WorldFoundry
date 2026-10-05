@@ -4,8 +4,18 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from worldfoundry.base_models.three_dimensions.point_clouds.pi3.pi3.utils.geometry import (
-    se3_inverse, get_pixel, depthmap_to_absolute_camera_coordinates, depthmap_to_camera_coordinates, homogenize_points, get_gt_warp, warp_kpts, geotrf, inv, opencv_camera_to_plucker, depth_edge
+from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.utils.geometry import (
+    se3_inverse as se3_inverse,
+    get_pixel as get_pixel,
+    depthmap_to_absolute_camera_coordinates as depthmap_to_absolute_camera_coordinates,
+    depthmap_to_camera_coordinates as depthmap_to_camera_coordinates,
+    homogenize_points as homogenize_points,
+    get_gt_warp as get_gt_warp,
+    warp_kpts as warp_kpts,
+    geotrf as geotrf,
+    inv as inv,
+    opencv_camera_to_plucker as opencv_camera_to_plucker,
+    depth_edge as depth_edge,
 )
 
 def robust_scale_estimation(ratios: torch.Tensor, trim_ratio: float = 0.25) -> torch.Tensor:

@@ -12,6 +12,7 @@ from src.fsdp import hook_for_multi_gpu_inference
 from src.models.uni3c import RealisDanceDiT
 from src.pipelines.pipeline_uni3c import RealisDanceDiTPipeline
 from src.utils import create_logger, is_main_process, set_seed
+from src.xfuser_compat import require_xfuser
 from transformers import AutoTokenizer, CLIPImageProcessor, CLIPVisionModel, UMT5EncoderModel
 
 
@@ -54,6 +55,7 @@ def main():
 
     # init dist and set seed
     if args.enable_sp:
+        require_xfuser("multi-GPU sequence-parallel inference")
         from xfuser.core.distributed import (
             init_distributed_environment,
             initialize_model_parallel,

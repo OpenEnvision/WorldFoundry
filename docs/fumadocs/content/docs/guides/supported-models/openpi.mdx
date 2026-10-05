@@ -1,0 +1,26 @@
+---
+title: "OpenPI"
+description: "Physical Intelligence OpenPI runtime (Apache-2.0): shared in-tree infra for pi0 / pi0-FAST / pi0.5, GCS weights."
+modelId: "openpi"
+pageSource: authored
+---
+
+OpenPI is Physical Intelligence's official open-source release of the pi-series robot policies (Apache-2.0). WorldFoundry flattens the inference runtime in-tree and validates it end to end: py_compile, import/from_pretrained, plan-only predict, and checkpoint-backed pi05_libero policy inference all passed, emitting the configured action schema.
+
+<ModelPaperFigures modelId="openpi" locale="en" />
+
+<ModelCommandBuilder modelId="openpi" locale="en" />
+
+## What it is for
+
+Use this page for shared OpenPI infra — variants `pi0-base`, `pi05-libero`, `pi0-fast-base`, `pi0-fast-droid`. Jump to the π0 / π0-FAST / π0.5 cards for a specific algorithm. Checkpoint-backed `pi05_libero` on [LIBERO](/docs/evaluation/benchmark-hub/libero) is the validated path.
+
+## Runtime contract
+
+Required `image`, `instruction`, and `prompt`. `actions`: `robot_action`, `proprio`, `action_space`. Artifact: `openpi_action_trace.json`. Action schema is emitted via `create_trained_policy_infer`. Runtime lives under `worldfoundry/synthesis/action_generation/openpi`.
+
+## Running in WorldFoundry
+
+Dedicated `worldfoundry-openpi-cu12` (Python 3.11, CUDA 12.4 or newer). Stage `gs://openpi-assets` with gsutil. License Apache-2.0. Status: **Verified** on shared infra / `pi05_libero`. Launch `worldfoundry-eval run pi0-base` for the family default.
+
+<ModelRelatedRecipes modelId="openpi" locale="en" />

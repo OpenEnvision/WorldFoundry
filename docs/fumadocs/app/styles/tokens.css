@@ -1,0 +1,155 @@
+/* WorldFoundry design tokens — single source of truth for light/dark + Fumadocs bridge. */
+
+:root {
+  /* Brand palette (pi) */
+  --pi-paper: #f7f5ef;
+  --pi-paper-hover: #efede5;
+  --pi-ink: #111;
+  --pi-muted: #65645f;
+  --pi-line: #d8d4c9;
+  --pi-soft-line: #c9c4b8;
+  --pi-brand-font: var(--font-fraunces), 'Fraunces', Georgia, 'Times New Roman', serif;
+  /* Align docs UI with Fumadocs (Geist); keep Noto Sans SC for CJK. */
+  --pi-docs-font:
+    var(--font-geist-sans), 'Geist', 'Noto Sans SC', ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --pi-brand-accent: #6b5a45;
+  --pi-brand-accent-soft: #9a8568;
+  --pi-surface: rgba(255, 255, 255, 0.72);
+  --pi-surface-strong: rgba(255, 255, 255, 0.88);
+  --pi-elevated: #ffffff;
+  --pi-shadow-soft: 0 1px 2px color-mix(in srgb, var(--pi-ink) 5%, transparent);
+  --pi-shadow-card: 0 8px 24px color-mix(in srgb, var(--pi-ink) 6%, transparent);
+  --pi-radius-sm: 0.375rem;
+  --pi-radius-md: 0.625rem;
+  --pi-radius-lg: 0.875rem;
+  --pi-radius-xl: 1rem;
+  --pi-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --pi-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* Docs type scale — Mintlify Aspen / Tailwind prose (SGLang Diffusion). */
+  --pi-doc-frame-max-width: 92rem;
+  --pi-doc-body-size: 1rem;
+  --pi-doc-body-leading: 1.75;
+  --pi-doc-body-tracking: -0.0125rem;
+  --pi-doc-paragraph-gap: 1.25em;
+  --pi-doc-list-gap: 1.25em;
+  --pi-doc-list-indent: 1.625em;
+  --pi-doc-list-item-gap: 0.5em;
+  --pi-doc-h1-size: 1.875rem;
+  --pi-doc-h1-leading: 1.2;
+  --pi-doc-h1-tracking: -0.025em;
+  --pi-doc-h1-weight: 600;
+  --pi-doc-h2-size: 1.5rem;
+  --pi-doc-h2-leading: 1.33333;
+  --pi-doc-h2-weight: 600;
+  --pi-doc-h2-mt: 2em;
+  --pi-doc-h2-mb: 1em;
+  --pi-doc-h3-size: 1.25rem;
+  --pi-doc-h3-leading: 1.6;
+  --pi-doc-h3-weight: 600;
+  --pi-doc-h3-mt: 1.6em;
+  --pi-doc-h3-mb: 0.6em;
+  --pi-doc-h4-size: 1rem;
+  --pi-doc-h4-leading: 1.5;
+  --pi-doc-h4-weight: 600;
+  --pi-doc-h4-mt: 1.5em;
+  --pi-doc-h4-mb: 0.5em;
+  --pi-doc-code-size: 0.875em;
+  --pi-doc-pre-size: 0.875rem;
+  --pi-doc-pre-leading: 1.71429;
+  --pi-doc-ui-xs: 0.75rem;
+  --pi-doc-ui-sm: 0.8125rem;
+  --pi-doc-ui-md: 0.875rem;
+
+  /* Semantic surfaces (docs/content) */
+  --pi-surface-table-head: #eee9dd;
+  --pi-surface-table-cell: var(--pi-elevated);
+  --pi-surface-code: var(--pi-elevated);
+  --pi-surface-card: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated));
+  --pi-surface-workflow-card: color-mix(in srgb, var(--pi-surface-strong) 82%, transparent);
+
+  /* Hero header chrome (paper background) */
+  --pi-text-on-hero: var(--pi-ink);
+  --pi-text-on-hero-muted: var(--pi-muted);
+  --pi-hero-chrome-bg: color-mix(in srgb, var(--pi-ink) 4%, var(--pi-paper));
+  --pi-hero-chrome-border: var(--pi-line);
+  --pi-hero-chrome-hover: color-mix(in srgb, var(--pi-brand-accent) 8%, var(--pi-paper));
+  --pi-hero-chrome-active: color-mix(in srgb, var(--pi-brand-accent) 12%, var(--pi-paper));
+
+  /* Home bands */
+  --wf-band-a: #f3efe6;
+  --wf-band-b: #f7f5ef;
+  --wf-surface: #ffffff;
+
+  /* Fumadocs bridge */
+  --color-fd-background: var(--pi-paper);
+  --color-fd-foreground: var(--pi-ink);
+  --color-fd-muted: color-mix(in srgb, var(--pi-paper) 82%, var(--pi-line));
+  --color-fd-muted-foreground: var(--pi-muted);
+  --color-fd-border: var(--pi-line);
+  --color-fd-popover: var(--pi-surface-strong);
+  --color-fd-popover-foreground: var(--pi-ink);
+  --color-fd-card: var(--pi-surface);
+  --color-fd-card-foreground: var(--pi-ink);
+  --color-fd-primary: var(--pi-brand-accent);
+  --color-fd-primary-foreground: #fff;
+  --color-fd-secondary: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated));
+  --color-fd-secondary-foreground: var(--pi-ink);
+  --color-fd-accent: color-mix(in srgb, var(--pi-brand-accent) 8%, var(--pi-paper));
+  --color-fd-accent-foreground: var(--pi-ink);
+  --color-fd-ring: var(--pi-brand-accent-soft);
+}
+
+/* Warm brown dark palette — not flat gray/black. */
+.dark {
+  --pi-paper: #141311;
+  --pi-paper-hover: #1c1b18;
+  --pi-ink: #f3efe6;
+  --pi-muted: #b3ada3;
+  --pi-line: #3a3733;
+  --pi-soft-line: #49443c;
+  --pi-brand-accent: #c9b297;
+  --pi-brand-accent-soft: #b39a7c;
+  --pi-surface: rgba(26, 24, 21, 0.78);
+  --pi-surface-strong: rgba(34, 32, 28, 0.94);
+  --pi-elevated: #221f1b;
+  --pi-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.32);
+  --pi-shadow-card: 0 8px 28px rgba(0, 0, 0, 0.42);
+
+  --pi-surface-table-head: color-mix(in srgb, var(--pi-paper) 82%, var(--pi-elevated));
+  --pi-surface-table-cell: color-mix(in srgb, var(--pi-paper) 94%, var(--pi-elevated));
+  --pi-surface-code: var(--pi-elevated);
+  --pi-surface-card: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated));
+  --pi-surface-workflow-card: color-mix(in srgb, var(--pi-paper) 86%, var(--pi-elevated));
+
+  --wf-band-a: #161412;
+  --wf-band-b: #141311;
+  --wf-surface: var(--pi-elevated);
+
+  --color-fd-background: var(--pi-paper);
+  --color-fd-foreground: var(--pi-ink);
+  --color-fd-muted: color-mix(in srgb, var(--pi-paper) 70%, var(--pi-line));
+  --color-fd-muted-foreground: var(--pi-muted);
+  --color-fd-border: var(--pi-line);
+  --color-fd-popover: var(--pi-surface-strong);
+  --color-fd-popover-foreground: var(--pi-ink);
+  --color-fd-card: var(--pi-surface);
+  --color-fd-card-foreground: var(--pi-ink);
+  --color-fd-primary: var(--pi-brand-accent);
+  --color-fd-primary-foreground: #141311;
+  --color-fd-secondary: color-mix(in srgb, var(--pi-paper) 86%, var(--pi-elevated));
+  --color-fd-accent: color-mix(in srgb, var(--pi-brand-accent) 16%, var(--pi-paper));
+  --color-fd-accent-foreground: var(--pi-ink);
+  --color-fd-ring: var(--pi-brand-accent-soft);
+}
+
+.dark .pi-home-shell,
+.dark .pi-doc-shell {
+  color-scheme: dark;
+}
+
+.dark .wf-home-shell {
+  --pi-muted: #a8a299;
+  --pi-line: #2e2c28;
+}

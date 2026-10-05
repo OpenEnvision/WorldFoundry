@@ -1,0 +1,44 @@
+---
+title: "HyperFlow for MiniMax-H3"
+description: "HyperFlow for MiniMax-H3 from Video Rebirth: text-to-video and image-to-video; Runner parity pending; dedicated `hyperflow`."
+modelId: "hyperflow"
+pageSource: generated
+---
+
+Eight-step MiniMax-H3 adapter with joint video/audio, first/last-frame conditioning and ordered multimodal references.
+
+<ModelPaperFigures modelId="hyperflow" locale="en" />
+
+Code: [Video-Rebirth/hyperflow](https://github.com/Video-Rebirth/hyperflow).
+
+<ModelCommandBuilder modelId="hyperflow" locale="en" />
+
+## What it is for
+
+Use `hyperflow` for the family's joint T2V/I2V inference path. The catalog records both task profiles on this page.
+
+It is published by Video Rebirth.
+
+Catalog tasks include text-to-video, image-to-video, reference-to-video, and audio-video-generation. Catalog aliases include `hyperflow-h3` and `minimax-h3-hyperflow`. Documented modalities: text and image in, video out.
+
+## Runtime contract
+
+Optional `prompt`, `num_frames`, `height`, `width`, and `seed`; artifacts `generated_video` and `hyperflow.mp4`.
+
+CLI task profiles: `t2va`, `fl2va`, and `ref2va`. WorldFoundry binds `HyperFlowPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `t2va` defaults: seed=42 Recorded `fl2va` defaults: seed=42.
+
+Supply a complete local diffusers MiniMax-H3 snapshot, weights_path and the dedicated Python executable. The upstream loader supplies the fixed grid; num_inference_steps must be 8 and output fps must be 24.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run hyperflow --pipeline.task-profile t2va` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+Recorded weight repositories include `videorebirth/hyperflow` and `MiniMaxAI/MiniMax-H3`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh hyperflow`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="hyperflow" locale="en" />

@@ -99,3 +99,21 @@ runner_parity:
   - LIBERO-Spatial, Object, Goal, and LIBERO-10 all passed strict checkpoint restoration and real two-camera GPU action inference.
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile planning records.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: Spatial-Forcing aligns VLA internal representations with 3D geometry (via VGGT-style supervision) to boost manipulation precision on OpenVLA backbones. All four released OpenVLA-LIBERO checkpoints (spatial, object, goal, long; Apache-2.0) passed strict restoration and real A100 inference with finite 8x7 actions — the catalog status is all_released_checkpoints_gpu_validated.
+  overview_zh: Spatial-Forcing 将 VLA 内部表征与 3D 几何对齐（借助 VGGT 式监督），提升 OpenVLA 骨干的操作精度。四个已发布 OpenVLA-LIBERO checkpoint（spatial、object、goal、long；Apache-2.0）全部通过严格恢复与真实 A100 推理，输出有限 8x7 动作——catalog 状态为 all_released_checkpoints_gpu_validated。
+  architecture: Fine-tuned OpenVLA 7B checkpoints where spatial alignment was enforced during training; at inference the models run as standard OpenVLA-style policies. The inference-only runtime disables checkpoint-hosted remote code; VGGT, alignment projectors, and LoRA adapter copies are excluded.
+  architecture_zh: 训练期施加空间对齐的 OpenVLA 7B 微调 checkpoint；推理时按标准 OpenVLA 式策略运行。推理专用运行时禁用 checkpoint 携带的远程代码；VGGT、对齐投影器与 LoRA 适配器副本被排除。
+  usage_notes: Pick the LIBERO split checkpoint you need (spatial/object/goal/long) from the official collection; only locally staged snapshots are accepted.
+  usage_notes_zh: 从官方 collection 中按需选择 LIBERO 子集 checkpoint（spatial/object/goal/long）；仅接受本地就位的快照。
+  limitations:
+  - Released checkpoints are LIBERO fine-tunes; other embodiments need retraining.
+  limitations_zh:
+  - 发布的 checkpoint 为 LIBERO 微调版；其他本体需重新训练。
+  recommended_benchmarks:
+  - id: libero
+    reason: All four LIBERO checkpoints are GPU-validated.
+    reason_zh: 四个 LIBERO checkpoint 全部通过 GPU 验证。

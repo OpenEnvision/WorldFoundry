@@ -1,0 +1,48 @@
+---
+title: "ShotStream"
+description: "ShotStream（Kuaishou (Kling Team)）：交互式视频生成、streaming-video；Runner 一致性待确认。"
+modelId: "shotstream"
+pageSource: generated
+---
+
+ShotStream 是快手可灵研究团队的实时交互流式视频生成器：目标是连续、可交互操控的视频流，而非固定片段。本 catalog 中官方推理路径已注册、源码绑定在固定 commit；checkpoint 与流式资产保持运行时限制。
+
+<ModelPaperFigures modelId="shotstream" locale="zh" />
+
+记录论文为[arXiv 2603.25746](https://arxiv.org/abs/2603.25746)。
+
+项目页：[luo0207.github.io/ShotStream](https://luo0207.github.io/ShotStream/)。代码：[KlingAIResearch/ShotStream](https://github.com/KlingAIResearch/ShotStream)。
+
+<ModelCommandBuilder modelId="shotstream" locale="zh" />
+
+## 用来做什么
+
+需要本系列的文生视频时选 `shotstream`：prompt 进、生成视频出。它是 catalog 上的 T2V 起步线，不是编辑器，也不是世界模型步进器。
+
+除已记录任务外的架构内部细节仓库未存（权重位于 KlingTeam/ShotStream）。上游仓库缺少根许可文件，已标记需人工审查。该模型由快手（可灵团队）发布。
+
+catalog 记录的任务包括 交互式视频生成、real-time-video-generation、streaming-video。别名包括 `interactive-video-generation`。输出模态为视频。
+
+## 运行时契约
+
+可选 `prompt`、`load.checkpoint_dir`、`load.wan_model_dir`、`data_path`、`seed`；产物 `generated_video`、`shotstream.mp4`。
+
+CLI task profile：`causal-video`。绑定的 pipeline 类是 `ShotStreamPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+`causal-video` 记录默认值：seed=42, fps=16。
+
+配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。 缺失资产由计划报告，不视为 catalog 阻塞。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run shotstream --pipeline.task-profile causal-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `KlingTeam/ShotStream`、`Wan-AI/Wan2.1-T2V-1.3B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh shotstream`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="shotstream" locale="zh" />

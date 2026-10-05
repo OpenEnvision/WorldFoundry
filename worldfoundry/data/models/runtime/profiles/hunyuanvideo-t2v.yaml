@@ -19,11 +19,12 @@ input_schema:
 artifact_kind: generated_video
 artifact_filename: hunyuanvideo-t2v.mp4
 execution:
-  backend_stage: official_in_tree_runtime
-  runtime_status: official_in_tree_runtime_ready_checkpoint_required
+  backend_stage: worldfoundry_native_diffusion
+  runtime_status: native_recipe_checkpoint_required
   integration_status: integrated
   pipeline_binding: hunyuanvideo-t2v
 integration:
   status: integrated
 notes:
-- HunyuanVideo text-to-video runtime is packaged in-tree and exposed through a WorldFoundry pipeline.
+- Uses the shared native diffusion runner, loader, scheduler, and component contracts.
+- The original upstream CLI runtime is not used as a backend.

@@ -18,6 +18,14 @@ Import convention for bench runners::
 
     from worldfoundry.evaluation.tasks.execution.framework import official_runner as ors
     from worldfoundry.evaluation.tasks.execution.framework.io import env_path
+    from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+        SCORECARD_SCHEMA_VERSION,
+        VIDEO_SUFFIXES,
+        resolve_env_path,
+    )
+
+**Legacy custom runners** still carry bench-specific scorecard assembly; new work
+should prefer ``official_runner.run_main()`` plus ``runner_common`` helpers.
 """
 
 from worldfoundry.evaluation.tasks.execution.framework.official_runner import (
@@ -35,6 +43,15 @@ from worldfoundry.evaluation.tasks.execution.framework.official_runner import (
     run_main,
     run_official_pipeline,
 )
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    SCORECARD_SCHEMA_VERSION,
+    VIDEO_SUFFIXES,
+    build_import_metric_rows,
+    build_video_coverage,
+    iter_video_files,
+    resolve_env_path,
+    video_stems_in_directory,
+)
 
 __all__ = [
     "BenchRunnerConfig",
@@ -50,4 +67,11 @@ __all__ = [
     "normalizer_only_hooks",
     "run_main",
     "run_official_pipeline",
+    "SCORECARD_SCHEMA_VERSION",
+    "VIDEO_SUFFIXES",
+    "build_import_metric_rows",
+    "build_video_coverage",
+    "iter_video_files",
+    "resolve_env_path",
+    "video_stems_in_directory",
 ]

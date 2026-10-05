@@ -11,22 +11,28 @@ source_repos:
 checkpoints:
 - repo_id: agibot-world/Genie-Envisioner
   role: genie_envisioner_checkpoint
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/agibot-world--Genie-Envisioner/GE_base_fast_v0.1.safetensors
+- repo_id: Lightricks/LTX-Video
+  role: ltx_base_model
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Lightricks--LTX-Video
 input_schema:
   prompt: true
   image: true
   video: false
-  actions:
-  - robot_action
-  - world_action
-artifact_kind: generated_world
+  actions: []
+artifact_kind: generated_video
 artifact_filename: genie-envisioner.mp4
 execution:
   backend_stage: in_tree_runtime_manifest
-  runtime_status: in_tree_runtime_manifest_checkpoint_env_pending
+  runtime_status: in_tree_runtime_manifest_checkpoint_required
   integration_status: runtime_ported
   pipeline_binding: genie-envisioner
 integration:
   status: runtime_ported
 notes:
 - Genie Envisioner source is vendored in-tree under synthesis/visual_generation/genie_envisioner/genie_envisioner_runtime.
-- The pipeline resolves the vendored inference entrypoint; execution remains checkpoint and robot-task gated.
+- The compatibility launcher uses the official GE-base multiview transformer and local LTX tokenizer, T5, and VAE.
+- The default three ALOHA high/left-wrist/right-wrist images are repeated across four history slots and are smoke inputs only; synthetic-three-view is also smoke-only.
+- For the released GE-base history contract, pass input_views as three camera directories in head/left-wrist/right-wrist order, each containing exactly 0.png through 3.png.
+- This GE-base video launcher conditions on camera history and text; it does not consume robot/world action arrays.
+- Checkpoint-matched AgiBot or LeRobot trajectories are still required for action-quality parity.

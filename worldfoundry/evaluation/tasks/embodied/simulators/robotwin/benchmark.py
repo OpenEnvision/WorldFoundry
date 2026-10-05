@@ -18,6 +18,7 @@ import os
 import sys
 import types
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -28,6 +29,22 @@ from worldfoundry.evaluation.tasks.embodied.simulators.specs import IMAGE_RGB, L
 logger = logging.getLogger(__name__)
 
 ROBOTWIN_ROOT = "/app/RoboTwin"
+ROBOTWIN_ROOT_ENV = "WORLDFOUNDRY_ROBOTWIN_ROOT"
+
+
+def _configured_robotwin_root() -> str:
+    value = os.environ.get(ROBOTWIN_ROOT_ENV, ROBOTWIN_ROOT)
+    return os.path.abspath(os.path.expanduser(value))
+
+
+@contextmanager
+def _working_directory(path: str | os.PathLike[str]):
+    previous = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(previous)
 
 
 class _EvalGripperPlanner:
@@ -352,6 +369,7 @@ class RoboTwinBenchmark(BaseSimulator):
         skip_expert_check: bool = False,
         fast_init: bool = True,
         fast_render: bool = False,
+        robotwin_root: str | os.PathLike[str] | None = None,
     ) -> None:
         import re
 
@@ -369,6 +387,9 @@ class RoboTwinBenchmark(BaseSimulator):
         self.skip_expert_check = skip_expert_check
         self.fast_init = fast_init
         self.fast_render = fast_render
+        self.robotwin_root = Path(
+            robotwin_root or os.getenv(ROBOTWIN_ROOT_ENV) or ROBOTWIN_ROOT
+        ).expanduser()
         self._env: Any = None
         self._env_class: Any = None
         self._args: dict[str, Any] | None = None
@@ -387,20 +408,25 @@ class RoboTwinBenchmark(BaseSimulator):
         if self._args is not None:  # Already initialized
             return
 
+        robotwin_root = self.robotwin_root
         # Add RoboTwin root and policy directories to sys.path to enable module imports.
         # This is necessary because RoboTwin expects its modules to be discoverable relative to its root.
-        for p in [ROBOTWIN_ROOT, f"{ROBOTWIN_ROOT}/policy", f"{ROBOTWIN_ROOT}/description/utils"]:
-            if p not in sys.path:
-                sys.path.insert(0, p)
+        for path in (robotwin_root, robotwin_root / "policy", robotwin_root / "description" / "utils"):
+            path_text = str(path)
+            if path_text not in sys.path:
+                sys.path.insert(0, path_text)
 
-        # Change current working directory to RoboTwin root for relative path resolution in configs.
-        # This is a common pattern in some legacy Python projects to simplify asset/config loading.
-        os.chdir(ROBOTWIN_ROOT)
+        # RoboTwin still resolves some imports/configs relative to its checkout.  Keep that
+        # compatibility local to initialisation instead of leaking a process-wide cwd change.
+        with _working_directory(robotwin_root):
+            self._load_robotwin_config(robotwin_root)
+
+    def _load_robotwin_config(self, robotwin_root: str) -> None:
         import yaml
 
         # Load the task-specific configuration YAML.
         config_path = os.path.join(
-            ROBOTWIN_ROOT,
+            robotwin_root,
             "task_config",
             f"{self.task_config}.yml",
         )
@@ -449,13 +475,14 @@ class RoboTwinBenchmark(BaseSimulator):
         args["head_camera_w"] = _camera_config[hcam]["w"]
         args["eval_mode"] = True
 
-        self._args = args
         # Defer open3d import if pointcloud data is not used, to speed up initialization.
         # This is a critical optimization as open3d can be a heavy dependency and
         # may not be needed for all evaluation setups.
         with _defer_open3d_import(enabled=not args.get("data_type", {}).get("pointcloud", False)):
             envs_module = importlib.import_module(f"envs.{self.task_name}")
-        self._env_class = getattr(envs_module, self.task_name)
+        env_class = getattr(envs_module, self.task_name)
+        self._args = args
+        self._env_class = env_class
         logger.info("RoboTwin initialised: task=%s", self.task_name)
 
     def _create_env(self) -> Any:
@@ -468,7 +495,8 @@ class RoboTwinBenchmark(BaseSimulator):
             The instantiated environment.
         """
         assert self._env_class is not None
-        return self._env_class()
+        with _working_directory(self.robotwin_root):
+            return self._env_class()
 
     def cleanup(self) -> None:
         """Safely close and clean up active RoboTwin SAPIEN environment allocations.
@@ -480,7 +508,8 @@ class RoboTwinBenchmark(BaseSimulator):
         """
         if self._env is not None:
             try:
-                self._env.close_env(clear_cache=True)
+                with _working_directory(self.robotwin_root):
+                    self._env.close_env(clear_cache=True)
             except Exception:
                 # Suppress errors during cleanup if the environment is already in a bad state.
                 pass
@@ -522,7 +551,8 @@ class RoboTwinBenchmark(BaseSimulator):
 
         # Full expert check — run oracle planner per seed to verify solvability.
         # This is an expensive process but ensures all generated tasks are solvable by the oracle.
-        from generate_episode_instructions import generate_episode_descriptions
+        with _working_directory(self.robotwin_root):
+            from generate_episode_instructions import generate_episode_descriptions
 
         env = self._create_env()
         tasks: list[dict[str, Any]] = []
@@ -532,24 +562,27 @@ class RoboTwinBenchmark(BaseSimulator):
 
         while len(tasks) < self.test_num:
             try:
-                # Setup environment for a demo run with the current seed.
-                env.setup_demo(
-                    now_ep_num=episode_idx,
-                    seed=now_seed,
-                    is_test=True,
-                    **self._args,
-                )
-                # Attempt to play out the episode using the oracle planner.
-                episode_info = env.play_once()
-                env.close_env()
-                # Check if the oracle planner succeeded and the task was completed.
-                if env.plan_success and env.check_success():
-                    # Generate human-readable instructions for the successful episode.
-                    results = generate_episode_descriptions(
-                        self.task_name,
-                        [episode_info["info"]],
-                        self.test_num,
+                with _working_directory(self.robotwin_root):
+                    # Setup environment for a demo run with the current seed.
+                    env.setup_demo(
+                        now_ep_num=episode_idx,
+                        seed=now_seed,
+                        is_test=True,
+                        **self._args,
                     )
+                    # Attempt to play out the episode using the oracle planner.
+                    episode_info = env.play_once()
+                    env.close_env()
+                    plan_succeeded = bool(env.plan_success and env.check_success())
+                # Check if the oracle planner succeeded and the task was completed.
+                if plan_succeeded:
+                    # Generate human-readable instructions for the successful episode.
+                    with _working_directory(self.robotwin_root):
+                        results = generate_episode_descriptions(
+                            self.task_name,
+                            [episode_info["info"]],
+                            self.test_num,
+                        )
                     # Select an instruction based on the specified type ("seen" or "unseen").
                     instruction = np.random.choice(
                         results[0][self.instruction_type],
@@ -570,7 +603,8 @@ class RoboTwinBenchmark(BaseSimulator):
                 # This ensures that the process doesn't halt on a single difficult seed.
                 logger.warning("Expert check failed for seed %d: %s", now_seed, e)
                 try:
-                    env.close_env()
+                    with _working_directory(self.robotwin_root):
+                        env.close_env()
                 except Exception:
                     # Further suppress errors if closing the environment also fails.
                     pass
@@ -596,23 +630,25 @@ class RoboTwinBenchmark(BaseSimulator):
         # Clean up any previously active environment before creating a new one.
         if self._env is not None:
             try:
-                self._env.close_env(clear_cache=True)
+                with _working_directory(self.robotwin_root):
+                    self._env.close_env(clear_cache=True)
             except Exception as e:
                 logger.warning("Failed to close previous RoboTwin env: %s", e)
             self._env = None
 
         self._env = self._create_env()
-        # Apply patches for faster initialization and rendering if enabled.
-        # These context managers temporarily modify RoboTwin's behavior to optimize performance.
-        with _patched_robot_set_planner(self.fast_init), _patched_render_setup(self.fast_render):
-            self._env.setup_demo(
-                now_ep_num=task.get("episode_idx", 0),
-                seed=task["seed"],
-                is_test=True,
-                **self._args,
-            )
-        self._env.set_instruction(instruction=task["instruction"])
-        raw_obs = self._env.get_obs()
+        with _working_directory(self.robotwin_root):
+            # Apply patches for faster initialization and rendering if enabled.
+            # These context managers temporarily modify RoboTwin's behavior to optimize performance.
+            with _patched_robot_set_planner(self.fast_init), _patched_render_setup(self.fast_render):
+                self._env.setup_demo(
+                    now_ep_num=task.get("episode_idx", 0),
+                    seed=task["seed"],
+                    is_test=True,
+                    **self._args,
+                )
+            self._env.set_instruction(instruction=task["instruction"])
+            raw_obs = self._env.get_obs()
         self._recorder.record_video(self._extract_frame(raw_obs))
         return raw_obs
 
@@ -639,10 +675,11 @@ class RoboTwinBenchmark(BaseSimulator):
             act = np.pad(act, (0, 14 - len(act)))
         assert act.shape[-1] == 14, f"dict[str, Any] dimension mismatch: got {act.shape[-1]}, expected 14"
 
-        self._env.take_action(act, action_type="qpos")
-        raw_obs = self._env.get_obs()
-        success = bool(self._env.eval_success)
-        done = success or (self._env.take_action_cnt >= self._env.step_lim)
+        with _working_directory(self.robotwin_root):
+            self._env.take_action(act, action_type="qpos")
+            raw_obs = self._env.get_obs()
+            success = bool(self._env.eval_success)
+            done = success or (self._env.take_action_cnt >= self._env.step_lim)
         self._recorder.record_video(self._extract_frame(raw_obs))
         self._recorder.record_step(reward=1.0 if success else 0.0, done=done, success=success)
         return StepResult(obs=raw_obs, reward=1.0 if success else 0.0, done=done, info={"success": success})

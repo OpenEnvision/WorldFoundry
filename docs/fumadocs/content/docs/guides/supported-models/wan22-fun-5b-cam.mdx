@@ -1,0 +1,50 @@
+---
+title: "Wan2.2-Fun 5B Control Camera"
+description: "Wan2.2-Fun 5B Control Camera from Alibaba PAI (VideoX-Fun): camera-controlled-video and image-to-video; Runner parity pending."
+modelId: "wan22-fun-5b-cam"
+pageSource: authored
+---
+
+Wan2.2-Fun 5B Control Camera brings the VideoX-Fun camera-control pathway to the Wan2.2 generation at 5B scale: image-to-video steered by explicit camera poses, with an upstream native profile of 121 frames at 24 FPS. WorldFoundry vendors VideoX-Fun in-tree (revision 403f1f7b) and wires a dedicated route for alibaba-pai/Wan2.2-Fun-5B-Control-Camera under Apache-2.0.
+
+<ModelPaperFigures modelId="wan22-fun-5b-cam" locale="en" />
+
+Code: [aigc-apps/VideoX-Fun](https://github.com/aigc-apps/VideoX-Fun).
+
+<ModelCommandBuilder modelId="wan22-fun-5b-cam" locale="en" />
+
+## What it is for
+
+Use `wan22-fun-5b-cam` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+
+A 5B-parameter Wan2.2 diffusion transformer with the VideoX-Fun Control-Camera conditioning pathway. Further internals are not recorded in this repository. It is published by Alibaba PAI (VideoX-Fun).
+
+Catalog tasks include camera-controlled-video and image-to-video. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-pose adherence for controlled i2v generation), [WRBench](/docs/evaluation/benchmark-hub/wrbench) (Native 121-frame/24FPS profile suits WRBench-style requests).
+
+Not [Wan2.2](/docs/guides/supported-models/wan2.2) and [Wan2.2 Fun A14B Cam](/docs/guides/supported-models/wan22-fun-a14b-cam). Score on [CameraBench](/docs/evaluation/benchmark-hub/camerabench) and [WRBench](/docs/evaluation/benchmark-hub/wrbench).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `frames`, `fps`, and `height`; artifacts `wan22-fun-5b-cam.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `Wan22Fun5BCameraPipeline`.
+
+Family status: **Runner parity pending**.
+
+The upstream native profile is 121 frames at 24 FPS; WRBench request values remain explicit, so set frame count and FPS deliberately rather than relying on defaults. Runner parity is pending.
+
+VideoX-Fun source is vendored at revision 403f1f7b78dcafccc4f6606dda4ec28e16e667dc.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run wan22-fun-5b-cam --pipeline.task-profile default` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `alibaba-pai/Wan2.2-Fun-5B-Control-Camera`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh wan22-fun-5b-cam`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="wan22-fun-5b-cam" locale="en" />

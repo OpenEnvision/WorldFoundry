@@ -1,183 +1,48 @@
 ---
 title: VideoPhy
-description: 面向 text-to-video 生成物理常识的评测，包含仓内 prompts、VideoCon-Physics runtime 和可运行命令。
+description: "UCLA / Google 的 T2V 物理常识评测：VideoCon-Physics 打 SA、PC 与 Joint。WorldFoundry 提供裁判路径，不编造榜单。"
 ---
 
+VideoPhy（UCLA 与 Google Research）检验文本生成视频模型在材料交互（固-固、固-流、流-流）上是否遵守 **物理常识**。每条 prompt 描述一种物理交互。官方裁判是微调的视频语言模型 **VideoCon-Physics**。三个分数：
 
-## 官方参考
+- **语义遵守** — 片段是否匹配 prompt？
+- **物理常识** — 运动是否服从物理？
+- **联合分** — 两者同时成立。
 
-| 资源 | 链接 |
-| --- | --- |
-| 项目页 | [videophy.github.io](https://videophy.github.io/) |
-| 论文 | [arXiv:2406.03520](https://arxiv.org/abs/2406.03520) |
-| GitHub | [github.com/Hritikbansal/videophy](https://github.com/Hritikbansal/videophy) |
-| HF 测试集 | [videophysics/videophy_test_public](https://huggingface.co/datasets/videophysics/videophy_test_public) |
-| VideoCon-Physics | [videophysics/videocon_physics](https://huggingface.co/videophysics/videocon_physics) |
-| 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/videophy/run_videophy_official_runner.py` |
+`videophy_average` 是 WorldFoundry 对已有分面的均值。官方打分路径在仓内；**完整 688 条 prompt 复现仍待完成**。
 
-## 简介
+论文：[VideoPhy](https://arxiv.org/abs/2406.03520)。项目：[videophy.github.io](https://videophy.github.io/)。代码：[Hritikbansal/videophy](https://github.com/Hritikbansal/videophy)。
 
-VideoPhy 评估 text-to-video 模型生成的视频是否同时满足输入 caption 和日常物理常识。它包含 688 条 captions，覆盖 solid-solid、solid-fluid、fluid-fluid 等真实材料交互。原论文指出，很多强 T2V 模型的问题并不只是画质，而是没有正确呈现动作、违反直觉物理，或者两者同时发生。
+WorldFoundry **捆绑 prompt 列表**，可跑仓内 VideoCon-Physics AutoEvaluator（`--videocon-checkpoint`、`--sa-threshold` / `--pc-threshold`），或导入官方 JSON。权重要调用方提供，不内置。
 
-WorldFoundry 已经把 VideoPhy 评测链路集成在仓内。prompt manifest、metric 计算、VideoCon-Physics 调用、scorecard 写出和已有结果导入都在 `worldfoundry/evaluation/tasks/execution/runners/videophy`；可复用的 VideoCon-Physics 推理代码在 `worldfoundry/base_models/llm_mllm_core/mllm/videocon_physics`。
+<BenchmarkPageSections id="videophy" locale="zh" />
 
-官方参考：
-
-- Project page: [videophy.github.io](https://videophy.github.io/)
-- Paper: [arXiv:2406.03520](https://arxiv.org/abs/2406.03520)
-- Test dataset: [videophysics/videophy_test_public](https://huggingface.co/datasets/videophysics/videophy_test_public)
-- Train dataset: [videophysics/videophy_train_public](https://huggingface.co/datasets/videophysics/videophy_train_public)
-- VideoCon-Physics weights: [videophysics/videocon_physics](https://huggingface.co/videophysics/videocon_physics)
-- 仓内 runner: `worldfoundry/evaluation/tasks/execution/runners/videophy/run_videophy_official_runner.py`
-
-## 评测协议
-
-WorldFoundry 使用仓内 prompt manifest：
-
-```text
-worldfoundry/data/benchmarks/assets/videophy/prompts.json
-```
-
-这个 manifest 包含用于生成和 coverage 统计的 688 条官方 captions 与 prompt IDs。每个候选模型需要为每条 prompt 生成一个视频。期望文件名是：
-
-```text
-<prompt_id>.mp4
-```
-
-完整 benchmark 套件下，生成产物目录应包含 `1.mp4` 到 `688.mp4`。
-
-主指标是 `videophy_average`。
-
-| Metric | 含义 |
-| --- | --- |
-| `semantic_adherence` | evaluator 判断生成视频符合输入 caption 的 prompt 比例（`SA=1`）。 |
-| `physical_commonsense` | 视频被判断符合物理常识的 prompt 比例（`PC=1`）。 |
-| `joint_score` | semantic adherence 和 physical commonsense 同时通过的 prompt 比例。 |
-| `videophy_average` | semantic-adherence 与 physical-commonsense 通过率的均值。 |
-
-VideoCon-Physics 内部会跑两次 entailment-style 推理：一次评估 semantic adherence，一次评估 physical commonsense。runner 会把逐视频预测合并成上面的指标。
-
-## 数据与权重准备
-
-从 WorldFoundry 仓库根目录开始：
-
-```bash
-cd "$WORLDFOUNDRY_REPO_ROOT"
-export WORLDFOUNDRY_VIDEOPHY_PROMPT_MANIFEST="$PWD/worldfoundry/data/benchmarks/assets/videophy/prompts.json"
-```
-
-通过 Hugging Face 下载 VideoCon-Physics checkpoint：
-
-```bash
-export WORLDFOUNDRY_VIDEOPHY_VIDEOCON_CKPT=/path/to/checkpoints/videocon_physics
-hf download videophysics/videocon_physics \
-  --local-dir "${WORLDFOUNDRY_VIDEOPHY_VIDEOCON_CKPT}"
-```
-
-如果需要对照官方发布的 test videos、annotations 或 train split，可以单独下载 dataset：
-
-```bash
-hf download videophysics/videophy_test_public \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/videophy_test_public
-
-hf download videophysics/videophy_train_public \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/videophy_train_public
-```
-
-复现 leaderboard 只需要 688 条 prompts、候选模型生成的视频，以及 VideoCon-Physics checkpoint。训练 VideoCon-Physics 是可选研究流程；如果你自己训练或微调了替代 evaluator，把 checkpoint 目录通过 `--videocon-checkpoint` 传入即可。
-
-## 生成候选视频
-
-用 text-to-video 候选模型跑 `WORLDFOUNDRY_VIDEOPHY_PROMPT_MANIFEST` 里的 captions，然后把输出按下面的结构放到同一个目录：
-
-```text
-/path/to/videophy/generated_videos/
-  1.mp4
-  2.mp4
-  ...
-  688.mp4
-```
-
-评分前设置生成产物目录：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/videophy/generated_videos
-```
-
-候选模型推理是 model-specific 的。对于 WorldFoundry 已集成的生成模型，使用对应 synthesis 入口或模型页面流程，然后把每个 prompt ID 的最终视频导出到上面的 layout。
-
-## 运行 VideoCon-Physics 评分
-
-运行仓内 VideoPhy official path：
-
-```bash
-cd "$WORLDFOUNDRY_REPO_ROOT"
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videophy/run_videophy_official_runner.py \
-  --run-official \
-  --prompt-manifest "${WORLDFOUNDRY_VIDEOPHY_PROMPT_MANIFEST}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --videocon-checkpoint "${WORLDFOUNDRY_VIDEOPHY_VIDEOCON_CKPT}" \
-  --batch-size "${WORLDFOUNDRY_VIDEOPHY_BATCH_SIZE:-1}" \
-  --num-frames "${WORLDFOUNDRY_VIDEOPHY_NUM_FRAMES:-32}" \
-  --output-dir tmp/videophy/official-run \
-  --strict \
-  --json
-```
-
-复现官方 leaderboard-style 套件时保留 `--strict`，这样缺少 688 个预期视频中的任何一个都会失败。部分 research run 可以去掉 `--strict`；scorecard 仍会报告视频覆盖情况。
-
-常用 runtime 变量：
-
-```bash
-export WORLDFOUNDRY_VIDEOPHY_BATCH_SIZE=1
-export WORLDFOUNDRY_VIDEOPHY_NUM_FRAMES=32
-export WORLDFOUNDRY_VIDEOPHY_VIDEOCON_PYTHON="${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
-export WORLDFOUNDRY_VIDEOPHY_SA_THRESHOLD=0.5
-export WORLDFOUNDRY_VIDEOPHY_PC_THRESHOLD=0.5
-```
-
-## 导入已有结果
-
-如果你已经有 VideoPhy 结果 JSON/CSV，里面包含逐样本 `sa`、`pc` 字段，或者有 metric IDs 和 scores 的 summary CSV，可以用同一个 runner 导入：
-
-```bash
-cd "$WORLDFOUNDRY_REPO_ROOT"
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videophy/run_videophy_official_runner.py \
-  --official-results-path /path/to/videophy_results.json \
-  --prompt-manifest "${WORLDFOUNDRY_VIDEOPHY_PROMPT_MANIFEST}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/videophy/imported \
-  --json
-```
-
-也可以通过统一 benchmark 入口导入已有结果：
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id videophy \
   --mode official-validation \
-  --official-results-path /path/to/videophy_results.json \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/videophy/official-validation \
   --json
 ```
 
-## 输出文件
+```bash
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/videophy/run_videophy_official_runner.py \
+  --run-official \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --videocon-checkpoint /path/to/videocon_physics \
+  --output-dir tmp/videophy/official \
+  --json
+```
 
-运行会写出：
+环境变量：`WORLDFOUNDRY_VIDEOPHY_RESULTS_PATH`、`WORLDFOUNDRY_VIDEOPHY_JUDGE_BACKEND`。Prompt 列表：`worldfoundry/data/benchmarks/assets/videophy/prompts.json`。
 
-- `scorecard.json`: WorldFoundry 统一 scorecard，包含 `semantic_adherence`、`physical_commonsense`、`joint_score` 和 `videophy_average`。
-- `videophy_results.json`: 使用 `--run-official` 时合并后的逐 prompt VideoCon-Physics 结果 JSON。
-- `raw_metric_table.jsonl`: scorecard 使用的 metric rows。
-- `per_sample_scores.jsonl`: 逐 prompt 的 SA/PC/joint 结果。
-- `videocon_physics_inputs/`: 自动生成的 semantic-adherence 和 physical-commonsense CSV 输入。
-- `videocon_physics_outputs/`: VideoCon-Physics 原始 CSV 输出。
-- `logs/`: VideoCon-Physics stdout/stderr 日志。
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/videophy.yaml`，`worldfoundry/evaluation/tasks/execution/runners/videophy`。
 
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)
+产物包括 `scorecard.json`（主键 `videophy_average`）。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

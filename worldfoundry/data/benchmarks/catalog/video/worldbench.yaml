@@ -1,5 +1,7 @@
 id: worldbench
 name: WorldBench
+publisher: UCLA
+publisher_kind: university
 benchmark_kind:
 - physical-understanding
 - video-to-video
@@ -99,6 +101,16 @@ metrics:
   output_unit: accuracy
 
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.worldbench.run_worldbench_official_runner
+    dataset_root_arg: --dataset-root
+    dataset_manifest_arg: --video-manifest
+    answer_manifest_arg: --answer-manifest
+    limit_arg: --limit
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    default_metrics: [foreground_miou, background_rmse]
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
   run_command:
   - worldfoundry-eval
@@ -147,6 +159,8 @@ runner:
 integration:
   status: integrated
   tier: in_tree
+  hf_dataset_id: worldbenchmark/IntuitivePhysics
+  judge_model_id: facebook/sam2.1-hiera-large
   implementation_scope: inference_and_evaluation_only
   source_files_copied: false
   shared_base_models: [sam2]
@@ -158,8 +172,8 @@ integration:
   - Existing JSON/JSONL/CSV/TSV result normalization remains available as a compatibility path.
 
 release_status: experimental
-maturity: runtime_ready
-open_source_status: in_tree_clean_reimplementation
+maturity: verified_runner
+open_source_status: in_tree_runtime
 official_benchmark_verified: false
 integration_evidence: true
 leaderboard_valid: false
@@ -206,3 +220,15 @@ artifact_layout:
   answer_manifest_env: WORLDFOUNDRY_WORLDBENCH_ANSWER_MANIFEST
   output_artifact: benchmark_scorecard
   filename_template: scorecard.json
+validation_command:
+- ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+- -m
+- worldfoundry.evaluation.tasks.execution.runners.worldbench.run_worldbench_official_runner
+- --run-official
+- --dataset-root
+- ${WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT}
+- --generated-video-dir
+- ${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}
+- --output-dir
+- <out>
+- --json

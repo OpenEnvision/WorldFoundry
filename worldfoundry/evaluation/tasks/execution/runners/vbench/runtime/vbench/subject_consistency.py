@@ -1,33 +1,28 @@
-import io
+import logging
 import os
-import cv2
-import json
-import numpy as np
-from PIL import Image
-from tqdm import tqdm
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.transforms as transforms
+from PIL import Image
+from tqdm import tqdm
+from vbench.utils import dino_transform, dino_transform_Image, load_dimension_info, load_video
 
-from vbench.utils import load_video, load_dimension_info, dino_transform, dino_transform_Image
-import logging
-
-from .distributed import (
-    get_world_size,
-    get_rank,
-    all_gather,
-    barrier,
+from worldfoundry.core.distributed.collectives.evaluation import (
     distribute_list_to_rank,
     gather_list_of_dict,
+    get_rank,
+    get_world_size,
 )
+from worldfoundry.core.execution.inference_runtime import adaptive_batched_inference, resolve_inference_batch_size
+from worldfoundry.core.utils.tensors.torch import temporal_feature_consistency
 
 logging.basicConfig(level = logging.INFO,format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
 def subject_consistency(model, video_list, device, read_frame):
+    model.eval()
+    batch_size = resolve_inference_batch_size(32, device=device, scope="vbench_dino")
     sim = 0.0
     cnt = 0
     video_results = []
@@ -43,25 +38,27 @@ def subject_consistency(model, video_list, device, read_frame):
             images = []
             for tmp_path in tmp_paths:
                 images.append(image_transform(Image.open(tmp_path)))
+            images = torch.stack(images)
         else:
             images = load_video(video_path)
             images = image_transform(images)
-        for i in range(len(images)):
-            with torch.no_grad():
-                image = images[i].unsqueeze(0)
-                image = image.to(device)
-                image_features = model(image)
-                image_features = F.normalize(image_features, dim=-1, p=2)
-                if i == 0:
-                    first_image_features = image_features
-                else:
-                    sim_pre = max(0.0, F.cosine_similarity(former_image_features, image_features).item())
-                    sim_fir = max(0.0, F.cosine_similarity(first_image_features, image_features).item())
-                    cur_sim = (sim_pre + sim_fir) / 2
-                    video_sim += cur_sim
-                    cnt += 1
-            former_image_features = image_features
-        sim_per_images = video_sim / (len(images) - 1)
+        if len(images) < 2:
+            raise ValueError("subject consistency requires at least two frames")
+        if torch.device(device).type == "cuda":
+            images = images.pin_memory()
+        image_features = adaptive_batched_inference(
+            images,
+            model,
+            batch_size=batch_size,
+            device=device,
+            pad_to_batch_size=True,
+            scope="vbench_dino",
+        )
+        image_features = F.normalize(image_features, dim=-1, p=2)
+        sim_per_images = float(temporal_feature_consistency(image_features).item())
+        transition_count = len(image_features) - 1
+        video_sim = sim_per_images * transition_count
+        cnt += transition_count
         sim += video_sim
         video_results.append({'video_path': video_path, 'video_results': sim_per_images})
     # sim_per_video = sim / (len(video_list) - 1)

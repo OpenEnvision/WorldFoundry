@@ -147,7 +147,7 @@ class GigaWorldPolicyRuntime:
         if self._policy is not None:
             return self._policy
 
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         from .runtime_upstream import get_policy
 

@@ -16,7 +16,7 @@ class Qwen3VLInterface(nn.Module):
         from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
 
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         qwen_config = config.framework.get("qwenvl", {})
         model_id = str(qwen_config.get("base_vlm", "Qwen/Qwen3-VL-4B-Instruct"))

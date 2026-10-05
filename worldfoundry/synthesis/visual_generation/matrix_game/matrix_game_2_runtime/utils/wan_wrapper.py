@@ -5,16 +5,16 @@ import torch
 from torch import nn
 from einops import rearrange
 from .scheduler import SchedulerInterface, FlowMatchScheduler
-from worldfoundry.base_models.diffusion_model.video.wan.models.causal_action_wan2p1 import (
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.causal_action_21 import (
     CausalWanModel,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.models.action_wan2p1 import (
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.action_21 import (
     WanModel,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.tokenizers import (
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import (
     HuggingfaceTokenizer,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.vae.action_wan2p1 import _video_vae
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.action_21 import _video_vae
 
 
 class WanVAEWrapper(torch.nn.Module): # todo
@@ -175,10 +175,15 @@ class WanDiffusionWrapper(torch.nn.Module):
         else:
             input_timestep = timestep
         logits = None
+        # ``dtype`` used to be exposed by older Diffusers ``ModelMixin``
+        # versions.  Matrix-Game-2's vendored CausalWanModel no longer has
+        # that convenience attribute with the unified runtime's Diffusers,
+        # so derive it from the loaded parameters instead.
+        model_dtype = next(self.model.parameters()).dtype
 
         if kv_cache is not None:
             flow_pred = self.model(
-                noisy_image_or_video.to(self.model.dtype),#.permute(0, 2, 1, 3, 4),
+                noisy_image_or_video.to(model_dtype),#.permute(0, 2, 1, 3, 4),
                 t=input_timestep, **conditional_dict,
                 # seq_len=self.seq_len,
                 kv_cache=kv_cache,
@@ -190,7 +195,7 @@ class WanDiffusionWrapper(torch.nn.Module):
             
         else:
             flow_pred = self.model(
-                noisy_image_or_video.to(self.model.dtype),#.permute(0, 2, 1, 3, 4),
+                noisy_image_or_video.to(model_dtype),#.permute(0, 2, 1, 3, 4),
                 t=input_timestep, **conditional_dict)
             #.permute(0, 2, 1, 3, 4)
         pred_x0 = self._convert_flow_pred_to_x0(

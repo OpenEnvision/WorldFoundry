@@ -1,0 +1,39 @@
+schema_version: 2
+model_id: astronex-world
+display_name: Astronex-World
+task_family: world_model
+groups:
+- world
+- video
+source_repos:
+- url: https://github.com/Astronex-Robotics/Astronex-World
+  revision: 27584bf1a89da01ef35a03b48d83bc818d2adf2b
+  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/Astronex-Robotics--Astronex-World
+checkpoints:
+- repo_id: Astronex-Lab/Astronex-World
+  revision: f06ea330f2ce5cabef5fbf175287fe323ec1218c
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Astronex-Lab--Astronex-World
+  role: primary
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions:
+  - trajectory
+  - action_tokens
+  - event_prompt
+artifact_kind: generated_world
+artifact_filename: astronex-world.mp4
+execution:
+  environment: astronex-world
+  backend_stage: official_external_runtime
+  runtime_status: cpu_contract_validated_checkpoint_gpu_pending
+  integration_status: integrated
+  pipeline_binding: astronex-world
+  defaults: {}
+integration:
+  status: integrated
+license: apache-2.0
+notes:
+- Official inference command construction is CPU-validated; checkpoint-backed generation remains pending.
+- The released action prediction head is zero initialized; action prediction is not advertised.

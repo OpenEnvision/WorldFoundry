@@ -1,175 +1,35 @@
 ---
 title: PhyGround
-description: WorldFoundry 中的 PhyGround：数据布局、分数导入与物理推理指标。
+description: "准则锚定的 TI2V：250 条 prompt 覆盖 13 条定律，由 PhyJudge 或人工按 1–5 分评定。WorldFoundry 导入 scores.json，不跑 judge。"
 ---
 
-## 评测内容
+PhyGround（美国东北大学）是**准则锚定**，不是实拍续写，也不是 PhyGenEval。**250** 条文本+图像转视频 prompt 各带预期物理结果，以及 **13 条**定律分类（固体、流体、光学）中适用的 **2–4** 条。Judge（PhyJudge-9B 或人工）按 **1–5** 分评语义符合、物理时序有效性、持久性与各适用定律。这更像量表，而不是 [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq) 的 mask IoU。
 
-PhyGround 评测文本加图像到视频生成的物理合理性。每个 prompt 都包含文本描述和首帧条件图像。视频会按三个通用维度和 13 条物理规律中的适用项评分：
+[PhyGenBench](/zh/docs/evaluation/benchmark-hub/phygenbench) 是 T2V *生成*常识套件（160 条 / 27 条定律 / PhyGenEval）。PhyGround 是 TI2V *定律准则*打分（250 条 / 13 条定律）。
 
-- 通用维度：persistence、physical temporal validity、semantic adherence。
-- 固体力学：gravity、inertia、momentum、impenetrability、collision、material。
-- 流体动力学：buoyancy、displacement、flow dynamics、boundary interaction、fluid continuity。
-- 光学：reflection 和 shadow。
+论文：[PhyGround](https://arxiv.org/abs/2605.10806)。项目：[phyground.github.io](https://phyground.github.io/)。代码：[NU-World-Model-Embodied-AI/PhyGround](https://github.com/NU-World-Model-Embodied-AI/PhyGround)。数据：[NU-World-Model-Embodied-AI/phyground](https://huggingface.co/datasets/NU-World-Model-Embodied-AI/phyground)。
 
-官方 benchmark 使用 1-5 的 ordinal judge scale，共 250 条 prompt。WorldFoundry 导入 PhyGround `scores.json`，并归一化为本地 scorecard 格式。该 runner 不启动 benchmark-local shell 脚本；judge 执行应通过 WorldFoundry/base-model 路径完成，或者直接提供已有结果产物。
+WorldFoundry **导入** PhyJudge/vLLM 或云端 judge 的 `scores.json`。它**不**对候选视频执行 PhyJudge-9B。
 
+<BenchmarkPageSections id="phyground" locale="zh" />
 
-## 官方参考
+## 如何运行
 
-| 资源 | 链接 |
-| --- | --- |
-| 项目页 | [phyground.github.io](https://phyground.github.io/) |
-| 论文 | [arXiv:2605.10806](https://arxiv.org/abs/2605.10806) |
-| GitHub | [github.com/NU-World-Model-Embodied-AI/PhyGround](https://github.com/NU-World-Model-Embodied-AI/PhyGround) |
-| HF 数据集 | [NU-World-Model-Embodied-AI/phyground](https://huggingface.co/datasets/NU-World-Model-Embodied-AI/phyground) |
-| PhyJudge 模型 | [NU-World-Model-Embodied-AI/phyjudge-9B](https://huggingface.co/NU-World-Model-Embodied-AI/phyjudge-9B) |
-| 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py` |
-
-## 数据与产物布局
-
-标准本地 data root 如下：
-
-```text
-<phyground_data_root>/
-  prompts/phyground.json
-  first_images/
-  videos/<model_id>/
-    <video_id>.mp4
-  annotations/
-```
-
-仓内 prompt resolver 也接受 `data/prompts/phyground.json` 和 `data/first_images/`，与官方项目布局一致。
-
-WorldFoundry 按下面顺序解析 prompts：
-
-- `--prompt-manifest <path>`
-- `WORLDFOUNDRY_PHYGROUND_PROMPT_MANIFEST`
-- 内置 benchmark assets
-- `--benchmark-data-root <root>`
-- `WORLDFOUNDRY_PHYGROUND_DATA_ROOT` 或 `WORLDFOUNDRY_BENCHMARK_DATA_ROOT`
-- `--phyground-root <root>` 或 `WORLDFOUNDRY_PHYGROUND_ROOT`
-
-每个 prompt 生成一个视频，文件名使用 prompt 的 `video` 字段。如果 prompt id 是 `ball_fall_0001`，期望输出是：
-
-```text
-<generated_videos>/ball_fall_0001.mp4
-```
-
-支持的视频后缀是 `.mp4`、`.mov`、`.mkv`、`.webm` 和 `.avi`。覆盖率按文件名 stem 计算。
-
-## 依赖与分数
-
-HF 数据集是 `NU-World-Model-Embodied-AI/phyground`，其中包含 `prompts/phyground.json` 和 `first_images/`。发布的 judge 模型是 `NU-World-Model-Embodied-AI/phyjudge-9B`，通常先通过 WorldFoundry/base-model 基础设施或其他兼容 judge 路径得到 `scores.json`，再由本 runner 导入。
-
-WorldFoundry runner 的完整评分输入可以是：
-
-- `--official-results-path /path/to/scores.json`
-- `WORLDFOUNDRY_PHYGROUND_RESULTS_PATH=/path/to/scores.json`
-- `<generated_videos>/scores.json`
-- `<generated_videos>/phyground_scores.json`
-
-## 支持的命令
-
-先设置候选视频目录；如果用环境变量导入，也设置 scores 文件：
+就位数据根（`prompts/`、`first_images/`、`annotations/`、`videos/<model_id>/`）并导入 judge 输出：
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/phyground/videos/my_model
-export WORLDFOUNDRY_PHYGROUND_RESULTS_PATH=/path/to/scores.json
-```
+hf download NU-World-Model-Embodied-AI/phyground --repo-type dataset --local-dir <phyground_data_root>
 
-通过公开 CLI 导入已有 PhyGround 分数：
-
-```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id phyground \
   --mode official-validation \
-  --benchmark-data-root /path/to/phyground_data_root \
-  --official-results-path /path/to/scores.json \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/phyground.json \
-  --output-dir tmp/phyground/import \
+  --benchmark-data-root <phyground_data_root> \
+  --generated-artifact-dir <phyground_data_root>/videos/<model_id> \
+  --result-model-id <model_id> \
+  --output-dir tmp/phyground/official-validation \
   --json
 ```
 
-需要使用 runner 专有参数时，例如 `--phyground-root`、`--limit` 或 `--run-fixture`，直接调用 runner：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py \
-  --official-results-path /path/to/scores.json \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --benchmark-data-root /path/to/phyground_data_root \
-  --prompt-manifest /path/to/phyground.json \
-  --output-dir tmp/phyground/import \
-  --json
-```
-
-如果 `scores.json` 已经与生成视频放在一起，或通过 `WORLDFOUNDRY_PHYGROUND_RESULTS_PATH` 提供，直接 `--run-official` 会复制并归一化该文件：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py \
-  --run-official \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --benchmark-data-root /path/to/phyground_data_root \
-  --output-dir tmp/phyground/run \
-  --json
-```
-
-## 导入路径
-
-- Runner：`worldfoundry.evaluation.tasks.execution.runners.phyground.run_phyground_official_runner`
-- 指标：`worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_metrics`
-- Prompt 布局：`worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_prompts`
-- Judge artifact adapter：`worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_runtime`
-- 官方分数聚合：`worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_official_scoring`
-
-## 结果文件格式
-
-推荐输入是 official-style 的 `scores.json`，包含 `results` 行：
-
-```json
-{
-  "num_videos": 250,
-  "general_dimensions": ["SA", "PTV", "persistence"],
-  "results": [
-    {
-      "video": "ball_fall_0001",
-      "SA": 4,
-      "PTV": 5,
-      "persistence": 5,
-      "physical": {
-        "laws": {
-          "gravity": { "score": 4, "status": "scored" }
-        }
-      }
-    }
-  ]
-}
-```
-
-也接受带 `metric_id` 和 `score` 的 summary CSV 行。summary 行中大于 `1.0` 的分数会按百分制处理并除以 `100`。
-
-`--output-dir` 下会写出：
-
-- `scorecard.json`：运行状态、覆盖率、指标表和结果路径。
-- `scores.json`：使用 `--run-official` 时复制到输出目录。
-- `raw_metric_table.jsonl`：每个声明指标一行。
-- `per_sample_scores.jsonl`：选取的 per-video judge 字段。
-
-## 指标
-
-主指标：`phyground_overall`。本页所有指标都是越高越好。
-
-| Metric | 含义 |
-| --- | --- |
-| `semantic_adherence` | 归一化 SA 分数：生成视频是否符合文本 prompt。 |
-| `physical_temporal_validity` | 归一化 PTV 分数：物理事件是否按合理时间顺序发生。 |
-| `persistence` | 归一化物体持久性分数：身份、形状和存在性是否随时间保持稳定。 |
-| `solid_body_score` | 适用固体力学规律的聚合分数。 |
-| `fluid_dynamics_score` | 适用流体动力学规律的聚合分数。 |
-| `optics_score` | 适用反射与阴影规律的聚合分数。 |
-| `phyground_overall` | 可用通用分数和物理分域分数的均值。 |
+也可把 `--official-results-path` 指到 `scores.json` / `annotations/`。`--prompt-manifest` 可校验 prompt 覆盖。产物包括 `scorecard.json`（主键 `phyground_overall`）。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

@@ -37,55 +37,55 @@ metrics:
   static_quality:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   temporal_quality:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   overall_alignment:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   fine_grained_alignment:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   clip_score:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: bounded_official_runtime_verified
   blip_score:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   fid:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   fvd:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
   fetv_average:
     aggregation: mean
     primary: true
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_video_quality_contract:evaluate_fetv_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
 metadata:
@@ -154,7 +154,7 @@ metadata:
     normalizer_verified: true
     surface: strict_video_bridge_and_bounded_official_clipscore
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_video_quality_contract:evaluate_fetv_video_quality_contract_file
+    target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
     status: implemented
     protocol: in_tree_official_runtime_and_result_normalization
     output_fields:
@@ -277,7 +277,7 @@ tasks:
       metric_ids:
       - local_metadata_coverage
       - local_prompt_video_pair_completeness
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_video_quality_contract:evaluate_fetv_video_quality_contract_file
+      evaluator_target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
       status: implemented
     - name: external_official_runner
       metric_ids:

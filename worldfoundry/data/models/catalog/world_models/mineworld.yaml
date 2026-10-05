@@ -31,3 +31,23 @@ pipeline_binding: mineworld
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes; blocked entries retain
   upstream provenance without runnable backends.
+docs:
+  publisher: Microsoft
+  publisher_kind: company
+  publisher_zh: 微软（Microsoft）
+  overview: 'MineWorld is Microsoft''s real-time open-source interactive world model for Minecraft: an autoregressive transformer that plays forward Minecraft scenes from image/video context and actions (arXiv 2504.08388, MIT license). In this catalog the source is vendored in-tree; runnable execution still needs the official dependency environment, checkpoints, and validation/demo data.'
+  overview_zh: MineWorld 是微软面向 Minecraft 的实时开源交互世界模型：自回归 Transformer，从图像/视频上下文与动作向前推演 Minecraft 场景（arXiv 2504.08388，MIT 许可）。本 catalog 中源码已内置树内；可运行执行仍需官方依赖环境、checkpoint 与验证/demo 数据。
+  architecture: Per the paper, a visual tokenizer plus an autoregressive transformer over interleaved state-action tokens, with parallel decoding for real-time speed. Internals beyond this are not recorded here.
+  architecture_zh: 按论文：视觉 tokenizer 加在「状态-动作」交错 token 上的自回归 Transformer，配并行解码实现实时速度。除此之外的内部细节此处未记录。
+  usage_notes: The pipeline resolves the official inference entrypoint and returns blocked runtime diagnostics until checkpoints and validation data are staged.
+  usage_notes_zh: pipeline 解析官方推理入口，在 checkpoint 与验证数据就位前返回 blocked 运行时诊断。
+  limitations:
+  - Execution is checkpoint/environment/data gated.
+  - 'Minecraft-domain world model: not a general video generator.'
+  limitations_zh:
+  - 执行受 checkpoint/环境/数据限制。
+  - Minecraft 领域世界模型：不是通用视频生成器。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Action-conditioned game-world rollout quality.
+    reason_zh: 动作条件游戏世界滚动生成质量。

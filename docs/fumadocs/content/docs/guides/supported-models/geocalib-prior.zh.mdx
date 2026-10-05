@@ -1,0 +1,52 @@
+---
+title: "GeoCalib"
+description: "GeoCalib（ETH Zurich (CVG)）：camera-calibration、gravity-estimation；已验证。"
+modelId: "geocalib-prior"
+pageSource: authored
+---
+
+GeoCalib 通过几何优化与深度学习结合，从单张图像估计相机标定与重力方向。本 catalog 中它是已验证的相机标定先验，由上层管线（尤其是 VIPE）通过共享 geometry-prior 契约调用。
+
+<ModelPaperFigures modelId="geocalib-prior" locale="zh" />
+
+记录论文为[arXiv 2409.06704](https://arxiv.org/abs/2409.06704)。
+
+项目页：[cvg.ethz.ch/research/geocalib](https://www.cvg.ethz.ch/research/geocalib/)。代码：[cvg/GeoCalib](https://github.com/cvg/GeoCalib)。
+
+论文：[arXiv 2409.06704](https://arxiv.org/abs/2409.06704)。项目页：[cvg.ethz.ch/research/geocalib](https://www.cvg.ethz.ch/research/geocalib/)。代码：[cvg/GeoCalib](https://github.com/cvg/GeoCalib)（**Apache-2.0**）。官方发布包：GitHub v1.0 的 `geocalib-pinhole.tar`。发布方：苏黎世联邦理工学院（CVG）。别名：`geocalib`、`cvg-geocalib`。Runner：**已验证**。每次运行的证据在 catalog 外跟踪。
+
+<ModelCommandBuilder modelId="geocalib-prior" locale="zh" />
+
+## 用来做什么
+
+`geocalib-prior` 是记录的重建线。从记录的视图写出几何时从这里起步。
+
+神经网络预测几何线索，可微优化层将其转化为焦距与重力估计（见上游 ECCV 2024 发布）。注册于 base_models/three_dimensions/general_3d/geocalib；apache-2.0。该模型由苏黎世联邦理工学院（CVG 组）发布。
+
+catalog 记录的任务包括 camera-calibration、gravity-estimation、几何先验。别名包括 `geocalib`、`cvg-geocalib`。
+
+GeoCalib 相机标定先验，不是视频模型。
+
+## 运行时契约
+
+可选 `input_path`、`camera_model`、`execute`、`max_points`、`focal_length`；产物 `geocalib-prior.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `GeoCalibPriorPipeline`。
+
+系列状态：**已验证**。
+
+它作为独立几何先验集成在 worldfoundry/base_models 下，通过共享的 geometry-prior pipeline/operator 契约对外暴露。 上层管线（如 ViPE）从这一规范位置导入它，而不是各自保留私有副本。 runner parity 已通过共享契约验证。
+
+单图估计：在缺乏几何线索的图像（如纯天空、无纹理墙面）上会退化。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run geocalib-prior --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+本卡片未记录公开 checkpoint id；按使用说明就位权重。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh geocalib-prior`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="geocalib-prior" locale="zh" />

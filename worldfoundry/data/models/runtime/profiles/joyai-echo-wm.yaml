@@ -1,0 +1,52 @@
+schema_version: 2
+model_id: joyai-echo-wm
+display_name: Echo-WM
+task_family: world_model
+groups:
+- world
+- video
+- audio
+- camera_control
+- action_control
+source_repos:
+- url: https://github.com/jd-opensource/JoyAI-Echo
+  revision: a08f1274573d7cd6ec66719f204951f4227a5173
+  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/jd-opensource--JoyAI-Echo
+  subdir: echo_wm
+checkpoints:
+- repo_id: Echo-Team/Echo-WM
+  revision: 04efdf813648f698680c10024f22f351a0273163
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Echo-Team--Echo-WM
+  role: base_and_flash_checkpoints
+- repo_id: google/gemma-3-12b-it-qat-q4_0-unquantized
+  revision: 68f7ee4fbd59087436ada77ed2d62f373fdd4482
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/google--gemma-3-12b-it-qat-q4_0-unquantized
+  role: gated_text_encoder
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions:
+  - action_str
+  - camera_navigation
+artifact_kind: generated_world
+artifact_filename: joyai-echo-wm.mp4
+execution:
+  environment: joyai-echo-wm
+  backend_stage: official_external_runtime
+  runtime_status: command_contract_validated_checkpoint_gpu_pending
+  integration_status: integrated
+  pipeline_binding: joyai-echo-wm
+  defaults:
+    variant: base
+    num_frames: 241
+    width: 1280
+    height: 704
+    fps: 24
+integration:
+  status: integrated
+notes:
+- variant=base routes to inference_wm.py; variant=flash routes to inference_wm_causal.py.
+- Prediction never clones source or downloads checkpoints; source_root, checkpoint_dir, and gemma_path are preflighted.
+- Director Agent, local-server, Gradio, training, and evaluation surfaces are outside this inference-only integration.
+- The upstream license marks this release for academic research and non-commercial use.

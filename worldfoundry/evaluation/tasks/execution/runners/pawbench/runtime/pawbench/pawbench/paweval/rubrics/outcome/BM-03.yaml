@@ -1,0 +1,54 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BM-03
+track: coverage
+title_en: Fried Egg Flip on Spatula
+outcome_question: Which egg-flip outcome in ['lands_yolk_up_intact', 'lands_yolk_down_intact', 'folds_without_tearing',
+  'white_tears_yolk_intact', 'yolk_ruptures', 'spatula_contact_no_flip'] is visible as the first decisive
+  result?
+readout_policy: Read the first settled post-spatula-contact egg state after the continuous
+  flip/contact attempt has settled or force stops. Qualifying frames must show yolk
+  orientation, folding, white tearing, yolk rupture, or contact-without-flip clearly
+  enough to select one label. A no-contact spatula miss is an action-execution failure
+  rather than a legal outcome.
+canonical_labels:
+- lands_yolk_up_intact
+- lands_yolk_down_intact
+- folds_without_tearing
+- white_tears_yolk_intact
+- yolk_ruptures
+- spatula_contact_no_flip
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- Egg orientation or integrity is hidden at landing/readout.
+- None of the canonical labels ['lands_yolk_up_intact', 'lands_yolk_down_intact', 'folds_without_tearing',
+  'white_tears_yolk_intact', 'yolk_ruptures', 'spatula_contact_no_flip'] can be decisively identified
+  within the readout window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's reference protocol;
+  record it as out-of-schema.
+priority_rules:
+- First decisive readout uses the first settled post-spatula-contact egg state after
+  the continuous attempted flip; choose the strongest action-caused egg material
+  outcome visible in that response window.
+- yolk_ruptures overrides white tearing, folding, and orientation labels whenever the yolk visibly breaks
+  or leaks.
+- white_tears_yolk_intact applies when the egg white tears/separates while the yolk remains intact.
+- folds_without_tearing applies when the egg folds over itself but remains materially intact.
+- lands_yolk_up_intact and lands_yolk_down_intact require an intact, unfolded landed egg with the visible
+  yolk side up or down.
+- spatula_contact_no_flip requires visible spatula contact with the egg followed by failed lift/turn,
+  sliding, or no flip. If the spatula never contacts/lifts the egg, mark action execution failure rather
+  than a legal outcome.
+- 'Priority: yolk rupture > white tear with yolk intact > fold without tearing > landed intact orientation
+  > spatula contact with no flip.'
+notes:
+- Outcome set separates yolk rupture from egg-white tearing and treats no-contact spatula misses as action
+  failure rather than terminal egg outcome.
+- 'Track B: use metadata-derived priority rules, not a family template.'
+- 'Scene title: Fried Egg Flip on Spatula.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules are authored from
+  STAGBench metadata/action protocol.'

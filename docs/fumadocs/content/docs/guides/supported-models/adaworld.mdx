@@ -1,0 +1,41 @@
+---
+title: "AdaWorld"
+description: "AdaWorld runs its released latent-action world-model checkpoint on a source video; short-form inference verified."
+modelId: "adaworld"
+pageSource: authored
+---
+
+AdaWorld extracts latent actions from video to condition an adaptable world model. WorldFoundry runs the released checkpoint through its public pipeline using a supplied source video.
+
+<ModelPaperFigures modelId="adaworld" locale="en" />
+
+The project is described in [arXiv 2503.18938](https://arxiv.org/abs/2503.18938). See the [project page](https://adaptable-world-model.github.io/) and [official code](https://github.com/Little-Podi/AdaWorld).
+
+<ModelCommandBuilder modelId="adaworld" locale="en" />
+
+## What it does
+
+AdaWorld's latent-action autoencoder extracts motion representations from video, which condition the world model's generated frames. The in-tree runtime follows the official FDM inference path. The recorded catalog tasks are `latent-action-world-model`, `action-conditioned-video`, and `multi-domain-world-model`; the completed GPU check covers a short source-video rollout, not separate task benchmarks.
+
+## Inputs and checkpoint
+
+Provide a readable source `video`. This inference route does not use `prompt` or `image`; direct action-token input has not been validated. The output artifact is `adaworld.mp4`.
+
+Place the released `Little-Podi/AdaWorld` checkpoint at `${WORLDFOUNDRY_CKPT_DIR}/Little-Podi--AdaWorld/adaworld.safetensors`, or pass its path explicitly as shown below. The main checkpoint already contains the CLIP and LAM encoder weights used for this inference path, so it does not need a separate `lam.ckpt`.
+
+```python
+from worldfoundry.pipelines.world_model.pipeline_runtime_manifest import AdaWorldPipeline
+
+pipeline = AdaWorldPipeline.from_pretrained(
+    {"checkpoint_path": "/path/to/adaworld.safetensors"}, device="cuda"
+)
+result = pipeline(video="/path/to/source.mp4", output_path="adaworld.mp4", start_index=0)
+```
+
+The catalog profile names `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8); the GPU probe used the local CUDA 12.1 environment. For short source clips, set `start_index` to an existing frame; the underlying runner defaults to frame 50.
+
+## Verification scope
+
+The public pipeline generated and decoded a four-frame, 256 × 256 MP4 from synthetic video with two sampling steps. Its MP4 matched the direct in-tree official runner byte for byte. This verifies checkpoint loading and the short inference path. Task success, long-horizon consistency, and output quality have not been measured.
+
+<ModelRelatedRecipes modelId="adaworld" locale="en" />

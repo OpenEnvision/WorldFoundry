@@ -1,0 +1,33 @@
+---
+title: "EasyAnimate"
+description: "阿里 PAI 的 DiT 视频系列。WorldFoundry 封装的是 V5.1 图生视频运行时；InP 权重是图像条件，非 InP 才是文生视频。"
+modelId: "easyanimate"
+pageSource: authored
+---
+
+EasyAnimate 是阿里 PAI 的扩散 Transformer 视频栈——文生视频、图生视频、视频到视频，以及上游的轨迹 / 相机控制。论文是 [EasyAnimate: High-Performance Video Generation Framework with Hybrid Windows Attention and Reward Backpropagation](https://arxiv.org/abs/2405.18991)。代码在 [aigc-apps/EasyAnimate](https://github.com/aigc-apps/EasyAnimate)。WorldFoundry 树内路径是 **V5.1 图生视频**封装；WRBench 相机控制评测复用同一套独立运行时，不检出 GitHub 树。
+
+<ModelPaperFigures modelId="easyanimate" locale="zh" />
+
+WorldFoundry 实际封装的卡片是 **V5.1**：**Qwen2-VL** 做文本编码器（多语言，中英最稳），采样从旧噪声调度改成 **Flow matching**。官方 V5.1 checkpoint 大约预测 **1–49 帧、8 fps**，分辨率 512 / 768 / 1024。WorldFoundry 图生视频默认是 **768×1344、49 帧、8 fps**，Flow 采样器，guidance **6.0**，写出 `easyanimate-i2v.mp4`。最常见的配置错误是混用系列：`*-InP`（例如 `EasyAnimateV5.1-7b-zh-InP`）是图像条件 demo；没有 InP 的 `EasyAnimateV5.1-7b-zh` 才是文生视频。
+
+<ModelCommandBuilder modelId="easyanimate" locale="zh" />
+
+## 用来做什么
+
+用树内 V5.1 图生视频路径给静帧加运动：`prompt` + `image` 进，经 `EasyAnimateI2VPipeline` 写出 `easyanimate-i2v.mp4`。别名 `easyanimate_i2v`、`easyanimate-i2v` 解析到这里。height / width 会映射到 `sample_size`。只有在你明确要文生视频时，才用非 InP 权重。
+
+WRBench 相机控制走这条运行时，所以控制向评测看 [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)；通用片段质量看 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)。两者都不是已收录的 WorldFoundry leaderboard。
+
+## 运行时契约
+必填输入：`prompt` 与 `image`。可选：`video`。`actions` 是 seed。catalog 任务包括文生视频、图生视频和视频到视频；已接线的 WorldFoundry demo 是 InP 系列上的图生视频。控制到视频、相机轨迹权重在上游存在；本 catalog 卡片不声称那些管线已经接好。
+
+## 在 WorldFoundry 中运行
+
+集成已记录；**runner 与 demo 一致性仍为 pending**。命令能启动，不等于本工作区已有 checkpoint 驱动的 GPU 产物。在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）里用面向 I2V 的 InP 权重（`alibaba-pai/EasyAnimateV5.1-7b-zh-InP`，就位路径 `$WORLDFOUNDRY_CKPT_DIR/hfd/alibaba-pai--EasyAnimateV5.1-7b-zh-InP`）跑 `worldfoundry-eval run easyanimate`。相关卡片还包括 `EasyAnimateV5.1-12b-zh`。缺失的 checkpoint 会在运行时报告，不会自动下载。
+
+## 最小评测
+
+已接线 demo 是 V5.1 I2V（`*-InP`）。对该目录跑 [VBench](/zh/docs/evaluation/benchmark-hub/vbench) 的 `custom_input` / `aesthetic_quality`——`vbench_standard` 命名不适用。读 `aesthetic_quality`。runner 一致性仍为 pending。
+
+<ModelRelatedRecipes modelId="easyanimate" locale="zh" />

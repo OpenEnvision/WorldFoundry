@@ -1,0 +1,40 @@
+[build-system]
+requires = [
+    "scikit-build-core>=0.10",
+    "torch>=2.5.0",
+    "setuptools>=61.0.0",
+    "wheel"
+]
+build-backend = "build_backend"
+backend-path = ["."]
+
+[project]
+name = "fastvideo-kernel"
+version = "0.3.2"
+description = "Unified CUDA kernels for FastVideo"
+readme = { text = "Optional FastVideo CUDA kernels integrated by WorldFoundry. License texts and notices are included in the distribution.", content-type = "text/plain" }
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Hao AI Lab", email = "contact@haoailab.com" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Environment :: GPU :: NVIDIA CUDA",
+]
+dependencies = [
+    "torch>=2.5.0",
+    "triton>=2.0.0; sys_platform == 'linux'",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/hao-ai-lab/FastVideo"
+
+[tool.scikit-build]
+cmake.build-type = "Release"
+minimum-version = "build-system.requires"
+wheel.packages = ["python/fastvideo_kernel", "attn_qat_infer"]
+wheel.license-files = ["LICENSE"]
+# LICENSE is a link to WorldFoundry's central notice bundle. The backend
+# materializes its text in standalone sdists so extraction is self-contained.
+sdist.include = ["LICENSE", "build_backend.py"]

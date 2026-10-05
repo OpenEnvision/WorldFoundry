@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 from typing import Optional, Tuple, Type
 
-from worldfoundry.core.nn.layers import LayerNorm2d, SamMLPBlock
+from worldfoundry.core.nn.blocks.layers import LayerNorm2d, SamMLPBlock
 
 
 # This class and its supporting functions below lightly adapted from the ViTDet backbone available at: https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/vit.py # noqa

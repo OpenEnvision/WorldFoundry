@@ -402,10 +402,15 @@ def call_pipeline_from_pretrained(
     supports_unified = all(name in parameters for name in unified_kwargs) or (
         has_var_kwargs and not explicit_parameters
     )
+    supports_unified_subset = "model_path" in parameters and "required_components" in parameters
     if supports_unified and (
         not required_positional or all(parameter.name in unified_kwargs for parameter in required_positional)
     ):
         return loader(**unified_kwargs)
+    if supports_unified_subset and (
+        not required_positional or all(parameter.name in unified_kwargs for parameter in required_positional)
+    ):
+        return loader(**{name: value for name, value in unified_kwargs.items() if name in parameters})
 
     # ── Subset kwargs: pass only names that exist in the signature ─
     kwargs: dict[str, Any] = {}
@@ -446,13 +451,15 @@ def call_pipeline_from_pretrained(
 def load_pipeline_from_spec(spec: PipelineRunnerSpec) -> Any:
     """Import and instantiate a pipeline based on a resolved :class:`PipelineRunnerSpec`.
 
-    Ensures the inference infrastructure is installed, imports the target
-    class, and dispatches to :func:`call_pipeline_from_pretrained`.
+    Imports the target class and dispatches to :func:`call_pipeline_from_pretrained`.
+    The execution layer owns inference runtime settings.
     """
-    from worldfoundry.core import install_worldfoundry_inference_infra
-
-    install_worldfoundry_inference_infra()
     pipeline_cls = import_pipeline_target(spec.pipeline_target)
+    preflight = getattr(pipeline_cls, "preflight_generation_defaults", None)
+    if callable(preflight):
+        # Model-owned request contracts can reject configured generation
+        # defaults before from_pretrained starts loading large checkpoints.
+        preflight(spec.generation_defaults, model_path=spec.model_path)
     return call_pipeline_from_pretrained(
         pipeline_cls,
         model_path=spec.model_path,
@@ -469,9 +476,6 @@ def load_pipeline_from_config(config: WorldModelConfig) -> tuple[PipelineRunnerS
     Returns both the :class:`PipelineRunnerSpec` and the loaded pipeline
     object so callers can inspect the spec while using the pipeline.
     """
-    from worldfoundry.core import install_worldfoundry_inference_infra
-
-    install_worldfoundry_inference_infra()
     spec = build_pipeline_runner_spec(config)
     return spec, load_pipeline_from_spec(spec)
 

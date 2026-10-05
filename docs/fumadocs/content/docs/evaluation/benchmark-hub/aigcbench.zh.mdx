@@ -1,125 +1,44 @@
 ---
 title: AIGCBench
-description: WorldFoundry 中的 AIGCBench：数据布局、可用 runner 与指标输出。
+description: "BenchCouncil 图生视频质量评测：首帧保真、对齐、运动、时序、DOVER。WorldFoundry 导入官方指标，不编造榜单。"
 ---
 
-## 评测内容
+AIGCBench（BenchCouncil，中科院计算所）评的是**图生视频**：给定条件图像和 prompt，片段是否保真、是否有运动、时序是否连贯？指标族：
 
-AIGCBench 面向图像到视频生成，按官方论文和项目资产中的四类能力评测：control-video alignment、motion effects、temporal consistency 和 video quality。官方数据集由 WebVid validation 视频、LAION-aesthetics 图文对，以及 "Ours" 生成图文集组成。WorldFoundry 的仓内 runner 负责整理 prompt 记录，并导入 AIGCBench 评分流水线产出的指标表。
+- **首帧保真** — 相对条件图像的 `mse_first` / `ssim_first`。
+- **对齐** — 图像-视频与文本-视频 CLIP。
+- **参考视频对齐** — 关键帧 / 对应帧 CLIP 与 SSIM（需要官方参考）。
+- **运动** — 光流平方均值。
+- **时序** — 相邻帧 CLIP。
+- **感知质量** — DOVER。也会记录 `frame_count`。
 
-这里的仓内入口不是 CLIP、DOVER、光流和参考视频指标的完整独立复刻。它需要已有的指标结果文件，或者由本地 WorldFoundry 评测栈产出的 scorer 结果。
+论文：[AIGCBench](https://arxiv.org/abs/2401.01651)。项目：[benchcouncil.org/AIGCBench](https://www.benchcouncil.org/AIGCBench)。代码：[BenchCouncil/AIGCBench](https://github.com/BenchCouncil/AIGCBench)（Apache-2.0）。数据集：[`stevenfan/AIGCBench_v1.0`](https://huggingface.co/datasets/stevenfan/AIGCBench_v1.0)。
 
-## 数据与产物布局
+WorldFoundry **导入官方指标 CSV / TSV**（或流水线分数转储）。`worldfoundry/data/benchmarks/assets/aigcbench` 里的 `prompt_suite.json` 可在不下载完整 Hugging Face 数据的情况下物化请求。CLIP、DOVER 与光流打分器仍由调用方提供。官方导出提供时，主键为 `aigcbench_average`。
 
-WorldFoundry 按下面顺序寻找 AIGCBench prompt suite：
+<BenchmarkPageSections id="aigcbench" locale="zh" />
 
-- `--prompt-manifest <path>`
-- `WORLDFOUNDRY_AIGCBENCH_PROMPT_MANIFEST`
-- 内置的 `worldfoundry/data/benchmarks/assets/aigcbench/prompt_suite.json`
-- `WORLDFOUNDRY_AIGCBENCH_DATASET_ROOT` 指向的 HF 数据集目录
-- 默认本地 HF 缓存中的 `stevenfan/AIGCBench_v1.0`
-
-HF 数据集中常用文件包括：
-
-- `webvid_eval_1000.txt`：WebVid prompt / reference-video id。
-- `Laion-aesthetics_select_samples.txt`：LAION 图像 prompt。
-- `t2i_625/`、`t2i_aspect_ratio_625/` 或 `AIGCBench/t2i_625/`：图像条件 prompt 资产。
-
-候选视频放在一个扁平目录中，文件名使用 prompt id：
-
-```text
-<generated_videos>/
-  <prompt_id>.mp4
-  <prompt_id>.webm
-```
-
-支持的视频后缀是 `.mp4`、`.mov`、`.mkv`、`.webm` 和 `.avi`。覆盖率通过视频文件 stem 与 prompt manifest 中的 prompt id 匹配计算。
-
-## 依赖说明
-
-完整产出指标时，评分侧需要 AIGCBench 所要求的参考图片/视频、CLIP ViT-L/14、DOVER 和光流工具。仅导入结果时，WorldFoundry runner 只需要能导入本仓 Python 包，并提供指标结果文件。
-
-可以下载 HF 数据集。本文不要求外部仓库 checkout，因为 WorldFoundry 集成已经在仓内。
-
-## 支持的命令
-
-先设置生成产物目录：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/aigcbench/generated_videos
-```
-
-通过公开 CLI 导入已有 AIGCBench 指标报告：
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id aigcbench \
   --mode official-validation \
-  --official-results-path /path/to/aigcbench_results.csv \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompt_suite.json \
-  --output-dir tmp/aigcbench/import \
+  --official-results-path <official_results.csv> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/aigcbench/official-validation \
   --json
 ```
 
-需要使用 runner 原生参数时，直接调用仓内 runner：
+`--strict` 会在覆盖缺口处失败；`--prompt-manifest` 可限制 prompt 子集。首帧 / 参考视频指标族需要官方资源就位。默认导入路径：`WORLDFOUNDRY_AIGCBENCH_RESULTS_PATH`。共享栈：`video_quality_motion_stack`。
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py \
-  --official-results-path /path/to/aigcbench_results.csv \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompt_suite.json \
-  --output-dir tmp/aigcbench/import \
-  --json
+仓内指针：
+
+```text
+worldfoundry/data/benchmarks/tasks/external/aigcbench.yaml
+worldfoundry/data/benchmarks/assets/aigcbench
 ```
 
-如果本地 WorldFoundry 指标栈已经能从生成视频产出 AIGCBench 结果，可使用同一 runner 的 `--run-official`：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py \
-  --run-official \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompt_suite.json \
-  --output-dir tmp/aigcbench/run \
-  --json
-```
-
-## 导入路径
-
-- Runner：`worldfoundry.evaluation.tasks.execution.runners.aigcbench.run_aigcbench_official_runner`
-- 指标：`worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_metrics`
-- Prompt 与产物布局：`worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_prompts`
-- Runtime adapter：`worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_runtime`
-
-## 结果文件格式
-
-导入器接受 JSON 或 CSV 风格的结果行。它可以读取带 `metric_id` 和 `score` 的汇总行，也可以读取以指标为列的 per-sample 行。`mse`、`ssim`、`clip_per` 以及 AIGCBench 展示名会映射到下面的规范指标 id。
-
-`--output-dir` 下会写出：
-
-- `scorecard.json`：benchmark 状态、覆盖率、指标表和输出路径。
-- `raw_metric_table.jsonl`：每个声明指标一行。
-- `per_sample_scores.jsonl`：当输入结果包含 sample id 时写出 per-sample 子集。
-
-## 指标
-
-主指标：`aigcbench_average`。
-
-| Metric | 方向 | 含义 |
-| --- | --- | --- |
-| `mse_first` | 越低越好 | 条件图像与生成视频首帧之间的 MSE。 |
-| `ssim_first` | 越高越好 | 条件图像与生成视频首帧之间的 SSIM。 |
-| `image_genvideo_clip` | 越高越好 | 条件图像与生成视频之间的 CLIP 相似度。 |
-| `genvideo_text_clip` | 越高越好 | 生成视频与文本 prompt 之间的 CLIP 相似度。 |
-| `genvideo_refvideo_clip_keyframes` | 越高越好 | 生成视频与参考视频关键帧之间的 CLIP 相似度。 |
-| `flow_square_mean` | 越高越好 | 用于 motion-effect 评分的光流平方均值。 |
-| `genvideo_refvideo_clip_corresponding_frames` | 越高越好 | 生成视频和参考视频对应帧的 CLIP 相似度。 |
-| `genvideo_clip_adjacent_frames` | 越高越好 | 相邻生成帧 CLIP 相似度，用于时序一致性。 |
-| `frame_count` | 越高越好 | 生成视频帧数。 |
-| `dover` | 越高越好 | DOVER 视频质量分。 |
-| `genvideo_refvideo_ssim` | 越高越好 | 生成视频与参考视频之间的 SSIM。 |
-| `aigcbench_average` | 越高越好 | 未直接提供 aggregate 时，对可用 AIGCBench 组件指标取均值。 |
+产物包括 `scorecard.json`（主键 `aigcbench_average`）、`benchmark_contract.json`、`raw_metric_table.jsonl`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

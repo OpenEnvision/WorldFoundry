@@ -1,0 +1,14 @@
+schema_version: 2
+binding_id: joyai-echo-longvideo
+model_id: joyai-echo-longvideo
+aliases:
+- joyai-echo
+- echo-longvideo
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.joyai_echo.pipeline_joyai_echo:JoyAIEchoLongVideoPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

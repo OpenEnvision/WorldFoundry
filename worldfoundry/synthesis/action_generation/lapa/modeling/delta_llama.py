@@ -121,7 +121,7 @@ class VideoLLaMAConfig(LLaMAConfig):
             return cls.from_dict(VIDEO_LLAMA_STANDARD_CONFIGS[path])
         load_type, load_path = path.split('::', 1)
         if load_type == 'pickle':
-            return cls.from_dict(load_pickle(load_path)['llama_config'])
+            return cls.from_dict(load_pickle(load_path, allow_pickle=True)['llama_config'])
         elif load_type == 'json':
             with open_file(load_path, 'r') as fin:
                 raw_config = fin.read()

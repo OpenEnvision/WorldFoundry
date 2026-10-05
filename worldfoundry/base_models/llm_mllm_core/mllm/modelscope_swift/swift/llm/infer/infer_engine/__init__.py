@@ -1,7 +1,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 from typing import TYPE_CHECKING
 
-from worldfoundry.core.utils.lazy_module import _LazyModule
+from worldfoundry.core.utils.python.lazy_module import _LazyModule
 
 if TYPE_CHECKING:
     from .vllm_engine import VllmEngine

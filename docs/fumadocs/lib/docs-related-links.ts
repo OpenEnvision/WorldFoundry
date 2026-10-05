@@ -9,7 +9,6 @@ export type DocsRelatedLink = {
 
 const BENCHMARK_HUB_RELATED_SLUGS = [
   ['evaluation'],
-  ['evaluation', 'quickstart'],
   ['evaluation', 'benchmark-hub'],
   ['evaluation', 'metrics'],
   ['evaluation', 'metrics', 'scorers'],

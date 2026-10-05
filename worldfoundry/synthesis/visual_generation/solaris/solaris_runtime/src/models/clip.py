@@ -322,14 +322,6 @@ class VisionTransformer(nnx.Module):
         return self.transformer[0](x)
 
         # Apply transformer blocks
-        if use_31_block:
-            for block in self.transformer[:-1]:
-                x = block(x)
-        else:
-            for block in self.transformer:
-                x = block(x)
-        return x
-
 
 _MEAN = jnp.array([0.48145466, 0.4578275, 0.40821073], jnp.float32)
 _STD = jnp.array([0.26862954, 0.26130258, 0.27577711], jnp.float32)

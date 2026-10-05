@@ -1,0 +1,54 @@
+---
+title: "LTX-2.x"
+description: "LTX-2.x from Lightricks: text-to-video and image-to-video; Verified; 6 variants."
+modelId: "ltx-2.x"
+pageSource: authored
+---
+
+LTX-2.x is Lightricks' current-generation video model family in this catalog, integrated natively for the distilled LTX-2 and LTX-2.3 image-to-video paths. The native route uses the official spatial upscaler between two denoising stages. Six variants are recorded (T2V/I2V/V2V for both 2 and 2.3), but only the two I2V routes are runnable today — the others are upstream capability profiles.
+
+<ModelPaperFigures modelId="ltx-2.x" locale="en" />
+
+The recorded paper is [arXiv 2601.03233](https://arxiv.org/abs/2601.03233).
+
+Project page: [ltx.video](https://ltx.video). Code: [Lightricks/LTX-2](https://github.com/Lightricks/LTX-2). Code: [Lightricks/LTX-Video](https://github.com/Lightricks/LTX-Video).
+
+<ModelCommandBuilder modelId="ltx-2.x" locale="en" />
+
+## What it is for
+
+Use `ltx-2-i2v` for the family's joint T2V/I2V inference path. The catalog records both task profiles on this page.
+
+The I2V route is a two-stage denoise with the official Spatial Upscaler as the boundary, loaded automatically from spatial_upsampler_path (not a separate Studio refiner toggle). Assembly uses the shared NativeDiffusionPipeline, joint multi-stage runner, and optimization policies — no Diffusers pipeline or copied upstream pipeline.
+
+Catalog tasks include text-to-video, image-to-video, video-to-video, and audio-video-generation. Documented modalities: text, image, and video in, video out. Also recorded: `ltx-2-t2v`, `ltx-2-v2v`, `ltx-2.3-t2v`.
+
+Recorded evaluation entry points include [AIGCBench](/docs/evaluation/benchmark-hub/aigcbench) (I2V-focused benchmark for the runnable routes).
+
+LTX 2.3-class I2V. Not the 2.5 or original LTX-Video card.
+
+## Runtime contract
+
+Artifacts `ltx-2-t2v.mp4`.
+
+CLI task profiles: `default`, `interactive-video`, and `control-video-to-video`. WorldFoundry binds `LTX23I2VPipeline`.
+
+Start on `ltx-2-i2v`. The family registers 6 catalog variants (cards above): `ltx-2-t2v` (`text-to-video`) — Runner parity pending; `ltx-2-i2v` (`image-to-video`) — Verified; `ltx-2-v2v` (`video-to-video`) — Runner parity pending; `ltx-2.3-t2v` (`text-to-video`) — Runner parity pending; `ltx-2.3-i2v` (`image-to-video`) — Verified among others. Family status: **Verified**.
+
+Runner status is Verified: both the LTX-2 and LTX-2.3 I2V targets produced recorded nonblank Studio demo artifacts. T2V/V2V still need scoped wrappers and validation — don't select those variants expecting output. This entry is tracked separately from LTX-Video 0.9.x because upstream ships distinct HF repository ids.
+
+Tracked separately from LTX-Video 0.9.x because upstream publishes LTX-2.x under distinct Hugging Face repository ids.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run ltx-2-t2v --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+The in-tree LTX package is **architecture only**. Runtime assembly, scheduling, loading, offload, quantization, and the denoising loop stay in the shared `diffusion_model` infrastructure. The transformer is adapted from [Lightricks/LTX-2](https://github.com/Lightricks/LTX-2) at `d6053703e00195bc668cbd1d5eda9dc0b2e7b74a`. Checkpoints and adapted source remain under the upstream LTX license. AlayaWorld's action/history model reuses this architecture from its own synthesis package.
+
+Recorded weight repositories include `Lightricks/LTX-2` and `Lightricks/LTX-2.3`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh ltx-2-t2v`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include other; status: **Verified**.
+
+<ModelRelatedRecipes modelId="ltx-2.x" locale="en" />

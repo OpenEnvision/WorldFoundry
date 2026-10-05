@@ -1,366 +1,273 @@
-"""Cosmos Predict2P5 visual generation pipeline module."""
+"""Public Cosmos Predict 2.5 pipeline backed by native diffusion recipes."""
+
+from __future__ import annotations
+
+import secrets
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
+
+import torch
+
+from worldfoundry.base_models.diffusion_model import NativeDiffusionPipeline
+from worldfoundry.base_models.diffusion_model.contracts import DiffusionRequest, SamplingConfig
+from worldfoundry.base_models.diffusion_model.optimizations import (
+    RuntimePolicy,
+    parse_offload_policy,
+    parse_torch_dtype,
+)
+from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
 
 from ..pipeline_utils import PipelineABC
-import math
-import numpy as np
-import torch
-from PIL import Image
-from typing import Any, Dict, List, Optional, Union
-
-from ...operators.cosmos_predict2p5_operator import CosmosPredict2p5Operator
-from ...synthesis.visual_generation.cosmos.cosmos_predict2p5_synthesis import CosmosPredict2p5Synthesis
-from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
-
+from .parallel_options import agree_cosmos_request, build_cosmos_parallel_context
+from .reason1_options import reason1_component_options
 
 COSMOS_PREDICT2P5_DEFAULT_FPS = 16
 COSMOS_PREDICT2P5_DEFAULT_NUM_FRAMES = 93
 COSMOS_PREDICT2P5_DEFAULT_NUM_INFERENCE_STEPS = 35
-_STUDIO_LEGACY_VALIDATION_DEFAULTS = {
-    "fps": 28,
-    "num_frames": 17,
-    "num_inference_steps": 4,
-}
-_SUPPORTED_WORLD_MODES = {
-    "img2world": "img2world",
-    "image2world": "img2world",
-    "image-to-world": "img2world",
-    "text2world": "img2world",
-    "text-to-world": "img2world",
-}
+DEFAULT_NEGATIVE_PROMPT = (
+    "The video captures a series of frames showing ugly scenes, static with no motion, motion blur, "
+    "over-saturation, shaky footage, low resolution, grainy texture, pixelated images, poorly lit areas, "
+    "underexposed and overexposed scenes, poor color balance, washed out colors, choppy sequences, jerky "
+    "movements, low frame rate, artifacting, color banding, unnatural transitions, outdated special effects, "
+    "fake elements, unconvincing visuals, poorly edited content, jump cuts, visual noise, and flickering. "
+    "Overall, the video is of poor quality."
+)
 
 
-def _normalize_generation_defaults(
-    *,
-    fps: int,
-    num_frames: int,
-    num_inference_steps: int,
-) -> tuple[int, int, int]:
-    """Promote legacy compact Studio defaults to usable Cosmos defaults."""
-    if (
-        fps == _STUDIO_LEGACY_VALIDATION_DEFAULTS["fps"]
-        and num_frames == _STUDIO_LEGACY_VALIDATION_DEFAULTS["num_frames"]
-        and num_inference_steps == _STUDIO_LEGACY_VALIDATION_DEFAULTS["num_inference_steps"]
-    ):
-        return (
-            COSMOS_PREDICT2P5_DEFAULT_FPS,
-            COSMOS_PREDICT2P5_DEFAULT_NUM_FRAMES,
-            COSMOS_PREDICT2P5_DEFAULT_NUM_INFERENCE_STEPS,
-        )
-    return fps, num_frames, num_inference_steps
-
-
-def _video_to_thwc_uint8(video: Any) -> np.ndarray:
-    """Video to thwc uint8 helper function."""
-    if isinstance(video, torch.Tensor):
-        arr = video.detach().cpu().float().numpy()
-    else:
-        arr = np.asarray(video)
-
-    if arr.ndim == 5:
-        if arr.shape[0] != 1:
-            raise ValueError(f"Expected batch size 1 for Cosmos video output, got shape {arr.shape}")
-        arr = arr[0]
-
-    if arr.ndim == 4:
-        if arr.shape[-1] in {1, 3, 4}:
-            pass
-        elif arr.shape[0] in {1, 3, 4}:
-            arr = np.transpose(arr, (1, 2, 3, 0))
-        elif arr.shape[1] in {1, 3, 4}:
-            arr = np.transpose(arr, (0, 2, 3, 1))
-
-    if arr.ndim != 4 or arr.shape[-1] not in {1, 3, 4}:
-        raise ValueError(f"Expected Cosmos video output in THWC-compatible shape, got {arr.shape}")
-
-    if arr.shape[-1] == 1:
-        arr = np.repeat(arr, 3, axis=-1)
-    elif arr.shape[-1] == 4:
-        arr = arr[..., :3]
-
-    if arr.dtype != np.uint8:
-        arr = arr.astype(np.float32, copy=False)
-        if arr.size:
-            min_value = float(arr.min())
-            max_value = float(arr.max())
-        else:
-            min_value = 0.0
-            max_value = 0.0
-        if min_value < 0.0 and max_value <= 1.0:
-            arr = (arr + 1.0) * 127.5
-        elif max_value <= 1.0:
-            arr = arr * 255.0
-        arr = np.clip(arr, 0, 255).astype(np.uint8)
-
-    return np.ascontiguousarray(arr)
+def _model_id(requested: str | None, source: object) -> str:
+    value = str(requested or "").lower()
+    if "14b" in value or "14b" in str(source).lower():
+        return "cosmos-predict2.5-14b"
+    if value and value not in {
+        "cosmos-predict-2.5",
+        "cosmos-predict-2.5-2b",
+        "cosmos-predict-2p5",
+        "cosmos-predict2.5",
+        "cosmos-predict2.5-2b",
+        "cosmos-predict2p5",
+        "nvidia/cosmos-predict2.5-2b",
+        "2b",
+    }:
+        raise ValueError(f"unsupported Cosmos Predict 2.5 selector: {requested!r}")
+    return "cosmos-predict2.5-2b"
 
 
 class CosmosPredict2p5Pipeline(PipelineABC):
+    """Studio-facing wrapper around the canonical 2B/14B native recipes."""
 
-    """Pipeline implementation for CosmosPredict2p5 visual generation."""
+    MODEL_ID = "cosmos-predict2.5"
+
     def __init__(
-        self,
-        operator: Optional[CosmosPredict2p5Operator] = None,
-        synthesis_model: Optional[CosmosPredict2p5Synthesis] = None,
-        memory_module: Optional[Any] = None,
-        device: str = "cuda",
-        # Use bfloat16 precision to balance memory efficiency and numeric range
-        weight_dtype: torch.dtype = torch.bfloat16,
-    ):
-        """Initialize the pipeline and configure runtime components."""
-        self.synthesis_model = synthesis_model
-        self.operator = operator
-        self.memory_module = memory_module
-        self.device = device
-        self.weight_dtype = weight_dtype
-        self.current_image = None
+        self, *, native_pipeline: NativeDiffusionPipeline, device: str, model_id: str, parallel_context=None,
+    ) -> None:
+        super().__init__(model_id=model_id, synthesis_model=None, device=device)
+        self.native_pipeline = native_pipeline
+        self.parallel_context = parallel_context
+
+    def close(self) -> None:
+        """Release owned inference subgroups; keep the caller-owned world live."""
+
+        if self.parallel_context is not None:
+            self.parallel_context.close()
 
     @classmethod
     def from_pretrained(
-        cls, 
-        model_path: Optional[str | Dict[str, Any]] = None,
-        required_components: Optional[Dict] = None,
-        token: Optional[str] = None,
-        mode: str = 'img2world',
+        cls,
+        model_path: str | Mapping[str, Any] | None = None,
+        required_components: Mapping[str, Any] | None = None,
         device: str = "cuda",
-        # Use bfloat16 precision to balance memory efficiency and numeric range
-        weight_dtype: Optional[torch.dtype] = torch.bfloat16,
-        **kwargs,
+        model_id: str | None = None,
+        **kwargs: Any,
     ) -> "CosmosPredict2p5Pipeline":
-        """Load the pipeline from pretrained checkpoints and configurations."""
-        component_options: Dict[str, Any] = dict(required_components or {})
-        if isinstance(model_path, dict):
-            component_options.update(model_path)
-            model_path = (
-                component_options.pop("model_path", None)
-                or component_options.pop("pretrained_model_path", None)
-                or component_options.pop("repo_id", None)
-            )
-        component_options.update(kwargs)
-        component_options = cls._strip_framework_loading_options(component_options)
-        mode = component_options.pop("mode", mode)
-        token = component_options.pop("token", token)
-        normalized_mode = str(mode).strip().lower().replace("_", "-")
-        if normalized_mode == "video2world" or normalized_mode == "video-to-world":
-            raise NotImplementedError(
-                "Cosmos Predict2.5 video2world loading is not wired in this in-tree "
-                "WorldFoundry wrapper yet."
-            )
-        mode = _SUPPORTED_WORLD_MODES.get(normalized_mode, mode)
-        if model_path is None:
-            model_path = "nvidia/Cosmos-Predict2.5"
-        if required_components is None:
-            required_components = {
-                "text_encoder_model_path": "nvidia/Cosmos-Reason1-7B",
-                "vae_model_path": "Wan-AI/Wan2.1-T2V-1.3B",
-            }
-        required_components = {**required_components, **component_options}
+        """Load native components with optional Reason1 placement and reuse.
 
-        synthesis_model = CosmosPredict2p5Synthesis.from_pretrained(
-            mode=mode,
-            transformer_model_path=model_path,
-            text_encoder_model_path=required_components["text_encoder_model_path"],
-            vae_model_path=required_components["vae_model_path"],
-            token=token,
+        ``text_embedding_cache_size`` counts complete prompt batches (default
+        zero); ``text_embedding_cache_max_bytes`` bounds host tensor storage
+        (default 512 MiB). ``text_encoder_run_on_cpu=True`` keeps Reason1
+        weights and computation on CPU while returning GPU conditioning.
+        ``tensor_parallel`` and ``context_parallel`` default to one. Multi-rank
+        inference requires an initialized world, explicit per-rank CUDA devices
+        and ``offload_mode=none``, ``torch_dtype=float32``. Low-precision model
+        parallelism is rejected because its generation drift failed validation.
+        All ranks load and call together; each returns
+        full tensors, and only rank zero writes video artifacts. Call ``close``
+        together before destroying the caller-owned world. Parallel kernels can
+        differ numerically from single-rank inference.
+        """
+
+        options = dict(model_path) if isinstance(model_path, Mapping) else {}
+        options.update(required_components or {})
+        options.update(kwargs)
+        encoder_options = reason1_component_options(options)
+        source = (
+            options.get("checkpoint_path")
+            or options.get("transformer_model_path")
+            or options.get("model_path")
+            or model_path
+        )
+        resolved_model_id = _model_id(str(options.get("variant_id") or model_id or ""), source)
+        overrides: dict[str, str] = {}
+        if isinstance(source, (str, Path)):
+            checkpoint = Path(source).expanduser()
+            if checkpoint.is_dir():
+                root = checkpoint.resolve()
+                overrides["transformer"] = str(root)
+                if (root / "tokenizer.pth").is_file():
+                    overrides["vae"] = str(root)
+            elif checkpoint.is_file():
+                overrides["transformer"] = str(checkpoint.resolve())
+        vae_source = options.get("vae_model_path")
+        if isinstance(vae_source, (str, Path)) and Path(vae_source).expanduser().exists():
+            overrides["vae"] = str(Path(vae_source).expanduser().resolve())
+        text_source = options.get("text_encoder_model_path")
+        if isinstance(text_source, (str, Path)) and Path(text_source).expanduser().is_dir():
+            root = str(Path(text_source).expanduser().resolve())
+            overrides.update({"text-encoder": root, "tokenizer": root})
+
+        policy = RuntimePolicy(
             device=torch.device(device),
-            weight_dtype=weight_dtype,
+            dtype=parse_torch_dtype(
+                options.get("torch_dtype", options.get("weight_dtype", options.get("dtype"))),
+                owner="Cosmos2.5",
+            ),
+            offload=parse_offload_policy(options.get("offload_mode", "block"), owner="Cosmos2.5"),
         )
-        operator = CosmosPredict2p5Operator()
-        memory_module = VisualFrameMemory(model_id="cosmos-predict2.5")
-
-        pipeline = cls(
-            operator=operator,
-            synthesis_model=synthesis_model,
-            memory_module=memory_module,
-            device=device,
-            weight_dtype=weight_dtype
+        parallel = build_cosmos_parallel_context(
+            options, policy, attention_heads=40 if resolved_model_id.endswith("14b") else 16,
         )
-        return pipeline
-
-    def set_negative_prompt(self, neg_prompt: Optional[str] = None):
-        """Set negative prompt for CosmosPredict2p5Pipeline."""
-        if neg_prompt is not None:
-            self.negative_prompt = neg_prompt
-        else:
-            self.negative_prompt = (
-                'The video captures a series of frames showing ugly scenes, static with no motion, '
-                'motion blur, over-saturation, shaky footage, low resolution, grainy texture,'
-                ' pixelated images, poorly lit areas, underexposed and overexposed scenes, '
-                'poor color balance, washed out colors, choppy sequences, jerky movements, '
-                'low frame rate, artifacting, color banding, unnatural transitions, '
-                'outdated special effects, fake elements, unconvincing visuals, '
-                'poorly edited content, jump cuts, visual noise, and flickering. '
-                'Overall, the video is of poor quality.'
+        component_options = {
+            "conditioner:main": encoder_options,
+            "latent_initializer:main": {
+                "tiled": bool(options.get("vae_tiling", False)),
+                "tile_size": tuple(options.get("vae_tile_size", (34, 34))),
+                "tile_stride": tuple(options.get("vae_tile_stride", (18, 16))),
+            }
+        }
+        if parallel is not None:
+            component_options["denoiser:main"] = {
+                "tensor_parallel": parallel.tp_size, "context_parallel": parallel.cp_size,
+                "parallel_context": parallel,
+            }
+        try:
+            if parallel is not None:
+                parallel.agree(("cosmos25-pipeline", resolved_model_id, overrides, str(policy.dtype),
+                                encoder_options, component_options["latent_initializer:main"]))
+            native = NativeDiffusionPipeline.from_pretrained(
+                resolved_model_id, policy=policy, checkpoint_overrides=overrides or None,
+                extensions=options.get("extensions", ()), component_options=component_options,
             )
+        except BaseException:
+            if parallel is not None:
+                try:
+                    parallel.close()
+                except Exception:
+                    pass
+            raise
+        return cls(native_pipeline=native, device=device, model_id=resolved_model_id, parallel_context=parallel)
 
-    def process(
-        self,
-        prompt: str,
-        images: Optional[Image.Image] = None,
-        image_path: Optional[str] = None,
-        input_path: Optional[str] = None,
-        height: int = 704,
-        width: int = 1280,
-    ) -> Dict[str, Any]:
-        """Process and normalize input arguments and conditions for inference."""
-        input_for_perception = images if images is not None else image_path or input_path
-        perception = self.operator.process_perception(
-            input_path=input_for_perception,
-            height=height,
-            width=width,
+    @classmethod
+    def plan(
+        cls,
+        model_path: str | Mapping[str, Any] | None = None,
+        required_components: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        options = dict(model_path) if isinstance(model_path, Mapping) else {}
+        options.update(required_components or {})
+        options.update(kwargs)
+        source = (
+            options.get("checkpoint_path")
+            or options.get("transformer_model_path")
+            or options.get("model_path")
+            or model_path
         )
-        
-        image = perception["input_image"]
-        height = perception["height"]
-        width = perception["width"]
-
-        self.operator.get_interaction(prompt)
-        interaction = self.operator.process_interaction()
-        
-        prompt = interaction["input_prompt"]
-
         return {
-            "prompt": prompt,
-            "image": image,
-            "height": height,
-            "width": width,
+            "model_id": _model_id(str(options.get("variant_id") or options.get("model_id") or ""), source),
+            "checkpoint": str(source) if source is not None else None,
+            "backend": "worldfoundry-native-diffusion",
+            "native_inference": True,
+            "blocked": False,
         }
 
     def __call__(
         self,
-        prompt: str,
-        negative_prompt: Optional[str] = None,
+        prompt: str | list[str],
+        negative_prompt: str | list[str] | None = None,
         images: Any = None,
-        image_path: Optional[str] = None,
-        input_path: Optional[str] = None,
+        image: Any = None,
+        image_path: str | None = None,
+        input_path: str | None = None,
         video: Any = None,
-        video_path: Optional[str] = None,
+        video_path: str | None = None,
+        output_path: str | None = None,
         guidance_scale: float = 7.0,
         num_inference_steps: int = COSMOS_PREDICT2P5_DEFAULT_NUM_INFERENCE_STEPS,
         fps: int = COSMOS_PREDICT2P5_DEFAULT_FPS,
         num_frames: int = COSMOS_PREDICT2P5_DEFAULT_NUM_FRAMES,
         height: int = 704,
         width: int = 1280,
-        action_latents: Optional[torch.Tensor] = None,
-        control_video: Optional[Union[List[Image.Image], Dict[str, List[Image.Image]]]] = None,
-        control_scale: Optional[Union[float, Dict[str, float]]] = 1.0,
-        cond_timestep: float = 0,
-        timestep_scale: float = 0.001,
-        seed: int = -1,
-        use_kerras_sigma: bool = True,
-        pad_mode: str = 'repeat',
-        output_type: Optional[str] = 'pt',
-        _normalize_output: bool = True,
+        seed: int = 0,
+        num_latent_conditional_frames: int = 1,
+        conditional_frame_timestep: float | None = None,
+        output_type: str = "video",
+        return_dict: bool = False,
+        **kwargs: Any,
     ) -> Any:
-        """Execute the complete pipeline generation flow."""
-        if prompt is None:
-            raise ValueError("prompt must be provided either in initialization or call().")
-        if video is not None or video_path is not None:
-            raise NotImplementedError(
-                "Cosmos Predict2.5 video2world conditioning is not wired in this in-tree "
-                "WorldFoundry wrapper yet. Use text2world/image2world here, or route the "
-                "official video2world runtime with an input video."
+        del kwargs
+        image_value = image if image is not None else images
+        image_value = image_value if image_value is not None else image_path
+        video_value = video if video is not None else video_path
+        if image_value is None and video_value is None and input_path is not None:
+            if Path(input_path).suffix.lower() in {".mp4", ".mov", ".avi", ".mkv", ".webm"}:
+                video_value = input_path
+            else:
+                image_value = input_path
+        inputs: dict[str, object] = {
+            "fps": int(fps),
+            "return_latent": output_type == "latent",
+            "num_latent_conditional_frames": int(num_latent_conditional_frames),
+        }
+        if conditional_frame_timestep is not None:
+            inputs["conditional_frame_timestep"] = float(conditional_frame_timestep)
+        if image_value is not None:
+            inputs["image"] = image_value
+        if video_value is not None:
+            inputs["video"] = video_value
+        if self.parallel_context is not None:
+            agree_cosmos_request(
+                self.parallel_context, prompt=prompt, negative_prompt=negative_prompt or DEFAULT_NEGATIVE_PROMPT,
+                inputs=inputs, seed=int(seed), height=int(height), width=int(width), num_frames=int(num_frames),
+                steps=int(num_inference_steps), guidance_scale=float(guidance_scale), output_type=output_type,
             )
-        if negative_prompt is None:
-            negative_prompt = getattr(self, "negative_prompt", None)
-        fps, num_frames, num_inference_steps = _normalize_generation_defaults(
-            fps=fps,
-            num_frames=num_frames,
-            num_inference_steps=num_inference_steps,
-        )
-
-        processed_input = self.process(
+            actual_seed = self.parallel_context.broadcast_seed(int(seed))
+        else:
+            actual_seed = secrets.randbits(63) if int(seed) < 0 else int(seed)
+        request = DiffusionRequest(
             prompt=prompt,
-            images=images,
-            image_path=image_path,
-            input_path=input_path,
-            height=height,
-            width=width,
+            negative_prompt=negative_prompt or DEFAULT_NEGATIVE_PROMPT,
+            height=int(height),
+            width=int(width),
+            num_frames=int(num_frames),
+            sampling=SamplingConfig(
+                num_inference_steps=int(num_inference_steps),
+                guidance_scale=float(guidance_scale),
+                seed=actual_seed,
+            ),
+            inputs=inputs,
         )
+        output = self.native_pipeline(request)
+        artifact_path = None
+        if (output_path is not None and output_type != "latent"
+                and (self.parallel_context is None or self.parallel_context.is_main)):
+            artifact_path = save_image_or_video_tensor(output.sample, output_path, fps=int(fps))
+        result = {
+            "video": output.sample,
+            "latents": output.latents,
+            "artifact_path": artifact_path,
+            "metadata": dict(output.metadata),
+        }
+        return result if return_dict else (artifact_path or output.sample)
 
-        video = self.synthesis_model.predict(
-            **processed_input,
-            negative_prompt=negative_prompt,
-            guidance_scale=guidance_scale,
-            num_inference_steps=num_inference_steps,
-            fps=fps,
-            num_frames=num_frames,
-            action_latents=action_latents,
-            control_video=control_video,
-            control_scale=control_scale,
-            cond_timestep=cond_timestep,
-            timestep_scale=timestep_scale,
-            seed=seed,
-            use_kerras_sigma=use_kerras_sigma,
-            pad_mode=pad_mode,
-            output_type=output_type,
-        )
 
-        if not _normalize_output:
-            return video
-        return _video_to_thwc_uint8(video)
-
-    def stream(
-        self,
-        prompt: str,
-        negative_prompt: Optional[str] = None,
-        images: Any = None,
-        image_path: Optional[str] = None,
-        input_path: Optional[str] = None,
-        video: Any = None,
-        video_path: Optional[str] = None,
-        guidance_scale: float = 7.0,
-        num_inference_steps: int = COSMOS_PREDICT2P5_DEFAULT_NUM_INFERENCE_STEPS,
-        fps: int = COSMOS_PREDICT2P5_DEFAULT_FPS,
-        num_frames: int = COSMOS_PREDICT2P5_DEFAULT_NUM_FRAMES,
-        height: int = 704,
-        width: int = 1280,
-        action_latents: Optional[torch.Tensor] = None,
-        control_video: Optional[Union[List[Image.Image], Dict[str, List[Image.Image]]]] = None,
-        control_scale: Optional[Union[float, Dict[str, float]]] = 1.0,
-        cond_timestep: float = 0,
-        timestep_scale: float = 0.001,
-        seed: int = -1,
-        use_kerras_sigma: bool = True,
-        pad_mode: str = 'repeat',
-        output_type: Optional[str] = 'pt',
-    ) -> Any:
-        """Stream visual generation outputs chunk by chunk."""
-        video = self.__call__(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            images=images,
-            image_path=image_path,
-            input_path=input_path,
-            video=video,
-            video_path=video_path,
-            guidance_scale=guidance_scale,
-            num_inference_steps=num_inference_steps,
-            fps=fps,
-            num_frames=num_frames,
-            height=height,
-            width=width,
-            action_latents=action_latents,
-            control_video=control_video,
-            control_scale=control_scale,
-            cond_timestep=cond_timestep,
-            timestep_scale=timestep_scale,
-            seed=seed,
-            use_kerras_sigma=use_kerras_sigma,
-            pad_mode=pad_mode,
-            output_type=output_type,
-            _normalize_output=False,
-        )
-
-        if not isinstance(video, torch.Tensor):
-            raise TypeError(
-                f"[CosmosPredict2p5Pipeline.stream] Expected torch.Tensor from predict, got {type(video)}"
-            )
-
-        video = video.squeeze(0)
-        self.memory_module.record(video)
-        print(
-            f"[CosmosPredict2p5Pipeline.stream] Recorded segment. "
-            f"Total frames in memory: {len(getattr(self.memory_module, 'all_frames', []))}"
-        )
-
-        return video
+__all__ = ["CosmosPredict2p5Pipeline"]

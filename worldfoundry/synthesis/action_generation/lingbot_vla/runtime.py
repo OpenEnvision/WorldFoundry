@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from types import SimpleNamespace
 from typing import Any, Mapping, Sequence
@@ -35,7 +36,7 @@ _CHECKPOINT_PATTERNS = tuple(str(item) for item in _MODEL_CONFIG["checkpoint_pat
 
 
 def clear_runtime_cache() -> None:
-    from worldfoundry.core.runtime_cache import clear_inference_runtime_cache
+    from worldfoundry.core.execution.runtime_cache import clear_inference_runtime_cache
 
     clear_inference_runtime_cache(_RUNTIME_CACHE)
 
@@ -71,11 +72,11 @@ class _LingBotV1Runtime:
         from transformers import AutoConfig, AutoProcessor, PretrainedConfig
 
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
-        from worldfoundry.core.checkpoint import load_safetensors_into_model_streaming
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
-        from worldfoundry.core.inference import compile_module_if_enabled, install_worldfoundry_inference_infra
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
-        from worldfoundry.core.utils.torch_utils import freeze_params, set_random_seed
+        from worldfoundry.core.model_loading.checkpoints import load_safetensors_into_model_streaming
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.inference import compile_module_if_enabled, install_worldfoundry_inference_infra
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
+        from worldfoundry.core.utils.tensors.torch import freeze_params, set_random_seed
 
         from .preprocessing.features import FeatureTransform
         from .modeling.policy import LingbotVlaPolicy
@@ -136,6 +137,13 @@ class _LingBotV1Runtime:
             ),
             self.device,
         )
+        if self.backbone_attention_implementation == "sdpa":
+            # This checkpoint-compatible Qwen implementation has eager and
+            # FA2 layers only, unlike the current Transformers implementation.
+            logging.getLogger(__name__).warning(
+                "LingBot-VLA v1 Qwen layers do not implement SDPA; using eager attention."
+            )
+            self.backbone_attention_implementation = "eager"
         config.vit_attn_implementation = self.backbone_attention_implementation
         config.tokenizer_path = str(self.base_model)
         config = _merge_qwen_config(

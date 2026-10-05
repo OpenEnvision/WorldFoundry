@@ -10,15 +10,15 @@ from __future__ import annotations
 
 import asyncio
 import functools
-import io
 import json
+import logging
+import math
 import os
 import re
 import time
 import traceback
 import uuid
 from collections import deque
-from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
@@ -29,17 +29,50 @@ from urllib.parse import quote
 import numpy as np
 from PIL import Image
 
-from worldfoundry.core.realtime import RealtimeSpec
-from worldfoundry.studio.catalog import CatalogEntry
-from worldfoundry.studio.execution import (
-    PreparedInputs,
-    StudioManager,
-    _normalize_frame_list,
-    _to_uint8_rgb,
+from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
+from worldfoundry.core.execution.realtime.prewarm import run_async_prewarm_sequence
+from worldfoundry.core.media.processing.postprocess import (
+    IdentityVideoPostProcessor,
+    VideoPostprocessChain,
+    VideoPostprocessStream,
+    VideoSpec,
+    frame_list_from_chunks,
 )
-from worldfoundry.studio.launch_config import StudioLaunchConfig
+from worldfoundry.core.observability.logging_setup import get_logger, write_jsonl_event
+from worldfoundry.core.observability.realtime_timing import RealtimeChunkTiming, RealtimeTimingWindow
+from worldfoundry.studio.inference.catalog import CatalogEntry
+from worldfoundry.studio.inference.execution import IMAGE_EXTS, VIDEO_EXTS, PreparedInputs, StudioManager
+from worldfoundry.studio.serving import (
+    bind_security_warning,
+    path_allowed,
+    request_token_valid,
+    require_auth_token_for_host,
+)
+from worldfoundry.studio.serving.realtime import media as realtime_media
+from worldfoundry.studio.serving.realtime.input import (
+    ControlSegment,
+    RealtimeControlResampler,
+    RealtimeControlState,
+    interactions_from_keys,
+    interactions_from_segments,
+)
+from worldfoundry.studio.serving.realtime.media import (
+    ChunkPresentationBuffer,
+    FrameQueuePolicy,
+    LatestFrameBuffer,
+    RealtimePresentationMode,
+    WebSocketPacingMode,
+    realtime_frames_from_result,
+)
+from worldfoundry.studio.serving.realtime.media import encode_jpeg_frames as _encode_jpeg_frames
+from worldfoundry.studio.serving.realtime.media import resize_rgb_frames as _resize_rgb_frames
+from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
 
-SUPPORTED_CONTROL_KEYS = frozenset({"w", "a", "s", "d", "i", "j", "k", "l"})
+_MIN_OUTPUT_WIDTH = realtime_media.MIN_OUTPUT_WIDTH
+_MIN_OUTPUT_HEIGHT = realtime_media.MIN_OUTPUT_HEIGHT
+_MAX_OUTPUT_WIDTH = realtime_media.MAX_OUTPUT_WIDTH
+_MAX_OUTPUT_HEIGHT = realtime_media.MAX_OUTPUT_HEIGHT
+_MAX_OUTPUT_PIXELS = realtime_media.MAX_OUTPUT_PIXELS
 _DREAMX_WORLD_MODEL_ID = "dreamx-world-5b-cam"
 _PROMPT_BOUNDARY_MODEL_IDS = frozenset(
     {
@@ -51,21 +84,52 @@ _PROMPT_BOUNDARY_MODEL_IDS = frozenset(
         "sana-wm",
     }
 )
-KEY_ALIASES = {
-    "arrowup": "i",
-    "arrowdown": "k",
-    "arrowleft": "j",
-    "arrowright": "l",
-}
-
 _TEXT_EVENT_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 _MAX_TEXT_EVENTS = 12
 _MAX_TEXT_EVENT_PROMPT = 1000
-_MIN_OUTPUT_WIDTH = 160
-_MIN_OUTPUT_HEIGHT = 90
-_MAX_OUTPUT_WIDTH = 1920
-_MAX_OUTPUT_HEIGHT = 1920
-_MAX_OUTPUT_PIXELS = 1920 * 1080
+_EXPLICIT_DISCONNECT_CLOSE_GRACE_SECONDS = 0.25
+_CHUNK_METRIC_NAMES = (
+    "condition_ms",
+    "model_ms",
+    "decode_ms",
+    "postprocess_ms",
+    "runtime_ms",
+    "copy_ms",
+    "cache_ms",
+    "cache_frames",
+    "cache_tokens",
+    "compile_active",
+    "cuda_graph",
+)
+
+logger = logging.getLogger(__name__)
+event_logger = get_logger(__name__)
+
+
+def _metric_float(
+    metrics: Mapping[str, Any],
+    name: str,
+    default: float = 0.0,
+) -> float:
+    value = metrics.get(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _chunk_metric_payload(metrics: Mapping[str, Any]) -> dict[str, float]:
+    payload: dict[str, float] = {}
+    for name in _CHUNK_METRIC_NAMES:
+        if name not in metrics:
+            continue
+        try:
+            payload[name] = round(float(metrics[name]), 1)
+        except (TypeError, ValueError):
+            continue
+    return payload
 
 
 def normalize_text_events(value: Any) -> list[dict[str, str]]:
@@ -84,9 +148,7 @@ def normalize_text_events(value: Any) -> list[dict[str, str]]:
             raise ValueError(f"text_events[{index - 1}] must be an object.")
         event_id = str(item.get("event_id") or item.get("id") or "").strip()
         if not _TEXT_EVENT_ID.fullmatch(event_id):
-            raise ValueError(
-                f"text_events[{index - 1}].event_id must use 1-64 letters, numbers, or _.:-."
-            )
+            raise ValueError(f"text_events[{index - 1}].event_id must use 1-64 letters, numbers, or _.:-.")
         if event_id in seen:
             raise ValueError(f"Duplicate text event id: {event_id}.")
         label = str(item.get("label") or event_id).strip()
@@ -95,9 +157,7 @@ def normalize_text_events(value: Any) -> list[dict[str, str]]:
         if not label or len(label) > 64:
             raise ValueError(f"Text event {event_id!r} label must contain 1-64 characters.")
         if not prompt or len(prompt) > _MAX_TEXT_EVENT_PROMPT:
-            raise ValueError(
-                f"Text event {event_id!r} prompt must contain 1-{_MAX_TEXT_EVENT_PROMPT} characters."
-            )
+            raise ValueError(f"Text event {event_id!r} prompt must contain 1-{_MAX_TEXT_EVENT_PROMPT} characters.")
         if not category or len(category) > 64:
             raise ValueError(f"Text event {event_id!r} category must contain 1-64 characters.")
         seen.add(event_id)
@@ -134,13 +194,9 @@ def normalize_output_resolution(value: Any) -> tuple[int, int] | None:
     else:
         raise ValueError("output_resolution must be an object, WIDTHxHEIGHT, or 'native'.")
     if not (_MIN_OUTPUT_WIDTH <= width <= _MAX_OUTPUT_WIDTH):
-        raise ValueError(
-            f"output width must be between {_MIN_OUTPUT_WIDTH} and {_MAX_OUTPUT_WIDTH}."
-        )
+        raise ValueError(f"output width must be between {_MIN_OUTPUT_WIDTH} and {_MAX_OUTPUT_WIDTH}.")
     if not (_MIN_OUTPUT_HEIGHT <= height <= _MAX_OUTPUT_HEIGHT):
-        raise ValueError(
-            f"output height must be between {_MIN_OUTPUT_HEIGHT} and {_MAX_OUTPUT_HEIGHT}."
-        )
+        raise ValueError(f"output height must be between {_MIN_OUTPUT_HEIGHT} and {_MAX_OUTPUT_HEIGHT}.")
     if width % 2 or height % 2:
         raise ValueError("output width and height must be even for realtime video encoding.")
     return width, height
@@ -227,8 +283,7 @@ class OutputResolutionState:
             )
         if width * height > self.max_pixels:
             raise ValueError(
-                f"output resolution {width}x{height} exceeds the realtime pixel budget "
-                f"of {self.max_pixels} pixels."
+                f"output resolution {width}x{height} exceeds the realtime pixel budget of {self.max_pixels} pixels."
             )
         source = self.source_dimensions
         if source is not None and (width > source[0] or height > source[1]):
@@ -317,27 +372,33 @@ def _entry_output_pixel_budget(entry: CatalogEntry) -> int:
     return min(max_area, _MAX_OUTPUT_PIXELS) if max_area > 0 else _MAX_OUTPUT_PIXELS
 
 
-def _new_output_resolution_state(entry: CatalogEntry, value: Any) -> OutputResolutionState:
+def _new_output_resolution_state(
+    entry: CatalogEntry,
+    value: Any,
+    *,
+    native_override: tuple[int, int] | None = None,
+) -> OutputResolutionState:
+    native = native_override or _entry_output_resolution(entry)
     return OutputResolutionState.from_value(
         value,
-        maximum=_entry_output_resolution(entry),
-        max_pixels=_entry_output_pixel_budget(entry),
+        maximum=native,
+        max_pixels=(
+            min(native[0] * native[1], _MAX_OUTPUT_PIXELS) if native is not None else _entry_output_pixel_budget(entry)
+        ),
     )
 
 
-def _output_resolution_options(entry: CatalogEntry) -> list[dict[str, Any]]:
-    native = _entry_output_resolution(entry)
+def _output_resolution_options(
+    entry: CatalogEntry,
+    *,
+    native_override: tuple[int, int] | None = None,
+) -> list[dict[str, Any]]:
+    native = native_override or _entry_output_resolution(entry)
     options: list[dict[str, Any]] = [
         {
             "mode": "native",
-            "label": (
-                f"Native · {native[0]}×{native[1]}" if native is not None else "Native"
-            ),
-            **(
-                {"width": native[0], "height": native[1]}
-                if native is not None
-                else {}
-            ),
+            "label": (f"Native · {native[0]}×{native[1]}" if native is not None else "Native"),
+            **({"width": native[0], "height": native[1]} if native is not None else {}),
         }
     ]
     candidates: list[tuple[int, int]] = []
@@ -349,12 +410,11 @@ def _output_resolution_options(entry: CatalogEntry) -> list[dict[str, Any]]:
     # Without a model-owned native size, guessed presets can accidentally
     # upscale the first generated frame. Keep only native until the runtime
     # has observed a real source size.
-    pixel_budget = _entry_output_pixel_budget(entry)
+    pixel_budget = (
+        min(native[0] * native[1], _MAX_OUTPUT_PIXELS) if native is not None else _entry_output_pixel_budget(entry)
+    )
     for width, height in dict.fromkeys(candidates):
-        if not (
-            _MIN_OUTPUT_WIDTH <= width <= _MAX_OUTPUT_WIDTH
-            and _MIN_OUTPUT_HEIGHT <= height <= _MAX_OUTPUT_HEIGHT
-        ):
+        if not (_MIN_OUTPUT_WIDTH <= width <= _MAX_OUTPUT_WIDTH and _MIN_OUTPUT_HEIGHT <= height <= _MAX_OUTPUT_HEIGHT):
             continue
         if width * height > pixel_budget:
             continue
@@ -376,6 +436,298 @@ def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
         return max(int(os.getenv(name, str(default)) or default), minimum)
     except Exception:
         return max(default, minimum)
+
+
+def _env_optional_timeout_s(name: str) -> float | None:
+    """Read a positive timeout in seconds; zero disables the deadline."""
+
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return None
+    try:
+        timeout_s = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a non-negative number of seconds.") from exc
+    if timeout_s < 0.0:
+        raise ValueError(f"{name} must be non-negative, got {timeout_s}.")
+    return timeout_s or None
+
+
+def _realtime_shutdown_timeout_s() -> float:
+    """Return the strict cooperative-shutdown budget."""
+
+    name = "WORLDFOUNDRY_REALTIME_SHUTDOWN_TIMEOUT_SECONDS"
+    raw = os.getenv(name, "5").strip()
+    try:
+        timeout_s = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a positive finite number of seconds.") from exc
+    if not math.isfinite(timeout_s) or timeout_s <= 0.0:
+        raise ValueError(f"{name} must be a positive finite number of seconds, got {raw!r}.")
+    return timeout_s
+
+
+def _shutdown_deadline(deadline: float | None = None) -> float:
+    if deadline is not None:
+        return deadline
+    return asyncio.get_running_loop().time() + _realtime_shutdown_timeout_s()
+
+
+def _consume_task_result(task: asyncio.Task[Any]) -> None:
+    if task.cancelled():
+        return
+    try:
+        error = task.exception()
+    except BaseException:
+        logger.warning(
+            "Could not retrieve realtime teardown task result for %s.",
+            task.get_name(),
+            exc_info=True,
+        )
+        # Done callbacks must never re-raise into the event loop.
+        return
+    else:
+        if error is not None:
+            logger.warning(
+                "Realtime teardown task %s failed: %s",
+                task.get_name(),
+                error,
+                exc_info=(type(error), error, error.__traceback__),
+            )
+
+
+def _retain_shutdown_task(
+    task: asyncio.Task[Any],
+    retained: set[asyncio.Task[Any]],
+) -> None:
+    """Keep cancellation-resistant tasks alive until their result is consumed."""
+
+    if task.done():
+        _consume_task_result(task)
+        return
+    if task in retained:
+        return
+    retained.add(task)
+
+    def discard(completed: asyncio.Task[Any]) -> None:
+        retained.discard(completed)
+        _consume_task_result(completed)
+
+    task.add_done_callback(discard)
+
+
+async def _finish_tasks_by_deadline(
+    tasks: tuple[asyncio.Task[Any] | None, ...],
+    *,
+    deadline: float,
+    retained: set[asyncio.Task[Any]],
+    label: str,
+    cancel_now: bool,
+    warn_on_timeout: bool = True,
+) -> bool:
+    """Wait within the remaining budget, then cancel and retain stragglers."""
+
+    current = asyncio.current_task()
+    pending = {
+        task
+        for task in tasks
+        if task is not None and task is not current and not task.done()
+    }
+    for task in tasks:
+        if task is not None and task is not current and task.done():
+            _consume_task_result(task)
+    if cancel_now:
+        for task in pending:
+            task.cancel()
+    if not pending:
+        return True
+    remaining = max(deadline - asyncio.get_running_loop().time(), 0.0)
+    try:
+        if remaining > 0.0:
+            done, pending = await asyncio.wait(pending, timeout=remaining)
+        else:
+            done = set()
+    except BaseException:
+        for task in pending:
+            task.cancel()
+            _retain_shutdown_task(task, retained)
+        raise
+    for task in done:
+        _consume_task_result(task)
+    if not pending:
+        return True
+    for task in pending:
+        task.cancel()
+        _retain_shutdown_task(task, retained)
+    if warn_on_timeout:
+        logger.warning(
+            "Realtime shutdown deadline expired while waiting for %s (%d task(s) still running).",
+            label,
+            len(pending),
+        )
+    return False
+
+
+async def _run_by_shutdown_deadline(
+    awaitable: Any,
+    *,
+    deadline: float,
+    retained: set[asyncio.Task[Any]],
+    label: str,
+    warn_on_timeout: bool = True,
+) -> bool:
+    task = asyncio.create_task(awaitable, name=f"world-realtime-shutdown-{label}")
+    try:
+        # Start each cleanup stage even when an earlier stage used the budget.
+        await asyncio.sleep(0)
+    except BaseException:
+        task.cancel()
+        _retain_shutdown_task(task, retained)
+        raise
+    return await _finish_tasks_by_deadline(
+        (task,),
+        deadline=deadline,
+        retained=retained,
+        label=label,
+        cancel_now=False,
+        warn_on_timeout=warn_on_timeout,
+    )
+
+
+async def _acquire_lock_by_shutdown_deadline(
+    lock: asyncio.Lock,
+    *,
+    deadline: float,
+    label: str,
+) -> bool:
+    """Acquire a cooperative asyncio lock without exceeding the budget."""
+
+    remaining = max(deadline - asyncio.get_running_loop().time(), 0.0)
+    if remaining <= 0.0:
+        logger.warning("Realtime shutdown deadline expired before acquiring %s.", label)
+        return False
+    try:
+        await asyncio.wait_for(lock.acquire(), timeout=remaining)
+    except asyncio.TimeoutError:
+        logger.warning("Realtime shutdown deadline expired while acquiring %s.", label)
+        return False
+    return True
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean value (1/0, true/false, yes/no, or on/off).")
+
+
+def _env_optional_int(name: str) -> int | None:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer.") from exc
+
+
+def _env_optional_float(name: str) -> float | None:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a number.") from exc
+
+
+def _realtime_rtx_device(launch_device: str) -> int:
+    configured = _env_optional_int("WORLDFOUNDRY_REALTIME_RTX_DEVICE")
+    if configured is not None:
+        if configured < 0:
+            raise ValueError("WORLDFOUNDRY_REALTIME_RTX_DEVICE must be non-negative.")
+        return configured
+    match = re.fullmatch(r"\s*cuda(?::(\d+))?\s*", launch_device, flags=re.IGNORECASE)
+    return int(match.group(1) or 0) if match else 0
+
+
+def _realtime_postprocess_stream(
+    *,
+    fps: int,
+    launch_config: StudioLaunchConfig,
+    native_resolution: tuple[int, int] | None = None,
+) -> VideoPostprocessStream:
+    """Resolve the explicitly selected realtime output processor."""
+
+    preset = os.getenv("WORLDFOUNDRY_REALTIME_POSTPROCESS_PRESET", "identity").strip()
+    normalized = preset.lower().replace("_", "-")
+    if normalized in {"", "none", "off", "identity"}:
+        return VideoPostprocessStream(
+            chain=VideoPostprocessChain((IdentityVideoPostProcessor(),)),
+            fps=fps,
+            profile_cuda=_env_bool("WORLDFOUNDRY_REALTIME_PROFILE_CUDA_POSTPROCESS", False),
+        )
+
+    from worldfoundry.core.media.processing.rtx import (
+        require_rtx_vfx_runtime,
+        rtx_postprocessor_from_preset,
+    )
+
+    device = _realtime_rtx_device(launch_config.device or "cuda")
+    processor = rtx_postprocessor_from_preset(
+        normalized,
+        scale=_env_optional_float("WORLDFOUNDRY_REALTIME_RTX_SCALE"),
+        output_width=_env_optional_int("WORLDFOUNDRY_REALTIME_RTX_OUTPUT_WIDTH"),
+        output_height=_env_optional_int("WORLDFOUNDRY_REALTIME_RTX_OUTPUT_HEIGHT"),
+        quality=(os.getenv("WORLDFOUNDRY_REALTIME_RTX_QUALITY", "").strip().upper() or None),
+        device=device,
+        non_blocking=_env_bool("WORLDFOUNDRY_REALTIME_RTX_NON_BLOCKING", False),
+        use_current_stream=_env_bool("WORLDFOUNDRY_REALTIME_RTX_USE_CURRENT_STREAM", True),
+    )
+    input_spec = None
+    if native_resolution is not None:
+        input_spec = VideoSpec(
+            height=native_resolution[1],
+            width=native_resolution[0],
+            fps=fps,
+            channels=3,
+            dtype="uint8",
+        )
+    capability = require_rtx_vfx_runtime(
+        device=device,
+        config=processor.config,
+        input_spec=input_spec,
+        run_inference=True,
+    )
+    logger.info(
+        "Enabled realtime RTX postprocess preset=%s quality=%s device=cuda:%d gpu=%s nvidia_vfx=%s",
+        normalized,
+        processor.config.quality,
+        device,
+        capability.gpu_name or "unknown",
+        capability.package_version or "unknown",
+    )
+    return VideoPostprocessStream(
+        chain=VideoPostprocessChain((processor,)),
+        fps=fps,
+        profile_cuda=_env_bool("WORLDFOUNDRY_REALTIME_PROFILE_CUDA_POSTPROCESS", False),
+    )
+
+
+def _frame_queue_policy(*, ordered_required: bool) -> FrameQueuePolicy:
+    """Resolve congestion policy without weakening count-exact sessions."""
+
+    if ordered_required:
+        return FrameQueuePolicy.ORDERED_QUALITY
+    configured = os.getenv(
+        "WORLDFOUNDRY_REALTIME_FRAME_QUEUE_POLICY",
+        FrameQueuePolicy.LATEST_INTERACTIVE.value,
+    )
+    return FrameQueuePolicy.from_value(configured)
 
 
 def _realtime_frame_budget(entry: CatalogEntry, requested: int) -> int:
@@ -441,325 +793,6 @@ def _ice_server_payload() -> list[dict[str, Any]]:
     return result
 
 
-def normalize_control_key(key: str) -> str:
-    normalized = str(key or "").strip().lower()
-    return KEY_ALIASES.get(normalized, normalized)
-
-
-@dataclass(slots=True)
-class RealtimeControlState:
-    """Pressed-key state with last-pressed-wins conflict resolution."""
-
-    pressed: set[str] = field(default_factory=set)
-    _order: dict[str, int] = field(default_factory=dict)
-    _sequence: int = 0
-
-    def apply(self, event: str, key: str) -> bool:
-        normalized = normalize_control_key(key)
-        if normalized not in SUPPORTED_CONTROL_KEYS:
-            return False
-        event = str(event or "").strip().lower()
-        if event == "keydown":
-            self.pressed.add(normalized)
-            self._sequence += 1
-            self._order[normalized] = self._sequence
-            return True
-        if event == "keyup":
-            self.pressed.discard(normalized)
-            self._order.pop(normalized, None)
-            return True
-        return False
-
-    def _latest(self, keys: tuple[str, ...]) -> str | None:
-        active = [key for key in keys if key in self.pressed]
-        return max(active, key=lambda key: self._order.get(key, -1), default=None)
-
-    def effective(self) -> frozenset[str]:
-        return frozenset(
-            key
-            for key in (
-                self._latest(("w", "s")),
-                self._latest(("a", "d")),
-                self._latest(("i", "k")),
-                self._latest(("j", "l")),
-            )
-            if key is not None
-        )
-
-
-ControlSegment = tuple[float, float, frozenset[str]]
-
-
-class RealtimeControlResampler:
-    """Resample timestamped input edges into a model chunk timeline."""
-
-    def __init__(self, *, fps: int, start_time: float = 0.0) -> None:
-        if fps <= 0:
-            raise ValueError("fps must be > 0")
-        self.fps = int(fps)
-        self.dt = 1.0 / float(fps)
-        self.next_chunk_start = float(start_time)
-        self._events: deque[tuple[float, str, str]] = deque()
-        self._state = RealtimeControlState()
-
-    def on_edge(self, *, arrival_time: float, event: str, key: str) -> bool:
-        normalized = normalize_control_key(key)
-        if normalized not in SUPPORTED_CONTROL_KEYS or event not in {"keydown", "keyup"}:
-            return False
-        self._events.append((float(arrival_time), event, normalized))
-        return True
-
-    def sample_chunk(self, num_frames: int, *, wall_time: float) -> list[ControlSegment]:
-        if num_frames < 1:
-            raise ValueError("num_frames must be >= 1")
-        duration = num_frames * self.dt
-        if self.next_chunk_start <= 0.0 or wall_time - self.next_chunk_start > duration:
-            self.next_chunk_start = float(wall_time)
-        start = self.next_chunk_start
-        end = start + duration
-
-        while self._events and self._events[0][0] < start:
-            _, event, key = self._events.popleft()
-            self._state.apply(event, key)
-
-        segments: list[ControlSegment] = []
-        cursor = start
-        effective = self._state.effective()
-        while self._events and self._events[0][0] <= end:
-            event_time, event, key = self._events.popleft()
-            if event_time > cursor:
-                segments.append((cursor, event_time, effective))
-            self._state.apply(event, key)
-            effective = self._state.effective()
-            cursor = max(cursor, event_time)
-        if cursor < end or not segments:
-            segments.append((cursor, end, effective))
-        self.next_chunk_start = end
-        return segments
-
-    def reset(self, *, start_time: float) -> None:
-        self._events.clear()
-        self._state = RealtimeControlState()
-        self.next_chunk_start = float(start_time)
-
-    @property
-    def effective_keys(self) -> frozenset[str]:
-        # Apply edges that have already arrived so key release can stop the
-        # producer immediately after the in-flight chunk finishes.
-        now = time.monotonic()
-        while self._events and self._events[0][0] <= now:
-            _, event, key = self._events.popleft()
-            self._state.apply(event, key)
-        return self._state.effective()
-
-
-def interactions_from_keys(keys: frozenset[str]) -> list[str]:
-    tokens: list[str] = []
-    for key, token in (
-        ("w", "forward"),
-        ("s", "backward"),
-        ("a", "left"),
-        ("d", "right"),
-        ("i", "camera_up"),
-        ("k", "camera_down"),
-        ("j", "camera_l"),
-        ("l", "camera_r"),
-    ):
-        if key in keys:
-            tokens.append(token)
-    return tokens
-
-
-def interactions_from_segments(segments: list[ControlSegment]) -> list[str]:
-    """Return the most recent non-idle control state in a sampled chunk."""
-
-    for _, _, keys in reversed(segments):
-        interactions = interactions_from_keys(keys)
-        if interactions:
-            return interactions
-    return []
-
-
-class LatestFrameBuffer:
-    """Bounded frame queue with short backpressure, then stale-frame eviction."""
-
-    def __init__(self, *, maxsize: int, backpressure_ms: int = 0) -> None:
-        if maxsize < 1:
-            raise ValueError("maxsize must be >= 1")
-        self.maxsize = int(maxsize)
-        self.backpressure_s = max(float(backpressure_ms), 0.0) / 1000.0
-        self._queue: asyncio.Queue[np.ndarray | None] = asyncio.Queue(maxsize=maxsize)
-        self.dropped_frames = 0
-        self.last_enqueue_ms = 0.0
-        self.closed = False
-
-    def qsize(self) -> int:
-        return self._queue.qsize()
-
-    async def put_chunk(self, frames: list[np.ndarray]) -> int:
-        if self.closed:
-            return 0
-        loop = asyncio.get_running_loop()
-        started = loop.time()
-        deadline = started + self.backpressure_s
-        accepted = 0
-        for frame in frames:
-            # Result normalization already moved tensors to CPU and converted
-            # them to RGB uint8 on the runtime worker. Keep the event loop's
-            # media handoff to a cheap contiguous-array check.
-            rgb = np.ascontiguousarray(frame)
-            if self._queue.full() and self.backpressure_s > 0:
-                remaining = deadline - loop.time()
-                if remaining > 0:
-                    try:
-                        await asyncio.wait_for(self._queue.put(rgb), timeout=remaining)
-                        accepted += 1
-                        continue
-                    except TimeoutError:
-                        pass
-            while self._queue.full():
-                try:
-                    self._queue.get_nowait()
-                    self.dropped_frames += 1
-                except asyncio.QueueEmpty:
-                    break
-            self._queue.put_nowait(rgb)
-            accepted += 1
-        self.last_enqueue_ms = (loop.time() - started) * 1000.0
-        return accepted
-
-    async def get(self) -> np.ndarray:
-        frame = await self._queue.get()
-        if frame is None:
-            raise EOFError("frame buffer closed")
-        return frame
-
-    def get_nowait(self) -> np.ndarray:
-        frame = self._queue.get_nowait()
-        if frame is None:
-            raise EOFError("frame buffer closed")
-        return frame
-
-    def close(self) -> None:
-        if self.closed:
-            return
-        self.closed = True
-        while True:
-            try:
-                self._queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-        self._queue.put_nowait(None)
-
-
-def realtime_frames_from_result(result: Any) -> list[np.ndarray]:
-    """Extract in-memory RGB frames without invoking artifact exporters."""
-
-    if isinstance(result, Iterator):
-        close = getattr(result, "close", None)
-        try:
-            # Materialize at the actual frame consumer so the runtime can keep
-            # generator-based integrations lazy and pinned up to this boundary.
-            result = list(result)
-        finally:
-            if callable(close):
-                close()
-
-    candidates: list[Any] = []
-    if isinstance(result, Mapping):
-        for key in ("sr_videos", "videos", "frames", "video", "output", "images"):
-            if key in result:
-                candidates.append(result[key])
-    else:
-        candidates.append(result)
-
-    for candidate in candidates:
-        if isinstance(candidate, Image.Image):
-            return [_to_uint8_rgb(candidate)]
-        frames = _normalize_frame_list(candidate)
-        if frames:
-            return [np.ascontiguousarray(frame) for frame in frames]
-    raise RuntimeError(
-        "Realtime stream returned no in-memory RGB frames. The model integration "
-        "must return a tensor/array/image chunk instead of only an artifact path."
-    )
-
-
-def _resize_rgb_frame(
-    frame: np.ndarray,
-    output_resolution: tuple[int, int] | None,
-) -> np.ndarray:
-    """Prepare one transport frame without ever enlarging model output."""
-
-    rgb = np.ascontiguousarray(frame)
-    if output_resolution is None or (rgb.shape[1], rgb.shape[0]) == output_resolution:
-        return rgb
-    width, height = output_resolution
-    source_height, source_width = rgb.shape[:2]
-    if (
-        width > _MAX_OUTPUT_WIDTH
-        or height > _MAX_OUTPUT_HEIGHT
-        or width * height > _MAX_OUTPUT_PIXELS
-    ):
-        raise ValueError(
-            f"realtime transport resolution {width}x{height} exceeds its safe output budget."
-        )
-    if width > source_width or height > source_height:
-        raise ValueError(
-            f"realtime transport cannot upscale {source_width}x{source_height} "
-            f"model output to {width}x{height}."
-        )
-    scale = min(width / source_width, height / source_height)
-    fitted = (
-        max(min(int(round(source_width * scale)), width), 1),
-        max(min(int(round(source_height * scale)), height), 1),
-    )
-    resized = Image.fromarray(rgb, mode="RGB").resize(
-        fitted,
-        resample=Image.Resampling.BILINEAR,
-    )
-    if fitted == output_resolution:
-        return np.ascontiguousarray(np.asarray(resized, dtype=np.uint8))
-    canvas = Image.new("RGB", output_resolution, "black")
-    canvas.paste(resized, ((width - fitted[0]) // 2, (height - fitted[1]) // 2))
-    return np.ascontiguousarray(np.asarray(canvas, dtype=np.uint8))
-
-
-def _resize_rgb_frames(
-    frames: list[np.ndarray],
-    *,
-    output_resolution: tuple[int, int] | None,
-) -> list[np.ndarray]:
-    return [_resize_rgb_frame(frame, output_resolution) for frame in frames]
-
-
-def _encode_jpeg_frames(
-    frames: list[np.ndarray],
-    *,
-    quality: int,
-    subsampling: int = 1,
-    output_resolution: tuple[int, int] | None = None,
-) -> list[bytes]:
-    """Encode a generated chunk for the same-port WebSocket fallback."""
-
-    packets: list[bytes] = []
-    for frame in frames:
-        output = io.BytesIO()
-        image = Image.fromarray(
-            _resize_rgb_frame(frame, output_resolution),
-            mode="RGB",
-        )
-        image.save(
-            output,
-            format="JPEG",
-            quality=quality,
-            optimize=False,
-            subsampling=subsampling,
-        )
-        packets.append(output.getvalue())
-    return packets
-
-
 def _validate_control_video_frames(path: str, *, expected_frames: int) -> int:
     """Decode enough control frames to reject a bad EXTEND transaction early."""
 
@@ -782,8 +815,7 @@ def _validate_control_video_frames(path: str, *, expected_frames: int) -> int:
     except Exception as exc:
         raise ValueError(f"Cannot decode control video {source.name}: {exc}") from exc
     raise ValueError(
-        f"Control video {source.name} has {count} decoded frame(s); "
-        f"this segment needs at least {expected_frames}."
+        f"Control video {source.name} has {count} decoded frame(s); this segment needs at least {expected_frames}."
     )
 
 
@@ -875,6 +907,7 @@ class ResidentWorldRuntime:
         fps: int,
         warmup_image_path: str = "",
         warmup_chunks: int = 0,
+        postprocess: VideoPostprocessStream | None = None,
     ) -> None:
         self.manager = manager
         self.entry = entry
@@ -883,14 +916,28 @@ class ResidentWorldRuntime:
         self.warmup_image_path = warmup_image_path
         self.warmup_chunks = max(int(warmup_chunks), 0)
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="world-realtime-runtime")
+        self._session_lock = asyncio.Lock()
+        self._reset_task: asyncio.Task[Any] | None = None
         self._base_request: PreparedInputs | None = None
+        self._reset_request: PreparedInputs | None = None
+        self._generation_inflight = False
         self._preload_future: asyncio.Future[Any] | None = None
+        self._preload_task: asyncio.Task[Any] | None = None
         self._preload_error: str | None = None
+        self._shutdown_tasks: set[asyncio.Task[Any]] = set()
+        self._closed = False
         self.warmup_ms = 0.0
+        self.preload_ms = 0.0
+        self.warmup_metrics: dict[str, Any] = {}
         self._configured = False
         self._first_stream_step = True
         self._seed_image: Image.Image | None = None
         self.last_generation_metrics: dict[str, Any] = {}
+        self.preserve_cuda_frames = False
+        self._postprocess = postprocess or VideoPostprocessStream(
+            chain=VideoPostprocessChain((IdentityVideoPostProcessor(),)),
+            fps=self.fps,
+        )
         self.queued_segment_generation = "queued-segment-generation" in entry.tags
         bootstrap_frames = _realtime_frame_budget(
             entry,
@@ -924,6 +971,30 @@ class ResidentWorldRuntime:
         # cadence advertised by the resident adapter. Keeping the bootstrap
         # frontend FPS here made 12/17/24-FPS models play at a hard-coded 16.
         self.fps = self.realtime_spec.fps
+        self._postprocess.fps = self.fps
+
+    def _postprocess_frames(
+        self,
+        frames: list[np.ndarray],
+        *,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[np.ndarray]:
+        chunks = self._postprocess.process(
+            frames,
+            layout="frame-list",
+            metadata=metadata,
+        )
+        return frame_list_from_chunks(chunks)
+
+    @property
+    def _cuda_transport_enabled(self) -> bool:
+        # Custom processors keep their existing CPU input contract. The exact
+        # identity chain preserves lazy frame objects and validates geometry.
+        return (
+            self.preserve_cuda_frames
+            and type(self._postprocess) is VideoPostprocessStream
+            and all(type(processor) is IdentityVideoPostProcessor for processor in self._postprocess.chain.processors)
+        )
 
     async def _run(
         self,
@@ -931,6 +1002,20 @@ class ResidentWorldRuntime:
         *args: Any,
         **kwargs: Any,
     ) -> Any:
+        if self._closed:
+            raise RuntimeError("cannot schedule new futures after shutdown")
+        loop = asyncio.get_running_loop()
+        call = functools.partial(func, *args, **kwargs)
+        return await loop.run_in_executor(self._executor, call)
+
+    async def _run_cleanup(
+        self,
+        func: Callable[..., Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """Submit owned reset work after normal admission has closed."""
+
         loop = asyncio.get_running_loop()
         call = functools.partial(func, *args, **kwargs)
         return await loop.run_in_executor(self._executor, call)
@@ -1005,37 +1090,93 @@ class ResidentWorldRuntime:
         )
 
     async def preload(self) -> None:
-        if self._preload_future is not None:
-            await asyncio.shield(self._preload_future)
+        self._ensure_open()
+        if self.ready:
             return
-        loop = asyncio.get_running_loop()
-        self._preload_future = loop.create_future()
-        try:
-            request = await self._run(
-                self._build_request,
-                prompt=self.entry.default_prompt or "",
-                image=None,
-                input_path="",
-                video_path="",
+        task = self._preload_task
+        if task is None or task.done():
+            self._preload_error = None
+            task = asyncio.create_task(
+                self._preload_session(), name="world-realtime-resident-preload",
             )
-            result = await self._run(
-                self.manager.run_realtime,
-                entry=self.entry,
-                request=request,
-                action="configure",
-            )
-            self._accept_realtime_spec(result)
-            if self.warmup_chunks and self.warmup_image_path and self.entry.supports_stream:
-                await self._warmup()
-            self._preload_future.set_result(None)
-        except Exception as exc:
-            self._preload_error = str(exc)
-            self._preload_future.set_exception(exc)
-            traceback.print_exc()
-            raise
+            self._preload_task = task
+            self._preload_future = task
+
+            def consume(completed: asyncio.Task[Any]) -> None:
+                if not completed.cancelled():
+                    completed.exception()
+
+            task.add_done_callback(consume)
+        await asyncio.shield(task)
+        self._ensure_open()
+
+    async def _preload_session(self) -> None:
+        """Own loading and cleanup independently of any individual waiter."""
+
+        async with self._session_lock:
+            started = time.perf_counter()
+            dispatched = False
+            try:
+                self._ensure_open()
+                if self._configured or self._reset_request is not None:
+                    await self._reset_session()
+                request = await self._run(
+                    self._build_request,
+                    prompt=self.entry.default_prompt or "",
+                    image=None,
+                    input_path="",
+                    video_path="",
+                )
+                self._ensure_open()
+                self._reset_request = request
+                dispatched = True
+                result = await self._run(
+                    self.manager.run_realtime,
+                    entry=self.entry,
+                    request=request,
+                    action="configure",
+                )
+                self._ensure_open()
+                self._accept_realtime_spec(result)
+                self.preload_ms = (time.perf_counter() - started) * 1000.0
+                if self.warmup_chunks and self.warmup_image_path and self.entry.supports_stream:
+                    await self._warmup_session()
+                self._ensure_open()
+            except BaseException as error:
+                self._preload_error = str(error) or type(error).__name__
+                if dispatched:
+                    cleanup = asyncio.create_task(
+                        self._reset_session(), name="world-realtime-preload-reset",
+                    )
+                    try:
+                        # CUDA work already running on the worker must finish
+                        # before cleanup and a subsequent attempt can reuse it.
+                        while not cleanup.done():
+                            try:
+                                await asyncio.shield(cleanup)
+                            except asyncio.CancelledError:
+                                if cleanup.cancelled():
+                                    raise
+                        cleanup.result()
+                    except BaseException as reset_error:
+                        self._reset_request = self._reset_request or request
+                        add_note = getattr(error, "add_note", None)
+                        if callable(add_note):
+                            add_note(f"Preload reset also failed: {reset_error!r}")
+                if not isinstance(error, asyncio.CancelledError):
+                    traceback.print_exc()
+                raise
 
     async def _warmup(self) -> None:
         """Compile and stabilize the actual resident stream before user input."""
+
+        self._ensure_open()
+        async with self._session_lock:
+            self._ensure_open()
+            await self._warmup_session()
+
+    async def _warmup_session(self) -> None:
+        """Exercise cold, steady, and buffered tail paths before clearing state."""
 
         def open_seed() -> Image.Image:
             with Image.open(self.warmup_image_path) as source:
@@ -1050,41 +1191,87 @@ class ResidentWorldRuntime:
             input_path=self.warmup_image_path,
             video_path="",
         )
-        configured = await self._run(
-            self.manager.run_realtime,
-            entry=self.entry,
-            request=request,
-            action="configure",
-        )
-        self._accept_realtime_spec(configured)
         interactions = ["forward"]
-        try:
-            for index in range(self.warmup_chunks):
-                stream_request = replace(
-                    request,
-                    image=request.image if index == 0 else None,
-                    image_path=request.image_path if index == 0 else None,
-                    interactions=interactions,
-                    call_kwargs=_interactive_call_kwargs(
-                        request.call_kwargs,
-                        interactions,
-                        seed=41_000 + index,
-                    ),
-                )
-                result = await self._run(
-                    self.manager.run_realtime,
-                    entry=self.entry,
-                    request=stream_request,
-                    action="stream",
-                )
-                await self._run(realtime_frames_from_result, result)
-        finally:
-            await self._run(
+        configured = False
+        timings: list[dict[str, float]] = []
+        self.warmup_metrics = {}
+
+        async def configure_warmup() -> None:
+            nonlocal configured
+            configured = True
+            result = await self._run(
                 self.manager.run_realtime,
                 entry=self.entry,
                 request=request,
-                action="reset",
+                action="configure",
             )
+            self._accept_realtime_spec(result)
+
+        async def warmup_step(index: int) -> None:
+            step_started = time.perf_counter()
+            stream_request = replace(
+                request,
+                image=request.image if index == 0 else None,
+                image_path=request.image_path if index == 0 else None,
+                interactions=interactions,
+                call_kwargs=_interactive_call_kwargs(
+                    request.call_kwargs,
+                    interactions,
+                    seed=41_000 + index,
+                ),
+            )
+            result = await self._run(
+                self.manager.run_realtime,
+                entry=self.entry,
+                request=stream_request,
+                action="stream",
+            )
+            model_finished = time.perf_counter()
+            frames = await self._run(realtime_frames_from_result, result)
+            copy_finished = time.perf_counter()
+            await self._run(
+                self._postprocess_frames,
+                frames,
+                metadata={"warmup": True, "warmup_index": index},
+            )
+            timings.append({
+                "runtime_ms": (model_finished - step_started) * 1000.0,
+                "copy_ms": (copy_finished - model_finished) * 1000.0,
+                "postprocess_ms": (time.perf_counter() - copy_finished) * 1000.0,
+            })
+
+        primary_error = None
+        try:
+            sequence = await run_async_prewarm_sequence(
+                cold_start=configure_warmup,
+                steady_state=warmup_step,
+                steady_steps=self.warmup_chunks,
+                label=f"studio.{self.entry.model_id}",
+                timeout_s=_env_optional_timeout_s("WORLDFOUNDRY_REALTIME_PREWARM_TIMEOUT_SECONDS"),
+            )
+            flush_started = time.perf_counter()
+            await self._run(self._postprocess.finish)
+            self.warmup_metrics = {
+                "configure_ms": sequence.cold_start.elapsed_ms if sequence.cold_start is not None else 0.0,
+                "steps": timings,
+                "flush_ms": (time.perf_counter() - flush_started) * 1000.0,
+            }
+        except BaseException as error:
+            primary_error = error
+            raise
+        finally:
+            reset_started = time.perf_counter()
+            if configured:
+                self._reset_request = request
+            try:
+                await self._reset_session()
+            except BaseException as error:
+                if primary_error is None:
+                    raise
+                add_note = getattr(primary_error, "add_note", None)
+                if callable(add_note):
+                    add_note(f"Warmup reset also failed: {error!r}")
+            self.warmup_metrics["reset_ms"] = (time.perf_counter() - reset_started) * 1000.0
         self.warmup_ms = (time.perf_counter() - started) * 1000.0
 
     async def configure(
@@ -1096,7 +1283,26 @@ class ResidentWorldRuntime:
         dense_video_path: str = "",
         sparse_video_path: str = "",
     ) -> Image.Image:
+        self._ensure_open()
+        async with self._session_lock:
+            self._ensure_open()
+            if self._configured or self._reset_request is not None:
+                await self._reset_session()
         await self.preload()
+        async with self._session_lock:
+            self._ensure_open()
+            return await self._configure_session(
+                prompt=prompt, image_path=image_path, video_path=video_path,
+                dense_video_path=dense_video_path, sparse_video_path=sparse_video_path,
+            )
+
+    async def _configure_session(
+        self, *, prompt: str, image_path: str, video_path: str,
+        dense_video_path: str, sparse_video_path: str,
+    ) -> Image.Image:
+        if self._configured or self._reset_request is not None:
+            await self._reset_session()
+        await self._run(self._postprocess.reset)
         if self.queued_segment_generation:
             missing = [
                 label
@@ -1109,9 +1315,7 @@ class ResidentWorldRuntime:
                 if not value
             ]
             if missing:
-                raise ValueError(
-                    "Queued segment setup is missing: " + ", ".join(missing) + "."
-                )
+                raise ValueError("Queued segment setup is missing: " + ", ".join(missing) + ".")
         image: Image.Image | None = None
         if image_path:
             with Image.open(image_path) as source:
@@ -1126,6 +1330,7 @@ class ResidentWorldRuntime:
             dense_video_path=dense_video_path,
             sparse_video_path=sparse_video_path,
         )
+        self._reset_request = request
         configured = await self._run(
             self.manager.run_realtime,
             entry=self.entry,
@@ -1134,6 +1339,7 @@ class ResidentWorldRuntime:
         )
         self._accept_realtime_spec(configured)
         self._base_request = request
+        self._reset_request = None
         self._configured = True
         self._first_stream_step = True
         self._seed_image = image or Image.new("RGB", (1280, 720), "black")
@@ -1146,6 +1352,14 @@ class ResidentWorldRuntime:
         if self._first_stream_step:
             return self.realtime_spec.first_chunk_frames
         return self.realtime_spec.steady_chunk_frames
+
+    def next_input_frames(self, default: int) -> int:
+        """Return the model-owned control/input sampling chunk size."""
+
+        del default
+        if self._first_stream_step:
+            return self.realtime_spec.resolved_first_input_frames
+        return self.realtime_spec.resolved_steady_input_frames
 
     def steady_chunk_frames(self, default: int) -> int:
         del default
@@ -1161,6 +1375,28 @@ class ResidentWorldRuntime:
             or self.entry.model_id in _PROMPT_BOUNDARY_MODEL_IDS
         )
 
+    @property
+    def postprocess_names(self) -> tuple[str, ...]:
+        return self._postprocess.processor_names
+
+    @property
+    def transport_native_resolution(self) -> tuple[int, int] | None:
+        """Expected postprocessed native size advertised to transport controls."""
+
+        native = _entry_output_resolution(self.entry)
+        if native is None:
+            return None
+        output = self._postprocess.chain.output_spec(
+            VideoSpec(
+                height=native[1],
+                width=native[0],
+                fps=self.fps,
+                channels=3,
+                dtype="uint8",
+            )
+        )
+        return output.width, output.height
+
     async def generate(
         self,
         interactions: list[str],
@@ -1171,15 +1407,35 @@ class ResidentWorldRuntime:
         dense_video_path: str | None = None,
         sparse_video_path: str | None = None,
     ) -> tuple[list[np.ndarray], float]:
+        self._ensure_open()
+        async with self._session_lock:
+            self._ensure_open()
+            try:
+                return await self._generate_session(
+                    interactions, seed=seed, control_segments=control_segments, prompt=prompt,
+                    dense_video_path=dense_video_path, sparse_video_path=sparse_video_path,
+                )
+            except BaseException:
+                if self._generation_inflight:
+                    self._reset_request = self._base_request
+                    self._clear_session()
+                raise
+            finally:
+                self._generation_inflight = False
+
+    async def _generate_session(
+        self, interactions: list[str], *, seed: int,
+        control_segments: list[ControlSegment] | None, prompt: str | None,
+        dense_video_path: str | None, sparse_video_path: str | None,
+    ) -> tuple[list[np.ndarray], float]:
         if not self._configured or self._base_request is None:
             raise RuntimeError("Realtime runtime is not configured.")
         if self.queued_segment_generation:
-            call_kwargs = dict(self._base_request.call_kwargs)
+            call_kwargs = {**self._base_request.call_kwargs, "seed": int(seed)}
             if not self._first_stream_step:
                 if not dense_video_path or not sparse_video_path:
                     raise ValueError(
-                        "Every EXTEND request needs a new dense depth video and sparse "
-                        "pointmap/track video."
+                        "Every EXTEND request needs a new dense depth video and sparse pointmap/track video."
                     )
                 call_kwargs["dense_video"] = dense_video_path
                 call_kwargs["sparse_video"] = sparse_video_path
@@ -1217,47 +1473,160 @@ class ResidentWorldRuntime:
                 request = replace(request, image=None, image_path=None)
             action = "stream"
         started = time.perf_counter()
+        self._generation_inflight = True
         result = await self._run(
             self.manager.run_realtime,
             entry=self.entry,
             request=request,
             action=action,
         )
+        runtime_finished = time.perf_counter()
         self._accept_realtime_spec(result)
         self._first_stream_step = False
         self._base_request = request
-        self.last_generation_metrics = (
-            dict(result.get("realtime_metrics") or {})
-            if isinstance(result, Mapping)
-            else {}
+        self.last_generation_metrics = dict(result.get("realtime_metrics") or {}) if isinstance(result, Mapping) else {}
+        copy_started = time.perf_counter()
+        frames = await self._run(
+            realtime_frames_from_result, result, preserve_cuda=self._cuda_transport_enabled,
         )
-        frames = await self._run(realtime_frames_from_result, result)
+        copy_ms = (time.perf_counter() - copy_started) * 1000.0
+        postprocess_started = time.perf_counter()
+        frames = await self._run(
+            self._postprocess_frames,
+            frames,
+            metadata={
+                "model_id": self.entry.model_id,
+                "seed": int(seed),
+            },
+        )
+        postprocess_ms = (time.perf_counter() - postprocess_started) * 1000.0
+        self.last_generation_metrics.setdefault(
+            "runtime_ms",
+            (runtime_finished - started) * 1000.0,
+        )
+        self.last_generation_metrics.setdefault("copy_ms", copy_ms)
+        self.last_generation_metrics["postprocess_ms"] = postprocess_ms
         generation_ms = (time.perf_counter() - started) * 1000.0
         return frames, generation_ms
 
     async def reset(self) -> None:
-        if self._base_request is not None:
-            try:
-                await self._run(
-                    self.manager.run_realtime,
-                    entry=self.entry,
-                    request=self._base_request,
-                    action="reset",
-                )
-            except Exception:
-                pass
+        if self._reset_task is None or self._reset_task.done():
+            self._reset_task = asyncio.create_task(
+                self._reset_locked(), name="world-realtime-session-reset",
+            )
+        task = self._reset_task
+        try:
+            done, _ = await asyncio.wait({task}, timeout=_realtime_shutdown_timeout_s())
+        except BaseException:
+            _retain_shutdown_task(task, self._shutdown_tasks)
+            raise
+        if task in done:
+            task.result()
+        else:
+            # Keep the session lock until the worker has actually cleaned up.
+            _retain_shutdown_task(task, self._shutdown_tasks)
+            logger.warning(
+                "Realtime postprocess reset did not finish within the shutdown budget; "
+                "session reuse will wait for cleanup."
+            )
+
+    async def _reset_locked(self) -> None:
+        async with self._session_lock:
+            await self._reset_session()
+
+    def _clear_session(self) -> None:
         self._configured = False
         self._base_request = None
         self._seed_image = None
         self._first_stream_step = True
+        self.last_generation_metrics = {}
+        self.preserve_cuda_frames = False
 
-    async def close(self) -> None:
-        await self.reset()
-        self._executor.shutdown(wait=False, cancel_futures=True)
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("Realtime runtime is closed.")
+
+    async def _reset_session(self) -> None:
+        request = self._base_request or self._reset_request
+        self._reset_request = request
+        self._clear_session()
+        error = None
+        try:
+            await self._run_cleanup(self._postprocess.reset)
+        except BaseException as caught:
+            error = caught
+        if request is not None:
+            try:
+                await self._run_cleanup(
+                    self.manager.run_realtime,
+                    entry=self.entry,
+                    request=request,
+                    action="reset",
+                )
+            except BaseException as caught:
+                if error is None:
+                    error = caught
+                else:
+                    add_note = getattr(error, "add_note", None)
+                    if callable(add_note):
+                        add_note(f"Model reset also failed: {caught!r}")
+            else:
+                self._reset_request = None
+        if error is not None:
+            raise error
+
+    async def close(self, *, deadline: float | None = None) -> None:
+        if self._closed:
+            return
+        deadline = _shutdown_deadline(deadline)
+        self._closed = True
+        try:
+            await _finish_tasks_by_deadline(
+                (self._preload_task,),
+                deadline=deadline,
+                retained=self._shutdown_tasks,
+                label="runtime preload",
+                cancel_now=True,
+            )
+            await _run_by_shutdown_deadline(
+                self.reset(),
+                deadline=deadline,
+                retained=self._shutdown_tasks,
+                label="runtime reset",
+            )
+        finally:
+            # Running Python/CUDA callables cannot be killed safely. Do not
+            # join them here; reject queued work and let running work finish
+            # cooperatively after the async shutdown handler returns.
+            pending = tuple(
+                task for task in (self._preload_task, self._reset_task)
+                if task is not None and not task.done()
+            )
+            if pending:
+                shutdown = asyncio.create_task(
+                    self._shutdown_executor_after(pending), name="world-realtime-worker-shutdown",
+                )
+                _retain_shutdown_task(shutdown, self._shutdown_tasks)
+            else:
+                self._executor.shutdown(wait=False, cancel_futures=True)
+
+    async def _shutdown_executor_after(self, tasks: tuple[asyncio.Task[Any], ...]) -> None:
+        """Keep the worker available for cleanup that outlives close's budget."""
+
+        try:
+            await asyncio.wait(tasks)
+        finally:
+            self._executor.shutdown(wait=False, cancel_futures=True)
 
     @property
     def ready(self) -> bool:
-        return bool(self._preload_future and self._preload_future.done() and not self._preload_future.cancelled() and self._preload_future.exception() is None)
+        return bool(
+            not self._closed
+            and self._preload_future
+            and self._preload_future.done()
+            and not self._preload_future.cancelled()
+            and self._preload_future.exception() is None
+        )
 
     @property
     def preload_error(self) -> str | None:
@@ -1268,11 +1637,15 @@ class ResidentWorldRuntime:
 class _ActivePeer:
     peer: Any
     channel: Any | None
-    frames: LatestFrameBuffer
+    frames: LatestFrameBuffer | ChunkPresentationBuffer
     resampler: RealtimeControlResampler
+    presentation_mode: RealtimePresentationMode = RealtimePresentationMode.HOLD_LAST
+    video_track: Any | None = None
     generation_task: asyncio.Task[Any] | None = None
     liveness_task: asyncio.Task[Any] | None = None
     input_task: asyncio.Task[Any] | None = None
+    setup_task: asyncio.Task[Any] | None = None
+    close_task: asyncio.Task[Any] | None = None
     input_messages: asyncio.Queue[Any] = field(default_factory=asyncio.Queue)
     closed: bool = False
     first_action: asyncio.Event = field(default_factory=asyncio.Event)
@@ -1291,6 +1664,12 @@ class _ActivePeer:
     active_event_id: str | None = None
     text_events_supported: bool = True
     output_resolution: OutputResolutionState = field(default_factory=OutputResolutionState)
+    session_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    perf_window: RealtimeTimingWindow = field(default_factory=RealtimeTimingWindow)
+
+    def __post_init__(self) -> None:
+        if self.prompt_scheduled:
+            self.frames.policy = FrameQueuePolicy.ORDERED_QUALITY
 
 
 @dataclass(slots=True)
@@ -1298,11 +1677,13 @@ class _ActiveSocket:
     socket: Any
     resampler: RealtimeControlResampler
     frame_packets: asyncio.Queue[bytes]
+    pacing_mode: WebSocketPacingMode = WebSocketPacingMode.LEGACY_DUAL
     send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     generation_task: asyncio.Task[Any] | None = None
     sender_task: asyncio.Task[Any] | None = None
     liveness_task: asyncio.Task[Any] | None = None
     closed: bool = False
+    disconnect_requested: bool = False
     first_action: asyncio.Event = field(default_factory=asyncio.Event)
     action_arrivals: deque[float] = field(default_factory=deque)
     chunk_index: int = 0
@@ -1320,9 +1701,16 @@ class _ActiveSocket:
     active_event_id: str | None = None
     text_events_supported: bool = True
     output_resolution: OutputResolutionState = field(default_factory=OutputResolutionState)
+    frame_queue_policy: FrameQueuePolicy = FrameQueuePolicy.LATEST_INTERACTIVE
     queued_segments: bool = False
     pending_segment: dict[str, str] | None = None
     segment_inflight: bool = False
+    session_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    perf_window: RealtimeTimingWindow = field(default_factory=RealtimeTimingWindow)
+
+    def __post_init__(self) -> None:
+        if self.prompt_scheduled or self.queued_segments:
+            self.frame_queue_policy = FrameQueuePolicy.ORDERED_QUALITY
 
 
 class RealtimePeerManager:
@@ -1333,17 +1721,243 @@ class RealtimePeerManager:
         fps: int,
         chunk_frames: int,
         ice_servers: list[dict[str, Any]] | None = None,
+        presentation_mode: RealtimePresentationMode | str | None = None,
+        socket_pacing_mode: WebSocketPacingMode | str | None = None,
     ) -> None:
         self.runtime = runtime
         self.fps = fps
         self.chunk_frames = chunk_frames
         self.ice_servers = list(ice_servers or [])
+        configured_presentation_mode = (
+            presentation_mode
+            if presentation_mode is not None
+            else os.environ.get(
+                "WORLDFOUNDRY_REALTIME_PRESENTATION_MODE",
+                RealtimePresentationMode.HOLD_LAST.value,
+            )
+        )
+        self.presentation_mode = RealtimePresentationMode.from_value(configured_presentation_mode)
+        configured_socket_pacing_mode = (
+            socket_pacing_mode
+            if socket_pacing_mode is not None
+            else os.environ.get(
+                "WORLDFOUNDRY_REALTIME_SOCKET_PACING_MODE",
+                WebSocketPacingMode.LEGACY_DUAL.value,
+            )
+        )
+        self.socket_pacing_mode = WebSocketPacingMode.from_value(configured_socket_pacing_mode)
         self._active: _ActivePeer | None = None
         self._active_socket: _ActiveSocket | None = None
         self._lock = asyncio.Lock()
         self._draining = False
         self._drain_done = asyncio.Event()
         self._drain_done.set()
+        self._shutdown_tasks: set[asyncio.Task[Any]] = set()
+        self._deferred_close_task: asyncio.Task[Any] | None = None
+        self._perf_log_interval_chunks = _env_int(
+            "WORLDFOUNDRY_REALTIME_PERF_LOG_INTERVAL_CHUNKS",
+            5,
+            minimum=0,
+        )
+        self._perf_warmup_chunks = _env_int(
+            "WORLDFOUNDRY_REALTIME_PERF_WARMUP_CHUNKS",
+            0,
+            minimum=0,
+        )
+        self._perf_jsonl_path = os.environ.get("WORLDFOUNDRY_REALTIME_PERF_JSONL", "").strip() or None
+
+    @staticmethod
+    def _positive_int_runtime_value(value: Any, *, label: str) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{label} must be an integer.") from exc
+        if parsed <= 0:
+            raise ValueError(f"{label} must be > 0.")
+        return parsed
+
+    @staticmethod
+    def _positive_float_runtime_value(value: Any, *, label: str) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{label} must be numeric.") from exc
+        if parsed <= 0.0:
+            raise ValueError(f"{label} must be > 0.")
+        return parsed
+
+    def _runtime_input_fps(self) -> float:
+        spec = getattr(self.runtime, "realtime_spec", None)
+        value = getattr(spec, "resolved_input_fps", self.fps)
+        return self._positive_float_runtime_value(
+            value,
+            label="realtime input_fps",
+        )
+
+    def _runtime_next_input_frames(self) -> int:
+        method = getattr(self.runtime, "next_input_frames", None)
+        if callable(method):
+            return self._positive_int_runtime_value(
+                method(self.chunk_frames),
+                label="next_input_frames",
+            )
+        return self._positive_int_runtime_value(
+            self.runtime.next_chunk_frames(self.chunk_frames),
+            label="next_chunk_frames",
+        )
+
+    def _record_perf(
+        self,
+        active: _ActivePeer | _ActiveSocket,
+        *,
+        transport: str,
+        generation_started: float,
+        now: float,
+        output_frames: int,
+        generation_ms: float,
+        pixel_post_ms: float,
+        enqueue_ms: float,
+        queue_depth: int,
+        dropped_frames: int,
+        control_latency_ms: float | None,
+    ) -> None:
+        window = active.perf_window
+        metrics = getattr(self.runtime, "last_generation_metrics", {}) or {}
+        presentation_mode = getattr(active, "presentation_mode", None)
+        socket_pacing_mode = getattr(active, "pacing_mode", None)
+        stage_ms = {
+            "generation_ms": generation_ms,
+            "pixel_post_ms": pixel_post_ms,
+            "enqueue_ms": enqueue_ms,
+            "server_chunk_ms": max((now - generation_started) * 1000.0, 0.0),
+        }
+        if control_latency_ms is not None:
+            stage_ms["control_latency_ms"] = control_latency_ms
+        gauges: dict[str, float] = {}
+        for name in _CHUNK_METRIC_NAMES:
+            if name not in metrics:
+                continue
+            try:
+                value = float(metrics[name])
+            except (TypeError, ValueError):
+                continue
+            if name.endswith("_ms"):
+                stage_ms[name] = value
+            else:
+                gauges[name] = value
+        timing = RealtimeChunkTiming(
+            session_id=active.session_id,
+            chunk_index=active.chunk_index,
+            transport=transport,
+            started_at_s=generation_started,
+            completed_at_s=now,
+            output_frames=output_frames,
+            queue_depth=queue_depth,
+            dropped_frames=dropped_frames,
+            warmup=active.chunk_index <= self._perf_warmup_chunks,
+            stage_ms=stage_ms,
+            gauges=gauges,
+        )
+        window.record(timing)
+        model_id = getattr(getattr(self.runtime, "entry", None), "model_id", None)
+        if self._perf_jsonl_path is not None:
+            try:
+                write_jsonl_event(
+                    self._perf_jsonl_path,
+                    level="INFO",
+                    event="realtime.chunk_timing",
+                    message="Realtime chunk timing",
+                    logger_name=__name__,
+                    model_id=model_id,
+                    postprocess=list(getattr(self.runtime, "postprocess_names", ())),
+                    presentation_mode=(
+                        presentation_mode.value if isinstance(presentation_mode, RealtimePresentationMode) else None
+                    ),
+                    socket_pacing_mode=(
+                        socket_pacing_mode.value if isinstance(socket_pacing_mode, WebSocketPacingMode) else None
+                    ),
+                    **timing.to_payload(),
+                )
+            except (OSError, TypeError, ValueError):
+                logger.warning(
+                    "Disabling realtime timing JSONL after a write failure: %s",
+                    self._perf_jsonl_path,
+                    exc_info=True,
+                )
+                self._perf_jsonl_path = None
+        interval = self._perf_log_interval_chunks
+        if active.chunk_index != 1 and (interval <= 0 or (active.chunk_index - 1) % interval != 0):
+            if interval <= 0:
+                window.reset_interval()
+            return
+
+        summary = window.summary()
+        generation_fps = output_frames / max(generation_ms / 1000.0, 1.0e-6)
+        interval_fps = 0.0 if summary is None else summary.throughput_fps
+        dropped_delta = 0 if summary is None else summary.dropped_frames
+        measured_chunks = 0 if summary is None else summary.chunk_count
+        measured_frames = 0 if summary is None else summary.frame_count
+
+        def stat_text(stage_name: str, field_name: str) -> str:
+            if summary is None:
+                return "-"
+            distribution = summary.stages.get(stage_name)
+            if distribution is None:
+                return "-"
+            return f"{getattr(distribution, field_name):.1f}"
+
+        latency_text = "-" if control_latency_ms is None else f"{control_latency_ms:.1f}"
+        message = (
+            "Realtime perf transport=%s chunk=%d interval_chunks=%d measured_chunks=%d frames=%d "
+            "gen_fps=%.1f interval_fps=%.1f playback_fps=%s generation_ms=%.1f "
+            "generation_p50_ms=%s generation_p90_ms=%s model_p50_ms=%s model_p90_ms=%s "
+            "pixel_post_ms=%.1f enqueue_ms=%.1f runtime_ms=%.1f condition_ms=%.1f "
+            "model_ms=%.1f decode_ms=%.1f postprocess_ms=%.1f copy_ms=%.1f cache_ms=%.1f queue_depth=%d "
+            "dropped_delta=%d control_latency_ms=%s cache_frames=%d cache_tokens=%d "
+            "compile_active=%d cuda_graph=%d"
+        ) % (
+            transport,
+            active.chunk_index,
+            window.observed_chunks,
+            measured_chunks,
+            measured_frames,
+            generation_fps,
+            interval_fps,
+            self.fps,
+            generation_ms,
+            stat_text("generation_ms", "p50_ms"),
+            stat_text("generation_ms", "p90_ms"),
+            stat_text("model_ms", "p50_ms"),
+            stat_text("model_ms", "p90_ms"),
+            pixel_post_ms,
+            enqueue_ms,
+            _metric_float(metrics, "runtime_ms", generation_ms),
+            _metric_float(metrics, "condition_ms"),
+            _metric_float(metrics, "model_ms"),
+            _metric_float(metrics, "decode_ms"),
+            _metric_float(metrics, "postprocess_ms"),
+            _metric_float(metrics, "copy_ms"),
+            _metric_float(metrics, "cache_ms"),
+            queue_depth,
+            dropped_delta,
+            latency_text,
+            int(round(_metric_float(metrics, "cache_frames"))),
+            int(round(_metric_float(metrics, "cache_tokens"))),
+            int(round(_metric_float(metrics, "compile_active"))),
+            int(round(_metric_float(metrics, "cuda_graph"))),
+        )
+        event_logger.event(
+            "INFO",
+            "realtime.performance.summary",
+            message,
+            transport=transport,
+            model_id=model_id,
+            session_id=active.session_id,
+            chunk_index=active.chunk_index,
+            warmup_chunks=self._perf_warmup_chunks,
+            summary=None if summary is None else summary.to_payload(),
+        )
+        window.reset_interval()
 
     @staticmethod
     def _request_id(payload: Mapping[str, Any]) -> str | None:
@@ -1516,9 +2130,7 @@ class RealtimePeerManager:
                 "applies_at": "next_chunk",
             }
         action = payload.get("action") if isinstance(payload.get("action"), Mapping) else {}
-        if message_type == "step" or (
-            message_type == "action" and str(action.get("event") or "").lower() == "step"
-        ):
+        if message_type == "step" or (message_type == "action" and str(action.get("event") or "").lower() == "step"):
             if bool(getattr(active, "queued_segments", False)):
                 return {
                     "type": "step_ack",
@@ -1543,8 +2155,7 @@ class RealtimePeerManager:
     def active(self) -> bool:
         return bool(
             self._draining
-            or
-            (self._active and not self._active.closed)
+            or (self._active and not self._active.closed)
             or (self._active_socket and not self._active_socket.closed)
         )
 
@@ -1552,39 +2163,101 @@ class RealtimePeerManager:
     def draining(self) -> bool:
         return self._draining
 
-    async def close_active(self) -> None:
-        async with self._lock:
-            active = self._active
-            self._active = None
-            active_socket = self._active_socket
-            self._active_socket = None
-            has_session = not (
-                (active is None or active.closed)
-                and (active_socket is None or active_socket.closed)
-            )
-            if has_session:
-                self._draining = True
-                self._drain_done.clear()
-            wait_for_drain = self._draining and not has_session
+    def _detach_active_locked(
+        self,
+    ) -> tuple[_ActivePeer | None, _ActiveSocket | None, bool, bool]:
+        active = self._active
+        self._active = None
+        active_socket = self._active_socket
+        self._active_socket = None
+        has_session = not ((active is None or active.closed) and (active_socket is None or active_socket.closed))
+        if has_session:
+            self._draining = True
+            self._drain_done.clear()
+        wait_for_drain = self._draining and not has_session
+        return active, active_socket, has_session, wait_for_drain
+
+    def _spawn_background_task(self, awaitable: Any, *, name: str) -> asyncio.Task[Any]:
+        """Own background cleanup until its result has been consumed."""
+
+        task = asyncio.create_task(awaitable, name=name)
+        _retain_shutdown_task(task, self._shutdown_tasks)
+        return task
+
+    def _schedule_deferred_close(self) -> None:
+        existing = self._deferred_close_task
+        if existing is not None and not existing.done():
+            return
+        timeout_s = _realtime_shutdown_timeout_s()
+        task = self._spawn_background_task(
+            self._deferred_close_after_lock(timeout_s),
+            name="world-realtime-deferred-close",
+        )
+        self._deferred_close_task = task
+
+        def clear_deferred(completed: asyncio.Task[Any]) -> None:
+            if self._deferred_close_task is completed:
+                self._deferred_close_task = None
+
+        task.add_done_callback(clear_deferred)
+
+    async def _deferred_close_after_lock(self, timeout_s: float) -> None:
+        await self._lock.acquire()
+        try:
+            detached = self._detach_active_locked()
+        finally:
+            self._lock.release()
+        deadline = asyncio.get_running_loop().time() + timeout_s
+        await self._finish_active_close(*detached, deadline=deadline)
+
+    async def _finish_active_close(
+        self,
+        active: _ActivePeer | None,
+        active_socket: _ActiveSocket | None,
+        has_session: bool,
+        wait_for_drain: bool,
+        *,
+        deadline: float,
+    ) -> None:
         if wait_for_drain:
-            await self._drain_done.wait()
+            await _run_by_shutdown_deadline(
+                self._drain_done.wait(),
+                deadline=deadline,
+                retained=self._shutdown_tasks,
+                label="concurrent session drain",
+            )
             return
         if not has_session:
             return
-        current_task = asyncio.current_task()
         try:
             if active is not None and not active.closed:
                 active.closed = True
-                tasks = (active.generation_task, active.liveness_task, active.input_task)
-                for task in tasks:
-                    if task is not None and task is not current_task:
-                        task.cancel()
-                await asyncio.gather(
-                    *(task for task in tasks if task is not None and task is not current_task),
-                    return_exceptions=True,
+                tasks = (
+                    active.generation_task,
+                    active.liveness_task,
+                    active.input_task,
+                    active.setup_task,
+                )
+                await _finish_tasks_by_deadline(
+                    tasks,
+                    deadline=deadline,
+                    retained=self._shutdown_tasks,
+                    label="WebRTC workers",
+                    cancel_now=True,
                 )
                 active.frames.close()
-                await active.peer.close()
+                close_track = getattr(active.video_track, "close", None)
+                if callable(close_track):
+                    await _run_by_shutdown_deadline(
+                        close_track(), deadline=deadline, retained=self._shutdown_tasks,
+                        label="NVENC track close",
+                    )
+                await _run_by_shutdown_deadline(
+                    active.peer.close(),
+                    deadline=deadline,
+                    retained=self._shutdown_tasks,
+                    label="WebRTC peer close",
+                )
             if active_socket is not None and not active_socket.closed:
                 active_socket.closed = True
                 tasks = (
@@ -1592,22 +2265,70 @@ class RealtimePeerManager:
                     active_socket.sender_task,
                     active_socket.liveness_task,
                 )
-                for task in tasks:
-                    if task is not None and task is not current_task:
-                        task.cancel()
-                await asyncio.gather(
-                    *(task for task in tasks if task is not None and task is not current_task),
-                    return_exceptions=True,
+                await _finish_tasks_by_deadline(
+                    tasks,
+                    deadline=deadline,
+                    retained=self._shutdown_tasks,
+                    label="WebSocket workers",
+                    cancel_now=True,
                 )
                 if not active_socket.socket.closed:
-                    await active_socket.socket.close()
+                    socket_close_deadline = deadline
+                    if active_socket.disconnect_requested:
+                        # The application-level disconnect already states the
+                        # client's intent. Give the RFC 6455 close handshake a
+                        # short chance to complete, but do not let a client
+                        # that stops reading consume the runtime-reset budget.
+                        socket_close_deadline = min(
+                            deadline,
+                            asyncio.get_running_loop().time()
+                            + _EXPLICIT_DISCONNECT_CLOSE_GRACE_SECONDS,
+                        )
+                    close_completed = await _run_by_shutdown_deadline(
+                        active_socket.socket.close(),
+                        deadline=socket_close_deadline,
+                        retained=self._shutdown_tasks,
+                        label="WebSocket close",
+                        warn_on_timeout=not active_socket.disconnect_requested,
+                    )
+                    if active_socket.disconnect_requested and not close_completed:
+                        logger.info(
+                            "Explicit WebSocket disconnect close handshake did not complete "
+                            "within its bounded grace period; continuing session teardown."
+                        )
         finally:
             try:
-                await self.runtime.reset()
+                await _run_by_shutdown_deadline(
+                    self.runtime.reset(),
+                    deadline=deadline,
+                    retained=self._shutdown_tasks,
+                    label="session runtime reset",
+                )
             finally:
-                async with self._lock:
-                    self._draining = False
-                    self._drain_done.set()
+                # The leader detached the session while holding _lock. These
+                # two non-awaiting assignments are atomic on the event loop;
+                # reacquiring the lock here could itself exceed the deadline.
+                self._draining = False
+                self._drain_done.set()
+
+    async def close_active(self, *, deadline: float | None = None) -> None:
+        deadline = _shutdown_deadline(deadline)
+        acquired = await _acquire_lock_by_shutdown_deadline(
+            self._lock,
+            deadline=deadline,
+            label="realtime session lock",
+        )
+        if not acquired:
+            # The caller's absolute deadline still wins, but preserve the
+            # close intent. A single retained task will detach and tear down
+            # the session when an in-flight setup operation releases _lock.
+            self._schedule_deferred_close()
+            return
+        try:
+            detached = self._detach_active_locked()
+        finally:
+            self._lock.release()
+        await self._finish_active_close(*detached, deadline=deadline)
 
     async def create_answer(self, *, offer: Mapping[str, Any], session: Mapping[str, Any]) -> dict[str, str]:
         from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
@@ -1622,12 +2343,11 @@ class RealtimePeerManager:
                 raise RuntimeError("A realtime world session is already active.")
 
             base_prompt = str(session.get("prompt") or self.runtime.entry.default_prompt or "")
-            text_events = normalize_text_events(
-                session.get("text_events", session.get("event_catalog"))
-            )
+            text_events = normalize_text_events(session.get("text_events", session.get("event_catalog")))
             output_resolution = _new_output_resolution_state(
                 self.runtime.entry,
                 session.get("output_resolution"),
+                native_override=self.runtime.transport_native_resolution,
             )
             await self.runtime.configure(
                 prompt=base_prompt,
@@ -1637,19 +2357,41 @@ class RealtimePeerManager:
                 sparse_video_path=str(session.get("sparse_video_path") or ""),
             )
             self.fps = self.runtime.realtime_spec.fps
-            frames = LatestFrameBuffer(
-                maxsize=_env_int(
-                    "WORLDFOUNDRY_REALTIME_FRAME_QUEUE",
-                    max(self.runtime.steady_chunk_frames(self.chunk_frames), 8),
-                ),
-                backpressure_ms=_env_int(
-                    "WORLDFOUNDRY_REALTIME_BACKPRESSURE_MS",
-                    max(
-                        int(self.runtime.steady_chunk_frames(self.chunk_frames) * 500 / self.fps),
-                        50,
-                    ),
-                ),
+            queue_policy = _frame_queue_policy(
+                ordered_required="prompt_update" in self.runtime.realtime_spec.controls,
             )
+            requested_presentation_mode = session.get("presentation_mode")
+            presentation_mode = (
+                self.presentation_mode
+                if requested_presentation_mode in (None, "")
+                else RealtimePresentationMode.from_value(requested_presentation_mode)
+            )
+            if presentation_mode is RealtimePresentationMode.REAL_FRAMES:
+                frames: LatestFrameBuffer | ChunkPresentationBuffer = ChunkPresentationBuffer(
+                    fps=self.fps,
+                    maximum_fps=_env_int(
+                        "WORLDFOUNDRY_REALTIME_PRESENTATION_MAX_FPS",
+                        self.fps * 2,
+                        minimum=self.fps,
+                    ),
+                    mailbox_size=2,
+                    policy=queue_policy,
+                )
+            else:
+                frames = LatestFrameBuffer(
+                    maxsize=_env_int(
+                        "WORLDFOUNDRY_REALTIME_FRAME_QUEUE",
+                        max(self.runtime.steady_chunk_frames(self.chunk_frames), 8),
+                    ),
+                    backpressure_ms=_env_int(
+                        "WORLDFOUNDRY_REALTIME_BACKPRESSURE_MS",
+                        max(
+                            int(self.runtime.steady_chunk_frames(self.chunk_frames) * 500 / self.fps),
+                            50,
+                        ),
+                    ),
+                    policy=queue_policy,
+                )
             rtc_configuration = RTCConfiguration(
                 iceServers=[
                     RTCIceServer(
@@ -1664,19 +2406,25 @@ class RealtimePeerManager:
             track = _build_video_track(
                 frames=frames,
                 fps=self.fps,
+                presentation_mode=presentation_mode,
+                gpu_id=_realtime_nvenc_device(getattr(getattr(self.runtime, "launch_config", None), "device", None)),
             )
+            self.runtime.preserve_cuda_frames = bool(getattr(track, "preserves_cuda_frames", False))
             pc.addTrack(track)
             loop = asyncio.get_running_loop()
             active = _ActivePeer(
                 peer=pc,
                 channel=None,
                 frames=frames,
-                resampler=RealtimeControlResampler(fps=self.fps, start_time=loop.time()),
+                resampler=RealtimeControlResampler(
+                    fps=self._runtime_input_fps(),
+                    start_time=loop.time(),
+                ),
+                presentation_mode=presentation_mode,
+                video_track=track,
                 last_client_message_at=loop.time(),
                 prompt_scheduled="prompt_update" in self.runtime.realtime_spec.controls,
-                initial_segment_pending=(
-                    "prompt_update" in self.runtime.realtime_spec.controls
-                ),
+                initial_segment_pending=("prompt_update" in self.runtime.realtime_spec.controls),
                 base_prompt=base_prompt,
                 text_events=text_events,
                 catalog_revision=1 if text_events else 0,
@@ -1698,7 +2446,9 @@ class RealtimePeerManager:
 
                 @channel.on("close")
                 def on_close() -> None:
-                    asyncio.create_task(self.close_active())
+                    active.close_task = self._spawn_background_task(
+                        self.close_active(), name="world-realtime-channel-close",
+                    )
 
                 active.generation_task = asyncio.create_task(self._generation_worker(active))
                 active.liveness_task = asyncio.create_task(self._liveness_watchdog(active))
@@ -1715,6 +2465,8 @@ class RealtimePeerManager:
                         "event_catalog": active.text_events,
                         "catalog_revision": active.catalog_revision,
                         "active_event_id": active.active_event_id,
+                        "frame_queue_policy": active.frames.policy.value,
+                        "presentation_mode": active.presentation_mode.value,
                         "resolution": active.output_resolution.to_payload(),
                         "resolution_revision": active.output_resolution.revision,
                     },
@@ -1726,17 +2478,27 @@ class RealtimePeerManager:
                     await self.close_active()
 
             try:
-                await pc.setRemoteDescription(
-                    RTCSessionDescription(sdp=str(offer["sdp"]), type=str(offer["type"]))
-                )
+                await pc.setRemoteDescription(RTCSessionDescription(sdp=str(offer["sdp"]), type=str(offer["type"])))
+                _configure_nvenc_h264(pc, track)
                 answer = await pc.createAnswer()
                 await pc.setLocalDescription(answer)
                 await _wait_for_ice_gathering(pc)
+                # A peer that completes signaling but never opens its
+                # DataChannel would otherwise hold the single session forever:
+                # the liveness watchdog only starts on channel open and the
+                # connection state can stay "connected".
+                active.setup_task = asyncio.create_task(
+                    self._peer_setup_watchdog(active),
+                    name="world-realtime-peer-setup-watchdog",
+                )
                 return {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
             except Exception:
                 active.closed = True
                 self._active = None
                 active.frames.close()
+                close_track = getattr(track, "close", None)
+                if callable(close_track):
+                    await close_track()
                 await pc.close()
                 await self.runtime.reset()
                 raise
@@ -1762,12 +2524,11 @@ class RealtimePeerManager:
             raise RuntimeError("Expected WebSocket message type='configure'.")
         session = payload.get("session") if isinstance(payload.get("session"), Mapping) else {}
         base_prompt = str(session.get("prompt") or self.runtime.entry.default_prompt or "")
-        text_events = normalize_text_events(
-            session.get("text_events", session.get("event_catalog"))
-        )
+        text_events = normalize_text_events(session.get("text_events", session.get("event_catalog")))
         output_resolution = _new_output_resolution_state(
             self.runtime.entry,
             session.get("output_resolution"),
+            native_override=self.runtime.transport_native_resolution,
         )
         await socket.send_str(
             json.dumps(
@@ -1780,6 +2541,7 @@ class RealtimePeerManager:
         async with self._lock:
             if self.active:
                 raise RuntimeError("A realtime world session is already active.")
+            self.runtime.preserve_cuda_frames = False
             await self.runtime.configure(
                 prompt=base_prompt,
                 image_path=str(session.get("init_image_path") or ""),
@@ -1788,26 +2550,40 @@ class RealtimePeerManager:
                 sparse_video_path=str(session.get("sparse_video_path") or ""),
             )
             self.fps = self.runtime.realtime_spec.fps
+            queue_policy = _frame_queue_policy(
+                ordered_required=(
+                    self.runtime.queued_segment_generation or "prompt_update" in self.runtime.realtime_spec.controls
+                ),
+            )
+            requested_socket_pacing_mode = session.get("socket_pacing_mode")
+            socket_pacing_mode = (
+                self.socket_pacing_mode
+                if requested_socket_pacing_mode in (None, "")
+                else WebSocketPacingMode.from_value(requested_socket_pacing_mode)
+            )
             loop = asyncio.get_running_loop()
             active = _ActiveSocket(
                 socket=socket,
-                resampler=RealtimeControlResampler(fps=self.fps, start_time=loop.time()),
+                resampler=RealtimeControlResampler(
+                    fps=self._runtime_input_fps(),
+                    start_time=loop.time(),
+                ),
                 frame_packets=asyncio.Queue(
                     maxsize=_env_int(
                         "WORLDFOUNDRY_REALTIME_SOCKET_FRAME_QUEUE",
                         max(self.runtime.steady_chunk_frames(self.chunk_frames) * 2, 16),
                     )
                 ),
+                pacing_mode=socket_pacing_mode,
                 last_client_message_at=loop.time(),
                 prompt_scheduled="prompt_update" in self.runtime.realtime_spec.controls,
-                initial_segment_pending=(
-                    "prompt_update" in self.runtime.realtime_spec.controls
-                ),
+                initial_segment_pending=("prompt_update" in self.runtime.realtime_spec.controls),
                 base_prompt=base_prompt,
                 text_events=text_events,
                 catalog_revision=1 if text_events else 0,
                 text_events_supported=self.runtime.supports_text_events,
                 output_resolution=output_resolution,
+                frame_queue_policy=queue_policy,
                 queued_segments=self.runtime.queued_segment_generation,
             )
             self._active_socket = active
@@ -1833,6 +2609,8 @@ class RealtimePeerManager:
                 "event_catalog": active.text_events,
                 "catalog_revision": active.catalog_revision,
                 "active_event_id": active.active_event_id,
+                "frame_queue_policy": active.frame_queue_policy.value,
+                "socket_pacing_mode": active.pacing_mode.value,
                 "resolution": active.output_resolution.to_payload(),
                 "resolution_revision": active.output_resolution.revision,
             },
@@ -1864,6 +2642,7 @@ class RealtimePeerManager:
             return
         message_type = str(payload.get("type") or "").lower()
         if message_type == "disconnect":
+            active.disconnect_requested = True
             await self.close_active()
             return
         if message_type in {"heartbeat", "ping"}:
@@ -2025,7 +2804,7 @@ class RealtimePeerManager:
                         next_prompt = active.pending_prompt
                         active.pending_prompt = None
                         active.pending_prompt_dirty = False
-                        frame_budget = self.runtime.next_chunk_frames(self.chunk_frames)
+                        frame_budget = self._runtime_next_input_frames()
                         segments = active.resampler.sample_chunk(
                             frame_budget,
                             wall_time=loop.time(),
@@ -2036,7 +2815,7 @@ class RealtimePeerManager:
                         forced_step = True
                         interactions = []
                     else:
-                        frame_budget = self.runtime.next_chunk_frames(self.chunk_frames)
+                        frame_budget = self._runtime_next_input_frames()
                         segments = active.resampler.sample_chunk(
                             frame_budget,
                             wall_time=loop.time(),
@@ -2076,7 +2855,10 @@ class RealtimePeerManager:
                                     ),
                                 },
                             )
-                    frames, generation_ms = await generation_task
+                    # Keep worker cancellation separate from the model task so
+                    # the handler can explicitly cancel and retain a model
+                    # coroutine that does not acknowledge cancellation.
+                    frames, generation_ms = await asyncio.shield(generation_task)
                 except ValueError as exc:
                     if not active.queued_segments:
                         raise
@@ -2088,9 +2870,9 @@ class RealtimePeerManager:
                     continue
                 except BaseException:
                     generation_task.cancel()
-                    await asyncio.gather(generation_task, return_exceptions=True)
+                    _retain_shutdown_task(generation_task, self._shutdown_tasks)
                     raise
-                encode_started = loop.time()
+                pixel_post_started = loop.time()
                 quality = _env_int(
                     "WORLDFOUNDRY_QUEUED_SEGMENT_JPEG_QUALITY"
                     if active.queued_segments
@@ -2113,9 +2895,11 @@ class RealtimePeerManager:
                     # packets after that ACK; re-encode the same RGB chunk at
                     # the newest boundary without rerunning model inference.
                     active.dropped_frames += len(packets)
+                pixel_post_ms = (loop.time() - pixel_post_started) * 1000.0
+                enqueue_started = loop.time()
                 accepted = 0
                 for packet in packets:
-                    if active.queued_segments or active.prompt_scheduled:
+                    if active.frame_queue_policy is FrameQueuePolicy.ORDERED_QUALITY:
                         # Segment playback is count-exact: once chunk_done
                         # announces N frames, the browser must receive all N or
                         # it can never finish PLAYING. Backpressure this rare,
@@ -2131,13 +2915,25 @@ class RealtimePeerManager:
                             break
                     active.frame_packets.put_nowait(packet)
                     accepted += 1
-                enqueue_ms = (loop.time() - encode_started) * 1000.0
+                enqueue_ms = (loop.time() - enqueue_started) * 1000.0
                 active.chunk_index += 1
                 now = loop.time()
                 while active.action_arrivals and active.action_arrivals[0] <= generation_started:
                     active.action_arrivals.popleft()
-                control_latency_ms = (
-                    (now - action_arrival) * 1000.0 if action_arrival is not None else None
+                control_latency_ms = (now - action_arrival) * 1000.0 if action_arrival is not None else None
+                queue_depth = active.frame_packets.qsize()
+                self._record_perf(
+                    active,
+                    transport="websocket",
+                    generation_started=generation_started,
+                    now=now,
+                    output_frames=accepted,
+                    generation_ms=generation_ms,
+                    pixel_post_ms=pixel_post_ms,
+                    enqueue_ms=enqueue_ms,
+                    queue_depth=queue_depth,
+                    dropped_frames=active.dropped_frames,
+                    control_latency_ms=control_latency_ms,
                 )
                 await self._socket_send(
                     active,
@@ -2147,11 +2943,10 @@ class RealtimePeerManager:
                         "frames": accepted,
                         "generation_ms": round(generation_ms, 1),
                         "enqueue_ms": round(enqueue_ms, 1),
-                        "control_latency_ms": round(control_latency_ms, 1)
-                        if control_latency_ms is not None
-                        else None,
-                        "queue_depth": active.frame_packets.qsize(),
+                        "control_latency_ms": round(control_latency_ms, 1) if control_latency_ms is not None else None,
+                        "queue_depth": queue_depth,
                         "dropped_frames": active.dropped_frames,
+                        "pixel_post_ms": round(pixel_post_ms, 1),
                         "resolution": resolution_snapshot.to_payload(),
                         "resolution_revision": resolution_snapshot.revision,
                         "interactions": (
@@ -2165,11 +2960,7 @@ class RealtimePeerManager:
                             if forced_step and not interactions
                             else interactions
                         ),
-                        **{
-                            key: round(float(value), 1)
-                            for key, value in self.runtime.last_generation_metrics.items()
-                            if key in {"condition_ms", "model_ms", "decode_ms"}
-                        },
+                        **_chunk_metric_payload(getattr(self.runtime, "last_generation_metrics", {}) or {}),
                     },
                 )
                 # The queue owns each encoded packet now. Do not retain a
@@ -2203,15 +2994,16 @@ class RealtimePeerManager:
         try:
             while not active.closed:
                 packet = await active.frame_packets.get()
-                now = loop.time()
-                if deadline is not None:
-                    deadline += 1.0 / self.fps
-                    if deadline > now:
-                        await asyncio.sleep(deadline - now)
-                    elif now - deadline > 1.0 / self.fps:
+                if active.pacing_mode is WebSocketPacingMode.LEGACY_DUAL:
+                    now = loop.time()
+                    if deadline is not None:
+                        deadline += 1.0 / self.fps
+                        if deadline > now:
+                            await asyncio.sleep(deadline - now)
+                        elif now - deadline > 1.0 / self.fps:
+                            deadline = now
+                    else:
                         deadline = now
-                else:
-                    deadline = now
                 async with active.send_lock:
                     await active.socket.send_bytes(packet)
         except asyncio.CancelledError:
@@ -2236,9 +3028,7 @@ class RealtimePeerManager:
         if active.closed or active.socket.closed:
             return
         async with active.send_lock:
-            await active.socket.send_str(
-                json.dumps(dict(payload), ensure_ascii=False, separators=(",", ":"))
-            )
+            await active.socket.send_str(json.dumps(dict(payload), ensure_ascii=False, separators=(",", ":")))
 
     async def _input_worker(self, active: _ActivePeer) -> None:
         """Apply reliable DataChannel messages in their original order."""
@@ -2303,6 +3093,31 @@ class RealtimePeerManager:
         except asyncio.CancelledError:
             raise
 
+    async def _peer_setup_watchdog(self, active: _ActivePeer) -> None:
+        """Free the single session when a peer never opens its DataChannel.
+
+        Intentionally not cancelled on channel open: after the timeout it
+        re-checks the session state and exits quietly when the channel arrived
+        or the session already closed, so its trigger path cannot race
+        close_active the way a cancellation from ``on_datachannel`` could.
+        ``close_active`` still cancels it (with the current-task guard) so
+        teardown never leaves it sleeping on a stale session.
+        """
+
+        timeout = _env_int("WORLDFOUNDRY_REALTIME_SOCKET_SETUP_TIMEOUT_SECONDS", 15)
+        try:
+            await asyncio.sleep(timeout)
+        except asyncio.CancelledError:
+            raise
+        if active.closed or active.channel is not None:
+            return
+        logger.warning(
+            "Realtime peer completed signaling but opened no DataChannel within %ds; "
+            "closing the half-open session.",
+            timeout,
+        )
+        await self.close_active()
+
     async def _generation_worker(self, active: _ActivePeer) -> None:
         loop = asyncio.get_running_loop()
         try:
@@ -2344,7 +3159,7 @@ class RealtimePeerManager:
                         next_prompt = active.pending_prompt
                         active.pending_prompt = None
                         active.pending_prompt_dirty = False
-                        frame_budget = self.runtime.next_chunk_frames(self.chunk_frames)
+                        frame_budget = self._runtime_next_input_frames()
                         segments = active.resampler.sample_chunk(
                             frame_budget,
                             wall_time=loop.time(),
@@ -2355,7 +3170,7 @@ class RealtimePeerManager:
                         forced_step = True
                         interactions = []
                     else:
-                        frame_budget = self.runtime.next_chunk_frames(self.chunk_frames)
+                        frame_budget = self._runtime_next_input_frames()
                         segments = active.resampler.sample_chunk(
                             frame_budget,
                             wall_time=loop.time(),
@@ -2372,13 +3187,12 @@ class RealtimePeerManager:
                     control_segments=segments,
                     prompt=next_prompt,
                 )
+                pixel_post_started = loop.time()
                 while True:
                     active.output_resolution.observe_source(frames[0] if frames else None)
                     resolution_snapshot = active.output_resolution.snapshot()
                     if resolution_snapshot.dimensions is None or all(
-                        (frame.shape[1], frame.shape[0])
-                        == resolution_snapshot.dimensions
-                        for frame in frames
+                        (frame.shape[1], frame.shape[0]) == resolution_snapshot.dimensions for frame in frames
                     ):
                         transport_frames = frames
                     else:
@@ -2389,13 +3203,26 @@ class RealtimePeerManager:
                         )
                     if resolution_snapshot.revision == active.output_resolution.revision:
                         break
+                pixel_post_ms = (loop.time() - pixel_post_started) * 1000.0
                 accepted = await active.frames.put_chunk(transport_frames)
                 active.chunk_index += 1
                 now = loop.time()
                 while active.action_arrivals and active.action_arrivals[0] <= generation_started:
                     active.action_arrivals.popleft()
-                control_latency_ms = (
-                    (now - action_arrival) * 1000.0 if action_arrival is not None else None
+                control_latency_ms = (now - action_arrival) * 1000.0 if action_arrival is not None else None
+                queue_depth = active.frames.qsize()
+                self._record_perf(
+                    active,
+                    transport="webrtc",
+                    generation_started=generation_started,
+                    now=now,
+                    output_frames=accepted,
+                    generation_ms=generation_ms,
+                    pixel_post_ms=pixel_post_ms,
+                    enqueue_ms=active.frames.last_enqueue_ms,
+                    queue_depth=queue_depth,
+                    dropped_frames=active.frames.dropped_frames,
+                    control_latency_ms=control_latency_ms,
                 )
                 self._send(
                     active.channel,
@@ -2405,11 +3232,13 @@ class RealtimePeerManager:
                         "frames": accepted,
                         "generation_ms": round(generation_ms, 1),
                         "enqueue_ms": round(active.frames.last_enqueue_ms, 1),
-                        "control_latency_ms": round(control_latency_ms, 1)
-                        if control_latency_ms is not None
-                        else None,
-                        "queue_depth": active.frames.qsize(),
+                        "control_latency_ms": round(control_latency_ms, 1) if control_latency_ms is not None else None,
+                        "queue_depth": queue_depth,
                         "dropped_frames": active.frames.dropped_frames,
+                        "dropped_chunks": getattr(active.frames, "dropped_chunks", 0),
+                        "presented_frames": getattr(active.frames, "presented_frames", None),
+                        "presentation_mode": active.presentation_mode.value,
+                        "pixel_post_ms": round(pixel_post_ms, 1),
                         "resolution": resolution_snapshot.to_payload(),
                         "resolution_revision": resolution_snapshot.revision,
                         "interactions": (
@@ -2421,11 +3250,7 @@ class RealtimePeerManager:
                             if forced_step and not interactions
                             else interactions
                         ),
-                        **{
-                            key: round(float(value), 1)
-                            for key, value in self.runtime.last_generation_metrics.items()
-                            if key in {"condition_ms", "model_ms", "decode_ms"}
-                        },
+                        **_chunk_metric_payload(getattr(self.runtime, "last_generation_metrics", {}) or {}),
                     },
                 )
                 if (
@@ -2450,11 +3275,44 @@ class RealtimePeerManager:
         channel.send(json.dumps(dict(payload), ensure_ascii=False, separators=(",", ":")))
 
 
+def _configure_nvenc_h264(peer: Any, track: Any) -> None:
+    """Negotiate the codec carried by pre-encoded NVENC packets."""
+    if not getattr(track, "preserves_cuda_frames", False):
+        return
+    from aiortc import RTCRtpSender
+
+    codecs = [codec for codec in RTCRtpSender.getCapabilities("video").codecs if codec.mimeType.lower() == "video/h264"]
+    if not codecs:
+        raise RuntimeError("NVENC transport requires aiortc H.264 RTP support")
+    for transceiver in peer.getTransceivers():
+        if transceiver.sender.track is track:
+            transceiver.setCodecPreferences(codecs)
+            return
+    raise RuntimeError("NVENC video track has no RTP transceiver")
+
+
+def _realtime_nvenc_device(launch_device: str | None) -> int:
+    match = re.fullmatch(r"\s*cuda(?::(\d+))?\s*", str(launch_device or "cuda"), flags=re.IGNORECASE)
+    return int(match.group(1) or 0) if match else 0
+
+
 def _build_video_track(
     *,
-    frames: LatestFrameBuffer,
+    frames: LatestFrameBuffer | ChunkPresentationBuffer,
     fps: int,
+    presentation_mode: RealtimePresentationMode | str = RealtimePresentationMode.HOLD_LAST,
+    gpu_id: int = 0,
 ) -> Any:
+    if _env_bool("WORLDFOUNDRY_REALTIME_NVENC", False):
+        from worldfoundry.studio.serving.realtime.nvenc import build_nvenc_track, nvenc_h264_supported
+
+        supported, reason = nvenc_h264_supported(gpu_id=gpu_id)
+        if supported:
+            return build_nvenc_track(
+                frames=frames, fps=fps, gpu_id=gpu_id,
+                presentation_mode=RealtimePresentationMode.from_value(presentation_mode).value,
+            )
+        logger.warning("NVENC realtime transport unavailable; using software video encoder: %s", reason)
     from aiortc import MediaStreamTrack
     from aiortc.mediastreams import MediaStreamError
     from av import VideoFrame
@@ -2464,46 +3322,60 @@ def _build_video_track(
 
         def __init__(self) -> None:
             super().__init__()
+            self._presentation_mode = RealtimePresentationMode.from_value(presentation_mode)
             self._pts = 0
             self._time_base = Fraction(1, fps)
             self._interval = 1.0 / fps
             self._deadline: float | None = None
             self._last_array: np.ndarray | None = None
+            self._first_real_frame_at: float | None = None
 
         async def recv(self) -> VideoFrame:
             loop = asyncio.get_running_loop()
-            if self._last_array is None:
+            if self._presentation_mode is RealtimePresentationMode.REAL_FRAMES:
                 try:
-                    self._last_array = await frames.get()
+                    frame_array = await frames.get()
                 except EOFError as exc:
                     raise MediaStreamError from exc
-                self._deadline = loop.time()
-            else:
-                assert self._deadline is not None
                 now = loop.time()
-                self._deadline += self._interval
-                if self._deadline > now:
-                    await asyncio.sleep(self._deadline - now)
-                elif now - self._deadline > self._interval:
-                    self._deadline = now
-                try:
-                    self._last_array = frames.get_nowait()
-                except asyncio.QueueEmpty:
-                    # Keep a constant RTP clock even between generated chunks.
-                    # Besides giving the browser a stable live stream, the
-                    # repeated hold frame flushes the encoder's final source
-                    # frame instead of leaving it buffered until the next user
-                    # action arrives.
-                    pass
-                except EOFError as exc:
-                    raise MediaStreamError from exc
+                if self._first_real_frame_at is None:
+                    self._first_real_frame_at = now
+                pts = max(self._pts, round((now - self._first_real_frame_at) * fps))
+            else:
+                if self._last_array is None:
+                    try:
+                        self._last_array = await frames.get()
+                    except EOFError as exc:
+                        raise MediaStreamError from exc
+                    self._deadline = loop.time()
+                else:
+                    assert self._deadline is not None
+                    now = loop.time()
+                    self._deadline += self._interval
+                    if self._deadline > now:
+                        await asyncio.sleep(self._deadline - now)
+                    elif now - self._deadline > self._interval:
+                        self._deadline = now
+                    try:
+                        self._last_array = frames.get_nowait()
+                    except asyncio.QueueEmpty:
+                        # Keep a constant RTP clock even between generated chunks.
+                        # Besides giving the browser a stable live stream, the
+                        # repeated hold frame flushes the encoder's final source
+                        # frame instead of leaving it buffered until the next user
+                        # action arrives.
+                        pass
+                    except EOFError as exc:
+                        raise MediaStreamError from exc
+                frame_array = self._last_array
+                pts = self._pts
             # Frames are already resized in the generation worker. Keep the
             # aiortc cadence path free of synchronous resize/canvas work; a
             # held frame is therefore repeated at zero additional scale cost.
-            frame = VideoFrame.from_ndarray(self._last_array, format="rgb24")
-            frame.pts = self._pts
+            frame = VideoFrame.from_ndarray(frame_array, format="rgb24")
+            frame.pts = pts
             frame.time_base = self._time_base
-            self._pts += 1
+            self._pts = pts + 1
             return frame
 
     return RealtimeVideoTrack()
@@ -2541,9 +3413,7 @@ def _require_realtime_dependencies(*, require_rtc: bool, require_av: bool) -> No
             missing.append(name)
     if missing:
         raise SystemExit(
-            "Realtime World frontend requires "
-            + ", ".join(missing)
-            + ". Install `worldfoundry[studio_realtime]`."
+            "Realtime World frontend requires " + ", ".join(missing) + ". Install `worldfoundry[studio_realtime]`."
         )
 
 
@@ -2572,9 +3442,7 @@ def serve_realtime_world_frontend(
 
     prompt_scheduled = "prompt-scheduled" in entry.tags
     queued_segments = "queued-segment-generation" in entry.tags
-    websocket_only = os.getenv(
-        "WORLDFOUNDRY_REALTIME_WEBSOCKET_ONLY", ""
-    ).strip().lower() in {"1", "true", "yes", "on"}
+    websocket_only = os.getenv("WORLDFOUNDRY_REALTIME_WEBSOCKET_ONLY", "").strip().lower() in {"1", "true", "yes", "on"}
     _require_realtime_dependencies(
         # Same-origin WebSocket streaming is fully self-contained and is the
         # reliable transport for SSH tunnels.  Keep aiortc optional when the
@@ -2619,6 +3487,11 @@ def serve_realtime_world_frontend(
             0,
             minimum=0,
         ),
+        postprocess=_realtime_postprocess_stream(
+            fps=fps,
+            launch_config=launch_config,
+            native_resolution=_entry_output_resolution(entry),
+        ),
     )
     peers = RealtimePeerManager(
         runtime=runtime,
@@ -2630,12 +3503,32 @@ def serve_realtime_world_frontend(
     upload_root.mkdir(parents=True, exist_ok=True)
     owned_uploads: set[Path] = set()
     upload_cleanup_lock = asyncio.Lock()
-    file_roots = tuple(
-        dict.fromkeys(root.expanduser().resolve() for root in (*allowed_roots, upload_root))
-    )
+    file_roots = tuple(dict.fromkeys(root.expanduser().resolve() for root in (*allowed_roots, upload_root)))
+    upload_allowed_exts = frozenset(IMAGE_EXTS) | frozenset(VIDEO_EXTS)
+    upload_max_bytes = _env_int("WORLDFOUNDRY_UPLOAD_MAX_BYTES", 512 * 1024 * 1024)
 
-    app = web.Application(client_max_size=2 * 1024**3)
+    auth_token = require_auth_token_for_host(host, server_name="Realtime world frontend")
+    middlewares = []
+    if auth_token:
+        static_paths = {"/", "/world.css", "/world.js", "/favicon.svg"}
+
+        @web.middleware
+        async def require_studio_token(request: Any, handler: Any) -> Any:
+            if request.path in static_paths:
+                return await handler(request)
+            if not request_token_valid(
+                auth_token,
+                authorization_header=request.headers.get("Authorization"),
+                query_token=request.query.get("token"),
+            ):
+                raise web.HTTPUnauthorized(reason="Missing or invalid Studio auth token.")
+            return await handler(request)
+
+        middlewares.append(require_studio_token)
+
+    app = web.Application(client_max_size=2 * 1024**3, middlewares=middlewares)
     preload_task: asyncio.Task[Any] | None = None
+    shutdown_tasks: set[asyncio.Task[Any]] = set()
 
     async def cleanup_owned_uploads() -> None:
         async with upload_cleanup_lock:
@@ -2684,16 +3577,13 @@ def serve_realtime_world_frontend(
                 "display_name": entry.display_name,
                 "transport": "websocket" if segment_transport else "webrtc+websocket",
                 "runtime_engine": "worldfoundry-resident",
-                "performance_contract": (
-                    "in-tree-full-quality-segments" if queued_segments else "in-tree-realtime"
-                ),
+                "postprocess": list(runtime.postprocess_names),
+                "performance_contract": ("in-tree-full-quality-segments" if queued_segments else "in-tree-realtime"),
                 "websocket_fallback": True,
                 "prefer_websocket": prefer_socket,
                 "supports_video_input": not (prompt_scheduled or queued_segments),
                 "interaction_mode": (
-                    "queued-segments"
-                    if queued_segments
-                    else "prompt-scheduled" if prompt_scheduled else "controls"
+                    "queued-segments" if queued_segments else "prompt-scheduled" if prompt_scheduled else "controls"
                 ),
                 "fps": runtime.realtime_spec.fps,
                 "chunk_frames": runtime.realtime_spec.first_chunk_frames,
@@ -2711,7 +3601,10 @@ def serve_realtime_world_frontend(
                 "event_catalog": [],
                 "active_event_id": None,
                 "output_resolution": {"mode": "native"},
-                "output_resolutions": _output_resolution_options(entry),
+                "output_resolutions": _output_resolution_options(
+                    entry,
+                    native_override=runtime.transport_native_resolution,
+                ),
                 "output_resolution_scope": "transport",
                 "ice_servers": ice_servers,
                 "examples": examples,
@@ -2727,6 +3620,7 @@ def serve_realtime_world_frontend(
                 "warmup_ms": round(runtime.warmup_ms, 1),
                 "session_active": peers.active,
                 "draining": peers.draining,
+                "postprocess": list(runtime.postprocess_names),
                 "realtime_spec": runtime.realtime_spec.to_payload(),
             }
         )
@@ -2741,23 +3635,42 @@ def serve_realtime_world_frontend(
         if field is None or field.name != "file":
             raise web.HTTPBadRequest(reason="Expected multipart field named 'file'.")
         filename = Path(field.filename or "input.bin").name
-        suffix = Path(filename).suffix[:16]
+        suffix = Path(filename).suffix[:16].lower()
+        if suffix not in upload_allowed_exts:
+            raise web.HTTPBadRequest(
+                reason=(
+                    f"Unsupported upload type {suffix or '<no suffix>'}; expected one of "
+                    f"{', '.join(sorted(upload_allowed_exts))}."
+                )
+            )
         target = upload_root / f"{uuid.uuid4().hex}{suffix}"
+        written = 0
         handle = await asyncio.to_thread(target.open, "wb")
         try:
-            while chunk := await field.read_chunk(size=1024 * 1024):
-                await asyncio.to_thread(handle.write, chunk)
-        finally:
-            await asyncio.to_thread(handle.close)
+            try:
+                while chunk := await field.read_chunk(size=1024 * 1024):
+                    written += len(chunk)
+                    if written > upload_max_bytes:
+                        raise web.HTTPBadRequest(
+                            reason=(
+                                f"Upload exceeds the per-file limit of {upload_max_bytes} bytes "
+                                "(override with WORLDFOUNDRY_UPLOAD_MAX_BYTES)."
+                            )
+                        )
+                    await asyncio.to_thread(handle.write, chunk)
+            finally:
+                await asyncio.to_thread(handle.close)
+        except BaseException:
+            # Never leave rejected or interrupted uploads on disk.
+            await asyncio.to_thread(target.unlink, missing_ok=True)
+            raise
         owned_uploads.add(target)
-        return web.json_response(
-            {"path": str(target), "url": f"/api/file?path={quote(str(target), safe='')}"}
-        )
+        return web.json_response({"path": str(target), "url": f"/api/file?path={quote(str(target), safe='')}"})
 
     async def file_response(request: Any) -> Any:
         raw = str(request.query.get("path") or "")
         path = Path(raw).expanduser().resolve()
-        if not any(path == root or root in path.parents for root in file_roots):
+        if not path_allowed(path, file_roots):
             raise web.HTTPForbidden(reason="Path is outside allowed Studio roots.")
         if not path.is_file():
             raise web.HTTPNotFound()
@@ -2820,23 +3733,29 @@ def serve_realtime_world_frontend(
 
         stale_after = _env_int("WORLDFOUNDRY_UPLOAD_STALE_SECONDS", 24 * 60 * 60)
         cutoff = time.time() - stale_after
-        stale = [
-            path
-            for path in upload_root.iterdir()
-            if path.is_file() and path.stat().st_mtime < cutoff
-        ]
+        stale = [path for path in upload_root.iterdir() if path.is_file() and path.stat().st_mtime < cutoff]
         await asyncio.gather(
             *(asyncio.to_thread(path.unlink, missing_ok=True) for path in stale),
             return_exceptions=True,
         )
 
     async def on_shutdown(_: Any) -> None:
-        if preload_task is not None and not preload_task.done():
-            preload_task.cancel()
-            await asyncio.gather(preload_task, return_exceptions=True)
-        await peers.close_active()
-        await runtime.close()
-        await cleanup_owned_uploads()
+        deadline = _shutdown_deadline()
+        await _finish_tasks_by_deadline(
+            (preload_task,),
+            deadline=deadline,
+            retained=shutdown_tasks,
+            label="application preload",
+            cancel_now=True,
+        )
+        await peers.close_active(deadline=deadline)
+        await runtime.close(deadline=deadline)
+        await _run_by_shutdown_deadline(
+            cleanup_owned_uploads(),
+            deadline=deadline,
+            retained=shutdown_tasks,
+            label="owned upload cleanup",
+        )
 
     app.router.add_get("/", index)
     app.router.add_get("/world.css", css)
@@ -2854,6 +3773,9 @@ def serve_realtime_world_frontend(
     app.on_shutdown.append(on_shutdown)
 
     print(f"WorldFoundry realtime WebRTC UI: http://{host}:{port}", flush=True)
+    warning = bind_security_warning(host)
+    if warning:
+        print(warning, flush=True)
     web.run_app(app, host=host, port=port, print=None, handle_signals=True)
 
 

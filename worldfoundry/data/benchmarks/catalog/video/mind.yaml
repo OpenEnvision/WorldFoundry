@@ -1,0 +1,324 @@
+id: mind
+name: MIND
+publisher: Central South University
+publisher_kind: university
+benchmark_kind:
+- interactive-video-world-model
+- memory-consistency
+- action-control
+domains:
+- world-model
+- interactive-video
+- memory
+- action-control
+modalities:
+- video
+- action
+status: confirmed_official_code
+official_sources:
+  github:
+    url: https://github.com/CSU-JPG/MIND
+    provenance: official source; runtime code is vendored in tree under the WorldFoundry runner
+    revision: 219f458bbfbc3204e848bb6dd1f45363d4e34730
+  paper_url: https://arxiv.org/abs/2602.08025
+  project_page: https://csu-jpg.github.io/MIND.github.io/
+  huggingface_datasets:
+  - repo_id: CSU-JPG/MIND
+    repo_type: dataset
+license:
+  status: mit
+  spdx: MIT
+  holder: 'Copyright (c) 2026 fgloris'
+  source: https://github.com/CSU-JPG/MIND/blob/main/LICENSE
+  scope: upstream evaluator source vendored under the WorldFoundry runner
+benchmark_assets:
+  dataset:
+    status: official_huggingface_dataset
+    repo_id: CSU-JPG/MIND
+    notes: 250 test clips at 1080p/24 FPS across 1st-person and 3rd-person perspectives.
+evaluation_surface:
+  purpose: Open-domain closed-loop revisited evaluation of memory consistency and action control in
+    interactive world models.
+  metric_protocol:
+    metric_ids:
+    - lcm_psnr
+    - lcm_ssim
+    - lcm_lpips
+    - lcm_mse
+    - dino_mse
+    - imaging_quality
+    - aesthetic_quality
+    - action_rpe_trans_mean
+    - action_rpe_rot_mean_deg
+    - action_rpe_trans_median
+    - action_rpe_rot_median_deg
+    - action_translation_rpe_trans_mean
+    - action_rotation_rpe_rot_mean_deg
+    - gsc_psnr
+    - gsc_ssim
+    - gsc_lpips
+    - gsc_mse
+    - memory_consistency_score
+    - visual_quality_score
+    - action_control_score
+    - scene_consistency_score
+    - mind_average
+    primary_metric: mind_average
+metrics:
+- id: lcm_psnr
+  name: LCM PSNR
+  description: Long-context-memory PSNR between the predicted continuation and the ground-truth frames.
+  higher_is_better: true
+  leaderboard_key: lcm_psnr
+  aggregator: mean
+  output_unit: db
+- id: lcm_ssim
+  name: LCM SSIM
+  description: Long-context-memory SSIM against the ground-truth continuation.
+  higher_is_better: true
+  leaderboard_key: lcm_ssim
+  aggregator: mean
+  output_unit: score
+- id: lcm_lpips
+  name: LCM LPIPS
+  description: Long-context-memory LPIPS (AlexNet) against the ground-truth continuation; lower is better.
+  higher_is_better: false
+  leaderboard_key: lcm_lpips
+  aggregator: mean
+  output_unit: score
+- id: lcm_mse
+  name: LCM MSE
+  description: Long-context-memory pixel MSE against the ground-truth continuation; lower is better.
+  higher_is_better: false
+  leaderboard_key: lcm_mse
+  aggregator: mean
+  output_unit: score
+- id: dino_mse
+  name: DINOv3 Feature MSE
+  description: MSE between L2-normalized DINOv3 patch tokens of predicted and ground-truth frames; lower is better.
+  higher_is_better: false
+  leaderboard_key: dino_mse
+  aggregator: mean
+  output_unit: score
+- id: imaging_quality
+  name: Imaging Quality
+  description: MUSIQ-SPAQ imaging quality of the generated frames, divided by 100 upstream.
+  higher_is_better: true
+  leaderboard_key: imaging_quality
+  aggregator: mean
+  output_unit: score
+- id: aesthetic_quality
+  name: Aesthetic Quality
+  description: LAION CLIP ViT-L/14 aesthetic predictor score, divided by 10 upstream.
+  higher_is_better: true
+  leaderboard_key: aesthetic_quality
+  aggregator: mean
+  output_unit: score
+- id: action_rpe_trans_mean
+  name: Action RPE Translation (mean)
+  description: Mean translation relative pose error between the ViPE trajectories of generated and
+    ground-truth videos; lower is better.
+  higher_is_better: false
+  leaderboard_key: action_rpe_trans_mean
+  aggregator: mean
+  output_unit: score
+- id: action_rpe_rot_mean_deg
+  name: Action RPE Rotation (mean)
+  description: Mean rotation relative pose error in degrees between the ViPE trajectories; lower is better.
+  higher_is_better: false
+  leaderboard_key: action_rpe_rot_mean_deg
+  aggregator: mean
+  output_unit: degrees
+- id: action_rpe_trans_median
+  name: Action RPE Translation (median)
+  description: Median translation relative pose error over all valid action steps; lower is better.
+  higher_is_better: false
+  leaderboard_key: action_rpe_trans_median
+  aggregator: mean
+  output_unit: score
+- id: action_rpe_rot_median_deg
+  name: Action RPE Rotation (median)
+  description: Median rotation relative pose error in degrees over all valid action steps; lower is better.
+  higher_is_better: false
+  leaderboard_key: action_rpe_rot_median_deg
+  aggregator: mean
+  output_unit: degrees
+- id: action_translation_rpe_trans_mean
+  name: Translation-Action RPE Translation
+  description: Mean translation RPE restricted to pure translation actions; lower is better.
+  higher_is_better: false
+  leaderboard_key: action_translation_rpe_trans_mean
+  aggregator: mean
+  output_unit: score
+- id: action_rotation_rpe_rot_mean_deg
+  name: Rotation-Action RPE Rotation
+  description: Mean rotation RPE in degrees restricted to pure camera-rotation actions; lower is better.
+  higher_is_better: false
+  leaderboard_key: action_rotation_rpe_rot_mean_deg
+  aggregator: mean
+  output_unit: degrees
+- id: gsc_psnr
+  name: GSC PSNR
+  description: General scene consistency PSNR between a mirror-test rollout and its time-reversed half.
+  higher_is_better: true
+  leaderboard_key: gsc_psnr
+  aggregator: mean
+  output_unit: db
+- id: gsc_ssim
+  name: GSC SSIM
+  description: General scene consistency SSIM on the mirror-test rollout.
+  higher_is_better: true
+  leaderboard_key: gsc_ssim
+  aggregator: mean
+  output_unit: score
+- id: gsc_lpips
+  name: GSC LPIPS
+  description: General scene consistency LPIPS on the mirror-test rollout; lower is better.
+  higher_is_better: false
+  leaderboard_key: gsc_lpips
+  aggregator: mean
+  output_unit: score
+- id: gsc_mse
+  name: GSC MSE
+  description: General scene consistency pixel MSE on the mirror-test rollout; lower is better.
+  higher_is_better: false
+  leaderboard_key: gsc_mse
+  aggregator: mean
+  output_unit: score
+- id: memory_consistency_score
+  name: Memory Consistency Score
+  description: WorldFoundry-derived mean of the normalized LCM and DINOv3 component metrics.
+  higher_is_better: true
+  leaderboard_key: memory_consistency_score
+  aggregator: mean
+  output_unit: score
+- id: visual_quality_score
+  name: Visual Quality Score
+  description: WorldFoundry-derived mean of the normalized imaging and aesthetic metrics.
+  higher_is_better: true
+  leaderboard_key: visual_quality_score
+  aggregator: mean
+  output_unit: score
+- id: action_control_score
+  name: Action Control Score
+  description: WorldFoundry-derived mean of the normalized overall RPE translation and rotation metrics.
+  higher_is_better: true
+  leaderboard_key: action_control_score
+  aggregator: mean
+  output_unit: score
+- id: scene_consistency_score
+  name: Scene Consistency Score
+  description: WorldFoundry-derived mean of the normalized mirror-test GSC metrics.
+  higher_is_better: true
+  leaderboard_key: scene_consistency_score
+  aggregator: mean
+  output_unit: score
+- id: mind_average
+  name: MIND Average
+  description: WorldFoundry-derived mean of the available MIND ability-group scores. MIND publishes no
+    official composite score, so this is never a leaderboard number.
+  higher_is_better: true
+  leaderboard_key: mind_average
+  aggregator: mean
+  output_unit: score
+  primary: true
+runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/mind/run_mind_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.mind.run_mind_official_runner
+    generated_arg: --generated-artifact-dir
+    dataset_root_arg: --gt-root
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    supports_fixture: true
+    default_metrics: [mind_average]
+    input_kind: mind_results_or_generated_videos
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:MINDContract
+  validation_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - mind
+  - --mode
+  - official-validation
+  - --official-results-path
+  - <mind_result.json>
+  - --output-dir
+  - <out>
+  - --json
+  runtime:
+    kind: in_tree_official_runtime
+    root: worldfoundry/evaluation/tasks/execution/runners/mind
+    runtime_root: worldfoundry/evaluation/tasks/execution/runners/mind/runtime/mind
+    root_env: WORLDFOUNDRY_MIND_ROOT
+    results_path_env: WORLDFOUNDRY_MIND_RESULTS_PATH
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  expected_artifacts:
+  - scorecard.json
+  - raw_metric_table.jsonl
+  - per_sample_scores.jsonl
+  - benchmark_contract.json
+  verification_status: in_tree_runtime
+  notes:
+  - The public runner can execute the checked-in MIND metric runtime with --run-official or normalize an
+    existing MIND result JSON with --official-results-path.
+  - --run-fixture normalizes a bundled synthetic fixture so the normalizer stays testable without GPUs.
+  - The lcm, visual, dino, and gsc metrics need CUDA plus LPIPS/torchmetrics/pyiqa/CLIP assets; the action
+    metric additionally needs the ViPE CLI and checkout supplied through --vipe-repo.
+  - All mutable state (work directory, MIND_CACHE_DIR, staged links, logs, result JSON) is written under
+    --output-dir; the vendored runtime is read-only.
+  - mind_average is a WorldFoundry-derived aggregate. MIND publishes no official composite score and its
+    leaderboard is not yet open.
+integration:
+  status: integrated
+  tier: in_tree
+  hf_dataset_id: CSU-JPG/MIND
+  blocked_reasons:
+  - Leaderboard parity requires the complete 250-clip official split and the MIND leaderboard, which is not
+    yet published.
+  - Recomputing all metrics requires MIND-Data, DINOv3 weights, and a working ViPE installation.
+release_status: experimental
+maturity: contract_ready
+open_source_status: experimental
+official_benchmark_verified: false
+integration_evidence: false
+leaderboard_valid: false
+requires:
+- --run-official with --gt-root <MIND-Data>, --generated-artifact-dir <model_outputs>, and --dino-path
+  <dinov3_vitb16>; or --official-results-path <mind_result.json> for result normalization
+- --vipe-repo <vipe_checkout> plus the vipe CLI when the action metric is requested
+blockers:
+- Leaderboard-valid scores require the complete official split and a published MIND leaderboard.
+data_refs:
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/mind.yaml
+  hf_dataset_ids:
+  - CSU-JPG/MIND
+runner_availability:
+  available: true
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:MINDContract
+  runner_script_available: true
+  task_yaml_available: true
+  runtime_verified: false
+  runtime_verification_scope: normalizer_only
+  full_suite_verified: false
+  surface: in_tree_runtime_with_result_normalizer
+  normalizer_verified: true
+base_model_dependencies:
+- video_world_perception_stack
+validation_command:
+- python
+- worldfoundry/evaluation/tasks/execution/runners/mind/run_mind_official_runner.py
+- --run-fixture
+- --output-dir
+- <out>
+- --json
+checkpoint_refs:
+- repo_id: facebook/dinov3-vitb16-pretrain-lvd1689m
+  repo_type: model
+  role: metric_weights
+  notes: Supplied through --dino-path or <weights-dir>/dinov3_vitb16; never vendored in tree.
+artifact_layout:
+  generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  output_artifact: benchmark_scorecard
+  filename_template: scorecard.json

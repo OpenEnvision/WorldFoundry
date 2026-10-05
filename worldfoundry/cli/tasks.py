@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
-from .utils import json_dump
 from worldfoundry.evaluation.utils import BENCHMARK_TASK_ROOT, write_json, write_jsonl
+
+from .presentation import print_details, print_table, terminal_enabled
+from .utils import CliUsageError, json_dump
+from .utils import task_roots_from_args as _task_roots_from_args
 
 DEFAULT_TASK_ROOT = BENCHMARK_TASK_ROOT
 DEFAULT_BENCHMARK_TASK_ROOT = DEFAULT_TASK_ROOT
@@ -90,6 +92,17 @@ def _task_list_detail(item: dict) -> str:
 
 def _print_grouped_task_list(items: list[dict]) -> None:
     """Print task entries grouped by suite, backend, and evaluation protocol."""
+    if terminal_enabled():
+        print_table(
+            "Benchmark tasks",
+            ("Task", "Suite / backend", "Details"),
+            [
+                (_task_list_label(item), _task_list_group_title(item), _task_list_detail(item))
+                for item in sorted(items, key=lambda row: (_task_list_group_key(row), _task_list_label(row)))
+            ],
+        )
+        return
+
     if not items:
         print("No registered tasks matched the filters.")
         return
@@ -114,35 +127,60 @@ def _handle_tasks_show(args: argparse.Namespace) -> int:
     else:
         matches = list_benchmark_zoo_cli_tasks(task_type=args.task_type)
         if not matches:
-            print(f"unknown task: {args.task_type!r}", file=sys.stderr)
-            return 2
+            raise CliUsageError(f"unknown task: {args.task_type!r}")
         if len(matches) > 1:
             benchmark_names = ", ".join(row["benchmark_name"] for row in matches)
-            print(
-                f"task {args.task_type!r} exists in multiple benchmarks: {benchmark_names}; "
-                "pass --benchmark-name",
-                file=sys.stderr,
+            raise CliUsageError(
+                f"task {args.task_type!r} exists in multiple benchmarks: {benchmark_names}; pass --benchmark-name"
             )
-            return 2
         item = matches[0]
     if args.json:
         json_dump(item)
         return 0
 
-    print(f"task_type: {item['task_type']}")
-    print(f"benchmark_name: {item['benchmark_name']}")
-    print(f"suite: {item['suite']}")
-    print(f"backend: {item['backend']}")
-    print(f"name: {item['name']}")
-    print(f"protocol: {item['protocol']}")
-    print(f"capability_track: {item['capability_track']}")
-    print(f"schema_type: {item['schema_type']}")
-    print(f"evaluation_protocol: {item['evaluation_protocol']}")
-    print(f"input_keys: {', '.join(item['input_keys'])}")
-    print(f"output_keys: {', '.join(item['output_keys'])}")
-    print(f"metric_groups: {', '.join(item['metric_groups'])}")
-    print(f"task_yaml_path: {item['task_yaml_path']}")
-    print(f"source_kind: {item['source_kind']}")
+    if terminal_enabled():
+        keys = (
+            "task_type",
+            "benchmark_name",
+            "suite",
+            "backend",
+            "name",
+            "protocol",
+            "capability_track",
+            "schema_type",
+            "evaluation_protocol",
+            "input_keys",
+            "output_keys",
+            "metric_groups",
+            "task_yaml_path",
+            "source_kind",
+            "benchmark_zoo_id",
+            "contract_only_surface",
+            "requires_upstream_runtime",
+            "official_runtime_validated",
+            "description",
+        )
+        print_details("Benchmark task", {key: item[key] for key in keys if key in item})
+        return 0
+    print_details(
+        "Benchmark task",
+        {
+            "task_type": f"{item['task_type']}",
+            "benchmark_name": f"{item['benchmark_name']}",
+            "suite": f"{item['suite']}",
+            "backend": f"{item['backend']}",
+            "name": f"{item['name']}",
+            "protocol": f"{item['protocol']}",
+            "capability_track": f"{item['capability_track']}",
+            "schema_type": f"{item['schema_type']}",
+            "evaluation_protocol": f"{item['evaluation_protocol']}",
+            "input_keys": f"{', '.join(item['input_keys'])}",
+            "output_keys": f"{', '.join(item['output_keys'])}",
+            "metric_groups": f"{', '.join(item['metric_groups'])}",
+            "task_yaml_path": f"{item['task_yaml_path']}",
+            "source_kind": f"{item['source_kind']}",
+        },
+    )
     if item["benchmark_zoo_id"]:
         print(f"benchmark_zoo_id: {item['benchmark_zoo_id']}")
         print(f"contract_only_surface: {item['contract_only_surface']}")
@@ -165,12 +203,20 @@ def _handle_tasks_catalog(args: argparse.Namespace) -> int:
         json_dump(items)
         return 0
 
+    if terminal_enabled():
+        print_table(
+            "Task catalog",
+            ("Benchmark", "Schema", "Tasks", "Tags"),
+            [
+                (item["name"], item["schema_version"], [task["name"] for task in item["tasks"]], item["tags"])
+                for item in items
+            ],
+        )
+        return 0
+
     for item in items:
         task_names = ", ".join(task["name"] for task in item["tasks"])
-        print(
-            f"{item['name']} [{item['schema_version']}] "
-            f"tasks={task_names} tags={', '.join(item['tags'])}"
-        )
+        print(f"{item['name']} [{item['schema_version']}] tasks={task_names} tags={', '.join(item['tags'])}")
     return 0
 
 # ── Suite commands ───────────────────────────────────────────────
@@ -183,6 +229,22 @@ def _handle_suites_list(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(suites)
         return 0
+    if terminal_enabled():
+        print_table(
+            "Evaluation suites",
+            ("Suite", "Name", "Models", "Benchmarks"),
+            [
+                (
+                    suite["id"],
+                    suite.get("name"),
+                    len(suite.get("model_ids") or []),
+                    len(suite.get("benchmark_ids") or []),
+                )
+                for suite in suites
+            ],
+        )
+        return 0
+
     for suite in suites:
         print(
             f"{suite['id']}: models={len(suite.get('model_ids') or [])} "
@@ -197,33 +259,24 @@ def _handle_suites_show(args: argparse.Namespace) -> int:
     try:
         suite = dict(get_model_benchmark_suite_preset(args.suite, args.suite_preset_path))
     except KeyError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
+        raise CliUsageError(str(exc)) from exc
     if args.json:
         json_dump(suite)
         return 0
-    print(f"id: {suite['id']}")
-    print(f"name: {suite.get('name') or suite['id']}")
-    print(f"aliases: {', '.join(suite.get('aliases') or ()) or '-'}")
-    print(f"models: {', '.join(suite.get('model_ids') or ()) or '-'}")
-    print(f"benchmarks: {', '.join(suite.get('benchmark_ids') or ()) or '-'}")
+    print_details(
+        "Evaluation suite",
+        {
+            "id": f"{suite['id']}",
+            "name": f"{suite.get('name') or suite['id']}",
+            "aliases": f"{', '.join(suite.get('aliases') or ()) or '-'}",
+            "models": f"{', '.join(suite.get('model_ids') or ()) or '-'}",
+            "benchmarks": f"{', '.join(suite.get('benchmark_ids') or ()) or '-'}",
+        },
+    )
     return 0
 
 # ── Filesystem task catalog commands ─────────────────────────────
 
-
-def _task_roots_from_args(args: argparse.Namespace) -> tuple[Path, ...]:
-    """Resolve task root paths from CLI flags, defaults, and environment variables."""
-    if args.task_root:
-        roots = list(args.task_root)
-    else:
-        roots = [root for root in (DEFAULT_TASK_ROOT, DEFAULT_BENCHMARK_TASK_ROOT) if root.exists()]
-    for env_name in ("WORLDFOUNDRY_TASK_ROOTS", "WORLDFOUNDRY_BENCHMARK_INCLUDE_PATH"):
-        for item in os.environ.get(env_name, "").split(os.pathsep):
-            if item.strip():
-                roots.append(Path(item))
-    roots.extend(getattr(args, "include_path", None) or ())
-    return tuple(dict.fromkeys(Path(root) for root in roots))
 
 def _load_filesystem_task_registry(args: argparse.Namespace):
     """Load a task registry from filesystem YAML roots derived from CLI args."""
@@ -250,6 +303,14 @@ def _handle_task_list(args: argparse.Namespace) -> int:
         json_dump(items)
         return 0
 
+    if terminal_enabled():
+        print_table(
+            "Task files",
+            ("Task", "Benchmark", "Protocol", "Source"),
+            [(item["task_name"], item["benchmark_name"], item["protocol"], item["source_path"]) for item in items],
+        )
+        return 0
+
     for item in items:
         eval_protocol = ", ".join(item["evaluation_protocol"]) or "-"
         print(
@@ -267,17 +328,22 @@ def _handle_task_show(args: argparse.Namespace) -> int:
         json_dump(item)
         return 0
 
-    print(f"task_name: {item['task_name']}")
-    print(f"benchmark_name: {item['benchmark_name']}")
-    print(f"protocol: {item['protocol']}")
-    print(f"evaluation_protocol: {', '.join(item['evaluation_protocol']) or '-'}")
-    print(f"input_keys: {', '.join(item['input_keys']) or '-'}")
-    print(f"output_keys: {', '.join(item['output_keys']) or '-'}")
-    print(f"metric_ids: {', '.join(item['metric_ids']) or '-'}")
-    print(f"metric_groups: {', '.join(item['metric_groups']) or '-'}")
-    print(f"tags: {', '.join(item['tags']) or '-'}")
-    print(f"source_path: {item['source_path']}")
-    print(f"description: {item['description']}")
+    print_details(
+        "Task details",
+        {
+            "task_name": f"{item['task_name']}",
+            "benchmark_name": f"{item['benchmark_name']}",
+            "protocol": f"{item['protocol']}",
+            "evaluation_protocol": f"{', '.join(item['evaluation_protocol']) or '-'}",
+            "input_keys": f"{', '.join(item['input_keys']) or '-'}",
+            "output_keys": f"{', '.join(item['output_keys']) or '-'}",
+            "metric_ids": f"{', '.join(item['metric_ids']) or '-'}",
+            "metric_groups": f"{', '.join(item['metric_groups']) or '-'}",
+            "tags": f"{', '.join(item['tags']) or '-'}",
+            "source_path": f"{item['source_path']}",
+            "description": f"{item['description']}",
+        },
+    )
     return 0
 
 def _task_validation_paths(args: argparse.Namespace) -> tuple[Path, ...]:
@@ -318,15 +384,40 @@ def _handle_task_validate(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(payload)
     else:
-        for item in items:
-            if item["ok"]:
-                print(f"ok: {item['path']} tasks={item['task_count']} kind={item['kind']}")
-            else:
-                print(f"error: {item['path']} {item['error_type']}: {item['error']}", file=sys.stderr)
-        print(
-            f"validated {payload['path_count']} paths: "
-            f"{payload['valid_count']} ok, {payload['invalid_count']} invalid"
-        )
+        if terminal_enabled():
+            print_details(
+                "Task validation",
+                {
+                    "ok": payload["ok"],
+                    "paths": payload["path_count"],
+                    "valid": payload["valid_count"],
+                    "invalid": payload["invalid_count"],
+                },
+            )
+            print_table(
+                "Task files",
+                ("Path", "OK", "Details"),
+                [
+                    (
+                        item["path"],
+                        item["ok"],
+                        f"{item['task_count']} tasks · {item['kind']}"
+                        if item["ok"]
+                        else f"{item['error_type']}: {item['error']}",
+                    )
+                    for item in items
+                ],
+            )
+        else:
+            for item in items:
+                if item["ok"]:
+                    print(f"ok: {item['path']} tasks={item['task_count']} kind={item['kind']}")
+                else:
+                    print(f"error: {item['path']} {item['error_type']}: {item['error']}", file=sys.stderr)
+            print(
+                f"validated {payload['path_count']} paths: "
+                f"{payload['valid_count']} ok, {payload['invalid_count']} invalid"
+            )
     return 0 if payload["ok"] else 1
 
 
@@ -340,7 +431,7 @@ def _handle_task_materialize(args: argparse.Namespace) -> int:
     from worldfoundry.evaluation.tasks.execution.orchestration.plan import build_run_plan
 
     if args.dataset_root is None and args.dataset_manifest is None:
-        raise ValueError("task materialize requires --dataset-root or --dataset-manifest")
+        raise CliUsageError("task materialize requires --dataset-root or --dataset-manifest")
 
     registry = _load_filesystem_task_registry(args)
     entry = registry.get(args.task_name, benchmark=args.benchmark)
@@ -369,14 +460,26 @@ def _handle_task_materialize(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(payload)
     else:
-        print(
-            f"materialized: task={materialized.task_type} "
-            f"benchmark={materialized.benchmark_name} requests={materialized.sample_count}"
-        )
-        if args.output_json:
-            print(f"wrote_json: {args.output_json}")
-        if args.output_jsonl:
-            print(f"wrote_jsonl: {args.output_jsonl}")
+        if terminal_enabled():
+            print_details(
+                "Requests materialized",
+                {
+                    "task": materialized.task_type,
+                    "benchmark": materialized.benchmark_name,
+                    "requests": materialized.sample_count,
+                    "JSON": args.output_json,
+                    "JSONL": args.output_jsonl,
+                },
+            )
+        else:
+            print(
+                f"materialized: task={materialized.task_type} "
+                f"benchmark={materialized.benchmark_name} requests={materialized.sample_count}"
+            )
+            if args.output_json:
+                print(f"wrote_json: {args.output_json}")
+            if args.output_jsonl:
+                print(f"wrote_jsonl: {args.output_jsonl}")
     return 0
 
 
@@ -385,7 +488,7 @@ def _handle_task_materialize(args: argparse.Namespace) -> int:
 
 def register_task_subparsers(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register task commands and keep related argument groups contiguous."""
-    tasks_parser = subparsers.add_parser("tasks", help="Inspect registered WorldFoundry benchmark tasks")
+    tasks_parser = subparsers.add_parser("tasks", help="Browse benchmark tasks and evaluation suites")
     tasks_subparsers = tasks_parser.add_subparsers(dest="tasks_command", required=True)
 
     tasks_list_parser = tasks_subparsers.add_parser("list", help="List WorldFoundry benchmark entries")

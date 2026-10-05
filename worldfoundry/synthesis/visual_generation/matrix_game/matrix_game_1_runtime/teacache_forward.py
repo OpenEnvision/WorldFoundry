@@ -1,11 +1,11 @@
 # teacache
-import torch
-import numpy as np
-from typing import Optional, Union, Dict, Any
+from typing import Any, Dict, Optional, Union
 
-from worldfoundry.base_models.diffusion_model.video.hunyuan_video.modulate_layers_i2v import modulate
-from worldfoundry.synthesis.visual_generation.matrix_game.dit.attenion import attention, get_cu_seqlens
-from diffusers.models.modeling_outputs import Transformer2DModelOutput
+import numpy as np
+import torch
+
+from worldfoundry.core.nn import modulate_sequence as modulate
+from worldfoundry.core.attention import get_cu_seqlens
 
 
 def teacache_forward(
@@ -88,7 +88,6 @@ def teacache_forward(
         if self.enable_teacache:
             inp = img.clone()
             vec_ = vec.clone()
-            txt_ = txt.clone()
             (
                 img_mod1_shift,
                 img_mod1_scale,
@@ -132,7 +131,7 @@ def teacache_forward(
                                 return module(*inputs)
 
                             return custom_forward
-                        ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
+                        ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False}
                         image_kwargs: Dict[str, Any] = {"tt":hidden_states.shape[2] // self.patch_size[0],
                             "th":hidden_states.shape[3] // self.patch_size[1],
                             "tw":hidden_states.shape[4] // self.patch_size[2]}
@@ -187,7 +186,7 @@ def teacache_forward(
                                     return module(*inputs)
 
                                 return custom_forward
-                            ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
+                            ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False}
                             image_kwargs: Dict[str, Any] = {"tt":hidden_states.shape[2] // self.patch_size[0],
                                 "th":hidden_states.shape[3] // self.patch_size[1],
                                 "tw":hidden_states.shape[4] // self.patch_size[2]}
@@ -243,7 +242,7 @@ def teacache_forward(
                             return module(*inputs)
 
                         return custom_forward
-                    ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
+                    ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False}
                     image_kwargs: Dict[str, Any] = {"tt":hidden_states.shape[2] // self.patch_size[0],
                         "th":hidden_states.shape[3] // self.patch_size[1],
                         "tw":hidden_states.shape[4] // self.patch_size[2]}
@@ -298,7 +297,7 @@ def teacache_forward(
                                 return module(*inputs)
 
                             return custom_forward
-                        ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
+                        ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False}
                         image_kwargs: Dict[str, Any] = {"tt":hidden_states.shape[2] // self.patch_size[0],
                             "th":hidden_states.shape[3] // self.patch_size[1],
                             "tw":hidden_states.shape[4] // self.patch_size[2]}

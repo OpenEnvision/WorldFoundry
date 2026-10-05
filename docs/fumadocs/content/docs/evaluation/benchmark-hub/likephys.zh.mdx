@@ -1,0 +1,49 @@
+---
+title: LikePhys
+description: "牛津似然探针：视频扩散模型是否更偏好物理合法片段，而不是配对的不合理变体？没有生成视频输入。"
+---
+
+LikePhys（牛津大学，ICLR 2026）是**免训练似然探针**，不是生成评测。它**不**给你们生成的视频打分。对 **12 个仿真场景**（刚体、流体、可形变体、光学）中的每一个，它把物理合法片段与配对的不合理变体放在一起，问扩散模型是否给合法片段**更高似然**（更低去噪 ELBO）。主指标是**误排率**——模型偏好不合理变体的频率。全部指标**越低越好**。
+
+这和 [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq)（续写实拍场景）、[PhyGenBench](/zh/docs/evaluation/benchmark-hub/phygenbench)（评审一段生成的 T2V）不是同一件事。
+
+论文：[LikePhys](https://arxiv.org/abs/2510.11512)。项目：[yuanjianhao508.github.io/LikePhys](https://yuanjianhao508.github.io/LikePhys/)。代码：[YuanJianhao508/LikePhys](https://github.com/YuanJianhao508/LikePhys)。片段：[JianhaoDYDY/LikePhys-Benchmark](https://huggingface.co/datasets/JianhaoDYDY/LikePhys-Benchmark)（920 个片段）。
+
+WorldFoundry **仓内重算官方误排公式**（`compute_misrank_normalized` 与 `read_exp_final.py` 过滤）。跑上游 ELBO 探针需要调用方提供的 LikePhys checkout（`WORLDFOUNDRY_LIKEPHYS_EVALUATOR_ROOT`）、CUDA 与被探测权重——WorldFoundry 不内置 fork 的 diffusers pipeline。
+
+<BenchmarkPageSections id="likephys" locale="zh" />
+
+## 如何运行
+
+导入 `results_<model>.json`（或含 `<scenario>/results_<probe_model>.json` 的目录）并重算误排：
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id likephys \
+  --mode official-validation \
+  --official-results-path <likephys_results_root> \
+  --output-dir tmp/likephys/official-validation \
+  --json
+```
+
+结果根含多个后端时用 `--probe-model`。`--no-report-filter` 会保留论文 `filter_config` 排除的变体。
+
+对单个模型、单个场景跑上游 ELBO 探针（需要 CUDA 与 LikePhys checkout）：
+
+```bash
+hf download JianhaoDYDY/LikePhys-Benchmark --repo-type dataset --local-dir "${WORLDFOUNDRY_LIKEPHYS_DATA_ROOT}"
+
+WORLDFOUNDRY_LIKEPHYS_EVALUATOR_ROOT=/path/to/LikePhys \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/likephys/run_likephys_official_runner.py \
+  --run-official \
+  --probe-model wan2.1-T2V-1.3b \
+  --scenario ball_drop \
+  --benchmark-data-root "${WORLDFOUNDRY_LIKEPHYS_DATA_ROOT}" \
+  --output-dir tmp/likephys/probe \
+  --json
+```
+
+`--dry-run` 只准备工作区并打印命令。产物包括 `scorecard.json`（主键 `likephys_misrank_rate`）与 `misrank_breakdown.json`。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

@@ -1,0 +1,39 @@
+---
+title: "DynamiCrafter"
+description: "Tencent / CUHK open-domain I2V. Two wired variants: 512 and 1024. Official long-config parity pending. Redistribution gated until license review."
+modelId: "dynamicrafter"
+pageSource: authored
+---
+
+DynamiCrafter animates an open-domain still: picture (plus optional prompt) in, a plausible motion clip out. It is a U-Net-era latent video diffusion with **dual-stream** image conditioning (CLIP image features + VAE latents). WorldFoundry wraps two resolution profiles as in-tree runtimes. Default pipeline: `DynamiCrafter512I2VPipeline`. Variants: `dynamicrafter-512-i2v`, `dynamicrafter-1024-i2v`.
+
+<ModelPaperFigures modelId="dynamicrafter" locale="en" />
+
+Paper: [arXiv 2310.12190](https://arxiv.org/abs/2310.12190). Project: [doubiiu.github.io/projects/DynamiCrafter](https://doubiiu.github.io/projects/DynamiCrafter/). Publisher: Tencent AI Lab / CUHK. Catalog license unset; the manifest **gates redistribution** until upstream license review.
+
+Both variants are wired; **official long-config parity is pending**. Start at 512 for speed, 1024 for finals. It invents motion — it does **not** follow camera paths or actions.
+
+<ModelCommandBuilder modelId="dynamicrafter" locale="en" />
+
+## What it is for
+
+Animate a still with DynamiCrafter I2V.
+
+Launch `worldfoundry-eval run dynamicrafter-512-i2v`.
+
+Score on [AIGCBench](/docs/evaluation/benchmark-hub/aigcbench) — image-to-video benchmark aligned with DynamiCrafter's task.
+
+## Runtime contract
+
+Required: `prompt` and `image`; optional: `video`; `actions`: seed; artifacts: `dynamicrafter-512-i2v.mp4`.
+
+| Variant | Size | Frames | Frame stride | Artifact |
+| --- | --- | --- | --- | --- |
+| `dynamicrafter-512-i2v` | **320×512** | **50** | **24** | `dynamicrafter-512-i2v.mp4` |
+| `dynamicrafter-1024-i2v` | **576×1024** | **50** | **10** | `dynamicrafter-1024-i2v.mp4` |
+
+## Run in WorldFoundry
+
+Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `Doubiiu/DynamiCrafter`, `Doubiiu/DynamiCrafter_512`, and `Doubiiu/DynamiCrafter_1024` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run dynamicrafter-512-i2v`. Catalog VRAM is unset.
+
+<ModelRelatedRecipes modelId="dynamicrafter" locale="en" />

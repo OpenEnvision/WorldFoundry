@@ -26,7 +26,7 @@ import torch
 import torch.distributed as dist
 from PIL import Image
 
-from worldfoundry.core.realtime import RealtimeSpec
+from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
 from worldfoundry.runtime.local_checkpoint_cache import stage_checkpoint_for_realtime
 
 NATIVE_LATENT_FRAMES = 9

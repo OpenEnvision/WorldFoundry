@@ -32,3 +32,23 @@ runtime_profile: runtime-profile:bernini-r-1.3b
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: bernini-r-1.3b
 catalog_category: video
+docs:
+  publisher: ByteDance
+  publisher_kind: company
+  publisher_zh: 字节跳动（ByteDance）
+  overview: Bernini-R 1.3B is the small renderer-only member of ByteDance's Bernini family — a 1.3B rendering checkpoint fine-tuned from Wan2.1 1.3B, covering the same six task types as its larger siblings. It is the practical single-GPU way to try the Bernini task surface. WorldFoundry vendors the renderer inference in-tree and loads ByteDance/Bernini-R-1.3B-Diffusers.
+  overview_zh: Bernini-R 1.3B 是字节 Bernini 系列中的小型「仅渲染器」成员——由 Wan2.1 1.3B 微调而来的 1.3B 渲染 checkpoint，覆盖与大模型相同的六类任务。它是单卡体验 Bernini 任务面的实用选择。WorldFoundry 树内内置渲染器推理代码，加载 ByteDance/Bernini-R-1.3B-Diffusers。
+  architecture: The manifest explicitly records this as a renderer-only 1.3B checkpoint fine-tuned from the Wan2.1 1.3B diffusion-transformer backbone; the 7B planner stage of the full Bernini design is absent.
+  architecture_zh: manifest 明确记录：这是一个由 Wan2.1 1.3B 扩散 Transformer 基座微调而来的 1.3B 纯渲染 checkpoint；完整 Bernini 设计中的 7B 规划阶段不包含在内。
+  usage_notes: Runner parity is pending_gpu_validation, but the small footprint makes this the recommended first stop in the Bernini family. Select tasks via task_type; the checkpoint is apache-2.0 and must be staged locally.
+  usage_notes_zh: Runner parity 为 pending_gpu_validation，但小体量使它成为 Bernini 系列的推荐起点。通过 task_type 选择任务；checkpoint 为 apache-2.0，需在本地就位。
+  limitations:
+  - 1.3B capacity limits fidelity versus the 14B renderer and the full planner+renderer pipeline.
+  - GPU artifact parity is still pending in this workspace.
+  limitations_zh:
+  - 1.3B 容量使保真度低于 14B 渲染器与完整规划+渲染流程。
+  - 本工作区的 GPU 产物一致性验证仍在等待中。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Quick quality yardstick for the small renderer.
+    reason_zh: 小渲染器的快速质量标尺。

@@ -6,7 +6,6 @@ import json
 import re
 import time
 from dataclasses import dataclass
-from hashlib import sha256
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -14,13 +13,13 @@ from worldfoundry.core.action_normalization import (
     select_modality_statistics,
     unnormalize_action_values,
 )
+from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import (
     project_root,
     resolve_local_hf_model_path,
     resolve_worldfoundry_path,
 )
-from worldfoundry.core.io.serialization import jsonable
-
+from worldfoundry.core.io.formats.serialization import jsonable
 
 RUNTIME_ROOT = Path(__file__).resolve().parent
 
@@ -320,7 +319,7 @@ class StarVLAPlanRuntime:
             "model_id": "starvla",
             "artifact_kind": "action_trace",
             "artifact_path": str(target),
-            "artifact_sha256": sha256(target.read_bytes()).hexdigest(),
+            "artifact_sha256": file_sha256(target),
             "backend": payload["backend"],
             "backend_quality": payload["backend_quality"],
             "action_shape": payload["action_shape"],
@@ -332,9 +331,9 @@ class StarVLAPlanRuntime:
             return self._loaded
         import torch
 
-        from .modeling.base import load_starvla_model
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from .modeling.base import load_starvla_model
 
         device = resolve_inference_device(self.config.device, allow_cpu_fallback=True)
         dtype = resolve_inference_dtype(device, self.config.torch_dtype)

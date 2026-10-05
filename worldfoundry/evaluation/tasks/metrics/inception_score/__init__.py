@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .compute import compute_inception_score
+compute_inception_score = lazy_export(f"{__name__}.compute", "compute_inception_score", owner=__name__)
 
 METRIC_ID = "inception_score"
 ALIASES = ("is", "isc")

@@ -15,6 +15,8 @@ checkpoint_refs:
   license: cc-by-nc-4.0
 - repo_id: cerspense/zeroscope_v2_XL
   license: cc-by-nc-4.0
+official_sources:
+  project_page: https://huggingface.co/cerspense/zeroscope_v2_576w
 integration:
   status: integrated
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -34,3 +36,23 @@ catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries
   expose WorldFoundry pipeline targets; metadata-only entries retain upstream provenance
   without runnable WorldFoundry backends.
+docs:
+  publisher: Open-source community (cerspense)
+  publisher_kind: lab
+  publisher_zh: 开源社区（cerspense，机构未记录）
+  overview: 'ZeroScope is a community fine-tune of ModelScopeT2V optimized for watermark-free 16:9 video, released in 576w and XL upscale checkpoints by the creator cerspense. In this catalog it is a verified legacy route: WorldFoundry output matched the official Diffusers route for the selected configuration.'
+  overview_zh: ZeroScope 是社区作者 cerspense 对 ModelScopeT2V 的微调版，面向无水印 16:9 视频优化，发布了 576w 与 XL 放大两个 checkpoint。在本 catalog 中它是已验证的旧代路径：WorldFoundry 输出与所选配置下的官方 Diffusers 路径一致。
+  architecture: A legacy U-Net latent video diffusion model (the ModelScopeT2V architecture) fine-tuned on watermark-free data; the 576w checkpoint generates at 576x320 and zeroscope_v2_XL upscales. The task list marks it legacy-unet-diffusion.
+  architecture_zh: 旧式 U-Net 潜空间视频扩散模型（即 ModelScopeT2V 架构），在无水印数据上微调；576w checkpoint 以 576x320 生成，zeroscope_v2_XL 负责放大。任务列表标注 legacy-unet-diffusion。
+  usage_notes: 'Runner parity is verified and the Studio/API route uses the unified environment — an easy, reliable smoke-test model. Mind the license: CC-BY-NC-4.0 requires benchmark policy review before commercial or automated benchmark use (recorded twice in the manifest).'
+  usage_notes_zh: Runner parity 已验证，Studio/API 路径使用统一环境——是简单可靠的冒烟测试模型。注意许可： CC-BY-NC-4.0 要求在商用或自动化评测前先做政策审阅（manifest 中记录了两次）。
+  limitations:
+  - 'CC-BY-NC-4.0 license: non-commercial; benchmark policy review required.'
+  - Legacy quality — use it for pipeline validation, not final content.
+  limitations_zh:
+  - CC-BY-NC-4.0 许可：非商用；自动化评测前需政策审阅。
+  - 旧代质量——适合管线验证，不适合产出成品。
+  recommended_benchmarks:
+  - id: fetv
+    reason: Fine-grained legacy T2V evaluation.
+    reason_zh: 细粒度的旧代文生视频评测。

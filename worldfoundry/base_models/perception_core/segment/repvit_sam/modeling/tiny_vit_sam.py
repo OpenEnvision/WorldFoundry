@@ -18,7 +18,7 @@ from timm.models.layers import DropPath as TimmDropPath,\
     to_2tuple, trunc_normal_
 from timm.models.registry import register_model
 from typing import Tuple
-from worldfoundry.core.nn.layers import LayerNorm2d
+from worldfoundry.core.nn.blocks.layers import LayerNorm2d
 
 
 class Conv2d_BN(torch.nn.Sequential):

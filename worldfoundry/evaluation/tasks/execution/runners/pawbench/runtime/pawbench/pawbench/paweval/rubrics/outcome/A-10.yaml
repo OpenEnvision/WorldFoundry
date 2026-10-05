@@ -1,0 +1,38 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A-10
+track: calibration
+title_en: Double coin flip
+outcome_question: Which label in ['0_heads', '1_head', '2_heads'] is visible across
+  the two coins in the first decisive post-toss readout window?
+readout_policy: Read the first decisive post-action result window after the requested
+  double flick/throw has actually occurred. Do not use the opening pre-action coin
+  faces. The readout does not have to be the final video frame; use the earliest
+  post-toss frame or short frame window where both coin faces are visible and no
+  longer in active flipping/spinning enough to count heads. If the count is readable
+  and later a hand occludes a coin or a coin drifts, keep the earliest decisive
+  count and record the later issue on the trust/readout side rather than relabeling.
+canonical_labels:
+- 0_heads
+- 1_head
+- 2_heads
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['0_heads', '1_head', '2_heads'] can be decisively
+  identified within the readout window.
+- Only the initial pre-action faces are visible; no post-flick/post-throw result
+  can be read.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'First-decisive-window rule: use the earliest post-action frame/window where the
+  two-coin result has committed; do not require the terminal frame and do not re-label
+  from later occlusion, drift, or transient states.'
+notes:
+- 'Scene title: Double coin flip.'
+- Initial coin faces are scene grounding, not outcome evidence.

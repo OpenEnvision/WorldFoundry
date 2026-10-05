@@ -5,23 +5,20 @@ description: Score generated artifacts with benchmarks, metrics, and reproducibl
 
 Evaluation turns model outputs into reviewable evidence: prepare inputs, generate or import results, score them, and write a scorecard. Model launch details stay in runners; benchmarks consume normalized `GenerationResult` rows. Scoring and leaderboard claims are separate — a successful framework import is not the same as an official leaderboard run.
 
-For a first end-to-end path, use [Usage](/docs/quickstart). For flags and discovery commands, see [CLI](/docs/reference/cli). For per-benchmark layouts, see [Benchmark Hub](/docs/evaluation/benchmark-hub). For metric recipes, see [Metrics](/docs/evaluation/metrics).
+For a first end-to-end path, use [Quickstart](/docs/quickstart). For flags and discovery commands, see [CLI](/docs/reference/cli). For per-benchmark layouts, see [Benchmark Hub](/docs/evaluation/benchmark-hub). For metric recipes, see [Metrics](/docs/evaluation/metrics).
 
 ## What to run
 
-| Goal | Command |
-| --- | --- |
-| Score a directory with a complete benchmark protocol | `worldfoundry-eval score --benchmark <id> --artifacts <dir> ...` |
-| Generate from a dataset manifest, then score metric ids | `worldfoundry-eval generate-score --model <id> --dataset-manifest <file> ...` |
-| Reproduce a known model × benchmark configuration | `worldfoundry-eval reproduce --benchmark <id> ...` |
-| Run a new/custom model on an existing benchmark | `worldfoundry-eval run --model <id> --model-manifest-dir <dir> --benchmark <id> ...` |
-| Change a known model or benchmark configuration | `worldfoundry-eval reproduce --recipe <recipe.yaml> ...` |
-| Score existing JSON/JSONL results | `worldfoundry-eval evaluate --mode existing-results ...` |
-| Build a request ledger from a task | `worldfoundry-eval task materialize ...` |
-| Run one benchmark × model | `worldfoundry-eval run --benchmark <id> --model <id> ...` |
-| Import official-shaped results | `worldfoundry-eval zoo benchmark-run --mode official-validation ...` |
-| Try a new benchmark manifest | `worldfoundry-eval run --benchmark-manifest-dir <dir> --benchmark <id> ...` |
-| List metric ids | `worldfoundry-eval metric list` |
+- **Score a directory with a complete benchmark protocol** — `worldfoundry-eval score --benchmark <id> --artifacts <dir> ...`
+- **Generate from a dataset manifest, then score metric IDs** — `worldfoundry-eval generate-score --model <id> --dataset-manifest <file> ...`
+- **Reproduce a known model × benchmark configuration** — `worldfoundry-eval reproduce --recipe <recipe.yaml> ...`
+- **Run a new/custom model on an existing benchmark** — `worldfoundry-eval run --model <id> --model-manifest-dir <dir> --benchmark <id> ...`
+- **Score existing JSON/JSONL results** — `worldfoundry-eval evaluate --mode existing-results ...`
+- **Build a request ledger from a task** — `worldfoundry-eval task materialize ...`
+- **Run one benchmark × model** — `worldfoundry-eval run --benchmark <id> --model <id> ...`
+- **Import official-shaped results** — `worldfoundry-eval zoo benchmark-run --mode official-validation ...`
+- **Try a new benchmark manifest** — `worldfoundry-eval run --benchmark-manifest-dir <dir> --benchmark <id> ...`
+- **List metric IDs** — `worldfoundry-eval metric list`
 
 Default user shape is `worldfoundry-eval run`. Use `evaluate` when you already have materialized requests or results. Use `zoo benchmark-run` for integrated external benchmarks where you supply the data root, generated artifacts, or official result files.
 
@@ -29,15 +26,15 @@ Default user shape is `worldfoundry-eval run`. Use `evaluate` when you already h
 
 The CLI, TUI, and Workspace compile these user intents onto the same two execution requests; they do not maintain separate inference or metric implementations.
 
-| Intent | Data and configuration | Classification |
-| --- | --- | --- |
-| Official reproduction | Pinned recipe, official sample coverage, model generation settings, and benchmark runtime settings | `reproduction` |
-| Model benchmark | In-tree model plus the benchmark's official prompt/data protocol | `protocol_compliant` |
-| Score my artifacts | User-provided artifacts plus a benchmark's complete metric protocol | `custom_dataset_metric_evaluation` |
-| Generate and score my dataset | Dataset manifest plus selected executable metric ids | `custom_dataset_metric_evaluation` |
-| Score existing results | WorldFoundry JSON/JSONL results plus selected executable metric ids | `custom_results_metric_evaluation` |
+- **Official reproduction** — Pinned recipe, official sample coverage, model generation settings, and benchmark runtime settings. Classification: `reproduction`.
+- **Model benchmark** — In-tree model plus the benchmark's official prompt/data protocol. Classification: `protocol_compliant`.
+- **Score my artifacts** — User-provided artifacts plus a benchmark's complete metric protocol. Classification: `custom_dataset_metric_evaluation`.
+- **Generate and score my dataset** — Dataset manifest plus selected executable metric IDs. Classification: `custom_dataset_metric_evaluation`.
+- **Score existing results** — WorldFoundry JSON/JSONL results plus selected executable metric IDs. Classification: `custom_results_metric_evaluation`.
 
 A custom-data score is useful evidence, but is not automatically comparable to an official leaderboard. Likewise, a bounded official component run may prove that the integration works without proving full benchmark comparability. `prepared_evaluation.json` records the classification, resolved request, configuration sources, and preflight diagnostics for every prepared run; model × benchmark plans also cap their claim at the benchmark catalog's checked-in evidence level.
+
+Models and benchmarks meet only through standard artifacts and manifests. The model runner produces `GenerationResult` rows; the benchmark adapter maps those artifacts strictly into the official layout; the official runner only executes and parses metrics. Adding a model therefore does not mean copying benchmark code, and adding a benchmark does not mean branching inside every model.
 
 ## Pipeline
 
@@ -107,21 +104,7 @@ Remove `--plan-only` after preflight reports `ready: true`.
 
 ## Reproduction recipes
 
-Checked-in reproduction profiles bind the known generator model, checkpoint, generation parameters, official prompts, and benchmark runtime without requiring users to re-enter them. Use an explicit profile when a benchmark has multiple published cells, or the benchmark id when one profile is declared as its default:
-
-```bash
-worldfoundry-eval reproduce \
-  --profile vbench-zeroscope-aesthetic \
-  --output-dir tmp/reproduce \
-  --plan-only \
-  --json
-
-worldfoundry-eval reproduce --benchmark vbench --output-dir tmp/reproduce --plan-only --json
-```
-
-The checked-in VBench profile is a bounded one-sample, `aesthetic_quality` validation profile and is explicitly not leaderboard eligible. Profile scope and eligibility are part of the prepared plan rather than inferred from a successful process exit.
-
-Use `--recipe` for a custom or newly published model cell. A reproduction recipe keeps upstream model and benchmark settings separate, so benchmark parameters cannot silently override orchestrator-owned paths or modes.
+Use `--recipe` for an immutable model × benchmark cell. A reproduction recipe keeps upstream model and benchmark settings separate, so benchmark parameters cannot silently override orchestrator-owned paths or modes. Scope and eligibility are part of the prepared plan rather than inferred from a successful process exit.
 
 ```yaml
 schema_version: worldfoundry-reproduction-recipe-v1
@@ -154,34 +137,28 @@ Benchmark-specific layouts and flags belong on each Benchmark Hub page.
 
 ## Outputs
 
-| Artifact | Read it for |
-| --- | --- |
-| `report.md` | Human-readable first look |
-| `scorecard.json` | Normalized scores and leaderboard eligibility |
-| `metrics/summary.json` | Aggregate metrics for automation |
-| `results.jsonl` | Per-sample status, artifacts, errors |
-| `run_manifest.json` | Run identity, paths, fingerprint |
+- **`report.md`** — Human-readable first look
+- **`scorecard.json`** — Normalized scores and leaderboard eligibility
+- **`metrics/summary.json`** — Aggregate metrics for automation
+- **`results.jsonl`** — Per-sample status, artifacts, errors
+- **`run_manifest.json`** — Run identity, paths, fingerprint
 
 ## Modes
 
-| Mode | Behavior |
-| --- | --- |
-| `existing-results` | Score materialized results; no model inference |
-| `model` / `generate` | Run a model runner, then score |
-| `official-validation` | Import official-shaped results through the benchmark runner |
-| `official-run` | Run the benchmark runtime declared by the manifest |
+- **`existing-results`** — Score materialized results; no model inference
+- **`model` / `generate`** — Run a model runner, then score
+- **`official-validation`** — Import official-shaped results through the benchmark runner
+- **`official-run`** — Run the benchmark runtime declared by the manifest
 
 Use `official-validation` for framework import evidence. Use `official-run` only after datasets, checkpoints, environment, and official evaluator requirements are satisfied.
 
 ## Contracts (short)
 
-| Object | Role |
-| --- | --- |
-| `GenerationRequest` | Normalized sample input |
-| `WorldModelRunner` | Executes generation → `GenerationResult` |
-| `GenerationResult` | Per-sample output + artifacts |
-| `Metric` | Turns results into score rows |
-| `scorecard` | Final eligibility / comparison record |
+- **`GenerationRequest`** — Normalized sample input
+- **`WorldModelRunner`** — Executes generation → `GenerationResult`
+- **`GenerationResult`** — Per-sample output + artifacts
+- **`Metric`** — Turns results into score rows
+- **`scorecard`** — Final eligibility / comparison record
 
 Subsystem ownership and data flow: [Evaluation core](/docs/maintainers/architecture/evaluation-core). Flag reference: [CLI](/docs/reference/cli).
 

@@ -48,4 +48,13 @@ notes:
   last frames show a coherent industrial workbench, black robot mechanism, and red block without the
   one-step blur; artifact SHA256 is b3211b8ece8a73519bb7c3589cbeebf8c59b4cc473c86cc0e630f833dad2c6f3.
   This is a quality-oriented short smoke, not parity with the official 480x832, 121-frame, 40-step recipe.
-- The MoE single-device path is physically validated only on A100 80GB; Hopper, Blackwell, and multi-GPU entries are supported targets pending hardware-specific validation.
+- The MoE single-device path is physically validated on A100 80GB and H100 80GB. On H100,
+  a public 480x832, 25-frame, 20-step T2V run produced a fully decodable video without the
+  refiner; its small-toy-car output remains a prompt-specific quality concern, and peak observed memory was 80,991 MiB
+  (about 79.1 GiB) on an H100 reporting 81,559 MiB total.
+- The pinned official script and in-tree runner each produced a coherent 25-frame, 832x480
+  T2V video from official example 1 with only duration shortened from five to one second,
+  40 steps and matching seed. Frame-aligned decoded RGB MAE averaged 10.48/255; this
+  validates the short-clip configuration qualitatively, not pixel-exact parity.
+  The five-second recipe, refiner, and other modes remain unvalidated.
+  Other Hopper devices, Blackwell, and multi-GPU entries remain pending hardware-specific validation.

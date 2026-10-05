@@ -1,0 +1,52 @@
+---
+title: "minWM"
+description: "minWM from Shengshu Technology: interactive-world-model and action-conditioned-video; Runner parity pending."
+modelId: "minwm-hy-action2v"
+pageSource: authored
+---
+
+minWM HY Action2V is Shengshu's minimal world-model recipe on a HunyuanVideo-1.5 base: given a prompt, an image, and a motion trajectory it generates action-conditioned, camera-controllable video through a distilled DMD entrypoint. In this catalog the dedicated HY15 Action2V route and native action-token path are wired; runner parity waits on checkpoints.
+
+<ModelPaperFigures modelId="minwm-hy-action2v" locale="en" />
+
+The recorded paper is [arXiv 2605.30263](https://arxiv.org/abs/2605.30263).
+
+Code: [shengshu-ai/minWM](https://github.com/shengshu-ai/minWM).
+
+<ModelCommandBuilder modelId="minwm-hy-action2v" locale="en" />
+
+## What it is for
+
+Use `minwm-hy-action2v` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+
+The official source is vendored at a pinned revision (apache-2.0). Only the HY15/Action2V/dmd subset of the 384.97 GB upstream minWM repository is required — the entry deliberately avoids pulling the full research archive. It is published by Shengshu Technology.
+
+Catalog tasks include interactive-world-model, action-conditioned-video, and camera-controlled-video. Catalog aliases include `minwm` and `minwm-hy-action2v`.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera/motion-trajectory adherence).
+
+HY action-to-video MiniWM. Embodied VLA is a sibling.
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `frames`, `fps`, and `height`; artifacts `minwm-hy-action2v.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `MinWMHYAction2VPipeline`.
+
+Family status: **Runner parity pending**.
+
+Inputs are prompt, image, and trajectory (native motion tokens). Stage the HY15 Action2V DMD subset before expecting artifacts; the Wan-based sibling is separately cataloged as minwm-wan-action2v.
+
+Official source is vendored at revision df522a26cd4409d3e3e8f269cc98eac069b5df47.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run minwm-hy-action2v --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `MIN-Lab/minWM` and `tencent/HunyuanVideo-1.5`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh minwm-hy-action2v`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="minwm-hy-action2v" locale="en" />

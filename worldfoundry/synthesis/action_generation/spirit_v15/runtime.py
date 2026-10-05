@@ -54,7 +54,7 @@ class SpiritV15Runtime:
             return self._model
 
         from worldfoundry.core.attention import resolve_transformers_attention_implementation
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         from .modeling import SpiritVLAPolicy
 
@@ -144,8 +144,8 @@ class SpiritV15Runtime:
         import numpy as np
         import torch
 
-        from worldfoundry.core.utils.image_utils import load_pil_image
-        from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
+        from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 
         model = self._load()
         images = self._images(observation, image)
@@ -268,7 +268,10 @@ def predict_action(
         ),
         user_prompt_template=str(_required_option(options, "user_prompt_template")),
     )
-    cache_key = (checkpoint_path, device, runtime_options_cache_key(options))
+    # Call metadata such as task_instruction changes per request. Cache the
+    # parsed model configuration instead, so a new prompt does not reload the
+    # Qwen backbone and Spirit policy weights on every action prediction.
+    cache_key = (config.checkpoint_location, config.device, runtime_options_cache_key(config.__dict__))
     runtime = _RUNTIME_CACHE.setdefault(cache_key, SpiritV15Runtime(config))
     return runtime.predict_action(
         instruction=instruction,

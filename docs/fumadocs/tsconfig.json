@@ -38,8 +38,8 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "tmp/worldfoundry-docs-next/types/**/*.ts",
-    "tmp/worldfoundry-docs-next/dev/types/**/*.ts"
+    "tmp/next/types/**/*.ts",
+    "tmp/next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

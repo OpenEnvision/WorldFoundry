@@ -1,0 +1,46 @@
+---
+title: "Kling API"
+description: "Kling API from Kuaishou: text-to-video and image-to-video; Runner parity pending."
+modelId: "kling-api"
+pageSource: generated
+---
+
+Kling API is the hosted endpoint for Kuaishou's Kling video generation family, recorded here for text-to-video and image-to-video. Prompts or reference images are submitted to Kuaishou's service and the rendered clips come back as WorldFoundry artifacts. This entry exists so hosted Kling runs sit next to locally-run open models in the same Studio result format, making side-by-side comparison practical.
+
+<ModelPaperFigures modelId="kling-api" locale="en" />
+
+Project page: [app.klingai.com](https://app.klingai.com/).
+
+<ModelCommandBuilder modelId="kling-api" locale="en" />
+
+## What it is for
+
+`kling-api` is the hosted inference line. Start here when no local checkpoint is recorded on the card.
+
+Catalog tasks include text-to-video, image-to-video, and hosted-api. Documented modalities: text and image in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs), [Physics-IQ Original](/docs/evaluation/benchmark-hub/physics-iq) (Probes whether provider-side video models respect basic physical plausibility).
+
+## Runtime contract
+
+Optional `prompt`, `negative_prompt`, `input_path`, `image_field`, and `task_type`.
+
+CLI task profiles: `default`. WorldFoundry binds `KlingApiPipeline`.
+
+Family status: **Runner parity pending**.
+
+The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Credentials come from the Kling open platform (app.klingai.com).
+
+Hosted API Studio pipeline is available; users must provide their own provider API key.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run kling-api --pipeline.task-profile default` to call the hosted route. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+The environment profile is not recorded.
+
+Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh kling-api`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="kling-api" locale="en" />

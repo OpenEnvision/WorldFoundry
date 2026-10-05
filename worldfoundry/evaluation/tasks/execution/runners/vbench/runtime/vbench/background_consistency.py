@@ -1,26 +1,25 @@
 import os
-import json
-import logging
-import numpy as np
-import clip
-from PIL import Image
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from vbench.utils import load_video, load_dimension_info, clip_transform
-from tqdm import tqdm
 
-from .distributed import (
-    get_world_size,
-    get_rank,
-    all_gather,
-    barrier,
+import torch
+import torch.nn.functional as F
+from PIL import Image
+from tqdm import tqdm
+from vbench.utils import clip_transform, load_dimension_info, load_video
+
+from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
+from worldfoundry.core.distributed.collectives.evaluation import (
     distribute_list_to_rank,
     gather_list_of_dict,
+    get_rank,
+    get_world_size,
 )
+from worldfoundry.core.execution.inference_runtime import adaptive_batched_inference, resolve_inference_batch_size
+from worldfoundry.core.utils.tensors.torch import temporal_feature_consistency
 
 
 def background_consistency(clip_model, preprocess, video_list, device, read_frame):
+    clip_model.eval()
+    batch_size = resolve_inference_batch_size(32, device=device, scope="vbench_clip")
     sim = 0.0
     cnt = 0
     video_results = []
@@ -38,22 +37,23 @@ def background_consistency(clip_model, preprocess, video_list, device, read_fram
         else:
             images = load_video(video_path)
             images = image_transform(images)
-        images = images.to(device)
-        image_features = clip_model.encode_image(images)
+        if len(images) < 2:
+            raise ValueError("background consistency requires at least two frames")
+        if torch.device(device).type == "cuda":
+            images = images.pin_memory()
+        image_features = adaptive_batched_inference(
+            images,
+            clip_model.encode_image,
+            batch_size=batch_size,
+            device=device,
+            pad_to_batch_size=True,
+            scope="vbench_clip",
+        )
         image_features = F.normalize(image_features, dim=-1, p=2)
-        for i in range(len(image_features)):
-            image_feature = image_features[i].unsqueeze(0)
-            if i == 0:
-                first_image_feature = image_feature
-            else:
-                sim_pre = max(0.0, F.cosine_similarity(former_image_feature, image_feature).item())
-                sim_fir = max(0.0, F.cosine_similarity(first_image_feature, image_feature).item())
-                cur_sim = (sim_pre + sim_fir) / 2
-                video_sim += cur_sim
-                cnt += 1
-                cnt_per_video += 1
-            former_image_feature = image_feature
-        sim_per_image = video_sim / (len(image_features) - 1)
+        sim_per_image = float(temporal_feature_consistency(image_features).item())
+        cnt_per_video = len(image_features) - 1
+        video_sim = sim_per_image * cnt_per_video
+        cnt += cnt_per_video
         sim += video_sim
         video_results.append({
             'video_path': video_path, 
@@ -77,4 +77,3 @@ def compute_background_consistency(json_dir, device, submodules_list, **kwargs):
         cnt = sum([d['cnt_per_video'] for d in video_results])
         all_results = sim / cnt
     return all_results, video_results
-

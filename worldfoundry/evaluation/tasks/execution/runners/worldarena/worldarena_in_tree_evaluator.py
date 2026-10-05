@@ -4,25 +4,34 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, MetricResult
 from worldfoundry.evaluation.tasks.execution.framework.in_tree_evaluator import (
     BenchmarkZooInTreeEvaluator,
-    evaluate_benchmark_metrics as _evaluate_benchmark_metrics,
 )
 
-BENCHMARK_ID = 'worldarena'
+BENCHMARK_ID = "worldarena"
 
 IN_TREE_CONFIG: dict[str, object] = {
     "benchmark_id": BENCHMARK_ID,
-    "evaluator_kind": 'reasoning',
-    "metric_ids": ('visual_quality', 'motion_quality', 'content_consistency', 'physics_adherence', 'three_d_accuracy', 'controllability', 'data_engine_success', 'policy_evaluator_correlation', 'action_planner_success', 'human_quality', 'ewm_score'),
-    "primary_metric": 'ewm_score',
-    "required_artifacts": ('generated_video',),}
+    "evaluator_kind": "reasoning",
+    "metric_ids": (
+        "visual_quality",
+        "motion_quality",
+        "content_consistency",
+        "physics_adherence",
+        "three_d_accuracy",
+        "controllability",
+        "data_engine_success",
+        "policy_evaluator_correlation",
+        "action_planner_success",
+        "human_quality",
+        "ewm_score",
+    ),
+    "primary_metric": "ewm_score",
+    "required_artifacts": ("generated_video",),
+}
 
 
 class WorldarenaInTreeEvaluator(BenchmarkZooInTreeEvaluator):
-    """Focused in-tree evaluator for worldarena."""
-
     def __init__(
         self,
         *,
@@ -34,19 +43,3 @@ class WorldarenaInTreeEvaluator(BenchmarkZooInTreeEvaluator):
             metric_ids=metric_ids,
             required_artifacts=required_artifacts,
         )
-
-
-def evaluate_worldarena_metrics(
-    request: GenerationRequest,
-    result: GenerationResult,
-    *,
-    metric_ids: Sequence[str] | None = None,
-    required_artifacts: Sequence[str] | None = None,
-) -> list[dict[str, object]]:
-    return _evaluate_benchmark_metrics(
-        BENCHMARK_ID,
-        request,
-        result,
-        metric_ids=metric_ids,
-        required_artifacts=required_artifacts,
-    )

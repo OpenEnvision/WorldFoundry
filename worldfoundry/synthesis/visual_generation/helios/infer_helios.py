@@ -45,7 +45,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--guidance_scale", default="auto")
     parser.add_argument("--zero_steps", type=int, default=1)
     parser.add_argument("--num_latent_frames_per_chunk", type=int, default=9)
-    parser.add_argument("--pyramid_num_inference_steps_list", type=int, nargs=3)
+    parser.add_argument("--pyramid_num_inference_steps_list", nargs="+", default=None,
+                        help="Three positive step counts, or 'auto' for the model variant defaults.")
     parser.add_argument("--image_path")
     parser.add_argument("--video_path")
     parser.add_argument("--prompt", required=True)
@@ -97,8 +98,12 @@ def _normalize_args(args: argparse.Namespace) -> argparse.Namespace:
         args.guidance_scale = 1.0 if args.model_variant == "distilled" else 5.0
     else:
         args.guidance_scale = float(args.guidance_scale)
-    if args.pyramid_num_inference_steps_list is None:
+    if args.pyramid_num_inference_steps_list is None or args.pyramid_num_inference_steps_list == ["auto"]:
         args.pyramid_num_inference_steps_list = [2, 2, 2] if args.model_variant == "distilled" else [20, 20, 20]
+    else:
+        args.pyramid_num_inference_steps_list = [int(value) for value in args.pyramid_num_inference_steps_list]
+        if len(args.pyramid_num_inference_steps_list) != 3 or min(args.pyramid_num_inference_steps_list) <= 0:
+            raise ValueError("pyramid_num_inference_steps_list requires three positive integers or 'auto'.")
     if args.model_variant == "distilled":
         args.is_enable_stage2 = True
         args.is_amplify_first_chunk = True
@@ -170,7 +175,12 @@ def _run(args: argparse.Namespace) -> None:
         subfolder="transformer",
         torch_dtype=weight_dtype,
     )
-    if not args.enable_compile:
+    # The vendored Triton norm/RoPE replacements are part of the same fused
+    # kernel path as flash attention.  Applying them while
+    # --disable_flash_attention is set silently changes the supposedly pure
+    # PyTorch reference path and has produced dark, nearly constant A100
+    # outputs.  Keep the entire fused-kernel stack behind the one opt-in.
+    if not args.enable_compile and not args.disable_flash_attention:
         transformer = replace_rmsnorm_with_fp32(transformer)
         transformer = replace_all_norms_with_flash_norms(transformer)
         replace_rope_with_flash_rope()

@@ -1,0 +1,30 @@
+---
+title: "Helios"
+description: "PKU / ByteDance 14B autoregressive long-video model on Wan2.1-T2V-14B weights. Distilled/Mid/Base variants; dedicated Helios environment."
+modelId: "helios"
+pageSource: authored
+---
+
+Helios is a 14B **autoregressive** video generator from Peking University's Yuan Group (with ByteDance / Canva). It starts from **Wan2.1-T2V-14B** weights and emits long video in chunks instead of running the bidirectional Wan stack for every clip. The paper is [Helios: Real Real-Time Long Video Generation Model](https://arxiv.org/abs/2603.04379); the project page is [pku-yuangroup.github.io/Helios-Page](https://pku-yuangroup.github.io/Helios-Page/). The authors' headline claim is **19.5 FPS on a single H100** for minute-scale generation, without KV-cache, sparse attention, or quantization as the speed story.
+
+<ModelPaperFigures modelId="helios" locale="en" />
+
+WorldFoundry vendors the inference implementation and exposes three checkpoints. **`helios-distilled`** (default) is the fast line: about **3** sampling steps and no CFG. **`helios-mid`** adds Pyramid Unified Predictor-Corrector token compression. **`helios-base`** is the quality line (official pyramid **[20,20,20]**, on the order of **50** steps). Distilled resident sessions keep a native **9-latent / 33-frame** history and accept `prompt_update` between segments — there is no keyboard or camera control.
+
+The in-tree pipeline generates in **33-frame** chunks and rounds requested lengths up to a compatible chunk count. Recorded defaults: **384×640**, **240** requested frames, **24 fps**, `num_inference_steps=50` (Distilled overrides this toward 3). The default route also accepts T2V, I2V, and V2V. Group offloading and multi-GPU context parallelism are exposed as runtime options.
+
+<ModelCommandBuilder modelId="helios" locale="en" />
+
+## What it is for
+
+Generate long video when a bidirectional Wan2.1-14B job would be too slow. Start on `helios-distilled` for iteration; switch to `helios-base` only when you need the quality recipe and can wait. [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) matches the long-horizon focus; [VBench](/docs/evaluation/benchmark-hub/vbench) is the short-clip quality suite. Neither is an ingested WorldFoundry board.
+
+## Runtime contract
+
+Required: `prompt`. Optional: `negative_prompt`, `num_frames`, `height`, `width`, `fps`, `num_inference_steps`, `guidance_scale` (default `auto`). Pipeline: `HeliosPipeline`. Artifact: generated video. Unified History Injection always feeds a clean history chunk and a noisy future chunk together so long rollouts do not drift as quickly as a naive autoregressive loop.
+
+## Running in WorldFoundry
+
+Use the dedicated environment `worldfoundry-helios-cu128` (Python 3.11.2, CUDA 12.8, `torch==2.10.0`). Launch `worldfoundry-eval run helios-distilled` (or `helios-mid` / `helios-base`) with `--pipeline.task-profile text-to-video`. Runner status is **Runner parity pending** (visual QA): import-light preflight is unit-tested, but full **240-request-frame** visual parity still needs that environment plus a GPU run. The recorded Base A100 smoke used a 3-step `[1,1,1]` pyramid — it proves wiring and a non-blank artifact, **not** the official `[20,20,20]` quality recipe. Weights: `BestWishYsh/Helios-Distilled`, `Helios-Mid`, `Helios-Base`.
+
+<ModelRelatedRecipes modelId="helios" locale="en" />

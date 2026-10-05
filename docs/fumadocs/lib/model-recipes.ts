@@ -1,7 +1,7 @@
-import rawData from '@/lib/model-recipes-data.json';
 import type { ModelRecipe, ModelRecipeData } from '@/lib/model-recipe-types';
+import { readSiteJson } from '@/lib/read-site-json';
 
-export const modelRecipeData = rawData as unknown as ModelRecipeData;
+export const modelRecipeData = readSiteJson<ModelRecipeData>('lib/model-recipes-data.json');
 
 const recipeById = new Map(modelRecipeData.recipes.map((recipe) => [recipe.id, recipe]));
 

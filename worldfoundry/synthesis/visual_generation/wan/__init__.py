@@ -14,9 +14,6 @@ from importlib import import_module
 # Defines the public API of this package, making these names accessible when
 # using 'from package import *'.
 __all__ = [
-    "Wan2p1I2VSynthesis",
-    "Wan2p1T2VSynthesis",
-    "Wan2p2Synthesis",
     "Wan2p5Synthesis",
     "Wan2p6Synthesis",
     "Wan2p7Synthesis",
@@ -25,9 +22,6 @@ __all__ = [
 # A mapping from the public API names (as defined in __all__) to their
 # respective submodule names within this package.
 _EXPORTS = {
-    "Wan2p1I2VSynthesis": "wan_2p1_i2v_synthesis",
-    "Wan2p1T2VSynthesis": "wan_2p1_t2v_synthesis",
-    "Wan2p2Synthesis": "wan2p2_synthesis",
     "Wan2p5Synthesis": "wan_2p5_synthesis",
     "Wan2p6Synthesis": "wan_2p6_synthesis",
     "Wan2p7Synthesis": "wan_2p7_synthesis",

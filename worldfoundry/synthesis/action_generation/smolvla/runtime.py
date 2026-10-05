@@ -108,8 +108,8 @@ class SmolVLARuntime:
         from accelerate import init_empty_weights
         from safetensors.torch import load_file
 
-        from worldfoundry.core.checkpoint import load_safetensors_into_model_streaming
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.model_loading.checkpoints import load_safetensors_into_model_streaming
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         from .configuration import SmolVLAConfig
         from .modeling import SmolVLAPolicy
@@ -194,6 +194,8 @@ class SmolVLARuntime:
             selected = []
             for aliases in self.config.camera_aliases:
                 value = first_present(mapping, *aliases)
+                if isinstance(value, Mapping):
+                    value = None  # A multi-camera container is not one image.
                 # Missing cameras are meaningful: the official policy creates
                 # masked empty-camera tokens for them.  Preserve each semantic
                 # slot so a later wrist camera is never assigned to camera1.
@@ -202,13 +204,12 @@ class SmolVLARuntime:
 
         nested_observation = observation.get("observation")
         mappings: list[Mapping[str, Any]] = []
-        top_level_images = observation.get("images")
-        if isinstance(top_level_images, Mapping):
-            mappings.append(top_level_images)
-        if isinstance(nested_observation, Mapping):
-            nested_images = nested_observation.get("images")
-            if isinstance(nested_images, Mapping):
-                mappings.append(nested_images)
+        for container in (observation, nested_observation):
+            if isinstance(container, Mapping):
+                for key in ("images", "image"):
+                    views = container.get(key)
+                    if isinstance(views, Mapping):
+                        mappings.append(views)
         mappings.append(observation)
         if isinstance(nested_observation, Mapping):
             mappings.append(nested_observation)
@@ -232,8 +233,8 @@ class SmolVLARuntime:
         import numpy as np
         import torch
 
-        from worldfoundry.core.utils.image_utils import load_pil_image
-        from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
+        from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 
         model = self._load()
         config = self._policy_config

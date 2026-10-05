@@ -43,10 +43,12 @@ class SpatiaPipeline(PipelineABC):
         return_dict: bool = False,
         **kwargs: Any,
     ) -> Any:
+        kw_image_path = kwargs.pop("image_path", None)
+        kw_video_path = kwargs.pop("video_path", None)
         result = self.synthesis_model.predict(
             prompt=prompt,
-            image_path=images or kwargs.pop("image_path", None),
-            video_path=video or kwargs.pop("video_path", None),
+            image_path=images or kw_image_path,
+            video_path=video or kw_video_path,
             output_path=output_path,
             return_dict=True,
             **kwargs,

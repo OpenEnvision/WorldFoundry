@@ -1,5 +1,7 @@
 """Runtime profile, environment, and asset manifests for models."""
 
+from typing import Any
+
 from .assets import (
     DEFAULT_RUNTIME_ASSETS_ROOT,
     RuntimeAsset,
@@ -17,16 +19,19 @@ from .environments import (
     load_runtime_environment_profiles,
     resolve_runtime_environment_profile,
 )
-from .profiles import RuntimeProfile, RuntimeProfileSynthesis, load_runtime_profile, load_runtime_profiles
 from .profiles import (
     DEFAULT_CATALOG_MANIFEST,
     DEFAULT_RUNTIME_PROFILES_ROOT,
+    RuntimeProfile,
+    load_runtime_profile,
     load_runtime_profile_manifest,
     load_runtime_profile_manifests,
+    load_runtime_profiles,
 )
 from .validate import (
     KNOWN_ARTIFACT_KINDS,
     RuntimeValidationIssue,
+    validate_catalog_references,
     validate_pipeline_aliases_against_bindings,
     validate_runtime_profile_references,
     validate_runtime_registry,
@@ -56,7 +61,18 @@ __all__ = [
     "load_runtime_profiles",
     "resolve_runtime_asset_profile",
     "resolve_runtime_environment_profile",
+    "validate_catalog_references",
     "validate_pipeline_aliases_against_bindings",
     "validate_runtime_profile_references",
     "validate_runtime_registry",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Lazily expose the synthesis bridge (pulls torch via BaseSynthesis)."""
+    if name == "RuntimeProfileSynthesis":
+        from .profile_synthesis import RuntimeProfileSynthesis
+
+        globals()[name] = RuntimeProfileSynthesis
+        return RuntimeProfileSynthesis
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -9,23 +9,22 @@ from __future__ import annotations
 import csv
 import json
 import os
-import re
 import shutil
-import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Mapping
 
-from worldfoundry.core.io.serialization import write_json, write_jsonl
-from worldfoundry.core.time import utc_now_iso
+from worldfoundry.core.io.formats.serialization import iter_jsonl, write_json, write_jsonl
+from worldfoundry.core.media.codecs.video import probe_video_metadata
+from worldfoundry.core.observability.time import utc_now_iso
 from worldfoundry.evaluation.reporting.scorecard import SCORECARD_SCHEMA_VERSION
-
 from worldfoundry.evaluation.tasks.execution.framework.io import optional_float
 from worldfoundry.evaluation.tasks.execution.framework.official_result_scoring import OfficialMetricScore
-
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import VIDEO_SUFFIXES
 
 JsonValue = Any
 RECORD_FILE_SUFFIXES = frozenset({".json", ".jsonl", ".ndjson", ".yaml", ".yml", ".csv"})
-VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"})
+VIDEO_EXTENSIONS = VIDEO_SUFFIXES | {".m4v"}
 LOCAL_METRIC_IDS = (
     "artifact_manifest_coverage",
     "generated_video_exists",
@@ -138,10 +137,10 @@ def _load_records(path: Path) -> list[Mapping[str, JsonValue]]:
         path: Prompt, question, generated-artifact, or judge result manifest.
     """
 
-    text = path.read_text(encoding="utf-8")
     suffix = path.suffix.lower()
     if suffix in {".jsonl", ".ndjson"}:
-        return [json.loads(line) for line in text.splitlines() if line.strip()]
+        return [row for row in iter_jsonl(path) if isinstance(row, Mapping)]
+    text = path.read_text(encoding="utf-8")
     if suffix in {".yaml", ".yml"}:
         import yaml
 
@@ -229,7 +228,17 @@ def _samples(
     """
 
     if prompt_records:
-        return [_sample_from_prompt(row, judge_rows, artifact_root, generated_files) for row in prompt_records]
+        generated_files_by_stem = {path.stem: path for path in generated_files}
+        return [
+            _sample_from_prompt(
+                row,
+                judge_rows,
+                artifact_root,
+                generated_files_by_stem,
+                fallback_index=index,
+            )
+            for index, row in enumerate(prompt_records)
+        ]
     return [
         {
             "sample_id": path.stem,
@@ -248,7 +257,9 @@ def _sample_from_prompt(
     row: Mapping[str, JsonValue],
     judge_rows: Mapping[str, Mapping[str, JsonValue]],
     artifact_root: Path | None,
-    generated_files: list[Path],
+    generated_files_by_stem: Mapping[str, Path],
+    *,
+    fallback_index: int,
 ) -> dict[str, JsonValue]:
     """Convert one prompt/question row into the evaluator's canonical sample shape.
 
@@ -256,12 +267,13 @@ def _sample_from_prompt(
         row: Prompt or question manifest row.
         judge_rows: Optional judge outputs keyed by sample id.
         artifact_root: Generated artifact directory.
-        generated_files: Generated video files discovered from disk.
+        generated_files_by_stem: Generated files indexed for stem-based lookup.
+        fallback_index: Stable prompt position used when no sample id is present.
     """
 
-    sample_id = _sample_id(row) or f"sample-{len(generated_files)}"
+    sample_id = _sample_id(row) or f"sample-{fallback_index:04d}"
     judge_row = judge_rows.get(sample_id, {})
-    video_path = _video_path(row, artifact_root, sample_id, generated_files)
+    video_path = _video_path(row, artifact_root, sample_id, generated_files_by_stem)
     return {
         "sample_id": sample_id,
         "prompt": _first_value(row, "prompt", "caption", "text"),
@@ -303,7 +315,7 @@ def _video_path(
     row: Mapping[str, JsonValue],
     artifact_root: Path | None,
     sample_id: str,
-    generated_files: list[Path],
+    generated_files_by_stem: Mapping[str, Path],
 ) -> Path | None:
     """Resolve the generated video path for a sample.
 
@@ -311,16 +323,16 @@ def _video_path(
         row: Prompt or artifact manifest row.
         artifact_root: Generated artifact directory.
         sample_id: Canonical sample identifier.
-        generated_files: Generated files used for stem-based lookup.
+        generated_files_by_stem: Generated files indexed for stem-based lookup.
     """
 
     raw_path = _first_value(row, "generated_video_path", "video_path", "generated_video", "artifact_path", "path")
     if raw_path not in (None, ""):
         path = Path(str(raw_path))
         return path if path.is_absolute() or artifact_root is None else artifact_root / path
-    for path in generated_files:
-        if path.stem == sample_id:
-            return path
+    indexed_path = generated_files_by_stem.get(sample_id)
+    if indexed_path is not None:
+        return indexed_path
     if artifact_root is not None:
         return artifact_root / f"{sample_id}.mp4"
     return None
@@ -341,7 +353,7 @@ def _local_metric_rows(
         kwargs: Optional caller-supplied video constraints.
     """
 
-    probes = [_probe_sample(sample) for sample in samples]
+    probes = _probe_samples(samples, kwargs)
     return [
         _manifest_coverage_row(samples, prompt_manifest_path, generated_files),
         _boolean_row("generated_video_exists", samples, [_sample_video_path(sample) is not None and _sample_video_path(sample).exists() for sample in samples]),
@@ -434,7 +446,12 @@ def _is_nonempty(path: Path | None) -> bool:
     return path is not None and path.exists() and path.stat().st_size > 0
 
 
-def _probe_sample(sample: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+def _probe_sample(
+    sample: Mapping[str, JsonValue],
+    *,
+    ffprobe_path: str | None = None,
+    timeout_seconds: float = 30.0,
+) -> dict[str, JsonValue]:
     """Probe one sample's video metadata using sidecar JSON or ffprobe.
 
     Args:
@@ -448,25 +465,48 @@ def _probe_sample(sample: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
     if sidecar is not None:
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         return {"available": True, "readable": bool(payload.get("readable", True)), "source": str(sidecar), **payload}
-    ffprobe_path = shutil.which("ffprobe")
     if ffprobe_path is None:
+        ffprobe_path = shutil.which("ffprobe")
+    if not ffprobe_path:
         return {"available": False, "readable": None, "source": None, "reason": NO_PROBE_REASON}
-    command = [
-        ffprobe_path,
-        "-v",
-        "error",
-        "-select_streams",
-        "v:0",
-        "-show_entries",
-        "stream=width,height,avg_frame_rate,nb_frames,duration",
-        "-of",
-        "json",
-        str(path),
-    ]
-    completed = subprocess.run(command, check=False, capture_output=True, text=True)
-    if completed.returncode != 0:
-        return {"available": True, "readable": False, "source": "ffprobe", "reason": completed.stderr.strip()}
-    return {"available": True, "readable": True, "source": "ffprobe", **_ffprobe_metadata(completed.stdout)}
+    try:
+        metadata = probe_video_metadata(path, ffprobe_path=ffprobe_path, timeout_seconds=timeout_seconds)
+    except (OSError, ValueError) as exc:
+        return {"available": True, "readable": False, "source": "ffprobe", "reason": str(exc)}
+    return {"available": True, "readable": True, "source": "ffprobe", **metadata}
+
+
+def _probe_samples(
+    samples: list[Mapping[str, JsonValue]],
+    kwargs: Mapping[str, JsonValue],
+) -> list[dict[str, JsonValue]]:
+    """Probe videos concurrently while preserving the sample order."""
+
+    if not samples:
+        return []
+    configured_workers = kwargs.get("video_probe_workers")
+    if configured_workers in (None, ""):
+        configured_workers = os.environ.get("WORLDFOUNDRY_VIDEO_PROBE_WORKERS", "0")
+    worker_count = int(configured_workers or 0)
+    if worker_count < 0:
+        raise ValueError("video_probe_workers must be non-negative")
+    if worker_count == 0:
+        worker_count = min(8, os.cpu_count() or 1)
+    worker_count = min(worker_count, len(samples))
+
+    configured_timeout = optional_float(kwargs.get("video_probe_timeout_seconds"))
+    timeout = 30.0 if configured_timeout is None else configured_timeout
+    if timeout <= 0:
+        raise ValueError("video_probe_timeout_seconds must be positive")
+    ffprobe_path = shutil.which("ffprobe") or ""
+
+    def probe(sample: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+        return _probe_sample(sample, ffprobe_path=ffprobe_path, timeout_seconds=timeout)
+
+    if worker_count <= 1:
+        return [probe(sample) for sample in samples]
+    with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="worldfoundry-video-probe") as executor:
+        return list(executor.map(probe, samples))
 
 
 def _sidecar_path(path: Path) -> Path | None:
@@ -486,58 +526,6 @@ def _sidecar_path(path: Path) -> Path | None:
         if candidate.exists():
             return candidate
     return None
-
-
-def _ffprobe_metadata(payload: str) -> dict[str, JsonValue]:
-    """Normalize ffprobe JSON into stable video metadata fields.
-
-    Args:
-        payload: ffprobe JSON stdout.
-    """
-
-    data = json.loads(payload)
-    streams = data.get("streams") if isinstance(data, Mapping) else None
-    stream = streams[0] if isinstance(streams, list) and streams and isinstance(streams[0], Mapping) else {}
-    fps = _rate_value(stream.get("avg_frame_rate"))
-    duration = optional_float(stream.get("duration"))
-    frame_count = _int_value(stream.get("nb_frames"))
-    if duration is None and frame_count is not None and fps not in (None, 0):
-        duration = frame_count / fps
-    return {
-        "width": _int_value(stream.get("width")),
-        "height": _int_value(stream.get("height")),
-        "fps": fps,
-        "duration_seconds": duration,
-        "frame_count": frame_count,
-    }
-
-
-def _rate_value(value: JsonValue) -> float | None:
-    """Convert an ffprobe rational frame-rate value into float fps.
-
-    Args:
-        value: Raw ffprobe rate value.
-    """
-
-    if value in (None, "", "0/0"):
-        return None
-    text = str(value)
-    if "/" in text:
-        numerator, denominator = text.split("/", 1)
-        denom = float(denominator)
-        return None if denom == 0 else float(numerator) / denom
-    return float(text)
-
-
-def _int_value(value: JsonValue) -> int | None:
-    """Convert numeric metadata to int when present.
-
-    Args:
-        value: Raw numeric value.
-    """
-
-    numeric = optional_float(value)
-    return None if numeric is None else int(numeric)
 
 
 def _readability_row(samples: list[Mapping[str, JsonValue]], probes: list[Mapping[str, JsonValue]]) -> dict[str, JsonValue]:

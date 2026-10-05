@@ -1,0 +1,36 @@
+---
+title: "Matrix-Game 3.0"
+description: "Matrix-Game 3.0 from Skywork AI (Kunlun Tech): `prompt` and `image` in; `matrix-game-3.mp4` out; runner verified; start on `matrix-game-3`."
+modelId: "matrix-game-3"
+pageSource: authored
+---
+
+Matrix-Game 3.0 is the third Skywork generation, pushing interactive world video to higher resolution with few-step inference. In this catalog the runner is verified — the official cityscape image-conditioned demo runs with actions forward + camera_r, 12 iterations, 3 inference steps, 704x1280, int8 quantization, compiled VAE, and the mg_lightvae decoder.
+
+<ModelPaperFigures modelId="matrix-game-3" locale="en" />
+
+The paper is [arXiv 2604.08995](https://arxiv.org/abs/2604.08995). Project page: [matrix-game-v3.github.io](https://matrix-game-v3.github.io). Code: [SkyworkAI/Matrix-Game](https://github.com/SkyworkAI/Matrix-Game).
+
+<ModelCommandBuilder modelId="matrix-game-3" locale="en" />
+
+## What it is for
+
+Interactive world on Matrix-Game 3. Sibling cards cover 1, 2.0, and 3.5 first-person.
+
+Launch `worldfoundry-eval run matrix-game-3` with `--pipeline.task-profile official-cityscape-image`.
+
+Score on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — action-conditioned game-world rollout quality.
+
+## Runtime contract
+
+Required: `prompt` and `image`; optional: `video`; `actions`: keyboard, mouse; artifacts: `matrix-game-3.mp4`.
+
+Defaults: num_inference_steps=3, fps=17.
+
+Recorded `official-cityscape-image` defaults: num_inference_steps=3, fps=17.
+
+## Run in WorldFoundry
+
+Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `Skywork/Matrix-Game-3.0` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run matrix-game-3` with `--pipeline.task-profile official-cityscape-image`. Catalog VRAM is unset.
+
+<ModelRelatedRecipes modelId="matrix-game-3" locale="en" />

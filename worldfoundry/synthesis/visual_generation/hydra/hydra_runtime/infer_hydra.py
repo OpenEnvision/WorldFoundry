@@ -16,9 +16,19 @@ _PROJECT_ROOT = str(Path(__file__).resolve().parents[5])
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from worldfoundry.base_models.diffusion_model.diffsynth import HyDRAPipeline, ModelManager  # noqa: E402
-from worldfoundry.base_models.diffusion_model.diffsynth.models import HyDRAAttentionConfig  # noqa: E402
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan import (  # noqa: E402
+    WanVideoVAE,
+    WanVideoVAEStateDictConverter,
+)
+from worldfoundry.base_models.diffusion_model.models.denoisers.wan import WAN21_T2V_1P3B_CONFIG  # noqa: E402
+from worldfoundry.base_models.diffusion_model.models.encoders.wan import WanTextEncoder  # noqa: E402
+from worldfoundry.base_models.diffusion_model.models.networks.wan import WanModel  # noqa: E402
+from worldfoundry.core.model_loading import load_model  # noqa: E402
 from worldfoundry.core.io import save_video  # noqa: E402
+from worldfoundry.synthesis.visual_generation.hydra.hydra_runtime.hydra_model import (  # noqa: E402
+    HyDRAAttentionConfig,
+)
+from worldfoundry.synthesis.visual_generation.hydra.hydra_runtime.pipeline import HyDRAPipeline  # noqa: E402
 
 
 def _crop_and_resize(image: Image.Image, height: int, width: int) -> Image.Image:
@@ -209,12 +219,37 @@ def build_pipeline(
     height: int = 480,
     width: int = 832,
 ) -> HyDRAPipeline:
-    model_manager = ModelManager(torch_dtype=torch.bfloat16, device="cpu")
-    model_manager.load_models(
-        [base_dit_path, base_text_encoder_path, base_vae_path],
-        model_names=["wan_video_dit", "wan_video_text_encoder", "wan_video_vae"],
+    dit = load_model(
+        WanModel,
+        base_dit_path,
+        config=WAN21_T2V_1P3B_CONFIG,
+        torch_dtype=torch.bfloat16,
+        device="cpu",
     )
-    pipe = HyDRAPipeline.from_model_manager(model_manager, device=device)
+    text_encoder = load_model(
+        WanTextEncoder,
+        base_text_encoder_path,
+        torch_dtype=torch.bfloat16,
+        device="cpu",
+    )
+    vae = load_model(
+        WanVideoVAE,
+        base_vae_path,
+        torch_dtype=torch.bfloat16,
+        device="cpu",
+        state_dict_converter=WanVideoVAEStateDictConverter().from_civitai,
+    )
+    tokenizer_path = Path(base_text_encoder_path).resolve().parent / "google" / "umt5-xxl"
+    if not tokenizer_path.is_dir():
+        raise FileNotFoundError(f"Wan tokenizer directory not found: {tokenizer_path}")
+    pipe = HyDRAPipeline.from_components(
+        text_encoder=text_encoder,
+        dit=dit,
+        vae=vae,
+        tokenizer_path=str(tokenizer_path),
+        torch_dtype=torch.bfloat16,
+        device=device,
+    )
     pipe.load_hydra_checkpoint(
         ckpt_path,
         enabled=hydra,

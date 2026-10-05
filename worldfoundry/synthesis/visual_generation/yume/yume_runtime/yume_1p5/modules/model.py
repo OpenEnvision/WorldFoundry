@@ -2,12 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.cuda import amp
-from diffusers.configuration_utils import ConfigMixin, register_to_config
-from diffusers.models.modeling_utils import ModelMixin
+from worldfoundry.core.model_loading.model_configuration import register_to_config
 from typing import Tuple
 
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.attention import flash_attention
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.model import WanModel, Head, rope_params, sinusoidal_embedding_1d, WanSelfAttention, WanCrossAttention, WanLayerNorm
+from worldfoundry.core.attention.sequence.varlen import flash_attention
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_22 import WanModel, Head, rope_params, sinusoidal_embedding_1d, WanSelfAttention, WanCrossAttention, WanLayerNorm
 
 
 def convpadd(tensor,pad_num):
@@ -261,7 +260,13 @@ class Yume1p5WanAttentionBlock(nn.Module):
         return x
 
 
-class Yume1p5WanModel(WanModel, ModelMixin, ConfigMixin):
+class Yume1p5WanModel(WanModel):
+
+    @property
+    def device(self) -> torch.device:
+        """Retain the small ``ModelMixin.device`` compatibility surface."""
+
+        return next(self.parameters()).device
 
     @register_to_config
     def __init__(self,
@@ -281,8 +286,7 @@ class Yume1p5WanModel(WanModel, ModelMixin, ConfigMixin):
                  cross_attn_norm=True,
                  eps=1e-6):
 
-        ModelMixin.__init__(self)
-        ConfigMixin.__init__(self)
+        nn.Module.__init__(self)
 
         assert model_type in ['t2v', 'i2v', 'ti2v']
         self.model_type = model_type

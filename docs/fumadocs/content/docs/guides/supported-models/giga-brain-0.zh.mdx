@@ -1,0 +1,56 @@
+---
+title: "GigaBrain-0"
+description: "GigaBrain-0（GigaAI）：视觉-语言-动作（VLA）、VLA 动作预测；已验证; 2 个 variant。"
+modelId: "giga-brain-0"
+pageSource: authored
+---
+
+GigaBrain-0 是极佳科技（GigaAI）的 3.5B VLA 基础策略，支持子任务预测，发布 GigaBrain-0-3.5B-Base 与 0.1 更新版，Apache-2.0 许可。本 catalog 中树内 GigaBrain-0.1 运行时使用转换的 LeRobot RoboTwin 统计输出了 checkpoint 驱动的 CUDA action_trace，PaliGemma tokenizer 与 physical-intelligence FAST tokenizer 均已就位。
+
+**0.1** 变体是已晋级的 GPU 路径：公共 pipeline 在 **80 GB** 卡上用**转换后的 LeRobot RoboTwin** 统计写出了 checkpoint 驱动的 CUDA `action_trace`（记录探针大约占用 20.8 GB、约 55 秒）。那是**非榜单**的运行时就绪。官方任务分数一致性仍需要门控的官方任务数据和任务专用 `norm_stats` / `delta_mask`。3.5B-base 线通过了张量 GPU 探针；已晋级的 action-trace 证据目前覆盖 **0.1**。
+
+<ModelPaperFigures modelId="giga-brain-0" locale="zh" />
+
+记录论文为[arXiv 2608.15875](https://arxiv.org/abs/2608.15875)。
+
+项目页：[gigaai-research.github.io/GigaBrain-Challenge-2026](https://gigaai-research.github.io/GigaBrain-Challenge-2026/)。代码：[open-gigaai/giga-brain-0](https://github.com/open-gigaai/giga-brain-0)。
+
+论文：[arXiv 2608.15875](https://arxiv.org/abs/2608.15875)。项目页：[gigaai-research.github.io/GigaBrain-Challenge-2026](https://gigaai-research.github.io/GigaBrain-Challenge-2026/)。代码：[open-gigaai/giga-brain-0](https://github.com/open-gigaai/giga-brain-0)。另外需要门控的 `google/paligemma-3b-pt-224`（Hugging Face 认证）和 `physical-intelligence/fast`。Runner 在该转换统计范围内**已验证**。别名包括 `giga-brain-0.1`、`GigaBrain-0.1-3.5B-Base`。
+
+<ModelCommandBuilder modelId="giga-brain-0" locale="zh" />
+
+## 用来做什么
+
+用 `giga-brain-0-3.5b-base` 做本卡的视觉-语言-动作推理。这条配方用来启动已记录的策略 profile。
+
+3.5B 策略，PaliGemma tokenizer 基座，用 FAST 动作 tokenizer 做离散动作编码，另有子任务预测头。官方仓库指针之外的架构内部细节仓库未记录。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测、VLA 策略执行、机器人策略。别名包括 `giga_brain_0`、`gigabrain0`、`giga-brain-0.1`、`GigaBrain-0-3.5B-Base` 等。同系列还有 `giga-brain-0.1-3.5b-base`。
+
+记录的评测入口包括[RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin)（CUDA 动作轨迹以转换的 RoboTwin 统计产出）。
+
+GigaBrain-0 具身策略，不是世界生成器。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`fps`；产物 `action_trace`、`giga_brain_0_action_trace.json`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `GigaBrain0Pipeline`。
+
+起步 variant 是 `giga-brain-0-3.5b-base`。catalog 登记了 2 个 variant（上方卡片）：`giga-brain-0-3.5b-base`（`vla.action_prediction`）：Runner 一致性待确认、`giga-brain-0.1-3.5b-base`（`vla.policy_rollout`）：Runner 一致性待确认。系列状态：**已验证**。
+
+PaliGemma tokenizer 模型为门控（需人工审查），需要 Hugging Face 认证。 由于官方任务 norm_stats/delta_mask 资产门控或未就位，官方任务分数 parity 单独跟踪。
+
+WorldFoundry in-tree GigaBrain-0.1 runtime emitted a checkpoint-backed CUDA action_trace using converted LeRobot RobotWin stats.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run giga-brain-0-3.5b-base --pipeline.task-profile interactive-video` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `open-gigaai/GigaBrain-0-3.5B-Base`、`open-gigaai/GigaBrain-0.1-3.5B-Base`、`google/paligemma-3b-pt-224` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh giga-brain-0-3.5b-base`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**已验证**。
+
+<ModelRelatedRecipes modelId="giga-brain-0" locale="zh" />

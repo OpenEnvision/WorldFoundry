@@ -1,0 +1,72 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BA-01
+track: coverage
+title_en: Cat Reaction to Gentle Hand Touch
+outcome_question: Which label in ['cat_accepts_touch_or_leans_in', 'cat_remains_still_near_hand',
+  'cat_withdraws_but_stays_in_area', 'cat_leaves_interaction_area', 'cat_defensive_posture_without_contact',
+  'cat_active_defensive_contact'] is visible as the first decisive post-touch
+  cat reaction?
+readout_policy: Read the first decisive post-action result window after the requested
+  action completes. Qualifying frames are those where the relevant evidence is in
+  view and no longer in transition. Use the scene protocol's first-decisive-window
+  rule; terminal stability is not required unless the protocol names it.
+canonical_labels:
+- cat_accepts_touch_or_leans_in
+- cat_remains_still_near_hand
+- cat_withdraws_but_stays_in_area
+- cat_leaves_interaction_area
+- cat_defensive_posture_without_contact
+- cat_active_defensive_contact
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- The hand-cat contact point or cat body language is hidden during the decisive
+  post-touch response.
+- None of the canonical labels ['cat_accepts_touch_or_leans_in', 'cat_remains_still_near_hand',
+  'cat_withdraws_but_stays_in_area', 'cat_leaves_interaction_area', 'cat_defensive_posture_without_contact',
+  'cat_active_defensive_contact'] can be decisively identified within the readout
+  window.
+out_of_schema_rules:
+- The hand never enters the cat interaction space or no gentle touch/stimulus is
+  visible; do not coerce a frozen/no-action scene into `cat_remains_still_near_hand`.
+- The cat, hand, or sofa/interaction geometry disappears, duplicates, swaps identity,
+  teleports, or changes via a cut.
+- The visible event is caused by a new off-screen stimulus rather than the requested
+  gentle hand touch.
+- The video introduces a different animal/person or changes the scene so the BA-01
+  state-action trial is no longer recognizable.
+priority_rules:
+- First decisive readout is the cat reaction attributable to the gentle hand touch
+  after the hand enters the cat interaction space; do not classify the cat's initial
+  alert/resting pose as an outcome.
+- '`cat_active_defensive_contact` applies when the cat swats, scratches, bites, lunges
+  into, or otherwise makes active defensive contact with the hand.'
+- '`cat_leaves_interaction_area` applies when the cat exits the touchable sofa/interaction
+  area, jumps away, runs away, or moves far enough that the gentle touch interaction
+  is no longer continuing.'
+- '`cat_defensive_posture_without_contact` applies when the cat shows clear defensive
+  threat or stress posture without active contact, such as arched back, raised fur,
+  flattened ears, hissing/open-mouth threat, or visibly defensive crouch.'
+- '`cat_withdraws_but_stays_in_area` applies when the cat recoils, pulls head or body
+  away, steps back, or avoids the hand while remaining in the same sofa/interaction
+  area.'
+- '`cat_accepts_touch_or_leans_in` applies when the cat accepts the touch, relaxes
+  into it, leans toward the hand, rubs against the hand, or otherwise shows affiliative/accepting
+  contact.'
+- '`cat_remains_still_near_hand` applies when the cat remains near the hand with no
+  clear accepting, withdrawal, leaving, defensive-posture, or active defensive-contact
+  response. This includes stillness or freeze-like stillness when no stronger visible
+  response is present.'
+- 'Tie-break: active defensive contact outranks leaving; leaving outranks defensive
+  posture; defensive posture outranks withdrawal; withdrawal outranks accepting contact;
+  accepting contact outranks remains-still. If decisive body language or hand-cat
+  contact is hidden, return `unreadable`.'
+notes:
+- 'Reaction scene: outcome label requires visible post-stimulus animal/person response,
+  not intent inference.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules
+  are authored from STAGBench metadata/action protocol.'
+- 'Scene title: Cat Reaction to Gentle Hand Touch.'

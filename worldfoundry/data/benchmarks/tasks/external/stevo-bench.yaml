@@ -1,0 +1,121 @@
+benchmark: stevo-bench
+name: STEVO-Bench
+description: Observation-controlled state-evolution benchmark probing whether video world models keep
+  simulating hidden processes (225 tasks across 6 world-change categories) using hosted VLM judges.
+tags:
+- benchmark-zoo
+- external-official
+- world-model
+- state-evolution
+- image-to-video
+splits:
+- standard
+metrics:
+  task_success: {aggregation: mean, primary: true}
+  state_evol_success: {aggregation: mean}
+  physical_inaccuracy: {aggregation: mean}
+  occlusion_done: {aggregation: mean}
+  trigger_applied: {aggregation: mean}
+  control_success: {aggregation: mean}
+metadata:
+  source_kind: benchmark_zoo
+  benchmark_id: stevo-bench
+  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:StevoBenchContract
+  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id stevo-bench --mode contract
+    --output-dir tmp/benchmark_zoo/benchmark_contract/stevo-bench --json
+  validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id stevo-bench --mode official-validation
+    --official-results-path <stevo_bench_run_dir_or_summary_json> --output-dir <out> --json
+  checkpoint_refs: []
+  runtime:
+    kind: in_tree_official_runtime_hosted_judges
+    root: worldfoundry/evaluation/tasks/execution/runners/stevo_bench
+    runtime_root: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench
+    root_env: WORLDFOUNDRY_STEVO_BENCH_ROOT
+    results_path_env: WORLDFOUNDRY_STEVO_BENCH_RESULTS_PATH
+    task_root_env: WORLDFOUNDRY_STEVO_BENCH_TASK_ROOT
+  release_status: experimental
+  maturity: verified_runner
+  open_source_status: in_tree_runtime
+  official_benchmark_verified: false
+  integration_evidence: false
+  leaderboard_valid: false
+  requires:
+  - STEVO-Bench task YAML root from the JhanLiufu/StEvo-Bench Hugging Face dataset for official runs.
+  - GOOGLE_API_KEY or OPENAI_API_KEY plus network access for the hosted VLM judges during --run-official.
+  blockers:
+  - Full 225-task official execution and leaderboard parity are unverified in this workspace.
+  data_refs:
+    task_yaml: worldfoundry/data/benchmarks/tasks/external/stevo-bench.yaml
+    fixture: worldfoundry/data/benchmarks/assets/stevo-bench/sample_run
+    upstream_repository: https://github.com/jhanliufu-personal/STEVO-Bench
+    dataset_repo: JhanLiufu/StEvo-Bench
+  artifact_layout:
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+    output_artifact: benchmark_scorecard
+    filename_template: scorecard.json
+  runner_availability:
+    available: true
+    runner_target: worldfoundry.evaluation.tasks.contracts.external:StevoBenchContract
+    runner_script_available: true
+    task_yaml_available: true
+    runtime_verified: false
+    normalizer_verified: true
+    surface: stevo_bench_official_in_tree
+tasks:
+  stevo_bench_standard:
+    benchmark_name: stevo-bench
+    protocol: external_official_benchmark
+    capability_track: video_world_model
+    schema_type: generated_artifact_set
+    input_keys:
+    - generated_video
+    - stevo_output_map
+    - stevo_task_root
+    output_keys:
+    - scorecard
+    - raw_metric_table
+    - per_sample_scores
+    metric_ids:
+    - task_success
+    - state_evol_success
+    - physical_inaccuracy
+    - occlusion_done
+    - trigger_applied
+    - control_success
+    tags:
+    - benchmark-zoo
+    - external-official
+    - stevo-bench
+    - state-evolution
+    metadata:
+      source_kind: benchmark_zoo
+      benchmark_id: stevo-bench
+      official_benchmark_verified: false
+      integration_evidence: false
+      leaderboard_valid: false
+    dataset:
+      hf_dataset_id: JhanLiufu/StEvo-Bench
+      split: standard
+    runtime_requirements:
+      generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+      results_path_env: WORLDFOUNDRY_STEVO_BENCH_RESULTS_PATH
+      task_root_env: WORLDFOUNDRY_STEVO_BENCH_TASK_ROOT
+    artifact_contract:
+      required:
+        generated_video:
+          kind: video
+      optional:
+        stevo_output_map:
+          kind: json
+    evaluation_protocol:
+    - name: in_tree_official_runtime
+      metric_ids:
+      - task_success
+      - state_evol_success
+      - physical_inaccuracy
+      - occlusion_done
+      - trigger_applied
+      - control_success
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:StevoBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py

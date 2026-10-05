@@ -5,8 +5,10 @@ environment_id: giga-world-policy-py311
 id: calvin
 name: CALVIN
 docker:
-  image: ghcr.io/allenai/vla-evaluation-harness/calvin:latest
-  source_image: ghcr.io/allenai/vla-evaluation-harness/calvin:latest
+  image: ghcr.io/allenai/vla-evaluation-harness/calvin@sha256:c607214d02e212fe8e0a4227d9c973921ec0232083e6862bb5387c3f58369984
+  digest: sha256:c607214d02e212fe8e0a4227d9c973921ec0232083e6862bb5387c3f58369984
+  source_image: ghcr.io/allenai/vla-evaluation-harness/calvin@sha256:c607214d02e212fe8e0a4227d9c973921ec0232083e6862bb5387c3f58369984
+  platform: linux/amd64
   python_env: calvin
   gpus: all
   env:

@@ -13,17 +13,16 @@ from typing import Any
 from urllib.parse import unquote
 
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
-from worldfoundry.runtime.env import resolve_hf_cache_dir
+from worldfoundry.evaluation.utils import load_manifest
 from worldfoundry.runtime.assets import (
     expand_worldfoundry_path,
     iter_manifest_asset_items,
     load_local_asset_manifest,
     resolve_asset_manifest_path,
 )
-from worldfoundry.evaluation.utils import load_manifest
+from worldfoundry.runtime.env import resolve_hf_cache_dir
 
 from ..catalog.schema import BenchmarkDatasetRef, BenchmarkZooEntry
-
 
 JsonValue = Any
 
@@ -1990,6 +1989,10 @@ def locate_local_dataset(
 ) -> DatasetLocation:
     """Locate a previously downloaded benchmark dataset without network access.
 
+    Lookup order is: per-dataset environment override, local asset/data
+    manifests, an explicit or configured direct data root, then Hugging Face
+    cache snapshots.
+
     Args:
         ref: Dataset reference, manifest-like mapping, or Hugging Face dataset id.
         data_root: Optional directory with ``org/name``, ``org--name``, or HF cache-style subfolders.
@@ -2276,13 +2279,11 @@ class DatasetManager:
         manifest_path: str | Path | None = None,
         env: Mapping[str, str] | None = None,
     ) -> DatasetLocation:
-        """Determines the physical directory path where a dataset resides.
+        """Locate a previously downloaded dataset without network access.
 
-        Queries paths in the following prioritized order:
-        1. High-priority local manifest rules.
-        2. Absolute data roots.
-        3. Environment variable overrides.
-        4. Standard Hugging Face cache snapshot folders.
+        Priority matches :func:`locate_local_dataset`: per-dataset environment
+        override, local manifests, a direct data root, then Hugging Face cache
+        snapshots under this manager's ``cache_dir``.
 
         Args:
             ref: Dataset target spec.

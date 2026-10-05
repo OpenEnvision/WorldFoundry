@@ -3,16 +3,12 @@ title: Embodied 官方运行准备
 description: 克隆 WorldFoundry 后，如何配置 checkpoint、Docker simulator 资产和结果路径，并完成具身 benchmark 测评。
 ---
 
-## 你会用到什么
-
 WorldFoundry 在仓库内提供具身 benchmark 的 **结果归一化、CLI 和 simulator 接口**（`worldfoundry.evaluation.tasks.embodied`）。**Checkpoint、simulator 资产、Docker image 和 rollout 结果不会打进 git**——这些路径由你在本机通过环境变量或 CLI 参数指定。
 
 两类测评 surface：
 
-| Surface | Benchmark ids | 在 WorldFoundry 里能做什么 |
-| --- | --- | --- |
-| 原生闭环 simulator | `ai2thor`, `behavior1k`, `calvin`, `kinetix`, `libero`, `libero-mem`, `libero-plus`, `libero-pro`, `maniskill2`, `maniskill`, `mikasa`, `molmospaces`, `rlbench`, `robocasa`, `robocerebra`, `robomme`, `robotwin`, `simpler-env`, `vlabench` | official result import、in-tree simulator API、Docker-backed rollout hooks |
-| 仅结果导入 | `bridgedata-v2`, `libero-para`, `metaworld` | 归一化官方格式的结果文件 |
+- **原生闭环 simulator** (`ai2thor`, `behavior1k`, `calvin`, `kinetix`, `libero`, `libero-mem`, `libero-plus`, `libero-pro`, `maniskill2`, `maniskill`, `mikasa`, `molmospaces`, `rlbench`, `robocasa`, `robocerebra`, `robomme`, `robotwin`, `simpler-env`, `vlabench`) — official result import、in-tree simulator API、Docker-backed rollout hooks
+- **仅结果导入** (`bridgedata-v2`, `metaworld`) — 归一化官方格式的结果文件
 
 `integration_status: integrated` 只表示接口已接入，**不等于** leaderboard 已验证。未跑完官方 protocol 前，scorecard 保持 `official_benchmark_verified=false`。
 
@@ -65,13 +61,11 @@ PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON} scripts/setup/prepare_embodied_offic
 
 生成文件（默认在 `tmp/benchmark_zoo/embodied_official_assets/`，可用 `--output-root` 改）：
 
-| 文件 | 用途 |
-| --- | --- |
-| `embodied_official_env.sh` | 可 `source` 的 env 模板；**你已 export 的变量优先**（`${VAR:-default}`） |
-| `local_assets_manifest.yaml` | 本地 asset 清单；可复制到 git 外并通过 `WORLDFOUNDRY_LOCAL_ASSET_MANIFEST` 指向 |
-| `check_repo_assets.sh` | 检查已配置的 source/runtime 根目录，并报告缺失路径 |
-| `download_public_assets.sh` | 公开 HF 资源下载命令 |
-| `validate_official_results.sh` | rollout 完成后的批量导入命令 |
+- `embodied_official_env.sh` — 可 `source` 的 env 模板；**你已 export 的变量优先**（`${VAR:-default}`）
+- `local_assets_manifest.yaml` — 本地 asset 清单；可复制到 git 外并通过 `WORLDFOUNDRY_LOCAL_ASSET_MANIFEST` 指向
+- `check_repo_assets.sh` — 检查已配置的 source/runtime 根目录，并报告缺失路径
+- `download_public_assets.sh` — 公开 HF 资源下载命令
+- `validate_official_results.sh` — rollout 完成后的批量导入命令
 
 加载并覆盖为你自己的路径：
 
@@ -96,13 +90,11 @@ export WORLDFOUNDRY_LOCAL_ASSET_MANIFEST=/path/to/your/local_assets_manifest.yam
 
 ## 第三步：按目标选择验证深度
 
-| 目标 | 命令 | 需要 GPU / 资产 |
-| --- | --- | --- |
-| 验证框架接线 | `worldfoundry-eval zoo benchmarks --json` | 否 |
-| Official result import | `worldfoundry-eval zoo benchmark-run --benchmark-id robotwin --mode official-validation --official-results-path <official_results.json> --output-dir tmp/benchmark_zoo/official_validation/robotwin --json` | 否 |
-| 检查还缺哪些 env / 路径 | `worldfoundry-eval zoo benchmark-show --benchmark-id robotwin --json` | 否（会列出缺失项） |
-| 导入已有 official 结果 | 见下文「导入官方结果」 | 只需结果文件 |
-| 完整 simulator rollout | 在上游 repo 内按官方文档跑 | 是 |
+- **验证框架接线** — `worldfoundry-eval zoo benchmarks --json`。需要 GPU / 资产：否
+- **Official result import** — `worldfoundry-eval zoo benchmark-run --benchmark-id robotwin --mode official-validation --official-results-path <official_results.json> --output-dir tmp/benchmark_zoo/official_validation/robotwin --json`。需要 GPU / 资产：否
+- **检查还缺哪些 env / 路径** — `worldfoundry-eval zoo benchmark-show --benchmark-id robotwin --json`。需要 GPU / 资产：否（会列出缺失项）
+- **导入已有 official 结果** — 见下文“导入官方结果”。需要 GPU / 资产：只需结果文件
+- **完整 simulator rollout** — 在上游 repo 内按官方文档跑。需要 GPU / 资产：是
 
 ---
 
@@ -115,16 +107,14 @@ bash scripts/setup/bootstrap_worldfoundry.sh --cuda cu128
 source tmp/worldfoundry_unified_env.sh
 ```
 
-| Runtime family | 推荐环境 | 何时独立环境 |
-| --- | --- | --- |
-| LIBERO、CALVIN、RoboCasa、MiKASA、RoboCerebra、RoboMME | `worldfoundry-unified-cu128` | robosuite/MuJoCo pin 冲突时 |
-| LIBERO-Plus | `libero-plus` profile | 与 base LIBERO 包可能不共存 |
-| BEHAVIOR-1K | OmniGibson/Isaac Sim 独立环境 | 需接受上游 terms + 大型资产 |
-| Kinetix | JAX 独立环境 | |
-| RLBench | CoppeliaSim/PyRep 独立环境 | |
-| RoboTwin、VLABench、ManiSkill2、SimplerEnv | 导入用统一环境；rollout 用外部 simulator runtime | SAPIEN/Curobo 等 |
-| AI2-THOR | 外部 simulator runtime | Unity 二进制 + CloudRendering/X11 |
-| Octo/OpenPI 系 policy | 按 model profile | |
+- **LIBERO、CALVIN、RoboCasa、MiKASA、RoboCerebra、RoboMME** — 推荐环境：`worldfoundry-unified-cu128`。何时独立环境：robosuite/MuJoCo pin 冲突时
+- **LIBERO-Plus** — 推荐环境：`libero-plus` profile。何时独立环境：与 base LIBERO 包可能不共存
+- **BEHAVIOR-1K** — 推荐环境：OmniGibson/Isaac Sim 独立环境。何时独立环境：需接受上游 terms + 大型资产
+- **Kinetix** — 推荐环境：JAX 独立环境
+- **RLBench** — 推荐环境：CoppeliaSim/PyRep 独立环境
+- **RoboTwin、VLABench、ManiSkill2、SimplerEnv** — 推荐环境：导入用统一环境；rollout 用外部 simulator runtime。何时独立环境：SAPIEN/Curobo 等
+- **AI2-THOR** — 推荐环境：外部 simulator runtime。何时独立环境：Unity 二进制 + CloudRendering/X11
+- **Octo/OpenPI 系 policy** — 推荐环境：按 model profile
 
 查看 model 环境映射：`bash scripts/setup/model_env_install.sh --list`
 
@@ -134,21 +124,20 @@ source tmp/worldfoundry_unified_env.sh
 
 每个 benchmark 用独立 env 指向 **你的** checkout、checkpoint 和结果文件：
 
-| Benchmark id | Split | Policy checkpoint | Official results |
-| --- | --- | --- | --- |
-| `ai2thor` | eval config 中的 `scene` / `benchmark_kwargs` | policy checkpoint 或 external policy server | `WORLDFOUNDRY_AI2THOR_RESULTS_PATH` |
-| `libero` | `WORLDFOUNDRY_LIBERO_SUITE` | `WORLDFOUNDRY_LIBERO_POLICY_CHECKPOINT` | `WORLDFOUNDRY_LIBERO_RESULTS_PATH` |
-| `robotwin` | `WORLDFOUNDRY_ROBOTWIN_TASK_CONFIG` | `WORLDFOUNDRY_ROBOTWIN_POLICY_CHECKPOINT` | `WORLDFOUNDRY_ROBOTWIN_RESULTS_PATH` |
-| `robomme` | `WORLDFOUNDRY_ROBOMME_SUITE` | `WORLDFOUNDRY_ROBOMME_POLICY_CHECKPOINT` | `WORLDFOUNDRY_ROBOMME_RESULTS_PATH` |
-| `libero-para` | `WORLDFOUNDRY_LIBERO_PARA_SPLIT` | `WORLDFOUNDRY_LIBERO_PARA_POLICY_CHECKPOINT` | `WORLDFOUNDRY_LIBERO_PARA_RESULTS_PATH` |
-| `calvin` | `WORLDFOUNDRY_CALVIN_SPLIT` | `WORLDFOUNDRY_CALVIN_POLICY_CHECKPOINT` | `WORLDFOUNDRY_CALVIN_RESULTS_PATH` |
-| `robocasa` | `WORLDFOUNDRY_ROBOCASA_SUITE` | `WORLDFOUNDRY_ROBOCASA_POLICY_CHECKPOINT` | `WORLDFOUNDRY_ROBOCASA_RESULTS_PATH` |
-| `maniskill2` | `WORLDFOUNDRY_MANISKILL2_SUITE` | `WORLDFOUNDRY_MANISKILL2_POLICY_CHECKPOINT` | `WORLDFOUNDRY_MANISKILL2_RESULTS_PATH` |
-| `rlbench` | `WORLDFOUNDRY_RLBENCH_TASK_SPLIT` | `WORLDFOUNDRY_RLBENCH_POLICY_CHECKPOINT` | `WORLDFOUNDRY_RLBENCH_RESULTS_PATH` |
-| `behavior1k` | `WORLDFOUNDRY_BEHAVIOR1K_TASK_SPLIT` | `WORLDFOUNDRY_BEHAVIOR1K_POLICY_CHECKPOINT` | `WORLDFOUNDRY_BEHAVIOR1K_RESULTS_PATH` |
-| `simpler-env` | `WORLDFOUNDRY_SIMPLERENV_SUITE` | `WORLDFOUNDRY_SIMPLERENV_POLICY_CHECKPOINT` | `WORLDFOUNDRY_SIMPLERENV_RESULTS_PATH` |
-| `vlabench` | `WORLDFOUNDRY_VLABENCH_TASK_SPLIT` | `WORLDFOUNDRY_VLABENCH_POLICY_CHECKPOINT` | `WORLDFOUNDRY_VLABENCH_RESULTS_PATH` |
-| `bridgedata-v2` | `WORLDFOUNDRY_BRIDGEDATA_V2_SPLIT` | `WORLDFOUNDRY_BRIDGEDATA_V2_POLICY_CHECKPOINT` | `WORLDFOUNDRY_BRIDGEDATA_V2_RESULTS_PATH` |
+<KvCatalog heading="Benchmark" vars rows={[
+    { name: <><code>ai2thor</code></>, description: <>{"eval config 中的 "}<code>scene</code>{" / "}<code>benchmark_kwargs</code></>, reads: [{ label: "Policy checkpoint", value: "policy checkpoint 或 external policy server" }, { label: "Official results", value: <><code>WORLDFOUNDRY_AI2THOR_RESULTS_PATH</code></> }] },
+    { name: <><code>libero</code></>, description: <><code>WORLDFOUNDRY_LIBERO_SUITE</code></>, reads: [{ label: "Policy checkpoint", value: <><code>WORLDFOUNDRY_LIBERO_POLICY_CHECKPOINT</code></> }, { label: "Official results", value: <><code>WORLDFOUNDRY_LIBERO_RESULTS_PATH</code></> }] },
+    { name: <><code>robotwin</code></>, description: <><code>WORLDFOUNDRY_ROBOTWIN_TASK_CONFIG</code></>, reads: [{ label: "Policy checkpoint", value: <><code>WORLDFOUNDRY_ROBOTWIN_POLICY_CHECKPOINT</code></> }, { label: "Official results", value: <><code>WORLDFOUNDRY_ROBOTWIN_RESULTS_PATH</code></> }] },
+    { name: <><code>robomme</code></>, description: <><code>WORLDFOUNDRY_ROBOMME_SUITE</code></>, reads: [{ label: "Policy checkpoint", value: <><code>WORLDFOUNDRY_ROBOMME_POLICY_CHECKPOINT</code></> }, { label: "Official results", value: <><code>WORLDFOUNDRY_ROBOMME_RESULTS_PATH</code></> }] },
+    { name: <><code>calvin</code></>, description: <><code>WORLDFOUNDRY_CALVIN_SPLIT</code></>, reads: [{ label: "Policy checkpoint", value: <><code>WORLDFOUNDRY_CALVIN_POLICY_CHECKPOINT</code></> }, { label: "Official results", value: <><code>WORLDFOUNDRY_CALVIN_RESULTS_PATH</code></> }] },
+    { name: <><code>robocasa</code></>, description: <><code>WORLDFOUNDRY_ROBOCASA_SUITE</code></>, reads: [{ label: "Policy checkpoint", value: <><code>WORLDFOUNDRY_ROBOCASA_POLICY_CHECKPOINT</code></> }, { label: "Official results", value: <><code>WORLDFOUNDRY_ROBOCASA_RESULTS_PATH</code></> }] },
+    { name: <><code>maniskill2</code></>, description: <><code>WORLDFOUNDRY_MANISKILL2_SUITE</code></>, reads: [{ label: "Policy checkpoint", value: <><code>WORLDFOUNDRY_MANISKILL2_POLICY_CHECKPOINT</code></> }, { label: "Official results", value: <><code>WORLDFOUNDRY_MANISKILL2_RESULTS_PATH</code></> }] },
+    { name: <><code>rlbench</code></>, description: <><code>WORLDFOUNDRY_RLBENCH_TASK_SPLIT</code></>, reads: [{ label: "Policy checkpoint", value: <><code>WORLDFOUNDRY_RLBENCH_POLICY_CHECKPOINT</code></> }, { label: "Official results", value: <><code>WORLDFOUNDRY_RLBENCH_RESULTS_PATH</code></> }] },
+    { name: <><code>behavior1k</code></>, description: <><code>WORLDFOUNDRY_BEHAVIOR1K_TASK_SPLIT</code></>, reads: [{ label: "Policy checkpoint", value: <><code>WORLDFOUNDRY_BEHAVIOR1K_POLICY_CHECKPOINT</code></> }, { label: "Official results", value: <><code>WORLDFOUNDRY_BEHAVIOR1K_RESULTS_PATH</code></> }] },
+    { name: <><code>simpler-env</code></>, description: <><code>WORLDFOUNDRY_SIMPLERENV_SUITE</code></>, reads: [{ label: "Policy checkpoint", value: <><code>WORLDFOUNDRY_SIMPLERENV_POLICY_CHECKPOINT</code></> }, { label: "Official results", value: <><code>WORLDFOUNDRY_SIMPLERENV_RESULTS_PATH</code></> }] },
+    { name: <><code>vlabench</code></>, description: <><code>WORLDFOUNDRY_VLABENCH_TASK_SPLIT</code></>, reads: [{ label: "Policy checkpoint", value: <><code>WORLDFOUNDRY_VLABENCH_POLICY_CHECKPOINT</code></> }, { label: "Official results", value: <><code>WORLDFOUNDRY_VLABENCH_RESULTS_PATH</code></> }] },
+    { name: <><code>bridgedata-v2</code></>, description: <><code>WORLDFOUNDRY_BRIDGEDATA_V2_SPLIT</code></>, reads: [{ label: "Policy checkpoint", value: <><code>WORLDFOUNDRY_BRIDGEDATA_V2_POLICY_CHECKPOINT</code></> }, { label: "Official results", value: <><code>WORLDFOUNDRY_BRIDGEDATA_V2_RESULTS_PATH</code></> }] }
+  ]} />
 
 上游代码根目录通常用 `WORLDFOUNDRY_<BENCHMARK>_ROOT`（例如 `WORLDFOUNDRY_LIBERO_ROOT`）。完整列表见 `prepare_embodied_official_assets.py` 生成的 `embodied_official_env.sh`。
 
@@ -177,20 +166,17 @@ worldfoundry-eval zoo benchmark-run \
 
 使用 Docker-backed official evaluator 或 VLA evaluation harness 运行指定 policy checkpoint，生成 result 文件，再用上一节的 `official-validation` 导入。
 
-Rollout 前建议记录：benchmark id、上游 commit、simulator 版本、dataset split、checkpoint 路径、action/observation 约定、结果文件路径。
+Rollout 前建议记录：benchmark ID、上游 commit、simulator 版本、dataset split、checkpoint 路径、action/observation 约定、结果文件路径。
 
 
 接入真实 policy 时，把 eval config 里的 `model_id` 换成已配置的 VLA policy，或通过 `server.url` 指向 external policy server；policy 返回 `{"token": "forward"}` 或等价离散 action 即可。
 
 ---
 
-## 内置验证 fixture
+## 本地验证输入
 
-零资产 validation 用的 minimal 结果在：
-
-`worldfoundry/data/test_cases/evaluation/embodied_fixtures/`
-
-覆盖 `libero`、`robomme`、`robotwin`，与真实 rollout 后的导入路径相同，但不构成 leaderboard 证据。
+请单独准备本地模拟器输入；公开仓库不分发测试 fixture 数据集。
+验证运行不能作为排行榜证据。
 
 ---
 

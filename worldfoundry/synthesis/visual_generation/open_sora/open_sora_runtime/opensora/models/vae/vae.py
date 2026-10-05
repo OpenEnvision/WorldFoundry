@@ -1,4 +1,3 @@
-import json
 import os
 
 import torch
@@ -14,26 +13,15 @@ from opensora.utils.ckpt_utils import load_checkpoint
 @MODELS.register_module()
 class VideoAutoencoderKL(nn.Module):
     def __init__(
-        self,
-        from_pretrained=None,
-        micro_batch_size=None,
-        cache_dir=None,
-        local_files_only=False,
-        subfolder=None,
-        config=None,
+        self, from_pretrained=None, micro_batch_size=None, cache_dir=None, local_files_only=False, subfolder=None
     ):
         super().__init__()
-        if config is not None:
-            if from_pretrained is not None:
-                raise ValueError("VideoAutoencoderKL accepts either config or from_pretrained, not both")
-            self.module = AutoencoderKL.from_config(config)
-        else:
-            self.module = AutoencoderKL.from_pretrained(
-                from_pretrained,
-                cache_dir=cache_dir,
-                local_files_only=local_files_only,
-                subfolder=subfolder,
-            )
+        self.module = AutoencoderKL.from_pretrained(
+            from_pretrained,
+            cache_dir=cache_dir,
+            local_files_only=local_files_only,
+            subfolder=subfolder,
+        )
         self.out_channels = self.module.config.latent_channels
         self.patch_size = (1, 8, 8)
         self.micro_batch_size = micro_batch_size
@@ -185,15 +173,6 @@ class VideoAutoencoderPipeline(PreTrainedModel):
         self.register_buffer("scale", scale)
         self.register_buffer("shift", shift)
 
-        # Transformers 5.x expects this expanded mapping to be populated by
-        # ``post_init()`` before ``from_pretrained()`` finalizes checkpoint
-        # loading.  Open-Sora intentionally does not call ``post_init()`` here:
-        # doing so would run the generic Transformers initializer over the
-        # already-loaded Diffusers spatial VAE.  Populate only the metadata
-        # required by the loader, preserving all pretrained parameters.
-        if not hasattr(self, "all_tied_weights_keys"):
-            self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(all_submodels=False)
-
     def encode(self, x):
         x_z = self.spatial_vae.encode(x)
 
@@ -266,97 +245,6 @@ class VideoAutoencoderPipeline(PreTrainedModel):
         return next(self.parameters()).dtype
 
 
-_OPENSORA_VAE_V1_2_SPATIAL_CONFIG = {
-    "_class_name": "AutoencoderKL",
-    "_diffusers_version": "0.18.0.dev0",
-    "act_fn": "silu",
-    "block_out_channels": [128, 256, 512, 512],
-    "down_block_types": [
-        "DownEncoderBlock2D",
-        "DownEncoderBlock2D",
-        "DownEncoderBlock2D",
-        "DownEncoderBlock2D",
-    ],
-    "force_upcast": False,
-    "in_channels": 3,
-    "latent_channels": 4,
-    "layers_per_block": 2,
-    "norm_num_groups": 32,
-    "out_channels": 3,
-    "sample_size": 512,
-    "scaling_factor": 0.13025,
-    "up_block_types": [
-        "UpDecoderBlock2D",
-        "UpDecoderBlock2D",
-        "UpDecoderBlock2D",
-        "UpDecoderBlock2D",
-    ],
-}
-
-
-def _local_spatial_vae_spec(snapshot_dir, vae_2d):
-    """Replace the published spatial-VAE Hub reference with local config.
-
-    OpenSora-VAE-v1.2 contains the spatial VAE parameters in its top-level
-    ``model.safetensors``, but its config only points at the PixArt Hub repo for
-    the spatial architecture.  Constructing that reference with Diffusers can
-    issue a network request even when all weights are already local.  The
-    published architecture is small and stable, so keep its exact config
-    in-tree and let the strict top-level checkpoint load fill every parameter.
-    """
-
-    vae_2d = dict(vae_2d)
-    source = vae_2d.pop("from_pretrained", None)
-    subfolder = vae_2d.pop("subfolder", None)
-    vae_2d.pop("cache_dir", None)
-    vae_2d.pop("local_files_only", None)
-
-    bundled_config_path = os.path.join(snapshot_dir, "vae", "config.json")
-    if os.path.isfile(bundled_config_path):
-        with open(bundled_config_path, encoding="utf-8") as handle:
-            spatial_config = json.load(handle)
-    elif source == "PixArt-alpha/pixart_sigma_sdxlvae_T5_diffusers" and subfolder == "vae":
-        spatial_config = dict(_OPENSORA_VAE_V1_2_SPATIAL_CONFIG)
-    else:
-        raise RuntimeError(
-            "Local Open-Sora VAE snapshot does not bundle its spatial VAE config and "
-            f"references an unsupported external component: {source!r} (subfolder={subfolder!r})"
-        )
-
-    vae_2d["config"] = spatial_config
-    return vae_2d
-
-
-def _load_local_vae_snapshot(snapshot_dir, **overrides):
-    """Strictly and offline load the published Transformers-4.36 VAE snapshot."""
-
-    from safetensors.torch import load_model as load_safetensors_model
-
-    config_path = os.path.join(snapshot_dir, "config.json")
-    weight_path = os.path.join(snapshot_dir, "model.safetensors")
-    if not os.path.isfile(config_path):
-        raise FileNotFoundError(f"Open-Sora VAE config not found: {config_path}")
-    if not os.path.isfile(weight_path):
-        raise FileNotFoundError(f"Open-Sora VAE safetensors checkpoint not found: {weight_path}")
-    with open(config_path, encoding="utf-8") as handle:
-        config_values = json.load(handle)
-    config_values.update(overrides)
-    config_values["vae_2d"] = _local_spatial_vae_spec(snapshot_dir, config_values["vae_2d"])
-    # Diffusers initializes the architecture randomly before the checkpoint is
-    # applied.  Inference seeds are set before VAE construction, so preserve the
-    # caller's CPU RNG state to keep the subsequent diffusion noise identical
-    # to the official ``from_pretrained`` lifecycle.
-    with torch.random.fork_rng(devices=[]):
-        model = VideoAutoencoderPipeline(VideoAutoencoderPipelineConfig(**config_values))
-    missing, unexpected = load_safetensors_model(model, weight_path, strict=False, device="cpu")
-    if missing or unexpected:
-        raise RuntimeError(
-            "Open-Sora VAE checkpoint does not exactly match the in-tree model: "
-            f"missing={missing}, unexpected={unexpected}"
-        )
-    return model
-
-
 @MODELS.register_module()
 def OpenSoraVAE_V1_2(
     micro_batch_size=4,
@@ -389,19 +277,7 @@ def OpenSoraVAE_V1_2(
         scale=scale,
     )
 
-    is_hf_snapshot_dir = bool(
-        from_pretrained
-        and os.path.isdir(from_pretrained)
-        and os.path.isfile(os.path.join(from_pretrained, "config.json"))
-        and (
-            os.path.isfile(os.path.join(from_pretrained, "model.safetensors"))
-            or os.path.isfile(os.path.join(from_pretrained, "pytorch_model.bin"))
-        )
-    )
-
-    if is_hf_snapshot_dir:
-        model = _load_local_vae_snapshot(from_pretrained, **kwargs)
-    elif from_pretrained is not None and not os.path.isdir(from_pretrained):
+    if from_pretrained is not None and not os.path.isdir(from_pretrained):
         model = VideoAutoencoderPipeline.from_pretrained(from_pretrained, **kwargs)
     else:
         config = VideoAutoencoderPipelineConfig(**kwargs)

@@ -2,10 +2,8 @@ import os
 import time
 from pprint import pformat
 
-import colossalai
 import torch
 import torch.distributed as dist
-from colossalai.cluster import DistCoordinator
 from mmengine.runner import set_random_seed
 from tqdm import tqdm
 
@@ -34,30 +32,6 @@ from opensora.utils.inference_utils import (
 from opensora.utils.misc import all_exists, create_logger, is_distributed, is_main_process, to_torch_dtype
 
 
-def _existing_env_path(name):
-    value = os.environ.get(name, "").strip()
-    if not value:
-        return None
-    value = os.path.expanduser(value)
-    return value if os.path.exists(value) else None
-
-
-def _apply_worldfoundry_path_overrides(cfg):
-    vae_path = _existing_env_path("OPENSORA_VAE_PATH")
-    if vae_path and cfg.get("vae") is not None:
-        cfg.vae["from_pretrained"] = vae_path
-
-    text_encoder_path = _existing_env_path("OPENSORA_TEXT_ENCODER_PATH")
-    if not text_encoder_path:
-        ckpt_dir = os.environ.get("WORLDFOUNDRY_CKPT_DIR", "").strip()
-        if ckpt_dir:
-            local_t5 = os.path.join(ckpt_dir, "MAGI-1", "ckpt", "t5", "t5-v1_1-xxl")
-            if os.path.exists(os.path.join(local_t5, "config.json")):
-                text_encoder_path = local_t5
-    if text_encoder_path and cfg.get("text_encoder") is not None:
-        cfg.text_encoder["from_pretrained"] = text_encoder_path
-
-
 def main():
     torch.set_grad_enabled(False)
     # ======================================================
@@ -65,7 +39,6 @@ def main():
     # ======================================================
     # == parse configs ==
     cfg = parse_configs(training=False)
-    _apply_worldfoundry_path_overrides(cfg)
 
     # == device and dtype ==
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -77,6 +50,8 @@ def main():
 
     # == init distributed env ==
     if is_distributed():
+        import colossalai
+        from colossalai.cluster import DistCoordinator
         colossalai.launch_from_torch({})
         coordinator = DistCoordinator()
         enable_sequence_parallelism = coordinator.world_size > 1
@@ -132,13 +107,6 @@ def main():
 
     # == build scheduler ==
     scheduler = build_module(cfg.scheduler, SCHEDULERS)
-
-    # Checkpoint construction is an implementation detail and must not change
-    # the diffusion noise associated with a user-visible seed.  Upstream
-    # Open-Sora relied on the Transformers 4.36 no-init loading lifecycle for
-    # this property.  Re-seed after every model has been built so direct local
-    # loaders and newer Transformers/Diffusers releases remain reproducible.
-    set_random_seed(seed=cfg.get("seed", 1024))
 
     # ======================================================
     # inference

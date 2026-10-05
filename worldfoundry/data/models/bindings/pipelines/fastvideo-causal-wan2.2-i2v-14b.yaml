@@ -1,0 +1,13 @@
+schema_version: 2
+binding_id: fastvideo-causal-wan2.2-i2v-14b
+model_id: fastvideo-causal-wan2.2-i2v-14b
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.fastvideo_causal_wan.pipeline_fastvideo_causal_wan:FastVideoCausalWanPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation
+aliases:
+- FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers

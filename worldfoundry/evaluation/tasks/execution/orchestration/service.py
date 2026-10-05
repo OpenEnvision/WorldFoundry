@@ -14,9 +14,10 @@ from typing import Any, Mapping, Sequence, TypeAlias
 import yaml
 
 from worldfoundry.evaluation.models.catalog.registry import load_model_zoo_registry
+from worldfoundry.evaluation.tasks.catalog.benchmark_id import normalize_benchmark_id
 from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
 from worldfoundry.evaluation.tasks.datasets import validate_dataset_manifest
-from worldfoundry.evaluation.tasks.execution.framework.in_tree_registry import target_benchmark_metrics
+from worldfoundry.evaluation.tasks.execution.framework.scoring_registry import target_benchmark_metrics
 from worldfoundry.evaluation.tasks.metrics.registry import default_metric_registry
 from worldfoundry.evaluation.utils import BENCHMARK_ZOO_DIR, MODEL_ZOO_DIR, write_json
 
@@ -34,10 +35,6 @@ from .model_benchmark import (
     RESERVED_BENCHMARK_PARAMETERS,
     ModelBenchmarkRunRequest,
     run_model_benchmark,
-)
-from .reproduction_profiles import (
-    DEFAULT_REPRODUCTION_PROFILE_ROOT,
-    resolve_reproduction_profile,
 )
 
 PREPARED_EVALUATION_SCHEMA_VERSION = "worldfoundry-prepared-evaluation-v2"
@@ -140,10 +137,7 @@ class ReproduceIntent:
     """Execute an immutable model/benchmark recipe."""
 
     output_dir: str | Path
-    recipe_path: str | Path | None = None
-    profile_id: str | None = None
-    benchmark_id: str | None = None
-    profile_root: str | Path = DEFAULT_REPRODUCTION_PROFILE_ROOT
+    recipe_path: str | Path
 
 
 EvaluationIntent: TypeAlias = (
@@ -375,7 +369,7 @@ def _validate_metrics(
     if not requested:
         _issue(issues, "error", "metrics_missing", "select at least one metric")
         return ()
-    benchmark_metrics = target_benchmark_metrics().get((benchmark_id or "").strip().casefold())
+    benchmark_metrics = target_benchmark_metrics().get(normalize_benchmark_id(benchmark_id))
     if benchmark_metrics is not None:
         unknown = [metric for metric in requested if metric not in benchmark_metrics]
         if unknown:
@@ -648,22 +642,7 @@ def _prepare_score_results(intent: ScoreResultsIntent) -> PreparedEvaluation:
 
 def _prepare_reproduction(intent: ReproduceIntent) -> PreparedEvaluation:
     try:
-        selectors = sum(
-            value not in (None, "")
-            for value in (intent.recipe_path, intent.profile_id, intent.benchmark_id)
-        )
-        if selectors != 1:
-            raise ValueError("select exactly one of recipe_path, profile_id, or benchmark_id")
-        recipe_path = (
-            Path(intent.recipe_path)
-            if intent.recipe_path is not None
-            else resolve_reproduction_profile(
-                profile_id=intent.profile_id,
-                benchmark_id=intent.benchmark_id,
-                root=intent.profile_root,
-            )
-        )
-        recipe = ReproductionRecipe.from_path(recipe_path)
+        recipe = ReproductionRecipe.from_path(intent.recipe_path)
     except Exception as exc:  # noqa: BLE001 - malformed recipes are returned as preflight issues.
         issue = PreparationIssue("error", "recipe_invalid", f"{type(exc).__name__}: {exc}")
         fidelity = EvaluationFidelity(
@@ -780,7 +759,7 @@ def execute_prepared_evaluation(prepared: PreparedEvaluation) -> Any:
         raise ValueError(f"evaluation preflight failed: {messages or 'request is not executable'}")
     output_dir = Path(prepared.request.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    write_json(output_dir / "prepared_evaluation.json", prepared.to_dict(), atomic=False)
+    write_json(output_dir / "prepared_evaluation.json", prepared.to_dict())
     if isinstance(prepared.request, ModelBenchmarkRunRequest):
         return run_model_benchmark(prepared.request)
     return execute_evaluate_run(prepared.request)

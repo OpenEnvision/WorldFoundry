@@ -1,5 +1,7 @@
 id: molmospaces
 name: MolmoSpaces-Bench
+publisher: Allen Institute for AI
+publisher_kind: institute
 benchmark_kind:
 - vla
 - embodied-action
@@ -24,6 +26,9 @@ official_sources:
   paper_url: https://arxiv.org/abs/2603.16861
   license: upstream_terms
 runner:
+  normalization:
+    dispatch: embodied
+    embodied_track: vla
   runner_target: worldfoundry.evaluation.tasks.contracts.external:MolmoSpacesContract
   expected_artifacts:
   - scorecard.json

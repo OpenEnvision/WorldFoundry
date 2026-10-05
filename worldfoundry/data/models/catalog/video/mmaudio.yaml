@@ -14,6 +14,9 @@ source:
   official_repo_url: https://github.com/hkchengrex/MMAudio
   notes:
   - Originally exposed by WorldFoundry-native-3D.
+official_sources:
+  project_page: https://hkchengrex.github.io/MMAudio
+  paper: https://arxiv.org/abs/2412.15322
 integration:
   status: integrated
   notes:
@@ -26,3 +29,19 @@ runner_parity:
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries expose WorldFoundry pipeline targets;
   metadata-only entries retain upstream provenance without runnable WorldFoundry backends.
+docs:
+  publisher: Sony AI / University of Illinois Urbana-Champaign
+  publisher_kind: company
+  publisher_zh: 索尼 AI / 伊利诺伊大学厄巴纳-香槟分校
+  overview: 'MMAudio generates soundtracks for silent video: given a video (and optionally a text prompt), it synthesizes audio that is semantically and temporally aligned with the visuals. In this catalog it is the companion tool for adding audio to clips produced by the video models — its artifact type is generated_audio, not video.'
+  overview_zh: MMAudio 为无声视频生成配音：给定一段视频（可附文本提示词），它合成与画面语义和时间对齐的音频。在本 catalog 中它是为视频模型产物补配音的配套工具——产物类型是 generated_audio，而非视频。
+  architecture: MMAudio is a multimodal joint-training flow-matching model that conditions audio generation on video frames and text (per its publication). This repository records the prompt/video input contract and the generated_audio artifact; model size options and internals are not recorded here.
+  architecture_zh: MMAudio 是多模态联合训练的流匹配（flow-matching）模型，以视频帧与文本为条件生成音频（见其论文）。本仓库记录 prompt/video 输入契约与 generated_audio 产物；模型尺寸选项与内部细节仓库未记录。
+  usage_notes: 'Runner parity is pending — checkpoint-backed artifact parity has not been run in this workspace. Typical workflow: generate video with any T2V/I2V entry, then feed the clip to MMAudio for a soundtrack.'
+  usage_notes_zh: Runner parity 为 pending——本工作区尚未做 checkpoint 加载的产物一致性验证。典型工作流：先用任一文生/图生视频条目出片，再把视频交给 MMAudio 生成配音。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。

@@ -1,40 +1,68 @@
 ---
-title: Physical AI Bench
-description: 在 WorldFoundry tree 内运行 PAI-Bench-G 与 PAI-Bench-C 评测。
+title: Physical AI Bench (PAI-Bench)
+description: "CVPR 2026 Physical AI 套件。WorldFoundry 仓内只打两条赛道：生成（VBench 风格 + VQA）与条件生成（控制保真）。没有单一主指标。"
 ---
 
-## 集成方式
+PAI-Bench（SHI Labs / Georgia Tech，联合 CMU 与 NVIDIA Research；CVPR 2026）是**多赛道 Physical AI** 套件：在生成视频上做感知与控制保真，不是 [PhyGenBench](/zh/docs/evaluation/benchmark-hub/phygenbench) 那种定律 prompt 集，也不是 [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq) 那种实拍续写。
 
-WorldFoundry 独立、in-tree 集成了 SHI-Labs PAI-Bench-G 与 PAI-Bench-C，并且只保留推理与评测代码。
+WorldFoundry 仓内 evaluator **只实现两条赛道**：
 
-| Track | 实现 |
-| --- | --- |
-| PAI-Bench-G | 复用 tree 内 VBench 与 VBench++ I2V；二分类 VQA 可读取预测或调用 Qwen-compatible judge。 |
-| PAI-Bench-C | 本地实现 Canny、blur SSIM、depth SI-RMSE、分割匹配与聚合；复用共享 DOVER、LPIPS、Video-Depth-Anything、GroundingDINO 与 SAM2。 |
+- **PAI-Bench-G**（`--track generation`）：VBench / VBench++ 风格感知指标加 VQA。数据集：`shi-labs/physical-ai-bench-generation`。
+- **PAI-Bench-C**（`--track conditional-generation`）：控制保真（Canny、深度 si-RMSE、分割、模糊 SSIM、LPIPS 多样性）。数据集：`shi-labs/physical-ai-bench-conditional-generation`（约 273 GB）。
 
-运行时不需要上游 repo、`third_party` 目录或 `SOURCE.json`。配置、prompt 与 provenance 全部位于 `worldfoundry/data/benchmarks/assets/physical-ai-bench`。
+论文可能还有其他赛道。那些**不在**本 contract——不要传 `--track understanding`。contract 也**没有**指定单一主指标；不要把 `aesthetic_quality` 当成官方总分。
 
-## 运行
+论文：[PAI-Bench](https://arxiv.org/abs/2512.01989)。代码：[SHI-Labs/physical-ai-bench](https://github.com/SHI-Labs/physical-ai-bench)。
+
+<BenchmarkPageSections id="physical-ai-bench" locale="zh" />
+
+## 如何运行
+
+对已就位数据与生成视频评 generation 赛道：
 
 ```bash
-python -m worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.run_physical_ai_bench_official_runner \
-  --track conditional-generation --run-official \
-  --dataset-root /path/to/physical-ai-bench-conditional-generation \
-  --generated-video-dir /path/to/generated/videos \
-  --allow-trusted-pickle \
-  --output-dir outputs/physical-ai-bench-c --json
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py \
+  --run-official \
+  --track generation \
+  --dataset-root "${WORLDFOUNDRY_PHYSICAL_AI_BENCH_DATASET_ROOT}" \
+  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/physical_ai_bench/generation \
+  --json
 ```
 
-PAI-Bench-G 使用 `--track generation`。其二分类 VQA 可通过 `--prediction-manifest` 读取预测，也支持 `local-qwen` 和 `openai-compatible` judge。官方 conditional-generation mask 是 pickle 文件，因此需要像上面的命令一样显式传入 `--allow-trusted-pickle`。
+条件生成赛道（按需传权重或预测目录）：
 
-## 环境
+```bash
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  -m worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.run_physical_ai_bench_official_runner \
+  --run-official \
+  --track conditional-generation \
+  --dataset-root "${WORLDFOUNDRY_PHYSICAL_AI_BENCH_DATASET_ROOT}" \
+  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/physical_ai_bench/conditional \
+  --json
+```
 
-benchmark runtime 使用 `worldfoundry-unified-cu128`。CPU metric 与结果归一化不需要额外环境。若 72B Qwen 无法放入统一进程，可以在单独的 vLLM serving 环境启动 OpenAI-compatible 服务，并通过 `--judge-base-url` 连接；benchmark code 与计分逻辑仍然全部在 tree 内。
+`--metrics` 可限定开发用指标族。生成赛道 VQA 需要预测 manifest 或已配置的 Qwen 兼容 judge（`--judge-backend`、`--judge-model`、`--judge-base-url`）。产物包括 `scorecard.json` 与 `official_results.json`。
 
-## 官方链接
+## 仓内赛道与 sidecar
 
-- [SHI-Labs/physical-ai-bench](https://github.com/SHI-Labs/physical-ai-bench)
-- [Generation dataset](https://huggingface.co/datasets/shi-labs/physical-ai-bench-generation)
-- [Conditional-generation dataset](https://huggingface.co/datasets/shi-labs/physical-ai-bench-conditional-generation)
+这是只做推理的集成，不会 clone / import 上游仓库或其 `third_party`。prompt、评测设置与出处在 `worldfoundry/data/benchmarks/assets/physical-ai-bench`（故意没有 `SOURCE.json`）。
 
-本地 scorecard 不等同于 SHI-Labs 官方 leaderboard submission；特别是大体量 conditional-generation dataset 的全量数值一致性仍待验证。
+- **Generation** 复用仓内 VBench / VBench++ I2V runtime。示例指标：`aesthetic_quality`、`background_consistency`、`imaging_quality`、`motion_smoothness`、`overall_consistency`、`subject_consistency`。二值物理 VQA 接受预测 manifest **或** Qwen 视频裁判。
+- **Conditional-generation** 在本地实现已发表的 CPU 迁移指标，并复用共享的 DOVER、LPIPS、Video-Depth-Anything、GroundingDINO、SAM2。预计算 sidecar：`--pred-depth-dir`（`.npy`）、`--pred-segmentation-dir`（JSON）。官方数据集 pickle 只有显式 `--allow-trusted-pickle` 才会加载；分割更推荐 JSON sidecar。
+
+标准环境：`worldfoundry-unified-cu128`。结果归一化以及 CPU 上的 Canny / 模糊 / 深度 / 分割不需要第二套环境。走模型的指标需要对应的 WorldFoundry checkpoint。
+
+PAI-Bench-G 的 Qwen2.5-VL-72B 二值 VQA 裁判通常要单独的多卡服务。塞不进 unified 进程时，起一个 vLLM OpenAI 兼容服务并传：
+
+```bash
+--judge-backend openai-compatible \
+--judge-model Qwen/Qwen2.5-VL-72B-Instruct \
+--judge-base-url http://localhost:8000/v1
+```
+
+那套环境只跑可选模型服务。评测代码与聚合仍在 unified WorldFoundry 进程里。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

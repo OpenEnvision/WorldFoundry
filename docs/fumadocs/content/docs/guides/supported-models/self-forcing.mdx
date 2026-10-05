@@ -1,0 +1,50 @@
+---
+title: "Self-Forcing"
+description: "Self-Forcing from Adobe Research / The University of Texas at Austin: text-to-video and image-to-video; Runner parity pending; Self Forcing."
+modelId: "self-forcing"
+pageSource: generated
+---
+
+Self-Forcing bridges the train-test gap in autoregressive video diffusion: by simulating the inference process during training — conditioning each frame on its own previously generated frames — it enables real-time streaming text-to-video on a single GPU (arXiv 2506.08009). In this catalog the official infer-only runtime is vendored in-tree; parity waits on the Self-Forcing DMD checkpoint plus Wan2.1 weights.
+
+<ModelPaperFigures modelId="self-forcing" locale="en" />
+
+The recorded paper is [Self Forcing: Bridging the Train-Test Gap in Autoregressive Video Diffusion](https://arxiv.org/abs/2506.08009) (NeurIPS 2025 spotlight, 2025).
+
+Project page: [self-forcing.github.io](https://self-forcing.github.io). Code: [guandeh17/Self-Forcing](https://github.com/guandeh17/Self-Forcing).
+
+<ModelCommandBuilder modelId="self-forcing" locale="en" />
+
+## What it is for
+
+Pick `self-forcing` when one recipe covers text-to-video and image-to-video: a prompt in, an optional still, a clip out. Start here instead of wiring two upstream demos.
+
+It is published by Adobe Research / The University of Texas at Austin.
+
+Catalog tasks include text-to-video, image-to-video, and autoregressive-video-generation. Catalog aliases include `Self-Forcing`, `selfforcing`, and `self_forcing`. Documented modalities: text and image in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Video quality for streaming text-to-video).
+
+## Runtime contract
+
+Optional `prompt`, `interactions`, `fps`, `seed`, and `num_output_frames`; artifacts `self-forcing.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `SelfForcingPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `default` defaults: seed=0.
+
+The default checkpoint path follows the official HF layout under $\{WORLDFOUNDRY_CKPT_DIR\}/Self-Forcing — override checkpoint_path if staged elsewhere. Full parity needs Wan2.1 weights under a wan_models-compatible layout; supply benchmark prompt lists separately through your local input configuration.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run self-forcing --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `gdhe17/Self-Forcing`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh self-forcing`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="self-forcing" locale="en" />

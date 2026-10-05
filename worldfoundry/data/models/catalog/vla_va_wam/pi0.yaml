@@ -6,6 +6,8 @@ aliases:
 availability: open_source
 provider: official_repo
 official_sources:
+  paper: https://arxiv.org/abs/2410.24164
+  project_page: https://www.physicalintelligence.company/blog/pi0
   github:
     head_sha: c23745b5ad24e98f66967ea795a07b2588ed6c79
     url: https://github.com/Physical-Intelligence/openpi
@@ -26,3 +28,23 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records. Runner or pipeline targets are present
   only after a complete in-tree WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: Physical Intelligence
+  publisher_kind: company
+  publisher_zh: Physical Intelligence（PI）
+  overview: 'pi0 is Physical Intelligence''s flagship flow-matching VLA: a PaliGemma-based backbone with an action expert that decodes continuous action chunks via flow matching. This catalog entry is the concrete pi0 algorithm route, reusing the flattened in-tree OpenPI runtime with pi0-specific configuration.'
+  overview_zh: pi0 是 Physical Intelligence 的旗舰 flow-matching VLA：基于 PaliGemma 的骨干加动作专家，经 flow matching 解码连续动作块。本 catalog 条目是具体的 pi0 算法路由，复用扁平化树内 OpenPI 运行时与 pi0 专用配置。
+  architecture: A PaliGemma VLM backbone plus a flow-matching action expert producing action chunks; the model graph, transforms, local checkpoint loader, and action sampler are in-tree. Checkpoints are GCS-hosted (gs://openpi-assets).
+  architecture_zh: PaliGemma VLM 骨干加 flow-matching 动作专家，输出动作块；模型图、变换、本地 checkpoint 加载器与动作采样器内置树内。checkpoint 托管于 GCS（gs://openpi-assets）。
+  usage_notes: Stage GCS checkpoints with gsutil/gcloud (not Hugging Face). Numerical parity remains gated only by staged checkpoint assets; the shared runtime infrastructure is validated under the openpi entry.
+  usage_notes_zh: 用 gsutil/gcloud 就位 GCS checkpoint（非 Hugging Face）。数值 parity 仅受 checkpoint 资产就位限制；共享运行时基础设施已在 openpi 条目下验证。
+  limitations:
+  - GCS-hosted checkpoints require gsutil/gcloud tooling.
+  - No license is recorded on this entry (see the openpi entry, Apache-2.0).
+  limitations_zh:
+  - GCS 托管 checkpoint 需要 gsutil/gcloud 工具。
+  - 本条目未记录许可证（参见 openpi 条目，Apache-2.0）。
+  recommended_benchmarks:
+  - id: libero
+    reason: The openpi family validates pi05_libero in-tree.
+    reason_zh: openpi 家族在树内验证了 pi05_libero。

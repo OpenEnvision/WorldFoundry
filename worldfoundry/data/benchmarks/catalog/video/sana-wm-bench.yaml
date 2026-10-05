@@ -1,0 +1,111 @@
+id: sana-wm-bench
+name: SANA-WM 80-Scene Benchmark
+publisher: NVIDIA
+publisher_kind: company
+aliases: [sana-wm-benchmark, sana-wm-80scene]
+benchmark_kind: [camera-controlled-video, world-model, long-horizon-video]
+domains: [world-model, camera-control, video-generation, long-horizon]
+modalities: [text, image, video, camera-trajectory]
+tags: [benchmark-zoo, external-official, sana-wm, 60-second]
+status: in_tree_runtime_ready
+source:
+  status: open_source
+  official_repo_url: https://github.com/NVlabs/Sana
+  paper_url: https://arxiv.org/abs/2605.15178
+official_sources:
+  github:
+    url: https://github.com/NVlabs/Sana
+    head_sha: 6298508fcb511762a11c42cff45b2fc9fd930325
+    evaluator_path: tools/metrics/sana_wm
+    license: Apache-2.0
+  documentation: https://nvlabs.github.io/Sana/docs/sana-wm-bench/
+  huggingface_datasets:
+  - repo_id: Efficient-Large-Model/SANA-WM-Bench
+    private: false
+    gated: false
+dataset:
+  hf_dataset_id: Efficient-Large-Model/SANA-WM-Bench
+  requires_auth: false
+  splits:
+  - simple_60s
+  - hard_60s
+  scenes_per_split: 80
+  frames_per_scene: 961
+  fps: 16
+  layout:
+    images: images/<scene_id>.png
+    trajectories: <split>/sanawm_export_v2/<scene_id>.npz
+    manifest: <split>/sanawm_export_v2/run_manifest.jsonl
+metrics:
+- {id: vbench_overall, name: VBench Overall, higher_is_better: true, aggregator: mean}
+- {id: vbench_total_score, name: VBench total score (diagnostic), higher_is_better: true, aggregator: mean}
+- {id: revisit_psnr, name: Revisit PSNR, higher_is_better: true, aggregator: mean}
+- {id: revisit_ssim, name: Revisit SSIM, higher_is_better: true, aggregator: mean}
+- {id: revisit_lpips, name: Revisit LPIPS, higher_is_better: false, aggregator: mean}
+- {id: rot_err_deg, name: Camera rotation error, higher_is_better: false, aggregator: mean}
+- {id: trans_err_rel, name: Camera translation error, higher_is_better: false, aggregator: mean}
+- {id: cam_mc_rel, name: Camera motion consistency error, higher_is_better: false, aggregator: mean}
+- {id: delta_iq, name: Temporal imaging-quality degradation, higher_is_better: false, aggregator: mean}
+runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/sana_wm_bench/run_sana_wm_bench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.sana_wm_bench.run_sana_wm_bench_official_runner
+    dataset_root_arg: --dataset-root
+    split_arg: --split
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    supports_fixture: true
+    input_kind: sana_wm_bench_dataset_and_generated_videos
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:SanaWMBenchContract
+  runner_script: worldfoundry/evaluation/tasks/execution/runners/sana_wm_bench/run_sana_wm_bench_official_runner.py
+  run_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - sana-wm-bench
+  - --mode
+  - official-run
+  - --dataset-root
+  - <SANA-WM-Bench>
+  - --generated-artifact-dir
+  - <method_dir>
+  - --output-dir
+  - <out>
+  - --json
+  expected_artifacts: [scorecard.json, raw_metric_table.jsonl]
+  runtime:
+    kind: in_tree_composite_evaluator
+    implementation: worldfoundry/evaluation/tasks/execution/runners/sana_wm_bench
+    upstream_checkout_required: false
+integration:
+  status: integrated
+  tier: in_tree
+  hf_dataset_id: Efficient-Large-Model/SANA-WM-Bench
+  implementation_scope: evaluation_and_generation_layout
+  shared_base_models: [vbench, pi3, lpips]
+  full_dataset_verified: false
+  bounded_fixture_verified: true
+release_status: experimental
+maturity: contract_ready
+official_benchmark_verified: false
+integration_evidence: true
+leaderboard_valid: false
+requires:
+- Public Efficient-Large-Model/SANA-WM-Bench dataset root
+- Generated clean <scene_id>_generated.mp4 files for each selected split
+- VBench weights for visual and temporal metrics
+- Pi3 checkpoint plus distributed GPU execution for fresh camera-pose estimates
+blockers:
+- Full 80-scene × two-split numerical parity has not been run in this checkout.
+- Pose inference is intentionally a separately schedulable GPU stage; its eval_poses.json is consumed in tree.
+data_refs:
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/sana-wm-bench.yaml
+  runtime_profile: worldfoundry/data/benchmarks/runtime_profiles/official/sana-wm-bench.yaml
+runner_availability:
+  available: true
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:SanaWMBenchContract
+  runner_script_available: true
+  task_yaml_available: true
+  runtime_verified: true
+  surface: in_tree_sana_wm_80scene_evaluator

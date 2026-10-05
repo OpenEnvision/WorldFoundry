@@ -13,6 +13,7 @@ checkpoint:
   local_dir: ${WORLDFOUNDRY_CKPT_DIR}/embodied_action/xiaomi-robotics-1
   license: apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2607.15330
   github:
     url: https://github.com/XiaomiRobotics/Xiaomi-Robotics-1
     head_sha: 26702e2544450f0d39ca850d666b82040ebf98d0
@@ -33,3 +34,19 @@ integration:
   - The public project repository at the pinned revision contains the report and release announcement but not the inference source snapshot used for this integration.
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as checkpoint metadata and runtime-profile planning records.
+docs:
+  publisher: Xiaomi Robotics
+  publisher_kind: company
+  publisher_zh: 小米机器人（Xiaomi Robotics）
+  overview: 'Xiaomi-Robotics-1 is Xiaomi''s next-generation VLA (Apache-2.0): a Qwen3-VL policy-token graph with a rectified-flow DiT action decoder emitting relative actions. The public repository at the pinned revision carries the report and release announcement; the inference source snapshot used here is integrated in-tree, and checkpoints stage into WORLDFOUNDRY_CKPT_DIR.'
+  overview_zh: Xiaomi-Robotics-1 是小米的下一代 VLA（Apache-2.0）：Qwen3-VL 策略 token 图配 rectified flow DiT 动作解码器，输出相对动作。锁定 revision 的公开仓库包含报告与发布公告；此处使用的推理源码快照已集成树内，checkpoint 就位于 WORLDFOUNDRY_CKPT_DIR。
+  architecture: A Qwen3-VL backbone produces policy tokens consumed by a rectified-flow DiT that decodes relative actions; preprocessing and normalization extraction are in-tree. Checkpoint-side Python is parsed only as literal normalization metadata and never executed.
+  architecture_zh: Qwen3-VL 骨干产生策略 token，由 rectified-flow DiT 消费并解码相对动作；预处理与归一化提取内置树内。checkpoint 侧 Python 仅作为字面归一化元数据解析，绝不执行。
+  usage_notes: Stage checkpoints under ${WORLDFOUNDRY_CKPT_DIR}/embodied_action/xiaomi-robotics-1. Model, processor, device, dtype, attention backend, and checkpoint loading are local-only.
+  usage_notes_zh: checkpoint 就位于 ${WORLDFOUNDRY_CKPT_DIR}/embodied_action/xiaomi-robotics-1。模型、 processor、设备、dtype、注意力后端与 checkpoint 加载均仅本地。
+  limitations:
+  - The public repo is a pre-release project page; the inference snapshot is not published there.
+  - No GPU rollout validation is recorded in this repository.
+  limitations_zh:
+  - 公开仓库为预发布项目页；推理快照未在其中发布。
+  - 仓库未记录 GPU rollout 验证。

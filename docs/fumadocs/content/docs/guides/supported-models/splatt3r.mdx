@@ -1,0 +1,48 @@
+---
+title: "Splatt3R"
+description: "Splatt3R from University of Oxford (Active Vision Lab): 3d-reconstruction and gaussian-splatting; Verified."
+modelId: "splatt3r"
+pageSource: generated
+---
+
+Splatt3R predicts a 3D Gaussian splat scene directly from an uncalibrated image pair — zero shot, no camera parameters, no per-scene optimization. In this catalog it is fully verified: checkpoint-backed GPU inference produced a finite 344,064-Gaussian PLY from the bundled official-style views, with evidence in inference_evidence.yaml.
+
+<ModelPaperFigures modelId="splatt3r" locale="en" />
+
+The recorded paper is [Splatt3R: Zero-shot Gaussian Splatting from Uncalibrated Image Pairs](https://arxiv.org/abs/2408.13912) (2024).
+
+Project page: [splatt3r.active.vision](https://splatt3r.active.vision/). Code: [btsmart/splatt3r](https://github.com/btsmart/splatt3r).
+
+<ModelCommandBuilder modelId="splatt3r" locale="en" />
+
+## What it is for
+
+`splatt3r` is the recorded reconstruction line. Start here to emit geometry from the documented views.
+
+Per the paper (arXiv 2408.13912), Splatt3R builds on MASt3R's two-view geometry backbone and adds a Gaussian-parameter head. WorldFoundry keeps the runtime under base_models/three_dimensions/general_3d/splatt3r/splatt3r_runtime, importing MASt3R/DUSt3R from their canonical sibling paths; the packaged runtime is inference-only (training loaders and demo code are pruned). It is published by University of Oxford (Active Vision Lab).
+
+Catalog tasks include 3d-reconstruction and gaussian-splatting. Catalog aliases include `splattr` and `splatt3r-official`.
+
+## Runtime contract
+
+Optional `input_path` and `interactions`; artifacts `splatt3r.ply`.
+
+CLI task profiles: `default`. WorldFoundry binds `Splatt3RPipeline`.
+
+Family status: **Verified**.
+
+Splatt3RSynthesis loads the in-tree runtime in-process and emits a PLY Gaussian-splat artifact. Checkpoints stay external assets (brandonsmart/splatt3r_v1.0) — stage them before running.
+
+Runtime code is vendored in-tree under worldfoundry/base_models/three_dimensions/general_3d/splatt3r/splatt3r_runtime; checkpoints remain external assets.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run splatt3r --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 11.3).
+
+Recorded weight repositories include `brandonsmart/splatt3r_v1.0`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh splatt3r`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="splatt3r" locale="en" />

@@ -1,0 +1,41 @@
+---
+title: "Octo"
+description: "Berkeley RAIL JAX generalist policy; octo-small-1.5 restored on A100 and emitted a finite (1, 4, 7) action chunk."
+modelId: "octo"
+pageSource: authored
+---
+
+Octo is Berkeley RAIL’s transformer generalist robot policy with a diffusion action head, implemented in JAX / Flax. The official paper is [Octo: An Open-Source Generalist Robot Policy](https://arxiv.org/abs/2405.12213) (arXiv 2405.12213). The project page is [octo-models.github.io](https://octo-models.github.io/). The GitHub tree is [octo-models/octo](https://github.com/octo-models/octo).
+
+<ModelPaperFigures modelId="octo" locale="en" />
+
+WorldFoundry keeps a flat in-tree inference package under `worldfoundry/synthesis/action_generation/octo` — no upstream checkout, package alias, or `sys.path` injection. Two catalog variants share that package: `octo-base-1.5` and `octo-small-1.5`. The recorded GPU path is **octo-small-1.5**: the official Orbax tree restored on an A100 (**136,670,604** parameters) and `sample_actions` produced a finite **(1, 4, 7)** action chunk. Base checkpoint sampling is still pending a separate checkpoint-backed run.
+
+<ModelCommandBuilder modelId="octo" locale="en" />
+
+## What it is for
+
+Start on `octo-small-1.5` when you want the path this repository actually sampled on GPU. Required inputs are `image`, `instruction`, `prompt`, and `video`. `OctoPipeline` writes `octo_action_trace.json`. Default runtime config pins `variant=small`, `dataset_key=bridge_dataset`, `image_key=image_primary`.
+
+`octo-base-1.5` uses the same modeling package and a staged Hugging Face tree; do not treat it as the A100 `sample_actions` evidence. A common evaluation venue for Open-X generalist policies is [SimplerEnv](/docs/evaluation/benchmark-hub/simpler-env). Real rollout still needs a benchmark-specific action-space binding.
+
+## Runtime contract
+
+Images are resized to **256×256**. The verified small-policy chunk is **batch 1 × action horizon 4 × action dim 7**. Text assets declared next to the policy: CLIP processor at `${WORLDFOUNDRY_HFD_ROOT}/openai--clip-vit-base-patch32` and a local multilingual sentence encoder under `${WORLDFOUNDRY_CKPT_DIR}/octo/universal-sentence-encoder-multilingual-3`. Legacy class names inside checkpoints are rewritten by an internal ModuleSpec resolver for inference components only.
+
+Pinned revisions:
+
+- `rail-berkeley/octo-small-1.5` @ `dc9aa3019f764726c770814b27e4ab0fc6e32a58` → `${WORLDFOUNDRY_CKPT_DIR}/octo-small-1.5`
+- `rail-berkeley/octo-base-1.5` @ `ee3c10e8edd6ce2e8b1e8744d3c6fba4097bed48` → `${WORLDFOUNDRY_HFD_ROOT}/rail-berkeley--octo-base-1.5`
+
+## Running in WorldFoundry
+
+Dedicated environment `worldfoundry-octo-jax` (Python 3.10, CUDA 11.8, JAX 0.4.20, cuDNN 8.9). This is not the PyTorch unified stack. Launch the GPU-validated variant with:
+
+```
+worldfoundry-eval run octo-small-1.5
+```
+
+The catalog default launch still prints `octo-base-1.5`. Swap the variant for the recorded A100 sample. No license is recorded in this repository — confirm upstream terms before production use.
+
+<ModelRelatedRecipes modelId="octo" locale="en" />

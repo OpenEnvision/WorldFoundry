@@ -1,6 +1,6 @@
 schema_version: 2
 model_id: geocalib-prior
-display_name: GeoCalib Prior
+display_name: GeoCalib
 task_family: three_dimension
 groups:
 - 3d

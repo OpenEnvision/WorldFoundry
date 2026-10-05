@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Sequence
+from typing import NamedTuple, Sequence
 
 import numpy as np
 
@@ -35,6 +35,54 @@ _DTYPE_TO_PLY = {
     "f4": "float",
     "f8": "double",
 }
+
+
+class PointCloud(NamedTuple):
+    """XYZ points, RGB colors in [0, 1], and optional surface normals."""
+
+    points: np.ndarray
+    colors: np.ndarray
+    normals: np.ndarray
+
+
+def write_point_cloud(path: str | Path, points: np.ndarray, colors: np.ndarray) -> Path:
+    """Save XYZ positions and RGB colors in the uint8 [0, 255] range."""
+
+    points = np.asarray(points, dtype=np.float32)
+    colors = np.asarray(colors)
+    if points.ndim != 2 or points.shape[1] != 3 or colors.shape != points.shape:
+        raise ValueError("Point cloud positions and colors must both have shape (N, 3)")
+    if not np.isfinite(points).all() or not np.isfinite(colors).all():
+        raise ValueError("Point cloud positions and colors must be finite")
+    if np.any(colors < 0) or np.any(colors > 255):
+        raise ValueError("Point cloud RGB colors must be in the range [0, 255]")
+    vertices = np.zeros(
+        len(points),
+        dtype=[(name, "f4") for name in ("x", "y", "z", "nx", "ny", "nz")]
+        + [(name, "u1") for name in ("red", "green", "blue")],
+    )
+    for index, name in enumerate(("x", "y", "z")):
+        vertices[name] = points[:, index]
+    for index, name in enumerate(("red", "green", "blue")):
+        vertices[name] = colors[:, index]
+    return write_ply(path, [("vertex", vertices)])
+
+
+def read_point_cloud(path: str | Path) -> PointCloud:
+    """Load a colored PLY point cloud; absent normals default to zero."""
+
+    vertices = read_ply_vertex(path)
+    required = ("x", "y", "z", "red", "green", "blue")
+    if any(name not in vertices.dtype.names for name in required):
+        raise ValueError("Point cloud PLY requires XYZ and RGB vertex properties")
+    points = np.column_stack([vertices[name] for name in required[:3]]).astype(np.float32)
+    colors = np.column_stack([vertices[name] for name in required[3:]]).astype(np.float32) / 255.0
+    normals = (
+        np.column_stack([vertices[name] for name in ("nx", "ny", "nz")]).astype(np.float32)
+        if all(name in vertices.dtype.names for name in ("nx", "ny", "nz"))
+        else np.zeros_like(points)
+    )
+    return PointCloud(points, colors, normals)
 
 
 def write_ply(

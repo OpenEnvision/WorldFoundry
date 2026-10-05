@@ -1,0 +1,116 @@
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+availability: open_source
+checkpoints:
+- nvidia/Cosmos-Predict2-2B-Video2World
+- nvidia/Cosmos-Predict2-14B-Video2World
+- google-t5/t5-11b
+family: NVIDIA Cosmos
+id: cosmos-predict-2
+aliases:
+- cosmos-predict2
+- cosmos2
+integration:
+  status: integrated
+  notes:
+  - Predict2 2B and 14B use the framework-owned denoiser, T5 conditioner, latent
+    initializer, Rectified Flow AB2 scheduler, Wan codec, loader, and standard runner.
+  - The Predict2 and Predict2.5 recipes share one checkpoint-shaped transformer
+    implementation; only version-specific architecture and sampling values live in recipes.
+  - No NVIDIA runtime package, Diffusers pipeline, or model-specific backend is invoked.
+license: other:nvidia-open-model-license
+modalities:
+- image-to-video
+- video-to-video
+- world-generation
+name: Cosmos Predict 2
+pipeline_binding: cosmos-predict-2
+release_type: code_and_weights
+runtime_profile: runtime-profile:cosmos-predict2-2b-video2world
+starred: true
+variants:
+- id: cosmos-predict2-2b-video2world
+  integration_status: integrated
+  provider: official_repo
+  runtime_profile: cosmos-predict2-2b-video2world
+  pipeline_binding: cosmos-predict2-2b-video2world
+  task: image/video-to-world
+  checkpoint_refs:
+  - repo_id: nvidia/Cosmos-Predict2-2B-Video2World
+    revision: f50c09f5d8ab133a90cac3f4886a6471e9ba3f18
+    filename: model-720p-16fps.pt
+    gated: true
+    requires_auth: true
+    license: other:nvidia-open-model-license
+  runner_parity:
+    status: pending
+    blocked_reasons:
+    - The official gated checkpoint is not available in the current authenticated cache;
+      full-resolution GPU output parity remains pending.
+  demo_parity:
+    status: not_recorded
+- id: cosmos-predict2-14b-video2world
+  integration_status: integrated
+  provider: official_repo
+  runtime_profile: cosmos-predict2-14b-video2world
+  pipeline_binding: cosmos-predict2-14b-video2world
+  task: image/video-to-world
+  checkpoint_refs:
+  - repo_id: nvidia/Cosmos-Predict2-14B-Video2World
+    revision: 03b03a377fede782647afac998f674d9f358e319
+    filename: model-720p-16fps.pt
+    gated: true
+    requires_auth: true
+    license: other:nvidia-open-model-license
+  runner_parity:
+    status: pending
+    blocked_reasons:
+    - The official gated checkpoint is not available in the current authenticated cache;
+      high-memory GPU output parity remains pending.
+  demo_parity:
+    status: not_recorded
+tasks:
+- image-to-video
+- video-to-video
+- world-generation
+runner_parity:
+  status: pending
+  notes:
+  - Registry, component contracts, architecture construction, conditioning masks, and AB2
+    scheduler numerics are validated locally; gated checkpoint and GPU parity are separate.
+official_sources:
+  paper: https://arxiv.org/abs/2501.03575
+  project_page: https://research.nvidia.com/labs/dir/cosmos-predict2/
+  github:
+    url: https://github.com/nvidia-cosmos/cosmos-predict2
+  huggingface:
+  - repo_id: nvidia/Cosmos-Predict2-2B-Video2World
+    type: model
+    status: gated
+  - repo_id: nvidia/Cosmos-Predict2-14B-Video2World
+    type: model
+    status: gated
+catalog_category: world_models
+catalog_scope: world-model/interactive starred models
+docs:
+  publisher: NVIDIA
+  publisher_kind: company
+  publisher_zh: 英伟达（NVIDIA）
+  overview: Cosmos Predict 2 is the previous generation of NVIDIA's world foundation model, covering image-to-video and video-to-world generation with 2B and 14B video2world variants. In this catalog it is assembled from the framework-owned denoiser, T5 conditioner, Rectified Flow AB2 scheduler, Wan codec, and standard runner — no NVIDIA runtime package or Diffusers pipeline is invoked.
+  overview_zh: Cosmos Predict 2 是英伟达世界基础模型的上一代，覆盖图生视频与视频到世界生成，含 2B 与 14B 两个 video2world variant。本 catalog 中它由框架自有的去噪器、T5 条件器、Rectified Flow AB2 调度器、 Wan 编解码器与标准 runner 组装——不调用英伟达运行时包或 Diffusers pipeline。
+  architecture: Predict2 and Predict2.5 share one checkpoint-shaped transformer implementation in WorldFoundry; only version-specific architecture and sampling values live in recipes. The native 2B architecture contains 567 checkpoint-owned tensors with no synthetic cross-attention projection.
+  architecture_zh: 在 WorldFoundry 中，Predict2 与 Predict2.5 共享同一按 checkpoint 形状实现的 transformer；只有版本差异的架构与采样值放在配方里。原生 2B 架构含 567 个 checkpoint 张量，无合成的交叉注意力投影。
+  usage_notes: Registry, component contracts, architecture construction, conditioning masks, and AB2 scheduler numerics are validated locally; gated checkpoint access and GPU parity are separate steps. Prefer cosmos-predict-2.5 for new work unless you need the T5-conditioned v2 recipe.
+  usage_notes_zh: 注册表、组件契约、架构构建、条件掩码与 AB2 调度器数值已本地验证；gated checkpoint 权限与 GPU 一致性是独立步骤。除非需要 T5 条件的 v2 配方，新工作建议优先使用 cosmos-predict-2.5。
+  limitations:
+  - Checkpoint access is gated; GPU output parity is pending.
+  - Superseded by Predict 2.5 for most use cases.
+  limitations_zh:
+  - checkpoint 权限受限；GPU 输出一致性待验证。
+  - 多数场景已被 Predict 2.5 取代。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: World-generation quality across conditions.
+    reason_zh: 各条件下世界生成质量评测。
+  - id: physics-iq
+    reason: Physical plausibility of predicted world video.
+    reason_zh: 预测世界视频的物理合理性。

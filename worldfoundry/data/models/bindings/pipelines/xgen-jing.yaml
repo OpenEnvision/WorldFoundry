@@ -1,0 +1,8 @@
+schema_version: 2
+binding_id: xgen-jing
+model_id: xgen-jing
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.xgen_jing.pipeline_xgen_jing:XGENJINGPipeline
+  loading: {method: from_pretrained, signature: unified}
+  invocation: {mode: native_or_standard_invocation}

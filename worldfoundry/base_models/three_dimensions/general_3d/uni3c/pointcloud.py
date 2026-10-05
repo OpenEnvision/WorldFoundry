@@ -6,7 +6,7 @@ import einops
 import kornia
 import torch
 
-from worldfoundry.core.geometry import render_point_cloud_frames_torch
+from worldfoundry.core.geometry.transforms import render_point_cloud_frames_torch
 
 try:
     from pytorch3d.renderer import (

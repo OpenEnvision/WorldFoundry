@@ -2,7 +2,7 @@ schema_version: worldfoundry.runtime_defaults.v1
 defaults:
   videocrafter1_i2v:
     model_name: videocrafter1_i2v
-    ckpt_path: ${WORLDFOUNDRY_CKPT_DIR}/video_models/videocrafter_i2v_512_v1.ckpt
+    ckpt_path: ${WORLDFOUNDRY_HFD_ROOT}/VideoCrafter--Image2Video-512/model.ckpt
     config: runtime/configs/videocrafter/inference_i2v_512_v1.0.yaml
     height: 320
     width: 512
@@ -10,7 +10,7 @@ defaults:
     generation_type: i2v
   videocrafter1_t2v:
     model_name: videocrafter1_t2v
-    ckpt_path: ${WORLDFOUNDRY_CKPT_DIR}/video_models/videocrafter_t2v_1024_v1.ckpt
+    ckpt_path: ${WORLDFOUNDRY_HFD_ROOT}/VideoCrafter--Text2Video-1024/model.ckpt
     config: runtime/configs/videocrafter/inference_t2v_1024_v1.0.yaml
     height: 576
     width: 1024
@@ -18,7 +18,7 @@ defaults:
     generation_type: t2v
   videocrafter2_t2v:
     model_name: videocrafter2_t2v
-    ckpt_path: ${WORLDFOUNDRY_CKPT_DIR}/video_models/videocrafter_t2v_512_v2.ckpt
+    ckpt_path: ${WORLDFOUNDRY_HFD_ROOT}/VideoCrafter--VideoCrafter2/model.ckpt
     config: runtime/configs/videocrafter/inference_t2v_512_v2.0.yaml
     height: 320
     width: 512

@@ -33,13 +33,13 @@ from torch.distributed.tensor import DTensor
 
 from worldfoundry.core.configuration.lazy_config import instantiate as lazy_instantiate
 from worldfoundry.core.distributed import broadcast_dtensor_model_states
-from worldfoundry.core.distributed.context_parallel import broadcast
-from worldfoundry.core.distributed.logging import log
-from worldfoundry.core.geometry import ray_condition
-from worldfoundry.core.utils import inference_runtime as misc
+from worldfoundry.core.distributed.model_parallel.context import broadcast
+from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.geometry.transforms import ray_condition
+from worldfoundry.core.execution import inference_runtime as misc
 
 try:
-    from worldfoundry.core.distributed.megatron_compat import parallel_state
+    from worldfoundry.core.distributed.model_parallel.megatron_compat import parallel_state
 except ModuleNotFoundError:
 
     class _ParallelStateFallback:

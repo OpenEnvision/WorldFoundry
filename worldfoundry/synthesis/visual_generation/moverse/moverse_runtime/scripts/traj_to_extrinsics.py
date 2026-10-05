@@ -9,7 +9,7 @@ Reads a 3-line trajectory file:
 Interpolates keypoint sequences to num_frames using cubic spline,
 then converts each (theta, phi, r) to a 4×4 w2c matrix.
 
-Coordinate system (consistent with CameraController in utils/camera_controller.py):
+Coordinate system:
   - World Y up, Camera Z forward, Camera X right
   - R = R_pitch @ R_yaw (global rotation: yaw around world Y, pitch around local X)
   - C = R^T @ [0, 0, r * radius]  (camera world position)
@@ -107,16 +107,14 @@ def trajectory_to_w2cs(
         phi_deg = float(phi_interp[i])        # positive = right
         r = float(r_interp[i]) * radius       # forward distance (world units)
 
-        # CameraController convention:
-        #   _total_yaw = phi  (positive = right)
-        #   _total_pitch = -theta  (positive = down, so negate theta)
+        # Yaw is positive right; pitch is positive down, so negate theta.
         theta_yaw = np.radians(phi_deg)
         theta_pitch = np.radians(-theta_deg)
 
         cy, sy = np.cos(theta_yaw), np.sin(theta_yaw)
         cp, sp = np.cos(theta_pitch), np.sin(theta_pitch)
 
-        # R = R_pitch @ R_yaw  (from CameraController._rebuild_rotation)
+        # R = R_pitch @ R_yaw
         R = np.array([
             [ cy,      0.0,  -sy     ],
             [-sp * sy,  cp,  -sp * cy],

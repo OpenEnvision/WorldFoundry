@@ -1,4 +1,4 @@
-"""worldfoundry-eval mcp - start the MCP evaluation server."""
+"""worldfoundry mcp - start the MCP evaluation server."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ def add_mcp_parser(subparsers: argparse._SubParsersAction) -> None:
 
     Args:
         subparsers: The subparser collection from the root
-            ``worldfoundry-eval`` command.
+            ``worldfoundry`` command.
     """
     parser = subparsers.add_parser(
         "mcp",

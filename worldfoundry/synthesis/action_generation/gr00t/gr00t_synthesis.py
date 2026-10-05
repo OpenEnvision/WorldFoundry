@@ -162,6 +162,12 @@ class GR00TSynthesis(ActionModelSynthesis):
             checkpoints=self.profile.checkpoints,
             variant=variant,
         )
+        if (
+            json.loads((checkpoint / "config.json").read_text()).get("model_type") == "gr00t_n1"
+            and "embodiment_tag" not in self.runtime_options
+            and "embodiment_tag" not in options
+        ):
+            merged["embodiment_tag"] = "GR1"
 
         # Construct and return the GR00TRuntimeConfig
         return GR00TRuntimeConfig(
@@ -260,15 +266,13 @@ class GR00TSynthesis(ActionModelSynthesis):
             interactions: A sequence of previous interaction strings.
             output_path: Desired path for saving model outputs.
             fps: Frames per second for video processing, if applicable.
-            timeout_seconds: Maximum time allowed for the prediction (ignored in current implementation).
+            timeout_seconds: Maximum time allowed for the original N1 worker.
             **kwargs: Additional arguments that can influence runtime configuration or model input.
 
         Returns:
             A dictionary containing the prediction results and metadata,
             including `run_dir`, `plan_path`, and the model's profile.
         """
-        del timeout_seconds  # This argument is ignored in this implementation.
-
         # Determine if only a plan should be generated, not actual inference
         plan_only = bool(kwargs.pop("plan_only", False)) or bool(self.runtime_options.get("plan_only"))
 
@@ -298,6 +302,12 @@ class GR00TSynthesis(ActionModelSynthesis):
 
         # Describe the checkpoint architecture for inclusion in the plan
         runtime_spec = GR00TRuntime.describe_checkpoint(runtime_config.checkpoint_dir)
+        is_original_n1 = runtime_spec.get("model_type") == "gr00t_n1"
+        backend = (
+            "worldfoundry.gr00t.official_n1_release_subprocess"
+            if is_original_n1
+            else "worldfoundry.gr00t.in_tree_runtime.predict_action"
+        )
 
         # Define the path for the runtime plan JSON file
         plan_path = run_dir / "runtime_profile_plan.json"
@@ -308,7 +318,7 @@ class GR00TSynthesis(ActionModelSynthesis):
             "profile": self.profile.to_dict(),
             "context": context,
             "runtime": {
-                "backend": "worldfoundry.gr00t.in_tree_runtime.predict_action",
+                "backend": backend,
                 "checkpoint_dir": str(runtime_config.checkpoint_dir),
                 "device": runtime_config.device,
                 "embodiment_tag": runtime_config.embodiment_tag,
@@ -340,24 +350,45 @@ class GR00TSynthesis(ActionModelSynthesis):
 
         # Get or create the GR00T runtime instance based on the configuration
         # and execute the predict_action method
-        result = self._runtime_for(runtime_config).predict_action(
-            instruction=prompt,
-            image=image,
-            output_path=context["output_path"],
-            gr00t_observation=kwargs.get("gr00t_observation") or kwargs.get("observation"),
-            extra_metadata={
-                "run_dir": str(run_dir),
-                "profile": self.profile.to_dict(),
-                "interactions": list(interactions),
-                "operator_context": {
-                    "action_space": kwargs.get("action_space"),
-                    "policy_controls": kwargs.get("policy_controls"),
-                    "observation_keys": sorted((kwargs.get("gr00t_observation") or {}).keys())
-                    if isinstance(kwargs.get("gr00t_observation"), Mapping)
-                    else [],
-                },
+        observation = kwargs.get("gr00t_observation") or kwargs.get("observation")
+        extra_metadata = {
+            "run_dir": str(run_dir),
+            "profile": self.profile.to_dict(),
+            "interactions": list(interactions),
+            "operator_context": {
+                "action_space": kwargs.get("action_space"),
+                "policy_controls": kwargs.get("policy_controls"),
+                "observation_keys": sorted(observation.keys()) if isinstance(observation, Mapping) else [],
             },
-        )
+        }
+        if is_original_n1:
+            from worldfoundry.synthesis.action_generation.gr00t.legacy_n1 import predict_n1_action
+
+            n1_options = {**self.runtime_options, **kwargs}
+            result = predict_n1_action(
+                checkpoint_dir=runtime_config.checkpoint_dir,
+                source_dir=n1_options.get("n1_source_dir"),
+                python_executable=n1_options.get("n1_python"),
+                data_config_name=str(n1_options.get("n1_data_config_name") or "gr1_arms_only"),
+                embodiment_tag=runtime_config.embodiment_tag,
+                device=runtime_config.device,
+                seed=runtime_config.seed,
+                instruction=prompt,
+                image=image,
+                observation=observation,
+                output_path=context["output_path"],
+                run_dir=run_dir,
+                extra_metadata=extra_metadata,
+                timeout_seconds=timeout_seconds,
+            )
+        else:
+            result = self._runtime_for(runtime_config).predict_action(
+                instruction=prompt,
+                image=image,
+                output_path=context["output_path"],
+                gr00t_observation=observation,
+                extra_metadata=extra_metadata,
+            )
         # Merge additional run metadata with the prediction result
         return {
             **result,

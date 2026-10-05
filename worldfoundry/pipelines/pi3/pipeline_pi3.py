@@ -1,22 +1,29 @@
 """Pi3 visual generation pipeline module."""
 
-from ..pipeline_utils import PipelineABC
-import os
 import json
 import math
-from typing import List, Optional, Union, Dict, Any, Generator
+import os
+from typing import Any, Dict, Generator, List, Optional, Union
 
 import numpy as np
 from PIL import Image
 
-from ...operators.pi3_operator import Pi3Operator
-from ...representations.point_clouds_generation.pi3.pi3_representation import (
+from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.runtime import (
     Pi3Representation,
 )
-from ...representations.point_clouds_generation.pi3.pi3x_representation import (
+from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.runtime_pi3x import (
     Pi3XRepresentation,
 )
-from worldfoundry.core.io.artifacts import render_point_cloud
+from worldfoundry.core.io import artifact_root_path
+from worldfoundry.core.media.artifacts import render_point_cloud
+
+from ...operators.pi3_operator import Pi3Operator
+from ..pipeline_utils import PipelineABC
+
+
+def _default_output_dir(name: str = "pi3_output") -> str:
+    """Resolve a stable default output directory instead of writing to the CWD."""
+    return str(artifact_root_path() / name)
 
 
 def _apply_camera_delta(c2w: np.ndarray, delta: List[float]) -> np.ndarray:
@@ -75,7 +82,7 @@ class Pi3Result:
     def save(self, output_dir: Optional[str] = None) -> List[str]:
         """Save for Pi3Result."""
         if output_dir is None:
-            output_dir = "./pi3_output"
+            output_dir = _default_output_dir()
 
         os.makedirs(output_dir, exist_ok=True)
         saved_files: List[str] = []

@@ -29,5 +29,11 @@ execution:
 integration:
   status: integrated
 notes:
-- Runtime profile for the in-tree NeoVerse pipeline and vendored DiffSynth adapter.
-- Runtime execution requires NeoVerse, Wan, reconstructor, LoRA, and CUDA assets.
+- Runtime profile for the native NeoVerse assembly over shared Wan infrastructure.
+- The released WorldMirror checkpoint uses the shared legacy Mirror modules with standard
+  RoPE and the NeoVerse timestamped Gaussian renderer; it is incompatible with Mirror 2.0 defaults.
+- The official inference route disables motion heads. Their checkpoint tensors are explicitly
+  excluded, while all active reconstruction roles are loaded strictly.
+- Runtime execution requires NeoVerse, Wan, reconstructor, CUDA, gsplat, and a torch-scatter
+  build matching the installed PyTorch/CUDA. Distilled LoRA is optional (4 steps with LoRA,
+  50 steps with CFG 5 when disabled).

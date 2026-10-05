@@ -102,6 +102,7 @@ class EasyAnimate:
         GPU_memory_mode: str = "model_cpu_offload",
         height: int | None = None,
         width: int | None = None,
+        device: str = "cuda",
     ):
         """
         Build an in-tree EasyAnimate I2V runtime.
@@ -122,6 +123,7 @@ class EasyAnimate:
             GPU_memory_mode: EasyAnimate offload and qfloat8 mode selector.
             height: Optional per-call frame height override.
             width: Optional per-call frame width override.
+            device: Execution device for offload hooks and sampling.
         """
         for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "DIFFUSERS_OFFLINE"):
             value = os.environ.get(name)
@@ -135,7 +137,9 @@ class EasyAnimate:
         if height is not None and width is not None:
             sample_size = [int(height), int(width)]
         self.sample_size = sample_size
-        self.video_length = video_length
+        self.video_length = int(video_length)
+        if self.video_length < 1 or int(num_inference_steps) < 1:
+            raise ValueError("EasyAnimate frame and inference step counts must be positive.")
         self.fps = fps
         self.generation_type = generation_type
         self.guidance_scale = guidance_scale
@@ -155,6 +159,10 @@ class EasyAnimate:
         # Load dynamic components from the EasyAnimate runtime package.
         components = load_easyanimate_components()
         import torch
+
+        self.device = torch.device(device)
+        if self.device.type == "cuda" and self.device.index is None:
+            self.device = torch.device("cuda", torch.cuda.current_device())
         from diffusers import (
             DDIMScheduler,
             DPMSolverMultistepScheduler,
@@ -319,12 +327,12 @@ class EasyAnimate:
         )
         # Apply GPU memory optimization strategies based on the chosen mode.
         if GPU_memory_mode == "sequential_cpu_offload":
-            pipeline.enable_sequential_cpu_offload()
+            pipeline.enable_sequential_cpu_offload(device=self.device)
         elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
-            pipeline.enable_model_cpu_offload()
+            pipeline.enable_model_cpu_offload(device=self.device)
             convert_weight_dtype_wrapper(transformer, weight_dtype)
         else:  # Default to "model_cpu_offload" if not specified or unrecognized.
-            pipeline.enable_model_cpu_offload()
+            pipeline.enable_model_cpu_offload(device=self.device)
 
         self.vae = vae
         self.pipeline = pipeline
@@ -351,7 +359,7 @@ class EasyAnimate:
         if self.vae.cache_mag_vae:
             video_length = (
                 int(
-                    (video_length - 1)
+                    (video_length - 1 + self.vae.mini_batch_encoder - 1)
                     // self.vae.mini_batch_encoder
                     * self.vae.mini_batch_encoder
                 )
@@ -362,7 +370,7 @@ class EasyAnimate:
         else:
             video_length = (
                 int(
-                    video_length
+                    (video_length + self.vae.mini_batch_encoder - 1)
                     // self.vae.mini_batch_encoder
                     * self.vae.mini_batch_encoder
                 )
@@ -373,7 +381,7 @@ class EasyAnimate:
         input_video, input_video_mask, clip_image = self.get_image_to_video_latent(
             validation_image_start,
             validation_image_end,
-            video_length=self.video_length,
+            video_length=video_length,
             sample_size=self.sample_size,
         )
 
@@ -385,7 +393,7 @@ class EasyAnimate:
                 negative_prompt=self.negative_prompt,
                 height=self.sample_size[0],
                 width=self.sample_size[1],
-                generator=torch.Generator(device="cuda").manual_seed(self.seed),
+                generator=torch.Generator(device=self.device).manual_seed(self.seed),
                 guidance_scale=self.guidance_scale,
                 num_inference_steps=self.num_inference_steps,
                 video=input_video,
@@ -395,7 +403,7 @@ class EasyAnimate:
 
         # Extract and normalize the generated frames from the pipeline output.
         sample = self._extract_pipeline_frames(output)
-        return self._normalize_pipeline_frames(sample)
+        return self._normalize_pipeline_frames(sample)[: self.video_length]
 
     @staticmethod
     def _extract_pipeline_frames(output: Any) -> Any:

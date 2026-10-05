@@ -12,6 +12,8 @@ import os
 from PIL import Image
 from .utils import load_dimension_info
 from ..paths import keye_model_path
+from worldfoundry.core.attention import resolve_transformers_attention_implementation
+from worldfoundry.core.utils import extract_yes_no_answer, resolve_generation_max_new_tokens
 from tqdm import tqdm
 
 # Import compatibility tools
@@ -22,42 +24,6 @@ except ImportError:
     COMPATIBILITY_AVAILABLE = False
     
 warnings.filterwarnings("ignore")
-import re
-
-def extract_yes_no_answer(text):
-    if isinstance(text, list):
-        if len(text) > 0:
-            text = text[0]
-        else:
-            return "no"  
-    
-    # Ensure text is a string
-    if not isinstance(text, str):
-        text = str(text)
-    
-    # Find content after "Answer:" (case insensitive)
-    answer_pattern = r'answer\s*:\s*([^\n\r\.]*)'
-    match = re.search(answer_pattern, text, re.IGNORECASE)
-    
-    if match:
-        answer_text = match.group(1).strip().lower()
-        if 'yes' in answer_text:
-            return "yes"
-        elif 'no' in answer_text:
-            return "no"
-    
-    text_lower = text.lower()
-
-    
-    last_yes_pos = text_lower.rfind('yes')
-    last_no_pos = text_lower.rfind('no')
-    
-    if last_yes_pos > last_no_pos and last_yes_pos != -1:
-        return "yes"
-    elif last_no_pos > last_yes_pos and last_no_pos != -1:
-        return "no"
-    
-    return "no"
 
 
 def Keye2_5VL_Video(prompt_dict_ls,model,processor,fps,device):
@@ -65,6 +31,7 @@ def Keye2_5VL_Video(prompt_dict_ls,model,processor,fps,device):
     valid_num = 0
     video_num = 0
     processed_json = []
+    max_new_tokens = resolve_generation_max_new_tokens(512, scope="4d_worldbench")
 
     for prompt_dict in tqdm(prompt_dict_ls):
         base_question = prompt_dict['auxiliary_info']
@@ -82,11 +49,10 @@ def Keye2_5VL_Video(prompt_dict_ls,model,processor,fps,device):
                 "question_details": []
             }
             score = 0
+            vision_inputs = None
             for i in range(len(base_question)):
                 print(f"\n--- Processing question {i+1}/{len(base_question)} ---")
                 print(f"Question: {base_question[i]}")
-
-                torch.cuda.empty_cache()
 
                 # Initialize detailed information for current question
                 question_detail = {
@@ -128,7 +94,9 @@ Answer: [Yes/No]"""
                     messages, tokenize=False, add_generation_prompt=True
                 )
 
-                image_inputs,video_inputs,mm_processor_kwargs = process_vision_info(messages)
+                if vision_inputs is None:
+                    vision_inputs = process_vision_info(messages)
+                image_inputs, video_inputs, mm_processor_kwargs = vision_inputs
 
                 inputs = processor(
                     text=[text],
@@ -144,7 +112,7 @@ Answer: [Yes/No]"""
 
                 generated_ids = model.generate(
                     **inputs,
-                    max_new_tokens=4096
+                    max_new_tokens=max_new_tokens
                 )
 
 # Extract generated tokens (excluding input tokens)
@@ -167,7 +135,7 @@ Answer: [Yes/No]"""
                 #print(f"Keye answer: {output_text}")
                 video_detail["question_details"].append(question_detail)
 
-            video_score = score / question_num
+            video_score = score / question_num if question_num else 0.0
             final_score += video_score
             
             video_detail["video_results"] = video_score
@@ -189,7 +157,7 @@ def compute_complex_landscape(json_dir, device, submodules_dict, **kwargs):
     keye_model_path(),
         torch_dtype="auto",
         device_map=device,
-        attn_implementation="flash_attention_2",
+        attn_implementation=resolve_transformers_attention_implementation(device=device),
         trust_remote_code=True,
     )
     min_pixels = 256*28*28
@@ -201,7 +169,11 @@ def compute_complex_landscape(json_dir, device, submodules_dict, **kwargs):
 
     print("Model loaded successfully")
     average_results,video_details = Keye2_5VL_Video(prompt_dict_ls, keye_model,processor,fps=1,device=device)
-    final_average_score = sum([d["video_results"] for d in video_details]) / len(video_details)
+    final_average_score = (
+        sum(d["video_results"] for d in video_details) / len(video_details)
+        if video_details
+        else 0.0
+    )
     output_dir = os.path.dirname(json_dir)
     dim_name = os.path.splitext(os.path.basename(json_dir))[0]
     dataset_base = os.path.splitext(os.path.basename(dataset_json))[0] if dataset_json else 'dataset'
@@ -221,5 +193,3 @@ def compute_complex_landscape(json_dir, device, submodules_dict, **kwargs):
         json.dump(detailed_output, f, indent=2, ensure_ascii=False)
     print(f"\nDetailed results saved to: {output_file}")
     return average_results, video_details    
-
-

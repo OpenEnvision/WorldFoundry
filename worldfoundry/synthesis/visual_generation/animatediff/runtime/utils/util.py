@@ -108,7 +108,11 @@ def load_weights(
         auto_download(motion_module_path, is_dreambooth_lora=False)
 
         print(f"load motion module from {motion_module_path}")
-        motion_module_state_dict = torch.load(motion_module_path, map_location="cpu")
+        motion_module_state_dict = torch.load(
+            motion_module_path,
+            map_location="cpu",
+            weights_only=True,
+        )
         motion_module_state_dict = motion_module_state_dict["state_dict"] if "state_dict" in motion_module_state_dict else motion_module_state_dict
         # filter parameters
         for name, param in motion_module_state_dict.items():
@@ -132,7 +136,11 @@ def load_weights(
                 for key in f.keys():
                     dreambooth_state_dict[key] = f.get_tensor(key)
         elif dreambooth_model_path.endswith(".ckpt"):
-            dreambooth_state_dict = torch.load(dreambooth_model_path, map_location="cpu")
+            dreambooth_state_dict = torch.load(
+                dreambooth_model_path,
+                map_location="cpu",
+                weights_only=True,
+            )
             
         # 1. vae
         converted_vae_checkpoint = convert_ldm_vae_checkpoint(dreambooth_state_dict, animation_pipeline.vae.config)
@@ -164,7 +172,11 @@ def load_weights(
         auto_download(adapter_lora_path, is_dreambooth_lora=False)
 
         print(f"load domain lora from {adapter_lora_path}")
-        domain_lora_state_dict = torch.load(adapter_lora_path, map_location="cpu")
+        domain_lora_state_dict = torch.load(
+            adapter_lora_path,
+            map_location="cpu",
+            weights_only=True,
+        )
         domain_lora_state_dict = domain_lora_state_dict["state_dict"] if "state_dict" in domain_lora_state_dict else domain_lora_state_dict
         domain_lora_state_dict.pop("animatediff_config", "")
 
@@ -177,7 +189,7 @@ def load_weights(
         auto_download(path, is_dreambooth_lora=False)
 
         print(f"load motion LoRA from {path}")
-        motion_lora_state_dict = torch.load(path, map_location="cpu")
+        motion_lora_state_dict = torch.load(path, map_location="cpu", weights_only=True)
         motion_lora_state_dict = motion_lora_state_dict["state_dict"] if "state_dict" in motion_lora_state_dict else motion_lora_state_dict
         motion_lora_state_dict.pop("animatediff_config", "")
 

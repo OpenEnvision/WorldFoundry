@@ -85,6 +85,7 @@ def _known_checkpoint_candidates(model_id: str) -> tuple[str, ...]:
         ),
         "unidepth-v2-prior": (
             root / "unidepth-v2-vitl14",
+            root / "lpiccinelli--unidepth-v2-vitl14",
         ),
         "unik3d-prior": (
             root / "unik3d-vitl",
@@ -161,8 +162,17 @@ class GeometryPriorSynthesis(BaseSynthesis):
                 import_error = f"{type(exc).__name__}: {exc}"
         profile_paths = self._checkpoint_paths()
         known_paths = _known_checkpoint_candidates(self.model_id)
+        explicit = self._explicit_checkpoint()
         if self.model_id == "track-anything-prior":
-            checkpoint_paths = tuple(dict.fromkeys((*profile_paths, *known_paths)))
+            checkpoint_paths = tuple(
+                self._expand_path(str(self.options.get(key) or default))
+                for key, default in zip(
+                    ("sam_ckpt_path", "aot_ckpt_path", "grounding_dino_ckpt_path"),
+                    known_paths,
+                )
+            )
+        elif explicit:
+            checkpoint_paths = (self._expand_path(str(explicit)),)
         else:
             existing_known = next((path for path in known_paths if Path(path).expanduser().exists()), "")
             fallback_known = existing_known or (known_paths[0] if known_paths else "")
@@ -204,13 +214,17 @@ class GeometryPriorSynthesis(BaseSynthesis):
             return ""
         return os.path.expandvars(os.path.expanduser(value))
 
-    def _existing_checkpoint(self, *, directory_ok: bool = False) -> str:
-        explicit = (
+    def _explicit_checkpoint(self) -> Any:
+        return (
             self.options.get("weights_path")
             or self.options.get("checkpoint_path")
             or self.options.get("ckpt_path")
             or self.options.get("weights_dir")
+            or self.options.get("model_path")
         )
+
+    def _existing_checkpoint(self, *, directory_ok: bool = False) -> str:
+        explicit = self._explicit_checkpoint()
         candidates = [str(explicit)] if explicit else []
         candidates.extend(self.state.checkpoint_paths)
         for raw_path in candidates:
@@ -248,7 +262,6 @@ class GeometryPriorSynthesis(BaseSynthesis):
         execute: bool = False,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        del prompt
         missing = self.state.missing_requirements
         plan = {
             "model_id": self.model_id,
@@ -290,6 +303,8 @@ class GeometryPriorSynthesis(BaseSynthesis):
         if self.model_id == "video-depth-anything-prior":
             return self._run_video_depth(video=video, images=images, output_dir=output_dir, **kwargs)
         if self.model_id == "track-anything-prior":
+            if prompt is not None:
+                kwargs.setdefault("prompt", prompt)
             return self._run_track_anything(video=video, images=images, output_dir=output_dir, **kwargs)
         if self.model_id in {"dust3r", "dust3r-base-model"}:
             return self._run_dust3r(images=images, output_dir=output_dir, **kwargs)
@@ -346,7 +361,7 @@ class GeometryPriorSynthesis(BaseSynthesis):
         elif self.model_id == "unidepth-v2-prior":
             from worldfoundry.base_models.three_dimensions.depth.unidepth import UniDepth2Model
 
-            model = UniDepth2Model(type=str(kwargs.get("type") or "l"), model_path=ckpt)
+            model = UniDepth2Model(type=str(kwargs.get("type") or "l"), model_path=ckpt, device=device)
             src = DepthEstimationInput(rgb=rgb_tensor, intrinsics=torch.tensor([focal], device=device), camera_type=CameraType.PINHOLE)
         elif self.model_id == "unik3d-prior":
             from worldfoundry.base_models.three_dimensions.depth.unik3d import Unik3DModel
@@ -399,7 +414,11 @@ class GeometryPriorSynthesis(BaseSynthesis):
             weights_path=ckpt,
         )
         with torch.inference_mode():
-            result = model.estimate(DepthEstimationInput(video_frame_list=frames))
+            result = model.estimate(
+                DepthEstimationInput(
+                    video_frame_list=[frame.astype(np.float32) / 255.0 for frame in frames]
+                )
+            )
         return _write_depth_artifacts(
             model_id=self.model_id,
             result=result,
@@ -461,7 +480,9 @@ class GeometryPriorSynthesis(BaseSynthesis):
         if len(image_paths) < 2:
             raise ValueError("DUSt3R inference requires at least one image path; a single image is duplicated for validation tests.")
 
-        ckpt = self._existing_checkpoint()
+        ckpt = self._existing_checkpoint(directory_ok=True)
+        if not ckpt:
+            raise FileNotFoundError("DUSt3R requires a local checkpoint file or a Hugging Face model directory.")
         device = "cuda" if torch.cuda.is_available() else "cpu"
         model = AsymmetricCroCo3DStereo.from_pretrained(ckpt).to(device).eval()
         dust3r_images = load_images(
@@ -543,12 +564,14 @@ class GeometryPriorSynthesis(BaseSynthesis):
     def _run_track_anything(self, *, video: Any, images: Any, output_dir: Path, **kwargs: Any) -> dict[str, Any]:
         from worldfoundry.base_models.perception_core.tracking.track_anything import TrackAnythingPipeline
 
-        root = _checkpoint_root()
-        sam_ckpt = Path(str(kwargs.get("sam_ckpt_path") or root / "SAM" / "models" / "sams" / "sam_vit_b_01ec64.pth")).expanduser()
-        aot_ckpt = Path(str(kwargs.get("aot_ckpt_path") or root / "Track-Anything" / "R50_DeAOTL_PRE_YTB_DAV.pth")).expanduser()
-        grounding_ckpt = Path(
-            str(kwargs.get("grounding_dino_ckpt_path") or root / "GroundingDINO" / "groundingdino_swint_ogc.pth")
-        ).expanduser()
+        defaults = _known_checkpoint_candidates(self.model_id)
+
+        def checkpoint_path(key: str, index: int) -> Path:
+            return Path(str(kwargs.get(key) or self.options.get(key) or defaults[index])).expanduser()
+
+        sam_ckpt = checkpoint_path("sam_ckpt_path", 0)
+        aot_ckpt = checkpoint_path("aot_ckpt_path", 1)
+        grounding_ckpt = checkpoint_path("grounding_dino_ckpt_path", 2)
         frames = _load_video_frames(
             _first_available(video, kwargs.get("video_path"), kwargs.get("input_path"), images),
             max_frames=int(kwargs.get("max_frames") or 3),

@@ -35,3 +35,23 @@ runner_parity:
   - Per-run validation evidence is tracked outside the release catalog.
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries expose WorldFoundry pipeline targets; metadata-only entries retain upstream provenance without runnable WorldFoundry backends.
+docs:
+  publisher: University of Oxford
+  publisher_kind: university
+  publisher_zh: 牛津大学
+  overview: 'VMem is an interactive video scene generation model with a surfel-indexed view memory: as you navigate a scene, it remembers which surfaces were seen from where, keeping new views consistent with the past. Both integration and runner status are verified — Studio/API visual validation ran the in-tree runtime with staged VMem and CUT3R checkpoints, reproducing the official navigation demo.'
+  overview_zh: VMem 是带「面元索引视图记忆」的交互式视频场景生成模型：当你在场景中游走时，它记住哪些表面曾从哪些视角被看到，使新视角与历史保持一致。集成与 runner 状态均为 verified——Studio/API 视觉验证使用树内运行时与就位的 VMem、CUT3R checkpoint，复现了官方导航 demo。
+  architecture: VMem indexes past views by surface elements (surfels) and retrieves only the relevant ones to condition generation of the next view (per the publication, arXiv 2506.18903). The route depends on CUT3R as its geometry backbone; both checkpoints must be staged.
+  architecture_zh: VMem 以面元（surfel）索引历史视图，检索相关视图作为下一视角生成的条件（见论文 arXiv 2506.18903）。该路径以 CUT3R 为几何主干；两组 checkpoint 均需就位。
+  usage_notes: One of the few fully verified interactive routes in the video category — the in-tree Studio/API route produced and visually validated the official-style navigation demo on 2026-06-27. Inputs cover prompt/image/video/actions; outputs are generated_video artifacts.
+  usage_notes_zh: video 类别中少数完整验证过的交互式路径之一——树内 Studio/API 路径已于 2026-06-27 产出并通过视觉验证官方风格导航 demo。输入覆盖 prompt/image/video/actions；输出为 generated_video 产物。
+  limitations:
+  - Requires both VMem and CUT3R checkpoints staged locally.
+  - Scene navigation quality depends on the geometry backbone; extreme viewpoint changes can still break consistency.
+  limitations_zh:
+  - 需要同时在本地就位 VMem 与 CUT3R checkpoint。
+  - 场景游走质量依赖几何主干；极端视角变化仍可能破坏一致性。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Scores camera-navigable generated scenes.
+    reason_zh: 评估可相机游走的生成场景。

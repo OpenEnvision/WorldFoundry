@@ -22,6 +22,15 @@ from typing import Any
 class MCPClient:
     """Stdio MCP client helper for local scripts and tool export.
 
+    Each helper call launches a fresh server subprocess by default, which is
+    fine for one-shot scripts but expensive in loops (full server import chain
+    per call). Use the client as an async context manager to keep one server
+    session alive across calls::
+
+        async with MCPClient() as client:
+            tools = await client.list_tools()
+            result = await client.call_tool("list_models")
+
     Attributes:
         command: Server executable to launch.
         args: Extra arguments passed to the server command.
@@ -36,9 +45,29 @@ class MCPClient:
     cwd: str | None = None
     timeout: timedelta = timedelta(seconds=600)
 
+    async def __aenter__(self) -> "MCPClient":
+        """Open a persistent server session reused by subsequent helper calls."""
+
+        self._persistent_context = await self._client()
+        self._persistent_session = await self._persistent_context.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> Any:
+        """Close the persistent session and its server subprocess."""
+
+        context = self.__dict__.pop("_persistent_context", None)
+        self.__dict__.pop("_persistent_session", None)
+        if context is None:
+            return None
+        return await context.__aexit__(exc_type, exc, tb)
+
     async def list_tools(self) -> list[Any]:
         """Query the MCP server for its available tools."""
 
+        session = self.__dict__.get("_persistent_session")
+        if session is not None:
+            result = await session.list_tools()
+            return list(result.tools)
         client = await self._client()
         async with client as session:
             result = await session.list_tools()
@@ -65,6 +94,9 @@ class MCPClient:
             Raw MCP tool result object.
         """
 
+        session = self.__dict__.get("_persistent_session")
+        if session is not None:
+            return await session.call_tool(name, arguments or {})
         client = await self._client()
         async with client as session:
             return await session.call_tool(name, arguments or {})

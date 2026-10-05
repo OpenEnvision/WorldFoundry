@@ -40,15 +40,10 @@ try:
 except ImportError:
     _TransformerEngineDotProductAttention = None
 
-from worldfoundry.base_models.diffusion_model.video.cosmos.cosmos2.runtime.cosmos_predict2.cosmos_predict2._src.predict2.networks.selective_activation_checkpoint import (
-    CheckpointMode,
-)
-from worldfoundry.base_models.diffusion_model.video.cosmos.cosmos2.runtime.cosmos_predict2.cosmos_predict2._src.predict2.networks.selective_activation_checkpoint import (
-    SACConfig as SACConfig,
-)
+from worldfoundry.core.nn.checkpointing.activation_checkpointing import CheckpointMode, SACConfig
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
-from worldfoundry.core.distributed.context_parallel import split_inputs_cp
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.model_parallel.context import split_inputs_cp
+from worldfoundry.core.distributed.runtime.logging import log
 
 T5_CONTEXT_TOKEN_NUMBER = 512
 FIRST_LAST_FRAME_CONTEXT_TOKEN_NUMBER = 257 * 2

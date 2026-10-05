@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
+import shutil
 from typing import Any, Mapping, Sequence
 
 from worldfoundry.synthesis.action_generation._native_policy_runtime import (
@@ -17,8 +19,39 @@ _DEFAULT_POLICY_CONFIG = str(_MODEL_CONFIG["default_policy_config"])
 _DEFAULT_SEED = int(_MODEL_CONFIG["seed"])
 
 
+def _stage_paligemma_tokenizer(location: str | Path | None = None) -> Path:
+    """Atomically stage the local PaliGemma tokenizer for OpenPI inference."""
+
+    from worldfoundry.core.io.paths import (
+        checkpoint_root_path,
+        resolve_local_hf_model_path,
+        resolve_worldfoundry_path,
+    )
+
+    source = resolve_worldfoundry_path(str(location or _MODEL_CONFIG["paligemma_tokenizer_path"]))
+    if not source.is_file() and location is None:
+        source = resolve_local_hf_model_path(
+            "google/paligemma-3b-pt-224",
+            required_files=("tokenizer.model",),
+        ) / "tokenizer.model"
+    if not source.is_file():
+        raise FileNotFoundError(f"MME-VLA PaliGemma tokenizer is missing: {source}")
+    target = checkpoint_root_path("runtime_assets", "openpi", "big_vision", "tokenizer.model")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.is_file() and not target.is_symlink() and target.stat().st_size == source.stat().st_size:
+        return target.resolve()
+
+    temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+    try:
+        shutil.copyfile(source, temporary)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return target.resolve()
+
+
 def clear_runtime_cache() -> None:
-    from worldfoundry.core.runtime_cache import clear_inference_runtime_cache
+    from worldfoundry.core.execution.runtime_cache import clear_inference_runtime_cache
 
     clear_inference_runtime_cache(_RUNTIME_CACHE)
 
@@ -43,10 +76,7 @@ def _runtime_for(location: str, options: Mapping[str, Any]) -> Any:
         return policy
 
     openpi_tokenizer.configure_local_tokenizer_assets(
-        paligemma=str(
-            options.get("paligemma_tokenizer_path")
-            or _MODEL_CONFIG["paligemma_tokenizer_path"]
-        ),
+        paligemma=str(_stage_paligemma_tokenizer(options.get("paligemma_tokenizer_path"))),
         fast="",
     )
     runtime_config = mme_config.get_config(config_name)

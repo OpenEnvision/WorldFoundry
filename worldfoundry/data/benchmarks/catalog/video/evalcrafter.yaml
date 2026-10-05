@@ -1,5 +1,7 @@
 id: evalcrafter
 name: EvalCrafter
+publisher: Tencent AI Lab
+publisher_kind: company
 benchmark_kind:
 - text-to-video
 - video-generation-quality
@@ -247,6 +249,20 @@ metrics:
   aggregator: mean
   output_unit: error
 runner:
+  normalization:
+    artifact_official_run: true
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py
+  pass_benchmark_id: false
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.evalcrafter.run_evalcrafter_official_runner
+    prompt_manifest_arg: --prompt-manifest
+    metric_arg: --metrics
+    limit_arg: --limit
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    supports_fixture: true
+    default_metrics: [clip_score, clip_temp_score, face_consistency_score]
   runner_target: worldfoundry.evaluation.tasks.contracts.external:EvalCrafterContract
   run_command:
   - worldfoundry-eval
@@ -305,6 +321,7 @@ base_model_dependency_preflight:
   missing: []
 integration:
   status: integrated
+  tier: in_tree
   evidence:
     bounded_official_component: true
     bounded_metrics:

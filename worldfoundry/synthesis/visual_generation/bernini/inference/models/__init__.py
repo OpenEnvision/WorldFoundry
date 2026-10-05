@@ -12,9 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .bernini import BerniniConfig, BerniniModel
 from .renderer import BerniniRendererConfig, BerniniRendererModel
 from .transformer_wan import WanTransformer3DModel
 from .wan_diffusion import GEN_Wanx22
 
-__all__ = ["BerniniRendererConfig", "BerniniRendererModel", "WanTransformer3DModel", "GEN_Wanx22"]
+__all__ = [
+    "BerniniConfig",
+    "BerniniModel",
+    "BerniniRendererConfig",
+    "BerniniRendererModel",
+    "WanTransformer3DModel",
+    "GEN_Wanx22",
+]
+
+
+def __getattr__(name):
+    """Load planner-only Qwen/FlashAttention modules on demand.
+
+    Bernini-R uses only the renderer. Importing the planner eagerly made that
+    path require FlashAttention even though none of its Qwen layers are used.
+    """
+
+    if name in {"BerniniConfig", "BerniniModel"}:
+        from .bernini import BerniniConfig, BerniniModel
+
+        return {"BerniniConfig": BerniniConfig, "BerniniModel": BerniniModel}[name]
+    raise AttributeError(name)

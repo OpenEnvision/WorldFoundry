@@ -1,0 +1,52 @@
+---
+title: "Mem-0"
+description: "Mem-0：视觉-语言-动作（VLA）、VLA 策略执行；仅静态加载; 独立环境 `worldfoundry-vla-mem-0`。"
+modelId: "mem-0"
+pageSource: authored
+---
+
+Mem-0（“Memory Matters”）是 RoboTwin RMBench 线的记忆增强操作策略：情节记忆库使策略能执行依赖既往事件的多任务序列。已确认的 qiuly/Mem-0-m1mix-RMBench checkpoint 面向已发表的 M1 多任务执行设定；完整运行时内置树内并通过静态验证。
+
+<ModelPaperFigures modelId="mem-0" locale="zh" />
+
+记录论文为[arXiv 2603.01229](https://arxiv.org/abs/2603.01229)。
+
+项目页：[rmbench.github.io](https://rmbench.github.io/)。代码：[RoboTwin-Platform/RMBench](https://github.com/RoboTwin-Platform/RMBench)。
+
+<ModelCommandBuilder modelId="mem-0" locale="zh" />
+
+## 用来做什么
+
+`mem-0` 是记录的指令到动作线。需要 WorldFoundry VLA rollout 而不是视频生成时从这里起步。
+
+树内运行时包含情节记忆库、Qwen 特征路径、任务分类器与 flow-matching 动作解码器。输出匹配官方 14 值双臂关节适配器，排除两个仅模型内部的填充通道。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 策略执行、机器人策略、memory_policy。别名包括 `mem0`、`memorymatters`。
+
+记录的评测入口包括[RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin)（构建于 RoboTwin 平台的 RMBench 记忆任务）。
+
+Mem-0 记忆策略 rollout，不是视频生成器。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`mem-0_action_trace.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `Mem0Pipeline`。
+
+系列状态：**仅静态加载**。
+
+本条目面向 M1 多任务执行 checkpoint，无需高层规划服务。 发布的 checkpoint 为字节分片——运行时直接读取其连续分片，无需另行拼装副本。
+
+The in-tree runtime contains the episodic memory bank, Qwen feature path, classifier, and flow-matching action decoder.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run mem-0 --pipeline.task-profile default` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-vla-mem-0`（Python 3.11，Cu124 Or Newer，torch>=2.6）。
+
+记录的权重仓库包括 `qiuly/Mem-0-m1mix-RMBench`、`Qwen/Qwen3-VL-2B-Instruct`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh mem-0`；下载缺失的公开权重时加 `--download`。
+
+状态：**仅静态加载**。
+
+<ModelRelatedRecipes modelId="mem-0" locale="zh" />

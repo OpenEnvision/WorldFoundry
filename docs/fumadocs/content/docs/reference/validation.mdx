@@ -9,25 +9,540 @@ Validation evidence should be proportional to the changed surface: small enough 
 
 ## Evidence by change type
 
-| Change | Minimum evidence | Extra evidence when promoted |
+- **Docs only** — `npm run types:check`, `npm run build`, affected route returns 200. Extra when promoted: Browser screenshot for layout or interaction changes.
+- **CLI or runner** — Public CLI discovery plus a representative evaluate command. Extra when promoted: Existing-results and model-mode runs if output contracts changed.
+- **Model manifest** — `zoo model-show`, `zoo model-download --check-local`. Extra when promoted: Clone, checkpoint, demo parity, runner parity, benchmark run.
+- **Model runtime integration** — In-tree runtime import, no machine-local source checkout dependency, runtime profile with `backend_stage`, and focused regression. Extra when promoted: Checkpoint-backed run and one normalized benchmark scorecard.
+- **Benchmark manifest** — `zoo benchmark-show`, `preflight runtime --profile <benchmark-id>`. Extra when promoted: Clone, dataset, official runtime, normalized scorecard.
+- **Benchmark runner** — `zoo benchmark-run --mode official-validation` or `--mode official-run`. Extra when promoted: Official result import, official runtime, and full-suite fairness gate.
+- **Suite or matrix** — `run --all-benchmarks --plan-only --json`. Extra when promoted: Plan selected cells, then validate artifacts with runnable benchmark paths.
+
+## Public tests
+
+All first-party test sources live under `tests/` and are published with the
+repository and source distribution. Tests use the repository's Apache-2.0
+license. The wheel contains the runtime packages.
+
+### Public CPU gate
+
+From the repository root, with Python 3.10 or newer:
+
+```bash
+python -m pip install -e ".[test]"
+make test
+# Individual development tests can be selected with pytest:
+python -m pytest -q tests/runtime/test_geometry_regression_impact.py
+```
+
+The default selection in `pyproject.toml` covers process logging, GPU lease
+bookkeeping with simulated devices, checkpoint staging, job persistence,
+Conda dispatch, pipeline cleanup, job shutdown, and packaging boundaries.
+It runs without CUDA, checkpoint downloads, or provider API credentials. CI
+uses the complete selection plus the coverage, evidence, historical-reference
+and JUnit-validator contracts. `make test-infer` is an alias; use `PYTHON=python3` on
+systems whose `python` command still points to Python 2.
+
+The Make targets collect an independent complete node manifest before running
+tests. They reject skips, collection errors, missing or additional nodes,
+duplicates, source changes and stale reports. `TEST_ARGS` applies only to the
+execution; filtering out nodes with `-k` or `-m` fails the gate. Public CPU and
+CPU Torch manifests and JUnit results are uploaded by CI. Successful standard
+library subtests keep their parent node; failed or skipped subtests still fail.
+
+### Extended suites
+
+| Path | Contents / requirements |
+| --- | --- |
+| `tests/test_*.py` | Model integration and infrastructure regressions moved from `test/` |
+| `tests/eval_core/` | Evaluation contracts; `make test-eval-core` runs this suite |
+| `tests/core/`, `tests/runtime/`, `tests/studio/` | Unit and integration tests for shared infrastructure |
+| Other module directories | Tests mirroring the corresponding runtime modules |
+| `tests/training/` | Training regressions; require the separately supplied training implementation and configs |
+| `tests/manual/` | Manual model inference and provider API smoke scripts |
+| `tests/stream/` | Manual streaming inference scripts |
+
+Select an extended suite or a single test explicitly:
+
+```bash
+python -m pytest -q tests/eval_core/test_evaluate_runner.py
+python -m pytest -q tests/studio/test_conda_dispatch.py
+# Collect the extended automated suites with their dependencies installed:
+python -m pytest --collect-only tests
+```
+
+Extended tests can require additional extras (for example `eval_core`, `ui`,
+or a model's runtime environment), local benchmark helpers, assets, or CUDA.
+Some historical regression tests refer to private training/benchmark code or
+earlier repository layouts. Their sources remain available here; the public
+CPU gate is the supported CI baseline. Installing the `test` extra alone does
+not provision those resources.
+
+`manual/` and `stream/` are excluded from recursive pytest collection. Run
+their scripts directly after preparing the relevant model environment:
+
+```bash
+PYTHONPATH=. python tests/manual/test_wan_2p2.py
+PYTHONPATH=. python tests/stream/test_wan2p2_stream.py
+```
+
+These scripts can download weights, use GPU memory, call real provider APIs,
+and write output artifacts. Supply credentials through the provider's
+environment variables. Real-weight MiniMax H3 tests use
+`MINIMAX_H3_CKPT_DIR`, defaulting to
+`~/.cache/worldfoundry/checkpoints/minimax-h3-components`.
+
+### Fast inference contracts and CUDA checks
+
+The tensor suite needs only the public test dependencies, CPU Torch,
+safetensors and einops. It runs without checkpoints, renderers or a GPU:
+
+```bash
+python -m pip install "torch==2.7.1" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -e ".[test]" "safetensors>=0.4" "einops>=0.7,<0.9"
+make test-infer-tensors
+```
+
+In a prepared 3D model environment, also run the result serializers and CUDA
+contracts. The serializer imports use that environment's model and rendering
+dependencies, including plyfile and gsplat:
+
+```bash
+make test-infer-contracts PYTHON=/path/to/model-env/bin/python
+make test-infer-cuda-contracts PYTHON=/path/to/model-env/bin/python
+```
+
+The first target uses small tensors and synthetic geometry without model weights.
+It covers real checkpoint round trips and meta-device assignment, rejection before
+partial mutation, remap collisions, camera conventions, masked PLY and array
+exports, fresh-process result serialization, request recovery, and concurrent
+submission. The CUDA target checks producer-event ordering, pinned-memory copies,
+fallbacks, and draining queued work after a callback fails. It fails when CUDA is
+unavailable rather than reporting a wholly skipped GPU suite as success.
+
+After setting the regression checkpoint and input roots described below, a short
+real Pi3X test checks a reused model against a fresh model, with changed inputs,
+an intervening failed request, and exact repeatability:
+
+```bash
+python -m pytest -q tests/pipelines/test_pi3x_real_inference.py
+```
+
+This is a state-isolation check, not an accepted-output quality baseline. The
+fixed-weight numerical replay gate remains necessary for changed model behavior.
+
+### Video generation and world models
+
+`make test-infer-tensors` includes the video component numerical contracts;
+`make test-infer-video-tensors` selects just this part. Real small Wan networks
+compare fused QKV and static cross-KV caches against the original network over
+different batches, temporal/spatial shapes, noncontiguous layouts and A/B/A
+requests. Causal VAE convolution compares chunked execution against independent
+full-sequence convolution and checks that future frames cannot affect earlier
+outputs. Sampling and CFG use analytic endpoints, with UniPC history reset,
+failure cleanup and global RNG isolation. Explicit zero or negative dimensions,
+frame counts, steps and fps fail before inference; only `None` selects defaults.
+
+LTX's timestep-conditioned VAE also injects noise during decoding. Video,
+audio/video and request-based tensor decoders use a local generator on the
+latent device, seeded from the request. Small real VAE tests cover tiled and
+untiled decoding, A/B/A seeds, global RNG isolation and exact agreement with
+the original VAE given the same random state. Untiled tensor decoding calls
+the decoder directly. The former uncontrolled LTX RGB output is stochastic;
+accepting a seeded reference requires separately recording this behavior fix
+and proving latent and controlled-decoder parity, rather than silently
+replacing a failed reference.
+
+The existing `tests/manual/geometry_regression_cases.json` now includes geometry,
+video and world-model cases. Legacy script names and `GEOMETRY_*` commands remain
+available; `plan-inference`, `replay-inference` and `verify-inference` expose the
+broader scope. New short cases declare Wan 2.1 1.3B, Wan 2.2 TI2V 5B, LTX 0.9.8
+I2V, CogVideoX 2B, Cosmos Predict 2.5 2B, Matrix Game 2 and DreamX World 5B AR.
+LTX retains its native two-pass ten-step recipe. These cases compare available
+latents, raw frames, decoded RGB exports and fps; they check changed conditions,
+A/B/A requests, expected failures, causal continuation, reset and replay. They
+protect these concrete inputs and state transitions, not full-demo quality.
+
+Additional cases cover Cosmos Transfer 2.5's general/edge 2B checkpoint,
+Gamma's released four-step causal checkpoint, and Oasis 500M's video prompt
+route. Gamma uses 189 frames per view, as required by the released weights;
+the case checks two 320×480 views and recovery after a rejected short request.
+Transfer samples its minimum 93-frame window (24 latent frames) before cropping
+the requested 17 RGB frames.
+Stage `control.mp4` under `WORLDFOUNDRY_REGRESSION_INPUT_ROOT` with at least 17
+frames (a longer clip also exercises bounded conditioning reads). Place the
+official `buildHouse_flat` sample's `first_frame.png`, `prompt.txt`,
+`action_left.json` and `action_right.json` under `gamma-world/buildHouse_flat`.
+Oasis expects `open-oasis/context.mp4` with multiple frames and
+`open-oasis/forward.one_hot_actions.json` with two 25-column rows: set column
+11 (`forward`) to 1 and every other column to 0. Its adapter reads one prompt
+frame and holds the last action through six output frames. Checkpoint paths
+and encoder/tokenizer assets are explicit in each case. These declarations
+select required replays; they do not certify GPU execution or other variants.
+
+Video cases can replace `call` with `sequence`. Each step specifies a unique
+`name`, `method` (default `__call__`), `call` and selected `outputs`. Use
+`outputs: []` for session configuration or reset. `expect_error` requires an
+exact qualified exception type and message pattern; unrelated errors fail.
+Returned CPU buffers are copied immediately, preserving earlier responses.
+`comparisons` specifies exact `equal` or `different` relationships within one
+run. `array_contracts` checks shape, dtype, ranges or exact `values`, including
+the requested fps numerator/denominator. `export_artifacts` selects MP4s inside
+the run directory for full decode and comparison. Reference/candidate audits
+still require exact numerical equality.
+
+For a generator that returns only a video path, `output_arrays` can select an
+MP4, WebM, MOV or MKV inside the run directory. The replay decodes every frame
+and saves `artifact.<relative-path>.frames` and `.fps` in `arrays.npz`, so
+required outputs cannot be satisfied by a path or plan alone. Also declare
+the video in `export_artifacts` to compare the encoded artifact's decoded
+pixels and frame rate against the reference. Oasis uses this route because
+its subprocess returns an MP4 without in-memory tensors; its generator fixes
+the random seed to 0.
+
+```bash
+make coverage-inference PYTHON=python3
+make plan-inference PYTHON=python3 INFERENCE_BASE=<comparison-commit>
+make replay-inference PYTHON=/path/to/prepared-env/bin/python \
+  INFERENCE_PROFILE=/private/path/inference-regression.json
+make verify-inference PYTHON=python3 \
+  INFERENCE_PROFILE=/private/path/inference-regression.json \
+  INFERENCE_REPORT=/private/path/completed-run/report.json
+```
+
+Coverage inventories catalogued native video/world bindings and registered
+variants of their pipeline classes. A shared class, family, alias or historical
+`verified` label does not assign a case to another model ID. `case_defined`
+means a recipe exists; it does not imply accepted references or successful GPU
+inference. A frozen baseline preserves existing gaps while CI rejects new
+uncovered identities, loss of an existing recipe and affected native variants
+without a runnable numerical replay. Releases requiring complete coverage
+can invoke the coverage script with `--require-complete`; gaps return exit 2.
+
+Runtime profile ownership uses the declared model ID and pipeline binding,
+including `source_repos[].in_tree_path` for code executed in subprocesses.
+These declarations supplement static imports. Unknown paths still expand
+selection conservatively and fail when an affected native variant lacks a
+real checkpoint replay.
+
+Appending recipes and their component declarations selects the added cases
+only when the exact committed before/after definitions prove that every
+existing recipe, ownership and global rule is unchanged. Changed test
+orchestration additionally requires unchanged committed runtime, environment
+and asset files, matching checkout contents, its CPU contracts and a real MG2
+smoke replay. Changed production code remains independently selected; dirty
+definitions, deletions or reclassifications keep the full replay selection.
+
+The legacy InSpatio, LingBot Cam/Act/V2 and ATI cases each use their own released
+checkpoint. Set `WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT` to the accepted
+scene containing `video_example_00/input/{video.mp4,target_tcw.txt}`.
+`WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS` contains 21-frame `poses.npy` and
+`intrinsics.npy`, plus `action.npy` for Act. ATI requires its fixed quantized
+packed-NPZ track file in `WORLDFOUNDRY_REGRESSION_ATI_TRACKS`. Inputs are hashed
+alongside weights. These short numerical replays do not certify full-demo
+quality or unrelated variants.
+
+`verify-inference` checks that a trusted GPU-host report matches this commit,
+source tree, matrix, dependency declarations and pinned reference index, that
+all affected cases executed, and that every numerical field is exact.
+It requires a `--base` commit-diff plan and recomputes the changed paths;
+manually listed or omitted paths cannot bypass the affected-case gate.
+Preflight, stale commits, omitted cases, relaxed tolerances and failed runs
+cannot pass. Public CPU and tensor gates must pass separately.
+
+The hosted `inference-replay` job consumes a successful official Actions
+artifact from a maintainer-dispatched control workflow. A missing, expired,
+foreign or stale receipt fails. The dispatch verifies the candidate's exact
+commit, tree, comparison base and pinned reference index before publishing
+`trusted-inference-evidence`. Evidence-only dispatches run the attestation job;
+ordinary CI runs verify the receipt. This workflow uses a prepared trusted GPU
+host without requiring a hosted GPU runner. Configure the repository variables
+`INFERENCE_EVIDENCE_CONTROL_REF`, `INFERENCE_EVIDENCE_WORKFLOW_PATH` and
+`INFERENCE_REFERENCE_INDEX_SHA256`; protect the merge branch with the
+`inference-replay` and CPU checks. A workflow declaration alone does not enable
+branch protection. Uncovered and unexecuted variants remain gaps.
+
+MG2 changes, including changes to its numerical contract, additionally require
+all six real-image, 12-block trajectories against a frozen accepted revision.
+The reference's complete digest is pinned. Flow/x0 outputs, every rolling cache,
+conditions, latent/video/RGB pixels, VAE state and continuous RNG histories must
+match exactly. Two current paths agreeing with each other is insufficient.
+This independent contract accompanies the public-pipeline A/B/A replay; neither
+can stand in for the other. The gate never regenerates accepted references.
+
+After committing the candidate, run both GPU gates on the prepared host. Build
+the bounded dispatch input from their completed reports:
+
+```bash
+INFERENCE_REFERENCE_INDEX_SHA256=<pinned-index> python3 tests/manual/inference_actions_evidence.py compact \
+  --base <comparison-commit> --head <candidate-commit> \
+  --conditioned-report /private/path/mg2-conditioned.json \
+  --junit /private/path/mg2-conditioned.xml \
+  --generic-replay /private/path/replay/report.json --output /private/path/evidence.json
+```
+
+Dispatch `CI` on the configured control branch with those two commit IDs and
+the compact JSON as `source_revision`, `base_revision` and `evidence_json`.
+After that dispatch succeeds, retry the candidate's `inference-replay` job.
+The companion `inference-evidence-verified.yml` performs this retry once it is
+installed on the repository's default branch; until then retry it explicitly.
+
+### Validation while optimizing
+
+| Change | Checks on every change | Broader evidence |
 | --- | --- | --- |
-| Docs only | `npm run types:check`, `npm run build`, affected route returns 200 | Browser screenshot for layout or interaction changes. |
-| CLI or runner | Focused `test/eval_core` test plus a representative evaluate command | Existing-results and model-mode runs if output contracts changed. |
-| Model manifest | `zoo model-show`, `zoo model-download --check-local` | Clone, checkpoint, demo parity, runner parity, benchmark run. |
-| Model runtime integration | In-tree runtime import, no machine-local source checkout dependency, runtime profile with `backend_stage`, and focused regression | Checkpoint-backed run and one normalized benchmark scorecard. |
-| Benchmark manifest | `zoo benchmark-show`, `preflight runtime --profile <benchmark-id>` | Clone, dataset, official runtime, normalized scorecard. |
-| Benchmark runner | `zoo benchmark-run --mode official-validation` or `--mode official-run` | Official result import, official runtime, and full-suite fairness gate. |
-| Suite or matrix | `run --all-benchmarks --plan-only --json` | Plan selected cells, then validate artifacts with runnable benchmark paths. |
+| Imports, ownership, configuration, packaging | Public CPU gate and built-distribution audit | Short affected-model replay for changed execution paths |
+| Attention, kernels, graphs, offload | Reference-versus-optimized tensor tests over shapes, precision, layouts, devices and repeated requests | Representative real-weight cases using each affected component |
+| A model's loading, preprocessing or output conversion | Inference contracts and that model's short accepted-output replay | Full demo and benchmark before promoting integration status |
+| Quantization, pruning or approximate attention | Explicit opt-in, measured numeric error and task-level quality limits | Representative datasets and hardware; benchmark before enabling by default |
+| Release affecting shared inference components | Complete accepted short-case matrix | Full demos and quality benchmarks at lower frequency or before release |
+
+Use the latest successful replay's `source_hashes` to help identify affected
+cases, together with explicit component/capability declarations and static
+dependencies. Runtime traces only cover paths that ran: they do not cover an
+unexecuted branch or a dynamically selected backend. Treat an unresolved impact
+as uncovered and expand the affected component's tests. Keep the reference
+implementation available for differential tests and safe fallback. Separate exact
+optimizations from approximations; specify numeric and task-quality limits for
+the latter and never silently widen tolerances or regenerate accepted references.
+
+GitHub CI runs the public CPU, CPU Torch tensor and packaging gates on pull
+requests, pushes to `main` and `release/**`, and manual dispatch. Result
+serializers, CUDA contracts, real-weight replays and broader model benchmarks
+require the prepared model environment. Hosted CI requires their official
+evidence for affected inference changes and publishes the affected-case plan. Daily GPU
+replays are available through the explicit host schedule described below.
+
+### Automatic affected-case selection
+
+```bash
+make plan-geometry PYTHON=python3 GEOMETRY_BASE=<comparison-commit>
+# Optional: add actual imported-source evidence from a successful matrix.
+python3 tests/manual/geometry_regression_impact.py --base <comparison-commit> \
+  --evidence /absolute/path/to/successful-runs --output tmp/3d-regression-plan.json
+```
+
+The planner combines the explicit component declarations in
+`tests/manual/geometry_regression_dependencies.json`, conditional and relative
+Python imports, literal lazy imports, package initializers, and optional recorded
+imports. Git rename and deletion handling includes the old paths. Shared
+inference infrastructure or matrix changes select all cases; new cases require dependency
+declarations. Unknown paths or an unresolved import graph select the full matrix
+and exit with `uncovered`, requiring the coverage gap to be resolved. A docs-only
+change can report `no_inference_changes`; it still requires the CPU gates.
+
+Only changes to the planner and source-snapshot orchestrator have a narrower
+verification rule: immutable Git entries must prove that all runtime code,
+environments, assets, matrix and dependency definitions are identical. The
+complete commit diff and inspected tooling must match the committed blobs.
+Those changes require the full CPU contracts and both MG2 GPU gates to exercise
+the verification chain. Missing history, changed case definitions or a mixed
+production change retains the full conservative model selection.
+
+CI uploads `geometry-impact` even when planning fails. This artifact lists
+required replays; it is not a successful GPU result. The runner rejects stale
+tree/policy hashes, contradictory empty plans, or plans omitting cases required
+by the current declarations and import graph.
+
+### Scheduled GPU regression on a prepared host
+
+Use the same model Python, accepted assets and environment as the numerical
+reference. First copy explicitly accepted outputs into durable private storage:
+
+```bash
+python3 tests/manual/geometry_regression_schedule.py import-reference \
+  --source /absolute/path/to/accepted-runs \
+  --destination /absolute/path/to/private-state/reference
+```
+
+The importer preserves the original evidence, relocates exported artifact paths,
+verifies exact numerical equality, and records each copied file's SHA-256. It
+refuses an existing destination. Save the returned `reference_index_sha256` in a
+private host profile such as `~/.config/worldfoundry/geometry-regression.json`:
+
+```json
+{
+  "source_root": "/absolute/path/to/WorldFoundry",
+  "source_ref": "refs/heads/your-validated-branch",
+  "python": "/absolute/path/to/model-env/bin/python",
+  "matrix": "tests/manual/geometry_regression_cases.json",
+  "dependencies": "tests/manual/geometry_regression_dependencies.json",
+  "reference": "/absolute/path/to/private-state/reference",
+  "reference_index_sha256": "<SHA-256 returned by import-reference>",
+  "state_root": "/absolute/path/to/private-state",
+  "cuda_visible_devices": "0",
+  "env": {
+    "WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT": "/accepted/checkpoints",
+    "WORLDFOUNDRY_REGRESSION_INPUT_ROOT": "/accepted/multiview-frames",
+    "WORLDFOUNDRY_REGRESSION_INPUT_IMAGE": "/accepted/input.png",
+    "WORLDFOUNDRY_REGRESSION_PANORAMA": "/accepted/panorama.jpg",
+    "WORLDFOUNDRY_REGRESSION_LYRA_INPUT_IMAGE": "/accepted/lyra-input.jpg"
+  },
+  "case_timeout_seconds": 1800,
+  "suite_timeout_seconds": 7200,
+  "retain_runs": 7
+}
+```
+
+The optional `gpu_holder` object configures an existing `gg` script using an
+absolute `script`, string-list `start_args`, its `env` (including `GG_PYTHON`),
+and optional log `ready_patterns`. The runner stops that script for replays and
+restarts it in a detached session after success, failure, timeout or interruption.
+If replay descendants cannot be stopped or GPU leases cannot be released, it
+fails and defers holder restoration until those resources are cleared.
+
+Preserve required runtime variables such as `LD_LIBRARY_PATH` and `CUDA_HOME`
+in the private profile's `env`. Cron jobs retain the prepared tool PATH. A CUDA
+preflight compares Python, Torch, CUDA, cuDNN, GPU and package versions with all
+selected references before loading weights or stopping the holder; changed
+environments fail rather than weakening the comparison.
+
+Models accepted in different Python/Torch environments use private
+`case_environments` overrides, for example
+`"case_environments": {"flashworld": {"python": "/absolute/path/to/flashworld-env/bin/python"}, "worldfm": {"python": "/absolute/path/to/worldfm-env/bin/python"}}`.
+Each override can also provide `env`, merged over the default profile environment.
+Every distinct selected environment gets its own preflight and each case runs in
+its configured interpreter. Unknown case IDs are rejected.
+
+```bash
+# Validate the runner with one case before enabling a complete daily matrix.
+python3 tests/manual/geometry_regression_suite.py \
+  --profile ~/.config/worldfoundry/geometry-regression.json --preflight-only
+python3 tests/manual/geometry_regression_suite.py \
+  --profile ~/.config/worldfoundry/geometry-regression.json --case-id pi3x
+python3 tests/manual/geometry_regression_schedule.py install \
+  --profile ~/.config/worldfoundry/geometry-regression.json --hour 3 --minute 0
+python3 tests/manual/geometry_regression_schedule.py status \
+  --profile ~/.config/worldfoundry/geometry-regression.json
+# Remove only WorldFoundry's marked cron block.
+python3 tests/manual/geometry_regression_schedule.py remove \
+  --profile ~/.config/worldfoundry/geometry-regression.json
+```
+
+Installation preserves other cron entries and uses `Asia/Shanghai`. It copies
+controllers from the committed source revision; reinstall after changing those
+controllers. Each run snapshots the configured local committed ref, without
+pulling, resetting, or executing dirty source files. Separate model processes
+share the host's physical-GPU lease locks, have per-case and suite time budgets,
+and undergo exact numerical and imported-source audits. The complete short
+matrix runs daily; an on-demand `--plan` can select affected cases instead.
+`latest.json` records `running` before work starts and the final outcome; run
+logs, source revision and comparisons live under `runs/`. Retention keeps seven
+run directories by default and archives older compact reports under `history/`.
+Accepted references are outside disposable runs and are never regenerated by
+the runner. Profiles, local assets, weights and evidence stay outside Git.
+`--preflight-only` checks all selected assets and environments without loading
+model weights; its `preflight_passed` status is not numerical inference evidence.
+
+Pin numerical environment settings in the host profile too, including
+`OMP_NUM_THREADS` and `MKL_NUM_THREADS`; CPU depth reconstruction can change with
+different thread counts even when every package version matches. Give each
+Python/Torch/CUDA/C++ ABI combination its own `TORCH_EXTENSIONS_DIR`, and ensure
+the extension compiler uses Torch's C++ ABI. A fresh cache alone does not fix an
+incompatible compiler default. DreamX honors explicitly enabled deterministic
+algorithms by disabling cuDNN benchmarking, which can otherwise select different
+convolution algorithms in separate processes. Keep references recorded under a
+changed determinism policy separately, with an original-production parity check;
+never overwrite existing references or relax tolerances to hide drift.
+
+These short cases cover declared inputs and capabilities. The Lyra-2 case still
+disables reconstruction. Full demos, quality benchmarks, and tests of new
+backends remain necessary before changing integration or release status.
+
+### Docker helper
+
+```bash
+WORLDFOUNDRY_DOCKER_GPUS=none tests/run_tests_docker.sh
+tests/run_tests_docker.sh tests/eval_core/test_cli_ux.py
+WORLDFOUNDRY_DOCKER_EXTRAS=test,eval_core tests/run_tests_docker.sh make:test-eval-core
+```
+
+The helper mounts the checkout and local caches, installs the selected extras,
+and runs the requested target. Its default target is the public CPU gate.
+
+### Adding tests
+
+Place deterministic regressions beside the relevant module tests and store
+small text fixtures under that suite. Move scripts that run inference at
+import time into `manual/` or `stream/`. Use environment variables for local
+checkpoints and skip real-weight tests when their resources are unavailable.
+Bytecode, caches, logs, generated output directories, secrets, and weights
+remain excluded from version control and source releases.
+
+## Preparing the optional CPU eval-core suite
+
+Install Torch and Torchvision from the official CPU wheel index first, then install the declared test extra from the normal package index:
+
+```bash
+python -m pip install --index-url https://download.pytorch.org/whl/cpu \
+  "torch>=2.7,<2.12.0" "torchvision>=0.22,<0.27.0"
+python -m pip install -e ".[eval_core]"
+```
+
+The separate first command is intentional: Python package metadata cannot select a CPU-specific wheel index, while pointing the whole extra at the PyTorch index would hide packages such as pytest and NumPy.
+
+## Numerical regression for geometry, video and world models
+
+The CPU gate and mocks do not prove that inference with real weights remains correct. After changing loading, preprocessing, inference, camera conversion, or export code, replay an accepted case in separate processes using `tests/manual/geometry_regression.py`. The matrix in `tests/manual/geometry_regression_cases.json` covers Depth Anything, Pi3/Pi3X, VGGT, CUT3R, LoGeR, LingBotMap, Hunyuan Mirror, HY-WorldMirror 2.0, FlashWorld, and WorldFM. Its additional Lyra-2 case validates video generation and camera trajectories only, with 3D reconstruction disabled. Prepare the model environment and local assets separately.
+
+```bash
+git worktree add --detach /tmp/worldfoundry-3d-reference <validated-revision>
+export WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT=/absolute/path/to/checkpoints
+export WORLDFOUNDRY_REGRESSION_INPUT_IMAGE=/absolute/path/to/accepted-image.png
+# The multiview cases use frame-0.png, frame-16.png, and frame-32.png.
+export WORLDFOUNDRY_REGRESSION_INPUT_ROOT=/absolute/path/to/accepted-sequence
+# Set REGRESSION_GPU_ID to an available GPU index or UUID from nvidia-smi.
+export CUDA_VISIBLE_DEVICES="${REGRESSION_GPU_ID}"
+
+# Run all three commands in the same model-specific Python environment.
+python tests/manual/geometry_regression.py run \
+  --case tests/manual/geometry_regression_cases.json --case-id pi3x \
+  --source-root /tmp/worldfoundry-3d-reference --output-dir tmp/3d-replay/reference/pi3x
+python tests/manual/geometry_regression.py run \
+  --case tests/manual/geometry_regression_cases.json --case-id pi3x \
+  --source-root . --output-dir tmp/3d-replay/candidate/pi3x
+python tests/manual/geometry_regression.py compare \
+  --reference tmp/3d-replay/reference/pi3x --candidate tmp/3d-replay/candidate/pi3x \
+  --report tmp/3d-replay/comparison.json
+```
+
+After replaying every affected case, audit coverage and check that the evidence still matches the current source:
+
+```bash
+make test-geometry PYTHON=/path/to/model-env/bin/python \
+  GEOMETRY_REFERENCE=tmp/3d-replay/reference \
+  GEOMETRY_CANDIDATE=tmp/3d-replay/candidate
+```
+
+Each root must contain a run directory named for every matrix case ID. Missing cases, changed case parameters, and changed imported-source hashes fail the gate. `GEOMETRY_MATRIX` can select the affected case matrix; use the complete matrix for changes to shared inference components. This audits completed real inference evidence and does not replace the replay commands.
+
+Each run records input and checkpoint SHA-256 hashes, case parameters and seed, dependency versions, CUDA/precision settings, hashes of imported source files, and raw numerical outputs. Comparison requires identical inputs, weights, parameters, and environments. It checks output fields, shapes, dtypes, finite values, and elementwise values for depth, points, confidence, masks, and cameras. Cases with `save` also compare exported PLY values, images, and NumPy artifacts. Missing assets, failed inference, empty outputs, NaNs, missing fields, and modified evidence fail. Reference directories are never overwritten automatically.
+
+Comparison is exact by default. Cases can set `deterministic: true` to require deterministic Torch algorithms and configure cuBLAS before CUDA initialization; unsupported deterministic operations fail. The Hunyuan Mirror and WorldFM cases use this setting. WorldFM also pins the inference seed after model loading; a seed set only before loading can be affected by initialization. Its panorama uses `WORLDFOUNDRY_REGRESSION_PANORAMA`, and Lyra-2 uses `WORLDFOUNDRY_REGRESSION_LYRA_INPUT_IMAGE`.
+
+For nondeterministic GPU operations, repeat the reference run first, measure its variation, and justify explicit floating-point `--atol` / `--rtol` settings. Boolean masks and integers remain exact. The matrix audit remains exact and does not inherit tolerances from a separate comparison report. Do not widen tolerances or replace an accepted reference with failing output to hide regressions.
+
+Additional cases declare `target` (`module:Class`), `load`, `call`, `assets`, and `required_outputs`. `${OUTPUT_DIR}` resolves to the run directory; use environment variables for other paths. `extra_calls` can capture raw depth, and `capture_modules` can capture raw forward outputs when a pipeline only returns artifact paths. Generative cases must also pin prompts, trajectories, sampling steps, and precision, and review rendered output quality.
+
+Validation applies to specific code, weights, inputs, and environments. Changes to shared components require replays of every affected model and variant; unexecuted cases remain uncovered. GitHub CI runs the public CPU gate; real inference must run separately on a GPU host with local weights and pass `make test-geometry` before accepting an inference change. Numerical parity protects accepted cases against regression, but cannot prove correctness for arbitrary inputs or replace benchmarks with ground-truth depth and calibrated cameras. Accept a reference using official results, quality metrics, and human review before using it as a regression baseline.
 
 ## Release gate
+
+From a lightweight editable checkout, install the declared gate dependencies
+before running the core commands:
+
+```bash
+python -m pip install -e ".[dev,test]"
+```
 
 <Tabs items={['core', 'docs', 'model', 'benchmark']}>
   <Tab>
 
 ```bash
+make test
 make lint
 make compile-eval
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" python -m pytest test/eval_core -q
+make cli-entrypoint-check
+make cli-check
 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval evaluate --results-path tmp/results.jsonl --output-dir tmp/worldfoundry_evaluate --json
 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmarks --json
 ```
@@ -37,6 +552,7 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmar
 
 ```bash
 cd docs/fumadocs
+npm run models:check
 npm run types:check
 npm run build
 curl -I http://localhost:8013/docs
@@ -66,15 +582,13 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmar
 
 ## Artifact acceptance
 
-| Artifact | Required for | Accept when |
-| --- | --- | --- |
-| `run_manifest.json` | Any evaluation run | Command, ids, status, timestamps, counts, and output paths match the run. |
-| `execution_plan.json` | Runner or suite changes | Resolved model, benchmark, metrics, and requests are deterministic. |
-| `sample_ledger.jsonl` | Partial-failure review | Failed/skipped samples include visible reasons. |
-| `metrics/summary.json` | Metric changes | Aggregates, failed counts, and metric keys match the expected schema. |
-| `scorecard.json` | Publishable evaluation evidence | Eligibility, leaderboard state, metrics, and blockers are present. |
-| `report.json` | Model/benchmark validation | Stage status, command, repo/checkpoint/dataset refs, and blockers are recorded. |
-| `suite_report.json` | Suite or matrix changes | Every selected cell is pass, fail, or skipped with a reason. |
+- **`run_manifest.json`** — Any evaluation run. Accept when: Command, ids, status, timestamps, counts, and output paths match the run.
+- **`execution_plan.json`** — Runner or suite changes. Accept when: Resolved model, benchmark, metrics, and requests are deterministic.
+- **`sample_ledger.jsonl`** — Partial-failure review. Accept when: Failed/skipped samples include visible reasons.
+- **`metrics/summary.json`** — Metric changes. Accept when: Aggregates, failed counts, and metric keys match the expected schema.
+- **`scorecard.json`** — Publishable evaluation evidence. Accept when: Eligibility, leaderboard state, metrics, and blockers are present.
+- **`report.json`** — Model/benchmark validation. Accept when: Stage status, command, repo/checkpoint/dataset refs, and blockers are recorded.
+- **`suite_report.json`** — Suite or matrix changes. Accept when: Every selected cell is pass, fail, or skipped with a reason.
 
 ## Integration claim rule
 
@@ -82,210 +596,34 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmar
 
 Do not use `integrated` as a leaderboard synonym. Normalizer-only benchmark integrations must keep `verification_status=normalizer_only` and `leaderboard_valid=false` until the full official scorer or judge has run and the exact scorecard proves eligibility.
 
-## Current World-Model Validation Notes
-
-These notes record the latest bounded evidence for the in-tree world-model runtimes as of June 27, 2026. The current Studio workspace source exposes `diamond`, `dino-wm`, `leworldmodel`, and `starwm` as `world` workload entries with model-specific official-demo inputs. The patched 7879 validation workspace verified that `/api/models` keeps the curated official-demo fields for all four entries, and `/api/jobs` accepts `plan_only` submissions without the earlier `call_kwargs.plan_only` schema error. Jobs `studio-00001` through `studio-00004` completed: `diamond`, `leworldmodel`, and `starwm` wrote ready in-tree runtime manifests, while `dino-wm` correctly stayed blocked on missing OSF assets.
-
-| Model id | Evidence | Current blocker |
-| --- | --- | --- |
-| `diamond` | In-tree official play stack resolves local `${WORLDFOUNDRY_CKPT_DIR}/diamond`; bounded Pong validation loaded ALE 0.9, collected one initialization step, entered the official control loop, and stopped only by the 90 second timeout. | Full visual/demo capture still needs a deliberate recording run. |
-| `dino-wm` | In-tree `infer.py` builds the official `plan_wall.yaml` command in `worldfoundry-unified-cu128`; module preflight passes. | Missing OSF checkpoint layout `checkpoints/outputs/<model_name>/hydra.yaml` and `checkpoints/model_*.pth`, plus task datasets. |
-| `leworldmodel` | In-tree official eval wrapper runs the PushT random-policy demo in `worldfoundry-unified-cu128` with local `pusht_expert_train.h5`; bounded validation passed both direct CLI and Studio workspace job paths using `num_eval=1`, `eval_budget=25`, JSON metrics, and a non-empty 25-frame mp4 preview. | Non-random policy evaluation remains checkpoint gated; full official 50-episode eval is still a longer validation run. |
-| `starwm` | In-tree official offline inference client builds the expected JSON/JSONL command with the bundled StarCraft prompt fixture. | Requires a running OpenAI-compatible endpoint serving the StarWM checkpoint. |
-
-## Current Video-Worldmodel Validation Notes
-
-### June 27 Studio 7870 Batch Evidence
-
-The 7870 Workspace batch below was submitted through `/api/jobs` on June 27, 2026 with one job per GPU. These rows add fresh release evidence for the exact in-tree Studio route and default official-demo inputs named in each model profile; they do not replace benchmark scoring.
-
-| Model id | Job | Artifact evidence | Visual QA |
-| --- | --- | --- | --- |
-| `worldcam` | `studio-00122` on `cuda:0` | `worldcam.mp4`, sha256 `43397270aed80baf6a3261972b9f474f6233fdf9860619ea77e50a36a795084c`, 233 non-empty 832x480 frames, mean adjacent frame diff `14.9166`. | Industrial first-person conditioning scene remains coherent with continuous camera motion. |
-| `matrix-game-2` | `studio-00123` on `cuda:1` | `matrix-game-2.mp4`, sha256 `b324a86229da9d5803578c214560f47013c4104189bf37481de7d7423b3c1abc`, 597 non-empty 640x352 frames, mean adjacent frame diff `19.3228`. | Official universal demo shows snowy outdoor navigation with clear world motion. |
-| `matrix-game-3` | `studio-00124` on `cuda:2` | `test.mp4`, sha256 `81c5c5eca9a725cf785a1db53d6a7994f3cc0fa7b4f383c0b97b5eb63b00071a`, 497 non-empty 1280x704 frames, mean adjacent frame diff `24.1725`. | Cityscape / gas-station world stays coherent across multi-segment motion. |
-| `hunyuan-world-voyager` | `studio-00125` on `cuda:3` | `hunyuan-world-voyager.mp4`, sha256 `57bc7a055c38cfd048c54f1db425d93ebe712b9131adf506dd86461e025a818e`, 45 non-empty 768x1024 frames, mean adjacent frame diff `6.4688`. | Top RGB pane matches the official thatched-roof village prompt; bottom pane is the expected depth preview concatenated by the in-tree Voyager pipeline. |
-| `videocrafter2_t2v` | `studio-00126` on `cuda:4` | `videocrafter2-t2v.mp4`, sha256 `9209588eaa2b06fd2a48549f81c8772676721c42d4dd81c3576899ebf5030af7`, 16 non-empty 512x320 frames, mean adjacent frame diff `4.3232`. | Futuristic city prompt is visible and temporally stable. |
-| `wan2.1_t2v` | `studio-00127` on `cuda:5` | `wan2-1-t2v.mp4`, sha256 `f42dff9e99d190b5274fabd4ed08ee923e582c0ea3df6931f349b04a8863dac4`, 81 non-empty 832x480 frames, mean adjacent frame diff `9.0117`. | Coherent robot/corridor scene generated through the in-tree Wan2.1 T2V Studio path. |
-| `cogvideox-5b-i2v` | `studio-00128` on `cuda:6` | `cogvideox-5b-i2v.mp4`, sha256 `ca332d8b3ba28b0c46ef527ec1e937b6863da197ddf9ad2263956a82306d9b18`, 49 non-empty 720x480 frames, mean adjacent frame diff `2.8895`. | Dragon/castle reference scene is preserved; motion is low but stable and prompt-aligned. |
-| `neoverse` | `studio-00129` on `cuda:7` | `neoverse.mp4`, sha256 `4bbdc53eecc0f76029f075c9d8e15fe25e61f1ad3016356e6f356c08269f6c04`, 81 non-empty 560x336 frames, mean adjacent frame diff `11.8459`. | Robot-arm tabletop assembly scene and camera motion match the accepted official video-input route. |
-
-### June 27 Additional Studio Route Checks
-
-The follow-up batches `studio-00130` through `studio-00145` exercised more in-tree video runners from the same 7870 Workspace API. The contact sheets and stats are stored under `tmp/worldfoundry_studio/validation_batch_00130_00137_video_stats.json`, `tmp/worldfoundry_studio/validation_batch_00138_partial_video_stats.json`, and `tmp/worldfoundry_studio/validation_batch_00139_00140_video_stats.json`.
-
-| Model id | Job | Evidence summary | Release treatment |
-| --- | --- | --- | --- |
-| `videocrafter1_i2v` | `studio-00130` | 16 non-empty 512x320 frames, sha256 `479345c0bcbecf08e6d919d832497ff048e76592ee31250338994a4d4ffb7e13`, mean adjacent frame diff `19.8167`; contact sheet shows a horse scene with visible motion. | Studio route visually verified. |
-| `videocrafter1_t2v` | `studio-00131` | 16 non-empty 1024x576 frames, sha256 `cbecd6edaf8721445ea84310e6a699224f19f3fc8a6e24b4cfb6f28e9cd38a39`, mean adjacent frame diff `22.4227`; contact sheet shows a tiger in a forest matching the prompt. | Studio route visually verified. |
-| `cogvideox_2b_t2v` | `studio-00132` | 17 non-empty 720x480 frames, sha256 `07069f3e82806e3c8666725c8b6a7f69eb66fc73acee48412df02ef418891cbb`, mean adjacent frame diff `6.3231`; contact sheet shows the neon robot alley prompt. | Studio route visually verified. |
-| `cogvideox_5b_t2v` | `studio-00133` | 17 non-empty 720x480 frames, sha256 `e6773de3f61c3ba8bd27c2b3f5b2b53a0ab030634e90e48f35d34092bfb9947d`, mean adjacent frame diff `5.3017`; contact sheet shows the rover desert prompt. | Studio route visually verified. |
-| `dynamicrafter_512_i2v` | `studio-00134` | 50 non-empty 512x320 frames, sha256 `46c726a338aa17c90345f46bebdc03c7f56e348ede3976c758d8ffc7bbe9c8c2`, mean adjacent frame diff `4.4835`; reference scene remains coherent. | Studio route visually verified. |
-| `i2vgen-xl` | `studio-00135` | 16 non-empty 512x320 frames, sha256 `60441c2dad89bb69ff3e75ea5b9a4b71b5920c49f1b482fee731381399880fdf`, mean adjacent frame diff `13.4487`; reference scene remains coherent. | Studio route visually verified. |
-| `easyanimate_i2v` | `studio-00136` | 49 non-empty 672x384 frames, sha256 `fc9486ecec1abc41d758a0c4ca5a22d3d0b908bb2e7c3f0ff88be0790eeb6179`, mean adjacent frame diff `25.9258`; contact sheet shows coherent jungle/castle motion. | Studio route visually verified. |
-| `ltx_video_i2v` | `studio-00138` | Dragon/castle rerun generated 89 non-empty 832x480 frames, sha256 `d6ef1a701e4c909252769947cc0c312e3de86d50adb6cc4de3fc3b37f0efa6ce`, mean adjacent frame diff `5.8207`. The earlier penguin run `studio-00137` was semantically clear but nearly static with mean diff `0.3002`. | Count the dragon/castle rerun as route validation; do not use the penguin run as motion-quality evidence. |
-| `framepack` | `studio-00139` | 37 non-empty 832x480 frames, sha256 `e750e37a3b2acbc7ba417d43c57038b73370ad6198b5b162abe329afb9b6fafd`, mean adjacent frame diff `9.1178`; contact sheet preserves the reference world with motion. | Studio route visually verified. |
-| `krea-realtime-video` | `studio-00140` | 6 non-empty 832x480 frames, sha256 `e374184476a98787881fd02220f8f7a1b163377253ea09bfb6b4296ca018ef16`, mean adjacent frame diff `6.9887`; contact sheet matches the art-gallery prompt. | Route verified; longer official realtime-video parity remains separate. |
-| `mochi-1-preview-t2v` | `studio-00142` | 13 non-empty 848x480 frames, sha256 `1abe8e49a55107d871e9641278d22764d72fb9806ea1902060e7b5ffaea7345f`, mean adjacent frame diff `4.0757`; greenhouse prompt is visible. | Route verified; full official preview config remains separate. |
-| `animatediff` | `studio-00143` | 8 non-empty 448x256 frames, sha256 `83f1e91258c69b0e2e4434853399eb43b256ff4c4bde56b65202395cbd57d182`, mean adjacent frame diff `9.3120`; lantern street-market prompt is visible. | Studio route visually verified. |
-| `zeroscope` | `studio-00144` | 8 non-empty 448x256 frames, sha256 `61d405f6a6808e2fef78f96a87a8b83e9247525dbc976bf43d6369bcbed5a852`, mean adjacent frame diff `3.3107`; rover/desert prompt is visible. | Studio route visually verified. |
-| `longcat-video` | `studio-00141` | 18 non-empty 1280x704 frames, sha256 `a9e8bc553ce2671c3affcc97ac1a2a7e6ff03931c3d4af4ab211e785f1ca7456`, mean adjacent frame diff `4.7008`; output is a clear city/waterfront scene but motion and prompt specificity are weak. | Route verified only; do not promote as visual-demo parity from this run. |
-| `modelscope-t2v` | `studio-00145` | 16 non-empty 256x256 frames, sha256 `365270db62ab2dbd1eea4c8f2753b930d4ad53fdd2b374bac74636808f90a695`, mean adjacent frame diff `9.8974`; contact sheet does not match the panda prompt. | Not accepted as visual QA evidence; keep previous accepted evidence separate. |
-
-| Model id | Evidence | Current blocker |
-| --- | --- | --- |
-| `longvie-1` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with the default 5-frame 640x352 dense/sparse control-video demo, local LongVie2 control checkpoint, Wan2.1 I2V 14B base, and Wan2.1 T2V tokenizer. The generated `longvie-1.mp4` has 5 non-empty frames and the preview visually matches the jungle-to-castle prompt. | Full-length official segment settings still need a longer validation run. |
-| `longvie-2` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with the same default 5-frame demo plus local `dit.safetensors`; `LongVie2Pipeline` generated a non-empty `longvie-2.mp4` preview matching the prompt. July 1, 2026 Workspace CLI recheck also passed with output `longvie-2.mp4`, sha256 `8503bc7a164e16331071388b873fc0824cefe226ba5ec28bf350d588e01ba5ae`, 5 non-empty 640x352 frames at 8 fps. | Full-length official segment settings and distributed USP variants still need longer validation. |
-| `matrix-game-1` | Studio workspace `/api/jobs` actual inference now reaches the in-tree official Matrix-Game-1 runner in `worldfoundry-unified-cu128`. Job `studio-00005` on the isolated 7878 workspace used the Studio image path mapped to `image_path`, `video_length=17`, `inference_steps=50`, `max_images=1`, `max_conditions=1`, bf16, and 1280x720 output. It generated `matrix-game-1.mp4` with sha256 `632c447bf4e4f9874f10d5f27183fa2b98a7265741897b13427016869a2e9285`; the artifact decodes as 17 non-empty 1280x720 frames with mean adjacent frame diff `19.4847`. | This is integration-validation evidence only. The generic Studio image output was noisy and did not pass visual QA. The official public repo's `run_inference.sh` points at `initial_image/`, but that fixture is not included upstream; the 65-frame official default also hit single-A100 80GB OOM in the unified env. Keep Matrix-Game-1 as official-demo visual-parity pending. |
-| `matrix-game-2` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with the official universal image-conditioned demo: `worldfoundry/data/test_cases/matrix-game-2/universal/0000.png`, `worldfoundry/data/test_cases/matrix-game-2/configs/inference_universal.yaml`, `num_frames=150`, `fps=12`, `seed=42`, `size=[352, 640]`, and `official_bench_actions=true`. Studio job `studio-00002` generated `matrix-game-2.mp4` with 597 non-empty 640x352 frames at 12 fps and 49.75 seconds; docs demo asset `/demos/studio/matrix-game-2-official-universal.mp4` was copied from that run. Bounded validation job `studio-00001` also passed with 57 frames. | This is demo-parity inference validation, not full benchmark scoring. The official random trajectory can enter dark or occluded views, so visual QA checks motion/coherence rather than uniform brightness. |
-| `matrix-game-3` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with the official cityscape image-conditioned demo: `worldfoundry/data/test_cases/matrix-game-3/001/image.png`, prompt `A colorful, animated cityscape with a gas station and various buildings.`, actions `forward` + `camera_r`, `num_iterations=12`, `num_inference_steps=3`, `size=704*1280`, `use_int8=true`, `compile_vae=true`, `vae_type=mg_lightvae`, and local `${WORLDFOUNDRY_CKPT_DIR}/Matrix-Game-3.0`. Studio job `studio-00002` generated `test.mp4` with 497 non-empty 1280x704 frames at 17 fps, visible city-street world motion, and docs demo asset `/demos/studio/matrix-game-3-cityscape.mp4`. Follow-up validation `studio-00003` verified the fixed Dynamo alias patch with `compile_vae=true` and no `_ConfigEntry` TypeError/AttributeError log spam. | This is demo-parity inference validation, not full benchmark scoring. On the A100 validation host `fa_version=3` requested FA3 but fell back to FA2. |
-| `hunyuan-world-voyager` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with the official README case1 conditioned-video demo: `worldfoundry/data/test_cases/hunyuan_world_voyager/case1`, prompt `An old-fashioned European village with thatched roofs on the houses.`, `num_frames=49`, `infer_steps=50`, `flow_shift=7.0`, `embedded_cfg_scale=6.0`, `seed=0`, `i2v_stability=true`, `ulysses_degree=1`, and `ring_degree=1`. Studio job `studio-00003` generated `hunyuan-world-voyager.mp4` with sha256 `2b584900d6049948d4f68bda208333240d10e4bc97dc770bc6890c7aeeabf081`; the artifact decodes as 45 non-empty 1024x768 frames at 16 fps and visually matches the European village / thatched-roof prompt with the expected RGB+depth preview. Docs demo asset: `/demos/studio/hunyuan-world-voyager-case1.mp4`. | This is official-demo inference validation, not full benchmark scoring. The official case1 command is single-GPU by default; xDiT multi-GPU is an optional latency path. |
-| `hunyuan-worldplay` | Studio workspace `/api/jobs` actual inference passed in `worldfoundry-unified-cu128` with the official-image-pose-video task and the official 8-rank launch profile: `torchrun_nproc_per_node=8`, `num_frames=125`, `fps=24`, `user_height=480`, `user_width=832`, `num_inference_steps=4`, `few_step=true`, `prompt_rewrite=false`, `return_pre_sr_video=false`, `model_type=ar`, `output_type=pt`, interaction `w-31`, and `seed=1`. The verified artifact sha256 is `392011407c3f706259d8e0d03d55960bbdc9be3d92fd8088fd8a4716b790dfda`; it decodes as 125 non-empty 832x480 frames with mean adjacent frame diff `6.069641984278156`. Visual QA shows a coherent stone-path / bridge / lake world scene with continuous camera motion. A follow-up run after the distributed Studio materialization fix produced the same sha256 and a single run directory shared by all ranks. | This verifies the in-tree 8-GPU Studio/API demo route. Full benchmark scoring and longer interaction suites remain separate. |
-| `hunyuan-game-craft` | Studio workspace `/api/jobs` actual inference passed on June 28, 2026 in the dedicated `HYGameCraft` conda profile through the in-tree runtime. Job `studio-00024` used the official village interactive-video recipe exposed by the Studio task profile: `torchrun_nproc_per_node=8`, seed `250160`, prompt `A charming medieval village with cobblestone streets, thatched-roof houses, and vibrant flower gardens under a bright blue sky.`, input `worldfoundry/data/test_cases/hunyuan_game_craft/village.png`, actions `forward,backward,right,left`, `interaction_speed=[0.2,0.2,0.2,0.2]`, `size=[704,1216]`, `num_frames=129`, `infer_steps=50`, and `cfg_scale=2.0`. The run generated `hunyuan-game-craft.mp4` with sha256 `d8b9ccab1d0e9ead19f425b6618748655320803e9146621253cde08c8610beec`; the artifact decodes as 132 non-empty 1216x704 frames at 16 fps with mean adjacent frame diff `12.034740705339289`. Visual QA shows the expected medieval village world and continuous camera/action motion. | This verifies the 8-rank Studio/API route and the distributed result-materialization path. Full benchmark scoring and longer interaction suites remain separate. |
-| `neoverse` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` after fixing the core spec default for the official video path. The accepted patched-workspace job `studio-00003` used bundled robot video, prompt `A two-arm robot assembles parts in front of a table.`, `predefined_trajectory=tilt_up`, `num_frames=81`, `trajectory_mode=relative`, `angle=15`, `seed=42`, `use_first_frame=true`, `static_scene=false`, `num_inference_steps=4`, and `cfg_scale=1.0`. It generated `neoverse.mp4` with sha256 `4bbdc53eecc0f76029f075c9d8e15fe25e61f1ad3016356e6f356c08269f6c04`; the artifact decodes as 81 non-empty 560x336 frames and visually shows the robot-arm tabletop assembly scene with camera motion. | The earlier `static_scene=true` run is not counted as parity evidence. |
-| `yume` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` for both in-tree YUME variants. YUME I2V job `studio-00002` used `size=544*960`, interactions `forward` + `camera_l`, 50 Euler steps, and generated `yume.mp4` with sha256 `ca3a42231c2f3190f2d6ed3b9ba42f572df5f810b9e0f1ebc857a3b208cb87ac`; it decodes as 64 non-empty 960x544 frames at 16 fps with mean adjacent frame diff `7.6733`. YUME-1.5 job `studio-00006` used `size=704*1280`, interactions `forward`, `left`, `camera_r`, and generated `yume-1p5.mp4` with sha256 `3a2259f72931b889ca2c8e37c400a296909970bdc5031b828a37fce858ea9da2`; it decodes as 87 non-empty 1280x704 frames at 16 fps with mean adjacent frame diff `12.4033`. The public docs asset `/demos/studio/yume-1p5-jungle-castle.mp4` was refreshed from a later 7870 Workspace run with sha256 `350249e32c50a8b0b3418c0fb459add75ecd3468eeb543c56747b7b57cee39d0`, 87 frames, 1280x704, 16 fps, and mean adjacent frame diff `18.3252`. Visual QA shows coherent first-person jungle/castle worlds with continuous camera motion. | This is Studio/API demo inference validation for the two YUME variants, not full benchmark scoring. |
-| `lyra-2` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with the official ZoomGS single-image forward navigation demo: `worldfoundry/data/test_cases/lyra/Lyra-2/00.png`, action `forward`, `fps=16`, `resolution=[480, 832]`, `seed=1`, `reconstruct_3d=false`, and local `${WORLDFOUNDRY_HFD_ROOT}/nvidia--Lyra-2.0` assets. Studio job `studio-00015` generated `lyra-2.mp4` with sha256 `8ace9ab06422f1fbafafc2945611e7266ccbf9d6512f603ba245b855773b6f4b`; the artifact decodes as 81 non-empty 832x480 frames at 16 fps. Visual QA shows a stable harbor/ship world with subtle continuous forward camera motion rather than a blank or frozen output. | This promotes the Lyra-2 variant. Lyra-1 has separate evidence below. |
-| `lyra-1` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with the official Lyra-1 static single-image SDG demo: `worldfoundry/data/test_cases/lyra/Lyra-1/00172.png`, `mode=static`, `trajectory=zoom_in`, `camera_rotation=center_facing`, `num_video_frames=121`, `height=704`, `width=1280`, `fps=24`, `num_steps=35`, `guidance=1.0`, and `seed=1`. Studio job `studio-00005` generated `lyra-1.mp4` with sha256 `4d03b5d457bcc9f34f48e395128c21de985cfcd5ea96c971eec43915bc9d7f27`; the artifact decodes as 121 non-empty 1280x704 frames at 24 fps with mean adjacent frame diff `3.899765184190538`. Visual QA shows a stable sunlit modern room with colored glass panels and continuous camera movement. | This promotes the Lyra-1 variant; full benchmark scoring remains separate. |
-| `lingbot-world` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in the dedicated `lingbot-world` conda environment with the base-cam checkpoint `robbyant/lingbot-world-base-cam`: `worldfoundry/data/test_cases/lingbot_world/00/image.jpg`, action path `worldfoundry/data/test_cases/lingbot_world/00`, interactions `forward,left,right,camera_l,camera_r`, `num_frames=161`, `sampling_steps=70`, `max_area=399360`, and `seed=42`. Studio job `studio-00007` generated `lingbot-world.mp4` with sha256 `1956dc6ca47cdcc3023b9a8b424f687726f559dffedae6c682a2b57d75e5e86b`; the artifact decodes as 161 non-empty 832x464 frames at 16 fps with mean adjacent frame diff `13.532635980844498`. Visual QA shows a coherent first-person dragon flight through a fantasy jungle/castle scene with continuous camera motion. | This promotes only the base-cam variant. Base-act and fast variants remain pending official checkpoint validation. |
-| `vmem` | Studio workspace `/api/jobs` actual inference passed on June 27, 2026 in `worldfoundry-unified-cu128` with the in-tree VMem runtime, local `${WORLDFOUNDRY_CKPT_DIR}/vmem` and `${WORLDFOUNDRY_CKPT_DIR}/cut3r` assets, input `worldfoundry/data/test_cases/studio_demo/00/image.jpg`, interaction `forward`, and official config `height=576`, `width=576`, `inference_num_steps=50`, `seed=42`. Studio job `studio-00118` generated `vmem.mp4` with sha256 `7a9f29527a222e3b09d8db5f78a42bf8cf4339a0b7bb7f0efa20b24f93da5c6e`; the artifact decodes as 6 non-empty 576x576 frames with mean adjacent frame diff `15.2285`. Visual QA shows the first-person jungle/castle scene preserved with continuous forward camera motion. | This validates the in-tree Studio/API VMem route. Longer multi-turn interaction suites and benchmark scoring remain separate. |
-| `worldcam` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with bundled WorldCam CS industrial conditioning video, intrinsics and extrinsics arrays, `conditioning_frames=65`, `num_ar_steps=50`, `num_inference_steps=50`, `cfg_scale=4`, `seed=0`, `height=480`, `width=832`, and `fps=30`. Studio job `studio-00004` generated `worldcam.mp4` with sha256 `78b3863500638d4227c3a4b4a052155f8bc08583b0523ab3da7a6d3527f66f85`; the artifact decodes as 233 non-empty 832x480 frames and visually preserves the industrial first-person scene. | This is official-style demo inference validation, not full benchmark scoring. |
-| `wow` | Workspace CLI actual inference passed on July 1, 2026 in `worldfoundry-unified-cu128` through the in-tree `WoWPipeline` with the official Wan 14B 600k default variant `WoW-world-model/WoW-1-Wan-14B-600k`. The run used `worldfoundry/data/test_cases/test_vla_image_case1/init_frame.png`, prompt `The Franka robot grasps the red bottle on the table.`, `steps=50`, `seed=42`, `num_frames=41`, `no_tiled=false`, `enable_vram_management=true`, and `persistent_param_gb=70`. The generated `wow.mp4` has sha256 `a0a49bea07b51770473a155e709ba48513c1e0ca5e4638bd1c2bc7eaa026ef9e`; it decodes as 41 non-empty 832x480 frames at 16 fps with mean adjacent frame diff `6.556299558460202`. Visual QA on frames 0/20/40 shows a coherent robot and red-bottle tabletop scene with continuous motion. | This promotes the official Wan 14B Workspace route. WoW DiT 2B remains a separate backend requiring its own checkpoint validation. |
-| `gen3c` | Workspace CLI actual inference passed on July 1, 2026 in the dedicated `gen3c` conda profile through the in-tree Cosmos Predict1 GEN3C runtime, without an external GEN3C checkout. The run used the official single-image demo fixture `worldfoundry/data/test_cases/gen3c/image.png`, `trajectory=left`, `camera_rotation=center_facing`, `movement_distance=0.3`, `num_video_frames=121`, `height=704`, `width=1280`, `fps=24`, `num_steps=35`, `guidance=1.0`, `seed=1`, `num_gpus=8`, `foreground_masking=true`, disabled prompt upsampler/guardrail/prompt encoder, local `nvidia/GEN3C-Cosmos-7B` assets, and `Ruicheng/moge-vitl`. The generated `gen3c.mp4` has sha256 `29dfcd6f8ac26c59ef49a9a7c5bfd12a8470990cc751ce3ed17e715692a81233`; it decodes as 121 non-empty 1280x704 frames at 24 fps with mean adjacent frame diff `5.119590534248738`. Visual QA on frames 0/30/60/90/120 shows the expected futuristic city scene with smooth left camera motion. | This verifies the official 8-GPU Workspace route. Initial loading is slow because the 27GB Cosmos checkpoint and Warp kernels are initialized across all ranks before sampling. |
-| `cameractrl` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with the official CameraCtrl pose file `0f47577ab3441480.txt`, mountain-lake prompt, `num_frames=16`, `fps=8`, `height=256`, `width=384`, `num_inference_steps=25`, `guidance_scale=14.0`, and `seed=42`. Studio job `studio-00008` generated `cameractrl.mp4` with sha256 `47e3b2de059e3b2321f3e56f0655b9ffb897524c605d63fa46d8d6277dd5ee64`; the artifact decodes as 16 non-empty frames and visually matches the prompt with continuous camera motion. | This validates the trajectory-video Studio route. MotionCtrl remains separate and is not promoted by this row. |
-| `dualcamctrl` | Full official-parameter inference passed on June 30, 2026 in `worldfoundry-unified-cu128` through the in-tree DualCamCtrl runtime. The run used the official seaside RGB/depth/camera fixtures under `worldfoundry/data/test_cases/dualcamctrl/demo_pic`, `num_frames=61`, `height=320`, `width=480`, `num_inference_steps=50`, `fps=10`, `seed=42`, and Hugging Face assets from `FayeHongfeiZhang/DualCamCtrl`, `alibaba-pai/Wan2.1-Fun-V1.1-1.3B-Control-Camera`, `Wan-AI/Wan2.1-T2V-1.3B`, and `Wan-AI/Wan2.1-I2V-14B-480P`. The generated `outputs/dualcamctrl/seaside_official.mp4` has sha256 `2ede70047a67e04e1e22ad0449d151f07b0b1dd66e22451c273867fbf592cea4` and decodes as 61 non-empty 320x480 frames. A follow-up `workspace_job infer` CLI regression with 9 frames / 2 steps also passed through Studio conda dispatch and wrote `tmp/worldfoundry_infer/dualcamctrl/short_cli.mp4` with sha256 `30292ed99f552a651517a472903b534d67a4b6c652c666fcca1008295c7f0c07`. | The 61-frame / 50-step run is the demo-parity evidence. The 9-frame / 2-step CLI run is only a path regression check and should not be used as a release demo. |
-| `motionctrl` | Studio workspace `/api/jobs` actual inference passed on June 27, 2026 in `worldfoundry-unified-cu128` with the in-tree MotionCtrl runtime, local `TencentARC/MotionCtrl` assets, default camera/object-motion fixtures, `num_frames=16`, `height=256`, `width=256`, `num_inference_steps=50`, and seed `20230211`. Studio job `studio-00007` on the isolated 7878 workspace generated `motionctrl.mp4` with sha256 `12aee3f92d2d61bfc249ecc9fedea91b07c516115c5c80e9154404f3b5392b79`; the artifact decodes as 16 non-empty 256x256 frames with mean adjacent frame diff `31.4121`. Visual QA shows coherent indoor-to-outdoor camera/object motion rather than a blank or frozen clip. | This validates the bounded MotionCtrl Studio/API route. Full official fixture parity and benchmark scoring remain separate. |
-| `self-forcing` | Studio workspace `/api/jobs` actual inference passed on June 27, 2026 in `worldfoundry-unified-cu128` after switching the default runtime root from external `github_repos` to the in-tree infer-only runtime at `worldfoundry/synthesis/visual_generation/forcing/self_forcing_runtime` and removing stale training imports from the cropped runtime. Job `studio-00018` used the official `self_forcing_dmd.yaml` path, local `${WORLDFOUNDRY_CKPT_DIR}/Self-Forcing/checkpoints/self_forcing_dmd.pt`, local Wan2.1 base weights, prompt `A cinematic shot of a red sports car driving along a coastal highway at sunset, with realistic motion, rich detail, and stable lighting.`, `num_output_frames=21`, `num_samples=1`, `use_ema=true`, `save_with_index=true`, `fps=16`, and `seed=0`. It generated `self-forcing.mp4` with sha256 `51072c63b4f7fb7a8560ff7b617044e88883dcf3a1892fb843617bb9bdf3cfdc`; the artifact decodes as 81 non-empty 832x480 frames with mean adjacent frame diff `3.8222318417801815`. Visual QA shows a coherent red sports car on a coastal highway at sunset. | This is bounded Studio/API validation evidence. Full official benchmark parity remains pending. |
-| `causal-forcing` | Studio workspace `/api/jobs` actual inference passed on June 27, 2026 in `worldfoundry-unified-cu128` after switching the default runtime root from external `github_repos` to the in-tree infer-only runtime at `worldfoundry/synthesis/visual_generation/forcing/causal_forcing_runtime` and removing stale training imports from the cropped runtime. Job `studio-00019` used the official chunk-wise DMD config, local `${WORLDFOUNDRY_CKPT_DIR}/Causal-Forcing/chunkwise/causal_forcing.pt`, local Wan2.1 base weights, prompt `A cinematic shot of a futuristic train crossing a mountain valley under dramatic clouds, with coherent motion and high visual detail.`, `num_output_frames=21`, `fps=16`, and `seed=0`. It generated `causal-forcing.mp4` with sha256 `9172cfa7622075062cecd345f02a472a19f80bb0370061a632b2b8385dba90b2`; the artifact decodes as 81 non-empty 832x480 frames with mean adjacent frame diff `11.497396240234375`. Visual QA shows a coherent futuristic train crossing a mountain valley. | This is bounded Studio/API validation evidence. Full official benchmark parity remains pending. |
-| `cogvideox-2b-t2v` | Studio workspace `/api/jobs` inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with the in-tree Diffusers CogVideoX runtime, prompt `A futuristic city street at sunset with reflective glass towers, clean motion, and cinematic lighting.`, `num_frames=17`, `height=480`, `width=720`, `num_inference_steps=10`, `fps=8`, and `seed=42`. Studio job `studio-00002` on the restarted 7875 workspace generated `cogvideox-2b-t2v.mp4` with sha256 `085fa33b0e623473f0b098c2a51f45497d88fd8e7c79a4bb7d94a74da03ee20e`; the artifact decodes as 17 non-empty 720x480 frames at 8 fps with mean adjacent frame diff `8.75875`, and visual QA shows a coherent futuristic city-street clip. The workspace log showed the denoising progress bar running from 0/10 to 10/10. | This verifies the CogVideoX 2B T2V Studio/API demo path. |
-| `cogvideox-5b-t2v` | Studio workspace `/api/jobs` inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with the in-tree Diffusers CogVideoX runtime, the same futuristic city prompt, `num_frames=17`, `height=480`, `width=720`, `num_inference_steps=10`, `fps=8`, and `seed=43`. Studio job `studio-00001` on the 7875 workspace generated `cogvideox-5b-t2v.mp4` with sha256 `ed7d76710d13bbe3c683c7dd1212a595e1dd1d86075ebf317a8f0c390c9d375e`; the artifact decodes as 17 non-empty 720x480 frames at 8 fps with mean adjacent frame diff `4.91821`, and visual QA shows a coherent futuristic city-street clip with stable geometry and subtle forward motion. The workspace log showed the denoising progress bar running from 0/10 to 10/10. | This verifies the CogVideoX 5B T2V Studio/API demo path. |
-| `cogvideox-5b-i2v` | Studio workspace `/api/jobs` inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with the in-tree Diffusers CogVideoX image-to-video runtime, `worldfoundry/data/test_cases/studio_demo/00/image.jpg`, prompt `First-person cinematic flight on a dragon through a lush jungle toward a towering ancient stone castle, with smooth forward camera motion, detailed fantasy world, natural lighting.`, `num_frames=49`, `height=480`, `width=720`, `num_inference_steps=50`, `guidance_scale=6.0`, `fps=8`, and `seed=45`. Studio job `studio-00003` on the 7875 workspace generated `cogvideox-5b-i2v.mp4` with sha256 `c4e452afa4007fce7651f0211f90831293e7d726c31812c6ed8628369024ca50`; the artifact decodes as 49 non-empty 720x480 frames at 8 fps with mean adjacent frame diff `3.7543341368436813`. Visual QA shows a stable first-person dragon/castle image-conditioned video without the texture-grid degeneration seen in the rejected 10-step mismatch validation. The workspace log showed the denoising progress bar running from 0/50 to 50/50. | This verifies the CogVideoX 5B I2V Studio/API demo path. |
-| `i2vgen-xl` | Studio workspace `/api/jobs` validation passed on June 26, 2026 in `worldfoundry-unified-cu128` with local `${WORLDFOUNDRY_CKPT_DIR}/i2vgen-xl`, input `worldfoundry/data/test_cases/studio_demo/00/image.jpg`, the first-person dragon/castle prompt, `num_frames=16`, `height=320`, `width=512`, `num_inference_steps=8`, `fps=8`, and `seed=101`. Studio job `studio-00001` on the 7876 workspace generated `i2vgen-xl.mp4` with sha256 `6a18c79e11fd0a539b224e52a98f8ee370a10da4812875c18f35d15f693bf8e6`; the artifact decodes as 16 non-empty 512x320 frames with mean adjacent frame diff `33.44407691955566`. Visual QA shows a nonblank image-conditioned dragon/castle clip. | This is a short Studio validation only. Do not count it as official long-config parity. |
-| `dynamicrafter_512_i2v` | Studio workspace `/api/jobs` validation passed on June 26, 2026 in `worldfoundry-unified-cu128` with local `${WORLDFOUNDRY_CKPT_DIR}/DynamiCrafter_512/model.ckpt`, input `worldfoundry/data/test_cases/studio_demo/00/image.jpg`, the first-person dragon/castle prompt, requested `num_frames=16`, `height=320`, `width=512`, `num_inference_steps=8`, `fps=8`, and `seed=102`. Studio job `studio-00002` on the 7876 workspace generated `dynamicrafter-512-i2v.mp4` with sha256 `0ffeb2d02884968d9b3418ec5fd5d1a579b0b084d3db2bf9a1c5a9cd0a46c55e`; the artifact decodes as 50 non-empty 512x320 frames with mean adjacent frame diff `6.741266180057915`. Visual QA shows a stable image-conditioned jungle/castle clip with subtle continuous motion. | This promotes the 512 I2V Studio validation only. Official long-config parity remains pending. |
-| `dynamicrafter_1024_i2v` | Studio workspace `/api/jobs` validation passed on June 27, 2026 in `worldfoundry-unified-cu128` with local `${WORLDFOUNDRY_CKPT_DIR}/DynamiCrafter_1024/model.ckpt`, input `worldfoundry/data/test_cases/studio_demo/00/image.jpg`, the first-person dragon/castle prompt, requested `frames=16`, `height=576`, `width=1024`, `steps=8`, `fps=8`, and `seed=202`. Studio job `studio-00008` on the isolated 7878 workspace generated `dynamicrafter-1024-i2v.mp4` with sha256 `d179d230a6017bbbabe820ab53a5e848b5ae2ffb2b0b65057b5db8f2e00311da`; the artifact decodes as 50 non-empty 1024x576 frames with mean adjacent frame diff `11.9499`. Visual QA shows a stable image-conditioned dragon/castle clip without blank or corrupted frames. | This promotes the bounded 1024 I2V Studio validation only. Official long-config parity remains pending. |
-| `easyanimate-i2v` | Studio workspace `/api/jobs` bounded I2V validation passed on June 27, 2026 in `worldfoundry-unified-cu128` after fixing the V5.1 scheduler default from `DDIM` to official `Flow`, switching the I2V checkpoint to `alibaba-pai/EasyAnimateV5.1-7b-zh-InP`, and mapping `height`/`width` to `sample_size`. Job `studio-00015` used local `${WORLDFOUNDRY_CKPT_DIR}/hfd/alibaba-pai--EasyAnimateV5.1-7b-zh-InP`, input `worldfoundry/data/test_cases/studio_demo/00/image.jpg`, prompt `A smooth cinematic camera move through a bright fantasy village with detailed buildings and stable motion.`, `num_frames=49`, `height=384`, `width=672`, `num_inference_steps=50`, `guidance_scale=6.0`, `fps=8`, and `seed=206`; it generated `easyanimate-i2v.mp4` with sha256 `b02c2d0b4e00106c5a0af7d633fd3a9d6de12236c931b4d9c6071a0144bf2c20`. The artifact decodes as 49 non-empty 672x384 frames with mean adjacent frame diff `14.83779218293582`; visual QA shows a coherent jungle/castle world with continuous motion instead of the rejected colored-noise DDIM output. | This is bounded Studio/API validation evidence. Full official benchmark parity remains pending. |
-| `allegro_ti2v` | Studio workspace `/api/jobs` validation passed again on June 27, 2026 on the 7870 workspace in `worldfoundry-unified-cu128` with local Allegro TI2V assets, input `worldfoundry/data/test_cases/studio_demo/00/image.jpg`, and the first-person dragon/castle prompt. Studio job `studio-00149` generated `allegro-ti2v.mp4` with sha256 `adb3a757dd50cfd08599f8497d1968ac08e35c6b41231ed361b3bb5ae3983f7e`; the artifact decodes as 88 non-empty 1280x720 frames at 15 fps with mean adjacent frame diff `5.521631757363504`. Visual QA shows a coherent dragon/castle clip without blank or corrupt frames. | This is Studio validation evidence. Full official-quality parity remains separate. |
-| `wan2.2-ti2v-5b` | Studio workspace `/api/jobs` validation passed on June 27, 2026 on the 7870 workspace in `worldfoundry-unified-cu128` using the Wan2.2 TI2V 5B route, official cats-boxing prompt, `size=1280*704`, `seed=42`, and 121 frames. Studio job `studio-00157` generated `wan-2p2.mp4` with sha256 `08163a019968b626878177f774b9cd33b3c9881acd98f1ac81b95f11fcabd281`; the artifact decodes as 121 non-empty 1280x704 frames at 16 fps with mean adjacent frame diff `14.943336838230938`. Visual QA shows two boxing cats matching the prompt and stable ring geometry. | This verifies the Studio 121-frame route. Full upstream benchmark scoring remains separate. |
-| `stable-virtual-camera` | Studio workspace `/api/jobs` validation passed on June 26, 2026 in `worldfoundry-unified-cu128` after fixing subprocess input path materialization. Job `studio-00010` used `worldfoundry/data/test_cases/studio_demo/00/image.jpg`, `version=1.1`, `task=img2trajvid_s-prob`, local `${WORLDFOUNDRY_CKPT_DIR}/stable-virtual-camera`, and `modelv1.1.safetensors`. It generated `stable-virtual-camera.mp4` with sha256 `d14261ebe0c13c007c10eef1a5aa5d27d24df02f289c6c9eccf12e4fc7a4f075`; the artifact decodes as 13 non-empty 512x320 frames at 30 fps. | This validates the in-tree adapter and path handling with local gated weights. Official-gallery parity remains pending. |
-| `skyreels-v2` | Studio workspace job `studio-00029` on June 27, 2026 passed visual QA with the in-tree SkyReels-V2 route, local DF-1.3B 540P checkpoint, prompt `A red sports car drives through a rainy neon city street, cinematic, sharp reflections.`, `num_frames=17`, `fps=8`, `num_inference_steps=8`, `height=540`, `width=960`, and `seed=102`. The generated `skyreels-v2.mp4` has sha256 `134db6fb54e72136a25f6102415aab20c6307066cb2b58b302d1118402f1513a`; it decodes as 17 non-empty 960x544 frames. | Accepted as a bounded Studio/API visual validation. The earlier June 26 city-plaza run remains recorded as a failed prompt-specific attempt and is not used as pass evidence. |
-| `krea-realtime-video` | Studio workspace `/api/jobs` short validation passed on June 26, 2026 in `worldfoundry-unified-cu128` after moving the infer-only realtime-video runtime in-tree under `worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime` and fixing the FlashAttention fallback import. Job `studio-00013` used prompt `A smooth cinematic flythrough of a bright modern art gallery with stable camera motion and realistic reflections.`, `num_blocks=1`, `height=480`, `width=832`, `fps=16`, and `seed=42`; it generated `krea-realtime-video.mp4` with sha256 `9919d555679909ca998b262450a492f27b904ac4787381e4f91636e4a586a06a`. The artifact decodes as 6 non-empty 832x480 frames with mean adjacent frame diff `5.34894437789917`; visual QA shows a bright modern art gallery matching the prompt. | This is bounded Studio validation evidence. Official longer realtime-video parity remains pending. |
-| `pusa-vidgen` | Studio workspace `/api/jobs` validation passed on June 27, 2026 in `worldfoundry-unified-cu128` after fixing the Wan2.2 model-loader registry to preserve the default `wan_video_dit` route while letting the Pusa runner explicitly select `WanModelPusa`. Job `studio-00121` used local `RaphaelLiu/Pusa-Wan2.2-V1`, local `Wan2.2-T2V-A14B`, optional LightX2V LoRA, prompt `A cinematic shot of a small robot walking through a neon-lit street at night, smooth camera motion, detailed reflections.`, `mode=t2v`, requested `num_frames=7` rounded by the official runtime to 9, `height=480`, `width=832`, `num_inference_steps=4`, `guidance_scale=1.0`, `lightx2v=true`, and `seed=0`. It generated `pusa-vidgen.mp4` with sha256 `409ea30bdda88a589df6a486d4b7bfc51063a4df3b7a020299b4376b25addefd`; the artifact decodes as 9 non-empty 832x480 frames with mean adjacent frame diff `4.498354434967041`. Visual QA shows a stable neon night street with a small robot, wet-road reflections, and prompt-aligned composition. | This validates the in-tree Pusa V1 Studio/API route and the `WanModelPusa` high/low DiT integration. Full official long-config parity remains pending. |
-| `longcat-video` | Studio workspace `/api/jobs` short T2V validation passed on June 27, 2026 in `worldfoundry-unified-cu128` with the in-tree LongCat runtime and local `${WORLDFOUNDRY_CKPT_DIR}/LongCat-Video`. Job `studio-00013` used prompt `A cinematic wide shot of a bright futuristic city plaza with clean glass towers, people walking, and smooth camera motion.`, `height=256`, `width=448`, `num_frames=9`, `num_inference_steps=4`, `guidance_scale=4.0`, `fps=8`, and `seed=42`; the refine output `output_t2v_refine.mp4` has sha256 `8de82f9472d6e5d64a5fee4c6b0a83471d21d0ebdd64a071602b5dcaed0f0572`. The artifact decodes as 18 non-empty 1280x704 frames with mean adjacent frame diff `3.0606036670705214`; visual QA shows a clear futuristic city skyline/plaza with people and no blank/noise failure. | This is bounded Studio/API validation evidence. Full 93-frame / 50-step official quality parity remains pending. |
-| `sana-video-2b-480p` | Studio workspace `/api/jobs` actual inference passed on June 27, 2026 in `worldfoundry-unified-cu128` with the in-tree Sana Video runtime and local `${WORLDFOUNDRY_CKPT_DIR}/SANA-Video_2B_480p/checkpoints/SANA_Video_2B_480p.pth`. Job `studio-00008` on the isolated 7879 workspace used prompt `A red sports car driving down a sunny city street, cinematic video, sharp details.`, `step=20`, `num_frames=17`, `fps=16`, `seed=1234`, `cfg_scale=6.0`, and `cuda:1`; it generated `sana_20step_17f_red_car.mp4` with sha256 `1e167e1117633f30321a5573663363ba7a93b6a6bee2a8071754d2b6df8500ee`. The artifact decodes as 17 non-empty 832x480 frames at 16 fps, and visual QA shows a clear red sports car on a sunny city street across sampled frames. | The earlier 2-step job `studio-00006` is recorded only as a chain validation because it failed semantic visual QA. Full 50-step / longer-frame official quality parity remains pending. |
-| `framepack` | Studio workspace `/api/jobs` short I2V validation passed on June 26, 2026 in `worldfoundry-unified-cu128` after fixing the in-tree FramePack wrapper to materialize official generator outputs into the Studio run directory. Job `studio-00017` used `worldfoundry/data/test_cases/studio_demo/00/image.jpg`, the first-person jungle/castle prompt, `max_frames=17`, `num_sampling_steps=8`, `seed=42`, and the local `FramePackI2V_HY` checkpoint. It generated `framepack.mp4` with sha256 `c5d4dfae92433550d1d009028702570e7bda610bdf649aa73b91f4f8f7251f48`; the artifact decodes as 37 non-empty 832x480 frames with mean adjacent frame diff `6.693102518717448`. Visual QA shows the dragon/castle reference scene preserved with subtle motion. | This is bounded Studio validation evidence. Official long-video parity remains pending. |
-| `worldgen` | Studio workspace `/api/jobs` 3D artifact validation passed on June 26, 2026 in `worldfoundry-unified-cu128` after fixing Depth-Anything V2 checkpoint resolution and submitting `low_vram=false`. Job `studio-00011` used `worldfoundry/data/test_cases/vggt/examples/kitchen/images`, prompt `a small furnished room`, and generated `worldgen.ply` with sha256 `39bb0b2daeaeea546dd98884a511db0b5ad5e249983674c766bf512cf111ad66`. The PLY is 142606753 bytes, binary little-endian, and declares 2097152 vertices. | This validates the in-tree 3D artifact route. The tiny side `worldgen.mp4` is not counted as video evidence, and full scene-quality parity remains pending. |
-| `depth-anything-v2-prior` | Studio/API job `studio-00036` on June 27, 2026 validated the shared Depth-Anything V2 image-depth route in `worldfoundry-unified-cu128` with `depth-anything/Depth-Anything-V2-Large`, `input_size=518`, and fixture `worldfoundry/data/test_cases/images/000.png`. It generated `000_depth.png` with sha256 `1f6b8954602b60076f1c9a1abddebaa30e8f9a314628a261b2c7d8929b4568d0`; the artifact is a nonblank 706x529 RGB depth map with grayscale extrema `[1, 227]` and stddev `32.63`. | This validates the shared DA2 base inference path used by geometry priors. Downstream 3D/world runtimes still need their own parity evidence. |
-| `vggt-omega` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with local `facebook/VGGT-Omega` assets, `task_type=official`, `image_resolution=512`, `preprocess_mode=crop`, `video_sample_fps=1.0`, and `max_points_k=200`. Studio job `studio-00010` generated `predictions.npz` sha256 `370f36b23ac86d12bb204e8c737a00791fe600a4f8129d3bb2be9fadf130e5a2` and `scene_conf20.0_blackFalse_whiteFalse_camTrue_skyFalse_max200k.glb` sha256 `d1f2eed3ed6274a84e9ab7cc72e5001eabfdc92ccec5d9ced486c8ca96f84613`; the GLB header and visual inspection were valid. | This is 3D scene-export validation, not video-generation evidence. |
-| `flashworld` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with local FlashWorld and Wan2.2 assets, image-conditioned camera-scene defaults, `num_frames=16`, `fps=15`, `image_height=480`, `image_width=704`, and `return_video=true`. Studio job `studio-00014` generated `flashworld.mp4` sha256 `899063237ba8f2ce520cc2d392ca4cc25da643c172d2a78d6f5de3b92b351c17` and `gaussians.ply` sha256 `4a4895af88019cfc9daebba4d300d8aa74768f19243253160eed3c4a5cb1ac3e`; the mp4 decodes as 226 non-empty 704x480 frames and the binary PLY declares 2703360 vertices. | This validates the image-to-3D plus preview path; full downstream 3D renderer scoring is separate. |
-| `recammaster` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with bundled motorcycle video input, camera trajectory `[100, 100, 0, 0, 30]`, and `num_frames=81`. Studio job `studio-00011` generated `recammaster.mp4` with sha256 `55e1323b8c764f361c65b1b1945946d9bb4c2ebdb6f2806a7f297d43716cb7b5`; the artifact decodes as 81 non-empty 832x480 frames and visually preserves the motorcycle bridge/road scene under camera motion. | This is official camera-trajectory demo validation, not full benchmark scoring. |
-| `worldfm` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with official `worldfoundry/data/test_cases/worldfm/meta.json`, `fps=30`, and `save_mode=video`. Studio job `studio-00012` generated `worldfm.mp4` and `worldfm_scene/output.mp4` with sha256 `f9b158fc44c3287f08620e681f44702e31e88ac359c00fb035e5a26c4cb8987d`; the video decodes as 4 non-empty 512x512 frames and `worldfm_scene/panorama.png` is 1920x960. Visual QA confirmed the Mario-style indoor panorama and video frames are consistent. | The official meta demo is short by design; longer scene sweeps remain separate validation. |
-| `warp-as-history` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in the dedicated `warp-as-history` conda environment. The run used the vendored official BMX/graffiti first frame, warp video, and visibility mask with prompt `A cyclist riding past a colorful graffiti wall beside trees and tall grass, urban BMX scene, with camera movement.`, `num_frames=33`, `fps=16`, `height=384`, `width=640`, and `seed=42`. Studio job `studio-00016` generated `warp-as-history.mp4` with sha256 `cd8cff7babee370497a56d5cc0718f975b17bcf1eab1a9002262da502d21d25a`; the artifact decodes as 33 non-empty 640x384 frames and visual QA shows a cyclist moving along the graffiti wall. | This model intentionally uses its dedicated conda profile because of official torch/Python pins. |
-| `fantasyworld-wan21` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` with the in-tree Wan2.1 official camera-world route: bundled Studio demo image, `worldfoundry/data/test_cases/fantasyworld/camera_forward.json`, prompt `A coherent fantasy harbor world with stable geometry during a forward camera move.`, `fps=16`, `seed=1024`, `using_scale=true`, `conf_threshold=1.0`, and `stride=4`. Patched-workspace job `studio-00004` generated `fantasyworld-wan21.mp4` with sha256 `5ff6d8f6723a7fa1950333a0c6d3d2c5ac3576710f9dd34e5a23581c06800044`; the artifact decodes as 81 non-empty 592x336 frames at 16 fps. It also wrote `image/recon_confthresh1.0.ply` with sha256 `778436734adc6405077245eddedba96700257cebea7089d4caf559fe77cd924c` and 1006992 vertices. Visual QA shows continuous forward camera motion through a fantasy jungle/castle scene. | This verifies only the Wan2.1 variant. Wan2.2 remains pending because the official single-GPU run hit A100 80GB OOM. |
-| `fantasyworld-wan22` | Studio workspace job `studio-00018` attempted the in-tree Wan2.2 official camera-world route on June 26, 2026 in `worldfoundry-unified-cu128`, with local FantasyWorld, Wan2.2 Fun, LoRA, and MoGe assets. The run failed during model forward with CUDA OOM after the process occupied roughly 79GB on one A100. | Not verified. Re-run with the official memory strategy, likely multi-GPU/offload or a documented lower-memory official configuration, before promoting this model. |
-| `skyreels-v3` | Studio workspace `/api/jobs` actual inference passed on June 26, 2026 in `worldfoundry-unified-cu128` after building `flash-attn==2.8.3.post1`. The run used the official USP shape through the in-tree runtime's internal `torchrun --nproc_per_node=8`: `task_type=reference_to_video`, `duration=5`, `resolution=720P`, `seed=42`, `use_usp=true`, and the in-tree Studio reference image. The generated `skyreels-v3.mp4` has 121 non-empty 720p frames, nonzero frame-to-frame motion, and a visually valid first-person jungle/castle preview. The docs demo asset is `/demos/studio/skyreels-v3-reference-to-video.mp4`. | Full benchmark scoring remains separate from this demo-parity validation. USP requires flash-attn and at least the requested multi-GPU allocation. |
-| `wan2.1-vace` | Studio workspace `/api/jobs` actual inference passed on June 28, 2026 through job `studio-00178` with the official VACE-14B command shape: 8-rank torchrun, 1280x720, 81 frames, 50 sampling steps, DiT/T5 FSDP, Ulysses size 8, ring size 1, local `Wan2.1-VACE-14B`, and in-tree girl/snake reference images. Output `wan2-1-vace.mp4` has sha256 `6eb8a4daf3a0234787afe538a23aba5b455c866f609378b1e827680792139c78`; it decodes as 81 non-empty 1280x720 frames at 16 fps and 5.06 seconds. Visual QA shows the official girl in red spring clothing with a green cartoon snake across sampled frames. Docs asset `/demos/studio/wan2-1-vace-girl-snake.mp4` was refreshed from this run. | This is official demo-parity inference validation; full suite benchmarking remains separate. |
-| `ltx_video_i2v` | Studio/API inference run `20260625-142135-586864-ltx-video-i2v` passed in `worldfoundry-unified-cu128` with local `LTX-Video` assets, penguin reference image, `fps=24`, `guidance_scale=3.0`, `height=480`, `width=832`, `num_frames=96`, `num_inference_steps=30`, and `seed=0`. Docs asset `/demos/studio/ltx-video-i2v-penguin.mp4` probes as a nonblank 89-frame 832x480 video at 24 fps. | This validates the Studio I2V demo route only; broader upstream LTX-Video parity is separate. |
-| `ltx2_i2v` | Studio/API inference run `20260627-095951-872490-ltx2-i2v` passed in `worldfoundry-unified-cu128` with local LTX-2 assets, the dragon/castle reference image, `fps=16`, `guidance_scale=4.0`, `height=480`, `width=832`, `num_frames=17`, `num_inference_steps=8`, and `seed=114`. The generated `ltx2-i2v.mp4` has sha256 `174d3a4ca40c053e92c96d67d5ab2639b4ef6338da44244fffeeb802c5b71660` and decodes as 17 nonblank 832x480 frames at 16 fps. Visual QA shows the reference scene preserved with stable motion. | This validates the LTX-2 I2V Studio/API route. T2V/V2V variants remain separate. |
-| `ltx2_3_i2v` | Studio/API inference run `20260625-152240-287232-ltx2-3-i2v` passed in `worldfoundry-unified-cu128` with local LTX-2.3 distilled checkpoint, penguin reference image, `fps=24`, `guidance_scale=1.0`, `height=512`, `width=768`, `num_frames=121`, `num_inference_steps=8`, and `seed=10`. Docs asset `/demos/studio/ltx2-3-i2v-penguin.mp4` probes as a nonblank 121-frame 768x512 video at 24 fps. | T2V and V2V LTX-2.x variants remain profile-only until scoped wrappers are validated. |
-| `magi-1` | Studio/API job `studio-00024` on June 27, 2026 validated the in-tree MAGI-1 I2V route with official example image/config assets, local `sand-ai/MAGI-1` checkpoint, 4.5B distill profile, 8 sampling steps, fps=24, and seed=1234. Output `magi-1.mp4` has sha256 `94e7b57bd3cae491e1852d146a73f3ee0fce0e917160692453e2affe9a27ea11`; it decodes as a coherent 24-frame 720x720 video at 24 fps. | The official runtime padded the requested short frame count to 24 frames. This is bounded Studio validation evidence, not exhaustive long-config parity. |
-| `mochi-1-preview-t2v` | Studio/API validation run `20260627-090106-334112-mochi-1-preview-t2v` passed in `worldfoundry-unified-cu128` with local `genmo/mochi-1-preview`, 13 frames, 848x480, fps=16, and a greenhouse/grass prompt. Output `mochi-1-preview-t2v.mp4` has sha256 `1fc26f30d9360538f8e52ff0599b7d055633df7479e36b475356f41d7ca58dbd`; visual QA shows a coherent greenhouse/grass clip. | Full official 31-frame / 64-step Mochi preview parity remains pending. |
-| `hunyuanvideo-1.5-t2v` | Native in-tree `generate.py` bounded validation run `tmp/worldfoundry_studio/runs/hunyuanvideo-1-5-native-t2v-demo-8step` passed on June 26, 2026 in `worldfoundry-unified-cu128` with `torchrun --nproc_per_node=8`, local `HunyuanVideo-1.5` assets, cat-on-snow prompt, `resolution=480p`, `video_length=9`, `num_inference_steps=8`, `cfg_distilled=true`, and `seed=42`. Output sha256 `c8629c9b801e5b723da7a2124c99091f444a50b293dddc53b36573376971b0dc`; the artifact probes as a nonblank 9-frame 848x480 video at 24 fps and visually shows a cat walking on a snowy street. | Internal bounded validation only. Do not present this artifact as a public official-demo result; use the 129-frame Studio demo asset on the Studio page for public visual examples. |
-| `hunyuanvideo-1.5-i2v` | Native in-tree `generate.py` bounded validation run `tmp/worldfoundry_studio/runs/hunyuanvideo-1-5-native-i2v-demo-8step` passed on June 26, 2026 in `worldfoundry-unified-cu128` with `torchrun --nproc_per_node=8`, local `HunyuanVideo-1.5` assets, input `worldfoundry/data/test_cases/hunyuanvideo_i2v/0.jpg`, `resolution=480p`, `video_length=9`, `num_inference_steps=8`, `enable_step_distill=true`, and `seed=0`. Output sha256 `bf75a3cc474a563d386c07091cb3a21e2d20fc6f9b4fa88c6234b91f0c35825f`; the artifact probes as a nonblank 9-frame 544x720 video at 24 fps and visually preserves the portrait/building/firework scene. | Internal bounded validation only. Do not present this artifact as a public official-demo result; use the 129-frame Studio demo asset on the Studio page for public visual examples. |
-| `hunyuanvideo-t2v` | Studio workspace `/api/jobs` official-demo parity passed after restoring the in-tree `official_hunyuan_video_runtime` T2V source to match `Tencent-Hunyuan/HunyuanVideo`. The run uses the upstream multi-GPU recipe: `torchrun --nproc_per_node=8`, prompt `A cat walks on the grass, realistic style.`, `height=720`, `width=1280`, `num_frames=129`, `num_inference_steps=50`, `flow_shift=7.0`, `embedded_cfg_scale=6.0`, `ulysses_degree=8`, `ring_degree=1`, `seed=42`, and local `${WORLDFOUNDRY_CKPT_DIR}/HunyuanVideo`. Output sha256 is `494d709d633bf024c82c47029e26c8adedd4a715e1f9f45aac5c1ff7e9057f6a`; it decodes as 129 non-empty 1280x720 frames at 24 fps and is byte-identical to a clean official-repo comparison run. Visual QA shows the official cat-on-grass sequence from the first frame onward. Docs asset `/demos/studio/hunyuanvideo-t2v-cat-grass-official.mp4` was refreshed from this verified Studio output. | This is release demo-parity evidence for the T2V variant. The earlier short modified-runtime run with a noisy first frame is superseded; the fix removed the modified T2V runtime path and stopped passing the unsupported `--fps` CLI argument to the official script. |
-| `hunyuanvideo-i2v` | Studio workspace `/api/jobs` official-demo validation passed on June 28, 2026 after adding the in-tree HunyuanVideo I2V runtime and registering the `HunyuanVideoI2VPipeline` entry. The run uses the upstream 8-rank stability recipe: `torchrun --nproc_per_node=8`, prompt `An Asian man with short hair in black tactical uniform and white clothes waves a firework stick.`, input `worldfoundry/data/test_cases/hunyuanvideo_i2v/0.jpg`, `i2v_resolution=720p`, `num_frames=129`, `num_inference_steps=50`, `flow_shift=7.0`, `embedded_cfg_scale=6.0`, `ulysses_degree=8`, `ring_degree=1`, `seed=0`, and local `${WORLDFOUNDRY_CKPT_DIR}/HunyuanVideo-I2V`. Output sha256 is `98e12d66610bbb4c646a4963110c020dcf98ad030170679a9bd72aa695df26b9`; it decodes as 129 non-empty 864x1024 frames at 24 fps. The scripted WorldFoundry runner path `scripts/model_zoo/run_hunyuanvideo_i2v_worldfoundry_runner_demo.sh` reproduced the same artifact sha256. Visual QA against the upstream demo asset shows the same portrait/building/firework scenario with coherent motion and no blank frames. Docs asset `/demos/studio/hunyuanvideo-i2v-firework-official.mp4` was refreshed from this verified Studio output. | This validates the original HunyuanVideo I2V Studio/API route with the official long demo recipe. The output aspect follows the upstream portrait reference image and xDiT resize behavior, so it is not expected to be 1280x720. |
-| `unianimate-dit` | Studio workspace `/api/jobs` actual inference passed on June 28, 2026 in `worldfoundry-unified-cu128` through the in-tree UniAnimate-DiT official USP path. Job `studio-00172` used the official 480p human-animation demo shape with local UniAnimate-DiT and Wan2.1-I2V assets, `max_frames=81`, `height=832`, `width=480`, `num_inference_steps=50`, `seed=0`, `use_usp=true`, and `nproc_per_node=4`. Output `unianimate-dit.mp4` has sha256 `57455c3500a00c188592cb655f0337eedf66004913ca08b2e23470b25dcaed06`; it decodes as 81 non-empty 1440x832 frames at 15 fps with mean adjacent frame diff `5.082765761017799`. Visual QA shows a valid pose-conditioned human animation, and the Studio `/video` and `/image` endpoints return range responses. Docs asset `/demos/studio/unianimate-dit-human-animation.mp4` was refreshed from this run. | This verifies the in-tree 4-rank USP Studio/API route. Full human-animation benchmark scoring remains separate. |
-| `open-sora` | Studio workspace `/api/jobs` validation passed on June 27, 2026 on the 7870 workspace after removing the incorrect local `t5-11b` override that caused a 4096/1024 caption-channel mismatch. Job `studio-00165` used the official Open-Sora v1.2 config shape with `DeepFloyd/t5-v1_1-xxl`, local `OpenSora-STDiT-v3`, local OpenSora VAE, 51 frames, 240p, 30 sampling steps, cfg 7.0, aes 6.5, flow 5, and seed 42. It generated `open-sora.mp4` with sha256 `ae9b8c0e74300519c2628c20e09d1672e838889a312a2693647eb199053d083a`; the artifact decodes as 51 non-empty 432x240 frames at 24 fps with mean adjacent frame diff `2.9100781250000005`. Visual QA shows a coherent neon rainy street with reflections and stable buildings. | This validates the in-tree Open-Sora Studio/API route. Motion is subtle at this bounded setting; longer official-quality runs remain separate. |
-| `open-sora-plan` | Studio workspace `/api/jobs` actual inference passed on June 28, 2026 in `worldfoundry-unified-cu128` after aligning the in-tree runtime with the official v1.3 GPU demo. Job `studio-00174` used `LanguageBind/Open-Sora-Plan-v1.3.0`, official `mt5-xxl`, the Tokyo street prompt from `examples/sora.txt`, `torchrun --nproc_per_node=8`, `num_frames=93`, `height=352`, `width=640`, `fps=18`, `guidance_scale=7.5`, `num_sampling_steps=100`, `sample_method=EulerAncestralDiscrete`, and `seed=1234`. Output `open-sora-plan.mp4` has sha256 `66df2331b08b6818d17982b9c1ff3523385d6cc742865ef6a5ec6a5429d6c2ab`; it decodes as 93 non-empty 640x352 frames at 18 fps with mean adjacent frame diff `5.89398494112319`. Visual QA shows the expected neon Tokyo street, woman in red dress/black jacket, reflections, and continuous walking motion. Studio `/video` and `/image` endpoints return range responses, and docs asset `/demos/studio/open-sora-plan-tokyo-street.mp4` was refreshed from this run. | This verifies the in-tree Studio/API route with the official demo recipe. Fixes applied: use official `mt5-xxl` instead of `umt5-xxl`, gather variable per-rank sample counts in non-SP torchrun, and prefer the single-prompt artifact over the padded grid video. |
-| `zeroscope` | Studio workspace `/api/jobs` short validation passed on June 26, 2026 in `worldfoundry-unified-cu128` with `cerspense/zeroscope_v2_576w`, prompt `research rover red desert under dusty sunset, slow cinematic pan, stable vehicle geometry`, `frames=8`, `fps=8`, `height=256`, `width=448`, `num_inference_steps=8`, and `seed=301`. Studio job `studio-00018` generated `zeroscope.mp4` with sha256 `9170ac3b553168af17e912885178747f12932f10a6bae68f212b3722d9de8bdb`; it decodes as 8 non-empty 448x256 frames with mean adjacent frame diff `3.7503609657287598`. Visual QA shows a red-desert rover scene matching the prompt. | This is a short Studio validation for the in-tree route; older ad-hoc parity scripts are not packaged. |
-| `modelscope-t2v` | Studio/API inference run `20260625-035911-217392-modelscope-t2v` passed in `worldfoundry-unified-cu128` with local `modelscope-damo-text-to-video-synthesis`, panda river prompt, `fps=8`, and `seed=42`. Studio job `studio-00019` on the 7876 workspace also passed on June 26, 2026 with a greenhouse rainstorm prompt, `fps=8`, `seed=302`, and sha256 `04e84f381e02b3ea7f9f822591a0aaa62eed7c527066ebb193c737005e17010e`; the artifact decodes as 16 non-empty 256x256 frames with mean adjacent frame diff `4.229966640472412`. | The selected ModelScope route emits 256x256 frames even when a wider size is requested. Checkpoint license remains non-commercial per HF metadata. |
-| `animatediff` | Studio workspace `/api/jobs` short validation passed on June 26, 2026 in `worldfoundry-unified-cu128` after fixing current diffusers/transformers checkpoint-key compatibility for VAE attention (`query/key/value/proj_attn` to `to_q/to_k/to_v/to_out.0`) and CLIP `position_ids`. Studio job `studio-00022` used prompt `snowy street market at night with lanterns, cinematic camera movement, detailed people silhouettes`, `frames=8`, `fps=8`, `height=256`, `width=448`, `num_inference_steps=8`, and `seed=303`; it generated `animatediff.mp4` with sha256 `0d2eaaf05117edbcea9735ca079eafcd2f7b5e84150381a7fcc4733a6e2d50bb`. The artifact decodes as 8 non-empty 448x256 frames with mean adjacent frame diff `8.168740272521973`; visual QA shows a snowy lantern-lit street market matching the prompt. | Official default artifact parity is still recorded separately in the catalog; this row validates the current Studio/API route in the unified env. |
-| `videocrafter1_i2v`, `videocrafter1_t2v`, `videocrafter2_t2v` | Studio/API runs `20260624-110643-120154-videocrafter1-i2v`, `20260624-125058-282785-videocrafter1-t2v`, and `20260624-125058-282694-videocrafter2-t2v` passed in `worldfoundry-unified-cu128` with local VideoCrafter checkpoints. The artifacts probe as nonblank videos: 16 frames at 512x320 for VC1 I2V, 16 frames at 1024x576 for VC1 T2V, and 16 frames at 512x320 for VC2 T2V. | Bounded Studio/API validation evidence only; exhaustive upstream VideoCrafter parity remains a longer validation stage. |
-
-## Current Geometry Studio Validation Notes
-
-| Model id | Evidence | Current blocker |
-| --- | --- | --- |
-| `unidepth-v2-prior` | Workspace CLI actual inference passed on July 1, 2026 in `worldfoundry-unified-cu128` using `worldfoundry/data/test_cases/images/000.png`. The run wrote `depth.npy`, `depth_preview.png`, `point_cloud.ply`, and `scene.rrd`; the preview is nonblank, `point_cloud.ply` declares 5000 vertices, `scene.rrd` is present, and the PLY sha256 is `7fe3a73bfa7d17ba34db49511dbdd385aba704c909e93093f689fc13956955cc`. Workspace metadata reports `has_points_cloud=true`, `has_rrd=true`, `has_viser=true`, recommended viewport `points`. | This validates the geometry-prior Studio artifact contract. Metric-scale depth accuracy remains benchmark-dependent. |
-| `unik3d-prior` | Workspace CLI actual inference passed on July 1, 2026 in `worldfoundry-unified-cu128` using `worldfoundry/data/test_cases/images/003.png`. The run wrote `depth.npy`, `depth_preview.png`, `point_cloud.ply`, and `scene.rrd`; the preview is nonblank, `point_cloud.ply` declares 5000 vertices, `scene.rrd` is present, and the PLY sha256 is `95bd307c21f8eff9f42deafa172cb10e750ba852a28ee4f19fd63ba0bcdc4763`. Workspace metadata reports `has_points_cloud=true`, `has_rrd=true`, `has_viser=true`, recommended viewport `points`. | This validates the geometry-prior Studio artifact contract. Metric-scale depth accuracy remains benchmark-dependent. |
-
-## Current Image and Action Studio Validation Notes
-
-| Model id | Evidence | Current blocker |
-| --- | --- | --- |
-| `show-o` | Studio workspace `/api/jobs` actual inference passed on June 27, 2026 in `worldfoundry-unified-cu128` using the in-tree Show-O runtime. Job `studio-00005` on the isolated 7879 workspace used prompt `a clean studio photo of a red teapot on a white table`, generated `show-o.png` at 512x512 with sha256 `5d6b92304b6c1789b2d05d33777470ebf77a70abec1c53be82727fdb27968153`, and visual QA confirmed a clear red teapot on a white table. The same run also verified `/api/jobs/studio-00005/image` returns `200 image/png` for a registered artifact path outside the workspace root. | This validates the T2I Studio route and the artifact preview fix. More Show-O modes remain separate validation items. |
-| `molmoact2` | Studio workspace `/api/jobs` actual action inference passed on June 27, 2026 in `worldfoundry-unified-cu128` for all configured MolmoAct2 variants. DROID job `studio-00007` wrote `droid_action.json` with `action_shape=[15, 8]`, sha256 `c8ae3bb3ee07abbff216c7665387e358fb3388f7c11cc9803e7e91953d46a4d6`, and nonzero actions. Follow-up API jobs `studio-00009` through `studio-00012` verified YAM `[30, 14]` sha256 `7014a43290d922bcd4698ee79e7ffcffe51c0dd4200956d079dd9e83085814dc`, SO100 `[30, 6]` sha256 `3768b4316c4cc4132a6aafee794c8c7272e328fe22c1ee636771dd08ad07832c`, LIBERO `[10, 7]` sha256 `c27c9398fb02353388deee0d75fb9ac5755ff0cb2e9eac92a3fe049a0d7b8bdb`, and Think-LIBERO `[10, 7]` sha256 `39c006956a1779f2114da880e41256d8c220d818c8b80990e76e17dea77d7a7c`; each trace reports `backend_quality=official_hf_in_tree_runtime`. | All configured MolmoAct2 Studio/API action variants are checkpoint-backed verified. Nonfatal torchao extension warnings were observed but did not block inference. |
-| `starvla` | Workspace CLI actual action inference passed on July 1, 2026 in `worldfoundry-unified-cu128` through the in-tree StarVLA source under `worldfoundry/synthesis/action_generation/starvla`. The run loaded local `Qwen3-VL-OFT-LIBERO-4in1` plus `Qwen3-VL-4B-Instruct`, used `enable_official_runtime=true`, generated `starvla.json` with sha256 `124aabb03400b643ba9929bbc4b321afa45cd240eae1f94dce45b49a625a9f46`, backend `official.starVLA.baseframework.predict_action`, and action shape `[1, 8, 7]`. | QwenOFT LIBERO action inference is verified. The WM4A/Wan2d2 variant still needs a separate promoted world-action runtime run. |
-| `gr00t` | Workspace CLI actual action inference passed on July 1, 2026 in `worldfoundry-unified-cu128` with local `GR00T-N1.7-LIBERO/libero_10` and the in-tree GR00T runtime. The run generated `gr00t.json` with sha256 `766bc57c30da796ae37d05786bfe0d019f43ff820cd5f9bcd04ccb1c71444867`, backend `worldfoundry.gr00t.in_tree_runtime.predict_action`, `artifact_kind=action_trace`, and `backend_quality=official_checkpoint_wrapper`. | This validates the LIBERO checkpoint wrapper path. Broader humanoid/mobile manipulation tasks and simulator scoring remain separate. |
-| `lapa` | Workspace job `studio-00205` passed on July 12, 2026 in the isolated `worldfoundry-lapa-jax-cu118` environment. The official LAPA-7B OpenX JAX runtime ran on GPU and generated `latent_action_tokens=[[5,5,7,3]]`; `lapa.json` sha256 is `a0cbd50e790366c936818f250677881b5574d51e20b1a6de9512e42a7ed669c7`. | This validates the LAPA action-token route and automatic isolated-environment dispatch. Policy rollout or simulator scoring remains separate. |
-| `molmobot` | Workspace job `studio-00202` loaded the official MolmoBot DROID checkpoint in `worldfoundry-unified-cu128` and consumed exterior/wrist images, robot state, and instruction. It generated 16 distinct finite 8-DoF actions; `molmobot.json` sha256 is `439039379e0709d25fb129129bfbd3c065e359d750d16a36a971ea395af246fe`. | Checkpoint-backed DROID action inference is verified. Robot rollout success remains simulator-dependent. |
-| `vlanext` | Workspace job `studio-00211` loaded the local Qwen3-VL backbone (625/625 tensors) and VLANeXt LIBERO checkpoint with zero missing/unexpected keys. The offline inference generated eight distinct finite 7-DoF actions; `vlanext.json` sha256 is `31a9c280b7348ad460f052a8e3fced08504e4e225a3a750f3ec04e754434b1b1`. | The Transformers 5.3 modality-token compatibility route and LIBERO checkpoint inference are verified. Simulator scoring remains separate. |
-| `mme-vla` | Workspace job `studio-00213` ran the official perceptual/frame-sampling/modulation policy in `worldfoundry-unified-cu128`. Memory initialization follows the upstream challenge adapter; the hash-identical local PaliGemma tokenizer avoids GCS access. It generated 20 distinct finite 8-DoF actions; `mme-vla.json` sha256 is `606bd0e5daf0703c51c4f3279502a5e88d7a49b961b8d99ab67c7976523a73d0`. | Checkpoint-backed memory-augmented inference is verified. Full RoboMME environment success rates remain benchmark work. |
-| `openvla` | Studio workspace `/api/jobs` actual action inference passed on June 27, 2026 in `worldfoundry-unified-cu128` with the in-tree OpenVLA HF runtime and a local checkpoint under `${WORLDFOUNDRY_HFD_ROOT}` (for example `openvla/openvla-7b`). Job `studio-00009` generated `openvla.json` with sha256 `923b5a8aa351a7e4eddd4fb3c6871530158556828a24e1acdc78d920bc8bab25`, backend `worldfoundry.openvla.in_tree_runtime.predict_action`, and one 7-D robot action. July 1, 2026 Workspace CLI recheck also passed with local `/ckpt/openvla-7b`, sha256 `e964e47433303df559fdce8e32529d3bf73a49b43ebb262202df6584f63d6bbd`, and one 7-D action. | The default base checkpoint route is verified. Dataset-specific fine-tuned variants should still record their own checkpoint and `unnorm_key` evidence. |
-| `openvla-oft` | Workspace CLI actual action inference passed on July 1, 2026 through the in-tree OpenVLA-OFT runtime, dispatched to the dedicated `worldfoundry-vla-openvla-compat-cu121` profile. The default LIBERO observation now provides `full_image`, `wrist_image`, 8-D `state`, `task_description`, `task_suite_name=libero_spatial`, and `unnorm_key=libero_spatial_no_noops`. The run generated `openvla-oft.json` with sha256 `1857f3a0f77b0bdfd432fd176c6ca011973e01c859a0c4453f49ba2af40ffb8e`, `backend_quality=checkpoint_backed`, and action shape `[8, 7]`. | This verifies the official-style dual-image LIBERO action-chunk route. Other LIBERO task-suite checkpoints should still record their own `unnorm_key` and checkpoint evidence. |
-| `cogact` | Workspace job `studio-00190` passed on July 12, 2026 in `worldfoundry-vla-openvla-compat-cu121` with local `CogACT--CogACT-Base/checkpoints/CogACT-Base.pt`, the official Bridge image/prompt contract, `cfg_scale=1.5`, DDIM, and 10 steps. The inference-only loader reused the staged OpenVLA Llama tokenizer and generated a finite, temporally varying `[16, 7]` action chunk; `cogact.json` sha256 is `f57a43ebdf1488445fc5514bff1ff55626b49fa2de01b0a9c87d2deadcc42cff`. | CogACT-Base checkpoint-backed action inference is verified. Other checkpoint sizes and simulator success rates remain separate validation items. |
-| `db-cogact` | Workspace CLI actual action inference passed on July 1, 2026 in `worldfoundry-unified-cu128` after adding the in-tree `dexbotic` package alias for upstream imports. The run used local `Dexmal/libero-db-cogact` assets, generated `db-cogact.json` with sha256 `2a9d8e0498d5d80d3251e766c58611a8c09cccceefdb01b6310c0e7ff5b7e56f`, `backend_quality=checkpoint_backed`, and action shape `[1, 16, 7]`. | This validates the DB-CogACT LIBERO checkpoint route without an external Dexbotic checkout or server. CALVIN and Simpler checkpoint variants need their own validation rows. |
-| `openpi` | Studio workspace `/api/jobs` actual action inference passed on June 27, 2026 in `worldfoundry-unified-cu128` with the in-tree OpenPI trained-policy wrapper and local `openpi-assets/checkpoints/pi05_libero` assets. Job `studio-00006` generated `openpi.json` with sha256 `23ba01b93d361dc74fc8bbab254564853476e75c537db4cadd55f31fb1494888`, backend `worldfoundry.openpi.in_tree_runtime.create_trained_policy_infer`, and an action trace with shape `[10, 7]`. July 1, 2026 Workspace CLI recheck also passed with sha256 `4a98e07f758570d8a3ca6f98da26f7423068880c193251d693e621b3a8ccf5ac`, `backend_quality=official_demo`, and action shape `[10, 7]`. | GCS warning logs from `big_vision` were nonfatal. Other OpenPI policy checkpoints still need their own validation rows. |
-| `octo` | Studio workspace `/api/jobs` actual action inference passed on June 27, 2026 after adding in-tree compatibility aliases for checkpoint configs that still reference `octo.data.utils.*`. Retry job `studio-00012` ran in the dedicated `worldfoundry-octo-jax` profile with local `octo-small-1.5`, generated `octo.json` with sha256 `43d015b6794e6470fa073dc321a1a82cf3890a359b4a3e27a6c509378ede53db`, backend `worldfoundry.octo.in_tree_runtime.sample_actions`, and action shape `[1, 4, 7]`. | Octo remains a justified JAX environment exception; this run fell back to CPU JAX because the current env lacks CUDA-enabled `jaxlib`. GPU Octo sampling should be rechecked if the JAX CUDA wheel is changed. |
-| `diffusion-policy` | Studio workspace `/api/jobs` actual action inference passed on June 27, 2026 after adding the in-tree inference-only `TrainDiffusionUnetLowdimWorkspace` needed by the official checkpoint target. Retry job `studio-00013` used the published low-dimensional PushT checkpoint `epoch=0550-test_mean_score=0.969.ckpt`, wrote `diffusion-policy.json` with sha256 `b0decb9c2f45f49460df5115b3394161e9362ebc7da007a9657737015fdbfdab`, backend `worldfoundry.diffusion_policy.in_tree_runtime.predict_action`, and action shape `[1, 8, 2]`. July 1, 2026 Workspace CLI recheck also passed with sha256 `2493674064e3ade36ea8daaa306002daa080bdf9b7a1eb1bb4af6dfbe8377804`, `action` shape `[1, 8, 2]`, `action_pred` shape `[1, 16, 2]`, `obs_pred` shape `[1, 16, 20]`, and `action_obs_pred` shape `[1, 8, 20]`. | This validates the low-dim PushT official checkpoint path. Image-conditioned or different-task Diffusion Policy checkpoints need separate observation schemas and validation. |
-| `open-magvit2` | Workspace job `studio-00187` passed on July 12, 2026 with the full 256-token autoregressive decode for ImageNet class 207. It generated a nonblank 256x256 golden-retriever image with sha256 `c2f015b24e430d79a304a5528d30734cbdfd106ae969e10ddd64bc89a8b05e65` and passed semantic visual QA. | The default class-conditional image route is verified; the earlier 64x64 bounded smoke output is superseded. |
-| `dvlt` | Workspace job `studio-00184` generated a finite 5,000-point Sydney Opera House reconstruction plus a 117-vertex camera overlay in `dvlt.glb`, sha256 `8e211e474a682f958cac70227f090550857d1db140a9e0d49323c833ab633349`. A real 1440x1000 Playwright Chromium session opened the artifact in Viser, confirmed both scene layers, and exercised reset-view and orbit drag. | The checkpoint-backed geometry and browser visualization route are verified. Benchmark depth/pose accuracy remains a separate evaluation. |
-| `raft` visualization | The in-tree official RAFT-Things checkpoint ran on GPU over two real robot-video frames and produced finite optical flow shaped `[384,640,2]`, median magnitude `0.4476`, and maximum magnitude `134.5713`. The Middlebury-color output sha256 is `f72d4e16ad74f7d434ff58a5cbe660aed9dd7d5f77a36e468e09ae8ba5d49084`. | Model inference, structured artifact, shared renderer, and nonblank visual inspection passed. |
-| `grounding-dino` visualization | The in-tree Swin-T model loaded the local official checkpoint and BERT encoder, detected five `robot` regions in a real manipulation frame, and rendered clipped `xyxy` boxes. The rendered PNG sha256 is `3c245a0adf171aae7c7f3622e50696fcce5f211113559379c90fcd6c990c98a0`. | Transformers 5 compatibility, local text encoder routing, inference, and visual inspection passed. |
-| `sam-v1` visualization | The official SAM ViT-B checkpoint ran on GPU with a box prompt and returned a finite nonempty `384x640` mask with area `36,749` and predicted quality `0.8841`. The overlay PNG sha256 is `27cce5112e1adda905c3586a77f64e0fde6bf079797a16b8768358e2d2d8bfe2`. | Checkpoint inference, mask artifact, overlay, and visual inspection passed. |
-| `dinov2` visualization | Local `facebook/dinov2-base` assets ran on GPU and produced finite patch features shaped `[16,16,768]` with standard deviation `1.6619`. The shared PCA visualization sha256 is `e63f9266c179543f93896962b35d3701a3fce559e07211736d80c9ff09655cb6`. | Feature extraction, structured artifact, PCA renderer, and visual inspection passed. |
-| `cotracker` visualization | The official CoTracker2 checkpoint ran on GPU over 16 real robot-video frames and produced 100 finite tracks with `0.795` visible fraction and maximum step `32.3385` pixels. Both the dependency-light official Visualizer and shared CLI renderer produced valid videos; the 16-frame CLI output sha256 is `2ec010f4f4c909e2bad9829c7992e867abf81e21f38f0fc98f1bc5496d91f8f1`. | Checkpoint tracking, official renderer, shared renderer, video decode, and sampled-frame visual inspection passed. |
-| `moge` visualization | MoGe-2 ViT-L Normal ran on GPU with local official assets and returned finite `384x640` depth and normals. Depth spans `0.5573..2.3255`; the mean normal norm is `1.0`. Shared CLI depth and normal renders were visually checked for continuous surfaces and correct object boundaries. | Checkpoint inference, structured depth/normal artifacts, CLI rendering, and visual inspection passed. Point-cloud/mesh browser validation remains a separate promoted run. |
-| `vfimamba` visualization | The local official VFIMamba checkpoint generated a finite `384x640` midpoint with standard deviation `49.9833`; normalized distances to the two real input frames were `0.05350` and `0.05303`. The interpolation video and input/midpoint/output contact sheet were visually inspected. | Checkpoint-backed interpolation and media visualization passed. Fast-motion regions retain expected interpolation blur. |
-| `tag2text` visualization | The official 4.48 GB Tag2Text checkpoint ran in `worldfoundry-unified-cu128` after Transformers 5 compatibility fixes. For the robot manipulation frame it produced caption `a robot that is sitting on a table` and tags `robot | table | machine`; the shared text renderer and CLI overlay were visually checked. | Checkpoint inference, local BERT routing, text artifact, and overlay passed. |
-| `depth-anything-v2` visualization | The official ViT-S checkpoint produced finite affine disparity shaped `384x640`, range `0..7.8314`, standard deviation `1.9236`. The direct relative-depth render sha256 is `4d5b126b91e4da6d219c315ae54c74670ff6de47a507d3c9992e08d3caa9fa00` and passed visual inspection. | Checkpoint inference, structured depth artifact, output-contract-aware shared rendering, and visual inspection passed. |
-| `efficient-sam` visualization | EfficientSAM ViT-S ran on GPU with the detected robot box prompt and returned a finite nonempty `384x640` mask with area `60,670` and predicted IoU `0.9086`. The overlay sha256 is `67df84945f376309cb0e59868bf2a91c48ac0bea6fe89bbd41e1671e38c07a53`. | Checkpoint segmentation, structured mask artifact, overlay, and visual inspection passed. |
-| `mobile-sam` visualization | The official TinyViT checkpoint ran on GPU with a box prompt and returned a finite nonempty `384x640` mask with area `53,285` and predicted quality `0.9141`. The overlay sha256 is `ed6b23a7a7f026c8265bc6c5764ff691053c7cec7e0881ea512e1a9a0ede0f47`. | Checkpoint inference, unified asset resolution, mask artifact, shared renderer, and visual inspection passed. |
-| `repvit-sam` visualization | The official RepViT-SAM v1.0 checkpoint ran on GPU and returned a finite nonempty `384x640` mask with area `65,384` and predicted quality `0.9224`. The overlay sha256 is `423e7866d2343f5a42475aac7c4c98d822daef7cb0461569bfb23f3a3cc0ea2f`. | Checkpoint inference, unified asset resolution, mask artifact, shared renderer, and visual inspection passed. |
-| `sam2` visualization | The official SAM2.1 Hiera base-plus checkpoint ran on GPU after restoring the upstream Hydra global-package contract and rewriting official `sam2.*` targets to the in-tree package. It returned a finite `384x640` box-prompt mask with area `28,666`; the overlay sha256 is `5643536efbe76544d21b1925131ff7f1546c24db79f4490313ffd594cd7eb9ff`. | In-tree config instantiation, checkpoint load, mask inference, shared renderer, and visual inspection passed. |
-| `midas-v2.1-small` visualization | The official MiDaS v2.1 Small 256 checkpoint ran on GPU through the in-tree loader without `torch.hub`. Its finite `384x640` relative inverse-depth output spans `104.9635..839.8524` with standard deviation `209.2751`; direct rendering places near robot arms ahead of the distant wall. The PNG sha256 is `f880adc0f1610c2338c4ddfb9c2d440d52e8f575494ee81cf2bcbd584988c2c2`. | Checkpoint load under current timm, structured depth artifact, shared renderer, and visual inspection passed. |
-| `unidepth-v2-prior` visualization | Workspace job `studio-00222` ran the official local ViT-L model on GPU and exported 50,000 official model points rather than reprojecting depth. The PLY sha256 is `f470e6a1b24715b4141a001772c233616ebc8d024f5af5f51bb89d8d7a735111`; metadata declares camera-frame `x-right/y-up/z-forward`. Viser at 1440x1000 showed an upright robot-table scene, no console errors, and a changed canvas after orbit. | Checkpoint-backed Workspace inference, metric depth, official point export, coordinate alignment, browser rendering, and interaction passed. |
-| `unik3d-prior` visualization | Workspace job `studio-00221` ran the official local ViT-L model with `camera_model=auto` and exported 50,000 official points; the PLY sha256 is `36b9205667e803f83587fca2e420030b5d2f5a0f002107dcbe8493a571685084`. This replaces the incorrect behavior that interpreted the ordinary fixture as an equirectangular panorama. Viser rendered the upright perspective scene with no console errors and responsive orbit. | Universal-camera inference, metric-distance output, official point export, coordinate alignment, browser rendering, and interaction passed. Explicit pinhole and panorama modes remain available. |
-| `amt` visualization | The official AMT-S checkpoint generated a finite `384x640` midpoint and bidirectional-flow output. Mean flow magnitude was `4.9939` pixels; normalized midpoint distances to the input frames were `0.05946` and `0.05424`. Midpoint and flow sha256 values are `7ccc04c10c6216bf2ca403ea15340492f11a70725ce561cfb57f107a777802f6` and `c5856ff41f9f2f70adbb529b32dfa6fba97da884d080697cfcee961cb55cf42e`. | Checkpoint interpolation, structured flow, shared renderer, and visual inspection passed. |
-| `vggt` visualization | Workspace job `studio-00214` ran the official VGGT kitchen sequence on GPU and exported a valid 3.63-million-point/camera GLB with sha256 `5e38234da6cd460b421a1058cb6ca97c1512be451b6abbbdf4aa93dff0970c70`. Viser loaded 400,000 sampled points plus camera meshes at 1440x1000; orbit interaction changed the canvas without roll or inversion. The official GLB is now served as `asset-native`, `+Y` up, `alignment=none`, while raw prediction NPZs receive one OpenCV-to-OpenGL conversion. | Checkpoint reconstruction, Workspace artifact routing, coordinate-frame alignment, Viser browser rendering, and orbit interaction passed. |
-| `monst3r` Rerun coordinates | The saved 25-frame MonST3R recording declares RDF for both world and camera (`ViewCoordinates` payload `[3,2,5]`) and logs camera transforms, pinholes, RGB, depth, dynamic points, and trajectory in that frame. A 1440x1000 WebGPU browser run showed upright table geometry, RGB/depth panes, trajectory, and timeline. | Recording structure and browser visualization passed. Rerun defaults to WebGPU because the validation host's software WebGL exposes only 6 color attachments; `WORLDFOUNDRY_STUDIO_RERUN_RENDERER=webgl` remains available for compatible browsers. |
-| `dust3r` Viser coordinates | The actual 10,000-point reconstruction PLY has sha256 `7b578ed1a0befbd3fc62d0c172ff8563230561855fe35014bbefd36f28155b3f`. Viser now discovers the adjacent `dust3r_camera_poses.npy`, transforms both geometry and two camera frustums with `first-camera-opengl`, and renders an upright room at 1440x1000; screenshot sha256 `7fc1e34df4146138cbf26beaa881e169bfc39c7b4bd963771da10159e0e4c809`. | Named pose-sidecar discovery, shared point/camera transform, browser rendering, and coordinate QA passed. The bounded 10k artifact is intentionally sparse. |
-| `loger` Viser coordinates | The actual 601,570-point PLY has sha256 `a46cc9762608fb53a325322fde73b0d412a5d6d3b217954aa2ac65630359b9df`. Viser samples 400,000 points, aligns all points and three cameras through the first OpenCV camera, and shows a level robot-table scene; the robust-framing screenshot sha256 is `3dff3ad1f6d285d1d77aa1fbd82a061c2536b99c1744ed15e4b6da39741ae36e`. | Checkpoint output, camera sidecars, OpenCV-to-OpenGL alignment, browser rendering, and robust framing passed. |
-| `pi3` Viser coordinates | The actual 689,032-point PLY has sha256 `3e150355f7ae43e83f1c8e396727a2bf3252f0d7aef67fd8c19deb63ac9534b4`. After point/camera alignment and 5-95% robust initial framing, the level robot-table scene fills the viewport without deleting predicted outliers; screenshot sha256 `01461af1b5e96db28c3b0b97456c3ef2f33fc68cbbbebc2a761a6f7cb1327ead`. | Checkpoint output, three camera sidecars, coordinate alignment, browser rendering, and outlier-resistant framing passed. |
-| `splatt3r` Spark visualization | The actual 344,064-Gaussian PLY includes SH color, opacity, anisotropic scale, and rotation fields and has sha256 `472452fdf54ab9863a8d3694e1bce91e999e0e1b6008de0395aa2fd132362027`. The native Spark viewer rendered the level robot-table reconstruction on a 1440x1000 canvas with zero console errors. Drag-orbit changed the screenshot from sha256 `d5ef53759c558dcbba1a161199c215e2d2a59158199b6fc8cc3e808db7a76dbd` to `10015f8055bbd86e26a9ca22d5d78c5870bf586d7c5d89227466622644e26012`. | 3DGS artifact routing, Gaussian attributes, browser rendering, coordinate orientation, and orbit interaction passed. Spark is used instead of degrading the asset to ordinary Viser points. |
-| `mmaudio` | Workspace job `studio-00191` generated 44.1 kHz non-silent FLAC audio with sha256 `dba40a981260955709961b35f3f37a4d6af0d45a4c89844488b657f2f5d54e92` and an H.264/AAC preview MP4 with sha256 `8e9a8c7076758da7167a3a406fa9579246cfea95b4b368bb88dbf0fe0b3345c8`. Workspace preserves both real media suffixes and registers the muxed video as the preview. | The small_44k motorcycle video-to-audio route is verified. Broader audio-text alignment scoring remains separate. |
-
 ## Runner evidence
 
-<TypeTable
-  type={{
-    runnerRun: {
-      type: 'required',
-      description: 'Runner command, generated output, scorecard, and focused regression test.',
-      required: true,
-    },
-    demoVerified: {
-      type: 'optional gate',
-      description: 'Official command, environment notes, generated sample, raw logs, and parity notes.',
-    },
-    checkpointVerified: {
-      type: 'optional gate',
-      description: 'Pinned checkpoint source, revision or hash, local cache path, device, command, and expected output checks.',
-    },
-    benchmarkReady: {
-      type: 'release evidence',
-      description: 'Normalized benchmark run with run manifest, metrics summary, report, scorecard, and no hidden sample failures.',
-    },
-  }}
-/>
+<RecipeRecords items={[
+  {
+    term: 'runnerRun',
+    detail: 'Required. Runner command, generated output, scorecard, and focused regression test.',
+  },
+  {
+    term: 'demoVerified',
+    detail: 'Optional gate. Official command, environment notes, generated sample, raw logs, and parity notes.',
+  },
+  {
+    term: 'checkpointVerified',
+    detail: 'Optional gate. Pinned checkpoint source, revision or hash, local cache path, device, command, and expected output checks.',
+  },
+  {
+    term: 'benchmarkReady',
+    detail: 'Release evidence. Normalized benchmark run with run manifest, metrics summary, report, scorecard, and no hidden sample failures.',
+  },
+]} />
 
 ## Failure policy
 
-| State | Meaning | Release treatment |
-| --- | --- | --- |
-| Pass | Required stages ran and produced expected artifacts. | Can support the matching claim. |
-| Partial | Some stages were skipped because they require network, credentials, data, GPU, or license review. | Usable for development, not for stronger public claims. |
-| Blocked | A required source, dataset, license, dependency, checkpoint, or API condition is unavailable. | Keep the manifest blocked or planned. |
-| Stale | Report hash, manifest hash, git commit, validator script, or timestamp no longer matches. | Rerun validation before counting it. |
-| Runner-only | Schema and runner path pass, but official runtime did not run. | Not leaderboard evidence. |
+- **Pass** — Required stages ran and produced expected artifacts. Release treatment: Can support the matching claim.
+- **Partial** — Some stages were skipped because they require network, credentials, data, GPU, or license review. Release treatment: Usable for development, not for stronger public claims.
+- **Blocked** — A required source, dataset, license, dependency, checkpoint, or API condition is unavailable. Release treatment: Keep the manifest blocked or planned.
+- **Stale** — Report hash, manifest hash, git commit, validator script, or timestamp no longer matches. Release treatment: Rerun validation before counting it.
+- **Runner-only** — Schema and runner path pass, but official runtime did not run. Release treatment: Not leaderboard evidence.
 
 ## Validation matrix
 
@@ -305,17 +643,15 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-art
   --json
 ```
 
-| Gate status | Meaning | Maintainer action |
-| --- | --- | --- |
-| `accepted_integrated` | Fresh report passes every required stage and manifest says integrated. | Keep evidence current. |
-| `accepted_variant_integrated` | One or more scoped variants pass while the parent family remains planned. | Continue validating remaining variants. |
-| `validated_but_manifest_not_promoted` | Report passes, manifest still says planned or blocked. | Promote only after artifact review. |
-| `manifest_integrated_without_report` | Manifest says integrated, but no fresh validation report exists. | Run staged validation or downgrade. |
-| `manifest_overclaims_integration` | Manifest says integrated but computed stages do not pass. | Downgrade or rerun full validation. |
-| `report_overclaims_integration` | Report claims integrated but staged evidence is incomplete. | Discard or rerun report. |
-| `stale_report` | Report hash, script, git commit, schema, or manifest entry changed. | Rerun validation. |
-| `partial_or_blocked` | Report exists but stages failed or were skipped. | Follow `next_action`. |
-| `not_validated` | Manifest entry has no report. | Run the matching runtime preflight and official validation run. |
+- **`accepted_integrated`** — Fresh report passes every required stage and manifest says integrated. Maintainer action: Keep evidence current.
+- **`accepted_variant_integrated`** — One or more scoped variants pass while the parent family remains planned. Maintainer action: Continue validating remaining variants.
+- **`validated_but_manifest_not_promoted`** — Report passes, manifest still says planned or blocked. Maintainer action: Promote only after artifact review.
+- **`manifest_integrated_without_report`** — Manifest says integrated, but no fresh validation report exists. Maintainer action: Run staged validation or downgrade.
+- **`manifest_overclaims_integration`** — Manifest says integrated but computed stages do not pass. Maintainer action: Downgrade or rerun full validation.
+- **`report_overclaims_integration`** — Report claims integrated but staged evidence is incomplete. Maintainer action: Discard or rerun report.
+- **`stale_report`** — Report hash, script, git commit, schema, or manifest entry changed. Maintainer action: Rerun validation.
+- **`partial_or_blocked`** — Report exists but stages failed or were skipped. Maintainer action: Follow `next_action`.
+- **`not_validated`** — Manifest entry has no report. Maintainer action: Run the matching runtime preflight and official validation run.
 
 ## Checklist
 
@@ -333,7 +669,7 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-art
     Run docs build when MDX, route generation, search, i18n, layout, or generated metadata changes.
   </Step>
   <Step>
-    Run `make lint` before release so generated outputs, checkpoint files, videos, notebooks, demo media, and downloaded data stay out of tracked source.
+    Run `make lint` for source and catalog checks, then `make packaging-check` before release to catch private files and local artifacts in tracked source or distribution artifacts.
   </Step>
   <Step>
     Refresh matrix or suite reports before promoting integration status.

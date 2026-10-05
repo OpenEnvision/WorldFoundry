@@ -1,0 +1,50 @@
+---
+title: "GigaWorld-Policy-0.5"
+description: "GigaWorld-Policy-0.5 from GigaAI: vla and vla action prediction; Runner parity pending."
+modelId: "giga-world-policy-0.5"
+pageSource: authored
+---
+
+GigaWorld-Policy-0.5 is GigaAI's world-action policy: an action-centered Mixture-of-Transformers released as a pretrained initialization (Apache-2.0), riding on Wan2.2-TI2V-5B components for VAE, text encoder, and tokenizer. WorldFoundry executes the exact released MoT and the official action-only diffusion loop in process.
+
+The sharded-safetensors transformer (`open-gigaai/Giga-World-Policy-0.5`, revision `4b68e90c`) is **not** a task-ready policy. Deployment additionally needs a local `norm_stats_delta.json` and, when applicable, a task-finetuned transformer directory. Transformer shards match published SHA-256 checksums in this catalog. **No GPU rollout validation** is recorded here.
+
+<ModelPaperFigures modelId="giga-world-policy-0.5" locale="en" />
+
+The recorded paper is [arXiv 2607.13960](https://arxiv.org/abs/2607.13960).
+
+Project page: [open-gigaai.github.io/giga-world-policy](https://open-gigaai.github.io/giga-world-policy/). Code: [open-gigaai/giga-world-policy](https://github.com/open-gigaai/giga-world-policy).
+
+Paper: [arXiv 2607.13960](https://arxiv.org/abs/2607.13960). Project: [open-gigaai.github.io/giga-world-policy](https://open-gigaai.github.io/giga-world-policy/). Code: [open-gigaai/giga-world-policy](https://github.com/open-gigaai/giga-world-policy). Runner: **not_recorded**. Status: `checkpoint_staged_task_stats_required`.
+
+<ModelCommandBuilder modelId="giga-world-policy-0.5" locale="en" />
+
+## What it is for
+
+Use `giga-world-policy-0.5` for vision-language-action inference on this card. The recipe exists so you can launch the recorded policy profile.
+
+Catalog tasks include vla, vla action prediction, and vla world action model. Catalog aliases include `giga-world-policy`, `gigaworld-policy`, and `gwp-0.5`.
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `giga_world_policy_0_5_action_trace.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `GigaWorldPolicyPipeline`.
+
+Family status: **Runner parity pending**.
+
+The released transformer is a pretrained initialization: task deployment additionally requires local post-training statistics (task-specific norm_stats_delta.json) and, when applicable, a task-finetuned transformer directory. All Hub assets must be staged locally; runtime network access is disabled.
+
+Exact released action-centered Mixture-of-Transformers and official action-only diffusion loop execute in process.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run giga-world-policy-0.5 --pipeline.task-profile default` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch>=2.7.1).
+
+Recorded weight repositories include `open-gigaai/Giga-World-Policy-0.5` and `Wan-AI/Wan2.2-TI2V-5B-Diffusers`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh giga-world-policy-0.5`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="giga-world-policy-0.5" locale="en" />

@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Sequence
 
-from worldfoundry.core.io.serialization import jsonable, read_json
+from worldfoundry.core.io.formats.serialization import jsonable, read_json
 
 from .runtime import XiaomiRobotics0RuntimeConfig, runtime_for
 

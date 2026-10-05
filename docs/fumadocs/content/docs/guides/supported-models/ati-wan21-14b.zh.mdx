@@ -1,0 +1,50 @@
+---
+title: "ATI-Wan2.1-14B"
+description: "ATI-Wan2.1-14B（ByteDance）：相机可控视频、图生视频；Runner 一致性待确认。"
+modelId: "ati-wan21-14b"
+pageSource: generated
+---
+
+ATI（Any Trajectory Instruction）把「画轨迹」变成视频控制：在输入图上画出点轨迹，基于 Wan2.1-14B 的模型就让物体、相机或两者沿轨迹运动。本 catalog 中仅内置 ATI 的官方推理增量——未改动的 Wan2.1 实现从 worldfoundry/base_models 复用。
+
+<ModelPaperFigures modelId="ati-wan21-14b" locale="zh" />
+
+记录论文为[arXiv 2505.22944](https://arxiv.org/abs/2505.22944)。
+
+代码：[bytedance/ATI](https://github.com/bytedance/ATI)。代码：[Wan-Video/Wan2.1](https://github.com/Wan-Video/Wan2.1)。
+
+<ModelCommandBuilder modelId="ati-wan21-14b" locale="zh" />
+
+## 用来做什么
+
+需要相机可控视频时选 `ati-wan21-14b`：相机轨迹进、受控视频出。视角必须跟随路径时，用它而不是无约束 T2V。
+
+按上游发布，ATI 通过轨迹指令模块把稠密点轨迹条件注入 Wan2.1 I2V 基座。运行时 checkpoint 加载构建 ATI 权重（bytedance-research/ATI）与本地就位的 Wan2.1 I2V 480P 基座组件的只读并集。该模型由字节跳动发布。
+
+catalog 记录的任务包括 相机可控视频、图生视频。模态上，它接受图像，输出视频。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（评估轨迹/相机运动的贴合度）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`operator_kwargs`；产物 `ati-wan21-14b.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `ATIPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+已用本地 ATI 与 Wan2.1 I2V 480P 权重验证真实的 81 帧 GPU 推理；点轨迹精度和官方产物一致性尚未测量。 不允许源码检出或运行时下载。 打包轨迹形状为 [N,121,1,3]，x/y 像素坐标乘以 8；可见度可用归一化 [0,1] 或上游量化 [0,8]，每条轨迹内部应保持一种编码。
+
+合成轨迹短测尚不能证明点轨迹贴合度或官方产物一致性。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run ati-wan21-14b --pipeline.task-profile default` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `bytedance-research/ATI`、`Wan-AI/Wan2.1-I2V-14B-480P`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh ati-wan21-14b`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="ati-wan21-14b" locale="zh" />

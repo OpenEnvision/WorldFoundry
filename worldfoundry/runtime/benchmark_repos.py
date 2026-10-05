@@ -15,10 +15,14 @@ import re
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.evaluation.utils import REPO_ROOT
+from worldfoundry.core.io.paths import project_root
 
 from .assets import load_local_assets
 from .env import EnvMapping, benchmark_repo_cache_root
+
+# Resolved from core so the runtime layer never imports
+# worldfoundry.evaluation (SA-10).
+REPO_ROOT = project_root()
 
 _GITHUB_SLUG_RE = re.compile(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/.]+)")
 

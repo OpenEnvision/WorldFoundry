@@ -18,13 +18,14 @@ input_schema:
 artifact_kind: generated_world
 artifact_filename: wonderworld.splat
 execution:
-  backend_stage: official_in_tree_subprocess_runtime
-  runtime_status: runtime_assets_required
-  integration_status: integrated
+  backend_stage: registered_subprocess_adapter_preflight_blocked
+  runtime_status: blocked_missing_runtime_source
+  integration_status: blocked
   pipeline_binding: wonderworld
 integration:
-  status: integrated
+  status: blocked
 notes:
-- Uses the in-tree WonderWorld run.py/example_config flow through
-  worldfoundry/synthesis/visual_generation/wonderworld/wonderworld_runtime.
-- Direct execution still requires WonderWorld checkpoint/runtime assets and local PyTorch3D-compatible extensions.
+- The public tree has the subprocess adapter but no WonderWorld run.py at its
+  expected runtime path, so checkpoint-backed inference is blocked before launch.
+- An authorized runtime source checkout, checkpoints, and PyTorch3D-compatible
+  extensions are required before direct execution can be verified.

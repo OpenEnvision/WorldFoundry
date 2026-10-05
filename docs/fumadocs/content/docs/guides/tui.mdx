@@ -1,16 +1,16 @@
 ---
-title: TUI Guide
+title: TUI guide
 description: How to use the Terminal User Interface for discovery, configuration, and command generation.
 ---
 
-The Terminal User Interface (TUI) provides a text-based interactive dashboard directly in your terminal. It is the easiest way to browse the model and benchmark catalogs, check readiness, and generate CLI commands without memorizing flags.
+The Terminal User Interface (TUI) is an interactive, text-based dashboard for your terminal. It is the easiest way to browse the model and benchmark catalogs, check readiness, and generate CLI commands without memorizing flags.
 
 ## Launch the TUI
 
-Before launching, ensure the WorldFoundry package is installed. The recommended setup uses the unified environment:
+Before launching, ensure the WorldFoundry package is installed. First-time CUDA setup uses the same official bootstrap as the [Quickstart](/docs/quickstart):
 
 ```bash
-bash scripts/setup/unified_install.sh
+bash scripts/setup/bootstrap_worldfoundry.sh
 source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 ```
@@ -18,7 +18,7 @@ conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 If you manage your own conda environment, install the package with the `[tui]` extra from the repo root:
 
 ```bash
-pip install -e ".[tui]"
+python -m pip install -e ".[tui]"
 ```
 
 Once your environment is active, launch the TUI:
@@ -31,12 +31,45 @@ The TUI reads the same model-zoo and benchmark-zoo manifests as the CLI discover
 
 ### Launch options
 
-| Flag | Effect |
-| --- | --- |
-| `--catalog-json` | Print the catalog payload used by the TUI and exit. |
-| `--model-id openvla` | Pre-select a model and skip the model picker. |
-| `--benchmark-id libero` | Pre-select a benchmark and skip the benchmark picker. |
-| `--print-command` | Print the generated `run` command to stdout and exit, without entering the interactive session. |
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>Flag</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>--catalog-json</code>
+          </div>
+        </div>
+        <p>Print the catalog payload used by the TUI and exit.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>--model-id openvla</code>
+          </div>
+        </div>
+        <p>Pre-select a model and skip the model picker.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>--benchmark-id libero</code>
+          </div>
+        </div>
+        <p>Pre-select a benchmark and skip the benchmark picker.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>--print-command</code>
+          </div>
+        </div>
+        <p>Print the generated <code>run</code> command to stdout and exit, without entering the interactive session.</p>
+      </li>
+    </ul>
+  </section>
+</div>
 
 Example — generate a command for a specific model × benchmark pair and exit:
 
@@ -54,11 +87,11 @@ Switch **Mode** in the top-left panel to move between Inference, Studio, and Eva
 
 ### Inference
 
-Use Inference to pick a model, fill model-specific inputs, and generate a runnable command. The toolbar provides **Run**, **Stop**, **Copy**, **Cmd**, **Check**, **Files**, **GPU**, and **Sync**.
+Use Inference to pick a model, fill model-specific inputs, and generate a runnable `worldfoundry-eval run` command. The toolbar provides **Run**, **Stop**, **Copy**, **Cmd**, **Check**, **Files**, **GPU**, and **Sync**. Everyday reproducible / model-page commands stay on `worldfoundry-eval run`; Workspace visual smoke uses `python -m worldfoundry.studio.workspace_job infer`. See [CLI entrypoints](/docs/reference/cli#entrypoints).
 
 ![TUI Inference mode](/images/tui/tui-inference.png)
 
-Typical fields include prompt, input path, output directory, optional artifact path, and GPU ids. The **Command Preview** section updates as you edit parameters.
+Typical fields include prompt, input path, output directory, optional artifact path, and GPU IDs. The **Command Preview** section updates as you edit parameters.
 
 ### Studio
 
@@ -72,7 +105,95 @@ Use Evaluation to configure benchmark runs. Choose an evaluation intent, select 
 
 ![TUI Evaluation mode](/images/tui/tui-evaluation.png)
 
-Keyboard shortcuts shown in the log: `Ctrl+Q` quit, `r` refresh, `c` copy, `Tab` / `Shift+Tab` navigate.
+The main navigation shortcuts also work while a text field has focus:
+
+<div className="pi-kv-catalog is-keys not-prose">
+  <section className="pi-kv-group">
+    <h3>Shortcut</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <kbd>Ctrl+F</kbd>
+          </div>
+        </div>
+        <p>Focus catalog search</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <kbd>F2</kbd>
+          </div>
+        </div>
+        <p>Focus the visible model or benchmark catalog</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <kbd>F3</kbd>
+          </div>
+        </div>
+        <p>Focus configuration tabs; use arrow keys to switch tabs</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <kbd>F4</kbd>
+          </div>
+        </div>
+        <p>Reveal and focus the execution log</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <kbd>Ctrl+R</kbd>
+            <kbd>Ctrl+S</kbd>
+          </div>
+        </div>
+        <p>Run / stop the configured command</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <kbd>Ctrl+D</kbd>
+          </div>
+        </div>
+        <p>Switch between WorldFoundry's matching light and dark themes</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <kbd>Ctrl+Q</kbd>
+          </div>
+        </div>
+        <p>Quit</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <kbd>Tab</kbd>
+            <kbd>Shift+Tab</kbd>
+          </div>
+        </div>
+        <p>Move between controls</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <kbd>Enter</kbd>
+          </div>
+        </div>
+        <p>Select the highlighted catalog row</p>
+      </li>
+    </ul>
+  </section>
+</div>
+
+Outside text fields, `r` refreshes the catalog, `c` copies the command, `p` checks paths and the environment, `g` shows GPU status, and `a` lists output files. Toolbar tooltips also describe these actions. Catalog refresh and GPU status queries run in the background so navigation remains available. GPU queries time out after 10 seconds and report failures in the execution log.
+
+The official OpenEnvision logo keeps its original renderer and proportions. Small terminals hide the logo and stack the workspace vertically; use `F2`, `F3`, and `F4` to move between sections. Search and table headers stay visible while browsing rows. Resizing, switching themes, and refreshing catalogs preserve the row you are browsing; press `Enter` to use it. Filtering preserves the configured model, and the overview identifies a selection outside the current filter. Switching modes preserves each mode's model selection and any edited output directory.
+
+Unicode icons are the default. If your terminal uses a Nerd Font, opt in with `WORLDFOUNDRY_TUI_ICONS=nerd`; use `WORLDFOUNDRY_TUI_ICONS=ascii` for plain button and navigation labels.
 
 ### Configuration
 
@@ -88,7 +209,7 @@ Inference mode presents model-specific parameters such as:
 - **Sequence length** — Maximum token or frame count.
 - **Seed** — Deterministic generation seed (optional).
 
-Changing a parameter in the TUI updates the generated command in real time. Use the Workspace or `generate-score` CLI when a custom dataset manifest needs more fields than the compact TUI exposes.
+Changing a parameter in the TUI updates the generated command in real time. If a required value is missing or invalid, an explanation appears below the toolbar and **Run** and **Copy** remain disabled until the command can be built. Use the Workspace or `generate-score` CLI when a custom dataset manifest needs more fields than the compact TUI exposes.
 
 ### Readiness indicators
 
@@ -103,12 +224,12 @@ When a readiness blocker is present, the generated command includes `--mode offi
 
 ## Fallback mode
 
-If the Textual dependency is not installed, the TUI prints a static fallback summary instead of the interactive dashboard. The fallback lists model ids, benchmark ids, and a brief readiness note.
+If the Textual dependency is not installed, the TUI prints a static fallback summary instead of the interactive dashboard. The fallback lists model IDs, benchmark IDs, and a brief readiness note.
 
 To restore the full interactive TUI, install the `[tui]` extra:
 
 ```bash
-pip install -e ".[tui]"
+python -m pip install -e ".[tui]"
 ```
 
 ## Next steps

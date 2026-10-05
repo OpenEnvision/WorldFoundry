@@ -1,0 +1,52 @@
+---
+title: "T2V Turbo T2V"
+description: "T2V Turbo T2V from University of California, Santa Barbara: text-to-video; Static load only; T2V-Turbo."
+modelId: "t2v_turbo_t2v"
+pageSource: authored
+---
+
+T2V-Turbo is a fast text-to-video model distilled from VideoCrafter2 with consistency distillation plus reward feedback, generating watchable clips in 4-8 steps. In this catalog it is assembled from the shared native diffusion components: the VideoCrafter2 base model and the ordered T2V-Turbo LoRA remain separate declarative checkpoint inputs.
+
+<ModelPaperFigures modelId="t2v_turbo_t2v" locale="en" />
+
+The recorded paper is [T2V-Turbo: Breaking the Quality Bottleneck of Video Consistency Model with Mixed Reward Feedback](https://arxiv.org/abs/2405.18750) (2024).
+
+Project page: [t2v-turbo.github.io](https://t2v-turbo.github.io/). Code: [Ji4chenLi/t2v-turbo](https://github.com/Ji4chenLi/t2v-turbo).
+
+The paper is [T2V-Turbo: Breaking the Quality Bottleneck of Video Consistency Model with Mixed Reward Feedback](https://arxiv.org/abs/2405.18750). Project page: [t2v-turbo.github.io](https://t2v-turbo.github.io). Code: [Ji4chenLi/t2v-turbo](https://github.com/Ji4chenLi/t2v-turbo).
+
+<ModelCommandBuilder modelId="t2v_turbo_t2v" locale="en" />
+
+## What it is for
+
+Pick `t2v_turbo_t2v` when you want this family's text-to-video line in WorldFoundry: a prompt in, a generated clip out. Use it as the catalog T2V start rather than an editor or a world-model stepper.
+
+It is published by University of California, Santa Barbara.
+
+Catalog tasks include text-to-video. Catalog aliases include `t2v-turbo-t2v` and `t2v-turbo`. Documented modalities: text in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (T2V-Turbo was tuned for exactly this suite's dimensions).
+
+## Runtime contract
+
+Optional `prompt`, `frames`, `fps`, `height`, and `width`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `T2VTurboT2VPipeline`.
+
+Family status: **Static load only**.
+
+Runner status records native checkpoint validation: local VideoCrafter2 and T2V-Turbo VC2 assets are available for strict component and LoRA checks. Use it when you need many quick T2V drafts rather than maximum quality.
+
+Uses the shared WorldFoundry native diffusion assembler, runner, checkpoint loader, offload policy, and LVDM components.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run t2v_turbo_t2v --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+The environment profile is not recorded.
+
+Recorded weight repositories include `jiachenli-ucsb/T2V-Turbo-VC2` and `VideoCrafter/VideoCrafter2`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh t2v_turbo_t2v`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Static load only**.
+
+<ModelRelatedRecipes modelId="t2v_turbo_t2v" locale="en" />

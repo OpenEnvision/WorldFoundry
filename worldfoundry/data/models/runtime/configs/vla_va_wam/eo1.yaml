@@ -1,8 +1,0 @@
-backend: processor_select_action
-checkpoint_path: ${WORLDFOUNDRY_CKPT_DIR}/IPEC-COMMUNITY--EO-1-3B
-source_repo: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/EO
-torch_dtype: bfloat16
-trust_remote_code: false
-predict_method: select_action
-action_contract: eo1_processor_action
-runtime_backend: eo1_transformers_processor_select_action

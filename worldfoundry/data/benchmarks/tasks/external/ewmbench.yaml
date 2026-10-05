@@ -25,8 +25,7 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: ewmbench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id ewmbench --mode contract --output-dir
-    tmp/benchmark_zoo/benchmark_contract/ewmbench --json
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id ewmbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/ewmbench --json
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:EWMBenchContract
   official_runner_command: worldfoundry-eval zoo benchmark-run
   name: EWMBench
@@ -39,7 +38,7 @@ metadata:
   status: in_tree_official_runtime_ready_full_upstream_pending
   maturity: contract_ready
   release_status: experimental
-  open_source_status: in_tree_result_normalizer
+  open_source_status: in_tree_runtime
   official_benchmark_verified: false
   integration_evidence: false
   leaderboard_valid: false
@@ -92,7 +91,7 @@ metadata:
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
-    surface: in_tree_result_normalizer
+    surface: ewmbench_official_in_tree
     normalizer_verified: true
   artifact_layout:
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -153,9 +152,7 @@ metadata:
     - --json
     runtime:
       results_path_env: WORLDFOUNDRY_EWMBENCH_RESULTS_PATH
-    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id ewmbench --mode official-validation
-      --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out>
-      --json
+    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id ewmbench --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
   validation_command:
   - worldfoundry-eval
   - zoo
@@ -249,9 +246,7 @@ tasks:
       - semantic_alignment
       - diversity
       - ewmbench_average
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id ewmbench --mode
-        official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos>
-        --output-dir <out> --json
+      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id ewmbench --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
       required_inputs:
       - official_results_path or official_results
       - generated_video artifacts for the official prompt/task suite

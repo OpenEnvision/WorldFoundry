@@ -144,7 +144,7 @@ def _load_official_input_frames(
     static_scene: bool,
 ) -> List[Image.Image]:
     """Load official input frames implementation."""
-    from worldfoundry.base_models.diffusion_model.diffsynth.utils.neoverse_auxiliary import (
+    from worldfoundry.synthesis.visual_generation.neoverse.native.auxiliary import (
         load_video,
     )
 

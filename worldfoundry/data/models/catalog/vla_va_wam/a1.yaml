@@ -8,6 +8,7 @@ aliases:
 availability: open_source
 provider: official_repo
 official_sources:
+  paper: https://arxiv.org/abs/2604.05672
   github:
     url: https://github.com/ATeam-Research/A1
     revision: 2fcb07da2932eaaad441cddea91179845aa23c9c
@@ -34,3 +35,23 @@ pipeline_binding: a1
 runtime_profile: runtime-profile:a1
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries with executable in-tree inference runtimes.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'A1 (AffordVLA) is an affordance-guided vision-language-action policy: it grounds manipulation in visual affordances before predicting robot actions. WorldFoundry runs AffordVLA fully in-tree — Molmo and CLIP ViT encoders, L1/DiT/flow action heads, and preprocessing — with two confirmed checkpoints: spatialtemporal-ai/a1-libero for tasks and a1-pretrain as the pretrained policy.'
+  overview_zh: A1（AffordVLA）是可供性（affordance）引导的视觉-语言-动作策略：先将操作任务锚定到视觉可供性，再预测机器人动作。WorldFoundry 将 AffordVLA 完整内置树内——Molmo 与 CLIP ViT 编码器、 L1/DiT/flow 动作头与预处理——并确认两个 checkpoint：任务用 spatialtemporal-ai/a1-libero，预训练策略 a1-pretrain。
+  architecture: The stack couples Molmo (VLM) and CLIP ViT visual encoding with selectable action heads (L1 regression, DiT, or flow). The runtime derives action dimensions from checkpoint tensors and validates every action-token boundary, so mismatched checkpoints fail fast.
+  architecture_zh: 该栈将 Molmo（VLM）与 CLIP ViT 视觉编码同可选动作头（L1 回归、DiT 或 flow）耦合。运行时从 checkpoint 张量推导动作维度并校验每个动作 token 边界，不匹配的 checkpoint 会快速失败。
+  usage_notes: Stage tokenizer and checkpoint assets locally before running. Assets are local-only and checkpoint-provided Python is never executed; runtime loading uses strict key matching.
+  usage_notes_zh: 运行前需在本地就位 tokenizer 与 checkpoint 资产。资产仅从本地加载，绝不执行 checkpoint 携带的 Python；运行时加载采用严格键匹配。
+  limitations:
+  - Output is an action_trace artifact, not video.
+  - No GPU rollout validation is recorded in this repository.
+  limitations_zh:
+  - 输出为 action_trace 产物，而非视频。
+  - 仓库未记录 GPU rollout 验证。
+  recommended_benchmarks:
+  - id: libero
+    reason: The a1-libero checkpoint targets LIBERO manipulation tasks.
+    reason_zh: a1-libero checkpoint 面向 LIBERO 操作任务。

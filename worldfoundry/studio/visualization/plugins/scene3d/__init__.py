@@ -1,15 +1,3 @@
-"""Migrated Studio visualization plugin group.
+"""Depth Anything 3 exports and VIPE projection rendering."""
 
-Concrete helpers live in submodules so optional visualization dependencies stay lazy.
-"""
-
-from __future__ import annotations
-
-__all__ = [
-    "depth_anything_v3",
-    "dvlt",
-    "geometry_export",
-    "glb_export",
-    "pixelsplat_full",
-    "projection",
-]
+__all__ = ["depth_anything_v3", "projection"]

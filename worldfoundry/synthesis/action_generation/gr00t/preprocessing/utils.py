@@ -19,7 +19,7 @@ from typing import Any
 
 import numpy as np
 
-from .config import ModalityConfig
+from .types import ModalityConfig
 
 
 def apply_sin_cos_encoding(values: np.ndarray) -> np.ndarray:

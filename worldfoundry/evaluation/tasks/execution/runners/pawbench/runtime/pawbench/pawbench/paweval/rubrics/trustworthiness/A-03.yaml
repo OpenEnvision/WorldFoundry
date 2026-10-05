@@ -1,0 +1,50 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: A-03
+track: calibration
+title_en: Two-color equal-sector spinner
+scene_grounding:
+- 'Initial state must match: Two equal colored sectors are visible on a wheel, with
+  a fixed top pointer and a hand at the rim.'
+- Apparatus geometry in the opening frames must match the source image.
+- The wheel sectors and pointer must match the source image; color counts and sizes
+  must not change mid-run.
+action_execution:
+- 'Required action: Spin the wheel once under the fixed pointer.'
+- Action must happen exactly once in the expected direction / region.
+target_requirements:
+- Scene-defining target, subject, and readout evidence must remain visible throughout the action.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-readout state/region change: subject moves between label-defining states or regions after the first decisive readout.'
+- 'Post-result side change: label-defining pointer/sector relation changes after
+  the latest readable terminal readout anchor.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+- Strict trust uses the same latest readable terminal pointer/sector relation as
+  the relaxed outcome anchor; normal settling before that latest terminal anchor
+  is not a post-result failure.
+- Normal slowing or settling of the wheel is not a trust failure by itself. Treat
+  only an impossible jump, pointer drift, sector repainting, or contradictory latest
+  readable terminal relation as post-result inconsistency.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Two-color equal-sector spinner.'

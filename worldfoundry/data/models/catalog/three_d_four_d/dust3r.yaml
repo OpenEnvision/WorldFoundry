@@ -48,3 +48,19 @@ catalog_policy:
 runtime_profile: runtime-profile:dust3r-base-model
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: dust3r-base-model
+docs:
+  publisher: NAVER Labs Europe
+  publisher_kind: company
+  publisher_zh: NAVER 欧洲实验室（NAVER Labs Europe）
+  overview: 'DUSt3R made unconstrained two-view 3D reconstruction easy: feed it two images — no calibration, no poses — and it directly regresses aligned pointmaps. In this catalog it is fully verified: checkpoint-backed Studio inference produced a finite point cloud from the bundled multi-view test case, with evidence recorded in inference_evidence.yaml.'
+  overview_zh: DUSt3R 让无约束双视图 3D 重建变得简单：给它两张图——无需标定、无需位姿——直接回归对齐的点图。本 catalog 中它已完整验证：checkpoint 加载的 Studio 推理从内置多视图测试用例产出有限点云，证据记录在 inference_evidence.yaml。
+  architecture: A ViT encoder-decoder that regresses per-pixel 3D pointmaps in a shared frame for an image pair; global alignment merges pairs into scenes (per arXiv 2312.14132). WorldFoundry vendors it under base_models/three_dimensions/general_3d/dust3r, exposed via the geometry-prior contract.
+  architecture_zh: ViT 编码-解码器为一对图像在共享坐标系中回归逐像素 3D 点图；全局对齐把多对合并为场景（见 arXiv 2312.14132）。WorldFoundry 将其内置于 base_models/three_dimensions/general_3d/dust3r，经 geometry-prior 契约暴露。
+  usage_notes: 'The runnable route is exposed through the shared geometry-prior contract (see dust3r-base-model). Mind the license: upstream is CC-BY-NC-SA-4.0 — recorded for provenance; respect non-commercial terms downstream.'
+  usage_notes_zh: 可运行路径经共享 geometry-prior 契约暴露（见 dust3r-base-model）。注意许可：上游为 CC-BY-NC-SA-4.0——已记录为溯源信息，下游使用需遵守非商用条款。
+  limitations:
+  - 'CC-BY-NC-SA-4.0 license: non-commercial terms apply downstream.'
+  - 'Pairwise design: large scenes need global alignment, which grows costly with many views.'
+  limitations_zh:
+  - CC-BY-NC-SA-4.0 许可：下游需遵守非商用条款。
+  - 两两配对设计：大场景需要全局对齐，视图很多时代价上升。

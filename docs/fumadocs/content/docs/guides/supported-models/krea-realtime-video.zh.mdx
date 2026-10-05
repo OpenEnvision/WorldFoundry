@@ -1,0 +1,48 @@
+---
+title: "Krea Realtime Video 14B"
+description: "Krea Realtime Video 14B（Krea AI）：文生视频、视频到视频；Runner 一致性待确认。"
+modelId: "krea-realtime-video"
+pageSource: generated
+---
+
+Krea Realtime Video 14B 是 Krea AI 开源的实时/流式视频生成模型。与 catalog 中的批式 T2V 不同，它面向低延迟流式生成：以流式方式做文生视频与视频到视频。树内运行时位于 synthesis/visual_generation/krea_realtime，路径暴露 num_blocks、分辨率、fps 与 seed 控制。别名 krea-rt-14b 解析到本条目。
+
+<ModelPaperFigures modelId="krea-realtime-video" locale="zh" />
+
+项目页：[krea.ai](https://www.krea.ai/)。代码：[krea-ai/realtime-video](https://github.com/krea-ai/realtime-video)。
+
+<ModelCommandBuilder modelId="krea-realtime-video" locale="zh" />
+
+## 用来做什么
+
+在 WorldFoundry 里用 `krea-realtime-video` 做 catalog 文生视频推理。这条配方让你按已记录的 T2V profile 启动，而不用自己拼上游 demo。
+
+上游将其描述为面向实时块式生成蒸馏的 14B 自回归/流式视频模型（权重在 krea/krea-realtime-video，apache-2.0）。本仓库记录了基于块的生成控制（num_blocks）与 prompt/video 输入契约；更深的内部细节仓库未记录。
+
+catalog 记录的任务包括 realtime-video-generation、文生视频、视频到视频、streaming-video。别名包括 `krea-rt-14b`。模态上，它接受文本、视频，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（流式文生视频输出的基础质量检查）。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`frames`、`fps`、`height`；产物 `krea-realtime-video.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `KreaRealtimeVideoPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+`interactive-video` 记录默认值：fps=16, height=480, width=832, seed=42。
+
+实时吞吐高度依赖你的 GPU——14B 规模要达到真正实时帧率需要数据中心级硬件。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run krea-realtime-video --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `krea/krea-realtime-video`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh krea-realtime-video`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="krea-realtime-video" locale="zh" />

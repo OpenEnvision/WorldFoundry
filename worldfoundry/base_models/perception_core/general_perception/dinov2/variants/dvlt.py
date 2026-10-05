@@ -35,8 +35,8 @@ from dvlt.model_components.layers.block import Mlp
 from dvlt.model_components.layers.block import NestedTensorBlock as Block
 from dvlt.model_components.layers.patch_embed import PatchEmbed
 from dvlt.model_components.layers.rope import PositionGetter, RotaryPositionEmbedding2D
-from worldfoundry.core.nn.layers import SwiGLUFFNFused
-from worldfoundry.core.nn.module_utils import named_apply
+from worldfoundry.core.nn.blocks.layers import SwiGLUFFNFused
+from worldfoundry.core.nn.blocks.module_utils import named_apply
 
 
 logger = logging.getLogger("dinov2")

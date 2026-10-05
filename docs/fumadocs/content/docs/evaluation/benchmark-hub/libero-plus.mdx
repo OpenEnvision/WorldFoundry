@@ -1,126 +1,37 @@
 ---
 title: LIBERO-Plus
-description: LIBERO-Plus — metrics, requirements, and run commands.
+description: "CVPR 2026 robustness suite: 10,030 perturbed LIBERO instances across seven factors. WorldFoundry imports official rollouts — it does not run the fork."
 ---
 
-## About
+LIBERO-Plus (CVPR 2026, Fudan / FudanNLP) is a **test-only** robustness overlay on the original LIBERO Spatial / Object / Goal / Long tasks, not a fifth lifelong suite. The authors generate **10,030** instances with controlled perturbations on **seven** factors (**21** sub-dimensions):
 
+- **Object layout** — target displacement, confounders (1,525).
+- **Camera viewpoint** — pose and FOV (1,599).
+- **Robot initial state** — start pose (1,550).
+- **Language instruction** — LLM rewrites (1,537).
+- **Lighting** — intensity, direction, color, shadow (1,142).
+- **Background texture** — scene / surface look (1,076).
+- **Sensor noise** — photometric degradation (1,601).
 
+Instances are binned into **L1–L5** by how many of four reference models solved them (L1 = all four, L5 = none). The paper's scan of ten VLAs reports drops from about **95%** on clean LIBERO to **below 30%** under modest camera or initial-state shifts — an upstream finding, not a hub score.
 
-LIBERO-Plus external benchmark manifest for extended language-conditioned manipulation suites.
+Paper: [LIBERO-Plus](https://arxiv.org/abs/2510.13626). Project: [sylvestf.github.io/LIBERO-plus](https://sylvestf.github.io/LIBERO-plus/). Code: [sylvestf/LIBERO-plus](https://github.com/sylvestf/LIBERO-plus) (MIT; drop-in `libero` fork).
 
+WorldFoundry is **official-results only**. You run the upstream fork, then `official-validation` normalizes the export. No in-tree robosuite, no Plus assets. [Base LIBERO](/docs/evaluation/benchmark-hub/libero) can wire closed-loop execution; this card cannot.
 
+<BenchmarkPageSections id="libero-plus" locale="en" />
 
-## Metrics
-
-LIBERO-Plus external benchmark manifest for extended language-conditioned manipulation suites.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/libero-plus.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `episode_success` | Share of episodes or tasks that complete successfully. |
-| `action_accuracy` | Correctness of predicted actions, states, or outcomes against the benchmark success criterion. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `libero-plus-runtime`.
-- **Separate setup:** this benchmark expects a dedicated conda env rather than the unified runtime.
-- LIBERO and LIBERO-Plus package constraints may conflict; use a separate environment if the unified runtime cannot satisfy both.
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_LIBERO_PLUS_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/libero-plus`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/Lifelong-Robot-Learning--LIBERO`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_LIBERO_PLUS_ROOT`
-- `WORLDFOUNDRY_LIBERO_PLUS_RESULTS_PATH`
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id libero-plus \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero-plus/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/libero-plus/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id libero-plus \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero-plus/official-run \
-  --json
-```
-
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id libero-plus --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_LIBERO_PLUS_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+Optional `WORLDFOUNDRY_LIBERO_PLUS_ROOT` points at the `sylvestf/LIBERO-plus` checkout. Default import path: `WORLDFOUNDRY_LIBERO_PLUS_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/libero-plus.yaml`. Outputs: `scorecard.json` (primary `success_rate`), `raw_results.jsonl`, and `evaluation/summary.json`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

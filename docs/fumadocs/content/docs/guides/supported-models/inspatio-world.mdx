@@ -1,0 +1,50 @@
+---
+title: "InSpatio-World"
+description: "InSpatio-World: video-conditioned-world-generation and trajectory-conditioned-video; Verified."
+modelId: "inspatio-world"
+pageSource: generated
+---
+
+InSpatio-World is a 1.3B video-conditioned world generator: given a video and a target trajectory it synthesizes trajectory-conditioned novel views of the same world. In this catalog it is fully verified — the in-tree pipeline generated and visually validated a 297-frame video through the Workspace on 2026-07-10, with every default component resolving from local checkpoint storage.
+
+<ModelPaperFigures modelId="inspatio-world" locale="en" />
+
+The recorded paper is [arXiv 2604.07209](https://arxiv.org/abs/2604.07209).
+
+Project page: [inspatio.github.io/inspatio-world](https://inspatio.github.io/inspatio-world/). Code: [inspatio/inspatio-world](https://github.com/inspatio/inspatio-world). Code: [madebyollin/taehv](https://github.com/madebyollin/taehv).
+
+<ModelCommandBuilder modelId="inspatio-world" locale="en" />
+
+## What it is for
+
+`inspatio-world` is the recorded reconstruction line. Start here to emit geometry from the documented views.
+
+The recorded checkpoint is inspatio/world (apache-2.0); official inference source is retained in-tree. An optional use_tae path resolves taew2_1.pth from the shared checkpoint root but is not required for the default Wan VAE path.
+
+Catalog tasks include video-conditioned-world-generation, trajectory-conditioned-video, and novel-view-synthesis. Catalog aliases include `inspatio-world-1.3b`.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Trajectory-following accuracy of generated views).
+
+## Runtime contract
+
+Required `input_path`; optional `prompt`, `traj_txt_path`, `skip_step1`, `skip_step2`, and `skip_step3`; artifacts `inspatio-world.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `InspatioWorldPipeline`.
+
+Family status: **Verified**.
+
+Every default component resolves from local checkpoint storage only — stage the inspatio/world weights first, then run the standard pipeline.
+
+The in-tree InSpatio-World pipeline generated and visually validated a 297-frame video through Workspace on 2026-07-10.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run inspatio-world --pipeline.task-profile default` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `inspatio/world`, `Wan-AI/Wan2.1-T2V-1.3B`, and `depth-anything/DA3NESTED-GIANT-LARGE-1.1` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh inspatio-world`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; status: **Verified**.
+
+<ModelRelatedRecipes modelId="inspatio-world" locale="en" />

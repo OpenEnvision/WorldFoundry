@@ -2,7 +2,7 @@ model:
   pretrained_checkpoint: '|<your_checkpoint_path>|'
   base_learning_rate: 1.0e-05
   scale_lr: false
-  target: worldfoundry.base_models.diffusion_model.video.lvdm.models.ddpm3d_vid2world.LatentVisualDiffusion
+  target: worldfoundry.base_models.diffusion_model.models.networks.lvdm.latent_diffusion_vid2world.LatentVisualDiffusion
   better_weight_transfer: extrapolative
   params:
     rescale_betas_zero_snr: true
@@ -36,7 +36,7 @@ model:
     action_dropout_prob: 0.2
     action_random_drop_btw_timestep: true
     unet_config:
-      target: worldfoundry.base_models.diffusion_model.video.lvdm.modules.networks.openaimodel3d_vid2world.UNetModel
+      target: worldfoundry.base_models.diffusion_model.models.networks.lvdm.unet3d_vid2world.UNetModel
       params:
         in_channels: 8
         out_channels: 4
@@ -70,7 +70,7 @@ model:
         action_emb: true
         action_dim: 51
     first_stage_config:
-      target: worldfoundry.base_models.diffusion_model.video.lvdm.models.autoencoder.AutoencoderKL
+      target: worldfoundry.base_models.diffusion_model.models.autoencoders.lvdm.model.AutoencoderKL
       params:
         embed_dim: 4
         monitor: val/rec_loss
@@ -91,16 +91,16 @@ model:
         lossconfig:
           target: torch.nn.Identity
     cond_stage_config:
-      target: worldfoundry.base_models.diffusion_model.video.lvdm.modules.encoders.condition.FrozenOpenCLIPEmbedder
+      target: worldfoundry.base_models.diffusion_model.models.encoders.lvdm.condition.FrozenOpenCLIPEmbedder
       params:
         freeze: true
         layer: penultimate
     img_cond_stage_config:
-      target: worldfoundry.base_models.diffusion_model.video.lvdm.modules.encoders.condition.FrozenOpenCLIPImageEmbedderV2
+      target: worldfoundry.base_models.diffusion_model.models.encoders.lvdm.condition.FrozenOpenCLIPImageEmbedderV2
       params:
         freeze: true
     image_proj_stage_config:
-      target: worldfoundry.base_models.diffusion_model.video.lvdm.modules.encoders.resampler.Resampler
+      target: worldfoundry.base_models.diffusion_model.models.encoders.lvdm.resampler.Resampler
       params:
         dim: 1024
         depth: 4
@@ -112,13 +112,13 @@ model:
         ff_mult: 4
         video_length: 16
 data:
-  target: worldfoundry.synthesis.visual_generation.world_model.vid2world.main.utils_data.DataModuleFromConfig
+  target: worldfoundry.synthesis.visual_generation.vid2world.main.utils_data.DataModuleFromConfig
   params:
     batch_size: 2
     num_workers: 12
     wrap: false
     validation:
-      target: worldfoundry.base_models.diffusion_model.video.lvdm.variants.vid2world.eval_inputs.valorant.CSGOVIDStyleDataset
+      target: worldfoundry.synthesis.visual_generation.vid2world.eval_inputs.valorant.CSGOVIDStyleDataset
       params:
         data_dir: assets/long_rollout/valorant
         video_length: 10

@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .wrapper import compute_lqs
+compute_lqs = lazy_export(f"{__name__}.wrapper", "compute_lqs", owner=__name__)
 
 METRIC_ID = "lqs"
 ALIASES = ("layout-quality-score", "layout_quality_score")

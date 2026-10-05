@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from torchvision.datasets import CIFAR10, STL10, CIFAR100
 import torchvision.transforms.functional as F
 
-from torch_fidelity.helpers import vassert
+from .helpers import vassert
 
 
 class TransformPILtoRGBTensor:

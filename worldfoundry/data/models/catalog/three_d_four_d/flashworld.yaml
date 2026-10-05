@@ -49,3 +49,23 @@ catalog_policy:
   - open_weights_restricted
   - api_or_closed
   - unknown
+docs:
+  publisher: Xiamen University / Tencent
+  publisher_kind: university
+  publisher_zh: 厦门大学 / 腾讯
+  overview: 'FlashWorld generates 3D scenes in seconds: from one image (plus optional prompt) it produces a camera-navigable 3D scene rather than a flat clip. In this catalog the in-tree pipeline, operator, and representation runtime are exposed and runner status is verified for the image-conditioned camera-scene demo with local FlashWorld/Wan assets.'
+  overview_zh: FlashWorld 数秒内生成 3D 场景：从一张图（可附提示词）产出可相机游走的 3D 场景，而非平面视频。本 catalog 中其树内 pipeline、operator 与表示运行时均已暴露，图像条件的相机场景 demo 在本地 FlashWorld/Wan 资产下 runner 状态为 verified。
+  architecture: FlashWorld distills a Wan-based video generator into a fast 3D-scene generator with Gaussian-style scene representations (per arXiv 2510.13678). Execution requires FlashWorld, Wan2.2, diffusers/transformers, and CUDA assets; no empty runner shim is registered.
+  architecture_zh: FlashWorld 将基于 Wan 的视频生成器蒸馏为快速 3D 场景生成器，使用高斯式场景表示（见 arXiv 2510.13678）。运行需要 FlashWorld、Wan2.2、diffusers/transformers 与 CUDA 资产；不注册空的 runner 壳。
+  usage_notes: Verified for the image-conditioned demo; per-run visual QA is tracked outside the catalog. Execution remains checkpoint/GPU/dependency gated — stage all recorded assets first.
+  usage_notes_zh: 图像条件 demo 已验证；每次运行的视觉 QA 在 catalog 外跟踪。执行仍受 checkpoint/GPU/依赖限制——请先就位所有记录资产。
+  limitations:
+  - Speed-focused distillation trades some scene fidelity versus optimization-based methods.
+  - Requires the full recorded asset set (FlashWorld + Wan2.2).
+  limitations_zh:
+  - 以速度为先的蒸馏在场景保真度上弱于基于优化的方法。
+  - 需要完整的记录资产组合（FlashWorld + Wan2.2）。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Standard scoring for navigable generated scenes.
+    reason_zh: 可游走生成场景的标准评分。

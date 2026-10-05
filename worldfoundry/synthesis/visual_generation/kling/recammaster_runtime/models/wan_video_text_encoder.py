@@ -3,7 +3,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.t5 import (
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import (
     T5RelativeEmbedding, T5LayerNorm, T5SelfAttention, init_weights)
 
 

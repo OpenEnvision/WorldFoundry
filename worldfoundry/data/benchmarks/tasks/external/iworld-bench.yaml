@@ -29,8 +29,7 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: iworld-bench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id iworld-bench --mode contract
-    --output-dir tmp/benchmark_zoo/benchmark_contract/iworld-bench --json
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id iworld-bench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/iworld-bench --json
   release_status: experimental
   integration_status: integrated
   maturity: verified_runner
@@ -47,8 +46,7 @@ metadata:
   - Generated videos for the requested task split
   - WorldFoundry VBench and VIPe runtime assets for full official execution beyond bounded memory metric
   blockers:
-  - Full official GPU execution beyond the bounded memory metric requires VBench assets and a CUDA/Torch-compatible
-    VIPe extension build; the current vendored VIPe tree does not contain the native extension sources.
+  - Full official GPU execution beyond the bounded memory metric requires VBench assets and a CUDA/Torch-compatible VIPe extension build; the current vendored VIPe tree does not contain the native extension sources.
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:IWorldBenchContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py
   data_refs:
@@ -62,7 +60,7 @@ metadata:
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: true
-    surface: bounded_official_memory_metric
+    surface: bounded_official_memory_component
     normalizer_verified: false
   prompt_suite:
     status: released_hf_dataset

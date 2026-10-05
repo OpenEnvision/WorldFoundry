@@ -1,0 +1,50 @@
+---
+title: "WorldMem"
+description: "WorldMem: interactive-world-model and minecraft-world-model; Runner parity pending."
+modelId: "worldmem"
+pageSource: generated
+---
+
+WorldMem targets the core weakness of interactive world models — forgetting: it equips a Minecraft-style interactive world model with an explicit memory so revisited places stay consistent over long horizons (paper: arXiv 2504.12369). WorldFoundry registers the route in-tree; upstream inference model and data assets are runtime-gated.
+
+<ModelPaperFigures modelId="worldmem" locale="en" />
+
+The recorded paper is [WorldMem: Long-term Consistent World Simulation with Memory](https://arxiv.org/abs/2504.12369) (2025).
+
+Project page: [worldmem.github.io](https://worldmem.github.io/). Code: [xizaoqu/WorldMem](https://github.com/xizaoqu/WorldMem).
+
+<ModelCommandBuilder modelId="worldmem" locale="en" />
+
+## What it is for
+
+`worldmem` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+
+The recorded design theme is long-term consistency via memory: past observations are stored and retrieved to condition future rollouts. Architecture internals beyond the official repository and paper pointers are not recorded in this repository.
+
+Catalog tasks include interactive-world-model, minecraft-world-model, and long-term-consistency.
+
+Recorded evaluation entry points include [MemoBench](/docs/evaluation/benchmark-hub/memobench) (Long-term memory consistency of world rollouts), [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Action-conditioned interactive rollout quality).
+
+## Runtime contract
+
+Artifacts `generated_video` and `worldmem_runtime_plan.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `WorldMemPipeline`.
+
+Family status: **Runner parity pending**.
+
+Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
+
+WorldMem route is registered; upstream inference model/data assets are runtime-gated.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run worldmem --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh worldmem`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="worldmem" locale="en" />

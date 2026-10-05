@@ -1,0 +1,50 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: A17
+track: calibration
+title_en: Ridge-Instability Ball Release
+scene_grounding:
+- 'Initial state must match: One metal ball is stationary at the centered top release
+  point of a symmetric ridge track.'
+- Apparatus geometry in the opening frames must match the source image.
+action_execution:
+- 'Required action: Release the ball once.'
+- Action must happen exactly once in the expected direction / region.
+target_requirements:
+- Scene-defining target, subject, and readout evidence must remain visible throughout the action.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+- The ball / puck must not re-appear at an inconsistent location after exiting the
+  apparatus.
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Inter-basin crossing: subject moves between terminal regions after already committing
+  to one basin.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+- A same-basin bounce, brief airborne frame, or later occlusion after committed basin
+  readout does not erase the relaxed outcome label. Impossible crossing to the other
+  basin after commitment is strict-excluding.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Ridge-Instability Ball Release.'
+- 'Geometry-sensitive scene: apparatus and region stability are fatal for strict trusted
+  metric.'

@@ -1,0 +1,52 @@
+---
+title: "MAGI-1"
+description: "MAGI-1 from Sand AI: image-to-video and video-generation; Runner parity pending; dedicated `magi-official-cu124`."
+modelId: "magi-1"
+pageSource: authored
+---
+
+MAGI-1 is Sand AI's open autoregressive video generation model, cataloged for image-to-video and general video generation and tracked as a high-priority open candidate with Apache-2.0 HF metadata. The WorldFoundry route is complete and reports missing checkpoint assets at runtime.
+
+<ModelPaperFigures modelId="magi-1" locale="en" />
+
+The recorded paper is [arXiv 2505.13211](https://arxiv.org/abs/2505.13211).
+
+Code: [SandAI-org/MAGI-1](https://github.com/SandAI-org/MAGI-1).
+
+<ModelCommandBuilder modelId="magi-1" locale="en" />
+
+## What it is for
+
+`magi-1` is the recorded text/image-to-video line. Use it when you want both prompt and still conditioning on the same catalog card.
+
+Upstream describes MAGI-1 as a large autoregressive video model generating chunk-by-chunk with causal attention, enabling streaming-style continuation. This repository records only the prompt+image input contract and the generated_video artifact; scale and internals are not recorded here.
+
+Catalog tasks include image-to-video and video-generation. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Baseline video generation quality suite).
+
+## Runtime contract
+
+Optional `prompt`, `negative_prompt`, `input_path`, `frames`, and `fps`; artifacts `magi-1.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `MAGI1Pipeline`.
+
+Family status: **Runner parity pending**.
+
+No runner-parity record exists yet — treat GPU validation as not done. Stage the MAGI-1 weights first; the route fails informatively when they are missing.
+
+Added as a high-priority open video generation candidate with Apache-2.0 HF metadata.
+
+The in-tree MAGI-1 I2V route is wired with the official example image/config assets, local sand-ai/MAGI-1 checkpoint, 4.5B distill profile, sampling controls, fps, and seed.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run magi-1 --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the dedicated environment `magi-official-cu124` (Python 3.10.12, CUDA 12.4).
+
+Recorded weight repositories include `sand-ai/MAGI-1` and `sand-ai/MAGI-1`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh magi-1`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="magi-1" locale="en" />

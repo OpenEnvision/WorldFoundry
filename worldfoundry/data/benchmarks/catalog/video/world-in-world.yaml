@@ -1,5 +1,7 @@
 id: world-in-world
 name: World-in-World
+publisher: Johns Hopkins University
+publisher_kind: university
 benchmark_kind:
 - closed-loop-world-model
 - embodied-action
@@ -99,6 +101,19 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  scoring:
+    engines: [in_tree]
+    hooks:
+      in_tree: worldfoundry.evaluation.tasks.execution.runners.world_in_world.world_in_world_in_tree_evaluator:IN_TREE_CONFIG
+  normalization:
+    artifact_official_run: true
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/world_in_world/run_world_in_world_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.world_in_world.run_world_in_world_official_runner
+    generated_arg: null
+    limit_arg: --limit
+    supports_fixture: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldInWorldContract
   validation_command:
   - worldfoundry-eval
@@ -126,18 +141,18 @@ runner:
   - raw_metric_table.jsonl
   verification_status: result_importer_ready
   notes:
-  - WorldFoundry normalizes caller-provided World-in-World official result files through the unified benchmark-run 
-    entrypoint.
+  - WorldFoundry normalizes caller-provided World-in-World official result files through the unified benchmark-run entrypoint.
   - This runner does not execute the closed-loop environments, planners, workers, or task scorers.
   - Imported summaries are not official benchmark or leaderboard evidence.
   required_env: []
 integration:
   status: integrated
+  tier: in_tree
   blocked_reasons:
   - Official closed-loop rollout and task-scoring execution is not provided by this result importer.
 release_status: experimental
 maturity: contract_ready
-open_source_status: in_tree_result_importer
+open_source_status: normalizer_only
 official_benchmark_verified: false
 integration_evidence: false
 leaderboard_valid: false
@@ -150,8 +165,7 @@ data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/world-in-world.yaml
   bundled_assets: worldfoundry/data/benchmarks/assets/world-in-world
   result_importer: worldfoundry/evaluation/tasks/execution/runners/world_in_world
-official_runner_script: 
-  worldfoundry/evaluation/tasks/execution/runners/world_in_world/run_world_in_world_official_runner.py
+official_runner_script: worldfoundry/evaluation/tasks/execution/runners/world_in_world/run_world_in_world_official_runner.py
 runner_availability:
   available: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldInWorldContract

@@ -20,24 +20,37 @@ inference, and export capabilities. It supports both single and nested model arc
 
 from __future__ import annotations
 
-from pathlib import Path
+import json
 import re
 import time
+from pathlib import Path
 from typing import Optional, Sequence
+
 import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub import PyTorchModelHubMixin
 from PIL import Image
 
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.cfg import create_object, load_config
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.cfg import (
+    create_object,
+    load_config,
+)
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.registry import MODEL_REGISTRY
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.specs import Prediction
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import affine_inverse
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.io.input_processor import InputProcessor
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.io.output_processor import OutputProcessor
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.geometry import (
+    affine_inverse,
+)
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.io.input_processor import (
+    InputProcessor,
+)
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.io.output_processor import (
+    OutputProcessor,
+)
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.logger import logger
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.pose_align import align_poses_umeyama
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.pose_align import (
+    align_poses_umeyama,
+)
 
 torch.backends.cudnn.benchmark = False
 # logger.info("CUDNN Benchmark Disabled")
@@ -48,6 +61,7 @@ CONFIG_NAME = "config.json"
 _REPO_TO_MODEL_NAME = {
     "depth-anything/DA3METRIC-LARGE": "da3metric-large",
     "depth-anything/DA3-GIANT": "da3-giant",
+    "depth-anything/DA3NESTED-GIANT-LARGE-1.1": "da3nested-giant-large",
 }
 
 
@@ -62,7 +76,23 @@ def _model_name_from_repo_id(repo_id: str) -> str:
     """
     if repo_id in _REPO_TO_MODEL_NAME:
         return _REPO_TO_MODEL_NAME[repo_id]
+
+    candidate = Path(repo_id).expanduser()
+    config_path = candidate / CONFIG_NAME if candidate.is_dir() else candidate.parent / CONFIG_NAME
+    if config_path.is_file():
+        try:
+            config_payload = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            config_payload = {}
+        configured_name = str(config_payload.get("model_name") or "").lower()
+        if configured_name in MODEL_REGISTRY:
+            return configured_name
+
     model_name = repo_id.rstrip("/").rsplit("/", 1)[-1].lower()
+    # HFD exports repository ids as ``owner--repo`` directory names. Keep
+    # accepting those directories even if their config metadata is missing.
+    if candidate.is_dir() and "--" in model_name:
+        model_name = model_name.rsplit("--", 1)[-1]
     if model_name in MODEL_REGISTRY:
         return model_name
     version_stripped = re.sub(r"-\d+(?:\.\d+)*$", "", model_name)
@@ -92,8 +122,18 @@ def _load_state_dict_file(path: str | Path) -> dict[str, torch.Tensor]:
         return load_file(str(path), device="cpu")
 
     state = torch.load(path, map_location="cpu")
-    if isinstance(state, dict) and "state_dict" in state:
-        state = state["state_dict"]
+    while isinstance(state, dict):
+        wrapped = next(
+            (
+                state[key]
+                for key in ("state_dict", "module", "model")
+                if key in state and isinstance(state[key], dict)
+            ),
+            None,
+        )
+        if wrapped is None:
+            break
+        state = wrapped
     if not isinstance(state, dict):
         raise TypeError(f"Unsupported Depth Anything 3 checkpoint format at {path}")
     return state
@@ -245,10 +285,18 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
             Dictionary containing model predictions
         """
         export_feat_layers = list(export_feat_layers or [])
-        # Determine optimal autocast dtype
+        # CUDA inference benefits from autocast, while the CPU-offload path must
+        # remain FP32.  Enabling CPU BF16 here leaves some DA3 convolution
+        # parameters in FP32 and produces input/bias dtype mismatches on later
+        # autoregressive spatial-memory updates.
+        use_autocast = image.device.type == "cuda"
         autocast_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
         with torch.no_grad():
-            with torch.autocast(device_type=image.device.type, dtype=autocast_dtype):
+            with torch.autocast(
+                device_type=image.device.type,
+                dtype=autocast_dtype,
+                enabled=use_autocast,
+            ):
                 return self.model(
                     image, extrinsics, intrinsics, export_feat_layers, infer_gs, use_ray_pose, ref_view_strategy
                 )
@@ -561,6 +609,16 @@ class DepthAnything3(nn.Module, PyTorchModelHubMixin):
             ValueError: If no tensors are found in the model
         """
         if self.device is not None:
+            # ``nn.Module.to`` does not update this API-level cache.  Resolve
+            # from live tensors when callers have offloaded the model.
+            for param in self.parameters():
+                if param.device != self.device:
+                    self.device = param.device
+                return self.device
+            for buffer in self.buffers():
+                if buffer.device != self.device:
+                    self.device = buffer.device
+                return self.device
             return self.device
 
         # Find device from parameters

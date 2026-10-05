@@ -19,7 +19,6 @@ from worldfoundry.evaluation.tasks.datasets import (
     resolve_dataset_samples_path,
 )
 
-
 # Canonical schema version tracking materialized output lists
 MATERIALIZED_REQUESTS_SCHEMA_VERSION = "worldfoundry-materialized-requests"
 

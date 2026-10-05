@@ -1,0 +1,48 @@
+---
+title: "WildDet3D"
+description: "WildDet3D from Allen Institute for AI (AI2): 3d-detection and wild-3d-perception; Verified."
+modelId: "wilddet3d"
+pageSource: generated
+---
+
+WildDet3D from the Allen Institute for AI recovers 3D object boxes from unconstrained RGB imagery. WorldFoundry calls the pinned official detector through a small adapter and stores its detections and depth map in a NumPy archive.
+
+<ModelPaperFigures modelId="wilddet3d" locale="en" />
+
+The recorded paper is [arXiv 2604.08626](https://arxiv.org/abs/2604.08626).
+
+Project page: [allenai.github.io/WildDet3D](https://allenai.github.io/WildDet3D/). Code: [allenai/WildDet3D](https://github.com/allenai/WildDet3D).
+
+<ModelCommandBuilder modelId="wilddet3d" locale="en" />
+
+## What it is for
+
+Pick `wilddet3d` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+
+This is a perception entry, not a video generator. The official model combines SAM3 image features and LingBot-Depth geometry; upstream source and submodules are loaded from a pinned external checkout. It is published by Allen Institute for AI (AI2).
+
+Catalog tasks include 3d-detection, wild-3d-perception, and world-understanding.
+
+## Runtime contract
+
+Artifacts `generated_3d_asset` and `wilddet3d_predictions.npz`.
+
+CLI task profiles: `default`. WorldFoundry binds `WildDet3DPipeline`.
+
+Family status: **Verified**.
+
+Provide image_path and comma-separated classes in the prompt; optionally provide intrinsics_path for a finite 3x3 .npy matrix. Stage the full allenai/WildDet3D checkpoint, robbyant/lingbot-depth-postrain-dc-vitl14/model.pt, and pinned official checkout with submodules. The upstream source uses the SAM License.
+
+The pinned official WildDet3D detector is launched through a small WorldFoundry adapter; source, submodules, and checkpoints remain external.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run wilddet3d --pipeline.task-profile default` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `allenai/WildDet3D` and `robbyant/lingbot-depth-postrain-dc-vitl14`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh wilddet3d`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="wilddet3d" locale="en" />

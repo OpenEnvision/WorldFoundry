@@ -1,0 +1,32 @@
+---
+title: "X-VLA"
+description: "X-VLA（Tsinghua University (AIR)）：`image`、`prompt`、`state`、`domain_id` 进，`action_trace`、`xvla_action_trace.json` 出；独立环境 `worldfoundry-vla-xvla`。"
+modelId: "xvla"
+pageSource: authored
+---
+
+X-VLA 是跨本体 VLA，基于 Florence-2 骨干与软提示域条件（论文：arXiv 2510.10274， Apache-2.0）。它是本 catalog 验证最充分的条目之一：九个已发布 checkpoint 全部严格恢复，并以显式域 ID 经真实 A100 推理产出有限的 30x20 动作，树内动作头与上游最大绝对差低于 5e-7。
+
+<ModelPaperFigures modelId="xvla" locale="zh" />
+
+论文是 [X-VLA: Soft-Prompted Transformer as Scalable Cross-Embodiment Vision-Language-Action Model](https://arxiv.org/abs/2510.10274)。项目页：[thu-air-dream.github.io/X-VLA](https://thu-air-dream.github.io/X-VLA)。代码：[2toinf/X-VLA](https://github.com/2toinf/X-VLA)。
+
+<ModelCommandBuilder modelId="xvla" locale="zh" />
+
+## 用来做什么
+
+滚动跨本体 VLA。WorldFoundry 在 A100 上验证了全部九个已发布 checkpoint：每个都带显式 `domain_id` 写出有限的 30×20 动作。
+
+启动 `worldfoundry-eval run xvla`，任务 profile 为 `vla`。必填：`image`、`prompt`、`state`、`domain_id`、`denoising_steps`。产物：`action_trace`、`xvla_action_trace.json`。
+
+`domain_id` 必须和 checkpoint 对齐（WidowX、Google Robot、LIBERO、CALVIN、RoboTwin2 等）。基座 `2toINF/X-VLA-Pt` 同样要带这个 ID。相关套件：[BridgeData V2](/zh/docs/evaluation/benchmark-hub/bridgedata-v2)。
+
+## 运行时契约
+
+必填：`image`、`prompt`、`state`、`domain_id`、`denoising_steps`。可选相机：`image0`、`image1`、`image2`。默认 float32 解码；bf16/fp16 是显式性能开关。产物：`xvla_action_trace.json`（以及 `action_trace`）。状态：**Verified**。运行时强制 `trust_remote_code=false`，不会导入上游 checkout。
+
+## 在 WorldFoundry 中运行
+
+独立环境 `worldfoundry-vla-xvla`（Python 3.10，CUDA 12.1 或更新，torch>=2.2）。就位对应快照，例如 `2toINF/X-VLA-WidowX`、`2toINF/X-VLA-Google-Robot` 或 `2toINF/X-VLA-Libero`——运行时不代下权重。启动 `worldfoundry-eval run xvla`，任务 profile 为 `vla`。许可：Apache-2.0。
+
+<ModelRelatedRecipes modelId="xvla" locale="zh" />

@@ -1,8 +1,20 @@
 """Generic feature-norm token pruning and reconstruction.
 
-The scoring and gather/scatter policy are adapted from the model-agnostic
-Sol-Engine/SGLang TokenPrune implementation. Model code retains control of the
-prunable token seam, active denoising steps and compensation state.
+Responsibility: score a token segment, gather the keep-set for expensive
+blocks, then scatter processed tokens back and fill drops from the
+previous full segment.
+
+This module is not a model-specific DiT hook and does not own the
+prunable seam, which steps prune, or CUDA Graph capture. Shape changes
+generally cannot enter a graph — callers keep that decision outside.
+
+Public surface:
+- :func:`select_token_indices` / :func:`prune_tokens` / :func:`restore_tokens`
+- :class:`TokenPruneState` — scatter metadata for one segment
+- :class:`TokenPruner` — previous-step compensation across denoising calls
+
+Model code retains control of the prunable token seam, active denoising
+steps, and compensation state.
 """
 
 from __future__ import annotations
@@ -23,7 +35,13 @@ TokenScoreMethod = Literal[
 ]
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Scoring — keep-set is sorted so gather/scatter stay deterministic
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _uniform_indices(num_tokens: int, keep: int, device: torch.device) -> torch.Tensor:
+    """Stride the sequence so a keep-ratio still covers the full temporal span."""
     positions = torch.arange(keep, device=device, dtype=torch.long)
     return ((positions * num_tokens) // keep).clamp_(max=num_tokens - 1)
 
@@ -71,9 +89,16 @@ def select_token_indices(
         return _uniform_indices(num_tokens, keep, hidden_states.device)
 
     if scores.ndim > 1:
+        # Mean over batch/extra dims so CFG branches share one keep-set.
         reduce_dims = tuple(range(scores.ndim - 1))
         scores = scores.mean(dim=reduce_dims)
+    # Sort so gather/scatter stay layout-stable across steps.
     return torch.sort(torch.topk(scores, keep, largest=True).indices).values
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Compact / expand — only the selected seam changes length
+# ──────────────────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +113,7 @@ class TokenPruneState:
 
     @property
     def kept_length(self) -> int:
+        """Number of retained tokens; used to slice the compacted sequence."""
         return int(self.indices.numel())
 
 
@@ -134,6 +160,11 @@ def prune_tokens(
     return compact.movedim(-2, normalized_dim), state
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Restore — dropped tokens come from the prior full segment, not zeros
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def restore_tokens(
     processed: torch.Tensor,
     state: TokenPruneState,
@@ -162,10 +193,16 @@ def restore_tokens(
     return restored.movedim(-2, state.seq_dim)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Stateful pruner — first call is dense so later drops have compensation
+# ──────────────────────────────────────────────────────────────────────────
+
+
 class TokenPruner:
     """Stateful previous-step compensation for repeated denoising calls."""
 
     def __init__(self, keep_ratio: float, *, method: TokenScoreMethod | str = "feat_norm") -> None:
+        """Reject a non-positive keep ratio; first ``prune`` is always a dense seed."""
         if not 0 < keep_ratio <= 1:
             raise ValueError("keep_ratio must be in (0, 1]")
         self.keep_ratio = float(keep_ratio)
@@ -174,6 +211,7 @@ class TokenPruner:
         self._pending_dense: dict[object, tuple[int, int, int]] = {}
 
     def reset(self, key: object | None = None) -> None:
+        """Drop compensation for one branch, or every branch when ``key`` is omitted."""
         if key is None:
             self._previous.clear()
             self._pending_dense.clear()
@@ -214,6 +252,7 @@ class TokenPruner:
         *,
         key: object = "default",
     ) -> torch.Tensor:
+        """Scatter a pruned step, or snapshot the dense seed as next compensation."""
         if state is None:
             pending = self._pending_dense.pop(key, None)
             if pending is not None:

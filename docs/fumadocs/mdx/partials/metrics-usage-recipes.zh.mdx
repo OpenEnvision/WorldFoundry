@@ -1,5 +1,3 @@
-import { MetricQuickNav } from '@/components/metric-quick-nav';
-
 ## 指标原理与计算
 
 本节说明各 registry 指标的原理与计算约定，目标是让用户无需先读实现代码即可理解每个指标。
@@ -14,8 +12,6 @@ import { MetricQuickNav } from '@/components/metric-quick-nav';
 - `↓` 表示越低越好。
 
 若涉及 benchmark 特有的聚合、过滤或官方榜单归一化，请在对应 benchmark 页面记录协议，而不要在此处重定义可复用指标。
-
-<MetricQuickNav locale="zh" page="recipes" />
 
 ### `artifact_count` (↑)
 **原理：** `artifact_count` is a WorldFoundry-specific structural metric rather than a paper metric. It counts the number of artifacts attached to each materialized `GenerationResult`. The computation is simply:

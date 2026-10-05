@@ -1,126 +1,34 @@
 ---
 title: LIBERO-Mem
-description: LIBERO-Mem — metrics, requirements, and run commands.
+description: "Non-Markovian LIBERO suite: 10 object-memory tasks (OM / OS / OR / OO). WorldFoundry imports official rollouts — it does not run the simulator."
 ---
 
-## About
+LIBERO-Mem (AAAI 2026) is **not** the Spatial / Object / Goal / LIBERO-100 lifelong suites. FPT Software AI Center (with Arkansas, Stuttgart, CMU, Aalborg, and Liverpool) added **10 new** tabletop tasks on the LIBERO / robosuite stack so a policy cannot succeed from the current frame. Cues live in **object history**: what moved, how many times, in what order, or behind an occlusion. The four official memory axes:
 
+- **Object Motion (OM)** — recall the last pick / place on an aliased scene.
+- **Object Sequence (OS)** — count repeated pick-and-place (3× / 5× / 7×).
+- **Object Relations (OR)** — swap or rotate identical bowls across plates.
+- **Object Occlusion (OO)** — remember which basket hid which object.
 
+Each task ships **120** trajectories (100 train / 20 val), **200–700** frames, instance IDs, masks, and symbolic subgoals (`→`, `∨`). Official scoring reports **task success** and **subgoal completion**. Embodied-SlotSSM is the authors' companion VLA — a model-card fact, not a WorldFoundry board row.
 
-LIBERO-Mem external benchmark manifest for memory-dependent language-conditioned manipulation.
+Paper: [Rethinking Progression of Memory State in Robotic Manipulation](https://arxiv.org/abs/2511.11478). Project: [libero-mem.github.io](https://libero-mem.github.io/). Code: [libero-mem/libero-mem](https://github.com/libero-mem/libero-mem).
 
+WorldFoundry is **official-results only**. You run the upstream evaluator, then `official-validation` normalizes JSON/CSV into the scorecard. No in-tree simulator, no Embodied-SlotSSM weights. That is different from [base LIBERO](/docs/evaluation/benchmark-hub/libero), which can also wire closed-loop execution.
 
+<BenchmarkPageSections id="libero-mem" locale="en" />
 
-## Metrics
-
-LIBERO-Mem external benchmark manifest for memory-dependent language-conditioned manipulation.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/libero-mem.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `memory_success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `action_accuracy` | Correctness of predicted actions, states, or outcomes against the benchmark success criterion. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `worldfoundry-unified-cu128`.
-- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
-- WorldFoundry provides contract and official result normalization for caller-provided LIBERO-Mem outputs.
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_LIBERO_MEM_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/libero-mem`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/Lifelong-Robot-Learning--LIBERO`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_LIBERO_MEM_ROOT`
-- `WORLDFOUNDRY_LIBERO_MEM_RESULTS_PATH`
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id libero-mem \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero-mem/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/libero-mem/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id libero-mem \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero-mem/official-run \
-  --json
-```
-
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id libero-mem --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_LIBERO_MEM_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+Optional `WORLDFOUNDRY_LIBERO_MEM_ROOT` points at a local toolkit / repo root. Default import path when you omit `--official-results-path` is `WORLDFOUNDRY_LIBERO_MEM_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/libero-mem.yaml`. Outputs: `scorecard.json` (primary `success_rate`; also `memory_success_rate` when the export has it), `raw_results.jsonl`, and `evaluation/summary.json`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

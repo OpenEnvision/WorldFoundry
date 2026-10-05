@@ -18,7 +18,6 @@ from PIL import Image
 
 from worldfoundry.runtime.in_tree_cli import ensure_in_tree_runtime, execute_in_tree, require_path
 
-
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 
@@ -195,6 +194,11 @@ class HYWorld2WorldgenRuntime:
         env: Mapping[str, Any] | None = None,
     ) -> None:
         self.repo_root = ensure_in_tree_runtime(self.bundled_repo_root(), package_file=__file__)
+        require_path(
+            self.repo_root / "hyworld2" / "worldgen" / "traj_render.py",
+            "HY-World 2.0 trajectory-render source (install the official checkout in the in-tree runtime directory)",
+            kind="file",
+        )
         configured_scene = scene_path or os.environ.get("HYWORLD_SCENE_PATH")
         self.scene_path = Path(configured_scene).expanduser() if configured_scene else None
         self.python_executable = str(python_executable or sys.executable)

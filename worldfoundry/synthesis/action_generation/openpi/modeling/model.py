@@ -16,7 +16,6 @@ import orbax.checkpoint as ocp
 import safetensors
 import torch
 
-from . import pytorch_pi0
 from .. import image_tensor as image_tools
 from .. import array_typing as at
 
@@ -209,6 +208,8 @@ class BaseModelConfig(abc.ABC):
         return nnx.merge(graphdef, state)
 
     def load_pytorch(self, runtime_config, weight_path: str):
+        from . import pytorch_pi0
+
         model = pytorch_pi0.PI0Pytorch(config=runtime_config.model)
         safetensors.torch.load_model(model, weight_path)
         return model

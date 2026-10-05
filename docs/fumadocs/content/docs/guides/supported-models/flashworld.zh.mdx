@@ -1,0 +1,56 @@
+---
+title: "FlashWorld"
+description: "FlashWorld（Xiamen University / Tencent）：3D 与 4D；已验证。"
+modelId: "flashworld"
+pageSource: authored
+---
+
+FlashWorld 数秒内生成 3D 场景：从一张图（可附提示词）产出可相机游走的 3D 场景，而非平面视频。本 catalog 中其树内 pipeline、operator 与表示运行时均已暴露，图像条件的相机场景 demo 在本地 FlashWorld/Wan 资产下 runner 状态为 已验证。
+
+<ModelPaperFigures modelId="flashworld" locale="zh" />
+
+记录论文为[FlashWorld: High-quality 3D Scene Generation within Seconds](https://arxiv.org/abs/2510.13678)（2025）。
+
+项目页：[imlixinyang.github.io/FlashWorld-Project-Page](https://imlixinyang.github.io/FlashWorld-Project-Page/)。代码：[imlixinyang/FlashWorld](https://github.com/imlixinyang/FlashWorld)。
+
+论文：[FlashWorld: High-quality 3D Scene Generation within Seconds](https://arxiv.org/abs/2510.13678)（arXiv 2510.13678）。项目页：[imlixinyang.github.io/FlashWorld-Project-Page](https://imlixinyang.github.io/FlashWorld-Project-Page/)。代码：[imlixinyang/FlashWorld](https://github.com/imlixinyang/FlashWorld)（**Apache-2.0**）。权重：`imlixinyang/FlashWorld`——Hugging Face 模型元数据是 **CC-BY-NC-SA-4.0**，请按产物各自许可遵守。机构：厦门大学 / 腾讯。
+
+栈把基于 Wan 的视频生成器蒸馏成快速的高斯式场景生成器。运行时需要 FlashWorld、**Wan2.2**（`Wan-AI/Wan2.2-TI2V-5B-Diffusers`）、diffusers / transformers 和 CUDA 资产。
+
+<ModelCommandBuilder modelId="flashworld" locale="zh" />
+
+## 用来做什么
+
+`flashworld` 是记录的重建线。从记录的视图写出几何时从这里起步。
+
+FlashWorld 将基于 Wan 的视频生成器蒸馏为快速 3D 场景生成器，使用高斯式场景表示（见 arXiv 2510.13678）。运行需要 FlashWorld、Wan2.2、diffusers/transformers 与 CUDA 资产；不注册空的 runner 壳。该模型由厦门大学 / 腾讯发布。
+
+catalog 记录的任务包括 fast 3D scene generation from image or text。
+
+记录的评测入口包括[WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)（可游走生成场景的标准评分）。
+
+## 运行时契约
+
+可选 `input_path`、`prompt`、`interactions`、`num_frames`、`fps`；产物 `generated_3d_asset`、`generated_video`、`flashworld.ply`。
+
+CLI task profile：`official-camera-scene`。绑定的 pipeline 类是 `FlashWorldPipeline`。
+
+系列状态：**已验证**。
+
+`official-camera-scene` 记录默认值：num_frames=16, fps=15。
+
+执行仍受 checkpoint/GPU/依赖限制——请先就位所有记录资产。
+
+必填 `prompt`、`image`；可选 `video`；`actions`：camera_path, camera_action_sequence；产物 `generated_3d_asset`、`generated_video`、`flashworld.ply`。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run flashworld --pipeline.task-profile official-camera-scene` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `imlixinyang/FlashWorld`、`Wan-AI/Wan2.2-TI2V-5B-Diffusers`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh flashworld`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="flashworld" locale="zh" />

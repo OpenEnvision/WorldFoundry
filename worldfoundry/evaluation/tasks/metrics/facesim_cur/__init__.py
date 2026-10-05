@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .wrapper import compute_facesim_cur, compute_facesim_cur_from_results
+compute_facesim_cur = lazy_export(f"{__name__}.wrapper", "compute_facesim_cur", owner=__name__)
+compute_facesim_cur_from_results = lazy_export(f"{__name__}.wrapper", "compute_facesim_cur_from_results", owner=__name__)
 
 METRIC_ID = "facesim_cur"
 ALIASES = ("face-sim-cur", "facesim-curricular", "face_sim_cur")

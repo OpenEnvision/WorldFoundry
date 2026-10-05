@@ -76,3 +76,24 @@ catalog_policy:
   - open_weights_restricted
   - api_or_closed
   - unknown
+docs:
+  publisher: NVIDIA
+  publisher_kind: company
+  publisher_zh: 英伟达（NVIDIA）
+  overview: 'Lyra is NVIDIA''s generative world model family for exploration: from an image or video (Lyra-1) or from actions (Lyra-2) it produces an explorable world video. In this catalog both variants run through in-tree pipelines backed by vendored runtime adapters, the default runner targets Lyra-2, and runner status is verified.'
+  overview_zh: Lyra 是英伟达面向探索的生成式世界模型家族：Lyra-1 从图像或视频、Lyra-2 从动作输入生成可探索的世界视频。本 catalog 中两个 variant 都经由内置运行时适配器支撑的树内 pipeline 运行，默认 runner 指向 Lyra-2，runner 状态为 verified。
+  architecture: 'The catalog records two generations: Lyra-1 for image-or-video-to-world-video and Lyra-2 for action-conditioned world video (paper on OpenReview; project page at NVIDIA Research). Runtime execution requires local Lyra checkpoints, text-encoder assets, DA3 (Depth Anything 3) assets, and CUDA dependencies; internals beyond the recorded structure are not stored in this repository.'
+  architecture_zh: catalog 记录两代模型：Lyra-1 做图像/视频到世界视频，Lyra-2 做动作条件世界视频（论文见 OpenReview，项目页在 NVIDIA Research）。运行需要本地 Lyra checkpoint、文本编码器资产、DA3（Depth Anything 3）资产与 CUDA 依赖；除已记录结构外的内部细节仓库未存。
+  usage_notes: 'Pick the variant by input: lyra-1 when you start from an image or video, lyra-2 when you drive the world with actions. The default catalog runner resolves to Lyra-2. Stage all recorded assets before submitting Studio jobs; per-run validation evidence is tracked outside the catalog.'
+  usage_notes_zh: 按输入选 variant：从图像或视频出发用 lyra-1，用动作驱动世界用 lyra-2。默认 catalog runner 解析到 Lyra-2。提交 Studio 任务前请就位所有记录资产；每次运行的验证证据在 catalog 外跟踪。
+  limitations:
+  - Runtime execution needs several staged asset sets (Lyra checkpoints, text encoder, DA3, CUDA).
+  limitations_zh:
+  - 运行需要就位多套资产（Lyra checkpoint、文本编码器、DA3、CUDA）。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Standard scoring for explorable generated worlds.
+    reason_zh: 可探索生成世界的标准评分。
+  - id: camerabench
+    reason: Evaluates camera/viewpoint control quality during exploration.
+    reason_zh: 评估探索过程中的相机/视角控制质量。

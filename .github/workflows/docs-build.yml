@@ -1,0 +1,43 @@
+# Build the Fumadocs site for documentation-affecting pull requests. Pages
+# publishing remains exclusively owned by deploy-docs.yml on main pushes.
+name: docs-build
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deploy-docs.yml"
+      - ".github/workflows/docs-build.yml"
+      - "docs/**"
+      - "scripts/docs/**"
+      - "worldfoundry/data/models/**"
+      - "worldfoundry/data/benchmarks/**"
+      - "worldfoundry/evaluation/api/**"
+  workflow_dispatch:
+
+concurrency:
+  group: docs-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: docs/fumadocs/.nvmrc
+          cache: npm
+          cache-dependency-path: docs/fumadocs/package-lock.json
+
+      - name: Build Fumadocs site
+        run: bash scripts/docs/build.sh

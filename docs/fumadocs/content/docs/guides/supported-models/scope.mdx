@@ -1,0 +1,32 @@
+---
+title: "SCOPE"
+description: "SCOPE: `image` and `prompt` in; `generated_video` and `scope.mp4` out; runner verified; start on `scope`."
+modelId: "scope"
+pageSource: authored
+---
+
+SCOPE is an interactive game world model over a Wan backbone: image plus per-step actions in, game-world video out (paper arXiv 2605.23345). In this catalog both integration and runner are verified — the image-action-to-video demo runs through the Workspace infer path with staged zizhaotong/SCOPE weights, the in-tree example image, and an action parquet.
+
+<ModelPaperFigures modelId="scope" locale="en" />
+
+The paper is [SCOPE: Simulating Cross-game Operations in Playable Environments for FPS World Models](https://arxiv.org/abs/2605.23345). Project page: [z2tong.github.io/SCOPE](https://z2tong.github.io/SCOPE). Code: [z2tong/SCOPE](https://github.com/z2tong/SCOPE).
+
+Catalog aliases include `scope-world-model` and `zizhaotong/SCOPE`.
+
+<ModelCommandBuilder modelId="scope" locale="en" />
+
+## What it is for
+
+Drive SCOPE as an action-conditioned world route. Launch `worldfoundry-eval run scope` — required `image` and `prompt`; out `generated_video` and `scope.mp4`.
+
+Score on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench).
+
+## Runtime contract
+
+Required: `image` and `prompt`. Optional: `video`. Actions: action_parquet. Artifacts: `generated_video` and `scope.mp4`. Status: **Verified**. SCOPEPipeline fails fast unless execute=True is supplied, then invokes the in-tree native assembly. Weights stay external HF assets injected through model_dir/checkpoint_root or SCOPE_MODEL_DIR.
+
+## Running in WorldFoundry
+
+Run in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `zizhaotong/SCOPE` locally — the runtime does not download weights. Launch `worldfoundry-eval run scope`.
+
+<ModelRelatedRecipes modelId="scope" locale="en" />

@@ -1,14 +1,16 @@
+from __future__ import annotations
+
 import functools
 import json
 import operator
 import os
-from typing import Tuple
+from typing import TYPE_CHECKING, Tuple
 
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-from colossalai.booster import Booster
-from colossalai.checkpoint_io import GeneralCheckpointIO
+if TYPE_CHECKING:
+    from colossalai.booster import Booster
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 from torchvision.datasets.utils import download_url
@@ -146,6 +148,7 @@ def download_model(model_name=None, local_path=None, url=None):
 
 
 def load_from_sharded_state_dict(model, ckpt_path, model_name="model", strict=False):
+    from colossalai.checkpoint_io import GeneralCheckpointIO
     ckpt_io = GeneralCheckpointIO()
     ckpt_io.load_model(model, os.path.join(ckpt_path, model_name), strict=strict)
 
@@ -194,7 +197,16 @@ def load_checkpoint(model, ckpt_path, save_as_pt=False, model_name="model", stri
         get_logger().info("Missing keys: %s", missing_keys)
         get_logger().info("Unexpected keys: %s", unexpected_keys)
     elif os.path.isdir(ckpt_path):
-        load_from_sharded_state_dict(model, ckpt_path, model_name, strict=strict)
+        safetensors_path = os.path.join(ckpt_path, "model.safetensors")
+        if os.path.isfile(safetensors_path):
+            from safetensors.torch import load_file
+
+            state_dict = load_file(safetensors_path, device="cpu")
+            missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=strict)
+            get_logger().info("Missing keys: %s", missing_keys)
+            get_logger().info("Unexpected keys: %s", unexpected_keys)
+        else:
+            load_from_sharded_state_dict(model, ckpt_path, model_name, strict=strict)
         get_logger().info("Model checkpoint loaded from %s", ckpt_path)
         if save_as_pt:
             save_path = os.path.join(ckpt_path, model_name + "_ckpt.pt")

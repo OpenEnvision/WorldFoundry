@@ -1,0 +1,45 @@
+{
+  "schema_version": "pawbench.metrics/v1",
+  "status": "ok",
+  "blockers": [],
+  "tracks": {
+    "calibration": {
+      "status": "ok",
+      "blockers": [],
+      "models": {
+        "fixture-model": {
+          "status": "ok",
+          "blockers": [],
+          "track_average": {
+            "name": "calibration_tvd_percent",
+            "value": 12.5
+          },
+          "scene_pass_rate": {
+            "passing_scenes": 25,
+            "scene_denominator": 25,
+            "value": 100.0
+          }
+        }
+      }
+    },
+    "coverage": {
+      "status": "ok",
+      "blockers": [],
+      "models": {
+        "fixture-model": {
+          "status": "ok",
+          "blockers": [],
+          "track_average": {
+            "name": "coverage_percent",
+            "value": 84.0
+          },
+          "scene_pass_rate": {
+            "passing_scenes": 25,
+            "scene_denominator": 25,
+            "value": 100.0
+          }
+        }
+      }
+    }
+  }
+}

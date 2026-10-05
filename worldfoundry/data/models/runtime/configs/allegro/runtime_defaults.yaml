@@ -4,3 +4,6 @@ defaults:
     model_name: allegro_ti2v
     model_path: ${WORLDFOUNDRY_CKPT_DIR}/Allegro-TI2V
     generation_type: i2v
+    num_frames: 88
+    height: 720
+    width: 1280

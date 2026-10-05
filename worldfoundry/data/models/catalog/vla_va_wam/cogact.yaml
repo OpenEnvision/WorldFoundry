@@ -16,6 +16,8 @@ integration:
 license: mit
 name: CogACT
 official_sources:
+  paper: https://arxiv.org/abs/2411.19650
+  project_page: https://cogact.github.io/CogACT_paper.pdf
   github:
     head_sha: b174a1b86dee
     url: https://github.com/microsoft/CogACT
@@ -55,3 +57,21 @@ runner_parity:
   - Official CogACT reconstructs the Prismatic Llama-2 VLM; WorldFoundry reuses the in-tree Prismatic implementation and local tokenizer assets while loading every VLM weight from the CogACT checkpoint itself.
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile planning records.
+docs:
+  publisher: Microsoft
+  publisher_kind: company
+  publisher_zh: 微软（Microsoft）
+  overview: 'CogACT from Microsoft is a componentized VLA: a Prismatic-style Llama-2 VLM handles cognition while a dedicated DiT action module handles control, released in Small/Base/Large variants under MIT. WorldFoundry has an independent in-tree synthesis entrypoint with a strict local checkpoint mapper; checkpoint-backed workspace inference passes without an external checkout.'
+  overview_zh: 微软的 CogACT 是组件化 VLA：Prismatic 式 Llama-2 VLM 负责认知，专用 DiT 动作模块负责控制，按 Small/Base/Large 三档发布，MIT 许可。WorldFoundry 拥有独立的树内 synthesis 入口与严格本地 checkpoint 映射器；checkpoint 驱动的 Workspace 推理无需外部 checkout 即可通过。
+  architecture: 'Cognition and action are separated: the VLM encodes image+instruction, then a DiT (diffusion transformer) action model predicts a 16x7 action chunk. The official demo contract is load_vla(...).predict_action(image, prompt, unnorm_key, cfg_scale, use_ddim, num_ddim_steps).'
+  architecture_zh: 认知与动作分离：VLM 编码图像+指令，DiT（扩散 transformer）动作模型预测 16x7 动作块。官方 demo 契约为 load_vla(...).predict_action(image, prompt, unnorm_key, cfg_scale, use_ddim, num_ddim_steps)。
+  usage_notes: Default SimplerEnv setups use bridge_orig or fractal20220817_data normalization keys. The inference-only loader reuses an installed OpenVLA Llama tokenizer when a gated Llama 2 mirror is unavailable. FSDP training, RLDS loaders, deployment server, and SimplerEnv adapters are excluded.
+  usage_notes_zh: 默认 SimplerEnv 配置使用 bridge_orig 或 fractal20220817_data 归一化键。当门控的 Llama 2 镜像不可用时，推理加载器复用已安装的 OpenVLA Llama tokenizer。FSDP 训练、RLDS 加载器、部署服务与 SimplerEnv 适配器均被排除。
+  limitations:
+  - Llama-2 tokenizer dependency may require a gated mirror or OpenVLA fallback.
+  limitations_zh:
+  - Llama-2 tokenizer 依赖可能需要门控镜像或 OpenVLA 回退。
+  recommended_benchmarks:
+  - id: simpler-env
+    reason: Official normalization targets SimplerEnv setups.
+    reason_zh: 官方归一化面向 SimplerEnv 配置。

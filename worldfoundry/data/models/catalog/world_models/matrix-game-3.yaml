@@ -20,6 +20,8 @@ modalities:
 - game-video
 name: Matrix-Game 3.0
 official_sources:
+  paper: https://arxiv.org/abs/2604.08995
+  project_page: https://matrix-game-v3.github.io/
   github:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
@@ -52,3 +54,26 @@ catalog_policy:
   open_source_rule: Only mark open_source when an official GitHub repository or official
     Hugging Face model page was confirmed. Do not infer checkpoint availability from
     papers, demos, or third-party mirrors.
+docs:
+  publisher: Skywork AI (Kunlun Tech)
+  publisher_kind: company
+  publisher_zh: 昆仑万维（Skywork AI）
+  overview: Matrix-Game 3.0 is the third Skywork generation, pushing interactive world video to higher resolution with few-step inference. In this catalog the runner is verified — the official cityscape image-conditioned demo runs with actions forward + camera_r, 12 iterations, 3 inference steps, 704x1280, int8 quantization, compiled VAE, and the mg_lightvae decoder.
+  overview_zh: Matrix-Game 3.0 是昆仑万维的第三代，以少步推理把交互式世界视频推到更高分辨率。本 catalog 中 runner 已验证——官方 cityscape 图像条件 demo 以「forward + camera_r」动作、12 次迭代、3 步推理、 704x1280、int8 量化、编译 VAE 与 mg_lightvae 解码器运行。
+  architecture: The runtime is vendored under synthesis/visual_generation/matrix_game/matrix_game_3_runtime including the infer-only video writer needed by the official process_video call and Dynamo alias compatibility; checkpoint_dir remains an external asset path.
+  architecture_zh: 运行时内置于 synthesis/visual_generation/matrix_game/matrix_game_3_runtime，包含官方 process_video 调用所需的仅推理视频写出器与 Dynamo 别名兼容；checkpoint_dir 保持为外部资产路径。
+  usage_notes: No external Matrix-Game checkout is required at runtime. The verified demo uses int8 plus a compiled light VAE for speed — switch these off if you need maximum fidelity and have GPU headroom.
+  usage_notes_zh: 运行时不需要外部 Matrix-Game 检出。已验证 demo 为提速使用 int8 与编译的轻量 VAE——若追求最高保真且 GPU 余量充足，可关闭这些选项。
+  limitations:
+  - The verified route uses int8 quantization and a light VAE — a speed/fidelity trade-off.
+  - Per-run visual QA is tracked outside the catalog.
+  limitations_zh:
+  - 已验证路径使用 int8 量化与轻量 VAE——速度与保真的权衡。
+  - 每次运行的视觉 QA 在 catalog 外跟踪。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Action-conditioned game-world rollout quality.
+    reason_zh: 动作条件游戏世界滚动生成质量。
+  - id: camerabench
+    reason: Camera-action following accuracy.
+    reason_zh: 相机动作跟随精度。

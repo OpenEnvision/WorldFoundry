@@ -12,6 +12,7 @@ checkpoints:
 - repo_id: Doubiiu/DynamiCrafter_512
   revision: 9eb874455b7903c0244fe7bf53ca21cb979cd05a
   role: i2v_checkpoint
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Doubiiu--DynamiCrafter_512
 input_schema:
   prompt: true
   image: true

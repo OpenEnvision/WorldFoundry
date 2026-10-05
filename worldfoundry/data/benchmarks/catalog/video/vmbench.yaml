@@ -1,5 +1,7 @@
 id: vmbench
 name: VMBench
+publisher: Alibaba AMAP
+publisher_kind: company
 benchmark_kind:
 - video-motion
 - text-to-video
@@ -106,6 +108,13 @@ metrics:
   unit: score
   primary: true
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/vmbench/run_vmbench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.vmbench.run_vmbench_official_runner
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    supports_fixture: true
+    default_metrics: [vmbench_average]
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VMBenchContract
   validation_command:
   - worldfoundry-eval
@@ -142,6 +151,7 @@ runner:
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 integration:
   status: integrated
+  tier: in_tree
   blocked_reasons:
   - Official eval code is vendored in-tree, but full validation still requires CUDA metric dependencies and checkpoints.
   - HF dataset endpoint for AMAP-ML/VMBench was not public; the prompt suite is bundled in-tree under

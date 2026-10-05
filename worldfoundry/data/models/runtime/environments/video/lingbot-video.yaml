@@ -1,28 +1,28 @@
 model_id: lingbot-video
-env_name: lingbot-video
+env_name: worldfoundry-unified-cu128
 env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
-python: '3.10'
+python: '3.11'
 cuda_profile: cu128
-driver_status: requires_cuda_13_compatible_driver
+driver_status: compatible
 conda_packages:
-- python=3.10
+- python=3.11
 - pip
 - ffmpeg
-pip_extra_index_url: https://download.pytorch.org/whl/nightly/cu130
+pip_extra_index_url: https://download.pytorch.org/whl/cu128
 pip_packages:
-- torch==2.12.0.dev20260220+cu130
-- torchvision==0.26.0.dev20260220+cu130
+- torch==2.11.0+cu128
+- torchvision==0.26.0+cu128
 - accelerate>=1.8.0
 - decord>=0.6.0
-- diffusers==0.39.0
+- diffusers==0.38.0
 - imageio>=2.35.0
 - imageio-ffmpeg>=0.5.1
 - numpy>=1.26
-- peft==0.19.1
+- peft>=0.18.0
 - pillow>=10.4.0
 - safetensors>=0.4.5
 - scipy>=1.11
-- transformers==5.8.1
+- transformers==5.3.0
 validation_imports:
 - torch
 - torchvision
@@ -31,6 +31,7 @@ validation_imports:
 - accelerate
 - worldfoundry.synthesis.visual_generation.lingbot_video.inference_backend
 notes:
-- LingBot-Video requires Transformers 5.x and Diffusers 0.39, which conflict with the unified environment's Transformers 4.57 pin.
-- The upstream release recommends the listed CUDA 13 nightly PyTorch build; a CUDA 13 compatible driver is required.
+- The in-tree Diffusers backend is validated with the existing CUDA 12.8 unified environment
+  (PyTorch 2.11, Diffusers 0.38, Transformers 5.3); the previous dedicated environment
+  resolved to an unprovisioned Python 3.12 prefix and could not import NumPy or Torch.
 - SGLang and Triton are optional deployment dependencies and are not installed by this base profile.

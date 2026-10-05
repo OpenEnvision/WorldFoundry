@@ -1,0 +1,34 @@
+---
+title: "OpenVLA-OFT"
+description: "OpenVLA-OFT: `image`, `prompt`, and `state` in; `action_trace` and `openvla-oft_action_trace.json` out; 5 variants; dedicated `worldfoundry-vla-openvla-compat-cu121`."
+modelId: "openvla-oft"
+pageSource: authored
+---
+
+OpenVLA-OFT applies optimized fine-tuning to OpenVLA — parallel decoding, continuous action heads, and chunking — and is fully GPU-validated in this catalog: an A100 restored all 7.54B parameters, produced deterministic finite 8x7 action chunks across multiple inputs at 14.47 GiB peak VRAM, and all five declared LIBERO checkpoints completed real inference (MIT license).
+
+<ModelPaperFigures modelId="openvla-oft" locale="en" />
+
+The paper is [arXiv 2502.19645](https://arxiv.org/abs/2502.19645). Project page: [openvla-oft.github.io](https://openvla-oft.github.io). Code: [moojink/openvla-oft](https://github.com/moojink/openvla-oft).
+
+Catalog aliases include `openvla_oft` and `openvla-oft-libero`.
+
+<ModelCommandBuilder modelId="openvla-oft" locale="en" />
+
+## What it is for
+
+Use the OFT LIBERO specialists when you want parallel-decoded 8×7 action chunks on the OpenVLA 7B backbone — not the base [OpenVLA](/docs/guides/supported-models/openvla) card.
+
+Launch `worldfoundry-eval run openvla-oft-libero-spatial`. Required: `image`, `prompt`, `state`. Artifacts: `action_trace` and `openvla-oft_action_trace.json`. Swap `openvla-oft-libero-object`, `-goal`, `-10`, or the combined spatial-object-goal-10 card for the other splits.
+
+Related suite: [LIBERO](/docs/evaluation/benchmark-hub/libero).
+
+## Runtime contract
+
+Required: `image`, `prompt`, `state`. Cameras: `full_image` and `wrist_image`. Proprio is 8-D; action chunk is **8×7**. Official demo observation: `experiments/robot/libero/sample_libero_spatial_observation.pkl`. Status: **Verified** — all five declared LIBERO checkpoints completed A100 inference. Upstream memory hint is about **16 GB** for LIBERO.
+
+## Running in WorldFoundry
+
+Dedicated environment `worldfoundry-vla-openvla-compat-cu121` (Python 3.10, CUDA 12.1). Stage the matching `moojink/openvla-7b-oft-finetuned-libero-*` snapshot — the runtime does not download weights. Launch `worldfoundry-eval run openvla-oft-libero-spatial`. License: MIT.
+
+<ModelRelatedRecipes modelId="openvla-oft" locale="en" />

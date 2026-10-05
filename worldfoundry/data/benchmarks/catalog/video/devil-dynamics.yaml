@@ -1,5 +1,7 @@
 id: devil-dynamics
 name: DEVIL Dynamics
+publisher: University of Chinese Academy of Sciences
+publisher_kind: university
 benchmark_kind:
 - text-to-video
 - dynamics-evaluation
@@ -57,6 +59,15 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  scoring:
+    engines: [physics_contract]
+    hooks:
+      physics_contract: worldfoundry.evaluation.tasks.execution.runners.devil_dynamics.devil_dynamics_contract_evaluator:write_devil_dynamics_evaluation
+  official_script: worldfoundry/evaluation/tasks/execution/runners/devil_dynamics/run_devil_dynamics_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.devil_dynamics.run_devil_dynamics_official_runner
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:DevilDynamicsContract
   validation_command:
   - worldfoundry-eval
@@ -93,6 +104,8 @@ runner:
   - WORLDFOUNDRY_DEVIL_DYNAMICS_RESULTS_PATH
 integration:
   status: integrated
+  tier: model_backed
+  judge_model_id: gemini
   blocked_reasons:
   - In-tree runtime is wired; full validation requires generated videos or rollouts for the official prompt/task suite.
   - Leaderboard parity requires official judge/checkpoint/API assets and complete metric artifacts.

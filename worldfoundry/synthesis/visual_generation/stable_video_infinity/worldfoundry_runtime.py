@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -12,6 +13,25 @@ SVI_NEGATIVE_PROMPT = (
     "deformed, disfigured, misshapen limbs, fused fingers, still picture, messy "
     "background, three legs, many people in the background, walking backwards"
 )
+
+
+def normalize_svi_lora_state_dict(state_dict: Mapping[str, Any]) -> dict[str, Any]:
+    """Remove the training-pipeline prefix used by the released SVI LoRA.
+
+    The official ``ModelManager.load_lora_v2`` retries SVI checkpoints after
+    stripping ``pipe.dit.`` because the adapter is merged into the bare Wan
+    DiT.  Keeping the normalization explicit here also lets the runtime verify
+    that every released LoRA pair found a native DiT module.
+    """
+
+    prefix = "pipe.dit."
+    normalized: dict[str, Any] = {}
+    for key, value in state_dict.items():
+        normalized_key = key.removeprefix(prefix)
+        if normalized_key in normalized:
+            raise ValueError(f"SVI LoRA key collision after removing {prefix!r}: {normalized_key!r}")
+        normalized[normalized_key] = value
+    return normalized
 
 
 def normalize_prompt_stream(prompt: str | Sequence[str]) -> list[str]:
@@ -185,6 +205,7 @@ class StableVideoInfinityRuntime:
             "dit": dit_files,
             "text_encoder": text_encoder,
             "vae": vae,
+            "tokenizer": tokenizer,
         }, lora_files
 
     def _load_pipeline(
@@ -213,27 +234,84 @@ class StableVideoInfinityRuntime:
         except KeyError as exc:
             raise ValueError(f"Unsupported SVI dtype: {self.dtype_name!r}") from exc
 
-        from worldfoundry.base_models.diffusion_model.diffsynth.models.model_manager import (
-            ModelManager,
+        from worldfoundry.base_models.diffusion_model.models.autoencoders.wan import (
+            WanVideoVAE,
+            WanVideoVAEStateDictConverter,
         )
+        from worldfoundry.base_models.diffusion_model.models.denoisers.wan import (
+            WAN21_I2V_14B_CONFIG,
+            convert_diffusers_wan_transformer_state_dict,
+        )
+        from worldfoundry.base_models.diffusion_model.models.encoders.wan import (
+            WanImageEncoder,
+            WanImageEncoderStateDictConverter,
+            WanTextEncoder,
+        )
+        from worldfoundry.base_models.diffusion_model.models.networks.wan import WanModel
+        from worldfoundry.core.model_loading import GeneralLoRALoader, load_model, load_state_dict
 
         from .official_pipeline import SVIVideoPipeline
 
-        manager = ModelManager(device="cpu", torch_dtype=torch_dtype)
-        manager.load_models([str(model_files["image_encoder"])], torch_dtype=torch.float32)
-        manager.load_models(
-            [[str(path) for path in model_files["dit"]]],
-            model_names=["wan_video_dit"],
-            torch_dtype=torch_dtype,
+        image_encoder = load_model(
+            WanImageEncoder,
+            str(model_files["image_encoder"]),
+            torch_dtype=torch.float32,
+            device="cpu",
+            state_dict_converter=WanImageEncoderStateDictConverter().from_civitai,
         )
-        manager.load_models(
-            [str(model_files["text_encoder"]), str(model_files["vae"])],
+        dit = load_model(
+            WanModel,
+            [str(path) for path in model_files["dit"]],
+            config=WAN21_I2V_14B_CONFIG,
             torch_dtype=torch_dtype,
+            device="cpu",
+            # ``load_model`` accepts a mapping-only converter.  The converter
+            # object's public API additionally returns inferred config as a
+            # tuple for model-manager callers, which is not valid here.
+            state_dict_converter=convert_diffusers_wan_transformer_state_dict,
         )
-        manager.load_lora_v2([str(path) for path in lora_files], lora_alpha=self.lora_alpha)
+        text_encoder = load_model(
+            WanTextEncoder,
+            str(model_files["text_encoder"]),
+            torch_dtype=torch_dtype,
+            device="cpu",
+        )
+        vae = load_model(
+            WanVideoVAE,
+            str(model_files["vae"]),
+            torch_dtype=torch_dtype,
+            device="cpu",
+            state_dict_converter=WanVideoVAEStateDictConverter().from_civitai,
+        )
+        # Match the official SVI ``LoRAFromCivitai`` merge exactly: released
+        # LoRA tensors are FP32, A/B products are evaluated as FP16 on CUDA,
+        # and only the finished delta is cast into the BF16 Wan base weight.
+        # Loading and multiplying the adapters as BF16 measurably changes the
+        # 50-step denoising trajectory.
+        lora_loader = GeneralLoRALoader(device=self.device, torch_dtype=torch.float16)
+        for lora_path in lora_files:
+            lora_state_dict = normalize_svi_lora_state_dict(
+                load_state_dict(str(lora_path), torch_dtype=torch.float16, device="cpu")
+            )
+            expected_pairs = lora_loader.get_name_dict(lora_state_dict)
+            if not expected_pairs:
+                raise RuntimeError(f"SVI LoRA contains no supported A/B or up/down pairs: {lora_path}")
+            updated = lora_loader.load(dit, lora_state_dict, alpha=self.lora_alpha)
+            if updated != len(expected_pairs):
+                module_names = {name for name, module in dit.named_modules() if hasattr(module, "weight")}
+                missing = sorted(set(expected_pairs).difference(module_names))
+                preview = ", ".join(missing[:5])
+                raise RuntimeError(
+                    f"SVI merged {updated}/{len(expected_pairs)} LoRA tensors from {lora_path}; "
+                    f"unmatched Wan DiT modules: {preview or 'unknown'}"
+                )
 
-        pipeline = SVIVideoPipeline.from_model_manager(
-            manager,
+        pipeline = SVIVideoPipeline.from_components(
+            text_encoder=text_encoder,
+            image_encoder=image_encoder,
+            dit=dit,
+            vae=vae,
+            tokenizer_path=str(model_files["tokenizer"]),
             torch_dtype=torch_dtype,
             device=self.device,
             use_usp=use_usp,
@@ -251,7 +329,7 @@ class StableVideoInfinityRuntime:
         if enable_vram_management:
             pipeline.enable_vram_management(num_persistent_param_in_dit=num_persistent_param_in_dit)
         else:
-            manager.to(self.device)
+            pipeline.to(self.device)
         pipeline.eval()
         return pipeline
 
@@ -333,5 +411,6 @@ __all__ = [
     "SVI_NEGATIVE_PROMPT",
     "StableVideoInfinityRuntime",
     "calculate_dimensions",
+    "normalize_svi_lora_state_dict",
     "normalize_prompt_stream",
 ]

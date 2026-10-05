@@ -1,0 +1,52 @@
+---
+title: "VideoCrafter1 T2V"
+description: "VideoCrafter1 T2V（Tencent AI Lab）：文生视频、视频生成；Runner 一致性待确认。"
+modelId: "videocrafter1-t2v"
+pageSource: authored
+---
+
+VideoCrafter1 T2V 是 VideoCrafter1 发布中的文生视频成员，按提示词生成最高 1024x576 的视频。树内仅推理运行时封装官方 1024 文生视频路径，提供本地 checkpoint、fps、帧数与 seed 控制。
+
+<ModelPaperFigures modelId="videocrafter1-t2v" locale="zh" />
+
+记录论文为[arXiv 2401.09047](https://arxiv.org/abs/2401.09047)。
+
+项目页：[ailab-cvc.github.io/videocrafter2](https://ailab-cvc.github.io/videocrafter2/)。代码：[VideoCrafter/VideoCrafter](https://github.com/VideoCrafter/VideoCrafter)。
+
+<ModelCommandBuilder modelId="videocrafter1-t2v" locale="zh" />
+
+## 用来做什么
+
+需要本系列的文生视频时选 `videocrafter1-t2v`：prompt 进、生成视频出。它是 catalog 上的 T2V 起步线，不是编辑器，也不是世界模型步进器。
+
+U-Net 潜空间视频扩散，最高 1024x576（见上游发布）。checkpoint 溯源在系列条目跟踪；训练与下载脚本已排除。该模型由腾讯 AI Lab发布。
+
+catalog 记录的任务包括 文生视频、视频生成。别名包括 `videocrafter1_t2v`。模态上，它接受文本，输出视频。
+
+记录的评测入口包括[EvalCrafter](/zh/docs/evaluation/benchmark-hub/evalcrafter)（VideoCrafter 项目的配套评测）。
+
+不是 [VideoCrafter](/zh/docs/guides/supported-models/videocrafter)、[VideoCrafter2 T2V](/zh/docs/guides/supported-models/videocrafter2-t2v)。 评测看 [EvalCrafter](/zh/docs/evaluation/benchmark-hub/evalcrafter)。
+
+## 运行时契约
+
+可选 `prompt`、`frames`、`fps`、`height`、`width`；产物 `generated_video`、`videocrafter1-t2v.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `VideoCrafter1T2VPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+Runner parity 为 pending。 同系列中建议优先 VideoCrafter2 T2V 以获得更好画质，或直接使用 DiT 条目获得当前一代质量。
+
+Checkpoint provenance is tracked on the top-level videocrafter catalog entry to avoid duplicate HF repo aliases.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run videocrafter1-t2v --pipeline.task-profile interactive-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `VideoCrafter/Text2Video-1024`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh videocrafter1-t2v`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="videocrafter1-t2v" locale="zh" />

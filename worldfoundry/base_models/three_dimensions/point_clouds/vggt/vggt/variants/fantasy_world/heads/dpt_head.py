@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.head_act import activate_head
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.utils import create_uv_grid, position_grid_to_embed
-from worldfoundry.base_models.diffusion_model.video.wan.vae.geometry_bridge import WanVAE_
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.geometry_bridge import WanVAE_
 from einops import rearrange
 
 

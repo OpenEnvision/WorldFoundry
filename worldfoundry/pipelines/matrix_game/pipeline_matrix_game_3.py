@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import tempfile
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 
@@ -13,6 +13,7 @@ from ...operators.matrix_game_3_operator import MatrixGame3Operator
 from ...synthesis.visual_generation.matrix_game.matrix_game_3_synthesis import MatrixGame3Synthesis
 from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
 from ..pipeline_utils import PipelineABC
+from worldfoundry.core.io.paths import scratch_directory
 
 DEFAULT_MATRIX_GAME3_COMPONENTS = {
     # Mirrors the upstream lightweight inference recipe while staying single-GPU friendly.
@@ -116,11 +117,13 @@ class MatrixGame3Pipeline(PipelineABC):
         num_iterations: Optional[int] = None,
         size=(704, 1280),
         fps: int = 17,
+        output_path: str | Path | None = None,
         output_dir: Optional[str] = None,
         save_name: str = "matrix_game_3",
         visualize_ops: bool = True,
         show_progress: bool = True,
         seed: int = 42,
+        return_dict: bool = False,
         **kwargs,
     ):
         """Execute the complete pipeline generation flow."""
@@ -137,9 +140,7 @@ class MatrixGame3Pipeline(PipelineABC):
             num_frames=num_frames,
             num_iterations=num_iterations,
         )
-        save_root = Path(output_dir).expanduser().resolve() if output_dir else Path(
-            tempfile.mkdtemp(prefix="matrix_game_3_")
-        )
+        save_root = Path(output_dir).expanduser().resolve() if output_dir else scratch_directory("matrix_game_3_")
         save_root.mkdir(parents=True, exist_ok=True)
         synthesis_result = self.synthesis_model.predict(
             image=output_dict["image"],
@@ -156,6 +157,21 @@ class MatrixGame3Pipeline(PipelineABC):
             show_progress=show_progress,
             **kwargs,
         )
+        generated_path = Path(synthesis_result["generated_video_path"]).expanduser().resolve()
+        artifact_path = generated_path
+        if output_path is not None:
+            artifact_path = Path(output_path).expanduser().resolve()
+            artifact_path.parent.mkdir(parents=True, exist_ok=True)
+            if artifact_path != generated_path:
+                shutil.copyfile(generated_path, artifact_path)
+
+        result = {
+            **synthesis_result,
+            "artifact_path": str(artifact_path),
+            "status": "succeeded",
+        }
+        if return_dict or output_path is not None:
+            return result
         return synthesis_result["video"]
 
     def stream(

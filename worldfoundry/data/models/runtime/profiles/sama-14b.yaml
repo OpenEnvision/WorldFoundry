@@ -10,8 +10,7 @@ checkpoints:
   role: editing_checkpoint
 input_schema:
   prompt: true
-  image: optional
-  video: optional
+  video: true
 artifact_kind: generated_video
 artifact_filename: sama-14b.mp4
 execution:

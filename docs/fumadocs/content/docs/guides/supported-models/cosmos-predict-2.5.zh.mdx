@@ -1,0 +1,35 @@
+---
+title: "Cosmos Predict 2.5"
+description: "NVIDIA 世界基础模型：文本 / 图像 / 视频入，世界视频出。原生 2B/14B 配方；checkpoint gated。已验证的是 2B 文生世界路径。"
+modelId: "cosmos-predict-2.5"
+pageSource: authored
+---
+
+Cosmos Predict 2.5 是英伟达面向物理 AI 的**世界基础模型**：文本、图像或视频进，世界视频出。论文是 [Cosmos Predict 2.5](https://arxiv.org/abs/2511.00062)（另见 [research.nvidia.com/labs/dir/cosmos-predict2.5](https://research.nvidia.com/labs/dir/cosmos-predict2.5)）。本 catalog 条目用 WorldFoundry 规范的去噪器、条件器、调度器、解码器与加载器角色**原生组装**，不走 Diffusers。
+
+<ModelPaperFigures modelId="cosmos-predict-2.5" locale="zh" />
+
+记录了两个规模：**2B** 与 **14B**。本仓库的结构检查与官方 EMA transformer 对齐：2B **569/569**、14B **729/729**，Reason1 语言权重 **338/338**，共享 **Wan VAE** **194/194**。图像 / 视频条件与正向 CFG 走这些共享 runner 契约，不是模型私有后端。NVIDIA 访问是 **gated**；记录的许可是 `other:nvidia-open-model-license`。
+
+WorldFoundry 已验证的配方是 **2B 文生世界**：**1280×704、93 帧、35 步、16 fps**，flow-UniPC 调度。14B 仍需端到端 GPU 输出验证。别名 `cosmos-predict2p5`、`cosmos-predict-2p5` 解析到这里。
+
+<ModelCommandBuilder modelId="cosmos-predict-2.5" locale="zh" />
+
+## 用来做什么
+
+从文本、首帧或视频前缀预测未来世界视频。variant 是 `cosmos-predict-2.5-2b` 与 `cosmos-predict-2.5-14b`。默认产物：`cosmos-predict2.5-2b.mp4`（14B 写出 `cosmos-predict2.5-14b.mp4`）。世界生成质量看 [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)，物理合理性看 [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq)。NVIDIA 已把新工作指向 Cosmos 3；本页停在实际接好的 2.5 卡片上。
+
+## 运行时契约
+`CosmosPredict2p5Pipeline` 用单一 **rectified-flow** 模型统一文 / 图 / 视频到世界，配 **Reason1** 语言条件器和共享 Wan VAE。提示词条件、正向 guidance、图像 / 视频潜空间条件与解码都走共享原生扩散角色。上游 NVIDIA cookbook 还提到机器人 / 动作条件与 policy variant（RoboCasa、LIBERO）；那不是本卡片上的额外 WorldFoundry variant。
+
+## 在 WorldFoundry 中运行
+
+pipeline 在 `worldfoundry-unified-cu128` 里直接调用原生配方。启动 `worldfoundry-eval run cosmos-predict-2.5-2b --pipeline.task-profile text-to-world-validation`。按 NVIDIA 访问规则就位 `nvidia/Cosmos-Predict2.5-2B`（测 14B 线再就位 14B）。张量结构对齐不等于 GPU 输出一致性——14B 仍为 pending。
+
+仓内网络是仅推理的 PyTorch `MinimalV1LVGDiT`，复用 WorldFoundry 的 attention / timestep 原语。NVIDIA EMA 转换和 `Denoiser` 适配器在 `worldfoundry/base_models/diffusion_model/models/denoisers/cosmos2p5.py`，不在 network 包里。架构对照：`nvidia-cosmos/cosmos-predict2.5` 的 `a2c298b0a3df3778b973fe65e9e58877b292d8a7`。
+
+## 最小评测
+
+2B 文生世界路径已验证。导入 [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench) 官方形态结果，读 `world_model_average`。`official-run` 需要 `WORLDFOUNDRY_WORLDMODELBENCH_JUDGE`；完整 judge 未验证。
+
+<ModelRelatedRecipes modelId="cosmos-predict-2.5" locale="zh" />

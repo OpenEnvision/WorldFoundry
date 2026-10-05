@@ -1,149 +1,43 @@
 ---
 title: VideoScore
-description: Human-feedback-trained video reward metric with in-tree runtime, frame-tree requirements, datasets, and run commands.
+description: "TIGER-Lab reward model: five 1-4 aspects trained on VideoFeedback 37.6K. WorldFoundry vendors the scorer; it does not invent a board."
 ---
 
-## About
+VideoScore (TIGER-Lab, University of Waterloo) is a **learned reward model**, not a prompt suite. It is trained on **VideoFeedback (37.6K human-annotated videos)** and predicts five aspect scores (official **1–4** scale) for any generated clip:
 
-VideoScore is an EMNLP 2024 automatic video evaluation model trained to simulate fine-grained human feedback for video generation. It is trained on VideoFeedback, a dataset of 37.6K generated videos from 11 video models with human ratings across multiple aspects.
+- Visual quality
+- Temporal consistency
+- Dynamic degree
+- Text-to-video alignment
+- Factual consistency
 
-WorldFoundry integrates the VideoScore inference and benchmark evaluation runtime in tree at `worldfoundry/evaluation/tasks/execution/runners/videoscore`. The official repository is a protocol reference; WorldFoundry runs the checked-in VideoScore runtime and loads datasets/checkpoints from local assets or Hugging Face.
+`videoscore_average` is the mean of the five. VideoScore-Bench evaluates scorer–human correlation (SPCC / pairwise). License: MIT (runtime); dataset stacks Apache-2.0 / MIT.
 
-Official references:
+Paper: [VideoScore](https://arxiv.org/abs/2406.15252). Project: [tiger-ai-lab.github.io/VideoScore](https://tiger-ai-lab.github.io/VideoScore/). Code: [TIGER-AI-Lab/VideoScore](https://github.com/TIGER-AI-Lab/VideoScore). Bench data: [`TIGER-Lab/VideoScore-Bench`](https://huggingface.co/datasets/TIGER-Lab/VideoScore-Bench).
 
-- Project page: [tiger-ai-lab.github.io/VideoScore](https://tiger-ai-lab.github.io/VideoScore/)
-- Paper: [arXiv:2406.15252](https://arxiv.org/abs/2406.15252)
-- Dataset: [TIGER-Lab/VideoFeedback](https://huggingface.co/datasets/TIGER-Lab/VideoFeedback)
-- Benchmark dataset: [TIGER-Lab/VideoScore-Bench](https://huggingface.co/datasets/TIGER-Lab/VideoScore-Bench)
-- Model: [TIGER-Lab/VideoScore-v1.1](https://huggingface.co/TIGER-Lab/VideoScore-v1.1)
-- In-tree runner: `worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py`
+WorldFoundry **vendors the runtime**, supports bounded in-process GPU scoring, and wraps `benchmark/eval_videoscore.py`. A bounded official scorer GPU run is verified; **SPCC / pairwise full-suite parity is not**.
 
-## Evaluation Protocol
+<BenchmarkPageSections id="videoscore" locale="en" />
 
-VideoScore predicts five aspect scores on a 1-4 scale:
-
-| Metric | Meaning |
-| --- | --- |
-| `visual_quality` | Overall visual quality, fidelity, and artifact level. |
-| `temporal_consistency` | Temporal stability and frame-to-frame coherence. |
-| `dynamic_degree` | Amount and quality of motion. |
-| `text_to_video_alignment` | Alignment between the prompt and generated video. |
-| `factual_consistency` | Whether generated content is factually consistent with the described scene. |
-| `videoscore_average` | Mean of the five aspect scores. |
-
-WorldFoundry normalizes 1-4 raw scores to 0-1 in the scorecard.
-
-## Data And Frames Preparation
-
-VideoScore benchmark evaluation consumes extracted frame directories, not a flat directory of mp4 files. Prepare either:
-
-- `--frames-dir`: a directory already containing frames in the layout expected by the official `eval_videoscore.py`, or
-- `--bench-data-root` plus `--bounded-sample-count`: WorldFoundry materializes a bounded set of frames from the local benchmark dataset for a small validation run.
-
-Download benchmark data and optional training/evidence data:
+## How to run
 
 ```bash
-export WORLDFOUNDRY_VIDEOSCORE_BENCH_ROOT=/path/to/datasets/VideoScore-Bench
-export WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT=/path/to/datasets/VideoFeedback
+hf download TIGER-Lab/VideoScore-Bench --repo-type dataset --local-dir /path/to/VideoScore-Bench
+export WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT=/path/to/VideoScore-Bench
 
-hf download TIGER-Lab/VideoScore-Bench \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_VIDEOSCORE_BENCH_ROOT}"
-
-hf download TIGER-Lab/VideoFeedback \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT}"
-```
-
-If you prepare a full frame tree yourself:
-
-```bash
-export WORLDFOUNDRY_VIDEOSCORE_FRAMES_DIR=/path/to/videoscore/frames
-```
-
-`--bench-name` selects the split inside VideoScore-Bench. The default is `video_feedback`; other official splits come from the VideoScore-Bench release.
-
-## Checkpoint Preparation
-
-Use the official VideoScore-v1.1 reward model or a local mirror:
-
-```bash
-export WORLDFOUNDRY_VIDEOSCORE_MODEL_REPO=/path/to/checkpoints/VideoScore-v1.1
-hf download TIGER-Lab/VideoScore-v1.1 \
-  --local-dir "${WORLDFOUNDRY_VIDEOSCORE_MODEL_REPO}"
-```
-
-If `WORLDFOUNDRY_VIDEOSCORE_MODEL_REPO` is not set, the runner falls back to the Hugging Face id `TIGER-Lab/VideoScore-v1.1`.
-
-## Run A Full Frame-Tree Evaluation
-
-Run VideoScore on a prepared frame tree:
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py \
-  --model-repo-name "${WORLDFOUNDRY_VIDEOSCORE_MODEL_REPO:-TIGER-Lab/VideoScore-v1.1}" \
-  --bench-data-root "${WORLDFOUNDRY_VIDEOSCORE_BENCH_ROOT}" \
-  --bench-name "${WORLDFOUNDRY_VIDEOSCORE_BENCH_NAME:-video_feedback}" \
-  --frames-dir "${WORLDFOUNDRY_VIDEOSCORE_FRAMES_DIR}" \
-  --dataset-root "${WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT}" \
-  --output-dir tmp/videoscore/official-run \
-  --timeout 7200 \
-  --json
-```
-
-This path calls the in-tree `benchmark/eval_videoscore.py` runtime and writes the official result JSON under `upstream/`.
-
-## Run A Bounded Validation
-
-For a small local check using the downloaded benchmark data:
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py \
-  --model-repo-name "${WORLDFOUNDRY_VIDEOSCORE_MODEL_REPO:-TIGER-Lab/VideoScore-v1.1}" \
-  --bench-data-root "${WORLDFOUNDRY_VIDEOSCORE_BENCH_ROOT}" \
   --bench-name video_feedback \
-  --bounded-sample-count 8 \
+  --bounded-sample-count 4 \
   --dataset-root "${WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT}" \
-  --output-dir tmp/videoscore/bounded8 \
+  --output-dir tmp/videoscore/bounded \
   --json
 ```
 
-The bounded path materializes frames for a small number of benchmark rows and runs the same VideoScore normalization pipeline. Use full frame-tree evaluation for benchmark-scale results.
+Import upstream `eval_*_videoscore.json` via `--official-results-path` / `--from-upstream-results`. Env: `WORLDFOUNDRY_VIDEOSCORE_MODEL_DIR`, `WORLDFOUNDRY_VIDEOSCORE_FRAMES_DIR`, `WORLDFOUNDRY_VIDEOSCORE_ROOT`. Shared stack: `videoscore_reward_metric_stack`.
 
-## Import Existing Results
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/videoscore.yaml`, `worldfoundry/evaluation/tasks/execution/runners/videoscore/runtime/videoscore`.
 
-Import an existing official-compatible VideoScore result JSON:
+Outputs include `scorecard.json` (primary `videoscore_average`).
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py \
-  --official-results-path /path/to/eval_video_feedback_videoscore.json \
-  --dataset-root "${WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT}" \
-  --frames-dir "${WORLDFOUNDRY_VIDEOSCORE_FRAMES_DIR}" \
-  --output-dir tmp/videoscore/imported \
-  --json
-```
-
-## Training
-
-The official VideoScore paper trains the reward model using the Mantis training stack and VideoFeedback data. WorldFoundry vendors the inference/evaluation runtime needed for benchmark reproduction. To reproduce VideoScore model training itself, use the official training protocol and then pass your trained model directory with `--model-repo-name`.
-
-## Outputs
-
-Each run writes:
-
-- `scorecard.json`: normalized aspect scores and `videoscore_average`.
-- `raw_metric_table.jsonl`: metric rows used by the scorecard.
-- `per_sample_scores.jsonl`: per-sample extracted scores when available.
-- `generated_video_manifest.json`: frame/video manifest for the evaluated artifacts.
-- `dataset_manifest.json`: discovered dataset metadata.
-- `upstream/eval_<bench_name>_videoscore.json`: raw official result JSON.
-- `upstream_stdout.log` and `upstream_stderr.log`: runtime logs.
-
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

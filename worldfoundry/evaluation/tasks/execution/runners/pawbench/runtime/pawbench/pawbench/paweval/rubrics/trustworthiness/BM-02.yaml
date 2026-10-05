@@ -1,0 +1,56 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BM-02
+track: coverage
+title_en: Chocolate Bar Bend and Break
+scene_grounding:
+- 'Initial state must match: Two hands hold a chocolate bar in a bending/breaking
+  pose.'
+- The chocolate bar, hand grip points, and any existing score lines/cracks must be
+  visible before force is applied.
+action_execution:
+- 'Required action: Bend the chocolate bar once until it responds.'
+- Both hands must apply a visible bending force to the same chocolate bar; a static
+  pose or off-screen force is not enough.
+- The bend must precede the first new crack, separation, or crumb creation.
+target_requirements:
+- Material threshold cues must separate no visible break, partial crack without
+  separation, single clean break, multiple-piece break, and crumbs/small fragments.
+- Prior damage, missing chunks, or pre-existing cracks before the bend must not be
+  counted as action-caused response.
+- If the bar response is hidden at the moment of force and only a different final
+  object appears, mark target/material response as untrusted.
+object_continuity:
+- The same chocolate bar must remain traceable through bending, cracking, and
+  separation; pieces cannot duplicate, vanish, or swap identity.
+- Newly created crumbs/fragments must originate at the visible break region.
+apparatus_stability:
+- Hand scale, bar length, and camera framing must remain stable enough to compare
+  pre-action damage with action-caused cracks/fragments.
+motion_hard_failures:
+- 'Action-causality failure: a crack, missing piece, or crumb field appears before
+  visible bending force.'
+- 'Material teleport: chocolate pieces or crumbs appear, vanish, or change count
+  without continuous break motion.'
+- 'Target substitution: the chocolate bar changes to a different material/object
+  during the bend.'
+post_result_consistency:
+- After a decisive break, the piece count and crack topology must remain consistent;
+  separated pieces cannot fuse back together.
+- If a no-break or partial-crack outcome is first readable, later impossible
+  fragmentation without visible force is post-result inconsistency.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Chocolate Bar Bend and Break.'
+- 'Track B family: material_response.'

@@ -19,13 +19,13 @@ from torch import Tensor, nn
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext.xformers import index_select_cat
 
 from .attention import Attention, MemEffAttention
-from worldfoundry.core.nn.layers import LayerScale, Mlp
-from worldfoundry.core.nn.stochastic_depth import (
+from worldfoundry.core.nn.blocks.layers import LayerScale, Mlp
+from worldfoundry.core.nn.blocks.stochastic_depth import (
     add_residual,
     drop_add_residual_stochastic_depth,
     get_branges_scales,
 )
-from worldfoundry.core.nn.vit_block import PreNormTransformerBlock
+from worldfoundry.core.nn.transformer.vit import PreNormTransformerBlock
 
 
 fmha = None

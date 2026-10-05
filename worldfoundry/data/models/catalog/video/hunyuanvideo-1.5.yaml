@@ -10,8 +10,7 @@ source_status:
   status: confirmed_official_github
   github:
     url: https://github.com/Tencent-Hunyuan/HunyuanVideo-1.5
-    verified_by: git ls-remote --symref https://github.com/Tencent-Hunyuan/HunyuanVideo-1.5.git
-      HEAD
+    verified_by: git ls-remote --symref https://github.com/Tencent-Hunyuan/HunyuanVideo-1.5.git HEAD
     default_branch: main
     head_sha: 60783e704160023913bee78f0b47036d393d4dfa
 checkpoint:
@@ -27,8 +26,15 @@ checkpoint:
     - text-to-video
     - image-to-video
     license_status: manual_review_required
-  notes: HF cardData reports license as 'other'; review upstream terms before redistribution
-    or automated download.
+  - id: black-forest-labs/FLUX.1-Redux-dev
+    sha: c95859fbf7703ca4d6824b4da4407d7cd0434f81
+    license: other
+    private: false
+    gated: auto
+    tasks:
+    - image-feature-extraction
+    license_status: non_commercial_manual_review_required
+  notes: HF cardData reports license as 'other'; review upstream terms before redistribution or automated download.
 variants:
 - id: hunyuanvideo-1.5-t2v
   task: text-to-video
@@ -39,51 +45,19 @@ variants:
     license: other
     private: false
     gated: false
-    notes:
-    - HF cardData reports license as 'other'.
   runtime_profile: hunyuanvideo-1.5-t2v
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: hunyuanvideo-1.5-t2v
   integration:
     status: integrated
   demo_parity:
-    status: native_in_tree_visual_validation_verified
-    demo_command:
-    - bash
-    - scripts/model_zoo/run_hunyuanvideo15_t2v_official_demo.sh
-    expected_artifacts:
-    - path: hunyuanvideo15_t2v_native_seed42_848x480_9f.mp4
-      video_probe:
-        expected_width: 848
-        expected_height: 480
-        expected_frames: 9
-        expected_fps: 24
-        fps_tolerance: 0.01
-        expected_duration_seconds: 0.375
-        duration_tolerance_seconds: 0.05
+    status: pending
     notes:
-    - >-
-      Native in-tree HunyuanVideo-1.5 `generate.py` T2V uses
-      `torchrun --nproc_per_node=8`, local `HunyuanVideo-1.5` assets, prompt
-      "A cat walks on a snowy street, cinematic, high quality.",
-      `resolution=480p`, `aspect_ratio=16:9`, `video_length=9`,
-      `num_inference_steps=8`, `cfg_distilled=true`, and `seed=42`.
-    - Per-run visual QA and artifact checks are tracked outside the model catalog.
+    - The earlier bounded generate.py artifact predates the unified native runner and is historical evidence only.
   runner_parity:
-    status: verified
-    demo_command:
-    - python
-    - scripts/model_zoo/run_hunyuanvideo15_t2v_worldfoundry_runner_demo.py
-    expected_artifacts:
-    - path: hunyuanvideo15_t2v_worldfoundry_seed42_848x480_9f.mp4
-      video_probe:
-        expected_width: 848
-        expected_height: 480
-        expected_frames: 9
-        expected_fps: 24
-        fps_tolerance: 0.01
-        expected_duration_seconds: 0.375
-        duration_tolerance_seconds: 0.05
+    status: pending
+    notes:
+    - Native recipe and registry assembly pass; checkpoint-backed CUDA artifact parity must be repeated after cutover.
 - id: hunyuanvideo-1.5-i2v
   task: image-to-video
   provider: official_repo
@@ -93,77 +67,93 @@ variants:
     license: other
     private: false
     gated: false
-    notes:
-    - HF cardData reports license as 'other'.
+  - repo_id: black-forest-labs/FLUX.1-Redux-dev
+    revision: c95859fbf7703ca4d6824b4da4407d7cd0434f81
+    license: other
+    private: false
+    gated: auto
   runtime_profile: hunyuanvideo-1.5-i2v
   runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
   pipeline_binding: hunyuanvideo-1.5-i2v
   integration:
     status: integrated
   demo_parity:
-    status: verified
+    status: pending
     notes:
-    - >-
-      Native in-tree HunyuanVideo-1.5 `generate.py` I2V uses
-      `torchrun --nproc_per_node=8`, local `HunyuanVideo-1.5` assets, input
-      `worldfoundry/data/test_cases/hunyuanvideo_i2v/0.jpg`, prompt
-      "A young man holds a sparkling firework at night, cinematic lighting,
-      realistic motion.", `resolution=480p`, `video_length=9`,
-      `num_inference_steps=8`, `enable_step_distill=true`, and `seed=0`.
-    - Per-run visual QA and artifact checks are tracked outside the model catalog.
+    - The earlier bounded generate.py artifact predates the unified native runner and is historical evidence only.
   runner_parity:
-    status: verified
+    status: pending
+    notes:
+    - Native recipe and registry assembly pass; checkpoint-backed CUDA artifact parity must be repeated after cutover.
+official_sources:
+  paper: https://arxiv.org/abs/2511.18870
 integration:
   status: integrated
   notes:
-  - WorldFoundry routes are complete; missing checkpoint/assets are reported at runtime.
+  - T2V and I2V are declarative recipes assembled by the shared native diffusion runner; generate.py is not retained as a second inference architecture.
+  - HunyuanVideo 1.5 owns only model-specific network, codec, and conditioning behavior.
+  - The I2V conditioner declares FLUX.1-Redux-dev as an independent gated vision checkpoint instead of inferring a sibling path.
+native_diffusion:
+  recipe_ids:
+  - hunyuanvideo-1.5-t2v
+  - hunyuanvideo-1.5-i2v
+  status: assembly_and_checkpoint_structure_verified
+  strategy: standard
+  components:
+  - conditioner
+  - latent_initializer
+  - scheduler
+  - denoiser
+  - latent_encoder
+  - decoder
+  checkpoint_validation:
+    transformer_checkpoint_keys: 1793
+    transformer_model_keys: 1793
+    vae_checkpoint_keys: 218
+    vae_model_keys: 218
+    i2v_siglip_checkpoint_keys: 448
+    i2v_siglip_model_keys: 448
+    missing_keys: 0
+    unexpected_keys: 0
+    shape_mismatches: 0
+    method: local safetensors header key-and-shape comparison on meta-constructed native modules
+  artifact_parity: pending_after_native_cutover
 demo_parity:
-  status: verified
-  demo_command:
-  - bash
-  - scripts/model_zoo/run_hunyuanvideo15_t2v_official_demo.sh
-  expected_artifacts:
-  - path: hunyuanvideo15_t2v_native_seed42_848x480_9f.mp4
-    video_probe:
-      expected_width: 848
-      expected_height: 480
-      expected_frames: 9
-      expected_fps: 24
-      fps_tolerance: 0.01
-      expected_duration_seconds: 0.375
-      duration_tolerance_seconds: 0.05
+  status: pending
   notes:
-  - Native in-tree HunyuanVideo-1.5 T2V and I2V `generate.py` routes use the
-    unified environment profile with 8-rank torchrun.
-  - Required local checkpoint layout includes `HunyuanVideo-1.5`, Qwen2.5-VL-7B
-    under `text_encoder/llm`, `google/byt5-small` under `text_encoder/byt5-small`,
-    ModelScope `Glyph-SDXL-v2`, and FLUX.1-Redux-dev under `vision_encoder/siglip`.
+  - Historical generate.py validation does not establish parity for NativeDiffusionPipeline.
 runner_parity:
-  status: verified
-  demo_command:
-  - python
-  - scripts/model_zoo/run_hunyuanvideo15_t2v_worldfoundry_runner_demo.py
-  expected_artifacts:
-  - path: hunyuanvideo15_t2v_worldfoundry_seed42_848x480_9f.mp4
-    video_probe:
-      expected_width: 848
-      expected_height: 480
-      expected_frames: 9
-      expected_fps: 24
-      fps_tolerance: 0.01
-      expected_duration_seconds: 0.375
-      duration_tolerance_seconds: 0.05
-notes: Added as a high-priority current open-weight video model. Native T2V and
-  I2V infer-only `generate.py` paths are now ported in-tree and release-validation
-  verified with local checkpoint assets.
+  status: pending
+  notes:
+  - Registry resolution is verified; native checkpoint-backed CUDA artifact parity remains pending.
+notes:
+- HunyuanVideo 1.5 T2V and I2V are exposed as independent model recipes under one shared infra architecture.
+- Checkpoints are external assets and HF license metadata is 'other'; the I2V-only FLUX.1-Redux-dev vision asset is gated and non-commercial-license review is required.
 catalog_category: video
-catalog_scope: Official GitHub and/or Hugging Face confirmed open-source or open-weight
-  video generation models. Checkpoints are not tracked in git; local validation may
-  download selected repos under cache/hfd.
+catalog_scope: Official GitHub and/or Hugging Face confirmed open-source or open-weight video generation models.
 catalog_policy:
-  github: Validated with git ls-remote, preferring git ls-remote --symref <repo>.git
-    HEAD for default branch and HEAD SHA.
-  huggingface: Validated with the Hugging Face /api/models endpoint. Recorded repo
-    id, sha, private, gated, license, and selected task tags only.
-  parity: This manifest does not claim WorldFoundry runtime parity unless an explicit
-    parity run and expected artifact are recorded.
+  github: Validate with git ls-remote and record the official default branch revision.
+  huggingface: Record official repo id, revision, access state, license metadata, and task tags.
+  parity: A pre-cutover generate.py artifact does not establish NativeDiffusionPipeline parity.
+docs:
+  publisher: Tencent (Hunyuan)
+  publisher_kind: company
+  publisher_zh: 腾讯（混元）
+  overview: 'HunyuanVideo 1.5 is the newer revision of Tencent''s open video family, again recorded with independent T2V and I2V recipes on one shared native infrastructure. The notable difference from the original: the I2V conditioner declares FLUX.1-Redux-dev as an independent gated vision checkpoint instead of inferring a sibling path.'
+  overview_zh: HunyuanVideo 1.5 是腾讯开源视频系列的较新版本，同样以独立的 T2V 与 I2V 配方共享一套原生基础设施。与初代的显著差异：I2V 条件器将 FLUX.1-Redux-dev 声明为独立的 gated 视觉 checkpoint，而不是推断同级路径。
+  architecture: 'Same shared-native-runner design as the hunyuanvideo entry: HunyuanVideo 1.5 owns only model-specific network, codec, and conditioning behavior, while assembly, loading, and scheduling come from the shared diffusion infrastructure. generate.py is not retained as a second inference architecture.'
+  architecture_zh: 与 hunyuanvideo 条目相同的共享原生 runner 设计：HunyuanVideo 1.5 只拥有模型特有的网络、编解码与条件行为，装配、加载与调度均来自共享扩散基础设施。generate.py 没有被保留为第二套推理架构。
+  usage_notes: 'Registry resolution is verified; native checkpoint-backed CUDA parity is pending. Two gates to clear before running I2V: the main checkpoints carry ''other'' HF license metadata, and FLUX.1-Redux-dev is gated with a non-commercial license that the manifest says needs review — accept its terms on Hugging Face first.'
+  usage_notes_zh: 注册表解析已验证；原生 checkpoint 加载的 CUDA 一致性仍在等待。运行 I2V 前有两道门槛：主 checkpoint 的 HF 许可元数据为“other”；FLUX.1-Redux-dev 为 gated 且许可为非商用（manifest 要求审阅）——请先在 Hugging Face 接受其条款。
+  limitations:
+  - Native CUDA artifact parity is pending.
+  - I2V depends on the gated, non-commercial FLUX.1-Redux-dev vision checkpoint.
+  - Main checkpoint license metadata is 'other'; review before commercial use.
+  limitations_zh:
+  - 原生 CUDA 产物一致性仍在等待。
+  - I2V 依赖 gated 且非商用许可的 FLUX.1-Redux-dev 视觉 checkpoint。
+  - 主 checkpoint 许可元数据为“other”，商用前需审阅。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard open T2V quality suite.
+    reason_zh: 标准开源文生视频质量评测。

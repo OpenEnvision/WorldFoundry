@@ -13,6 +13,7 @@ source:
   official_repo_url: https://github.com/miccooper9/egowm
   hf_repo_id: anuragba/egowm
 official_sources:
+  paper: https://arxiv.org/abs/2601.15284
   project_page: https://egowm.github.io/
   github:
     url: https://github.com/miccooper9/egowm
@@ -38,12 +39,12 @@ variants:
 integration:
   status: runtime_ported
   notes:
-  - EgoWM official source route is registered; checkpoint/assets are runtime-gated.
+  - EgoWM official 25-DoF SVD inference is bound through a user-staged source checkout and local checkpoint directories.
 runner_parity:
-  status: implemented_checkpoint_pending
+  status: implemented
   notes:
-  - resolve_model_zoo_config and pipeline import are expected to pass; real generation
-    emits a runtime plan until required checkpoints/assets are staged.
+  - The compatibility wrapper runs the official action/state-conditioned SVD model and normalizes its MP4 to the requested artifact path.
+  - Real GPU validation evidence is tracked per run rather than embedded as a machine-local catalog path.
 runtime_profile: runtime-profile:egowm
 output_artifacts:
 - generated_video
@@ -52,3 +53,19 @@ catalog_scope: World-model catalog entries. Integrated entries expose in-tree Wo
   runtimes; blocked entries retain upstream provenance without runnable backends.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: egowm
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'EgoWM is an egocentric navigation world model: from a first-person view and navigation actions it predicts the video a moving agent would see, with 3-DoF and 25-DoF action variants recorded (egowm-svd-3dof / egowm-svd-25dof). In this catalog the official source route is registered with the source pinned at a recorded commit; checkpoints stay runtime-gated.'
+  overview_zh: EgoWM 是第一人称导航世界模型：给定第一视角画面与导航动作，预测移动智能体将看到的视频，记录了 3 自由度与 25 自由度两个动作 variant（egowm-svd-3dof / egowm-svd-25dof）。本 catalog 中官方源码路径已注册、源码固定在记录的 commit；checkpoint 保持运行时限制。
+  architecture: The variant names record a Stable Video Diffusion backbone conditioned on 3-DoF or 25-DoF action spaces (checkpoint anuragba/egowm). Architecture internals beyond the recorded tasks are not stored in this repository.
+  architecture_zh: variant 名称记录其为以 3 自由度或 25 自由度动作空间为条件的 Stable Video Diffusion 基座（checkpoint 为 anuragba/egowm）。除已记录任务外的架构内部细节仓库未存。
+  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
+  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。
+  limitations:
+  - Real generation is checkpoint/asset gated.
+  - The publishing institution is not recorded in this repository.
+  limitations_zh:
+  - 真实生成受 checkpoint/资产限制。
+  - 发表机构在本仓库中未记录。

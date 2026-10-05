@@ -1,178 +1,40 @@
 ---
 title: WorldScore
-description: Run WorldScore from WorldFoundry's bundled runtime.
+description: "Stanford unified world-generation bench: controllability, quality, dynamics on camera-specified rollouts. WorldFoundry vendors the runtime; a bounded dynamic component is verified."
 ---
 
-## About
+WorldScore (Stanford) unifies evaluation of **3D/4D scene generation and video world models**. A model receives a starting scene plus a sequence of **camera-specified layout instructions**. Three families normalize into `worldscore_average`:
 
-WorldScore evaluates world generation: a model starts from an observed scene and must extend it while preserving camera, object, visual, and motion constraints. The public benchmark covers 3,000 examples across 3D generation, 4D generation, image-to-video, and text-to-video systems.
+- **Controllability** — camera and object / condition control
+- **Quality** — visual and reconstruction fidelity
+- **Dynamics** — temporal behavior
 
-WorldFoundry already carries the benchmark runner and runtime under `worldfoundry/evaluation/tasks/execution/runners/worldscore`. Do not clone the official repos for a WorldFoundry run. Downloading the Hugging Face dataset and metric checkpoints is still expected.
+Paper: [WorldScore](https://arxiv.org/abs/2504.00983). Project: [haoyi-duan.github.io/WorldScore](https://haoyi-duan.github.io/WorldScore/). Code: [haoyi-duan/WorldScore](https://github.com/haoyi-duan/WorldScore) (MIT). Data: [`Howieeeee/WorldScore`](https://huggingface.co/datasets/Howieeeee/WorldScore) (revision `42c4e267e1cc0529af1b0284ce018e04d43906e3`).
 
-## What It Measures
+WorldFoundry **vendors the core runtime** and converts `evaluation.json` trees into scorecards. A **bounded dynamic component is verified**; **full metric-tree execution is not**. Full metrics need DROID / `lietorch`, GroundingDINO, SAM, optical-flow / interpolation, Mamba, and matching checkpoints.
 
-WorldScore is the first unified benchmark for **world generation**. It decomposes world building into a sequence of next-scene tasks with explicit camera-trajectory layout specs, then scores controllability, quality, and dynamics across 3D, 4D, I2V, and T2V systems.
+<BenchmarkPageSections id="worldscore" locale="en" />
 
-## Benchmark Design
-
-| Property | Detail |
-| --- | --- |
-| Examples | 3,000 curated test cases spanning static and dynamic worlds |
-| Modalities | 3D generation, 4D generation, image-to-video, text-to-video |
-| Task form | Next-scene generation from an observed scene under camera or layout control |
-| Static split | Controllability + quality (camera control, object control, 3D/photometric/style consistency) |
-| Dynamic split | Adds motion accuracy, motion magnitude, and motion smoothness |
-| Aggregates | `WorldScore-Static` and `WorldScore-Dynamic` leaderboard variants |
-
-Unlike single-scene video benchmarks, WorldScore requires multi-scene continuity, long sequences, image conditioning, multi-style coverage, camera control, and 3D consistency in one protocol.
-
-## Official References
-
-- Paper: [arXiv:2504.00983](https://arxiv.org/abs/2504.00983)
-- Project page and leaderboard: [haoyi-duan.github.io/WorldScore](https://haoyi-duan.github.io/WorldScore/)
-- Official source reference: [github.com/haoyi-duan/WorldScore](https://github.com/haoyi-duan/WorldScore)
-- Dataset: [Howieeeee/WorldScore](https://huggingface.co/datasets/Howieeeee/WorldScore)
-- In-tree runner: `worldfoundry/evaluation/tasks/execution/runners/worldscore/run_worldscore_official_runner.py`
-
-## Leaderboard Notes
-
-The official site publishes `WorldScore-Static` and `WorldScore-Dynamic` rankings with per-family sub-metrics (camera control, object control, content alignment, 3D/photometric/style consistency, subjective quality, motion accuracy/magnitude/smoothness). WorldFoundry records bounded GPU validation for one dynamic sample; full 3,000-example leaderboard parity requires complete `evaluation.json` trees and the full metric checkpoint stack.
-
-## Prepare Data And Assets
-
-Run from the WorldFoundry repository root:
+## How to run
 
 ```bash
-cd /path/to/WorldFoundry
-export PYTHONPATH="$PWD:${PYTHONPATH:-}"
-```
+hf download Howieeeee/WorldScore --repo-type dataset \
+  --revision 42c4e267e1cc0529af1b0284ce018e04d43906e3 \
+  --local-dir cache/worldfoundry/data/hfd_datasets/Howieeeee/WorldScore
 
-Download or stage the dataset so the data root contains `WorldScore-Dataset/`:
-
-```bash
-export WORLDFOUNDRY_WORLDSCORE_DATA_PATH=/path/to/Howieeeee__WorldScore
-hf download Howieeeee/WorldScore \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_WORLDSCORE_DATA_PATH}"
-```
-
-Prepare metric assets. WorldFoundry models these as reusable base-model dependencies, but the files still need to exist locally for full metric execution:
-
-- `WORLDFOUNDRY_WORLDSCORE_CONFIG_ROOT`: optional config override; defaults to `worldfoundry/data/benchmarks/assets/worldscore/config`.
-- `WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR`: shared WorldScore metric checkpoint directory.
-- `WORLDFOUNDRY_DROID_SLAM_CKPT`: DROID-SLAM checkpoint, commonly `droid.pth`.
-- `WORLDFOUNDRY_GROUNDING_DINO_CKPT`: GroundingDINO Swin-T checkpoint.
-- `WORLDFOUNDRY_SAM_VIT_H_CKPT`: SAM ViT-H checkpoint.
-- `WORLDFOUNDRY_SAM2_CKPT`: SAM2.1 checkpoint.
-- `WORLDFOUNDRY_RAFT_THINGS_CKPT`: RAFT Things checkpoint.
-- `WORLDFOUNDRY_SEA_RAFT_CKPT`: SEA-RAFT checkpoint.
-- `WORLDFOUNDRY_FLOWFORMERPLUSPLUS_CKPT`: FlowFormer++ checkpoint.
-- `WORLDFOUNDRY_VFIMAMBA_CKPT`: VFIMamba checkpoint.
-
-Prepare candidate outputs in one of two shapes:
-
-```text
-complete run:
-  <model_workspace>/<model_name>/worldscore_output/
-    static/.../input_image.png
-    static/.../frames/000.png
-    static/.../camera_data.json
-    static/.../image_data.json
-    static/.../evaluation.json
-    dynamic/.../input_image.png
-    dynamic/.../frames/000.png
-    dynamic/.../videos/output.mp4
-    dynamic/.../image_data.json
-    dynamic/.../evaluation.json
-    worldscore.json
-
-bounded run:
-  <generated_artifact_dir>/
-    candidate.mp4
-```
-
-The bounded path is useful for local integration runs. It stages one generated video or frame directory into the dynamic WorldScore layout and is not leaderboard evidence.
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/worldscore_artifacts
-export WORLDFOUNDRY_WORLDSCORE_MODEL_NAME=wan2.1_i2v
-export WORLDFOUNDRY_WORLDSCORE_MODEL_PATH=/path/to/model_workspace
-export WORLDFOUNDRY_WORLDSCORE_HF_DATASET_ROOT="${WORLDFOUNDRY_WORLDSCORE_DATA_PATH}"
-```
-
-## Run With WorldFoundry
-
-Public benchmark command for the in-tree runtime:
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id worldscore \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --env WORLDFOUNDRY_WORLDSCORE_HF_DATASET_ROOT="${WORLDFOUNDRY_WORLDSCORE_HF_DATASET_ROOT}" \
-  --env WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR="${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}" \
-  --env WORLDFOUNDRY_WORLDSCORE_MODEL_NAME="${WORLDFOUNDRY_WORLDSCORE_MODEL_NAME}" \
-  --env WORLDFOUNDRY_WORLDSCORE_MODEL_PATH="${WORLDFOUNDRY_WORLDSCORE_MODEL_PATH}" \
-  --output-dir tmp/worldscore/official-run \
-  --json
-```
-
-Public command for importing an existing `worldscore.json`:
-
-```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id worldscore \
   --mode official-validation \
-  --official-results-path /path/to/worldscore_output/worldscore.json \
-  --benchmark-data-root "${WORLDFOUNDRY_WORLDSCORE_DATA_PATH}" \
-  --generated-artifact-dir /path/to/worldscore_output \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/worldscore/official-validation \
   --json
 ```
 
-Direct runner command for staging and running from the bundled runtime:
+GPU path: `--generated-root`, `--data-path`, `--num-jobs`. Staging helpers: `--stage-dynamic-source`, `--stage-sample-index`, `--stage-target-frames`. Env: `WORLDFOUNDRY_WORLDSCORE_RESULTS_PATH`, `WORLDFOUNDRY_WORLDSCORE_OUTPUT_DIR`, `WORLDFOUNDRY_WORLDSCORE_CONFIG_ROOT`. Shared stack: `worldscore_spatial_metric_stack`.
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/worldscore/run_worldscore_official_runner.py \
-  --worldscore-root worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore \
-  --worldscore-config-root worldfoundry/data/benchmarks/assets/worldscore/config \
-  --model-name "${WORLDFOUNDRY_WORLDSCORE_MODEL_NAME}" \
-  --model-path "${WORLDFOUNDRY_WORLDSCORE_MODEL_PATH}" \
-  --data-path "${WORLDFOUNDRY_WORLDSCORE_DATA_PATH}" \
-  --stage-dynamic-source "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --stage-target-frames 8 \
-  --stage-overwrite \
-  --output-dir tmp/worldscore/direct-runner \
-  --json
-```
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/worldscore.yaml`, `worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore`.
 
-Direct runner command for importing a completed result file:
+Outputs include `scorecard.json` (primary `worldscore_average`) and `per_sample_metrics.jsonl`.
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/worldscore/run_worldscore_official_runner.py \
-  --data-path "${WORLDFOUNDRY_WORLDSCORE_DATA_PATH}" \
-  --generated-root /path/to/worldscore_output \
-  --official-results-path /path/to/worldscore_output/worldscore.json \
-  --output-dir tmp/worldscore/direct-import \
-  --json
-```
-
-## Metrics
-
-| Metric ID | Meaning |
-| --- | --- |
-| `controllability` | Mean of camera-control and object-control adherence. Higher is better. |
-| `quality` | Mean visual/reconstruction quality family: content alignment, 3D consistency, photometric consistency, style consistency, and subjective quality when present. Higher is better. |
-| `dynamics` | Mean motion family: motion accuracy, motion magnitude, and motion smoothness. Higher is better. |
-| `worldscore_average` | Primary aggregate across available WorldScore metric families. WorldFoundry normalizes percent-like values to a unit score in the scorecard. |
-
-## Outputs
-
-WorldFoundry writes these files under `--output-dir`:
-
-- `scorecard.json`: normalized benchmark scorecard consumed by reports and comparisons.
-- `per_sample_metrics.jsonl`: one row per discovered sample or imported sample metric row.
-- `raw_metric_table.jsonl`: metric rows with availability, raw score, normalized score, and source.
-- `official_stdout.log` and `official_stderr.log` for direct official-runtime execution.
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

@@ -7,6 +7,8 @@ from typing import Any, Mapping, Sequence
 
 from PIL import Image
 
+from worldfoundry.core.io import write_video
+
 from ..pipeline_utils import PipelineABC
 
 
@@ -140,6 +142,7 @@ class DreamXWorld5BCamPipeline(PipelineABC):
         num_inference_steps: int = 30,
         guidance_scale: float = 5.0,
         seed: int = 42,
+        output_path: str | Path | None = None,
         return_dict: bool = True,
         **kwargs: Any,
     ) -> Any:
@@ -156,6 +159,19 @@ class DreamXWorld5BCamPipeline(PipelineABC):
             **kwargs,
         )
         result = self.stream_realtime(interactions=interactions, seed=seed, **kwargs)
+        if output_path is not None:
+            frames = result.get("frames")
+            if frames is None:
+                raise RuntimeError("DreamX-World generation did not return video frames.")
+            write_video(frames, output_path, fps=fps)
+            result = dict(result)
+            result.update(
+                status="ok",
+                artifact_kind="generated_video",
+                artifact_path=str(output_path),
+                fps=int(fps),
+                num_output_frames=len(frames),
+            )
         return result if return_dict else result["frames"]
 
 

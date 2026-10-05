@@ -1,168 +1,42 @@
 ---
 title: WorldModelBench
-description: Run WorldModelBench with WorldFoundry's in-tree evaluator and VILA judge path.
+description: "NeurIPS 2025 world-model judging suite: 350 instances, VILA judge. WorldFoundry checks in evaluation.py; full judge execution is not verified."
 ---
 
-## About
+WorldModelBench (NVIDIA, UC Berkeley, UC San Diego, MIT; NeurIPS 2025) judges video generators as world models across **7 application domains / 56 subdomains**. Official size: **350 instances**, calibrated against **67K crowd-sourced human labels**. Three families:
 
-WorldModelBench asks whether generated videos behave like world models. It contains 350 public test instances across 7 domains and 56 subdomains. Each instance provides a first-frame description, an instruction, and a first-frame image. Text-to-video models use the description plus instruction; image-to-video models use the first frame plus instruction.
+- Instruction following
+- Common-sense reasoning
+- Physics adherence (e.g. mass-conservation violations such as irregular size changes)
 
-WorldFoundry already includes the WorldModelBench evaluator wrapper and runtime under `worldfoundry/evaluation/tasks/execution/runners/worldmodelbench`. Do not clone the official repos for a WorldFoundry run. You still need the data assets and the VILA judge checkpoint.
+The official judge is a fine-tuned **2B VILA-family** multimodal model that the paper reports outperforms GPT-4o at detecting world-modeling violations. `world_model_average` aggregates public families.
 
-## What It Measures
+Paper: [WorldModelBench](https://arxiv.org/abs/2502.20694). Project: [worldmodelbench-team.github.io](https://worldmodelbench-team.github.io/). Code: [WorldModelBench-Team/WorldModelBench](https://github.com/WorldModelBench-Team/WorldModelBench). Data: [`Efficient-Large-Model/worldmodelbench`](https://huggingface.co/datasets/Efficient-Large-Model/worldmodelbench).
 
-WorldModelBench judges whether video generators behave as **world models** — not only whether clips look good, but whether they follow instructions, preserve temporal common sense, and respect physical laws. The benchmark crowdsourced 67K human labels to train a human-aligned VILA judge that automates evaluation.
+WorldFoundry **checks in upstream `evaluation.py` and the 350-instance manifest**. Result import and manifest coverage checks are verified; **full judge-checkpoint execution is not**. Leaderboard answers are withheld upstream.
 
-## Benchmark Design
+<BenchmarkPageSections id="worldmodelbench" locale="en" />
 
-| Axis | Coverage | Scoring |
-| --- | --- | --- |
-| Domains | 7 application domains, 56 subdomains, 350 public prompts | 50 prompts per domain |
-| Instruction following | Object, subject, and intended motion alignment | 0–3 per instance |
-| Common sense | Temporal coherence and frame-wise aesthetics | 0–2 per instance |
-| Physical adherence | Newtonian motion, solid mechanics, fluid mechanics, impenetrability, gravity | 0–5 per instance |
-| Prompts | Text description + instruction + first-frame image | T2V uses text; I2V uses image + instruction |
-
-Physical-adherence checks target subtle violations such as size drift, unnatural deformation, impossible fluid flow, object penetration, and gravity inconsistency — failures that generic video-quality metrics often miss.
-
-## Official References
-
-- Paper: [arXiv:2502.20694](https://arxiv.org/abs/2502.20694)
-- Project page and leaderboard: [worldmodelbench-team.github.io](https://worldmodelbench-team.github.io/)
-- Official source reference: [github.com/WorldModelBench-Team/WorldModelBench](https://github.com/WorldModelBench-Team/WorldModelBench)
-- Test data: [Efficient-Large-Model/worldmodelbench](https://huggingface.co/datasets/Efficient-Large-Model/worldmodelbench)
-- Judge model: [Efficient-Large-Model/vila-ewm-qwen2-1.5b](https://huggingface.co/Efficient-Large-Model/vila-ewm-qwen2-1.5b)
-- In-tree runner: `worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py`
-
-## Leaderboard Notes
-
-The public leaderboard reports Instruction Following, Physics Adherence, Common Sense, and a Total Score. Official answers and explanations are withheld for test integrity; submit results to `worldmodelbench.team@gmail.com` per the project page. WorldFoundry normalizes local judge output into `scorecard.json` but does not host the upstream submission workflow.
-
-## Prepare Data And Assets
-
-Run from the WorldFoundry repository root:
+## How to run
 
 ```bash
-cd /path/to/WorldFoundry
-export PYTHONPATH="$PWD:${PYTHONPATH:-}"
-```
+hf download Efficient-Large-Model/worldmodelbench --repo-type dataset \
+  --local-dir cache/worldfoundry/data/hfd_datasets/Efficient-Large-Model/worldmodelbench
 
-Create a data root with the manifest, first-frame images, and evaluator file layout expected by the runner:
-
-```text
-<worldmodelbench_data_root>/
-  worldmodelbench.json
-  images/
-  evaluation.py
-```
-
-WorldFoundry ships the public 350-instance manifest:
-
-```bash
-export WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT=/path/to/worldmodelbench
-mkdir -p "${WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT}"
-cp worldfoundry/data/benchmarks/assets/worldmodelbench/worldmodelbench.json \
-  "${WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT}/worldmodelbench.json"
-```
-
-If you use a Hugging Face mirror for the data assets, place it in the same root:
-
-```bash
-hf download Efficient-Large-Model/worldmodelbench \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT}"
-```
-
-Download the judge checkpoint:
-
-```bash
-export WORLDFOUNDRY_WORLDMODELBENCH_JUDGE=/path/to/vila-ewm-qwen2-1.5b
-hf download Efficient-Large-Model/vila-ewm-qwen2-1.5b \
-  --local-dir "${WORLDFOUNDRY_WORLDMODELBENCH_JUDGE}"
-```
-
-Generate one video per manifest row. The output filename must match the first-frame stem:
-
-```text
-images/69620089860948e38a4921dd4869d24f.jpg
-=> <generated_videos>/69620089860948e38a4921dd4869d24f.mp4
-```
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/worldmodelbench/generated_videos
-```
-
-Prompt construction follows the local README:
-
-```python
-# text-to-video
-" ".join([instance["text_first_frame"], instance["text_instruction"]])
-
-# image-to-video
-image = instance["first_frame"]
-text = instance["text_instruction"]
-```
-
-## Run With WorldFoundry
-
-Public command for importing a completed `worldmodelbench_results.json`:
-
-```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id worldmodelbench \
   --mode official-validation \
-  --official-results-path /path/to/worldmodelbench_results.json \
-  --benchmark-data-root "${WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --official-results-path <official_results.json> \
+  --benchmark-data-root <worldmodelbench_data_root> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/worldmodelbench/official-validation \
   --json
 ```
 
-Direct runner command for judge execution through the bundled runtime:
+Official-run drives `evaluation.py` with `WORLDFOUNDRY_WORLDMODELBENCH_JUDGE` (VILA checkpoint or HF model id). The wrapper validates accs/preds shapes against N, 2N, and 5N category lengths and records 350-instance video coverage. Env: `WORLDFOUNDRY_WORLDMODELBENCH_RESULTS_PATH`, `WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT`. Shared asset: `worldmodelbench_dataset_assets`. Manifest: `worldfoundry/data/benchmarks/assets/worldmodelbench/worldmodelbench.json`.
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py \
-  --worldmodelbench-root worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/runtime \
-  --data-root "${WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT}" \
-  --video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --judge "${WORLDFOUNDRY_WORLDMODELBENCH_JUDGE}" \
-  --model-name "${WORLDFOUNDRY_MODEL_NAME:-candidate_model}" \
-  --output-dir tmp/worldmodelbench/direct-runner \
-  --json
-```
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/worldmodelbench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/runtime/evaluation.py`.
 
-Direct runner command for importing a completed result file:
+Outputs include `scorecard.json` (primary `world_model_average`) and `judge_responses.jsonl`.
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py \
-  --data-root "${WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT}" \
-  --video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --official-results-path /path/to/worldmodelbench_results.json \
-  --output-dir tmp/worldmodelbench/direct-import \
-  --json
-```
-
-## Metrics
-
-WorldModelBench raw category maxima are 3, 2, and 5 points. WorldFoundry reports both raw and normalized values when possible.
-
-| Metric ID | Meaning |
-| --- | --- |
-| `instruction_following` | Whether the generated video follows the requested instruction. Raw max: 3. |
-| `common_sense` | Framewise and temporal common-sense quality. Raw max: 2. |
-| `physical_adherence` | Physical-law adherence across Newtonian behavior, mass/solid consistency, fluid behavior, penetration, and gravity. Raw max: 5. |
-| `world_model_average` | Primary aggregate across the three public categories. Raw max: 10. |
-
-## Outputs
-
-The runner writes these files under `--output-dir`:
-
-- `scorecard.json`: normalized scorecard with metric values and generated-video coverage.
-- `raw_metric_table.jsonl`: one row per metric ID.
-- `judge_responses.jsonl`: flattened VILA judge responses when available.
-- `upstream/worldmodelbench_results.json`: generated by the direct judge path.
-- `upstream_stdout.log` and `upstream_stderr.log`: direct judge execution logs.
-
-Public benchmark-zoo runs can also write `runner_runtime_report.json`.
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

@@ -44,3 +44,19 @@ catalog_policy:
   - open_weights_restricted
   - api_or_closed
   - unknown
+docs:
+  publisher: Google DeepMind / UC Berkeley
+  publisher_kind: company
+  publisher_zh: Google DeepMind / 加州大学伯克利分校
+  overview: 'MonST3R extends the DUSt3R pointmap approach to dynamic scenes: it estimates per-timestep geometry directly from video, recovering shape and motion without a static-scene assumption. In this catalog it is fully verified — the CUDA Studio job produced a valid GLB v2 scene with 51 geometries and finite point data on 2026-07-10 through the in-tree demo.py subprocess adapter.'
+  overview_zh: MonST3R 把 DUSt3R 的点图方法扩展到动态场景：直接从视频逐时刻估计几何，在不假设静态场景的前提下同时恢复形状与运动。本 catalog 中它已完整验证——CUDA Studio 任务于 2026-07-10 通过树内 demo.py 子进程适配器产出含 51 个几何体、点数据有限的合法 GLB v2 场景。
+  architecture: Per the upstream publication, MonST3R fine-tunes the DUSt3R pointmap regressor on dynamic data so that pointmaps are estimated per timestep; downstream optimization aligns them into a 4D scene. WorldFoundry vendors the infer-time components in-tree and materializes a GLB scene artifact.
+  architecture_zh: 按上游论文，MonST3R 在动态数据上微调 DUSt3R 的点图回归器，使点图按时刻估计；下游优化将其对齐为 4D 场景。WorldFoundry 将推理组件内置树内，并生成 GLB 场景产物。
+  usage_notes: The Studio default disables the optional flow loss so missing RAFT2/SAM2 assets do not block preview output. For full official dynamic-mask parity, configure the MonST3R, RAFT, and SAM2 assets in the runtime environment.
+  usage_notes_zh: Studio 默认关闭可选的光流损失，因此 RAFT2/SAM2 资产缺失不会阻塞预览输出。若要完整对齐官方动态掩码效果，请在运行时环境中配置 MonST3R、RAFT 与 SAM2 资产。
+  limitations:
+  - Full official dynamic-mask parity needs RAFT2/SAM2 assets beyond the Studio default path.
+  - Optimization-based alignment makes long videos slow compared with feed-forward reconstructors.
+  limitations_zh:
+  - 完整的官方动态掩码效果需要 Studio 默认路径之外的 RAFT2/SAM2 资产。
+  - 基于优化的对齐使长视频处理速度慢于前馈式重建器。

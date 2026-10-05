@@ -34,3 +34,28 @@ runtime_profile: runtime-profile:bernini
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: bernini
 catalog_category: video
+docs:
+  publisher: ByteDance
+  publisher_kind: company
+  publisher_zh: 字节跳动（ByteDance）
+  overview: 'Bernini is ByteDance''s unified any-to-any visual generation model: one checkpoint covers text-to-image, image editing, text-to-video, video-to-video, and reference-guided video. This flagship entry serves the full ByteDance/Bernini-Diffusers checkpoint, which pairs a 7B semantic planner with a 14B renderer. WorldFoundry vendors the official inference source in-tree and loads the self-contained Diffusers checkpoint directly — no external Bernini checkout is used.'
+  overview_zh: Bernini 是字节跳动的统一「任意到任意」视觉生成模型：一个 checkpoint 同时覆盖文生图、图像编辑、文生视频、视频到视频与参考引导视频。本旗舰条目对应完整的 ByteDance/Bernini-Diffusers checkpoint，内含 7B 语义规划器与 14B 渲染器。WorldFoundry 将官方推理源码内置于树内，直接加载自包含的 Diffusers checkpoint——不依赖外部 Bernini 检出。
+  architecture: 'Two-stage design recorded in the manifest: a 7B semantic planner produces an intermediate plan and a 14B renderer synthesizes the final pixels. Official recipes run single-request inference with 8-way Ulysses sequence parallelism (nproc_per_node=8, ulysses_size=8). The task_type input selects among the six recorded task families at request time.'
+  architecture_zh: manifest 记录的是两段式设计：7B 语义规划器先产出中间规划，14B 渲染器再合成最终像素。官方配方使用单请求 8 路 Ulysses 序列并行推理（nproc_per_node=8、ulysses_size=8）。请求时通过 task_type 输入在六类已记录任务间切换。
+  usage_notes: 'Integration is complete but runner parity is pending_gpu_validation: the official 8-GPU Ulysses dispatch is implemented, and artifact parity still requires staged weights plus H100-class GPUs. If you do not have an 8-GPU node, use the Bernini-R renderer-only entries instead — the 1.3B one runs on a single GPU.'
+  usage_notes_zh: 集成已完成，但 runner parity 为 pending_gpu_validation：官方 8 卡 Ulysses 调度已实现，产物一致性仍需就位权重并使用 H100 级 GPU 验证。如果没有 8 卡节点，请改用 Bernini-R 渲染器条目——其中 1.3B 版单卡可跑。
+  limitations:
+  - The official recipe assumes an 8-GPU Ulysses setup; smaller topologies are not the recorded configuration.
+  - Artifact parity has not been GPU-validated in this workspace yet (pending_gpu_validation).
+  - Weights (apache-2.0) are external and must be staged before running.
+  limitations_zh:
+  - 官方配方假定 8 卡 Ulysses 环境；更小拓扑不是已记录配置。
+  - 本工作区尚未完成 GPU 产物一致性验证（pending_gpu_validation）。
+  - 权重（apache-2.0）为外部资产，运行前需先就位。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Covers the T2V half of Bernini's unified task space.
+    reason_zh: 覆盖 Bernini 统一任务空间中的文生视频部分。
+  - id: t2v-compbench
+    reason: Compositional prompts stress the semantic-planner stage.
+    reason_zh: 组合式提示词可检验语义规划阶段的能力。

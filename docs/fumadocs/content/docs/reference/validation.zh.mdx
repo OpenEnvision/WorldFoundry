@@ -9,25 +9,295 @@ description: 代码、文档、runner 和 benchmark facade 的发布门禁。
 
 ## 按变更类型选择证据
 
-| 变更 | 最小证据 | 提升状态时的额外证据 |
+- **只改文档** — `npm run types:check`、`npm run build`、受影响 route 返回 200。提升状态时的额外证据：布局或交互变化需要浏览器截图。
+- **CLI 或 runner** — 公开 CLI 目录检查加代表性 evaluate 命令。提升状态时的额外证据：如果输出契约变化，再跑 existing-results 和 model-mode runs。
+- **Model manifest** — `zoo model-show`、`zoo model-download --check-local`。提升状态时的额外证据：Clone、checkpoint、demo parity、runner parity、benchmark run。
+- **Model runtime integration** — 仓内 runtime import、无机器本地 source checkout 依赖、带 `backend_stage` 的 runtime profile，以及聚焦回归。提升状态时的额外证据：Checkpoint-backed run 和一份 normalized benchmark scorecard。
+- **Benchmark manifest** — `zoo benchmark-show`、`preflight runtime --profile <benchmark-id>`。提升状态时的额外证据：Clone、dataset、official runtime、normalized scorecard。
+- **Benchmark runner** — `zoo benchmark-run --mode official-validation` 或 `--mode official-run`。提升状态时的额外证据：Official result import、official runtime 和 full-suite fairness gate。
+- **Suite 或 matrix** — `run --all-benchmarks --plan-only --json`。提升状态时的额外证据：规划选中的 cells，然后用可运行 benchmark 路径验证 artifacts。
+
+## 公开测试
+
+一方测试源码统一存放在 `tests/`，随仓库和 sdist 发布，采用仓库的 Apache-2.0 许可证。wheel 只包含运行时包。
+
+```bash
+python -m pip install -e ".[test]"
+make test
+# 开发时可以单独运行某项测试：
+python -m pytest -q tests/runtime/test_geometry_regression_impact.py
+```
+
+默认 CPU 门禁覆盖进程日志、模拟 GPU 租约、checkpoint staging、任务持久化、Conda dispatch、推理取消与超时、worker 退出和打包边界。它不需要 CUDA、模型下载、Torch 或 API 凭据，CI 使用同一选择。`make test-infer` 是别名；系统的 `python` 仍为 Python 2 时，使用 `make test PYTHON=python3`。
+
+`make test` 还包含覆盖策略、官方推理证据、固定历史参考和 JUnit 验证器的测试。Make 门禁先独立收集完整节点清单，再执行测试，拒绝 skip、collection error、少跑、多跑、重复节点、源码改变和旧报告。`TEST_ARGS` 只影响执行阶段，使用 `-k` 或 `-m` 漏跑节点仍会失败。CI 发布完整清单及 JUnit。标准库成功 subtest 保留父节点，失败或跳过的 subtest 仍使门禁失败。
+
+| 路径 | 内容与环境要求 |
+| --- | --- |
+| `tests/test_*.py` | 从旧 `test/` 迁入的模型集成与 infra 回归 |
+| `tests/core/`、`tests/runtime/`、`tests/studio/` | 共享基础设施的单元与集成测试 |
+| `tests/eval_core/` | 扩展 evaluation 契约，使用 `make test-eval-core` |
+| 其他模块目录 | 对应运行时模块的测试 |
+| `tests/training/` | 需要另行提供的 training 实现和 configs |
+| `tests/manual/` | 手动模型推理与托管 API smoke 脚本 |
+| `tests/stream/` | 手动 streaming / incremental inference 脚本 |
+
+扩展测试可能依赖 `eval_core`、`ui`、模型专用环境、本地 assets 或 CUDA。部分历史断言还涉及私有 training / benchmark 实现或旧布局；公开 CPU 门禁是当前支持的 CI 基线，安装 `test` extra 不会准备这些额外资源。
+
+```bash
+python -m pytest -q tests/eval_core/test_evaluate_runner.py
+python -m pytest -q tests/studio/test_conda_dispatch.py
+python -m pytest --collect-only tests
+PYTHONPATH=. python tests/manual/test_wan_2p2.py
+PYTHONPATH=. python tests/stream/test_wan2p2_stream.py
+WORLDFOUNDRY_DOCKER_GPUS=none tests/run_tests_docker.sh
+WORLDFOUNDRY_DOCKER_EXTRAS=test,eval_core tests/run_tests_docker.sh make:test-eval-core
+```
+
+`manual/` 和 `stream/` 不参加递归 pytest collection。直接运行前需要准备模型环境；脚本可能下载 weights、占用 GPU、调用真实 API 并写出产物。凭据使用 provider 的环境变量。MiniMax H3 的真实权重测试使用 `MINIMAX_H3_CKPT_DIR`，默认 `~/.cache/worldfoundry/checkpoints/minimax-h3-components`。
+
+新增确定性回归放在对应模块目录，小型文本 fixture 放在该 suite 内。导入时直接执行推理的脚本放入 `manual/` 或 `stream/`。checkpoint 路径使用环境变量，资源不可用时跳过真实权重测试；缓存、日志、输出、凭据和 weights 不进入 Git 或源码发行物。
+
+## 推理契约与 CUDA 快速检查
+
+仅安装公开测试依赖、CPU Torch、safetensors 和 einops，即可运行张量测试，不需要 checkpoint、渲染器或 GPU：
+
+```bash
+python -m pip install "torch==2.7.1" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -e ".[test]" "safetensors>=0.4" "einops>=0.7,<0.9"
+make test-infer-tensors
+```
+
+在已准备的 3D 模型环境中继续运行结果导出和 CUDA 测试。结果导出会导入该环境的模型和渲染依赖，包括 plyfile 和 gsplat：
+
+```bash
+make test-infer-contracts PYTHON=/path/to/model-env/bin/python
+make test-infer-cuda-contracts PYTHON=/path/to/model-env/bin/python
+```
+
+第一个目标使用小张量和已知几何，不加载模型权重，覆盖 checkpoint 往返与 meta 参数赋值、加载失败前的原子校验、键重命名冲突、相机坐标约定、带 mask 的 PLY 和原始数组导出、跨进程结果序列化、异常恢复和并发提交。CUDA 目标检查 producer event 的先后顺序、pinned-memory 拷贝、失败 fallback，以及回调报错后已入队工作的同步。CUDA 不可用时该目标直接失败，不能用整个 suite 都被 skip 来表示通过。
+
+设置下文的 checkpoint 和输入目录后，还可以运行短的真实 Pi3X 测试，比较复用模型和新加载模型，覆盖换输入、失败请求和重复推理：
+
+```bash
+python -m pytest -q tests/pipelines/test_pi3x_real_inference.py
+```
+
+这是请求状态隔离检查，不代表结果质量已经验收。模型行为发生变化时仍需运行固定权重的数值回归门禁。
+
+### Video generation 与 world model
+
+LTX 的 timestep-conditioned VAE 在解码时也会注入噪声。视频、音视频和带请求的张量解码现在使用 latent 所在设备上的独立 generator，seed 来自当前请求。真实小型 VAE 测试覆盖分块与不分块解码、A/B/A seed、全局随机状态隔离，以及与原 VAE 在相同随机状态下的精确一致性。不分块的张量解码直接调用 decoder。旧 LTX RGB 受未固定的全局随机状态影响；建立确定性 reference 时必须记录这一行为修复，并独立证明 latent 与受控解码的一致性，不能静默替换失败基准。
+
+`make test-infer-tensors` 同时运行视频共享组件的数值测试；只运行这一部分可用 `make test-infer-video-tensors`。它用小型真实 Wan 网络比较融合 QKV、静态 cross-KV 缓存与原始网络，覆盖不同 batch、时间/空间 shape、非连续 layout、换 prompt 和重复请求。VAE 因果卷积与独立全序列卷积对比，并检查未来帧不会改变过去输出。采样与 CFG 使用已知解析结果，检查 UniPC 的状态重置、失败请求清理及全局 RNG 隔离。显式传入零或负数的尺寸、帧数、步数和 fps 必须在模型推理前失败，只有 `None` 使用默认值。
+
+同一个 `tests/manual/geometry_regression_cases.json` 现在包含几何、视频和世界模型案例。原有脚本和 `GEOMETRY_*` 名称继续可用；`plan-inference`、`replay-inference` 和 `verify-inference` 是覆盖更广的入口。新增短案例分别声明 Wan 2.1 1.3B、Wan 2.2 TI2V 5B、LTX 0.9.8 I2V、CogVideoX 2B、Cosmos Predict 2.5 2B、Matrix Game 2 和 DreamX World 5B AR。LTX 保留原生两阶段十步配方，其他采样参数也由案例显式固定。这些短案例比较 latent、原始帧、导出的 RGB 像素和 fps，检查换条件后输出变化、A/B/A 请求、失败恢复，以及因果块的延续、reset 与重放。它们验证具体输入下的集成和请求隔离，不验证完整 demo 的生成质量。
+
+额外案例声明 Cosmos Transfer 2.5 的 general/edge 2B 权重、Gamma 已发布的四步因果权重，以及 Oasis 500M 的视频 prompt 入口。Gamma 按权重要求固定每视角 189 帧，检查两个 320×480 视角，以及拒绝短请求后重放。Transfer 先采样最小 93 帧窗口（24 个 latent 帧），再裁剪出请求的 17 个 RGB 帧。请在 `WORLDFOUNDRY_REGRESSION_INPUT_ROOT` 下准备至少 17 帧的 `control.mp4`（更长的视频还可检查条件读取是否有界）；在 `gamma-world/buildHouse_flat` 下放置官方样本的 `first_frame.png`、`prompt.txt`、`action_left.json`、`action_right.json`。Oasis 使用多帧 `open-oasis/context.mp4` 和两行、每行 25 列的 `open-oasis/forward.one_hot_actions.json`：第 11 列（从 0 开始，`forward`）为 1，其余列为 0。适配器读取一个 prompt 帧，将末行动作延续到六帧输出。各案例显式列出权重及编码器、tokenizer 路径。这些声明用于选择待执行的回归，不代表 GPU 已运行或其他变体已覆盖。
+
+视频案例可以用 `sequence` 替代单次 `call`。每一步包含唯一 `name`、`method`（默认 `__call__`）、`call` 和需要记录的 `outputs`。`outputs: []` 用于只配置或重置会话；`expect_error` 必须指定精确异常类型与消息模式，其他异常仍会失败。返回的 CPU buffer 会立即复制，后续请求不能覆盖前一次证据。`comparisons` 的 `equal` / `different` 是单次运行内的约束；`array_contracts` 声明 shape、dtype、数值范围或精确 `values`，例如 fps 的分子/分母。`export_artifacts` 声明本次运行目录内需要完整解码并比较的 MP4。参考与候选仍要求数值完全一致。
+
+只返回视频路径的生成器可以用 `output_arrays` 选择运行目录内的 MP4、WebM、MOV 或 MKV。回归工具完整解码后，将 `artifact.<相对路径>.frames` 和 `.fps` 保存到 `arrays.npz`，因此路径或计划本身不能满足必需数值输出。还应在 `export_artifacts` 中声明视频，比较导出文件解码后的像素及帧率。Oasis 的子进程只返回 MP4，没有内存张量，因此使用此入口；生成器的随机种子固定为 0。
+
+```bash
+make coverage-inference PYTHON=python3
+make plan-inference PYTHON=python3 INFERENCE_BASE=<comparison-commit>
+make replay-inference PYTHON=/path/to/prepared-env/bin/python \
+  INFERENCE_PROFILE=/private/path/inference-regression.json
+make verify-inference PYTHON=python3 \
+  INFERENCE_PROFILE=/private/path/inference-regression.json \
+  INFERENCE_REPORT=/private/path/completed-run/report.json
+```
+
+覆盖报告按 catalog 的 native binding 和同一 pipeline class 下注册的 variant 列出缺口。相同 class、模型家族、alias 或历史 `verified` 状态都不会自动给另一个 model ID 分配案例。`case_defined` 只表示有测试配方；报告不会将其提升成 reference 已验收或 GPU 已通过。固定基线保留既有缺口，同时 CI 拒绝新增未覆盖身份、既有配方退化，以及实际受影响却没有可执行数值回放的 native 变体。需要完整覆盖的发布可添加 `--require-complete`，存在缺口时退出码为 2。
+
+Runtime profile 按声明的 model ID 和 pipeline binding 识别归属，并纳入 `source_repos[].in_tree_path`，覆盖静态 import 图无法发现的子进程代码。这些声明补充静态依赖；未知路径仍保守扩大选择，受影响的 native 变体没有真实权重回放时仍失败。
+
+追加案例及组件声明时，只有实际提交前后的定义能证明全部既有配方、归属和全局规则未变，才只选择新增案例。测试编排工具改动还要求提交中的 runtime、环境和 assets 不变，工作文件与提交一致，并通过对应 CPU 契约和真实 MG2 smoke 回放。生产代码变更仍独立加入选择；未提交定义、删除或重新分类都会保留完整回放范围。
+
+旧 InSpatio、LingBot Cam/Act/V2 和 ATI 案例分别加载各自发布的 checkpoint。`WORLDFOUNDRY_REGRESSION_INSPATIO_SCENE_ROOT` 指向含 `video_example_00/input/{video.mp4,target_tcw.txt}` 的已验收场景；`WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS` 包含 21 帧的 `poses.npy`、`intrinsics.npy`，Act 还使用 `action.npy`。ATI 的固定量化 packed-NPZ tracks 文件由 `WORLDFOUNDRY_REGRESSION_ATI_TRACKS` 指定。输入与权重均保存哈希；这些短数值案例不代表完整 demo 质量或其他 variant 已通过。
+
+`verify-inference` 检查可信 GPU 主机生成的报告与当前 commit、源码 tree、案例矩阵、依赖声明和固定 reference index 一致，选中案例全部执行，且所有数值字段完全一致。预检查、过期 commit、少跑案例、放宽容差和失败结果不能通过。公开 CPU 与张量门禁仍必须分别通过。
+
+Hosted CI 的 `inference-replay` 必须读取维护者通过控制 workflow dispatch 发布的官方 Actions artifact；缺失、过期、外部来源或旧提交的证据都会失败。专用 dispatch 检查候选 commit、tree、比较基线及固定 reference index 后发布 `trusted-inference-evidence`，只运行 attestation，普通 CI 再消费它。真实回放在已准备的可信 GPU 主机执行。仓库须配置 `INFERENCE_EVIDENCE_CONTROL_REF`、`INFERENCE_EVIDENCE_WORKFLOW_PATH` 和 `INFERENCE_REFERENCE_INDEX_SHA256`，并在合并分支保护中要求 `inference-replay` 及 CPU 检查；仅添加 workflow 不会自动启用分支保护。未覆盖或未执行的变体仍是缺口。
+
+MG2 改动及其数值契约改动还必须通过六条真实图像、12-block 轨迹的固定历史参考检查。门禁锁定已验收报告的完整 digest，逐步精确比较 flow/x0、全部滚动缓存、条件、latent/video/RGB 像素、VAE 状态和连续 RNG。两条当前路径互相一致不足以通过。此独立检查与公开 pipeline 的 A/B/A 回放都必须完成，不能互相代替，也不会自动更新参考。
+
+先提交候选再跑两项 GPU 门禁，用 `tests/manual/inference_actions_evidence.py compact` 传入 `--base`、`--head`、`--conditioned-report`、`--junit`、`--generic-replay` 和 `--output`，环境中设置固定的 `INFERENCE_REFERENCE_INDEX_SHA256`。在控制分支 dispatch `CI`，三个输入为候选 `source_revision`、比较 `base_revision` 及压缩报告 `evidence_json`。官方 dispatch 成功后重试该候选的 `inference-replay` job。配套 `inference-evidence-verified.yml` 部署到默认分支后会自动重试；部署前需要显式重试。
+
+验证门禁要求使用 `--base` 生成的 commit diff 计划，并重新计算实际变更路径。手工列举或遗漏变更文件的计划无法绕过受影响案例检查。
+
+## 持续优化时如何验证
+
+| 改动 | 每次修改的检查 | 更广的证据 |
 | --- | --- | --- |
-| 只改文档 | `npm run types:check`、`npm run build`、受影响 route 返回 200 | 布局或交互变化需要浏览器截图。 |
-| CLI 或 runner | 聚焦 `test/eval_core` 测试加代表性 evaluate 命令 | 如果输出契约变化，再跑 existing-results 和 model-mode runs。 |
-| Model manifest | `zoo model-show`、`zoo model-download --check-local` | Clone、checkpoint、demo parity、runner parity、benchmark run。 |
-| Model runtime integration | 仓内 runtime import、无机器本地 source checkout 依赖、带 `backend_stage` 的 runtime profile，以及聚焦回归 | Checkpoint-backed run 和一份 normalized benchmark scorecard。 |
-| Benchmark manifest | `zoo benchmark-show`、`preflight runtime --profile <benchmark-id>` | Clone、dataset、official runtime、normalized scorecard。 |
-| Benchmark runner | `zoo benchmark-run --mode official-validation` 或 `--mode official-run` | Official result import、official runtime 和 full-suite fairness gate。 |
-| Suite 或 matrix | `run --all-benchmarks --plan-only --json` | 规划选中的 cells，然后用可运行 benchmark 路径验证 artifacts。 |
+| import、目录归属、配置和打包 | 公开 CPU 门禁与发行物检查 | 执行路径改变时，复跑受影响模型的短案例 |
+| attention、kernel、graph、offload | 参考实现与加速实现对比，覆盖 shape、精度、layout、device 和连续请求 | 每类受影响组件的代表性真实权重案例 |
+| 单个模型的加载、预处理和输出转换 | 推理契约与该模型的短基准回放 | 提升集成状态前运行完整 demo 和 benchmark |
+| 量化、裁剪和近似 attention | 显式启用，测量数值误差并约束任务质量 | 代表性数据和硬件，默认启用前跑质量 benchmark |
+| 涉及共享推理组件的发布 | 完整已验收短案例矩阵 | 较低频率或发布前运行完整 demo 和质量 benchmark |
+
+用最近一次成功回放的 `source_hashes` 辅助判断影响范围，再结合显式组件/能力声明和静态依赖。动态记录只覆盖实际执行的路径，无法覆盖未执行分支或动态选择的 backend；依赖关系无法确认时保留为未覆盖，并扩大对应组件的测试。保留参考实现供差分测试和 fallback 使用。精确优化与有损优化分开：后者必须明确数值和任务质量阈值，不能静默放宽容差或重新生成基准。
+
+GitHub CI 在 PR、`main` 和 `release/**` 的 push，以及手动触发时，自动运行公开 CPU、CPU Torch 张量和打包门禁，并发布受影响案例计划。真实权重回放和更广的模型 benchmark 依赖已准备的模型环境；定时 GPU 回归通过下面的主机定时任务执行。
+
+### 自动选择受影响案例
+
+```bash
+make plan-geometry PYTHON=python3 GEOMETRY_BASE=<comparison-commit>
+# 可选：叠加已通过回放的实际导入记录。
+python3 tests/manual/geometry_regression_impact.py --base <comparison-commit> \
+  --evidence /absolute/path/to/successful-runs --output tmp/3d-regression-plan.json
+```
+
+选例结合 `tests/manual/geometry_regression_dependencies.json` 中的组件声明、条件和相对导入、字符串形式的 lazy import、父包初始化文件及可选的实际导入记录。Git rename 和删除会保留旧路径。共享 infra 或案例矩阵变化选择全部案例；新增案例必须声明依赖。未知路径或无法解析的导入图会扩展到全部案例，并以 `uncovered` 非零退出，需要补上覆盖缺口。只有文档变化时可以返回 `no_inference_changes`，CPU 门禁仍需通过。
+
+只有 planner 和源码快照编排工具具有较窄的验证规则：不可变 Git entries 必须证明全部运行时代码、环境、assets、案例及依赖定义完全不变，完整 diff 及检查的工具文件也必须与提交 blob 一致。此类改动仍要求完整 CPU 契约和 MG2 两项 GPU 门禁，验证完整工具链。缺少历史、案例定义变化或混入任何生产改动，仍保留原来的全量保守模型选择。
+
+CI 即使选例失败也会上传 `geometry-impact`，其中是必须执行的回归计划，不能当作 GPU 推理通过的证据。执行器拒绝源码树或规则哈希过期、状态与空选例矛盾，以及漏掉当前规则和导入图要求的案例的计划。
+
+### 在模型主机上定时执行 GPU 回归
+
+使用与参考结果相同的模型 Python、已验收 assets 和环境。先将明确验收过的结果复制到持久化的私有目录：
+
+```bash
+python3 tests/manual/geometry_regression_schedule.py import-reference \
+  --source /absolute/path/to/accepted-runs \
+  --destination /absolute/path/to/private-state/reference
+```
+
+导入器保留原始结果，只迁移导出产物路径，验证数值完全一致，并记录复制后每个文件的 SHA-256。目标目录已存在时拒绝覆盖。将返回的 `reference_index_sha256` 写入私有 profile，例如 `~/.config/worldfoundry/geometry-regression.json`：
+
+```json
+{
+  "source_root": "/absolute/path/to/WorldFoundry",
+  "source_ref": "refs/heads/your-validated-branch",
+  "python": "/absolute/path/to/model-env/bin/python",
+  "matrix": "tests/manual/geometry_regression_cases.json",
+  "dependencies": "tests/manual/geometry_regression_dependencies.json",
+  "reference": "/absolute/path/to/private-state/reference",
+  "reference_index_sha256": "<import-reference 返回的 SHA-256>",
+  "state_root": "/absolute/path/to/private-state",
+  "cuda_visible_devices": "0",
+  "env": {
+    "WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT": "/accepted/checkpoints",
+    "WORLDFOUNDRY_REGRESSION_INPUT_ROOT": "/accepted/multiview-frames",
+    "WORLDFOUNDRY_REGRESSION_INPUT_IMAGE": "/accepted/input.png",
+    "WORLDFOUNDRY_REGRESSION_PANORAMA": "/accepted/panorama.jpg",
+    "WORLDFOUNDRY_REGRESSION_LYRA_INPUT_IMAGE": "/accepted/lyra-input.jpg"
+  },
+  "case_timeout_seconds": 1800,
+  "suite_timeout_seconds": 7200,
+  "retain_runs": 7
+}
+```
+
+可选的 `gpu_holder` 配置指定原有 `gg` 脚本的绝对 `script`、字符串列表 `start_args`、包括 `GG_PYTHON` 的 `env`，以及可选的日志就绪标记 `ready_patterns`。回放期间停止该脚本；成功、失败、超时或中断后，以独立 session 恢复。若推理子进程无法清理或 GPU 租约无法释放，执行器报告失败，并推迟占卡脚本恢复，直到残留资源清理完成。
+
+将必要的 `LD_LIBRARY_PATH`、`CUDA_HOME` 等运行变量保存在私有 profile 的 `env` 中。cron 任务保留已准备的工具 PATH。CUDA 预检查会在加载权重和停止占卡脚本前，逐项检查 Python、Torch、CUDA、cuDNN、GPU 和包版本是否与全部选中基准一致；环境变化直接失败，不放宽比较条件。
+
+在不同 Python/Torch 环境中验收的模型使用私有 `case_environments` 覆盖，例如 `"case_environments": {"flashworld": {"python": "/absolute/path/to/flashworld-env/bin/python"}, "worldfm": {"python": "/absolute/path/to/worldfm-env/bin/python"}}`。每个覆盖还可以提供 `env`，叠加到默认环境之上。每种选中环境分别进行预检查，案例使用各自配置的解释器运行；未知案例 ID 会被拒绝。
+
+```bash
+# 先用一个案例验证执行器，再开启每日完整短矩阵。
+python3 tests/manual/geometry_regression_suite.py \
+  --profile ~/.config/worldfoundry/geometry-regression.json --preflight-only
+python3 tests/manual/geometry_regression_suite.py \
+  --profile ~/.config/worldfoundry/geometry-regression.json --case-id pi3x
+python3 tests/manual/geometry_regression_schedule.py install \
+  --profile ~/.config/worldfoundry/geometry-regression.json --hour 3 --minute 0
+python3 tests/manual/geometry_regression_schedule.py status \
+  --profile ~/.config/worldfoundry/geometry-regression.json
+# 只删除带 WorldFoundry 标记的 cron 区块。
+python3 tests/manual/geometry_regression_schedule.py remove \
+  --profile ~/.config/worldfoundry/geometry-regression.json
+```
+
+安装保留其他 cron 条目，时区为 `Asia/Shanghai`。控制脚本来自已提交版本；控制脚本变化后需要重新安装。每次运行从指定的本地已提交 ref 生成隔离快照，不自动 pull/reset，也不执行工作区未提交代码。案例各自使用独立模型进程，共用主机上的物理 GPU 租约锁，有单案例和整套超时，并接受严格数值和导入源码审计。每日运行完整短矩阵；按需执行时可传 `--plan` 使用受影响案例计划。
+
+`latest.json` 在开始时记录 `running`，结束时记录最终结果；`runs/` 保存日志、源码版本和比较报告。默认保留最近七次运行目录，更早的简要报告归档到 `history/`。已验收基准必须位于可清理的运行目录之外，执行器不会重新生成或覆盖它。profile、本地 assets、权重和数值证据不进入 Git。
+
+`--preflight-only` 检查全部选中案例的 assets 和环境，不加载模型权重；其 `preflight_passed` 状态不能当作数值推理通过的证据。
+
+主机 profile 还应固定数值环境配置，包括 `OMP_NUM_THREADS` 和 `MKL_NUM_THREADS`；即使所有包版本一致，CPU 深度重建也可能随线程数改变。为不同 Python/Torch/CUDA/C++ ABI 使用独立的 `TORCH_EXTENSIONS_DIR`，并保证扩展编译器采用 Torch 的 C++ ABI；单独新建缓存无法纠正编译器的 ABI 默认值。DreamX 在调用者显式启用确定性算法时关闭 cuDNN 自动选算法，避免不同进程选择不同卷积算法。确定性策略变化后的参考结果须另存，附上与受控原实现的数值对齐证明；不能覆盖旧参考或放宽阈值掩盖差异。
+
+短案例覆盖的是已声明输入和能力。Lyra-2 案例仍关闭 3D 重建；接受新 backend、更新集成状态或发布时，仍需要完整 demo 和质量 benchmark。
+
+## 准备可选 CPU eval-core 测试环境
+
+先从 PyTorch 官方 CPU wheel index 安装 Torch/Torchvision，再从正常 package index 安装已声明的测试 extra：
+
+```bash
+python -m pip install --index-url https://download.pytorch.org/whl/cpu \
+  "torch>=2.7,<2.12.0" "torchvision>=0.22,<0.27.0"
+python -m pip install -e ".[eval_core]"
+```
+
+拆成两条命令是有意为之：Python package metadata 不能指定 CPU 专用 wheel index；如果把整个 extra 都指向 PyTorch index，pytest、NumPy 等包反而可能不可见。
+
+## 几何、视频和世界模型的数值回归
+
+CPU 门禁和 mock 测试不能证明真实权重的推理结果保持正确。修改模型加载、预处理、推理、相机转换或导出代码时，使用 `tests/manual/geometry_regression.py` 在两个独立进程中复跑同一个已验收案例。`tests/manual/geometry_regression_cases.json` 提供 Depth Anything、Pi3/Pi3X、VGGT、CUT3R、LoGeR、LingBotMap、Hunyuan Mirror、HY-WorldMirror 2.0、FlashWorld 和 WorldFM 的固定案例。额外的 Lyra-2 案例只验证视频生成和相机轨迹，关闭了 3D 重建；模型环境和本地 assets 需要另行准备。
+
+```bash
+# 使用先前已验收的代码版本；不要在正在工作的目录中 reset。
+git worktree add --detach /tmp/worldfoundry-3d-reference <validated-revision>
+export WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT=/absolute/path/to/checkpoints
+export WORLDFOUNDRY_REGRESSION_INPUT_IMAGE=/absolute/path/to/accepted-image.png
+# 多视角案例使用固定的 frame-0.png、frame-16.png、frame-32.png。
+export WORLDFOUNDRY_REGRESSION_INPUT_ROOT=/absolute/path/to/accepted-sequence
+# 先根据 nvidia-smi 将 REGRESSION_GPU_ID 设为可用 GPU 的编号或 UUID。
+export CUDA_VISIBLE_DEVICES="${REGRESSION_GPU_ID}"
+
+# 用同一个模型专用 Python 环境执行三条命令。
+python tests/manual/geometry_regression.py run \
+  --case tests/manual/geometry_regression_cases.json --case-id pi3x \
+  --source-root /tmp/worldfoundry-3d-reference --output-dir tmp/3d-replay/reference/pi3x
+python tests/manual/geometry_regression.py run \
+  --case tests/manual/geometry_regression_cases.json --case-id pi3x \
+  --source-root . --output-dir tmp/3d-replay/candidate/pi3x
+python tests/manual/geometry_regression.py compare \
+  --reference tmp/3d-replay/reference/pi3x --candidate tmp/3d-replay/candidate/pi3x \
+  --report tmp/3d-replay/comparison.json
+```
+
+完成全部受影响案例后，用矩阵门禁检查覆盖率和证据是否仍匹配当前源码：
+
+```bash
+make test-geometry PYTHON=/path/to/model-env/bin/python \
+  GEOMETRY_REFERENCE=tmp/3d-replay/reference \
+  GEOMETRY_CANDIDATE=tmp/3d-replay/candidate
+```
+
+这个门禁要求根目录下存在每个矩阵 case id 的运行子目录。缺少任何案例、案例参数改变或实际导入的源码哈希改变都会失败。可用 `GEOMETRY_MATRIX` 指定本次影响范围的案例矩阵；共享推理组件改动时使用完整矩阵。它检查已经完成的真实推理证据，不代替前面的推理命令。
+
+每次运行保存输入和权重的 SHA-256、案例参数和 seed、依赖版本、CUDA/精度设置、实际导入源码的哈希，以及原始数值输出。比较时要求输入、权重、参数和环境一致，并检查深度、点云、置信度、mask、相机参数的字段、shape、dtype、有限值和逐项数值。设置 `save` 的案例还比较保存后的 PLY 数值、图像和 NumPy 产物。缺少 assets、推理失败、空输出、NaN、丢失字段或被修改的证据都会失败，不能记为通过。参考目录不会被自动覆盖。
+
+默认要求完全一致。案例可以设置 `deterministic: true`，要求 Torch 使用确定性算法，并在 CUDA 初始化前配置 cuBLAS；不支持确定性执行的算子会失败。Hunyuan Mirror 和 WorldFM 案例使用这一设置。WorldFM 还在模型加载后固定推理 seed，避免仅在加载前设置 seed 时受到模型初始化影响。其全景输入使用 `WORLDFOUNDRY_REGRESSION_PANORAMA`，Lyra-2 使用 `WORLDFOUNDRY_REGRESSION_LYRA_INPUT_IMAGE`。
+
+存在 GPU 非确定性时，先在参考版本上重复运行，测量同版本的数值波动，再为浮点输出选择有依据的 `--atol` / `--rtol`；布尔 mask 和整数输出仍要求完全一致。矩阵门禁始终严格比较，不会继承单独 comparison 报告的容差。不要通过扩大容差或用失败产物更新 reference 来消除失败。
+
+新增模型案例使用 `target`（`module:Class`）、`load`、`call`、`assets` 和 `required_outputs`。`${OUTPUT_DIR}` 指向本次运行目录；其他路径使用环境变量。`extra_calls` 可以补充原始深度，`capture_modules` 可以捕获只返回产物路径的模型的原始 forward 输出。生成式模型还应固定 prompt、轨迹、采样步数和精度，并对渲染结果做质量验收。
+
+已验证状态只适用于具体代码、权重、输入和运行环境。共享组件改变后，复跑所有受影响的模型及 variant；没有复跑的模型保留为未覆盖。GitHub CI 运行公开 CPU 门禁；真实推理需要在有本地权重的 GPU 主机上单独运行，并在接受推理改动前通过 `make test-geometry`。数值一致证明已验收案例没有发生回归，不能证明任意输入都没有 bug，也不能替代带真实深度和相机标定的质量 benchmark。先用官方结果、质量指标和人工检查验收 reference，再将它作为回归基线。
 
 ## 发布门禁
+
+轻量 editable checkout 在运行 core 门禁前，先安装声明的测试依赖：
+
+```bash
+python -m pip install -e ".[dev,test]"
+```
 
 <Tabs items={['core', 'docs', 'model', 'benchmark']}>
   <Tab>
 
 ```bash
+make test
 make lint
 make compile-eval
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" python -m pytest test/eval_core -q
+make cli-entrypoint-check
+make cli-check
 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval evaluate --results-path tmp/results.jsonl --output-dir tmp/worldfoundry_evaluate --json
 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmarks --json
 ```
@@ -37,6 +307,7 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmar
 
 ```bash
 cd docs/fumadocs
+npm run models:check
 npm run types:check
 npm run build
 curl -I http://localhost:8013/docs
@@ -66,15 +337,13 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmar
 
 ## 产物验收
 
-| 产物 | 必需场景 | 通过标准 |
-| --- | --- | --- |
-| `run_manifest.json` | 任意 evaluation run | Command、ids、status、timestamps、counts 和 output paths 与 run 一致。 |
-| `execution_plan.json` | Runner 或 suite 变化 | Resolved model、benchmark、metrics 和 requests 是确定性的。 |
-| `sample_ledger.jsonl` | 部分失败 review | Failed/skipped samples 有可见原因。 |
-| `metrics/summary.json` | Metric 变化 | Aggregates、failed counts 和 metric keys 符合预期 schema。 |
-| `scorecard.json` | 可发布 evaluation evidence | Eligibility、leaderboard state、metrics 和 blockers 存在。 |
-| `report.json` | Model/benchmark validation | Stage status、command、repo/checkpoint/dataset refs 和 blockers 已记录。 |
-| `suite_report.json` | Suite 或 matrix 变化 | 每个选中 cell 都是 pass、fail 或 skipped，并带原因。 |
+- **`run_manifest.json`** — 任意 evaluation run。通过标准：Command、ids、status、timestamps、counts 和 output paths 与 run 一致。
+- **`execution_plan.json`** — Runner 或 suite 变化。通过标准：Resolved model、benchmark、metrics 和 requests 是确定性的。
+- **`sample_ledger.jsonl`** — 部分失败 review。通过标准：Failed/skipped samples 有可见原因。
+- **`metrics/summary.json`** — Metric 变化。通过标准：Aggregates、failed counts 和 metric keys 符合预期 schema。
+- **`scorecard.json`** — 可发布 evaluation evidence。通过标准：Eligibility、leaderboard state、metrics 和 blockers 存在。
+- **`report.json`** — Model/benchmark validation。通过标准：Stage status、command、repo/checkpoint/dataset refs 和 blockers 已记录。
+- **`suite_report.json`** — Suite 或 matrix 变化。通过标准：每个选中 cell 都是 pass、fail 或 skipped，并带原因。
 
 ## 集成声明规则
 
@@ -82,187 +351,34 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmar
 
 不要把 `integrated` 当成 leaderboard 同义词。Normalizer-only benchmark integration 必须保持 `verification_status=normalizer_only` 和 `leaderboard_valid=false`，直到完整 official scorer 或 judge 已运行，且具体 scorecard 证明 eligibility。
 
-## 当前 World-Model 验证记录
-
-以下记录是 2026-06-27 针对仓内 world-model runtime 的最新 bounded 证据。当前 Studio workspace 源码会把 `diamond`、`dino-wm`、`leworldmodel`、`starwm` 暴露为 `world` workload，并保留各自官方 demo 输入字段。隔离 7879 验证 workspace 已确认 `/api/models` 对四个条目都返回 curated official-demo 字段，且 `/api/jobs` 可以提交 `plan_only`，不再触发之前的 `call_kwargs.plan_only` schema error。Jobs `studio-00001` 到 `studio-00004` 均完成：`diamond`、`leworldmodel`、`starwm` 写出 ready 的仓内 runtime manifest，`dino-wm` 正确保持在缺 OSF 资产的 blocked 状态。
-
-| Model id | 证据 | 当前 blocker |
-| --- | --- | --- |
-| `diamond` | 仓内官方 play stack 能解析本地 `${WORLDFOUNDRY_CKPT_DIR}/diamond`；Pong bounded validation 加载 ALE 0.9，完成 1 step 初始化采样，进入官方控制循环，最后只因 90 秒 timeout 停止。 | 完整可视化/demo capture 仍需要一次有意的 recording run。 |
-| `dino-wm` | 仓内 `infer.py` 能在 `worldfoundry-unified-cu128` 构造官方 `plan_wall.yaml` 命令；模块预检通过。 | 缺 OSF checkpoint 结构 `checkpoints/outputs/<model_name>/hydra.yaml`、`checkpoints/model_*.pth` 和任务数据集。 |
-| `leworldmodel` | 仓内官方 eval wrapper 已在 `worldfoundry-unified-cu128` 跑通 PushT random-policy demo；bounded validation 同时覆盖 direct CLI 和 Studio workspace job 路径，使用本地 `pusht_expert_train.h5`、`num_eval=1`、`eval_budget=25`，写出 JSON metrics 和非空 25 帧 mp4 preview。 | 非 random policy 仍需要 policy checkpoint；官方 50-episode 完整 eval 仍属于更长验证。 |
-| `starwm` | 仓内官方 offline inference client 能用 bundled StarCraft prompt fixture 构造 JSON/JSONL 推理命令。 | 需要运行中的 OpenAI-compatible endpoint，并服务 StarWM checkpoint。 |
-
-## 当前 Video-Worldmodel 验证记录
-
-### 2026-06-27 Studio 7870 批量验证证据
-
-下面这批任务均通过 7870 Workspace 的 `/api/jobs` 提交，按“一张 GPU 一个 job”并行运行。它们补充的是仓内 Studio 路径和各模型 profile 中官方 demo 输入的发布证据；不替代完整 benchmark scoring。
-
-| Model id | Job | Artifact 证据 | 视觉 QA |
-| --- | --- | --- | --- |
-| `worldcam` | `studio-00122`，`cuda:0` | `worldcam.mp4`，sha256 `43397270aed80baf6a3261972b9f474f6233fdf9860619ea77e50a36a795084c`，233 个非空 832x480 帧，平均相邻帧差 `14.9166`。 | 工业第一人称 conditioning 场景保持连贯，并有连续相机运动。 |
-| `matrix-game-2` | `studio-00123`，`cuda:1` | `matrix-game-2.mp4`，sha256 `b324a86229da9d5803578c214560f47013c4104189bf37481de7d7423b3c1abc`，597 个非空 640x352 帧，平均相邻帧差 `19.3228`。 | 官方 universal demo 呈现雪地户外导航和明显 world motion。 |
-| `matrix-game-3` | `studio-00124`，`cuda:2` | `test.mp4`，sha256 `81c5c5eca9a725cf785a1db53d6a7994f3cc0fa7b4f383c0b97b5eb63b00071a`，497 个非空 1280x704 帧，平均相邻帧差 `24.1725`。 | 城市街道 / 加油站场景在多段运动中保持连贯。 |
-| `hunyuan-world-voyager` | `studio-00125`，`cuda:3` | `hunyuan-world-voyager.mp4`，sha256 `57bc7a055c38cfd048c54f1db425d93ebe712b9131adf506dd86461e025a818e`，45 个非空 768x1024 帧，平均相邻帧差 `6.4688`。 | 上半部分 RGB 画面符合官方茅草屋村庄 prompt；下半部分是仓内 Voyager pipeline 预期拼接的 depth preview。 |
-| `videocrafter2_t2v` | `studio-00126`，`cuda:4` | `videocrafter2-t2v.mp4`，sha256 `9209588eaa2b06fd2a48549f81c8772676721c42d4dd81c3576899ebf5030af7`，16 个非空 512x320 帧，平均相邻帧差 `4.3232`。 | 未来城市 prompt 可见，视频稳定。 |
-| `wan2.1_t2v` | `studio-00127`，`cuda:5` | `wan2-1-t2v.mp4`，sha256 `f42dff9e99d190b5274fabd4ed08ee923e582c0ea3df6931f349b04a8863dac4`，81 个非空 832x480 帧，平均相邻帧差 `9.0117`。 | 仓内 Wan2.1 T2V Studio 路径生成了连贯的机器人/走廊场景。 |
-| `cogvideox-5b-i2v` | `studio-00128`，`cuda:6` | `cogvideox-5b-i2v.mp4`，sha256 `ca332d8b3ba28b0c46ef527ec1e937b6863da197ddf9ad2263956a82306d9b18`，49 个非空 720x480 帧，平均相邻帧差 `2.8895`。 | 骑龙/城堡 reference scene 被保留；运动幅度较小，但稳定并符合 prompt。 |
-| `neoverse` | `studio-00129`，`cuda:7` | `neoverse.mp4`，sha256 `4bbdc53eecc0f76029f075c9d8e15fe25e61f1ad3016356e6f356c08269f6c04`，81 个非空 560x336 帧，平均相邻帧差 `11.8459`。 | 机械臂桌面装配场景和相机运动符合已接受的官方 video-input 路径。 |
-
-### 2026-06-27 追加 Studio 路径验证
-
-后续 `studio-00130` 到 `studio-00145` 继续通过同一个 7870 Workspace API 覆盖更多仓内 video runner。Contact sheet 和统计结果保存在 `tmp/worldfoundry_studio/validation_batch_00130_00137_video_stats.json`、`tmp/worldfoundry_studio/validation_batch_00138_partial_video_stats.json` 和 `tmp/worldfoundry_studio/validation_batch_00139_00140_video_stats.json`。
-
-| Model id | Job | 证据摘要 | 发布处理 |
-| --- | --- | --- | --- |
-| `videocrafter1_i2v` | `studio-00130` | 16 个非空 512x320 帧，sha256 `479345c0bcbecf08e6d919d832497ff048e76592ee31250338994a4d4ffb7e13`，平均相邻帧差 `19.8167`；contact sheet 是有运动的马场景。 | Studio 路径视觉验证通过。 |
-| `videocrafter1_t2v` | `studio-00131` | 16 个非空 1024x576 帧，sha256 `cbecd6edaf8721445ea84310e6a699224f19f3fc8a6e24b4cfb6f28e9cd38a39`，平均相邻帧差 `22.4227`；contact sheet 是符合 prompt 的森林老虎。 | Studio 路径视觉验证通过。 |
-| `cogvideox_2b_t2v` | `studio-00132` | 17 个非空 720x480 帧，sha256 `07069f3e82806e3c8666725c8b6a7f69eb66fc73acee48412df02ef418891cbb`，平均相邻帧差 `6.3231`；contact sheet 符合 neon robot alley prompt。 | Studio 路径视觉验证通过。 |
-| `cogvideox_5b_t2v` | `studio-00133` | 17 个非空 720x480 帧，sha256 `e6773de3f61c3ba8bd27c2b3f5b2b53a0ab030634e90e48f35d34092bfb9947d`，平均相邻帧差 `5.3017`；contact sheet 符合 rover desert prompt。 | Studio 路径视觉验证通过。 |
-| `dynamicrafter_512_i2v` | `studio-00134` | 50 个非空 512x320 帧，sha256 `46c726a338aa17c90345f46bebdc03c7f56e348ede3976c758d8ffc7bbe9c8c2`，平均相邻帧差 `4.4835`；reference scene 保持连贯。 | Studio 路径视觉验证通过。 |
-| `i2vgen-xl` | `studio-00135` | 16 个非空 512x320 帧，sha256 `60441c2dad89bb69ff3e75ea5b9a4b71b5920c49f1b482fee731381399880fdf`，平均相邻帧差 `13.4487`；reference scene 保持连贯。 | Studio 路径视觉验证通过。 |
-| `easyanimate_i2v` | `studio-00136` | 49 个非空 672x384 帧，sha256 `fc9486ecec1abc41d758a0c4ca5a22d3d0b908bb2e7c3f0ff88be0790eeb6179`，平均相邻帧差 `25.9258`；contact sheet 显示 jungle/castle 运动连贯。 | Studio 路径视觉验证通过。 |
-| `ltx_video_i2v` | `studio-00138` | 骑龙/城堡重跑生成 89 个非空 832x480 帧，sha256 `d6ef1a701e4c909252769947cc0c312e3de86d50adb6cc4de3fc3b37f0efa6ce`，平均相邻帧差 `5.8207`。早先企鹅 run `studio-00137` 语义清楚但几乎静止，平均帧差 `0.3002`。 | 只把骑龙/城堡重跑计为 route validation；企鹅 run 不作为 motion-quality evidence。 |
-| `framepack` | `studio-00139` | 37 个非空 832x480 帧，sha256 `e750e37a3b2acbc7ba417d43c57038b73370ad6198b5b162abe329afb9b6fafd`，平均相邻帧差 `9.1178`；contact sheet 保留 reference world 并有运动。 | Studio 路径视觉验证通过。 |
-| `krea-realtime-video` | `studio-00140` | 6 个非空 832x480 帧，sha256 `e374184476a98787881fd02220f8f7a1b163377253ea09bfb6b4296ca018ef16`，平均相邻帧差 `6.9887`；contact sheet 符合 art-gallery prompt。 | Route 已验证；更长官方 realtime-video parity 另行验证。 |
-| `mochi-1-preview-t2v` | `studio-00142` | 13 个非空 848x480 帧，sha256 `1abe8e49a55107d871e9641278d22764d72fb9806ea1902060e7b5ffaea7345f`，平均相邻帧差 `4.0757`；greenhouse prompt 可见。 | Route 已验证；完整官方 preview 配置另行验证。 |
-| `animatediff` | `studio-00143` | 8 个非空 448x256 帧，sha256 `83f1e91258c69b0e2e4434853399eb43b256ff4c4bde56b65202395cbd57d182`，平均相邻帧差 `9.3120`；灯笼街市 prompt 可见。 | Studio 路径视觉验证通过。 |
-| `zeroscope` | `studio-00144` | 8 个非空 448x256 帧，sha256 `61d405f6a6808e2fef78f96a87a8b83e9247525dbc976bf43d6369bcbed5a852`，平均相邻帧差 `3.3107`；rover/desert prompt 可见。 | Studio 路径视觉验证通过。 |
-| `longcat-video` | `studio-00141` | 18 个非空 1280x704 帧，sha256 `a9e8bc553ce2671c3affcc97ac1a2a7e6ff03931c3d4af4ab211e785f1ca7456`，平均相邻帧差 `4.7008`；输出是清晰 city/waterfront 场景，但运动和 prompt specificity 偏弱。 | 只计 route verified；本 run 不提升为 visual-demo parity。 |
-| `modelscope-t2v` | `studio-00145` | 16 个非空 256x256 帧，sha256 `365270db62ab2dbd1eea4c8f2753b930d4ad53fdd2b374bac74636808f90a695`，平均相邻帧差 `9.8974`；contact sheet 未匹配 panda prompt。 | 不接受为视觉 QA 证据；既有已接受证据单独保留。 |
-
-| Model id | 证据 | 当前 blocker |
-| --- | --- | --- |
-| `longvie-1` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通；使用默认 5 帧 640x352 dense/sparse control-video demo、本地 LongVie2 control checkpoint、Wan2.1 I2V 14B base 和 Wan2.1 T2V tokenizer。生成的 `longvie-1.mp4` 有 5 个非空帧，preview 人工检查符合 jungle-to-castle prompt。 | 官方长段设置仍需要更长验证。 |
-| `longvie-2` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通；使用同一个 5 帧 demo 并加载本地 `dit.safetensors`，`LongVie2Pipeline` 生成非空 `longvie-2.mp4` preview，画面符合 prompt。 | 官方长段设置和 distributed USP variants 仍需要更长验证。 |
-| `matrix-game-1` | Studio workspace `/api/jobs` 已能在 `worldfoundry-unified-cu128` 调到仓内 official Matrix-Game-1 runner。隔离 7878 workspace 的 job `studio-00005` 将 Studio image path 映射到 `image_path`，使用 `video_length=17`、`inference_steps=50`、`max_images=1`、`max_conditions=1`、bf16 和 1280x720 输出，生成 `matrix-game-1.mp4`，sha256 为 `632c447bf4e4f9874f10d5f27183fa2b98a7265741897b13427016869a2e9285`；artifact 解码为 17 个非空 1280x720 帧，平均相邻帧差 `19.4847`。 | 这只是 integration validation 证据。通用 Studio image 的输出噪声重，没有通过视觉 QA。公开官方 repo 的 `run_inference.sh` 指向 `initial_image/`，但上游没有提交该 fixture；65-frame 官方默认配置也在统一环境的单张 A100 80GB 上 OOM。因此 Matrix-Game-1 仍保持 official-demo visual parity pending。 |
-| `matrix-game-2` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通官方 universal image-conditioned demo：`worldfoundry/data/test_cases/matrix-game-2/universal/0000.png`、`worldfoundry/data/test_cases/matrix-game-2/configs/inference_universal.yaml`、`num_frames=150`、`fps=12`、`seed=42`、`size=[352, 640]`、`official_bench_actions=true`。Studio job `studio-00002` 生成 `matrix-game-2.mp4`，包含 597 个非空 640x352 帧、12 fps、49.75 秒；docs demo asset `/demos/studio/matrix-game-2-official-universal.mp4` 来自该 run。bounded validation job `studio-00001` 也已通过，输出 57 帧。 | 这是 demo-parity inference 验证，不等同完整 benchmark scoring。官方随机轨迹可能进入偏暗或遮挡视角，因此视觉 QA 检查运动和连贯性，而不是要求每一帧亮度一致。 |
-| `matrix-game-3` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通官方 cityscape image-conditioned demo：`worldfoundry/data/test_cases/matrix-game-3/001/image.png`，prompt `A colorful, animated cityscape with a gas station and various buildings.`，actions 为 `forward` + `camera_r`，`num_iterations=12`、`num_inference_steps=3`、`size=704*1280`、`use_int8=true`、`compile_vae=true`、`vae_type=mg_lightvae`，并使用本地 `${WORLDFOUNDRY_CKPT_DIR}/Matrix-Game-3.0`。Studio job `studio-00002` 生成 `test.mp4`，包含 497 个非空 1280x704 帧、17 fps、明显 city-street world motion；docs demo asset 是 `/demos/studio/matrix-game-3-cityscape.mp4`。后续短 validation `studio-00003` 验证修复后的 Dynamo alias patch，在 `compile_vae=true` 时不再出现 `_ConfigEntry` TypeError/AttributeError 日志刷屏。 | 这是 demo-parity inference 验证，不等同完整 benchmark scoring。在 A100 验证主机上 `fa_version=3` 会请求 FA3，但实际回落到 FA2。 |
-| `hunyuan-world-voyager` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通官方 README case1 conditioned-video demo：`worldfoundry/data/test_cases/hunyuan_world_voyager/case1`，prompt 为 `An old-fashioned European village with thatched roofs on the houses.`，`num_frames=49`、`infer_steps=50`、`flow_shift=7.0`、`embedded_cfg_scale=6.0`、`seed=0`、`i2v_stability=true`、`ulysses_degree=1`、`ring_degree=1`。Studio job `studio-00003` 生成 `hunyuan-world-voyager.mp4`，sha256 为 `2b584900d6049948d4f68bda208333240d10e4bc97dc770bc6890c7aeeabf081`；artifact 解码为 45 个非空 1024x768 帧、16 fps，人工抽帧符合欧洲茅草屋村庄 prompt，并保持预期的 RGB+depth preview。docs demo asset 是 `/demos/studio/hunyuan-world-voyager-case1.mp4`。 | 这是官方 demo 推理验证，不等同完整 benchmark scoring。官方 case1 命令默认单卡；xDiT 多卡是可选加速路径。 |
-| `hunyuan-worldplay` | Studio workspace `/api/jobs` actual inference 已在 `worldfoundry-unified-cu128` 按 official-image-pose-video task 和官方 8-rank 启动配置跑通：`torchrun_nproc_per_node=8`、`num_frames=125`、`fps=24`、`user_height=480`、`user_width=832`、`num_inference_steps=4`、`few_step=true`、`prompt_rewrite=false`、`return_pre_sr_video=false`、`model_type=ar`、`output_type=pt`、interaction `w-31`、`seed=1`。验证产物 sha256 为 `392011407c3f706259d8e0d03d55960bbdc9be3d92fd8088fd8a4716b790dfda`；artifact 解码为 125 个非空 832x480 帧，平均相邻帧差 `6.069641984278156`。视觉 QA 显示 stone path / bridge / lake world 场景连贯，并有连续相机运动。修复分布式 Studio 结果物化后复跑得到同一 sha256，并且 8 个 rank 只共享一个 run directory。 | 这验证仓内 8 卡 Studio/API demo 路径；完整 benchmark scoring 和更长 interaction suite 另行处理。 |
-| `hunyuan-game-craft` | Studio workspace `/api/jobs` actual inference 已于 2026-06-28 在专用 `HYGameCraft` conda profile 中通过仓内 runtime 跑通。Job `studio-00024` 使用 Studio task profile 暴露的官方 village interactive-video 配方：`torchrun_nproc_per_node=8`、seed `250160`、prompt `A charming medieval village with cobblestone streets, thatched-roof houses, and vibrant flower gardens under a bright blue sky.`、输入 `worldfoundry/data/test_cases/hunyuan_game_craft/village.png`、actions `forward,backward,right,left`、`interaction_speed=[0.2,0.2,0.2,0.2]`、`size=[704,1216]`、`num_frames=129`、`infer_steps=50`、`cfg_scale=2.0`。本次 run 生成 `hunyuan-game-craft.mp4`，sha256 为 `d8b9ccab1d0e9ead19f425b6618748655320803e9146621253cde08c8610beec`；artifact 解码为 132 个非空 1216x704 帧、16 fps，平均相邻帧差 `12.034740705339289`。视觉 QA 显示符合预期的中世纪村庄 world，并有连续相机/action 运动。 | 这验证 8-rank Studio/API 路径和分布式结果物化路径；完整 benchmark scoring 与更长 interaction suite 另行处理。 |
-| `neoverse` | 修复 core spec 的官方 video-path 默认后，Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通。被接受的 patched-workspace job `studio-00003` 使用仓内 robot video、prompt `A two-arm robot assembles parts in front of a table.`、`predefined_trajectory=tilt_up`、`num_frames=81`、`trajectory_mode=relative`、`angle=15`、`seed=42`、`use_first_frame=true`、`static_scene=false`、`num_inference_steps=4`、`cfg_scale=1.0`。生成的 `neoverse.mp4` sha256 为 `4bbdc53eecc0f76029f075c9d8e15fe25e61f1ad3016356e6f356c08269f6c04`；artifact 解码为 81 个非空 560x336 帧，视觉上是机械臂桌面装配场景并有相机运动。 | 早先 `static_scene=true` 的 run 不算 parity evidence。 |
-| `yume` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通两个仓内 YUME 变体。YUME I2V job `studio-00002` 使用 `size=544*960`、interactions `forward` + `camera_l`、50 Euler steps，生成 `yume.mp4`，sha256 为 `ca3a42231c2f3190f2d6ed3b9ba42f572df5f810b9e0f1ebc857a3b208cb87ac`；artifact 解码为 64 个非空 960x544 帧、16 fps，平均相邻帧差 `7.6733`。YUME-1.5 job `studio-00006` 使用 `size=704*1280`、interactions `forward`、`left`、`camera_r`，生成 `yume-1p5.mp4`，sha256 为 `3a2259f72931b889ca2c8e37c400a296909970bdc5031b828a37fce858ea9da2`；artifact 解码为 87 个非空 1280x704 帧、16 fps，平均相邻帧差 `12.4033`。公开 docs asset `/demos/studio/yume-1p5-jungle-castle.mp4` 来自后续 7870 Workspace run，sha256 为 `350249e32c50a8b0b3418c0fb459add75ecd3468eeb543c56747b7b57cee39d0`，87 帧、1280x704、16 fps，平均相邻帧差 `18.3252`。视觉 QA 显示两个第一人称 jungle/castle world 连贯且有连续相机运动。 | 这是两个 YUME 变体的 Studio/API demo 推理验证，不是完整 benchmark scoring。 |
-| `lyra-2` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通官方 ZoomGS single-image forward navigation demo：`worldfoundry/data/test_cases/lyra/Lyra-2/00.png`、action `forward`、`fps=16`、`resolution=[480, 832]`、`seed=1`、`reconstruct_3d=false`，并使用本地 `${WORLDFOUNDRY_HFD_ROOT}/nvidia--Lyra-2.0` 资产。Studio job `studio-00015` 生成 `lyra-2.mp4`，sha256 为 `8ace9ab06422f1fbafafc2945611e7266ccbf9d6512f603ba245b855773b6f4b`；artifact 解码为 81 个非空 832x480 帧、16 fps。视觉 QA 显示稳定的 harbor/ship world，并有细微连续 forward camera motion，不是空视频或完全静帧。 | 提升 Lyra-2 变体；Lyra-1 的独立证据见下一行。 |
-| `lyra-1` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通官方 Lyra-1 static single-image SDG demo：`worldfoundry/data/test_cases/lyra/Lyra-1/00172.png`、`mode=static`、`trajectory=zoom_in`、`camera_rotation=center_facing`、`num_video_frames=121`、`height=704`、`width=1280`、`fps=24`、`num_steps=35`、`guidance=1.0`、`seed=1`。Studio job `studio-00005` 生成 `lyra-1.mp4`，sha256 为 `4d03b5d457bcc9f34f48e395128c21de985cfcd5ea96c971eec43915bc9d7f27`；artifact 解码为 121 个非空 1280x704 帧、24 fps，平均相邻帧差为 `3.899765184190538`。视觉 QA 显示稳定的彩色玻璃阳光室内 world，并有连续相机运动。 | 提升 Lyra-1 变体；完整 benchmark scoring 另行验证。 |
-| `lingbot-world` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在专用 `lingbot-world` conda 环境中跑通 base-cam checkpoint `robbyant/lingbot-world-base-cam`：`worldfoundry/data/test_cases/lingbot_world/00/image.jpg`、action path `worldfoundry/data/test_cases/lingbot_world/00`、interactions `forward,left,right,camera_l,camera_r`、`num_frames=161`、`sampling_steps=70`、`max_area=399360`、`seed=42`。Studio job `studio-00007` 生成 `lingbot-world.mp4`，sha256 为 `1956dc6ca47cdcc3023b9a8b424f687726f559dffedae6c682a2b57d75e5e86b`；artifact 解码为 161 个非空 832x464 帧、16 fps，平均相邻帧差为 `13.532635980844498`。视觉 QA 显示连贯的第一人称骑龙穿越 fantasy jungle/castle world，并有连续相机运动。 | 只提升 base-cam 变体；base-act 和 fast 仍需官方 checkpoint 验证。 |
-| `vmem` | Studio workspace `/api/jobs` actual inference 已于 2026-06-27 在 `worldfoundry-unified-cu128` 跑通仓内 VMem runtime；使用本地 `${WORLDFOUNDRY_CKPT_DIR}/vmem` 和 `${WORLDFOUNDRY_CKPT_DIR}/cut3r` 资产、输入 `worldfoundry/data/test_cases/studio_demo/00/image.jpg`、interaction `forward`、官方配置 `height=576`、`width=576`、`inference_num_steps=50`、`seed=42`。Studio job `studio-00118` 生成 `vmem.mp4`，sha256 为 `7a9f29527a222e3b09d8db5f78a42bf8cf4339a0b7bb7f0efa20b24f93da5c6e`；artifact 解码为 6 个非空 576x576 帧，平均相邻帧差 `15.2285`。视觉 QA 显示第一人称 jungle/castle 场景被保留，并有连续 forward camera motion。 | 这验证仓内 Studio/API VMem 路径；更长多轮交互 suite 和 benchmark scoring 另行处理。 |
-| `worldcam` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通仓内 WorldCam CS industrial conditioning video、intrinsics/extrinsics arrays、`conditioning_frames=65`、`num_ar_steps=50`、`num_inference_steps=50`、`cfg_scale=4`、`seed=0`、`height=480`、`width=832`、`fps=30`。Studio job `studio-00004` 生成 `worldcam.mp4`，sha256 为 `78b3863500638d4227c3a4b4a052155f8bc08583b0523ab3da7a6d3527f66f85`；artifact 解码为 233 个非空 832x480 帧，人工抽帧保持工业第一人称场景。 | 这是 official-style demo inference 验证，不等同完整 benchmark scoring。 |
-| `wow` | Workspace CLI actual inference 已于 2026-07-01 在 `worldfoundry-unified-cu128` 通过仓内 `WoWPipeline` 跑通官方 Wan 14B 600k 默认变体 `WoW-world-model/WoW-1-Wan-14B-600k`。该 run 使用 `worldfoundry/data/test_cases/test_vla_image_case1/init_frame.png`、prompt `The Franka robot grasps the red bottle on the table.`、`steps=50`、`seed=42`、`num_frames=41`、`no_tiled=false`、`enable_vram_management=true`、`persistent_param_gb=70`。生成的 `wow.mp4` sha256 为 `a0a49bea07b51770473a155e709ba48513c1e0ca5e4638bd1c2bc7eaa026ef9e`；artifact 解码为 41 个非空 832x480 帧、16 fps，平均相邻帧差 `6.556299558460202`。0/20/40 帧人工 QA 显示机器人和红色瓶子桌面场景连贯，并有连续运动。 | 这提升 WoW 官方 Wan 14B Workspace route；WoW DiT 2B 是独立 backend，需要单独 checkpoint validation。 |
-| `gen3c` | Workspace CLI actual inference 已于 2026-07-01 在专用 `gen3c` conda profile 中通过仓内 Cosmos Predict1 GEN3C runtime 跑通，不依赖外部 GEN3C checkout。该 run 使用官方 single-image demo fixture `worldfoundry/data/test_cases/gen3c/image.png`、`trajectory=left`、`camera_rotation=center_facing`、`movement_distance=0.3`、`num_video_frames=121`、`height=704`、`width=1280`、`fps=24`、`num_steps=35`、`guidance=1.0`、`seed=1`、`num_gpus=8`、`foreground_masking=true`，并关闭 prompt upsampler/guardrail/prompt encoder，使用本地 `nvidia/GEN3C-Cosmos-7B` 资产和 `Ruicheng/moge-vitl`。生成的 `gen3c.mp4` sha256 为 `29dfcd6f8ac26c59ef49a9a7c5bfd12a8470990cc751ce3ed17e715692a81233`；artifact 解码为 121 个非空 1280x704 帧、24 fps，平均相邻帧差 `5.119590534248738`。0/30/60/90/120 帧人工 QA 显示符合预期的未来城市场景和连续 left camera motion。 | 这验证官方 8 卡 Workspace route。首次运行较慢是因为 27GB Cosmos checkpoint 和 Warp kernels 需要在所有 rank 初始化后才进入采样。 |
-| `cameractrl` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通官方 CameraCtrl pose file `0f47577ab3441480.txt`、mountain-lake prompt、`num_frames=16`、`fps=8`、`height=256`、`width=384`、`num_inference_steps=25`、`guidance_scale=14.0`、`seed=42`。Studio job `studio-00008` 生成 `cameractrl.mp4`，sha256 为 `47e3b2de059e3b2321f3e56f0655b9ffb897524c605d63fa46d8d6277dd5ee64`；artifact 解码为 16 个非空帧，视觉上符合 prompt 且有连续相机运动。 | 这只验证 CameraCtrl trajectory-video Studio 路径；MotionCtrl 不因这一行被提升。 |
-| `dualcamctrl` | 2026-06-30 已在 `worldfoundry-unified-cu128` 通过仓内 DualCamCtrl runtime 跑通完整官方参数推理。该 run 使用 `worldfoundry/data/test_cases/dualcamctrl/demo_pic` 下的 official seaside RGB/depth/camera fixture，参数为 `num_frames=61`、`height=320`、`width=480`、`num_inference_steps=50`、`fps=10`、`seed=42`，资产来自 `FayeHongfeiZhang/DualCamCtrl`、`alibaba-pai/Wan2.1-Fun-V1.1-1.3B-Control-Camera`、`Wan-AI/Wan2.1-T2V-1.3B` 和 `Wan-AI/Wan2.1-I2V-14B-480P`。生成的 `outputs/dualcamctrl/seaside_official.mp4` sha256 为 `2ede70047a67e04e1e22ad0449d151f07b0b1dd66e22451c273867fbf592cea4`，解码为 61 个非空 320x480 帧。随后又用 `workspace_job infer` 做了 9 帧 / 2 step CLI 路径回归，确认能经过 Studio conda dispatch 写出 `tmp/worldfoundry_infer/dualcamctrl/short_cli.mp4`，sha256 为 `30292ed99f552a651517a472903b534d67a4b6c652c666fcca1008295c7f0c07`。 | 61 帧 / 50 step run 是 demo-parity 证据；9 帧 / 2 step CLI run 只验证提交路径，不作为发布 demo。 |
-| `motionctrl` | Studio workspace `/api/jobs` actual inference 已于 2026-06-27 在 `worldfoundry-unified-cu128` 跑通；使用仓内 MotionCtrl runtime、本地 `TencentARC/MotionCtrl` 资产、默认 camera/object-motion fixture、`num_frames=16`、`height=256`、`width=256`、`num_inference_steps=50`、seed `20230211`。隔离 7878 workspace 中，Studio job `studio-00007` 生成 `motionctrl.mp4`，sha256 为 `12aee3f92d2d61bfc249ecc9fedea91b07c516115c5c80e9154404f3b5392b79`；artifact 解码为 16 个非空 256x256 帧，平均相邻帧差 `31.4121`。视觉 QA 显示从室内到室外的 camera/object motion 连贯，不是空视频或静帧。 | 这验证有界 MotionCtrl Studio/API 路径；完整官方 fixture parity 和 benchmark scoring 另行处理。 |
-| `self-forcing` | 将默认 runtime root 从外部 `github_repos` 切到仓内 infer-only runtime `worldfoundry/synthesis/visual_generation/forcing/self_forcing_runtime`，并移除裁剪 runtime 中残留的 training import 后，Studio workspace `/api/jobs` actual inference 已于 2026-06-27 在 `worldfoundry-unified-cu128` 跑通。Job `studio-00018` 使用官方 `self_forcing_dmd.yaml` 路径、本地 `${WORLDFOUNDRY_CKPT_DIR}/Self-Forcing/checkpoints/self_forcing_dmd.pt`、本地 Wan2.1 base weights、prompt `A cinematic shot of a red sports car driving along a coastal highway at sunset, with realistic motion, rich detail, and stable lighting.`、`num_output_frames=21`、`num_samples=1`、`use_ema=true`、`save_with_index=true`、`fps=16` 和 `seed=0`，生成 `self-forcing.mp4`，sha256 为 `51072c63b4f7fb7a8560ff7b617044e88883dcf3a1892fb843617bb9bdf3cfdc`。artifact 解码为 81 个非空 832x480 帧，平均相邻帧差 `3.8222318417801815`；视觉 QA 显示红色跑车沿海高速日落场景连贯。 | 这是有界 Studio/API validation 证据；完整官方 benchmark parity 仍待验证。 |
-| `causal-forcing` | 将默认 runtime root 从外部 `github_repos` 切到仓内 infer-only runtime `worldfoundry/synthesis/visual_generation/forcing/causal_forcing_runtime`，并移除裁剪 runtime 中残留的 training import 后，Studio workspace `/api/jobs` actual inference 已于 2026-06-27 在 `worldfoundry-unified-cu128` 跑通。Job `studio-00019` 使用官方 chunk-wise DMD config、本地 `${WORLDFOUNDRY_CKPT_DIR}/Causal-Forcing/chunkwise/causal_forcing.pt`、本地 Wan2.1 base weights、prompt `A cinematic shot of a futuristic train crossing a mountain valley under dramatic clouds, with coherent motion and high visual detail.`、`num_output_frames=21`、`fps=16` 和 `seed=0`，生成 `causal-forcing.mp4`，sha256 为 `9172cfa7622075062cecd345f02a472a19f80bb0370061a632b2b8385dba90b2`。artifact 解码为 81 个非空 832x480 帧，平均相邻帧差 `11.497396240234375`；视觉 QA 显示未来列车穿越山谷场景连贯。 | 这是有界 Studio/API validation 证据；完整官方 benchmark parity 仍待验证。 |
-| `cogvideox-2b-t2v` | Studio workspace `/api/jobs` inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通仓内 Diffusers CogVideoX runtime，prompt 为 `A futuristic city street at sunset with reflective glass towers, clean motion, and cinematic lighting.`，参数为 `num_frames=17`、`height=480`、`width=720`、`num_inference_steps=10`、`fps=8`、`seed=42`。重启后的 7875 workspace 中，Studio job `studio-00002` 生成 `cogvideox-2b-t2v.mp4`，sha256 为 `085fa33b0e623473f0b098c2a51f45497d88fd8e7c79a4bb7d94a74da03ee20e`；artifact 解码为 17 个非空 720x480 帧、8 fps，平均相邻帧差 `8.75875`，视觉 QA 显示连贯的未来城市街景视频。workspace 日志显示 denoising progress bar 从 0/10 跑到 10/10。 | 验证 CogVideoX 2B T2V Studio/API demo 路径。 |
-| `cogvideox-5b-t2v` | Studio workspace `/api/jobs` inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通仓内 Diffusers CogVideoX runtime，使用同一个未来城市 prompt，参数为 `num_frames=17`、`height=480`、`width=720`、`num_inference_steps=10`、`fps=8`、`seed=43`。7875 workspace 中，Studio job `studio-00001` 生成 `cogvideox-5b-t2v.mp4`，sha256 为 `ed7d76710d13bbe3c683c7dd1212a595e1dd1d86075ebf317a8f0c390c9d375e`；artifact 解码为 17 个非空 720x480 帧、8 fps，平均相邻帧差 `4.91821`，视觉 QA 显示稳定连贯的未来城市街景和轻微前进运动。workspace 日志显示 denoising progress bar 从 0/10 跑到 10/10。 | 验证 CogVideoX 5B T2V Studio/API demo 路径。 |
-| `cogvideox-5b-i2v` | Studio workspace `/api/jobs` inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通仓内 Diffusers CogVideoX image-to-video runtime，输入图为 `worldfoundry/data/test_cases/studio_demo/00/image.jpg`，prompt 为 `First-person cinematic flight on a dragon through a lush jungle toward a towering ancient stone castle, with smooth forward camera motion, detailed fantasy world, natural lighting.`，参数为 `num_frames=49`、`height=480`、`width=720`、`num_inference_steps=50`、`guidance_scale=6.0`、`fps=8`、`seed=45`。7875 workspace 中，Studio job `studio-00003` 生成 `cogvideox-5b-i2v.mp4`，sha256 为 `c4e452afa4007fce7651f0211f90831293e7d726c31812c6ed8628369024ca50`；artifact 解码为 49 个非空 720x480 帧、8 fps，平均相邻帧差 `3.7543341368436813`。视觉 QA 显示稳定的第一人称骑龙/城堡 image-conditioned video，没有被拒绝的 10-step mismatch validation 中出现的纹理网格退化。workspace 日志显示 denoising progress bar 从 0/50 跑到 50/50。 | 验证 CogVideoX 5B I2V Studio/API demo 路径。 |
-| `i2vgen-xl` | Studio workspace `/api/jobs` validation 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通；使用本地 `${WORLDFOUNDRY_CKPT_DIR}/i2vgen-xl`、输入 `worldfoundry/data/test_cases/studio_demo/00/image.jpg`、第一人称骑龙/城堡 prompt、`num_frames=16`、`height=320`、`width=512`、`num_inference_steps=8`、`fps=8`、`seed=101`。7876 workspace 中，Studio job `studio-00001` 生成 `i2vgen-xl.mp4`，sha256 为 `6a18c79e11fd0a539b224e52a98f8ee370a10da4812875c18f35d15f693bf8e6`；artifact 解码为 16 个非空 512x320 帧，平均相邻帧差 `33.44407691955566`。视觉 QA 显示非空 image-conditioned 骑龙/城堡片段。 | 这是短 Studio validation，不等同官方长配置 parity。 |
-| `dynamicrafter_512_i2v` | Studio workspace `/api/jobs` validation 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通；使用本地 `${WORLDFOUNDRY_CKPT_DIR}/DynamiCrafter_512/model.ckpt`、输入 `worldfoundry/data/test_cases/studio_demo/00/image.jpg`、第一人称骑龙/城堡 prompt，请求参数为 `num_frames=16`、`height=320`、`width=512`、`num_inference_steps=8`、`fps=8`、`seed=102`。7876 workspace 中，Studio job `studio-00002` 生成 `dynamicrafter-512-i2v.mp4`，sha256 为 `0ffeb2d02884968d9b3418ec5fd5d1a579b0b084d3db2bf9a1c5a9cd0a46c55e`；artifact 解码为 50 个非空 512x320 帧，平均相邻帧差 `6.741266180057915`。视觉 QA 显示稳定的 image-conditioned jungle/castle 片段和轻微连续运动。 | 只提升 512 I2V Studio validation；官方长配置 parity 仍待验证。 |
-| `dynamicrafter_1024_i2v` | Studio workspace `/api/jobs` validation 已于 2026-06-27 在 `worldfoundry-unified-cu128` 跑通；使用本地 `${WORLDFOUNDRY_CKPT_DIR}/DynamiCrafter_1024/model.ckpt`、输入 `worldfoundry/data/test_cases/studio_demo/00/image.jpg`、第一人称骑龙/城堡 prompt，请求参数为 `frames=16`、`height=576`、`width=1024`、`steps=8`、`fps=8`、`seed=202`。隔离 7878 workspace 中，Studio job `studio-00008` 生成 `dynamicrafter-1024-i2v.mp4`，sha256 为 `d179d230a6017bbbabe820ab53a5e848b5ae2ffb2b0b65057b5db8f2e00311da`；artifact 解码为 50 个非空 1024x576 帧，平均相邻帧差 `11.9499`。视觉 QA 显示稳定的 image-conditioned 骑龙/城堡片段，没有空帧或损坏帧。 | 只提升有界 1024 I2V Studio validation；官方长配置 parity 仍待验证。 |
-| `easyanimate-i2v` | 修复 V5.1 scheduler 默认值从 `DDIM` 改为官方 `Flow`、I2V checkpoint 改为 `alibaba-pai/EasyAnimateV5.1-7b-zh-InP`，并让 `height`/`width` 映射到 `sample_size` 后，Studio workspace `/api/jobs` bounded I2V validation 已于 2026-06-27 在 `worldfoundry-unified-cu128` 跑通。Job `studio-00015` 使用本地 `${WORLDFOUNDRY_CKPT_DIR}/hfd/alibaba-pai--EasyAnimateV5.1-7b-zh-InP`、输入 `worldfoundry/data/test_cases/studio_demo/00/image.jpg`、prompt `A smooth cinematic camera move through a bright fantasy village with detailed buildings and stable motion.`、`num_frames=49`、`height=384`、`width=672`、`num_inference_steps=50`、`guidance_scale=6.0`、`fps=8`、`seed=206`，生成 `easyanimate-i2v.mp4`，sha256 为 `b02c2d0b4e00106c5a0af7d633fd3a9d6de12236c931b4d9c6071a0144bf2c20`。artifact 解码为 49 个非空 672x384 帧，平均相邻帧差 `14.83779218293582`；视觉 QA 显示连贯的 jungle/castle world 和连续运动，不再是之前被拒绝的 DDIM 彩色噪声输出。 | 这是有界 Studio/API validation 证据；完整官方 benchmark parity 仍待验证。 |
-| `allegro_ti2v` | Studio workspace `/api/jobs` 已于 2026-06-27 在 7870 workspace 的 `worldfoundry-unified-cu128` 中再次通过 validation；使用本地 Allegro TI2V 资产、输入 `worldfoundry/data/test_cases/studio_demo/00/image.jpg` 和第一人称骑龙/城堡 prompt。Studio job `studio-00149` 生成 `allegro-ti2v.mp4`，sha256 为 `adb3a757dd50cfd08599f8497d1968ac08e35c6b41231ed361b3bb5ae3983f7e`；artifact 解码为 88 个非空 1280x720 帧、15 fps，平均相邻帧差 `5.521631757363504`。视觉 QA 显示连贯的骑龙/城堡片段，没有空帧或损坏帧。 | 这是 Studio validation 证据；完整官方质量 parity 独立处理。 |
-| `wan2.2-ti2v-5b` | Studio workspace `/api/jobs` 已于 2026-06-27 在 7870 workspace 的 `worldfoundry-unified-cu128` 中通过 validation；使用 Wan2.2 TI2V 5B 路径、官方 cats-boxing prompt、`size=1280*704`、`seed=42` 和 121 帧。Studio job `studio-00157` 生成 `wan-2p2.mp4`，sha256 为 `08163a019968b626878177f774b9cd33b3c9881acd98f1ac81b95f11fcabd281`；artifact 解码为 121 个非空 1280x704 帧、16 fps，平均相邻帧差 `14.943336838230938`。视觉 QA 显示两只拳击猫符合 prompt，拳击场几何稳定。 | 这验证 Studio 121 帧路线；完整上游 benchmark scoring 独立处理。 |
-| `stable-virtual-camera` | 修复 subprocess 输入路径物化后，Studio workspace `/api/jobs` validation 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通。Job `studio-00010` 使用 `worldfoundry/data/test_cases/studio_demo/00/image.jpg`、`version=1.1`、`task=img2trajvid_s-prob`、本地 `${WORLDFOUNDRY_CKPT_DIR}/stable-virtual-camera` 和 `modelv1.1.safetensors`，生成 `stable-virtual-camera.mp4`，sha256 为 `d14261ebe0c13c007c10eef1a5aa5d27d24df02f289c6c9eccf12e4fc7a4f075`；artifact 解码为 13 个非空 512x320 帧、30 fps。 | 这验证了仓内 adapter 和路径处理；官方 gallery parity 仍待验证，公开用户还需要 gated checkpoint 访问权。 |
-| `skyreels-v2` | Studio workspace job `studio-00029` 于 2026-06-27 通过视觉 QA；使用仓内 SkyReels-V2 route、本地 DF-1.3B 540P checkpoint、prompt `A red sports car drives through a rainy neon city street, cinematic, sharp reflections.`、`num_frames=17`、`fps=8`、`num_inference_steps=8`、`height=540`、`width=960`、`seed=102`。生成的 `skyreels-v2.mp4` sha256 为 `134db6fb54e72136a25f6102415aab20c6307066cb2b58b302d1118402f1513a`，解码为 17 个非空 960x544 帧。 | 可作为有界 Studio/API 视觉 validation 通过证据。2026-06-26 的城市广场 run 仍记录为 prompt-specific 失败，不作为通过依据。 |
-| `krea-realtime-video` | 将 infer-only realtime-video runtime 迁入 `worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime` 并修复 FlashAttention fallback import 后，Studio workspace `/api/jobs` short validation 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通。Job `studio-00013` 使用 prompt `A smooth cinematic flythrough of a bright modern art gallery with stable camera motion and realistic reflections.`、`num_blocks=1`、`height=480`、`width=832`、`fps=16`、`seed=42`，生成 `krea-realtime-video.mp4`，sha256 为 `9919d555679909ca998b262450a492f27b904ac4787381e4f91636e4a586a06a`。artifact 解码为 6 个非空 832x480 帧，平均相邻帧差 `5.34894437789917`；视觉 QA 显示明亮现代画廊，与 prompt 对齐。 | 这是有界 Studio validation 证据；官方更长 realtime-video parity 仍待验证。 |
-| `pusa-vidgen` | 修复 Wan2.2 model-loader registry 后，Studio workspace `/api/jobs` validation 已于 2026-06-27 在 `worldfoundry-unified-cu128` 跑通；该修复保持默认 `wan_video_dit` 路径不变，同时允许 Pusa runner 显式选择 `WanModelPusa`。Job `studio-00121` 使用本地 `RaphaelLiu/Pusa-Wan2.2-V1`、本地 `Wan2.2-T2V-A14B`、可选 LightX2V LoRA，prompt `A cinematic shot of a small robot walking through a neon-lit street at night, smooth camera motion, detailed reflections.`，`mode=t2v`，请求 `num_frames=7` 并由官方 runtime 自动补到 9，`height=480`、`width=832`、`num_inference_steps=4`、`guidance_scale=1.0`、`lightx2v=true`、`seed=0`。生成 `pusa-vidgen.mp4`，sha256 为 `409ea30bdda88a589df6a486d4b7bfc51063a4df3b7a020299b4376b25addefd`；artifact 解码为 9 个非空 832x480 帧，平均相邻帧差 `4.498354434967041`。视觉 QA 显示稳定的霓虹夜间街道、小机器人主体和湿地反射，符合 prompt。 | 这验证仓内 Pusa V1 Studio/API 路径，以及 `WanModelPusa` high/low DiT 集成；完整官方长配置 parity 仍待验证。 |
-| `longcat-video` | Studio workspace `/api/jobs` short T2V validation 已于 2026-06-27 在 `worldfoundry-unified-cu128` 跑通；使用仓内 LongCat runtime 和本地 `${WORLDFOUNDRY_CKPT_DIR}/LongCat-Video`。Job `studio-00013` 使用 prompt `A cinematic wide shot of a bright futuristic city plaza with clean glass towers, people walking, and smooth camera motion.`、`height=256`、`width=448`、`num_frames=9`、`num_inference_steps=4`、`guidance_scale=4.0`、`fps=8`、`seed=42`；refine 输出 `output_t2v_refine.mp4` 的 sha256 为 `8de82f9472d6e5d64a5fee4c6b0a83471d21d0ebdd64a071602b5dcaed0f0572`。artifact 解码为 18 个非空 1280x704 帧，平均相邻帧差 `3.0606036670705214`；视觉 QA 显示清晰的未来城市 skyline/plaza 和行人，没有空帧或噪声失败。 | 这是有界 Studio/API validation 证据；完整 93 帧 / 50 step 官方质量 parity 仍待验证。 |
-| `sana-video-2b-480p` | Studio workspace `/api/jobs` actual inference 已于 2026-06-27 在 `worldfoundry-unified-cu128` 跑通；使用仓内 Sana Video runtime 和本地 `${WORLDFOUNDRY_CKPT_DIR}/SANA-Video_2B_480p/checkpoints/SANA_Video_2B_480p.pth`。隔离 7879 workspace 的 job `studio-00008` 使用 prompt `A red sports car driving down a sunny city street, cinematic video, sharp details.`、`step=20`、`num_frames=17`、`fps=16`、`seed=1234`、`cfg_scale=6.0` 和 `cuda:1`，生成 `sana_20step_17f_red_car.mp4`，sha256 为 `1e167e1117633f30321a5573663363ba7a93b6a6bee2a8071754d2b6df8500ee`。artifact 解码为 17 个非空 832x480 帧、16 fps；视觉 QA 显示清晰红色跑车在阳光城市街道上行驶。 | 更早的 2-step job `studio-00006` 只记录为链路 validation，因为语义视觉 QA 未通过。完整 50 step / 更长帧数官方质量 parity 仍待验证。 |
-| `framepack` | 修复仓内 FramePack wrapper 将官方 generator 产物 materialize 到 Studio run 目录后，Studio workspace `/api/jobs` short I2V validation 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通。Job `studio-00017` 使用 `worldfoundry/data/test_cases/studio_demo/00/image.jpg`、第一人称 jungle/castle prompt、`max_frames=17`、`num_sampling_steps=8`、`seed=42` 和本地 `FramePackI2V_HY` checkpoint，生成 `framepack.mp4`，sha256 为 `c5d4dfae92433550d1d009028702570e7bda610bdf649aa73b91f4f8f7251f48`。artifact 解码为 37 个非空 832x480 帧，平均相邻帧差 `6.693102518717448`；视觉 QA 显示骑龙/城堡 reference scene 被保留并有轻微运动。 | 这是有界 Studio validation 证据；官方长视频 parity 仍待验证。 |
-| `worldgen` | 修复 Depth-Anything V2 checkpoint 解析并以 `low_vram=false` 提交后，Studio workspace `/api/jobs` 3D artifact validation 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通。Job `studio-00011` 使用 `worldfoundry/data/test_cases/vggt/examples/kitchen/images`、prompt `a small furnished room`，生成 `worldgen.ply`，sha256 为 `39bb0b2daeaeea546dd98884a511db0b5ad5e249983674c766bf512cf111ad66`。该 PLY 大小 142606753 bytes，binary little-endian，并声明 2097152 vertices。 | 这验证仓内 3D artifact 路线。旁路生成的极小 `worldgen.mp4` 不计为视频证据，完整场景质量 parity 仍待验证。 |
-| `depth-anything-v2-prior` | Studio/API job `studio-00036` 于 2026-06-27 在 `worldfoundry-unified-cu128` 验证了共享 Depth-Anything V2 image-depth 路径；使用 `depth-anything/Depth-Anything-V2-Large`、`input_size=518` 和 fixture `worldfoundry/data/test_cases/images/000.png`。输出 `000_depth.png` 的 sha256 为 `1f6b8954602b60076f1c9a1abddebaa30e8f9a314628a261b2c7d8929b4568d0`，是非空 706x529 RGB depth map，灰度 extrema 为 `[1, 227]`，stddev 为 `32.63`。 | 这验证 geometry priors 共享的 DA2 基础推理路径；下游 3D/world runtime 仍需要各自的 parity evidence。 |
-| `vggt-omega` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 使用本地 `facebook/VGGT-Omega` 资产跑通，参数为 `task_type=official`、`image_resolution=512`、`preprocess_mode=crop`、`video_sample_fps=1.0`、`max_points_k=200`。Studio job `studio-00010` 生成 `predictions.npz`，sha256 为 `370f36b23ac86d12bb204e8c737a00791fe600a4f8129d3bb2be9fadf130e5a2`，以及 `scene_conf20.0_blackFalse_whiteFalse_camTrue_skyFalse_max200k.glb`，sha256 为 `d1f2eed3ed6274a84e9ab7cc72e5001eabfdc92ccec5d9ced486c8ca96f84613`；GLB header 和视觉检查均有效。 | 这是 3D scene-export 验证，不是 video-generation 证据。 |
-| `flashworld` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 使用本地 FlashWorld 和 Wan2.2 资产跑通 image-conditioned camera-scene 默认配置：`num_frames=16`、`fps=15`、`image_height=480`、`image_width=704`、`return_video=true`。Studio job `studio-00014` 生成 `flashworld.mp4`，sha256 为 `899063237ba8f2ce520cc2d392ca4cc25da643c172d2a78d6f5de3b92b351c17`，以及 `gaussians.ply`，sha256 为 `4a4895af88019cfc9daebba4d300d8aa74768f19243253160eed3c4a5cb1ac3e`；mp4 解码为 226 个非空 704x480 帧，binary PLY 声明 2703360 vertices。 | 这验证 image-to-3D 和 preview 路径；完整 3D renderer scoring 独立处理。 |
-| `recammaster` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通仓内 motorcycle video input、camera trajectory `[100, 100, 0, 0, 30]`、`num_frames=81`。Studio job `studio-00011` 生成 `recammaster.mp4`，sha256 为 `55e1323b8c764f361c65b1b1945946d9bb4c2ebdb6f2806a7f297d43716cb7b5`；artifact 解码为 81 个非空 832x480 帧，视觉上在相机运动下保持 motorcycle bridge/road 场景。 | 这是官方 camera-trajectory demo 验证，不等同完整 benchmark scoring。 |
-| `worldfm` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通官方 `worldfoundry/data/test_cases/worldfm/meta.json`、`fps=30`、`save_mode=video`。Studio job `studio-00012` 生成 `worldfm.mp4` 和 `worldfm_scene/output.mp4`，sha256 都是 `f9b158fc44c3287f08620e681f44702e31e88ac359c00fb035e5a26c4cb8987d`；视频解码为 4 个非空 512x512 帧，`worldfm_scene/panorama.png` 为 1920x960。视觉 QA 确认 Mario-style indoor panorama 和视频帧一致。 | 官方 meta demo 本身较短；更长 scene sweep 属于单独验证。 |
-| `warp-as-history` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在专用 `warp-as-history` conda 环境中跑通。该 run 使用仓内官方 BMX/graffiti first frame、warp video 和 visibility mask，prompt 为 `A cyclist riding past a colorful graffiti wall beside trees and tall grass, urban BMX scene, with camera movement.`，`num_frames=33`、`fps=16`、`height=384`、`width=640`、`seed=42`。Studio job `studio-00016` 生成 `warp-as-history.mp4`，sha256 为 `cd8cff7babee370497a56d5cc0718f975b17bcf1eab1a9002262da502d21d25a`；artifact 解码为 33 个非空 640x384 帧，视觉 QA 显示骑行者沿 graffiti wall 移动。 | 该模型因官方 torch/Python pin，明确使用专用 conda profile。 |
-| `fantasyworld-wan21` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通仓内 Wan2.1 official camera-world 路径：bundled Studio demo image、`worldfoundry/data/test_cases/fantasyworld/camera_forward.json`、prompt `A coherent fantasy harbor world with stable geometry during a forward camera move.`、`fps=16`、`seed=1024`、`using_scale=true`、`conf_threshold=1.0`、`stride=4`。patched-workspace job `studio-00004` 生成 `fantasyworld-wan21.mp4`，sha256 为 `5ff6d8f6723a7fa1950333a0c6d3d2c5ac3576710f9dd34e5a23581c06800044`；artifact 解码为 81 个非空 592x336 帧、16 fps。同时输出 `image/recon_confthresh1.0.ply`，sha256 为 `778436734adc6405077245eddedba96700257cebea7089d4caf559fe77cd924c`，包含 1006992 vertices。视觉 QA 显示 fantasy jungle/castle 场景中的连续 forward camera motion。 | 只验证 Wan2.1 变体。Wan2.2 仍 pending，因为官方单卡 run 在 A100 80GB 上 OOM。 |
-| `fantasyworld-wan22` | Studio workspace job `studio-00018` 于 2026-06-26 在 `worldfoundry-unified-cu128` 尝试仓内 Wan2.2 official camera-world 路径，使用本地 FantasyWorld、Wan2.2 Fun、LoRA 和 MoGe 资产。该 run 在模型 forward 阶段 CUDA OOM，单张 A100 显存占用接近 79GB。 | 未验证。需要按官方内存策略重跑，例如多卡/offload 或明确记录的低显存官方配置，通过后才能提升状态。 |
-| `skyreels-v3` | Studio workspace `/api/jobs` actual inference 已于 2026-06-26 在构建好 `flash-attn==2.8.3.post1` 的 `worldfoundry-unified-cu128` 中跑通。该 run 通过仓内 runtime 内部 `torchrun --nproc_per_node=8` 走官方 USP 形状：`task_type=reference_to_video`、`duration=5`、`resolution=720P`、`seed=42`、`use_usp=true`，并使用仓内 Studio reference image。生成的 `skyreels-v3.mp4` 有 121 个非空 720p 帧、非零帧间运动，人工检查是有效的第一人称 jungle/castle preview。docs demo asset 是 `/demos/studio/skyreels-v3-reference-to-video.mp4`。 | Full benchmark scoring 独立于这个 demo-parity validation。USP 需要 flash-attn 和请求到的多卡资源。 |
-| `wan2.1-vace` | Studio workspace `/api/jobs` actual inference 已于 2026-06-28 通过 job `studio-00178` 按官方 VACE-14B command shape 跑通：8-rank torchrun、1280x720、81 帧、50 sampling steps、DiT/T5 FSDP、Ulysses size 8、ring size 1、本地 `Wan2.1-VACE-14B`，以及仓内 girl/snake reference images。输出 `wan2-1-vace.mp4` 的 sha256 为 `6eb8a4daf3a0234787afe538a23aba5b455c866f609378b1e827680792139c78`；artifact 解码为 81 个非空 1280x720 帧、16 fps、5.06 秒。视觉 QA 抽帧显示官方红色春服女孩和绿色卡通蛇画面持续有效。docs asset `/demos/studio/wan2-1-vace-girl-snake.mp4` 已用本次 run 刷新。 | 这是官方 demo-parity 推理验证；完整 suite benchmark 仍独立处理。 |
-| `ltx_video_i2v` | Studio/API inference run `20260625-142135-586864-ltx-video-i2v` 已在 `worldfoundry-unified-cu128` 跑通；使用本地 `LTX-Video` 资产、penguin reference image、`fps=24`、`guidance_scale=3.0`、`height=480`、`width=832`、`num_frames=96`、`num_inference_steps=30`、`seed=0`。docs asset `/demos/studio/ltx-video-i2v-penguin.mp4` 检测为非空 89 帧 832x480、24 fps 视频。 | 只验证 Studio I2V demo 路线；更完整的 LTX-Video 上游 parity 仍独立处理。 |
-| `ltx2_i2v` | Studio/API inference run `20260627-095951-872490-ltx2-i2v` 已在 `worldfoundry-unified-cu128` 跑通；使用本地 LTX-2 资产、骑龙/城堡 reference image、`fps=16`、`guidance_scale=4.0`、`height=480`、`width=832`、`num_frames=17`、`num_inference_steps=8`、`seed=114`。生成的 `ltx2-i2v.mp4` sha256 为 `174d3a4ca40c053e92c96d67d5ab2639b4ef6338da44244fffeeb802c5b71660`，解码为 17 个非空 832x480 帧、16 fps；视觉 QA 显示 reference scene 被稳定保留并有运动。 | 这验证 LTX-2 I2V Studio/API route；T2V/V2V 变体仍需单独验证。 |
-| `ltx2_3_i2v` | Studio/API inference run `20260625-152240-287232-ltx2-3-i2v` 已在 `worldfoundry-unified-cu128` 跑通；使用本地 LTX-2.3 distilled checkpoint、penguin reference image、`fps=24`、`guidance_scale=1.0`、`height=512`、`width=768`、`num_frames=121`、`num_inference_steps=8`、`seed=10`。docs asset `/demos/studio/ltx2-3-i2v-penguin.mp4` 检测为非空 121 帧 768x512、24 fps 视频。 | LTX-2.x 的 T2V/V2V 变体仍是 profile-only，待 scoped wrapper 和验证。 |
-| `magi-1` | Studio/API job `studio-00024` 于 2026-06-27 验证了仓内 MAGI-1 I2V route；使用官方 example image/config 资产、本地 `sand-ai/MAGI-1` checkpoint、4.5B distill profile、8 sampling steps、fps=24 和 seed=1234。输出 `magi-1.mp4` sha256 为 `94e7b57bd3cae491e1852d146a73f3ee0fce0e917160692453e2affe9a27ea11`，解码为连贯的 24 帧 720x720、24 fps 视频。 | 官方 runtime 会把本次短帧数请求 padding 到 24 帧；这是有界 Studio validation 证据，不是完整长配置 parity。 |
-| `mochi-1-preview-t2v` | Studio/API validation run `20260627-090106-334112-mochi-1-preview-t2v` 已在 `worldfoundry-unified-cu128` 跑通；使用本地 `genmo/mochi-1-preview`、13 帧、848x480、fps=16 和 greenhouse/grass prompt。输出 `mochi-1-preview-t2v.mp4` sha256 为 `1fc26f30d9360538f8e52ff0599b7d055633df7479e36b475356f41d7ca58dbd`；视觉 QA 显示连贯的温室草地视频。 | 完整官方 31 帧 / 64 step Mochi preview parity 仍待验证。 |
-| `hunyuanvideo-1.5-t2v` | 原生仓内 `generate.py` 有界 validation run `tmp/worldfoundry_studio/runs/hunyuanvideo-1-5-native-t2v-demo-8step` 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通；使用 `torchrun --nproc_per_node=8`、本地 `HunyuanVideo-1.5` 资产、雪地猫 prompt、`resolution=480p`、`video_length=9`、`num_inference_steps=8`、`cfg_distilled=true`、`seed=42`。输出 sha256 为 `c8629c9b801e5b723da7a2124c99091f444a50b293dddc53b36573376971b0dc`；artifact 检测为非空 9 帧 848x480、24 fps 视频，人工抽帧可见雪地街道上的猫。 | 仅作为内部有界 validation 记录，不作为公开官方 demo 结果展示；Studio 页面使用 129 帧 demo asset 作为公开视觉示例。 |
-| `hunyuanvideo-1.5-i2v` | 原生仓内 `generate.py` 有界 validation run `tmp/worldfoundry_studio/runs/hunyuanvideo-1-5-native-i2v-demo-8step` 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通；使用 `torchrun --nproc_per_node=8`、本地 `HunyuanVideo-1.5` 资产、输入 `worldfoundry/data/test_cases/hunyuanvideo_i2v/0.jpg`、`resolution=480p`、`video_length=9`、`num_inference_steps=8`、`enable_step_distill=true`、`seed=0`。输出 sha256 为 `bf75a3cc474a563d386c07091cb3a21e2d20fc6f9b4fa88c6234b91f0c35825f`；artifact 检测为非空 9 帧 544x720、24 fps 视频，人工抽帧保持人像/建筑/烟花场景。 | 仅作为内部有界 validation 记录，不作为公开官方 demo 结果展示；Studio 页面使用 129 帧 demo asset 作为公开视觉示例。 |
-| `hunyuanvideo-t2v` | Studio workspace `/api/jobs` 已通过官方 demo parity；此前将仓内 `official_hunyuan_video_runtime` 的 T2V 源码恢复为与 `Tencent-Hunyuan/HunyuanVideo` 官方仓库一致。该 run 使用上游 multi-GPU recipe：`torchrun --nproc_per_node=8`、prompt `A cat walks on the grass, realistic style.`、`height=720`、`width=1280`、`num_frames=129`、`num_inference_steps=50`、`flow_shift=7.0`、`embedded_cfg_scale=6.0`、`ulysses_degree=8`、`ring_degree=1`、`seed=42`，以及本地 `${WORLDFOUNDRY_CKPT_DIR}/HunyuanVideo`。输出 sha256 为 `494d709d633bf024c82c47029e26c8adedd4a715e1f9f45aac5c1ff7e9057f6a`；artifact 解码为 129 个非空 1280x720 帧、24 fps，并且与 clean official-repo 对照 run 字节级一致。视觉 QA 从首帧开始就是官方 cat-on-grass 序列。docs asset `/demos/studio/hunyuanvideo-t2v-cat-grass-official.mp4` 已用本次验证后的 Studio 输出刷新。 | 这是 T2V 变体的 release demo-parity 证据。早先 modified-runtime 短 run 出现噪声首帧，现已被本记录取代；修复包括移除被修改过的 T2V runtime 路径，并停止向官方脚本传入不支持的 `--fps` CLI 参数。 |
-| `hunyuanvideo-i2v` | 新增仓内 HunyuanVideo I2V runtime 并注册 `HunyuanVideoI2VPipeline` 后，Studio workspace `/api/jobs` 已于 2026-06-28 按官方 demo 配置跑通。该 run 使用上游 8-rank stability recipe：`torchrun --nproc_per_node=8`、prompt `An Asian man with short hair in black tactical uniform and white clothes waves a firework stick.`、输入 `worldfoundry/data/test_cases/hunyuanvideo_i2v/0.jpg`、`i2v_resolution=720p`、`num_frames=129`、`num_inference_steps=50`、`flow_shift=7.0`、`embedded_cfg_scale=6.0`、`ulysses_degree=8`、`ring_degree=1`、`seed=0`，以及本地 `${WORLDFOUNDRY_CKPT_DIR}/HunyuanVideo-I2V`。输出 sha256 为 `98e12d66610bbb4c646a4963110c020dcf98ad030170679a9bd72aa695df26b9`；artifact 解码为 129 个非空 864x1024 帧、24 fps。脚本化 WorldFoundry runner 路径 `scripts/model_zoo/run_hunyuanvideo_i2v_worldfoundry_runner_demo.sh` 也复现了同一 sha256 artifact。与上游 demo asset 抽帧对比后，视觉上保持相同人像/建筑/烟花场景，动作连贯且无空帧。docs asset `/demos/studio/hunyuanvideo-i2v-firework-official.mp4` 已用本次 Studio 输出刷新。 | 这验证原版 HunyuanVideo I2V Studio/API route 已按官方长 demo recipe 跑通。输出比例来自上游竖图 reference 和 xDiT resize 行为，因此不应期待 1280x720 横版。 |
-| `unianimate-dit` | Studio workspace `/api/jobs` actual inference 已于 2026-06-28 在 `worldfoundry-unified-cu128` 通过仓内 UniAnimate-DiT official USP 路径验证。Job `studio-00172` 使用官方 480p human-animation demo 形状：本地 UniAnimate-DiT 与 Wan2.1-I2V 资产、`max_frames=81`、`height=832`、`width=480`、`num_inference_steps=50`、`seed=0`、`use_usp=true`、`nproc_per_node=4`。输出 `unianimate-dit.mp4` sha256 为 `57455c3500a00c188592cb655f0337eedf66004913ca08b2e23470b25dcaed06`；artifact 解码为 81 个非空 1440x832 帧、15 fps，平均相邻帧差 `5.082765761017799`。视觉 QA 显示有效的 pose-conditioned human animation，且 Studio `/video` 与 `/image` endpoint 均能返回 range response。docs asset `/demos/studio/unianimate-dit-human-animation.mp4` 已用本次 run 刷新。 | 这验证仓内 4-rank USP Studio/API route；完整 human-animation benchmark scoring 仍独立处理。 |
-| `open-sora` | 移除错误的本地 `t5-11b` override 后，Studio workspace `/api/jobs` 已于 2026-06-27 在 7870 workspace 通过 validation；该 override 曾导致 4096/1024 caption-channel mismatch。Job `studio-00165` 使用官方 Open-Sora v1.2 配置形状：`DeepFloyd/t5-v1_1-xxl`、本地 `OpenSora-STDiT-v3`、本地 OpenSora VAE、51 帧、240p、30 sampling steps、cfg 7.0、aes 6.5、flow 5 和 `seed=42`。输出 `open-sora.mp4` sha256 为 `ae9b8c0e74300519c2628c20e09d1672e838889a312a2693647eb199053d083a`；artifact 解码为 51 个非空 432x240 帧、24 fps，平均相邻帧差 `2.9100781250000005`。视觉 QA 显示连贯的雨夜霓虹街道、反射和稳定建筑。 | 这验证仓内 Open-Sora Studio/API 路线。本次有界设置下运动较弱；更长官方质量 run 独立处理。 |
-| `open-sora-plan` | Studio workspace `/api/jobs` actual inference 已于 2026-06-28 在 `worldfoundry-unified-cu128` 通过；本次已将仓内 runtime 对齐官方 v1.3 GPU demo。Job `studio-00174` 使用 `LanguageBind/Open-Sora-Plan-v1.3.0`、官方 `mt5-xxl`、`examples/sora.txt` 中的 Tokyo street prompt、`torchrun --nproc_per_node=8`、`num_frames=93`、`height=352`、`width=640`、`fps=18`、`guidance_scale=7.5`、`num_sampling_steps=100`、`sample_method=EulerAncestralDiscrete`、`seed=1234`。输出 `open-sora-plan.mp4` sha256 为 `66df2331b08b6818d17982b9c1ff3523385d6cc742865ef6a5ec6a5429d6c2ab`；artifact 解码为 93 个非空 640x352 帧、18 fps，平均相邻帧差 `5.89398494112319`。视觉 QA 显示符合官方 prompt 的 Tokyo neon street、红裙黑夹克女性、湿地反光和连续步行动作。Studio `/video` 与 `/image` endpoint 均返回 range response，docs asset `/demos/studio/open-sora-plan-tokyo-street.mp4` 已用本次 run 刷新。 | 这验证仓内 Studio/API route 已按官方 demo recipe 跑通。已修复：使用官方 `mt5-xxl` 而不是 `umt5-xxl`，非 SP torchrun 按 rank 样本数 gather，且优先选择单 prompt artifact，避免 padded grid video 改变分辨率。 |
-| `zeroscope` | Studio workspace `/api/jobs` 短 validation 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通；使用 `cerspense/zeroscope_v2_576w`、prompt `research rover red desert under dusty sunset, slow cinematic pan, stable vehicle geometry`、`frames=8`、`fps=8`、`height=256`、`width=448`、`num_inference_steps=8`、`seed=301`。Studio job `studio-00018` 生成 `zeroscope.mp4`，sha256 为 `9170ac3b553168af17e912885178747f12932f10a6bae68f212b3722d9de8bdb`；artifact 解码为 8 个非空 448x256 帧，平均相邻帧差为 `3.7503609657287598`。视觉 QA 显示红色沙漠 rover 场景和 prompt 匹配。 | 这是仓内 route 的短 Studio validation；旧的 ad-hoc parity script 不随开源包发布。 |
-| `modelscope-t2v` | Studio/API inference run `20260625-035911-217392-modelscope-t2v` 已在 `worldfoundry-unified-cu128` 跑通；使用本地 `modelscope-damo-text-to-video-synthesis`、panda river prompt、`fps=8`、`seed=42`。7876 workspace 的 Studio job `studio-00019` 也于 2026-06-26 跑通；使用 greenhouse rainstorm prompt、`fps=8`、`seed=302`，sha256 为 `04e84f381e02b3ea7f9f822591a0aaa62eed7c527066ebb193c737005e17010e`；artifact 解码为 16 个非空 256x256 帧，平均相邻帧差为 `4.229966640472412`。 | 当前 ModelScope route 即使请求更宽尺寸也会输出 256x256。HF metadata 显示 checkpoint license 为 non-commercial，发布说明不能当作无限制开源权重。 |
-| `animatediff` | Studio workspace `/api/jobs` 短 validation 已于 2026-06-26 在 `worldfoundry-unified-cu128` 跑通；此前修复了当前 diffusers/transformers 的 checkpoint key 兼容问题，包括 VAE attention 的 `query/key/value/proj_attn` 到 `to_q/to_k/to_v/to_out.0`，以及 CLIP `position_ids`。Studio job `studio-00022` 使用 prompt `snowy street market at night with lanterns, cinematic camera movement, detailed people silhouettes`、`frames=8`、`fps=8`、`height=256`、`width=448`、`num_inference_steps=8`、`seed=303`；生成 `animatediff.mp4`，sha256 为 `0d2eaaf05117edbcea9735ca079eafcd2f7b5e84150381a7fcc4733a6e2d50bb`。artifact 解码为 8 个非空 448x256 帧，平均相邻帧差为 `8.168740272521973`；视觉 QA 显示雪夜灯笼街市与 prompt 匹配。 | 官方默认 artifact parity 仍在 catalog 中单独记录；这一行验证当前统一环境中的 Studio/API route。 |
-| `videocrafter1_i2v`, `videocrafter1_t2v`, `videocrafter2_t2v` | Studio/API runs `20260624-110643-120154-videocrafter1-i2v`、`20260624-125058-282785-videocrafter1-t2v`、`20260624-125058-282694-videocrafter2-t2v` 已在 `worldfoundry-unified-cu128` 跑通，使用本地 VideoCrafter checkpoint。artifact 均为非空视频：VC1 I2V 为 16 帧 512x320，VC1 T2V 为 16 帧 1024x576，VC2 T2V 为 16 帧 512x320。 | 仅作为有界 Studio/API validation 证据；完整上游 VideoCrafter parity 仍是更长验证阶段。 |
-
-## 当前图像与 Action Studio 验证记录
-
-| Model id | 证据 | 当前 blocker |
-| --- | --- | --- |
-| `show-o` | Studio workspace `/api/jobs` actual inference 已于 2026-06-27 在 `worldfoundry-unified-cu128` 跑通，使用仓内 Show-O runtime。隔离 7879 workspace 的 job `studio-00005` 使用 prompt `a clean studio photo of a red teapot on a white table`，生成 512x512 的 `show-o.png`，sha256 为 `5d6b92304b6c1789b2d05d33777470ebf77a70abec1c53be82727fdb27968153`；视觉 QA 确认为白桌上的红色茶壶。该 run 也验证了 `/api/jobs/studio-00005/image` 对注册过的 workspace root 外部 artifact 返回 `200 image/png`。 | 这验证 T2I Studio 路径和 artifact preview 修复；Show-O 其他模式仍需单独验证。 |
-| `molmoact2` | Studio workspace `/api/jobs` actual action inference 已于 2026-06-27 在 `worldfoundry-unified-cu128` 跑通所有已配置 MolmoAct2 变体。DROID job `studio-00007` 写出 `droid_action.json`，`action_shape=[15, 8]`，sha256 为 `c8ae3bb3ee07abbff216c7665387e358fb3388f7c11cc9803e7e91953d46a4d6`，且 actions 非零。后续 API jobs `studio-00009` 到 `studio-00012` 分别验证 YAM `[30, 14]` sha256 `7014a43290d922bcd4698ee79e7ffcffe51c0dd4200956d079dd9e83085814dc`、SO100 `[30, 6]` sha256 `3768b4316c4cc4132a6aafee794c8c7272e328fe22c1ee636771dd08ad07832c`、LIBERO `[10, 7]` sha256 `c27c9398fb02353388deee0d75fb9ac5755ff0cb2e9eac92a3fe049a0d7b8bdb`、Think-LIBERO `[10, 7]` sha256 `39c006956a1779f2114da880e41256d8c220d818c8b80990e76e17dea77d7a7c`；所有 trace 都报告 `backend_quality=official_hf_in_tree_runtime`。 | MolmoAct2 已配置 Studio/API action 变体均已 checkpoint-backed 验证。torchao extension warning 非阻塞。 |
-| `openvla` | Studio workspace `/api/jobs` actual action inference 已于 2026-06-27 在 `worldfoundry-unified-cu128` 跑通，使用仓内 OpenVLA HF runtime 和 `${WORLDFOUNDRY_HFD_ROOT}` 下的本地 checkpoint（例如 `openvla/openvla-7b`）。Job `studio-00009` 生成 `openvla.json`，sha256 为 `923b5a8aa351a7e4eddd4fb3c6871530158556828a24e1acdc78d920bc8bab25`，backend 为 `worldfoundry.openvla.in_tree_runtime.predict_action`，输出 1 个 7 维 robot action。 | 默认 base checkpoint 路径已验证。数据集专用 fine-tuned 变体仍需要单独记录 checkpoint 和 `unnorm_key` 证据。 |
-| `cogact` | Workspace job `studio-00190` 已于 2026-07-12 在 `worldfoundry-vla-openvla-compat-cu121` 跑通，使用本地 `CogACT--CogACT-Base/checkpoints/CogACT-Base.pt`、官方 Bridge image/prompt contract、`cfg_scale=1.5`、DDIM 和 10 steps。Inference-only loader 复用了已落盘的 OpenVLA Llama tokenizer，生成有限且随时间变化的 `[16, 7]` action chunk；`cogact.json` sha256 为 `f57a43ebdf1488445fc5514bff1ff55626b49fa2de01b0a9c87d2deadcc42cff`。 | CogACT-Base checkpoint-backed action inference 已验证；其他 checkpoint size 和 simulator success rate 仍需单独验证。 |
-| `openpi` | Studio workspace `/api/jobs` actual action inference 已于 2026-06-27 在 `worldfoundry-unified-cu128` 跑通，使用仓内 OpenPI trained-policy wrapper 和本地 `openpi-assets/checkpoints/pi05_libero` 资产。Job `studio-00006` 生成 `openpi.json`，sha256 为 `23ba01b93d361dc74fc8bbab254564853476e75c537db4cadd55f31fb1494888`，backend 为 `worldfoundry.openpi.in_tree_runtime.create_trained_policy_infer`，action trace shape 为 `[10, 7]`。 | `big_vision` 的 GCS warning 非阻塞。其他 OpenPI policy checkpoint 仍需要单独验证。 |
-| `octo` | 添加仓内兼容 alias 以支持 checkpoint config 中仍引用的 `octo.data.utils.*` 后，Studio workspace `/api/jobs` actual action inference 已于 2026-06-27 跑通。重跑 job `studio-00012` 使用专用 `worldfoundry-octo-jax` profile 和本地 `octo-small-1.5`，生成 `octo.json`，sha256 为 `43d015b6794e6470fa073dc321a1a82cf3890a359b4a3e27a6c509378ede53db`，backend 为 `worldfoundry.octo.in_tree_runtime.sample_actions`，action shape 为 `[1, 4, 7]`。 | Octo 仍是合理的 JAX 专用环境例外；本次运行因当前 env 缺少 CUDA 版 `jaxlib` 而回落到 CPU JAX。若替换 JAX CUDA wheel，需要重新验证 GPU sampling。 |
-| `diffusion-policy` | 添加官方 checkpoint target 所需的仓内 infer-only `TrainDiffusionUnetLowdimWorkspace` 后，Studio workspace `/api/jobs` actual action inference 已于 2026-06-27 跑通。重跑 job `studio-00013` 使用官方 low-dimensional PushT checkpoint `epoch=0550-test_mean_score=0.969.ckpt`，写出 `diffusion-policy.json`，sha256 为 `b0decb9c2f45f49460df5115b3394161e9362ebc7da007a9657737015fdbfdab`，backend 为 `worldfoundry.diffusion_policy.in_tree_runtime.predict_action`，action shape 为 `[1, 8, 2]`。 | 这验证 low-dim PushT 官方 checkpoint 路径。Image-conditioned 或其他 task 的 Diffusion Policy checkpoint 需要单独 observation schema 和验证。 |
-| `open-magvit2` | Workspace job `studio-00187` 已于 2026-07-12 使用 ImageNet class 207 的完整 256-token autoregressive decode 跑通，生成非空 256x256 金毛犬图像，sha256 为 `c2f015b24e430d79a304a5528d30734cbdfd106ae969e10ddd64bc89a8b05e65`，并通过语义视觉 QA。 | 默认 class-conditional image 路径已验证；早期 64x64 bounded smoke 结果已被替代。 |
-| `dvlt` | Workspace job `studio-00184` 生成有限的 5,000-point 悉尼歌剧院重建与 117-vertex camera overlay；`dvlt.glb` sha256 为 `8e211e474a682f958cac70227f090550857d1db140a9e0d49323c833ab633349`。真实 1440x1000 Playwright Chromium 会话已在 Viser 打开该产物，确认两个 scene layer，并执行 reset-view 与 orbit drag。 | checkpoint-backed geometry 与浏览器可视化路径已验证；benchmark depth/pose accuracy 属于独立评测。 |
-| `raft` 可视化 | 仓内官方 RAFT-Things checkpoint 在 GPU 上处理真实机器人视频的相邻两帧，得到有限的 `[384,640,2]` 光流；中位位移 `0.4476`，最大位移 `134.5713`。Middlebury 色轮 PNG sha256 为 `f72d4e16ad74f7d434ff58a5cbe660aed9dd7d5f77a36e468e09ae8ba5d49084`。 | 模型推理、结构化 artifact、共享 renderer 和非空视觉检查均通过。 |
-| `grounding-dino` 可视化 | 仓内 Swin-T 加载本地官方 checkpoint 和 BERT encoder，在真实操作帧中检测到 5 个 `robot` 区域，并渲染裁剪后的 `xyxy` 框。PNG sha256 为 `3c245a0adf171aae7c7f3622e50696fcce5f211113559379c90fcd6c990c98a0`。 | Transformers 5 兼容、本地 text encoder、推理和视觉检查均通过。 |
-| `sam-v1` 可视化 | 官方 SAM ViT-B checkpoint 在 GPU 上使用 box prompt，返回有限且非空的 `384x640` mask，面积 `36,749`，预测质量 `0.8841`。overlay PNG sha256 为 `27cce5112e1adda905c3586a77f64e0fde6bf079797a16b8768358e2d2d8bfe2`。 | checkpoint 推理、mask artifact、overlay 和视觉检查均通过。 |
-| `dinov2` 可视化 | 本地 `facebook/dinov2-base` 在 GPU 上生成有限的 `[16,16,768]` patch feature，标准差 `1.6619`。共享 PCA 可视化 sha256 为 `e63f9266c179543f93896962b35d3701a3fce559e07211736d80c9ff09655cb6`。 | 特征提取、结构化 artifact、PCA renderer 和视觉检查均通过。 |
-| `cotracker` 可视化 | 官方 CoTracker2 checkpoint 在 GPU 上处理 16 帧真实机器人视频，生成 100 条有限轨迹，可见率 `0.795`，最大单步位移 `32.3385` 像素。去除非必要 matplotlib 依赖后的官方 Visualizer 与共享 CLI 都生成有效视频；16 帧 CLI 输出 sha256 为 `2ec010f4f4c909e2bad9829c7992e867abf81e21f38f0fc98f1bc5496d91f8f1`。 | checkpoint tracking、官方 renderer、共享 renderer、视频解码和抽帧视觉检查均通过。 |
-| `mobile-sam` 可视化 | 官方 TinyViT checkpoint 在 GPU 上使用 box prompt，返回有限且非空的 `384x640` mask，面积 `53,285`，预测质量 `0.9141`；overlay sha256 为 `ed6b23a7a7f026c8265bc6c5764ff691053c7cec7e0881ea512e1a9a0ede0f47`。 | checkpoint 推理、统一资产解析、mask artifact、共享 renderer 和视觉检查均通过。 |
-| `repvit-sam` 可视化 | 官方 RepViT-SAM v1.0 checkpoint 在 GPU 上返回有限且非空的 `384x640` mask，面积 `65,384`，预测质量 `0.9224`；overlay sha256 为 `423e7866d2343f5a42475aac7c4c98d822daef7cb0461569bfb23f3a3cc0ea2f`。 | checkpoint 推理、统一资产解析、mask artifact、共享 renderer 和视觉检查均通过。 |
-| `sam2` 可视化 | 恢复官方 Hydra global-package contract，并将配置中的 `sam2.*` target 规范到仓内包后，官方 SAM2.1 Hiera base-plus checkpoint 已在 GPU 跑通；输出有限的 `384x640` box-prompt mask，面积 `28,666`，overlay sha256 为 `5643536efbe76544d21b1925131ff7f1546c24db79f4490313ffd594cd7eb9ff`。 | 仓内配置实例化、checkpoint 加载、mask 推理、共享 renderer 和视觉检查均通过。 |
-| `midas-v2.1-small` 可视化 | 官方 MiDaS v2.1 Small 256 checkpoint 通过仓内 loader 在 GPU 跑通，运行时不再调用 `torch.hub`。有限的 `384x640` 相对逆深度范围为 `104.9635..839.8524`，标准差 `209.2751`；直接渲染中近处机械臂位于远处墙面之前。PNG sha256 为 `f880adc0f1610c2338c4ddfb9c2d440d52e8f575494ee81cf2bcbd584988c2c2`。 | 当前 timm 下的 checkpoint 加载、结构化深度 artifact、共享 renderer 和视觉检查均通过。 |
-| `unidepth-v2-prior` 可视化 | Workspace job `studio-00222` 在 GPU 上运行本地官方 ViT-L，并直接导出 50,000 个官方 model points，不再从 depth 二次反投影。PLY sha256 为 `f470e6a1b24715b4141a001772c233616ebc8d024f5af5f51bb89d8d7a735111`；metadata 声明 camera-frame `x-right/y-up/z-forward`。1440x1000 Viser 中机器人桌面场景朝向正确、无 console error，orbit 后 canvas 明显变化。 | checkpoint-backed Workspace 推理、metric depth、官方 points 导出、坐标对齐、浏览器渲染和交互均通过。 |
-| `unik3d-prior` 可视化 | Workspace job `studio-00221` 使用本地官方 ViT-L 和 `camera_model=auto`，导出 50,000 个官方 points；PLY sha256 为 `36b9205667e803f83587fca2e420030b5d2f5a0f002107dcbe8493a571685084`。该路径替代了把普通 fixture 错当 equirectangular panorama 的旧行为。Viser 中透视场景朝向正确、无 console error，orbit 交互正常。 | universal-camera 推理、metric distance、官方 points 导出、坐标对齐、浏览器渲染和交互均通过；仍支持显式 pinhole/panorama 模式。 |
-| `dust3r` Viser 坐标 | 实际 10,000-point reconstruction PLY sha256 为 `7b578ed1a0befbd3fc62d0c172ff8563230561855fe35014bbefd36f28155b3f`。Viser 现可发现相邻 `dust3r_camera_poses.npy`，对 geometry 与两个 camera frustum 一起应用 `first-camera-opengl`，1440x1000 浏览器中房间朝向正确；截图 sha256 为 `7fc1e34df4146138cbf26beaa881e169bfc39c7b4bd963771da10159e0e4c809`。 | 命名 pose sidecar 发现、共享 point/camera transform、浏览器渲染和坐标 QA 均通过；10k bounded artifact 本身较稀疏。 |
-| `loger` Viser 坐标 | 实际 601,570-point PLY sha256 为 `a46cc9762608fb53a325322fde73b0d412a5d6d3b217954aa2ac65630359b9df`。Viser 抽样 400,000 点，将 points 与三台 cameras 一起对齐到首个 OpenCV camera，机器人桌面场景保持水平；鲁棒取景截图 sha256 为 `3dff3ad1f6d285d1d77aa1fbd82a061c2536b99c1744ed15e4b6da39741ae36e`。 | checkpoint output、camera sidecar、OpenCV-to-OpenGL 对齐、浏览器渲染和鲁棒取景均通过。 |
-| `pi3` Viser 坐标 | 实际 689,032-point PLY sha256 为 `3e150355f7ae43e83f1c8e396727a2bf3252f0d7aef67fd8c19deb63ac9534b4`。point/camera 对齐并使用 5-95% 鲁棒初始取景后，水平机器人桌面场景填满 viewport，预测离群点仍被保留；截图 sha256 为 `01461af1b5e96db28c3b0b97456c3ef2f33fc68cbbbebc2a761a6f7cb1327ead`。 | checkpoint output、三台 camera sidecar、坐标对齐、浏览器渲染和抗离群取景均通过。 |
-| `splatt3r` Spark 可视化 | 实际 344,064-Gaussian PLY 包含 SH color、opacity、anisotropic scale 与 rotation 字段，sha256 为 `472452fdf54ab9863a8d3694e1bce91e999e0e1b6008de0395aa2fd132362027`。原生 Spark viewer 在 1440x1000 canvas 中正确渲染水平机器人桌面重建，console error 为零；drag-orbit 使截图 sha256 从 `d5ef53759c558dcbba1a161199c215e2d2a59158199b6fc8cc3e808db7a76dbd` 变为 `10015f8055bbd86e26a9ca22d5d78c5870bf586d7c5d89227466622644e26012`。 | 3DGS artifact routing、Gaussian 属性、浏览器渲染、坐标朝向与 orbit 交互均通过；该资产走 Spark，不降级成普通 Viser points。 |
-| `mmaudio` | Workspace job `studio-00191` 生成 44.1 kHz 非静音 FLAC，sha256 为 `dba40a981260955709961b35f3f37a4d6af0d45a4c89844488b657f2f5d54e92`，以及 H.264/AAC preview MP4，sha256 为 `8e9a8c7076758da7167a3a406fa9579246cfea95b4b368bb88dbf0fe0b3345c8`。Workspace 保留两种真实媒体后缀，并把 muxed video 登记为 preview。 | small_44k motorcycle video-to-audio 路径已验证；更广泛的 audio-text alignment scoring 需单独评测。 |
-
 ## Runner 证据
 
-<TypeTable
-  type={{
-    runnerRun: {
-      type: 'required',
-      description: 'Runner command、generated output、scorecard 和聚焦回归测试。',
-      required: true,
-    },
-    demoVerified: {
-      type: 'optional gate',
-      description: '官方命令、环境记录、生成样本、raw logs 和 parity notes。',
-    },
-    checkpointVerified: {
-      type: 'optional gate',
-      description: 'Pinned checkpoint source、revision 或 hash、local cache path、device、command 和 expected output checks。',
-    },
-    benchmarkReady: {
-      type: 'release evidence',
-      description: 'Normalized benchmark run，包含 run manifest、metrics summary、report、scorecard，且没有隐藏的 sample failures。',
-    },
-  }}
-/>
+<RecipeRecords items={[
+  {
+    term: 'runnerRun',
+    detail: '必填。Runner command、generated output、scorecard 和聚焦回归测试。',
+  },
+  {
+    term: 'demoVerified',
+    detail: '可选门。官方命令、环境记录、生成样本、raw logs 和 parity notes。',
+  },
+  {
+    term: 'checkpointVerified',
+    detail: '可选门。Pinned checkpoint source、revision 或 hash、local cache path、device、command 和 expected output checks。',
+  },
+  {
+    term: 'benchmarkReady',
+    detail: '发布证据。Normalized benchmark run，包含 run manifest、metrics summary、report、scorecard，且没有隐藏的 sample failures。',
+  },
+]} />
 
 ## 失败策略
 
-| 状态 | 含义 | 发布处理 |
-| --- | --- | --- |
-| Pass | 必需阶段已运行，并产出预期产物。 | 可以支撑对应 claim。 |
-| Partial | 有阶段因为 network、credentials、data、GPU 或 license review 被跳过。 | 可用于开发，不能支撑更强公开 claim。 |
-| Blocked | 必需 source、dataset、license、dependency、checkpoint 或 API 条件不可用。 | Manifest 保持 blocked 或 planned。 |
-| Stale | Report hash、manifest hash、git commit、validator script 或 timestamp 不再匹配。 | 重新运行验证后才能计入。 |
-| Runner-only | Schema 和 runner path 通过，但 official runtime 未运行。 | 不是 leaderboard evidence。 |
+- **Pass** — 必需阶段已运行，并产出预期产物。发布处理：可以支撑对应 claim。
+- **Partial** — 有阶段因为 network、credentials、data、GPU 或 license review 被跳过。发布处理：可用于开发，不能支撑更强公开 claim。
+- **Blocked** — 必需 source、dataset、license、dependency、checkpoint 或 API 条件不可用。发布处理：Manifest 保持 blocked 或 planned。
+- **Stale** — Report hash、manifest hash、git commit、validator script 或 timestamp 不再匹配。发布处理：重新运行验证后才能计入。
+- **Runner-only** — Schema 和 runner path 通过，但 official runtime 未运行。发布处理：不是 leaderboard evidence。
 
 ## Validation matrix
 
@@ -282,17 +398,15 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-art
   --json
 ```
 
-| Gate status | 含义 | Maintainer action |
-| --- | --- | --- |
-| `accepted_integrated` | Fresh report 通过所有必需阶段，manifest 也声明 integrated。 | 保持证据 fresh。 |
-| `accepted_variant_integrated` | 一个或多个 scoped variants 通过，但 parent family 仍是 planned。 | 继续验证剩余 variants。 |
-| `validated_but_manifest_not_promoted` | Report 通过，但 manifest 仍是 planned 或 blocked。 | Artifact review 后再提升。 |
-| `manifest_integrated_without_report` | Manifest 声称 integrated，但没有 fresh validation report。 | 运行 staged validation 或降级。 |
-| `manifest_overclaims_integration` | Manifest 声称 integrated，但 computed stages 不通过。 | 降级或重新运行 full validation。 |
-| `report_overclaims_integration` | Report 声称 integrated，但 staged evidence 不完整。 | 丢弃或重跑 report。 |
-| `stale_report` | Report hash、script、git commit、schema 或 manifest entry 改变。 | 重新运行验证。 |
-| `partial_or_blocked` | Report 存在，但 stages 失败或被跳过。 | 按 `next_action` 处理。 |
-| `not_validated` | Manifest entry 没有 report。 | 运行对应 runtime preflight 和 official validation run。 |
+- **`accepted_integrated`** — Fresh report 通过所有必需阶段，manifest 也声明 integrated。Maintainer action: 保持证据 fresh。
+- **`accepted_variant_integrated`** — 一个或多个 scoped variants 通过，但 parent family 仍是 planned。Maintainer action: 继续验证剩余 variants。
+- **`validated_but_manifest_not_promoted`** — Report 通过，但 manifest 仍是 planned 或 blocked。Maintainer action: Artifact review 后再提升。
+- **`manifest_integrated_without_report`** — Manifest 声称 integrated，但没有 fresh validation report。Maintainer action: 运行 staged validation 或降级。
+- **`manifest_overclaims_integration`** — Manifest 声称 integrated，但 computed stages 不通过。Maintainer action: 降级或重新运行 full validation。
+- **`report_overclaims_integration`** — Report 声称 integrated，但 staged evidence 不完整。Maintainer action: 丢弃或重跑 report。
+- **`stale_report`** — Report hash、script、git commit、schema 或 manifest entry 改变。Maintainer action: 重新运行验证。
+- **`partial_or_blocked`** — Report 存在，但 stages 失败或被跳过。Maintainer action: 按 `next_action` 处理。
+- **`not_validated`** — Manifest entry 没有 report。Maintainer action: 运行对应 runtime preflight 和 official validation run。
 
 ## 清单
 
@@ -310,7 +424,7 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-art
     当 MDX、route generation、search、i18n、layout 或 generated metadata 改变时，运行 docs build。
   </Step>
   <Step>
-    发布前运行 `make lint`，确保生成输出、checkpoint、视频、notebook、demo media 和下载数据不会进入 tracked source。
+    先运行 `make lint` 检查源码与目录，再于发布前运行 `make packaging-check`，检查 tracked source 或发行物是否混入私有文件和本地产物。
   </Step>
   <Step>
     提升 integration status 前刷新 matrix 或 suite reports。
@@ -318,5 +432,5 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-art
 </Steps>
 
 <Callout title="经验规则">
-  模型或基准只有在标准 runner 为对应 runner path 写出 fresh `scorecard.json` 和 `metrics/summary.json` 后，才算 benchmark-ready。
+  模型或 benchmark 只有在标准 runner 为对应 runner path 写出 fresh `scorecard.json` 与 `metrics/summary.json` 之后，才算 benchmark-ready。
 </Callout>

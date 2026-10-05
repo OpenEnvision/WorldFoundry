@@ -22,21 +22,49 @@ checkpoint_refs:
   requires_auth: true
   notes:
   - Hugging Face API reports gated=auto; accept access terms before downloading.
+official_sources:
+  paper: https://arxiv.org/abs/2501.08453
 integration:
   status: integrated
   verification_status: gpu_validation_verified
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 runtime_profile: runtime-profile:vchitect-2-t2v
 runner_parity:
-  status: verified
+  status: native_checkpoint_validated
   notes:
-  - The in-tree runtime exposes generated_video directly through the Vchitect pipeline.
-  - Per-run visual QA and artifact checks are tracked outside the model catalog.
+  - The native DiT matches all 1019 checkpoint tensors and the native SD3 decoder matches all 138 decoder tensors.
 pipeline_binding: vchitect-2-t2v
 notes:
-- Use id vchitect-2-t2v. The in-tree Vchitect runtime emits generated_video when
-  local checkpoints and runtime dependencies are available.
+- Use id vchitect-2-t2v. The public pipeline is assembled from native role-based components.
+native_diffusion:
+  recipe_id: vchitect-2-t2v
+  architecture: vchitect-2-mmdit
+  backend: worldfoundry-native-diffusion
+  shared_components:
+  - native shifted flow Euler scheduler
+  - native SD3 frame decoder
+  - native checkpoint loader and block offload policy
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries
   expose WorldFoundry pipeline targets; metadata-only entries retain upstream provenance
   without runnable WorldFoundry backends.
+docs:
+  publisher: Shanghai AI Laboratory (Vchitect)
+  publisher_kind: lab
+  publisher_zh: 上海人工智能实验室（Vchitect 团队）
+  overview: 'Vchitect-2.0 is Shanghai AI Lab''s open text-to-video diffusion transformer; this entry serves the 2B checkpoint through a fully native assembly. It carries an unusually strong structural guarantee: the native DiT matches all 1019 checkpoint tensors and the native SD3 decoder matches all 138 decoder tensors. Aliases include vchitect, vchitect-2, and vchitect2-t2v.'
+  overview_zh: Vchitect-2.0 是上海人工智能实验室的开源文生视频扩散 Transformer；本条目以完全原生的装配提供其 2B checkpoint。它有一项少见的强结构保证：原生 DiT 与 checkpoint 的 1019 个张量全部匹配，原生 SD3 解码器与 138 个解码器张量全部匹配。别名包括 vchitect、vchitect-2、vchitect2-t2v。
+  architecture: A parallel diffusion transformer paired with an SD3-family VAE decoder, assembled from role-based DiT, conditioner, scheduler, initializer, and decoder components. The pinned official source revision is recorded in the profile (Vchitect-2.0 @ be56767f).
+  architecture_zh: 并行扩散 Transformer 配 SD3 系 VAE 解码器，由角色化的 DiT、条件器、调度器、初始化器与解码器组件装配。profile 记录了固定的官方源码 revision（Vchitect-2.0 @ be56767f）。
+  usage_notes: 'Runner status is native_checkpoint_validated: the default path loads the shared native pipeline and does not emit blocked plan artifacts. Weights are apache-2.0 at Vchitect/Vchitect-2.0-2B. Use id vchitect-2-t2v.'
+  usage_notes_zh: runner 状态为 native_checkpoint_validated：默认路径加载共享原生 pipeline，不会产生 blocked 计划产物。权重为 apache-2.0，位于 Vchitect/Vchitect-2.0-2B。请使用 id vchitect-2-t2v。
+  limitations:
+  - Tensor-level validation is structural — full visual parity with upstream demos is a separate, unrecorded step.
+  - '2B scale: quality below the 13B+ entries in this catalog.'
+  limitations_zh:
+  - 张量级验证属于结构层——与上游 demo 的完整视觉一致性是另一个尚未记录的步骤。
+  - 2B 规模：质量低于 catalog 中 13B 以上的条目。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard T2V quality suite.
+    reason_zh: 标准文生视频质量评测。

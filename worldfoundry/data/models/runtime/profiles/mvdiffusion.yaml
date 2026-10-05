@@ -14,14 +14,15 @@ input_schema:
   video: false
   actions:
   - camera_views
-artifact_kind: generated_3d_asset
+artifact_kind: generated_image
 artifact_filename: mvdiffusion.png
 execution:
   backend_stage: in_tree_model_subprocess_adapter
-  runtime_status: runtime_integrated_assets_may_be_missing
+  runtime_status: panorama_gpu_validated_quality_concern
   integration_status: integrated
   pipeline_binding: mvdiffusion
 integration:
   status: integrated
 notes:
 - Uses an in-tree subprocess adapter for upstream MVDiffusion source when available.
+- The default image-outpainting route produces eight perspective PNGs and a panorama PNG; the 720-frame spin video is optional.

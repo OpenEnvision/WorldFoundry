@@ -1,0 +1,27 @@
+schema_version: 2
+id: worldcrafter
+name: WorldCrafter
+tasks: [text-to-video, image-to-video, camera-controlled-video, world-model]
+provider: TencentARC
+source:
+  status: open_source
+  official_repo_url: https://github.com/TencentARC/WorldCrafter
+  license: worldcrafter-academic-only
+checkpoint: TencentARC/WorldCrafter-Base
+runtime_profile: runtime-profile:worldcrafter
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: worldcrafter
+official_sources:
+  project_page: https://drexubery.github.io/WorldCrafter/
+  paper: https://arxiv.org/abs/2609.24984
+integration:
+  status: integrated
+  notes:
+  - Reuses shared Helios transformer, scheduler, latent preparation and VGGT layers.
+  - Model-specific UCPE camera residuals, RepEncoder memory and Fast routing remain explicit.
+runner_parity:
+  status: verified
+  notes:
+  - Local H100 validation passed released-weight I2V/T2V at 640x384 for two chunks, strict loading, pre-clamp finite outputs, full decode and visual review.
+  - Shared-transformer upstream numerical checks passed; Base resume matched continuous pre-clamp outputs exactly. Long-horizon quality is not established.
+catalog_category: world_models

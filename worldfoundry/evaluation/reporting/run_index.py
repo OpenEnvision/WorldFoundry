@@ -11,22 +11,28 @@ import os
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.core.io.formats.serialization import iter_jsonl_objects
 from worldfoundry.evaluation.utils import (
     escape_markdown_cell as _escape_markdown_cell,
+)
+from worldfoundry.evaluation.utils import (
     format_value as _format_value,
+)
+from worldfoundry.evaluation.utils import (
+    mapping_or_empty as _mapping,
     read_json_object,
     write_json,
     write_jsonl,
 )
 
 from .run_report import (
-    _dedupe_labels,
-    _int_or_zero,
-    _mapping,
-    _normalise_roots,
-    _row_from_summary,
-    _run_summary_candidate,
+    MOCK_BACKEND_BLOCKING_REASON,
+    dedupe_labels as _dedupe_labels,
+    find_run_summary_candidate as _run_summary_candidate,
+    is_mock_backend,
     load_run_summary,
+    normalise_roots as _normalise_roots,
+    row_from_summary as _row_from_summary,
 )
 
 RUN_INDEX_SCHEMA_VERSION = "worldfoundry-run-index"
@@ -44,6 +50,20 @@ def _rows_from_index_payload(payload: Mapping[str, Any], path: Path) -> list[dic
             raise TypeError(f"run index row {index} must be a JSON object in {path}")
         parsed_rows.append(dict(row))
     return parsed_rows
+
+
+def _row_backends(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    return sorted({str(row["backend"]) for row in rows if row.get("backend")})
+
+
+def _mock_backend_issues(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    return [
+        "mock backend: "
+        f"{row.get('label') or row.get('run_id') or row.get('source_path')} "
+        f"({MOCK_BACKEND_BLOCKING_REASON})"
+        for row in rows
+        if is_mock_backend(row.get("backend"))
+    ]
 
 def _index_summary_from_rows(path: Path, rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Build an index payload from a flat list of row dicts."""
@@ -65,12 +85,13 @@ def _index_summary_from_rows(path: Path, rows: Sequence[Mapping[str, Any]]) -> d
         "run_count": len(rows),
         "benchmarks": benchmarks,
         "datasets": datasets,
+        "backends": _row_backends(rows),
         "metric_ids": metric_ids,
         "comparison_keys": comparison_keys,
         "comparison_identity_statuses": comparison_identity_statuses,
         "runs": list(rows),
         "rows": list(rows),
-        "issues": [],
+        "issues": _mock_backend_issues(rows),
         "artifacts": {"index_source": str(path.resolve())},
     }
 
@@ -81,14 +102,7 @@ def load_run_index(path: str | Path) -> dict[str, Any]:
     if not source_path.exists():
         raise FileNotFoundError(f"run index path does not exist: {source_path}")
     if source_path.suffix.lower() == ".jsonl":
-        rows: list[dict[str, Any]] = []
-        for line_number, line in enumerate(source_path.read_text(encoding="utf-8").splitlines(), start=1):
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            if not isinstance(row, Mapping):
-                raise TypeError(f"run index JSONL line {line_number} must be a JSON object in {source_path}")
-            rows.append(dict(row))
+        rows = list(iter_jsonl_objects(source_path))
         return _index_summary_from_rows(source_path, rows)
 
     payload = read_json_object(source_path)
@@ -358,6 +372,7 @@ def build_run_index(
 
     rows = _dedupe_labels(rows)
     issues.extend(_duplicate_run_id_issues(rows))
+    issues.extend(_mock_backend_issues(rows))
     if not rows:
         issues.append("no run summaries found")
 
@@ -379,6 +394,7 @@ def build_run_index(
         "run_count": len(rows),
         "benchmarks": benchmarks,
         "datasets": datasets,
+        "backends": _row_backends(rows),
         "metric_ids": metric_ids,
         "comparison_keys": comparison_keys,
         "comparison_identity_statuses": _comparison_identity_statuses(rows),
@@ -398,6 +414,7 @@ def build_markdown_run_index(index: Mapping[str, Any]) -> str:
         f"- Runs: {_format_value(index.get('run_count'))}",
         f"- Roots: {_format_value(index.get('roots') or [])}",
         f"- Benchmarks: {_format_value(index.get('benchmarks') or [])}",
+        f"- Backends: {_format_value(index.get('backends') or [])}",
         f"- Metrics: {_format_value(index.get('metric_ids') or [])}",
         f"- Comparison identities: {_format_value(index.get('comparison_identity_statuses') or {})}",
         "",
@@ -410,6 +427,7 @@ def build_markdown_run_index(index: Mapping[str, Any]) -> str:
         "Model",
         "Dataset",
         "Evaluation",
+        "Backend",
         "Protocol",
         "Samples",
         "Failed",
@@ -427,6 +445,7 @@ def build_markdown_run_index(index: Mapping[str, Any]) -> str:
             row.get("model_id") or row.get("model_name"),
             row.get("dataset_id"),
             row.get("evaluation_mode"),
+            row.get("backend"),
             row.get("protocol_id"),
             row.get("sample_count"),
             row.get("failed_samples"),

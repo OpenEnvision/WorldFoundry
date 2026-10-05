@@ -1,0 +1,52 @@
+---
+title: "SANA-WM"
+description: "SANA-WM（NVIDIA）：世界模型、相机可控视频；Runner 一致性待确认; 独立环境 `sana`。"
+modelId: "sana-wm"
+pageSource: authored
+---
+
+SANA-WM 是基于英伟达高效 Sana 架构的世界模型：两阶段设计（交互阶段加 LTX-2 精修器），以常驻多卡 pipeline 生成相机可控的世界视频。真实 Workspace 运行把组件划分到四张 A100 上，从九帧原生窗口生成八帧有限、可解码的 1280x704 画面。
+
+<ModelPaperFigures modelId="sana-wm" locale="zh" />
+
+记录论文为[SANA-WM: Efficient Minute-Scale World Modeling with Hybrid Linear Diffusion Transformer](https://arxiv.org/abs/2605.15178)（2026）。
+
+项目页：[nvlabs.github.io/Sana/WM](https://nvlabs.github.io/Sana/WM/)。代码：[NVlabs/Sana](https://github.com/NVlabs/Sana)。
+
+<ModelCommandBuilder modelId="sana-wm" locale="zh" />
+
+## 用来做什么
+
+用 `sana-wm-streaming` 做相机条件视频推理。配方绑定了已记录的相机控制 profile。
+
+相机动作遵循当前官方 SANA-WM 控制约定：`w/s` 前进/后退，`a/d` 向左/右转头，`j/l` 向左/右平移，`i/k` 向上/下俯仰。持续按键的默认速度为每帧 0.025 个单位和 0.6°，松键后逐渐减速。首图之后的每个过渡帧提供一个动作，也可直接传入 `camera_to_world` 位姿。
+
+SANA-WM 复用规范的 Sana 网络、编码器、自编码器、调度器与配方角色——不再保留模态自有的 Sana 运行时（论文 arXiv 2605.15178，apache-2.0）。交互 pipeline 保持两阶段模型常驻，以原生 8k+1 时间窗口推进；质量档案保持双向阶段与 LTX-2 精修器开启。该模型由英伟达（NVIDIA）发布。
+
+catalog 记录的任务包括 世界模型、相机可控视频、controllable-world-generation。别名包括 `sana world model`、`sana-wm-2.6b`、`sana-wm-streaming`、`Efficient-Large-Model/SANA-WM_streaming`。
+
+记录的评测入口包括[SANA-WM 80-Scene Benchmark](/zh/docs/evaluation/benchmark-hub/sana-wm-bench)（本仓库记录的 SANA-WM 专用评测）、[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（世界滚动生成的相机控制贴合度）。
+
+不是 [SANA](/zh/docs/guides/supported-models/sana)。 评测看 [SANA-WM 80-Scene Benchmark](/zh/docs/evaluation/benchmark-hub/sana-wm-bench)、[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`fps`、`guidance_scale`；产物 `sana-wm-streaming.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `SanaWMPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+已验证的四卡 A100 运行是四阶段冒烟测试，确认执行与条件连贯性——不代表默认 60 步质量配方。 组件在多卡上的放置可配置。
+
+WorldFoundry registers an in-tree resident pipeline with configurable multi-GPU component placement.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run sana-wm-streaming --pipeline.task-profile interactive-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+记录的权重仓库包括 `Efficient-Large-Model/SANA-WM_streaming`、`Efficient-Large-Model/SANA-WM_bidirectional`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh sana-wm-streaming`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="sana-wm" locale="zh" />

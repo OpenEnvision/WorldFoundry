@@ -1,0 +1,48 @@
+---
+title: "Spatial-Forcing"
+description: "Spatial-Forcing：视觉-语言-动作（VLA）、VLA 动作预测；已验证; 4 个 variant。"
+modelId: "spatial-forcing"
+pageSource: generated
+---
+
+Spatial-Forcing 将 VLA 内部表征与 3D 几何对齐（借助 VGGT 式监督），提升 OpenVLA 骨干的操作精度。四个已发布 OpenVLA-LIBERO checkpoint（spatial、object、goal、long；Apache-2.0）全部通过严格恢复与真实 A100 推理，输出有限 8x7 动作——catalog 状态为 已验证。
+
+<ModelPaperFigures modelId="spatial-forcing" locale="zh" />
+
+代码：[OpenHelix-Team/Spatial-Forcing](https://github.com/OpenHelix-Team/Spatial-Forcing)。
+
+<ModelCommandBuilder modelId="spatial-forcing" locale="zh" />
+
+## 用来做什么
+
+需要 catalog 上的 VLA 策略时选 `spatial-forcing-libero-spatial`：指令与观测进、动作轨迹出。用来滚动已记录策略，不是用来训练新策略。
+
+训练期施加空间对齐的 OpenVLA 7B 微调 checkpoint；推理时按标准 OpenVLA 式策略运行。推理专用运行时禁用 checkpoint 携带的远程代码；VGGT、对齐投影器与 LoRA 适配器副本被排除。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测、VLA 策略执行。别名包括 `spatial_forcing`、`spatial-forcing-openvla`。同系列还有 `spatial-forcing-libero-object`、`spatial-forcing-libero-goal`、`spatial-forcing-libero-10`。
+
+记录的评测入口包括[LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（四个 LIBERO checkpoint 全部通过 GPU 验证）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`wrist_image`、`state`、`variant`；产物 `action_trace`、`spatial-forcing_action_trace.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `SpatialForcingPipeline`。
+
+起步 variant 是 `spatial-forcing-libero-spatial`。catalog 登记了 4 个 variant（上方卡片）：`spatial-forcing-libero-spatial`（`vla.policy_rollout`）：已验证、`spatial-forcing-libero-object`（`vla.policy_rollout`）：已验证、`spatial-forcing-libero-goal`（`vla.policy_rollout`）：已验证、`spatial-forcing-libero-10`（`vla.policy_rollout`）：已验证。系列状态：**已验证**。
+
+从官方 collection 中按需选择 LIBERO 子集 checkpoint（spatial/object/goal/long）；仅接受本地就位的快照。
+
+发布的 checkpoint 为 LIBERO 微调版；其他本体需重新训练。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run spatial-forcing-libero-spatial --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-vla-spatial-forcing-cu121`（Python 3.10，CUDA 12.1，torch==2.2.0）。
+
+记录的权重仓库包括 `haofuly/spatial-forcing-7b-finetuned-libero-spatial`、`haofuly/spatial-forcing-7b-finetuned-libero-object`、`haofuly/spatial-forcing-7b-finetuned-libero-goal` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh spatial-forcing-libero-spatial`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**已验证**。
+
+<ModelRelatedRecipes modelId="spatial-forcing" locale="zh" />

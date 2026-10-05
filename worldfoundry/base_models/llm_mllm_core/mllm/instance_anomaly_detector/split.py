@@ -1,17 +1,28 @@
+import json
 import os
 import subprocess
-import json
-from pathlib import Path
 
-def get_video_info(filepath):
+from worldfoundry.runtime.jobs import run_bounded_command
+
+
+def get_video_info(filepath, *, timeout_seconds: int = 30):
+    if timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be positive")
     cmd = [
         "ffprobe", "-v", "error",
         "-select_streams", "v:0",
         "-show_entries", "stream=avg_frame_rate,duration",
         "-of", "json", filepath
     ]
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    info = json.loads(result.stdout)
+    result = run_bounded_command(cmd, timeout=timeout_seconds)
+    if result["timed_out"]:
+        raise TimeoutError(f"ffprobe timed out after {timeout_seconds}s for {filepath}")
+    if result["returncode"] != 0:
+        detail = str(result["stderr"]).strip()
+        raise RuntimeError(
+            f"ffprobe failed for {filepath} with code {result['returncode']}: {detail}"
+        )
+    info = json.loads(result["stdout"])
     duration = float(info['streams'][0]['duration'])
     fr_str = info['streams'][0]['avg_frame_rate']
     if '/' in fr_str:

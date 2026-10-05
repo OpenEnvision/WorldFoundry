@@ -5,25 +5,27 @@ description: End-to-end execution flow from CLI inputs to artifacts, metrics, sc
 
 ## Introduction
 
-This page traces one evaluation run from the CLI through artifact files on disk. Read it when you need to know *where* a flag lands in code, *which* runner owns file writing, or *why* model mode can fork into `ContractRunner` versus `ExistingResultsRunner`. User-facing command examples live in the [Evaluation Guide](/docs/evaluation); here the focus is execution plumbing.
+This page traces one evaluation run from the CLI through artifact files on disk. Read it when you need to know *where* a flag lands in code, *which* runner owns file writing, or how model mode hands generated results to `ExistingResultsRunner`. User-facing command examples live in the [Evaluation guide](/docs/evaluation); for how CLI/TUI/MCP compile intent into the request this page starts from, see [Surfaces and orchestration](/docs/maintainers/architecture/surfaces-orchestration). Here the focus is execution plumbing.
 
-## Entry Points
+## Entry points
 
-Every user-facing command eventually reaches `run_evaluate()` in `evaluation/tasks/execution/evaluate.py`. The console entry is `worldfoundry/cli/main.py`, which dispatches subcommands into one of four shapes:
+The console entry is `worldfoundry/cli/main.py:1888` `main()`. Most evaluate and model-only runs then enter `run_evaluate()` in `evaluation/tasks/execution/orchestration/evaluate.py` (`:1071`). A model-plus-benchmark run does **not** go through that facade: orchestration calls `execute_prepared_evaluation()` → `run_model_benchmark()` in `model_benchmark.py`. The CLI dispatches into one of four shapes:
 
 - **evaluate** — normalizes inputs, picks a run mode, and returns one `EvaluateRunResult`.
 - **existing outputs** — scores artifacts already on disk through `existing_results.py` without loading a model.
 - **model run** — resolves a model runner via `resolver.py`, calls `generate()`, then scores normalized results.
 - **model plus benchmark** — runs generation and then a benchmark-zoo runner end to end through `model_benchmark.py`.
 
-The first meaningful branch is always mode selection: whether the run needs model weights on GPU, or only files that already exist.
+For evaluate and model-only runs, the first meaningful branch is mode selection: whether the run needs model weights on GPU, or only files that already exist. Model-plus-benchmark never enters that fork.
 
-## Evaluate Workflow
+## Evaluate workflow
 
 The happy path looks like this: one `EvaluateRunRequest` enters the facade, a mode is chosen, inputs are loaded or materialized from a task registry, and a delegate runner writes the standard artifact bundle. If something is missing from an output directory, follow this flow to see which runner stage should have produced it.
 
+<CallChainDiagram />
+
 ```python
-# worldfoundry/cli/main.py → evaluation/tasks/execution/evaluate.py
+# worldfoundry/cli/main.py → evaluation/tasks/execution/orchestration/evaluate.py
 result = run_evaluate(EvaluateRunRequest(...))
 
 mode = _mode(request)
@@ -45,73 +47,151 @@ write("report.md")
 
 The facade is intentionally small. `run_evaluate()` validates the request, chooses a mode, then hands off to a runner that owns file writing and per-sample accounting.
 
-## Mode Behavior
+## Mode behavior
 
-Mode selection is the first branch that changes cost and requirements. `existing-results` never loads weights—it only scores what is already on disk, which is why hosted API batches and offline demos use it. `model` resolves a runner and calls `generate()` first; the metrics you pass then decide whether scoring stays in-process (`ContractRunner`) or reuses the existing-results path (`ExistingResultsRunner`).
+`existing-results` scores supplied results without loading a generation model. `model` resolves a runner and generates results first. Both modes resolve metric IDs and objects into the same scoring path.
 
-| Mode | Input required | Model loaded? | Metrics path | Use it when |
-| --- | --- | --- | --- | --- |
-| `existing-results` | `results` or `results_path`; optional requests | No | Built-in metric ids or artifact checks | A demo, hosted job, or offline process already generated artifacts. |
-| `model` | Requests plus runner config or model-zoo id | Yes | Either object metrics through `ContractRunner`, or built-in metrics through `ExistingResultsRunner` | You want model execution in the framework. |
+## Model mode detail
 
-## Model Mode Detail
-
-After `runner.generate()` returns, `_align_model_results()` ensures every request has a matching result row (including explicit failures). The fork below is easy to miss: passing `Metric` objects keeps the whole run inside `ContractRunner`; passing string metric ids delegates scoring to the same code path as `existing-results`.
+The model runner emits `GenerationResult` objects. After sample alignment, `ExistingResultsRunner` handles scoring and reporting through `scoring.py`.
 
 ```python
-runner = resolve_model_zoo_runner(request.model_id)
 results = runner.generate(requests)
 results = _align_model_results(requests, results)
-
-if isinstance(request.metrics[0], Metric):
-    return ContractRunner(...).score(results)       # Metric objects → in-process
-else:
-    return ExistingResultsRunner(...).score(results)  # metric ids → existing-results path
+return ExistingResultsRunner().run(
+    output_dir=output_dir, requests=requests, results=results, metrics=resolved_metrics,
+)
 ```
 
-Important distinction: model execution and benchmark scoring are separated. A model runner only emits `GenerationResult` objects. Scoring happens after results are normalized.
 
-## Contract Runner Detail
+## Contract runner detail
 
-`run_contract()` is the strictest in-process path and the reference implementation for artifact layout. Each stage writes or updates a file that downstream validation, docs exports, and leaderboard tooling expect to find. When debugging a partial run, walk the stages in order: a missing `metrics/per_sample.jsonl` usually means generation never finished alignment, not that reporting failed.
+`run_contract()` owns generation and delegates scoring and artifact reporting to `ExistingResultsRunner`. The output file layout remains shared across direct contract runs, model mode, and offline scoring. Metric progress is persisted in batches; an interrupted run retains `metrics/checkpoint.jsonl` for `resume=True`. Shared stage handling records generation, scoring, aggregation, and reporting failures. Starting a new attempt clears the previous finished reports; the run index falls back to the current manifest until a new report is ready. Metric summaries distinguish executed, scored, successful, failed, and skipped samples. A skipped metric value does not become an execution error, and each metric retains its own aggregation policy.
+
+Workspace CLI delegates use the same stage handling. A failed subprocess preserves any fresh partial scores and records its actual exit code; successful normalization does not override execution failure. Reports from an earlier attempt cannot stand in for a missing new scorecard.
 
 ```python
-# evaluation/tasks/execution/contract.py → run_contract()
-requests = _normalize_requests(request)
-write_execution_plan(requests)                # execution_plan.json
-write_run_manifest(status="running")          # run_manifest.json
+# contract.py: generation
+results, cache_stats = run_generation_with_cache(requests, runner.generate, ...)
+return run_existing_results(
+    output_dir=output_dir, requests=requests, results=results, metrics=metrics,
+)
 
-results = run_generation_with_cache(runner, requests)
-write_artifacts_jsonl(_artifact_rows(results)) # artifacts.jsonl
-write_per_sample_metrics(...)                 # metrics/per_sample.jsonl
-summary = _build_summary(...)                 # metrics/summary.json
-write_scorecard(summary)                      # scorecard.json
-write_run_report_artifacts(summary)           # summary.json + report.md
-write_run_manifest(status="finished")         # final run_manifest.json
+# existing_results.py: shared scoring and reporting
+for batch in score_samples(...):
+    write_sample_progress(batch)
+summary = build_metrics_summary(requests, results, per_sample_rows, metrics)
+write_scorecard(..., metrics_summary=summary)
+write_run_report_artifacts(...)
 ```
 
 Generation is the expensive stage: runner exceptions become failed samples, and deterministic outputs can reuse the SQLite generation cache. Reporting stages only run after every sample has an aligned result row.
 
-## Artifact Contract
+## Artifact contract
 
-These files form the audit trail described in the [Evaluation Guide](/docs/evaluation#main-outputs). They are stable across run modes: an `existing-results` run still writes `sample_ledger.jsonl` and `scorecard.json` so reviewers can compare it with a full model run on the same benchmark. Paths are relative to the run output directory recorded in `run_manifest.json`.
+These files form the audit trail described in the [Evaluation guide](/docs/evaluation#outputs). They are stable across run modes: an `existing-results` run still writes `sample_ledger.jsonl` and `scorecard.json` so reviewers can compare it with a full model run on the same benchmark. Paths are relative to the run output directory recorded in `run_manifest.json`.
 
-| File | Producer | Meaning |
-| --- | --- | --- |
-| `run_manifest.json` | Runner | Run identity, status, model, benchmark, dataset, context metadata, output paths. |
-| `execution_plan.json` | Runner or `RunPlan` | Planned stages, sample ids, materialization details, output files. |
-| `requests.jsonl` | Runner | One normalized `GenerationRequest` per sample. |
-| `results.jsonl` | Model runner through evaluation runner | One normalized `GenerationResult` per sample. |
-| `sample_ledger.jsonl` | Runner | Per-sample pass/fail status with stage-level errors. |
-| `artifacts.jsonl` | Runner | Flattened artifact refs enriched relative to the output directory. |
-| `metrics/per_sample.jsonl` | Metrics layer | Per-sample metric outputs or skipped state. |
-| `metrics/summary.json` | Metrics layer | Aggregates, failed ids, skipped ids, leaderboard fields. |
-| `scorecard.json` | Reporting layer | Release/review surface consumed by validation and docs. |
-| `report.md` | Reporting layer | Human-readable summary derived from scorecard. |
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>File</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>run_manifest.json</code>
+          </div>
+        </div>
+        <p>Run identity, status, model, benchmark, dataset, context metadata, output paths.</p>
+        <p className="pi-kv-read"><span>Producer</span> Runner</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>execution_plan.json</code>
+          </div>
+        </div>
+        <p>Planned stages, sample IDs, materialization details, output files.</p>
+        <p className="pi-kv-read"><span>Producer</span> Runner or <code>RunPlan</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>requests.jsonl</code>
+          </div>
+        </div>
+        <p>One normalized <code>GenerationRequest</code> per sample.</p>
+        <p className="pi-kv-read"><span>Producer</span> Runner</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>results.jsonl</code>
+          </div>
+        </div>
+        <p>One normalized <code>GenerationResult</code> per sample.</p>
+        <p className="pi-kv-read"><span>Producer</span> Model runner through evaluation runner</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>sample_ledger.jsonl</code>
+          </div>
+        </div>
+        <p>Per-sample pass/fail status with stage-level errors.</p>
+        <p className="pi-kv-read"><span>Producer</span> Runner</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>artifacts.jsonl</code>
+          </div>
+        </div>
+        <p>Flattened artifact refs enriched relative to the output directory.</p>
+        <p className="pi-kv-read"><span>Producer</span> Runner</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>metrics/per_sample.jsonl</code>
+          </div>
+        </div>
+        <p>Per-sample metric outputs or skipped state.</p>
+        <p className="pi-kv-read"><span>Producer</span> Metrics layer</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>metrics/summary.json</code>
+          </div>
+        </div>
+        <p>Aggregates, failed ids, skipped ids, leaderboard fields.</p>
+        <p className="pi-kv-read"><span>Producer</span> Metrics layer</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>scorecard.json</code>
+          </div>
+        </div>
+        <p>Release/review surface consumed by validation and docs.</p>
+        <p className="pi-kv-read"><span>Producer</span> Reporting layer</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>report.md</code>
+          </div>
+        </div>
+        <p>Human-readable summary derived from scorecard.</p>
+        <p className="pi-kv-read"><span>Producer</span> Reporting layer</p>
+      </li>
+    </ul>
+  </section>
+</div>
 
-## Task Materialization
+## Task materialization
 
-Task-driven runs fix sample ids, splits, and input keys *before* any model code runs. That makes reruns and cache reuse reproducible: the same task YAML and dataset manifest should yield identical `requests.jsonl` rows on every machine. The code below connects catalog task YAML to the `EvaluateRunRequest` that `run_evaluate()` already understands—see [Benchmarks and Data](/docs/maintainers/architecture/benchmarks-data) for where those YAML files live.
+Task-driven runs fix sample IDs, splits, and input keys *before* any model code runs. That makes reruns and cache reuse reproducible: the same task YAML and dataset manifest should yield identical `requests.jsonl` rows on every machine. The code below connects catalog task YAML to the `EvaluateRunRequest` that `run_evaluate()` already understands—see [Benchmarks and data](/docs/maintainers/architecture/benchmarks-data) for where those YAML files live.
 
 ```python
 registry = load_task_registry_from_paths(task_yaml_paths)
@@ -121,4 +201,4 @@ requests = materialize_generation_requests(requests)
 return EvaluateRunRequest(requests=requests, ...)
 ```
 
-Use this path when sample ids, splits, input keys, output keys, and cache policy need to be reproducible before generation starts.
+Use this path when sample IDs, splits, input keys, output keys, and cache policy need to be reproducible before generation starts.

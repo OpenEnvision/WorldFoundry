@@ -50,6 +50,7 @@ def __getattr__(name: str):
         "DEFAULT_CAMERACTRL_CKPT",
         "DEFAULT_CAMERACTRL_CONFIG",
         "DEFAULT_CAMERACTRL_IMAGE_LORA",
+        "DEFAULT_CAMERACTRL_MOTION_ADAPTER",
         "DEFAULT_SD15_ROOT",
     }:
         # Handle the CameraCtrlSynthesis class, which resides in its own dedicated submodule.
@@ -75,6 +76,7 @@ __all__ = [
     "DEFAULT_CAMERACTRL_CKPT",
     "DEFAULT_CAMERACTRL_CONFIG",
     "DEFAULT_CAMERACTRL_IMAGE_LORA",
+    "DEFAULT_CAMERACTRL_MOTION_ADAPTER",
     "DEFAULT_SD15_ROOT",
     "runtime_root",
 ]

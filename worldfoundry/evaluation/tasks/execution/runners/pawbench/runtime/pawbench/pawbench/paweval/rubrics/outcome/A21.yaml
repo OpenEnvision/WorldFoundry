@@ -1,0 +1,43 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A21
+track: calibration
+title_en: Two-Dice Sum
+outcome_question: Which sum_N label is determined by the two visible top faces on
+  the dice once a first decisive post-action readout is visible?
+readout_policy: Read the first decisive post-action result window after the requested
+  roll has actually occurred. Qualifying frames are those where both dice are in
+  view and no longer in transition. The readout frame is the first frame where both
+  dice have stopped translating/rotating enough for their top faces to be counted.
+canonical_labels:
+- sum_2
+- sum_3
+- sum_4
+- sum_5
+- sum_6
+- sum_7
+- sum_8
+- sum_9
+- sum_10
+- sum_11
+- sum_12
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- Fewer than two die top faces are visible and countable in the readout window.
+- A top face is hidden, resting on an edge, off-screen, or too blurred to count.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'First-decisive-window rule: use the earliest frame where the post-action result
+  has committed; do not re-label from later transient states.'
+notes:
+- 'Emit `outcome_label: sum_N` directly from the two visible top faces and describe
+  the face values in `observed_result` (for example, face_4 + face_4 -> sum_8).'
+- Read top faces only; side faces are not evidence. Any parity or distributional
+  metric is derived downstream from the summed top-face label.
+- 'Scene title: Two-Dice Sum.'

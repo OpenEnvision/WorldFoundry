@@ -1,21 +1,23 @@
-from typing import Any, List, Tuple, Optional, Union, Dict
-from einops import rearrange
+from typing import Optional
+
 import torch
+import torch.distributed as dist
 import torch.nn as nn
-from .mlp_layers import MLP, MLPEmbedder, FinalLayer
-from .attenion import attention, get_cu_seqlens, parallel_attention
-from worldfoundry.base_models.diffusion_model.video.hunyuan_video.modules.norm_layers import get_norm_layer
+import torch.nn.functional as F
+from einops import rearrange
+
+from worldfoundry.core.nn import activation_layer as get_activation_layer
+from worldfoundry.core.nn import normalization_layer as get_norm_layer
 from worldfoundry.core.attention import (
     apply_nd_rotary_embedding as apply_rotary_emb,
-    get_1d_rotary_pos_embed,
+)
+from worldfoundry.core.attention import (
     get_nd_rotary_pos_embed,
     scaled_dot_product_attention,
 )
+from worldfoundry.core.attention.backends.hybrid import parallel_attention
 
-from worldfoundry.base_models.diffusion_model.video.hunyuan_video.modules.activation_layers import get_activation_layer
-import torch.nn.functional as F
-
-import torch.distributed as dist
+from .mlp_layers import MLP, MLPEmbedder
 
 try:
     from flash_attn import flash_attn_func
@@ -143,7 +145,6 @@ class ActionModule(nn.Module):
         self.rope_theta = rope_theta
         if self.enable_keyboard:
             self.keyboard_embed = MLPEmbedder(in_dim=keyboard_dim_in, hidden_dim=hidden_size, **factory_kwargs)
-        mouse_dim_out = img_hidden_size // (patch_size[0]*patch_size[1]*patch_size[2])
         self.mouse_qk_dim_list = mouse_qk_dim_list
         qk_norm_layer = get_norm_layer(qk_norm_type)
         self.heads_num = heads_num

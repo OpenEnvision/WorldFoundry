@@ -1,175 +1,35 @@
 ---
 title: PhyGround
-description: "PhyGround in WorldFoundry: data layout, score import, and physical-reasoning metrics."
+description: "Criteria-grounded TI2V: 250 prompts over 13 laws, judged 1–5 by PhyJudge or humans. WorldFoundry imports scores.json; it does not run the judge."
 ---
 
-## What It Measures
+PhyGround (Northeastern University) is **criteria grounding**, not filmed continuation and not PhyGenEval. Each of **250** text+image-to-video prompts names an expected physical outcome and **2–4** applicable laws from a **13-law** taxonomy (solid-body, fluids, optics). A judge (PhyJudge-9B or humans) rates the generated video **1–5** on semantic adherence, physical temporal validity, persistence, and each applicable law. That is closer to a rubric than to [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq) mask IoU.
 
-PhyGround evaluates physical plausibility for text-plus-image-to-video generation. Each prompt has a text description and a first-frame conditioning image. Videos are judged on three general dimensions and prompt-specific physical-law criteria across 13 laws:
+[PhyGenBench](/docs/evaluation/benchmark-hub/phygenbench) is the T2V *generation* commonsense suite (160 prompts / 27 laws / PhyGenEval). PhyGround is TI2V *law-criteria* scoring on 250 prompts / 13 laws.
 
-- General: persistence, physical temporal validity, and semantic adherence.
-- Solid-body mechanics: gravity, inertia, momentum, impenetrability, collision, and material behavior.
-- Fluid dynamics: buoyancy, displacement, flow dynamics, boundary interaction, and fluid continuity.
-- Optics: reflection and shadow behavior.
+Paper: [PhyGround](https://arxiv.org/abs/2605.10806). Project: [phyground.github.io](https://phyground.github.io/). Code: [NU-World-Model-Embodied-AI/PhyGround](https://github.com/NU-World-Model-Embodied-AI/PhyGround). Data: [NU-World-Model-Embodied-AI/phyground](https://huggingface.co/datasets/NU-World-Model-Embodied-AI/phyground).
 
-The official benchmark uses a 1-5 ordinal judge scale and includes 250 prompts. WorldFoundry imports PhyGround `scores.json` outputs and normalizes them into the local scorecard format. The runner does not launch benchmark-local shell scripts; judge execution is expected to happen through the WorldFoundry/base-model path or to be supplied as an existing result artifact.
+WorldFoundry **imports** `scores.json` from PhyJudge/vLLM or a cloud judge. It does **not** execute PhyJudge-9B over candidate videos.
 
+<BenchmarkPageSections id="phyground" locale="en" />
 
-## Official References
+## How to run
 
-| Resource | Link |
-| --- | --- |
-| Project page | [phyground.github.io](https://phyground.github.io/) |
-| Paper | [arXiv:2605.10806](https://arxiv.org/abs/2605.10806) |
-| GitHub | [github.com/NU-World-Model-Embodied-AI/PhyGround](https://github.com/NU-World-Model-Embodied-AI/PhyGround) |
-| HF dataset | [NU-World-Model-Embodied-AI/phyground](https://huggingface.co/datasets/NU-World-Model-Embodied-AI/phyground) |
-| PhyJudge model | [NU-World-Model-Embodied-AI/phyjudge-9B](https://huggingface.co/NU-World-Model-Embodied-AI/phyjudge-9B) |
-| In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py` |
-
-## Data And Artifacts
-
-A standard local data root looks like this:
-
-```text
-<phyground_data_root>/
-  prompts/phyground.json
-  first_images/
-  videos/<model_id>/
-    <video_id>.mp4
-  annotations/
-```
-
-The in-tree prompt resolver also accepts `data/prompts/phyground.json` and `data/first_images/`, matching the official project layout.
-
-WorldFoundry resolves prompts from:
-
-- `--prompt-manifest <path>`
-- `WORLDFOUNDRY_PHYGROUND_PROMPT_MANIFEST`
-- bundled benchmark assets
-- `--benchmark-data-root <root>`
-- `WORLDFOUNDRY_PHYGROUND_DATA_ROOT` or `WORLDFOUNDRY_BENCHMARK_DATA_ROOT`
-- `--phyground-root <root>` or `WORLDFOUNDRY_PHYGROUND_ROOT`
-
-Generate one video for each prompt and name it by the prompt `video` field. If the prompt id is `ball_fall_0001`, the expected output is:
-
-```text
-<generated_videos>/ball_fall_0001.mp4
-```
-
-Supported suffixes are `.mp4`, `.mov`, `.mkv`, `.webm`, and `.avi`. Coverage is based on filename stems.
-
-## Dependencies And Scores
-
-The HF dataset is `NU-World-Model-Embodied-AI/phyground`; it provides `prompts/phyground.json` and `first_images/`. The released judge model is `NU-World-Model-Embodied-AI/phyjudge-9B`, typically served through the WorldFoundry/base-model infrastructure or another compatible judge path before importing the resulting `scores.json`.
-
-For the WorldFoundry runner, full scoring input is one of:
-
-- `--official-results-path /path/to/scores.json`
-- `WORLDFOUNDRY_PHYGROUND_RESULTS_PATH=/path/to/scores.json`
-- `<generated_videos>/scores.json`
-- `<generated_videos>/phyground_scores.json`
-
-## Supported Commands
-
-Set candidate videos and, when importing by environment variable, the scores file:
+Stage the data root (`prompts/`, `first_images/`, `annotations/`, `videos/<model_id>/`) and import judge outputs:
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/phyground/videos/my_model
-export WORLDFOUNDRY_PHYGROUND_RESULTS_PATH=/path/to/scores.json
-```
+hf download NU-World-Model-Embodied-AI/phyground --repo-type dataset --local-dir <phyground_data_root>
 
-Import existing PhyGround scores through the public CLI:
-
-```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id phyground \
   --mode official-validation \
-  --benchmark-data-root /path/to/phyground_data_root \
-  --official-results-path /path/to/scores.json \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/phyground.json \
-  --output-dir tmp/phyground/import \
+  --benchmark-data-root <phyground_data_root> \
+  --generated-artifact-dir <phyground_data_root>/videos/<model_id> \
+  --result-model-id <model_id> \
+  --output-dir tmp/phyground/official-validation \
   --json
 ```
 
-Use the direct runner when you need runner-specific arguments such as `--phyground-root`, `--limit`, or `--run-fixture`:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py \
-  --official-results-path /path/to/scores.json \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --benchmark-data-root /path/to/phyground_data_root \
-  --prompt-manifest /path/to/phyground.json \
-  --output-dir tmp/phyground/import \
-  --json
-```
-
-If `scores.json` is already colocated with generated videos or supplied through `WORLDFOUNDRY_PHYGROUND_RESULTS_PATH`, the direct `--run-official` path copies and normalizes it:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/phyground/run_phyground_official_runner.py \
-  --run-official \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --benchmark-data-root /path/to/phyground_data_root \
-  --output-dir tmp/phyground/run \
-  --json
-```
-
-## Import Paths
-
-- Runner: `worldfoundry.evaluation.tasks.execution.runners.phyground.run_phyground_official_runner`
-- Metrics: `worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_metrics`
-- Prompt layout: `worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_prompts`
-- Judge artifact adapter: `worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_runtime`
-- Official score aggregation: `worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_official_scoring`
-
-## Result File Shape
-
-The preferred input is the official-style `scores.json` with `results` rows:
-
-```json
-{
-  "num_videos": 250,
-  "general_dimensions": ["SA", "PTV", "persistence"],
-  "results": [
-    {
-      "video": "ball_fall_0001",
-      "SA": 4,
-      "PTV": 5,
-      "persistence": 5,
-      "physical": {
-        "laws": {
-          "gravity": { "score": 4, "status": "scored" }
-        }
-      }
-    }
-  ]
-}
-```
-
-Summary CSV rows with `metric_id` and `score` are also accepted. Scores above `1.0` in summary rows are treated as percentages and divided by `100`.
-
-Outputs under `--output-dir` include:
-
-- `scorecard.json`: run status, coverage, metric table, and result paths.
-- `scores.json`: copied into the output directory when using `--run-official`.
-- `raw_metric_table.jsonl`: one row per declared metric.
-- `per_sample_scores.jsonl`: selected per-video judge fields.
-
-## Metrics
-
-Primary metric: `phyground_overall`. Higher is better for every metric.
-
-| Metric | Meaning |
-| --- | --- |
-| `semantic_adherence` | Normalized SA score: whether the generated video matches the text prompt. |
-| `physical_temporal_validity` | Normalized PTV score: whether physical events happen in a plausible temporal order. |
-| `persistence` | Normalized object persistence score: identity, shape, and existence stay stable over time. |
-| `solid_body_score` | Aggregate over applicable solid-body laws. |
-| `fluid_dynamics_score` | Aggregate over applicable fluid-dynamics laws. |
-| `optics_score` | Aggregate over applicable reflection and shadow laws. |
-| `phyground_overall` | Mean over available general and physics-domain scores. |
+Or pass `--official-results-path` at the `scores.json` / `annotations/` file. `--prompt-manifest` optionally checks prompt coverage. Outputs include `scorecard.json` (primary `phyground_overall`).
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

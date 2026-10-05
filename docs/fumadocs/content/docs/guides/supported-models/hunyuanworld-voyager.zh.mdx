@@ -1,0 +1,18 @@
+---
+title: "HunyuanWorld-Voyager"
+description: "腾讯的相机路径 RGB-D 世界生成模型。公开 binding 已验证官方 case1 的 8 步配置。"
+modelId: "hunyuanworld-voyager"
+pageSource: authored
+---
+
+HunyuanWorld-Voyager 旨在从输入图像出发，沿指定相机路径生成 RGB-D 视频。参见[官方源码](https://github.com/Tencent-Hunyuan/HunyuanWorld-Voyager)和[项目页](https://3d-models.hunyuan.tencent.com/world/)。
+
+<ModelPaperFigures modelId="hunyuanworld-voyager" locale="zh" />
+
+## WorldFoundry 状态
+
+**公开 binding 已验证官方 case1 的 8 步配置。** `WorldFoundryPipelineRunner` 现通过桥接器调用官方 Voyager 源码。独立官方 CLI 与公开 binding 均使用官方 case1 权重及 49 帧条件生成可完整解码的 RGB-D H.264 视频。两份产物均为 768 × 1024、24 fps、45 帧；已目检首、中、末帧。该结果仅覆盖这组配置，不代表官方默认 50 步或任意相机路径也已验证。
+
+运行时需另行准备固定在 `6218ccd36df77d0254dcf24ad1fb77312f75b04a` 的外部官方源码、官方权重、满足上游依赖的专用 Python 环境，以及预渲染的 49 帧条件目录；设置 `WORLDFOUNDRY_VOYAGER_SOURCE_ROOT` 和 `WORLDFOUNDRY_VOYAGER_PYTHON`。WorldFoundry 不再分发官方源码和权重。腾讯社区许可证排除欧盟、英国、韩国境内使用，再分发上游材料时要求附带 `LICENSE` 和 `NOTICE`。
+
+<ModelRelatedRecipes modelId="hunyuanworld-voyager" locale="zh" />

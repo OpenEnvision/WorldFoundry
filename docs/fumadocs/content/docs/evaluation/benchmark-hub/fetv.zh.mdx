@@ -1,181 +1,40 @@
 ---
 title: FETV
-description: 细粒度 text-to-video 评测，包含仓内 FETV-EVAL runtime、prompt assets 和可运行评分命令。
+description: "NeurIPS 2023 细粒度 T2V 评测：619 条 prompt，覆盖内容、属性与复杂度。WorldFoundry 内置 CLIPScore 与导入器，不编造榜单。"
 ---
 
-## 简介
+FETV（北大与华为诺亚）是**细粒度**开放域文生视频评测。**619 条 prompt** 落在三个正交轴上：**主要内容**、**属性控制**（颜色、数量、风格）、**prompt 复杂度**（简单 vs 组合）。打分混合人工评分（静态质量、时序质量、整体 / 细粒度对齐）与自动指标（CLIPScore、BLIPScore、FID、FVD）。只有声明的分量齐备时才写出 `fetv_average`。
 
-FETV 是 NeurIPS 2023 的 fine-grained open-domain text-to-video benchmark。它按 prompt content、controllable attributes、prompt complexity 和 temporal categories 评估生成模型。官方评测同时包含人类质量/对齐评分，以及 CLIPScore、BLIPScore、FID、FVD 等自动指标。
+论文：[FETV（NeurIPS 2023 D&B）](https://proceedings.neurips.cc/paper_files/paper/2023/hash/c481049f7410f38e788f67c171c64ad5-Abstract-Datasets_and_Benchmarks.html)。Prompt：[llyx97/FETV](https://github.com/llyx97/FETV)。打分器：[llyx97/FETV-EVAL](https://github.com/llyx97/FETV-EVAL)。数据集：[`lyx97/FETV`](https://huggingface.co/datasets/lyx97/FETV)（CC-BY-4.0）。
 
-WorldFoundry 已经把可运行的 FETV-EVAL 代码集成在仓内。official runtime adapter 是 `worldfoundry/evaluation/tasks/execution/runners/fetv/fetv_official_runtime.py`，runner 是 `worldfoundry/evaluation/tasks/execution/runners/fetv/run_fetv_official_runner.py`，可复用的 BLIP / StyleGAN-V 代码在 `worldfoundry/base_models`。
+WorldFoundry **内置 FETV-EVAL**，把生成视频接到官方 prompt 索引（官方 16 帧布局），通过共享基座资源跑 **CLIPScore**，并归一化 FETV-EVAL 结果目录或 CSV。人工评分不能重算。BLIP / FID / FVD 需要对应包与参考帧。
 
-官方参考：
+<BenchmarkPageSections id="fetv" locale="zh" />
 
-- FETV paper: [NeurIPS 2023 proceedings](https://proceedings.neurips.cc/paper_files/paper/2023/hash/c481049f7410f38e788f67c171c64ad5-Abstract-Datasets_and_Benchmarks.html)
-- FETV benchmark data: [lyx97/FETV](https://huggingface.co/datasets/lyx97/FETV)
-- Generated videos and frames: [lyx97/FETV_gen_videos](https://huggingface.co/datasets/lyx97/FETV_gen_videos)
-- Official source references: [llyx97/FETV](https://github.com/llyx97/FETV), [llyx97/FETV-EVAL](https://github.com/llyx97/FETV-EVAL)
+## 如何运行
 
-## 评测协议
-
-WorldFoundry 已经内置官方 prompt assets：
-
-```text
-worldfoundry/data/benchmarks/assets/fetv/fetv_data.json
-worldfoundry/data/benchmarks/assets/fetv/sampled_prompts_for_fid_fvd/prompts_gen.json
-worldfoundry/data/benchmarks/assets/fetv/sampled_prompts_for_fid_fvd/prompts_real.json
-```
-
-核心 FETV prompt file 包含 619 条 prompts。CLIPScore 和 BLIPScore 使用官方 evaluator 时，需要先把生成视频转成 uniform sampled frame folders：
-
-```text
-/path/to/fetv/<model>/16frames_uniform/
-  sent0/
-    frame0.jpg
-    ...
-    frame15.jpg
-  sent1/
-  ...
-  sent618/
-```
-
-FID 和 FVD 需要用 `sampled_prompts_for_fid_fvd` 中的大规模 generated/reference sets，并保持官方 FETV 目录约定。
-
-主指标是 `fetv_average`。
-
-| Metric | 含义 |
-| --- | --- |
-| `static_quality` | 人类 static visual quality 评分。 |
-| `temporal_quality` | 人类 temporal quality 评分。 |
-| `overall_alignment` | 人类 overall text-video alignment。 |
-| `fine_grained_alignment` | 人类 prompt-aspect alignment。 |
-| `clip_score` | 基于采样帧的自动 CLIPScore。 |
-| `blip_score` | 基于采样帧的自动 BLIPScore。 |
-| `fid` | FID distribution distance；越低越好。 |
-| `fvd` | FVD distribution distance；越低越好。 |
-| `fetv_average` | 可用 FETV 归一化指标的均值。 |
-
-## 数据与权重准备
-
-从 WorldFoundry 仓库根目录开始：
-
-```bash
-cd /path/to/WorldFoundry
-export WORLDFOUNDRY_FETV_PROMPT_FILE="$PWD/worldfoundry/data/benchmarks/assets/fetv/fetv_data.json"
-export WORLDFOUNDRY_FETV_MODEL_NAME=my_t2v_model
-```
-
-如果需要复现官方已发布模型结果，可以下载官方 released generated videos 和 frame assets：
-
-```bash
-hf download lyx97/FETV_gen_videos \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/FETV_gen_videos
-```
-
-对于新模型，先为 `fetv_data.json` 里的 619 条 prompts 生成视频，然后把每个视频转换成 16 帧 uniform sampled frames。prompt file 已经在仓内；评分代码不需要外部 source tree。
-
-设置 CLIP/BLIP frame directory：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/fetv/my_t2v_model/16frames_uniform
-```
-
-完整自动指标还需要准备：
-
-```bash
-export WORLDFOUNDRY_FETV_FID_GENERATED_VIDEO_DIR=/path/to/fetv/my_t2v_model_fid
-export WORLDFOUNDRY_FETV_FID_REAL_VIDEO_DIR=/path/to/fetv/real_videos_fid
-export WORLDFOUNDRY_FETV_FVD_GENERATED_VIDEO_DIR=/path/to/fetv/my_t2v_model_fvd
-export WORLDFOUNDRY_FETV_FVD_REAL_VIDEO_DIR=/path/to/fetv/real_videos_fvd
-```
-
-## 运行自动评分
-
-只运行 CLIPScore：
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/fetv/run_fetv_official_runner.py \
-  --run-official \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --fetv-model-name "${WORLDFOUNDRY_FETV_MODEL_NAME}" \
-  --fetv-prompt-file "${WORLDFOUNDRY_FETV_PROMPT_FILE}" \
-  --fetv-metrics clip_score \
-  --output-dir tmp/fetv/clip-score \
-  --json
-```
-
-运行 CLIPScore 和 BLIPScore：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/fetv/run_fetv_official_runner.py \
-  --run-official \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --fetv-model-name "${WORLDFOUNDRY_FETV_MODEL_NAME}" \
-  --fetv-prompt-file "${WORLDFOUNDRY_FETV_PROMPT_FILE}" \
-  --fetv-metrics clip_score blip_score \
-  --output-dir tmp/fetv/clip-blip \
-  --json
-```
-
-准备好 FID/FVD 目录后，运行全部已集成自动指标：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/fetv/run_fetv_official_runner.py \
-  --run-official \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --fetv-model-name "${WORLDFOUNDRY_FETV_MODEL_NAME}" \
-  --fetv-prompt-file "${WORLDFOUNDRY_FETV_PROMPT_FILE}" \
-  --fetv-metrics clip_score blip_score fid fvd \
-  --fetv-fid-generated-video-dir "${WORLDFOUNDRY_FETV_FID_GENERATED_VIDEO_DIR}" \
-  --fetv-fid-real-video-dir "${WORLDFOUNDRY_FETV_FID_REAL_VIDEO_DIR}" \
-  --fetv-fvd-generated-video-dir "${WORLDFOUNDRY_FETV_FVD_GENERATED_VIDEO_DIR}" \
-  --fetv-fvd-real-video-dir "${WORLDFOUNDRY_FETV_FVD_REAL_VIDEO_DIR}" \
-  --output-dir tmp/fetv/official-run \
-  --json
-```
-
-## 导入已有结果
-
-如果你已经有 FETV-EVAL output directory 或 CSV/JSON result export，可以直接导入：
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/fetv/run_fetv_official_runner.py \
-  --official-results-path /path/to/FETV-EVAL/results-or-fetv_eval_results.csv \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --fetv-model-name "${WORLDFOUNDRY_FETV_MODEL_NAME}" \
-  --output-dir tmp/fetv/imported \
-  --json
-```
-
-也可以通过统一 benchmark 入口导入同一个结果：
+导入 FETV-EVAL 目录或官方 CSV：
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id fetv \
   --mode official-validation \
-  --official-results-path /path/to/FETV-EVAL/results-or-fetv_eval_results.csv \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --official-results-path <official_results.csv-or-FETV-EVAL-dir> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/fetv/official-validation \
   --json
 ```
 
-## 输出文件
+用 `--fetv-metrics` 选择自动指标族（`clip_score`、`blip_score`、`fid`、`fvd`）。FID / FVD 需要 `--fetv-fid-real-video-dir` / `--fetv-fvd-real-video-dir`。默认导入路径：`WORLDFOUNDRY_FETV_RESULTS_PATH`。可选：`WORLDFOUNDRY_FETV_RUNTIME_ROOT`、`WORLDFOUNDRY_FETV_ARTIFACT_SCORE_DIR`。共享栈：`video_quality_motion_stack`、`fetv_blip_retrieval_source`、`fetv_stylegan_v_fvd_source`。
 
-运行会写出：
+仓内指针：
 
-- `scorecard.json`: WorldFoundry 统一 scorecard，包含可用 FETV metrics。
-- `raw_metric_table.jsonl`: 归一化后的 metric rows。
-- `fetv_eval_results_<model>.csv`: 仓内 runtime 产出的 metric summary。
-- `auto_eval_results/`: 使用 `--run-official` 时的 CLIP/BLIP/FID/FVD 原始输出。
-- `fetv_official_runtime_summary.json`: runtime 命令和结果路径。
+```text
+worldfoundry/data/benchmarks/tasks/external/fetv.yaml
+worldfoundry/evaluation/tasks/execution/runners/fetv/runtime/fetv_eval
+worldfoundry/data/benchmarks/assets/fetv/fetv_data.json
+```
 
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)
+产物包括 `scorecard.json`（齐备时主键 `fetv_average`）、`benchmark_contract.json`、`raw_metric_table.jsonl`。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

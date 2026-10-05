@@ -10,6 +10,9 @@ checkpoint: ZichengD/LiveWorld
 runtime_profile: runtime-profile:liveworld
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: liveworld
+official_sources:
+  project_page: https://zichengduan.github.io/LiveWorld
+  paper: https://arxiv.org/abs/2404.05072
 integration:
   status: integrated
   notes: [Official source is vendored at revision a31145ffffb61be92f93c1e0d2ac5d826f29a256.]
@@ -17,3 +20,25 @@ runner_parity:
   status: pending
   notes: [Dedicated geometry-NPZ and monitor-centric inference route is wired.]
 catalog_category: world_models
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'LiveWorld is a camera-controlled video-to-video world model with a monitor-centric workflow: it consumes a video plus a geometry NPZ and re-renders the scene under new camera behavior. In this catalog the official source is vendored at a pinned revision and the dedicated geometry-NPZ route is wired; prediction waits on four missing checkpoint snapshots.'
+  overview_zh: LiveWorld 是相机可控的视频到视频世界模型，采用以监控画面为中心的工作流：输入视频加几何 NPZ，在新的相机行为下重新渲染场景。本 catalog 中官方源码以固定 revision 内置，专用几何 NPZ 路径已接通；预测待四个缺失的 checkpoint snapshot 就位。
+  architecture: The recorded stack pins Wan2.1-T2V-14B and SAM3, both structurally validated locally (apache-2.0). Architecture internals beyond the recorded structure are not stored in this repository.
+  architecture_zh: 记录的栈固定 Wan2.1-T2V-14B 与 SAM3，两者均已本地结构验证（apache-2.0）。除已记录结构外的架构内部细节仓库未存。
+  usage_notes: Runtime resolution is local-only; prediction remains gated until the four missing checkpoint snapshots are staged. Inputs are prompt, video, and geometry_npz.
+  usage_notes_zh: 运行时解析仅限本地；在四个缺失的 checkpoint snapshot 就位前预测保持受限。输入为提示词、视频与 geometry_npz。
+  limitations:
+  - Prediction is gated on four missing checkpoint snapshots.
+  - Needs a geometry NPZ alongside the video input.
+  - The publishing institution is not recorded in this repository.
+  limitations_zh:
+  - 预测受四个缺失 checkpoint snapshot 限制。
+  - 除视频输入外还需要几何 NPZ。
+  - 发表机构在本仓库中未记录。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-behavior adherence of re-rendered video.
+    reason_zh: 重渲染视频的相机行为贴合度。

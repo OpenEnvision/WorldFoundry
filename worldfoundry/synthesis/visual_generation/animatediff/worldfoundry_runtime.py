@@ -16,9 +16,9 @@ from typing import Any, Sequence
 
 import numpy as np
 
+from worldfoundry.core.io import file_sha256
 from worldfoundry.evaluation.utils import REPO_ROOT, worldfoundry_data_path
 from worldfoundry.runtime.env import resolve_hfd_root
-
 
 # Default paths for AnimateDiff repository, integrated assets, configurations, and models.
 DEFAULT_ANIMATEDIFF_REPO_ROOT = Path(__file__).resolve().parent
@@ -133,7 +133,7 @@ class AnimateDiffRuntime:
         Returns:
             A hexadecimal string representing the SHA256 hash.
         """
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        return file_sha256(path)
 
     @staticmethod
     def frames_sha256(frames: Sequence[Any] | np.ndarray) -> str:
@@ -395,7 +395,7 @@ class AnimateDiffRuntime:
             video: Not supported in this integration; will raise ValueError if provided.
             interactions: A sequence of interaction strings (currently unused).
             output_path: Optional path to save the generated video. If None,
-                         defaults to "animatediff.gif" in the current working directory.
+                         defaults to "animatediff.mp4" in the current working directory.
             fps: Frames per second for the output video. If None, defaults to 8.
             **kwargs: Additional parameters for the AnimateDiff pipeline, including:
                 - `official_config_path`, `config_path`, `config`: (Deprecated) for legacy config execution.
@@ -452,14 +452,16 @@ class AnimateDiffRuntime:
         ).videos
 
         # Determine and resolve the output path, ensuring parent directories exist
-        target = Path(output_path) if output_path is not None else Path.cwd() / "animatediff.gif"
+        target = Path(output_path) if output_path is not None else Path.cwd() / "animatediff.mp4"
         target = target.expanduser().resolve()
         target.parent.mkdir(parents=True, exist_ok=True)
-        # Ensure the output file has a valid video suffix, defaulting to .gif
-        if target.suffix.lower() not in {".gif", ".mp4"}:
-            target = target.with_suffix(".gif")
+        # The evaluation runner historically proposed a GIF name for this
+        # profile.  Normalize every direct inference artifact to MP4 so it is
+        # a regular, frame-accurate video demo.
+        if target.suffix.lower() != ".mp4":
+            target = target.with_suffix(".mp4")
 
-        from worldfoundry.core.io.video import save_videos_grid
+        from worldfoundry.core.media.codecs.video import save_videos_grid
 
         # Save the generated video tensor to a file
         save_videos_grid(sample, str(target), fps=fps or int(kwargs.get("fps", 8)))
@@ -473,7 +475,7 @@ class AnimateDiffRuntime:
             "artifact_path": str(target),
             "artifact_size": target.stat().st_size,
             "frames_sha256": self.frames_sha256(frames),
-            "video_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "video_sha256": file_sha256(target),
             "profile": self.profile.to_dict(),
             "runtime": "official_repo.AnimateDiff.AnimationPipeline",
             "motion_module_path": self.motion_module_path,

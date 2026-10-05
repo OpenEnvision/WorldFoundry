@@ -6,30 +6,20 @@ from __future__ import annotations
 import argparse
 import math
 import os
-import sys
 from typing import List, Optional
 
 import numpy as np
 import torch
 import imageio
 from PIL import Image, ImageOps
-from worldfoundry.core.io.paths import package_module_root as package_root
-
-_DIFFSYNTH_PARENT = package_root("worldfoundry.base_models.diffusion_model.diffsynth").parent
-if str(_DIFFSYNTH_PARENT) not in sys.path:
-    sys.path.insert(0, str(_DIFFSYNTH_PARENT))
-
-from diffsynth import load_state_dict
-from diffsynth.pipelines.wan_video_semantic import ModelConfig, WanVideoPipeline
 from worldfoundry.core.io import VideoData, save_video
+from worldfoundry.synthesis.visual_generation.sama.native_pipeline import (
+    SamaWanPipeline,
+    load_sama_pipeline,
+)
 
 DEFAULT_MODEL_ROOT = ""
 
-DEFAULT_NEG_PROMPT = (
-    "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，"
-    "最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，"
-    "畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
-)
 VIDEO_EXTENSIONS = (".mp4", ".mov", ".mkv", ".avi", ".webm")
 
 
@@ -69,7 +59,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="cuda:0", help="Device string (default: cuda:0)")
     parser.add_argument("--lora-path", default="", help="LoRA checkpoint path (optional)")
     parser.add_argument("--state-dict", default="", help="Full DiT weight checkpoint path")
-    parser.add_argument("--negative-prompt", default=DEFAULT_NEG_PROMPT, help="Negative prompt")
+    parser.add_argument(
+        "--negative-prompt",
+        default=None,
+        help="Negative prompt override (defaults to '[Video edit]' with --prompt-prefix, otherwise empty)",
+    )
     parser.add_argument("--height", type=int, default=480, help="Target frame height (default: 480)")
     parser.add_argument("--width", type=int, default=832, help="Target frame width (default: 832)")
     parser.add_argument("--max-frames", type=int, default=81, help="Max frames to read from source video (default: 81)")
@@ -99,40 +93,15 @@ def parse_args() -> argparse.Namespace:
 
 # ---------- pipeline ----------
 
-def init_pipeline(device: str, lora_path: str, state_dict: str, model_root: str) -> WanVideoPipeline:
-    dit_weights = [
-        os.path.join(model_root, f"diffusion_pytorch_model-{i:05d}-of-00006.safetensors")
-        for i in range(1, 7)
-    ]
-    pipe = WanVideoPipeline.from_pretrained(
-        torch_dtype=torch.bfloat16,
+def init_pipeline(device: str, lora_path: str, state_dict: str, model_root: str) -> SamaWanPipeline:
+    pipe = load_sama_pipeline(
+        model_root,
+        state_dict_path=state_dict.strip() or None,
+        lora_path=lora_path.strip() or None,
         device=device,
-        source_concat_mode="token",
-        model_configs=[
-            ModelConfig(path=dit_weights),
-            ModelConfig(path=os.path.join(model_root, "models_t5_umt5-xxl-enc-bf16.pth")),
-            ModelConfig(path=os.path.join(model_root, "Wan2.1_VAE.pth")),
-        ],
-        tokenizer_config=ModelConfig(
-            local_model_path="/",
-            model_id=model_root,
-            origin_file_pattern="google/*",
-            skip_download=True,
-        ),
-        redirect_common_files=False,
+        torch_dtype=torch.bfloat16,
     )
-
-    if state_dict and state_dict.strip():
-        dit_sd = load_state_dict(state_dict)
-        missing, unexpected = pipe.dit.load_state_dict(dit_sd, strict=False)
-        print(f"[Info] Loaded state dict: missing={len(missing)}, unexpected={len(unexpected)}", flush=True)
-
     pipe.enable_vram_management()
-
-    if lora_path and lora_path.strip():
-        pipe.load_lora(pipe.dit, lora_path, alpha=1.0)
-        print(f"[Info] LoRA loaded: {lora_path}", flush=True)
-
     return pipe
 
 
@@ -333,10 +302,11 @@ def main() -> None:
     width, height = frames[0].size
 
     prompt = args.prompt
-    negative_prompt = ''
+    negative_prompt = args.negative_prompt
     if args.prompt_prefix:
         prompt = f"[Video edit] {prompt}"
-        negative_prompt = "[Video edit]"
+    if negative_prompt is None:
+        negative_prompt = "[Video edit]" if args.prompt_prefix else ""
     
     print(f"[Run] prompt='{prompt}' src='{args.src_video}' frames={len(frames)} "
           f"size={width}x{height} fps={case_fps} seed={args.seed}", flush=True)

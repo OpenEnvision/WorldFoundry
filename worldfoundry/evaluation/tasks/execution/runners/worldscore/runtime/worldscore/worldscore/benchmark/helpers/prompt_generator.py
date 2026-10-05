@@ -1,3 +1,4 @@
+import ast
 import openai
 from openai import OpenAI
 import json
@@ -71,7 +72,7 @@ class TextPromptGen(object):
                 response = response.choices[0].message.content
                 try:
                     print(response)
-                    output = eval(response)
+                    output = ast.literal_eval(response)
                     _, _ = output['scene_name'], output['entities']
                     if isinstance(output, tuple):
                         output = output[0]

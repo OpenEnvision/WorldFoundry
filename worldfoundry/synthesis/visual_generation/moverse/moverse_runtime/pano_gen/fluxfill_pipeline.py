@@ -22,7 +22,7 @@ from diffusers.utils.torch_utils import randn_tensor
 from diffusers import DiffusionPipeline
 from diffusers.pipelines.flux import FluxPipelineOutput
 
-from worldfoundry.base_models.diffusion_model.video.wan.pipeline_helpers import (
+from worldfoundry.synthesis.visual_generation.shared.wan_diffusers import (
     retrieve_timesteps,
 )
 

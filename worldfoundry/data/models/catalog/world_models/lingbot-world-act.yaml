@@ -9,6 +9,8 @@ source:
   official_repo_url: https://github.com/robbyant/lingbot-world
   license: apache-2.0
 official_sources:
+  project_page: https://technology.robbyant.com/lingbot-world
+  paper: https://arxiv.org/abs/2601.20540
   github:
     url: https://github.com/robbyant/lingbot-world
     revision: a43bec7f8091c83e9b30b16b912f6fc906236fa6
@@ -23,5 +25,29 @@ integration:
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: lingbot-world-act
 runtime_profile: runtime-profile:lingbot-world-act
-runner_parity: {status: pending, notes: [In-tree action payload routing is wired; full GPU artifact parity requires locally staged weights.]}
+runner_parity:
+  status: verified_configuration
+  notes:
+  - The dedicated LingBot environment loaded the Base-Act preview checkpoint with control_type=act. An earlier 49-frame, 40-step room example and a current 17-frame, 8-step cat example both generated checkpoint-backed action-conditioned MP4s.
+  - The public WorldFoundryPipelineRunner binding also generated the cat example at 17 frames and 8 steps. Its 544x720, 16 fps MP4 decoded fully; first, middle, and last frames were visually reviewed with non-black, changing content. Action-only adherence and the official 161-frame recipe remain untested.
 catalog_category: world_models
+docs:
+  publisher: Robbyant (Ant Group)
+  publisher_kind: company
+  publisher_zh: 蚂蚁灵波科技（Robbyant，蚂蚁集团）
+  overview: 'LingBot-World Base Act is the action-conditioned sibling of LingBot-World: instead of camera poses it consumes an action matrix, making it the interactive-control profile of the family. It is independently cataloged and resolves the official Base-Act preview checkpoint — Base-Cam is never substituted.'
+  overview_zh: LingBot-World Base Act 是 LingBot-World 的动作条件同门：它消费动作矩阵而非相机位姿，是该家族的交互控制档案。它独立记录，并解析官方 Base-Act 预览 checkpoint——绝不以 Base-Cam 顶替。
+  architecture: The inference path reuses the in-tree LingBot runtime and central Wan base modules (apache-2.0). Inputs are prompt, image, pose, and action_matrix.
+  architecture_zh: 推理路径复用树内 LingBot 运行时与中央 Wan 基座模块（apache-2.0）。输入为提示词、图像、位姿与 action_matrix。
+  usage_notes: The Base-Act preview checkpoint generated a 49-frame, 40-step room video and a 17-frame, 8-step cat video with a forward WASD action matrix. The public runner was also validated for the latter configuration in the dedicated LingBot environment. These runs do not isolate action adherence or validate the official 161-frame recipe. Keep the dedicated environment because unified-env act2cam output was near-black.
+  usage_notes_zh: Base-Act 预览权重已生成 49 帧、40 步房间视频，以及带前进 WASD 动作矩阵的 17 帧、8 步猫图视频；后者也通过专属 LingBot 环境的公开 runner 验证。这些运行尚未单独测量动作贴合度，也未验证官方 161 帧配方。统一环境的 act2cam 曾产出近黑画面，因此保留专属环境。
+  limitations:
+  - Only the 17-frame, 8-step public-runner configuration was validated; action-only adherence and the official 161-frame recipe remain untested.
+  - Must run in the dedicated LingBot environment (unified-env parity failed).
+  limitations_zh:
+  - 公开 runner 仅验证了 17 帧、8 步配置；仅动作信号的贴合度及官方 161 帧配方尚未验证。
+  - 必须在专属 LingBot 环境运行（统一环境一致性失败）。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Action-conditioned world-rollout quality.
+    reason_zh: 动作条件世界滚动生成质量。

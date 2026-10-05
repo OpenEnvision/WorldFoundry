@@ -1,0 +1,35 @@
+generator:
+  patch_size: [1, 2, 2]
+  in_dim: 48
+  out_dim: 48
+  dim: 3072
+  num_heads: 24
+  num_layers: 30
+  ffn_dim: 14336
+  freq_dim: 256
+  text_dim: 4096
+  qk_norm: true
+  cross_attn_norm: true
+  eps: 1.0e-6
+  rope_max_seq_len: 1024
+  compile_fusion: false
+  local_attn_size: 97
+  sink_size: 9
+action:
+  embed_dim: 256
+  hidden_dim: 512
+  kernel_size: 3
+  non_proj_bias: true
+vae:
+  z_dim: 48
+  spatial_scale: 16
+  temporal_scale: 4
+text_encoder:
+  max_length: 1024
+inference:
+  num_timesteps: 1000
+  timestep_shift: 5.0
+  denoising_steps: [1000, 750, 500, 250]
+  frames_per_block: 4
+  output_fps: 24
+  deterministic_attention: false

@@ -1,6 +1,6 @@
 import torch
 import torchvision.transforms as transforms
-import clip
+from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
 from fld.features.ImageFeatureExtractor import ImageFeatureExtractor
 
 

@@ -13,9 +13,19 @@ DEFAULT_CLIP_MODEL = "openai:ViT-B-32"
 
 
 @lru_cache(maxsize=4)
-def _open_clip_bundle(model: str, device: str):
+def open_clip_bundle(model: str = DEFAULT_CLIP_MODEL, device: str | None = None):
+    """Cached ``(model, preprocess, tokenizer)`` open_clip bundle.
+
+    ``model`` uses the ``"<pretrained>:<arch>"`` convention (e.g.
+    ``"openai:ViT-B-32"``). Benchmark runtimes delegate here instead of keeping
+    their own module-level CLIP singletons.
+    """
     import open_clip
 
+    if device is None:
+        import torch
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
     pretrained, arch = model.split(":", 1)
     clip_model, _, preprocess = open_clip.create_model_and_transforms(
         arch,
@@ -36,7 +46,7 @@ def encode_clip_texts(
 ) -> np.ndarray:
     """Return L2-normalized CLIP text embeddings."""
     device_t = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    clip_model, _, tokenizer = _open_clip_bundle(model, device_t)
+    clip_model, _, tokenizer = open_clip_bundle(model, device_t)
     tokens = tokenizer(texts).to(device_t)
     feats = clip_model.encode_text(tokens)
     feats = F.normalize(feats, dim=-1)
@@ -52,7 +62,7 @@ def encode_clip_images(
 ) -> np.ndarray:
     """Return L2-normalized CLIP image embeddings."""
     device_t = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    clip_model, preprocess, _ = _open_clip_bundle(model, device_t)
+    clip_model, preprocess, _ = open_clip_bundle(model, device_t)
     batch = torch.stack([preprocess(load_rgb_image(image)) for image in images], dim=0).to(device_t)
     feats = clip_model.encode_image(batch)
     feats = F.normalize(feats, dim=-1)
@@ -88,4 +98,5 @@ __all__ = [
     "cosine_similarity_vectors",
     "encode_clip_images",
     "encode_clip_texts",
+    "open_clip_bundle",
 ]

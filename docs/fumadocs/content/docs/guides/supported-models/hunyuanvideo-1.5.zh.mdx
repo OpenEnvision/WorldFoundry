@@ -1,0 +1,28 @@
+---
+title: "HunyuanVideo 1.5"
+description: "腾讯混元视频 1.5 的文生/图生视频，走共享原生基础设施；图生视频需要 gated 的 FLUX.1-Redux-dev。"
+modelId: "hunyuanvideo-1.5"
+pageSource: authored
+---
+
+HunyuanVideo 1.5 是腾讯开源视频系列的较新版本，同样以独立的 T2V 与 I2V 配方共享一套原生基础设施。与初代的显著差异：I2V 条件器将 FLUX.1-Redux-dev 声明为独立的 gated 视觉 checkpoint，而不是推断同级路径。
+
+<ModelPaperFigures modelId="hunyuanvideo-1.5" locale="zh" />
+
+<ModelCommandBuilder modelId="hunyuanvideo-1.5" locale="zh" />
+
+## 用来做什么
+
+从 `hunyuanvideo-1.5-t2v` 开始。启动 `worldfoundry-eval run hunyuanvideo-1.5-t2v`。只有接受 gated FLUX.1-Redux-dev 条款后才跑 `hunyuanvideo-1.5-i2v`。
+
+列出的文生视频评测：[VBench](/zh/docs/evaluation/benchmark-hub/vbench)。
+
+## 运行时契约
+
+必填 `prompt`；`actions` 是 seed。默认产物 `hunyuanvideo-1.5-t2v.mp4`。variant：`hunyuanvideo-1.5-t2v`、`hunyuanvideo-1.5-i2v`。图生视频 conditioner 把 `black-forest-labs/FLUX.1-Redux-dev` 声明为独立 gated 视觉 checkpoint。
+
+## 在 WorldFoundry 中运行
+
+统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。就位 `tencent/HunyuanVideo-1.5`。主权重 license 元数据为 `other`。状态：原生带 checkpoint 的 CUDA 为 **Runner 一致性待确认**。跑 I2V 前先在 Hugging Face 接受 FLUX.1-Redux-dev 条款。
+
+<ModelRelatedRecipes modelId="hunyuanvideo-1.5" locale="zh" />

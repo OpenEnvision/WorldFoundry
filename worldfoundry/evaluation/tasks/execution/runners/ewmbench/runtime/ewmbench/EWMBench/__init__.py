@@ -3,13 +3,7 @@ import json
 import os
 from collections import defaultdict
 
-from .basic_metrics import compute_basic_metrics
-from .caption import caption_reference
-from .distributed import print0
-from .diversity import compute_diversity
-from .scene_consistency import compute_scene_consistency
-from .semantics import compute_semantics
-from .trajectory_consistency import compute_trajectory_consistency
+from worldfoundry.core.distributed.collectives.evaluation import print0
 from .utils import init_submodules, save_json
 
 
@@ -247,9 +241,14 @@ class EmbodiedWorldModelBenchmark(object):
                 print0(f"Evaluating: {dimension}")
 
                 if dimension == "trajectory_consistency":
+                    from .trajectory_consistency import compute_trajectory_consistency
+
                     results = compute_trajectory_consistency(gt_path=gt_path, data_base=data_base)
 
                 elif dimension == "semantics":
+                    from .caption import caption_reference
+                    from .semantics import compute_semantics
+
                     submodules_list = submodules_dict[dimension]
                     caption_model = submodules_list["caption_model"]
                     semantics_model = submodules_list["clip_model"]
@@ -286,22 +285,32 @@ class EmbodiedWorldModelBenchmark(object):
                     results = compute_semantics(caption_json, gt_caption_json, semantics_model)
 
                 elif dimension == "scene_consistency":
+                    from .scene_consistency import compute_scene_consistency
+
                     submodules_list = submodules_dict[dimension]
                     results = compute_scene_consistency(cur_full_info_path, submodules_list, **kwargs)
 
                 elif dimension == "diversity":
+                    from .diversity import compute_diversity
+
                     submodules_list = submodules_dict[dimension]
                     results = compute_diversity(cur_full_info_path, submodules_list, **kwargs)
 
                 elif dimension == "psnr_ssim":
+                    from .basic_metrics import compute_basic_metrics
+
                     results = compute_basic_metrics(
                         gt_path=gt_path, pd_path=data_base, metric_names=["psnr", "ssim"]
                     )
 
                 elif dimension == "psnr":
+                    from .basic_metrics import compute_basic_metrics
+
                     results = compute_basic_metrics(gt_path=gt_path, pd_path=data_base, metric_names=["psnr"])
 
                 elif dimension == "ssim":
+                    from .basic_metrics import compute_basic_metrics
+
                     results = compute_basic_metrics(gt_path=gt_path, pd_path=data_base, metric_names=["ssim"])
 
                 else:

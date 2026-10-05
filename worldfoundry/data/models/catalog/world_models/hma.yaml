@@ -13,6 +13,7 @@ source:
   official_repo_url: https://github.com/liruiw/HMA
   license: apache-2.0
 official_sources:
+  project_page: https://liruiw.github.io/hma
   paper: https://arxiv.org/abs/2502.04296
   github:
     url: https://github.com/liruiw/HMA
@@ -31,24 +32,25 @@ variants:
 - id: hma-magvit-362m
   task: robot-action-video
   provider: official_repo
-  checkpoint: liruiw/hma-base-cont
+  checkpoint: liruiw/hma-base-disc
   integration:
-    status: planned
+    status: integrated
 - id: hma-mar-1b
   task: robot-action-video
   provider: official_repo
-  checkpoint: liruiw/hma-base-disc
+  checkpoint: liruiw/hma-base-cont
   integration:
-    status: planned
+    status: integrated
 integration:
   status: runtime_ported
   notes:
-  - HMA official generator route is registered; checkpoints/robot assets are runtime-gated.
+  - HMA official continuous MAR and discrete MAGVIT interactive inference are bound through a user-staged source checkout and local checkpoint directories.
 runner_parity:
-  status: implemented_checkpoint_pending
+  status: implemented
   notes:
-  - resolve_model_zoo_config and pipeline import are expected to pass; real generation
-    emits a runtime plan until required checkpoints/assets are staged.
+  - The compatibility wrapper runs STMAR with the SVD temporal VAE for continuous checkpoints, or STMaskGIT with the official MAGVIT2 tokenizer for discrete checkpoints.
+  - Real GPU validation evidence is tracked per run rather than embedded as a machine-local catalog path.
+  - The default single-image, constant-action LangTable prompt is smoke-only. A paired trajectory_path supplies true history and raw_language_table_delta_yx action increments; checkpoint normalization remains inside the official backbone.
 runtime_profile: runtime-profile:hma
 output_artifacts:
 - generated_video
@@ -57,3 +59,23 @@ catalog_scope: World-model catalog entries. Integrated entries expose in-tree Wo
   runtimes; blocked entries retain upstream provenance without runnable backends.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: hma
+docs:
+  publisher: Massachusetts Institute of Technology (MIT)
+  publisher_kind: university
+  publisher_zh: 麻省理工学院（MIT）
+  overview: HMA (Heterogeneous Masked Autoregression) models robot action-video dynamics across heterogeneous embodiments and datasets, fast enough for real-time interaction. Recorded variants cover a MAGVIT-style 362M discrete model and a 1B MAR continuous model. In this catalog the official generator route is registered; checkpoints and robot assets stay runtime-gated.
+  overview_zh: HMA（异构掩码自回归）跨异构机器人形态与数据集建模「动作-视频」动力学，速度足以支撑实时交互。记录的 variant 覆盖 MAGVIT 风格的 362M 离散模型与 1B MAR 连续模型。本 catalog 中官方生成器路径已注册；checkpoint 与机器人资产保持运行时限制。
+  architecture: Per the paper (arXiv 2502.04296), masked autoregression over video tokens handles heterogeneous action spaces through modality-specific heads; discrete (hma-base-disc) and continuous (hma-base-cont) checkpoints are recorded under liruiw (apache-2.0). Source is pinned at a recorded commit.
+  architecture_zh: 按论文（arXiv 2502.04296），对视频 token 的掩码自回归通过按模态划分的输出头处理异构动作空间；记录了 liruiw 下的离散（hma-base-disc）与连续（hma-base-cont）checkpoint（apache-2.0）。源码固定在记录的 commit。
+  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
+  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。
+  limitations:
+  - Real generation is checkpoint/robot-asset gated.
+  - 'Research-scale resolution: outputs target dynamics fidelity, not cinematic quality.'
+  limitations_zh:
+  - 真实生成受 checkpoint/机器人资产限制。
+  - 研究规模分辨率：输出以动力学保真为先，而非影视级画质。
+  recommended_benchmarks:
+  - id: ewmbench
+    reason: Embodied world-model video prediction quality.
+    reason_zh: 具身世界模型视频预测质量。

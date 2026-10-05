@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import json
-import os
 import re
-import shutil
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.core.io.filesystem.file_utils import materialize_file
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
-from worldfoundry.evaluation.utils import write_jsonl, worldfoundry_hfd_dataset_root
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
+    first_existing_dir,
+    resolve_env_path,
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
 )
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import VIDEO_SUFFIXES
+from worldfoundry.evaluation.utils import worldfoundry_hfd_dataset_root, write_jsonl
 
 BENCHMARK_ID = "aigcbench"
 IN_TREE_AIGCBENCH_ROOT = Path(__file__).resolve().parent / "runtime" / "aigcbench"
@@ -27,25 +29,17 @@ WEBVID_PROMPT_COUNT = 1000
 LAION_PROMPT_COUNT = 925
 DEFAULT_OURS_PROMPT_COUNT = 2002
 CANONICAL_PROMPT_COUNT = WEBVID_PROMPT_COUNT + LAION_PROMPT_COUNT + DEFAULT_OURS_PROMPT_COUNT
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp"})
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
-
 
 def resolve_aigcbench_root(explicit: Path | None = None) -> Path | None:
-    for candidate in (
+    return first_existing_dir(
         explicit,
-        _env_path("WORLDFOUNDRY_AIGCBENCH_ROOT"),
+        resolve_env_path("WORLDFOUNDRY_AIGCBENCH_ROOT"),
         IN_TREE_AIGCBENCH_ROOT,
         bundled_benchmark_assets_root(BENCHMARK_ID),
-    ):
-        if candidate is not None and candidate.is_dir():
-            return candidate.expanduser().resolve()
-    return None
+    )
 
 
 def resolve_dataset_root(explicit: Path | None = None) -> Path | None:
@@ -53,8 +47,8 @@ def resolve_dataset_root(explicit: Path | None = None) -> Path | None:
         path = explicit.expanduser().resolve()
         return path if path.is_dir() else None
     for candidate in (
-        _env_path("WORLDFOUNDRY_AIGCBENCH_DATASET_ROOT"),
-        _env_path("WORLDFOUNDRY_AIGCBENCH_PROMPT_SUITE_DIR"),
+        resolve_env_path("WORLDFOUNDRY_AIGCBENCH_DATASET_ROOT"),
+        resolve_env_path("WORLDFOUNDRY_AIGCBENCH_PROMPT_SUITE_DIR"),
         bundled_benchmark_assets_root(BENCHMARK_ID),
     ):
         if candidate is not None and candidate.is_dir():
@@ -77,7 +71,7 @@ def _resolve_dataset_file(
     if explicit is not None:
         path = explicit.expanduser().resolve()
         return path if path.is_file() else None
-    env_path = _env_path(env_name)
+    env_path = resolve_env_path(env_name)
     if env_path is not None:
         return env_path if env_path.is_file() else None
     bundled = bundled_benchmark_asset(BENCHMARK_ID, relative)
@@ -124,7 +118,7 @@ def resolve_prompt_manifest_path(
     if explicit is not None:
         path = explicit.expanduser().resolve()
         return path if path.is_file() else None
-    env_manifest = _env_path("WORLDFOUNDRY_AIGCBENCH_PROMPT_MANIFEST")
+    env_manifest = resolve_env_path("WORLDFOUNDRY_AIGCBENCH_PROMPT_MANIFEST")
     if env_manifest is not None:
         return env_manifest if env_manifest.is_file() else None
     bundled = bundled_benchmark_asset(BENCHMARK_ID, PROMPT_MANIFEST_REL)
@@ -138,7 +132,7 @@ def resolve_prompt_manifest_path(
 
 
 def resolve_t2i_image_dir(*, dataset_root: Path | None = None) -> Path | None:
-    env_dir = _env_path("WORLDFOUNDRY_AIGCBENCH_T2I_DIR")
+    env_dir = resolve_env_path("WORLDFOUNDRY_AIGCBENCH_T2I_DIR")
     if env_dir is not None and env_dir.is_dir():
         return env_dir
     root = dataset_root or resolve_dataset_root()
@@ -368,7 +362,7 @@ def copy_aigcbench_generated_videos(
         if not source_path.is_file():
             continue
         target_path = generated_artifact_dir / video_filename_for_prompt_id(sample_id)
-        shutil.copy2(source_path, target_path)
+        materialize_file(source_path, target_path, writable=False)
         materialized += 1
         manifest_rows.append({"sample_id": sample_id, "artifact": output_artifact, "path": str(target_path)})
 
@@ -378,7 +372,7 @@ def copy_aigcbench_generated_videos(
                 continue
             sample_id = path.stem
             target_path = generated_artifact_dir / video_filename_for_prompt_id(sample_id)
-            shutil.copy2(path, target_path)
+            materialize_file(path, target_path, writable=False)
             materialized += 1
             manifest_rows.append({"sample_id": sample_id, "artifact": output_artifact, "path": str(target_path)})
 

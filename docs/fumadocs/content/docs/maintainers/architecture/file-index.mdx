@@ -1,0 +1,150 @@
+---
+title: Codebase map
+description: Source-level directory-to-responsibility map across the WorldFoundry packages, with key entry files and links to the narrative architecture pages.
+---
+
+This page is the quick-reference index of the repository: one entry per top-level package, what it owns, and the first file to read. It is deliberately compact. For the *why* behind these boundaries, read [Architecture](/docs/maintainers/architecture) and the subpages it links to. Use this map to decide *where* a change belongs before opening a file.
+
+The boundary rule is the same on every entry: a package exposes stable, serializable contracts to its neighbors and keeps private details inside. Cross-package edges that skip the contract layer (for example, a benchmark importing a pipeline, or a pipeline importing an evaluator) are the bugs to look for here.
+
+## Repository layout
+
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>Package</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>worldfoundry/cli</code>
+          </div>
+        </div>
+        <p>User-facing commands: TUI, evaluate, embodied, run, validate, zoo, preflight, reporting. Dispatches into orchestration, never owns model inference or scoring.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>cli/main.py:1888</code> <code>main()</code>; subcommand tree at <code>cli/main.py:1088</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>worldfoundry/cli/tui*.py</code>
+          </div>
+        </div>
+        <p>Guided-discovery TUI surfaces (discovery, brand, app).</p>
+        <p className="pi-kv-read"><span>First file</span> <code>cli/tui.py</code>, <code>cli/tui_app.py</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>worldfoundry/mcp</code>
+          </div>
+        </div>
+        <p>MCP server and tools (discovery, metrics, readiness, context) reused from the same catalog/runtime contracts.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>{"mcp/__init__.py:30"}</code> <code>main()</code>; <code>mcp/server.py:38</code> <code>create_mcp_server</code>; <code>mcp/tools/registration.py:55</code> <code>register_tools</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>worldfoundry/runtime</code>
+          </div>
+        </div>
+        <p>Execution environment preparation: conda profiles, device pool, CUDA tiers, compile cache, in-tree CLI bridges, asset staging.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>runtime/conda.py</code>, <code>runtime/env.py</code>, <code>runtime/cuda_tiers.py</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>worldfoundry/data</code>
+          </div>
+        </div>
+        <p>Catalogs, runtime profiles, benchmark tasks, and test fixtures. Declares what exists and what is ready; not runtime behavior.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>data/models/catalog/</code>, <code>data/benchmarks/catalog/</code>, <code>data/models/runtime/profiles/</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>worldfoundry/core</code>
+          </div>
+        </div>
+        <p>Shared inference infrastructure: loading, attention, distributed, VRAM, kernels, memory, configuration, IO, safety. The only home for offload/distributed/kernel/quantization.</p>
+        <p className="pi-kv-read"><span>First file</span> <a href="/docs/maintainers/architecture/core-infrastructure">Core infrastructure</a></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>worldfoundry/base_models</code>
+          </div>
+        </div>
+        <p>Inference-only model packages: <code>diffusion_model</code> (the single canonical diffusion kernel), <code>llm_mllm_core</code>, <code>perception_core</code>, <code>three_dimensions</code>. No training, datasets, or experiment scripts.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>{"base_models/diffusion_model/__init__.py"}</code>; <a href="/docs/maintainers/architecture/native-diffusion">Native diffusion</a></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>worldfoundry/pipelines</code>
+          </div>
+        </div>
+        <p>One thin public wrapper per model family: <code>from_pretrained</code>, <code>process</code>/<code>{"__call__"}</code>, optional <code>stream</code>.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>pipelines/pipeline_utils.py:11</code> <code>PipelineABC</code>; 88 family dirs under <code>pipelines/</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>worldfoundry/operators</code>
+          </div>
+        </div>
+        <p>Input-side partners for runnable pipelines: validation, media loading, camera/action parsing, interaction shaping, perception preprocessing.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>operators/base_operator.py:4</code> <code>BaseOperator</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>worldfoundry/synthesis</code>
+          </div>
+        </div>
+        <p>In-tree runtime execution: hosted API wrappers, native runtime bridges, per-family <code>synthesis.py</code>, action surfaces, memory modules.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>synthesis/base_synthesis.py:38</code> <code>BaseSynthesis</code>; <a href="/docs/maintainers/architecture/runtime-assembly">Runtime assembly</a></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>worldfoundry/evaluation</code>
+          </div>
+        </div>
+        <p>Public contracts, execution runners, catalog loaders, metrics, reporting, scorecards. The benchmark side of the artifact boundary.</p>
+        <p className="pi-kv-read"><span>First file</span> <a href="/docs/maintainers/architecture/evaluation-core">Evaluation core</a></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>worldfoundry/studio</code>
+          </div>
+        </div>
+        <p>Interactive preview shell over the same catalog and runtime contracts. Presentation glue only.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>studio/cli.py:78</code> <code>main()</code>; <code>studio/inference/execution.py</code>, <code>studio/inference/catalog.py</code>; <a href="/docs/maintainers/architecture/studio-internals">Studio internals</a></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>worldfoundry/training</code>
+          </div>
+        </div>
+        <p>Training and post-training recipes (SFT, distillation, RL). Not on the evaluate/scorecard path.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>training/recipes/spec.py</code></p>
+      </li>
+    </ul>
+  </section>
+</div>
+
+## How the entries connect
+
+A run flows down this list, not across it at random. User input enters through `cli` or `mcp`; `runtime` and `data` prepare the environment and declare what can run; `core` and `base_models` provide the shared inference primitives; `pipelines` plus `operators` plus `synthesis` turn a normalized request into a `GenerationResult`; `base_models/three_dimensions` runs geometry models and derives geometric artifacts when needed; `evaluation` consumes artifacts and produces scorecards; `studio` previews the same artifacts through a UI shell. `training` sits beside this spine: it produces checkpoints, it does not score them.
+
+<Callout type="info">
+  The package a file lives in should answer "who owns this kind of change?" before you read the code. If you are unsure which layer owns a fix, start at [Architecture](/docs/maintainers/architecture) and pick the subpage that matches the layer you are changing.
+</Callout>
+
+## Where to go next
+
+- **Adding a model** — start at `pipelines/` and `operators/`, then `synthesis/`. See [Model runtime](/docs/maintainers/architecture/model-runtime) and [Runtime assembly](/docs/maintainers/architecture/runtime-assembly).
+- **Adding a benchmark** — start at `data/benchmarks/` and `evaluation/tasks/`. See [Benchmarks and data](/docs/maintainers/architecture/benchmarks-data) and [Evaluation core](/docs/maintainers/architecture/evaluation-core).
+- **Tracing a run** — start at `cli/main.py` → `evaluation/tasks/execution/orchestration/`. See [Workflow](/docs/maintainers/architecture/workflow) and [Surfaces and orchestration](/docs/maintainers/architecture/surfaces-orchestration).
+- **Shared primitives** — anything reusable across model families belongs in `worldfoundry/core`. See [Core infrastructure](/docs/maintainers/architecture/core-infrastructure).

@@ -15,19 +15,27 @@ from diffusers.models.attention_processor import Attention
 from diffusers.models.embeddings import TimestepEmbedding, Timesteps, PixArtAlphaTextProjection
 from diffusers.models.modeling_outputs import Transformer2DModelOutput
 from diffusers.models.modeling_utils import ModelMixin
-from diffusers.models.normalization import RMSNorm, LayerNorm, FP32LayerNorm, AdaLayerNormContinuous
+# Modified by WorldFoundry: upstream FramePack imports AdaLayerNormContinuous only to
+# monkey-patch it (a local class of the same name, defined below, shadows it afterwards).
+# Alias the diffusers class so enable_framepack_global_patches() can still reach it after
+# the shadowing local definition executes.
+from diffusers.models.normalization import RMSNorm, LayerNorm, FP32LayerNorm
+from diffusers.models.normalization import AdaLayerNormContinuous as _DiffusersAdaLayerNormContinuous
 from diffusers_helper.utils import zero_module
+from worldfoundry.core.attention import get_cu_seqlens
 
 
-accelerate.accelerator.convert_outputs_to_fp32 = lambda x: x
+# Modified by WorldFoundry: upstream FramePack executed the monkey patches below at
+# module import time, which rewrote torch.nn.LayerNorm.forward (and several diffusers
+# normalization classes plus accelerate's fp32 output conversion) for the whole process
+# as soon as anything imported this module. The patch bodies are unchanged, but they are
+# now applied only via enable_framepack_global_patches(), which the FramePack runtime
+# entry (inference.py) and HunyuanVideoTransformer3DModelPacked.__init__ call explicitly.
+_GLOBAL_PATCHES_APPLIED = False
 
 
 def _layer_norm_forward(self, x):
     return torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps).to(x)
-
-
-LayerNorm.forward = _layer_norm_forward
-torch.nn.LayerNorm.forward = _layer_norm_forward
 
 
 def _fp32_layer_norm_forward(self, x):
@@ -41,9 +49,6 @@ def _fp32_layer_norm_forward(self, x):
     ).to(origin_dtype)
 
 
-FP32LayerNorm.forward = _fp32_layer_norm_forward
-
-
 def _rms_norm_forward(self, hidden_states):
     input_dtype = hidden_states.dtype
     variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
@@ -55,9 +60,6 @@ def _rms_norm_forward(self, hidden_states):
     return hidden_states.to(input_dtype) * self.weight.to(input_dtype)
 
 
-RMSNorm.forward = _rms_norm_forward
-
-
 def _ada_layer_norm_continuous_forward(self, x, conditioning_embedding):
     emb = self.linear(self.silu(conditioning_embedding))
     scale, shift = emb.chunk(2, dim=1)
@@ -65,7 +67,37 @@ def _ada_layer_norm_continuous_forward(self, x, conditioning_embedding):
     return x
 
 
-AdaLayerNormContinuous.forward = _ada_layer_norm_continuous_forward
+def enable_framepack_global_patches():
+    """Apply FramePack's upstream process-global monkey patches (idempotent).
+
+    WARNING - process-global effect: this replaces ``torch.nn.LayerNorm.forward``
+    for *every* model in the current process (not just FramePack), replaces the
+    ``forward`` of diffusers' ``LayerNorm``/``FP32LayerNorm``/``RMSNorm``/
+    ``AdaLayerNormContinuous`` classes, and neuters
+    ``accelerate.accelerator.convert_outputs_to_fp32``. Any other model that runs
+    in the same process afterwards sees the patched numerical behaviour (dtype
+    cast via ``.to(x)``, altered autocast semantics).
+
+    The patching is intentionally NOT reversible: FramePack's official inference
+    stack assumes these semantics from model construction through sampling, and
+    restoring the originals mid-process would leave already-constructed modules
+    in an inconsistent state. Run FramePack in a dedicated process if this
+    pollution is unacceptable.
+
+    Calling this more than once is a no-op.
+    """
+    global _GLOBAL_PATCHES_APPLIED
+    if _GLOBAL_PATCHES_APPLIED:
+        return
+    _GLOBAL_PATCHES_APPLIED = True
+
+    accelerate.accelerator.convert_outputs_to_fp32 = lambda x: x
+
+    LayerNorm.forward = _layer_norm_forward
+    torch.nn.LayerNorm.forward = _layer_norm_forward
+    FP32LayerNorm.forward = _fp32_layer_norm_forward
+    RMSNorm.forward = _rms_norm_forward
+    _DiffusersAdaLayerNormContinuous.forward = _ada_layer_norm_continuous_forward
 
 
 enabled_backends = []
@@ -127,24 +159,6 @@ def center_down_sample_3d(x, kernel_size):
     # xc = xp[cp]
     # return xc
     return torch.nn.functional.avg_pool3d(x, kernel_size, stride=kernel_size)
-
-
-def get_cu_seqlens(text_mask, img_len):
-    batch_size = text_mask.shape[0]
-    text_len = text_mask.sum(dim=1)
-    max_len = text_mask.shape[1] + img_len
-
-    cu_seqlens = torch.zeros([2 * batch_size + 1], dtype=torch.int32, device="cuda")
-
-    for i in range(batch_size):
-        s = text_len[i] + img_len
-        s1 = i * max_len + s
-        s2 = (i + 1) * max_len
-        cu_seqlens[2 * i + 1] = s1
-        cu_seqlens[2 * i + 2] = s2
-
-    return cu_seqlens
-
 
 def apply_rotary_emb_transposed(x, freqs_cis):
     cos, sin = freqs_cis.unsqueeze(-2).chunk(2, dim=-1)
@@ -799,6 +813,10 @@ class HunyuanVideoTransformer3DModelPacked(ModelMixin, ConfigMixin, PeftAdapterM
         has_clean_x_embedder=False,
     ) -> None:
         super().__init__()
+
+        # Modified by WorldFoundry: upstream applied these patches at module import;
+        # apply them at model construction instead so a mere import stays side-effect free.
+        enable_framepack_global_patches()
 
         inner_dim = num_attention_heads * attention_head_dim
         out_channels = out_channels or in_channels

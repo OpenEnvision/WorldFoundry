@@ -12,7 +12,7 @@ from vbench.utils import load_dimension_info
 from worldfoundry.base_models.perception_core.optical_flow.raft import InputPadder, RAFT
 
 
-from .distributed import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     all_gather,

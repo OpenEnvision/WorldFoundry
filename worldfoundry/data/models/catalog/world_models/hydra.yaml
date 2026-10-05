@@ -11,12 +11,43 @@ checkpoint: H-EmbodVis/HyDRA
 runtime_profile: runtime-profile:hydra
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: hydra
+official_sources:
+  project_page: https://kj-chen666.github.io/Hybrid-Memory-in-Video-World-Models/
+  paper: https://arxiv.org/abs/2603.25716
 integration:
   status: integrated
   notes:
   - Official source is vendored at revision 48652becf0030edbaabde4d04f33bb33ad380410.
   - The public repository has no LICENSE file in the pinned revision; license review remains required.
 runner_parity:
-  status: pending
-  notes: [In-tree runtime and WRBench camera JSON route are wired; GPU artifact validation requires checkpoints.]
+  status: verified_configuration
+  notes:
+  - The public pipeline generated the official example 1 with its source video,
+    camera JSON, and caption at the upstream default of 50 steps on local checkpoints.
+    All 77 generated frames decode at 832x480 and visibly preserve the street scene
+    and armored subject as the subject leaves and returns to view.
+  - A separate synthetic-camera run showed a broad wall-like occlusion; performance
+    on arbitrary trajectories and quantitative camera adherence remain unmeasured.
 catalog_category: world_models
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'HyDRA is a camera-controlled video-to-video world model: it re-renders an input video along new camera behavior described by a camera JSON. The pinned runtime generated a coherent 77-frame continuation of an official example at 50 steps; a separate synthetic camera case showed an occlusion.'
+  overview_zh: HyDRA 是相机可控的视频到视频世界模型：按 camera JSON 描述的新相机行为重新渲染输入视频。固定版本的运行时用官方样例和 50 步推理生成了连贯的 77 帧续写；另一个合成相机案例出现遮挡。
+  architecture: Architecture internals are not recorded in this repository. The pinned public revision has no LICENSE file, so license review remains required before downstream use.
+  architecture_zh: 架构内部细节仓库未记录。固定的公开 revision 无 LICENSE 文件，下游使用前必须先做许可审查。
+  usage_notes: Bundled source is mandatory — external source checkouts are rejected. Inputs are prompt, video, and camera_json. The official example completed at 50 steps; synthetic-path visual quality needs review.
+  usage_notes_zh: 必须使用内置源码——外部源码检出会被拒绝。输入为提示词、视频与 camera_json。官方样例 50 步推理已完成；合成轨迹下的画质仍需检查。
+  limitations:
+  - 'No LICENSE in the pinned upstream revision: legal review required.'
+  - The official example looks coherent, while a separate synthetic-path artifact has a broad occlusion; quantitative camera adherence is unmeasured.
+  - The publishing institution is not recorded in this repository.
+  limitations_zh:
+  - 固定上游 revision 无 LICENSE：需要法律审查。
+  - 官方样例画面连贯，但另一个合成轨迹产物出现大面积遮挡；相机轨迹遵循性尚未量化测量。
+  - 发表机构在本仓库中未记录。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-behavior adherence of re-rendered video.
+    reason_zh: 重渲染视频的相机行为贴合度。

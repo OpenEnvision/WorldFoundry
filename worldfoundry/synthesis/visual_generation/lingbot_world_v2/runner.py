@@ -13,11 +13,11 @@ import torch
 import torch.distributed as dist
 from PIL import Image
 
-from worldfoundry.base_models.diffusion_model.video.wan.configs.lingbot_world_v2 import (
+from worldfoundry.base_models.diffusion_model.recipes.wan_configs.lingbot_world_v2 import (
     LINGBOT_WORLD_V2_CONFIG,
     SUPPORTED_SIZES,
 )
-from worldfoundry.core.io.video import save_image_or_video_tensor
+from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
 
 from .inference import LingBotWorldV2Inference
 

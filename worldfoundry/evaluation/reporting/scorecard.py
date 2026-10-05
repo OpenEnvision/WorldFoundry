@@ -14,6 +14,11 @@ from typing import Any, Mapping
 from worldfoundry.evaluation.utils import write_json
 
 from .comparison_identity import build_comparison_identity
+from .run_report import (
+    MOCK_BACKEND_BLOCKING_REASON,
+    evaluation_backend_from_payload,
+    is_mock_backend,
+)
 
 SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 _MISSING_EVIDENCE_REASON = "missing official/full-suite leaderboard evidence gate"
@@ -172,6 +177,15 @@ def build_scorecard(
         metrics_summary=metrics_summary_payload,
     )
 
+    backend = evaluation_backend_from_payload(
+        {
+            "backend": metrics_summary_payload.get("backend"),
+            "run": run_payload,
+            "generation": generation_payload,
+        }
+    )
+    backend_is_mock = is_mock_backend(backend)
+
     eligibility_reasons: list[str] = []
     if failed_samples:
         eligibility_reasons.append(f"{failed_samples} sample(s) failed")
@@ -179,8 +193,20 @@ def build_scorecard(
         eligibility_reasons.append(_MISSING_EVIDENCE_REASON)
     if not provenance_candidate:
         eligibility_reasons.append("evaluation provenance is not leaderboard-comparable")
-    score_valid = failed_samples == 0
-    leaderboard_valid = score_valid and bool(evidence_gate["present"]) and provenance_candidate
+    if backend_is_mock:
+        eligibility_reasons.append(MOCK_BACKEND_BLOCKING_REASON)
+    invalid_metrics = [key for key, value in per_metric.items() if value.get("valid") is False]
+    if not leaderboard:
+        eligibility_reasons.append("no valid metric scores")
+    if invalid_metrics:
+        eligibility_reasons.append(f"invalid metrics: {', '.join(sorted(invalid_metrics))}")
+    score_valid = failed_samples == 0 and bool(leaderboard) and not invalid_metrics
+    leaderboard_valid = (
+        score_valid
+        and bool(evidence_gate["present"])
+        and provenance_candidate
+        and not backend_is_mock
+    )
     resolved_comparison_identity = build_comparison_identity(
         benchmark=benchmark_payload,
         dataset=dataset_payload,
@@ -229,6 +255,7 @@ def build_scorecard(
         "evaluation": {
             "available": True,
             "kind": evaluation_kind,
+            "backend": backend,
             "mode": resolved_comparison_identity["evaluation_mode"],
             "num_results": int(metrics_summary_payload.get("sample_count") or 0),
             "successful_samples": int(metrics_summary_payload.get("successful_samples") or 0),

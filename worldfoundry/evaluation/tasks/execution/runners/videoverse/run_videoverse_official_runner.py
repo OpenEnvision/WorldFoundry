@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+
+
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    SCORECARD_SCHEMA_VERSION,
+    VIDEO_SUFFIXES,
+    resolve_env_path,
+)
+
 import argparse
 import json
 import os
@@ -15,10 +23,8 @@ from worldfoundry.evaluation.tasks.execution.runners._benchmark_metrics.formulas
     videoverse_subquestion_metrics,
 )
 
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 PROMPT_MANIFEST_REL = Path("prompt/prompts_of_VideoVerse.json")
 DECOMPOSED_PROMPT_MANIFEST_REL = Path("prompt/prompts_of_VideoVerse_decomposed.json")
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"})
 CANONICAL_PROMPT_COUNT = 300
 CANONICAL_EVENT_COUNT = 815
 CANONICAL_CHECK_COUNT = 793
@@ -98,11 +104,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--strict", action="store_true", help="Return non-zero unless the canonical full suite is complete.")
     parser.add_argument("--json", action="store_true")
     return parser.parse_args(argv)
-
-
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value) if value else None
 
 
 def _default_prompt_manifest() -> Path | None:
@@ -693,17 +694,17 @@ def normalize_videoverse_results(
 ) -> dict[str, Any]:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    official_results_path = args.official_results_path or _env_path("WORLDFOUNDRY_VIDEOVERSE_RESULTS_PATH")
+    official_results_path = args.official_results_path or resolve_env_path("WORLDFOUNDRY_VIDEOVERSE_RESULTS_PATH")
     if official_results_path is None:
         raise ValueError("--official-results-path or WORLDFOUNDRY_VIDEOVERSE_RESULTS_PATH is required")
     prompt_manifest_path = (
         args.prompt_manifest
-        or _env_path("WORLDFOUNDRY_VIDEOVERSE_PROMPT_MANIFEST")
+        or resolve_env_path("WORLDFOUNDRY_VIDEOVERSE_PROMPT_MANIFEST")
         or _default_prompt_manifest()
     )
     decomposed_prompt_manifest_path = (
         args.decomposed_prompt_manifest
-        or _env_path("WORLDFOUNDRY_VIDEOVERSE_DECOMPOSED_PROMPT_MANIFEST")
+        or resolve_env_path("WORLDFOUNDRY_VIDEOVERSE_DECOMPOSED_PROMPT_MANIFEST")
         or _default_decomposed_prompt_manifest()
     )
     if prompt_manifest_path is None or not Path(prompt_manifest_path).is_file():
@@ -712,7 +713,7 @@ def normalize_videoverse_results(
             "worldfoundry/data/benchmarks/assets/videoverse/ or set "
             "WORLDFOUNDRY_VIDEOVERSE_PROMPT_MANIFEST."
         )
-    generated_artifact_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_artifact_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
 
     prompt_payload = _load_json(prompt_manifest_path)
     if not isinstance(prompt_payload, Mapping):
@@ -820,12 +821,12 @@ def run_official_videoverse(args: argparse.Namespace) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     prompt_manifest_path = (
         args.prompt_manifest
-        or _env_path("WORLDFOUNDRY_VIDEOVERSE_PROMPT_MANIFEST")
+        or resolve_env_path("WORLDFOUNDRY_VIDEOVERSE_PROMPT_MANIFEST")
         or _default_prompt_manifest()
     )
     decomposed_prompt_manifest_path = (
         args.decomposed_prompt_manifest
-        or _env_path("WORLDFOUNDRY_VIDEOVERSE_DECOMPOSED_PROMPT_MANIFEST")
+        or resolve_env_path("WORLDFOUNDRY_VIDEOVERSE_DECOMPOSED_PROMPT_MANIFEST")
         or _default_decomposed_prompt_manifest()
     )
     if prompt_manifest_path is None or not Path(prompt_manifest_path).is_file():
@@ -834,7 +835,7 @@ def run_official_videoverse(args: argparse.Namespace) -> dict[str, Any]:
             "worldfoundry/data/benchmarks/assets/videoverse/ or set "
             "WORLDFOUNDRY_VIDEOVERSE_PROMPT_MANIFEST."
         )
-    generated_artifact_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_artifact_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
     if generated_artifact_dir is None:
         raise ValueError("--generated-artifact-dir or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required for --run-official")
 

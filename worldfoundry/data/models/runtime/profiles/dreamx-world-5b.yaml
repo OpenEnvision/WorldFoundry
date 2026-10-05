@@ -34,6 +34,10 @@ notes:
 - A real single-A100 Workspace run loaded both pinned checkpoints and generated nine finite,
   decodable 1280x704 frames from the official DreamX example image. This short two-control
   rollout validates the resident AR path and is not a long-horizon quality-parity claim.
+- The directly runnable Workspace default was revalidated on 2026-07-28 with its staged
+  DreamX fixture, non-empty demo prompt, native four-step distilled schedule, and one native
+  nine-frame 1280x704 AR block. The MP4 SHA256 is
+  7a65a12d96154c7ce1034d1e938d40c2bdaa8b2ef2939ed56cc03d196f91c3a4.
 runtime_status: native_checkpoint_runtime_a100_workspace_validated
 task_family: world_model
 execution:

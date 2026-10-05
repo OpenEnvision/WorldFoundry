@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
 
 from worldfoundry.evaluation.tasks.metrics._shared.imports import prepend_import_path
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
@@ -38,6 +39,8 @@ def compute_attribute_sad(
     n_points: int = 1000,
 ) -> dict[str, np.ndarray | float]:
     """Compute Attribute SaD from precomputed HCS feature tensors."""
+    import numpy as np
+
     sad_result = _get_sad_fn()(hcs_real, hcs_gen, text_list, n_points)
     return {
         "sad_per_attribute": sad_result,
@@ -55,6 +58,8 @@ def compute_attribute_pad(
     n_points: int = 1000,
 ) -> dict[str, Any]:
     """Compute Attribute PaD from precomputed HCS feature tensors."""
+    import numpy as np
+
     pad_result = _get_pad_fn()(hcs_real, hcs_gen, text_list, n_points)
     kl_values = pad_result[:, 0].cpu().numpy()
     jsd_values = pad_result[:, 1].cpu().numpy()

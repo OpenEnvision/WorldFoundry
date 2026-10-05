@@ -1,0 +1,73 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BA-07
+track: coverage
+title_en: Leashed Dog Bowl Reaction
+outcome_question: Which label in ['dog_continues_eating_at_bowl', 'dog_pauses_or_lifts_head_near_bowl',
+  'dog_resists_taut_leash_stays_near_bowl', 'dog_steps_back_from_bowl', 'bowl_shifts_without_food_spill',
+  'food_spills_or_bowl_tips'] is visible as the first decisive result after the
+  gentle leash pull?
+readout_policy: Read the first decisive dog/bowl/leash relation after the single gentle
+  leash pull begins. Qualifying frames must keep the dog, bowl/food, leash, and pulling
+  hand visible enough to decide eating/pausing, leash-resisted near-bowl stance,
+  step-back, bowl shift, or food spill/bowl tip. Terminal stability is not required
+  unless the protocol names it.
+canonical_labels:
+- dog_continues_eating_at_bowl
+- dog_pauses_or_lifts_head_near_bowl
+- dog_resists_taut_leash_stays_near_bowl
+- dog_steps_back_from_bowl
+- bowl_shifts_without_food_spill
+- food_spills_or_bowl_tips
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- The dog's head/bowl relation is hidden at the moment eating, pause/lift-head, or
+  step-back would need to be read.
+- The bowl moves but the frames do not show whether food spills or the bowl tips.
+- Leash tension is hidden or ambiguous when it is needed to distinguish leash-resisted
+  near-bowl stance from ordinary pause near the bowl.
+- None of the canonical labels ['dog_continues_eating_at_bowl', 'dog_pauses_or_lifts_head_near_bowl',
+  'dog_resists_taut_leash_stays_near_bowl', 'dog_steps_back_from_bowl', 'bowl_shifts_without_food_spill',
+  'food_spills_or_bowl_tips'] can be decisively identified within the readout window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's
+  reference protocol; record it as out-of-schema.
+- The bowl or food moves, tips, or spills due to an off-screen cause, teleportation,
+  ground deformation, or a non-dog/non-leash actor rather than visible dog/leash interaction.
+- The leash, bowl, or food layout changes before the pull so the initial eating/pull
+  setup is no longer defined.
+priority_rules:
+- First decisive readout is the dog/bowl/leash relation after the single gentle leash
+  pull while the dog is eating.
+- dog_continues_eating_at_bowl means the dog keeps its head at the bowl and continues
+  eating after the visible pull, with no stronger bowl/leash/step-back outcome.
+- dog_pauses_or_lifts_head_near_bowl means the dog stops eating or lifts its head
+  but remains near the bowl, with no clear taut-leash resistance or stronger outcome.
+- dog_resists_taut_leash_stays_near_bowl means the leash becomes visibly taut and
+  the dog braces, leans, or is held near the bowl without stepping back from it.
+- dog_steps_back_from_bowl means the dog visibly increases distance from the bowl
+  after the pull, regardless of whether the leash is taut.
+- bowl_shifts_without_food_spill means the bowl visibly slides, rotates, or is nudged
+  while remaining upright and without visible food spill.
+- food_spills_or_bowl_tips means food visibly spills from the bowl or the bowl visibly
+  tips/falls.
+- 'Priority: food spill/bowl tip overrides bowl shift without spill; bowl shift overrides
+  dog step-back; dog step-back overrides taut-leash near-bowl resistance; taut-leash
+  resistance overrides pause/lift-head; pause/lift-head overrides continuing to eat.'
+- These are visual relation labels, not obedience or intent labels; infer only from
+  dog posture, dog-bowl distance, bowl/food motion, and leash tension.
+- If multiple effects occur in the first post-pull window, use the strongest visible
+  outcome by the priority order above. If leash tension, dog-bowl distance, or bowl/food
+  motion is hidden at the decisive moment, return `unreadable` rather than guessing.
+notes:
+- 'Reaction scene: outcome label requires visible post-stimulus animal/person response,
+  not intent inference.'
+- 'Outcome set intentionally separates bowl displacement from food spill/bowl tip
+  because they are different terminal physical futures.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules
+  are authored from STAGBench metadata/action protocol.'
+- 'Scene title: Leashed Dog Bowl Reaction.'

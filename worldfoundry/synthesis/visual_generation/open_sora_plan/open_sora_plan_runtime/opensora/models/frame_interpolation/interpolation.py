@@ -2,7 +2,6 @@
 from json import load
 import os
 import cv2
-import sys
 import glob
 import torch
 import argparse
@@ -11,7 +10,9 @@ import os.path as osp
 from warnings import warn
 from omegaconf import OmegaConf
 from torchvision.utils import make_grid
-sys.path.append('.')
+# Modified by WorldFoundry: removed upstream's CWD-relative `sys.path.append('.')`; all
+# AMT imports below are package-absolute and build_from_cfg canonicalizes `networks.*`
+# to the worldfoundry.base_models AMT package, so no path injection is needed.
 from worldfoundry.base_models.perception_core.frame_interpolation.amt.utils.utils import (
     read, write,
     img2tensor, tensor2img,

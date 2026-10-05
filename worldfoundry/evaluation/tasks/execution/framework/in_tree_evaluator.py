@@ -12,10 +12,12 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.api import AggregateResult, GenerationRequest, GenerationResult, MetricResult
-from worldfoundry.evaluation.tasks.execution.framework.in_tree_registry import (
+from worldfoundry.evaluation.tasks.execution.framework.io import coerce_unit_score
+from worldfoundry.evaluation.tasks.execution.framework.scoring_registry import (
     get_in_tree_benchmark_config,
     supported_in_tree_benchmark_ids,
 )
+
 JUDGE_BLOCKED_REASON = "official judge, labels, rubric, or API evidence is required"
 SAFETY_JUDGE_REQUIRED_REASON = "safety judge or rule violation manifest is required"
 
@@ -101,6 +103,15 @@ class BenchmarkZooInTreeEvaluator:
         required = config.get("required_artifacts", ("generated_video",))
         self.required_artifacts = tuple(required_artifacts or required)  # type: ignore[arg-type]
         self._config = config
+        self.parameters = {"benchmark_id": key}
+        self.higher_is_better = bool(config.get("higher_is_better", True))
+
+    def metric_definition(self, metric_id: str) -> dict[str, Any]:
+        """Describe one output; aggregate scores also depend on the selected components."""
+        parameters: dict[str, Any] = dict(self.parameters)
+        if metric_id == self._config.get("primary_metric"):
+            parameters["components"] = sorted(key for key in self.metric_ids if key != metric_id)
+        return {"parameters": parameters, "higher_is_better": self.higher_is_better}
 
     def __call__(self, request: GenerationRequest, result: GenerationResult) -> list[MetricResult]:
         """Evaluate one materialized sample for existing-results runner use.
@@ -122,6 +133,19 @@ class BenchmarkZooInTreeEvaluator:
             result: Materialized generation result with artifacts and evaluator metadata.
         """
         return self(request, result)
+
+    def compute_batch(
+        self,
+        requests: Sequence[GenerationRequest],
+        results: Sequence[GenerationResult],
+    ) -> list[list[MetricResult]]:
+        """Evaluate an aligned batch through one resident evaluator instance."""
+
+        if len(requests) != len(results):
+            raise ValueError(
+                f"request/result batch sizes differ: {len(requests)} != {len(results)}"
+            )
+        return [self(request, result) for request, result in zip(requests, results)]
 
     def aggregate(self, results: Sequence[MetricResult]) -> AggregateResult:
         """Aggregate valid numeric rows with a simple mean.
@@ -169,31 +193,6 @@ class BenchmarkZooInTreeEvaluator:
         if evaluator_kind == "world_in_world":
             return _evaluate_world_in_world_metrics(self.metric_ids, request, result, artifact_status, self._config)
         return _evaluate_reasoning_metrics(self.benchmark_id, self.metric_ids, request, result, artifact_status, self._config)
-
-
-def evaluate_benchmark_metrics(
-    benchmark_id: str,
-    request: GenerationRequest,
-    result: GenerationResult,
-    *,
-    metric_ids: Sequence[str] | None = None,
-    required_artifacts: Sequence[str] | None = None,
-) -> list[dict[str, Any]]:
-    """Evaluate one benchmark sample and return serializable rows.
-
-    Args:
-        benchmark_id: Target benchmark id.
-        request: Sample request containing reference labels, answers, or rubrics.
-        result: Generation output containing artifacts and evaluator metadata.
-        metric_ids: Optional metric subset.
-        required_artifacts: Optional artifact checks to enforce before scoring.
-    """
-    evaluator = BenchmarkZooInTreeEvaluator(
-        benchmark_id,
-        metric_ids=metric_ids,
-        required_artifacts=required_artifacts,
-    )
-    return [row.to_dict() for row in evaluator.evaluate_sample(request, result)]
 
 
 def artifact_presence_evidence(result: GenerationResult, required_artifacts: Sequence[str]) -> dict[str, Any]:
@@ -269,16 +268,7 @@ def _unit_score(value: Any) -> float | None:
     Args:
         value: Candidate numeric score or percentage.
     """
-    if not isinstance(value, (int, float)) or isinstance(value, bool):
-        return None
-    numeric = float(value)
-    if numeric < 0:
-        return None
-    if numeric <= 1:
-        return numeric
-    if numeric <= 100:
-        return numeric / 100.0
-    return None
+    return coerce_unit_score(value)
 
 
 def _lookup_aliases(metric_id: str) -> tuple[str, ...]:

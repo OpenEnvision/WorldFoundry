@@ -1,12 +1,12 @@
 """World Model visual generation pipeline module."""
 
-from ..dreamx_world import DreamXWorld5BARPipeline, DreamXWorld5BCamPipeline
 from .pipeline_runtime_manifest import (
     AdaWorldPipeline,
+    CausalRCMPipeline,
     CtrlWorldPipeline,
+    DIAMONDCsgoPipeline,
     DIAMONDPipeline,
     DinoWMPipeline,
-    DROIDWPipeline,
     EgoWMPipeline,
     GenieEnvisionerPipeline,
     GigaWorld0Pipeline,
@@ -21,6 +21,7 @@ from .pipeline_runtime_manifest import (
     NWMPipeline,
     Oasis500MPipeline,
     OmniForcingPipeline,
+    OpenDreamerPipeline,
     PointWorldPipeline,
     SanaWMPipeline,
     ShotStreamPipeline,
@@ -30,7 +31,6 @@ from .pipeline_runtime_manifest import (
     UWMPipeline,
     VGGTWorldPipeline,
     Vid2WorldPipeline,
-    ViewCrafterPipeline,
     WildDet3DPipeline,
     WildWorldPipeline,
     WorldGrowPipeline,
@@ -40,12 +40,11 @@ from .pipeline_runtime_manifest import (
 
 __all__ = [
     "AdaWorldPipeline",
+    "CausalRCMPipeline",
     "CtrlWorldPipeline",
     "DIAMONDPipeline",
+    "DIAMONDCsgoPipeline",
     "DinoWMPipeline",
-    "DROIDWPipeline",
-    "DreamXWorld5BARPipeline",
-    "DreamXWorld5BCamPipeline",
     "EgoWMPipeline",
     "GenieEnvisionerPipeline",
     "GigaWorld0Pipeline",
@@ -60,6 +59,7 @@ __all__ = [
     "NWMPipeline",
     "OmniForcingPipeline",
     "Oasis500MPipeline",
+    "OpenDreamerPipeline",
     "PointWorldPipeline",
     "SanaWMPipeline",
     "ShotStreamPipeline",
@@ -69,7 +69,6 @@ __all__ = [
     "UWMPipeline",
     "VGGTWorldPipeline",
     "Vid2WorldPipeline",
-    "ViewCrafterPipeline",
     "WildDet3DPipeline",
     "WildWorldPipeline",
     "WorldModelRuntimePipeline",

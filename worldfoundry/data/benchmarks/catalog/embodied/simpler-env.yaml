@@ -1,5 +1,7 @@
 id: simpler-env
 name: SimplerEnv
+publisher: UC San Diego
+publisher_kind: university
 benchmark_kind:
 - vla
 - robot-manipulation
@@ -32,6 +34,9 @@ dataset:
   reason: SimplerEnv evaluates policy rollouts in simulator; generated result files and rollout logs are normalized by 
     WorldFoundry.
 runner:
+  normalization:
+    dispatch: embodied
+    embodied_track: vla
   runner_target: worldfoundry.evaluation.tasks.contracts.external:SimplerEnvContract
   verification_status: normalizer_only
   validation_command:

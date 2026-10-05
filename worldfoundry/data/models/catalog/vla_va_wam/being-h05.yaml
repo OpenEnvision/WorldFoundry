@@ -18,6 +18,8 @@ integration_status: integrated
 license: manual_review:missing_hf_license
 name: Being-H0.5
 official_sources:
+  paper: https://arxiv.org/abs/2605.00078
+  project_page: https://research.beingbeyond.com/ptr
   github:
     head_sha: 66b959e05db225fd816f8a517d94a9c0585cfc3e
     subdir: Being-H05
@@ -88,3 +90,26 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records. Runner or pipeline targets are present
   only after a complete in-tree WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: BeingBeyond
+  publisher_kind: company
+  publisher_zh: BeingBeyond（北京智在无界）
+  overview: 'Being-H0.5 is BeingBeyond''s 2B-parameter cross-embodiment VLA policy. In this catalog it is a GPU-validated entry: the LIBERO checkpoint passed public pipeline checkpoint-backed GPU get_action validation and emitted an action_trace artifact. Four checkpoint lines are recorded — base, LIBERO, RoboCasa, and a combined LIBERO+RoboCasa variant — with the inference-only runtime kept directly in-tree.'
+  overview_zh: Being-H0.5 是 BeingBeyond 的 2B 参数跨本体 VLA 策略。本 catalog 中它是 GPU 已验证条目： LIBERO checkpoint 通过了公开 pipeline 的 checkpoint 驱动 GPU get_action 验证并输出 action_trace 产物。仓库记录四条 checkpoint 线——base、LIBERO、RoboCasa 与 LIBERO+RoboCasa 合并变体——推理专用运行时直接内置树内。
+  architecture: The inference-only Being-H0.5 architecture and policy runtime live under worldfoundry/synthesis/action_generation/being_h05, using efficient SDPA attention for the validated LIBERO path. Architecture internals beyond the official repository pointer are not recorded in this repository.
+  architecture_zh: 推理专用的 Being-H0.5 架构与策略运行时位于 worldfoundry/synthesis/action_generation/being_h05，已验证的 LIBERO 路径使用高效 SDPA 注意力。官方仓库指针之外的架构内部细节仓库未记录。
+  usage_notes: Start with the GPU-verified Being-H05-2B_libero checkpoint. Note all Being-H05 Hugging Face repos carry manual_review:missing_hf_license — confirm licensing before production use.
+  usage_notes_zh: 建议从 GPU 已验证的 Being-H05-2B_libero checkpoint 起步。注意所有 Being-H05 Hugging Face 仓库均为 manual_review:missing_hf_license——生产使用前请确认许可。
+  limitations:
+  - Upstream Hugging Face repos have no recorded license (manual review required).
+  - Only the LIBERO checkpoint has full get_action GPU validation; others have probe-level checks.
+  limitations_zh:
+  - 上游 Hugging Face 仓库未记录许可证（需人工审查）。
+  - 仅 LIBERO checkpoint 有完整 get_action GPU 验证；其余为探针级检查。
+  recommended_benchmarks:
+  - id: libero
+    reason: GPU-validated LIBERO policy checkpoint.
+    reason_zh: GPU 已验证的 LIBERO 策略 checkpoint。
+  - id: robocasa
+    reason: Dedicated RoboCasa checkpoint line.
+    reason_zh: 有专门的 RoboCasa checkpoint 线。

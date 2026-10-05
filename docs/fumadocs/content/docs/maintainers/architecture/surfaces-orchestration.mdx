@@ -1,0 +1,139 @@
+---
+title: Surfaces and orchestration
+description: How CLI, TUI, and MCP enter the system, and how the orchestration service compiles user intent into the three planning boundaries before any model runs.
+---
+
+## What this layer is for
+
+TUI, CLI, Studio, Python, and MCP are different ways to operate the same system. None of them owns model inference or benchmark scoring. Their job is to turn user intent into one of the request types the execution layer already understands, and to surface the results. This page covers CLI/TUI, a pointer to Studio, MCP, and the orchestration service that compiles intent into a runnable plan.
+
+Read [Workflow](/docs/maintainers/architecture/workflow) first for where these paths land once a request exists. Read [Evaluation core](/docs/maintainers/architecture/evaluation-core) for the delegate runners that actually execute.
+
+## CLI and TUI
+
+The console entry is `worldfoundry/cli/main.py:1888` `main()`. It builds a subcommand tree starting at `cli/main.py:1088`:
+
+- **`tui`** — launches the guided-discovery TUI. The TUI lives in `cli/tui.py` (`main` at `:131`) with its app, discovery, brand, and icon helpers in the `cli/tui_*.py` files. It drives the same catalog and orchestration calls as the CLI; it is presentation, not a second runtime.
+- **`evaluate`** — normalizes inputs, picks a run mode, returns one `EvaluateRunResult`.
+- **`run`** — model run: resolves a model runner, generates, then scores.
+- **`validate`** — validates benchmark metadata loading without running a model.
+- **`embodied`** — embodied eval subtree (`run`, `serve`, `merge`, `plan`).
+- Plus `zoo`, `preflight`, `dataset`, `tasks`, `reporting`, `model_run`, `plan_metric`, `mcp` helpers.
+
+The CLI dispatches into the orchestration service; it does not import pipeline files or compute metrics directly. Keeping it this way is why a new surface can be added without re-implementing generation, artifact materialization, or scoring.
+
+Studio is the interactive preview surface. Its install/entry is `worldfoundry/studio/cli.py:78` `main()`. It uses the same catalog and runtime contracts; it does not own scoring. Internals live on [Studio internals](/docs/maintainers/architecture/studio-internals).
+
+## MCP
+
+The MCP server exposes the catalog, run lifecycle, metrics, and readiness as tools so an agent can drive the same workflow. It is a thin shell over the same contracts; it contains no private model code.
+
+- Entry: `mcp/__init__.py:30` `main()`; server construction in `mcp/server.py` (`create_mcp_server` `:38`, `run_server` `:55`).
+- Tools are registered through `mcp/tools/registration.py:55` `register_tools`, which binds each payload as an `@mcp.tool()`.
+- Tool payloads are grouped by responsibility, not by model: `discovery` (list/get model, benchmark, task), `runs` (preview, evaluate, status, result, samples, cancel), `metrics` (list, show), `readiness` (benchmark dataset checks), `studio` (workspace inference), and `context` (`MCPToolContext`).
+
+Because every tool resolves through the same catalog and orchestration service, an MCP-driven run and a CLI-driven run produce the same artifacts and scorecards.
+
+## Orchestration service
+
+The orchestration service is the single compile boundary between a surface and execution. It lives in `evaluation/tasks/execution/orchestration/service.py`. It validates one of five intent dataclasses and returns a `PreparedEvaluation` that the execution layer can run.
+
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>Intent</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>ModelBenchmarkIntent</code>
+          </div>
+        </div>
+        <p><code>ModelBenchmarkRunRequest</code> (model + benchmark)</p>
+        <p className="pi-kv-read"><span>First file</span> <code>service.py:60</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>ScoreArtifactsIntent</code>
+          </div>
+        </div>
+        <p>scores existing artifacts</p>
+        <p className="pi-kv-read"><span>First file</span> <code>service.py:85</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>GenerateAndScoreIntent</code>
+          </div>
+        </div>
+        <p>generate then score</p>
+        <p className="pi-kv-read"><span>First file</span> <code>service.py:101</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>ScoreResultsIntent</code>
+          </div>
+        </div>
+        <p>score results on disk</p>
+        <p className="pi-kv-read"><span>First file</span> <code>service.py:125</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>ReproduceIntent</code>
+          </div>
+        </div>
+        <p>reproduction recipe</p>
+        <p className="pi-kv-read"><span>First file</span> <code>service.py:135</code></p>
+      </li>
+    </ul>
+  </section>
+</div>
+
+Each intent has a matching `_prepare_*` function (`service.py:414`–`:642`). The public entry points are `prepare_evaluation(intent)` at `service.py:737` and `execute_prepared_evaluation(prepared)` at `service.py:753`. A surface's job is to produce one of these intents; it must not duplicate generation, dispatch, or metric execution.
+
+<ArchDiagram id="surfaces" />
+
+## The three planning boundaries
+
+WorldFoundry keeps three planning types distinct. Do not wrap them in a fourth recipe executor.
+
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>Boundary</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>PreparedEvaluation</code>
+          </div>
+        </div>
+        <p>User-facing compiler result: preflight diagnostics, protocol-fidelity policy, claim level derived from generation/data/evaluation/runtime/reference provenance.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>service.py:198</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>RunPlan</code>
+          </div>
+        </div>
+        <p>Lower-level plan for one generation/evaluate stage; fingerprinted for reproducible reruns and cache reuse.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>orchestration/plan.py:113</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>EvaluateRunRequest</code> / <code>ModelBenchmarkRunRequest</code>
+          </div>
+        </div>
+        <p>The actual request types the runners consume.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>orchestration/evaluate.py:41</code> / <code>orchestration/model_benchmark.py:64</code></p>
+      </li>
+    </ul>
+  </section>
+</div>
+
+A caller flag can only *narrow* the claim level, never promote a diagnostic run to an official one. `score_valid` records whether the evaluator produced a usable score; `leaderboard_valid` additionally requires comparable provenance and benchmark-runner evidence. See [Evaluation core](/docs/maintainers/architecture/evaluation-core) for how claim level flows into the scorecard.
+
+For the directory-level map, see [Codebase map](/docs/maintainers/architecture/file-index). For the execution side these surfaces hand off to, see [Workflow](/docs/maintainers/architecture/workflow).

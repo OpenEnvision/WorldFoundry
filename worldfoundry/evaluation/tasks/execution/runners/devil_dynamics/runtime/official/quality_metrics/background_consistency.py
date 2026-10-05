@@ -2,7 +2,6 @@ import os
 import json
 import logging
 import numpy as np
-import clip
 from PIL import Image
 import torch
 import torch.nn as nn

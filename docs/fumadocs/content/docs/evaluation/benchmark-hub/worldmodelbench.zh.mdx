@@ -1,168 +1,42 @@
 ---
 title: WorldModelBench
-description: 使用 WorldFoundry 仓内 evaluator 和 VILA judge 路径运行 WorldModelBench。
+description: "NeurIPS 2025 世界模型裁判套件：350 条实例，VILA 裁判。WorldFoundry 检入 evaluation.py；完整裁判执行未验证。"
 ---
 
-## 简介
+WorldModelBench（NVIDIA、UC Berkeley、UC San Diego、MIT；NeurIPS 2025）把视频生成器当世界模型来评，覆盖 **7 个应用域 / 56 个子域**。官方规模：**350 条实例**，对照 **6.7 万条众包人类标注** 校准。三个分面：
 
-WorldModelBench 判断生成视频是否表现出 world model 能力。它包含 350 个公开 test instances，覆盖 7 个 domain 和 56 个 subdomain。每个 instance 提供首帧描述、指令和首帧图像。text-to-video 模型使用描述加指令；image-to-video 模型使用首帧加指令。
+- 指令跟随
+- 常识推理
+- 物理遵守（例如不规则尺寸变化这类质量守恒违规）
 
-WorldFoundry 已在 `worldfoundry/evaluation/tasks/execution/runners/worldmodelbench` 中包含 WorldModelBench evaluator wrapper 和 runtime。使用 WorldFoundry 时不要 clone 官方 repo；你仍需要准备数据资产和 VILA judge checkpoint。
+官方裁判是微调的 **2B VILA 系** 多模态模型，论文报告在检测世界建模违规上优于 GPT-4o。`world_model_average` 汇总公开分面。
 
-## 评测什么
+论文：[WorldModelBench](https://arxiv.org/abs/2502.20694)。项目：[worldmodelbench-team.github.io](https://worldmodelbench-team.github.io/)。代码：[WorldModelBench-Team/WorldModelBench](https://github.com/WorldModelBench-Team/WorldModelBench)。数据：[`Efficient-Large-Model/worldmodelbench`](https://huggingface.co/datasets/Efficient-Large-Model/worldmodelbench)。
 
-WorldModelBench 判断视频生成器是否具备 **world model** 能力——不仅画面是否好看，还要考察 instruction following、时序常识和物理规律。benchmark 用 67K 人工标注训练 human-aligned VILA judge 做自动评测。
+WorldFoundry **检入上游 `evaluation.py` 与 350 条实例清单**。结果导入与清单覆盖检查已验证；**完整裁判权重执行未验证**。榜单答案在上游扣留。
 
-## Benchmark 设计
+<BenchmarkPageSections id="worldmodelbench" locale="zh" />
 
-| 维度 | 覆盖范围 | 计分 |
-| --- | --- | --- |
-| Domain | 7 个应用领域、56 个子域、350 个公开 prompt | 每个 domain 50 个 prompt |
-| Instruction following | 物体、主体与预期运动是否对齐 | 每个 instance 0–3 分 |
-| Common sense | 时序连贯性与逐帧美学 | 每个 instance 0–2 分 |
-| Physical adherence | 牛顿运动、固体力学、流体力学、不可穿透性、重力 | 每个 instance 0–5 分 |
-| Prompt | 首帧描述 + 指令 + 首帧图像 | T2V 用文本；I2V 用图像 + 指令 |
-
-Physical adherence 重点捕捉 size drift、异常形变、不合理流体、物体穿透、重力不一致等 generic 视频指标容易漏掉的 subtle violations。
-
-## 官方参考
-
-- Paper: [arXiv:2502.20694](https://arxiv.org/abs/2502.20694)
-- Project page 与 leaderboard: [worldmodelbench-team.github.io](https://worldmodelbench-team.github.io/)
-- 官方源码参考: [github.com/WorldModelBench-Team/WorldModelBench](https://github.com/WorldModelBench-Team/WorldModelBench)
-- 测试数据: [Efficient-Large-Model/worldmodelbench](https://huggingface.co/datasets/Efficient-Large-Model/worldmodelbench)
-- Judge 模型: [Efficient-Large-Model/vila-ewm-qwen2-1.5b](https://huggingface.co/Efficient-Large-Model/vila-ewm-qwen2-1.5b)
-- 仓内 runner: `worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py`
-
-## Leaderboard 说明
-
-公开 leaderboard 报告 Instruction Following、Physics Adherence、Common Sense 和 Total Score。官方答案与解释不公开；按 project page 指引提交到 `worldmodelbench.team@gmail.com`。WorldFoundry 会把本地 judge 输出归一化为 `scorecard.json`，但不托管上游提交流程。
-
-## 准备数据和资产
-
-从 WorldFoundry 仓库根目录运行：
+## 如何运行
 
 ```bash
-cd /path/to/WorldFoundry
-export PYTHONPATH="$PWD:${PYTHONPATH:-}"
-```
+hf download Efficient-Large-Model/worldmodelbench --repo-type dataset \
+  --local-dir cache/worldfoundry/data/hfd_datasets/Efficient-Large-Model/worldmodelbench
 
-创建数据根目录，包含 runner 需要的 manifest、首帧图像和 evaluator 文件：
-
-```text
-<worldmodelbench_data_root>/
-  worldmodelbench.json
-  images/
-  evaluation.py
-```
-
-WorldFoundry 仓内带有公开 350-instance manifest：
-
-```bash
-export WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT=/path/to/worldmodelbench
-mkdir -p "${WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT}"
-cp worldfoundry/data/benchmarks/assets/worldmodelbench/worldmodelbench.json \
-  "${WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT}/worldmodelbench.json"
-```
-
-如果使用 Hugging Face 数据镜像，把它放在同一个 root：
-
-```bash
-hf download Efficient-Large-Model/worldmodelbench \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT}"
-```
-
-下载 judge checkpoint：
-
-```bash
-export WORLDFOUNDRY_WORLDMODELBENCH_JUDGE=/path/to/vila-ewm-qwen2-1.5b
-hf download Efficient-Large-Model/vila-ewm-qwen2-1.5b \
-  --local-dir "${WORLDFOUNDRY_WORLDMODELBENCH_JUDGE}"
-```
-
-每条 manifest 记录生成一个视频，输出文件名必须匹配首帧 stem：
-
-```text
-images/69620089860948e38a4921dd4869d24f.jpg
-=> <generated_videos>/69620089860948e38a4921dd4869d24f.mp4
-```
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/worldmodelbench/generated_videos
-```
-
-Prompt 构造遵循本地 README：
-
-```python
-# text-to-video
-" ".join([instance["text_first_frame"], instance["text_instruction"]])
-
-# image-to-video
-image = instance["first_frame"]
-text = instance["text_instruction"]
-```
-
-## 使用 WorldFoundry 运行
-
-导入已完成的 `worldmodelbench_results.json`：
-
-```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id worldmodelbench \
   --mode official-validation \
-  --official-results-path /path/to/worldmodelbench_results.json \
-  --benchmark-data-root "${WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --official-results-path <official_results.json> \
+  --benchmark-data-root <worldmodelbench_data_root> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/worldmodelbench/official-validation \
   --json
 ```
 
-直接通过仓内 runtime 执行 judge：
+official-run 用 `WORLDFOUNDRY_WORLDMODELBENCH_JUDGE`（VILA 权重或 HF 模型 id）驱动 `evaluation.py`。封装会按 N、2N、5N 类别长度校验 accs/preds 形状，并记录 350 条视频覆盖。环境变量：`WORLDFOUNDRY_WORLDMODELBENCH_RESULTS_PATH`、`WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT`。共享资源：`worldmodelbench_dataset_assets`。清单：`worldfoundry/data/benchmarks/assets/worldmodelbench/worldmodelbench.json`。
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py \
-  --worldmodelbench-root worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/runtime \
-  --data-root "${WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT}" \
-  --video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --judge "${WORLDFOUNDRY_WORLDMODELBENCH_JUDGE}" \
-  --model-name "${WORLDFOUNDRY_MODEL_NAME:-candidate_model}" \
-  --output-dir tmp/worldmodelbench/direct-runner \
-  --json
-```
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/worldmodelbench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/runtime/evaluation.py`。
 
-直接导入结果文件：
+产物包括 `scorecard.json`（主键 `world_model_average`）与 `judge_responses.jsonl`。
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/worldmodelbench/run_worldmodelbench_official_runner.py \
-  --data-root "${WORLDFOUNDRY_WORLDMODELBENCH_DATA_ROOT}" \
-  --video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --official-results-path /path/to/worldmodelbench_results.json \
-  --output-dir tmp/worldmodelbench/direct-import \
-  --json
-```
-
-## 指标
-
-WorldModelBench 原始分类上限分别是 3、2、5 分。WorldFoundry 会尽量同时写入 raw value 和 normalized value。
-
-| Metric ID | 含义 |
-| --- | --- |
-| `instruction_following` | 生成视频是否遵循给定指令。原始上限：3。 |
-| `common_sense` | framewise 和 temporal common-sense 质量。原始上限：2。 |
-| `physical_adherence` | 牛顿行为、质量/固体一致性、流体、穿透、重力等物理遵循度。原始上限：5。 |
-| `world_model_average` | 三个公开分类的主聚合分数。原始上限：10。 |
-
-## 输出
-
-runner 会在 `--output-dir` 下写入：
-
-- `scorecard.json`：包含指标值和生成视频覆盖情况的规范化 scorecard。
-- `raw_metric_table.jsonl`：每个 metric ID 一行。
-- `judge_responses.jsonl`：可用时展开的 VILA judge response。
-- `upstream/worldmodelbench_results.json`：直接执行 judge 路径时生成。
-- `upstream_stdout.log` 和 `upstream_stderr.log`：直接执行 judge 时的日志。
-
-公开 benchmark-zoo 运行还可能写入 `runner_runtime_report.json`。
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

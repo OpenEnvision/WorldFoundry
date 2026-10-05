@@ -1,0 +1,34 @@
+---
+title: "Wan2.1"
+description: "Alibaba Tongyi Lab's open video family — T2V 1.3B/14B and I2V 14B at 480p/720p. The 1.3B 832×480, 81-frame route is the verified catalog backbone."
+modelId: "wan2.1"
+pageSource: authored
+---
+
+Wan2.1 is Alibaba Tongyi Lab's open video foundation family, and the backbone a large part of this catalog builds on — camera-control world models, action-conditioned rollouts, and later Helios-style long-video work all start from these weights. The official suite covers text-to-video at 1.3B and 14B, image-to-video 14B at 480p and 720p, plus upstream video editing and bilingual visual text (Chinese and English). This page records the four Apache-2.0 Hugging Face lines WorldFoundry actually binds: `wan2.1-t2v-1.3b`, `wan2.1-t2v-14b`, `wan2.1-i2v-14b-480p`, and `wan2.1-i2v-14b-720p`.
+
+<ModelPaperFigures modelId="wan2.1" locale="en" />
+
+The technical report is [Wan: Open and Advanced Large-Scale Video Generative Models](https://arxiv.org/abs/2503.20314). Code and weights live at [Wan-Video/Wan2.1](https://github.com/Wan-Video/Wan2.1) and [Wan-AI](https://huggingface.co/Wan-AI).
+
+<ModelCommandBuilder modelId="wan2.1" locale="en" />
+
+## What it is for
+
+Start on `wan2.1-t2v-1.3b`. Launch `worldfoundry-eval run wan2.1-t2v-1.3b`. Use `wan2.1-t2v-14b` or I2V 480p/720p only when you accept **Runner parity pending** on those lines.
+
+Iterate prompts on the 1.3B line when you need a cheap, verified artifact. Wan2.1 is the default backbone when a later catalog entry (VACE, Helios, camera-control world models) says it is Wan-derived. Compare clip quality on [VBench](/docs/evaluation/benchmark-hub/vbench) and physical plausibility on [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq) — those are the suites Wan releases are commonly discussed against, not ingested WorldFoundry leaderboards.
+
+## Runtime contract
+
+Required `prompt`; optional `image` / `video`; `actions` is seed. Verified 1.3B T2V: **832×480, 81 frames, 50 steps, guidance 6.0, 16 fps, shift 8.0** through `Wan2p1T2VPipeline` (`wan2.1-t2v-1.3b-832x480-81f`). Artifact: `wan2.1-t2v-1.3b-832x480-81f.mp4`. 14B T2V default **1280×720**, shift **5.0**; I2V 480p **832×480 / 81 frames / 40 steps / guidance 5.0 / shift 3.0**; I2V 720p **1280×720**, shift **5.0**. Catalog tasks are `text-to-video` and `image-to-video` only.
+
+Wan-VAE encodes **1080p of arbitrary length** so the DiT denoises in latent space. Text is UMT5. I2V needs the image-encoder checkpoint role.
+
+## Running in WorldFoundry
+
+Unified `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage Wan-AI checkpoints locally. License Apache-2.0. Catalog VRAM **8 GB** on the 1.3B line. Runtime integration is recorded for the family. A prior local 81-frame T2V 1.3B artifact is recorded with verified demo and runner parity; 14B T2V and both I2V lines still lack output parity. No public parity demo script is packaged, and reproducing the 1.3B artifact requires the staged checkpoint and runtime environment.
+
+Generate the 1.3B T2V clip, then score the folder on [VBench](/docs/evaluation/benchmark-hub/vbench) `custom_input` / `aesthetic_quality` — the only VBench GPU dimension this repo verified. Read `aesthetic_quality` in `tmp/vbench/wan2.1/eval/scorecard.json`.
+
+<ModelRelatedRecipes modelId="wan2.1" locale="en" />

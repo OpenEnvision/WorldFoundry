@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+
+
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 from collections.abc import Mapping
@@ -26,7 +31,12 @@ from worldfoundry.evaluation.tasks.execution.runners.camerabench.camerabench_met
     evaluate_camerabench_from_score_dir,
 )
 
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
+DEFAULT_CAMERABENCH_RUNTIME_ROOT = Path(__file__).resolve().parent / "runtime" / "camerabench"
+VENDORED_TASK_SCRIPTS = {
+    "binary": "binary_classification_evaluation.py",
+    "vqa_retrieval": "vqa_and_retrieval_evaluation.py",
+    "caption": "caption_evaluation.py",
+}
 METRIC_ORDER = (
     "camera_motion_average_precision",
     "camera_motion_roc_auc",
@@ -143,6 +153,86 @@ def _score_dir_report(score_dir: Path | None) -> dict[str, Any]:
         "patterns": patterns,
         "sample_files": [str(path) for path in files[:20]],
     }
+
+
+def _camerabench_runtime_root(explicit: Path | None = None) -> Path:
+    if explicit is not None:
+        return explicit.expanduser().resolve()
+    env_root = env_path("WORLDFOUNDRY_CAMERABENCH_RUNTIME_ROOT")
+    if env_root is not None:
+        return env_root
+    return DEFAULT_CAMERABENCH_RUNTIME_ROOT
+
+
+def run_vendored_official_scripts(
+    *,
+    score_dir: Path,
+    output_dir: Path,
+    runtime_root: Path,
+    task: str = "binary",
+    mode: str = "both",
+    no_gpt: bool = True,
+    openai_api_key: str | None = None,
+    timeout: int = 7200,
+) -> tuple[dict[str, dict[str, Any]], list[list[str]], str, str]:
+    """Execute the vendored official CameraBench evaluation scripts.
+
+    Runs the byte-vendored ``t2v_metrics/camerabench`` evaluators as
+    subprocesses against a prepared score directory and returns the parsed
+    per-task result payloads plus the executed commands and captured output.
+    """
+
+    if task not in {"binary", "vqa_retrieval", "caption", "all"}:
+        raise ValueError(f"unknown CameraBench task: {task}")
+    selected = tuple(VENDORED_TASK_SCRIPTS) if task == "all" else (task,)
+    missing = [name for name in selected if not (runtime_root / VENDORED_TASK_SCRIPTS[name]).is_file()]
+    if missing:
+        raise FileNotFoundError(
+            f"vendored CameraBench runtime scripts not found under {runtime_root}: "
+            + ", ".join(VENDORED_TASK_SCRIPTS[name] for name in missing)
+        )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    task_results: dict[str, dict[str, Any]] = {}
+    commands: list[list[str]] = []
+    stdout_chunks: list[str] = []
+    stderr_chunks: list[str] = []
+    for item in selected:
+        script = runtime_root / VENDORED_TASK_SCRIPTS[item]
+        output_file = output_dir / f"camerabench_{item}_results.json"
+        command = [sys.executable, str(script), "--score_dir", str(score_dir), "--output_file", str(output_file)]
+        if item == "vqa_retrieval":
+            command.extend(["--mode", mode])
+        if item == "caption" and no_gpt:
+            command.append("--no_gpt")
+        env = os.environ.copy()
+        if item == "caption" and not no_gpt and openai_api_key:
+            env["OPENAI_API_KEY"] = openai_api_key
+        # The upstream scripts import matplotlib for optional plots; force a
+        # headless backend so the subprocess never needs a display.
+        env.setdefault("MPLBACKEND", "Agg")
+        completed = subprocess.run(
+            command,
+            cwd=str(runtime_root),
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+        stdout_chunks.append(f"===== {item} =====\n{completed.stdout}")
+        stderr_chunks.append(f"===== {item} =====\n{completed.stderr}")
+        commands.append(command)
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"vendored CameraBench {item} evaluation failed with exit code {completed.returncode}: "
+                f"{completed.stderr.strip()[-2000:]}"
+            )
+        if output_file.is_file():
+            payload = load_json(output_file)
+            if isinstance(payload, dict):
+                task_results[item] = payload
+    return task_results, commands, "\n".join(stdout_chunks), "\n".join(stderr_chunks)
 
 
 def _namespaced_results_by_split(task: str, raw_results: Mapping[str, Any]) -> dict[str, Any]:
@@ -301,6 +391,7 @@ def normalize_camerabench_results(
     benchmark_data_root: Path | None = None,
     score_dir: Path | None = None,
     strict: bool = False,
+    official_runtime_executed: bool = False,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     scorecard_path = output_dir / "scorecard.json"
@@ -346,11 +437,12 @@ def normalize_camerabench_results(
     )
     strict_failed = strict and not full_suite_valid
     normalization_ok = returncode == 0 and available_count > 0 and not strict_failed
-    # Running the score-directory aggregator is not the complete CameraBench
-    # evaluation protocol: the upstream per-sample score generation still has
-    # to happen outside this runner.  Keep all imported/aggregated evidence
-    # fail-closed until that end-to-end path is implemented and audited.
-    normalizer_only = True
+    # Running the score-directory aggregator (in-tree port or vendored
+    # official scripts) is not the complete CameraBench evaluation protocol:
+    # the upstream per-sample score generation still has to happen outside
+    # this runner.  Keep all imported/aggregated evidence fail-closed until
+    # that end-to-end path is implemented and audited.
+    normalizer_only = not official_runtime_executed
     official_verified = False
     integration_evidence = False
 
@@ -415,8 +507,8 @@ def normalize_camerabench_results(
         },
         "validation": {
             "normalizer_only": normalizer_only,
-            "official_runtime_executed": False,
-            "in_tree_metric_evaluator_executed": False,
+            "official_runtime_executed": official_runtime_executed,
+            "in_tree_metric_evaluator_executed": command is not None and not official_runtime_executed,
             "upstream_aggregation_executed": command is not None,
             "official_results_imported": command is None and available_count > 0,
             "strict": strict,
@@ -481,20 +573,36 @@ def run_official_camerabench(args: argparse.Namespace) -> dict[str, Any]:
     upstream_output_dir = output_dir / "upstream"
     upstream_output_dir.mkdir(parents=True, exist_ok=True)
     start = time.monotonic()
-    task_results, commands = evaluate_camerabench_from_score_dir(
-        args.score_dir,
-        output_dir=upstream_output_dir,
-        task=args.task,
-        mode=args.mode,
-        no_gpt=args.no_gpt,
-        openai_api_key=args.openai_api_key,
-    )
-    duration_seconds = time.monotonic() - start
-    stdout_path.write_text(
-        "\n".join([f"===== {task} =====\n{task_results.get(task, {})}" for task in task_results]),
-        encoding="utf-8",
-    )
-    stderr_path.write_text("", encoding="utf-8")
+    if args.run_official:
+        runtime_root = _camerabench_runtime_root(args.camerabench_runtime_root)
+        task_results, commands, upstream_stdout, upstream_stderr = run_vendored_official_scripts(
+            score_dir=args.score_dir,
+            output_dir=upstream_output_dir,
+            runtime_root=runtime_root,
+            task=args.task,
+            mode=args.mode,
+            no_gpt=args.no_gpt,
+            openai_api_key=args.openai_api_key,
+            timeout=args.timeout,
+        )
+        duration_seconds = time.monotonic() - start
+        stdout_path.write_text(upstream_stdout, encoding="utf-8")
+        stderr_path.write_text(upstream_stderr, encoding="utf-8")
+    else:
+        task_results, commands = evaluate_camerabench_from_score_dir(
+            args.score_dir,
+            output_dir=upstream_output_dir,
+            task=args.task,
+            mode=args.mode,
+            no_gpt=args.no_gpt,
+            openai_api_key=args.openai_api_key,
+        )
+        duration_seconds = time.monotonic() - start
+        stdout_path.write_text(
+            "\n".join([f"===== {task} =====\n{task_results.get(task, {})}" for task in task_results]),
+            encoding="utf-8",
+        )
+        stderr_path.write_text("", encoding="utf-8")
     raw_results = merge_task_results(task_results)
     upstream_results_path = upstream_output_dir / f"camerabench_{args.task}_results.json"
     write_json(upstream_results_path, raw_results)
@@ -511,6 +619,7 @@ def run_official_camerabench(args: argparse.Namespace) -> dict[str, Any]:
         benchmark_data_root=args.benchmark_data_root,
         score_dir=args.score_dir,
         strict=strict,
+        official_runtime_executed=args.run_official,
     )
 
 
@@ -529,6 +638,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--task", choices=("binary", "vqa_retrieval", "caption", "all"), default=os.environ.get("WORLDFOUNDRY_CAMERABENCH_TASK", "binary"))
     parser.add_argument("--mode", choices=("vqa", "retrieval", "both"), default=os.environ.get("WORLDFOUNDRY_CAMERABENCH_MODE", "both"))
     parser.add_argument("--output-dir", type=Path, default=env_path("WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR"))
+    parser.add_argument(
+        "--run-official",
+        action="store_true",
+        help="Execute the vendored official t2v_metrics/camerabench evaluation scripts instead of the in-tree port.",
+    )
+    parser.add_argument(
+        "--camerabench-runtime-root",
+        type=Path,
+        default=env_path("WORLDFOUNDRY_CAMERABENCH_RUNTIME_ROOT"),
+        help="Override the vendored CameraBench runtime directory (defaults to the in-tree runtime/camerabench).",
+    )
+    parser.add_argument("--timeout", type=int, default=int(os.environ.get("WORLDFOUNDRY_BENCHMARK_TIMEOUT", "7200")))
     parser.add_argument("--no-gpt", action="store_true")
     parser.add_argument("--openai-api-key", default=os.environ.get("OPENAI_API_KEY"))
     parser.add_argument("--strict", action="store_true", help="Require complete local testset coverage and all CameraBench metric families.")
@@ -544,7 +665,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         scorecard = run_official_camerabench(args)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

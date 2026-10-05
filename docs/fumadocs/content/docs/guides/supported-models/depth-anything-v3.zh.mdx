@@ -1,0 +1,42 @@
+---
+title: "Depth Anything 3"
+description: "字节 Seed 的多视角几何基础模型。官方 SOH 导出路径已移植；runner 待验证。不是米制先验卡。权重 Apache-2.0。"
+modelId: "depth-anything-v3"
+pageSource: authored
+---
+
+Depth Anything 3（DA3）是字节 Seed 的**几何基础模型**：在单目深度之外还能预测**多视角一致**几何。这张卡是树内官方 **SOH 导出**路径（`DepthAnything3Pipeline`）。它**不是**已验证的米制先验 [depth-anything-v3-prior](/zh/docs/guides/supported-models/depth-anything-v3-prior)。别名 `da3`、`depth-anything-3` 解析到这里。
+
+<ModelPaperFigures modelId="depth-anything-v3" locale="zh" />
+
+官方论文见 [arXiv 2511.10647](https://arxiv.org/abs/2511.10647)。项目页：[depth-anything-3.github.io](https://depth-anything-3.github.io/)。代码：[ByteDance-Seed/Depth-Anything-3](https://github.com/ByteDance-Seed/Depth-Anything-3)。权重：`depth-anything/DA3-LARGE`（**apache-2.0**）。
+
+集成是 Runner 一致性待验证；runner **待验证**。recipe 的环境 / VRAM / 产物行未设置——就位后用 `model-show` 查看。
+
+<ModelCommandBuilder modelId="depth-anything-v3" locale="zh" />
+
+## 用来做什么
+
+完整 DA3 SOH 导出。只要度量深度就走先验兄弟卡。
+
+启动 `worldfoundry-eval run depth-anything-v3 --pipeline.task-profile official-soh-export`。
+
+## 运行时契约
+
+必填 `input_path`；可选 `export_format`、`process_res`、`process_res_method`、`max_frames`、`frame_stride`、`infer_gs`。
+
+| 旋钮 | 默认 |
+| --- | --- |
+| `input_path` | 捆绑 SOH 示例 `data/test_cases/depth_anything_v3/examples/SOH` |
+| `export_format` | `mini_npz` |
+| `process_res` | **504** |
+| `process_res_method` | `upper_bound_resize` |
+| `max_frames` | **2** |
+| `frame_stride` | **1** |
+| `infer_gs` | **false** |
+
+## 在 WorldFoundry 中运行
+
+状态：**Runner 一致性待验证**。 权重必须本地就位——运行时不下载。在该环境执行 `worldfoundry-eval run depth-anything-v3 --pipeline.task-profile official-soh-export`。catalog 未记录 VRAM。
+
+<ModelRelatedRecipes modelId="depth-anything-v3" locale="zh" />

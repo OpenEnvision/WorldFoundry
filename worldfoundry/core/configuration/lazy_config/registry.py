@@ -13,16 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Map config-file import strings to live callables, and the inverse.
+
+LazyCall stores ``_target_`` as either a live object or an import path
+such as ``torch.nn.Conv2d``. :func:`locate` resolves that string without
+the caller knowing which package owns the symbol; :func:`convert_target_to_string`
+is the inverse used when a dataclass/attrs type cannot live inside
+OmegaConf.
+
+:func:`locate` tries :func:`pydoc.locate` first, then Hydra's private
+``_locate`` for cases pydoc misses (for example ``torch.optim.sgd.SGD``).
+:func:`convert_target_to_string` prefers the shortest prefix that still
+resolves to the same object so configs stay stable when a class moves
+from ``pkg._impl.Foo`` to ``pkg.Foo``.
+"""
+
 import inspect
 import pydoc
 from typing import Any
 
-"""
-``Registry`` and `locate` provide ways to map a string (typically found
-in config files) to callable objects.
-"""
-
 __all__ = ["locate", "convert_target_to_string"]
+
+# ──────────────────────────────────────────────────────────────────────────
+# Optional fvcore Registry — keep the name for configs that still import it
+# ──────────────────────────────────────────────────────────────────────────
 
 try:
     from fvcore.common.registry import Registry  # for backward compatibility.
@@ -32,12 +46,22 @@ except Exception:
     pass
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Bidirectional locate — compress paths so a moved class keeps its _target_
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def convert_target_to_string(t: Any) -> str:
-    """
-    Inverse of ``locate()``.
+    """Return the shortest import path that :func:`locate` maps back to *t*.
+
+    Classmethods are encoded as ``ClassName.method`` under the class
+    module. Ordinary callables use ``__module__`` + ``__qualname__``.
+    Intermediate prefixes are tried so ``pkg.sub._impl.Foo`` can shrink
+    to ``pkg.sub.Foo`` when that alias exists.
 
     Args:
-        t: any object with ``__module__`` and ``__qualname__``
+        t: Any object with ``__module__`` and ``__qualname__`` (or a
+            classmethod bound on a class).
     """
     if hasattr(t, "__self__") and inspect.isclass(t.__self__):
         # classmethod
@@ -68,11 +92,18 @@ _convert_target_to_string = convert_target_to_string  # for backward compatibili
 
 
 def locate(name: str) -> Any:
-    """
-    Locate and return an object ``x`` using an input string ``{x.__module__}.{x.__qualname__}``,
-    such as "module.submodule.class_name".
+    """Resolve ``"module.submodule.ClassName"`` to the live Python object.
 
-    Raise Exception if it cannot be found.
+    Args:
+        name: Dotted import path as stored in a LazyCall ``_target_``.
+
+    Returns:
+        The located class, function, or other attribute.
+
+    Raises:
+        ImportError: Neither pydoc nor Hydra can find *name*, or Hydra
+            itself is unavailable after pydoc failed.
+        Exception: Hydra ``_locate`` failed after pydoc returned ``None``.
     """
     obj = pydoc.locate(name)
 

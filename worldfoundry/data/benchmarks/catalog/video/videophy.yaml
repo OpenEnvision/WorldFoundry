@@ -1,5 +1,7 @@
 id: videophy
 name: VideoPhy
+publisher: UCLA
+publisher_kind: university
 benchmark_kind:
 - text-to-video
 - physical-commonsense
@@ -57,6 +59,20 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  scoring:
+    engines: [physics_contract]
+    hooks:
+      physics_contract: worldfoundry.evaluation.tasks.execution.runners.videophy.videophy_contract_evaluator:write_videophy_evaluation
+  normalization:
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/videophy/run_videophy_official_runner.py
+  pass_benchmark_id: false
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.videophy.run_videophy_official_runner
+    limit_arg: --limit
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    supports_fixture: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoPhyContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/videophy/run_videophy_official_runner.py
   run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
@@ -97,6 +113,8 @@ runner:
     executing upstream scorers.
 integration:
   status: integrated
+  tier: model_backed
+  judge_model_id: videophysics/videocon_physics
   blocked_reasons:
   - Official repository/source metadata is verified, but the official benchmark runtime has not been executed in
     WorldFoundry.

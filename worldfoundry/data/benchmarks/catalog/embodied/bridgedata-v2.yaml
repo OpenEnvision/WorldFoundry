@@ -1,5 +1,7 @@
 id: bridgedata-v2
 name: BridgeData V2
+publisher: UC Berkeley
+publisher_kind: university
 benchmark_kind:
 - vla
 - robot-manipulation
@@ -38,6 +40,9 @@ dataset:
   notes:
   - Official dataset download is HTTP/project-page based rather than a single confirmed Hugging Face benchmark table.
 runner:
+  normalization:
+    dispatch: embodied
+    embodied_track: vla
   runner_target: worldfoundry.evaluation.tasks.contracts.external:BridgeDataV2Contract
   verification_status: normalizer_only
   validation_command:

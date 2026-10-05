@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import Literal
 
 import torch
-from dacite import Config, from_dict
+try:
+    from dacite import Config, from_dict
+except ImportError:
+    from ...dacite_compat import Config, from_dict
 from jaxtyping import Float, Int64
 from torch import Tensor
 

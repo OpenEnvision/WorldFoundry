@@ -24,4 +24,4 @@ execution:
 integration:
   status: runtime_ported
 notes:
-- MineWorld source is vendored in-tree under synthesis/visual_generation/world_model/mineworld.
+- MineWorld source is vendored in-tree under synthesis/visual_generation/mineworld.

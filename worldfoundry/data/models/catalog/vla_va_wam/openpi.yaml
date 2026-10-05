@@ -15,6 +15,8 @@ integration:
 license: apache-2.0
 name: OpenPI
 official_sources:
+  paper: https://arxiv.org/abs/2504.16054
+  project_page: https://www.physicalintelligence.company/blog/openpi
   github:
     head_sha: c23745b5ad24e98f66967ea795a07b2588ed6c79
     url: https://github.com/Physical-Intelligence/openpi
@@ -70,3 +72,21 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records. Runner or pipeline targets are present
   only after a complete in-tree WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: Physical Intelligence
+  publisher_kind: company
+  publisher_zh: Physical Intelligence（PI）
+  overview: 'OpenPI is Physical Intelligence''s official open-source release of the pi-series robot policies (Apache-2.0). WorldFoundry flattens the inference runtime in-tree and validates it end to end: py_compile, import/from_pretrained, plan-only predict, and checkpoint-backed pi05_libero policy inference all passed, emitting the configured action schema.'
+  overview_zh: OpenPI 是 Physical Intelligence 官方开源的 pi 系列机器人策略（Apache-2.0）。 WorldFoundry 将推理运行时扁平化内置树内并端到端验证：py_compile、导入/from_pretrained、仅计划 predict 与 checkpoint 驱动的 pi05_libero 策略推理全部通过，输出配置的动作 schema。
+  architecture: 'The runtime is the shared infrastructure for the pi0 / pi0-FAST / pi0.5 family: PaliGemma-based VLA backbones with flow-matching or FAST-token action decoding. The local pi05_libero route uses backend worldfoundry.openpi.in_tree_runtime.create_trained_policy_infer.'
+  architecture_zh: 该运行时是 pi0 / pi0-FAST / pi0.5 家族的共享基础设施：基于 PaliGemma 的 VLA 骨干，配 flow-matching 或 FAST token 动作解码。本地 pi05_libero 路由使用后端 worldfoundry.openpi.in_tree_runtime.create_trained_policy_infer。
+  usage_notes: Checkpoints come from GCS (gs://openpi-assets), not Hugging Face — use gsutil or gcloud to stage. For specific model generations use the dedicated pi0, pi0-fast, and pi05 catalog entries.
+  usage_notes_zh: checkpoint 来自 GCS（gs://openpi-assets）而非 Hugging Face——请用 gsutil 或 gcloud 就位。具体模型世代请使用专门的 pi0、pi0-fast 与 pi05 catalog 条目。
+  limitations:
+  - GCS-hosted checkpoints require gsutil/gcloud tooling.
+  limitations_zh:
+  - GCS 托管的 checkpoint 需要 gsutil/gcloud 工具。
+  recommended_benchmarks:
+  - id: libero
+    reason: Checkpoint-backed pi05_libero inference is validated.
+    reason_zh: checkpoint 驱动的 pi05_libero 推理已验证。

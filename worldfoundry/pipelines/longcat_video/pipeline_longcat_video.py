@@ -87,7 +87,7 @@ class LongCatVideoPipeline(PipelineABC):
         """Load the pipeline from pretrained checkpoints and configurations."""
         del model_id
         options = cls._normalize_options(model_path, required_components, kwargs)
-        checkpoint_dir = options.get("checkpoint_dir") or options.get("ckpt_dir")
+        checkpoint_dir = options.get("checkpoint_dir") or options.get("ckpt_dir") or options.get("model_path")
         if checkpoint_dir is None and model_path is not None and not isinstance(model_path, dict):
             checkpoint_dir = model_path
         task_type = str(options.get("task_type") or "t2v")
@@ -147,7 +147,7 @@ class LongCatVideoPipeline(PipelineABC):
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Process and normalize input arguments and conditions for inference."""
-        return {
+        request = {
             "prompt": prompt,
             "images": images,
             "video": video,
@@ -163,6 +163,21 @@ class LongCatVideoPipeline(PipelineABC):
             "negative_prompt": negative_prompt or _DEFAULT_NEGATIVE_PROMPT,
             "extra": kwargs,
         }
+        if task_type == "t2v":
+            # The upstream demo runs every stage by default. A pipeline request
+            # selects base or distilled inference; refinement is explicitly opt-in.
+            request.update(
+                run_base=not use_distill,
+                run_distill=use_distill,
+                run_refiner=False,
+            )
+            for key in (
+                "run_base", "run_distill", "run_refiner", "fps", "cpu_offload",
+                "max_sequence_length", "distill_num_inference_steps", "spatial_refine_only",
+            ):
+                if key in kwargs:
+                    request[key] = kwargs[key]
+        return request
 
     def _record(self, payload: dict[str, Any]) -> None:
         """Record for LongCatVideoPipeline."""

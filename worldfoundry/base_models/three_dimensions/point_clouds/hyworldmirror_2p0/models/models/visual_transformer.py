@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-from worldfoundry.core.nn.layers import PatchEmbed, PatchEmbed_Mlp
+from worldfoundry.core.nn.blocks.layers import PatchEmbed, PatchEmbed_Mlp
 from ..layers.vision_transformer import vit_small, vit_base, vit_large, vit_giant2
 from ..layers.block import Block, DistBlock
 from ...comm.padding import minimal_pad_to_divisible,depad_by_length,pad_by_length
@@ -272,7 +272,7 @@ class VisualGeometryTransformer(nn.Module):
             ) if rope_base > 0 else None
             self.pos_getter = PositionGetter() if self.rope is not None else None
         else:
-            from worldfoundry.core.attention.rope_2d import (
+            from worldfoundry.core.attention.rotary.rope_2d import (
                 PositionGetter,
                 RotaryPositionEmbedding2D,
             )

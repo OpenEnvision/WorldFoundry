@@ -14,6 +14,8 @@ from typing import Any, Sequence
 
 import numpy as np
 
+from worldfoundry.core.io import file_sha256
+
 
 class ZeroScopeRuntime:
     """Manages the ZeroScope diffusers pipeline for text-to-video generation.
@@ -123,24 +125,17 @@ class ZeroScopeRuntime:
 
         import torch
         from diffusers import TextToVideoSDPipeline
-        import transformers.modeling_utils as transformers_modeling_utils
-        import transformers.utils.import_utils as transformers_import_utils
 
         # Determine the actual device and data type based on availability.
         device = self.device if str(self.device).startswith("cuda") and torch.cuda.is_available() else "cpu"
         dtype = torch.float16 if device.startswith("cuda") else torch.float32
-
-        # ZeroScope's official HF repos store trusted local weights as .bin files.
-        # transformers>=4.53 blocks .bin loading on torch<2.6; this repo currently
-        # uses torch 2.5.1, so this bypasses the version guard to allow loading.
-        transformers_import_utils.check_torch_load_is_safe = lambda: None
-        transformers_modeling_utils.check_torch_load_is_safe = lambda: None
 
         # Load the pipeline from the local path.
         pipe = TextToVideoSDPipeline.from_pretrained(
             self.model_path,
             torch_dtype=dtype,
             local_files_only=True,  # Ensure model is loaded only from local files.
+            use_safetensors=True,
         )
         pipe = pipe.to(device)
         self.device = device  # Update the device in case it changed (e.g., from cuda to cpu).
@@ -209,7 +204,7 @@ class ZeroScopeRuntime:
         export_to_video(frames, str(target), fps=fps or int(kwargs.get("fps", 8)))
 
         # Calculate SHA256 hash of the generated video file.
-        video_sha = hashlib.sha256(target.read_bytes()).hexdigest()
+        video_sha = file_sha256(target)
 
         return {
             "status": "success",

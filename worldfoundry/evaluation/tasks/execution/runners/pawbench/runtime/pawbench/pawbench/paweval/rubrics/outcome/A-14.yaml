@@ -1,0 +1,37 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A-14
+track: calibration
+title_en: Blind draw with visual distractor
+outcome_question: Which label in ['red', 'blue'] is visible as the first decisive
+  post-action result?
+readout_policy: Read the first decisive post-action result window after the requested
+  draw has actually occurred. Judge only the single ball that is uniquely picked
+  up, isolated, or otherwise selected by the hand before the color readout. Balls
+  remaining in the box and visible distractor props are context, not outcome evidence.
+canonical_labels:
+- red
+- blue
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['red', 'blue'] can be decisively identified within
+  the readout window.
+- The selected ball is hidden, still inside the hand/box, or not color-readable in
+  every post-draw readout frame.
+out_of_schema_rules:
+- No ball is picked up, or multiple balls are picked/isolated with no unique selected
+  ball before color readout; this is out-of-schema, not nearest-legal.
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'First-decisive-window rule: use the earliest frame where the post-action result
+  has committed; do not re-label from later transient states.'
+- Brief contact with multiple balls is allowed only if exactly one ball becomes the
+  unique selected/readable object before color readout.
+notes:
+- 'Scene title: Blind draw with visual distractor.'
+- Ignore unselected balls and distractor props when assigning the red/blue outcome.

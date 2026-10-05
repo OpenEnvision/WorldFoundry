@@ -5,10 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from worldfoundry.base_models.capabilities import BASE_MODEL_CAPABILITIES
+from worldfoundry.core.io.paths import package_data_path
 
 
 def config_path(name: str = "AMT-S.yaml") -> Path:
-    return Path(__file__).resolve().parent / "cfgs" / name
+    return package_data_path('models', 'runtime', 'configs', 'amt') / name
 
 
 def checkpoint_path() -> Path:

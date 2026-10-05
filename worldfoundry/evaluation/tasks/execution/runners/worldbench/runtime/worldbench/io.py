@@ -255,8 +255,6 @@ def load_frames(path: Path, *, limit: int | None = None) -> list[np.ndarray]:
         pass
     except Exception as exc:
         decord_error = exc
-    else:  # pragma: no cover - control cannot reach this after return
-        decord_error = None
 
     try:
         import cv2

@@ -1,0 +1,49 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: A-14
+track: calibration
+title_en: Blind draw with visual distractor
+scene_grounding:
+- 'Initial state must match: A blind draw setup like A-13 is visible, with additional
+  distractor props around the box.'
+- Apparatus geometry in the opening frames must match the source image.
+action_execution:
+- 'Required action: The man picks up exactly one ball once.'
+- Action must happen exactly once in the expected direction / region.
+- No ball picked or multiple balls picked/isolated is an action/out-of-schema failure,
+  not a red/blue guess.
+target_requirements:
+- Scene-defining target, subject, and readout evidence must remain visible throughout the action.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+- The selected ball must remain trackable from pick-up/isolation through the first
+  readable color frame; unselected balls and distractor props are not the outcome
+  object.
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-readout state/region change: subject moves between label-defining states or regions after the first decisive readout.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Blind draw with visual distractor.'
+- Judge only the single selected ball color; ignore unselected balls and distractor
+  props.

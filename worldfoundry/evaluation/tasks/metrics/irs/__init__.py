@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .wrapper import compute_irs, compute_irs_measures, compute_irs_with_reference, fit_irs_reference_means
+compute_irs = lazy_export(f"{__name__}.wrapper", "compute_irs", owner=__name__)
+compute_irs_measures = lazy_export(f"{__name__}.wrapper", "compute_irs_measures", owner=__name__)
+compute_irs_with_reference = lazy_export(f"{__name__}.wrapper", "compute_irs_with_reference", owner=__name__)
+fit_irs_reference_means = lazy_export(f"{__name__}.wrapper", "fit_irs_reference_means", owner=__name__)
 
 METRIC_ID = "irs"
 ALIASES = ("image-realism-score", "image_realism_score")

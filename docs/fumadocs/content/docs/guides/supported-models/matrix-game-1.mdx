@@ -1,0 +1,32 @@
+---
+title: "Matrix-Game 1.0"
+description: "Matrix-Game 1.0 from Skywork AI (Kunlun Tech): `image` and `prompt` in; `world.mp4` out."
+modelId: "matrix-game-1"
+pageSource: authored
+---
+
+Matrix-Game 1.0 is the first generation of Skywork's interactive game world model: from an image and keyboard/mouse-style actions it generates playable game-world video. In this catalog it is registered as its own model id and never routes through Matrix-Game-2; the minimal official Python runtime closure is vendored in-tree.
+
+<ModelPaperFigures modelId="matrix-game-1" locale="en" />
+
+<ModelCommandBuilder modelId="matrix-game-1" locale="en" />
+
+## What it is for
+
+Drive Matrix-Game 1 with keyboard/mouse tokens. Not the 2.0 or 3.x runtimes.
+
+Launch `worldfoundry-eval run matrix-game-1`.
+
+Score on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — action-conditioned game-world rollout quality.
+
+## Runtime contract
+
+Required: `image` and `prompt`; `actions`: keyboard, mouse, navigation_token; artifacts: `world.mp4`.
+
+WorldFoundry vendors the minimal Matrix-Game-1 official Python runtime closure under worldfoundry/synthesis/visual_generation/matrix_game/matrix_game_1_runtime.
+
+## Run in WorldFoundry
+
+Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `Skywork/Matrix-Game` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run matrix-game-1`. Catalog VRAM is unset.
+
+<ModelRelatedRecipes modelId="matrix-game-1" locale="en" />

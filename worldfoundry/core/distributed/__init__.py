@@ -1,8 +1,22 @@
-"""Distributed tensor helpers shared by optimized runtime modules."""
+"""Distributed transport, process lifecycle and parallel topology.
+
+- runtime: process groups, launch, rank coordination and logging.
+- collectives: tensor, object, DeviceMesh and metric communication.
+- model_parallel: TP/CP/PP/DP groups, context splitting and pipeline scheduling.
+- sequence_parallel: sequence process state, communicators and all-to-all runtime.
+- sharding: FSDP1/FSDP2 parameter placement and scoped unsharding.
+
+Attention math belongs to core.attention.parallel, not this transport package.
+The existing package-level collective and topology APIs are exported below.
+"""
 
 from __future__ import annotations
 
-from .context_parallel import (
+# ──────────────────────────────────────────────────────────────────────────
+# Public re-exports — keep this facade import-light; no eager NCCL init
+# ──────────────────────────────────────────────────────────────────────────
+
+from worldfoundry.core.distributed.model_parallel.context import (
     broadcast,
     broadcast_split_tensor,
     cat_outputs_cp,
@@ -13,26 +27,26 @@ from .context_parallel import (
     split_inputs_cp,
     split_inputs_cp_object_list,
 )
-from .device_mesh_collectives import (
+from worldfoundry.core.distributed.collectives.device_mesh import (
     DTensorFastEmaModelUpdater,
     FastEmaModelUpdater,
     broadcast_dtensor_model_states,
     get_local_tensor_if_DTensor,
     get_local_tensor_if_dtensor,
 )
-from .generic_collectives import (
+from worldfoundry.core.distributed.collectives.generic import (
     get_rank as get_global_rank,
 )
-from .generic_collectives import (
+from worldfoundry.core.distributed.collectives.generic import (
     get_world_size,
 )
-from .generic_collectives import (
+from worldfoundry.core.distributed.collectives.generic import (
     is_dist_initialized as is_distributed_initialized,
 )
-from .inference_runtime import dist_init, is_last_rank, is_last_tp_cp_rank
-from .inference_runtime import get_device as get_distributed_device
-from .logging import print_per_rank, print_rank_0
-from .model_parallel_groups import (
+from worldfoundry.core.distributed.runtime.inference_runtime import dist_init, is_last_rank, is_last_tp_cp_rank
+from worldfoundry.core.distributed.runtime.inference_runtime import get_device as get_distributed_device
+from worldfoundry.core.distributed.runtime.logging import print_per_rank, print_rank_0
+from worldfoundry.core.distributed.model_parallel.groups import (
     destroy_model_parallel,
     get_cp_group,
     get_cp_rank,
@@ -58,14 +72,18 @@ from .model_parallel_groups import (
     initialize_model_parallel,
     model_parallel_is_initialized,
 )
-from .pipeline_parallel import PPScheduler, init_pp_scheduler, pp_scheduler
-from .rank_orchestration import (
+from worldfoundry.core.distributed.model_parallel.pipeline import PPScheduler, init_pp_scheduler, pp_scheduler
+from worldfoundry.core.distributed.runtime.rank_orchestration import (
     DistributedOpSpec,
     PayloadBus,
     RankCoordinator,
     SignalBus,
     distributed_op,
 )
+
+# ──────────────────────────────────────────────────────────────────────────
+# __all__ — names callers may import from worldfoundry.core.distributed
+# ──────────────────────────────────────────────────────────────────────────
 
 __all__ = [
     "DistributedOpSpec",

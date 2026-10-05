@@ -27,8 +27,10 @@ from tqdm.auto import tqdm
 
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.specs import Prediction
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.logger import logger
-from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.pca_utils import PCARGBVisualizer
-from worldfoundry.core.utils.parallel_execution import async_call
+from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.utils.pca_utils import (
+    PCARGBVisualizer,
+)
+from worldfoundry.core.execution.parallel_execution import async_call
 
 
 def visualize_depth(

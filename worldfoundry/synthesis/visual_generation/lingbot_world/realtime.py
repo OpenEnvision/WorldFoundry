@@ -26,8 +26,9 @@ from einops import rearrange
 from PIL import Image
 
 from worldfoundry.core import autocast_context
+from worldfoundry.core.vram.encoder_lifecycle import offload_module_to_cpu
+from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
 from worldfoundry.core.io.paths import checkpoint_root_path
-from worldfoundry.core.realtime import RealtimeSpec
 from worldfoundry.runtime.compile_cache import CompilePolicy, compile_module_cached
 from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.taehv import (
     TAEHV,
@@ -125,11 +126,7 @@ class RealtimeCameraState:
 
         rotation = self.pose[:3, :3]
         translation = self.pose[:3, 3]
-        rotation = (
-            _rotation_matrix("y", yaw_rate * duration)
-            @ rotation
-            @ _rotation_matrix("x", pitch_delta)
-        )
+        rotation = _rotation_matrix("y", yaw_rate * duration) @ rotation @ _rotation_matrix("x", pitch_delta)
 
         forward_rate = float("w" in keys) - float("s" in keys)
         forward = np.asarray((rotation[0, 2], 0.0, rotation[2, 2]), dtype=np.float32)
@@ -234,25 +231,17 @@ class LingBotRealtimeSession:
         self.latent_height = self.height // int(core_model.vae_stride[1])
         self.latent_width = self.width // int(core_model.vae_stride[2])
         self.frame_sequence_length = (
-            self.latent_height
-            * self.latent_width
-            // (int(core_model.patch_size[1]) * int(core_model.patch_size[2]))
+            self.latent_height * self.latent_width // (int(core_model.patch_size[1]) * int(core_model.patch_size[2]))
         )
         self.chunk_sequence_length = self.chunk_latent_frames * self.frame_sequence_length
-        self.max_sequence_length = int(
-            math.ceil(self.chunk_sequence_length / self.sp_size) * self.sp_size
-        )
+        self.max_sequence_length = int(math.ceil(self.chunk_sequence_length / self.sp_size) * self.sp_size)
         self.cache_sequence_length = self.cache_frames * self.frame_sequence_length
         self.fps = 16
-        self.world_scale = float(
-            os.getenv("WORLDFOUNDRY_LINGBOT_WORLD_SCALE", "1.271182656288147")
-        )
+        self.world_scale = float(os.getenv("WORLDFOUNDRY_LINGBOT_WORLD_SCALE", "1.271182656288147"))
 
         self.camera = RealtimeCameraState(
             move_speed_per_second=self.camera_move_speed_per_second,
-            rotate_speed_radians_per_second=float(
-                np.deg2rad(self.camera_rotate_speed_degrees_per_second)
-            ),
+            rotate_speed_radians_per_second=float(np.deg2rad(self.camera_rotate_speed_degrees_per_second)),
         )
         self._last_camera_pose: torch.Tensor | None = None
         self._camera_directions: torch.Tensor | None = None
@@ -362,9 +351,7 @@ class LingBotRealtimeSession:
     @staticmethod
     def _decoder_checkpoint() -> Path:
         configured = os.getenv("WORLDFOUNDRY_LINGBOT_LIGHTTAE_PATH", "").strip()
-        return Path(configured).expanduser() if configured else checkpoint_root_path(
-            "taehv", "lighttaew2_1.pth"
-        )
+        return Path(configured).expanduser() if configured else checkpoint_root_path("taehv", "lighttaew2_1.pth")
 
     def _load_decoder(self) -> None:
         if self._decoder_model is not None:
@@ -403,13 +390,13 @@ class LingBotRealtimeSession:
         if not text_is_fsdp:
             text_model.to(self.device)
         context = self.core.text_encoder([prompt], self.device)
-        if (
-            not text_is_fsdp
-            and _env_flag("WORLDFOUNDRY_LINGBOT_OFFLOAD_ONESHOT_ENCODERS", True)
-        ):
-            text_model.cpu()
-            if self.device.type == "cuda":
-                torch.cuda.empty_cache()
+        if not text_is_fsdp and _env_flag("WORLDFOUNDRY_LINGBOT_OFFLOAD_ONESHOT_ENCODERS", True):
+            offload_module_to_cpu(
+                text_model,
+                device=self.device,
+                empty_cuda_cache=self.device.type == "cuda",
+                torch_module=torch,
+            )
         return context
 
     def _prepare_camera_grid(self) -> None:
@@ -470,9 +457,7 @@ class LingBotRealtimeSession:
             self._wait_for_state_stream(synchronize=True)
             try:
                 if not self.configured:
-                    raise RuntimeError(
-                        "Configure the LingBot realtime session before updating its prompt."
-                    )
+                    raise RuntimeError("Configure the LingBot realtime session before updating its prompt.")
                 if normalized_prompt == self._prompt:
                     return False
 
@@ -525,10 +510,7 @@ class LingBotRealtimeSession:
         latent = self.core.vae.encode_streaming(pixels, self._vae_state)
         expected_latents = self.chunk_latent_frames * chunks
         if latent.shape[1] != expected_latents:
-            raise RuntimeError(
-                f"Streaming VAE produced {latent.shape[1]} latent frames; "
-                f"expected {expected_latents}."
-            )
+            raise RuntimeError(f"Streaming VAE produced {latent.shape[1]} latent frames; expected {expected_latents}.")
         mask = torch.zeros(
             4,
             expected_latents,
@@ -546,12 +528,9 @@ class LingBotRealtimeSession:
 
         if chunks < 1:
             return
-        condition = self._synchronize_condition(
-            self._encode_i2v_condition(None, first=False, chunks=chunks)
-        )
+        condition = self._synchronize_condition(self._encode_i2v_condition(None, first=False, chunks=chunks))
         self._prefetched_conditions.extend(
-            chunk.contiguous()
-            for chunk in condition.split(self.chunk_latent_frames, dim=1)
+            chunk.contiguous() for chunk in condition.split(self.chunk_latent_frames, dim=1)
         )
 
     @torch.no_grad()
@@ -579,9 +558,7 @@ class LingBotRealtimeSession:
         self._prompt = normalized_prompt
         prompt_done = time.perf_counter()
         self._vae_state = self.core.vae.prepare_streaming_encode()
-        self._pending_first_condition = self._synchronize_condition(
-            self._encode_i2v_condition(image, first=True)
-        )
+        self._pending_first_condition = self._synchronize_condition(self._encode_i2v_condition(image, first=True))
         prefetch_chunks = _env_int(
             "WORLDFOUNDRY_REALTIME_CONDITION_PREFETCH_CHUNKS",
             self.condition_prefetch_chunks,
@@ -618,11 +595,7 @@ class LingBotRealtimeSession:
 
     def _fallback_segments(self, interactions: Sequence[str], num_frames: int) -> list[dict[str, Any]]:
         keys = sorted(
-            {
-                _TOKEN_TO_KEY[token]
-                for raw in interactions
-                if (token := str(raw).strip().lower()) in _TOKEN_TO_KEY
-            }
+            {_TOKEN_TO_KEY[token] for raw in interactions if (token := str(raw).strip().lower()) in _TOKEN_TO_KEY}
         )
         return [{"duration": num_frames / float(self.fps), "keys": keys}]
 
@@ -641,9 +614,7 @@ class LingBotRealtimeSession:
         previous = torch.cat((anchor, selected), dim=0)
         rotation = previous[:, :3, :3]
         translation = previous[:, :3, 3:]
-        inverse = torch.eye(4, device=self.device, dtype=torch.float32)[None].repeat(
-            previous.shape[0], 1, 1
-        )
+        inverse = torch.eye(4, device=self.device, dtype=torch.float32)[None].repeat(previous.shape[0], 1, 1)
         inverse[:, :3, :3] = rotation.transpose(-1, -2)
         inverse[:, :3, 3:] = -torch.bmm(rotation.transpose(-1, -2), translation)
         relative = torch.bmm(inverse[:-1], previous[1:])
@@ -695,15 +666,7 @@ class LingBotRealtimeSession:
         expected = self.next_output_frames()
         if video.shape[0] != expected:
             raise RuntimeError(f"LightTAE produced {video.shape[0]} frames; expected {expected}.")
-        return (
-            video.permute(0, 2, 3, 1)
-            .mul_(255.0)
-            .round_()
-            .clamp_(0, 255)
-            .to(torch.uint8)
-            .cpu()
-            .numpy()
-        )
+        return video.permute(0, 2, 3, 1).mul_(255.0).round_().clamp_(0, 255).to(torch.uint8).cpu().numpy()
 
     def generate(
         self,

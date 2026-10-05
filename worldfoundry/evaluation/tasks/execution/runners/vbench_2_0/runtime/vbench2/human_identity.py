@@ -31,8 +31,9 @@ def extract_face_features(face_image, model):
     image = image.astype(np.float32, copy=False)
     image -= 127.5
     image /= 127.5
-    data = torch.from_numpy(image).cuda()
-    with torch.no_grad():
+    device = next(model.parameters()).device
+    data = torch.from_numpy(image).to(device=device, non_blocking=True)
+    with torch.inference_mode():
         output = model(data)
         output = output.data.cpu().numpy()
         fe_1 = output[::2]
@@ -41,7 +42,8 @@ def extract_face_features(face_image, model):
     return feature.flatten() # 返回人脸特征向量
 
 def calculate_similarity(x1, x2):
-    return np.dot(x1, x2) / (np.linalg.norm(x1) * np.linalg.norm(x2))
+    denominator = np.linalg.norm(x1) * np.linalg.norm(x2)
+    return float(np.dot(x1, x2) / denominator) if denominator > 0 else 0.0
     
 class IDTracker:
     def __init__(self, similarity_threshold=0.4, grid_size=20):
@@ -95,15 +97,12 @@ def evaluate_id_consistency(prompt_dict_ls, retina_model, model):
         
             video_reader = decord.VideoReader(video_path)
             video = video_reader.get_batch(range(len(video_reader))) 
-            frame_count, height, width = video.shape[0], video.shape[1], video.shape[2]
-            scale = min(height, width)
-            video = video.permute(0, 3, 1, 2)[None].float().cuda() # B T C H W
-            cap = cv2.VideoCapture(video_path)
-            fps = int(cap.get(cv2.CAP_PROP_FPS))
             tracker = IDTracker(similarity_threshold=similarity_threshold)
             consistent_frame_count = 0
             frame_num = 0
-            video_np = video[0].permute(0,2,3,1).detach().cpu().numpy()
+            # Face detection consumes CPU numpy frames; avoid a full-video
+            # GPU round trip and only transfer the cropped face batch.
+            video_np = video.detach().cpu().numpy()
             for coun, frame in enumerate(video_np):
                 if coun<1:
                     flag, valid = tracker.update(frame, coun, retina_model, model)
@@ -133,7 +132,7 @@ def evaluate_id_consistency(prompt_dict_ls, retina_model, model):
             num+=frame_num
             processed_json.append(new_item)
             
-    return score/num, processed_json
+    return (score / num if num else 0.0), processed_json
 
     
     
@@ -152,7 +151,7 @@ def compute_human_identity(json_dir, device, submodules_dict, **kwargs):
     retina_model = Model(max_size=2048, device=device)
     retina_model.load_state_dict(retina_state_dict)
     model = resnet_face18(use_se=False)
-    state_dict=torch.load(submodules_dict['model'])
+    state_dict=torch.load(submodules_dict['model'], map_location="cpu", weights_only=True)
     new_state_dict = {}
     for k, v in state_dict.items():
         new_state_dict[k.replace('module.', '')] = v
@@ -166,5 +165,5 @@ def compute_human_identity(json_dir, device, submodules_dict, **kwargs):
         if d['video_results']!=-1:
             num+=1
             score+= d['video_results']
-    all_results = score/num
+    all_results = score / num if num else 0.0
     return all_results, video_results

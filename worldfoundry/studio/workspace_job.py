@@ -9,10 +9,10 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from .catalog import find_entry
-from .conda_dispatch import dispatch_spec_for_inference, run_manager_payload_in_conda
-from .execution import StudioManager
-from .workspace_app import (
+from worldfoundry.studio.inference.catalog import find_entry
+from worldfoundry.studio.inference.dispatch import dispatch_spec_for_inference, run_manager_payload_in_conda
+from worldfoundry.studio.inference.execution import StudioManager
+from worldfoundry.studio.serving.workspace import (
     SETTINGS,
     JobCreateRequest,
     _call_param_names,
@@ -46,17 +46,6 @@ def _parse_json_mapping(value: str | None, *, label: str) -> dict[str, Any]:
     return dict(payload)
 
 
-def _parse_env_assignments(values: list[str]) -> dict[str, str]:
-    env: dict[str, str] = {}
-    for item in values:
-        if "=" not in item:
-            raise ValueError(f"environment override must be KEY=VALUE, got {item!r}")
-        key, value = item.split("=", 1)
-        key = key.strip()
-        if not key:
-            raise ValueError(f"environment override has an empty key: {item!r}")
-        env[key] = value
-    return env
 
 
 def _apply_size_param(params: dict[str, Any], value: str | None) -> None:
@@ -180,7 +169,10 @@ def _run_infer(args: argparse.Namespace) -> int:
         )
     else:
         manager = StudioManager(workspace_root=workspace_root)
-        record = manager.run(**run_kwargs, progress_callback=None)
+        try:
+            record = manager.run(**run_kwargs, progress_callback=None)
+        finally:
+            manager.close()
     print(json.dumps(record.to_manifest(), ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 

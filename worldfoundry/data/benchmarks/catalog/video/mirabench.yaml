@@ -1,5 +1,7 @@
 id: mirabench
 name: MiraBench
+publisher: Tencent
+publisher_kind: company
 benchmark_kind:
 - long-video-generation
 - video-generation-quality
@@ -168,6 +170,17 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  scoring:
+    engines: [video_quality]
+    hooks:
+      video_quality: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
+  normalization:
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/mirabench/run_mirabench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.mirabench.run_mirabench_official_runner
+    generated_arg: null
+    supports_fixture: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:MiraBenchContract
   validation_command:
   - worldfoundry-eval
@@ -202,6 +215,7 @@ runner:
   - Full leaderboard validation still requires generated videos, 150-prompt metadata, and complete upstream checkpoints.
 integration:
   status: integrated
+  tier: in_tree
   blocked_reasons:
   - Official repository/source metadata, reusable CLIP/DINOv2/RAFT dependencies, and official-result normalizer are
     integrated.

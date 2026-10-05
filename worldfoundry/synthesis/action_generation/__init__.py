@@ -13,6 +13,10 @@ def __getattr__(name: str) -> Any:
         from .base_action_synthesis import ActionModelSynthesis
 
         return ActionModelSynthesis
+    if name == "DreamDojoSynthesis":
+        from .dreamdojo import DreamDojoSynthesis
+
+        return DreamDojoSynthesis
     raise AttributeError(name)
 
-__all__ = ["ActionModelSynthesis"]
+__all__ = ["ActionModelSynthesis", "DreamDojoSynthesis"]

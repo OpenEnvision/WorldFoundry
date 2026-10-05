@@ -69,6 +69,6 @@ integration:
 notes:
 - The default runtime matches the official policy server with 10 action denoising steps, early stopping, no depth branch, and no ZeroMQ service.
 - Setting generate_world with a world_video_path continues to 50 steps and writes the decoded future-view mosaic; run_depth adds the depth branch.
-- The selected 38.9 GB policy subtree and small Wan base config/tokenizer files must be staged before runtime; inference performs no network download.
+- The selected task-specific policy subtree and small Wan base config/tokenizer files must be staged before runtime; inference performs no network download.
 - The X-WAM model state is strict and complete, so redundant Wan DiT, T5, and VAE base weights are not downloaded separately.
-- RoboCasa-SFT passed strict 38.9 GB restoration, finite 10-step action/proprioception inference, and the full 50-step A100 world branch; its 960x256 three-view mosaic decoded all nine H.264 frames. RoboTwin-SFT remains unvalidated.
+- RoboCasa-SFT passed strict 38.9 GB restoration, finite 10-step action/proprioception inference, and the full 50-step A100 world branch; its 960x256 three-view mosaic decoded all nine H.264 frames. RoboTwin-SFT passed a paired official-runner comparison on one released RoboTwin episode with 1.027/255 decoded RGB MAE and 6.78e-5 action MAE. Optional depth decoding and closed-loop task success remain unvalidated.

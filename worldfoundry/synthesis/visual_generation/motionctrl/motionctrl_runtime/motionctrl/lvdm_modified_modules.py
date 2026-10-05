@@ -3,7 +3,7 @@ import logging
 import torch
 from einops import rearrange, repeat
 
-from worldfoundry.base_models.diffusion_model.video.lvdm.models.utils_diffusion import timestep_embedding
+from worldfoundry.base_models.diffusion_model.schedulers.lvdm.schedule_math import timestep_embedding
 
 try:
     import xformers

@@ -1,0 +1,52 @@
+---
+title: "LongVie 2"
+description: "LongVie 2（Shanghai AI Laboratory (Vchitect)）：图生视频、长视频生成；已验证; 独立环境 `worldfoundry-longvie-cu128`。"
+modelId: "longvie-2"
+pageSource: authored
+---
+
+LongVie 2 是 Vchitect 团队第二代可控长视频框架，也是本 catalog 中这对条目里已验证的一个： Studio 默认的四卡 torchrun USP 路径已于 2026-07-28 完成 checkpoint 加载运行，81 帧全部按 640x352 解码。它以排队的 81 帧控制视频分段生成，每次续写复用上一段末帧、八帧历史与噪声状态。
+
+<ModelPaperFigures modelId="longvie-2" locale="zh" />
+
+记录论文为[arXiv 2512.13604](https://arxiv.org/abs/2512.13604)。
+
+项目页：[vchitect.github.io/LongVie2-project](https://vchitect.github.io/LongVie2-project/)。代码：[Vchitect/LongVie](https://github.com/Vchitect/LongVie)。
+
+<ModelCommandBuilder modelId="longvie-2" locale="zh" />
+
+## 用来做什么
+
+用 `longvie-2` 做 catalog 深度推理。配方按记录 profile 写出深度。
+
+构建在规范化 Wan 角色之上（基座：Wan2.1-I2V-14B-480P），叠加 LongVie 专属权重：适配器同时加载 control.safetensors 与 dit.safetensors——后者即区别于 LongVie-1 的 LongVie 2 DiT 注意力覆盖。 execute=True 时支持官方 USP ring/ulysses 分布式推理。该模型由上海人工智能实验室（Vchitect 团队）发布。
+
+catalog 记录的任务包括 图生视频、长视频生成、depth-controlled-video、trajectory-controlled-video。别名包括 `longvie2`、`longvie-v2`。模态上，它接受图像，输出视频、深度。
+
+记录的评测入口包括[ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench)（长时程生成评测）、[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（控制驱动生成适合做相机运动评测）。
+
+LongVie-2 长图生视频。不是 v1 卡。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`input_path`、`interactions`、`frames`；产物 `generated_video`、`longvie-2.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `LongVie2Pipeline`。
+
+系列状态：**已验证**。
+
+每个排队分段都需要非空提示词加稠密深度与稀疏点图/轨迹控制视频；首段还需要一张图像。 质量默认值： 81 帧、16 FPS、50 步。 Studio profile 使用四 rank USP，只有 rank 0 落盘产物。 这是排队式分段生成，不是键盘实时交互。
+
+每个分段都需要预先准备深度与点图/轨迹控制视频——输入准备成本高。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run longvie-2 --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-longvie-cu128`（Python 3.10，CUDA 12.8）。
+
+记录的权重仓库包括 `Vchitect/LongVie2`、`Wan-AI/Wan2.1-I2V-14B-480P`、`Vchitect/LongVie2` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh longvie-2`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="longvie-2" locale="zh" />

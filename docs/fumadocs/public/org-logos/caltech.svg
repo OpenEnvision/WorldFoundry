@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="California Institute of Technology">
+  <circle cx="64" cy="64" r="58" fill="#ff6c0c"/>
+  <circle cx="64" cy="64" r="50" fill="none" stroke="#ffffff" stroke-width="3"/>
+  <path fill="#ffffff" d="M64 24c8 14 16 26 16 38 0 12-7 22-16 22s-16-10-16-22c0-12 8-24 16-38z"/>
+  <path fill="#ff6c0c" d="M64 36c4 8 8 16 8 24 0 8-4 14-8 14s-8-6-8-14c0-8 4-16 8-24z"/>
+  <rect x="44" y="86" width="40" height="8" fill="#ffffff"/>
+  <rect x="50" y="78" width="28" height="8" fill="#ffffff"/>
+</svg>

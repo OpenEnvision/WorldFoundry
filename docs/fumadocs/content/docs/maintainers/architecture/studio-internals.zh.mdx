@@ -3,62 +3,129 @@ title: Studio 内部
 description: Studio 如何发现模型、驱动 pipeline、落盘 run，以及如何把 UI 与执行层分开。
 ---
 
-Studio 是覆盖同一套 pipeline 与 artifact 契约的目录驱动 shell，供 CLI 推理与评测共用。它不拥有模型权重、打分逻辑或 benchmark manifest；职责是发现可运行条目、准备输入、调用正确的 runtime driver、写出 `RunRecord`，并为 UI 挑选 preview assets。同一套执行核心可服务 Gradio（`app.py`）、Workspace job、conda 子进程与 torchrun worker，变化的只是展示层。
+Studio 是覆盖同一套 pipeline 与 artifact 契约的目录驱动 shell，供 CLI 推理与评测共用。它不拥有模型权重、打分逻辑或 benchmark manifest；职责是发现可运行条目、准备输入、调用正确的 runtime driver、写出 `RunRecord`，并为 UI 挑选 preview assets。同一套执行核心服务 `world` 实时交互页面、Workspace job、conda 子进程与 torchrun worker。
 
-```text
-launch args
-  -> StudioLaunchConfig
-  -> discover_catalog()
-  -> StudioManager
-  -> prepare_inputs()
-  -> runtime_driver_for()
-  -> run()
-  -> materialize_run()
-  -> pick_preview_assets()
-  -> Gradio / Workspace UI update
-```
+<ArchDiagram id="studio" locale="zh" />
 
-推理语义放在 `studio/execution.py`，catalog 发现放在 `studio/catalog.py`。`studio/app.py` 应保持轻薄：布局、回调与 Gradio 组件更新。若改动也必须在没有 Gradio 的 `runtime_job.py` 或 `workspace_app.py` 中生效，就应落在 execution，而不是 UI 文件。
+推理语义放在 `studio/inference/execution.py`，catalog 发现放在 `studio/inference/catalog.py`。`studio/ui/launcher.py` 负责独立前端路由，启动参数由 `studio/ui/launch_config.py` 解析。页面、全屏与键盘交互位于 `studio/visualization/backends/world.py` 和 `world_realtime_client.py`；推理语义应由共享 execution 核心处理。
 
 ## 文件
 
-| 文件 | 作用 | 重要符号 |
-| --- | --- | --- |
-| `studio/catalog.py` | 从 pipeline files、canonical runtime entries 和 overrides 发现模型条目。 | `CatalogEntry`、`discover_catalog()`、`filter_catalog()`、`find_entry()`、`catalog_stats()`。 |
-| `studio/execution.py` | 准备输入、加载 pipeline classes、选择 runtime driver strategy、写 run records、导出 previews。 | `PreparedInputs`、`RunRecord`、`PipelineContext`、`BaseRuntimeDriver`、`StudioManager`。 |
-| `studio/app.py` | Gradio UI、launch config、preset handling、callbacks、run buttons、recent-run loading。 | `StudioLaunchConfig`、`parse_launch_config()`、`build_demo()`、`main()`。 |
-| `studio/theme.py` | Theme constants 和 UI styling hooks。 | 只服务 app shell。 |
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>文件</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>studio/inference/catalog.py</code>
+          </div>
+        </div>
+        <p>从 pipeline files、canonical runtime entries 和 overrides 发现模型条目。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>CatalogEntry</code>、<code>discover_catalog()</code>、<code>filter_catalog()</code>、<code>find_entry()</code>、<code>catalog_stats()</code>。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>studio/inference/execution.py</code>
+          </div>
+        </div>
+        <p>准备输入、加载 pipeline classes、选择 runtime driver strategy、写 run records、导出 previews。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>PreparedInputs</code>、<code>RunRecord</code>、<code>PipelineContext</code>、<code>BaseRuntimeDriver</code>、<code>StudioManager</code>。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>studio/ui/launcher.py</code>
+          </div>
+        </div>
+        <p>独立前端启动与路由；共享启动参数由 <code>ui/launch_config.py</code> 解析。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>StudioLaunchConfig</code>、<code>parse_launch_config()</code>、<code>main()</code>。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>studio/visualization/backends/world.py</code>
+          </div>
+        </div>
+        <p>实时交互页面的布局、样式、全屏入口与浏览器脚本。</p>
+        <p className="pi-kv-read"><span>首读</span> 浏览器脚本由 <code>world_realtime_client.py</code> 提供。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>studio/serving/realtime/</code>
+          </div>
+        </div>
+        <p>与 transport 无关的输入重采样、RGB 归一化、JPEG 编码和有界帧队列。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>RealtimeControlResampler</code>、<code>FrameQueuePolicy</code>、<code>LatestFrameBuffer</code>。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>studio/visualization/backends/world_realtime.py</code>
+          </div>
+        </div>
+        <p>管理 resident model thread 以及 WebRTC/WebSocket 会话生命周期。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>ResidentWorldRuntime</code>、<code>RealtimePeerManager</code>。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>core/media/processing/postprocess.py</code>
+          </div>
+        </div>
+        <p>位于模型 encode/diffuse/decode 契约之外的有状态链式输出处理。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>VideoPostprocessStream</code>、<code>VideoPostProcessorSession</code>。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>core/media/processing/rtx.py</code>
+          </div>
+        </div>
+        <p>可选、保持布局的 NVIDIA VFX adapter 与启动前诊断；只有显式选择后才 import 专有 runtime。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>RTXVideoSuperResolutionPostProcessor</code>、<code>inspect_rtx_vfx_capability()</code>。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>runtime/realtime_regression.py</code>
+          </div>
+        </div>
+        <p>用显式性能阈值检查规范化 chunk-timing JSONL。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>RealtimeRegressionManifest</code>、<code>evaluate_realtime_manifest()</code>。</p>
+      </li>
+    </ul>
+  </section>
+</div>
 
-## Catalog Discovery
+## Catalog discovery
 
 Catalog 构建刻意做成静态过程。`discover_catalog()` 用 AST helpers 扫描 pipeline 模块，从而在不 import 重型 CUDA 栈或可选依赖的情况下列出模型。它合并三路来源：`pipeline_*.py` 类、component-pipeline 工厂、action-synthesis 类，再叠加 curated overrides 与 canonical runtime entries（aliases、默认 kwargs、checkpoint、`runtime_kind`）。去重键是 `(module_path, class_name)`；隐藏或抽象 id 不会进入 UI 列表。
 
 真正的 import 发生在更晚：只有某次 run 需要具体类时，`StudioManager.import_pipeline_class()` 才按 `CatalogEntry` 的 `module_path` / `class_name` 加载。因此模型可以出现在 catalog 里，却在 LOAD 时因当前环境缺少 runtime import 或本地 checkpoint 而失败。
 
-| 步骤 | 函数 | 含义 |
-| --- | --- | --- |
-| 找 project root | `_project_root()` / `_project_root_candidates()` | 允许 Studio 从 repo root 或 package context 运行。 |
-| 检查 pipelines | `_AstPipelineInfo` 周边 AST helpers | 不 import 重型模型依赖，直接读取 pipeline modules。 |
-| 归一化 ids | `_normalize_model_id()` | UI、CLI launch args 和 recent runs 共用的稳定 lookup key。 |
-| 构建 entries | `discover_catalog()` | 产出 `CatalogEntry[]`，包含 family、class path、category、backend、aliases、examples。 |
-| 过滤 entries | `filter_catalog()` | 对 UI 列表应用 search 和 category filters。 |
+- **找 project root** (`_project_root()` / `_project_root_candidates()`) — 允许 Studio 从 repo root 或 package context 运行。
+- **检查 pipelines**（`_AstPipelineInfo` 周边 AST helpers）— 不 import 重型模型依赖，直接读取 pipeline modules。
+- **归一化 ids** (`_normalize_model_id()`) — UI、CLI launch args 和 recent runs 共用的稳定 lookup key。
+- **构建 entries** (`discover_catalog()`) — 产出 `CatalogEntry[]`，包含 family、class path、category、backend、aliases、examples。
+- **过滤 entries** (`filter_catalog()`) — 对 UI 列表应用 search 和 category filters。
 
-## Execution Core
+## Execution core
 
 `StudioManager` 是编排中枢。典型的 `run` / `stream` / `init` / `reset` 路径会准备 request、把输入落到 run 目录、按 `entry.runtime_kind` 选择 driver、加载 pipeline（LRU 缓存）、调用 driver，再物化为 `RunRecord`。Driver 存在是因为并非每个家族都是一次 `__call__`：two-stage 3DGS 先重建再 orbit，point-cloud nav 先重建再渲染视角，WorldFM 需要自定义相机与 panorama 处理；其余走 `BaseRuntimeDriver`。
 
 `PreparedInputs` 是 staging 后的归一化载荷（prompt、图像、视频、interactions、runtime kwargs）。`PipelineContext` 保存已加载类、device、variant 与 output root。`RunRecord` 是 UI 可重载的持久单元：ids、inputs、outputs、artifact 路径、preview 选择、status 与 manifest JSON。Workspace 推理还可传入 `infer_metadata` 契约，让物化阶段校验必需的输出类型（video、image、splat 等）。
 
-| Class / function | 作用 |
-| --- | --- |
-| `PreparedInputs` | 保存 staged prompt、images、videos、interactions、runtime kwargs 和 metadata。 |
-| `RunRecord` | 保存 run id、model id、inputs、outputs、artifacts、preview paths、status 和 manifest export。 |
-| `PipelineContext` | 保存 imported pipeline class、model ref、device、variant、load kwargs、output root。 |
-| `BaseRuntimeDriver` | 默认 driver：load pipeline、run fresh request、可选 initialize/continue streaming、reset state。 |
-| `TwoStage3DGSRuntimeDriver` | Two-stage 3DGS flows 的专用 driver。 |
-| `PointCloudNavRuntimeDriver` | Point-cloud/navigation previews 的专用 driver。 |
-| `WorldFMRuntimeDriver` | WorldFM camera pose 和 panorama workflow 的专用 driver。 |
-| `StudioManager` | 编排 import、driver selection、input preparation、run execution、recent-run storage、unload/reset。 |
+- `PreparedInputs` — 保存 staged prompt、images、videos、interactions、runtime kwargs 和 metadata。
+- `RunRecord` — 保存 run ID、model ID、inputs、outputs、artifacts、preview paths、status 和 manifest export。
+- `PipelineContext` — 保存 imported pipeline class、model ref、device、variant、load kwargs、output root。
+- `BaseRuntimeDriver` — 默认 driver：load pipeline、run fresh request、可选 initialize/continue streaming、reset state。
+- `TwoStage3DGSRuntimeDriver` — Two-stage 3DGS flows 的专用 driver。
+- `PointCloudNavRuntimeDriver` — Point-cloud/navigation previews 的专用 driver。
+- `WorldFMRuntimeDriver` — WorldFM camera pose 和 panorama workflow 的专用 driver。
+- `StudioManager` — 编排 import、driver selection、input preparation、run execution、recent-run storage、unload/reset。
 
 ## Preview 和 Artifact Helpers
 
@@ -66,38 +133,52 @@ Driver 返回后，`materialize_run()` 把异构 result 落成 run 目录下的�
 
 Preview 空白通常意味着 pipeline 把文件写到了预期 key 之外、返回了没有 `save()` 的内存对象，或产出了解码器拒绝的视频。应先修 pipeline 契约，再考虑放宽 scan mode 或转换 helpers。
 
-| 函数 | 作用 |
-| --- | --- |
-| `export_frames_to_video()` | 把 frame sequences 转成 preview video。 |
-| `collect_artifact_paths()` | 在 output directory 下发现生成文件。 |
-| `pick_preview_assets()` | 为 UI preview 选择 primary video/image/model/json assets。 |
-| `maybe_extract_video_preview_image()` | 从 video preview 保存代表性图片。 |
-| `convert_model_for_preview()` | Browser preview 需要别的格式时转换 3D assets。 |
-| `maybe_build_rerun_rrd()` | 可用时构建 Rerun recording。 |
-| `write_json()` | 写 run manifests 和 input/output records。 |
+- `export_frames_to_video()` — 把 frame sequences 转成 preview video。
+- `collect_artifact_paths()` — 在 output directory 下发现生成文件。
+- `pick_preview_assets()` — 为 UI preview 选择 primary video/image/model/json assets。
+- `maybe_extract_video_preview_image()` — 从 video preview 保存代表性图片。
+- `convert_model_for_preview()` — Browser preview 需要别的格式时转换 3D assets。
+- `maybe_build_rerun_rrd()` — 可用时构建 Rerun recording。
+- `write_json()` — 写 run manifests 和 input/output records。
 
 ## UI 文件边界
 
-把 `app.py` 当作展示胶水。只影响 Gradio 的 launch flags 留在 UI；会改变非 UI 执行的值应进入 execution 对 `StudioLaunchConfig` 的消费。HTML status 与 tray cards 留在 UI。按钮回调可以调用 `StudioManager`，但不应自己加载 pipeline、staging 文件或发明 artifact 布局。纯 demo 默认值可以放在 UI；必须与评测或 Workspace 契约一致的 preset 应是共享数据，而不是 Gradio 专用字符串。
+启动与展示通过独立浏览器前端提供。模型加载、输入归一化、runtime driver 与 artifact 契约由共享推理模块负责，页面与传输层调用 `StudioManager`。
 
-| 区域 | 留在 `app.py` | 如果满足则移到 `execution.py` |
-| --- | --- | --- |
-| Launch parsing | CLI flags、default UI selections、gradio launch parameters。 | 这个值影响非 UI execution。 |
-| HTML helpers | Header、tray、cards、status blocks、summaries。 | 同样输出需要被 tests 或 CLI 使用。 |
-| Callback glue | Button handlers 和 component updates。 | 它加载模型、触碰文件或转换 artifacts。 |
-| Presets | UI-specific prompt/interactions defaults。 | Preset 语义需要和 evaluation 共享。 |
+- **启动参数** — `ui/launch_config.py` 解析 CLI flags 与环境默认值，返回 `StudioLaunchConfig`。
+- **前端路由** — `ui/launcher.py` 与 `visualization/backends/frontends.py` 根据模型或 artifact 启动 `world`、Viser、Spark 等前端。
+- **浏览器交互** — `visualization/backends/world.py` 与 `world_realtime_client.py` 负责页面、全屏、键盘和摇杆。
+- **实时传输** — `visualization/backends/world_realtime.py` 维护常驻会话，调用 `StudioManager.run_realtime()` 并通过 WebRTC/WebSocket 传输帧和控制。
+- **共享推理** — `inference/execution.py` 负责模型与 driver；实时交互直接传输内存中的帧，每次按键无需导出 MP4。
+
+## 实时服务边界
+
+实时路径刻意把模型状态与展示状态分开：
+
+<ArchDiagram id="studio-realtime" locale="zh" />
+
+模型通过 `RealtimeSpec` 拥有因果时序；transport 不应猜测 latent stride，也不能
+静默改变严格 segment 帧数。`latest-interactive` 会在有界 backpressure 后丢弃旧帧，
+保护控制延迟；`ordered-quality` 从不丢帧，凡是 `chunk_done` 帧数属于播放契约的
+prompt-scheduled 或 queued segment 都必须使用它。
+
+Postprocessor 位于解码 RGB 提取之后，持有隔离的会话状态，可以暂存一个 chunk，
+并按 chain 顺序 flush 尾帧。默认 identity processor 也走同一条生产边界但不改变
+输出，因此未来接 VSR、去噪或插帧时不需要侵入模型专属推理循环。RTX adapter
+保持 layout/container/dtype/range，每条 stream 独占一个 VFX effect，复用前先 clone
+借用的 DLPack 输出，并由单独授权的 `rtx_postprocess` extra 控制。每个完成的 chunk
+都会记录归一化阶段 timing；用 `runtime/realtime_regression.py` 可以对 trace 中的
+p50/p90、吞吐、队列深度和掉帧做门禁。
 
 ## 调试路径
 
-多数 Studio bug 是契约错位，而不是 Gradio 本身。缺模型几乎总是 catalog discovery、aliases 或隐藏 id。device / variant 错通常来自 launch config 与 `PipelineContext` overrides。输入到不了模型，问题在 `prepare_inputs()` 或 driver kwargs 绑定。Streaming 失败常见于没有 memory state 就调用 `init`/`stream`，或 two-stage driver 尚无先验重建。Recent run 无法 reload，说明 `materialize_run()` 之后 manifest 或 artifact 路径漂移了。
+多数 Studio bug 来自 catalog、输入、runtime 或 artifact 契约错位。缺模型几乎总是 catalog discovery、aliases 或隐藏 id。device / variant 错通常来自 launch config 与 `PipelineContext` overrides。输入到不了模型，问题在 `prepare_inputs()` 或 driver kwargs 绑定。Streaming 失败常见于没有 memory state 就调用 `init`/`stream`，或 two-stage driver 尚无先验重建。Recent run 无法 reload，说明 `materialize_run()` 之后 manifest 或 artifact 路径漂移了。
 
-| 现象 | 检查 |
-| --- | --- |
-| UI 里缺模型 | `discover_catalog()` output、`CatalogEntry.aliases`、category filter、pipeline file naming。 |
-| Variant/device 错 | `StudioLaunchConfig`、`_variant_payload()`、`_apply_variant_runtime_overrides()`、`PipelineContext`。 |
-| 输入没到模型 | `prepare_inputs()`、`PreparedInputs`、driver `run_fresh()` kwargs。 |
-| Preview 空白 | `collect_artifact_paths()`、`pick_preview_assets()`、conversion helpers、generated file extension。 |
-| Streaming 坏了 | `BaseRuntimeDriver.run_init()`、`BaseRuntimeDriver.run_continue()`、pipeline `stream()`、memory state。 |
-| Recent run 无法 reload | `RunRecord.to_manifest()`、`materialize_run()`、`load_run()`、artifact paths。 |
+- **UI 里缺模型** — `discover_catalog()` output、`CatalogEntry.aliases`、category filter、pipeline file naming。
+- **Variant/device 错** — `StudioLaunchConfig`、`resolve_cli_variant_id()`、`PipelineContext`。
+- **输入没到模型** — `prepare_inputs()`、`PreparedInputs`、driver `run_fresh()` kwargs。
+- **Preview 空白** — `collect_artifact_paths()`、`pick_preview_assets()`、conversion helpers、generated file extension。
+- **Streaming 坏了** — `BaseRuntimeDriver.run_init()`、`BaseRuntimeDriver.run_continue()`、pipeline `stream()`、memory state。
+- **Recent run 无法 reload** — `RunRecord.to_manifest()`、`materialize_run()`、`load_run()`、artifact paths。
 
-面向用户的启动与 frontend 路由见 [Studio](/zh/docs/guides/studio)。Studio 所依赖的 pipeline / operator / `GenerationResult` 契约见 [模型运行时](/zh/docs/maintainers/architecture/model-runtime)。
+面向用户的启动与 frontend 路由见 [Studio](/zh/docs/guides/studio)。Studio 作为使用界面如何把用户意图编译为与 CLI、MCP 相同的 request，见 [使用界面与编排](/zh/docs/maintainers/architecture/surfaces-orchestration)。Studio 所依赖的 pipeline / operator / `GenerationResult` 契约见 [模型运行时](/zh/docs/maintainers/architecture/model-runtime)。

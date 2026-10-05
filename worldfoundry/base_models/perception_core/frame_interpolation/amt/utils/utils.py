@@ -53,10 +53,18 @@ class AverageMeterGroups:
 
 class InputPadder:
     """ Pads images such that dimensions are divisible by divisor """
-    def __init__(self, dims, divisor=16):
+    def __init__(self, dims, divisor=16, minimum_size=0):
         self.ht, self.wd = dims[-2:]
-        pad_ht = (((self.ht // divisor) + 1) * divisor - self.ht) % divisor
-        pad_wd = (((self.wd // divisor) + 1) * divisor - self.wd) % divisor
+        divisor = int(divisor)
+        minimum_size = int(minimum_size)
+        if divisor < 1:
+            raise ValueError("divisor must be positive")
+        if minimum_size < 0:
+            raise ValueError("minimum_size cannot be negative")
+        padded_ht = ((max(self.ht, minimum_size) + divisor - 1) // divisor) * divisor
+        padded_wd = ((max(self.wd, minimum_size) + divisor - 1) // divisor) * divisor
+        pad_ht = padded_ht - self.ht
+        pad_wd = padded_wd - self.wd
         self._pad = [pad_wd//2, pad_wd - pad_wd//2, pad_ht//2, pad_ht - pad_ht//2]
 
     def pad(self, *inputs):
@@ -294,4 +302,3 @@ def check_dim_and_resize(tensor_list):
         tensor_list = resize_tensor_list
 
     return tensor_list
-

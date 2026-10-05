@@ -1,131 +1,25 @@
 ---
 title: RoboCasa
-description: RoboCasa — metrics, requirements, and run commands.
+description: "UT Austin & NVIDIA kitchen simulation — 120 scenes, 100+ atomic and composite tasks. WorldFoundry imports official rollouts."
 ---
 
-## About
+RoboCasa is UT Austin and NVIDIA's large-scale **kitchen** simulation for generalist robots: **120** realistic kitchen layouts, **2,500+** 3D assets (many generated), and about **100** atomic skills plus **composite** long-horizon activities, with large demonstration sets. The paper is [RoboCasa: Large-Scale Simulation of Everyday Tasks for Generalist Robots](https://arxiv.org/abs/2406.02523). Project: [robocasa.ai](https://robocasa.ai/). Code: [robocasa/robocasa](https://github.com/robocasa/robocasa). GitHub license metadata in this catalog is `other:noassertion_github_api` — read the upstream terms before reuse.
 
+WorldFoundry **imports** official rollout exports. Scene assets and long-horizon policy execution stay upstream. Repo mirror: `cache/vla_va_wam/repos/robocasa--robocasa`. Models such as [Being-H0.5](/docs/guides/supported-models/being-h05) publish a RoboCasa specialist line; that is not a score on this page.
 
+<BenchmarkPageSections id="robocasa" locale="en" />
 
-RoboCasa external benchmark task manifest for long-horizon robot manipulation policy rollouts.
-
-
-
-## Metrics
-
-RoboCasa external benchmark task manifest for long-horizon robot manipulation policy rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/robocasa.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `episode_success` | Share of episodes or tasks that complete successfully. |
-| `reward` | Cumulative reward on RoboCasa kitchen manipulation tasks in the official domestic simulator. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `robocasa-headless-venv`.
-- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
-- RoboCasa/robosuite import 已在 headless venv 可见；完整官方状态仍需要 assets、task suite 和 policy rollout。
-
-### Evaluation data
-
-- RoboCasa uses simulator assets and generated policy rollouts rather than a single public HF benchmark table.
-- Candidate model outputs: set `WORLDFOUNDRY_ROBOCASA_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/robocasa--robocasa`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_ROBOCASA_ROOT`
-- `WORLDFOUNDRY_ROBOCASA_RESULTS_PATH`
-
-### Verify setup
-
-```bash
-PYTHONPATH=${WORLDFOUNDRY_CACHE_DIR}/repos/robocasa--robocasa:src ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-robocasa-headless-venv/bin/python -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile robocasa --manifest worldfoundry/data/benchmarks/runtime_profiles/official/robocasa.yaml --output-dir tmp/worldfoundry_preflight/robocasa --json
-```
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id robocasa \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robocasa/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/robocasa/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id robocasa \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robocasa/official-run \
-  --json
-```
-
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id robocasa --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official RoboCasa repository checkout
-- RoboCasa simulator assets
-- Long-horizon policy checkpoint
-- Official task and scene split declaration
-
-### Environment
-
-- `WORLDFOUNDRY_ROBOCASA_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-
-
+Default import path: `WORLDFOUNDRY_ROBOCASA_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/robocasa.yaml`. Declare atomic vs composite (and the scene split) with the export. Outputs: `scorecard.json` (primary `success_rate`) and `raw_results.jsonl`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

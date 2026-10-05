@@ -1,200 +1,39 @@
 ---
 title: 4DWorldBench
-description: 3D/4D world generation 的 in-tree 测评代码、数据结构、权重准备和运行命令。
+description: "CVPR 2026 的 3D/4D 世界生成评测：感知质量、Condition-4D 对齐、物理、4D 一致性。WorldFoundry 内置官方 runtime，不编造榜单。"
 ---
 
-## 简介
+4DWorldBench（中科大，联合浙大与北京中关村学院；CVPR 2026）评的是 **3D/4D 世界生成器**——图像转 3D/4D、视频转 4D、文本转 3D/4D——把各种条件模态映射到同一评测空间。四个轴汇总为 `four_d_worldbench_average`：
 
-4DWorldBench 是面向 3D/4D world generation 的综合评测 benchmark。官方论文和项目页把 world generation 定义为比 2D 视频生成更进一步的任务：模型需要从文本、图像或视频条件构建 realistic、dynamic、physically plausible 的世界，并在空间、时间、相机运动和物理交互上保持一致。
+- **感知质量** — CLIP-IQA、CLIP-aesthetic、FastVQA。
+- **Condition-4D 对齐** — Keye-VL 是/否 judge 覆盖属性 / 关系 / 运动 / 事件 / 场景控制，外加 DROID-SLAM 相机误差（原始误差越低越好，再反向归一化）。
+- **物理真实感** — LLM 辅助物理推理。
+- **4D 一致性** — DROID-SLAM 重投影、VFIMamba 插帧、运动 QA、VGG 风格。
 
-WorldFoundry 已经把可运行的测评代码集成在 `worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench`。官方 repo 只作为 protocol 参考；在 WorldFoundry 里运行评测不需要外部 GitHub checkout。
+论文：[4DWorldBench](https://arxiv.org/pdf/2511.19836)。项目：[yeppp27.github.io/4DWorldBench.github.io](https://yeppp27.github.io/4DWorldBench.github.io/)。代码：[yeppp27/4dworldbench_code](https://github.com/yeppp27/4dworldbench_code)。
 
-官方参考：
+WorldFoundry **仓内托管官方 runtime**（`run_four_d_worldbench_official_runner.py`），按官方 schema 的数据集 JSON 一次评一个 `--dimension`。官方数据集下载尚未发布；需自行提供 JSON 与生成视频。
 
-- Project page: [yeppp27.github.io/4DWorldBench.github.io](https://yeppp27.github.io/4DWorldBench.github.io/)
-- Paper: [arXiv:2511.19836](https://arxiv.org/abs/2511.19836)
-- 本地 runner: `worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py`
-- 仓内 runtime: `worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/runtime/four_d_worldbench`
+<BenchmarkPageSections id="4dworldbench" locale="zh" />
 
-## 评测协议
-
-4DWorldBench 从四个维度评估生成的 3D/4D world 视频。WorldFoundry 保留原始 metric ID，因此导入已有官方结果和重新计算结果都会写入同一套 scorecard。
-
-| 维度 | WorldFoundry metrics | 评估内容 |
-| --- | --- | --- |
-| Perceptual Quality | `perceptual_clip_iqa_metrics`, `perceptual_clip_aesthetic_metrics`, `perceptual_fastvqa` | 单帧质量、美学质量和时序视频质量。 |
-| Condition-4D Alignment | `alignment_attribute_control`, `alignment_relationship_control`, `alignment_motion_control`, `alignment_event_control`, `alignment_scene_control`, `alignment_camera_error_metrics` | 生成世界是否遵循物体属性、关系、动作、事件、场景和相机约束。 |
-| Physical Realism | `physics_realism` | 可见动态是否符合 prompt 或输入条件里的物理约束。 |
-| 4D Consistency | `consistency_viewpoint`, `consistency_motion_smoothness`, `consistency_motion_qa`, `consistency_style` | 视角一致性、运动平滑性、运动 QA 和风格稳定性。 |
-
-主指标是 `four_d_worldbench_average`。中间聚合指标包括 `perceptual_quality`、`condition_4d_alignment`、`physical_realism_score` 和 `four_d_consistency`。
-
-## 数据准备
-
-评测由官方 dataset JSON 驱动。每个 JSON 描述一个 split/task，以及一个或多个候选模型。runner 会根据 `models[].model_name` 找到指定模型，然后评估该模型下 `generated_videos` 指向的视频。
-
-最小结构如下：
-
-```json
-{
-  "dataset_info": {
-    "base_path": "/path/to/4DWorldBench",
-    "model_type": "text-to-3D | image-to-4D | video-to-4D",
-    "condition_type": "text | image | video"
-  },
-  "models": [
-    {
-      "model_name": "your_model_name",
-      "conditions": [
-        {
-          "condition_meta_info": "alignment_motion_control",
-          "prompts": [
-            {
-              "prompt_id": "sample_0001",
-              "prompt_key": "sample_0001",
-              "condition_content": "/path/to/condition/file.txt",
-              "condition_caption": "Text description of the condition",
-              "generated_videos": [
-                "your_model_name/sample_0001.mp4"
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-视频路径可以是绝对路径。相对路径会依次相对 `--generated-video-dir`、`dataset_info.base_path`、dataset JSON 所在目录解析。为了保持运行干净，建议只在官方 JSON 中添加或更新候选模型 entry 和生成视频路径。
-
-## 权重与依赖
-
-先使用统一 CUDA 环境，再安装 benchmark 需要的 metric 依赖：
+## 如何运行
 
 ```bash
-cd /path/to/WorldFoundry
-bash scripts/setup/model_env_install.sh --model 4dworldbench
-```
-
-不同维度需要的资产不同：
-
-| 维度 | 需要准备 |
-| --- | --- |
-| CLIP-IQA / CLIP-Aesthetic | `pyiqa`、`opencv-python`、生成视频。 |
-| FastVQA | FAST-VQA/FasterVQA 权重，通常是 `FAST_VQA_3D_1_1_Scr.pth`。 |
-| Keye-VL alignment 和 motion QA | `Kwai-Keye/Keye-VL-1_5-8B` 或本地 HF mirror。 |
-| Camera/viewpoint metrics | WorldFoundry DROID-SLAM base model、DROID checkpoint，以及当前环境可 import 的 `lietorch` / `droid_backends` 扩展。 |
-| Motion smoothness | WorldFoundry VFIMamba base model 和 checkpoint。 |
-| Physical realism | Keye-VL captioning，加上 `OPENAI_API_KEY` 做 LLM reasoning。 |
-
-常用环境变量：
-
-```bash
-export WORLDFOUNDRY_4DWORLDBENCH_KEYE_MODEL=/path/to/Kwai-Keye--Keye-VL-1_5-8B
-export WORLDFOUNDRY_4DWORLDBENCH_FASTVQA_CKPT=/path/to/FAST_VQA_3D_1_1_Scr.pth
-export WORLDFOUNDRY_4DWORLDBENCH_DROID_CKPT=/path/to/droid.pth
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/4dworldbench/generated_videos
-export OPENAI_API_KEY=...
-```
-
-`OPENAI_API_KEY` 只在 `physics_realism` 维度需要；perceptual 相关指标不需要。
-
-## 生成候选视频
-
-4DWorldBench 本身不负责训练或运行候选生成模型。候选模型需要通过它自己的 WorldFoundry model package 或你的推理脚本完成训练/推理，然后把生成视频写入 `generated_videos` 引用的路径。
-
-如果要复现 leaderboard 风格结果，需要对每个官方 split/task 准备对应 dataset JSON，并保证：
-
-- `--model-name` 和 `models[].model_name` 完全一致。
-- 选中的每个 prompt 至少有一个 `generated_videos` 视频。
-- 当前 Python 环境可以正常读取这些视频。
-
-## 运行单个维度
-
-使用仓内 runtime 跑一个官方维度：
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py \
   --run-official \
-  --dataset-json /path/to/4dworldbench_dataset.json \
-  --model-name your_model_name \
+  --dataset-json <dataset.json> \
+  --model-name <model_name> \
   --dimension perceptual_clip_iqa_metrics \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/4dworldbench/your_model_name/perceptual_clip_iqa_metrics \
+  --generated-video-dir <generated_artifacts> \
+  --output-dir tmp/4dworldbench/official \
   --json
 ```
 
-官方原始结果会写到 `tmp/4dworldbench/your_model_name/perceptual_clip_iqa_metrics/upstream/4dworldbench_results.json`；WorldFoundry 统一 scorecard 写到 `scorecard.json`。
+依赖模型的维度会解析 `WORLDFOUNDRY_4DWORLDBENCH_KEYE_MODEL`、`WORLDFOUNDRY_4DWORLDBENCH_DROID_CKPT`、`OPENAI_API_KEY`。像素级维度不需要它们。共享栈：`keye_vl`、`droid_slam`、`vfimamba`、`fastvqa`。默认导入路径：`WORLDFOUNDRY_4DWORLDBENCH_RESULTS_PATH`。
 
-## 运行完整指标集
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/4dworldbench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench`。
 
-根据要复现的 split 和你已准备的资产运行对应维度。依赖都安装完成后，可以用下面的 loop：
+产物包括 `scorecard.json`（主键 `four_d_worldbench_average`）与 `raw_metric_table.jsonl`。
 
-```bash
-cd /path/to/WorldFoundry
-
-export DATASET_JSON=/path/to/4dworldbench_dataset.json
-export MODEL_NAME=your_model_name
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/4dworldbench/generated_videos
-
-for DIMENSION in \
-  perceptual_clip_iqa_metrics \
-  perceptual_clip_aesthetic_metrics \
-  perceptual_fastvqa \
-  alignment_attribute_control \
-  alignment_relationship_control \
-  alignment_motion_control \
-  alignment_event_control \
-  alignment_scene_control \
-  alignment_camera_error_metrics \
-  physics_realism \
-  consistency_viewpoint \
-  consistency_motion_smoothness \
-  consistency_motion_qa \
-  consistency_style
-do
-  PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-    worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py \
-    --run-official \
-    --dataset-json "${DATASET_JSON}" \
-    --model-name "${MODEL_NAME}" \
-    --dimension "${DIMENSION}" \
-    --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-    --output-dir "tmp/4dworldbench/${MODEL_NAME}/${DIMENSION}" \
-    --json
-done
-```
-
-如果只需要 perceptual 结果，就只跑 perceptual 维度。要得到完整平均分，需要准备四个维度组对应的 judge/checkpoint 资产并跑完整指标集。
-
-## 导入已有结果
-
-如果你已经有官方 4DWorldBench 结果 JSON，可以导入成 WorldFoundry 统一 scorecard：
-
-```bash
-cd /path/to/WorldFoundry
-
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id 4dworldbench \
-  --mode official-validation \
-  --official-results-path /path/to/4dworldbench_results.json \
-  --output-dir tmp/4dworldbench/imported \
-  --json
-```
-
-导入入口支持单个结果 JSON，也支持包含多个结果 JSON 的目录。
-
-## 输出文件
-
-每次运行会写出：
-
-- `scorecard.json`: WorldFoundry 统一 scorecard，包含归一化指标和聚合指标。
-- `raw_metric_table.jsonl`: 每个 metric 一行。
-- `per_sample_scores.jsonl`: 如果官方结果包含 sample detail，会写出逐样本结果。
-- `upstream/4dworldbench_results.json`: 使用 `--run-official` 时的官方 runtime 原始输出。
-
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

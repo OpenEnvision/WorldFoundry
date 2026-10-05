@@ -1,5 +1,7 @@
 id: ai2thor
 name: AI2-THOR
+publisher: Allen Institute for AI
+publisher_kind: institute
 benchmark_kind:
 - vla
 - embodied-action

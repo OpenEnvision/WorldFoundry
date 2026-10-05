@@ -1,69 +1,64 @@
-"""A wrapper for the LTX-Video image-to-video generation pipeline.
-
-This module provides a class `LTXVideo` to easily interact with the LTX-Video model
-for generating videos from a text prompt and an initial conditioning image.
-It handles model loading, device selection, seeding, and video generation,
-abstracting away the underlying Diffusers pipeline details.
-"""
+"""Native WorldFoundry runtime for LTX-Video 0.9.8 image-to-video inference."""
 
 from __future__ import annotations
 
-import gc
-import random
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
-import numpy as np
 import torch
-from PIL import Image
+
+from worldfoundry.base_models.diffusion_model import NativeDiffusionPipeline
+from worldfoundry.base_models.diffusion_model.contracts import DiffusionRequest, SamplingConfig
+from worldfoundry.base_models.diffusion_model.loaders import CheckpointSpec
+from worldfoundry.base_models.diffusion_model.optimizations import OffloadMode, OffloadPolicy, RuntimePolicy
 
 
-def _load_image(image_path: str, height: int, width: int) -> Image.Image:
-    """Load an RGB conditioning image resized for LTX image-to-video.
+def _resolve_assets(
+    model_path: str,
+) -> tuple[CheckpointSpec, CheckpointSpec, CheckpointSpec, CheckpointSpec]:
+    path = Path(model_path).expanduser().resolve()
+    if path.is_dir():
+        root = path
+        checkpoint = root / "ltxv-13b-0.9.8-distilled.safetensors"
+    elif path.is_file():
+        checkpoint = path
+        root = path.parent
+    else:
+        raise FileNotFoundError(f"LTX-Video model_path does not exist: {path}")
+    if not checkpoint.is_file():
+        raise FileNotFoundError(f"LTX-Video checkpoint does not exist: {checkpoint}")
+    upsampler = root / "ltxv-spatial-upscaler-0.9.8.safetensors"
+    if not upsampler.is_file():
+        raise FileNotFoundError(f"LTX-Video spatial upsampler does not exist: {upsampler}")
 
-    Args:
-        image_path: Local image file path used as the first video frame.
-        height: Target frame height in pixels.
-        width: Target frame width in pixels.
-    """
-    return Image.open(Path(image_path).expanduser()).convert("RGB").resize((width, height))
+    text_root = root / "text_encoder"
+    text_shards = tuple(sorted(text_root.glob("model-*.safetensors")))
+    if not text_shards or not (text_root / "config.json").is_file():
+        raise FileNotFoundError(f"LTX-Video text encoder assets are incomplete: {text_root}")
+    tokenizer_root = root / "tokenizer"
+    if not (tokenizer_root / "spiece.model").is_file():
+        raise FileNotFoundError(f"LTX-Video tokenizer assets are incomplete: {tokenizer_root}")
+    return (
+        CheckpointSpec(source=str(checkpoint)),
+        CheckpointSpec(source=str(upsampler)),
+        CheckpointSpec(source=tuple(str(value) for value in text_shards)),
+        CheckpointSpec(source=str(tokenizer_root)),
+    )
 
 
-def _seed_everything(seed: int) -> None:
-    """Seed CPU and accelerator RNGs before a deterministic generation call.
-
-    Args:
-        seed: Integer seed propagated to Python, NumPy, and PyTorch.
-    """
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-    if torch.backends.mps.is_available():
-        torch.mps.manual_seed(seed)
-
-
-def _select_device() -> str:
-    """Choose the best available local inference device.
-
-    Args:
-        None.
-    """
-    if torch.cuda.is_available():
-        return "cuda"
-    if torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
+def _offload(value: str | None, cpu_offload: bool) -> OffloadPolicy:
+    mode = str(value or ("block" if cpu_offload else "none")).strip().lower()
+    if mode in {"none", "false", "0"}:
+        return OffloadPolicy()
+    if mode in {"cpu", "block", "layer"}:
+        return OffloadPolicy(mode=OffloadMode.BLOCK, target="cpu", pin_memory=True)
+    if mode == "disk":
+        return OffloadPolicy(mode=OffloadMode.DISK, target="disk")
+    raise ValueError(f"unsupported LTX-Video offload_mode: {value!r}")
 
 
 class LTXVideo:
-    """A wrapper class for the LTX-Video image-to-video generation pipeline.
-
-    This class simplifies the process of loading the LTX-Video model and generating
-    videos from a text prompt and an initial conditioning image. It encapsulates
-    configuration parameters and the Diffusers pipeline for a streamlined user experience.
-    """
+    """Expose the native LTX-Video recipe through the existing runtime surface."""
 
     def __init__(
         self,
@@ -80,106 +75,97 @@ class LTXVideo:
         conditioning_start_frames: int = 0,
         model_path: str = "Lightricks/LTX-Video",
         seed: int = 171198,
-        num_inference_steps: int = 50,
-        guidance_scale: float = 3.0,
-        device: Optional[str] = None,
+        num_inference_steps: int = 10,
+        guidance_scale: float = 1.0,
+        device: str | None = None,
         torch_dtype: str = "bfloat16",
+        cpu_offload: bool = True,
+        offload_mode: str | None = None,
+        vae_tiling: dict[str, object] | None = None,
+        **kwargs,
     ) -> None:
-        """Create the in-tree LTX image-to-video runtime wrapper.
-
-        Args:
-            model_name: Registry name for the WorldFoundry video model.
-            generation_type: Generation mode, currently only image-to-video is supported.
-            num_images_per_prompt: Number of generated samples per prompt.
-            image_cond_noise_scale: Image conditioning noise scale passed to compatible pipelines.
-            height: Output video height in pixels.
-            width: Output video width in pixels.
-            num_frames: Number of frames to generate.
-            frame_rate: Output frame rate metadata.
-            pipeline_config: Deprecated external LTX-Video config path kept for config compatibility.
-            negative_prompt: Negative prompt used by the pipeline.
-            conditioning_start_frames: Expected conditioning frame index; only zero is supported.
-            model_path: Hugging Face repo ID or local checkpoint directory for weights.
-            seed: Deterministic seed for generation.
-            num_inference_steps: Denoising step count.
-            guidance_scale: Classifier-free guidance scale.
-            device: Optional explicit PyTorch device.
-            torch_dtype: Floating point dtype name used when loading weights.
-        """
-        del pipeline_config  # Remove deprecated pipeline_config argument as it's no longer used.
+        del pipeline_config, kwargs
         if generation_type != "i2v":
-            raise ValueError("LTXVideo only supports image-to-video generation in WorldFoundry.")
-        if conditioning_start_frames != 0:
-            raise ValueError("LTXVideo only supports conditioning_start_frames=0.")
-        self.model_name = model_name
+            raise ValueError("native LTX-Video currently supports image-to-video inference")
+        if int(num_images_per_prompt) != 1:
+            raise ValueError("native LTX-Video runtime currently emits one video per prompt")
+        if int(conditioning_start_frames) != 0:
+            raise ValueError("LTX-Video image conditioning targets the first frame")
+        if not 0.0 <= float(image_cond_noise_scale) <= 1.0:
+            raise ValueError("image_cond_noise_scale must be between zero and one")
+        if int(height) % 32 or int(width) % 32:
+            raise ValueError("LTX-Video height and width must be divisible by 32")
+        if int(num_inference_steps) != 10:
+            raise ValueError("the distilled LTX-Video 0.9.8 two-pass recipe requires ten steps")
+        if float(guidance_scale) != 1.0:
+            raise ValueError("the distilled LTX-Video 0.9.8 recipe requires guidance_scale=1")
+
+        self.model_name = str(model_name)
         self.generation_type = generation_type
-        self.num_images_per_prompt = num_images_per_prompt
-        self.image_cond_noise_scale = image_cond_noise_scale
-        self.height = height
-        self.width = width
-        self.num_frames = num_frames
-        self.frame_rate = frame_rate
-        self.negative_prompt = negative_prompt
-        self.model_path = model_path
-        self.seed = seed
-        self.num_inference_steps = num_inference_steps
-        self.guidance_scale = guidance_scale
-        # Select device automatically if not explicitly provided.
-        self.device = device or _select_device()
-        # Convert string dtype (e.g., "bfloat16") to actual torch.dtype object.
-        self.torch_dtype = getattr(torch, torch_dtype)
-        self.pipeline = self._load_pipeline()
+        self.height = int(height)
+        self.width = int(width)
+        self.num_frames = int(num_frames)
+        self.frame_rate = int(frame_rate)
+        self.image_strength = 1.0 - float(image_cond_noise_scale)
+        self.negative_prompt = str(negative_prompt)
+        self.seed = int(seed)
+        self.num_inference_steps = int(num_inference_steps)
+        self.guidance_scale = float(guidance_scale)
+        self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        try:
+            dtype = getattr(torch, str(torch_dtype))
+        except AttributeError as error:
+            raise ValueError(f"unknown torch dtype: {torch_dtype!r}") from error
 
-    def _load_pipeline(self):
-        """Load the packaged Diffusers LTX image-to-video pipeline.
-
-        Returns:
-            The initialized and device-mapped LTXImageToVideoPipeline instance.
-        """
-        from diffusers import LTXImageToVideoPipeline
-
-        pipeline = LTXImageToVideoPipeline.from_pretrained(
-            self.model_path,
-            torch_dtype=self.torch_dtype,
+        model, upsampler, text_encoder, tokenizer = _resolve_assets(model_path)
+        tiling = dict(vae_tiling or {})
+        self.pipeline = NativeDiffusionPipeline.from_pretrained(
+            "ltx-video-i2v",
+            policy=RuntimePolicy(
+                device=self.device,
+                dtype=dtype,
+                offload=_offload(offload_mode, cpu_offload),
+            ),
+            checkpoint_overrides={
+                "model": model,
+                "upsampler": upsampler,
+                "text_encoder": text_encoder,
+                "tokenizer": tokenizer,
+            },
+            component_options={
+                "decoder:main": {
+                    "tiled": bool(tiling.get("enabled", True)),
+                    "spatial_tile_size": int(tiling.get("spatial_tile_size", 768)),
+                    "spatial_overlap": int(tiling.get("spatial_overlap", 64)),
+                    "temporal_tile_size": int(tiling.get("temporal_tile_size", 80)),
+                    "temporal_overlap": int(tiling.get("temporal_overlap", 24)),
+                }
+            },
         )
-        return pipeline.to(self.device)
 
-    def generate_video(self, prompt: str, image_path: Optional[str] = None):
-        """Generate a video tensor from a prompt and initial image.
-
-        Args:
-            prompt: Text prompt describing the target video.
-            image_path: Local conditioning image path required for image-to-video generation.
-
-        Returns:
-            A PyTorch tensor containing the generated video frames.
-        """
+    def generate_video(self, prompt: str, image_path: str | None = None) -> torch.Tensor:
         if image_path is None:
-            raise ValueError("LTX image-to-video generation requires image_path.")
-        _seed_everything(self.seed)
-        image = _load_image(image_path, self.height, self.width)
-        # Create a PyTorch generator for deterministic random number generation on the specified device.
-        generator = torch.Generator(device=self.device).manual_seed(self.seed)
+            raise ValueError("LTX-Video image-to-video inference requires image_path")
         output = self.pipeline(
-            image=image,
-            prompt=prompt,
-            negative_prompt=self.negative_prompt,
-            width=self.width,
-            height=self.height,
-            num_frames=self.num_frames,
-            frame_rate=self.frame_rate,
-            num_inference_steps=self.num_inference_steps,
-            guidance_scale=self.guidance_scale,
-            num_videos_per_prompt=self.num_images_per_prompt,
-            generator=generator,
-            output_type="pt",
+            DiffusionRequest(
+                prompt=str(prompt or ""),
+                negative_prompt=self.negative_prompt or None,
+                height=self.height,
+                width=self.width,
+                num_frames=self.num_frames,
+                sampling=SamplingConfig(
+                    num_inference_steps=self.num_inference_steps,
+                    guidance_scale=self.guidance_scale,
+                    seed=self.seed,
+                ),
+                inputs={
+                    "image": str(Path(image_path).expanduser().resolve()),
+                    "image_strength": self.image_strength,
+                    "frame_rate": self.frame_rate,
+                },
+            )
         )
-        # Extract the first video (assuming num_images_per_prompt typically results in one video).
-        frames = output.frames[0]
-        if torch.cuda.is_available():
-            # Clear CUDA memory and synchronize streams to free up resources after generation.
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-        # Explicitly run garbage collection to release CPU memory.
-        gc.collect()
-        return frames
+        return output.sample
+
+
+__all__ = ["LTXVideo"]

@@ -1,5 +1,7 @@
 id: fetv
 name: FETV
+publisher: Peking University
+publisher_kind: university
 benchmark_kind:
 - text-to-video
 - fine-grained-evaluation
@@ -133,6 +135,19 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  scoring:
+    engines: [video_quality]
+    hooks:
+      video_quality: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_fetv_video_quality_contract_file
+  official_script: worldfoundry/evaluation/tasks/execution/runners/fetv/run_fetv_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.fetv.run_fetv_official_runner
+    metric_arg: --fetv-metrics
+    limit_arg: --fetv-limit
+    model_arg: --fetv-model-name
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    default_metrics: [clip_score]
   runner_target: worldfoundry.evaluation.tasks.contracts.external:FETVContract
   validation_command:
   - worldfoundry-eval
@@ -169,6 +184,7 @@ runner:
   - Full leaderboard validation still requires generated videos and metric model assets.
 integration:
   status: integrated
+  tier: in_tree
   blocked_reasons:
   - Full metric execution requires prepared BLIP/FID/FVD assets and metric packages.
   - Full leaderboard validation requires generated videos and FETV metric dependency setup.

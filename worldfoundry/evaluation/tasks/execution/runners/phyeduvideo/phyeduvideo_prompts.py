@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import json
-import os
-import shutil
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.core.io.filesystem.file_utils import materialize_file
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
-from worldfoundry.evaluation.utils import write_jsonl
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
+    first_existing_dir,
+    resolve_env_path,
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
 )
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import VIDEO_SUFFIXES
+from worldfoundry.evaluation.utils import write_jsonl
 
 BENCHMARK_ID = "phyeduvideo"
 PROMPTS_DIR_REL = Path("Prompts")
@@ -26,23 +28,15 @@ PC3_FILE_REL = PROMPTS_DIR_REL / "PC-3.json"
 SCRIPTS_DIR_REL = Path("scripts")
 
 CANONICAL_PROMPT_COUNT = 205
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
-
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def resolve_phyeduvideo_root(explicit: Path | None = None) -> Path | None:
-    for candidate in (
+    return first_existing_dir(
         explicit,
-        _env_path("WORLDFOUNDRY_PHYEDUVIDEO_ROOT"),
+        resolve_env_path("WORLDFOUNDRY_PHYEDUVIDEO_ROOT"),
         bundled_benchmark_assets_root(BENCHMARK_ID),
-    ):
-        if candidate is not None and candidate.is_dir():
-            return candidate.expanduser().resolve()
-    return None
+    )
 
 
 def _resolve_repo_file(
@@ -58,7 +52,7 @@ def _resolve_repo_file(
         if not path.is_file():
             raise FileNotFoundError(f"PhyEduVideo {label} not found: {path}")
         return path
-    env_path = _env_path(env_name)
+    env_path = resolve_env_path(env_name)
     if env_path is not None:
         if not env_path.is_file():
             raise FileNotFoundError(f"PhyEduVideo {label} not found: {env_path}")
@@ -232,7 +226,7 @@ def copy_phyeduvideo_generated_videos(
         if not source_path.is_file():
             continue
         target_path = generated_artifact_dir / video_filename_for_prompt_id(sample_id)
-        shutil.copy2(source_path, target_path)
+        materialize_file(source_path, target_path, writable=False)
         materialized += 1
         manifest_rows.append({"sample_id": sample_id, "artifact": output_artifact, "path": str(target_path)})
 
@@ -242,7 +236,7 @@ def copy_phyeduvideo_generated_videos(
                 continue
             sample_id = path.stem
             target_path = generated_artifact_dir / video_filename_for_prompt_id(sample_id)
-            shutil.copy2(path, target_path)
+            materialize_file(path, target_path, writable=False)
             materialized += 1
             manifest_rows.append({"sample_id": sample_id, "artifact": output_artifact, "path": str(target_path)})
 

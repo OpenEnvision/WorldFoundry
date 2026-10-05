@@ -4,8 +4,8 @@ import inspect
 import numbers
 
 import torch
-from torch import Tensor
 import torch.nn.functional as F
+from torch import Tensor
 from torch.nn import init
 from torch.nn.parameter import Parameter
 
@@ -285,45 +285,9 @@ class MixedFusedRMSNorm(torch.nn.Module):
     try:
       try:
         return FusedRMSNormAffineMixedDtypesFunction.apply(input, self.weight, self.normalized_shape, self.eps, True)
-      except:
+      except Exception:
         return FusedRMSNormAffineMixedDtypesFunction.apply(input, self.weight, self.normalized_shape, self.eps)
-    except:
+    except Exception:
       # `memory_efficient=False` aligns with the old version
       # `apply` doesn't accept keyword arguments
       return FusedRMSNormAffineMixedDtypesFunction.apply(input, self.weight, self.normalized_shape, self.eps, False)
-
-
-if __name__ == "__main__":
-    norm = FusedLayerNorm(3072).to("cuda")
-    x = torch.rand(1,  21730, 3072, dtype=torch.float32, device="cuda")
-    
-    y = norm(x)
-    
-    
-    torch.cuda.synchronize()
-    import time
-    N = 100
-    start = time.time()
-    for i in range(N):
-        y1 = norm(x)
-    torch.cuda.synchronize()
-    
-    cost = (time.time() - start) / N
-    print(f"apex layernorm cost: {cost}")
-    
-    
-    from torch import nn
-    start = time.time()
-    layer_norm = nn.LayerNorm(3072).to("cuda")
-    for i  in range(N):
-        y2 = layer_norm(x)
-        
-    torch.cuda.synchronize()
-
-    print(y1)
-    print(y2)
-
-    print(f"equal: {torch.isclose(y1, y2, rtol=1e-5, atol=1e-8)}")
-
-    cost = (time.time() - start) / N
-    print(f"torch layernorm cost: {cost}")

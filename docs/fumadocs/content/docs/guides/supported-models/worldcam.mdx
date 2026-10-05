@@ -1,0 +1,50 @@
+---
+title: "WorldCam"
+description: "WorldCam from KAIST / Adobe Research / MAUM AI: world and camera control; Verified."
+modelId: "worldcam"
+pageSource: generated
+---
+
+WorldCam, from KAIST's CV Lab with Adobe Research and MAUM AI, is an interactive world model with camera-pose control for long-horizon game video. In this catalog the integration is verified: the runtime code is in-tree, the wrapper supports load_model=False planning without external checkout dependency, and the runner supports the official-style conditioning-video demo in the unified environment profile.
+
+<ModelPaperFigures modelId="worldcam" locale="en" />
+
+The recorded paper is [arXiv 2603.16871](https://arxiv.org/abs/2603.16871).
+
+Project page: [cvlab-kaist.github.io/WorldCam](https://cvlab-kaist.github.io/WorldCam/). Code: [cvlab-kaist/WorldCam](https://github.com/cvlab-kaist/WorldCam).
+
+<ModelCommandBuilder modelId="worldcam" locale="en" />
+
+## What it is for
+
+Use `worldcam` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+
+The in-tree runner follows the official conditioning-video path and consumes local WorldCam/Wan assets, indicating a Wan-based diffusion backbone with camera-pose conditioning. Architecture internals beyond this are not recorded in this repository. It is published by KAIST / Adobe Research / MAUM AI.
+
+Catalog tasks include world, camera control, and world model.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-pose-controlled rollout adherence), [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Long-horizon interactive world quality).
+
+## Runtime contract
+
+Required `input_path`; optional `prompt`, `negative_prompt`, `fps`, `height`, and `width`; artifacts `worldcam.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `WorldCamPipeline`.
+
+Family status: **Verified**.
+
+Recorded `interactive-video` defaults: fps=30, height=480, width=832, seed=0.
+
+The release is code-only (no confirmed official checkpoints), so stage local WorldCam/Wan assets yourself; the wrapper's load_model=False mode lets you validate planning without weights.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run worldcam --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `worldcam/worldcam` and `Wan-AI/Wan2.1-T2V-1.3B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh worldcam`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="worldcam" locale="en" />

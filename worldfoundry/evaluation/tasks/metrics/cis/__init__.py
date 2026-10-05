@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .wrapper import compute_bcis, compute_cis, compute_cis_from_predictions, compute_wcis
+compute_bcis = lazy_export(f"{__name__}.wrapper", "compute_bcis", owner=__name__)
+compute_cis = lazy_export(f"{__name__}.wrapper", "compute_cis", owner=__name__)
+compute_cis_from_predictions = lazy_export(f"{__name__}.wrapper", "compute_cis_from_predictions", owner=__name__)
+compute_wcis = lazy_export(f"{__name__}.wrapper", "compute_wcis", owner=__name__)
 
 METRIC_ID = "cis"
 ALIASES = ("conditional-inception-score", "conditional_is", "bcis", "wcis")

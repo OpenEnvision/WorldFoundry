@@ -6,6 +6,7 @@ import {
   isValidElement,
   useId,
   useMemo,
+  useState,
   type ReactNode,
 } from 'react';
 
@@ -15,6 +16,19 @@ function escapeValue(v: string) {
 
 function collectTabPanels(children: ReactNode) {
   return Children.toArray(children).filter(isValidElement);
+}
+
+function resolveActiveIndex(
+  items: string[] | undefined,
+  defaultIndex: number,
+  defaultValue?: string,
+) {
+  if (!items?.length) return 0;
+  if (defaultValue) {
+    const matched = items.findIndex((item) => escapeValue(item) === defaultValue);
+    if (matched >= 0) return matched;
+  }
+  return Math.min(Math.max(defaultIndex, 0), items.length - 1);
 }
 
 export type TabsProps = {
@@ -36,15 +50,11 @@ export function Tabs({
 }: TabsProps) {
   const groupId = useId().replace(/:/g, '');
   const panels = useMemo(() => collectTabPanels(children), [children]);
-
-  const activeIndex = useMemo(() => {
-    if (!items?.length) return 0;
-    if (defaultValue) {
-      const matched = items.findIndex((item) => escapeValue(item) === defaultValue);
-      if (matched >= 0) return matched;
-    }
-    return Math.min(Math.max(defaultIndex, 0), items.length - 1);
-  }, [defaultIndex, defaultValue, items]);
+  const initialIndex = useMemo(
+    () => resolveActiveIndex(items, defaultIndex, defaultValue),
+    [defaultIndex, defaultValue, items],
+  );
+  const [selected, setSelected] = useState(initialIndex);
 
   if (!items?.length) {
     return <div className={className}>{children}</div>;
@@ -52,7 +62,7 @@ export function Tabs({
 
   return (
     <div
-      data-wf-docs-tabs="css"
+      data-wf-docs-tabs="react"
       data-group={groupId}
       className={cn(
         'wf-docs-tabs flex flex-col overflow-hidden rounded-xl border bg-fd-secondary my-4',
@@ -61,11 +71,12 @@ export function Tabs({
     >
       {items.map((item, index) => (
         <input
-          key={`input-${item}`}
+          key={`input-${index}`}
           type="radio"
           name={`wf-docs-tabs-${groupId}`}
-          id={`wf-docs-tabs-${groupId}-${escapeValue(item)}`}
-          defaultChecked={index === activeIndex}
+          id={`wf-docs-tabs-${groupId}-${index}`}
+          checked={index === selected}
+          onChange={() => setSelected(index)}
           className="wf-docs-tabs-input sr-only"
         />
       ))}
@@ -79,12 +90,13 @@ export function Tabs({
         ) : null}
         {items.map((item, index) => (
           <label
-            key={`label-${item}`}
-            htmlFor={`wf-docs-tabs-${groupId}-${escapeValue(item)}`}
+            key={`label-${index}`}
+            htmlFor={`wf-docs-tabs-${groupId}-${index}`}
             role="tab"
             data-tab-index={index}
-            data-state={index === activeIndex ? 'active' : 'inactive'}
-            aria-selected={index === activeIndex}
+            data-state={index === selected ? 'active' : 'inactive'}
+            aria-selected={index === selected}
+            onClick={() => setSelected(index)}
             className="wf-docs-tabs-trigger inline-flex items-center gap-2 whitespace-nowrap text-fd-muted-foreground border-b border-transparent py-2 text-sm font-medium transition-colors [&_svg]:size-4 hover:text-fd-accent-foreground cursor-pointer"
           >
             {item}
@@ -98,7 +110,8 @@ export function Tabs({
             key={items[index] ?? index}
             role="tabpanel"
             data-tab-index={index}
-            data-state={index === activeIndex ? 'active' : 'inactive'}
+            data-state={index === selected ? 'active' : 'inactive'}
+            hidden={index !== selected}
             className="wf-docs-tabs-panel p-4 text-[0.9375rem] bg-fd-background rounded-xl outline-none prose-no-margin [&>figure:only-child]:-m-4 [&>figure:only-child]:border-none"
           >
             {panel}

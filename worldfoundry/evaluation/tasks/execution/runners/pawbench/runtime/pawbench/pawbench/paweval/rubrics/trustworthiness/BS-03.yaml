@@ -1,0 +1,59 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BS-03
+track: coverage
+title_en: Tablecloth Pull Under Objects
+scene_grounding:
+- 'Initial state must match: Objects rest on a tablecloth while hands hold the cloth edge.'
+- Target objects, tablecloth, cloth edge/hand grip, and tabletop support region must be visible before
+  the pull.
+action_execution:
+- 'Required action: Pull the tablecloth out once.'
+- Hands must pull the tablecloth edge out from under the objects; object motion without cloth motion is
+  action execution failure.
+- The cloth pull must stay visible until objects have remained, shifted, fallen, or scattered.
+target_requirements:
+- Target objects resting on the tablecloth must remain visible enough to count upright, scattered-on-table,
+  fallen-on-table, and left-table states after the pull.
+- Tabletop boundary must be visible enough to distinguish on-table fall/scatter from object leaving the
+  table.
+- Tablecloth removal must be the cause of displacement; pre-existing fallen or shifted objects before
+  the pull must not be counted as action-caused response.
+- After a successful pull, the removed red-checkered cloth may remain visible in the actor hands or off
+  to the side; that is not duplication if the tabletop beneath the objects is bare or visibly uncovered.
+object_continuity:
+- Each visible object should remain traceable from initial rest to final state; no object can vanish,
+  duplicate, or be replaced by a different prop.
+- Tablecloth edge and tabletop support must remain coherent during removal.
+- Treat cloth duplication/support discontinuity as fatal only when an apparently second same-pattern cloth
+  still physically supports the objects after another cloth has been pulled clear; a trailing folded cloth
+  in hand is expected.
+apparatus_stability:
+- Table plane, cloth path, and object scale must remain stable enough to judge displacement severity.
+- Bare tabletop becoming visible under/around the objects after the pull is positive evidence of cloth
+  removal, not apparatus instability.
+motion_hard_failures:
+- 'Cloth-pull failure: tablecloth is not pulled from under the objects before the claimed response.'
+- 'Object teleport: objects jump, disappear, scatter, or fall without continuous motion caused by cloth
+  removal.'
+- 'Support discontinuity: tabletop/cloth geometry changes to keep objects upright or make them fall.'
+post_result_consistency:
+- After the first settled object state, upright/fallen/off-table positions must persist unless continuous
+  motion explains a later fall.
+- '`objects_remain_in_place` is untrusted if the tablecloth never visibly moved; it must be a result of
+  a real cloth pull, not a frozen scene.'
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Tablecloth Pull Under Objects.'
+- 'Track B family: stability_stack.'

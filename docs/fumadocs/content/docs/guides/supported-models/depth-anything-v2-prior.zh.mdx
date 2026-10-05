@@ -1,0 +1,54 @@
+---
+title: "Depth Anything V2"
+description: "Depth Anything V2（TikTok / The University of Hong Kong）：单目深度估计、米制深度估计；已验证。"
+modelId: "depth-anything-v2-prior"
+pageSource: authored
+---
+
+Depth Anything V2 是 V1 的后继者，用合成数据训练、细节更锐利，此处作为米制/单目深度先验集成，runner 状态已验证。记录的 checkpoint 为 depth-anything/Depth-Anything-V2-Large；共享先验工厂与视频深度先验复用同一实现。
+
+<ModelPaperFigures modelId="depth-anything-v2-prior" locale="zh" />
+
+记录论文为[arXiv 2406.09414](https://arxiv.org/abs/2406.09414)。
+
+项目页：[depth-anything-v2.github.io](https://depth-anything-v2.github.io/)。代码：[DepthAnything/Depth-Anything-V2](https://github.com/DepthAnything/Depth-Anything-V2)。
+
+官方论文见 [arXiv 2406.09414](https://arxiv.org/abs/2406.09414)。项目页：[depth-anything-v2.github.io](https://depth-anything-v2.github.io/)。记录的 checkpoint：`depth-anything/Depth-Anything-V2-Large`（`depth_anything_v2_vitl.pth`）。Runner 经共享先验契约**已验证**。逐次证据在 catalog 外。
+
+<ModelCommandBuilder modelId="depth-anything-v2-prior" locale="zh" />
+
+## 用来做什么
+
+用 `depth-anything-v2-prior` 做 catalog 几何推理。产物是重建而不是生成视频时选它。
+
+与 V1 同为 DINOv2+DPT 家族，但用精确合成标注加伪标注真实图像训练，边缘与细结构更好（见论文）。注册于 base_models/three_dimensions/depth/depth_anything/depth_anything_v2。该模型由TikTok / 香港大学发布。
+
+catalog 记录的任务包括 单目深度估计、米制深度估计、几何先验。别名包括 `dav2-prior`、`depth-anything-v2`。模态上，它接受图像，输出深度。
+
+## 运行时契约
+
+可选 `input_path`、`model`、`execute`、`max_points`、`focal_length`；产物 `depth-anything-v2-prior.npz`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `DepthAnythingV2PriorPipeline`。
+
+系列状态：**已验证**。
+
+它作为独立几何先验集成在 worldfoundry/base_models 下，通过共享的 geometry-prior pipeline/operator 契约对外暴露。 上层管线（如 ViPE）从这一规范位置导入它，而不是各自保留私有副本。 runner parity 已通过共享契约验证。
+
+米制精度随领域变化；室内/室外标定不同。
+
+Integrated as an independent depth prior at worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v2.
+
+记录的 checkpoint：`depth-anything/Depth-Anything-V2-Large`（`depth_anything_v2_vitl.pth`）。DINOv2 + DPT 家族。Runner 经共享 prior operator **已验证**——逐次证据在 catalog 外。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run depth-anything-v2-prior --pipeline.task-profile default` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `depth-anything/Depth-Anything-V2-Large`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh depth-anything-v2-prior`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="depth-anything-v2-prior" locale="zh" />

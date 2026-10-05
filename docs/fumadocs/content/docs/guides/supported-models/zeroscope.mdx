@@ -1,0 +1,32 @@
+---
+title: "ZeroScope"
+description: "cerspense's watermark-free 16:9 ModelScopeT2V fine-tune. Prompt-only 576×320 U-Net; Diffusers-matched WorldFoundry route; CC-BY-NC-4.0."
+modelId: "zeroscope"
+pageSource: authored
+---
+
+ZeroScope is a community **text-to-video** fine-tune of [ModelScopeT2V](/docs/guides/supported-models/modelscope-t2v) by **cerspense**, aimed at watermark-free **16:9** clips. A prompt goes in; `zeroscope.mp4` comes out. The in-tree runtime is **prompt-only**: image or video inputs raise. There is no camera path, no navigation action, and no 3D asset.
+
+<ModelPaperFigures modelId="zeroscope" locale="en" />
+
+WorldFoundry executes the Hugging Face Diffusers U-Net through `worldfoundry/synthesis/visual_generation/zeroscope/worldfoundry_runtime.py`. For the selected configuration, output **matched the official Diffusers route**. Aliases `zero-scope` and `zero_scope` resolve here.
+
+Two cards are recorded: `cerspense/zeroscope_v2_576w` (base **576×320**) and `cerspense/zeroscope_v2_XL` (upscaler). The wired Studio/API profile stages the **576w** checkpoint. Both licenses are **CC-BY-NC-4.0**.
+
+<ModelCommandBuilder modelId="zeroscope" locale="en" />
+
+## What it is for
+
+Smoke-test a legacy T2V pipe, or compare against the ModelScopeT2V parent — not produce modern DiT footage. Launch `worldfoundry-eval run zeroscope` with a required `prompt`. Runtime defaults: **8 frames**, **576×320**, **25 steps**, guidance **9.0**, **8 fps**. Artifact: `zeroscope.mp4`.
+
+Use [FETV](/docs/evaluation/benchmark-hub/fetv) if you need a fine-grained suite from this U-Net era. For first-person world exploration use [YUME](/docs/guides/supported-models/yume). For a 3D splat use [WorldGen](/docs/guides/supported-models/worldgen).
+
+## Running in WorldFoundry
+
+`ZeroScopePipeline` runs in `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `cerspense/zeroscope_v2_576w` under `WORLDFOUNDRY_HFD_ROOT`. Review CC-BY-NC-4.0 before commercial use or automated benchmarking — the manifest records that policy review twice.
+
+## Minimal eval
+
+The 576w route is runner-verified. Score generated clips on [FETV](/docs/evaluation/benchmark-hub/fetv) with `--fetv-metrics clip_score` and read `clip_score` — that is the bounded official component. `fetv_average` appears only when every declared component is present.
+
+<ModelRelatedRecipes modelId="zeroscope" locale="en" />

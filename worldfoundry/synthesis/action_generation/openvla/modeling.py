@@ -206,8 +206,12 @@ class PrismaticPreTrainedModel(PreTrainedModel):
 
     @property
     def _supports_sdpa(self) -> bool:
-        """Check LLM supports SDPA Attention"""
-        return self.language_model._supports_sdpa
+        """Report LLM support even during the parent constructor's checks."""
+        language_model = getattr(self, "language_model", None)
+        if language_model is not None:
+            return language_model._supports_sdpa
+        model_class = AutoModelForCausalLM._model_mapping[type(self.config.text_config)]
+        return bool(getattr(model_class, "_supports_sdpa", False))
 
 
 class PrismaticForConditionalGeneration(PrismaticPreTrainedModel, GenerationMixin):

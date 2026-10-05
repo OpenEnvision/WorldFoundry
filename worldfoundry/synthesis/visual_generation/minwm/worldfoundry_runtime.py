@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path
-from worldfoundry.core.distributed.multiprocess_launch import find_free_port
+from worldfoundry.core.distributed.runtime.multiprocess_launch import find_free_port
 from worldfoundry.runtime.in_tree_cli import ensure_in_tree_runtime, execute_in_tree, require_path
 
 
@@ -66,6 +66,10 @@ class _MinWMRuntime:
 
 class MinWMHYAction2VRuntime(_MinWMRuntime):
     MODEL_ID = "minwm-hy-action2v"
+
+    @staticmethod
+    def bundled_repo_root() -> Path:
+        return Path(__file__).resolve().parent
 
     @staticmethod
     def default_base_path(checkpoints: Path) -> Path:
@@ -126,7 +130,7 @@ class MinWMHYAction2VRuntime(_MinWMRuntime):
             "torch.distributed.run",
             "--nproc_per_node=1",
             "--module",
-            "worldfoundry.synthesis.visual_generation.minwm.minwm_runtime.HY15.hy15_inference",
+            "worldfoundry.synthesis.visual_generation.minwm.hy15_inference",
             "--mode",
             "ar_rollout",
             "--transformer_dir",

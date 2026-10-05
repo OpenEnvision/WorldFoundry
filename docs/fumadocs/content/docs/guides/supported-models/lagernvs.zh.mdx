@@ -1,0 +1,48 @@
+---
+title: "LagrNVS"
+description: "LagrNVS（Meta AI (FAIR)）：新视角合成、3d-scene-rendering；Runner 一致性待确认。"
+modelId: "lagernvs"
+pageSource: generated
+---
+
+LagrNVS 是 Meta 的新视角合成模型，用于沿新的相机路径渲染场景（facebook/lagernvs_general_512）。 WorldFoundry 用树内适配器封装上游 minimal_inference.py 命令；checkpoint 在 Hugging Face 上为 gated， HF_TOKEN 缺失会在推理时报告。
+
+<ModelPaperFigures modelId="lagernvs" locale="zh" />
+
+记录论文为[arXiv 2603.20176](https://arxiv.org/abs/2603.20176)。
+
+项目页：[szymanowiczs.github.io/lagernvs](https://szymanowiczs.github.io/lagernvs)。代码：[facebookresearch/lagernvs](https://github.com/facebookresearch/lagernvs)。
+
+<ModelCommandBuilder modelId="lagernvs" locale="zh" />
+
+## 用来做什么
+
+用 `lagernvs` 做 catalog 几何推理。产物是重建而不是生成视频时选它。
+
+catalog 记录其为 512 分辨率的新视角/相机路径渲染模型；内部细节仓库未记录。许可为 FAIR 非商用研究许可。该模型由Meta AI（FAIR）发布。
+
+catalog 记录的任务包括 新视角合成、3d-scene-rendering、camera-path-rendering。别名包括 `lager-nvs`、`facebook/lagernvs_general_512`、`facebookresearch/lagernvs`。
+
+## 运行时契约
+
+可选 `input_path`、`frames`、`fps`、`model_repo`、`python_executable`；产物 `generated_video`、`lagernvs.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `LagrNVSPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+`default` 记录默认值：frames=16, fps=25。
+
+运行前请先接受 gated 条款并设置 HF_TOKEN。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run lagernvs --pipeline.task-profile default` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `facebook/lagernvs_general_512`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lagernvs`；下载缺失的公开权重时加 `--download`。
+
+gated `facebook/lagernvs_general_512`，下载前需在上游接受条款；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="lagernvs" locale="zh" />

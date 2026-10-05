@@ -1,15 +1,15 @@
-from torch_fidelity.helpers import get_kwarg, vassert, vprint, process_deprecations
-from torch_fidelity.metric_fid import (
+from .helpers import get_kwarg, vassert, vprint, process_deprecations
+from .metric_fid import (
     fid_inputs_to_metric,
     fid_featuresdict_to_statistics_cached,
     fid_statistics_to_metric,
 )
-from torch_fidelity.metric_isc import isc_featuresdict_to_metric
-from torch_fidelity.metric_kid import kid_featuresdict_to_metric
-from torch_fidelity.metric_mind import mind_featuresdict_to_metric
-from torch_fidelity.metric_prc import prc_featuresdict_to_metric
-from torch_fidelity.metric_ppl import calculate_ppl
-from torch_fidelity.utils import (
+from .metric_isc import isc_featuresdict_to_metric
+from .metric_kid import kid_featuresdict_to_metric
+from .metric_mind import mind_featuresdict_to_metric
+from .metric_prc import prc_featuresdict_to_metric
+from .metric_ppl import calculate_ppl
+from .utils import (
     create_feature_extractor,
     extract_featuresdict_from_input_id_cached,
     get_cacheable_input_name,

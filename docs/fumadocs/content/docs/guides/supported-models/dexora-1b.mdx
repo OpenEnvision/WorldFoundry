@@ -1,0 +1,52 @@
+---
+title: "Dexora 1B"
+description: "Dexora 1B: vla and dexterous manipulation; Static load only; dedicated `worldfoundry-vla-dexora`."
+modelId: "dexora-1b"
+pageSource: authored
+---
+
+Dexora 1B is a dexterous bimanual manipulation VLA built on a 1B RDT policy backbone (paper: arXiv 2605.18722, MIT license). WorldFoundry keeps the full inference stack in-tree — SigLIP/T5 encoders, strict checkpoint loader, diffusion sampler, and a 36-DoF action contract — but the authors publish data and training code without official policy weights.
+
+<ModelPaperFigures modelId="dexora-1b" locale="en" />
+
+The recorded paper is [Dexora: Open-source VLA for High-DoF Bimanual Dexterity](https://arxiv.org/abs/2605.18722) (ICRA 2026, 2026).
+
+Project page: [dexoravla.github.io](https://dexoravla.github.io). Code: [dexoravla/Dexora](https://github.com/dexoravla/Dexora).
+
+Paper: [arXiv 2605.18722](https://arxiv.org/abs/2605.18722). Project: [dexoravla.github.io](https://dexoravla.github.io). Code: [dexoravla/Dexora](https://github.com/dexoravla/Dexora). License: **MIT**. Institution is not recorded. Authors published **data and training code**, not official policy weights. Status: **Static load only**. Static runtime is verified; **numerical parity is pending** a user-trained Stage-1 / Stage-3 checkpoint.
+
+<ModelCommandBuilder modelId="dexora-1b" locale="en" />
+
+## What it is for
+
+`dexora-1b` is the recorded instruction-to-action line. Start here when you need a WorldFoundry VLA rollout rather than a video generator.
+
+A 1B-parameter RDT (robotics diffusion transformer) policy with SigLIP vision and T5 language encoding, sampling 36-DoF bimanual dexterous actions through a diffusion sampler. Source-level checkpoint and inference contracts match the official 1B configuration.
+
+Catalog tasks include vla, dexterous manipulation, bimanual robot policy, and vla policy rollout. Catalog aliases include `dexora` and `dexora_vla`.
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `dexora_action_trace.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `DexoraPipeline`.
+
+Family status: **Static load only**.
+
+You must train your own Stage-1 or Stage-3 checkpoint with the official pipeline before the runtime can execute; training, datasets, teleoperation, ZMQ services, robot SDKs, and simulator code are excluded from the tree.
+
+The 1B RDT policy, SigLIP/T5 encoders, strict checkpoint loader, diffusion sampler, and 36-DoF action contract are in-tree.
+
+Dedicated env: `worldfoundry-vla-dexora` (Python 3.10, CUDA 12.1 or newer). Training, teleop, ZMQ, robot SDKs, and simulators are excluded. Catalog VRAM is unset. License: **MIT**.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run dexora-1b --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the dedicated environment `worldfoundry-vla-dexora` (Python 3.10, Cu121 Or Newer, torch>=2.2).
+
+Recorded weight repositories include `google/siglip-so400m-patch14-384` and `google/t5-v1_1-xxl`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh dexora-1b`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Static load only**.
+
+<ModelRelatedRecipes modelId="dexora-1b" locale="en" />

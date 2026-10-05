@@ -1,0 +1,50 @@
+---
+title: "Matrix-Game 3.5"
+description: "Matrix-Game 3.5 from Riemann Dynamics: image-to-video and camera-controlled-video; Runner parity pending."
+modelId: "matrix-game-3.5-first-person"
+pageSource: authored
+---
+
+Matrix-Game 3.5 First-Person Base is the first-person profile of the Matrix-Game 3.5 release: long-horizon interactive world video at 1280x704, generated block by block (84 new frames per block) under camera-NPZ control. This model id is permanently bound to first-person.safetensors. A default 25-step one-block A100 run exported 85 non-empty frames on 2026-07-20; official sample parity is still pending.
+
+<ModelPaperFigures modelId="matrix-game-3.5-first-person" locale="en" />
+
+Project page: [matrix-game-v3-5.github.io](https://matrix-game-v3-5.github.io/). Code: [Riemann-Dynamics/Matrix-Game-3.5](https://github.com/Riemann-Dynamics/Matrix-Game-3.5).
+
+<ModelCommandBuilder modelId="matrix-game-3.5-first-person" locale="en" />
+
+## What it is for
+
+Pick `matrix-game-3.5-first-person` when you need camera-controlled video: a camera trajectory in, a steered clip out. Use it instead of unconstrained T2V when viewpoint must follow a path.
+
+The recorded stack builds on Wan2.2-TI2V-5B (apache-2.0) with the Matrix-Game-3.5-Base weights and a DA3NESTED-GIANT-LARGE-1.1 depth dependency (CC-BY-NC-4.0 — separate non-commercial terms). Inference is integrated through the canonical NativeDiffusionPipeline with no DiffSynth pipeline remaining; the released checkpoint is the 25-step bidirectional 5B base, not the announced few-step real-time distilled model. It is published by Riemann Dynamics.
+
+Catalog tasks include image-to-video, camera-controlled-video, interactive-world-model, and long-horizon-generation. Catalog aliases include `matrix-game-3.5-fp` and `matrix-game-35-first-person`. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Long-horizon interactive world-rollout quality), [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-NPZ trajectory adherence).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `fps`, `steps`, and `guidance_scale`; artifacts `generated_world_video` and `matrix-game-3.5-first-person.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `MatrixGame35FirstPersonPipeline`.
+
+Family status: **Runner parity pending**.
+
+Each block consumes 84 camera poses and generates 84 new frames (exports include the anchor frame). The shared resolver prefers staged local checkpoints and can materialize missing Hub files. The recorded A100 artifact predates the NativeDiffusionPipeline cutover — regenerate before claiming native parity.
+
+Revision-pinned inference behavior is integrated through the canonical NativeDiffusionPipeline; no DiffSynth Matrix pipeline remains.
+
+The public runtime retains only the generated rollout and provenance needed to reproduce inference; copied validation panels, debug videos, and latent dumps are not runtime outputs.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run matrix-game-3.5-first-person --pipeline.task-profile interactive-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `RiemannDynamics/Matrix-Game-3.5-Base`, `Wan-AI/Wan2.2-TI2V-5B`, and `depth-anything/DA3NESTED-GIANT-LARGE-1.1` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh matrix-game-3.5-first-person`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0 and cc-by-nc-4.0; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="matrix-game-3.5-first-person" locale="en" />

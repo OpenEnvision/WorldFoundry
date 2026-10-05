@@ -1,0 +1,30 @@
+schema_version: worldfoundry.runtime_defaults.v1
+
+x-echo-common: &echo_common
+  wan_base_dir: ${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-1.3B
+  task: t2v-1.3B
+  width: 640
+  height: 352
+  frames: 81
+  fps: 15
+  num_chunks: 2
+  sample_steps: 50
+  sample_shift: 5.0
+  sample_solver: unipc
+  sample_guide_scale: 5.0
+  base_seed: 42
+  negative_prompt: "oversaturated colors, overexposed, static, blurry details"
+  camera_trajectory: "z*80"
+  camera_translation_step: 0.00125
+  camera_rotation_step_degrees: 0.5625
+  offload_model: true
+  t5_cpu: false
+  t5_fsdp: false
+  dit_fsdp: false
+  ulysses_size: 1
+  ring_size: 1
+
+defaults:
+  echo-memory-context-k1:
+    <<: *echo_common
+    checkpoint_path: ${WORLDFOUNDRY_CKPT_DIR}/Echo-Memory/context_k1/epoch-0.safetensors

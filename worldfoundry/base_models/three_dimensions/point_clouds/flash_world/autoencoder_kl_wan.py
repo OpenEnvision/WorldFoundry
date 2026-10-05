@@ -33,10 +33,9 @@ from diffusers.models.autoencoders.vae import DecoderOutput, DiagonalGaussianDis
 import einops
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
-# Import base components from wan_2p1 to avoid code duplication
+# Import base components from the canonical Wan autoencoder role.
 try:
-    # Use absolute import to avoid relative import complexity
-    from .....base_models.diffusion_model.video.wan.wan_2p1.modules.vae import (
+    from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import (
         CausalConv3d,
         RMS_norm,
         Upsample,

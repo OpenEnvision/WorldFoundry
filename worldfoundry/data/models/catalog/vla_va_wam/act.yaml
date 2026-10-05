@@ -10,6 +10,7 @@ integration:
   status: integrated
 name: Action Chunking Transformer
 official_sources:
+  paper: https://arxiv.org/abs/2304.13705
   github:
     head_sha: 742c753c0d4a5d87076c8f69e5628c79a8cc5488
     url: https://github.com/tonyzhaozh/act
@@ -25,3 +26,19 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile
   planning records. Runner or pipeline targets are present only after a complete in-tree WorldFoundry model runtime is registered
   and validated.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'ACT (Action Chunking Transformer) is the classic imitation-learning policy behind the ALOHA line of work: instead of predicting one action at a time it predicts chunks of future actions, smoothing control and reducing compounding error. WorldFoundry executes the full policy — DETR-VAE, transformer, ResNet backbone, preprocessing, and action-chunk aggregation — from a flattened in-tree package.'
+  overview_zh: ACT（Action Chunking Transformer）是 ALOHA 系列工作背后的经典模仿学习策略：不逐步预测单个动作，而是预测未来动作块，使控制更平滑并降低误差累积。WorldFoundry 从扁平化树内包完整执行该策略——DETR-VAE、transformer、ResNet 骨干、预处理与动作块聚合。
+  architecture: 'A DETR-style transformer with a CVAE objective: a ResNet visual backbone feeds a transformer encoder-decoder that emits an action chunk; the VAE latent captures demonstration multimodality.'
+  architecture_zh: DETR 风格的 transformer 加 CVAE 目标：ResNet 视觉骨干馈入 transformer 编解码器并输出动作块；VAE 隐变量捕捉示范的多模态性。
+  usage_notes: Checkpoint-backed prediction requires a caller-staged policy_best.ckpt and matching dataset_stats.pkl. Checkpoint tensors use weights-only deserialization and statistics use a restricted NumPy-only reader, so no upstream pickle execution occurs.
+  usage_notes_zh: checkpoint 驱动的预测需调用方就位 policy_best.ckpt 与匹配的 dataset_stats.pkl。checkpoint 张量采用 weights-only 反序列化，统计文件使用受限的仅 NumPy 读取器，不执行上游 pickle。
+  limitations:
+  - No official checkpoint is distributed with the catalog; you must stage your own trained policy.
+  - Designed for fixed-embodiment imitation; no language conditioning.
+  limitations_zh:
+  - catalog 不附带官方 checkpoint；需自行就位训练好的策略。
+  - 面向固定本体的模仿学习；无语言条件。

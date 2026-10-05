@@ -20,7 +20,8 @@ integration:
   kind: pipeline_runner
   status: integrated
   notes:
-  - WorldFoundry exposes the in-tree NeoVerse pipeline and vendored DiffSynth runtime adapter.
+  - WorldFoundry exposes a native NeoVerse assembly over canonical Wan components
+    plus its model-specific control and reconstruction roles.
   - Real inference remains checkpoint/GPU gated; no metadata-only runner shim is used.
 confirmation: Official GitHub repo reports Apache-2.0 and says inference scripts/model checkpoints are released.
 output_artifacts:
@@ -48,3 +49,26 @@ catalog_policy:
   - open_weights_restricted
   - api_or_closed
   - unknown
+docs:
+  publisher: CreateAI (formerly TuSimple)
+  publisher_kind: company
+  publisher_zh: CreateAI（原图森未来）
+  overview: 'NeoVerse is a 4D world model built as a native assembly over canonical Wan components plus model-specific control and reconstruction roles: it enhances world generation with 4D-aware conditioning. In this catalog the runner is verified for the README-style tilt_up video demo with local NeoVerse assets; the official video-input path uses static_scene=false.'
+  overview_zh: NeoVerse 是一个 4D 世界模型，由规范 Wan 组件加模型专属的控制与重建角色原生组装而成，用 4D 感知条件增强世界生成。本 catalog 中其 runner 已针对 README 风格的 tilt_up 视频 demo（使用本地 NeoVerse 资产）验证；官方视频输入路径使用 static_scene=false。
+  architecture: Per the upstream release (arXiv 2601.00393), NeoVerse layers 4D reconstruction and control roles over a Wan video backbone. WorldFoundry expresses this as a native assembly over shared Wan infrastructure — real inference stays checkpoint/GPU gated with no metadata-only runner shim.
+  architecture_zh: 按上游发布（arXiv 2601.00393），NeoVerse 在 Wan 视频基座上叠加 4D 重建与控制角色。 WorldFoundry 将其表达为共享 Wan 基础设施上的原生组装——真实推理仍受 checkpoint/GPU 限制，不使用仅元数据的 runner 壳。
+  usage_notes: Runtime execution requires NeoVerse, Wan, reconstructor, LoRA, and CUDA assets. For video input follow the official path with static_scene=false; per-run visual QA and artifact checks are tracked outside the catalog.
+  usage_notes_zh: 运行需要 NeoVerse、Wan、重建器、LoRA 与 CUDA 资产。视频输入请按官方路径使用 static_scene=false；每次运行的视觉 QA 与产物检查在 catalog 外跟踪。
+  limitations:
+  - Requires the full recorded asset stack (NeoVerse + Wan + reconstructor + LoRA).
+  - Verified scope is the README-style demo; broader scenario coverage is tracked outside the catalog.
+  limitations_zh:
+  - 需要完整的记录资产组合（NeoVerse + Wan + 重建器 + LoRA）。
+  - 已验证范围是 README 风格 demo；更广场景覆盖在 catalog 外跟踪。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Scores navigable generated worlds.
+    reason_zh: 评估可游走的生成世界。
+  - id: 4dworldbench
+    reason: Matches the entry's 4D world-model focus.
+    reason_zh: 契合该条目的 4D 世界模型定位。

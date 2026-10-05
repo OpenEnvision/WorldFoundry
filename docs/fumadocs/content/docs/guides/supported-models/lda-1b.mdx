@@ -1,0 +1,52 @@
+---
+title: "LDA-1B"
+description: "LDA-1B: vla and robot policy; Static load only; dedicated `worldfoundry-vla-lda-1b`."
+modelId: "lda-1b"
+pageSource: authored
+---
+
+LDA-1B is a 1B-scale VLA policy combining Qwen3-VL language-vision assembly with a DINOv3-ViT compatibility model and an MMDiT action sampler, released for RoboCasa (Wayer2/LDA-robocasa, CC-BY-NC-4.0). WorldFoundry keeps the full inference path in-tree with static runtime verification complete.
+
+<ModelPaperFigures modelId="lda-1b" locale="en" />
+
+The recorded paper is [arXiv 2505.03233](https://arxiv.org/abs/2505.03233).
+
+Code: [jiangranlv/LDA-1B](https://github.com/jiangranlv/LDA-1B).
+
+<ModelCommandBuilder modelId="lda-1b" locale="en" />
+
+## What it is for
+
+Use `lda-1b` for vision-language-action inference on this card. The recipe exists so you can launch the recorded policy profile.
+
+Qwen3-VL provides multimodal encoding, DINOv3-ViT adds visual features, and an MMDiT (multimodal diffusion transformer) samples actions, with state packing and action unnormalization in-tree. Model and parameter names preserve the released checkpoint contract.
+
+Catalog tasks include vla, robot policy, policy rollout, and embodied benchmark. Catalog aliases include `lda1b` and `wayer2/lda-robocasa`.
+
+Recorded evaluation entry points include [RoboCasa](/docs/evaluation/benchmark-hub/robocasa) (The released checkpoint targets RoboCasa).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `lda_1b_action_trace.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `LDA1BSynthesis`.
+
+Family status: **Static load only**.
+
+The runtime loads only a locally staged tensor state dict with weights_only=true. Exact checkpoint-key and numerical rollout validation require the unstaged 14.4 GB artifact — stage it before real runs.
+
+Qwen3-VL assembly, DINOv3-ViT compatibility model, MMDiT sampler, state packing, and action unnormalization are in-tree.
+
+The source repository declares CC BY-NC 4.0 while the hosted artifact card declares Apache-2.0; this integration conservatively uses the source license.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run lda-1b --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the dedicated environment `worldfoundry-vla-lda-1b` (Python 3.10, Cu124 Or Newer, torch==2.6.0).
+
+Recorded weight repositories include `Wayer2/LDA-robocasa`, `Qwen/Qwen3-VL-4B-Instruct`, and `facebook/dinov3-vits16-pretrain-lvd1689m`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lda-1b`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Static load only**.
+
+<ModelRelatedRecipes modelId="lda-1b" locale="en" />

@@ -2,9 +2,12 @@
 
 from ..pipeline_utils import PipelineABC
 import math
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 from PIL import Image
+
+from worldfoundry.core.io import write_video
 
 from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
 from ...operators.infinite_world_operator import InfiniteWorldOperator
@@ -97,6 +100,42 @@ class InfiniteWorldPipeline(PipelineABC):
         result["num_frames"] = min(int(result.get("num_frames", target)), target)
         return result
 
+    @staticmethod
+    def _expand_action_ids(
+        move_ids,
+        view_ids,
+        *,
+        prefix_length: int,
+        target_length: int,
+    ):
+        """Spread high-level commands across the generated video timeline.
+
+        Studio interactions are command segments (for example, ``forward`` then
+        ``camera_l``), while Infinite-World consumes one move/view id per decoded
+        frame.  Leaving a short command list unexpanded makes the runtime pad the
+        remainder with no-ops, producing an almost static video.
+        """
+
+        prefix = max(int(prefix_length), 0)
+        target = max(int(target_length), prefix)
+        if move_ids.shape[0] != view_ids.shape[0]:
+            raise ValueError("Infinite-World move/view action lengths must match.")
+        if move_ids.shape[0] >= target:
+            return move_ids, view_ids
+
+        move_actions = move_ids[prefix:]
+        if move_actions.shape[0] == 0:
+            return move_ids, view_ids
+
+        payload_length = target - prefix
+        base, remainder = divmod(payload_length, int(move_actions.shape[0]))
+        expanded_indices = list(range(prefix)) + [
+            prefix + index
+            for index in range(int(move_actions.shape[0]))
+            for _ in range(base + (1 if index < remainder else 0))
+        ]
+        return move_ids[expanded_indices], view_ids[expanded_indices]
+
     def process(
         self,
         images,
@@ -136,6 +175,9 @@ class InfiniteWorldPipeline(PipelineABC):
         num_frames: Optional[int] = None,
         negative_prompt: Optional[str] = None,
         seed: Optional[int] = None,
+        output_path: str | Path | None = None,
+        output_dir: str | Path | None = None,
+        fps: int = 30,
         return_dict: bool = False,
         **kwargs,
     ):
@@ -154,12 +196,21 @@ class InfiniteWorldPipeline(PipelineABC):
             action_count=len(output_dict["operator_condition"]["actions"]),
             condition_frames=output_dict["num_condition_frames"],
         )
+        target_action_length = int(output_dict["num_condition_frames"]) + resolved_num_chunks * (
+            int(self.synthesis_model.validation_num_frames) - 1
+        )
+        move_ids, view_ids = self._expand_action_ids(
+            output_dict["operator_condition"]["move_ids"],
+            output_dict["operator_condition"]["view_ids"],
+            prefix_length=output_dict["operator_condition"]["prefix_length"],
+            target_length=target_action_length,
+        )
 
         result = self.synthesis_model.predict(
             prompt=output_dict["prompt"],
             condition_video=output_dict["condition_video"],
-            move_ids=output_dict["operator_condition"]["move_ids"],
-            view_ids=output_dict["operator_condition"]["view_ids"],
+            move_ids=move_ids,
+            view_ids=view_ids,
             num_chunks=resolved_num_chunks,
             negative_prompt=negative_prompt,
             seed=seed,
@@ -170,7 +221,19 @@ class InfiniteWorldPipeline(PipelineABC):
         # requested a chunk count, in which case full chunks are intentional.
         if num_chunks is None and num_frames is not None:
             result = self._trim_result_frames(result, num_frames)
-        if return_dict:
+        if output_path is None and output_dir is not None:
+            output_path = Path(output_dir) / "infinite-world.mp4"
+        if output_path is not None:
+            artifact_path = Path(output_path).expanduser().resolve()
+            artifact_path.parent.mkdir(parents=True, exist_ok=True)
+            frames = result.get("video_uint8", result["video"])
+            write_video(frames, artifact_path, fps=fps)
+            result.update(
+                artifact_path=str(artifact_path),
+                status="succeeded",
+                fps=int(fps),
+            )
+        if return_dict or output_path is not None:
             return result
         return result["video"]
 

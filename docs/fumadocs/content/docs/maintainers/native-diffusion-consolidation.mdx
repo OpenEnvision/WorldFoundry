@@ -1,0 +1,78 @@
+---
+title: Native diffusion consolidation
+description: Migration and consolidation status for native-diffusion families — reused roles, deleted code, and local structural/tensor validation. Release-evidence provenance, not architecture design.
+---
+
+This page records the **migration and consolidation status** of native-diffusion families: which canonical roles each model reuses, what upstream code was deleted, and the local structural/checkpoint validation that backs each recipe. It is release-evidence provenance, **not architecture design**. For the sampling kernel, component boundaries, dependency rules, and the migration *process*, read [Native diffusion](/docs/maintainers/architecture/native-diffusion); for the shared primitives these families depend on, read [Core infrastructure](/docs/maintainers/architecture/core-infrastructure).
+
+<Callout type="info">
+  A recurring distinction below: **structural/checkpoint validation** (exact key or tensor coverage against a released checkpoint) is not the same as **CUDA artifact parity** (a real GPU run producing matching output). Several families note that CUDA parity remains a separate release gate and is not implied by structural validation.
+</Callout>
+
+## Scheduler and component consolidation
+
+The current native kernel establishes these contracts. Wan's shifted trajectory is canonical, and the formerly duplicated flow UniPC/DPM++ implementations now live once under `schedulers/`. Both Wan and Cosmos compatibility paths resolve to the same native UniPC class; Wan's six DPM++ and six UniPC copies are one-way exports. One-off migration validation covered schedule construction, noise interpolation, flow conversion, and complete multistep trajectories; the temporary validation code was removed after use. FLUX.2 is the first real component evacuated from a modality directory: its latent autoencoder now lives under `models/autoencoders/flux2`, uses the shared core-backed module loader, and its benchmark caller uses the canonical path; the old `image/flux2` package has been deleted.
+
+## Sana
+
+Sana image, video, streaming, ControlNet, and SANA-WM variants now share the same role-based package as every other diffusion family. Checkpoint-shaped network math lives under `models/networks/sana`, DC-AE under `models/autoencoders/sana`, conditioning under `models/encoders/sana`, and construction under recipes and schedulers. The migrated Wan VAE variants use framework-independent adapters rather than Diffusers mixins. Repeated shape, volume, configuration-filtering, state-dict-prefix, and Triton autotune helpers were moved into `worldfoundry/core`; unused training/random helpers and the former Sana `utils` layers were deleted.
+
+## Wan family
+
+`wan2.1-t2v-1.3b` is the first complete built-in native recipe. Its UMT5 conditioner, tokenizer resource, DiT, latent initializer, shifted Euler scheduler, and VAE decoder are assembled through the standard strategy. The checkpoint resolver first asks `worldfoundry/core` for a staged local Hub snapshot, then uses filtered Hub materialization; the repository revision and required files remain declarative. Local checkpoint validation confirms exact key coverage for DiT (825), text encoder (242), and VAE (194). CUDA artifact parity for this new recipe remains a separate release gate and is not implied by structural validation.
+
+Wan-derived products use the same roles instead of carrying private Wan frameworks. PUSA, SAMA, Spatia, MultiWorld, FantasyWorld, and WoW compose the canonical Wan transformer, conditioning, codec, checkpoint loading, LoRA/control helpers, and staged runner with only their checkpoint-visible differences retained. Exact local graph checks cover MultiWorld (984/984 tensors), FantasyWorld's Wan2.1 overlay (3,132/3,132) and both Wan2.2 high/low branches (2,658/2,658 each), and WoW 1.3B (825/825). The WoW graph is inferred from the released transformer checkpoint and correctly selects VAE-only first-frame conditioning. WoW DiT 2B no longer carries its copied Cosmos source tree, scheduler, tokenizer, or pipeline; it supplies the post-trained transformer checkpoint to the canonical Cosmos Predict2 route. Its checkpoint graph and CUDA artifact parity remain pending because the pinned Hub snapshot does not contain the expected `wow_dit_2b.pt` asset. These structural checks do not claim post-cutover CUDA artifact parity.
+
+## Matrix Game 3.5
+
+Matrix Game 3.5 is the second checkpoint-backed native integration. `matrix-game-3.5-first-person` and `matrix-game-3.5-third-person` are separate frozen recipes in the same default registry, each bound directly to its released full 829-key DiT checkpoint. Exact header-to-model validation fixes the first-person subject-reference embedding capacity at two and the third-person capacity at four; the product profile still limits a third-person request to two references. They reuse the canonical Wan UMT5 conditioner, 48-channel Wan2.2 VAE, latent initializer, scheduler, core attention, loader, and standard runner. Structural validation also matches all 242 text-encoder keys and all 196 converted Wan2.2 VAE keys. Mosaic, PRoPE, and subject-memory tensor computation lives in the Matrix denoiser component; the old DiffSynth Matrix pipeline has been deleted and the synthesis route now submits a `DiffusionRequest` to `NativeDiffusionPipeline`. The copied validation runner, GT/candidate panels, temporary section videos, latent snapshots, online YOLO filter, and alternate VGGT registration path were removed after integration. Runtime configuration now exposes inference-native names only. CUDA artifact parity must be repeated after this native cutover and remains distinct from structural checkpoint validation.
+
+## Echo Memory
+
+Echo Memory is the third native family and contributes eleven immutable model recipes to the same default registry. Each public model ID fixes its checkpoint file and memory architecture; none is an option on a shared mutable Echo pipeline. The denoiser promotes the canonical Wan blocks with checkpoint-compatible Echo modules, while conditioner, VAE, core loading, UniPC scheduler, runner, and runtime policy remain shared infrastructure. The framework-owned `frozen-context` strategy initializes target noise with a clean context suffix, relocks that suffix after every solver step, and decodes target latents only. Exact native model coverage was checked for all 1,185 tensors in the released K=1 checkpoint. The previous A100 artifact predates this cutover, so a fresh native CUDA artifact is still required before parity is claimed.
+
+## LTX
+
+The LTX family is the next native integration. `ltx-2-i2v`, `ltx-2.3-i2v`, and `ltx-video-i2v` are independent recipes using the same `NativeDiffusionPipeline`, core-backed loader, runtime policy, and framework-owned `joint-multistage` runner. LTX-2.x couples video and audio across low-resolution generation and spatial-refinement stages; LTX-Video 0.9.8 uses the same runner with a video-only modality across two stages, with its spatial upsampler applied between them. Transformers supplies only checkpoint-compatible Gemma/T5 architectures, not an inference backend. Exact local checkpoint coverage was verified for every role: LTX-2 transformer 3,510, connector 59, video encoder/decoder 94/92, audio decoder 58, vocoder 194, upsampler 73, statistics 2, and Gemma 1,066; LTX-2.3 transformer 4,186, connector 262, video encoder/decoder 86/86, audio decoder 58, vocoder 1,227, upsampler 72, statistics 2, and Gemma 1,066; LTX-Video transformer 1,215, video encoder/decoder 94/134, and T5 220. The copied upstream pipeline and legacy `video/ltx2` loader stack were deleted after all callers moved. CUDA artifact parity remains a separate release gate.
+
+## Cosmos Predict 2.5 / Transfer 2.5
+
+Cosmos Predict 2.5 and Transfer 2.5 follow the same rule. The 2B and 14B Predict recipes and the 2B controlled-video Transfer recipe share one native runner, Reason1 conditioner, Wan codec instance, Karras flow-UniPC scheduler, core loader, and offload policy. Transfer contributes a checkpoint-shaped VACE network branch—four control blocks at base layers 0/7/14/21 and an eight-modality control embedder—but no ControlNet backend or family runner. The released Predict and Transfer configs keep temporal FPS RoPE modulation disabled. Exact local structure checks cover Predict 2B (569 transformer tensors), Predict 14B (729), Reason1 language weights (338), and the Wan codec (194); the native Transfer control path also passes a finite tiny forward. The legacy `video/cosmos2p5` Diffusers copy was deleted. Transfer checkpoint structure and full native CUDA artifact parity remain pending because the exact general/edge asset was unavailable locally.
+
+## Cosmos Predict1 / Predict2 (GEN3C)
+
+Cosmos Predict1 and Predict2 use that architecture rather than reviving their upstream runtimes. `gen3c-cosmos1-7b` binds a 570-tensor native DiT, the shared T5-11B conditioner, the Cosmos Tokenize1 codec, Karras x0 AB2, and a standard initializer. Its MoGe depth inference, named camera paths, and RGBD forward warp are model preprocessing backed by reusable `worldfoundry/core` geometry—not a GEN3C runner. `cosmos-predict2-2b-video2world` and `cosmos-predict2-14b-video2world` share the Predict2/2.5 backbone module and Wan codec, while recipe configuration selects 567/727-tensor topologies, T5-11B, sigma-max initialization, and Rectified Flow AB2. Both generations use the framework-owned terminal clean-prediction lifecycle rather than a family runner. Registry, tiny-forward, mask, geometry, and scheduler validation pass locally. Predict2 weights are gated and full native GPU artifact parity for both generations remains pending.
+
+## HunyuanVideo
+
+HunyuanVideo follows the same composition boundary. `hunyuanvideo-t2v`, `hunyuanvideo-i2v`, `hunyuanvideo-1.5-t2v`, and `hunyuanvideo-1.5-i2v` are four immutable recipes in the default registry and use the standard framework runner. Original and 1.5 releases own checkpoint-compatible denoisers, prompt conditioning, and latent codecs only; scheduling, loading, offload, execution, media IO, and public pipeline behavior remain shared. Their formerly repeated MLP, text/timestep projection, AdaLN/final layer, prefix modulation, attention, and RoPE helpers now resolve to the same core primitives while retaining checkpoint-visible submodule names. Exact local checkpoint checks cover the converted original T2V DiT (856 source keys to 976 native keys), original I2V DiT (856 keys), original causal VAE (248 keys), 1.5 DiT (1,793 keys), 1.5 VAE (218 keys), and the I2V-only SigLIP vision encoder (448 keys), with no missing, unexpected, or shape-mismatched tensors. The gated FLUX.1-Redux-dev vision asset is an explicit I2V component dependency instead of an inferred sibling directory. The original causal 3D VAE is one native PyTorch module shared by encode and decode. The old `video/hunyuan_video` package, upstream CLI configs, and one-off validation/demo scripts were removed. Previous official-runtime artifacts are retained only as historical source evidence; all four recipes still require fresh checkpoint-backed CUDA artifact parity after the native cutover. Hunyuan GameCraft and HunyuanWorld-Voyager currently use a synthesis-level transitional compatibility layer and are not evidence that those derived products have completed this migration.
+
+## LVDM
+
+LVDM no longer owns a second runtime tree. Its checkpoint-shaped implementation is split by role:
+
+- `models/networks/lvdm`: latent-diffusion orchestration, 3D UNets, and checkpoint-visible attention blocks;
+- `models/autoencoders/lvdm`: the latent codec;
+- `models/encoders/lvdm`: text, image, adapter, and resampler conditioning;
+- `schedulers/lvdm`: DDIM variants, diffusion schedules, and the Vid2World KV cache;
+- `core/model_loading/factory.py` and `core/nn`: generic config construction, distributions, EMA, checkpoint, and classic convolution helpers.
+
+Vid2World dataset adapters belong to its synthesis package under `synthesis/visual_generation/vid2world/eval_inputs`. Runtime configs must use these role-based fully-qualified paths; the old `base_models/diffusion_model/video/lvdm` package is deleted.
+
+### LVDM fork status
+
+- **T2V-Turbo** — Shared role-based components. Its VideoCrafter2 base resolves the common network, codec, encoder, and scheduler roles; the model keeps only its LoRA and consistency-sampling behavior.
+- **VideoCrafter** — Shared role-based components. All packaged configs point directly to canonical role packages instead of a copied framework tree.
+- **Dynamicrafter, MotionCtrl, Pandora** — Shared role-based components. Existing synthesis adapters keep their product-specific behavior while importing the same LVDM components.
+- **Vid2World** — Shared components plus explicit extensions. Its modified latent diffusion network, UNet, attention, DDIM sampler, and KV cache are named role components; datasets remain synthesis-owned.
+
+### Guard rails
+
+For every LVDM-derived integration:
+
+1. Reuse canonical role components when checkpoint-visible structure is identical.
+2. Add a narrowly named role component only when checkpoint or inference behavior differs.
+3. Keep orchestration in a native recipe/pipeline and data adapters in synthesis.
+4. Run `compileall`, target resolution, checkpoint key/shape checks when assets exist, and the relevant integration test subset.
+
+Do not reintroduce a model-local `models/modules/pipeline/scheduler` framework hierarchy.

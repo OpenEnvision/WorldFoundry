@@ -1,7 +1,11 @@
+import { DocsZoomImage } from '@/components/docs-zoom-image';
 import { withBasePath } from '@/lib/site-path';
 
 const homeTeaserSrc = withBasePath('/teaser.png');
 const docsTeaserSrc = withBasePath('/docs-teaser.png');
+
+const docsTeaserWidth = 1024;
+const docsTeaserHeight = 682;
 
 type TeaserImageProps = {
   alt: string;
@@ -10,13 +14,18 @@ type TeaserImageProps = {
 
 export function TeaserImage({ alt, variant = 'docs' }: TeaserImageProps) {
   const src = variant === 'home' ? homeTeaserSrc : docsTeaserSrc;
-  const image = (
-    <img
-      src={src}
-      alt={alt}
-      className={variant === 'home' ? 'w-full h-auto object-contain' : undefined}
-    />
-  );
+  const image =
+    variant === 'home' ? (
+      <img src={src} alt={alt} className="w-full h-auto object-contain" />
+    ) : (
+      <DocsZoomImage
+        alt={alt}
+        className="wf-docs-teaser-image"
+        height={docsTeaserHeight}
+        src={src}
+        width={docsTeaserWidth}
+      />
+    );
 
   if (variant === 'home') {
     return (

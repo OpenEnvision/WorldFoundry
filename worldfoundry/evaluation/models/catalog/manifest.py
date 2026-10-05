@@ -351,8 +351,14 @@ def _catalog_paths(root: str | Path | None = None) -> tuple[Path, ...]:
 
 
 def _iter_catalog_mappings(path: Path) -> tuple[Mapping[str, Any], ...]:
-    """Load and iterate over model catalog mappings defined in a YAML file."""
-    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    """Load and iterate over model catalog mappings defined in a YAML file.
+
+    YAML parse errors are re-raised with the file path in the message.
+    """
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise yaml.YAMLError(f"failed to parse model catalog file {path}: {exc}") from exc
     if not isinstance(payload, Mapping):
         raise TypeError(f"model catalog file must contain a mapping: {path}")
     entries = payload.get("models") or payload.get("entries") or payload.get("manifests")
@@ -396,7 +402,10 @@ def load_model_catalog_manifests(root: str | Path | None = None) -> tuple[ModelC
     manifests_by_id: dict[str, tuple[int, ModelCatalogManifest]] = {}
     for path in _catalog_paths(root):
         for data in _iter_catalog_mappings(path):
-            manifest = catalog_manifest_from_mapping(data)
+            try:
+                manifest = catalog_manifest_from_mapping(data)
+            except (TypeError, ValueError) as exc:
+                raise type(exc)(f"{path}: {exc}") from exc
             priority = _catalog_mapping_priority(data)
             existing = manifests_by_id.get(manifest.model_id)
             if existing is None or priority > existing[0]:

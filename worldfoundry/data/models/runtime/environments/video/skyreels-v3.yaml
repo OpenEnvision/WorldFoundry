@@ -9,30 +9,15 @@ env_name: worldfoundry-unified-cu128
 env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
 model_id: skyreels-v3
 notes:
-- SkyReels V3 is routed through the shared WorldFoundry CUDA 12.8 runtime. Its official runtime imports torchao at startup,
-  so the unified install requirements include torchao rather than leaving it as an undocumented ad hoc package.
-- 8-GPU USP generation requires flash-attn. Build it with `bash scripts/setup/install_flash_attn.sh flash_attn_fa28` or run
-  `bash scripts/setup/unified_install.sh --cuda cu128` without `--skip-flash-attn` on hosts with a working CUDA compiler.
-- Requires a CUDA compiler, flash-attn, torchao, and the shared PyTorch CUDA 12.8 wheel set for the official multi-GPU path.
+- SkyReels V3 runs through WorldFoundry native diffusion and shares the standard CUDA environment with Wan models.
+- Block/component offload is selected through RuntimePolicy; no model-specific Diffusers, torchao, or xFuser runtime is used.
 pip_packages:
 - torch
-- torchvision
-- torchao
-- flash-attn
-- diffusers
 - transformers
-- accelerate
 - safetensors
-- imageio
-- imageio-ffmpeg
 - numpy
 - einops
-- loguru
 python: '3.11'
 validation_imports:
 - torch
-- torchvision
-- torchao
-- flash_attn
-- diffusers
 - transformers

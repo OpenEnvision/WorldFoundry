@@ -1,0 +1,50 @@
+---
+title: "HY-WorldPlay"
+description: "HY-WorldPlay from Tencent (Hunyuan): world and video; Verified."
+modelId: "hy-worldplay"
+pageSource: generated
+---
+
+HY-WorldPlay is Tencent's real-time interactive world video model: starting from an image, it follows pose/action input to roll the world forward — the interactive arm of the Hunyuan world stack. In this catalog the runner is verified for the official image-pose-video route with the official 8-GPU execution profile.
+
+<ModelPaperFigures modelId="hy-worldplay" locale="en" />
+
+The recorded paper is [arXiv 2602.09022](https://arxiv.org/abs/2602.09022).
+
+Project page: [3d-models.hunyuan.tencent.com/world](https://3d-models.hunyuan.tencent.com/world/). Code: [Tencent-Hunyuan/HY-WorldPlay](https://github.com/Tencent-Hunyuan/HY-WorldPlay).
+
+<ModelCommandBuilder modelId="hy-worldplay" locale="en" />
+
+## What it is for
+
+Pick `hy-worldplay` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+
+The recorded checkpoint set tells the assembly: tencent/HY-WorldPlay action weights over tencent/HunyuanVideo-1.5 video-model support assets, with Qwen2.5-VL-7B-Instruct, byt5-small, and FLUX.1-Redux-dev as support components. The in-tree pipeline follows the official demo contract. It is published by Tencent (Hunyuan).
+
+Catalog tasks include world, video, and world model. Catalog aliases include `hunyuan-worldplay` and `hunyuanworldplay`. Documented outputs include video.
+
+Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Interactive world-rollout quality), [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Pose/camera-following accuracy).
+
+## Runtime contract
+
+Optional `image`, `prompt`, `interactions`, `num_frames`, and `fps`; artifacts `hy-worldplay.mp4`.
+
+CLI task profiles: `official-image-pose-video`. WorldFoundry binds `HunyuanWorldPlayPipeline`.
+
+Family status: **Verified**.
+
+Recorded `official-image-pose-video` defaults: fps=24, height=480, width=832, seed=1.
+
+The official route uses 8 torchrun ranks — plan for a multi-GPU host and stage all five recorded checkpoint sets. Full benchmark scoring and longer interaction suites remain separate work.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run hy-worldplay --pipeline.task-profile official-image-pose-video` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `tencent/HY-WorldPlay`, `tencent/HunyuanVideo-1.5`, and `Qwen/Qwen2.5-VL-7B-Instruct` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh hy-worldplay`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="hy-worldplay" locale="en" />

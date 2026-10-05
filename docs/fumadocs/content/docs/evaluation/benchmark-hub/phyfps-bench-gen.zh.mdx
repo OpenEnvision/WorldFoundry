@@ -1,250 +1,45 @@
 ---
 title: PhyFPS-Bench-Gen
-description: WorldFoundry 中的 PhyFPS-Bench-Gen：Visual Chronometer runner、数据布局与指标。
+description: "100 条 prompt 的时间刻度审计：Meta FPS 是否与运动隐含的 PhyFPS 一致？全部指标越低越好。不是物理定律评测。"
 ---
 
-## 评测内容
+PhyFPS-Bench-Gen（TACO Group，德州农工大学）审计**时间刻度幻觉**：生成器声明的容器帧率（**Meta FPS**）是否与运动隐含的物理速度（**PhyFPS**，由 Visual Chronometer 预测）一致。它**不是**定律、锚定、教育或续写评测。
 
-PhyFPS-Bench-Gen 用来评估生成视频的时间速度一致性。它比较模型名义帧率或元数据帧率 Meta FPS，与 Visual Chronometer 预测出的物理运动速度 PhyFPS。官方 prompt 集覆盖人、动物、车辆、自然、流体、相机运动、天气和其他动态线索，并避免直接要求慢动作、延时摄影或速度变化的表述。
+套件是 **100 条 prompt**。输出命名为 `0001.mp4` … `0100.mp4`。预测器在滑动窗口上运行（`--stride`、`--clip-length`）；scorecard 报告 Meta 与 PhyFPS 的误差，以及视频内 / 视频间变异系数。**全部指标越低越好。**
 
-WorldFoundry 在 PhyFPS runner 目录中内置了 Visual Chronometer 推理 runtime，可以在进程内完成预测；也可以导入同 schema 的已有 `results.csv`。
+代码：[taco-group/Visual_Chronometer](https://github.com/taco-group/Visual_Chronometer)。权重：[xiangbog/Visual_Chronometer](https://huggingface.co/xiangbog/Visual_Chronometer)（`vc_common_10_60fps.ckpt`）。
 
+WorldFoundry 在仓内运行 Visual Chronometer `predict.py`，和/或归一化调用方的 `results.csv`。对齐指标需要 `WORLDFOUNDRY_PHYFPS_META_FPS`（或 manifest）。
 
-## 官方参考
+<BenchmarkPageSections id="phyfps-bench-gen" locale="zh" />
 
-| 资源 | 链接 |
-| --- | --- |
-| GitHub | [github.com/taco-group/Visual_Chronometer](https://github.com/taco-group/Visual_Chronometer) |
-| HF checkpoint | [xiangbog/Visual_Chronometer](https://huggingface.co/xiangbog/Visual_Chronometer) |
-| 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py` |
+## 如何运行
 
-## 数据与产物布局
-
-Prompt manifest 是纯文本文件，每行一个 prompt：
-
-```text
-<phyfps_root>/
-  prompts.txt
-```
-
-WorldFoundry 按下面顺序解析：
-
-- `--prompt-manifest <path>`
-- `WORLDFOUNDRY_PHYFPS_BENCH_GEN_PROMPT_MANIFEST`
-- `WORLDFOUNDRY_PHYFPS_BENCH_GEN_ROOT/prompts.txt`
-- 内置 benchmark assets（如果存在）
-
-每个 prompt 生成一个视频，放在一个扁平目录中。WorldFoundry 的规范命名是从 `0001.mp4` 开始的四位编号：
-
-```text
-<generated_videos>/
-  0001.mp4
-  0002.mp4
-  ...
-```
-
-支持的视频后缀是 `.mp4`、`.mov`、`.mkv`、`.webm` 和 `.avi`。正式全量证据需要 prompt 数量与生成视频 stem 都能匹配解析到的 manifest。
-
-## 依赖与 checkpoint
-
-仓内 runtime 路径：
-
-```text
-worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer
-```
-
-默认配置文件是 `inference/configs/config_fps.yaml`。默认 checkpoint 是 `inference/ckpts/vc_common_10_60fps.ckpt`。如果该 checkpoint 不存在且安装了 `huggingface_hub`，runtime 会从 `xiangbog/Visual_Chronometer` 下载 `vc_common_10_60fps.ckpt`。
-
-常用覆盖变量：
-
-- `WORLDFOUNDRY_VISUAL_CHRONOMETER_ROOT`：替代的本地 Visual Chronometer runtime 根目录。
-- `WORLDFOUNDRY_PHYFPS_DEVICE`：runner 使用的设备，默认 `cuda:0`。
-- `WORLDFOUNDRY_PHYFPS_META_FPS`：应用到所有视频的同一个 Meta FPS。
-- `WORLDFOUNDRY_PHYFPS_META_FPS_MANIFEST`：从视频名或 stem 到 Meta FPS 的 JSON 映射。
-- `WORLDFOUNDRY_PHYFPS_BENCH_GEN_RESULTS_PATH`：要导入的已有 `results.csv`。
-
-`avg_error_fps` 和 `pct_error` 需要 Meta FPS。只依赖 PhyFPS 预测的 consistency 指标可以单独计算。
-
-## 支持的命令
-
-先设置候选视频目录，并为 alignment 指标设置 Meta FPS：
+导入已有的 `results.csv`：
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/phyfps/generated_videos
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id phyfps-bench-gen \
+  --mode official-validation \
+  --official-results-path <results.csv> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/phyfps-bench-gen/official-validation \
+  --json
+```
+
+在仓内预测 PhyFPS（对齐需要 VC-Common 权重与 Meta FPS）：
+
+```bash
 export WORLDFOUNDRY_PHYFPS_META_FPS=24
-```
-
-通过公开 CLI 调用集成的官方 runtime：
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id phyfps-bench-gen \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompts.txt \
-  --output-dir tmp/phyfps-bench-gen/run \
-  --env WORLDFOUNDRY_PHYFPS_META_FPS="${WORLDFOUNDRY_PHYFPS_META_FPS}" \
-  --json
-```
-
-通过公开 CLI 导入已有 Visual Chronometer CSV：
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id phyfps-bench-gen \
-  --mode official-validation \
-  --official-results-path /path/to/results.csv \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompts.txt \
-  --output-dir tmp/phyfps-bench-gen/import \
-  --env WORLDFOUNDRY_PHYFPS_META_FPS=24 \
-  --json
-```
-
-需要使用公开 wrapper 没有暴露的参数时，直接调用 runner，例如 `--stride`、`--clip-length`、`--device`、`--meta-fps` 或 `--meta-fps-manifest`：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompts.txt \
-  --meta-fps 24 \
   --stride 4 \
-  --clip-length 30 \
-  --device cuda:0 \
-  --output-dir tmp/phyfps-bench-gen/run \
+  --output-dir tmp/phyfps_bench_gen/official \
   --json
 ```
 
-不运行 Visual Chronometer、只导入已有结果：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py \
-  --official-results-path /path/to/results.csv \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompts.txt \
-  --meta-fps-manifest /path/to/meta_fps.json \
-  --output-dir tmp/phyfps-bench-gen/import \
-  --json
-```
-
-## Visual Chronometer
-
-Visual Chronometer 是内置在本 benchmark 中的 PhyFPS 预测器。它估计视觉运动所体现的物理帧率 PhyFPS，这与容器 metadata FPS 可能不同：一段按 24 FPS 编码的视频，视觉上可能更接近 35 FPS 或 60 FPS。
-
-当你有官方 100-prompt 套件并需要 Meta FPS 对齐指标（`avg_error_fps`、`pct_error`、`phyfps_bench_gen_average`）时，使用 **PhyFPS-Bench-Gen**。
-
-当你只需要对任意生成视频目录做 PhyFPS 预测和时序一致性指标、不需要 prompt manifest 或 Meta FPS 目标时，使用 **Visual Chronometer** benchmark id。
-
-| 场景 | Benchmark id | Runner |
-| --- | --- | --- |
-| 完整 prompt 套件 + Meta FPS 对齐 | `phyfps-bench-gen` | `run_phyfps_bench_gen_official_runner.py` |
-| 任意视频目录，仅 PhyFPS | `visual-chronometer` | `run_visual_chronometer_official_runner.py` |
-
-共享 runtime 根目录：
-
-```text
-worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer
-```
-
-仅做 Visual Chronometer 计分时，把视频放在一个扁平目录中。文件名会写入 `results.csv` 的 video id，没有强制数字命名规范：
-
-```text
-/path/to/generated/
-  prompt_000.mp4
-  prompt_001.mp4
-```
-
-Visual Chronometer runner 的额外环境变量：
-
-| 变量 | 用途 |
-| --- | --- |
-| `WORLDFOUNDRY_VISUAL_CHRONOMETER_DEVICE` | 预测设备，默认 `cuda:0`。 |
-| `WORLDFOUNDRY_VISUAL_CHRONOMETER_PREDICT_BACKEND` | 预测 backend，默认 `official`。 |
-| `WORLDFOUNDRY_VISUAL_CHRONOMETER_RESULTS_PATH` | 用于导入的已有 `results.csv`。 |
-
-不依赖 prompt manifest 的 PhyFPS 预测：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_visual_chronometer_official_runner.py \
-  --run-official \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/visual-chronometer/run \
-  --stride 4 \
-  --clip-length 30 \
-  --device "${WORLDFOUNDRY_VISUAL_CHRONOMETER_DEVICE:-cuda:0}" \
-  --json
-```
-
-通过公开 CLI 导入已有 Visual Chronometer `results.csv`：
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id visual-chronometer \
-  --mode official-validation \
-  --official-results-path /path/to/results.csv \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/visual-chronometer/import \
-  --json
-```
-
-Visual Chronometer 相关的 Python 导入：
-
-```python
-from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.visual_chronometer_metrics import (
-    compute_visual_chronometer_metrics,
-    metric_rows_from_computed,
-)
-from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.run_visual_chronometer_official_runner import (
-    normalize_visual_chronometer_results,
-    run_official_visual_chronometer,
-)
-```
-
-Visual Chronometer 指标为 `mean_phyfps`、`inter_video_cv`、`intra_video_cv` 和 `visual_chronometer_average`。比较时间稳定性时，variation 类指标越低越好；`mean_phyfps` 本身是描述性指标，通常要和目标 metadata FPS 一起解释。
-
-## 导入路径
-
-- Runner：`worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.run_phyfps_bench_gen_official_runner`
-- 指标：`worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_metrics`
-- Prompt 布局：`worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_prompts`
-- 预测 wrapper：`worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_predict`
-- Visual Chronometer runtime：`worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.visual_chronometer_runtime`
-
-## 结果文件格式
-
-`results.csv` 需要包含这些列：
-
-```csv
-video,segment,start_frame,mid_frame,end_frame,predicted_phyfps
-0001.mp4,0,0,15,29,23.8
-0001.mp4,AVG,,,,24.1
-```
-
-导入器会读取每个视频的 segment 行和 `AVG` 行。如果没有 average 行，则从 segment 行计算平均值。
-
-`--output-dir` 下会写出：
-
-- `scorecard.json`：运行状态、覆盖率、指标和 Visual Chronometer 摘要。
-- `results.csv`：使用 `--run-official` 执行预测时产生。
-- `raw_metric_table.jsonl`：每个指标一行。
-- `per_sample_scores.jsonl`：每个视频的 average PhyFPS 和 segment 数量。
-
-## 指标
-
-主指标：`phyfps_bench_gen_average`。本页所有指标都是越低越好。
-
-| Metric | 含义 |
-| --- | --- |
-| `avg_error_fps` | Meta FPS 与 average PhyFPS 的平均绝对差。 |
-| `pct_error` | Meta FPS 与 PhyFPS 的平均相对误差百分比。 |
-| `inter_video_cv` | 各视频 average PhyFPS 之间的变异系数。 |
-| `intra_video_cv` | 每个视频内部滑窗 PhyFPS 预测的变异系数均值。 |
-| `phyfps_bench_gen_average` | 可用 PhyFPS score family 的均值。 |
+产物包括 `scorecard.json`（主键 `phyfps_bench_gen_average`）与 `results.csv`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

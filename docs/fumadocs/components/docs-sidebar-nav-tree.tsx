@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { BenchmarkBadge } from '@/components/benchmark-badge';
+import { DocsSidebarIcon } from '@/components/docs-sidebar-icon';
 import type { Locale } from '@/lib/i18n';
 import {
   isSidebarItemActive,
@@ -56,7 +58,10 @@ export function DocsSidebarNavTree({
           className={['pi-doc-link', hubActive ? 'pi-doc-link-active' : ''].filter(Boolean).join(' ')}
           aria-current={hubActive ? 'page' : undefined}
         >
-          <span className="pi-doc-link-title">{hub.link.label}</span>
+          <span className="pi-doc-link-row">
+            <DocsSidebarIcon url={hub.link.url} active={hubActive} />
+            <span className="pi-doc-link-title">{hub.link.label}</span>
+          </span>
         </Link>
         <button
           type="button"
@@ -66,7 +71,7 @@ export function DocsSidebarNavTree({
           aria-label={open ? collapseLabel : expandLabel}
           onClick={() => setOpen((value) => !value)}
         >
-          <span aria-hidden="true">{open ? '−' : '+'}</span>
+          <ChevronRight aria-hidden="true" size={14} strokeWidth={2} />
         </button>
       </div>
       {open ? (

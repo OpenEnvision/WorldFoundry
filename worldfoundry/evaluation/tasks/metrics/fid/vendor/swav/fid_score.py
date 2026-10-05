@@ -34,7 +34,7 @@ except ImportError:
     def tqdm(x):
         return x
 
-from worldfoundry.evaluation.tasks.metrics.swav_fid.resnet50 import resnet50
+from worldfoundry.evaluation.tasks.metrics.fid.vendor.swav.resnet50 import resnet50
 
 parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
 parser.add_argument('--batch-size', type=int, default=50,
@@ -161,7 +161,7 @@ def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
     diff = mu1 - mu2
 
     # Product might be almost singular
-    covmean, _ = linalg.sqrtm(sigma1.dot(sigma2), disp=False)
+    covmean = linalg.sqrtm(sigma1.dot(sigma2))
     if not np.isfinite(covmean).all():
         msg = ('fid calculation produces singular product; '
                'adding %s to diagonal of cov estimates') % eps
@@ -207,13 +207,18 @@ def calculate_activation_statistics(files, model, batch_size=50, dims=2048,
 
 
 def compute_statistics_of_path(path, model, batch_size, max_size, dims, device):
-    if path.endswith('.npz'):
+    if isinstance(path, (str, os.PathLike)):
+        path = os.fspath(path)
+    if isinstance(path, str) and path.endswith('.npz'):
         with np.load(path) as f:
             m, s = f['mu'][:], f['sigma'][:]
     else:
-        path = pathlib.Path(path)
-        files = sorted([file for ext in IMAGE_EXTENSIONS
-                       for file in path.glob('*.{}'.format(ext))])
+        if isinstance(path, str):
+            path = pathlib.Path(path)
+            files = sorted([file for ext in IMAGE_EXTENSIONS
+                           for file in path.glob('*.{}'.format(ext))])
+        else:
+            files = list(path)
         if max_size.isdigit():
             files = files[:int(max_size)]
             print('Using {} images from {}'.format(max_size, path))
@@ -229,10 +234,11 @@ def compute_statistics_of_path(path, model, batch_size, max_size, dims, device):
 
 
 def calculate_fid_given_paths(paths, batch_size, max_size, device, dims):
-    """Calculates the FID of two paths"""
-    for p in paths:
-        if not os.path.exists(p):
-            raise RuntimeError('Invalid path: %s' % p)
+    """Calculates the FID of two directories, statistics files, or image lists."""
+    for source in paths:
+        for p in (source,) if isinstance(source, (str, os.PathLike)) else source:
+            if not os.path.exists(p):
+                raise RuntimeError('Invalid path: %s' % p)
 
     model = resnet50().to(device)
 

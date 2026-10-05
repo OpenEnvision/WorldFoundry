@@ -1,5 +1,7 @@
 id: robocerebra
 name: RoboCerebra
+publisher: Beihang University
+publisher_kind: university
 benchmark_kind:
 - vla
 - embodied-action
@@ -19,6 +21,9 @@ official_sources:
   paper_url: https://arxiv.org/abs/2502.02853
   license: upstream_terms
 runner:
+  normalization:
+    dispatch: embodied
+    embodied_track: vla
   runner_target: worldfoundry.evaluation.tasks.contracts.external:RoboCerebraContract
   expected_artifacts:
   - scorecard.json

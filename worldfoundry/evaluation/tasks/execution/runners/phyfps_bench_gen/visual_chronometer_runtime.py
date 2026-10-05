@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path, VIDEO_SUFFIXES
 from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_metrics import VideoPhyFPSRecord
 
 DEFAULT_CONFIG_REL = Path("inference/configs/config_fps.yaml")
@@ -15,7 +16,6 @@ DEFAULT_CKPT_REL = Path("inference/ckpts/vc_common_10_60fps.ckpt")
 HF_REPO_ID = "xiangbog/Visual_Chronometer"
 HF_CKPT_FILENAME = "vc_common_10_60fps.ckpt"
 
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 IN_TREE_VISUAL_CHRONOMETER_ROOT = Path(__file__).resolve().parent / "runtime" / "visual_chronometer"
 
 
@@ -26,15 +26,12 @@ class VisualChronometerPaths:
     ckpt_path: Path
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def resolve_chronometer_root(explicit: Path | None = None) -> Path | None:
     for candidate in (
         explicit,
-        _env_path("WORLDFOUNDRY_VISUAL_CHRONOMETER_ROOT"),
+        resolve_env_path("WORLDFOUNDRY_VISUAL_CHRONOMETER_ROOT"),
         IN_TREE_VISUAL_CHRONOMETER_ROOT,
     ):
         if candidate is not None and candidate.is_dir():

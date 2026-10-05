@@ -5,8 +5,10 @@ environment_id: giga-world-policy-py311
 id: simpler-env
 name: SimplerEnv
 docker:
-  image: ghcr.io/allenai/vla-evaluation-harness/simpler:latest
-  source_image: ghcr.io/allenai/vla-evaluation-harness/simpler:latest
+  image: ghcr.io/allenai/vla-evaluation-harness/simpler@sha256:edde57a160f2e055c71e2c7bdb6addf16bcf3ac26ffe7f6429d1172bb5c7569e
+  digest: sha256:edde57a160f2e055c71e2c7bdb6addf16bcf3ac26ffe7f6429d1172bb5c7569e
+  source_image: ghcr.io/allenai/vla-evaluation-harness/simpler@sha256:edde57a160f2e055c71e2c7bdb6addf16bcf3ac26ffe7f6429d1172bb5c7569e
+  platform: linux/amd64
   python_env: simpler
   gpus: all
   env:

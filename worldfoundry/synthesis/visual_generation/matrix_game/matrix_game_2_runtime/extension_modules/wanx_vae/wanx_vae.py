@@ -1,9 +1,26 @@
-from worldfoundry.synthesis.visual_generation.matrix_game.shared.vae_wrapper import VAEWrapper
 import os
+
 import torch
-import torch.nn as nn
-from pathlib import Path
-from worldfoundry.synthesis.visual_generation.matrix_game.wanx_vae import WanVAE, CLIPModel
+
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.action_clip import CLIPModel
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.action_21 import WanVAE
+
+
+class VAEWrapper:
+    def __init__(self, vae):
+        self.vae = vae
+
+    def __getattr__(self, name):
+        if name in self.__dict__:
+            return self.__dict__[name]
+        return getattr(self.vae, name)
+
+    def encode(self, x):
+        raise NotImplementedError
+
+    def decode(self, latents):
+        raise NotImplementedError
+
 
 class WanxVAEWrapper(VAEWrapper):
     def __init__(self, vae, clip):

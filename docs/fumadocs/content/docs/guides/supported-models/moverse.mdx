@@ -1,0 +1,50 @@
+---
+title: "MoVerse"
+description: "MoVerse: image-to-navigable-world and camera-controlled-video; Runner parity pending; dedicated `moverse`."
+modelId: "moverse"
+pageSource: authored
+---
+
+MoVerse turns one image into a navigable world: it builds a panoramic Gaussian scaffold from the input and generates camera-controlled video as you move through it. In this catalog the headless inference closure is in-tree with local-only checkpoint resolution; full GPU parity waits on staged checkpoints, FLUX access, CUDA kernels, and at least 24 GB VRAM.
+
+<ModelPaperFigures modelId="moverse" locale="en" />
+
+The recorded paper is [arXiv 2606.13376](https://arxiv.org/abs/2606.13376).
+
+Project page: [orange-3dv-team.github.io/MoVerse](https://orange-3dv-team.github.io/MoVerse). Code: [Orange-3DV-Team/MoVerse](https://github.com/Orange-3DV-Team/MoVerse). Code: [ByteDance-Seed/Depth-Anything-3](https://github.com/ByteDance-Seed/Depth-Anything-3).
+
+<ModelCommandBuilder modelId="moverse" locale="en" />
+
+## What it is for
+
+`moverse` is the recorded camera-control route. Start here to follow a catalog camera path.
+
+The recorded assembly reuses WorldFoundry's shared GeoCalib AutoLevel, Depth Anything 3, SHARP panorama, Wan (Wan2.1-T2V-1.3B video base), and TAEHV components, plus FLUX.1-Fill-dev as panorama base and MoVerse's own component weights. Upstream has no license file — review before downstream use.
+
+Catalog tasks include image-to-navigable-world, camera-controlled-video, and panoramic-gaussian-scaffold. Catalog aliases include `mo-verse` and `Orange-3DV-Team/MoVerse`. Documented modalities: image in, world state out.
+
+Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Navigable generated-world quality), [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-control adherence during navigation).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `frames`, and `fps`; artifacts `generated_world`, `gaussian_scaffold`, and `generated_video`.
+
+CLI task profiles: `default`. WorldFoundry binds `MoVersePipeline`.
+
+Family status: **Runner parity pending**.
+
+Execution is offline and needs four pre-staged Hugging Face snapshots plus ffmpeg, gsplat, and compatible CUDA kernels. Runtime planning and missing-asset diagnostics work without importing the heavy model stack.
+
+The headless inference closure is integrated in-tree with local-only checkpoint resolution and shared WorldFoundry GeoCalib, DA3, SHARP, Wan, and TAEHV components.
+
+Execution is offline and requires four pre-staged Hugging Face snapshots plus ffmpeg, gsplat, and compatible CUDA kernels.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run moverse --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+Recorded weight repositories include `Orange-3DV-Team/MoVerse`, `black-forest-labs/FLUX.1-Fill-dev`, and `depth-anything/DA3NESTED-GIANT-LARGE-1.1` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh moverse`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="moverse" locale="en" />

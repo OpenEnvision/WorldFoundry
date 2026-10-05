@@ -1,0 +1,54 @@
+---
+title: "Bernini"
+description: "Bernini（ByteDance）：文生图、图像编辑；Runner 一致性待确认; 独立环境 `worldfoundry-bernini-cu124`。"
+modelId: "bernini"
+pageSource: authored
+---
+
+Bernini 是字节跳动的统一「任意到任意」视觉生成模型：一个 checkpoint 同时覆盖文生图、图像编辑、文生视频、视频到视频与参考引导视频。本旗舰条目对应完整的 ByteDance/Bernini-Diffusers checkpoint，内含 7B 语义规划器与 14B 渲染器。WorldFoundry 将官方推理源码内置于树内，直接加载自包含的 Diffusers checkpoint——不依赖外部 Bernini 检出。
+
+<ModelPaperFigures modelId="bernini" locale="zh" />
+
+记录论文为[Bernini: Latent Semantic Planning for Video Diffusion](https://arxiv.org/abs/2605.22344)（2026）。
+
+项目页：[bernini-ai.github.io](https://bernini-ai.github.io/)。代码：[bytedance/Bernini](https://github.com/bytedance/Bernini)。
+
+这不是仅渲染器的 [Bernini-R 1.3B](/zh/docs/guides/supported-models/bernini-r-1.3b) 或 [Bernini-R 14B](/zh/docs/guides/supported-models/bernini-r-14b)。
+
+<ModelCommandBuilder modelId="bernini" locale="zh" />
+
+## 用来做什么
+
+在 WorldFoundry 里用 `bernini` 做 catalog 文生视频推理。这条配方让你按已记录的 T2V profile 启动，而不用自己拼上游 demo。
+
+manifest 记录的是两段式设计：7B 语义规划器先产出中间规划，14B 渲染器再合成最终像素。官方配方使用单请求 8 路 Ulysses 序列并行推理（nproc_per_node=8、ulysses_size=8）。请求时通过 task_type 输入在六类已记录任务间切换。
+
+catalog 记录的任务包括 文生图、图像编辑、文生视频、视频到视频。别名包括 `bernini-diffusers`、`bernini-7b-14b`。模态上，它接受文本、图像、视频，输出图像、视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（覆盖 Bernini 统一任务空间中的文生视频部分）、[T2V-CompBench](/zh/docs/evaluation/benchmark-hub/t2v-compbench)（组合式提示词可检验语义规划阶段的能力）。
+
+## 运行时契约
+
+可选 `prompt`、`task_type`、`neg_prompt`、`num_frames`、`height`；产物 `generated_image`、`generated_video`、`bernini.mp4`。
+
+CLI task profile：`t2v`、`t2i`、`i2i`、`v2v`、`r2v`、`rv2v`。绑定的 pipeline 类是 `BerniniWorldFoundryPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+`t2i` 记录默认值：num_frames=1, height=512, width=512, num_inference_steps=50, seed=42, fps=16；`i2i` 记录默认值：num_frames=1, height=512, width=512, num_inference_steps=40, seed=42, fps=16。
+
+如果没有 8 卡节点，请改用 Bernini-R 渲染器条目——其中 1.3B 版单卡可跑。
+
+集成已完成，但 runner parity 为 pending_gpu_validation：官方 8 卡 Ulysses 调度已实现，产物一致性仍需就位权重并使用 H100 级 GPU 验证。 如果没有 8 卡节点，请改用 Bernini-R 渲染器条目——其中 1.3B 版单卡可跑。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run bernini --pipeline.task-profile t2v`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-bernini-cu124`（Python 3.11，CUDA 12.4，torch==2.5.1+cu124）。
+
+记录的权重仓库包括 `ByteDance/Bernini-Diffusers`、`ByteDance/Bernini-Diffusers`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh bernini`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="bernini" locale="zh" />

@@ -7,11 +7,12 @@ import numpy as np
 from tqdm import tqdm
 
 from worldfoundry.base_models.perception_core.frame_interpolation.vfimamba import config as cfg
-from worldfoundry.base_models.perception_core.frame_interpolation.vfimamba.Trainer_finetune import Model, convert
+from worldfoundry.base_models.perception_core.frame_interpolation.vfimamba.inference import Model, convert
 from worldfoundry.base_models.perception_core.frame_interpolation.vfimamba.benchmark.utils.padder import InputPadder
+from worldfoundry.core.execution.device import get_current_torch_device
 
 from .utils import load_dimension_info, read_video_frames_cv2
-from .distributed import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     distribute_list_to_rank,
@@ -30,7 +31,7 @@ class MotionSmoothnessMetric:
     """Motion smoothness via VFI model with SSIM weighting."""
 
     def __init__(self, ckpt_path=None, device=None) -> None:
-        self._device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self._device = device or get_current_torch_device()
 
         model = Model(-1)
         ckpt_resolved = Path(ckpt_path) if ckpt_path else None
@@ -98,7 +99,7 @@ class MotionSmoothnessMetric:
 
 
 def compute_motion_smoothness(json_dir, submodules_list, **kwargs):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = get_current_torch_device()
     model_path = submodules_list.get("model")
 
     metric = MotionSmoothnessMetric(model_path, device=device)

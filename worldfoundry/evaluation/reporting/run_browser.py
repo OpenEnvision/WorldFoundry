@@ -188,6 +188,7 @@ def build_run_browser_html(index: Mapping[str, Any]) -> str:
             <th>Model</th>
             <th>Benchmark</th>
             <th>Dataset</th>
+            <th>Backend</th>
             <th>Samples</th>
             {metric_headers}
             <th>Artifacts</th>
@@ -242,7 +243,7 @@ def build_run_browser_html(index: Mapping[str, Any]) -> str:
       const q = query.value.trim().toLowerCase();
       const haystack = [
         row.run_id, row.label, row.model_id, row.model_name,
-        row.benchmark, row.dataset_id, row.status
+        row.benchmark, row.dataset_id, row.status, row.backend
       ].map(text).join(' ').toLowerCase();
       return (!q || haystack.includes(q))
         && (!benchmark.value || text(row.benchmark) === benchmark.value)
@@ -265,6 +266,7 @@ def build_run_browser_html(index: Mapping[str, Any]) -> str:
           `<td>${{text(row.model_id || row.model_name)}}</td>`,
           `<td>${{text(row.benchmark)}}</td>`,
           `<td>${{text(row.dataset_id)}}</td>`,
+          `<td class="${{text(row.backend) === 'mock' ? 'status-failed' : ''}}">${{text(row.backend)}}</td>`,
           `<td>${{formatValue(row.sample_count)}}</td>`
         ];
         metrics.forEach((metric) => {{
@@ -287,7 +289,7 @@ def build_run_browser_html(index: Mapping[str, Any]) -> str:
       selected.innerHTML = [
         `<div><b>${{text(row.run_id || row.label)}}</b></div>`,
         `<div>${{text(row.model_id || row.model_name)}} / ${{text(row.benchmark)}}</div>`,
-        `<div>Status: ${{text(row.status)}}; samples: ${{formatValue(row.sample_count)}}</div>`,
+        `<div>Status: ${{text(row.status)}}; backend: ${{text(row.backend) || 'n/a'}}; samples: ${{formatValue(row.sample_count)}}</div>`,
         `<div>${{link(row.source_path, 'summary')}} ${{link(artifacts.scorecard, 'scorecard')}} ${{link(artifacts.report, 'report')}}</div>`
       ].join('');
       json.textContent = JSON.stringify(row, null, 2);

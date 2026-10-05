@@ -1,0 +1,72 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BA-06
+track: coverage
+title_en: Cat Tabletop Object Contact
+outcome_question: Which label in ['cat_does_not_enter_tabletop_area', 'cat_enters_tabletop_area_without_object_contact',
+  'cat_touches_object_without_displacing', 'cat_displaces_non_cup_object', 'cat_displaces_cup_without_spill',
+  'cat_spills_or_tips_cup'] is visible as the first decisive result after the cat
+  reaches or steps toward the tabletop objects?
+readout_policy: Read the first decisive tabletop-entry/contact/displacement result
+  after the requested single reach or step begins. Qualifying frames must keep the
+  cat, table edge, cup, and small tabletop objects visible enough to decide whether
+  the cat entered the tabletop area, contacted an object, displaced a non-cup object,
+  displaced the cup without spill, or tipped/spilled the cup. Terminal stability is
+  not required unless the protocol names it.
+canonical_labels:
+- cat_does_not_enter_tabletop_area
+- cat_enters_tabletop_area_without_object_contact
+- cat_touches_object_without_displacing
+- cat_displaces_non_cup_object
+- cat_displaces_cup_without_spill
+- cat_spills_or_tips_cup
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- The cat body or paw hides the relevant cup/object at the moment contact or displacement
+  would need to be read.
+- The cup moves but the frames do not show whether liquid/contents spill or whether
+  the cup tips.
+- None of the canonical labels ['cat_does_not_enter_tabletop_area', 'cat_enters_tabletop_area_without_object_contact',
+  'cat_touches_object_without_displacing', 'cat_displaces_non_cup_object', 'cat_displaces_cup_without_spill',
+  'cat_spills_or_tips_cup'] can be decisively identified within the readout window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's
+  reference protocol; record it as out-of-schema.
+- The cup or another tabletop object moves, tips, or spills due to an off-screen cause,
+  teleportation, table deformation, or a non-cat actor rather than visible cat contact.
+- The table edge, cup, or tabletop object layout changes before the cat's reach/step
+  so the initial contact/displacement setup is no longer defined.
+priority_rules:
+- First decisive readout is the cat/tabletop relation and object displacement after
+  the single reach or step.
+- cat_does_not_enter_tabletop_area means the cat remains outside the tabletop area
+  after the visible reach/step opportunity; do not score the initial poised posture
+  or paw-near-edge state as tabletop entry.
+- cat_enters_tabletop_area_without_object_contact means the cat newly places a paw
+  or body onto the tabletop surface but does not visibly contact the cup or any small
+  tabletop object.
+- cat_touches_object_without_displacing means the cat visibly contacts the cup or
+  a small tabletop object, but the contacted object does not change position or tip.
+- cat_displaces_non_cup_object means a non-cup tabletop object visibly shifts, falls,
+  or is knocked due to cat contact, while no stronger cup outcome is visible.
+- cat_displaces_cup_without_spill means the cup visibly shifts, rotates, or is bumped
+  but remains upright enough that no spill/tip is visible.
+- cat_spills_or_tips_cup means the cup visibly tips/falls or liquid/contents visibly
+  spill from it.
+- 'Priority: cup spill/tip overrides cup displacement without spill; cup displacement
+  overrides non-cup displacement; non-cup displacement overrides touch without displacement;
+  touch without displacement overrides tabletop entry without contact; tabletop entry
+  overrides no tabletop entry.'
+- If multiple effects occur in the first post-reach window, use the strongest visible
+  contact/displacement outcome by the priority order above. If the decisive object
+  motion is hidden by the cat body, return `unreadable`.
+notes:
+- 'Outcome set intentionally separates cup displacement from cup tip/spill because
+  they are different terminal physical futures.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules
+  are authored from STAGBench metadata/action protocol.'
+- 'Scene title: Cat Tabletop Object Contact.'

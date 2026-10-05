@@ -8,4 +8,4 @@ pipeline:
     method: from_pretrained
     signature: unified
   invocation:
-    mode: native_or_standard_invocation
+    mode: native_diffusion_invocation

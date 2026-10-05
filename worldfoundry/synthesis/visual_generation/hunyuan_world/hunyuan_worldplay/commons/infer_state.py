@@ -1,5 +1,5 @@
-from typing import Optional
 from dataclasses import dataclass, field
+from typing import Optional
 
 
 @dataclass
@@ -11,9 +11,7 @@ class InferState:
     # fp8 gemm related
     use_fp8_gemm: bool = False  # whether to use fp8 gemm
     quant_type: str = "fp8-per-block"  # fp8 quantization type
-    include_patterns: list = field(
-        default_factory=lambda: ["double_blocks"]
-    )  # include patterns for fp8 gemm
+    include_patterns: list = field(default_factory=lambda: ["double_blocks"])  # include patterns for fp8 gemm
 
     # vae related
     use_vae_parallel: bool = False  # whether to use vae parallel
@@ -32,19 +30,20 @@ def parse_range(value):
 
 def initialize_infer_state(args=None, **kwargs):
     global __infer_state
-    
+
     # If args is provided, use it as source; otherwise construct from kwargs
     if args is None:
         from types import SimpleNamespace
+
         args = SimpleNamespace(**kwargs)
-        
+
     # Helper to safely get attributes with defaults (handling both object and dict-like behavior if needed)
     def get_arg(name, default=None):
         return getattr(args, name, default)
 
     sage_blocks_range_val = get_arg("sage_blocks_range", "0-53")
     sage_blocks_range = parse_range(sage_blocks_range_val) if sage_blocks_range_val else None
-    
+
     # Map CLI argument use_sageattn to internal enable_sageattn field
     use_sageattn = get_arg("use_sageattn", False)
 

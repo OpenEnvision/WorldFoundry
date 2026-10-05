@@ -23,6 +23,8 @@ checkpoint:
     gated: false
     tasks:
     - image-to-video
+official_sources:
+  paper: https://arxiv.org/abs/2505.13211
 integration:
   status: integrated
   notes:
@@ -48,3 +50,23 @@ catalog_policy:
     id, sha, private, gated, license, and selected task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit
     parity run and expected artifact are recorded.
+docs:
+  publisher: Sand AI
+  publisher_kind: company
+  publisher_zh: Sand AI
+  overview: MAGI-1 is Sand AI's open autoregressive video generation model, cataloged for image-to-video and general video generation and tracked as a high-priority open candidate with Apache-2.0 HF metadata. The WorldFoundry route is complete and reports missing checkpoint assets at runtime.
+  overview_zh: MAGI-1 是 Sand AI 开源的自回归视频生成模型，catalog 记录其图生视频与通用视频生成任务，并作为 Apache-2.0 元数据的高优先级开源候选跟踪。WorldFoundry 路径已完备，checkpoint 缺失会在运行时报告。
+  architecture: Upstream describes MAGI-1 as a large autoregressive video model generating chunk-by-chunk with causal attention, enabling streaming-style continuation. This repository records only the prompt+image input contract and the generated_video artifact; scale and internals are not recorded here.
+  architecture_zh: 上游将 MAGI-1 描述为按块自回归生成、使用因果注意力的大型视频模型，支持流式续写。本仓库仅记录 prompt+image 输入契约与 generated_video 产物；规模与内部细节仓库未记录。
+  usage_notes: No runner-parity record exists yet — treat GPU validation as not done. Stage the MAGI-1 weights first; the route fails informatively when they are missing.
+  usage_notes_zh: 尚无 runner parity 记录——应视为未完成 GPU 验证。先就位 MAGI-1 权重；缺失时路径会给出明确报错。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Baseline video generation quality suite.
+    reason_zh: 基础视频生成质量评测。

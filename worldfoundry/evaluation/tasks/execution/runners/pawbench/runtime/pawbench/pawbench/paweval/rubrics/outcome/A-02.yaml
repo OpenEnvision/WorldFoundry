@@ -1,0 +1,37 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A-02
+track: calibration
+title_en: Die face toss
+outcome_question: Which top face (face_1..face_6) is visible on the die once the post-action
+  motion has decisively settled?
+readout_policy: Read the first decisive post-action result window after the requested
+  action completes. Qualifying frames are those where the relevant evidence is in
+  view and no longer in transition. The readout frame is the first frame where the
+  die has stopped translating and rotating and the top face is visible.
+canonical_labels:
+- face_1
+- face_2
+- face_3
+- face_4
+- face_5
+- face_6
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['face_1', 'face_2', 'face_3', 'face_4', 'face_5',
+  'face_6'] can be decisively identified within the readout window.
+- The die top face is not visible (resting on an edge, off-screen, or hidden under
+  an object).
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'First-decisive-window rule: use the earliest frame where the post-action result
+  has committed; do not re-label from later transient states.'
+notes:
+- Read the top face only; side-face pips are not evidence.
+- 'Scene title: Die face toss.'

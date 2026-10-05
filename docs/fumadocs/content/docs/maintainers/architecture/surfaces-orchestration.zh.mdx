@@ -1,0 +1,139 @@
+---
+title: 使用界面与编排
+description: CLI、TUI、MCP 如何进入系统，编排服务如何在模型运行前把用户意图编译为三个规划边界。
+---
+
+## 本层职责
+
+TUI、CLI、Studio、Python、MCP 是操作同一系统的不同方式，都不承载模型推理或 benchmark 打分。它们的任务是把用户意图转换为执行层已理解的某一种 request 类型，并展示结果。本页覆盖 CLI/TUI、Studio 入口、MCP，以及把意图编译为可运行 plan 的编排服务。
+
+request 产生之后落到哪里，先读 [工作流](/zh/docs/maintainers/architecture/workflow)。实际执行的 delegate runner 见 [评测核心](/zh/docs/maintainers/architecture/evaluation-core)。
+
+## CLI 与 TUI
+
+控制台入口是 `worldfoundry/cli/main.py:1888` `main()`。它在 `cli/main.py:1088` 起构建子命令树：
+
+- **`tui`** —— 启动引导式发现 TUI。TUI 在 `cli/tui.py`（`main` 在 `:131`），app、discovery、brand、icon 助手在 `cli/tui_*.py`。它驱动与 CLI 相同的 catalog 与编排调用，只是展示，不是第二套 runtime。
+- **`evaluate`** —— 归一化输入、选择 run mode、返回一个 `EvaluateRunResult`。
+- **`run`** —— 模型运行：解析 runner、生成、再打分。
+- **`validate`** —— 不跑模型即校验 benchmark metadata 加载。
+- **`embodied`** —— 具身评测子树（`run`、`serve`、`merge`、`plan`）。
+- 另有 `zoo`、`preflight`、`dataset`、`tasks`、`reporting`、`model_run`、`plan_metric`、`mcp` 助手。
+
+CLI 调度到编排服务，不直接 import pipeline 文件或算 metric。保持这一点，才能在不重新实现生成、artifact 物化或打分的前提下新增界面。
+
+Studio 是交互式预览界面，安装入口是 `worldfoundry/studio/cli.py:78` `main()`。它复用同一套 catalog 与 runtime 契约，不承载打分。内部结构见 [Studio 内部](/zh/docs/maintainers/architecture/studio-internals)。
+
+## MCP
+
+MCP server 把 catalog、run 生命周期、metric、readiness 暴露为工具，让 agent 驱动同一工作流。它是复用同一套契约的薄壳，不含私有模型代码。
+
+- 入口：`mcp/__init__.py:30` `main()`；server 构造在 `mcp/server.py`（`create_mcp_server` `:38`、`run_server` `:55`）。
+- 工具经 `mcp/tools/registration.py:55` `register_tools` 注册，把每个 payload 绑定为 `@mcp.tool()`。
+- 工具 payload 按职责分组，而非按模型：`discovery`（list/get model、benchmark、task）、`runs`（preview、evaluate、status、result、samples、cancel）、`metrics`（list、show）、`readiness`（benchmark dataset 检查）、`studio`（workspace 推理）、`context`（`MCPToolContext`）。
+
+因为每个工具都经同一 catalog 与编排服务解析，MCP 驱动的 run 与 CLI 驱动的 run 产出相同的 artifact 与 scorecard。
+
+## 编排服务
+
+编排服务是界面与执行之间唯一的编译边界，位于 `evaluation/tasks/execution/orchestration/service.py`。它校验五个 intent dataclass 之一，返回执行层可运行的 `PreparedEvaluation`。
+
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>Intent</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>ModelBenchmarkIntent</code>
+          </div>
+        </div>
+        <p><code>ModelBenchmarkRunRequest</code>（model + benchmark）</p>
+        <p className="pi-kv-read"><span>首读</span> <code>service.py:60</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>ScoreArtifactsIntent</code>
+          </div>
+        </div>
+        <p>为已有 artifact 打分</p>
+        <p className="pi-kv-read"><span>首读</span> <code>service.py:85</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>GenerateAndScoreIntent</code>
+          </div>
+        </div>
+        <p>先生成再打分</p>
+        <p className="pi-kv-read"><span>首读</span> <code>service.py:101</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>ScoreResultsIntent</code>
+          </div>
+        </div>
+        <p>为磁盘上的 result 打分</p>
+        <p className="pi-kv-read"><span>首读</span> <code>service.py:125</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>ReproduceIntent</code>
+          </div>
+        </div>
+        <p>复现 recipe</p>
+        <p className="pi-kv-read"><span>首读</span> <code>service.py:135</code></p>
+      </li>
+    </ul>
+  </section>
+</div>
+
+每个 intent 有对应的 `_prepare_*` 函数（`service.py:414`–`:642`）。公共入口是 `prepare_evaluation(intent)`（`service.py:737`）与 `execute_prepared_evaluation(prepared)`（`service.py:753`）。界面的职责是产出其中一个 intent，不得重复实现生成、调度或 metric 执行。
+
+<ArchDiagram id="surfaces" locale="zh" />
+
+## 三个规划边界
+
+WorldFoundry 保持三种规划类型相互独立。不要用第四种 recipe executor 包裹它们。
+
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>边界</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>PreparedEvaluation</code>
+          </div>
+        </div>
+        <p>面向用户的编译结果：preflight 诊断、协议保真策略、由 generation/data/evaluation/runtime/reference 溯源推导出的 claim 等级。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>service.py:198</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>RunPlan</code>
+          </div>
+        </div>
+        <p>单个生成/评测 stage 的低层 plan；带指纹，保证可复现重跑与缓存复用。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>orchestration/plan.py:113</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>EvaluateRunRequest</code> / <code>ModelBenchmarkRunRequest</code>
+          </div>
+        </div>
+        <p>runner 实际消费的 request 类型。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>orchestration/evaluate.py:41</code> / <code>orchestration/model_benchmark.py:64</code></p>
+      </li>
+    </ul>
+  </section>
+</div>
+
+调用方标志只能*收窄* claim 等级，绝不能把诊断型 run 提升为官方 run。`score_valid` 记录 evaluator 是否产出可用分数；`leaderboard_valid` 另需可比溯源与 benchmark-runner 证据。claim 等级如何流入 scorecard 见 [评测核心](/zh/docs/maintainers/architecture/evaluation-core)。
+
+目录级地图见 [代码地图](/zh/docs/maintainers/architecture/file-index)。这些界面交接给的执行侧见 [工作流](/zh/docs/maintainers/architecture/workflow)。

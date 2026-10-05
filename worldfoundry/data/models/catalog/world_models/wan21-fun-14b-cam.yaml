@@ -15,3 +15,23 @@ integration:
   notes: [VideoX-Fun source is vendored at revision 403f1f7b78dcafccc4f6606dda4ec28e16e667dc.]
 runner_parity: {status: pending, notes: [Dedicated 14B camera checkpoint route is wired.]}
 catalog_category: world_models
+docs:
+  publisher: Alibaba PAI (VideoX-Fun)
+  publisher_kind: company
+  publisher_zh: 阿里云 PAI（VideoX-Fun）
+  overview: 'Wan2.1-Fun V1.1 14B Control Camera is Alibaba PAI''s largest Wan2.1-generation camera-control checkpoint in the VideoX-Fun family: image-to-video generation steered by explicit camera pose sequences. WorldFoundry vendors VideoX-Fun in-tree (revision 403f1f7b) and wires a dedicated route for the alibaba-pai/Wan2.1-Fun-V1.1-14B-Control-Camera checkpoint under Apache-2.0.'
+  overview_zh: Wan2.1-Fun V1.1 14B Control Camera 是阿里云 PAI 在 VideoX-Fun 家族中 Wan2.1 世代最大的相机控制 checkpoint：由显式相机位姿序列操控的图生视频。WorldFoundry 将 VideoX-Fun 内置树内（revision 403f1f7b），并为 alibaba-pai/Wan2.1-Fun-V1.1-14B-Control-Camera checkpoint 接通专用路由， Apache-2.0 许可。
+  architecture: 'A 14B-parameter Wan2.1 diffusion transformer with the VideoX-Fun Control-Camera conditioning pathway: camera extrinsics are injected as control signals alongside the image condition. Further internals are not recorded in this repository.'
+  architecture_zh: 14B 参数的 Wan2.1 扩散 Transformer，叠加 VideoX-Fun Control-Camera 条件通路：相机外参作为控制信号与图像条件一同注入。更多内部细节仓库未记录。
+  usage_notes: Use the sibling wan21-fun-1p3b-cam entry for a GPU-validated reference of the same route at 1.3B scale; the 14B route itself is wired but parity is pending. Camera pose sequences must be supplied explicitly.
+  usage_notes_zh: 同路由的 1.3B 版本（wan21-fun-1p3b-cam）已有 GPU 验证可作参照；14B 路由本身已接通但 parity 仍为 pending。相机位姿序列需显式提供。
+  limitations:
+  - Runner parity is pending for the 14B checkpoint; the 1.3B sibling is the validated reference.
+  - 14B scale implies materially higher VRAM needs than the 1.3B variant.
+  limitations_zh:
+  - 14B checkpoint 的 runner parity 为 pending；1.3B 同门版本是已验证参照。
+  - 14B 规模意味着显存需求远高于 1.3B 变体。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-pose adherence for controlled i2v generation.
+    reason_zh: 受控图生视频的相机位姿跟随。

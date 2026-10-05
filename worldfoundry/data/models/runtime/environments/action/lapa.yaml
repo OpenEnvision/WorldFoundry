@@ -12,6 +12,7 @@ notes:
   out of scope, while the flattened in-tree LAPA inference modules use JAX CUDA 11.8 wheels for action-token inference.
 - LAPA-7B-openx requires runtime JAX compatibility shims for Flax/Tux and frame inputs shaped like the WorldBench route.
 - LAPA stays isolated because Transformers 5 removes the Flax generation modules required by the official runtime.
+- H100 requires CUDA 12.6 ptxas for JAX compilation; the CUDA 11.8 ptxas wheel fails even though the JAX CUDA 11.8 runtime works.
 pip_packages:
 - numpy<2
 - Pillow
@@ -23,7 +24,7 @@ pip_packages:
 - https://storage.googleapis.com/jax-releases/cuda11/jaxlib-0.4.25+cuda11.cudnn86-cp310-cp310-manylinux2014_x86_64.whl
 - nvidia-cuda-runtime-cu11==11.8.89
 - nvidia-cuda-nvrtc-cu11==11.8.89
-- nvidia-cuda-nvcc-cu11==11.8.89
+- nvidia-cuda-nvcc-cu12==12.6.85
 - nvidia-cuda-cupti-cu11==11.8.87
 - nvidia-cublas-cu11==11.11.3.6
 - nvidia-cudnn-cu11==8.9.6.50

@@ -1,17 +1,20 @@
 """Flash World visual generation pipeline module."""
 
-from ..pipeline_utils import PipelineABC
-from typing import Optional, List, Union, Dict, Any
+import base64
 import importlib.util
 import os
 import shutil
-import base64
 import tempfile
 import warnings
-import torch
+from typing import Any, Dict, List, Optional, Union
+
 import numpy as np
+import torch
 from PIL import Image
+
 from worldfoundry.core.io import load_json, write_video
+
+from ..pipeline_utils import PipelineABC
 
 
 def _flash_world_operator_cls():
@@ -23,7 +26,7 @@ def _flash_world_operator_cls():
 
 def _flash_world_representation_cls():
     """Flash world representation cls helper function."""
-    from ...representations.point_clouds_generation.flash_world.flash_world_representation import (
+    from worldfoundry.base_models.three_dimensions.point_clouds.flash_world.runtime import (
         FlashWorldRepresentation,
     )
 
@@ -350,7 +353,7 @@ class FlashWorldPipeline(PipelineABC):
             input_: Input image (path, PIL Image, numpy array, tensor, or None)
             text_prompt: Text description for scene generation
             cameras: Camera parameters (tensor or list of dicts). Ignored if interactions is provided.
-            interactions: List of interaction strings (e.g., ["camera_rotate_left", "camera_forward"]).
+            interactions: List of interaction strings (e.g., ["camera_l", "forward"]).
                           If provided, cameras will be generated from these interactions.
             num_frames: Number of frames
             image_height: Output image height
@@ -416,35 +419,9 @@ class FlashWorldPipeline(PipelineABC):
         Returns:
             List of camera dictionaries
         """
-        cameras = []
-        radius = 2.0
-        
-        for i in range(num_frames):
-            angle = 2 * np.pi * i / num_frames
-            
-            # Circular camera path
-            x = radius * np.cos(angle)
-            z = radius * np.sin(angle)
-            y = 0.5
-            
-            # Look at origin
-            direction = np.array([-x, -y, -z])
-            direction = direction / (np.linalg.norm(direction) + 1e-8)
-            
-            # Simple quaternion (simplified, should use proper rotation)
-            quat = [1.0, 0.0, 0.0, 0.0]  # Identity rotation
-            
-            camera = {
-                'position': [float(x), float(y), float(z)],
-                'quaternion': quat,
-                'fx': image_width * 0.7,
-                'fy': image_height * 0.7,
-                'cx': image_width * 0.5,
-                'cy': image_height * 0.5,
-            }
-            cameras.append(camera)
-        
-        return cameras
+        return self.operator._create_default_cameras(
+            num_frames, image_width, image_height
+        )
     
     def save_results(
         self,

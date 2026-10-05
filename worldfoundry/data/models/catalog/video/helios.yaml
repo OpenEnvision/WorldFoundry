@@ -18,6 +18,7 @@ source:
   revision: 8f2a2faab3298c8a7630a2c73aea37c01b5bab01
   license: apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2603.04379
   project_page: https://pku-yuangroup.github.io/Helios-Page/
   github:
     url: https://github.com/PKU-YuanGroup/Helios
@@ -81,3 +82,28 @@ runner_parity:
   - Full 240-request-frame visual parity requires the dedicated Helios environment and GPU execution.
 catalog_category: video
 catalog_scope: Official open-source video-generation integrations exposed through WorldFoundry pipelines.
+docs:
+  publisher: Peking University (Yuan Group)
+  publisher_kind: university
+  publisher_zh: 北京大学（袁粒课题组）
+  overview: 'Helios is PKU-YuanGroup''s long-video generation family covering T2V, I2V, V2V, and long-video generation, released in three checkpoints: Helios-Distilled (default, efficient), Helios-Mid, and Helios-Base (best quality). WorldFoundry vendors the inference implementation in-tree at the pinned revision, and all three checkpoints are exposed as variants. Resident Distilled sessions keep the native 9-latent/33-frame history and accept prompt changes between segments.'
+  overview_zh: Helios 是北大袁粒课题组的长视频生成系列，覆盖文生视频、图生视频、视频到视频与长视频生成，发布了三个 checkpoint：Helios-Distilled（默认、高效）、Helios-Mid、Helios-Base（最佳质量）。WorldFoundry 以固定 revision 在树内内置其推理实现，三个 checkpoint 均以 variant 形式暴露。常驻的 Distilled 会话保留原生 9 潜变量/33 帧历史，并允许在分段之间更换提示词。
+  architecture: 'Helios generates video in 33-frame chunks; the in-tree pipeline rounds requested frame counts up to a compatible chunk count. The manifest records group offloading and multi-GPU context parallelism as runtime options. Note the recorded Base smoke test: a real A100 checkpoint-load and decode at 384x640/33 frames used a 3-step [1,1,1] pyramid — it verifies wiring and a nonblank artifact, not the official [20,20,20] quality recipe.'
+  architecture_zh: Helios 以 33 帧为块生成视频；树内 pipeline 会把请求帧数向上取整到兼容的块数。manifest 记录了 group offloading 与多卡上下文并行等运行时选项。注意已记录的 Base 冒烟测试：真实 A100 上以 384x640/33 帧、三步 [1,1,1] 金字塔完成加载与解码——它验证的是链路可跑与产物非空，而非官方 [20,20,20] 质量配方。
+  usage_notes: 'Default to Helios-Distilled; switch to Base for final quality (expect much longer runtimes). Runner status is pending_visual_qa: import-light preflight is unit-tested, but full 240-request-frame visual parity needs the dedicated Helios environment plus GPU execution. Helios does not expose keyboard camera controls — prompt updates at chunk boundaries are the only interactivity.'
+  usage_notes_zh: 默认用 Helios-Distilled；出成品换 Base（耗时显著增加）。runner 状态为 pending_visual_qa：轻量导入预检已有单测覆盖，但完整 240 请求帧的视觉一致性还需专用 Helios 环境与 GPU 执行。Helios 不提供键盘相机控制——唯一的交互是在块边界更新提示词。
+  limitations:
+  - Full visual parity (240 request frames) still requires the dedicated environment and GPU run.
+  - No keyboard/camera control; interactivity is limited to prompt changes at 33-frame chunk boundaries.
+  - The recorded Base A100 run was a 3-step smoke, not official-quality parity.
+  limitations_zh:
+  - 完整视觉一致性（240 请求帧）仍需专用环境与 GPU 运行。
+  - 无键盘/相机控制；交互仅限在 33 帧块边界更换提示词。
+  - 已记录的 Base A100 运行是三步冒烟测试，不代表官方质量一致性。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Baseline quality suite for the T2V routes.
+    reason_zh: T2V 路径的基础质量评测。
+  - id: chronomagic-bench
+    reason: Long-horizon suite matching Helios's long-video focus.
+    reason_zh: 长时程评测，契合 Helios 的长视频定位。

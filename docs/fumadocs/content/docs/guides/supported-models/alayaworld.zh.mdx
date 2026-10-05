@@ -1,0 +1,56 @@
+---
+title: "AlayaWorld"
+description: "AlayaWorld：图生视频、相机可控视频；已验证。"
+modelId: "alayaworld"
+pageSource: authored
+---
+
+AlayaWorld 是面向长视频的相机可控交互式世界模型：从一张图出发，带动作控制与 DA3 空间记忆自回归滚动生成世界视频。本 catalog 中它已通过 checkpoint/GPU 验证——发布的 33.6 GB 合并 checkpoint 通过精确字节数与 SHA-256 校验，统一树内 pipeline 在 A100 上开启 DA3 空间记忆生成官方 case1 首个 chunk （544x960、24 fps 的 32 帧 H.264）。
+
+<ModelPaperFigures modelId="alayaworld" locale="zh" />
+
+记录论文为[AlayaWorld: Long-Horizon and Playable Video World Generation](https://arxiv.org/abs/2607.06291)（2026）。
+
+项目页：[alaya-lab.github.io/AlayaWorld](https://alaya-lab.github.io/AlayaWorld/)。代码：[AlayaLab/AlayaWorld](https://github.com/AlayaLab/AlayaWorld)。
+
+官方论文是 [AlayaWorld: Long-Horizon and Playable Video World Generation](https://arxiv.org/abs/2607.06291)（arXiv 2607.06291）。项目页：[alaya-lab.github.io/AlayaWorld](https://alaya-lab.github.io/AlayaWorld/)。代码：[AlayaLab/AlayaWorld](https://github.com/AlayaLab/AlayaWorld)。权重：`AlayaLab/AlayaWorld`（revision `e3f1adeb`）。许可证：**ltx-2-community-license**。
+
+本仓库核对过：发布的 **33.6 GB** 合并 checkpoint 通过精确大小和 SHA-256；transformer / 历史 / Gemma 连接器键与 safetensors 头一致；官方 **case1** 首块在 **A100** 上开着 DA3 记忆跑过——**32** 帧 H.264，**544×960**，**24 fps**。多 rank Ulysses 张量一致性已验证；真正的 NCCL 多卡产物**待做**。
+
+<ModelCommandBuilder modelId="alayaworld" locale="zh" />
+
+## 用来做什么
+
+`alayaworld` 是记录的相机控制路由。按 catalog 相机路径推进时从这里起步。
+
+运行时是 WorldFoundry 规范树内 LTX-2.3 模型的轻量扩展——Transformer、VAE、Gemma 连接器、RoPE、patchifier、注意力分发器与分布式辅助全部复用；Alaya 专属张量仅映射到动作 AdaLN 与时间历史编码器。空间记忆复用树内 Depth Anything 3 模型（论文 arXiv 2607.06291）。
+
+catalog 记录的任务包括 图生视频、相机可控视频、交互式世界模型、长视频生成。别名包括 `alaya-world`、`alaya_world`。模态上，它接受图像，输出视频。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（交互滚动生成的相机控制质量）、[MemoBench](/zh/docs/evaluation/benchmark-hub/memobench)（长时程空间记忆一致性评测）。
+
+AlayaWorld 空间记忆加视频。不是 Evoke。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`frames`、`fps`、`height`；产物 `generated_world_video`、`alayaworld.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `AlayaWorldPipeline`。
+
+系列状态：**已验证**。
+
+注意力分发按硬件能力选择；多卡 Ulysses 上下文并行使用 WorldFoundry 核心集合通信。 多 rank Ulysses 张量一致性已验证，但真正的 NCCL 多卡产物运行仍待多 GPU 环境。
+
+The runtime reuses WorldFoundry's existing LTX-2.3 Transformer, VAE, Gemma connector, RoPE, patchifier, attention dispatcher, and distributed helpers.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run alayaworld --pipeline.task-profile default` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch>=2.6）。
+
+记录的权重仓库包括 `AlayaLab/AlayaWorld`、`google/gemma-3-12b-it-qat-q4_0-unquantized`、`depth-anything/DA3NESTED-GIANT-LARGE-1.1`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh alayaworld`；下载缺失的公开权重时加 `--download`。
+
+gated `google/gemma-3-12b-it-qat-q4_0-unquantized`，下载前需在上游接受条款；状态：**已验证**。
+
+<ModelRelatedRecipes modelId="alayaworld" locale="zh" />

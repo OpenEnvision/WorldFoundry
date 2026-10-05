@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="University of Waterloo">
+  <path fill="#000000" d="M64 8 16 28v40c0 30 20 46 48 52 28-6 48-22 48-52V28Z"/>
+  <path fill="#f2c14e" d="M64 18 28 34v32c0 22 15 35 36 40 21-5 36-18 36-40V34Z"/>
+  <path fill="#000000" d="M48 52h32v8H48zm4 12h24v28H52z"/>
+  <path fill="#f2c14e" d="M58 70h12v14H58z"/>
+</svg>

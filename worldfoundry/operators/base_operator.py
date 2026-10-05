@@ -57,5 +57,11 @@ class BaseOperator(object):
         return self.interaction_history
     
     def delete_last_interaction(self):
-        """Remove the last recorded interaction from the current list."""
+        """Remove the last recorded interaction from the current list.
+
+        Raises:
+            ValueError: If there is no recorded interaction to delete.
+        """
+        if not self.current_interaction:
+            raise ValueError("No interaction to delete.")
         self.current_interaction = self.current_interaction[:-1]

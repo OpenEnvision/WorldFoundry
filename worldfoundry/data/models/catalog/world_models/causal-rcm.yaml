@@ -1,0 +1,86 @@
+id: causal-rcm
+name: Causal-rCM
+aliases:
+- rcm
+- causal_rcm
+- rcm-causal
+- causal-rcm-wan2.1
+tasks:
+- autoregressive-video-generation
+- streaming-video-generation
+- interactive-world-model
+- text-to-video
+- image-to-video
+output_artifacts:
+- generated_world
+- generated_video
+provider: official_repo
+source:
+  status: open_source
+  official_repo_url: https://github.com/NVlabs/rcm
+  license: apache-2.0
+official_sources:
+  project_page: https://research.nvidia.com/labs/dir/rcm
+  paper: https://arxiv.org/abs/2510.08431
+  causal_paper: https://arxiv.org/abs/2606.25473
+  github:
+    url: https://github.com/NVlabs/rcm
+    revision: ed3cb14dd936f92cdc9f9381af7369991509b41f
+  huggingface:
+  - repo_id: worstcoder/rcm-Wan
+    type: model
+    status: public_community_checkpoint
+    provenance: community_reproduction
+  - repo_id: worstcoder/Wan
+    type: model
+    role: wan2pt1_vae_and_text_encoder
+base_model_refs:
+- role: wan2_1_t2v_1_3b
+  repo_id: Wan-AI/Wan2.1-T2V-1.3B
+- role: wan2_1_t2v_14b
+  repo_id: Wan-AI/Wan2.1-T2V-14B
+integration:
+  status: runtime_ported
+  notes:
+  - WorldFoundry vendors the official Apache-2.0 causal inference stack under
+    synthesis/visual_generation/rcm/rcm_runtime; the adapter owns checkpoint gating, command
+    construction, and pipeline/catalog exposure.
+  - The upstream `imaginaire` framework package is not vendored. WorldFoundry's own lazy_config,
+    easy_io, rank-aware logging, and selective activation checkpointing back the vendored code.
+  - BlockPattern/AttnMaskSpec and the block-causal and teacher-forcing mask predicates were lifted into
+    worldfoundry/core/attention/sparse/block_pattern.py so causal chunk schedules are one shared primitive.
+  blocked_reasons:
+  - Execution requires the public Causal-rCM DiT checkpoint plus the Wan2.1 VAE and umT5 text encoder to be staged locally.
+runner_parity:
+  status: implemented_public_checkpoint_not_staged
+  notes:
+  - The pipeline resolves the vendored causal entrypoint and returns blocked runtime diagnostics until
+    the DiT, VAE, and text-encoder checkpoints are staged.
+  - Extracted block-mask primitives are verified against the upstream implementation across 702 mask
+    configurations and 162 chunk-schedule configurations.
+runtime_profile: runtime-profile:causal-rcm
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: causal-rcm
+catalog_category: world_models
+catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes; blocked
+  entries retain upstream provenance without runnable backends.
+docs:
+  publisher: NVIDIA
+  publisher_kind: company
+  publisher_zh: 英伟达（NVIDIA）
+  overview: 'Causal-rCM applies NVIDIA''s rCM consistency distillation to causal video generation: it streams video autoregressively over latent-frame chunks with distilled few-step sampling, making it a low-latency interactive world-model candidate. In this catalog the official Apache-2.0 causal inference stack is vendored in-tree; execution waits on the public DiT, Wan2.1 VAE, and umT5 checkpoints being staged locally.'
+  overview_zh: Causal-rCM 把英伟达的 rCM 一致性蒸馏应用于因果视频生成：以潜帧 chunk 为单位自回归流式生成，配合蒸馏的少步采样，是低延迟交互式世界模型的候选。本 catalog 中官方 Apache-2.0 因果推理栈已内置树内；执行待公开 DiT、Wan2.1 VAE 与 umT5 checkpoint 本地就位。
+  architecture: Per the paper (arXiv 2510.08431), rCM combines score-regularized consistency distillation for few-step sampling. The vendored stack drops the upstream imaginaire framework — WorldFoundry's own lazy_config, easy_io, and logging back it — and the block-causal mask predicates were lifted into worldfoundry/core/attention/sparse/block_pattern.py, verified against upstream across 702 mask and 162 chunk-schedule configurations.
+  architecture_zh: 按论文（arXiv 2510.08431），rCM 结合分数正则化的一致性蒸馏实现少步采样。内置栈去掉了上游 imaginaire 框架——由 WorldFoundry 自有的 lazy_config、easy_io 与日志支撑——块因果掩码谓词提取到 worldfoundry/core/attention/sparse/block_pattern.py，并在 702 种掩码与 162 种 chunk 调度配置下对照上游验证。
+  usage_notes: 'first_chunk_t and chunk_t select the schedule: c1-1 frame-wise gives the lowest streaming latency, c3-3 more throughput. Distilled 4-step sampling is the default; distilled=False samples the multi-step teacher with CFG. context_from_last_step=True saves one clean forward per chunk but requires a checkpoint trained for noisy context. The released entrypoint is prompt/image conditioned with no discrete action space.'
+  usage_notes_zh: first_chunk_t 与 chunk_t 选择调度：c1-1 逐帧模式流式延迟最低，c3-3 吞吐更高。默认使用蒸馏的 4 步采样；distilled=False 则以 CFG 采样多步教师。context_from_last_step=True 每 chunk 省一次干净前向，但要求 checkpoint 针对带噪上下文训练。发布的入口为提示词/图像条件，无离散动作空间。
+  limitations:
+  - Blocked until the public DiT, Wan2.1 VAE, and umT5 text-encoder checkpoints are staged locally.
+  - No discrete action space — the chunk schedule is the only streaming control surface.
+  limitations_zh:
+  - 在公开 DiT、Wan2.1 VAE 与 umT5 文本编码器 checkpoint 本地就位前保持 blocked。
+  - 无离散动作空间——chunk 调度是唯一的流式控制面。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Video quality evaluation for streaming text/image-to-video.
+    reason_zh: 流式文/图生视频的质量评测。

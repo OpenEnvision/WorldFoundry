@@ -14,7 +14,7 @@ import torch.nn.init
 from torch import Tensor, nn
 
 from ..layers import RMSNorm, RopePositionEmbedding, SelfAttentionBlock, SwiGLUFFN
-from worldfoundry.core.nn.layers import LayerScale, Mlp, PatchEmbed
+from worldfoundry.core.nn.blocks.layers import LayerScale, Mlp, PatchEmbed
 from ..utils import named_apply
 
 logger = logging.getLogger("dinov3")

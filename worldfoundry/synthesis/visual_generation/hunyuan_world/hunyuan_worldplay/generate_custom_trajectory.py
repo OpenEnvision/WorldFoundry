@@ -1,5 +1,4 @@
 import numpy as np
-import json
 
 
 def rot_x(theta):
@@ -81,30 +80,3 @@ def generate_camera_trajectory_local(motions):
         poses.append(T.copy())
 
     return poses
-
-
-if __name__ == "__main__":
-    # Examples: Forward 0.08 * 16 -> Right Rotate 3 degree * 16
-    motions = []
-    for i in range(15):
-        motions.append({"forward": 0.08})
-
-    for i in range(16):
-        motions.append({"yaw": np.deg2rad(3)})
-
-    intrinsic = [
-        [969.6969696969696, 0.0, 960.0],
-        [0.0, 969.6969696969696, 540.0],
-        [0.0, 0.0, 1.0],
-    ]
-
-    poses = generate_camera_trajectory_local(motions)
-    custom_c2w = {}
-    for i, p in enumerate(poses):
-        custom_c2w[str(i)] = {"extrinsic": p.tolist(), "K": intrinsic}
-        json.dump(
-            custom_c2w,
-            open("./assets/pose/pose.json", "w"),
-            indent=4,
-            ensure_ascii=False,
-        )

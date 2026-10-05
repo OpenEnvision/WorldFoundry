@@ -1,8 +1,17 @@
-"""Small compatibility helpers removed from recent Transformers releases."""
+"""Compatibility helpers removed from recent Transformers releases.
+
+Keeps older ``from_pretrained`` graphs working when Hugging Face drops
+a utility. Do not add new model logic here.
+"""
 
 from __future__ import annotations
 
 import torch
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Head mask / prune indices — keep older from_pretrained graphs loading
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def prepare_head_mask(
@@ -35,6 +44,7 @@ def find_pruneable_heads_and_indices(
     requested = set(heads) - already_pruned_heads
     mask = torch.ones(n_heads, head_size)
     for head in requested:
+        # Indices shift left as earlier heads were already removed from the matrix.
         shifted_head = head - sum(1 for pruned in already_pruned_heads if pruned < head)
         mask[shifted_head] = 0
     keep = mask.view(-1).contiguous().eq(1)

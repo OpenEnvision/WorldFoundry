@@ -1,7 +1,7 @@
 """Native embodied simulator registry.
 
 Only simulators with an in-tree :class:`BaseSimulator` implementation are listed.
-Offline or normalizer-only benchmarks (e.g. BridgeData V2, LIBERO-Para) stay in the
+Offline or normalizer-only benchmarks (e.g. BridgeData V2) stay in the
 catalog but are not resolved by the closed-loop runner.
 
 Sections:
@@ -44,121 +44,121 @@ SIMULATOR_ENTRIES: tuple[SimulatorEntry, ...] = (
         "worldfoundry.evaluation.tasks.embodied.simulators.ai2thor.benchmark",
         "AI2ThorBenchmark",
         aliases=("ai2-thor",),
-        official_config_dir="configs/benchmarks/ai2thor",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/ai2thor",
     ),
     SimulatorEntry(
         "behavior1k",
         "worldfoundry.evaluation.tasks.embodied.simulators.behavior1k.benchmark",
         "Behavior1KBenchmark",
         aliases=("behavior-1k", "behavior_1k"),
-        official_config_dir="configs/benchmarks/behavior1k",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/behavior1k",
     ),
     SimulatorEntry(
         "calvin",
         "worldfoundry.evaluation.tasks.embodied.simulators.calvin.benchmark",
         "CALVINBenchmark",
-        official_config_dir="configs/benchmarks/calvin",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/calvin",
     ),
     SimulatorEntry(
         "kinetix",
         "worldfoundry.evaluation.tasks.embodied.simulators.kinetix.benchmark",
         "KinetixBenchmark",
-        official_config_dir="configs/benchmarks/kinetix",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/kinetix",
     ),
     SimulatorEntry(
         "libero",
         "worldfoundry.evaluation.tasks.embodied.simulators.libero.benchmark",
         "LIBEROBenchmark",
         aliases=("libero-spatial", "libero-object", "libero-goal", "libero-10", "libero-90"),
-        official_config_dir="configs/benchmarks/libero",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/libero",
     ),
     SimulatorEntry(
         "libero-mem",
         "worldfoundry.evaluation.tasks.embodied.simulators.libero_mem.benchmark",
         "LIBEROMemBenchmark",
         aliases=("libero_mem",),
-        official_config_dir="configs/benchmarks/libero_mem",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/libero-mem",
     ),
     SimulatorEntry(
         "libero-plus",
         "worldfoundry.evaluation.tasks.embodied.simulators.libero_plus.benchmark",
         "LIBEROPlusBenchmark",
         aliases=("libero_plus",),
-        official_config_dir="configs/benchmarks/libero_plus",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/libero-plus",
     ),
     SimulatorEntry(
         "libero-pro",
         "worldfoundry.evaluation.tasks.embodied.simulators.libero_pro.benchmark",
         "LIBEROProBenchmark",
         aliases=("libero_pro",),
-        official_config_dir="configs/benchmarks/libero_pro",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/libero-pro",
     ),
     SimulatorEntry(
         "maniskill2",
         "worldfoundry.evaluation.tasks.embodied.simulators.maniskill2.benchmark",
         "ManiSkill2Benchmark",
         aliases=("maniskill", "mani-skill2", "mani-skill"),
-        official_config_dir="configs/benchmarks/maniskill2",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/maniskill2",
     ),
     SimulatorEntry(
         "mikasa",
         "worldfoundry.evaluation.tasks.embodied.simulators.mikasa.benchmark",
         "MIKASABenchmark",
         aliases=("mikasa-robo", "mikasa_robo"),
-        official_config_dir="configs/benchmarks/mikasa",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/mikasa",
     ),
     SimulatorEntry(
         "molmospaces",
         "worldfoundry.evaluation.tasks.embodied.simulators.molmospaces.benchmark",
         "MolmoSpacesBenchmark",
         aliases=("molmo-spaces", "molmospaces-bench"),
-        official_config_dir="configs/benchmarks/molmospaces",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/molmospaces",
     ),
     SimulatorEntry(
         "rlbench",
         "worldfoundry.evaluation.tasks.embodied.simulators.rlbench.benchmark",
         "RLBenchBenchmark",
-        official_config_dir="configs/benchmarks/rlbench",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/rlbench",
     ),
     SimulatorEntry(
         "robocasa",
         "worldfoundry.evaluation.tasks.embodied.simulators.robocasa.benchmark",
         "RoboCasaBenchmark",
-        official_config_dir="configs/benchmarks/robocasa",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/robocasa",
     ),
     SimulatorEntry(
         "robocerebra",
         "worldfoundry.evaluation.tasks.embodied.simulators.robocerebra.benchmark",
         "RoboCerebraBenchmark",
-        official_config_dir="configs/benchmarks/robocerebra",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/robocerebra",
     ),
     SimulatorEntry(
         "robomme",
         "worldfoundry.evaluation.tasks.embodied.simulators.robomme.benchmark",
         "RoboMMEBenchmark",
         aliases=("robo-mme",),
-        official_config_dir="configs/benchmarks/robomme",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/robomme",
     ),
     SimulatorEntry(
         "robotwin",
         "worldfoundry.evaluation.tasks.embodied.simulators.robotwin.benchmark",
         "RoboTwinBenchmark",
         aliases=("robotwin2", "robotwin-v2", "robotwin-2.0"),
-        official_config_dir="configs/benchmarks/robotwin",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/robotwin",
     ),
     SimulatorEntry(
         "simpler-env",
         "worldfoundry.evaluation.tasks.embodied.simulators.simpler.benchmark",
         "SimplerEnvBenchmark",
         aliases=("simpler", "simplerenv", "simpler_env"),
-        official_config_dir="configs/benchmarks/simpler",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/simpler-env",
     ),
     SimulatorEntry(
         "vlabench",
         "worldfoundry.evaluation.tasks.embodied.simulators.vlabench.benchmark",
         "VLABenchBenchmark",
         aliases=("vla-bench", "vla_bench"),
-        official_config_dir="configs/benchmarks/vlabench",
+        official_config_dir="worldfoundry/data/benchmarks/eval_configs/embodied/vlabench",
     ),
 )
 

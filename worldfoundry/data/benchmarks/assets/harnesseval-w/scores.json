@@ -1,0 +1,134 @@
+[
+  {
+    "schema_version": "harnesseval.skill_eval",
+    "model_id": "synthetic-fixture",
+    "case_id": "synthetic-0",
+    "taxonomy": {
+      "probe_family": "exploratory_transition"
+    },
+    "case_score": {
+      "score": 0.6
+    },
+    "observation_quality": {
+      "dimensions": {
+        "render_quality_inspector": 0.8,
+        "motion_quality_inspector": 0.8,
+        "appearance_consistency_inspector": 0.8,
+        "physical_plausibility_inspector": 0.8
+      }
+    },
+    "provenance": {
+      "synthetic": true
+    }
+  },
+  {
+    "schema_version": "harnesseval.skill_eval",
+    "model_id": "synthetic-fixture",
+    "case_id": "synthetic-1",
+    "taxonomy": {
+      "probe_family": "intentional_transition"
+    },
+    "case_score": {
+      "score": 0.6
+    },
+    "observation_quality": {
+      "dimensions": {
+        "render_quality_inspector": 0.8,
+        "motion_quality_inspector": 0.8,
+        "appearance_consistency_inspector": 0.8,
+        "physical_plausibility_inspector": 0.8
+      }
+    },
+    "provenance": {
+      "synthetic": true
+    }
+  },
+  {
+    "schema_version": "harnesseval.skill_eval",
+    "model_id": "synthetic-fixture",
+    "case_id": "synthetic-2",
+    "taxonomy": {
+      "probe_family": "physical_transition"
+    },
+    "case_score": {
+      "score": 0.6
+    },
+    "observation_quality": {
+      "dimensions": {
+        "render_quality_inspector": 0.8,
+        "motion_quality_inspector": 0.8,
+        "appearance_consistency_inspector": 0.8,
+        "physical_plausibility_inspector": 0.8
+      }
+    },
+    "provenance": {
+      "synthetic": true
+    }
+  },
+  {
+    "schema_version": "harnesseval.skill_eval",
+    "model_id": "synthetic-fixture",
+    "case_id": "synthetic-3",
+    "taxonomy": {
+      "probe_family": "drift_resistance"
+    },
+    "case_score": {
+      "score": 0.6
+    },
+    "observation_quality": {
+      "dimensions": {
+        "render_quality_inspector": 0.8,
+        "motion_quality_inspector": 0.8,
+        "appearance_consistency_inspector": 0.8,
+        "physical_plausibility_inspector": 0.8
+      }
+    },
+    "provenance": {
+      "synthetic": true
+    }
+  },
+  {
+    "schema_version": "harnesseval.skill_eval",
+    "model_id": "synthetic-fixture",
+    "case_id": "synthetic-4",
+    "taxonomy": {
+      "probe_family": "return_revisit_consistency"
+    },
+    "case_score": {
+      "score": 0.6
+    },
+    "observation_quality": {
+      "dimensions": {
+        "render_quality_inspector": 0.8,
+        "motion_quality_inspector": 0.8,
+        "appearance_consistency_inspector": 0.8,
+        "physical_plausibility_inspector": 0.8
+      }
+    },
+    "provenance": {
+      "synthetic": true
+    }
+  },
+  {
+    "schema_version": "harnesseval.skill_eval",
+    "model_id": "synthetic-fixture",
+    "case_id": "synthetic-5",
+    "taxonomy": {
+      "probe_family": "offscreen_evolution"
+    },
+    "case_score": {
+      "score": 0.6
+    },
+    "observation_quality": {
+      "dimensions": {
+        "render_quality_inspector": 0.8,
+        "motion_quality_inspector": 0.8,
+        "appearance_consistency_inspector": 0.8,
+        "physical_plausibility_inspector": 0.8
+      }
+    },
+    "provenance": {
+      "synthetic": true
+    }
+  }
+]

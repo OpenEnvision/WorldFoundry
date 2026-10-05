@@ -1,129 +1,34 @@
+"""Native dual-denoiser inference runner for FantasyWorld Wan2.2."""
+
 from __future__ import annotations
 
 from contextlib import nullcontext
+from pathlib import Path
+import random
+import sys
 from typing import Optional
 
 import numpy as np
-import random
-import sys
 import torch
 from PIL import Image
 from tqdm import tqdm
 
+from .native_pipeline import build_fantasy_world_wan22_models
 from .runtime_env import (
-    ensure_fantasy_world_runtime,
+    WAN22_LORA_HIGH_NAME,
+    WAN22_LORA_LOW_NAME,
     ensure_moge2_runtime,
-    prepare_wan22_runtime_root,
     resolve_moge_pretrained,
 )
 from .worldfoundry_runtime import normalize_wan_num_frames, pad_camera_params_to_frames
 
 
-_WAN22_CAMERA_GROUP_COUNTS = {"pipe": 453, "vggt": 765, "IRGBlock": 1440}
-_WAN22_CAMERA_CONTROL_KEYS = {
-    "pipe.dit.control_adapter.conv.weight",
-    "pipe.dit.control_adapter.conv.bias",
-    "pipe.dit.control_adapter.residual_blocks.0.conv1.weight",
-    "pipe.dit.control_adapter.residual_blocks.0.conv1.bias",
-    "pipe.dit.control_adapter.residual_blocks.0.conv2.weight",
-    "pipe.dit.control_adapter.residual_blocks.0.conv2.bias",
-}
-
-def _ensure_wan22_control_adapter(model) -> None:
-    dit = model.pipe.dit
-    if getattr(dit, "control_adapter", None) is not None:
-        return
-    from worldfoundry.base_models.diffusion_model.diffsynth.models.fantasy_world_wan22_wan_video_dit import (
-        SimpleAdapter,
-    )
-
-    reference = next(dit.parameters())
-    dit.control_adapter = SimpleAdapter(
-        24,
-        dit.dim,
-        kernel_size=dit.patch_size[1:],
-        stride=dit.patch_size[1:],
-    ).to(device=reference.device, dtype=reference.dtype)
-
-
-def _load_wan22_camera_checkpoint(model, checkpoint_path: str, *, label: str) -> None:
-    """Strictly validate and load one released FantasyWorld camera checkpoint."""
-
-    state_dict = torch.load(
-        checkpoint_path,
-        map_location="cpu",
-        weights_only=True,
-        mmap=True,
-    )
-    group_counts = {
-        group: sum(key.startswith(f"{group}.") for key in state_dict)
-        for group in _WAN22_CAMERA_GROUP_COUNTS
-    }
-    if group_counts != _WAN22_CAMERA_GROUP_COUNTS:
-        raise RuntimeError(
-            f"FantasyWorld Wan2.2 {label} checkpoint schema is incomplete: "
-            f"expected={_WAN22_CAMERA_GROUP_COUNTS}, actual={group_counts}"
-        )
-    control_keys = {key for key in state_dict if key.startswith("pipe.dit.control_adapter.")}
-    if control_keys != _WAN22_CAMERA_CONTROL_KEYS:
-        raise RuntimeError(
-            f"FantasyWorld Wan2.2 {label} camera-control schema mismatch: "
-            f"missing={sorted(_WAN22_CAMERA_CONTROL_KEYS - control_keys)}, "
-            f"unexpected={sorted(control_keys - _WAN22_CAMERA_CONTROL_KEYS)}"
-        )
-    _ensure_wan22_control_adapter(model)
-
-    prefix = "pipe.dit."
-    checkpoint_dit = {
-        key[len(prefix) :]: value
-        for key, value in state_dict.items()
-        if key.startswith(prefix)
-    }
-    model_dit = model.pipe.dit.state_dict()
-    unexpected = sorted(set(checkpoint_dit) - set(model_dit))
-    mismatched = sorted(
-        key
-        for key in set(model_dit) & set(checkpoint_dit)
-        if tuple(model_dit[key].shape) != tuple(checkpoint_dit[key].shape)
-    )
-    if unexpected or mismatched:
-        raise RuntimeError(
-            f"FantasyWorld Wan2.2 {label} DiT overlay mismatch: "
-            f"unexpected={unexpected[:8]}, "
-            f"shape_mismatch={mismatched[:8]}"
-        )
-
-    messages = model.load_state_dict(state_dict, strict=False)
-    if messages.unexpected_keys:
-        raise RuntimeError(
-            f"Unexpected FantasyWorld Wan2.2 {label} keys: {messages.unexpected_keys}"
-        )
-    missing_control = [
-        key for key in messages.missing_keys if key.startswith("pipe.dit.control_adapter.")
-    ]
-    if missing_control:
-        raise RuntimeError(
-            f"FantasyWorld Wan2.2 {label} camera-control keys were not restored: "
-            f"{missing_control}"
-        )
-    print(
-        f"Strictly restored FantasyWorld Wan2.2 {label} DiT overlay: "
-        f"{len(checkpoint_dit)} matched tensors including camera-control adapter; "
-        f"{len(set(model_dit) - set(checkpoint_dit))} tensors retained from the official base",
-        flush=True,
-    )
-
-
 class FantasyWorldWan22Runner:
-    """Official FantasyWorld Wan2.2 inference wrapper."""
+    """Run the released high/low Wan2.2 models on one native architecture."""
 
     @staticmethod
     def _canonical_cuda_device(device: str) -> str:
-        if device == "cuda":
-            return "cuda:0"
-        if device.startswith("cuda:"):
-            return device
-        return device
+        return "cuda:0" if device == "cuda" else device
 
     @classmethod
     def _auto_device_layout(
@@ -136,38 +41,30 @@ class FantasyWorldWan22Runner:
         resolved_base = cls._canonical_cuda_device(base_device)
         if not resolved_base.startswith("cuda"):
             return resolved_base, resolved_base, resolved_base
-
-        device_count = torch.cuda.device_count()
-        if device_count <= 1:
-            resolved_high = cls._canonical_cuda_device(high_model_device or resolved_base)
-            resolved_low = cls._canonical_cuda_device(low_model_device or resolved_high)
-            resolved_moge = cls._canonical_cuda_device(moge_device or resolved_high)
-            return resolved_high, resolved_low, resolved_moge
-
-        base_index = 0 if resolved_base == "cuda" else int(resolved_base.split(":", maxsplit=1)[1])
-        resolved_high = cls._canonical_cuda_device(high_model_device or f"cuda:{base_index}")
-        high_index = int(resolved_high.split(":", maxsplit=1)[1])
-
-        if low_model_device is None:
-            resolved_low = f"cuda:{(high_index + 1) % device_count}"
-        else:
-            resolved_low = cls._canonical_cuda_device(low_model_device)
-
+        count = torch.cuda.device_count()
+        if count <= 1:
+            high = cls._canonical_cuda_device(high_model_device or resolved_base)
+            return (
+                high,
+                cls._canonical_cuda_device(low_model_device or high),
+                cls._canonical_cuda_device(moge_device or high),
+            )
+        base_index = int(resolved_base.split(":", 1)[1])
+        high = cls._canonical_cuda_device(high_model_device or f"cuda:{base_index}")
+        high_index = int(high.split(":", 1)[1])
+        low = cls._canonical_cuda_device(low_model_device or f"cuda:{(high_index + 1) % count}")
         if moge_device is None:
-            candidate_indices = [
-                idx for idx in range(device_count)
-                if f"cuda:{idx}" not in {resolved_high, resolved_low}
-            ]
-            resolved_moge = f"cuda:{candidate_indices[0]}" if candidate_indices else resolved_high
+            free = [index for index in range(count) if f"cuda:{index}" not in {high, low}]
+            moge = f"cuda:{free[0]}" if free else high
         else:
-            resolved_moge = cls._canonical_cuda_device(moge_device)
-
-        return resolved_high, resolved_low, resolved_moge
+            moge = cls._canonical_cuda_device(moge_device)
+        return high, low, moge
 
     def __init__(
         self,
         *,
-        ckpt_dir: str,
+        base_dir: str,
+        lora_dir: str,
         model_ckpt_high: str,
         model_ckpt_low: str,
         moge_path: Optional[str] = None,
@@ -188,19 +85,14 @@ class FantasyWorldWan22Runner:
     ) -> None:
         if not str(device).startswith("cuda") or not torch.cuda.is_available():
             raise ValueError("FantasyWorld Wan2.2 official inference requires a CUDA device.")
-
-        ensure_fantasy_world_runtime()
         ensure_moge2_runtime(moge_path)
 
         from worldfoundry.base_models.three_dimensions.depth.moge.model.v2 import MoGeModel
-        from worldfoundry.base_models.diffusion_model.diffsynth.utils.re10k_pose import (
-            RealEstate10KPoseProcessor,
-        )
-        from FantasyWorld.fusion.model_wan22 import FantasyWorldFusionModel
         from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.variants.fantasy_world.utils.pose_enc import (
             extri_intri_to_pose_encoding,
             pose_encoding_to_extri_intri,
         )
+        from worldfoundry.core.geometry.pose import RealEstate10KPoseProcessor
 
         from . import utils as fw_utils
 
@@ -209,10 +101,7 @@ class FantasyWorldWan22Runner:
         self.cfg_scale = float(cfg_scale)
         self.fps = int(fps)
         self.high_device, self.low_device, self.moge_device = self._auto_device_layout(
-            str(device),
-            high_model_device,
-            low_model_device,
-            moge_device,
+            str(device), high_model_device, low_model_device, moge_device
         )
         self.device = self.high_device
         self.torch_dtype = weight_dtype
@@ -220,61 +109,26 @@ class FantasyWorldWan22Runner:
         self.height = int(height)
         self.width = int(width)
         self.timestep_boundary = int(timestep_boundary)
-
         self._fw_utils = fw_utils
         self._extri_intri_to_pose_encoding = extri_intri_to_pose_encoding
 
-        vggt_cfg = {
-            "enable_camera": True,
-            "enable_depth": True,
-            "enable_point": True,
-            "enable_track": False,
-            "DPT_patch_size": 16,
-        }
-        camera_cfg = {
-            "pose_in_dim": 768,
-            "plucker_fea_dim": 2048,
-            "pose_inject_method": "adaln",
-            "use_info": "plucker",
-        }
-
-        self.model_high = FantasyWorldFusionModel(
-            start_index=16,
-            use_gradient_checkpointing=True,
-            cross_attention_list=list(range(24)),
-            origin_file_pattern="high_noise_model/diffusion_pytorch_model*.safetensors",
-            dit_path=ckpt_dir,
-            lora_path=f"{ckpt_dir}/PAI/Wan2.2-Fun-Reward-LoRAs/Wan2.2-Fun-A14B-InP-high-noise-HPS2.1.safetensors",
-            vggt_cfg=vggt_cfg,
-            camera_control=True,
-            camera_cfg=camera_cfg,
-            load_vae=True,
-            load_text_encoder=True,
+        lora_root = Path(lora_dir).expanduser().resolve()
+        models = build_fantasy_world_wan22_models(
+            base_model_root=base_dir,
+            high_lora_path=lora_root / WAN22_LORA_HIGH_NAME,
+            low_lora_path=lora_root / WAN22_LORA_LOW_NAME,
+            high_checkpoint_path=model_ckpt_high,
+            low_checkpoint_path=model_ckpt_low,
+            high_device=self.high_device,
+            low_device=self.low_device,
+            torch_dtype=self.torch_dtype,
         )
-        self.model_low = FantasyWorldFusionModel(
-            start_index=16,
-            use_gradient_checkpointing=True,
-            cross_attention_list=list(range(24)),
-            origin_file_pattern="low_noise_model/diffusion_pytorch_model*.safetensors",
-            dit_path=ckpt_dir,
-            lora_path=f"{ckpt_dir}/PAI/Wan2.2-Fun-Reward-LoRAs/Wan2.2-Fun-A14B-InP-low-noise-HPS2.1.safetensors",
-            vggt_cfg=vggt_cfg,
-            camera_control=True,
-            camera_cfg=camera_cfg,
-        )
-
-        _load_wan22_camera_checkpoint(self.model_high, model_ckpt_high, label="HIGH")
-        _load_wan22_camera_checkpoint(self.model_low, model_ckpt_low, label="LOW")
-
-        self.model_high.to(self.torch_dtype)
-        self.model_high.to(self.high_device)
+        self.model_high = models.high.to(self.high_device).eval()
+        self.model_low = models.low.to(self.low_device).eval()
         self.model_high.pipe.device = self.high_device
-        self.model_high.eval()
-
-        self.model_low.to(self.torch_dtype)
-        self.model_low.to(self.low_device)
+        self.model_high.pipe.torch_dtype = self.torch_dtype
         self.model_low.pipe.device = self.low_device
-        self.model_low.eval()
+        self.model_low.pipe.torch_dtype = self.torch_dtype
 
         self.pose_processor = RealEstate10KPoseProcessor(
             sample_stride=1,
@@ -288,118 +142,108 @@ class FantasyWorldWan22Runner:
             is_i2v=True,
             pose_encoding_to_extri_intri=pose_encoding_to_extri_intri,
         )
-        self.moge = MoGeModel.from_pretrained(resolve_moge_pretrained(moge_pretrained)).to(self.moge_device).eval()
+        self.moge = MoGeModel.from_pretrained(
+            resolve_moge_pretrained(moge_pretrained)
+        ).to(self.moge_device).eval()
+
+    def _prepare_control_latents(
+        self,
+        plucker_embedding: torch.Tensor,
+        target_device: str,
+    ) -> torch.Tensor:
+        camera_video = plucker_embedding.to(
+            device=target_device,
+            dtype=self.torch_dtype,
+        )[0].permute(3, 0, 1, 2).unsqueeze(0)
+        values = torch.cat(
+            (
+                torch.repeat_interleave(camera_video[:, :, :1], repeats=4, dim=2),
+                camera_video[:, :, 1:],
+            ),
+            dim=2,
+        ).transpose(1, 2)
+        batch, frames, channels, height, width = values.shape
+        if frames % 4:
+            raise ValueError("FantasyWorld Wan2.2 camera-control frames must be divisible by four")
+        values = values.reshape(batch, frames // 4, 4, channels, height, width).transpose(2, 3)
+        return values.reshape(batch, frames // 4, channels * 4, height, width).transpose(1, 2).contiguous()
 
     def generate_video_with_dual_models(
         self,
         *,
         context_pos: torch.Tensor,
-        context_neg: torch.Tensor,
+        context_neg: torch.Tensor | None,
         y: torch.Tensor,
         plucker_embedding: torch.Tensor,
-    ):
-        num_frames = self.num_frames
-        if num_frames % 4 != 1:
-            num_frames = (num_frames + 2) // 4 * 4 + 1
-
-        self.model_high.pipe.scheduler.set_timesteps(self.sample_steps)
-        self.model_low.pipe.scheduler.set_timesteps(self.sample_steps)
-
-        noise = self.model_high.pipe.generate_noise(
-            (1, 16, (num_frames - 1) // 4 + 1, self.height // 8, self.width // 8),
+    ) -> tuple[torch.Tensor, dict | None]:
+        high_pipe = self.model_high.pipe
+        low_pipe = self.model_low.pipe
+        high_pipe.scheduler.set_timesteps(self.sample_steps)
+        low_pipe.scheduler.set_timesteps(self.sample_steps)
+        latent_channels = int(high_pipe.vae.model.z_dim)
+        latents = high_pipe.generate_noise(
+            (
+                1,
+                latent_channels,
+                (self.num_frames - 1) // 4 + 1,
+                self.height // high_pipe.vae.upsampling_factor,
+                self.width // high_pipe.vae.upsampling_factor,
+            ),
             seed=self.base_seed,
-        ).to(dtype=self.torch_dtype, device=self.high_device)
-        latents = noise
+            device=self.high_device,
+            dtype=torch.float32,
+        ).to(device=self.high_device, dtype=self.torch_dtype)
 
-        def _prepare_control_latents(target_device: str) -> torch.Tensor:
-            control_camera_video = plucker_embedding.to(
-                device=target_device,
-                dtype=self.torch_dtype,
-            )[0].permute([3, 0, 1, 2]).unsqueeze(0)
-            control_camera_latents = torch.concat(
-                [
-                    torch.repeat_interleave(control_camera_video[:, :, 0:1], repeats=4, dim=2),
-                    control_camera_video[:, :, 1:],
-                ],
-                dim=2,
-            ).transpose(1, 2)
-            bsz, frames_local, channels, height, width = control_camera_latents.shape
-            control_camera_latents = control_camera_latents.contiguous().view(
-                bsz, frames_local // 4, 4, channels, height, width
-            ).transpose(2, 3)
-            control_camera_latents = control_camera_latents.contiguous().view(
-                bsz, frames_local // 4, channels * 4, height, width
-            ).transpose(1, 2)
-            return control_camera_latents.to(device=target_device, dtype=self.torch_dtype)
-
-        control_latents_by_device = {
-            self.high_device: _prepare_control_latents(self.high_device),
+        devices = {self.high_device, self.low_device}
+        control_by_device = {
+            target: self._prepare_control_latents(plucker_embedding, target)
+            for target in devices
         }
-        if self.low_device != self.high_device:
-            control_latents_by_device[self.low_device] = _prepare_control_latents(self.low_device)
-
-        y_by_device = {self.high_device: y.to(dtype=self.torch_dtype, device=self.high_device)}
-        if self.low_device != self.high_device:
-            y_by_device[self.low_device] = y.to(dtype=self.torch_dtype, device=self.low_device)
-
-        context_pos_by_device = {
-            self.high_device: context_pos.to(dtype=self.torch_dtype, device=self.high_device),
+        y_by_device = {
+            target: y.to(device=target, dtype=self.torch_dtype)
+            for target in devices
         }
-        context_neg_by_device = {
-            self.high_device: context_neg.to(dtype=self.torch_dtype, device=self.high_device),
+        positive_by_device = {
+            target: context_pos.to(device=target, dtype=self.torch_dtype)
+            for target in devices
         }
-        if self.low_device != self.high_device:
-            context_pos_by_device[self.low_device] = context_pos.to(
-                dtype=self.torch_dtype,
-                device=self.low_device,
-            )
-            context_neg_by_device[self.low_device] = context_neg.to(
-                dtype=self.torch_dtype,
-                device=self.low_device,
-            )
+        negative_by_device = (
+            None
+            if context_neg is None
+            else {
+                target: context_neg.to(device=target, dtype=self.torch_dtype)
+                for target in devices
+            }
+        )
         final_prediction = None
 
-        for progress_id, _ in enumerate(tqdm(range(self.sample_steps))):
-            step_t = self.model_high.pipe.scheduler.timesteps[progress_id]
-            current_model = self.model_high if step_t.item() > self.timestep_boundary else self.model_low
-            current_device = self.high_device if current_model is self.model_high else self.low_device
-            t = step_t.unsqueeze(0).to(dtype=self.torch_dtype, device=current_device)
-            latents = latents.to(current_device)
-
-            noise_pred_posi, prediction = current_model.joint_forward(
+        for progress_id, step_t in enumerate(tqdm(high_pipe.scheduler.timesteps)):
+            use_high = float(step_t) > self.timestep_boundary
+            model = self.model_high if use_high else self.model_low
+            target = self.high_device if use_high else self.low_device
+            latents = latents.to(target)
+            timestep = step_t.unsqueeze(0).to(device=target, dtype=self.torch_dtype)
+            positive, prediction = model.joint_forward(
                 latents,
-                timestep=t,
-                context=context_pos_by_device[current_device],
-                y=y_by_device[current_device],
-                use_gradient_checkpointing=False,
-                camera_token=None,
-                control_camera_latents_input=control_latents_by_device[current_device],
-                uncond=False,
+                timestep=timestep,
+                context=positive_by_device[target],
+                y=y_by_device[target],
+                control_camera_latents_input=control_by_device[target],
                 return_prediction=progress_id == self.sample_steps - 1,
             )
-
-            if self.cfg_scale != 1.0 and context_neg is not None:
-                noise_pred_nega, _ = current_model.joint_forward(
-                    latents,
-                    timestep=t,
-                    context=context_neg_by_device[current_device],
-                    y=y_by_device[current_device],
-                    use_gradient_checkpointing=False,
-                    camera_token=None,
-                    control_camera_latents_input=control_latents_by_device[current_device],
-                    uncond=False,
-                )
-                noise_pred = noise_pred_nega + self.cfg_scale * (noise_pred_posi - noise_pred_nega)
+            if negative_by_device is None or self.cfg_scale == 1.0:
+                noise_prediction = positive
             else:
-                noise_pred = noise_pred_posi
-
-            latents = current_model.pipe.scheduler.step(
-                noise_pred,
-                current_model.pipe.scheduler.timesteps[progress_id],
-                latents,
-            )
+                negative, _ = model.joint_forward(
+                    latents,
+                    timestep=timestep,
+                    context=negative_by_device[target],
+                    y=y_by_device[target],
+                    control_camera_latents_input=control_by_device[target],
+                )
+                noise_prediction = negative + self.cfg_scale * (positive - negative)
+            latents = model.pipe.scheduler.step(noise_prediction, step_t.to(target), latents)
             final_prediction = prediction
-
         return latents, final_prediction
 
     def generate_video(
@@ -413,95 +257,81 @@ class FantasyWorldWan22Runner:
         using_scale: bool = True,
     ):
         neg_prompt = neg_prompt or ""
-
         with torch.no_grad():
             input_image = image.convert("RGB")
             camera_params = pad_camera_params_to_frames(camera_params, self.num_frames)
-            input_image_pt = torch.tensor(
+            input_image_tensor = torch.tensor(
                 np.array(input_image) / 255,
                 dtype=torch.float32,
                 device=self.moge_device,
             ).permute(2, 0, 1)
-
-            output = self.moge.infer(input_image_pt)
-            moge = {k: v.cpu().contiguous() for k, v in output.items()}
-
-            intrinsics = []
-            extrinsics = []
-            for camera in camera_params:
-                intrinsics.append(self._fw_utils.get_intrinsic_matrix(camera))
-                extrinsics.append(camera.w2c_mat)
-            intrinsics = torch.from_numpy(np.stack(intrinsics).astype(np.float32))
-            extrinsics = torch.from_numpy(np.stack(extrinsics).astype(np.float32))
-            extrinsics_4x4 = extrinsics.unsqueeze(0)
-
-            if using_scale:
-                first_intrinsic = intrinsics[0, :, :].unsqueeze(0)
-                first_extrinsic = extrinsics[0, :3, :].unsqueeze(0)
-                first_moge_world, first_moge_mask = self._fw_utils.batch_depth_to_world(
-                    prediction=moge,
-                    extrinsics=first_extrinsic,
-                    intrinsics=first_intrinsic,
+            moge_output = self.moge.infer(input_image_tensor)
+            moge = {key: value.cpu().contiguous() for key, value in moge_output.items()}
+            intrinsics = torch.from_numpy(
+                np.stack([self._fw_utils.get_intrinsic_matrix(camera) for camera in camera_params]).astype(
+                    np.float32
                 )
-                extrinsics_3x4 = extrinsics_4x4[:, :, :3, :]
+            )
+            extrinsics = torch.from_numpy(
+                np.stack([camera.w2c_mat for camera in camera_params]).astype(np.float32)
+            )
+            if using_scale:
+                first_world, first_mask = self._fw_utils.batch_depth_to_world(
+                    prediction=moge,
+                    extrinsics=extrinsics[0, :3, :].unsqueeze(0),
+                    intrinsics=intrinsics[0].unsqueeze(0),
+                )
                 extrinsics = self._fw_utils.normalize_scene(
-                    extrinsics=extrinsics_3x4,
-                    first_moge_world=first_moge_world.unsqueeze(0),
-                    first_moge_mask=first_moge_mask.unsqueeze(0),
+                    extrinsics=extrinsics.unsqueeze(0)[:, :, :3, :],
+                    first_moge_world=first_world.unsqueeze(0),
+                    first_moge_mask=first_mask.unsqueeze(0),
                 ).squeeze(0)
-
-            pose_enc = self._extri_intri_to_pose_encoding(
+            pose_encoding = self._extri_intri_to_pose_encoding(
                 extrinsics.unsqueeze(0),
                 intrinsics.unsqueeze(0),
                 [self.height, self.width],
                 pose_encoding_type="absT_quaR_FoV",
             ).squeeze(0)
             plucker_embedding = self.pose_processor.get_plucker_embedding_direct_from_cam_params(
-                pose_enc.unsqueeze(0),
+                pose_encoding.unsqueeze(0),
                 image_size=(self.height, self.width),
             ).to(dtype=self.torch_dtype)
 
-            inputs_shared, inputs_posi, inputs_nega = self.model_high.pipe(
-                prompt=prompt or "",
-                negative_prompt=neg_prompt,
-                seed=self.base_seed,
-                tiled=True,
-                input_image=input_image,
-                end_image=end_image,
-                height=self.height,
-                width=self.width,
-                num_frames=self.num_frames,
-                return_condition=True,
-            )
-            ctx_pos, ctx_neg = inputs_posi["context"], inputs_nega["context"]
-            y = inputs_shared["y"]
-
-        autocast_ctx = (
-            torch.autocast(device_type="cuda", dtype=self.torch_dtype)
-            if self.device.startswith("cuda")
-            else nullcontext()
-        )
-        with torch.no_grad(), autocast_ctx:
-            latent_video, prediction = self.generate_video_with_dual_models(
-                context_pos=ctx_pos,
-                context_neg=ctx_neg,
-                y=y,
-                plucker_embedding=plucker_embedding,
-            )
-            latent_video = latent_video.to(self.high_device)
-            frames = self.model_high.pipe.vae.decode(
-                latent_video,
-                device=self.high_device,
+            image_embedding = self.model_high.pipe.encode_image(
+                input_image,
+                end_image,
+                self.num_frames,
+                self.height,
+                self.width,
                 tiled=True,
                 tile_size=(30, 52),
                 tile_stride=(15, 26),
             )
+            y = image_embedding["y"]
+            context_pos = self.model_high.pipe.encode_prompt(prompt or "")["context"]
+            context_neg = self.model_high.pipe.encode_prompt(neg_prompt)["context"]
 
-        video = frames.squeeze(0).permute(1, 2, 3, 0).to(torch.float32).cpu()
-        video = (video + 1.0) / 2.0
-        video = (video * 255.0).clamp(0, 255)
-        frames_np_processed = video.numpy().astype(np.uint8)
-        return frames_np_processed, prediction
+        autocast_context = (
+            torch.autocast(device_type="cuda", dtype=self.torch_dtype)
+            if self.device.startswith("cuda")
+            else nullcontext()
+        )
+        with torch.no_grad(), autocast_context:
+            latent_video, prediction = self.generate_video_with_dual_models(
+                context_pos=context_pos,
+                context_neg=context_neg,
+                y=y,
+                plucker_embedding=plucker_embedding,
+            )
+            decoded = self.model_high.pipe.decode_video(
+                latent_video.to(self.high_device),
+                tiled=True,
+                tile_size=(30, 52),
+                tile_stride=(15, 26),
+            )
+        video = decoded.squeeze(0).permute(1, 2, 3, 0).to(torch.float32).cpu()
+        frames = ((video + 1.0) * 127.5).clamp(0, 255).numpy().astype(np.uint8)
+        return frames, prediction
 
 
 def build_wan22_runner(
@@ -525,10 +355,10 @@ def build_wan22_runner(
     low_model_device: Optional[str] = None,
     moge_device: Optional[str] = None,
     weight_dtype: torch.dtype = torch.bfloat16,
-):
-    runtime_root, runtime_handle = prepare_wan22_runtime_root(base_dir, lora_dir)
-    runner = FantasyWorldWan22Runner(
-        ckpt_dir=runtime_root,
+) -> FantasyWorldWan22Runner:
+    return FantasyWorldWan22Runner(
+        base_dir=base_dir,
+        lora_dir=lora_dir,
         model_ckpt_high=model_ckpt_high,
         model_ckpt_low=model_ckpt_low,
         moge_path=moge_path,
@@ -547,5 +377,6 @@ def build_wan22_runner(
         moge_device=moge_device,
         weight_dtype=weight_dtype,
     )
-    runner._runtime_handle = runtime_handle
-    return runner
+
+
+__all__ = ["FantasyWorldWan22Runner", "build_wan22_runner"]

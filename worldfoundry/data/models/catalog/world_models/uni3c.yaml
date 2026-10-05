@@ -13,6 +13,8 @@ source:
   official_repo_url: https://github.com/alibaba-damo-academy/Uni3C
   license: Apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2504.14899
+  project_page: https://ewrfcas.github.io/Uni3C/
   github:
     url: https://github.com/alibaba-damo-academy/Uni3C
     revision: 75ed6e2180316b7f07398e4e88ea8bdba3e6970c
@@ -44,11 +46,34 @@ runtime_profile: runtime-profile:uni3c
 pipeline_binding: uni3c
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 runner_parity:
-  status: implemented_checkpoint_pending
+  status: checkpoint_gpu_validated
   notes:
   - Static compilation, route resolution, local asset wiring, and offline command planning are covered locally.
-  - Full GPU artifact parity remains pending staged 14B checkpoints and a CUDA 12.4 inference run.
+  - The default PCDController camera route completed real H100 Workspace inference with the official Uni3C controller and Wan2.1-I2V-14B checkpoints.
+  - A full 81-frame H.264 camera run at 688x512 and 16 FPS decoded completely using a real toy photograph and a verified 15-degree input-control trajectory. The generated view moved smoothly; output angle was not calibrated.
+  - Input point-cloud controls used WorldFoundry's Torch renderer because the installed PyTorch3D extension was incompatible; official DepthPro, Tracer, camera construction, and Uni3C stage-two inference were used.
+  - The unified camera-plus-human route remains outside this checkpoint-backed validation claim.
 output_artifacts:
 - generated_video
 catalog_category: world_models
 catalog_scope: World-model catalog entries with in-tree inference runtimes.
+docs:
+  publisher: Alibaba DAMO Academy
+  publisher_kind: company
+  publisher_zh: 阿里巴巴达摩院
+  overview: 'Uni3C from Alibaba DAMO Academy unifies camera control and human-motion control for image-to-video generation: the PCDController stage steers the camera while the unified stage combines camera plus human motion (RealisDance-DiT). WorldFoundry vendors both official stage-two inference paths in-tree, with public Apache-2.0 checkpoints (ewrfcas/Uni3C, theFoxofSky/RealisDance-DiT) on top of the Wan2.1-I2V-14B-720P base.'
+  overview_zh: 阿里巴巴达摩院的 Uni3C 将相机控制与人体动作控制统一到图生视频中：PCDController 阶段负责相机操控，统一阶段结合相机与人体动作（RealisDance-DiT）。WorldFoundry 已将两条官方第二阶段推理路径内置树内，公开 Apache-2.0 checkpoint（ewrfcas/Uni3C、theFoxofSky/RealisDance-DiT）构建在 Wan2.1-I2V-14B-720P 基座之上。
+  architecture: 'Three checkpoint roles are recorded: ewrfcas/Uni3C as pcd_controller, Wan-AI/Wan2.1-I2V-14B-720P-Diffusers as camera_base, and theFoxofSky/RealisDance-DiT as the unified camera-plus-human model. Pre-rendered control bundles stay explicit runtime inputs; preprocessing is not silently substituted.'
+  architecture_zh: 仓库记录三个 checkpoint 角色：ewrfcas/Uni3C 为 pcd_controller、 Wan-AI/Wan2.1-I2V-14B-720P-Diffusers 为 camera_base、theFoxofSky/RealisDance-DiT 为相机+人体统一模型。预渲染控制包保持为显式运行时输入；预处理不会被隐式替换。
+  usage_notes: Choose the camera-only or unified camera-plus-human route and provide the matching pre-rendered control bundle. The default PCDController camera route is checkpoint-backed and GPU-validated on H100; the unified camera-plus-human route still requires its own checkpoint-backed validation.
+  usage_notes_zh: 按需选择仅相机或相机+人体统一路由，并提供匹配的预渲染控制包。默认 PCDController 相机路线已使用正式 checkpoint 在 H100 上完成 GPU 验证；相机+人体统一路线仍需单独完成 checkpoint 支撑的验证。
+  limitations:
+  - The recorded GPU validation covers the default PCDController camera route, not the unified camera-plus-human route.
+  - Control bundles must be pre-rendered; the pipeline does not generate them.
+  limitations_zh:
+  - 已记录的 GPU 验证覆盖默认 PCDController 相机路线，不覆盖相机+人体统一路线。
+  - 控制包需预先渲染；pipeline 不代为生成。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-trajectory adherence under explicit control.
+    reason_zh: 显式控制下的相机轨迹跟随。

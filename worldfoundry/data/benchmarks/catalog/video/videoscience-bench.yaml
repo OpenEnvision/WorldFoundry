@@ -1,5 +1,7 @@
 id: videoscience-bench
 name: VideoScience-Bench
+publisher: UC San Diego
+publisher_kind: university
 benchmark_kind:
 - text-to-video
 - scientific-reasoning
@@ -80,6 +82,15 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  scoring:
+    engines: [in_tree]
+    hooks:
+      in_tree: worldfoundry.evaluation.tasks.execution.runners.videoscience_bench.videoscience_bench_in_tree_evaluator:IN_TREE_CONFIG
+  official_script: worldfoundry/evaluation/tasks/execution/runners/videoscience_bench/run_videoscience_bench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.videoscience_bench.run_videoscience_bench_official_runner
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoScienceBenchContract
   validation_command:
   - worldfoundry-eval
@@ -119,6 +130,7 @@ runner:
   - WORLDFOUNDRY_VIDEOSCIENCE_BENCH_RESULTS_PATH
 integration:
   status: integrated
+  tier: model_backed
   blocked_reasons:
   - Official repository/source metadata and the official-result normalizer are integrated.
   - Full validation requires generated videos or rollouts for the official prompt/task suite.

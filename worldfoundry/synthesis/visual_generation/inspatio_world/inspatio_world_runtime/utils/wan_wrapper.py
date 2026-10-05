@@ -6,11 +6,11 @@ from torch import nn
 
 import time
 from worldfoundry.core.nn import FlowMatchScheduler, SchedulerInterface
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.t5 import umt5_xxl
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.tokenizers import HuggingfaceTokenizer
-from worldfoundry.base_models.diffusion_model.video.wan.models.causal_camera_wan2p1 import CausalWanModel
-from worldfoundry.base_models.diffusion_model.video.wan.models.camera_wan2p1 import WanModel
-from worldfoundry.base_models.diffusion_model.video.wan.vae.camera_wan2p1 import _video_vae
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import umt5_xxl
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import HuggingfaceTokenizer
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.causal_camera_21 import CausalWanModel
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.camera_21 import WanModel
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.camera_21 import _video_vae
 import os
 import torch.distributed.checkpoint as dcp
 from torch.distributed.checkpoint.filesystem import FileSystemReader
@@ -226,17 +226,13 @@ class WanDiffusionWrapper(torch.nn.Module):
         # Initialize primary model
         if is_causal:
             config = CausalWanModel.load_config(config_path)
-            config = dict(config)
-            config["in_dim"] = in_dim
             with torch.device("meta"):
-                self.model = CausalWanModel(**config)
+                self.model = CausalWanModel.from_config(config, in_dim=in_dim)
             self.model.to_empty(device='cpu')
         else:
             config = WanModel.load_config(config_path)
-            config = dict(config)
-            config["in_dim"] = in_dim
             with torch.device("meta"):
-                self.model = WanModel(**config)
+                self.model = WanModel.from_config(config, in_dim=in_dim)
             self.model.to_empty(device='cpu')
 
         # Initialize secondary model for dual-model mode (Wan2.2)
@@ -247,7 +243,7 @@ class WanDiffusionWrapper(torch.nn.Module):
         if dual_model and not is_causal:
             # Use same config for model_2
             with torch.device("meta"):
-                self.model_2 = WanModel(**config)
+                self.model_2 = WanModel.from_config(config, in_dim=in_dim)
             self.model_2.to_empty(device='cpu')
 
         if rank == 0:

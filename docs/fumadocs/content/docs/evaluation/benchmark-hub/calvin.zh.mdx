@@ -1,132 +1,27 @@
 ---
 title: CALVIN
-description: CALVIN — 指标、依赖与运行命令。
+description: "长时程语言条件桌面评测（RA-L 2022）。官方协议是在 A/B/C 上训练、在 D 上测试后，报告链长度 1–5 的成功率。"
 ---
 
-## 简介
+CALVIN（Composing Actions from Language and Vision）是弗莱堡大学的长时程、语言条件操作评测（IEEE RA-L 2022）。策略在 **PyBullet** 桌面上必须串起最多**五条**语言指令。四个环境配置 **A/B/C/D** 测零样本迁移：标志性划分是在 A/B/C 上训练，在未见过的 **D** 上评测。论文报告的是每个链长度的成功率，以及**平均完成的指令数**，不是单一的 episode 成败比特。
 
+论文：[CALVIN](https://ieeexplore.ieee.org/document/9788026)（项目 [calvin.cs.uni-freiburg.de](http://calvin.cs.uni-freiburg.de/)）。代码：[mees/calvin](https://github.com/mees/calvin)（MIT）。
 
+WorldFoundry 是**官方结果导入器**。你在上游跑序列评测器，再归一化导出。模拟器、数据集根目录和策略权重遵循官方 CALVIN 文档。仓库镜像：`cache/vla_va_wam/repos/mees--calvin`。
 
-CALVIN external benchmark task manifest for long-horizon language-conditioned manipulation.
+<BenchmarkPageSections id="calvin" locale="zh" />
 
-
-
-## 指标
-
-CALVIN external benchmark task manifest for long-horizon language-conditioned manipulation.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/calvin.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `sequence_success` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `completion` | CALVIN 长时链式语言条件子任务连续完成比例（无环境重置）。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `giga-world-policy-py311`。
-- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
-- CALVIN 官方 rollout 需要数据集 split、policy checkpoint 和 long-horizon evaluator 输出；轻量 preflight 不启动仿真/评测。
-
-### 测评数据
-
-- WorldFoundry tracks the upstream CALVIN runtime and normalizes official result files; dataset materialization is handled outside this manifest.
-- 待测模型输出目录：设置 `WORLDFOUNDRY_CALVIN_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/mees--calvin`
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_CALVIN_ROOT`
-- `WORLDFOUNDRY_CALVIN_DATASET_ROOT`
-- `WORLDFOUNDRY_CALVIN_RESULTS_PATH`
-
-### 环境检查
-
-```bash
-PYTHONPATH=${WORLDFOUNDRY_CACHE_DIR}/repos/mees--calvin:src ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-giga-world-policy-py311/bin/python -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile calvin --manifest worldfoundry/data/benchmarks/runtime_profiles/official/calvin.yaml --output-dir tmp/worldfoundry_preflight/calvin --json
-```
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id calvin \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/calvin/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/calvin/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id calvin \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/calvin/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id calvin --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official CALVIN repository checkout
-- CALVIN dataset root
-- Benchmark-specific policy checkpoint
-- Official long-horizon sequence evaluation command
-
-### Environment
-
-- `WORLDFOUNDRY_CALVIN_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-
-
+默认导入路径：`WORLDFOUNDRY_CALVIN_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/calvin.yaml`。产物：`scorecard.json`（主键 `success_rate`；另有 `sequence_success`、`completion`）与 `raw_results.jsonl`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

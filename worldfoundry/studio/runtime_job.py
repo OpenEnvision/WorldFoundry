@@ -9,8 +9,8 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from .catalog import find_entry
-from .execution import (
+from worldfoundry.studio.inference.catalog import find_entry
+from worldfoundry.studio.inference.execution import (
     TORCHRUN_DISTRIBUTED_ENV,
     TORCHRUN_LINGBOT_FAST_ENV,
     StudioManager,
@@ -22,7 +22,6 @@ from .execution import (
     ensure_torchrun_lingbot_fast_runtime,
     shutdown_torchrun_lingbot_fast_runtime,
 )
-
 
 SECRET_ENV_REF_KEY = "__worldfoundry_secret_env__"
 
@@ -199,14 +198,20 @@ def _run_manager_payload(args: argparse.Namespace) -> int:
         and _torchrun_world_size() > 1
     )
     if torchrun_distributed:
-        return _run_distributed_manager_payload(args, manager, run_kwargs)
+        try:
+            return _run_distributed_manager_payload(args, manager, run_kwargs)
+        finally:
+            manager.close()
 
     if torchrun_lingbot and _torchrun_rank() != 0:
         try:
             ensure_torchrun_lingbot_fast_runtime()
             manager.run_torchrun_worker_loop()
         finally:
-            shutdown_torchrun_lingbot_fast_runtime()
+            try:
+                shutdown_torchrun_lingbot_fast_runtime()
+            finally:
+                manager.close()
         return 0
 
     try:
@@ -221,6 +226,7 @@ def _run_manager_payload(args: argparse.Namespace) -> int:
                 manager.shutdown_torchrun_workers()
             finally:
                 shutdown_torchrun_lingbot_fast_runtime()
+        manager.close()
 
     if torchrun_distributed and _torchrun_rank() != 0:
         return 0
@@ -260,6 +266,7 @@ def _run_manager_worker(args: argparse.Namespace) -> int:
             continue
         if str(payload.get("command") or "").strip().lower() == "shutdown":
             print(json.dumps({"status": "shutdown"}, sort_keys=True), flush=True)
+            manager.close()
             return 0
 
         result_path = Path(str(payload.get("result_path") or ""))
@@ -310,6 +317,7 @@ def _run_manager_worker(args: argparse.Namespace) -> int:
                 },
             )
             traceback.print_exc()
+    manager.close()
     return 0
 
 

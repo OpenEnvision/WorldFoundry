@@ -5,8 +5,10 @@ environment_id: needs-rlbench-pyrep-coppeliasim-env
 id: rlbench
 name: RLBench
 docker:
-  image: ghcr.io/allenai/vla-evaluation-harness/rlbench:latest
-  source_image: ghcr.io/allenai/vla-evaluation-harness/rlbench:latest
+  image: ghcr.io/allenai/vla-evaluation-harness/rlbench@sha256:87e57e8061cd7b11aec4d2de51e09709742fbc406d535f8a0a948abecb5cf1b6
+  digest: sha256:87e57e8061cd7b11aec4d2de51e09709742fbc406d535f8a0a948abecb5cf1b6
+  source_image: ghcr.io/allenai/vla-evaluation-harness/rlbench@sha256:87e57e8061cd7b11aec4d2de51e09709742fbc406d535f8a0a948abecb5cf1b6
+  platform: linux/amd64
   python_env: rlbench
   runtime: nvidia
   xvfb: true

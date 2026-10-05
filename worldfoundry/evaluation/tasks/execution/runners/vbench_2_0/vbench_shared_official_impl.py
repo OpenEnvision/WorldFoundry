@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+
+
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+
 import argparse
 import json
 import math
@@ -13,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from worldfoundry.core.io.paths import cache_root_path
+from worldfoundry.core.execution.process import read_text_tail, run_logged_subprocess
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
 from worldfoundry.evaluation.tasks.execution.framework.io import env_path, utc_now_iso, write_json, write_jsonl
 from worldfoundry.evaluation.utils import REPO_ROOT
@@ -25,7 +30,6 @@ IN_TREE_VBENCH2_ROOT = RUNNERS_ROOT / "vbench_2_0" / "runtime"
 DEFAULT_VBENCH_ROOT = IN_TREE_VBENCH_PLUS_PLUS_ROOT
 VBENCH_FULL_INFO_ASSET = bundled_benchmark_asset("vbench", "VBench_full_info.json")
 VBENCH_PROMPTS_ASSET_ROOT = bundled_benchmark_asset("vbench", "prompts")
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 VIDEO_EXTENSIONS = frozenset({".mp4", ".gif", ".mov", ".mkv", ".avi", ".webm", ".m4v"})
 VBENCH2_HF_DATASETS = (
     "Vchitect/VBench-2.0_sampled_videos",
@@ -1238,23 +1242,21 @@ def run_series(args: argparse.Namespace) -> dict[str, Any]:
     shim_dir = ensure_torchvision_write_video_shim(output_dir)
     command = build_official_command(args, upstream_output_dir)
     start = time.monotonic()
-    completed = subprocess.run(
+    completed = run_logged_subprocess(
         command,
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
         cwd=args.vbench_root,
         env=vbench_subprocess_env(args, shim_dir=shim_dir),
-        capture_output=True,
-        text=True,
         timeout=args.timeout,
-        check=False,
+        start_new_session=False,
     )
     duration_seconds = time.monotonic() - start
-    stdout_path.write_text(completed.stdout, encoding="utf-8")
-    stderr_path.write_text(completed.stderr, encoding="utf-8")
     try:
         upstream_results_path = latest_results(upstream_output_dir)
     except FileNotFoundError as exc:
-        stderr_tail = "\n".join(completed.stderr.splitlines()[-20:])
-        stdout_tail = "\n".join(completed.stdout.splitlines()[-20:])
+        stderr_tail = read_text_tail(stderr_path)
+        stdout_tail = read_text_tail(stdout_path)
         detail = stderr_tail or stdout_tail or "no upstream stdout/stderr"
         raise FileNotFoundError(f"{exc}; returncode={completed.returncode}; upstream_tail={detail}") from exc
     raw_results = load_results(upstream_results_path)

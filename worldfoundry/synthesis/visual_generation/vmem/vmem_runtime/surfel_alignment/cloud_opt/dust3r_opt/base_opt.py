@@ -37,7 +37,20 @@ from ..commons import (
 from . import init_im_poses as init_fun
 from pathlib import Path
 from scipy.spatial.transform import Rotation
-from evo.core.trajectory import PosePath3D, PoseTrajectory3D
+
+try:
+    from evo.core.trajectory import PosePath3D, PoseTrajectory3D
+except ImportError:
+    class PoseTrajectory3D:
+        """Minimal trajectory container used when the optional evo package is absent."""
+
+        def __init__(self, positions_xyz, orientations_quat_wxyz, timestamps):
+            self.positions_xyz = np.asarray(positions_xyz)
+            self.orientations_quat_wxyz = np.asarray(orientations_quat_wxyz)
+            self.timestamps = np.asarray(timestamps)
+            self.num_poses = len(self.positions_xyz)
+
+    PosePath3D = PoseTrajectory3D
 
 
 def adjust_learning_rate_by_lr(optimizer, lr):

@@ -65,7 +65,27 @@ class InternLM2Tokenizer(PreTrainedTokenizer):
         self.add_eos_token = add_eos_token
         self.decode_with_prefix_space = decode_with_prefix_space
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
+        try:
+            self.sp_model.Load(vocab_file)
+        except RuntimeError as exc:
+            # The released GO-1 tokenizer contains a literal NUL piece. Newer
+            # SentencePiece rejects that piece while loading the model, even
+            # though the other 92,543 pieces and their IDs are valid. Replace
+            # only that unusable piece in memory; the checkpoint stays intact
+            # and every token ID used by normal instructions is preserved.
+            if "piece must not include null character" not in str(exc):
+                raise
+            from sentencepiece import sentencepiece_model_pb2
+
+            model = sentencepiece_model_pb2.ModelProto()
+            with open(vocab_file, "rb") as source:
+                model.ParseFromString(source.read())
+            null_pieces = [piece for piece in model.pieces if piece.piece == "\x00"]
+            replacement = "\ue000"
+            if len(null_pieces) != 1 or any(piece.piece == replacement for piece in model.pieces):
+                raise
+            null_pieces[0].piece = replacement
+            self.sp_model.LoadFromSerializedProto(model.SerializeToString())
         self._no_prefix_space_tokens = None
         super().__init__(
             bos_token=bos_token,

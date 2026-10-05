@@ -72,14 +72,14 @@ def _as_bool(value: Any, default: bool = False) -> bool:
 
 def _resolve_device(torch: Any, requested: str) -> str:
     del torch
-    from worldfoundry.core.device import resolve_inference_device
+    from worldfoundry.core.execution.device import resolve_inference_device
 
     return resolve_inference_device(requested or "cuda", allow_cpu_fallback=True)
 
 
 def _resolve_dtype(torch: Any, requested: str | None, device: str) -> tuple[Any, str]:
     del torch
-    from worldfoundry.core.device import resolve_inference_dtype
+    from worldfoundry.core.execution.device import resolve_inference_dtype
 
     dtype = resolve_inference_dtype(device, requested or "auto")
     return dtype, str(dtype).removeprefix("torch.")

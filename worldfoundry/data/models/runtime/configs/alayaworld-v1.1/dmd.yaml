@@ -1,0 +1,118 @@
+sample:
+  fps: 24.0
+  height: 544
+  temporal_stride: 8
+  width: 960
+layout:
+  condition:
+    i2v_prob: 1.0
+    type: nearby
+    v2v_prob: 0.0
+    v2v_ratio_max: 0.6
+    v2v_ratio_min: 0.2
+  history_latent_frames: 4
+  k4_use_valid_starts: false
+  max_gap_sec: 0.0
+  output:
+    latent_frames:
+    - 4
+    - 30
+    probs:
+    - 1.0
+    - 0.0
+  sink_latent_frames: 1
+  sink_remote: false
+  sink_remote_min_distance: 8
+memory:
+  compress_h: 2
+  compress_t: 1
+  compress_w: 2
+  drop_prob: 0.0
+  gate_init: 0.5
+  lr_compress_h: 2
+  lr_compress_t: 1
+  lr_compress_w: 2
+  use_lr_branch: true
+  use_self_attn: true
+spatial_memory:
+  cache_stride: 1
+  constant_depth: 1.0
+  context_mode: vigeo_prefix_last_frame
+  depth_backend: vigeo
+  downsample: 4
+  dropout: 0.0
+  enabled: true
+  include_nearby: true
+  include_sink: false
+  num_context_frames: 10
+  require_full_context: true
+  retrieval_depth_threshold: 0.1
+  retrieval_max_coverage: true
+  retrieval_views: 1
+  skip_recent_latents: 1
+  use_warped_context: true
+  vigeo_cache_budget: 262144
+  vigeo_device: auto
+  vigeo_generated_source_pose_mode: aligned_vigeo
+  vigeo_num_tokens: 1369
+  vigeo_prefix_frames: 24
+  vigeo_single_frame_scale: 1.0
+  vigeo_stream_chunk_size: 16
+runtime:
+  attention_type: pytorch
+  compact_spatial_tokens: true
+  dtype: bf16
+  norm_by_fps: true
+  norm_by_max_frames: true
+  positional_embedding_max_pos: 20,2048,2048
+  vae_chunk_size: 33
+  vae_decode_chunk_latents: 161
+validation:
+  cfg_scale: 1.0
+  dynamic_rounds: false
+  enabled: true
+  max_samples: 1
+  modes:
+    custom_i2v:
+      control: []
+      dataset:
+        source: custom_i2v
+        image_dir: outputs/infer_i2v_camera/inputs/images
+        captions_json: outputs/infer_i2v_camera/inputs/captions.json
+        pose_jsonl: outputs/infer_i2v_camera/inputs/pose.jsonl
+        pose_offset: 0
+      layout:
+        condition: i2v
+        condition_latent_frames: 1
+        height: 544
+        width: 960
+        history_latent_frames: 4
+        max_gap_sec: 0.0
+        output_latent_frames: 4
+      memory_start_round: 1
+      rollout_rounds: 5
+  rescale_scale: 0.0
+  sampling_steps: 4
+  save_joystick: false
+  save_videos: true
+  scheduler: uniform
+  stg_blocks: []
+  stg_scale: 1.0
+  video_history_latent_frames: 4
+  vigeo_handoff_mode: direct_latent
+  vigeo_pred_decode_mode: chunk
+sigma_shift:
+  adaptive_shift_frame_hi: 121
+  adaptive_shift_frame_lo: 8
+  adaptive_shift_m_hi: 30.0
+  adaptive_shift_m_lo: 3.0
+  adaptive_sigma_shift: true
+control:
+  candidates:
+  - []
+  probs:
+  - 1.0
+student_adapter:
+  enabled: true
+  rank: 256
+  alpha: 256

@@ -1,126 +1,27 @@
 ---
 title: BEHAVIOR-1K
-description: BEHAVIOR-1K — metrics, requirements, and run commands.
+description: "1,000 household activities in OmniGibson, specified in BDDL. WorldFoundry imports official result exports; it does not run OmniGibson."
 ---
 
-## About
+BEHAVIOR-1K is Stanford Vision & Learning Lab's human-centered embodied benchmark: **1,000** everyday activities (cleaning, cooking, tidying) chosen from human time-use surveys, written in the **BDDL** predicate language, and simulated in **OmniGibson** with fluids, object states, and household physics. Success is **logical goal satisfaction**, not a pixel score. **Subgoal** satisfaction is the partial-credit signal.
 
+Paper: [BEHAVIOR-1K](https://arxiv.org/abs/2403.09227). Project: [behavior.stanford.edu](https://behavior.stanford.edu/). Simulator / code: [StanfordVL/OmniGibson](https://github.com/StanfordVL/OmniGibson) (`upstream_terms` in this catalog).
 
+WorldFoundry **imports** official OmniGibson result exports. It does not vendor OmniGibson, the 1,000 activity definitions, or policy checkpoints. Those follow Stanford's documentation.
 
-BEHAVIOR-1K external benchmark manifest for household embodied policy rollouts.
+<BenchmarkPageSections id="behavior1k" locale="en" />
 
-
-
-## Metrics
-
-BEHAVIOR-1K external benchmark manifest for household embodied policy rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/behavior1k.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `episode_success` | Share of episodes or tasks that complete successfully. |
-| `subgoal_success` | Share of episodes or tasks that complete successfully. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `worldfoundry-unified-cu128`.
-- **Separate setup:** this benchmark expects a dedicated conda env rather than the unified runtime.
-- WorldFoundry provides the native contract, result normalizer, and in-tree simulator wrapper; full rollout execution still depends on the upstream OmniGibson runtime.
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_BEHAVIOR1K_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/behavior1k`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/StanfordVL--OmniGibson`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_BEHAVIOR1K_ROOT`
-- `WORLDFOUNDRY_BEHAVIOR1K_RESULTS_PATH`
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id behavior1k \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/behavior1k/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/behavior1k/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id behavior1k \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/behavior1k/official-run \
-  --json
-```
-
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id behavior1k --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_BEHAVIOR1K_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+Optional `WORLDFOUNDRY_BEHAVIOR1K_ROOT` points at a local OmniGibson / activity root. Default import path: `WORLDFOUNDRY_BEHAVIOR1K_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/behavior1k.yaml`. Outputs: `scorecard.json` (primary `success_rate`; also `subgoal_success`), `raw_results.jsonl`, and `evaluation/summary.json`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

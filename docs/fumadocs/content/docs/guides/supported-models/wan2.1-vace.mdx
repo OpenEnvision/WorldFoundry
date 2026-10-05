@@ -1,0 +1,28 @@
+---
+title: "Wan2.1 VACE"
+description: "Wan2.1 all-in-one create/edit member: reference images, V2V, and mask/control in one native Wan assembly."
+modelId: "wan2.1-vace"
+pageSource: authored
+---
+
+Wan2.1 VACE is the all-in-one video creation and editing member of the Wan2.1 family: reference-image guidance, video-to-video editing, and mask/control-conditioned generation in one checkpoint. WorldFoundry assembles it from canonical Wan roles; image references, source video/mask conditions, and precomputed VACE context tensors are all supported without an official-runtime backend.
+
+<ModelPaperFigures modelId="wan2.1-vace" locale="en" />
+
+<ModelCommandBuilder modelId="wan2.1-vace" locale="en" />
+
+## What it is for
+
+Start on `wan2.1-vace`. Launch `worldfoundry-eval run wan2.1-vace`. Use this card for reference-image create/edit, V2V, and mask/control — not the plain Wan2.1 T2V backbone.
+
+[VBench](/docs/evaluation/benchmark-hub/vbench) is the listed quality suite.
+
+## Runtime contract
+
+Required `prompt`; optional `image` / `video`. Native defaults: **1280×720, 81 frames, 50 steps, guidance 5.0**. Artifact: `wan2.1-vace.mp4`. Image references, source video/mask conditions, and precomputed VACE context tensors are supported without an official-runtime backend.
+
+## Running in WorldFoundry
+
+Unified `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `Wan-AI/Wan2.1-VACE-14B` or `Wan-AI/Wan2.1-VACE-1.3B-diffusers`. Status: **Runner parity pending** for full checkpoint visual parity. Prepare masks and references before launch.
+
+<ModelRelatedRecipes modelId="wan2.1-vace" locale="en" />

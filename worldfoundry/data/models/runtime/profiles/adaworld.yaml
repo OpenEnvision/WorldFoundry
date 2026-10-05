@@ -7,24 +7,28 @@ groups:
 - robotics
 source_repos:
 - url: https://github.com/Little-Podi/AdaWorld
+  revision: fe3701e607d025376b54aad28d04121f592ddbb3
+checkpoints:
+- repo_id: Little-Podi/AdaWorld
+  role: adaworld_checkpoint
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Little-Podi--AdaWorld/adaworld.safetensors
 input_schema:
-  prompt: true
-  image: true
+  prompt: false
+  image: false
   video: true
-  actions:
-  - world_action
-  - robot_action
-artifact_kind: generated_world
+  actions: []
+artifact_kind: generated_video
 artifact_filename: adaworld.mp4
 execution:
-  backend_stage: source_only_unavailable
-  runtime_status: studio_unavailable_official_env_and_task_assets_required
-  integration_status: blocked
-  pipeline_binding: null
+  backend_stage: in_tree_runtime_manifest
+  runtime_status: checkpoint_backed_gpu_inference_verified_synthetic_video
+  integration_status: runtime_ported
+  pipeline_binding: adaworld
 integration:
-  status: blocked
+  status: runtime_ported
 notes:
-- AdaWorld source is vendored in-tree under synthesis/visual_generation/world_model/adaworld.
-- Local checkpoints may exist, but official AdaWorld dependencies and task/demo video assets are not reproducibly runnable
-  from the unified Studio environment.
-- AdaWorld is hidden from release-facing Studio inference until runnable parity is restored.
+- AdaWorld's in-tree official FDM runner accepts a source video and the released adaworld.safetensors checkpoint.
+- The released main checkpoint includes the active OpenCLIP and LAM encoder weights; its additional LAM decoder tensors
+  are unused by the inference-only runtime.
+- A four-frame 256x256, two-step synthetic-video probe completed through the public pipeline and matched the direct
+  official in-tree runner byte-for-byte. This checks inference wiring, not task quality or long-horizon behavior.

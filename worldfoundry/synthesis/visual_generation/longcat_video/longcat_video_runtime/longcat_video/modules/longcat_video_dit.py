@@ -13,7 +13,7 @@ from diffusers.models.modeling_utils import ModelMixin
 from safetensors.torch import load_file
 
 from .lora_utils import create_lora_network
-from worldfoundry.core.distributed import context_parallel_util
+from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
 from .attention import Attention, MultiHeadCrossAttention
 from .blocks import TimestepEmbedder, CaptionEmbedder, PatchEmbed3D, FeedForwardSwiGLU, FinalLayer_FP32, LayerNorm_FP32, modulate_fp32
 

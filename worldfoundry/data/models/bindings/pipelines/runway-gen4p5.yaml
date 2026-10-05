@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: runway-gen4p5
+model_id: runway-gen4p5
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.runway.pipeline_runway_gen4p5:RunwayGen4p5Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+
+
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+
 import argparse
 import json
 import os
@@ -10,16 +14,20 @@ import time
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.evaluation.utils import REPO_ROOT
-
-from worldfoundry.runtime.env import resolve_hf_cache_dir  # type: ignore[reportMissingImports]  # noqa: E402
+from worldfoundry.core.execution.process import run_logged_subprocess
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
-from worldfoundry.evaluation.tasks.execution.framework.io import env_path, load_json, utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.io import (
+    env_path,
+    load_json,
+    utc_now_iso,
+    write_json,
+    write_jsonl,
+)
+from worldfoundry.runtime.env import resolve_hf_cache_dir  # type: ignore[reportMissingImports]  # noqa: E402
 
 DEFAULT_WORLDMODELBENCH_ROOT = Path(__file__).resolve().parent / "runtime"
 WORLDMODELBENCH_HF_CACHE_DIR = "datasets--Efficient-Large-Model--worldmodelbench"
 WORLDMODELBENCH_MANIFEST_ASSET = bundled_benchmark_asset("worldmodelbench", "worldmodelbench.json")
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"})
 
 METRIC_ALIASES = {
@@ -458,7 +466,11 @@ def normalize_worldmodelbench_results(
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "run": {
-            "status": "official_verified" if returncode == 0 and available_count and shape_ok else "failed",
+            "status": (
+                "official_verified" if official_verified
+                else "official_results_imported" if normalization_ok
+                else "failed"
+            ),
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_worldmodelbench_official_runner",
             "command": command,
@@ -600,18 +612,16 @@ def run_official_worldmodelbench(args: argparse.Namespace) -> dict[str, Any]:
     if manifest_path is not None:
         env["WORLDFOUNDRY_WORLDMODELBENCH_MANIFEST"] = str(manifest_path)
     start = time.monotonic()
-    completed = subprocess.run(
+    completed = run_logged_subprocess(
         command,
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
         cwd=runtime_root,
         env=env,
-        capture_output=True,
-        text=True,
         timeout=args.timeout,
-        check=False,
+        start_new_session=False,
     )
     duration_seconds = time.monotonic() - start
-    stdout_path.write_text(completed.stdout, encoding="utf-8")
-    stderr_path.write_text(completed.stderr, encoding="utf-8")
 
     results_path = upstream_results_path(save_name, args.cot)
     if results_path.is_file():

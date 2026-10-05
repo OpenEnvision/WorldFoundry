@@ -1,13 +1,11 @@
 from ..model_manager import ModelManager
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.model import WanModel
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_text_encoder import WanTextEncoder
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import WanModel
+from worldfoundry.base_models.diffusion_model.models.encoders.wan import WanImageEncoder, WanPrompter, WanTextEncoder
 from worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_2_runtime.extension_modules.wanx_vae.wanx_vae import (
     WanVAE as WanVideoVAE,
 )
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_image_encoder import WanImageEncoder
-from worldfoundry.base_models.diffusion_model.diffsynth.schedulers.flow_match import FlowMatchScheduler
-from worldfoundry.base_models.diffusion_model.diffsynth.diffusion.base_pipeline import BasePipeline
-from worldfoundry.base_models.diffusion_model.diffsynth.prompters.wan_prompter import WanPrompter
+from worldfoundry.core.nn import FlowMatchScheduler
+from worldfoundry.base_models.diffusion_model.runners import StagedDiffusionPipeline
 import torch, os
 from einops import rearrange
 import numpy as np
@@ -16,12 +14,12 @@ from tqdm import tqdm
 from typing import Optional
 
 from worldfoundry.core.vram import enable_vram_management, AutoWrappedModule, AutoWrappedLinear
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.t5 import T5RelativeEmbedding, T5LayerNorm
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.model import WanRMSNorm, sinusoidal_embedding_1d
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.vae import RMS_norm, CausalConv3d, Upsample
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import T5RelativeEmbedding, T5LayerNorm
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import WanRMSNorm, sinusoidal_embedding_1d
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import RMS_norm, CausalConv3d, Upsample
 
 
-class WanVideoReCamMasterPipeline(BasePipeline):
+class WanVideoReCamMasterPipeline(StagedDiffusionPipeline):
 
     def __init__(self, device="cuda", torch_dtype=torch.float16, tokenizer_path=None):
         super().__init__(device=device, torch_dtype=torch_dtype)

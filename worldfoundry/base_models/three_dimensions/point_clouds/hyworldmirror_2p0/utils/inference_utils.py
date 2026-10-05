@@ -28,7 +28,7 @@ from .save_utils import (
     save_gs_ply, save_points_ply, save_camera_params,
 )
 from .video_utils import video_to_image_frames, video_to_image_frames_new
-from worldfoundry.core.io.artifacts import download_file_from_url, segment_sky
+from worldfoundry.core.media.artifacts import download_file_from_url, segment_sky
 
 _IO_WORKERS = 8
 

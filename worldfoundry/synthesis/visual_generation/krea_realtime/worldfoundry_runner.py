@@ -10,10 +10,9 @@ from pathlib import Path
 import numpy as np
 from omegaconf import OmegaConf
 
-from worldfoundry.core.io.paths import package_module_root as package_root
+from worldfoundry.core.io.paths import package_data_path
 
 DEFAULT_RUNTIME_ROOT = Path(__file__).resolve().parent / "krea_runtime"
-KREA_WAN_PARENT = package_root("worldfoundry.base_models.diffusion_model.video.wan.variants.krea_realtime.wan").parent
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,6 +32,8 @@ def parse_args() -> argparse.Namespace:
 
 def _write_config(repo_root: Path, checkpoint_path: Path, output_path: Path) -> Path:
     base_config = repo_root / "configs" / "self_forcing_server_14b.yaml"
+    if not base_config.is_file():
+        base_config = package_data_path('models', 'runtime', 'configs', 'krea_realtime', 'self_forcing_server_14b.yaml')
     if not base_config.is_file():
         raise FileNotFoundError(f"Krea official config not found: {base_config}")
     config = OmegaConf.load(base_config)
@@ -73,8 +74,6 @@ def main() -> None:
     os.environ["MODEL_FOLDER"] = str(Path(args.model_folder).expanduser().resolve())
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
-    if str(KREA_WAN_PARENT) not in sys.path:
-        sys.path.insert(0, str(KREA_WAN_PARENT))
     if "dotenv" not in sys.modules:
         try:
             import dotenv  # noqa: F401
@@ -86,8 +85,8 @@ def main() -> None:
     old_cwd = Path.cwd()
     os.chdir(repo_root)
     try:
-        from release_server import GenerateParams
         import sample
+        from release_server import GenerateParams
 
         sample.save_video_direct = _save_video_cv2
         sample.save_video_ffmpeg_pipe = _save_video_cv2

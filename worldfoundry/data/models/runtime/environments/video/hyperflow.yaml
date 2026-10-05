@@ -1,0 +1,23 @@
+schema_version: 2
+model_id: hyperflow
+env_name: hyperflow
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+conda_packages: [python=3.11, pip, ffmpeg]
+pip_extra_index_url: https://download.pytorch.org/whl/cu128
+pip_packages:
+- torch==2.11.0+cu128
+- torchvision==0.26.0+cu128
+- torchaudio==2.11.0+cu128
+- hyperflow-h3[examples] @ git+https://github.com/Video-Rebirth/hyperflow.git@1dd2f342aba5ab51da02b62885939655e8e268da
+- diffusers==0.40.0
+- transformers==5.12.1
+- accelerate
+- peft==0.18.0
+- safetensors>=0.8
+- pillow
+validation_imports: [torch, diffusers, transformers, hyperflow_h3, peft, av]
+notes:
+- The pinned upstream package supplies inference only. No runtime clone, package installation or weight download is performed during generation.
+- Sol-Attn and FlashAttention-3 are optional installations; the default backend is PyTorch SDPA.

@@ -27,3 +27,19 @@ runner_parity:
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries expose WorldFoundry pipeline targets;
   metadata-only entries retain upstream provenance without runnable WorldFoundry backends.
+docs:
+  publisher: NVIDIA
+  publisher_kind: company
+  publisher_zh: 英伟达（NVIDIA）
+  overview: 'OmniVinci is NVIDIA''s omni-modal understanding LLM: one model that reasons over images, video, and audio together. In this catalog it is an understanding/reasoning entry, not a generator — tasks are multimodal reasoning, audio reasoning, and image/video question answering, and the artifact is a model_response.'
+  overview_zh: OmniVinci 是英伟达的全模态理解大模型：单一模型同时对图像、视频与音频进行推理。在本 catalog 中它是理解/推理类条目，而非生成器——任务为多模态推理、音频推理与图像/视频问答，产物是 model_response。
+  architecture: NVIDIA describes OmniVinci as an omni-modal LLM with joint vision-audio alignment (public release at nvidia/omnivinci). This repository records the prompt/image/video input contract; parameter counts and internals are not recorded here.
+  architecture_zh: 英伟达将 OmniVinci 描述为具备视觉-音频联合对齐的全模态 LLM（公开发布于 nvidia/omnivinci）。本仓库记录 prompt/image/video 输入契约；参数规模与内部细节仓库未记录。
+  usage_notes: Runner parity is pending. Use it to interrogate videos produced by generation entries — e.g. asking questions about physical plausibility or event order — rather than to generate content.
+  usage_notes_zh: Runner parity 为 pending。适合用来审视生成条目产出的视频——例如就物理合理性或事件顺序提问——而不是用来生成内容。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。

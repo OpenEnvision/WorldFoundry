@@ -1,0 +1,42 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A-04
+track: calibration
+title_en: Two-color unequal-sector spinner
+outcome_question: Which colored sector of the wheel is under the fixed pointer in
+  the latest readable post-action terminal pointer/sector relation, using the color
+  names ['red', 'blue']?
+readout_policy: Read the latest readable post-action terminal result window after
+  the requested action completes. Qualifying frames are those where the fixed pointer
+  and the colored wheel sector under it are both visible enough to identify a canonical
+  color. The wheel does not need to be fully stopped for outcome readout; later
+  terminal instability belongs to the trustworthiness axis.
+canonical_labels:
+- red
+- blue
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['red', 'blue'] can be decisively identified within
+  the readout window.
+- The pointer-over-sector relationship is ambiguous in every sampled post-action
+  frame (pointer on a sector boundary, unreadable pointer, or still too blurred to
+  identify a sector).
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'Latest-terminal-readout rule: use the latest readable post-action terminal frame
+  where the pointer-over-sector relation can be identified. If earlier and later
+  terminal frames disagree, return the latest readable canonical label and leave
+  the instability judgment to the trustworthiness axis.'
+- Do not require the spinner to fully stop when a readable pointer-over-color
+  relation is already visible; later settling instability belongs to the
+  trustworthiness axis.
+notes:
+- Color is canonical. Letter labels (A/B/C) are only allowed when a deterministic
+  color-letter crosswalk is documented.
+- 'Scene title: Two-color unequal-sector spinner.'

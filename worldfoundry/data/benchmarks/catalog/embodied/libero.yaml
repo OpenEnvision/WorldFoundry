@@ -1,5 +1,7 @@
 id: libero
 name: LIBERO
+publisher: The University of Texas at Austin
+publisher_kind: university
 benchmark_kind:
 - vla
 - robot-manipulation
@@ -48,6 +50,9 @@ dataset_refs:
   license: apache-2.0
   path: cache/vla_va_wam/hf_datasets/lerobot--libero
 runner:
+  normalization:
+    dispatch: embodied
+    embodied_track: vla
   runner_target: worldfoundry.evaluation.tasks.embodied.rollout_runner:build_libero_closed_loop_runner
   run_command:
   - worldfoundry-eval

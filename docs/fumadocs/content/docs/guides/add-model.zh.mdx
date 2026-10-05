@@ -1,124 +1,82 @@
 ---
 title: 添加模型
-description: 添加 model manifests、runtime profiles、runners、checkpoints、operators 和 pipelines 的清单。
+description: 如何把一个模型接到 WorldFoundry：pipeline、operator、runtime、catalog，以及第一份 PR 需要准备的证据。
 ---
 
-## 介绍
+把模型加进 WorldFoundry，不是「把 checkpoint 丢进目录、指望 CLI 自己找到」。Catalog 记录身份与出处；pipeline 负责加载权重并推理；operator 把 `GenerationRequest` 转成 pipeline 能理解的输入；binding 告诉评测 runner 该 import 哪个类；runtime profile 描述环境和资产。只要你希望这个方法能在仓库里被稳定复现，这几层缺一不可。
 
-第一份模型 PR 应该保持窄：一个模型族、一个 operator、一个 pipeline、必要时一个 runtime profile、一条已解析 runner path，以及一份聚焦 run-evidence report。
+下面按 reviewer 通常阅读 PR 的顺序写。已有模型 ID 见 [模型目录](/zh/docs/guides/supported-models)，跑 demo 见 [推理](/zh/docs/guides/inference)，checkpoint 落盘见 [本地资产](/zh/docs/guides/local-assets)，生成与打分为何必须隔开见 [设计](/zh/docs/overview/design)。
 
-好的第一份 PR 只需要证明 route 能端到端跑通，不必在第一天覆盖所有 task variant、所有 checkpoint 或所有 benchmark cell。
+## 第一份 PR 要窄
 
-## 实现区域
+第一份 pull request 只需要证明一条 route 能端到端跑通：一个模型族、一个 operator、一个 pipeline、必要时一个 runtime profile、一条已解析的 runner path，以及一份聚焦的 run-evidence report。这样就足以说明 catalog → binding → operator → pipeline → artifact 在一台别人也能复原的机器上成立。
 
-模型集成会落在几个固定 surface 上。用下面列表判断 diff 应该改哪里：
+不必等所有 checkpoint variant、所有 task 别名、所有 benchmark cell 都绿了再合入。骨架先落地，其余可以跟着加。若第一份 PR 同时还改公共 loader、再写一套 binding parser、或把训练树一并 vendoring 进来，review 成本高，也更容易回退。
 
-- **Pipeline 与 operator** — 公开模型入口，以及 prompt、图片、视频、camera control、action 和 interaction state 的输入整理。
-- **Runtime implementation** — 放在合适的 synthesis、representation 或 base-model package 下的推理代码。
-- **Evaluation binding** — 统一 route resolution，让 CLI 和 benchmark runner 能找到该方法。
-- **Catalog metadata** — Source、license、checkpoint refs、task coverage、runtime profile、blockers 和支持状态。
-- **聚焦检查** — 小型确定性测试或 helper 命令，用来证明本次修改的 runner surface。
+## 一次集成会改到哪里
+
+WorldFoundry 里的模型是五层叠在一起的。Pipeline 是公开入口：放在 `worldfoundry/pipelines/<family>/` 下的类，必须暴露 `from_pretrained()`，以及确定性的 `process()` 或 `__call__()`。这个类拥有 checkpoint 构造和原生 generate 调用。它不应该解析 prompt、解码 camera 轨迹、或自行判断哪张图是「第一帧」。那些事属于 operator。
+
+Operator 放在 `worldfoundry/operators/`。每个 runnable method 都要有，哪怕第一版很薄。它负责校验请求、加载媒体、解析 camera / action、整理 interaction state，让 pipeline 只看见稳定、有类型的输入。若跳过 operator、把这些逻辑塞进 pipeline，后面的 benchmark 或 Studio 表单就没有干净的挂载点。
+
+Backend 相关的推理实现——官方 `inference.py`、transformer block、tokenizer 封装——按现有布局放进 `worldfoundry/synthesis/`、`worldfoundry/base_models/`。这些包是 runtime primitive，不是训练循环、dataset builder、dataloader、augmentation pipeline 或 Lightning callback 的落点。
+
+Evaluation binding 决定 CLI、TUI 和通用 benchmark runner 如何找到该方法。解析路径永远是 catalog 上的 `pipeline_target` 或 `pipeline_binding`，再经过 `worldfoundry/evaluation/models/pipelines/bindings.py`。Route 字符串的归一化只应出现在这个文件里，不要在 catalog 加载、resolver 或 check helper 里再写一套 parser。
+
+最后是 catalog 元数据，也就是对外记录。`worldfoundry/data/models/catalog/<category>/<model-id>.yaml` 里写 source、license、checkpoint refs、task coverage、runtime profile、blockers 和 `integration.status`。Support matrix 不会把这些字段当成证据，它会根据已经落盘的 report 重新计算 readiness。
 
 ## 可运行路由契约
 
-WorldFoundry 通过同一套公开 contract 解析每个 runnable method。加捷径前先确认这些规则：
+WorldFoundry 用同一套公开 contract 解析每个 runnable method。只有能 import 到具体 pipeline class，这个方法才算 runnable。你用 `pipeline_target`（`module:Class`）或 bindings.py 已认识的 `pipeline_binding` id 来命名它。两者都缺时，`worldfoundry-eval run <model-id>` 会在动 GPU 之前失败，这是刻意的。
 
-- **Pipeline** — 每个 runnable method 都必须通过 catalog `pipeline_target` 或 `evaluation/models/pipelines/bindings.py` 解析到具体 pipeline class。
-- **Operator** — 每个 runnable pipeline 都必须有 operator，即使第一版只是薄实现。Input validation、media loading、camera/action parsing 和 interaction shaping 都放在这里。
-- **Runtime profile** — Runtime profile 描述环境、checkpoint、命令和 execution metadata。它不能替代 pipeline/operator route，也不能单独作为支持声明。
-- **Binding source** — Route normalization 只放在 `evaluation/models/pipelines/bindings.py`；不要在 catalog、loading、resolver 或 check code 里新增平行 parser。
-- **Base-model code** — `base_models/perception_core` 和 `base_models/three_dimensions` 只放 inference/runtime primitives。不要在这里添加 training loops、dataset builders、dataloaders、augmentation pipelines 或 callbacks。
+Runtime profile 不能替代这条 route。Profile 描述 conda / Docker 环境、checkpoint 角色、启动命令和 execution metadata，帮助机器*准备好*去跑；它本身不等于「模型已接入」。Catalog 里只有 profile、没有 pipeline 的条目，会一直停在 planned 或 blocked。
 
-## 实现清单
+`base_models/perception_core` 与 `base_models/three_dimensions` 更严：只放推理和 runtime helper。若官方仓库把训练脚本和 `inference.py` 放在一起，训练侧不要进树内包。移植 infer 路径，不要 import trainer。
 
-<Steps>
-  <Step>
-    在 `worldfoundry/pipelines/<family>/` 添加或更新 pipeline；它必须暴露 `from_pretrained()` 和确定性的 `process()` / `__call__()` 契约。
-  </Step>
-  <Step>
-    在 `worldfoundry/operators/` 添加或更新 operator；每个 runnable method 都需要，不只复杂输入路径需要。
-  </Step>
-  <Step>
-    按现有布局，把 backend-specific inference code 放在 `base_models/`、`synthesis/` 或 `representations/`。不要把 training/data-processing helper trees 提交到 perception 或 3D base-model packages。
-  </Step>
-  <Step>
-    通过 catalog YAML 的 `pipeline_target` 或 `evaluation/models/pipelines/bindings.py` 里的 canonical binding helpers 注册 route。
-  </Step>
-  <Step>
-    只有模型能参与 generic benchmark runner 时，才在 `worldfoundry/evaluation/models/pipelines/handlers.py` 添加 inference handler。
-  </Step>
-  <Step>
-    添加或更新相关 `worldfoundry/data/models/catalog/<category>/<model-id>.yaml` 条目，记录 source、license、checkpoint refs、tasks、runtime profile 和 integration status。
-  </Step>
-  <Step>
-    当官方 demo settings 可对比时，添加小型 model-zoo check helper。
-  </Step>
-  <Step>
-    为确定性 runner behavior 添加聚焦回归测试。
-  </Step>
-</Steps>
+## 按这条 route 实现
 
-## 状态规则
+先写 pipeline，放在 `worldfoundry/pipelines/<family>/`，方便按族浏览。`from_pretrained()` 应接受 loader 已经会传的参数——model path 或 options dict、device、model id——并在缺 checkpoint 时明确失败。`process()` / `__call__()` 的返回值要能被 WorldFoundry runner 包成 `GenerationResult`：status、耗时、错误、以及落盘后的 artifact 路径。不要只返回内存里的 tensor。评测和 Studio 需要进程退出后仍能打开的文件。
 
-Catalog 字段描述意图；staged evidence 决定 support matrix 是否认可。
+Operator 和 pipeline 放在同一次改动里。哪怕第一版只检查「prompt 是字符串」「图像路径存在」，也比 pipeline 默默吃下一个未知 key 的 dict 要好。模型以后变复杂——多视角、action chunk、camera rig——把增长留在 operator，pipeline 继续只做 checkpoint runner。
 
-- **`source.status=open_source`** — 官方 public source 可用，并记录 license metadata。
-- **`source.status=api`** — 模型通过 hosted provider 或 private service boundary 调用。
-- **`source.status=closed`** — 没有公开 runnable source/checkpoint。
-- **`integration_status=planned`** — Source 或 code 存在，但必需的 runnable checks 未完成。
-- **`integration_status=blocked`** — Source、license、checkpoint、dependency、API 或 hardware 条件阻止可运行集成。
-- **`integration_status=integrated`** — 必需 runnable checks 通过，且 report 对当前 manifest 是 fresh。
+Vendor 或自研推理实现跟现有树对齐。视频合成多半在 `synthesis/visual_generation/`；交互式 world model 往往挨着已经 vendoring 了官方仅推理 runtime 的兄弟目录；感知与 3D helper 在 `base_models/`。不要在 `cache/` 再放一份架构代码再从那里 import。Runner 需要的 Python 模块必须在 `worldfoundry/` 下，并和这次集成一起被 review。
 
-Manifest claims 本身不可信。Support matrix 会从 staged evidence 重新计算 readiness。
+然后注册 route。最简单的是在 catalog YAML 上写 `pipeline_target`。若多个 alias 或某个 runtime profile 要共用一个类，在 `worldfoundry/data/models/bindings/pipelines/` 增加或更新 binding，交给 `bindings.py` 解析。通用 benchmark runner 的 pipeline 调用契约在 `worldfoundry/evaluation/models/pipelines/invocation.py`。多数第一份 PR 只需接入现有调用契约；能跑通 `worldfoundry-eval run <model-id>` 就是里程碑。
 
-## 常用命令
+Catalog 条目放在类名已经存在之后再写，避免 YAML 指向一个 import 不了的 target。记录 source URL、license、Hugging Face `repo_id`、本地 `checkpoint` 角色、tasks、`runtime_profile`，以及诚实的 `integration.status`。在 check report 出现之前用 `planned`；license、checkpoint、API key 或 GPU 类型缺了、跑不起来时用 `blocked`；只有必要检查通过、且 report 哈希仍对得上当前 manifest 时，才标 `integrated`。
 
-<Tabs items={['查看', '检查本地', '下载', '拉取', '评测']}>
-  <Tab>
+若官方 demo 有可对照的命令行，加一个小型 model-zoo check helper。在 `tests/`（手动流式 demo 放在 `tests/stream/`） 里为确定性部分写聚焦回归：请求整形、路径解析、「缺 checkpoint 就抛错」。不要把数小时的视频长跑当成合入门槛，除非那是展示这条 route 的唯一办法。
+
+## Catalog 状态是声明，证据才作数
+
+`source.status` 描述权重和代码怎么来。`open_source` 表示官方公开源码存在，并且记了 license；`api` 表示只能走 hosted provider 或私有服务；`closed` 表示没有公开可跑的源码或 checkpoint。这些标签讲出处，不讲 WorldFoundry 今天能不能跑。
+
+`integration.status` 才是仓库侧声明。`planned` 表示源码或代码已在树内，但 runnable checks 没做完；`blocked` 表示有具体条件——license、checkpoint、依赖、API 或硬件——挡住了运行；`integrated` 表示必要检查已通过，且 report 对当前 manifest hash 仍新鲜。只改 YAML、不重跑 report，support matrix 会把证据当成 stale，不会跟着你的标签走。
+
+## 发现、落盘与试跑
+
+YAML 进 catalog 树之后，先确认 zoo 看得到它。在 unified 环境里：
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo models --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-show --model-id <model-id-or-alias> --include-manifest --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-specs --model-id <model-id> --json
+worldfoundry-eval zoo models --json
+worldfoundry-eval zoo model-show --model-id <model-id-or-alias> --include-manifest --json
+worldfoundry-eval zoo model-specs --model-id <model-id> --json
 ```
 
-  </Tab>
-  <Tab>
+`model-show` 最快能核对 alias、`pipeline_target`、checkpoint 角色和 runtime profile 是否按你想的方式解析。`model-specs` 是 runner 实际会消费的压缩视图。
+
+声明 checkpoint 和真正落盘是两件事。`--check-local` 只报告配置的 cache 里是否已有文件：
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-download --check-local \
-  --model-id <model-id> \
-  --json
+worldfoundry-eval zoo model-download --check-local --model-id <model-id> --json
 ```
 
-  </Tab>
-  <Tab>
+在允许拉权重的机器上再加 `--execute`；若要钉目标位置，加上 `--repo-id` 和 `--cache-dir`。用 `--report-path tmp/model_zoo/download/<model-id>.json` 写下下载报告，reviewer 不用把 blob 拷进 git 也能看到落了什么。`--disable-xet`、`--disable-hf-transfer`、`--timeout`、`--retries` 只属于那台拉取机器。
+
+第一次端到端推理用模型 runner，不要上 benchmark：
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-download \
-  --model-id <model-id> \
-  --repo-id <org/name> \
-  --cache-dir /path/to/checkpoints \
-  --check-local \
-  --report-path tmp/model_zoo/download/<model-id>.json \
-  --json
-```
-
-  </Tab>
-  <Tab>
-
-```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-download --check-local \
-  --model-id <model-id> \
-  --execute \
-  --json
-```
-
-  </Tab>
-  <Tab>
-
-```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval evaluate \
+worldfoundry-eval evaluate \
   --mode model \
   --model-id <model-id> \
   --model-manifest-dir worldfoundry/data/models/catalog \
@@ -128,35 +86,33 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval evaluate \
   --json
 ```
 
-  </Tab>
-</Tabs>
+`artifact_count` 只问「有没有出现文件」，足以证明 route。带完整 benchmark protocol 的打分是后续 PR，而且必须消费 `GenerationResult` 里的 artifact，不能从 metric 里直接调 pipeline。环境还没选好时，从 [推理](/zh/docs/guides/inference) 和 unified bootstrap 开始；模型若需要独立 conda profile，用 `bash scripts/setup/model_env_install.sh --model <model-id>` 安装，不要猜 prefix。
 
-只有在机器被允许拉取 checkpoint 时，才添加 `--execute`、`--disable-xet`、`--disable-hf-transfer`、`--timeout` 或 `--retries`。
+## Check report 必须写什么
 
-## Run-evidence report
+模型检查命令把报告写到 `tmp/model_zoo/validation/<model-id>/`。Support matrix 哈希的就是这份对象。它应记录 manifest entry hash、check script hash、git commit、各 stage 结果、blockers，以及下一步。YAML 动了、report 没动，即使 `integration.status` 仍写着 `integrated`，readiness 也会回落。
 
-模型检查命令会把报告写到 `tmp/model_zoo/validation/<model-id>`。Report 应包含 manifest entry hash、check script hash、git commit、stage results、blockers 和 next action。任一项漂移时，support matrix 会把 report 视为 stale。
+把这个目录当证据，不当权重缓存。Checkpoint 放 `${WORLDFOUNDRY_CKPT_DIR}` 或 Hugging Face cache；生成视频放 `tmp/` 或 `${WORLDFOUNDRY_ARTIFACT_DIR}`。
 
-## PR 证据
+## PR 里 reviewer 需要看到什么
 
-Reviewer 应能根据 PR 内容复现你的路径，而不必猜测机器状态：
+Reviewer 应能复现你的路径，而不必问你用了哪台 GPU、靠哪条隐藏环境变量才跑通。附上 catalog YAML diff、`tmp/model_zoo/validation/<model-id>/report.json`、cache 位置和 Hugging Face `repo_id`（不要权重）、官方 demo 命令及其 raw log 与产物路径、WorldFoundry runner 命令及其输出路径，以及聚焦测试。提升状态时刷新 `tmp/preflight_report.md`，让 support matrix 和 PR 说同一件事。
 
-- **Manifest diff** — 相关 `worldfoundry/data/models/catalog/<category>/<model-id>.yaml` 条目。
-- **Source checks** — `tmp/model_zoo/validation/<model-id>/report.json`。
-- **Checkpoint state** — Cache location 和 repo id，不提交 checkpoint。
-- **Demo parity** — 官方命令、raw logs、generated artifact path。
-- **Runner parity** — WorldFoundry runner 命令和 output artifact path。
-- **Tests** — `test/` 或 `test_stream/` 下的聚焦文件。
-- **Support matrix** — 提升状态时刷新 `tmp/preflight_report.md`。
+不要提交 checkpoint、生成视频、本地 cache、API key 或私有资产。这些在 report 里用路径和哈希表示即可。
 
-不要提交 checkpoints、generated videos、local caches、API keys 或 private assets。
+## Cache 与 runtime 卫生
 
-## Cache 边界
+Cache 目录只放临时下载、checkpoint 副本、数据集镜像、official-runtime clone cache、生成预览和日志，不是第二棵 `worldfoundry/`。树内 runner 不得从 cache path import Python 模块。若克隆官方仓只是为了取出 `inference.py`，把仅推理切片 vendoring 进对应 package，删掉训练侧。
 
-Cache path 只能放临时下载、checkpoint copies、dataset mirrors、official-runtime clone caches、generated previews 和 logs。不要把模型架构代码放进 `cache/`，也不要让 in-tree runner 从 cache path import Python modules。如果 runner 需要模型架构代码，把这些代码放在 `worldfoundry/` 下，并随模型集成一起 review。
+推理时真正会跑到的 transform 可以留在 runtime package，例如 GroundingDINO `util.transforms`、DUST3R crop helper、DROID-SLAM RGB-D geometry。Training dataset、dataloader、loss、callback、只用于增强的模块和实验脚本不应进来。`pixelsplat` 是当前 3D base model 下的例外，因为它仍走官方 Lightning test runner 和 dataset 形态的 loader。把它当作待迁成纯推理 runner 的债务，不要当成你正在加的这个模型的样板。
 
-## Runtime 卫生边界
+## 模型主页
 
-推理时必须使用的 transforms 可以留在对应 runtime package 中，例如 GroundingDINO `util.transforms`、DUST3R cropping/transforms、DROID-SLAM RGB-D geometry helpers。Training datasets、dataloaders、losses、callbacks、augmentation-only modules 和 experiment scripts 不应进入 runtime package，除非这个框架未来开始支持该模型族的仓内训练。
+每个模型的文章是独立文件：`docs/fumadocs/content/docs/guides/supported-models/<model-id>.mdx` 以及对应的 `.zh.mdx`。目录页仍然链到 `/zh/docs/guides/supported-models/<model-id>`。
 
-`pixelsplat` 是当前 3D base models 下的例外，因为它仍使用官方 Lightning test runner 和 dataset-shaped loader。把它视为需要移植成纯推理 runner 的技术债，不要把它作为新增集成的模式。
+`npm --prefix docs/fumadocs run models:generate` 会按 catalog 的 `docs:` 和 recipe JSON 生成初稿。之后改该文件即可写模型自己的概述、架构、配图和额外章节。共用控件可以嵌进 MDX：
+
+- `<ModelCommandBuilder modelId="<model-id>" locale="zh" />` — 运行命令构建器
+- `<ModelRelatedRecipes modelId="<model-id>" locale="zh" />` — 同族相关模型
+
+手写内容请把 frontmatter 的 `pageSource` 设为 `authored`。仍是 `generated` 的页面会在下次 generate 时被刷新。YAML 里的 `docs.overview` 只给生成稿打底，一旦你接手 MDX，文章以文件为准。

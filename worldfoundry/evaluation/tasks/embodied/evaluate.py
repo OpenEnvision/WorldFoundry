@@ -11,7 +11,7 @@ It serves as the transition layer between:
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -25,7 +25,6 @@ from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import (
 from .contracts import EmbodiedGenerationSpec
 from .materialize import materialize_vla_va_wam_requests
 from .metrics import metric_suite
-
 
 VLA_VA_WAM_RUN_REQUEST_SCHEMA_VERSION = "worldfoundry-vla-va-wam-run-request"
 
@@ -75,9 +74,7 @@ def _coerce_request(
     if isinstance(request, VlaVaWamRunRequest):
         if not kwargs:
             return request
-        payload = asdict(request)
-        payload.update(kwargs)
-        return VlaVaWamRunRequest(**payload)
+        return replace(request, **kwargs)
     payload = dict(kwargs)
     if isinstance(request, Mapping):
         payload = {**dict(request), **payload}

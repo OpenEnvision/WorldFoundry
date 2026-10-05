@@ -10,7 +10,11 @@ source_repos:
   revision: d2fe4b1d509e54a3cf95da40ec6e232b68361d07
 checkpoints:
 - repo_id: anyeZHY/tesseract
-  role: tesseract_checkpoint
+  role: rgbdn_sft_transformer
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/anyeZHY--tesseract/tesseract_v01e_rgbdn_sft
+- repo_id: THUDM/CogVideoX-5b-I2V
+  role: cogvideox_i2v_base
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/THUDM--CogVideoX-5b-I2V
 input_schema:
   prompt: true
   image: true
@@ -18,15 +22,16 @@ input_schema:
   actions:
   - world_action
   - robot_action
-artifact_kind: generated_world
+artifact_kind: generated_video
 artifact_filename: tesseract.mp4
 execution:
   backend_stage: in_tree_runtime_manifest
-  runtime_status: in_tree_runtime_manifest_checkpoint_env_pending
+  runtime_status: in_tree_runtime_manifest_checkpoint_required
   integration_status: runtime_ported
   pipeline_binding: tesseract
 integration:
   status: runtime_ported
 notes:
-- TesserAct source is vendored in-tree under synthesis/visual_generation/tesseract/tesseract_runtime.
-- The pipeline resolves a vendored inference entrypoint; execution remains checkpoint and embodied-task gated.
+- TesserAct source is vendored in-tree under synthesis/action_generation/tesseract/tesseract_runtime.
+- The compatibility launcher uses the official TesserAct RGB-depth-normal SFT model classes and local checkpoints only.
+- Official depth and normal files are accepted; synthetic-gradient conditioning is a deterministic runtime smoke aid, not estimated geometry.

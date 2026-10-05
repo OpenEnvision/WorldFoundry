@@ -1,177 +1,50 @@
 ---
 title: VMBench
-description: 使用 WorldFoundry 仓内运行器评测 VMBench motion metrics。
+description: "阿里高德 ICCV 2025 运动评测：1050 条 prompt、五个本地指标。WorldFoundry 内置打分器，不编造榜单。"
 ---
 
-## 简介
+VMBench（AMAP-ML；ICCV 2025）用五个对齐感知的本地指标评 **运动生成**——没有托管裁判 API：
 
-VMBench 用 perception-aligned prompt suite 和五个运动指标评测 text-to-video 的运动质量。prompt suite 包含 1,050 条 prompt，每条都有稳定的四位数编号。有效评测需要每条 prompt 生成一个视频，并让文件名保留该编号。
+- **PAS** — 可感知幅度
+- **OIS** — 运动中的物体完整性
+- **TCS** — 时间连贯
+- **CAS** — 常识遵守
+- **MSS** — 运动平滑
 
-WorldFoundry 已经把 benchmark code 放在仓内：
+官方套件：**1050 条运动向 prompt**。视频命名 `0001.mp4` … `1050.mp4`。`vmbench_average` 是已有 PAS/OIS/TCS/CAS/MSS 的均值。许可证：Apache-2.0。
 
-```text
-worldfoundry/evaluation/tasks/execution/runners/vmbench/run_vmbench_official_runner.py
-worldfoundry/evaluation/tasks/execution/runners/vmbench/vmbench_official_runtime.py
-worldfoundry/evaluation/tasks/execution/runners/vmbench/runtime/official
-worldfoundry/data/benchmarks/assets/vmbench/prompts/prompts.json
-```
+论文：[VMBench（ICCV 2025）](https://openaccess.thecvf.com/content/ICCV2025/html/Ling_VMBench_A_Benchmark_for_Perception-Aligned_Video_Motion_Generation_ICCV_2025_paper.html)。项目：[amap-ml.github.io/VMBench-Website](https://amap-ml.github.io/VMBench-Website/)。代码：[AMAP-ML/VMBench](https://github.com/AMAP-ML/VMBench)。
 
-正常使用 WorldFoundry 评测时，用户不应该 clone official repos。上游 VMBench README 和论文只作为协议参考；WorldFoundry 使用仓内 evaluator 和 bundled prompt manifest。完整重算指标仍然需要从 Hugging Face 下载 checkpoint。
+WorldFoundry **仓内内置官方指标代码**，并捆绑 prompt 套件（`worldfoundry/data/benchmarks/assets/vmbench/prompts/prompts.json`）。接入时官方 HF 数据集端点 **尚未公开**。结果 / runtime 接线存在；**完整 CUDA 指标重算未验证**。完整重算需要 MMDetection / MMPose / DeepSpeed 与检测 / 跟踪权重。
 
-协议参考：
+<BenchmarkPageSections id="vmbench" locale="zh" />
 
-- Paper: [VMBench: A Benchmark for Perception-Aligned Video Motion Generation](https://arxiv.org/abs/2503.10076)
-- Project page: [amap-ml.github.io/VMBench-Website](https://amap-ml.github.io/VMBench-Website/)
-- Source reference: [github.com/AMAP-ML/VMBench](https://github.com/AMAP-ML/VMBench)
-- Checkpoint assets: [GD-ML/VMBench](https://huggingface.co/GD-ML/VMBench)
-
-## 准备输入
-
-从 WorldFoundry 仓库根目录开始：
-
-```bash
-cd /path/to/WorldFoundry
-export WORLDFOUNDRY_REPO_ROOT="$PWD"
-export PYTHONPATH="$WORLDFOUNDRY_REPO_ROOT:${PYTHONPATH:-}"
-```
-
-使用仓内 prompt manifest：
-
-```bash
-export WORLDFOUNDRY_VMBENCH_PROMPT_MANIFEST="$WORLDFOUNDRY_REPO_ROOT/worldfoundry/data/benchmarks/assets/vmbench/prompts/prompts.json"
-```
-
-把生成视频放在一个扁平目录中，文件名必须对应 prompt 编号：
-
-```text
-/path/to/vmbench/generated_videos/
-  0001.mp4
-  0002.mp4
-  ...
-  1050.mp4
-```
-
-然后设置 WorldFoundry 输入目录：
-
-```bash
-export WORLDFOUNDRY_VMBENCH_VIDEO_DIR=/path/to/vmbench/generated_videos
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR="${WORLDFOUNDRY_VMBENCH_VIDEO_DIR}"
-```
-
-下载 VMBench checkpoint bundle 和 companion models：
-
-```bash
-export WORLDFOUNDRY_VMBENCH_ASSET_DIR=/path/to/vmbench/assets
-
-hf download GD-ML/VMBench \
-  --local-dir "${WORLDFOUNDRY_VMBENCH_ASSET_DIR}"
-
-hf download q-future/one-align \
-  --local-dir "${WORLDFOUNDRY_VMBENCH_ASSET_DIR}/q-future/one-align"
-
-hf download google-bert/bert-base-uncased \
-  --local-dir "${WORLDFOUNDRY_VMBENCH_ASSET_DIR}/google-bert/bert-base-uncased"
-```
-
-设置仓内 runtime 会读取的 checkpoint 路径：
-
-```bash
-export WORLDFOUNDRY_GROUNDING_DINO_BERT_BASE_UNCASED="${WORLDFOUNDRY_VMBENCH_ASSET_DIR}/google-bert/bert-base-uncased"
-export WORLDFOUNDRY_QALIGN_ONE_ALIGN_MODEL="${WORLDFOUNDRY_VMBENCH_ASSET_DIR}/q-future/one-align"
-export WORLDFOUNDRY_VMBENCH_CAS_CKPT="${WORLDFOUNDRY_VMBENCH_ASSET_DIR}/vit_g_vmbench.pt"
-
-export WORLDFOUNDRY_VMBENCH_GROUNDING_DINO_CKPT="${WORLDFOUNDRY_VMBENCH_ASSET_DIR}/groundingdino_swinb_cogcoor.pth"
-export WORLDFOUNDRY_SAM_VIT_H_CKPT="${WORLDFOUNDRY_VMBENCH_ASSET_DIR}/sam_vit_h_4b8939.pth"
-export WORLDFOUNDRY_SAM2_CKPT="${WORLDFOUNDRY_VMBENCH_ASSET_DIR}/sam2.1_hiera_large.pt"
-export WORLDFOUNDRY_COTRACKER2_CKPT="${WORLDFOUNDRY_VMBENCH_ASSET_DIR}/scaled_offline.pth"
-```
-
-runner 默认运行五个指标。准备资产时如果只想选择部分指标：
-
-```bash
-export WORLDFOUNDRY_VMBENCH_METRICS="pas ois tcs cas mss"
-```
-
-## 运行命令
-
-通过直接仓内 runner 重算完整指标：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/vmbench/run_vmbench_official_runner.py \
-  --run-official \
-  --runtime-backend official \
-  --video-dir "${WORLDFOUNDRY_VMBENCH_VIDEO_DIR}" \
-  --prompt-manifest "${WORLDFOUNDRY_VMBENCH_PROMPT_MANIFEST}" \
-  --output-dir tmp/vmbench/direct-official-run \
-  --json
-```
-
-如果其他 WorldFoundry evaluator 已经产出 VMBench-shaped metric artifacts，可以用 artifact backend 导入：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/vmbench/run_vmbench_official_runner.py \
-  --run-official \
-  --runtime-backend artifact \
-  --video-dir "${WORLDFOUNDRY_VMBENCH_VIDEO_DIR}" \
-  --artifact-score-dir /path/to/vmbench/metric_artifacts \
-  --prompt-manifest "${WORLDFOUNDRY_VMBENCH_PROMPT_MANIFEST}" \
-  --output-dir tmp/vmbench/artifact-run \
-  --json
-```
-
-已有 `results.json` 或 `scores.csv` 时，使用公开 CLI 导入：
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id vmbench \
   --mode official-validation \
-  --official-results-path /path/to/vmbench/results.json \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/vmbench/official-validation \
   --json
 ```
 
-当前公开 CLI 没有声明 VMBench 本地重算命令。需要执行 `pas`、`ois`、`tcs`、`cas`、`mss` 时，请使用上面的直接 runner。
-
-## 指标
-
-WorldFoundry 内部把主要 VMBench 分数归一化到 0 到 1，且都是越高越好。
-
-| Metric ID | Upstream name | 含义 |
-| --- | --- | --- |
-| `perceptible_amplitude_score` | PAS | 运动幅度是否明显到可被感知。 |
-| `object_integrity_score` | OIS | 运动物体是否保持身份、形状和结构。 |
-| `temporal_coherence_score` | TCS | 运动在时间上是否连贯。 |
-| `commonsense_adherence_score` | CAS | 生成动作是否符合常识中的运动预期。 |
-| `motion_smoothness_score` | MSS | 运动是否平滑，而不是抖动。 |
-| `vmbench_average` | Avg | 可用 PAS/OIS/TCS/CAS/MSS 分数的平均值。 |
-
-## 输出布局
-
-直接完整运行会写出：
-
-```text
-tmp/vmbench/direct-official-run/
-  scorecard.json
-  raw_metric_table.jsonl
-  per_sample_metrics.jsonl
-  upstream_stdout.log
-  upstream_stderr.log
-  upstream/
-    results.json
-    scores.csv
-    pas.stdout.log
-    pas.stderr.log
-    ois.stdout.log
-    ois.stderr.log
-    tcs.stdout.log
-    tcs.stderr.log
-    cas.stdout.log
-    cas.stderr.log
-    mss.stdout.log
-    mss.stderr.log
+```bash
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/vmbench/run_vmbench_official_runner.py \
+  --run-official \
+  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --prompt-manifest "${WORLDFOUNDRY_VMBENCH_PROMPT_MANIFEST}" \
+  --output-dir tmp/vmbench/official-run \
+  --json
 ```
 
-公开 CLI 导入也会在指定输出目录下写出 `scorecard.json`、`raw_metric_table.jsonl`、`per_sample_metrics.jsonl` 和 runner log files。
+环境变量：`WORLDFOUNDRY_VMBENCH_PROMPT_MANIFEST`（默认仓内套件）、`WORLDFOUNDRY_VMBENCH_RESULTS_PATH`。共享栈：`motion_stack`。
+
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/vmbench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/vmbench/runtime/official`。
+
+产物包括 `scorecard.json`（主键 `vmbench_average`，榜单键 `Avg`）。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

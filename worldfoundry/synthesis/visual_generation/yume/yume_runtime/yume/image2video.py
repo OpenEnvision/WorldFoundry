@@ -13,33 +13,11 @@ import torchvision.transforms.functional as TF
 from safetensors import safe_open
 from safetensors.torch import load_file
 
-from worldfoundry.core.attention import attention as _worldfoundry_attention
-from worldfoundry.core.attention import flash_attention as _worldfoundry_flash_attention
-from worldfoundry.core.distributed.block_fsdp import shard_model
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.clip import CLIPModel
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.model import WanModel
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.t5 import T5EncoderModel
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.vae import WanVAE
-
-
-def _patch_official_wan_attention_fallback() -> None:
-    from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules import attention as wan_attention
-    from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules import clip as wan_clip
-    from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules import model as wan_model
-
-    if getattr(wan_attention, "FLASH_ATTN_2_AVAILABLE", False) or getattr(
-        wan_attention, "FLASH_ATTN_3_AVAILABLE", False
-    ):
-        return
-
-    wan_attention.flash_attention = _worldfoundry_flash_attention
-    wan_attention.attention = _worldfoundry_attention
-    wan_clip.flash_attention = _worldfoundry_flash_attention
-    wan_model.flash_attention = _worldfoundry_flash_attention
-
-
-_patch_official_wan_attention_fallback()
-
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.clip import CLIPModel
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import WanModel
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import T5EncoderModel
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import WanVAE
 
 def upsample_conv3d_weights(conv_small: nn.Conv3d, size: Tuple[int, int, int]):
     old_weight = conv_small.weight.data
@@ -144,6 +122,10 @@ class YumeI2V:
 
         self.model = load_yume_checkpoint(self.model, os.path.join(checkpoint_dir, "Yume-Dit"))
         self.model.eval().requires_grad_(False)
+        # The released shards materialize as float32 tensors. Cast on CPU before
+        # the device transfer so the 14B DiT does not consume roughly 64 GiB of
+        # H100 memory while T5, CLIP, and the VAE are still being initialized.
+        self.model.to(dtype=config.param_dtype)
 
         if dit_fsdp:
             self.model = shard_model(self.model, device_id=device_id)

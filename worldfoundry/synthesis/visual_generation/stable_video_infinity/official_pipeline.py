@@ -3,8 +3,8 @@
 This module ports the image-conditioning path from the official Stable Video
 Infinity ``SVIVideoPipeline`` at revision
 ``63af54329f38b10ed1a91dc88bc67a765d0c4a18``.  The shared Wan/FlowMatch
-implementation is provided by WorldFoundry's in-tree DiffSynth runtime; this
-file owns the SVI-specific multi-frame continuation and reference padding.
+implementation is provided by WorldFoundry's native Wan staged runner; this
+file owns only SVI-specific multi-frame continuation and reference padding.
 """
 
 from __future__ import annotations
@@ -14,16 +14,11 @@ from typing import Any
 
 import torch
 
-from worldfoundry.base_models.diffusion_model.diffsynth.models.model_manager import (
-    ModelManager,
-)
-from worldfoundry.base_models.diffusion_model.diffsynth.pipelines.wan_video import (
-    WanVideoPipeline,
-)
+from worldfoundry.base_models.diffusion_model.runners import WanStagedPipeline
 from worldfoundry.core.vram import AutoTorchModule
 
 
-class SVIVideoPipeline(WanVideoPipeline):
+class SVIVideoPipeline(WanStagedPipeline):
     """Wan I2V pipeline with Stable Video Infinity continuation conditioning."""
 
     @staticmethod
@@ -67,24 +62,29 @@ class SVIVideoPipeline(WanVideoPipeline):
         return Image.fromarray(array).convert("RGB")
 
     @classmethod
-    def from_model_manager(
+    def from_components(
         cls,
-        model_manager: ModelManager,
-        torch_dtype: torch.dtype | None = None,
-        device: str | None = None,
+        *,
+        text_encoder,
+        image_encoder,
+        dit,
+        vae,
+        tokenizer_path: str,
+        torch_dtype: torch.dtype,
+        device: str,
         use_usp: bool = False,
     ) -> "SVIVideoPipeline":
-        if device is None:
-            device = model_manager.device
-        if torch_dtype is None:
-            torch_dtype = model_manager.torch_dtype
-        pipe = cls(device=device, torch_dtype=torch_dtype)
-        pipe.fetch_models(model_manager)
+        pipe = cls(device=device, torch_dtype=torch_dtype, tokenizer_path=tokenizer_path)
+        pipe.text_encoder = text_encoder
+        pipe.image_encoder = image_encoder
+        pipe.dit = dit
+        pipe.vae = vae
+        pipe.prompter.fetch_models(text_encoder)
 
         if use_usp:
             from xfuser.core.distributed import get_sequence_parallel_world_size
 
-            from worldfoundry.core.attention.patch_xdit_context_parallel import (
+            from worldfoundry.core.attention.parallel.patch_xdit_context_parallel import (
                 usp_attn_forward,
                 usp_dit_forward,
             )

@@ -1,5 +1,7 @@
 id: calvin
 name: CALVIN
+publisher: University of Freiburg
+publisher_kind: university
 benchmark_kind:
 - vla
 - robot-manipulation
@@ -28,6 +30,9 @@ dataset:
   reason: WorldFoundry tracks the upstream CALVIN runtime and normalizes official result files; dataset materialization 
     is handled outside this manifest.
 runner:
+  normalization:
+    dispatch: embodied
+    embodied_track: vla
   runner_target: worldfoundry.evaluation.tasks.contracts.external:CALVINContract
   verification_status: normalizer_only
   validation_command:

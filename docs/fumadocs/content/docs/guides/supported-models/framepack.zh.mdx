@@ -1,0 +1,44 @@
+---
+title: "FramePack"
+description: "斯坦福恒定记忆的长图生视频。集成已验证；runner 和官方长视频 demo 仍 pending。HF 许可卡片待审。产物 framepack.mp4。"
+modelId: "framepack"
+pageSource: authored
+---
+
+FramePack 是斯坦福的**恒定记忆**长图生视频打包器（ControlNet 作者）：输入帧上下文被压进**定长**窗口，片段变长时生成成本大致不变，有限显存也能做分钟级视频。WorldFoundry 把最小化仅推理运行时放在 `worldfoundry/synthesis/visual_generation/framepack/framepack_runtime`，对外是 `FramePackPipeline`。**集成已验证**。**Runner 和官方长视频 demo 仍 pending**。
+
+<ModelPaperFigures modelId="framepack" locale="zh" />
+
+论文：[arXiv 2504.12626](https://arxiv.org/abs/2504.12626)。项目页：[lllyasviel.github.io/frame_pack_gitpage](https://lllyasviel.github.io/frame_pack_gitpage/)。代码：[lllyasviel/FramePack](https://github.com/lllyasviel/FramePack)。公开、非门控权重：`lllyasviel/FramePackI2V_HY` 和 `lllyasviel/FramePack_F1_I2V_HY_20250503`。HF `cardData` **没有**露出许可证——晋级前请审阅。catalog 未记录 VRAM。
+
+<ModelCommandBuilder modelId="framepack" locale="zh" />
+
+## 用来做什么
+
+从起始图按下一帧块打包长视频。
+
+启动 `worldfoundry-eval run framepack`。
+
+评测入口：[ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench)（长时程生成评测，契合 FramePack 的长视频定位）。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`input_path`、`frames`、`fps`；产物 `framepack.mp4`。
+
+| 旋钮 | 默认 |
+| --- | --- |
+| 时长 | **5** 秒 |
+| FPS | **30** |
+| 步数 | 每个 FramePack 段 **25** |
+| 潜窗口 | **9** |
+| CFG / GS / RS | **1.0** / **10.0** / **0.0** |
+| Seed | **31337** |
+| TeaCache | **开** |
+
+树内官方 runner 默认值（上游 UI 质量配方——不是本工作区已 GPU 验证的长片段）：
+
+## 在 WorldFoundry 中运行
+
+状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `lllyasviel/FramePackI2V_HY`、`lllyasviel/FramePack_F1_I2V_HY_20250503`、`lllyasviel/FramePackI2V_HY` 等就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run framepack`。catalog 未记录 VRAM。
+
+<ModelRelatedRecipes modelId="framepack" locale="zh" />

@@ -1,9 +1,9 @@
 ---
 title: 运行推理
-description: 运行模型 demo、检查生成产物并做发布验证 — 评分请见评测章节。
+description: 运行模型 demo、检查生成产物并做发布验证；评分请见评测章节。
 ---
 
-WorldFoundry 推理覆盖环境安装、checkpoint 准备、模型启动和产物检查。Benchmark 评分与 scorecard 见 [评测](/zh/docs/evaluation)。选模型 id、看 readiness 标签请先看 [模型](/zh/docs/guides/supported-models)。
+WorldFoundry 推理覆盖环境安装、checkpoint 准备、模型启动和产物检查。Benchmark 评分与 scorecard 见[评测](/zh/docs/evaluation)。要挑 model ID、看 readiness 标签，先看[模型](/zh/docs/guides/supported-models)。
 
 ## 快速路径
 
@@ -12,15 +12,16 @@ bash scripts/setup/bootstrap_worldfoundry.sh
 source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 
-bash scripts/inference/test_nav_video_gen.sh matrix-game-2 \
-  --output-dir tmp/matrix_game2_first_run
+worldfoundry-eval run <model-id> \
+  --pipeline.task-profile <task-profile> \
+  --output-dir tmp/worldfoundry_infer/<model-id>
 ```
 
-在 `tmp/matrix_game2_first_run` 下检查生成的视频和运行元数据。该产物只是推理证据，不是 benchmark 或 leaderboard 证据。Checkpoint 与 cache 布局见 [本地资产](/zh/docs/guides/local-assets)；Web workspace 见 [Studio](/zh/docs/guides/studio)。
+`<model-id>` 和 `<task-profile>` 从模型页复制。在 `tmp/worldfoundry_infer/<model-id>` 下检查生成产物。该产物只是推理证据，不是 benchmark 或 leaderboard 证据。Checkpoint 与 cache 布局见 [本地资产](/zh/docs/guides/local-assets)；Web workspace 见 [Studio](/zh/docs/guides/studio)。状态用词见 [运行状态](/zh/docs/guides/run-status)。
 
 ## 环境
 
-创建并激活统一推理环境：
+创建并激活统一推理环境。官方首次 clone 命令是 `bash scripts/setup/bootstrap_worldfoundry.sh`（与[快速开始](/zh/docs/quickstart)相同）：
 
 ```bash
 bash scripts/setup/bootstrap_worldfoundry.sh
@@ -53,8 +54,12 @@ bash scripts/setup/link_hf_checkpoints.sh \
 
 这个脚本会同时创建 HFD alias，例如 `THUDM--CogVideoX-5b-I2V`，以及原生
 Hugging Face cache alias，例如
-`models--THUDM--CogVideoX-5b-I2V/snapshots/worldfoundry-local`。新用户不需要
-执行这一步，可以直接让 Hugging Face 按默认策略下载到 `HF_HOME`。
+`models--THUDM--CogVideoX-5b-I2V/snapshots/<40-hex-local-revision>`，并让
+`refs/main` 指向该 local revision。新用户不需要执行这一步，可以直接让
+Hugging Face 按默认策略下载到 `HF_HOME`。
+
+对外公开的默认写法仍然是 Hugging Face repo ID。本地软链接只是为已经下载过
+权重的机器模拟出同一套 cache layout。
 
 单模型首次推理可以用面向发布的 helper 串起这些步骤：
 
@@ -88,11 +93,21 @@ bash scripts/inference/prepare_model_infer.sh <model-id> --download
 JAX/TensorFlow 隔离，或 simulator 依赖。
 
 不要把私有 cache 路径写进公开文档。公开 checkpoint 路径应该是 Hugging Face
-repo id、原生 HF cache 位置，或文档明确声明的 `WORLDFOUNDRY_CKPT_DIR` alias。
+repo ID、原生 HF cache 位置，或文档明确声明的 `WORLDFOUNDRY_CKPT_DIR` alias。
 
 ## CLI 推理
 
-共享命令行推理入口是 Studio workspace job runner：
+日常可复现、写进文档的标准命令是 `worldfoundry-eval run`，与模型页上的命令同一形状：
+
+```bash
+worldfoundry-eval run <model-id> \
+  --pipeline.task-profile <task-profile> \
+  --output-dir tmp/worldfoundry_infer/<model-id>
+```
+
+**选哪条命令。** 日常可复现 / 模型页命令用 `worldfoundry-eval run`。只有 Workspace 视觉冒烟才用 `python -m worldfoundry.studio.workspace_job infer`。入口对照见 [CLI 命令入口](/zh/docs/reference/cli#命令入口)。
+
+Workspace 视觉冒烟（与 Studio UI 提交的是同一条 job 路径）：
 
 ```bash
 python -m worldfoundry.studio.workspace_job infer \
@@ -125,6 +140,186 @@ python -m worldfoundry.studio.workspace_job infer \
   --output-dir tmp/worldfoundry_infer/<model-id>
 ```
 
+### Echo-Memory Context-K1
+
+WorldFoundry 集成 `echo-memory-context-k1`，固定模型 recipe、checkpoint 文件和
+采样布局。结构化加载覆盖已发布的 1,185 张量 DiT；原生 pipeline 切换后的
+全新双 chunk CUDA 验证、官方样例对齐和 benchmark 评分仍待完成。未发布或已撤回权重的 Echo-Memory 变体不纳入接入范围。
+
+Runtime 直接扩展 WorldFoundry 的 canonical Wan 2.1，不调用 DiffSynth。
+架构从不会由 checkpoint header 隐式决定：先按固定 model recipe 构造模型，
+再要求完整的 key 与 shape coverage。当前公开的 K=1 模型使用正常 pipeline 接口：
+
+```python
+from worldfoundry.pipelines.echo_memory.pipeline_echo_memory import (
+    EchoMemoryContextK1Pipeline,
+)
+
+pipe = EchoMemoryContextK1Pipeline.from_pretrained(device="cuda")
+result = pipe(
+    "镜头沿安静的森林小径向前移动。",
+    images="/path/to/anchor.png",
+    camera_trajectory="z*80",
+    output_path="tmp/echo_memory/context_k1.mp4",
+    return_dict=True,
+)
+print(result["generated_video_path"])
+```
+
+研究扩展应保持四层职责分离：
+
+1. 用不可变的 `EchoMemoryRecipe` 和 `EchoMemoryModelSpec` 固定模型身份与可复现实验。
+2. 将 checkpoint 特有的 tensor math 放在 `models/networks` 下。
+3. 将 state-dict conversion 与共享 `Denoiser` adapter 放在 `models/denoisers`，再组合框架自有的 `frozen-context` execution strategy。
+4. 通过 `BaseMemory` 实现历史保留/检索（发布路线使用 `EchoRolloutMemory`），不修改 canonical Wan 路径。
+
+新 recipe 还必须增加严格 checkpoint-structure invariant、固定公开 model ID、
+catalog/binding/profile，并在 promotion 前完成真实 CUDA validation。
+公开用法和 checkpoint 身份见
+[Echo-Memory 模型卡](/zh/docs/guides/supported-models/echo-memory-context-k1)。
+Training 与尚未验证的 FSDP/USP 不属于当前 infer-only surface。
+
+### Matrix-Game 3.5 原生模型
+
+Matrix-Game 3.5 以两个不可变的模型 recipe 注册：
+
+- `matrix-game-3.5-first-person` 始终加载 `first-person.safetensors`。
+- `matrix-game-3.5-third-person` 始终加载 `third-person.safetensors`。该 checkpoint 架构含四个 subject-reference embedding slot；发布的 inference profile 有意把每次请求限制为最多两个 reference。
+
+两个 recipe 共用原生 `DiffusionRequest` → `NativeDiffusionPipeline` 路径，
+并复用 canonical Wan components 与 Depth Anything 3。输入必须包含 anchor image，以及相机 NPZ：
+`extrinsics_c2w`（或 `extrinsics`）形状为 `(N,4,4)`，像素 intrinsics
+形状为 `(4,)`、`(N,4)`、`(3,3)` 或 `(N,3,3)`。单 block 至少需要
+86 个 pose，输出 anchor 加 84 个新生成帧，分辨率 704×1280、16 FPS。
+已发布 base checkpoint 默认使用 25 个去噪 step。
+
+声明式 inference profile 统一位于
+`worldfoundry/data/models/runtime/configs/matrix_game_3p5`；runtime package
+只保留产品推理路径与可注入的 memory research factory。Profile override 统一使用
+`num_inference_blocks`、`num_inference_steps`、`guidance_scale`、
+`inference_seed` 与 `candidates_per_query_group`。上游 validation runner、
+GT/candidate panel、逐 section debug video、latent dump、在线 YOLO 分支和
+VGGT 备选 registration 分支均不进入 infer-only runtime。
+
+```python
+from worldfoundry.pipelines.matrix_game.pipeline_matrix_game_3p5 import (
+    MatrixGame35FirstPersonPipeline,
+)
+
+pipe = MatrixGame35FirstPersonPipeline.from_pretrained(device="cuda")
+result = pipe(
+    image_path="/path/to/anchor.png",
+    camera_path="/path/to/camera_c2w.npz",
+    prompt="镜头向右跟拍，穿过电影感城市街道。",
+    output_path="tmp/matrix_game_3p5/first_person.mp4",
+    return_dict=True,
+)
+print(result["artifact_path"])
+```
+
+第三人称 recipe 使用 `MatrixGame35ThirdPersonPipeline`；需要主体 memory 时传入
+`refs=["/path/to/subject_crop.png"]`。Checkpoint 布局见
+[本地资产](/zh/docs/guides/local-assets)。Memory retrieval
+与 fusion 研究应扩展
+`build_mosaic_inference_dataset(..., dataset_cls=...)` 与
+`build_mosaic_pipeline_module(..., module_cls=...)` 等 factory，
+而不是复制 runtime 或 native diffusion infrastructure。
+
+### Cosmos 1 与 Cosmos 2 原生模型
+
+GEN3C/Cosmos Predict1 与 Cosmos Predict2 都是普通的 native recipe，不是
+family backend。GEN3C 在共享 denoising loop 之前，用 MoGe depth 和 core RGBD
+warp 把命名 camera trajectory 转成条件；Predict2 2B/14B 共用原生 Predict
+backbone 与 Wan codec，再由各自 recipe 选择 T5-11B 和 Rectified Flow AB2。
+
+```python
+from worldfoundry.pipelines.cosmos.pipeline_cosmos_predict2 import CosmosPredict2Pipeline
+from worldfoundry.pipelines.gen3c.pipeline_gen3c import Gen3CPipeline
+
+predict2 = CosmosPredict2Pipeline.from_pretrained(model_id="cosmos-predict2", device="cuda")
+predict2(
+    "镜头向前穿过机器人实验室。",
+    image="/path/to/first_frame.png",
+    output_path="tmp/cosmos/predict2.mp4",
+)
+
+gen3c = Gen3CPipeline.from_pretrained(device="cuda")
+gen3c(
+    images="/path/to/first_frame.png",
+    trajectory="left",
+    output_path="tmp/cosmos/gen3c.mp4",
+)
+```
+
+两个 wrapper 都直接调用 `NativeDiffusionPipeline`。Predict2 checkpoint 受 gated
+access 限制；registry 与结构验证通过并不代表已完成全分辨率 GPU artifact parity。
+
+### Cosmos 2.5 原生模型
+
+`cosmos-predict2.5-2b`、`cosmos-predict2.5-14b` 与
+`cosmos-transfer2.5-2b-controlled-video` 是同一个 registry 中的原生 recipe。
+Predict 支持 text、image 或短视频条件；Transfer 的 `video`/`control_video`
+参数表示 edge-control sequence，可选 `image` 用于锚定首个生成帧。两个公开
+pipeline 默认都使用 93 帧、35 步 Karras flow-UniPC、16 FPS 与 positive guidance。
+
+```python
+from worldfoundry.pipelines.cosmos.pipeline_cosmos_transfer2p5 import (
+    CosmosTransfer2p5Pipeline,
+)
+
+pipe = CosmosTransfer2p5Pipeline.from_pretrained(device="cuda")
+result = pipe(
+    "机器人穿过明亮的工作室。",
+    control_video="/path/to/edge_control.mp4",
+    image="/path/to/first_frame.png",
+    output_path="tmp/cosmos/transfer2p5.mp4",
+    return_dict=True,
+)
+print(result["artifact_path"])
+```
+
+原生路径不会 import Diffusers，也不依赖已删除的
+`base_models/diffusion_model/video/cosmos2p5`。Transfer 当前固定官方
+`general/edge` checkpoint；其他 control variant 需要在验证后作为独立的
+checkpoint-specific recipe 接入。
+
+### HunyuanVideo 原生模型
+
+原版与 1.5 的 T2V/I2V 是同一套 native pipeline 上四个独立 recipe。
+选择 model 只会切换 checkpoint-compatible component，不会切换 runner
+architecture：
+
+```python
+from worldfoundry.pipelines.hunyuan_video.pipeline_hunyuan_video import (
+    HunyuanVideo15I2VPipeline,
+)
+
+pipe = HunyuanVideo15I2VPipeline.from_pretrained(device="cuda")
+result = pipe(
+    "烟花照亮夜晚的城市街道。",
+    image="/path/to/reference.png",
+    output_path="tmp/hunyuanvideo-1.5-i2v.mp4",
+    return_dict=True,
+)
+print(result["artifact_path"])
+```
+
+`hunyuanvideo-t2v`、`hunyuanvideo-i2v`、`hunyuanvideo-1.5-t2v` 与
+`hunyuanvideo-1.5-i2v` 复用框架 loader、scheduler、offload policy、standard
+denoising runner 与 media writer；旧上游 CLI runtime 不再是 backend。生成后可
+通过公开 CLI、catalog model ID 和 benchmark ID 运行生成的视频：
+
+```bash
+worldfoundry run --benchmark vbench \
+  --model hunyuanvideo-1.5-t2v \
+  --generated-artifact-dir /path/to/generated-videos \
+  --mode official-run \
+  --output-dir tmp/bench/hunyuanvideo-1.5-t2v
+```
+
+Registry 与 checkpoint 结构验证已经通过；切换后的 native CUDA artifact parity
+仍需重跑，不能由历史 CLI artifact 替代。
+
 兼容桥接脚本也存在：
 
 ```bash
@@ -148,13 +343,12 @@ bash scripts/workspace/run_workspace.sh
 http://127.0.0.1:7870/
 ```
 
-Workspace 是检查 release readiness 的首选界面。
-
-它适合检查模型专用输入表单、官方 demo 默认参数、生成文件、
-gallery previews 和视觉回归；确认后再记录模型 readiness。
+Workspace 是检查 release readiness 的首选界面。它适合检查模型专用输入表单、
+官方 demo 默认参数、生成文件、gallery preview 和视觉回归；确认之后再记录
+模型 readiness。
 
 逐模型 viewer 路由和 Visualizers 页面说明见
-[Studio 指南](/zh/docs/guides/studio#workspace-可视化器)。
+[Studio 指南](/zh/docs/guides/studio#workspace-可视化入口)。
 
 Create Job 字段、runtime checks、默认值，以及可选的持久化默认配置，见
 [Studio 指南](/zh/docs/guides/studio#create-job-配置)。
@@ -163,23 +357,19 @@ Create Job 字段、runtime checks、默认值，以及可选的持久化默认�
 
 每次推理应产生一个 manifest-like JSON record 和一个或多个 artifact：
 
-| 输出 | 期望用途 |
-| --- | --- |
-| 生成的视频/图像/3D/action artifact | 需要人工视觉或结构检查的主要 demo 输出。 |
-| Job manifest 或 run record | 记录 model id、variant、backend、参数、路径、耗时、状态和错误。 |
-| Logs | Runtime import、checkpoint、CUDA 和模型调用细节。 |
-| Studio 的 Gallery/Files 条目 | 发布验证时的人类 review surface。 |
+- **生成的视频/图像/3D/action artifact** — 需要人工视觉或结构检查的主要 demo 输出。
+- **Job manifest 或 run record** — 记录 model ID、variant、backend、参数、路径、耗时、状态和错误。
+- **Logs** — Runtime import、checkpoint、CUDA 和模型调用细节。
+- **Studio 的 Gallery/Files 条目** — 发布验证时的人类 review surface。
 
-不要把“生成了视频文件”本身当作成功。
-
-还要检查输入契约、prompt/camera/action 控制、帧数、分辨率和 artifact
-内容是否匹配官方 demo 或模型 profile。
+“生成了视频文件”本身不算成功。还要检查输入契约、prompt/camera/action 控制、
+帧数、分辨率与 artifact 内容，是否匹配目标官方 demo 或模型 profile。
 
 ## 下一步
 
-产物确认无误后，进入独立文档章节继续：
+产物确认无误后，继续：
 
 <Cards>
-  <Card title="评测" description="运行 benchmark、对输出评分并阅读 scorecard。" href="/docs/evaluation" />
-  <Card title="Studio" description="多模型 workspace，用于视觉 QA 与 Gallery 审查。" href="/docs/guides/studio" />
+  <Card title="评测" description="运行 benchmark、对输出评分并阅读 scorecard。" href="/zh/docs/evaluation" />
+  <Card title="Studio" description="多模型 workspace，用于视觉 QA 与 Gallery 审查。" href="/zh/docs/guides/studio" />
 </Cards>

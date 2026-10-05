@@ -1,11 +1,10 @@
 import torch
 import os
+from worldfoundry.core.distributed.collectives.evaluation import dist_init, print0
 try:
     from .WorldArena import WorldArenaBenchmark
-    from .WorldArena.distributed import dist_init, print0
 except ImportError:
     from WorldArena import WorldArenaBenchmark
-    from WorldArena.distributed import dist_init, print0
 from datetime import datetime
 import argparse
 import json

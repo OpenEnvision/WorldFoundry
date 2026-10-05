@@ -1,0 +1,43 @@
+---
+title: "DreamX-World 5B"
+description: "高德因果 AR 世界：常驻 KV/VAE 缓存，4 步 AR-Forcing。A100 验证过一块 1280×704 九帧。Apache-2.0。不是长时程 scorecard。"
+modelId: "dreamx-world-5b"
+pageSource: authored
+---
+
+DreamX-World 5B AR 是高德的**因果自回归**世界：潜变量、注意力、交叉注意力和 VAE 缓存保持**常驻**，视频在相机动作下按**三潜帧**块往前滚。解码 RGB **只出不回**——从不作为条件再喂回去。蒸馏 **4 步 AR-Forcing**。Pipeline：`DreamXWorld5BARPipeline`。别名 `dreamx-world-5b-ar` 解析到这里。
+
+<ModelPaperFigures modelId="dreamx-world-5b" locale="zh" />
+
+论文：[arXiv 2606.16993](https://arxiv.org/abs/2606.16993)。项目页：[amap-ml.github.io/DreamX_World](https://amap-ml.github.io/DreamX_World)。代码：[AMAP-ML/DreamX-World](https://github.com/AMAP-ML/DreamX-World)。许可证：**apache-2.0**。
+
+**2026-07-28** 单卡 A100 用官方示例图产出一块可解码的 **1280×704 九帧**（已验证）。那是**两次控制**的常驻路径检查，不是长时程质量对齐。
+
+<ModelCommandBuilder modelId="dreamx-world-5b" locale="zh" />
+
+## 用来做什么
+
+滚一块常驻因果 AR 世界，不是长时程分数卡。
+
+启动 `worldfoundry-eval run dreamx-world-5b`。
+
+评测入口：[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（世界滚动生成的总体质量）。
+
+## 运行时契约
+
+必填 `image`、`prompt`；可选 `video`；`actions`：camera_navigation；产物 `generated_world`、`dreamx-world-5b.mp4`。
+
+| 旋钮 | 记录值 |
+| --- | --- |
+| 已验证块 | **1280×704**、**9** 帧，单卡 A100，**2026-07-28** |
+| 调度 | 蒸馏 **4 步** AR-Forcing |
+| 块 | **三**潜帧；KV / 交叉注意力 / VAE 缓存常驻 |
+| RGB | 只作输出——从不回灌 |
+| 因果权重 | `GD-ML/DreamX-World-5B`（`config.json`、`model.safetensors`） |
+| 配套 | `Wan-AI/Wan2.2-TI2V-5B`（VAE、T5、tokenizer） |
+
+## 在 WorldFoundry 中运行
+
+状态：**已验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `GD-ML/DreamX-World-5B`、`Wan-AI/Wan2.2-TI2V-5B` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run dreamx-world-5b`。catalog 未记录 VRAM。
+
+<ModelRelatedRecipes modelId="dreamx-world-5b" locale="zh" />

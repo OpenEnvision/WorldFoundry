@@ -10,18 +10,80 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import shutil
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
+logger = logging.getLogger(__name__)
 
 _READY_FILE = ".worldfoundry-local-cache.json"
 
 
-def _enabled(source: Path) -> bool:
-    del source
+def _validated_relative_paths(
+    paths: Iterable[str],
+    *,
+    parameter: str,
+) -> tuple[str, ...]:
+    validated: list[str] = []
+    for raw_path in paths:
+        value = str(raw_path)
+        relative = Path(value)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError(
+                f"{parameter} entries must be relative paths without '..': {value!r}"
+            )
+        validated.append(value)
+    return tuple(validated)
+
+
+def _resolved_within(root: Path, candidate: Path, *, description: str) -> Path:
+    resolved_root = root.resolve()
+    resolved_candidate = candidate.resolve()
+    try:
+        resolved_candidate.relative_to(resolved_root)
+    except ValueError as error:
+        raise ValueError(
+            f"{description} resolves outside {resolved_root}: {candidate}"
+        ) from error
+    return resolved_candidate
+
+
+def _resolved_relative(root: Path, relative: str, *, parameter: str) -> Path:
+    return _resolved_within(
+        root,
+        root / relative,
+        description=f"{parameter} entry {relative!r}",
+    )
+
+
+@contextmanager
+def _publish_lock(cache_root: Path, target_name: str) -> Iterator[None]:
+    """Serialize the publish step across unrelated processes via ``flock``.
+
+    Staging copies may run concurrently, but replacing the published target
+    directory must be exclusive: without the lock, one process could delete a
+    directory that a concurrent process just published and started reading.
+    """
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover - non-POSIX platforms
+        yield
+        return
+    lock_path = cache_root / f".{target_name}.lock"
+    with open(lock_path, "w", encoding="utf-8") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def _enabled() -> bool:
     raw = os.getenv("WORLDFOUNDRY_REALTIME_STAGE_CHECKPOINT", "0").strip().lower()
     if raw in {"0", "false", "no", "off"}:
         return False
@@ -34,16 +96,26 @@ def _enabled(source: Path) -> bool:
 
 def _selected_files(source: Path, include_paths: tuple[str, ...]) -> list[Path]:
     if not include_paths:
-        return [item for item in source.rglob("*") if item.is_file() and not item.is_symlink()]
+        selected_files: list[Path] = []
+        for item in source.rglob("*"):
+            if item.is_file() and not item.is_symlink():
+                _resolved_within(source, item, description="checkpoint source file")
+                selected_files.append(item)
+        return selected_files
     selected: set[Path] = set()
     for relative in include_paths:
-        item = source / relative
+        item = _resolved_relative(source, relative, parameter="include_paths")
         if item.is_file() and not item.is_symlink():
             selected.add(item)
         elif item.is_dir():
-            selected.update(
-                child for child in item.rglob("*") if child.is_file() and not child.is_symlink()
-            )
+            for child in item.rglob("*"):
+                if child.is_file() and not child.is_symlink():
+                    _resolved_within(
+                        source,
+                        child,
+                        description="checkpoint source file",
+                    )
+                    selected.add(child)
     return list(selected)
 
 
@@ -59,7 +131,9 @@ def _cache_target(
     identity = json.dumps([str(source), sorted(include_paths)], separators=(",", ":"))
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
     safe_name = "-".join(part for part in source.name.split() if part) or "checkpoint"
-    return cache_root / f"{safe_name}-{digest}"
+    target = cache_root / f"{safe_name}-{digest}"
+    _resolved_within(cache_root, target, description="local checkpoint target")
+    return target
 
 
 def _copy_tree_parallel(
@@ -80,14 +154,28 @@ def _copy_tree_parallel(
         },
         key=lambda item: len(item.parts),
     )
-    target.mkdir(parents=True, exist_ok=False)
+    target.mkdir(parents=True, exist_ok=True)
     for directory in directories:
         (target / directory.relative_to(source)).mkdir(parents=True, exist_ok=True)
 
-    links = [] if include_paths else [item for item in source.rglob("*") if item.is_symlink()]
-    for link in links:
-        destination = target / link.relative_to(source)
-        destination.symlink_to(os.readlink(link), target_is_directory=link.is_dir())
+    links: list[tuple[Path, str]] = []
+    if not include_paths:
+        for link in (item for item in source.rglob("*") if item.is_symlink()):
+            _resolved_within(source, link, description="checkpoint source symlink")
+            destination = target / link.relative_to(source)
+            link_target = os.readlink(link)
+            resolved_link_target = Path(link_target)
+            if not resolved_link_target.is_absolute():
+                resolved_link_target = destination.parent / resolved_link_target
+            _resolved_within(
+                target,
+                resolved_link_target,
+                description="staged checkpoint symlink",
+            )
+            links.append((destination, link_target))
+    for destination, link_target in links:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.symlink_to(link_target)
 
     files.sort(key=lambda item: item.stat().st_size, reverse=True)
     workers = max(
@@ -112,7 +200,10 @@ def _is_ready(target: Path, source: Path, required_paths: tuple[str, ...]) -> bo
         return False
     if payload.get("source") != str(source):
         return False
-    return all((target / relative).exists() for relative in required_paths)
+    return all(
+        _resolved_relative(target, relative, parameter="required_paths").exists()
+        for relative in required_paths
+    )
 
 
 def _stage_rank_zero(
@@ -135,13 +226,16 @@ def _stage_rank_zero(
             f"({source_bytes / 1024**3:.1f} GiB required, {free_bytes / 1024**3:.1f} GiB free)."
         )
 
-    temporary = cache_root / f".{target.name}.tmp-{os.getpid()}"
-    if temporary.exists():
-        shutil.rmtree(temporary)
-    print(
-        f"[worldfoundry] staging {source_bytes / 1024**3:.1f} GiB checkpoint "
-        f"from {source} to {target}",
-        flush=True,
+    temporary = _resolved_within(
+        cache_root,
+        Path(tempfile.mkdtemp(prefix=f".{target.name}.tmp-", dir=cache_root)),
+        description="checkpoint staging directory",
+    )
+    logger.info(
+        "staging %.1f GiB checkpoint from %s to %s",
+        source_bytes / 1024**3,
+        source,
+        target,
     )
     try:
         _copy_tree_parallel(source, temporary, include_paths=include_paths)
@@ -156,9 +250,16 @@ def _stage_rank_zero(
             ),
             encoding="utf-8",
         )
-        if target.exists():
-            shutil.rmtree(target)
-        temporary.rename(target)
+        with _publish_lock(cache_root, target.name):
+            if _is_ready(target, source, required_paths):
+                # A concurrent process published a valid tree while we were
+                # copying. Reuse it and discard the duplicate; deleting the
+                # published tree here would break readers already loading it.
+                shutil.rmtree(temporary, ignore_errors=True)
+                return target
+            if target.exists():
+                shutil.rmtree(target)
+            temporary.rename(target)
     except Exception:
         shutil.rmtree(temporary, ignore_errors=True)
         raise
@@ -180,18 +281,31 @@ def stage_checkpoint_for_realtime(
     """
 
     resolved = Path(source).expanduser().resolve()
-    if not _enabled(resolved):
+    if not _enabled():
         return resolved
+    required = _validated_relative_paths(required_paths, parameter="required_paths")
+    included = tuple(
+        sorted(_validated_relative_paths(include_paths, parameter="include_paths"))
+    )
+    for relative in (*required, *included):
+        parameter = "required_paths" if relative in required else "include_paths"
+        _resolved_relative(resolved, relative, parameter=parameter)
     cache_root_value = os.getenv("WORLDFOUNDRY_REALTIME_LOCAL_CHECKPOINT_CACHE")
     if not cache_root_value:
         raise ValueError(
             "Set WORLDFOUNDRY_REALTIME_LOCAL_CHECKPOINT_CACHE to an explicit "
             "staging directory when checkpoint staging is enabled."
         )
-    cache_root = Path(cache_root_value).expanduser()
-    required = tuple(str(item) for item in required_paths)
-    included = tuple(sorted(str(item) for item in include_paths))
-    missing_source = [relative for relative in required if not (resolved / relative).exists()]
+    cache_root = Path(cache_root_value).expanduser().resolve()
+    missing_source = [
+        relative
+        for relative in required
+        if not _resolved_relative(
+            resolved,
+            relative,
+            parameter="required_paths",
+        ).exists()
+    ]
     if missing_source:
         raise FileNotFoundError(
             f"Checkpoint is incomplete at {resolved}; missing: {', '.join(missing_source)}"
@@ -220,8 +334,18 @@ def stage_checkpoint_for_realtime(
     payload = status[0] or {}
     if payload.get("error"):
         raise RuntimeError(f"Realtime checkpoint staging failed: {payload['error']}")
-    target = Path(payload.get("path") or resolved)
-    if not all((target / relative).exists() for relative in required):
+    published_path = payload.get("path")
+    if not published_path:
+        raise RuntimeError("Realtime checkpoint staging returned no local path")
+    target = _resolved_within(
+        cache_root,
+        Path(published_path).expanduser(),
+        description="published local checkpoint path",
+    )
+    if not all(
+        _resolved_relative(target, relative, parameter="required_paths").exists()
+        for relative in required
+    ):
         raise FileNotFoundError(f"Staged checkpoint is incomplete: {target}")
     return target
 

@@ -1,0 +1,41 @@
+---
+title: "Astra"
+description: "Wan2.1-1.3B interactive world with camera actions. Official garden_1 Sekai demo is runner-verified: 832×480, 97 frames, 20 fps. Apache-2.0 bases."
+modelId: "astra"
+pageSource: authored
+---
+
+Astra is an **interactive world model** on a Wan2.1 backbone: one image plus camera actions roll out navigable world video. WorldFoundry vendors the infer-only runtime under `worldfoundry/synthesis/visual_generation/kling/astra_runtime` and exposes it as `AstraPipeline`. Studio defaults mirror the official Wan2.1-backed **Sekai** image rollout.
+
+<ModelPaperFigures modelId="astra" locale="en" />
+
+The official paper is [Astra: General Interactive World Model with Autoregressive Denoising](https://arxiv.org/abs/2512.08931) (ICLR 2026, arXiv 2512.08931). Project: [eternalevan.github.io/Astra-project](https://eternalevan.github.io/Astra-project/). Code: [EternalEvan/Astra](https://github.com/EternalEvan/Astra). Weights: `EvanEternal/Astra` (mirror `KwaiVGI/Astra`) plus `Wan-AI/Wan2.1-T2V-1.3B`. Recorded license on those bases: **apache-2.0**. Publishing institution is not recorded here.
+
+Runner parity is **verified**: the official **garden_1** Sekai demo ran through the in-tree Studio/API path with `forward_left` camera control and emitted **97 frames at 832×480, 20 fps**.
+
+<ModelCommandBuilder modelId="astra" locale="en" />
+
+## What it is for
+
+Astra world / video route as recorded.
+
+Launch `worldfoundry-eval run astra` with `--pipeline.task-profile official-sekai-image`.
+
+Score on [CameraBench](/docs/evaluation/benchmark-hub/camerabench) — camera-following accuracy of interactive rollouts.
+
+## Runtime contract
+
+Required: `prompt` and `image`; optional: `video`; `actions`: camera_direction; artifacts: `astra.mp4`.
+
+| Knob | Verified demo |
+| --- | --- |
+| Size | **832×480** |
+| Frames | **97** |
+| FPS | **20** |
+| Camera | `forward_left` on garden_1 |
+
+## Run in WorldFoundry
+
+Status: **Verified**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `EvanEternal/Astra`, `Wan-AI/Wan2.1-T2V-1.3B`, and `EvanEternal/Astra` among others locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run astra` with `--pipeline.task-profile official-sekai-image`. Catalog VRAM is unset.
+
+<ModelRelatedRecipes modelId="astra" locale="en" />

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Dexora">
+  <rect width="128" height="128" rx="28" fill="#1b1714"/>
+  <path fill="#e8d5a3" d="M34 28h30c24 0 40 16 40 36s-16 36-40 36H34V28zm18 16v40h12c14 0 24-10 24-20S78 44 64 44H52z"/>
+  <path fill="none" stroke="#c4a574" stroke-width="5" stroke-linecap="round" d="M94 40c10 8 15 16 15 24s-5 16-15 24"/>
+</svg>

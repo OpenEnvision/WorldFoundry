@@ -1,0 +1,50 @@
+---
+title: "World Labs API"
+description: "World Labs API from World Labs: world-generation and assets; Runner parity pending."
+modelId: "worldlabs"
+pageSource: authored
+---
+
+World Labs API is the hosted entry for World Labs' generative world service, recorded for world-generation and asset outputs rather than flat video. Instead of returning a clip, the service produces explorable 3D world content on World Labs' infrastructure; WorldFoundry archives what the API returns as artifacts. This is the only hosted_api entry in the catalog aimed at world generation instead of video generation.
+
+<ModelPaperFigures modelId="worldlabs" locale="en" />
+
+Project page: [worldlabs.ai](https://www.worldlabs.ai/).
+
+<ModelCommandBuilder modelId="worldlabs" locale="en" />
+
+## What it is for
+
+`worldlabs` is the hosted inference line. Start here when no local checkpoint is recorded on the card.
+
+World Labs has not published the architecture behind its world generation service; this repository records only the hosted endpoint integration and the artifact kinds it returns.
+
+Catalog tasks include world-generation, assets, and hosted-api.
+
+Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Unified benchmark for scoring generated explorable worlds).
+
+Not [Marble 1.1](/docs/guides/supported-models/worldlabs-marble-1.1). Score on [WorldScore](/docs/evaluation/benchmark-hub/worldscore).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `prompt_type`, `image_azimuths`, and `disable_recaption`.
+
+CLI task profiles: `default`. WorldFoundry binds `WorldLabsPipeline`.
+
+Family status: **Runner parity pending**.
+
+The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Access is provisioned through World Labs' platform (worldlabs.ai).
+
+Hosted API Studio pipeline is available; users must provide their own provider API key.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run worldlabs --pipeline.task-profile default` to call the hosted route. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+The environment profile is not recorded.
+
+Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh worldlabs`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="worldlabs" locale="en" />

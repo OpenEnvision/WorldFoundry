@@ -27,5 +27,5 @@ execution:
 integration:
   status: runtime_ported
 notes:
-- LeWorldModel source is vendored in-tree under synthesis/visual_generation/world_model/le_wm.
+- LeWorldModel source is vendored in-tree under synthesis/visual_generation/le_wm.
 - The pipeline resolves the official eval entrypoint through an infer-only wrapper; execution needs stable-worldmodel packages and task datasets, with policy weights only when policy is not random.

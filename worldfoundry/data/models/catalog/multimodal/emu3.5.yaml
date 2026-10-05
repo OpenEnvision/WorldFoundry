@@ -1,0 +1,45 @@
+id: emu3.5
+name: Emu3.5
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: emu3.5
+aliases:
+- emu3p5
+- emu3_5
+- BAAI/Emu3.5
+tasks:
+- multimodal-generation
+- image-generation
+provider: worldfoundry_native
+source:
+  status: open_source
+  official_repo_url: https://huggingface.co/BAAI/Emu3.5
+  notes:
+  - Official source checkout is pinned to baaivision/Emu3.5 revision 8fcf1da48f9c5252fe0a0b8dc842e07b6efcd745.
+integration:
+  status: integrated
+  notes:
+  - The official model class and generation path are invoked from a pinned checkout with eager attention.
+  - Checkpoint-backed GPU inference produced an official protobuf with text and two decoded images. Official CLI byte-for-byte parity remains untested.
+runtime_profile: runtime-profile:emu3.5
+runner_parity:
+  status: pending
+  notes:
+  - The WorldFoundry pipeline produced a checkpoint-backed protobuf with text and two decoded PNG images; a separate official CLI comparison has not been run.
+catalog_category: multimodal
+catalog_scope: Interleaved text and image generation.
+docs:
+  publisher: Beijing Academy of Artificial Intelligence (BAAI)
+  publisher_kind: lab
+  publisher_zh: 北京智源人工智能研究院（BAAI）
+  overview: 'Emu3.5 is BAAI''s native multimodal model for interleaved text and images. WorldFoundry uses the pinned official implementation and emits its protobuf response. Checkpoint-backed GPU inference has produced text and decoded images; no video output is claimed.'
+  overview_zh: Emu3.5 是北京智源（BAAI）面向交错文本与图像的原生多模态模型。WorldFoundry 调用固定版本的官方实现并输出其 protobuf 响应。权重支持的 GPU 推理已生成文本和可解码图像；不宣称视频输出。
+  architecture: Emu3.5 predicts a unified text/image token stream and generates visual tokens with discrete diffusion, then decodes visual tokens through its separate vision tokenizer.
+  architecture_zh: Emu3.5 预测统一的图文 token 序列，并以离散扩散生成视觉 token，再通过独立的视觉 tokenizer 解码。
+  usage_notes: Stage the BAAI/Emu3.5 and BAAI/Emu3.5-VisionTokenizer weights plus the pinned official source checkout. The default story and howto tasks return an official protobuf response.
+  usage_notes_zh: 就位 BAAI/Emu3.5、BAAI/Emu3.5-VisionTokenizer 权重和固定版本的官方源码。默认 story 和 howto 任务返回官方 protobuf 响应。
+  limitations:
+  - Official CLI byte-for-byte parity and larger image sizes have not been verified in this workspace.
+  - The official checkpoint card describes text/image generation, not video generation.
+  limitations_zh:
+  - 本工作区尚未验证与官方 CLI 的逐字节一致性或更大尺寸图像。
+  - 官方权重说明的是文本/图像生成，而非视频生成。

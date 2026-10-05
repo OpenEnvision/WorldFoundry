@@ -1,5 +1,7 @@
 """Module for the Camera operator implementation."""
 
+import logging
+
 import torch
 from torchvision.transforms import v2
 import torchvision
@@ -8,6 +10,8 @@ from PIL import Image
 import numpy as np
 from einops import rearrange
 from .base_operator import BaseOperator
+
+logger = logging.getLogger(__name__)
 
 
 class Camera(object):
@@ -83,7 +87,7 @@ class ReCamMasterOperator(BaseOperator):
         reader = imageio.get_reader(file_path)
         if reader.count_frames() < self.max_num_frames or reader.count_frames() - 1 < start_frame_id + (self.num_frames - 1) * self.frame_interval:
             reader.close()
-            print(f"WARNING: Your video clip is too short. The length of video clip need longer than {self.max_num_frames}")
+            logger.warning("Your video clip is too short. The length of video clip need longer than %s", self.max_num_frames)
             return None
         
         frames = []

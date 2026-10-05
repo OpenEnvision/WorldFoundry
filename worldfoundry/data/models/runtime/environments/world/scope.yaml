@@ -56,6 +56,5 @@ validation_imports:
 - pyarrow
 - imageio
 - peft
-- worldfoundry.base_models.diffusion_model.diffsynth
-- worldfoundry.base_models.diffusion_model.diffsynth.models.scope_dit
-- worldfoundry.base_models.diffusion_model.diffsynth.pipelines.scope_pipeline
+- worldfoundry.base_models.diffusion_model.models.networks.wan.variants.scope_action
+- worldfoundry.synthesis.visual_generation.scope.scope_runtime.native_pipeline

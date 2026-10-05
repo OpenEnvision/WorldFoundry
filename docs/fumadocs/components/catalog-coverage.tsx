@@ -36,7 +36,13 @@ function EntryRow({
   const body = (
     <>
       <span className="wf-catalog-entry-name">{entry.name}</span>
-      <span className="wf-catalog-entry-id">{entry.id}</span>
+      <span className="wf-catalog-entry-id">
+        {entry.versions
+          ? entry.versions.length > 4
+            ? `${entry.versions.length} variants`
+            : entry.versions.join(' · ')
+          : entry.id}
+      </span>
     </>
   );
 

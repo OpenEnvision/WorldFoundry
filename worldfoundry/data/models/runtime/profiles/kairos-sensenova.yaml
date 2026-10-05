@@ -30,8 +30,8 @@ execution:
 integration:
   status: verified
 official_demo:
-  config: kairos/configs/kairos_4b_config_DMD.py
-  input_recipe: examples/example_t2v_480P.json
+  config: ${WORLDFOUNDRY_DATA_ROOT}/models/runtime/configs/kairos/kairos_4b_config_DMD.py
+  input_recipe: ${WORLDFOUNDRY_DATA_ROOT}/models/runtime/configs/kairos/examples/example_t2v_480P.json
   nproc_per_node: 8
   call_kwargs:
     cfg_scale: 5

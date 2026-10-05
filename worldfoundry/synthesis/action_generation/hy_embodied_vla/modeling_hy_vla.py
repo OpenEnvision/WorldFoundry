@@ -466,6 +466,7 @@ class HyVLA(nn.Module):
             tokenizer_model_path,
             trust_remote_code=False,
             local_files_only=True,
+            fix_mistral_regex=True,
         )
 
         self.model = HyVLAFlowMatching(

@@ -7,17 +7,24 @@ runtime:
   - ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/synthesis/visual_generation/framepack/framepack_runtime
   checkpoint_candidates:
   - $WORLDFOUNDRY_CKPT_DIR/FramePackI2V_HY
+  - $WORLDFOUNDRY_CKPT_DIR/lllyasviel--FramePackI2V_HY
+  - $WORLDFOUNDRY_CKPT_DIR/lllyasviel--FramePack_F1_I2V_HY_20250503
   - $WORLDFOUNDRY_HFD_ROOT/lllyasviel--FramePackI2V_HY
   - $WORLDFOUNDRY_HFD_ROOT/lllyasviel--FramePack_F1_I2V_HY_20250503
   defaults:
     hf_home: $WORLDFOUNDRY_HFD_ROOT
     hunyuan_root: $WORLDFOUNDRY_HFD_ROOT/hub/models--hunyuanvideo-community--HunyuanVideo
     flux_redux_root: $WORLDFOUNDRY_CKPT_DIR/FLUX.1-Redux-dev
-    seconds: 1
+    seconds: 5
     latent_window_size: 9
-    num_steps: 4
+    num_steps: 25
     seed: 31337
+    cfg: 1.0
+    gs: 10.0
+    rs: 0.0
     gpu_memory_preservation: 6
+    use_teacache: true
+    mp4_crf: 16
   command:
   - "{python}"
   - "-m"
@@ -46,7 +53,18 @@ runtime:
   - "{num_steps}"
   - "--seed"
   - "{seed}"
+  - "--cfg"
+  - "{cfg}"
+  - "--gs"
+  - "{gs}"
+  - "--rs"
+  - "{rs}"
   - "--gpu-memory-preservation"
   - "{gpu_memory_preservation}"
+  - "--use-teacache"
+  - "{use_teacache}"
+  - "--mp4-crf"
+  - "{mp4_crf}"
 notes:
 - Official repo exposes a Gradio entrypoint; WorldFoundry vendors the minimal inference runtime in-tree and wraps the official process function in a non-interactive runner.
+- Defaults preserve the official UI quality recipe: five seconds at 30 FPS and 25 denoising steps per FramePack section.

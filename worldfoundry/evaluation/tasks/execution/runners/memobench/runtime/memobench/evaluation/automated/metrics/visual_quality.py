@@ -1,11 +1,14 @@
 import numpy as np
 import torch
-import torch.nn as nn
 import requests
 import os
 import cv2
 from PIL import Image
 
+from worldfoundry.evaluation.tasks.metrics._shared.aesthetic import (
+    load_laion_aesthetic_mlp_head,
+)
+from worldfoundry.evaluation.tasks.metrics._shared.clip_embed import open_clip_bundle
 
 _AESTHETIC_URL = (
     "https://github.com/christophschuhmann/improved-aesthetic-predictor"
@@ -14,28 +17,26 @@ _AESTHETIC_URL = (
 _AESTHETIC_CACHE = os.path.expanduser("~/.cache/aesthetic_predictor.pth")
 
 _aes_model = None
-_aes_clip = None
-_aes_preprocess = None
 _aes_device = None
 
 
 def _load_aesthetic(device: str = None):
-    global _aes_model, _aes_clip, _aes_preprocess, _aes_device
+    """Load the MemoBench aesthetic scorer.
 
-    if _aes_model is not None:
-        return _aes_model, _aes_clip, _aes_preprocess, _aes_device
-
-    import open_clip
+    Provenance: the CLIP ViT-L/14 backbone and improved-aesthetic-predictor MLP
+    head construction are delegated to the shared in-tree helpers
+    (``metrics._shared.clip_embed`` / ``metrics._shared.aesthetic``). Only the
+    MemoBench download-to-cache staging protocol stays here.
+    """
+    global _aes_model, _aes_device
 
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-    _aes_device = device
+    clip_model, preprocess, _ = open_clip_bundle("openai:ViT-L-14", device)
 
-    # Load CLIP ViT-L/14 (same backbone used by LAION predictor)
-    _aes_clip, _, _aes_preprocess = open_clip.create_model_and_transforms(
-        "ViT-L-14", pretrained="openai"
-    )
-    _aes_clip = _aes_clip.to(device).eval()
+    if _aes_model is not None:
+        return _aes_model, clip_model, preprocess, _aes_device
+    _aes_device = device
 
     # Download aesthetic head weights if not cached
     if not os.path.exists(_AESTHETIC_CACHE):
@@ -46,24 +47,9 @@ def _load_aesthetic(device: str = None):
         with open(_AESTHETIC_CACHE, "wb") as f:
             f.write(r.content)
 
-    # MLP architecture matching the LAION improved-aesthetic-predictor checkpoint
-    _aes_model = nn.Sequential(
-        nn.Linear(768, 1024),
-        nn.Dropout(0.2),
-        nn.Linear(1024, 128),
-        nn.Dropout(0.2),
-        nn.Linear(128, 64),
-        nn.Dropout(0.1),
-        nn.Linear(64, 16),
-        nn.Linear(16, 1),
-    )
-    state = torch.load(_AESTHETIC_CACHE, map_location="cpu", weights_only=True)
-    # Checkpoint stores keys as "layers.0.weight" — strip the prefix
-    state = {k.replace("layers.", ""): v for k, v in state.items()}
-    _aes_model.load_state_dict(state)
-    _aes_model = _aes_model.to(device).eval()
+    _aes_model = load_laion_aesthetic_mlp_head(_AESTHETIC_CACHE).to(device)
 
-    return _aes_model, _aes_clip, _aes_preprocess, _aes_device
+    return _aes_model, clip_model, preprocess, _aes_device
 
 
 def _bgr_to_pil(img: np.ndarray) -> Image.Image:

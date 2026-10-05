@@ -1,147 +1,42 @@
-"""Wan 2P1 T2V visual generation pipeline module."""
+"""Public Wan2.1 text-to-video adapters for the native diffusion infra."""
 
 from __future__ import annotations
 
-from ...synthesis.visual_generation.memory.video import VideoArtifactMemory
-from ..pipeline_utils import PipelineABC
-from typing import Any, Dict, Optional
+from ..native_diffusion_video import NativeTextToVideoPipeline
 
-from ...operators.runtime_video_operator import RuntimeVideoOperator
-from ...synthesis.visual_generation.wan.wan_2p1_t2v_synthesis import Wan2p1T2VSynthesis
+WAN21_NEGATIVE_PROMPT = (
+    "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，"
+    "整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，"
+    "画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，"
+    "手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
+)
 
 
-class Wan2p1T2VPipeline(PipelineABC):
-    """Independent WorldFoundry pipeline for Wan2p1T2V."""
+class Wan2p1T2VPipeline(NativeTextToVideoPipeline):
+    """Wan2.1 T2V 1.3B on the framework-owned native runner."""
 
-    SYNTHESIS_CLS = Wan2p1T2VSynthesis
+    MODEL_ID = "wan2.1-t2v-1.3b"
+    OWNER = "Wan2.1 T2V 1.3B"
+    CHECKPOINT_ROLES = ("dit", "text-encoder", "tokenizer", "vae")
+    PEFT_ADAPTER_COMPONENT = "denoiser:main"
+    DEFAULT_HEIGHT = 480
+    DEFAULT_WIDTH = 832
+    DEFAULT_NUM_FRAMES = 81
+    DEFAULT_NUM_INFERENCE_STEPS = 50
+    DEFAULT_GUIDANCE_SCALE = 6.0
+    DEFAULT_NEGATIVE_PROMPT = WAN21_NEGATIVE_PROMPT
+    DEFAULT_FPS = 16
+    DEFAULT_SCHEDULER_OPTIONS = {"shift": 8.0}
 
-    def __init__(
-        self,
-        operator: Optional[RuntimeVideoOperator] = None,
-        synthesis_model=None,
-        memory_module: Optional[VideoArtifactMemory] = None,
-        device: str = "cuda",
-    ) -> None:
-        """Initialize the pipeline and configure runtime components."""
-        self.synthesis_model = synthesis_model
-        self.generation_type = getattr(synthesis_model, "generation_type", "i2v")
-        self.model_name = getattr(synthesis_model, "model_name", None)
-        self.operator = operator or RuntimeVideoOperator(generation_type=self.generation_type)
-        self.memory_module = memory_module or VideoArtifactMemory(model_id='wan-2.1-t2v')
-        self.device = device
 
-    @classmethod
-    def from_pretrained(
-        cls,
-        model_path: Optional[str] = None,
-        required_components: Optional[Dict[str, Any]] = None,
-        device: str = "cuda",
-        lazy: bool = True,
-        **kwargs,
-    ) -> "Wan2p1T2VPipeline":
-        """Load the pipeline from pretrained checkpoints and configurations."""
-        required_components = dict(required_components or {})
-        generator_overrides = dict(required_components)
-        generator_overrides.update(kwargs)
+class Wan2p1T2V14BPipeline(Wan2p1T2VPipeline):
+    """Wan2.1 T2V 14B using the same component and execution contracts."""
 
-        synthesis_model = cls.SYNTHESIS_CLS.from_pretrained(
-            pretrained_model_path=model_path,
-            device=device,
-            lazy=lazy,
-            generator_overrides=generator_overrides,
-        )
-        return cls(
-            operator=RuntimeVideoOperator(generation_type=synthesis_model.generation_type),
-            synthesis_model=synthesis_model,
-            memory_module=VideoArtifactMemory(model_id='wan-2.1-t2v'),
-            device=device,
-        )
+    MODEL_ID = "wan2.1-t2v-14b"
+    OWNER = "Wan2.1 T2V 14B"
+    DEFAULT_HEIGHT = 720
+    DEFAULT_WIDTH = 1280
+    DEFAULT_SCHEDULER_OPTIONS = {"shift": 5.0}
 
-    def process(self, prompt: str, images=None, **kwargs) -> Dict[str, Any]:
-        """Process and normalize input arguments and conditions for inference."""
-        del kwargs
-        self.operator.get_interaction(prompt)
-        try:
-            interaction = self.operator.process_interaction()
-        finally:
-            self.operator.delete_last_interaction()
-        perception = self.operator.process_perception(images=images)
-        return {
-            "prompt": interaction["processed_prompt"],
-            "images": perception["images"],
-        }
 
-    def __call__(
-        self,
-        prompt: str,
-        images=None,
-        output_path: Optional[str] = None,
-        fps: Optional[int] = None,
-        return_dict: bool = False,
-        **kwargs,
-    ):
-        """Execute the complete pipeline generation flow."""
-        if self.synthesis_model is None:
-            raise RuntimeError("Synthesis model is not loaded. Use from_pretrained() first.")
-
-        processed = self.process(prompt=prompt, images=images)
-        result = self.synthesis_model.predict(
-            prompt=processed["prompt"],
-            images=processed["images"],
-            output_path=output_path,
-            fps=fps,
-            return_dict=True,
-            **kwargs,
-        )
-        if return_dict:
-            return result
-        return result["video"]
-
-    def stream(
-        self,
-        prompt: str,
-        images=None,
-        output_path: Optional[str] = None,
-        fps: Optional[int] = None,
-        return_dict: bool = False,
-        **kwargs,
-    ):
-        """Stream visual generation outputs chunk by chunk."""
-        if self.memory_module is None:
-            raise ValueError("memory_module is not initialized")
-
-        current_images = images
-        if current_images is None and self.generation_type == "i2v":
-            current_images = self.memory_module.select(prefer_type="image")
-            if current_images is None:
-                raise ValueError("stream() for i2v models requires an initial image on the first call.")
-        elif current_images is not None:
-            self.memory_module.record(current_images, metadata={"kind": "input_image"})
-
-        result = self(
-            prompt=prompt,
-            images=current_images,
-            output_path=output_path,
-            fps=fps,
-            return_dict=True,
-            **kwargs,
-        )
-        self.memory_module.record(
-            result["video"],
-            metadata={
-                "prompt": prompt,
-                "model_name": self.model_name,
-                "generation_type": self.generation_type,
-            },
-        )
-        if return_dict:
-            return result
-        return result["video"]
-
-    def get_operator(self) -> RuntimeVideoOperator:
-        """Get operator for Wan2p1T2VPipeline."""
-        return self.operator
-
-    def get_synthesis_model(self):
-        """Get synthesis model for Wan2p1T2VPipeline."""
-        return self.synthesis_model
+__all__ = ["Wan2p1T2V14BPipeline", "Wan2p1T2VPipeline"]

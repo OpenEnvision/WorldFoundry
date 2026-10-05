@@ -15,7 +15,7 @@ artifact_kind: generated_video
 artifact_filename: unianimate-dit.mp4
 execution:
   backend_stage: official_runtime_bridge
-  runtime_status: integrated_checkpoint_required
+  runtime_status: checkpoint_backed_short_gpu_inference_verified
   integration_status: integrated
   pipeline_binding: unianimate-dit
 integration:

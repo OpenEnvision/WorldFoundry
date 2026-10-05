@@ -1,0 +1,50 @@
+---
+title: "TesserAct"
+description: "TesserAct from University of Massachusetts Amherst (Embodied AGI Lab): embodied-world-model and robotics-world-model; Runner parity pending."
+modelId: "tesseract"
+pageSource: generated
+---
+
+TesserAct is an embodied 4D world model for robotics: it predicts action-conditioned video of manipulation scenes with temporally consistent geometry. The official WorldArena-listed source is vendored in-tree, WorldFoundry registers a runtime manifest pipeline for it, and the confirmed anyeZHY/tesseract checkpoint is referenced on Hugging Face.
+
+<ModelPaperFigures modelId="tesseract" locale="en" />
+
+The recorded paper is [arXiv 2504.20995](https://arxiv.org/abs/2504.20995).
+
+Project page: [tesseractworld.github.io](https://tesseractworld.github.io/). Code: [UMass-Embodied-AGI/TesserAct](https://github.com/UMass-Embodied-AGI/TesserAct).
+
+<ModelCommandBuilder modelId="tesseract" locale="en" />
+
+## What it is for
+
+Use `tesseract` for catalog world-model inference. Choose it when you need action-conditioned future frames rather than a standalone clip generator.
+
+The vendored runtime lives under synthesis/action_generation/tesseract/tesseract_runtime and resolves the official inference entrypoint. Architecture internals beyond the vendored source are not recorded in this repository. It is published by University of Massachusetts Amherst (Embodied AGI Lab).
+
+Catalog tasks include embodied-world-model, robotics-world-model, and action-conditioned-video. Catalog aliases include `tesser-act`.
+
+Recorded evaluation entry points include [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) (Embodied manipulation world-model quality), [WorldArena](/docs/evaluation/benchmark-hub/worldarena) (Listed among WorldArena open-source world models).
+
+## Runtime contract
+
+Optional `input_path`, `prompt`, `load.checkpoint_dir`, `load.base_model_dir`, and `geometry_mode`; artifacts `tesseract.mp4`.
+
+CLI task profiles: `robot-action-video`. WorldFoundry binds `TesserActPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `robot-action-video` defaults: height=256, width=320, fps=8, seed=23.
+
+The pipeline returns blocked runtime diagnostics until checkpoints and embodied task assets are staged locally. Stage anyeZHY/tesseract plus the task assets first, then rerun.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run tesseract --pipeline.task-profile robot-action-video` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `anyeZHY/tesseract` and `THUDM/CogVideoX-5b-I2V`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh tesseract`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="tesseract" locale="en" />

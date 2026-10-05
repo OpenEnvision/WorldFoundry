@@ -9,19 +9,37 @@ function notifyMainScroll(main: HTMLElement) {
   window.dispatchEvent(new Event(DOCS_MAIN_SCROLL_EVENT));
 }
 
-function forwardWheelToMain(panel: HTMLElement, main: HTMLElement, event: WheelEvent) {
-  const canScroll = panel.scrollHeight > panel.clientHeight + 1;
+function findScrollContainer(node: Node | null): HTMLElement | null {
+  let current: Node | null = node;
+  while (current && current instanceof HTMLElement) {
+    const overflowY = getComputedStyle(current).overflowY;
+    const canScroll =
+      (overflowY === 'auto' || overflowY === 'scroll') &&
+      current.scrollHeight > current.clientHeight + 1;
+    if (canScroll) return current;
+    current = current.parentElement;
+  }
+  return null;
+}
 
-  if (!canScroll) {
+function forwardWheelToMain(panel: HTMLElement, main: HTMLElement, event: WheelEvent) {
+  // The sidebar/right-rail panels are `overflow: hidden` flex columns; the real
+  // scroll happens on an inner container (e.g. `.pi-doc-list`). Forwarding to the
+  // panel itself made `canScroll` always false, which preventDefault'd the wheel
+  // and starved the inner list. Resolve the actual scrollable ancestor instead.
+  const scroller = findScrollContainer(event.target instanceof Node ? event.target : null);
+
+  if (!scroller) {
     main.scrollTop += event.deltaY;
     notifyMainScroll(main);
     event.preventDefault();
     return;
   }
 
-  const atTop = panel.scrollTop <= 0;
-  const atBottom = panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 1;
+  const atTop = scroller.scrollTop <= 0;
+  const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
 
+  // Only hand the wheel to the main column once the inner list has reached an edge.
   if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) {
     main.scrollTop += event.deltaY;
     notifyMainScroll(main);

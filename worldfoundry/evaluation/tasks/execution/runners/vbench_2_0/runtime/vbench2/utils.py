@@ -39,7 +39,7 @@ except ImportError:
 CACHE_DIR = os.environ.get('VBENCH2_CACHE_DIR')
 if CACHE_DIR is None:
     CACHE_DIR = os.path.join(os.path.expanduser('~'), '.cache', 'vbench2')
-from .distributed import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_rank,
     barrier,
 )

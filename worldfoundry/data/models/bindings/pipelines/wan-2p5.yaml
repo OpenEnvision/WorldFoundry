@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: wan-2p5
+model_id: wan-2p5
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.wan.pipeline_wan_2p5:Wan2p5Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

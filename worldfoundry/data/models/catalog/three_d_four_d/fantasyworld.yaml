@@ -75,3 +75,26 @@ catalog_policy:
   - open_weights_restricted
   - api_or_closed
   - unknown
+docs:
+  publisher: Alibaba (Amap, Fantasy-AMAP)
+  publisher_kind: company
+  publisher_zh: 阿里巴巴（高德 Fantasy-AMAP 团队）
+  overview: 'FantasyWorld does geometry-consistent world modeling by unifying video and 3D prediction: from an image it produces camera-controllable world video that stays geometrically coherent. Two variants are recorded — the verified Wan2.1 pipeline (the release-facing default) and a Wan2.2 pipeline that stays hidden from Studio until its official memory strategy is verified.'
+  overview_zh: FantasyWorld 通过统一视频与 3D 预测实现几何一致的世界建模：从一张图生成相机可控、几何连贯的世界视频。记录两个 variant——已验证的 Wan2.1 pipeline（面向发布的默认路径），以及在官方显存策略验证前对 Studio 隐藏的 Wan2.2 pipeline。
+  architecture: FantasyWorld augments a Wan video backbone with a unified 3D-prediction branch so that generated frames respect scene geometry (per arXiv 2509.21657). Runtime execution requires local FantasyWorld Wan2.1, Wan2.1 I2V, MoGe, and CUDA assets.
+  architecture_zh: FantasyWorld 在 Wan 视频基座上增加统一的 3D 预测分支，使生成帧遵守场景几何（见 arXiv 2509.21657）。运行需要本地 FantasyWorld Wan2.1、Wan2.1 I2V、MoGe 与 CUDA 资产。
+  usage_notes: The default row resolves to the verified in-tree Wan2.1 runner — that is the route to use. The Wan2.2 variant remains pending because the official single-GPU run requires an accepted memory strategy.
+  usage_notes_zh: 默认行解析到已验证的树内 Wan2.1 runner——请使用该路径。Wan2.2 variant 因官方单卡运行需要认可的显存策略而保持 pending。
+  limitations:
+  - The Wan2.2 variant is hidden from Studio until its memory strategy is verified.
+  - Requires several staged asset sets (FantasyWorld, Wan2.1 I2V, MoGe).
+  limitations_zh:
+  - Wan2.2 variant 在显存策略验证前对 Studio 隐藏。
+  - 需要就位多套资产（FantasyWorld、Wan2.1 I2V、MoGe）。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Scores geometry-consistent generated worlds.
+    reason_zh: 评估几何一致的生成世界。
+  - id: camerabench
+    reason: Camera-control quality evaluation.
+    reason_zh: 相机控制质量评测。

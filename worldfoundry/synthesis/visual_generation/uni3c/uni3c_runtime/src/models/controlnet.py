@@ -5,7 +5,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from diffusers.models import ModelMixin
 from diffusers.models.attention_processor import Attention
-from xfuser.core.long_ctx_attention import xFuserLongContextAttention
+
+from src.models.rotary_compat import apply_rotary_embedding_bhld
+from src.xfuser_compat import long_context_attention
 
 
 def zero_module(module):
@@ -50,13 +52,8 @@ class WanAttnProcessorSP:
         value = value.unflatten(2, (attn.heads, -1)).transpose(1, 2)
 
         if rotary_emb is not None:
-            def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
-                x_rotated = torch.view_as_complex(hidden_states.to(torch.float64).unflatten(3, (-1, 2)))
-                x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4)
-                return x_out.type_as(hidden_states)
-
-            query = apply_rotary_emb(query, rotary_emb)
-            key = apply_rotary_emb(key, rotary_emb)
+            query = apply_rotary_embedding_bhld(query, rotary_emb)
+            key = apply_rotary_embedding_bhld(key, rotary_emb)
 
         # I2V task
         hidden_states_img = None
@@ -82,7 +79,7 @@ class WanAttnProcessorSP:
             query = query.transpose(1, 2)
             key = key.transpose(1, 2)
             value = value.transpose(1, 2)
-            hidden_states = xFuserLongContextAttention()(None, query=half(query), key=half(key), value=half(value))
+            hidden_states = long_context_attention(None, query=half(query), key=half(key), value=half(value))
             hidden_states = hidden_states.transpose(1, 2)
         else:
             hidden_states = F.scaled_dot_product_attention(
@@ -128,13 +125,8 @@ class SimpleAttnProcessor2_0:
         value = value.unflatten(2, (attn.heads, -1)).transpose(1, 2)  # [b,head,l,c]
 
         if rotary_emb is not None:
-            def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
-                x_rotated = torch.view_as_complex(hidden_states.to(torch.float64).unflatten(3, (-1, 2)))
-                x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4)
-                return x_out.type_as(hidden_states)
-
-            query = apply_rotary_emb(query, rotary_emb)
-            key = apply_rotary_emb(key, rotary_emb)
+            query = apply_rotary_embedding_bhld(query, rotary_emb)
+            key = apply_rotary_embedding_bhld(key, rotary_emb)
 
         if self.sp_size > 1:
             def half(x):
@@ -143,7 +135,7 @@ class SimpleAttnProcessor2_0:
             query = query.transpose(1, 2)
             key = key.transpose(1, 2)
             value = value.transpose(1, 2)
-            hidden_states = xFuserLongContextAttention()(None, query=half(query), key=half(key), value=half(value))
+            hidden_states = long_context_attention(None, query=half(query), key=half(key), value=half(value))
             hidden_states = hidden_states.transpose(1, 2)
         else:
             hidden_states = F.scaled_dot_product_attention(

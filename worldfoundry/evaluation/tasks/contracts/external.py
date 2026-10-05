@@ -269,6 +269,44 @@ PhysicalAIBenchContract = ExternalBenchmarkContract(
     ),
 )
 
+SanaWMBenchContract = ExternalBenchmarkContract(
+    benchmark_id="sana-wm-bench",
+    display_name="SANA-WM 80-Scene Benchmark",
+    input_keys=(
+        "dataset_root",
+        "generated_video_dir",
+        "scene_manifest",
+        "camera_trajectory_npz",
+        "pose_results_path",
+        "official_results_path",
+    ),
+    output_keys=(
+        "scorecard",
+        "raw_metric_table",
+        "vbench_scores",
+        "revisit_consistency",
+        "temporal_degradation",
+        "eval_poses",
+    ),
+    metric_ids=(
+        "vbench_overall",
+        "vbench_total_score",
+        "revisit_psnr",
+        "revisit_ssim",
+        "revisit_lpips",
+        "rot_err_deg",
+        "trans_err_rel",
+        "cam_mc_rel",
+        "delta_iq",
+    ),
+    requires_upstream_runtime=False,
+    notes=(
+        "The 80-scene, two-split SANA-WM evaluator is implemented in tree and reuses WorldFoundry VBench and Pi3 surfaces.",
+        "The public dataset and model-backed VBench/Pi3 weights remain explicit runtime assets.",
+        "Fresh Pi3 pose estimation is a separately schedulable distributed stage; the in-tree evaluator consumes its eval_poses.json output.",
+    ),
+)
+
 WBenchContract = ExternalBenchmarkContract(
     benchmark_id="wbench",
     display_name="WBench",
@@ -381,6 +419,71 @@ WorldModelBenchContract = ExternalBenchmarkContract(
     ),
 )
 
+HarnessEvalWContract = ExternalBenchmarkContract(
+    benchmark_id="harnesseval-w",
+    display_name="HarnessEval-W",
+    input_keys=("generated_artifact_dir", "manifest", "plan_root", "backend_config", "official_results_path"),
+    output_keys=("scorecard", "raw_metric_table", "per_case_metrics", "official_report", "benchmark_contract"),
+    metric_ids=(
+        "overall_macro",
+        "overall_core_macro",
+        "overall_observation_macro",
+        "observation_quality_macro",
+        "observation_physical_plausibility_macro",
+        "exploratory_transition",
+        "intentional_transition",
+        "physical_transition",
+        "drift_resistance",
+        "return_revisit_consistency",
+        "offscreen_evolution",
+    ),
+    requires_upstream_runtime=True,
+    notes=(
+        "In-tree Python evaluator preserves official skill plans, evidence and common-case aggregation.",
+        "Model components are reused from base_models; no upstream generation or shell launchers are included.",
+        "Full-suite GPU/judge parity remains unverified; synthetic fixtures are not leaderboard evidence.",
+    ),
+)
+
+WorldOlympiadContract = ExternalBenchmarkContract(
+    benchmark_id="worldolympiad",
+    display_name="WorldOlympiad",
+    input_keys=(
+        "prompt_json",
+        "reference_video",
+        "generated_video_dir",
+        "chunk_timestamps",
+        "official_results_path",
+    ),
+    output_keys=("scorecard", "raw_metric_table", "per_case_metrics", "benchmark_contract"),
+    metric_ids=(
+        "combined_score",
+        "physical_score",
+        "physical_mechanics",
+        "physical_thermotics",
+        "physical_material",
+        "physical_compliance_rate",
+        "three_d_score",
+        "three_d_raw",
+        "gs_score",
+        "meta_view_score",
+        "camera_motion_score",
+        "interaction_score",
+        "interaction_raw",
+        "chunk_instruction_following",
+        "transition_smoothness",
+        "global_consistency",
+        "clip_semantic_adherence",
+    ),
+    requires_upstream_runtime=True,
+    notes=(
+        "Contract covers the physical, geometry, and interaction tracks of the WorldOlympiad triathlon.",
+        "WorldFoundry keeps the official batch evaluator in tree, so --run-official needs no external checkout.",
+        "Per-case judge JSON, scheduler summaries, and summarize_scores aggregates are also normalized in tree.",
+        "Scored execution requires DA3, SAM3, and QwenVL services plus weights provisioned outside the source tree.",
+    ),
+)
+
 WorldScoreContract = ExternalBenchmarkContract(
     benchmark_id="worldscore",
     display_name="WorldScore",
@@ -391,6 +494,42 @@ WorldScoreContract = ExternalBenchmarkContract(
     notes=(
         "Contract supports video, 3D, and 4D generation outputs through one artifact schema.",
         "Dataset download and upstream metric execution remain explicit validation stages.",
+    ),
+)
+
+
+ApplePIContract = ExternalBenchmarkContract(
+    benchmark_id="apple-pi",
+    display_name="Apple-PI",
+    input_keys=(
+        "apple_pi_gt_dir",
+        "apple_pi_prediction_dir",
+        "apple_pi_submission_json",
+        "apple_pi_prompt_jsonl",
+        "official_results_path",
+    ),
+    output_keys=(
+        "scorecard",
+        "raw_metric_table",
+        "per_sample_scores",
+        "benchmark_contract",
+        "apple_pi_results",
+    ),
+    metric_ids=(
+        "perception_text",
+        "perception_graphic",
+        "formulation_text",
+        "formulation_graphic",
+        "deduction",
+        "apple_pi_average",
+    ),
+    requires_upstream_runtime=False,
+    notes=(
+        "WorldFoundry executes the Apple-PI protocol in-tree through its native evaluator/runtime.",
+        "The evaluator reuses the shared WorldFoundry SAM3 and MoGe-2 base-model capabilities and the existing Gemini client convention.",
+        "An official-compatible result JSON can still be imported for reproducibility and comparison.",
+        "Apple-PI requires three independent rollouts for every case and subtrack.",
+        "The GT dataset is not vendored; follow the upstream Apple-PI data contract.",
     ),
 )
 
@@ -577,18 +716,16 @@ T2VWorldBenchContract = ExternalBenchmarkContract(
     input_keys=("world_knowledge_prompt_manifest", "generated_video_dir", "vlm_judge_results_path"),
     output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "benchmark_contract"),
     metric_ids=(
-        "physics_knowledge",
-        "nature_knowledge",
-        "activity_knowledge",
-        "culture_knowledge",
-        "causality_knowledge",
-        "object_knowledge",
-        "world_knowledge_average",
+        "quality",
+        "realism",
+        "relevance",
+        "consistency",
+        "final",
     ),
     requires_upstream_runtime=True,
     notes=(
-        "Contract records the paper-described 6-category world-knowledge T2V evaluation surface only.",
-        "No public official code/data/runtime was confirmed, so this remains blocked until release evidence exists.",
+        "The official CSV reports quality, realism, relevance, consistency, and final scores on 5/5/5/5/20 scales.",
+        "Full official execution still requires generated videos, staged metadata, and the upstream VLM runtime.",
     ),
 )
 
@@ -973,6 +1110,28 @@ WorldReasonBenchContract = ExternalBenchmarkContract(
     ),
 )
 
+StevoBenchContract = ExternalBenchmarkContract(
+    benchmark_id="stevo-bench",
+    display_name="STEVO-Bench",
+    input_keys=("generated_video_dir", "stevo_output_map", "stevo_task_root", "official_results_path"),
+    output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "benchmark_contract"),
+    metric_ids=(
+        "task_success",
+        "state_evol_success",
+        "physical_inaccuracy",
+        "occlusion_done",
+        "trigger_applied",
+        "control_success",
+    ),
+    requires_upstream_runtime=True,
+    notes=(
+        "The official evaluator is vendored in-tree; --run-official executes it without an external checkout.",
+        "Official judging is performed by hosted VLM APIs (Gemini default, OpenAI supported), so real runs need "
+        "GOOGLE_API_KEY or OPENAI_API_KEY plus network access; result normalization is pure-local.",
+        "The 225-task YAML suite is a separate Hugging Face dataset (JhanLiufu/StEvo-Bench) supplied by the caller.",
+    ),
+)
+
 VideoScienceBenchContract = ExternalBenchmarkContract(
     benchmark_id="videoscience-bench",
     display_name="VideoScience-Bench",
@@ -1009,6 +1168,20 @@ PhyEduVideoContract = ExternalBenchmarkContract(
     notes=(
         "Contract covers PhyEduVideo physics-education text-to-video evaluation.",
         "Official evaluation requires the upstream codebase and any judge/runtime assets.",
+    ),
+)
+
+PAWBenchContract = ExternalBenchmarkContract(
+    benchmark_id="pawbench",
+    display_name="PAWBench",
+    input_keys=("dataset_root", "generated_video_dir", "official_results_path"),
+    output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "benchmark_contract"),
+    metric_ids=("calibration_tvd_percent", "coverage_percent"),
+    requires_upstream_runtime=False,
+    notes=(
+        "The official PAWBench evaluator and PAWEval rubrics are vendored in-tree.",
+        "WorldFoundry preserves PAW-Calibration TVD and PAW-Coverage as separate metrics without a synthetic average.",
+        "Fresh official evaluation requires the external dataset, 50 rollouts per scene, and the hosted Gemini 3.5 Flash judge through OpenRouter.",
     ),
 )
 
@@ -1080,6 +1253,122 @@ PhyGroundContract = ExternalBenchmarkContract(
     ),
 )
 
+LikePhysContract = ExternalBenchmarkContract(
+    benchmark_id="likephys",
+    display_name="LikePhys",
+    input_keys=(
+        "likephys_dataset_root",
+        "likephys_evaluator_root",
+        "probe_model",
+        "official_results_path",
+    ),
+    output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "benchmark_contract", "misrank_breakdown"),
+    metric_ids=(
+        "likephys_misrank_rate",
+        "likephys_dataset_weighted_misrank_rate",
+        "rigid_body_misrank_rate",
+        "fluid_misrank_rate",
+        "deformable_misrank_rate",
+        "optics_misrank_rate",
+        "temporal_disorder_misrank_rate",
+    ),
+    requires_upstream_runtime=True,
+    notes=(
+        "Contract covers LikePhys likelihood-preference probing of video diffusion models over paired "
+        "physically valid and impossible clips.",
+        "LikePhys scores a model, not generated videos: the probe reads the denoiser, VAE, and scheduler "
+        "directly, so it needs the upstream evaluator checkout, CUDA, and the probed checkpoints.",
+        "Every metric is a mis-rank error rate where lower is better.",
+    ),
+)
+
+MINDContract = ExternalBenchmarkContract(
+    benchmark_id="mind",
+    display_name="MIND",
+    input_keys=(
+        "generated_video",
+        "mind_gt_root",
+        "action_json",
+        "official_results_path",
+    ),
+    output_keys=(
+        "scorecard",
+        "raw_metric_table",
+        "per_sample_scores",
+        "mind_result_json",
+        "benchmark_contract",
+    ),
+    metric_ids=(
+        "lcm_psnr",
+        "lcm_ssim",
+        "lcm_lpips",
+        "lcm_mse",
+        "dino_mse",
+        "imaging_quality",
+        "aesthetic_quality",
+        "action_rpe_trans_mean",
+        "action_rpe_rot_mean_deg",
+        "action_rpe_trans_median",
+        "action_rpe_rot_median_deg",
+        "action_translation_rpe_trans_mean",
+        "action_rotation_rpe_rot_mean_deg",
+        "gsc_psnr",
+        "gsc_ssim",
+        "gsc_lpips",
+        "gsc_mse",
+        "memory_consistency_score",
+        "visual_quality_score",
+        "action_control_score",
+        "scene_consistency_score",
+        "mind_average",
+    ),
+    requires_upstream_runtime=True,
+    notes=(
+        "Contract covers MIND memory-consistency and action-control metrics for interactive world models.",
+        "The in-tree runtime can either execute the vendored official metric stack with --run-official "
+        "or normalize an existing MIND result JSON.",
+        "mind_average is a WorldFoundry-derived aggregate; MIND publishes no official composite score.",
+    ),
+)
+
+RBenchContract = ExternalBenchmarkContract(
+    benchmark_id="rbench",
+    display_name="RBench",
+    input_keys=(
+        "rbench_prompt_manifest",
+        "conditioning_image_dir",
+        "generated_video_dir",
+        "vlm_judge_results_dir",
+        "motion_operator_results_path",
+    ),
+    output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "benchmark_contract", "track_breakdown"),
+    metric_ids=(
+        "rbench_overall",
+        "embodiment_overall",
+        "task_completion",
+        "visual_quality",
+        "visual_quality_base",
+        "physical_plausibility",
+        "task_adherence_consistency",
+        "robot_subject_stability",
+        "motion_smoothness",
+        "motion_amplitude",
+        "task_track_overall",
+        "common_manipulation",
+        "long_horizon_planning",
+        "multi_entity_collaboration",
+        "spatial_relationship",
+        "visual_reasoning",
+    ),
+    requires_upstream_runtime=True,
+    notes=(
+        "Contract covers RBench robotics image-to-video evaluation across four embodiments and five task categories.",
+        "Scoring needs an external VLM judge (GPT or Qwen3-VL) plus the GroundingDINO/SAM2/CoTracker/Q-Align "
+        "operator stack; WorldFoundry reproduces the official aggregation over their per-video outputs.",
+        "rbench_overall is a WorldFoundry composite of the two official track scores, not a published RBench number.",
+    ),
+)
+
 EWMBenchContract = ExternalBenchmarkContract(
     benchmark_id="ewmbench",
     display_name="EWMBench",
@@ -1145,31 +1434,6 @@ LIBEROContract = ExternalBenchmarkContract(
     notes=(
         "Contract covers LIBERO policy rollouts and official result normalization for VLA models.",
         "WorldFoundry can normalize official result files directly; simulator runtime remains an explicit upstream stage.",
-    ),
-)
-
-LIBEROParaContract = ExternalBenchmarkContract(
-    benchmark_id="libero-para",
-    display_name="LIBERO-Para",
-    input_keys=(
-        "dataset_root",
-        "paraphrase_manifest",
-        "episode_manifest",
-        "policy_results_path",
-        "official_results_path",
-    ),
-    output_keys=("scorecard", "raw_results", "per_sample_metrics", "rollout_logs"),
-    metric_ids=(
-        "success_rate",
-        "paraphrase_success_rate",
-        "language_generalization_success",
-        "task_success",
-        "action_accuracy",
-    ),
-    requires_upstream_runtime=True,
-    notes=(
-        "Contract covers LIBERO-Para paraphrased language-instruction manipulation evaluation for VLA policies.",
-        "WorldFoundry normalizes official-shaped result files; upstream LIBERO-Para runtime execution remains external evidence.",
     ),
 )
 
@@ -1478,9 +1742,9 @@ _BUILTIN_CONTRACT_ITEMS = (
     IWorldBenchContract,
     KinetixContract,
     LARYBenchContract,
+    LikePhysContract,
     LIBEROContract,
     LIBEROMemContract,
-    LIBEROParaContract,
     LIBEROPlusContract,
     LIBEROProContract,
     ManiSkillContract,
@@ -1488,8 +1752,10 @@ _BUILTIN_CONTRACT_ITEMS = (
     MetaWorldContract,
     MIKASAContract,
     MemoBenchContract,
+    MINDContract,
     MiraBenchContract,
     MolmoSpacesContract,
+    PAWBenchContract,
     PhyEduVideoContract,
     PhysVidBenchContract,
     PhyGenBenchContract,
@@ -1497,12 +1763,15 @@ _BUILTIN_CONTRACT_ITEMS = (
     PhysicsIQContract,
     PhysicsIQVerifiedContract,
     PhysicalAIBenchContract,
+    SanaWMBenchContract,
+    RBenchContract,
     RoboCasaContract,
     RoboCerebraContract,
     RoboMMEContract,
     RoboTwinContract,
     RLBenchContract,
     SimplerEnvContract,
+    StevoBenchContract,
     T2VSafetyBenchContract,
     T2VWorldBenchContract,
     T2VCompBenchContract,
@@ -1524,8 +1793,11 @@ _BUILTIN_CONTRACT_ITEMS = (
     WorldBenchContract,
     WorldInWorldContract,
     WorldModelBenchContract,
+    HarnessEvalWContract,
+    WorldOlympiadContract,
     WorldReasonBenchContract,
     WorldScoreContract,
+    ApplePIContract,
 )
 for _contract in _BUILTIN_CONTRACT_ITEMS:
     register_external_benchmark_contract(_contract, source="builtin")

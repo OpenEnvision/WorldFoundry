@@ -29,6 +29,8 @@ runtime:
   - "{wan_root}"
   - "--prompt"
   - "{prompt}"
+  - "--image-path"
+  - "{image_path}"
   - "--output-path"
   - "{output_path}"
   - "--max-frames"

@@ -1,0 +1,39 @@
+model_id: open-sora
+env_name: worldfoundry-unified-cu121
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu121
+driver_status: compatible
+pip_packages:
+- torch==2.5.1
+- torchvision==0.20.1
+- mmengine>=0.10.3
+- timm>=0.9.16
+- rotary-embedding-torch==0.5.3
+- beartype>=0.22.9
+- ftfy>=6.2.0
+- diffusers>=0.27.2
+- accelerate>=0.29.2
+- av>=12.0.0
+- einops>=0.7
+- transformers
+- safetensors
+- sentencepiece
+validation_imports:
+- torch
+- mmengine
+- timm
+- rotary_embedding_torch
+- beartype
+- diffusers
+- accelerate
+- av
+notes:
+- The in-tree v1.2.0 inference source supports single-GPU execution without ColossalAI.
+- Distributed execution and sharded checkpoints require colossalai==0.3.7 from the official requirements.
+- Runtime config injects local VAE and text-encoder paths through OPENSORA_VAE_PATH and OPENSORA_TEXT_ENCODER_PATH.
+- Transformers 4.57+ rejects the published T5 PyTorch .bin shards on torch 2.5.1.
+  Direct .bin loading requires torch 2.6 or newer. For this pinned torch 2.5.1
+  environment, run the in-tree convert_t5_to_safetensors.py tool (using
+  torch.load(weights_only=True)) to create a separate derived cache. The tool
+  was verified with torch 2.5.1 and safetensors 0.7.0.

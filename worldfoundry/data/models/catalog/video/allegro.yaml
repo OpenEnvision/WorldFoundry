@@ -45,6 +45,8 @@ catalog_policy:
   github: Validated with git ls-remote, preferring git ls-remote --symref <repo>.git HEAD for default branch and HEAD SHA.
   huggingface: Validated with the Hugging Face /api/models endpoint. Recorded repo id, sha, private, gated, license, and selected task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit parity run and expected artifact are recorded.
+official_sources:
+  paper: https://arxiv.org/abs/2410.15458
 integration:
   status: integrated
   notes:
@@ -55,3 +57,23 @@ runner_parity:
     - WorldFoundry pipeline target is registered for the in-tree Allegro TI2V runtime.
     - Generated artifact parity with the official demo configuration still requires
       a full official run.
+docs:
+  publisher: Rhymes AI
+  publisher_kind: company
+  publisher_zh: Rhymes AI
+  overview: Allegro is an open text-to-video and image-to-video generation model, cataloged here through its TI2V (text+image to video) route. WorldFoundry wraps the in-tree Allegro TI2V runtime, so a prompt — optionally anchored by a start image — produces a video artifact through the standard pipeline contract. The entry also resolves the aliases allegro_ti2v and allegro-ti2v.
+  overview_zh: Allegro 是开源的文生视频/图生视频模型，本 catalog 通过其 TI2V（文本+图像生成视频）路径接入。 WorldFoundry 封装了树内 Allegro TI2V 运行时：一条提示词（可选配一张起始图）经标准 pipeline 契约产出视频产物。该条目同时解析别名 allegro_ti2v 与 allegro-ti2v。
+  architecture: Allegro is a diffusion-transformer video generator released by Rhymes AI; the manifest records the in-tree runtime wrapper and the TI2V conditioning path (prompt, image, video, actions in the input schema), while local checkpoint assets remain external. Deeper architecture internals are not recorded in this repository — consult the upstream release for layer-level details.
+  architecture_zh: Allegro 是 Rhymes AI 发布的扩散 Transformer 视频生成模型；manifest 记录了树内运行时封装与 TI2V 条件路径（输入 schema 含 prompt、image、video、actions），本地 checkpoint 属外部资产。更底层的架构细节仓库未记录——请查阅上游发布说明。
+  usage_notes: 'The catalog marks the integration as integrated with runner parity pending: the pipeline target is registered, but artifact parity with the official demo configuration still requires a full official run. Stage the Allegro checkpoints locally before launching, and use the model-show command on this page to inspect the recorded contract first.'
+  usage_notes_zh: Catalog 将集成状态记录为 integrated、runner parity 为 pending：pipeline target 已注册，但与官方 demo 配置的产物一致性仍需一次完整官方运行来确认。启动前请先在本地就位 Allegro checkpoint，并可用本页的 model-show 命令查看已记录契约。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Multi-dimension video generation quality suite that fits Allegro's T2V/I2V output.
+    reason_zh: 多维视频生成质量评测，适配 Allegro 的文生/图生视频输出。

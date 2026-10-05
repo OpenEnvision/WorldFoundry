@@ -106,7 +106,7 @@ class FaceScore(nn.Module):
             face = self.crop_face_image(img1,box)
             try:
                 face = Image.fromarray(face.numpy().transpose(1,2,0).astype(np.uint8))
-            except:
+            except Exception:
                 continue
             face = self.preprocess(face).unsqueeze(0).to(self.device)
             get_faces.append(face)

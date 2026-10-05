@@ -31,12 +31,13 @@ def compute_vs_similarity(
     paired: bool = True,
 ) -> float:
     """Mean VS similarity for paired image/text embeddings."""
-    matrix = compute_vs_similarity_matrix(image_features, text_features)
     if paired:
-        if matrix.shape[0] != matrix.shape[1]:
-            raise ValueError("paired VS similarity requires square alignment of image/text counts")
-        return float(np.mean(np.diag(matrix)))
-    return float(np.mean(matrix))
+        images = _normalize_rows(image_features)
+        texts = _normalize_rows(text_features)
+        if images.shape != texts.shape:
+            raise ValueError("paired VS similarity requires matching image/text feature shapes")
+        return float(np.mean(np.einsum("ij,ij->i", images, texts)))
+    return float(np.mean(compute_vs_similarity_matrix(image_features, text_features)))
 
 
 def compute_vs_similarity_from_scores(scores: np.ndarray, *, paired: bool = True) -> float:

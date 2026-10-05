@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.evaluation.tasks.metrics._shared.torch_fidelity import calculate_metrics
+from worldfoundry.evaluation.tasks.metrics._shared.torch_fidelity import calculate_metrics, prepare_image_input
 
 
 def _parse_numeric_result(result: dict[str, Any]) -> dict[str, float]:
@@ -24,8 +24,8 @@ def compute_mind(
     **kwargs: Any,
 ) -> float:
     result = calculate_metrics()(
-        input1=str(reference),
-        input2=str(generated),
+        input1=prepare_image_input(reference, **kwargs),
+        input2=prepare_image_input(generated, **kwargs),
         batch_size=batch_size,
         cuda=cuda,
         feature_extractor=feature_extractor,

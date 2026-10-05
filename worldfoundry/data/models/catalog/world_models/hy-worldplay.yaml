@@ -35,6 +35,8 @@ modalities:
 - camera-action-control
 name: HY-WorldPlay
 official_sources:
+  project_page: https://3d-models.hunyuan.tencent.com/world/
+  paper: https://arxiv.org/abs/2602.09022
   github:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
@@ -65,3 +67,28 @@ catalog_policy:
   open_source_rule: Only mark open_source when an official GitHub repository or official
     Hugging Face model page was confirmed. Do not infer checkpoint availability from
     papers, demos, or third-party mirrors.
+docs:
+  publisher: Tencent (Hunyuan)
+  publisher_kind: company
+  publisher_zh: 腾讯（混元）
+  overview: 'HY-WorldPlay is Tencent''s real-time interactive world video model: starting from an image, it follows pose/action input to roll the world forward — the interactive arm of the Hunyuan world stack. In this catalog the runner is verified for the official image-pose-video route with the official 8-GPU execution profile.'
+  overview_zh: HY-WorldPlay 是腾讯的实时交互世界视频模型：从一张图出发，跟随位姿/动作输入向前滚动世界——混元世界栈的交互分支。本 catalog 中 runner 已按官方 image-pose-video 路径与官方 8 卡执行档案验证。
+  architecture: 'The recorded checkpoint set tells the assembly: tencent/HY-WorldPlay action weights over tencent/HunyuanVideo-1.5 video-model support assets, with Qwen2.5-VL-7B-Instruct, byt5-small, and FLUX.1-Redux-dev as support components. The in-tree pipeline follows the official demo contract.'
+  architecture_zh: 记录的 checkpoint 组合揭示其装配：tencent/HY-WorldPlay 动作权重叠加 tencent/HunyuanVideo-1.5 视频模型支持资产，辅以 Qwen2.5-VL-7B-Instruct、byt5-small 与 FLUX.1-Redux-dev 支持组件。树内 pipeline 遵循官方 demo 契约。
+  usage_notes: The official route uses 8 torchrun ranks — plan for a multi-GPU host and stage all five recorded checkpoint sets. Full benchmark scoring and longer interaction suites remain separate work.
+  usage_notes_zh: 官方路径使用 8 个 torchrun rank——请准备多卡主机并就位全部五套记录的 checkpoint。完整 benchmark 打分与更长交互套件是独立工作。
+  limitations:
+  - Official execution profile needs 8 GPUs.
+  - Five checkpoint sets must be staged before running.
+  - Benchmark scoring and long interaction suites are not yet recorded.
+  limitations_zh:
+  - 官方执行档案需要 8 卡。
+  - 运行前须就位五套 checkpoint。
+  - benchmark 打分与长交互套件尚未记录。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Interactive world-rollout quality.
+    reason_zh: 交互式世界滚动生成质量。
+  - id: camerabench
+    reason: Pose/camera-following accuracy.
+    reason_zh: 位姿/相机跟随精度。

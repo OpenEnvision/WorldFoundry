@@ -6,8 +6,8 @@
 
 """Module for base_models -> three_dimensions -> point_clouds -> cut3r -> heads -> __init__.py functionality."""
 
-from .linear_head import LinearPts3d, LinearPts3d_Desc, LinearPts3dPose
 from .dpt_head import DPTPts3dPose
+from .linear_head import LinearPts3d, LinearPts3d_Desc, LinearPts3dPose
 
 
 def head_factory(
@@ -30,7 +30,6 @@ def head_factory(
         return LinearPts3d_Desc(net, has_conf, has_depth, local_feat_dim)
     elif head_type == "dpt" and output_mode == "pts3d":
         raise NotImplementedError(f"unexpected {head_type=} and {output_mode=}")
-        return create_dpt_head(net, has_conf=has_conf)
     elif head_type == "dpt" and output_mode == "pts3d+pose":
         return DPTPts3dPose(net, has_conf, has_rgb, has_pose)
     else:

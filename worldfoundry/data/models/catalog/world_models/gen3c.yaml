@@ -11,6 +11,8 @@ source:
   official_repo_url: https://github.com/nv-tlabs/GEN3C
   license: nvidia-source-code
 official_sources:
+  paper: https://arxiv.org/abs/2503.03751
+  project_page: https://research.nvidia.com/labs/toronto-ai/GEN3C/
   github:
     url: https://github.com/nv-tlabs/GEN3C
   huggingface:
@@ -18,16 +20,39 @@ official_sources:
     type: model
     status: confirmed
 integration:
-  status: verified_official_8gpu_workspace
+  status: integrated
   notes:
-  - In-tree Cosmos Predict1 GEN3C runtime is registered; inference follows the dedicated gen3c conda profile.
-  - Official single-image Workspace demo passed on 8 A100 GPUs with local Cosmos/MoGe assets.
+  - Cosmos Predict1/GEN3C is assembled through the same native denoiser, T5 conditioner,
+    latent initializer, Karras x0 AB2 scheduler, codec, loader, and standard runner contracts as other models.
+  - Named camera trajectories, MoGe depth, and RGBD forward warping are native preprocessing
+    inside the latent-initializer role; callers may also provide pre-rendered 3D-cache tensors.
+  - The previous official-runtime demo evidence does not establish parity for the new native path.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: gen3c
 runner_parity:
-  status: verified_official_8gpu_workspace
+  status: pending
   notes:
-  - Workspace CLI validation uses the upstream single-image demo parameters: 121 frames, 1280x704, 24 fps.
-  - Visual QA shows the expected futuristic city camera-control scene with smooth left motion.
+  - Transformer and T5 checkpoint structure, native camera geometry, registry, and scheduler
+    contracts pass local validation; full-resolution native GPU output parity remains pending.
 catalog_category: world_models
 catalog_scope: world-model/interactive starred models
+docs:
+  publisher: NVIDIA
+  publisher_kind: company
+  publisher_zh: 英伟达（NVIDIA）
+  overview: 'GEN3C generates camera-controlled video with an explicit 3D cache: it builds a rough 3D scene from the input image (via depth), warps it along the requested camera path, and lets the video model fill in the rest — precise camera control with 3D consistency (CVPR 2025). In this catalog it is assembled natively through the same denoiser/conditioner/scheduler contracts as the Cosmos Predict1 family.'
+  overview_zh: GEN3C 用显式 3D 缓存生成相机可控视频：先从输入图（借助深度）搭出粗略 3D 场景，沿目标相机路径前向扭曲，再让视频模型补全其余部分——兼顾精确相机控制与 3D 一致性（CVPR 2025）。本 catalog 中它经与 Cosmos Predict1 家族相同的去噪器/条件器/调度器契约原生组装。
+  architecture: 'Named camera trajectories, MoGe depth, and RGBD forward warping are native preprocessing inside the latent-initializer role; callers may also provide pre-rendered 3D-cache tensors. The stack uses the native T5 conditioner, Karras x0 AB2 scheduler, codec, and loader (license: nvidia-source-code).'
+  architecture_zh: 命名相机轨迹、MoGe 深度与 RGBD 前向扭曲是潜变量初始化角色内的原生预处理；调用方也可直接提供预渲染的 3D 缓存张量。栈使用原生 T5 条件器、Karras x0 AB2 调度器、编解码器与加载器（许可： nvidia-source-code）。
+  usage_notes: Transformer and T5 checkpoint structure, camera geometry, registry, and scheduler contracts pass local validation, but full-resolution native GPU output parity is pending — earlier official-runtime demo evidence does not carry over to the native path.
+  usage_notes_zh: transformer 与 T5 checkpoint 结构、相机几何、注册表与调度器契约已通过本地验证，但全分辨率原生 GPU 输出一致性待验证——早期官方运行时的 demo 证据不适用于原生路径。
+  limitations:
+  - Full-resolution native GPU output parity is pending.
+  - 'NVIDIA source-code license: review terms before downstream use.'
+  limitations_zh:
+  - 全分辨率原生 GPU 输出一致性待验证。
+  - 英伟达源码许可：下游使用前请审阅条款。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-trajectory adherence of controlled generation.
+    reason_zh: 受控生成的相机轨迹贴合度。

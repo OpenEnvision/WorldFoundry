@@ -1,0 +1,42 @@
+---
+title: "Wan2.2"
+description: "Alibaba Tongyi Lab's Wan2.2 family: verified TI2V 5B at 1280×704 / 121 frames / 24 fps, plus pending A14B T2V and I2V MoE routes."
+modelId: "wan2.2"
+pageSource: authored
+---
+
+Wan2.2 is Alibaba Tongyi Lab's next Wan generation — tracked separately from [Wan2.1](/docs/guides/supported-models/wan2.1) because upstream versions the code and checkpoints on their own. This catalog card binds three Apache-2.0 Hugging Face lines: **T2V A14B** (MoE text-to-video), **I2V A14B** (MoE image-to-video), and **TI2V 5B** (dense text+image-to-video). Only the 5B route has a recorded demo and runner artifact in this repository.
+
+<ModelPaperFigures modelId="wan2.2" locale="en" />
+
+The official paper is still [Wan: Open and Advanced Large-Scale Video Generative Models](https://arxiv.org/abs/2503.20314). Code and weights live at [Wan-Video/Wan2.2](https://github.com/Wan-Video/Wan2.2) and [Wan-AI](https://huggingface.co/Wan-AI). The project site is [wan.video](https://wan.video). The catalog still points the project field at the HuMo page — that is a Wan-derived neighbor, not this family. Aliases `wan-2p2` and `wan2p2` resolve here.
+
+<ModelCommandBuilder modelId="wan2.2" locale="en" />
+
+## What it is for
+
+Start on `wan2.2-ti2v-5b` when you want a checkpoint-backed clip. The recorded contract is **1280×704** (or **704×1280**), **121 frames**, **24 fps**, **50 UniPC steps**, guidance **5.0**, flow-shift **5.0**, writing `wan2.2-ti2v-5b-1280x704-121f.mp4`. Prompt is required; an image switches the same 5B weights from T2V to I2V. Catalog minimum for this variant is **24 GB**.
+
+Use `wan2.2-t2v-a14b` for the dual-expert text-to-video card and `wan2.2-i2v-a14b` when a still is the conditioner. Both A14B lines are integrated with in-tree pipelines, but status is still **Runner parity pending** — do not treat a successful launch as a verified 14B artifact.
+
+There is **no V2V** route on this card. Upstream Speech-to-Video (`Wan2.2-S2V-14B`) and Animate (`Wan2.2-Animate-14B`) exist on GitHub and Hugging Face; they are not bound here. Compare general clip quality on [VBench](/docs/evaluation/benchmark-hub/vbench) — that is a listed suite, not an ingested WorldFoundry scorecard.
+
+## Inference
+
+Native sampling is **UniPC only**. The three WorldFoundry defaults:
+
+| Variant | Task | Size / frames / fps | Steps · guidance · shift | VRAM (catalog) | Parity |
+| --- | --- | --- | --- | --- | --- |
+| `wan2.2-ti2v-5b` | T2V or I2V on one 5B card | 1280×704, 121f, 24 fps | 50 · 5.0 · 5.0 | 24 GB | demo + runner **verified** |
+| `wan2.2-t2v-a14b` | T2V MoE | 832×480, 81f, 16 fps | 40 · high 4.0 / low 3.0 · 12.0 | 80 GB | **pending** |
+| `wan2.2-i2v-a14b` | I2V MoE | 832×480, 81f, 16 fps | 40 · 3.5 / 3.5 · 5.0 | 80 GB | **pending** |
+
+A14B inference swaps a high-noise expert and a low-noise expert across the schedule (catalog boundaries **0.875** T2V, **0.900** I2V). Official A14B generate scripts also advertise 480p and 720p (`1280×720`) at ≥80 GB with `--offload_model`; those sizes are upstream options, not the verified WorldFoundry profile. TI2V 5B uses the high-compression Wan2.2-VAE (**16×16×4**). Seed is the recorded `actions` field (`base_seed` default 42 in the command builder). Prompt extension is off by default.
+
+## Running in WorldFoundry
+
+Install the unified environment with `bash scripts/setup/unified_install.sh` (Python 3.11, CUDA 12.8) and stage weights locally — the runtime does not download them. The recorded launch is `worldfoundry-eval run wan2.2-ti2v-5b`. That profile is the verified 5B contract, not a 14B run. Pipelines are `Wan2p2Pipeline` (5B), `Wan2p2T2VA14BPipeline`, and `Wan2p2I2VA14BPipeline`.
+
+Checkpoints: `Wan-AI/Wan2.2-TI2V-5B`, `Wan-AI/Wan2.2-T2V-A14B`, `Wan-AI/Wan2.2-I2V-A14B` (all `apache-2.0`, public, not gated). Family-level hardware still lists **80 GB** because that is the A14B floor; the 5B verified path is the 24 GB line.
+
+<ModelRelatedRecipes modelId="wan2.2" locale="en" />

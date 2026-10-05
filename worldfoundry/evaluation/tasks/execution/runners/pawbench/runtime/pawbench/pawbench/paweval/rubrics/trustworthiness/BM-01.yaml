@@ -1,0 +1,62 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BM-01
+track: coverage
+title_en: Loose Yarn Pull on Knitted Fabric
+scene_grounding:
+- 'Initial state must match: A hand pinches a visible loose yarn loop or end on a
+  knitted fabric or sweater.'
+- The knitted fabric/sweater surface, the loose yarn/thread end, and nearby intact
+  stitch rows must be visible before the pull.
+action_execution:
+- 'Required action: Pull the loose yarn end once.'
+- The pull must acquire the actual loose yarn/thread end, not a hand-only gesture
+  over the fabric or a different strand.
+- The pull must happen once with continuous hand/thread contact through the response
+  window.
+target_requirements:
+- Loose yarn/thread target must be visible at action onset and must remain traceable
+  to the same fabric location while pulled.
+- Material threshold cues must distinguish clean pull-free, small unravel, large
+  unravel/ladder, tear/break, and no-change outcomes.
+- 'Do not require a broad hole or obvious ladder before allowing the large-unravel
+  threshold: a long continuous yarn loop/strand pulled far away from the fabric
+  is large material response evidence even if the local knit rows remain mostly
+  continuous.'
+- Pre-existing loose loops, holes, or damage before the pull must not be counted as
+  an action-caused unravel or break.
+object_continuity:
+- The same loose yarn/thread and fabric patch must remain materially continuous
+  across frames unless the visible outcome is `thread_snaps`.
+- The fabric may deform, but rows, color, and texture must not jump, duplicate, or
+  repaint in a way that invents/erases unravel evidence.
+apparatus_stability:
+- The camera, fabric plane, and hand/fabric scale must stay stable enough to compare
+  pre-pull and post-pull stitch continuity.
+motion_hard_failures:
+- 'Target acquisition failure: the hand never visibly grips the loose yarn/thread
+  or switches to a different strand mid-pull.'
+- 'Material teleport: yarn, loose loops, or fabric holes appear/disappear without
+  continuous pulling, unraveling, tearing, or break motion.'
+- 'Pre-action damage jump: the fabric is already unraveled/torn before the action
+  but the video presents it as caused by the pull.'
+post_result_consistency:
+- After the first decisive material response, the loose thread and fabric damage
+  must remain consistent with that response; a snapped thread cannot later reconnect.
+- A small unravel cannot become a large ladder through a cut, teleport, or repaint
+  after motion has stopped; that is post-result inconsistency.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Loose Yarn Pull on Knitted Fabric.'
+- 'Track B family: material_response.'

@@ -13,9 +13,12 @@ import argparse
 import csv
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
+from worldfoundry.core.observability.logging_setup import configure_logging, get_logger
+from worldfoundry.core.io.formats.serialization import iter_jsonl
 from worldfoundry.evaluation.tasks.execution.framework.io import scalar_number, write_json
 
 SUPPORTED_SUFFIXES = {".json", ".jsonl", ".csv", ".tsv"}
@@ -136,11 +139,7 @@ def load_payload(path: Path) -> Any:
     if suffix == ".json":
         return json.loads(path.read_text(encoding="utf-8"))
     if suffix == ".jsonl":
-        rows = []
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                rows.append(json.loads(line))
-        return rows
+        return list(iter_jsonl(path))
     if suffix in {".csv", ".tsv"}:
         delimiter = "\t" if suffix == ".tsv" else ","
         with path.open(newline="", encoding="utf-8-sig") as handle:
@@ -265,6 +264,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    # This module is also invoked directly by benchmark subprocesses.  Configure
+    # its inherited JSONL sink before emitting lifecycle events so those events
+    # do not fall through to Python's unstructured last-resort handler.
+    configure_logging()
     try:
         summary = materialize_artifact_scores(
             benchmark_id=args.benchmark_id,
@@ -273,8 +276,24 @@ def main(argv: list[str] | None = None) -> int:
             output_path=args.output_path,
         )
     except Exception as exc:  # noqa: BLE001
-        print(f"error: {exc}")
+        get_logger(__name__).event(
+            "ERROR",
+            "artifact_score.materialization_failed",
+            "Artifact score materialization failed",
+            exc_info=True,
+            benchmark_id=args.benchmark_id,
+            output_path=str(args.output_path),
+        )
+        print(f"error: {exc}", file=sys.stderr)
         return 1
+    get_logger(__name__).event(
+        "INFO",
+        "artifact_score.materialized",
+        "Artifact score materialization completed",
+        benchmark_id=args.benchmark_id,
+        row_count=summary["row_count"],
+        results_path=summary["results_path"],
+    )
     if args.json:
         print(json.dumps(summary, indent=2, ensure_ascii=False, sort_keys=True))
     else:

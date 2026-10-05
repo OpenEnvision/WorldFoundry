@@ -8,7 +8,7 @@ groups:
 source_repos:
 - url: https://github.com/NVlabs/Sana
   revision: 00cb59836c297bd5fad401000ee65f9042f29d02
-  in_tree_path: worldfoundry/base_models/diffusion_model/image/sana
+  in_tree_path: worldfoundry/base_models/diffusion_model/models/networks/sana
 checkpoints:
 - repo_id: Efficient-Large-Model/SANA-WM_bidirectional
   revision: 90e0ff3b8f1f9b54a92b4b707edeaa27073aec84
@@ -26,15 +26,16 @@ artifact_filename: sana-wm.mp4
 execution:
   environment: _unified
   backend_stage: in_tree_resident_runtime
-  runtime_status: native_checkpoint_four_gpu_workspace_validated_a100
+  runtime_status: native_stage1_single_gpu_validated_h100
   integration_status: in_tree_runtime_workspace_validated
   pipeline_binding: sana-wm
 integration:
   status: in_tree_runtime_workspace_validated
 notes:
-- SANA-WM source is vendored in-tree under base_models/diffusion_model/image/sana.
-- The interactive pipeline keeps its two-stage model resident and advances with native 8k+1 temporal windows.
-- A real Workspace run component-partitioned the stage-one model, refiner, refiner text encoder,
-  VAE and camera intrinsics across four A100s and generated eight finite, decodable 1280x704
-  frames from a nine-frame native window. The four-stage smoke validates execution and coherent
-  conditioning, but does not claim the default 60-step quality recipe.
+- SANA-WM reuses the canonical Sana network, encoder, autoencoder, scheduler, and
+  recipe roles; no modality-owned Sana runtime remains.
+- The current bidirectional native recipe runs stage-one sampling and direct LTX-2 VAE
+  decoding with native 8k+1 temporal windows; it does not load the LTX-2 refiner.
+- A single H100 run generated 33 decodable 1280x704 frames at 60 sampling steps.
+  Visual review found dark, coarse output with initial-frame artifacts. This validates
+  stage-one execution only, not parity with the official refined quality path.

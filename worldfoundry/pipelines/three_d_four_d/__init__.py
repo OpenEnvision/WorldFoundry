@@ -1,11 +1,9 @@
 """Three D Four D visual generation pipeline module."""
 
 from .pipeline_runtime import (
-    FourDGSPipeline,
     LagrNVSPipeline,
     MonST3RPipeline,
     MVDiffusionPipeline,
-    ShapeOfMotionPipeline,
     StableVirtualCameraPipeline,
     ThreeDFourDRuntimePipeline,
     WonderJourneyPipeline,
@@ -14,11 +12,9 @@ from .pipeline_runtime import (
 )
 
 __all__ = [
-    "FourDGSPipeline",
     "LagrNVSPipeline",
     "MonST3RPipeline",
     "MVDiffusionPipeline",
-    "ShapeOfMotionPipeline",
     "StableVirtualCameraPipeline",
     "ThreeDFourDRuntimePipeline",
     "WonderJourneyPipeline",

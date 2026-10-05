@@ -6,7 +6,7 @@ from typing import Tuple, Optional
 from einops import rearrange
 
 from worldfoundry.core.model_loading import hash_state_dict_keys
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.model import WanRMSNorm, sinusoidal_embedding_1d, MLPProj
+from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_21 import WanRMSNorm, sinusoidal_embedding_1d, MLPProj
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 try:
     import flash_attn_interface
@@ -51,6 +51,10 @@ def flash_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, num_heads
         k = rearrange(k, "b s (n d) -> b s n d", n=num_heads)
         v = rearrange(v, "b s (n d) -> b s n d", n=num_heads)
         x = flash_attn_interface.flash_attn_func(q, k, v)
+        # FlashAttention 3 releases expose either the output tensor directly
+        # or ``(output, softmax_lse)``.  ReCamMaster only consumes the output.
+        if isinstance(x, tuple):
+            x = x[0]
         x = rearrange(x, "b s n d -> b s (n d)", n=num_heads)
     elif FLASH_ATTN_2_AVAILABLE:
         q = rearrange(q, "b s (n d) -> b s n d", n=num_heads)

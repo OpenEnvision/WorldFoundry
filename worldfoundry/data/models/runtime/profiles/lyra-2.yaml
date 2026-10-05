@@ -20,6 +20,8 @@ input_schema:
   prompt: true
   image: true
   video: false
+  camera_path: true
+  region_hint: true
   actions:
   - navigation_actions
   - camera_trajectory

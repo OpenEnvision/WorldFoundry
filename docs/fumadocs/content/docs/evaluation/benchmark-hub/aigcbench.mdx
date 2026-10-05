@@ -1,125 +1,44 @@
 ---
 title: AIGCBench
-description: "AIGCBench in WorldFoundry: data layout, supported runners, and metric outputs."
+description: "BenchCouncil I2V quality bench: first-frame fidelity, alignment, motion, temporality, DOVER. WorldFoundry imports official metrics; it does not invent a board."
 ---
 
-## What It Measures
+AIGCBench (BenchCouncil, ICT / CAS) evaluates **image-to-video** generation: given a condition image and a prompt, does the clip stay faithful, move, and stay temporally coherent? Metric families:
 
-AIGCBench evaluates image-to-video generation quality across four families from the official paper and project assets: control-video alignment, motion effects, temporal consistency, and video quality. The official dataset combines WebVid validation videos, LAION-aesthetics image-text pairs, and an "Ours" generated image-text set. WorldFoundry uses the in-tree runner to materialize prompt records and to import metric rows produced by the AIGCBench scoring pipeline.
+- **First-frame fidelity** — `mse_first` / `ssim_first` vs the condition image.
+- **Alignment** — image–video and text–video CLIP.
+- **Reference-video match** — keyframe / corresponding-frame CLIP and SSIM (needs official references).
+- **Motion** — optical-flow square mean.
+- **Temporality** — adjacent-frame CLIP.
+- **Perceptual quality** — DOVER. `frame_count` is also recorded.
 
-The in-tree surface is not a standalone reimplementation of every CLIP, DOVER, optical-flow, and reference-video calculation. It expects either a caller-provided metric result file or a WorldFoundry scorer output produced by the local evaluation stack.
+Paper: [AIGCBench](https://arxiv.org/abs/2401.01651). Project: [benchcouncil.org/AIGCBench](https://www.benchcouncil.org/AIGCBench). Code: [BenchCouncil/AIGCBench](https://github.com/BenchCouncil/AIGCBench) (Apache-2.0). Dataset: [`stevenfan/AIGCBench_v1.0`](https://huggingface.co/datasets/stevenfan/AIGCBench_v1.0).
 
-## Data And Artifacts
+WorldFoundry **imports official metric CSV / TSV** (or pipeline score dumps) through the in-tree runner. Bundled `prompt_suite.json` under `worldfoundry/data/benchmarks/assets/aigcbench` can materialize requests without the full Hugging Face download. CLIP, DOVER, and flow scorers stay caller-supplied. Primary key: `aigcbench_average` when the official dump provides it.
 
-WorldFoundry looks for the AIGCBench prompt suite in this order:
+<BenchmarkPageSections id="aigcbench" locale="en" />
 
-- `--prompt-manifest <path>`
-- `WORLDFOUNDRY_AIGCBENCH_PROMPT_MANIFEST`
-- bundled `worldfoundry/data/benchmarks/assets/aigcbench/prompt_suite.json`
-- a downloaded HF dataset root from `WORLDFOUNDRY_AIGCBENCH_DATASET_ROOT`
-- the default local HF cache entry for `stevenfan/AIGCBench_v1.0`
-
-Useful dataset files from the HF dataset are:
-
-- `webvid_eval_1000.txt` for WebVid prompt/reference-video ids.
-- `Laion-aesthetics_select_samples.txt` for LAION image prompts.
-- `t2i_625/`, `t2i_aspect_ratio_625/`, or `AIGCBench/t2i_625/` for image-conditioned prompt assets.
-
-Put candidate videos in one flat directory and name each file by prompt id:
-
-```text
-<generated_videos>/
-  <prompt_id>.mp4
-  <prompt_id>.webm
-```
-
-Supported video suffixes are `.mp4`, `.mov`, `.mkv`, `.webm`, and `.avi`. Coverage is computed by matching each video stem to the prompt ids in the resolved manifest.
-
-## Dependencies
-
-For full metric production, the scoring side needs the same assets implied by AIGCBench: reference images/videos where applicable, CLIP ViT-L/14, DOVER, and optical-flow tooling. The WorldFoundry runner itself only needs Python package access to the repository and a metric result file when using result import.
-
-HF dataset downloads are supported. External repository checkouts are not required for these docs because the WorldFoundry integration lives in-tree.
-
-## Supported Commands
-
-Set the generated artifact directory once:
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/aigcbench/generated_videos
-```
-
-Import an existing AIGCBench metric report through the public CLI:
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id aigcbench \
   --mode official-validation \
-  --official-results-path /path/to/aigcbench_results.csv \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompt_suite.json \
-  --output-dir tmp/aigcbench/import \
+  --official-results-path <official_results.csv> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/aigcbench/official-validation \
   --json
 ```
 
-Use the direct in-tree runner when you need its native arguments:
+`--strict` fails on coverage gaps; `--prompt-manifest` restricts to a prompt subset. Reference-image / reference-video families need those official assets staged. Default import path: `WORLDFOUNDRY_AIGCBENCH_RESULTS_PATH`. Shared stack: `video_quality_motion_stack`.
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py \
-  --official-results-path /path/to/aigcbench_results.csv \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompt_suite.json \
-  --output-dir tmp/aigcbench/import \
-  --json
+In-tree pointers:
+
+```text
+worldfoundry/data/benchmarks/tasks/external/aigcbench.yaml
+worldfoundry/data/benchmarks/assets/aigcbench
 ```
 
-If your local WorldFoundry metric stack is configured to create AIGCBench results from generated videos, call the same runner with `--run-official`:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py \
-  --run-official \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompt_suite.json \
-  --output-dir tmp/aigcbench/run \
-  --json
-```
-
-## Import Paths
-
-- Runner: `worldfoundry.evaluation.tasks.execution.runners.aigcbench.run_aigcbench_official_runner`
-- Metrics: `worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_metrics`
-- Prompts and artifact layout: `worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_prompts`
-- Runtime adapter: `worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_runtime`
-
-## Result File Shape
-
-The importer accepts JSON or CSV-style result rows. It can read summary rows with `metric_id` and `score` or per-sample rows with metric columns. Metric aliases such as `mse`, `ssim`, `clip_per`, and AIGCBench display names are normalized to the canonical ids below.
-
-Outputs written under `--output-dir` include:
-
-- `scorecard.json`: benchmark status, coverage, metric table, and output paths.
-- `raw_metric_table.jsonl`: one row per declared metric.
-- `per_sample_scores.jsonl`: per-sample subset when the input result file contains sample ids.
-
-## Metrics
-
-Primary metric: `aigcbench_average`.
-
-| Metric | Direction | Meaning |
-| --- | --- | --- |
-| `mse_first` | Lower is better | MSE between the conditioning image and the first generated frame. |
-| `ssim_first` | Higher is better | SSIM between the conditioning image and the first generated frame. |
-| `image_genvideo_clip` | Higher is better | CLIP similarity between the conditioning image and generated video. |
-| `genvideo_text_clip` | Higher is better | CLIP similarity between generated video and text prompt. |
-| `genvideo_refvideo_clip_keyframes` | Higher is better | CLIP similarity between generated and reference-video keyframes. |
-| `flow_square_mean` | Higher is better | Optical-flow square mean used as a motion-effect score. |
-| `genvideo_refvideo_clip_corresponding_frames` | Higher is better | CLIP similarity over corresponding generated/reference frames. |
-| `genvideo_clip_adjacent_frames` | Higher is better | Adjacent-frame CLIP similarity for temporal consistency. |
-| `frame_count` | Higher is better | Generated video frame count. |
-| `dover` | Higher is better | DOVER video quality score. |
-| `genvideo_refvideo_ssim` | Higher is better | SSIM between generated and reference videos. |
-| `aigcbench_average` | Higher is better | Mean over available AIGCBench component metrics when not supplied directly. |
+Outputs include `scorecard.json` (primary `aigcbench_average`), `benchmark_contract.json`, and `raw_metric_table.jsonl`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

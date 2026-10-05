@@ -19,7 +19,7 @@ def load_model(config_path: str | Path, checkpoint_path: str | Path, device: str
     from omegaconf import OmegaConf
 
     from . import src as _src  # noqa: F401
-    from worldfoundry.base_models.diffusion_model.video.lvdm.utils import instantiate_from_config
+    from worldfoundry.core.model_loading.factory import instantiate_from_config
 
     config = OmegaConf.load(str(config_path))
     payload = torch.load(str(checkpoint_path), map_location="cpu")

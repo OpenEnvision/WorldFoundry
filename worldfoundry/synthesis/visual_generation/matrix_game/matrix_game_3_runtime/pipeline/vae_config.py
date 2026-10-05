@@ -1,6 +1,6 @@
 import os
 import torch
-from worldfoundry.base_models.diffusion_model.video.wan.vae.light_wan2p2 import Wan2_2_VAE
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.light_22 import Wan2_2_VAE
 VAE_DTYPE = torch.bfloat16
 
 def _parse_lightvae_pruning_rate(value):
@@ -21,6 +21,8 @@ def get_vae_config(args=None):
         args.lightvae_pruning_rate = 0.75
     else:
         vae_path = os.path.join(args.ckpt_dir, "Wan2.2_VAE.pth")
+        # The full Wan checkpoint must not inherit the lightweight VAE's default.
+        args.lightvae_pruning_rate = 0.0
     return {
         "vae_path": vae_path,
         "vae_dtype": "bfloat16",

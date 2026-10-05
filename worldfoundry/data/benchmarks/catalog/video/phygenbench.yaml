@@ -1,5 +1,7 @@
 id: phygenbench
 name: PhyGenBench
+publisher: Shanghai AI Laboratory
+publisher_kind: institute
 benchmark_kind:
 - text-to-video
 - physical-commonsense
@@ -59,6 +61,19 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  scoring:
+    engines: [physics_contract]
+    hooks:
+      physics_contract: worldfoundry.evaluation.tasks.execution.runners.phygenbench.phygenbench_contract_evaluator:write_phygenbench_evaluation
+  normalization:
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py
+  pass_benchmark_id: false
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.phygenbench.run_phygenbench_official_runner
+    generated_arg: null
+    limit_arg: --limit
+    supports_fixture: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGenBenchContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py
   validation_command:
@@ -105,11 +120,13 @@ runner:
   - WORLDFOUNDRY_PHYGENBENCH_STRICT
 integration:
   status: integrated
+  tier: model_backed
+  judge_model_id: gpt-4o-2024-05-13
   blocked_reasons:
   - Only result import and the bounded overall aggregation component are available; stage judge execution is absent.
 release_status: experimental
 maturity: contract_ready
-open_source_status: in_tree_result_importer_and_bounded_aggregator
+open_source_status: normalizer_only
 official_benchmark_verified: false
 integration_evidence: false
 leaderboard_valid: false

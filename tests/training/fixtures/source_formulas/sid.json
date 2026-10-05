@@ -1,0 +1,41 @@
+{
+  "atol": 1e-6,
+  "rtol": 1e-6,
+  "inputs": {
+    "cfg": {
+      "unconditional": [[1.0, 2.0]],
+      "conditional": [[3.0, 6.0]],
+      "scales": [0.0, 1.0, 4.5]
+    },
+    "generator": {
+      "generated": [[1.0, 2.0], [3.0, 4.0]],
+      "teacher_clean": [[2.0, 4.0], [5.0, 8.0]],
+      "fake_clean": [[1.5, 3.0], [4.0, 6.0]],
+      "score_weight": [0.5, 2.0]
+    },
+    "fake_score_flow": {
+      "prediction": [[1.0, 2.0], [0.0, 2.0]],
+      "target": [[0.0, 0.0], [1.0, 1.0]]
+    },
+    "score_sigmas": [0.25, 0.75]
+  },
+  "expected": {
+    "cfg": {
+      "scale_zero": [[1.0, 2.0]],
+      "scale_one": [[3.0, 6.0]],
+      "scale_four_point_five": [[10.0, 20.0]]
+    },
+    "generator_alpha_one": [0.625, 10.0],
+    "generator_alpha_quarter": [1.09375, 17.5],
+    "fake_score_flow": [5.0, 2.0],
+    "score_weights": {
+      "1-minus-sigma": [0.75, 0.25],
+      "1-minus-sigma-squared": [0.5625, 0.0625],
+      "1-over-sigma": [4.0, 1.3333333333333333],
+      "1-over-sigma2": [16.0, 1.7777777777777777],
+      "snr-sqrt": [3.0, 0.3333333333333333],
+      "snr": [9.0, 0.1111111111111111],
+      "sid-legacy": [0.6666666666666666, 0.3333333333333333]
+    }
+  }
+}

@@ -1,5 +1,7 @@
 id: phyfps-bench-gen
 name: PhyFPS-Bench-Gen
+publisher: Texas A&M University
+publisher_kind: university
 benchmark_kind:
 - text-to-video
 - temporal-consistency
@@ -74,6 +76,16 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  normalization:
+    artifact_official_run: true
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.run_phyfps_bench_gen_official_runner
+    generated_arg: --generated-artifact-dir
+    limit_arg: --limit
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyFPSBenchGenContract
   official_runner_script: 
     worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py
@@ -128,6 +140,8 @@ runner:
   - WORLDFOUNDRY_PHYFPS_BENCH_GEN_STRICT
 integration:
   status: integrated
+  tier: model_backed
+  judge_model_id: xiangbog/Visual_Chronometer
   evidence:
     normalizer_surface: phyfps_bench_gen_official_in_tree
     framework_validation: worldfoundry-eval zoo benchmark-run --benchmark-id phyfps-bench-gen --mode official-validation
@@ -180,6 +194,9 @@ validation_command:
 checkpoint_refs: []
 blockers:
 - Full leaderboard parity requires the complete official assets, generated artifacts, and verified scorecard evidence.
+dataset:
+  not_applicable: true
+  reason: The official 100-prompt suite is versioned in the pinned GitHub source; generated videos are caller-provided, so no Hugging Face dataset is required.
 artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard

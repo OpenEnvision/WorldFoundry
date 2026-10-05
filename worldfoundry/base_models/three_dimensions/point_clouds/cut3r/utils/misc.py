@@ -28,21 +28,6 @@ def fill_default_args(kwargs, func):
     return kwargs
 
 
-def freeze_all_params(modules):
-    """Freeze all params.
-
-    Args:
-        modules: The modules.
-    """
-    for module in modules:
-        try:
-            for n, param in module.named_parameters():
-                param.requires_grad = False
-        except AttributeError:
-
-            module.requires_grad = False
-
-
 def is_symmetrized(gt1, gt2):
     """Is symmetrized.
 
@@ -90,7 +75,7 @@ def transpose_to_landscape(head, activate=True):
             decout: The decout.
             true_shape: The true shape.
         """
-        B = len(true_shape)
+        len(true_shape)
         assert true_shape[0:1].allclose(true_shape), "true_shape must be all identical"
         H, W = true_shape[0].cpu().tolist()
         res = head(decout, (H, W), **kwargs)

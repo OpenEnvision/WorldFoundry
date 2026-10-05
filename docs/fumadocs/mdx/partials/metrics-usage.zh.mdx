@@ -1,5 +1,3 @@
-import { MetricQuickNav } from '@/components/metric-quick-nav';
-
 ## 每个指标怎么用
 
 三步走：
@@ -9,8 +7,6 @@ import { MetricQuickNav } from '@/components/metric-quick-nav';
 3. 复制下面对应 metric 的示例代码运行
 
 只有 **built-in existing-results** 能走 CLI；其余 metric 用 Python `compute_*` 或 Scorer 类。
-
-<MetricQuickNav locale="zh" />
 
 Metric 模块保持 lazy import：只有实际加载 feature extractor、多模态 scorer 或 API judge 时才需要 checkpoint。默认 cache 沿用 Hugging Face / Torch / torchvision layout：
 

@@ -1,61 +1,59 @@
 ---
-title: Add a Benchmark
-description: Checklist for benchmark manifests, runners, datasets, official runs, and leaderboard evidence.
+title: Add a benchmark
+description: How to land a WorldFoundry benchmark — catalog, task contract, runner, and the evidence that separates integration from a leaderboard claim.
 ---
 
-## Introduction
+Adding a benchmark to WorldFoundry is not “paste a paper name into YAML and mark it integrated.” The catalog records identity, provenance, and what the protocol actually measures. An external task manifest declares how samples become `GenerationRequest` rows. A runner or normalizer writes a scorecard shape the rest of the system can review. A readiness report is what the support matrix hashes. None of those pieces is a substitute for the others, and none of them, by itself, is a leaderboard claim.
 
-WorldFoundry uses Benchmark Zoo as the supported public benchmark surface. Add new benchmark support through catalog manifests, external task manifests, runner contracts, and readiness evidence.
+The public surface for this work is Benchmark Zoo: catalog files under `worldfoundry/data/benchmarks/catalog/`, task files under `worldfoundry/data/benchmarks/tasks/external/`, and execution code under `worldfoundry/evaluation/tasks`. Use that path when you are tracking an external or community benchmark that has an official source, a dataset or prompt suite, a runner, and runtime stages. Per-benchmark pages live on [Benchmark Hub](/docs/evaluation/benchmark-hub). Reusable scorers that are not protocol-specific live under [Metrics](/docs/evaluation/metrics). Embodied simulators have extra asset and Docker steps in [Embodied official runtime](/docs/evaluation/embodied-official-runtime). The model side of the same artifact boundary is [Add a model](/docs/guides/add-model).
 
-Most benchmark work follows the same story: record official provenance in catalog metadata, declare the task contract, prove the runner can write a scorecard shape, then promote only when real assets and official scorer evidence exist.
+## Keep the first PR narrow
 
-## Supported surface
+The first pull request should prove one support surface end to end. Pick one benchmark id, one catalog YAML, one external task contract, one callable runner or official-result normalizer, and one report that a reviewer can open without guessing your machine. That is enough to show catalog → task → runner → scorecard artifacts works for assets the user supplies.
 
-Today the public integration path is Benchmark Zoo:
+Do not wait until every official dimension, every judge weight, and every leaderboard split is green. A bounded official-validation import that writes a honest scorecard is a better first PR than a wide metadata dump that also claims `leaderboard_valid: true`. Do not rewrite shared metric APIs or invent a second catalog parser in the same change.
 
-- **Benchmark zoo** — `worldfoundry/data/benchmarks/catalog/*.yaml`, `scripts/benchmark_zoo`, and `worldfoundry/evaluation/tasks`. Use this when tracking an external or community benchmark with official source, dataset, runner, and runtime stages.
+## What an integration actually touches
 
-## Discovery checks
+A WorldFoundry benchmark is a stack of contracts, not a single script. Identity lives in `worldfoundry/data/benchmarks/catalog/<family>/<benchmark-id>.yaml`: `id`, aliases, family, modalities, and the normalized tasks the rest of the zoo will search. Source provenance lives next to it — official repository, paper, project page, license, clone target, and whatever access note a later runner will need. If the GitHub URL is unverified, say so. The support matrix will not upgrade a guess.
 
-Start by confirming the benchmark already appears in catalog and task metadata:
+The dataset block is about access, not about copying videos into git. Record dataset ids, whether a Hugging Face mirror exists, what the cache expectation is, which filters apply, and any unsafe or gated flags. Some video benchmarks, such as VBench, do not need a public dataset at all: they consume a prompt suite plus generated videos from `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`. Embodied benchmarks usually need a data root, a simulator checkout, and sometimes a Docker image. Write the condition that is true, including `not_applicable` when that is the official shape.
+
+The runner block names the callable surface: runner target, official validation mode, the official benchmark command if you wrap one, and the artifacts a successful run must leave behind. Metrics on the catalog are the protocol’s scores — ids, direction, aggregation, ranges, and leaderboard keys — not a second copy of the in-tree metric registry. If a dimension is only an approximation of the official script, say that on the Benchmark Hub page and in the catalog notes. Do not silently swap in CLIPScore because the official judge is heavy.
+
+The task contract sits in `worldfoundry/data/benchmarks/tasks/external/<benchmark-id>.yaml`. That file is how a prompt list or simulator episode becomes `GenerationRequest` rows. Keep protocol-specific mapping there, or in the runner that reads it. Do not teach a model pipeline the VBench dimension list, and do not teach a metric how to launch Cosmos.
+
+Evidence fields — check notes, report paths, blockers, executed commands — are the only catalog statements the support matrix treats as pointers to proof. The proof itself is a file under `tmp/`, not a sentence in YAML.
+
+## Integration is not a leaderboard
+
+WorldFoundry splits framework integration from leaderboard eligibility on purpose. A runner that can import official-shaped results and write `scorecard.json` is integration evidence. A number that may be compared to a published table requires the official scorer or judge, the declared asset coverage, and a scorecard that still says the run is eligible.
+
+That is why a catalog can be `integrated` and still carry `leaderboard_valid: false`, `official_benchmark_verified: false`, and, when you only normalize upstream files, `verification_status: normalizer_only` plus `normalizer_only: true`. VBench is the usual example: a bounded official GPU check on one dimension is real integration evidence; the full prompt suite and the remaining heavy dependencies are still pending, so the leaderboard flag stays false. Copy that honesty. Do not promote the flag because a single video scored.
+
+If you only have a normalizer, you may still mark the surface `integrated` once the CLI command, the artifact and data requirements, and the normalization report exist. Leave the three leaderboard-limiting fields in place until the official scorer or judge has actually run.
+
+## Write the manifests, then see if the zoo agrees
+
+Draft the catalog YAML by responsibility, not as one unsorted table. Identity, source, dataset, runner, metrics, and evidence should be readable as separate stories. Add the matching external task file in the same PR so `tasks show` and `benchmark-show` cannot disagree about the id.
+
+Then ask the zoo whether it parsed what you meant. From the unified environment:
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmarks --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmark-show \
-  --benchmark-id <benchmark-id> \
-  --include-spec \
-  --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval tasks show \
-  --task-type <benchmark-id> \
-  --json
+worldfoundry-eval zoo benchmarks --json
+worldfoundry-eval zoo benchmark-show --benchmark-id <benchmark-id> --include-spec --json
+worldfoundry-eval zoo benchmark-specs --benchmark-id <benchmark-id> --json
+worldfoundry-eval tasks show --task-type <benchmark-id> --json
 ```
 
-## Benchmark-zoo manifest
+`benchmark-show` is the fastest way to see aliases, required env vars, blockers, and the resolved spec. `benchmark-specs` is the compact view a runner will consume. `tasks show` confirms the external task contract registered under the same id. If these three disagree, fix the YAML before you touch a GPU.
 
-The catalog entry is the public contract. Group fields by responsibility rather than dumping everything into one flat table:
+## Prove the runner can write a scorecard
 
-- **Identity** — `benchmark_id`, aliases, family, modalities, normalized tasks.
-- **Source** — Official repository, paper, project page, license, clone target.
-- **Dataset** — Dataset ids, access state, cache expectation, filters, unsafe flags.
-- **Runner** — Runner target, official validation, official benchmark command, expected artifacts.
-- **Metrics** — Metric ids, direction, aggregation, score ranges, leaderboard keys.
-- **Evidence** — Check notes, report paths, blockers, executed commands.
-
-Inspect and export specs:
+The first executable milestone is official validation, not a full leaderboard sweep. Import official-shaped results — or a small generated-artifact directory the protocol accepts — and write a reviewable scorecard:
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmarks --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmark-specs \
-  --benchmark-id <benchmark-id> \
-  --json
-```
-
-## Runnable Evaluator
-
-Official validation imports official-shaped results and writes a reviewable scorecard before you claim full benchmark parity:
-
-```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmark-run \
+worldfoundry-eval zoo benchmark-run \
   --benchmark-id <benchmark-id> \
   --output-dir tmp/benchmark_zoo/official_validation/<benchmark-id> \
   --mode official-validation \
@@ -64,41 +62,30 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmar
   --json
 ```
 
-The benchmark runner separates framework integration from leaderboard eligibility. A passing official-validation import is useful development evidence; leaderboard claims still require the official scorer or judge, declared assets, and complete scorecard evidence.
+A passing import is development evidence. It shows the normalizer, artifact kinds, and scorecard writer agree. It does not show that your videos cover the official prompt list, that the judge weights were the published ones, or that the number is comparable to the paper. Those claims wait for the official command, the declared assets, and a scorecard that still records the gaps.
 
-## Readiness checks
-
-After metadata looks correct, run the declared runtime profile:
+When metadata looks right, run the declared runtime profile so missing datasets, licenses, and conda prefixes fail in a report instead of in a hallway conversation:
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval preflight runtime \
+worldfoundry-eval preflight runtime \
   --profile <benchmark-id> \
   --manifest worldfoundry/data/benchmarks/runtime_profiles/official/<benchmark-id>.yaml \
   --output-dir tmp/preflight/runtime/<benchmark-id> \
   --json
 ```
 
-Add execution flags only when the machine has permission, network access, credentials, datasets, and runtime capacity.
+Add network, credential, or execute flags only on a machine that is allowed to fetch data and has the runtime capacity. Read the JSON report for blockers, stage status, and next action. Open logs only when a stage failed. The same discipline applies to `tmp/benchmark_zoo/validation/<benchmark-id>/report.json`: that file is what readiness hashes. If the YAML moves and the report does not, an `integrated` label becomes stale.
 
-The check output goes under `tmp/preflight/runtime/<benchmark-id>`. Use the JSON report for blockers, stage status, and next actions; inspect logs only when a stage fails.
+Embodied benchmarks usually need one more hop after import. Roll out in the official simulator or Docker evaluator, write the result files those projects already emit, then import with `official-validation`. Do not invent a parallel score format inside WorldFoundry and call it official. The embodied setup page lists the env vars and asset roots; this guide does not repeat them.
 
-## Status rules
+## Status has to match what the runner can prove
 
-Promotion language must match what the runner can actually prove:
+`planned` means the metadata exists but the declared runner, importer, normalizer, or artifact contract is not yet callable with evidence. Use it for a catalog row you are still wiring. `blocked` means a concrete official condition is missing: code, data, judge weights, license access, or a runtime dependency you cannot stage. Write the reason in `blockers` so the next person does not rediscover it. `integrated` means the declared WorldFoundry surface is callable and evidenced — an in-tree runner, an official command wrapper, an isolated importer, or an official-result normalizer can write the expected scorecard artifacts for user-supplied assets.
 
-- **`planned`** — Metadata exists, but the declared runner, importer, normalizer, or artifact contract is not yet callable and evidenced.
-- **`blocked`** — Official code, data, judge weights, license access, or runtime dependencies are unavailable.
-- **`integrated`** — The declared WorldFoundry support surface is callable and evidenced: an in-tree runner, official command, isolated importer, or official-result normalizer can write the expected scorecard artifacts for user-supplied assets.
+Promotion language is part of the contract. If the PR says `integrated` and the scorecard cannot be opened, the status is wrong. If the PR says the number is leaderboard-valid and `leaderboard_valid` is still false, the prose is wrong. Change both together, and only after the report hashes match the current manifests.
 
-Normalizer-only integrations may be `integrated` when the CLI command, artifact/data requirements, and normalization evidence are documented. Keep `verification_status: normalizer_only`, `normalizer_only: true`, and `leaderboard_valid: false` unless the full official scorer or judge has run and the scorecard proves leaderboard eligibility.
+## What a reviewer needs in the PR
 
-## PR evidence
+A reviewer should be able to walk from a catalog sentence to a command and an artifact without asking which node you used. Attach the catalog and task diffs — `worldfoundry/data/benchmarks/catalog/**/<benchmark-id>.yaml`, `worldfoundry/data/benchmarks/tasks/external/<benchmark-id>.yaml`, and any runner or normalizer files — plus the metadata-check output from `benchmark-show` / `benchmark-specs` / `tasks show`. Attach `tmp/benchmark_zoo/validation/<benchmark-id>/report.json`, the dataset cache path and access condition without the data itself, the generated scorecard, raw logs, and expected artifact paths. If a stage was skipped, write the license, API, dataset, or hardware reason in the report, not only in the PR body.
 
-Reviewers should be able to trace catalog claims to commands and artifacts:
-
-- **Manifest diff** — `worldfoundry/data/benchmarks/catalog/*.yaml`, `worldfoundry/data/benchmarks/tasks/external/*.yaml`, or benchmark runner/normalizer files.
-- **Metadata checks** — `tasks show`, `benchmark-specs`, or `benchmark-show` output.
-- **Readiness report** — `tmp/benchmark_zoo/validation/<benchmark-id>/report.json`.
-- **Dataset state** — Cache path and access condition, without committing data.
-- **Runtime run** — Generated scorecard, raw logs, and expected artifact paths.
-- **Skipped stages** — License, API, dataset, or hardware reason.
+Do not commit datasets, generated videos, judge checkpoints, API keys, or private simulator images. Those belong in the report as paths and hashes. When you promote status, refresh the preflight output so the support matrix and the PR tell the same story.

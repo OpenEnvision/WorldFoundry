@@ -1,0 +1,50 @@
+---
+title: "LingBot-VLA 2.0"
+description: "LingBot-VLA 2.0（Robbyant (Ant Group)）：视觉-语言-动作（VLA）、VLA 动作预测；仅静态加载; 独立环境 `worldfoundry-lingbot-vla-v2-cu128`。"
+modelId: "lingbot-vla-v2"
+pageSource: authored
+---
+
+LingBot-VLA 2.0 是蚂蚁灵波科技（Robbyant）的 6B 第二代 VLA，基于 Qwen3-VL 专家混合策略，以 robbyant/lingbot-vla-v2-6b 发布，Apache-2.0 许可。WorldFoundry 在树内进程内运行官方策略推理——包含批处理、特征变换、机器人映射与归一化——静态 checkpoint 验证已完成。
+
+<ModelPaperFigures modelId="lingbot-vla-v2" locale="zh" />
+
+记录论文为[arXiv 2607.06403](https://arxiv.org/abs/2607.06403)。
+
+代码：[Robbyant/lingbot-vla-v2](https://github.com/Robbyant/lingbot-vla-v2)。
+
+<ModelCommandBuilder modelId="lingbot-vla-v2" locale="zh" />
+
+## 用来做什么
+
+需要 catalog 上的 VLA 策略时选 `lingbot-vla-v2-6b`：指令与观测进、动作轨迹出。用来滚动已记录策略，不是用来训练新策略。
+
+Qwen3-VL/MoE 策略，55 维内部表征、去噪动作解码、image_grid_thw 处理与可选 torch.compile 路径。仅训练用的感知教师被排除；推理消费其蒸馏进权重的表征。该模型由蚂蚁灵波科技（Robbyant，蚂蚁集团）发布。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测、VLA 策略执行、机器人策略。别名包括 `lingbot-vla2`、`lingbot-vla-v2-6b`、`lingbotvla2`。
+
+LingBot VLA v2。不是 v1 VLA 卡。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`lingbot_vla_v2_action_trace.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `LingBotVLAV2Pipeline`。
+
+系列状态：**仅静态加载**。
+
+公开 6B checkpoint 使用捆绑的官方派生推理配置；机器人专用下游 checkpoint 可用自己的 lingbotvla_cli.yaml 覆盖。
+
+Qwen3-VL/MoE policy inference, official batching, feature transforms, robot mappings, and normalization assets are integrated directly in-tree.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run lingbot-vla-v2-6b --pipeline.task-profile default` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-lingbot-vla-v2-cu128`（Python 3.11，CUDA 12.8，torch==2.8.0）。
+
+记录的权重仓库包括 `robbyant/lingbot-vla-v2-6b`、`Qwen/Qwen3-VL-4B-Instruct`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lingbot-vla-v2-6b`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**仅静态加载**。
+
+<ModelRelatedRecipes modelId="lingbot-vla-v2" locale="zh" />

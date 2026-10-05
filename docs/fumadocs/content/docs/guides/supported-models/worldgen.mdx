@@ -1,0 +1,30 @@
+---
+title: "WorldGen"
+description: "ZiYang Xie WorldGen: text or image in, traversable 3D splat/mesh out. In-tree adapter; gated FLUX foundations; runner parity pending."
+modelId: "worldgen"
+pageSource: authored
+---
+
+WorldGen on this card is **ZiYang Xie's** open 3D-world generator ([github.com/ZiYang-xie/WorldGen](https://github.com/ZiYang-xie/WorldGen), project [worldgen.github.io](https://worldgen.github.io/)). At runtime it turns a **text prompt** and/or a **single image** into a **3D scene** — default **Gaussian splat** `worldgen.ply`, or a **mesh** `worldgen.glb` when `return_mesh` is set. It does **not** emit world video.
+
+<ModelPaperFigures modelId="worldgen" locale="en" />
+
+The catalog paper URL and title-page thumb are Meta Reality Labs' [WorldGen: From Text to Traversable and Interactive 3D Worlds](https://arxiv.org/abs/2511.16825). That is a **different project** with the same name. This page documents the **LeoXie/WorldGen** adapter WorldFoundry actually wires, not Meta's release. It is also **not** [Hunyuan World worldgen](/docs/guides/supported-models/hyworld-worldgen).
+
+<ModelCommandBuilder modelId="worldgen" locale="en" />
+
+## What it is for
+
+Build a walkable 3D asset, not a clip. Launch `worldfoundry-eval run worldgen`. Recorded inputs: `prompt` and `image`. Optional `actions.camera_path`. Video is **not** a required input. The in-tree flow is text-to-scene (`t2s`) or image-to-scene (`i2s`): FLUX paints a panorama, then the adapter reconstructs splat or mesh. You can also pass a ready panorama and skip FLUX generation.
+
+Default inference resolution in the vendored script is **1600**. Low-VRAM mode turns on automatically below 24 GB. Background inpaint cannot combine with `return_mesh`.
+
+Score generated 3D worlds on [WorldScore](/docs/evaluation/benchmark-hub/worldscore). That is a catalog entry point, not an ingested WorldFoundry score.
+
+## Running in WorldFoundry
+
+`WorldGenPipeline` is an in-tree subprocess adapter in `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `LeoXie/WorldGen` **and** accept the gated **FLUX.1-dev** (text-to-pano) and **FLUX.1-Fill-dev** (image-to-pano) terms. Missing foundations are reported at inference time. **Runner / official scene-quality parity is pending.**
+
+A local 512×256, 50-step text-to-scene run produced a finite Gaussian-splat scene with the requested furniture. A cropped perspective-photo image-to-scene run produced a valid PLY but did not preserve its input room. The current upstream image path maps a single input across spherical panorama rays without a specified camera field of view. A separate full 2:1 panorama exposed a contour-fill bug that erased every conditioned pixel when the image covered the whole sphere; the in-tree fix preserves the full mask. Repeating the 50-step run with that panorama produced a valid PLY whose recovered RGB differed from the input by 1.44/255 on average. Because the full panorama leaves nothing to inpaint, this verifies condition preservation and scene conversion, not novel expansion from a perspective photograph.
+
+<ModelRelatedRecipes modelId="worldgen" locale="en" />

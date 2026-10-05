@@ -13,5 +13,7 @@ architecture_defaults:
     output_dim: 1024
     interleave_self_attention: true
 variants:
+  gr1:
+    embodiment_tag: GR1
   libero_10:
     embodiment_tag: LIBERO_PANDA

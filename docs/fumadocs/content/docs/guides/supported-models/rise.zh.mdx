@@ -1,0 +1,31 @@
+---
+title: "RISE"
+description: "OpenDriveLab 的 Pi0.5 动作策略：三路 RGB 加 14 维状态进，50×14 动作块出。Apache-2.0 树内运行时；没有公开的已训练动作 checkpoint。"
+modelId: "rise"
+pageSource: authored
+---
+
+RISE 是 OpenDriveLab 的 **Pi0.5 架构动作策略**。论文是 [RISE: Self-Improving Robot Policy with Compositional World Model](https://arxiv.org/abs/2602.11075)（arXiv 2602.11075）。项目页见 [opendrivelab.com/RISE](https://opendrivelab.com/RISE)。WorldFoundry 在 `worldfoundry/synthesis/action_generation/rise` 下保留仅推理路径：官方 AgileX 变换、三相机映射、分位数归一化，以及 **50×14** 绝对动作契约全部在进程内执行。别名 `rise-policy`、`rise-pi05` 解析到本页。
+
+<ModelPaperFigures modelId="rise" locale="zh" />
+
+论文的训练故事是组合世界模型上的想象 RL。本卡片是**已部署策略的推理**路径。必填输入是语言 `prompt` 与 RGB `image`；运行时还要求 **14 维**机器人 `state`。需要三路视角——头部、左腕、右腕（`cam_high`、`cam_left_wrist`、`cam_right_wrist`）——先缩放到 **320×240** 再进 Pi0.5 栈。策略经 **10** 步 flow matching（`num_inference_steps=10`，seed `42`）写出一块 **50 步 × 14 维**动作。GitHub 树许可为 **Apache-2.0**。
+
+<ModelCommandBuilder modelId="rise" locale="zh" />
+
+## 用来做什么
+
+滚动兼容的 Pi0.5 动作 checkpoint：`prompt` + `image`（外加 14 维 `state` 与三路相机）进，经 `RisePipeline` 写出 `action_trace` / `rise_action_trace.json`。任务 profile 为 `vla`、`vla.action_prediction`、`embodied_policy`。默认启动 `worldfoundry-eval run rise`。
+
+公开 Hugging Face 仓库 `OpenDriveLab-org/RISE_Assets` **只提供动力学模型与样例数据**。你必须自行就位训练好的动作策略权重（`model.safetensors` 或 JAX Orbax `params/`）、分位数 `norm_stats.json`、本地 PaliGemma SentencePiece tokenizer，以及 FAST tokenizer。缺任何一项，运行时构建会尽早失败。不使用源码 checkout，也不走运行时网络。
+
+论文真机设定是双臂 7 自由度 AgileX，控制频率 **30 Hz**。那是上游硬件上下文，不是 WorldFoundry 测到的控制频率。
+
+## 运行时契约
+接受的本地格式是 PyTorch safetensors 与 JAX Orbax 参数。自动精度按算力：Turing 用 **fp16**，Ampere / Ada / Hopper / Blackwell 用 **bf16**，CPU 回退 **fp32**。PyTorch checkpoint 可用 `torch.compile`；JAX 走架构原生编译路径。catalog 默认 `action_advantage=1.0`、`advantage_bin=10`。内部 Pi0.5 动作维是 32；对外契约是 14 维 AgileX。
+
+## 在 WorldFoundry 中运行
+
+在统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，`torch>=2.5`）里运行 `worldfoundry-eval run rise`。集成状态为 **integrated**；runner / demo 为 **未记录**，本卡片也没有公开的已训练动作 checkpoint id。期望 `get_action` 产物前，先把权重就位到本地。
+
+<ModelRelatedRecipes modelId="rise" locale="zh" />

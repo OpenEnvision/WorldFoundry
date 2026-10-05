@@ -20,6 +20,7 @@ class WorldGen:
             resolution: int = 1600,
             device: torch.device = 'cuda',
             low_vram: Optional[bool] = None,
+            initialize_pano_generator: bool = True,
         ):
         self.device = device
         self.depth_model = build_depth_model(device)
@@ -33,7 +34,9 @@ class WorldGen:
             print(f"Detected {total_vram:.1f}GB VRAM, {'enabling' if low_vram else 'disabling'} low VRAM mode")
         self.low_vram = low_vram
 
-        if mode == 't2s':
+        if not initialize_pano_generator:
+            self.pano_gen_model = None
+        elif mode == 't2s':
             self.pano_gen_model = build_pano_gen_model(lora_path=lora_path, device=device, low_vram=low_vram)
         elif mode == 'i2s':
             self.pano_gen_model = build_pano_fill_model(lora_path=lora_path, device=device, low_vram=low_vram)
@@ -97,6 +100,8 @@ class WorldGen:
 
     
     def generate_pano(self, prompt: str = "", image: Optional[Image.Image] = None) -> Image.Image:
+        if self.pano_gen_model is None:
+            raise RuntimeError("WorldGen panorama generation was not initialized for this direct-panorama request.")
         if self.mode == 't2s':
             assert image is None, "image is not supported for text-to-scene generation"
             pano_image = gen_pano_image(self.pano_gen_model, prompt=prompt, height=self.resolution//2, width=self.resolution)

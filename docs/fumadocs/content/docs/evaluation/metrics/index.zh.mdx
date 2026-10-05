@@ -3,32 +3,23 @@ title: 指标
 description: 树内 metric registry 与分布/感知类 compute API。
 ---
 
-import { MetricQuickNav } from '@/components/metric-quick-nav';
 import MetricsSetup from '../../../../mdx/partials/metrics-usage-setup.zh.mdx';
 
-定量评测是生成式建模进展的核心环节。当系统从单帧合成扩展到视频、编辑、具身 rollout 与长程世界模拟时，输出空间的增长速度远快于人工审查所能覆盖的范围。指标承担压缩层的作用：将高维 artifact 转化为可在模型、checkpoint、消融与 benchmark 套件之间比较的标量或向量摘要。WorldFoundry 提供树内 metric 层——由 registry 管理的 scorer 与分布/感知 compute 例程，runner 通过稳定契约调用。本 hub 并非对已发表指标的综述，而是说明仓库实际实现了什么、如何发现、以及假设在何处失效。
+WorldFoundry 提供树内 metric 层——由 registry 管理的 scorer 与分布/感知 compute 例程，runner 通过稳定契约调用。Benchmark 决定*在什么数据上测什么*；metric 决定*如何把预测变成数字*。每条注册项声明输入、可选 checkpoint 依赖与输出形态；runner 引用 metric ID，registry 解析别名、校验可用性并路由到对应 `compute_*`，使模型代码不接触打分细节、打分却在跨机器时保持可复现。本 hub 只记录仓库实际实现了什么，并非已发表指标的综述。
 
-Benchmark 回答*在什么数据上测什么*；metric 回答*如何把预测变成数字*。实践中边界常常模糊：同一段 FVD 逻辑可能出现在视频 benchmark、独立消融脚本、以及 scorecard 字段 `distribution.fid` 中。若没有共享 registry，团队会重复实现预处理、checkpoint 路径与聚合规则——细微差异即可造成无法归因的 leaderboard 落差。我们将 metric 视为一等 artifact，而非临时 notebook 片段。每条注册项声明输入（图像、视频、特征数组、文本 prompt）、可选 checkpoint 依赖与输出形态；runner 引用 metric id，registry 解析别名、校验可用性并路由到对应 `compute_*` 实现，使模型代码不必了解打分细节，打分却在不同机器上保持可复现。
-
-树内目录按四个家族组织，与侧栏一致。多模态 scorer 与质量指标（CLIP 系、VQA、ITM、人脸、艺术、Open S2V judge）刻画条件与生成之间的语义一致性。分布指标（FID、IS、KID、FVD、JEDi、CMMD、Clean-FID 及特征数组变体）总结总体分布统计而非逐样本对错。感知成对指标（LPIPS、SSIM、DINO 相似度、mask accuracy、layout quality）在存在配对监督时衡量局部保真度。编辑与 layout 指标（SemSR、IRS、CAS、编辑方向、object-wise consistency）面向编辑指令、mask 或 layout 约束构成评测契约的结构化编辑任务。[Registry 与参考](/zh/docs/evaluation/metrics/reference) 另页说明发现方式（`worldfoundry-eval metric list`）、参数化 id、checkpoint 落盘与包结构，注册新 metric 或排查 run 为何跳过某分数时可查阅。
-
-依赖预训练 backbone 的 metric 显式声明依赖，缺失 checkpoint 时明确失败而非静默替换代理模型。Registry key 统一大小写与连字符，runner 与 scorecard 存储规范 id，实现可在契约与字段名不变的前提下演进。Benchmark manifest 决定哪些 metric 用于哪些任务，本 hub 说明每条 metric 被调用时的行为。每个 benchmark 的 evaluator asset 和运行命令见 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)。并非文献中每个 leaderboard 数字都有树内实现，各页会标注近似、不支持的模式，以及须使用官方 benchmark 脚本而非通用 compute API 的情形。
+树内目录按四个家族组织：**scorer 与质量**（CLIP、VQA、ITM、人脸、艺术、S2V judge）、**分布**（FID、IS、KID、FVD、JEDi、CMMD、Clean-FID）、**感知成对**（LPIPS、SSIM、DINO、mask、layout）、**编辑与 layout**（SemSR、IRS、CAS、manipulation）。依赖预训练 backbone 的 metric 显式声明依赖，缺失 checkpoint 时明确失败，绝不静默替换代理。第五页 [Registry 与参考](/zh/docs/evaluation/metrics/reference) 说明发现方式（`worldfoundry-eval metric list`）、参数化 id、checkpoint 落盘与包结构。每个 benchmark 的 evaluator asset 与运行命令见 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)；各页会标注近似与须使用官方脚本而非通用 compute API 的情形。
 
 ## 快速开始
 
 <MetricsSetup />
 
-<MetricQuickNav locale="zh" variant="hub" />
-
 ## 子页面
 
-| 页面 | 内容 |
-| --- | --- |
-| [多模态 scorer 与质量](/zh/docs/evaluation/metrics/scorers) | CLIPScore、VQAScore、ITMScore、FaceScore、ArtScore、OpenS2V reward 指标。 |
-| [分布指标](/zh/docs/evaluation/metrics/distribution) | FID、IS、KID、FVD、JEDi、CMMD、Clean-FID 及特征数组类指标。 |
-| [感知成对](/zh/docs/evaluation/metrics/perceptual) | LPIPS、SSIM、DINO 相似度、mask accuracy、layout quality。 |
-| [编辑与 layout](/zh/docs/evaluation/metrics/editing) | SemSR、IRS、CAS、编辑方向、object-wise consistency。 |
-| [Registry 与参考](/zh/docs/evaluation/metrics/reference) | `MetricRegistry`、已注册指标表、CLI、checkpoint、架构说明。 |
+- [多模态 scorer 与质量](/zh/docs/evaluation/metrics/scorers) — CLIPScore、VQAScore、ITMScore、FaceScore、ArtScore、OpenS2V reward 指标。
+- [分布指标](/zh/docs/evaluation/metrics/distribution) — FID、IS、KID、FVD、JEDi、CMMD、Clean-FID 及特征数组类指标。
+- [感知成对](/zh/docs/evaluation/metrics/perceptual) — LPIPS、SSIM、DINO 相似度、mask accuracy、layout quality。
+- [编辑与 layout](/zh/docs/evaluation/metrics/editing) — SemSR、IRS、CAS、编辑方向、object-wise consistency。
+- [Registry 与参考](/zh/docs/evaluation/metrics/reference) — `MetricRegistry`、已注册指标表、CLI、checkpoint、架构说明。
 
 ## 相关页面
 

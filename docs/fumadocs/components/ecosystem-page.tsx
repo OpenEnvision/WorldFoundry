@@ -1,8 +1,7 @@
 import Link from 'next/link';
 
-import { SiteNav, type SiteNavItemId } from '@/components/site-nav';
-import { SiteSearchTrigger } from '@/components/site-search-trigger';
-import { WorldFoundryWordmarkLink } from '@/components/worldfoundry-wordmark';
+import { SiteHeader } from '@/components/site-header';
+import type { SiteNavItemId } from '@/components/site-nav';
 import { WORLDFOUNDRY_GITHUB_REPO } from '@/lib/site-links';
 
 type EcosystemLink = {
@@ -37,23 +36,18 @@ export function EcosystemPage({
 }: EcosystemPageProps) {
   return (
     <main className="pi-home-shell wf-home-shell">
-      <header className="pi-header pi-doc-header wf-home-site-header">
-        <div className="pi-doc-header-inner flex flex-wrap items-center justify-between w-full">
-          <div className="pi-doc-header-brand">
-            <WorldFoundryWordmarkLink variant="compact" />
-          </div>
-          <div className="pi-doc-header-tools ml-auto">
-            <SiteNav active={active} />
-            <SiteSearchTrigger />
-            <div className="pi-language-switch" aria-label="Language">
-              <Link href={active === 'home' ? '/' : `/${active}`} aria-current="true">
-                English
-              </Link>
-              <Link href="/zh/docs">中文</Link>
-            </div>
-          </div>
-        </div>
-      </header>
+      <SiteHeader
+        variant="solid"
+        active={active}
+        languageLinks={[
+          {
+            href: active === 'home' ? '/' : `/${active}`,
+            label: 'English',
+            current: true,
+          },
+          { href: '/zh/docs', label: '中文' },
+        ]}
+      />
 
       <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8 md:py-12">
         <section className="pi-ecosystem-hero">

@@ -1,0 +1,45 @@
+schema_version: 2
+model_id: worldcrafter-fast
+display_name: WorldCrafter Fast
+task_family: world_model
+groups: [world, video, camera_control, autoregressive_video, text_to_video, image_to_video]
+source_repos:
+- url: https://github.com/TencentARC/WorldCrafter
+  revision: 7e57e4d0448e8661eb6ae078f53e19638bd07102
+  in_tree_path: worldfoundry/base_models/diffusion_model/models/networks/worldcrafter
+checkpoints:
+- repo_id: TencentARC/WorldCrafter-Fast
+  revision: 51320c3eb58a6313ccd6021a1da6d723d53e1a58
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/TencentARC--WorldCrafter-Fast
+  role: shared_components_and_distilled_branches
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions: [camera_path, actions, actions_file]
+artifact_kind: generated_world
+artifact_filename: worldcrafter.mp4
+execution:
+  environment: _unified
+  backend_stage: shared_base_model_runtime
+  runtime_status: checkpoint_backed_gpu_verified
+  integration_status: integrated
+  pipeline_binding: worldcrafter-fast
+  default_parameters:
+    model_type: fast
+    height: 384
+    width: 640
+    num_chunks: 2
+    fps: 16
+    num_inference_steps: 6
+    guidance_scale: 1.0
+integration:
+  status: integrated
+license: worldcrafter-academic-only
+usage_restrictions:
+- Official WorldCrafter code and weights are licensed for academic use only.
+notes:
+- One global metric camera-to-world trajectory, in complete 33-frame chunks.
+- Fast T2V uses 12 steps for its first chunk and 6 thereafter; I2V uses 6 per chunk.
+- Base supports resumable state; Fast rejects resume/state export.
+- Public wrapper uses the shared local checkpoint resolver and never imports an external source checkout.

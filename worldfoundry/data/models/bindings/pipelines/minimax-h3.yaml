@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: minimax-h3
+model_id: minimax-h3
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.minimax.pipeline_minimax_h3:NativeMiniMaxH3Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

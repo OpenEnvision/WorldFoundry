@@ -20,15 +20,15 @@ import os
 import torch
 import torch.distributed.checkpoint as dcp
 
-from worldfoundry.base_models.diffusion_model.video.cosmos.cosmos2.runtime.cosmos_predict2.cosmos_predict2._src.predict2.checkpointer.dcp import (
+from worldfoundry.core.model_loading.checkpoints.dcp import (
     DefaultLoadPlanner,
     DistributedCheckpointer,
     ModelWrapper,
 )
 from worldfoundry.core.configuration.hydra import get_config_module, override
 from worldfoundry.core.configuration.lazy_config import instantiate
-from worldfoundry.core.distributed.logging import log
-from worldfoundry.core.utils import inference_runtime as misc
+from worldfoundry.core.distributed.runtime.logging import log
+from worldfoundry.core.execution import inference_runtime as misc
 from worldfoundry.data.io import easy_io
 
 

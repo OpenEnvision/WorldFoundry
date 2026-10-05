@@ -8,6 +8,8 @@ availability: open_source
 provider: official_repo
 license: mit
 official_sources:
+  paper: https://arxiv.org/abs/2606.09811
+  project_page: https://serene-sivy.github.io/aha-wam/
   github:
     url: https://github.com/Serene-SIVY/AHA-WAM
     head_sha: 69076f6206518554477be5639deb016eee03a9d6
@@ -22,7 +24,7 @@ checkpoint:
   filename: robotwin_ahawam.pt
   license: mit
 integration:
-  status: in_tree_checkpoint_runtime
+  status: integrated
   notes:
   - The exact video/action experts, mixture cache editor, six-frame history, two-phase chunk inference, VAE, and UMT5 encoder execute in process.
   - Every asset is loaded from local storage with strict key matching; no upstream checkout, server, Hub download, or custom remote implementation is used.
@@ -38,3 +40,23 @@ runtime_profile: runtime-profile:ahawam
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile planning records.
 schema_version: 2
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'AHA-WAM is a world-action model for manipulation: paired video and action experts share a mixture cache so the policy benefits from predictive world modeling. The MIT-licensed SereneC/AHA-WAM-RoboTwin2.0 checkpoint (robotwin_ahawam.pt) is recorded, with Wan-series VAE and UMT5 text-encoder weights staged from DiffSynth-Studio conversions; everything executes in process in-tree.'
+  overview_zh: AHA-WAM 是面向操作的世界-动作模型：视频与动作专家成对并共享 mixture cache，使策略受益于预测式世界建模。仓库记录 MIT 许可的 SereneC/AHA-WAM-RoboTwin2.0 checkpoint（robotwin_ahawam.pt）， Wan 系列 VAE 与 UMT5 文本编码器权重来自 DiffSynth-Studio 转换版本；全部在树内进程内执行。
+  architecture: The exact video/action experts, mixture cache editor, six-frame history, and two-phase chunk inference run in process, alongside the Wan VAE and UMT5 encoder. Trainers, datasets, simulators, evaluation launchers, and deployment servers are excluded.
+  architecture_zh: 精确的视频/动作专家、mixture cache 编辑器、六帧历史与两阶段块推理在进程内运行，并搭配 Wan VAE 与 UMT5 编码器。训练器、数据集、模拟器、评测启动器与部署服务均被排除。
+  usage_notes: Stage the policy checkpoint, statistics, and Wan-series VAE/text-encoder weights locally. Assets are local-only and checkpoint-provided Python is never executed; runtime loading uses strict key matching.
+  usage_notes_zh: 需在本地就位策略 checkpoint、统计文件与 Wan 系列 VAE/文本编码器权重。资产仅从本地加载，绝不执行 checkpoint 携带的 Python；运行时加载采用严格键匹配。
+  limitations:
+  - Single released checkpoint targets RoboTwin 2.0; other embodiments need retraining.
+  - No GPU rollout validation is recorded in this repository.
+  limitations_zh:
+  - 唯一发布的 checkpoint 面向 RoboTwin 2.0；其他本体需重新训练。
+  - 仓库未记录 GPU rollout 验证。
+  recommended_benchmarks:
+  - id: robotwin
+    reason: The released checkpoint is trained for RoboTwin 2.0.
+    reason_zh: 发布的 checkpoint 面向 RoboTwin 2.0 训练。

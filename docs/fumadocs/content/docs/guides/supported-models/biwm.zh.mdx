@@ -1,0 +1,41 @@
+---
+title: BiWM
+description: 复用共享 Wan BaseModel 的相机控制视频推理。
+pageSource: authored
+---
+
+BiWM 复用项目的 Wan Transformer、UMT5、因果 VAE、注意力与视频写出，只添加逐帧相机文本条件和专有采样流程。模型 ID 为 `biwm-wan21`（Wan2.1 T2V 1.3B）和 `biwm-wan22`（Wan2.2 TI2V 5B）。
+
+**必须提供训练后的 BiWM generator 权重。** 已核查的上游版本公开了代码、数据集和演示视频，尚未找到公开的 generator checkpoint。普通 Wan 基座不能替代 BiWM 权重；完整视频质量验证仍等待该权重。本集成不包含训练功能。
+
+```python
+from worldfoundry.pipelines.biwm import BiWMPipeline
+
+pipe = BiWMPipeline.from_pretrained(
+    model_id="biwm-wan22",
+    generator_ckpt="/checkpoints/biwm-stage2/diffusion_pytorch_model.safetensors",
+    wan_base="/checkpoints/Wan2.2-TI2V-5B",
+    stage=2,
+    device="cuda:0",
+)
+result = pipe(
+    prompt="A sunny garden with a stone path.",
+    images="garden.png",
+    actions="w-8,right-12,s-6",
+    num_chunks=4,
+    output_path="biwm.mp4",
+    return_dict=True,
+)
+```
+
+省略 `images` 即为 T2V。基座目录需要原生 `config.json`、`Wan2.1_VAE.pth` 或 `Wan2.2_VAE.pth`、`models_t5_umt5-xxl-enc-bf16.pth` 和 `google/umt5-xxl/` tokenizer。Generator 按完整键名和形状严格加载，不静默忽略历史压缩模块权重。
+
+动作格式为 `token-count`，长度按 **latent 帧**计数。`w/s/a/d` 表示平移，`up/down/left/right` 表示旋转，数字 `0..80` 对应“平移类别 × 9 + 旋转类别”。首帧固定静止；不足时延续最后一个动作，超长时截断。也可用 `action_label=9` 指定持续前进。两者都省略时使用上游的固定种子随机动作序列。
+
+Stage 2 默认每块 4 个 latent 帧、5 块注意力窗口、保留 1 个起始块；使用 `[1, .75, .5, .25]`、shift 5 的无 CFG 采样。T2V 输出帧数为 `4 × num_chunks × chunk_size − 3`，I2V 为 `4 × num_chunks × chunk_size + 1`。生成后一次性解码，保留 VAE 的跨块因果缓存。默认 832 × 480、24 FPS；Wan2.1 的宽高须为 16 的倍数，Wan2.2 须为 32 的倍数。
+
+Stage 1 需加载对应 teacher 权重并设置 `stage=1`，调用时可用 `num_frames=77`、`num_inference_steps=50`、`guidance_scale=5`；默认负面提示词复用 Wan。该路径支持整段 T2V，不接受图像或分块控制参数。
+
+本集成对应公开 Wan **未压缩历史**推理脚本。HY15/LTX 的训练配方及学习式历史压缩不作为已支持的推理路径。Checkpoint 中可能包含的动作嵌入 MLP 会完整恢复，但上游 Wan forward 的实际相机控制使用逐帧文本交叉注意力。
+
+上游：[LynnReal-AI/BiWM](https://github.com/LynnReal-AI/BiWM)，固定版本 `e546ae0a04a831c8a19aafa437b5662fffd92d67`。Apache-2.0 许可与来源统一记录于根目录 `THIRD-PARTY-NOTICES`。

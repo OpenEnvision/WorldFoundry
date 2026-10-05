@@ -1,0 +1,40 @@
+schema_version: 2
+environment_id: echo-memory
+model_id: echo-memory
+env_name: worldfoundry-unified-cu128
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+driver_status: compatible
+conda_packages:
+- python
+- pip
+- ffmpeg
+- ninja
+pip_packages:
+- torch>=2.6
+- torchvision
+- diffusers
+- transformers
+- safetensors
+- huggingface-hub
+- accelerate
+- sentencepiece
+- einops
+- numpy
+- pillow
+- imageio
+- imageio-ffmpeg
+- easydict
+- tqdm
+validation_imports:
+- torch
+- diffusers
+- transformers
+- safetensors
+- worldfoundry.base_models.diffusion_model.models.networks.echo_memory
+- worldfoundry.synthesis.visual_generation.echo_memory
+notes:
+- All independent Echo-Memory model IDs share this native WorldFoundry environment.
+- Only released model weights and the Wan 2.1 backbone are external assets; runtime code is in-tree.
+- Multi-GPU inference is intentionally gated until exact distributed parity is validated.

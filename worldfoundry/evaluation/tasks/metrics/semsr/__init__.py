@@ -4,15 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .wrapper import (
-    compute_sem_shift,
-    compute_semsr,
-    compute_semsr_from_embeddings,
-    compute_semsr_from_images,
-    compute_semsr_from_similarities,
-)
+compute_sem_shift = lazy_export(f"{__name__}.wrapper", "compute_sem_shift", owner=__name__)
+compute_semsr = lazy_export(f"{__name__}.wrapper", "compute_semsr", owner=__name__)
+compute_semsr_from_embeddings = lazy_export(f"{__name__}.wrapper", "compute_semsr_from_embeddings", owner=__name__)
+compute_semsr_from_images = lazy_export(f"{__name__}.wrapper", "compute_semsr_from_images", owner=__name__)
+compute_semsr_from_similarities = lazy_export(f"{__name__}.wrapper", "compute_semsr_from_similarities", owner=__name__)
 
 METRIC_ID = "semsr"
 ALIASES = ("semantic-shift-rate", "semantic_shift_rate", "sem_sr")

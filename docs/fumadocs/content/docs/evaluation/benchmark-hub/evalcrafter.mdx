@@ -1,135 +1,56 @@
 ---
 title: EvalCrafter
-description: EvalCrafter text-to-video quality evaluation in WorldFoundry.
+description: "700-prompt T2V quality bench: visual, alignment, motion, temporality (17 metrics → Total). WorldFoundry recomputes CLIP subset or imports; no invented board."
 ---
 
-## What It Measures
+EvalCrafter (Tencent AI Lab and City University of Hong Kong) is a **700-prompt** text-to-video quality suite. Seventeen objective metrics roll up into four aspects plus `evalcrafter_total`:
 
-EvalCrafter is a 700-prompt text-to-video benchmark covering visual quality, content alignment, motion quality, and temporal consistency. The original benchmark reports 17 objective metrics plus human feedback; WorldFoundry exposes those objective scores through the in-tree EvalCrafter runner and `final_result.txt` parser.
+- **Visual quality** — DOVER aesthetic / technical VQA, Inception Score.
+- **Text–video alignment** — CLIP, BLIP-BLEU, SD score, detection / color / count, OCR error, celebrity-ID error.
+- **Motion quality** — action recognition, motion activity, optical flow.
+- **Temporality** — temporal CLIP, warping error, face consistency.
 
-Use EvalCrafter when you need a broad diagnostic stack for generated videos rather than a physics-only or world-model-only benchmark.
+Paper: [EvalCrafter](https://arxiv.org/abs/2310.11440). Project: [evalcrafter.github.io](http://evalcrafter.github.io). Code: [evalcrafter/EvalCrafter](https://github.com/evalcrafter/EvalCrafter). Prompts: [`RaphaelLiu/EvalCrafter_T2V_Dataset`](https://huggingface.co/datasets/RaphaelLiu/EvalCrafter_T2V_Dataset). In-tree list: `worldfoundry/data/benchmarks/assets/evalcrafter/prompt700.txt`.
 
-## Assets And Data
+WorldFoundry keeps an **in-tree CLIP subset** (`clip_score`, `clip_temp_score`, `face_consistency_score`) and a normalizer for official `final_result.txt` dumps. Videos must be prompt-index MP4s (`0000.mp4` … `0699.mp4`). A bundled `sample_results.txt` supports import smoke. Primary key: `evalcrafter_total`.
 
-WorldFoundry keeps the prompt suite and runtime in-tree:
+<BenchmarkPageSections id="evalcrafter" locale="en" />
 
-| Asset | Path |
-| --- | --- |
-| Task YAML | `worldfoundry/data/benchmarks/tasks/external/evalcrafter.yaml` |
-| Prompt suite | `worldfoundry/data/benchmarks/assets/evalcrafter/prompt700.txt` |
-| Runner | `worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py` |
-| Runtime root | `worldfoundry/evaluation/tasks/execution/runners/evalcrafter/runtime/evalcrafter` |
+## How to run
 
-The optional public dataset asset is `RaphaelLiu/EvalCrafter_T2V_Dataset`, tracked in WorldFoundry as `evalcrafter_dataset_assets`.
-
-## Generated Artifacts
-
-The generated-video directory must be the inner directory containing exactly the videos for the 700 prompts:
-
-```text
-/path/to/evalcrafter/videos/
-  0000.mp4
-  0001.mp4
-  0002.mp4
-  ...
-  0699.mp4
-```
-
-Do not pass a parent experiment directory unless the `0000.mp4` through `0699.mp4` files are directly inside it. The runner checks the prompt ids from `prompt700.txt` against the direct `.mp4` filenames.
-
-## Dependencies
-
-The WorldFoundry runner no longer launches EvalCrafter's benchmark-local shell pipeline. It consumes `final_result.txt` produced by the WorldFoundry metric stack or by an existing official EvalCrafter run, then writes WorldFoundry scorecards and metric rows.
-
-For full metric production, use the dedicated environment:
-
-```bash
-bash scripts/setup/model_env_install.sh --model evalcrafter
-```
-
-Place the metric assets under the EvalCrafter checkpoint root or set `WORLDFOUNDRY_EVALCRAFTER_CHECKPOINTS_DIR`. The full metric stack can need DOVER, BLIP2, SDXL, Inception, VideoMAE, FlowNet2, VGG-Face, DeAOT/AOT, OCR, detection, segmentation, and action-recognition dependencies. Existing `final_result.txt` import does not need all heavyweight metric packages.
-
-Useful variables:
-
-| Variable | Use |
-| --- | --- |
-| `WORLDFOUNDRY_EVALCRAFTER_ROOT` | Override the in-tree runtime root. |
-| `WORLDFOUNDRY_EVALCRAFTER_RESULTS_PATH` | Point to `final_result.txt` or a directory containing it. |
-| `WORLDFOUNDRY_EVALCRAFTER_PROMPT_MANIFEST` | Override `prompt700.txt`. |
-| `WORLDFOUNDRY_EVALCRAFTER_SCORER_BACKEND` | `artifact` by default; reads an existing `final_result.txt`. |
-
-## Commands
-
-Set the generated video directory:
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/evalcrafter/videos
-export WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR=tmp/evalcrafter/run
-```
-
-Score a generated-video directory when `final_result.txt` is already available through `WORLDFOUNDRY_EVALCRAFTER_RESULTS_PATH` or inside the generated directory:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py \
-  --evalcrafter-root worldfoundry/evaluation/tasks/execution/runners/evalcrafter/runtime/evalcrafter \
-  --videos-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" \
-  --run-official \
-  --json
-```
-
-Import an existing result directory or result file:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/evalcrafter/run_evalcrafter_official_runner.py \
-  --evalcrafter-root worldfoundry/evaluation/tasks/execution/runners/evalcrafter/runtime/evalcrafter \
-  --results-dir /path/to/final_result.txt \
-  --videos-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/evalcrafter/import \
-  --json
-```
-
-The public wrapper can also launch the integrated runner when inputs are passed through the benchmark manifest:
+Import official aggregates (smoke uses the bundled sample):
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id evalcrafter \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --official-results-path /path/to/final_result.txt \
-  --output-dir tmp/evalcrafter/zoo-run \
+  --mode official-validation \
+  --official-results-path worldfoundry/data/benchmarks/assets/evalcrafter/sample_results.txt \
+  --output-dir tmp/evalcrafter/official-validation \
   --json
 ```
 
-## Import Paths
+Recompute the in-tree CLIP subset from numbered MP4s:
 
-For Python use:
-
-```python
-from worldfoundry.evaluation.tasks.execution.runners.evalcrafter.evalcrafter_metrics import (
-    load_upstream_results,
-    normalized_score,
-)
-from worldfoundry.evaluation.tasks.execution.runners.evalcrafter.evalcrafter_official_impl import (
-    normalize_evalcrafter_results,
-    run_official_evalcrafter,
-)
+```bash
+export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/evalcrafter/generated_videos
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id evalcrafter \
+  --mode official-run \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --output-dir tmp/evalcrafter/official-run \
+  --json
 ```
 
-## Outputs
+CLIP ViT-B/32 resolves through `WORLDFOUNDRY_CLIP_VIT_B32_MODEL_DIR` or `--clip-model`. Default import path: `WORLDFOUNDRY_EVALCRAFTER_RESULTS_PATH`. Optional root: `WORLDFOUNDRY_EVALCRAFTER_ROOT`.
 
-The output directory contains:
+In-tree pointers:
 
-| File | Meaning |
-| --- | --- |
-| `scorecard.json` | Coverage, eligibility, and all available EvalCrafter metrics. |
-| `raw_metric_table.jsonl` | One row per metric. |
-| `per_sample_metrics.jsonl` | Reserved for per-sample rows; currently empty for result-file import. |
-| `input_validation.json` | Written by `--run-official` before scoring. |
-| `final_result.txt` | Copied into the output directory when the artifact backend reads an external result. |
+```text
+worldfoundry/data/benchmarks/tasks/external/evalcrafter.yaml
+worldfoundry/evaluation/tasks/execution/runners/evalcrafter/
+worldfoundry/data/benchmarks/assets/evalcrafter
+```
 
-Primary metrics are `visual_quality`, `text_video_alignment`, `motion_quality`, `temporal_consistency`, and `evalcrafter_total`. Component metrics include `vqa_aesthetic`, `vqa_technical`, `inception_score`, `clip_temp_score`, `warping_error`, `face_consistency_score`, `action_score`, `motion_ac_score`, `flow_score`, `clip_score`, `blip_bleu`, `sd_score`, `detection_score`, `color_score`, `count_score`, `ocr_error`, and `celebrity_id_error`.
+Outputs include `scorecard.json` (primary `evalcrafter_total`), `benchmark_contract.json`, and `raw_metric_table.jsonl`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

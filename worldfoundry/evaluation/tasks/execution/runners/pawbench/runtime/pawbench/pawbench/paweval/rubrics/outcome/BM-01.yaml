@@ -1,0 +1,56 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BM-01
+track: coverage
+title_en: Loose Yarn Pull on Knitted Fabric
+outcome_question: Which label in ['thread_pulls_free_cleanly', 'small_unravel', 'large_unravel_or_ladder',
+  'thread_snaps', 'thread_stays_attached_no_visible_change'] is visible as the first
+  decisive post-action result?
+readout_policy: Read after the single continuous yarn-pull action has settled or
+  the pulling force visibly stops. Qualifying frames must show the thread and fabric
+  response clearly enough to choose clean pull-free, small unravel, large unravel/ladder,
+  snap, or no visible change. Do not label an early small unravel if the same continuous
+  pull later becomes a larger ladder/run.
+canonical_labels:
+- thread_pulls_free_cleanly
+- small_unravel
+- large_unravel_or_ladder
+- thread_snaps
+- thread_stays_attached_no_visible_change
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['thread_pulls_free_cleanly', 'small_unravel', 'large_unravel_or_ladder',
+  'thread_snaps', 'thread_stays_attached_no_visible_change'] can be decisively identified
+  within the readout window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's
+  reference protocol; record it as out-of-schema.
+priority_rules:
+- 'Readout timing: use the first clear post-pull state after the continuous pull
+  settles or force stops; choose the strongest action-caused material outcome visible
+  in that response window.'
+- '`thread_pulls_free_cleanly` requires the loose end to detach without visible
+  unravel laddering, tearing, or fabric-hole growth at the pull site.'
+- '`small_unravel` requires only a short local loop release around the pulled yarn:
+  the released strand remains close to the pull site, does not span a hand-width
+  or large visible distance, and the surrounding knitted rows retain material
+  continuity.'
+- '`large_unravel_or_ladder` requires an extended run, ladder, widening gap, broad
+  fabric-row release, or a long pulled-out loop/strand that spans a large visible
+  distance from the fabric. A large amount of extracted yarn is sufficient even
+  when the remaining fabric patch still looks locally continuous.'
+- '`thread_snaps` requires the pulled yarn/thread itself to visibly tear or break;
+  `thread_stays_attached_no_visible_change` is the no-change threshold when the
+  thread remains attached and no new unraveling is visible.'
+- 'Tie-break: snap/break evidence overrides unravel size; otherwise choose
+  large-unravel over small-unravel when the released yarn length is visibly long
+  (for example spanning a hand-width or more, forming a tall/triangular loop, or
+  extending well away from the pull site) or when laddering spans multiple fabric
+  rows. Return `unreadable` if the threshold cannot be seen.'
+notes:
+- 'Track B: use metadata-derived priority rules, not a family template.'
+- 'Scene title: Loose Yarn Pull on Knitted Fabric.'

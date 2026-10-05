@@ -1,0 +1,44 @@
+---
+title: "Being-H0.5"
+description: "BeingBeyond's 2B cross-embodiment VLA: RGB, language, and state in; get_action out. The LIBERO specialist is the GPU-validated WorldFoundry route."
+modelId: "being-h05"
+pageSource: authored
+---
+
+Being-H0.5 is BeingBeyond's 2B-parameter Vision-Language-Action policy for **cross-embodiment** control. At run time it maps RGB, a language instruction, and robot state into a **200-dimensional unified action space** (end-effector, joints, gripper or fingers, base) so one checkpoint can speak different robot control languages instead of shipping a pile of per-robot heads.
+
+<ModelPaperFigures modelId="being-h05" locale="en" />
+
+The official paper is [Being-H0.5: Scaling Human-Centric Robot Learning for Cross-Embodiment Generalization](https://arxiv.org/abs/2601.12993) (arXiv 2601.12993). The project write-up is on [BeingBeyond Research](https://research.beingbeyond.com/being-h05). The catalog still lists a later Being-H0.7 arXiv id as the paper URL; that is a different model.
+
+WorldFoundry keeps an inference-only runtime under `worldfoundry/synthesis/action_generation/being_h05`. Four Hugging Face lines are recorded: base, LIBERO specialist, RoboCasa specialist, and a LIBERO+RoboCasa generalist. Only the LIBERO specialist has a checkpoint-backed GPU `get_action` validation and an `action_trace` artifact in this repository.
+
+<ModelCommandBuilder modelId="being-h05" locale="en" />
+
+## What it is for
+
+Start on `being-h05-2b-libero`. That is the line WorldFoundry actually ran: multi-view RGB, language instruction, and robot state in; `being_h05_action_trace.json` out, on an 80 GB GPU with memory-efficient SDPA. Official BeingHPolicy also emits robot-specific actions plus `action_unified` when RTC is enabled. Default profile pins `data_config_name=libero_nonorm`, `dataset_name=libero_posttrain`, `embodiment_tag=libero`, and `$WORLDFOUNDRY_HFD_ROOT/BeingBeyond--Being-H05-2B_libero`. Paper evaluation on this 2B backbone uses **RGB-only 224×224**.
+
+Use `being-h05-2b-robocasa` when the kitchen suite is the target. The combined `being-h05-2b-libero-robocasa` checkpoint loaded on GPU in a tensor probe, but a real `get_action` exceeded a single 80 GB card — do not treat that variant as a validated rollout path here.
+
+The base `being-h05-2b` card is the unspecialized preview, not a suite specialist. For simulated suites that match the released specialists, the natural next pages are [LIBERO](/docs/evaluation/benchmark-hub/libero) and [RoboCasa](/docs/evaluation/benchmark-hub/robocasa).
+
+## Runtime contract
+
+Required WorldFoundry inputs: `image`, `instruction`, `prompt`, and `state`. Optional: `video`. The `actions` field is recorded as `robot_action`, `action_unified`, `proprio`, `action_space`. Pipeline class: `BeingH05Pipeline`. Launch `worldfoundry-eval run being-h05-2b` — pick the LIBERO variant unless you are comparing checkpoints.
+
+Two inference-time pieces travel with the released checkpoint. **Manifold-Preserving Gating** drops unreliable context under sensory shift so flow updates stay on a stable action manifold. **Universal Async Chunking** keeps action chunks consistent across different control rates and delays.
+
+The paper reports **98.9%** LIBERO success in the specialist setting and **97.6%** in the generalist setting, and **53.9% / 53.3%** on RoboCasa Human-50. Those are upstream numbers, not a WorldFoundry scorecard. Real-robot results in the paper cover five embodiments and ten tasks (spatial, long-horizon, bimanual, generalization); this catalog does not claim those rollouts.
+
+## Running in WorldFoundry
+
+Use the dedicated environment `worldfoundry-being-h05` (Python 3.10, CUDA 11.8 or newer). Weights must already be staged — the runtime does not download them. Safetensors are preferred; legacy `.bin` / `.pt` load with strict key matching.
+
+The GitHub tree is Apache-2.0. Every recorded Hugging Face repo is tagged `manual_review:missing_hf_license` — confirm the card before any production use.
+
+## Minimal eval
+
+`being-h05-2b-libero` is the GPU-validated `get_action` line. An action trace is not a suite score. Import official LIBERO `eval_result` trees with `worldfoundry-eval zoo benchmark-run --benchmark-id libero --mode official-validation` and read `success_rate`. Closed-loop is wired; this repo has not recorded a Being-H0.5 leaderboard.
+
+<ModelRelatedRecipes modelId="being-h05" locale="en" />

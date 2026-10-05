@@ -1,0 +1,50 @@
+---
+title: "HunyuanWorld 1.0"
+description: "HunyuanWorld 1.0（Tencent (Hunyuan)）：世界模型；Runner 一致性待确认。"
+modelId: "hunyuanworld-1"
+pageSource: generated
+---
+
+HunyuanWorld 1.0 从文本或一张图生成沉浸式、可探索的 3D 世界——腾讯开源世界生成栈的第一代，导出分层全景与网格场景。本 catalog 中官方源码路径已注册；checkpoint 与第三方资产保持运行时限制。
+
+<ModelPaperFigures modelId="hunyuanworld-1" locale="zh" />
+
+记录论文为[arXiv 2507.21809](https://arxiv.org/abs/2507.21809)。
+
+项目页：[3d.hunyuan.tencent.com](https://3d.hunyuan.tencent.com/)。代码：[Tencent-Hunyuan/HunyuanWorld-1.0](https://github.com/Tencent-Hunyuan/HunyuanWorld-1.0)。
+
+<ModelCommandBuilder modelId="hunyuanworld-1" locale="zh" />
+
+## 用来做什么
+
+需要动作条件世界步进时选 `hunyuanworld-1`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
+
+按上游发布，生成以全景为先：先生成全景代理图，再做语义分层并提升为 3D 世界表示。除此之外的架构内部细节仓库未记录。该模型由腾讯（混元）发布。
+
+catalog 记录的任务包括 世界模型。
+
+记录的评测入口包括[WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)（生成可探索世界的标准评分）。
+
+## 运行时契约
+
+产物 `generated_world`、`hunyuanworld_1_runtime_plan.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `HunyuanWorld1Pipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。 缺失资产由计划报告，不视为 catalog 阻塞。 较新的组件已验证栈请见 hy-world-2.0 条目。
+
+真实生成受 checkpoint/资产限制。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run hunyuanworld-1 --pipeline.task-profile default` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `tencent/HunyuanWorld-1`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh hunyuanworld-1`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="hunyuanworld-1" locale="zh" />

@@ -146,7 +146,10 @@ def _qwen_attn_implementation() -> str:
     override = os.environ.get("LINGBOT_QWEN_ATTN_IMPLEMENTATION")
     if override:
         return override
-    if importlib.util.find_spec("flash_attn_interface") is not None:
+    # Transformers dispatches this backend through the ``flash_attn_3``
+    # package.  A standalone ``flash_attn_interface`` module is not enough
+    # and selecting FA3 from that weaker signal makes Qwen3-VL fail at load.
+    if importlib.util.find_spec("flash_attn_3") is not None:
         return "flash_attention_3"
     return "sdpa"
 

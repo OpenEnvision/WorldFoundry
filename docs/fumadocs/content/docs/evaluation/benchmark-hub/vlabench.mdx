@@ -1,126 +1,31 @@
 ---
 title: VLABench
-description: VLABench — metrics, requirements, and run commands.
+description: "Fudan OpenMOSS language-conditioned manipulation bench: 100 categories, 2,000+ objects in MuJoCo. WorldFoundry imports official rollouts; it does not run the sim."
 ---
 
-## About
+VLABench (OpenMOSS, Fudan University) benchmarks **language-conditioned manipulation that needs world knowledge and multi-step reasoning**, not just instruction following. Official size: **100 task categories** and **2,000+ objects** in MuJoCo, probing mesh / texture understanding, spatial and semantic reasoning, physical-law understanding, and long-horizon planning for both VLA policies and VLM planners.
 
+Paper: [VLABench](https://arxiv.org/abs/2502.09858). Code: [OpenMOSS/VLABench](https://github.com/OpenMOSS/VLABench). License: upstream terms.
 
+WorldFoundry is an **official-results importer**. Simulator execution, policy loading, and rollout collection stay upstream. Scorecard primary: `success_rate`.
 
-VLABench external benchmark manifest for language-conditioned manipulation policy rollouts.
+<BenchmarkPageSections id="vlabench" locale="en" />
 
-
-
-## Metrics
-
-VLABench external benchmark manifest for language-conditioned manipulation policy rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/vlabench.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `episode_success` | Share of episodes or tasks that complete successfully. |
-| `reward` | Cumulative reward on VLABench language-conditioned tabletop manipulation rollouts. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `vlabench-runtime`.
-- **Separate setup:** this benchmark expects a dedicated conda env rather than the unified runtime.
-- WorldFoundry provides contract and official result normalization for caller-provided VLABench outputs.
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_VLABENCH_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/vlabench`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/OpenMOSS--VLABench`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_VLABENCH_ROOT`
-- `WORLDFOUNDRY_VLABENCH_RESULTS_PATH`
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id vlabench \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/vlabench/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/vlabench/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
+Default import: `WORLDFOUNDRY_VLABENCH_RESULTS_PATH`. Optional root: `WORLDFOUNDRY_VLABENCH_ROOT`.
 
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id vlabench \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/vlabench/official-run \
-  --json
-```
+In-tree pointer: `worldfoundry/data/benchmarks/tasks/external/vlabench.yaml`.
 
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id vlabench --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_VLABENCH_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+Outputs include `scorecard.json` (primary `success_rate`), `raw_results.jsonl`, and `evaluation/summary.json`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

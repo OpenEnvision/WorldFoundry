@@ -1,0 +1,39 @@
+---
+title: "DUSt3R"
+description: "NAVER Labs 双视图点图，无需标定。捆绑多视图用例已 runner 验证。CC-BY-NC-SA-4.0。写出 dust3r_point_cloud.ply。"
+modelId: "dust3r"
+pageSource: authored
+---
+
+DUSt3R 让无约束双视图 3D 变简单：**两张图**，不要标定，不要位姿——直接回归对齐的**点图**。WorldFoundry 把它放在 `worldfoundry/base_models/three_dimensions/general_3d/dust3r`，经共享几何先验契约对外是 `DUSt3RPipeline`。别名 `naver-dust3r`、`geometric-3d-vision-made-easy` 解析到这里。
+
+<ModelPaperFigures modelId="dust3r" locale="zh" />
+
+论文：[DUSt3R: Geometric 3D Vision Made Easy](https://arxiv.org/abs/2312.14132)（arXiv 2312.14132）。项目页：[dust3r.europe.naverlabs.com](https://dust3r.europe.naverlabs.com/)。发布方：NAVER Labs Europe。许可证：**CC-BY-NC-SA-4.0**（下游非商用）。
+
+Runner **已验证**：checkpoint 驱动的 Studio 推理从捆绑多视图用例产出有限点云（`inference_evidence.yaml`）。
+
+<ModelCommandBuilder modelId="dust3r" locale="zh" />
+
+## 用来做什么
+
+启动 `worldfoundry-eval run dust3r`，走前馈多视图重建 profile。必填：`image`。可选：`prompt`、`video`。`actions`：`multi_view_reconstruction`。产物：`dust3r_point_cloud.ply`。大场景仍要全局对齐，视角一多就贵。流式米制状态是 [CUT3R](/zh/docs/guides/supported-models/cut3r)，不是这张成对卡。
+
+## 运行时契约
+`DUSt3RPipeline`，走共享几何先验契约（`dust3r-base-model`）。必填：`image`（未标定的一对或多视图）。catalog 可选：`prompt`、`video`。`actions`：`multi_view_reconstruction`。产物：`dust3r_point_cloud.ply`。
+
+| 旋钮 | 记录值 |
+| --- | --- |
+| Checkpoint | `naver/DUSt3R_ViTLarge_BaseDecoder_512_dpt` → `$WORLDFOUNDRY_CKPT_DIR/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth` |
+| 编码器 | ViT-Large + Base 解码器，**512** DPT |
+| 成对输出 | 共享坐标系下的逐像素点图（相机 1） |
+| 多视图 | 成对推理后再做全局对齐 |
+| Runner | **已验证**——捆绑多视图 Studio 用例产出有限点云（`inference_evidence.yaml`） |
+
+环境：`worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。catalog 未记录 VRAM。许可证：**CC-BY-NC-SA-4.0**。
+
+## 在 WorldFoundry 中运行
+
+先就位 NAVER `512_dpt` 文件。缺权重会在加载时报错，运行时不会下载。下游遵守 NC-SA。
+
+<ModelRelatedRecipes modelId="dust3r" locale="zh" />

@@ -8,8 +8,11 @@ import pandas as pd
 from tqdm import tqdm
 from datetime import datetime
 
-logging.getLogger().setLevel(logging.WARNING)
-logging.disable(logging.INFO)   # suppress per-clip tokenizer spam from open_clip/ImageReward
+# Do not mutate the process-wide root logger. Quiet only the noisy
+# third-party loggers this script actually triggers.
+logging.getLogger("open_clip").setLevel(logging.WARNING)
+logging.getLogger("ImageReward").setLevel(logging.WARNING)
+logging.getLogger(__name__).setLevel(logging.WARNING)
 
 from automated.io.frames import FrameReader, VideoReader
 from automated.io.metadata import (

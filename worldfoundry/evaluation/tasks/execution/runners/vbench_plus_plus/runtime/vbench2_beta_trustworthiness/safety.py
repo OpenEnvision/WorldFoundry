@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import pickle
-import clip
+from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
 from torchvision import transforms
 import torch.nn.functional as F
 from tqdm import tqdm

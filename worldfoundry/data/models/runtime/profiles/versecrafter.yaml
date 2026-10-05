@@ -13,7 +13,7 @@ checkpoints:
   size_bytes: 34677842418
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/TencentARC--VerseCrafter
   role: geoadapter
-  status: checkpoint_missing_download_queued
+  status: checkpoint_manifest_validated
   required_paths:
   - config.json
   - diffusion_pytorch_model.safetensors.index.json
@@ -35,7 +35,7 @@ checkpoints:
   revision: b135031bae30b5ac2ae141a0e68717795ce38340
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Ruicheng--moge-2-vitl-normal
   role: depth_model
-  status: checkpoint_manifest_validated
+  status: checkpoint_hash_verified
   required_paths:
   - model.pt
 input_schema: {prompt: true, image: true, trajectory_npz: true}
@@ -44,8 +44,13 @@ artifact_filename: versecrafter.mp4
 execution:
   environment: _unified
   backend_stage: independent_in_tree_runtime
-  runtime_status: checkpoint_assets_pending_with_license_restrictions
-  integration_status: integrated_checkpoint_assets_pending
+  runtime_status: checkpoint_backed_short_gpu_inference_quality_concern
+  integration_status: integrated
   pipeline_binding: versecrafter
-integration: {status: integrated_checkpoint_assets_pending}
-notes: [Research-only; no commercial use; not intended for use in the EU.]
+integration: {status: integrated}
+notes:
+- A local 17-frame 832x480, 30-step GPU run completed after correcting the default
+  Blender camera basis; the first control frame now contains the input scene.
+- Late frames show visible disocclusion artifacts, so this is short-run inference
+  evidence rather than camera-path accuracy or official quality parity.
+- Research-only; no commercial use; not intended for use in the EU.

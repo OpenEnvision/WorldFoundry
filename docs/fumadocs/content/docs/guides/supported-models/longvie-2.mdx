@@ -1,0 +1,52 @@
+---
+title: "LongVie 2"
+description: "LongVie 2 from Shanghai AI Laboratory (Vchitect): image-to-video and long-video-generation; Verified; dedicated `worldfoundry-longvie-cu128`."
+modelId: "longvie-2"
+pageSource: authored
+---
+
+LongVie 2 is the second-generation controllable long-video framework from the Vchitect team, and the verified member of the pair in this catalog: Studio's default four-GPU torchrun USP route completed a checkpoint-backed run on 2026-07-28, decoding all 81 frames at 640x352. It generates queued 81-frame control-video segments where each continuation reuses the prior final frame, an eight-frame history, and the noise state.
+
+<ModelPaperFigures modelId="longvie-2" locale="en" />
+
+The recorded paper is [arXiv 2512.13604](https://arxiv.org/abs/2512.13604).
+
+Project page: [vchitect.github.io/LongVie2-project](https://vchitect.github.io/LongVie2-project/). Code: [Vchitect/LongVie](https://github.com/Vchitect/LongVie).
+
+<ModelCommandBuilder modelId="longvie-2" locale="en" />
+
+## What it is for
+
+Use `longvie-2` for catalog depth inference. The recipe writes depth under the recorded profile.
+
+Built over canonical Wan roles (base: Wan2.1-I2V-14B-480P) plus LongVie-specific weights: the adapter loads both control.safetensors and dit.safetensors — the latter is the LongVie 2 DiT attention override that distinguishes it from LongVie-1. Official USP ring/ulysses distributed inference is supported when execute=True. It is published by Shanghai AI Laboratory (Vchitect).
+
+Catalog tasks include image-to-video, long-video-generation, depth-controlled-video, and trajectory-controlled-video. Catalog aliases include `longvie2` and `longvie-v2`. Documented modalities: image in, video and depth out.
+
+Recorded evaluation entry points include [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) (Long-horizon generation suite), [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Control-driven generation benefits from camera-motion evaluation).
+
+## Runtime contract
+
+Optional `prompt`, `negative_prompt`, `input_path`, `interactions`, and `frames`; artifacts `generated_video` and `longvie-2.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `LongVie2Pipeline`.
+
+Family status: **Verified**.
+
+Each queued segment needs a non-empty prompt plus dense depth and sparse pointmap/track control videos; the first segment also needs an image. Quality defaults: 81 frames at 16 FPS, 50 steps. The Studio profile uses four-rank USP with the complete model resident on each supported 80GB rank, and only rank zero materializes the artifact. This is queued segment generation, not keyboard realtime.
+
+WorldFoundry implements LongVie 2 over canonical Wan roles and the shared staged runner; LongVie owns only checkpoint-shaped control and attention behavior.
+
+LongVie 2 runs on canonical Wan components and the shared staged diffusion runner; its synthesis package owns only product assembly and LongVie-specific conditioning.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run longvie-2 --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the dedicated environment `worldfoundry-longvie-cu128` (Python 3.10, CUDA 12.8).
+
+Recorded weight repositories include `Vchitect/LongVie2`, `Wan-AI/Wan2.1-I2V-14B-480P`, and `Vchitect/LongVie2` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh longvie-2`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="longvie-2" locale="en" />

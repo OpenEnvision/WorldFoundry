@@ -11,7 +11,7 @@ from vbench.background_consistency import compute_background_consistency, backgr
 from vbench.utils import load_video, load_dimension_info, dino_transform, dino_transform_Image, clip_transform
 from vbench2_beta_long.utils import reorganize_clips_results, save_segment, create_video_from_first_frames, fuse_inclip_clip2clip, dreamsim_transform
 import logging
-import clip
+from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
 logging.basicConfig(level = logging.INFO,format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 

@@ -1,127 +1,27 @@
 ---
 title: RoboMME
-description: RoboMME — 指标、依赖与运行命令。
+description: "ICML 2026 记忆增强操作：Counting、Permanence、Reference、Imitation 共 16 个任务。WorldFoundry 导入套件成功率；不跑模拟器。"
 ---
 
-## 简介
+RoboMME（密歇根大学，联合斯坦福与 Figure AI；ICML 2026）是面向**记忆增强** VLA 的标准化评测。**16** 个长时程任务分成四个认知套件——**Counting**（时间：精确计数）、**Permanence**（空间：遮挡与交换）、**Reference**（物体：依据先前线索解析身份）、**Imitation**（程序：复现演示轨迹）——各 4 个任务。官方发布含 **1600** 条演示与 **77 万**训练时间步，以及基于 **π0.5** 骨干的 **14** 个记忆增强变体。论文按套件报告成功率，不是单一抓放二值位。
 
+论文：[RoboMME](https://arxiv.org/abs/2603.04639)。项目：[robomme.github.io](https://robomme.github.io/)。代码：[RoboMME/robomme_policy_learning](https://github.com/RoboMME/robomme_policy_learning)。
 
+WorldFoundry **导入**官方 rollout 导出，并归一化总体与逐套件成功率。它**不跑** RoboMME 模拟器或那些 π0.5 变体。请在导出上写明套件（`counting` / `permanence` / `reference` / `imitation`）。
 
-RoboMME external benchmark manifest for memory and multimodal embodied policy evaluation.
+<BenchmarkPageSections id="robomme" locale="zh" />
 
-
-
-## 指标
-
-RoboMME external benchmark manifest for memory and multimodal embodied policy evaluation.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/robomme.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `counting_success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `permanence_success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `reference_success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `imitation_success_rate` | episode / task 是否成功完成的比例或成功率。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `worldfoundry-unified-cu128`。
-- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
-- WorldFoundry provides contract and official result normalization for caller-provided RoboMME outputs.
-
-### 测评数据
-
-- 待测模型输出目录：设置 `WORLDFOUNDRY_ROBOMME_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/robomme`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/RoboMME--robomme_policy_learning`
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_ROBOMME_ROOT`
-- `WORLDFOUNDRY_ROBOMME_RESULTS_PATH`
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id robomme \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robomme/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/robomme/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id robomme \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robomme/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id robomme --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_ROBOMME_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+可选 `WORLDFOUNDRY_ROBOMME_ROOT` 指向本地 runtime / 仓库。默认导入路径：`WORLDFOUNDRY_ROBOMME_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/robomme.yaml`。产物：`scorecard.json`（主键 `success_rate`；另有 `counting_success_rate`、`permanence_success_rate`、`reference_success_rate`、`imitation_success_rate`）、`raw_results.jsonl`、`evaluation/summary.json`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

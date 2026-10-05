@@ -1,0 +1,29 @@
+schema_version: 2
+model_id: molmobot-pi0-droid
+env_name: worldfoundry-molmobot-pi0-cu128
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+driver_status: compatible
+conda_packages:
+- python
+- pip
+pip_packages:
+- torch==2.7.1
+- transformers==4.53.2
+- jax[cuda12]==0.5.3
+- numpy>2.0,<2.4
+- molmobot-pi0 @ git+https://github.com/allenai/MolmoBot.git@33c0ca77bf6062a23d60ffd4a6859334c4a46d30#subdirectory=MolmoBot-Pi0
+validation_imports:
+- numpy
+- torch
+- transformers
+- openpi
+- molmobot_pi0
+env_optional:
+- OPENPI_DATA_HOME
+notes:
+- Use a dedicated Python 3.11 environment; OpenPI pins Torch and Transformers independently of MolmoBot's OLMo runtime.
+- After installation run python -m worldfoundry.synthesis.action_generation.molmobot.openpi_setup inside this environment.
+- Stage the validated PaliGemma tokenizer under OPENPI_DATA_HOME/big_vision before inference; the runtime does not fetch it implicitly.
+- The WorldFoundry Pi0 adapter does not import MolmoSpaces or its simulator resources.

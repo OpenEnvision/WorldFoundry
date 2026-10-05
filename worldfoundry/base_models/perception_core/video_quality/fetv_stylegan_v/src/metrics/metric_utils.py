@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 import numpy as np
 import torch
 from src import dnnlib
-from src.training.dataset import video_to_image_dataset_kwargs
+from src.dataset_support.dataset import video_to_image_dataset_kwargs
 import random
 
 #----------------------------------------------------------------------------

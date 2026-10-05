@@ -1,26 +1,28 @@
-import sys
-import os
 import argparse
-
+import os
+import sys
 import time
-from mmengine import Config
-import mmengine
-from mmengine.dist import init_dist, get_dist_info
 
-import torch.distributed as dist
 import kairos.apis.kairos_embodied_api  # noqa: F401 - registers KairosEmbodiedAPI
-from kairos.apis.builder import build_model_pipeline
-from kairos.modules.utils.prompt_rewriter import PromptRewriter
+import mmengine
 import torch
+import torch.distributed as dist
+from kairos.apis.builder import build_model_pipeline
+from kairos.modules.utils import FLAGS_KAIROS_PLAT_DEVICE, parallel_state, save_image, save_video
+from kairos.modules.utils.prompt_rewriter import PromptRewriter
+from mmengine import Config
+from mmengine.dist import get_dist_info, init_dist
 from PIL import Image
-from kairos.modules.utils import save_video, save_image, parallel_state, FLAGS_KAIROS_PLAT_DEVICE
+
+from worldfoundry.core.io.paths import package_data_path
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='TRAIN_MODEL_LOOP')
     parser.add_argument('--input_file', default='', help='input_file')
     parser.add_argument(
         '--config_file',
-        default='kairos/configs/kairos_4b_config_DMD.py',
+        default=str(package_data_path('models', 'runtime', 'configs', 'kairos', 'kairos_4b_config_DMD.py')),
         help='path to config file'
     )
 

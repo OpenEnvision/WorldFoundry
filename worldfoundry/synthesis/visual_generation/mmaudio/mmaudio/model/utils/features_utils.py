@@ -12,6 +12,7 @@ from mmaudio.ext.autoencoder import AutoEncoderModule
 from mmaudio.ext.mel_converter import get_mel_converter
 from mmaudio.ext.synchformer import Synchformer
 from mmaudio.model.utils.distributions import DiagonalGaussianDistribution
+from worldfoundry.synthesis.visual_generation.mmaudio.checkpoints import dfn5b_open_clip_ref
 
 
 def patch_clip(clip_model):
@@ -46,7 +47,7 @@ class FeaturesUtils(nn.Module):
         super().__init__()
 
         if enable_conditions:
-            self.clip_model = create_model_from_pretrained('hf-hub:apple/DFN5B-CLIP-ViT-H-14-384',
+            self.clip_model = create_model_from_pretrained(dfn5b_open_clip_ref(),
                                                            return_transform=False)
             self.clip_preprocess = Normalize(mean=[0.48145466, 0.4578275, 0.40821073],
                                              std=[0.26862954, 0.26130258, 0.27577711])

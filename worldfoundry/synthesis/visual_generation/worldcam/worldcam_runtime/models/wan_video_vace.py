@@ -1,4 +1,4 @@
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_vace_core import (
+from worldfoundry.base_models.diffusion_model.models.networks.wan.vace_core import (
     build_vace_wan_classes,
 )
 

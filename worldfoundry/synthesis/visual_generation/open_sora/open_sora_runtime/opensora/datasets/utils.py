@@ -1,6 +1,7 @@
 import os
 import re
 
+import av
 import numpy as np
 import pandas as pd
 import requests
@@ -10,15 +11,6 @@ import torchvision.transforms as transforms
 from PIL import Image
 from torchvision.datasets.folder import IMG_EXTENSIONS, pil_loader
 from torchvision.utils import save_image
-try:
-    from torchvision.io import write_video
-except ImportError:
-    import imageio.v2 as imageio
-
-    def write_video(filename, video_array, fps=8, video_codec=None, options=None, **kwargs):
-        del video_codec, options, kwargs
-        frames = video_array.detach().cpu().numpy() if hasattr(video_array, "detach") else video_array
-        imageio.mimsave(filename, frames, fps=fps)
 
 from . import video_transforms
 
@@ -183,7 +175,19 @@ def save_sample(x, save_path=None, fps=8, normalize=True, value_range=(-1, 1), f
             x.sub_(low).div_(max(high - low, 1e-5))
 
         x = x.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 3, 0).to("cpu", torch.uint8)
-        write_video(save_path, x, fps=fps, video_codec="h264")
+        # torchvision's write_video sets pict_type to the string "NONE", which
+        # recent PyAV releases reject. Let the encoder choose each frame type.
+        with av.open(save_path, mode="w") as container:
+            stream = container.add_stream("h264", rate=fps)
+            stream.width = x.shape[2]
+            stream.height = x.shape[1]
+            stream.pix_fmt = "yuv420p"
+            for image in x.numpy():
+                frame = av.VideoFrame.from_ndarray(image, format="rgb24")
+                for packet in stream.encode(frame):
+                    container.mux(packet)
+            for packet in stream.encode():
+                container.mux(packet)
     if verbose:
         print(f"Saved to {save_path}")
     return save_path

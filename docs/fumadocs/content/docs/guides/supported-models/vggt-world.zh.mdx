@@ -1,0 +1,54 @@
+---
+title: "VGGT-World"
+description: "VGGT-World：世界模型、视频生成；Runner 一致性待确认。"
+modelId: "vggt-world"
+pageSource: authored
+---
+
+VGGT-World 在 VGGT 式 3D 场景理解之上构建世界模型：将几何锚定的场景感知与视频生成耦合，使滚动生成与底层 3D 结构保持一致。WorldFoundry 树内注册了官方源码路由（论文：arXiv 2603.12655）； checkpoint 与资产为运行时门控。
+
+<ModelPaperFigures modelId="vggt-world" locale="zh" />
+
+记录论文为[VGGT-World: Transforming VGGT into an Autoregressive Geometry World Model](https://arxiv.org/abs/2603.12655)（2026）。
+
+代码：[SimonSun0810/VGGT-World](https://github.com/SimonSun0810/VGGT-World)。
+
+论文是 [VGGT-World: Transforming VGGT into an Autoregressive Geometry World Model](https://arxiv.org/pdf/2603.12655)。代码：[SimonSun0810/VGGT-World](https://github.com/SimonSun0810/VGGT-World)。
+
+<ModelCommandBuilder modelId="vggt-world" locale="zh" />
+
+## 用来做什么
+
+用 `vggt-world` 做 catalog 世界模型推理。需要动作条件未来帧、而不是独立片段生成器时选它。
+
+除记录的官方仓库（SimonSun0810/VGGT-World，锁定 head c90f5ee2）与 arXiv 论文指针外，架构内部细节仓库未记录。
+
+catalog 记录的任务包括 世界模型、3d-scene-understanding、视频生成。输出模态为视频。
+
+记录的评测入口包括[WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)（3D 锚定滚动生成的统一世界生成质量）。
+
+不是 [VGGT](/zh/docs/guides/supported-models/vggt)、[VGGT-Omega](/zh/docs/guides/supported-models/vggt-omega)。 评测看 [WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)。
+
+## 运行时契约
+
+产物 `generated_world`、`vggt_world_runtime_plan.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `VGGTWorldPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。 缺失资产由计划报告，不视为 catalog 阻塞。
+
+WorldFoundry tracks upstream source and checkpoint 计划中; no runnable pipeline is registered.
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run vggt-world --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+本卡片未记录公开 checkpoint id；按使用说明就位权重。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh vggt-world`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="vggt-world" locale="zh" />

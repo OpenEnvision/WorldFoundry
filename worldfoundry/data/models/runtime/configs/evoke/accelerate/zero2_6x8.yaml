@@ -1,0 +1,24 @@
+# 6 nodes x 8 GPUs = 48 processes, ZeRO-2, standard (torchrun/rdzv) launcher.
+#   Under the DEEPSPEED distributed_type, num_machines/num_processes MUST be fixed here in the yaml:
+#     overriding them from the CLI is unreliable for multi-node runs.
+#   deepspeed_multinode_launcher: standard -> uses PyTorch RDZV, so no pod-to-pod SSH is needed
+#     (matching a scheduler where every pod independently runs the same command).
+#   The per-node values machine_rank/main_process_ip/main_process_port are overridden from the CLI by
+#     the launch script, out of $RANK/$MASTER_ADDR/$MASTER_PORT.
+#   Topology: W=48, sf_critic_sp_world_size=8 -> 48%8=0, num_groups=6, C=1 => gbs=6 (it is 5 at 40 GPUs).
+compute_environment: LOCAL_MACHINE
+distributed_type: DEEPSPEED
+deepspeed_config:
+ deepspeed_config_file: ../deepspeed/zero2.json
+ deepspeed_multinode_launcher: standard
+fsdp_config: {}
+machine_rank: 0
+num_machines: 6
+num_processes: 48
+main_training_function: main
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false

@@ -1,6 +1,6 @@
 # This file includes code originally from the Geocalib repository:
 # https://github.com/cvg/GeoCalib
-# Licensed under the Apache-2.0 License. See THIRD_PARTY_LICENSES.md for details.
+# Licensed under the Apache-2.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
 """Implementation of perspective fields.
 

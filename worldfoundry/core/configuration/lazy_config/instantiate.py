@@ -13,6 +13,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Recursive object construction from LazyCall / ``_target_`` config trees.
+
+WorldFoundry inference configs are *deferred constructor graphs*: a
+:class:`~worldfoundry.core.configuration.lazy_config.lazy_call.LazyCall`
+records ``_target_`` plus keyword arguments instead of building the object.
+:func:`instantiate` walks that graph and materializes it.
+
+Resolution rules:
+
+- A mapping with ``_target_`` is treated as a constructor call. Nested
+  values are instantiated first unless ``_recursive_=False``. Extra
+  positional/keyword arguments override the stored ones.
+- OmegaConf ``ListConfig`` / plain lists instantiate element-wise so
+  layers such as ``nn.Sequential`` can take a list of objects.
+- Structured OmegaConf configs backed by a dataclass or attrs class are
+  converted through the LazyCall-aware :func:`to_object` patch (a
+  ``_target_`` node is *not* flattened to a dict).
+- Anything else is returned unchanged.
+
+:func:`dump_dataclass` is the inverse for dataclass *instances*: it
+emits a ``_target_`` mapping that :func:`instantiate` can rebuild.
+"""
+
 import collections.abc as abc
 import dataclasses
 import logging
@@ -24,20 +47,33 @@ from worldfoundry.core.configuration.lazy_config.registry import _convert_target
 
 __all__ = ["dump_dataclass", "instantiate"]
 
+# ──────────────────────────────────────────────────────────────────────────
+# Inverse + walk — dump_dataclass emits _target_; instantiate consumes it
+# ──────────────────────────────────────────────────────────────────────────
+
 
 def is_dataclass_or_attrs(target):
+    """Return True when *target* is a dataclass or attrs class/instance."""
     return dataclasses.is_dataclass(target) or attrs.has(target)
 
 
 def dump_dataclass(obj: Any):
-    """
-    Dump a dataclass recursively into a dict that can be later instantiated.
+    """Serialize a dataclass instance into a LazyCall-style ``_target_`` dict.
+
+    Nested dataclass fields and dataclass items inside lists/tuples are
+    dumped recursively. Non-dataclass values are copied as-is. The result
+    is meant to be passed back to :func:`instantiate`, not used as a
+    general-purpose JSON encoder.
 
     Args:
-        obj: a dataclass object
+        obj: A dataclass *instance* (not a class).
 
     Returns:
-        dict
+        Mapping with ``_target_`` set to the type's import path plus one
+        entry per dataclass field.
+
+    Raises:
+        AssertionError: *obj* is a type or is not a dataclass instance.
     """
     assert dataclasses.is_dataclass(obj) and not isinstance(obj, type), (
         "dump_dataclass() requires an instance of a dataclass."
@@ -54,20 +90,25 @@ def dump_dataclass(obj: Any):
 
 
 def instantiate(cfg, *args, **kwargs):
-    """
-    Recursively instantiate objects defined in dictionaries by
-    "_target_" and arguments.
+    """Materialize a LazyCall / Hydra-style config into a live object.
+
+    Faster than ``hydra.utils.instantiate(..., _convert_=all)`` for the
+    common case of a mapping with ``_target_`` (see facebookresearch/hydra
+    #1200). Callers may pass extra ``*args`` / ``**kwargs``; keyword
+    overrides win over stored config keys.
 
     Args:
-        cfg: a dict-like object with "_target_" that defines the caller, and
-            other keys that define the arguments
-        args: Optional positional parameters pass-through.
-        kwargs: Optional named parameters pass-through.
+        cfg: A ``_target_`` mapping, OmegaConf container, list, or any
+            already-materialized value.
+        *args: Extra positional arguments forwarded to the target.
+        **kwargs: Extra keyword arguments that override stored fields.
 
     Returns:
-        object instantiated by cfg
+        The constructed object, a list/ListConfig of constructed objects,
+        a structured dataclass/attrs instance, or *cfg* unchanged when it
+        is not a constructor description.
     """
-    from omegaconf import DictConfig, ListConfig, OmegaConf
+    from omegaconf import DictConfig, ListConfig
 
     if isinstance(cfg, ListConfig):
         lst = [instantiate(x) for x in cfg]
@@ -80,7 +121,12 @@ def instantiate(cfg, *args, **kwargs):
     # If input is a DictConfig backed by dataclasses (i.e. omegaconf's structured config),
     # instantiate it to the actual dataclass.
     if isinstance(cfg, DictConfig) and is_dataclass_or_attrs(cfg._metadata.object_type):
-        return OmegaConf.to_object(cfg)
+        # Call the package-local to_object directly instead of relying on the
+        # global ``OmegaConf.to_object`` monkey-patch installed by
+        # ``lazy_config/__init__`` (identical behavior; see CF-3).
+        from worldfoundry.core.configuration.lazy_config.omegaconf_patch import to_object
+
+        return to_object(cfg)
 
     if isinstance(cfg, abc.Mapping) and "_target_" in cfg:
         # conceptually equivalent to hydra.utils.instantiate(cfg) with _convert_=all,

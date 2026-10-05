@@ -17,6 +17,8 @@ integration:
 license: apache-2.0
 name: MME-VLA
 official_sources:
+  paper: https://arxiv.org/abs/2603.04639
+  project_page: https://robomme.github.io/challenge.html
   github:
     head_sha: ecf086c3be7c
     url: https://github.com/RoboMME/robomme_policy_learning
@@ -59,3 +61,21 @@ runner_parity:
   - RoboMME simulator, dataset builders, VLM subgoal training, OpenPI websocket server execution, and evaluation loops are excluded.
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile planning records.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: MME-VLA is the policy-learning line of the RoboMME project, centered on perceptual frame sampling for memory-heavy manipulation. Four Apache-2.0 checkpoint repos are confirmed from the README — the best perceptual-framesamp module, the mme_vla_suite collection, a pi05 baseline, and a VLM subgoal predictor. WorldFoundry calls create_trained_policy(...).infer in-process from a vendored subset.
+  overview_zh: MME-VLA 是 RoboMME 项目的策略学习线，核心是面向重记忆操作的感知帧采样。README 确认四个 Apache-2.0 checkpoint 仓库——最佳感知帧采样模块、mme_vla_suite 集合、pi05 基线与 VLM 子目标预测器。 WorldFoundry 从内置子集在进程内调用 create_trained_policy(...).infer。
+  architecture: The recorded design combines a perceptual frame-sampling module with policy learning and an optional VLM subgoal predictor. Resolver, runtime import, and compileall checks pass without an external checkout; further internals are not recorded in this repository.
+  architecture_zh: 仓库记录的设计将感知帧采样模块与策略学习及可选的 VLM 子目标预测器结合。解析器、运行时导入与 compileall 检查无需外部 checkout 即通过；更多内部细节仓库未记录。
+  usage_notes: Checkpoint-backed action-chunk validation remains required before demo parity is claimed; stage the framesamp module checkpoint first.
+  usage_notes_zh: 在声称 demo parity 前仍需 checkpoint 驱动的动作块验证；请先就位帧采样模块 checkpoint。
+  limitations:
+  - Demo parity is not yet claimed; checkpoint-backed validation is pending.
+  limitations_zh:
+  - 尚未声称 demo parity；checkpoint 驱动验证待完成。
+  recommended_benchmarks:
+  - id: robomme
+    reason: Native benchmark of the RoboMME project.
+    reason_zh: RoboMME 项目的原生基准。

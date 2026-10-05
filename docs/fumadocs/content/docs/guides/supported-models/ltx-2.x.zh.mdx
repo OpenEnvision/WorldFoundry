@@ -1,0 +1,54 @@
+---
+title: "LTX-2.x"
+description: "LTX-2.x（Lightricks）：文生视频、图生视频；已验证; 6 个 variant。"
+modelId: "ltx-2.x"
+pageSource: authored
+---
+
+LTX-2.x 是 Lightricks 当前一代视频模型在本 catalog 中的条目，原生集成了蒸馏版 LTX-2 与 LTX-2.3 的图生视频路径。原生路径在两段去噪之间使用官方空间上采样器。共记录六个 variant（2 与 2.3 各有 T2V/I2V/V2V），但目前只有两条 I2V 路径可运行——其余是上游能力档案。
+
+<ModelPaperFigures modelId="ltx-2.x" locale="zh" />
+
+记录论文为[arXiv 2601.03233](https://arxiv.org/abs/2601.03233)。
+
+项目页：[ltx.video](https://ltx.video)。代码：[Lightricks/LTX-2](https://github.com/Lightricks/LTX-2)。代码：[Lightricks/LTX-Video](https://github.com/Lightricks/LTX-Video)。
+
+<ModelCommandBuilder modelId="ltx-2.x" locale="zh" />
+
+## 用来做什么
+
+用 `ltx-2-i2v` 跑本系列联合 T2V/I2V 推理路径。本页记录了这两种任务 profile。
+
+I2V 路径为两段去噪，以官方 Spatial Upscaler 为分界，从 spatial_upsampler_path 自动加载（不是独立的 Studio 细化开关）。装配使用共享 NativeDiffusionPipeline、联合多段 runner 与优化策略——不使用 Diffusers pipeline 或复制的上游 pipeline。注意记录在案的调度差异：原生蒸馏调度为 8+3 步，而上游文档为 8+4 步，在差异调和并完成 checkpoint 验证前不得宣称与上游完全一致。
+
+catalog 记录的任务包括 文生视频、图生视频、视频到视频、音视频联合生成。模态上，它接受文本、图像、视频，输出视频。同系列还有 `ltx-2-t2v`、`ltx-2-v2v`、`ltx-2.3-t2v`。
+
+记录的评测入口包括[AIGCBench](/zh/docs/evaluation/benchmark-hub/aigcbench)（针对可运行 I2V 路径的图生视频评测）。
+
+LTX 2.3 系图生视频。不是 2.5 也不是原版 LTX-Video。
+
+## 运行时契约
+
+产物 `ltx-2-t2v.mp4`。
+
+CLI task profile：`default`、`interactive-video`、`control-video-to-video`。绑定的 pipeline 类是 `LTX23I2VPipeline`。
+
+起步 variant 是 `ltx-2-i2v`。catalog 登记了 6 个 variant（上方卡片）：`ltx-2-t2v`（`text-to-video`）：Runner 一致性待确认、`ltx-2-i2v`（`image-to-video`）：已验证、`ltx-2-v2v`（`video-to-video`）：Runner 一致性待确认、`ltx-2.3-t2v`（`text-to-video`）：Runner 一致性待确认、`ltx-2.3-i2v`（`image-to-video`）：已验证 等。系列状态：**已验证**。
+
+runner 状态为 已验证：LTX-2 与 LTX-2.3 的 I2V target 均产出了记录在案的非空 Studio demo 产物。 T2V/V2V 仍需专门封装与验证——不要指望选那些 variant 能出结果。 由于上游使用不同的 HF 仓库 id，本条目与 LTX-Video 0.9.x 分开跟踪。
+
+只有 I2V 路径可运行；T2V 与 V2V variant 是档案而非可运行路径。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run ltx-2-t2v --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+仓内 LTX 包**只放架构代码**。运行时装配、调度、加载、offload、量化和去噪循环仍在共享的 `diffusion_model` 基础设施里。transformer 改编自 [Lightricks/LTX-2](https://github.com/Lightricks/LTX-2) 的 `d6053703e00195bc668cbd1d5eda9dc0b2e7b74a`。checkpoint 与改编源码仍受上游 LTX 许可约束。AlayaWorld 的动作 / 历史模型从自己的 synthesis 包复用这套架构。
+
+记录的权重仓库包括 `Lightricks/LTX-2`、`Lightricks/LTX-2.3`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh ltx-2-t2v`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 other；状态：**已验证**。
+
+<ModelRelatedRecipes modelId="ltx-2.x" locale="zh" />

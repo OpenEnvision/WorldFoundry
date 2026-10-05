@@ -1,31 +1,58 @@
 ---
 title: Benchmark Hub
-description: Find a benchmark, inspect its execution boundary, and open its manifest-backed run recipe.
+description: "Pick a benchmark by what it actually measures, then open its manifest-backed recipe — import, score, or closed-loop — without invented rankings."
 ---
+
+This hub is a **recipe index**, not a leaderboard site. Each card is generated from benchmark catalogs and task manifests: what the suite measures, which files it needs, and which WorldFoundry path is real (official import, in-tree scoring, or closed-loop). It does **not** invent ranks. Detail pages link a live author-maintained board when one exists, otherwise they cite the paper table or say so.
 
 <BenchmarkRecipeCatalog />
 
-## What a benchmark recipe records
+## How to pick a bench
 
-Each detail page is generated from benchmark catalogs and task manifests rather than a hand-maintained link list. A recipe keeps these claims separate:
+Start from the claim you need to test, then open that recipe — do not install a dedicated environment first.
 
-| Record | What it tells you |
-| --- | --- |
-| Catalog | Stable benchmark ID, domains, aliases, official sources, and integration status. |
-| Evaluation surface | Primary metrics, artifact layout, judge requirements, and supported execution path. |
-| Runtime | In-tree evaluator, external result importer, hosted judge, or simulator boundary. |
-| Verification | The strongest checked runner or normalizer evidence currently recorded in the manifest. |
-| Eligibility | Whether available evidence is sufficient for leaderboard-facing claims. |
+- **Lifelong / knowledge-transfer manipulation** — [LIBERO](/docs/evaluation/benchmark-hub/libero) (four suites on a Franka tabletop). Related kitchen work is [RoboCasa](/docs/evaluation/benchmark-hub/robocasa).
+- **GPU-parallel skill families** — [ManiSkill](/docs/evaluation/benchmark-hub/maniskill) (SAPIEN). WorldFoundry imports rollouts; it does not replace the simulator.
+- **Long-horizon language chains** — [CALVIN](/docs/evaluation/benchmark-hub/calvin) (A/B/C → D, success at chain length 1–5).
+- **Real-to-sim policy ranking** — [SimplerEnv](/docs/evaluation/benchmark-hub/simpler-env) (Google Robot and WidowX/Bridge, calibrated to real setups).
+- **Household activities with logical goals** — [BEHAVIOR-1K](/docs/evaluation/benchmark-hub/behavior1k) (1,000 BDDL activities in OmniGibson).
+- **Whether a video model continues real physics** — [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq) (5-second continuations; in-tree scorer). Pair with [Physics-IQ Verified](/docs/evaluation/benchmark-hub/physics-iq-verified) only when that protocol is the one you mean — the media are not interchangeable.
+- **Open T2V clip quality / composition** — [VBench](/docs/evaluation/benchmark-hub/vbench), [T2V-CompBench](/docs/evaluation/benchmark-hub/t2v-compbench), [FETV](/docs/evaluation/benchmark-hub/fetv).
 
-This hub does **not** publish leaderboard rankings. Missing or pending verification remains visible instead of being promoted to a stronger support claim.
+Before installing benchmark-specific packages, read the [runtime environment matrix](/docs/evaluation/benchmark-hub/runtime-environments). It separates the unified environment, managed dedicated environments, hosted judges, and dimension-specific native/checkpoint stacks.
 
-Before installing benchmark-specific packages, read the [runtime environment matrix](/docs/evaluation/benchmark-hub/runtime-environments). It separates the unified environment, managed dedicated environments, hosted judge services, and dimension-specific native/checkpoint stacks.
+## What a recipe records
+
+<RecipeRecords items={[
+  {
+    term: 'Dimensions',
+    detail: 'Tasks, axes, suites, tracks, or splits the catalog actually records — not marketing tags.',
+  },
+  {
+    term: 'Data composition',
+    detail: 'Prompt or task count, dataset sources, modalities, and license when those facts are recorded.',
+  },
+  {
+    term: 'Metrics',
+    detail: 'Scorecard keys, direction, and the primary aggregate used for the run.',
+  },
+  {
+    term: 'Leaderboard',
+    detail: 'Live author-maintained boards when they exist, otherwise cited paper tables. Catalog inclusion is not a WorldFoundry ranking.',
+  },
+  {
+    term: 'How to run',
+    detail: 'Official import, in-tree scoring, checkpoints, and environment boundaries.',
+  },
+]} />
 
 ## How to run one benchmark
 
-Open the benchmark recipe first. Prompt files, generated-artifact layouts, checkpoint names, judge models, and official result formats are benchmark-specific.
+Open the recipe first. Prompt files, generated-artifact layouts, checkpoint names, judge models, and official result formats are benchmark-specific.
 
 ### Import official result files
+
+Use this when the recipe says WorldFoundry **normalizes** an upstream export and does not run the simulator.
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
@@ -37,9 +64,9 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-### Score generated artifacts
+### Score generated artifacts in tree
 
-Use `official-run` only when the benchmark recipe says the in-tree runtime can recompute scores from generated artifacts and the required checkpoints are staged.
+Use `official-run` only when the recipe says the in-tree runtime can recompute scores from generated artifacts and the required media or checkpoints are staged. Physics-IQ is the usual example.
 
 ```bash
 worldfoundry-eval zoo benchmark-run \

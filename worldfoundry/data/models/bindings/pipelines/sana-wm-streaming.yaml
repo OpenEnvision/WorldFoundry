@@ -1,0 +1,13 @@
+schema_version: 2
+binding_id: sana-wm-streaming
+model_id: sana-wm-streaming
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.sana_wm.pipeline_sana_wm:SanaWMStreamingPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation
+aliases:
+- Efficient-Large-Model/SANA-WM_streaming

@@ -7,6 +7,9 @@ from PIL import Image
 import argparse
 from transformers import AutoProcessor, AutoConfig, AutoModelForCausalLM
 from tqdm import tqdm
+from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.reproducibility import (
+    initialize_reproducibility,
+)
 
 class CaptionModel:
     def __init__(self, model_path="microsoft/Florence-2-large", batch_size=8):
@@ -149,6 +152,7 @@ def main():
     parser.add_argument("--num_workers", type=int, default=1, help="Total number of workers for multi-GPU parallel")
     parser.add_argument("--output_json", type=str, default=None, help="Output JSON path (default: <root_dir>/new.json)")
     args = parser.parse_args()
+    initialize_reproducibility()
 
     root_dir = args.root_dir
     vggt_root = os.path.join(root_dir, "new_vggt")

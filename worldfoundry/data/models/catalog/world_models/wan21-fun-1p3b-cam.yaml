@@ -21,3 +21,21 @@ runner_parity:
   - The Control+i2v checkpoint matched all 989 in-tree transformer tensors without fallback or skipped camera weights.
   - The official pose-conditioned route emitted nine coherent H.264 frames at 672x384 after four denoising steps.
 catalog_category: world_models
+docs:
+  publisher: Alibaba PAI (VideoX-Fun)
+  publisher_kind: company
+  publisher_zh: 阿里云 PAI（VideoX-Fun）
+  overview: 'Wan2.1-Fun V1.1 1.3B Control Camera is the GPU-validated camera-control entry of the VideoX-Fun family in this catalog: the complete 1.3B camera checkpoint and split Wan components passed real A100 inference in the WorldFoundry workspace. The official pose-conditioned route emitted nine coherent H.264 frames at 672x384 after four denoising steps, with all 989 transformer tensors matched without fallback.'
+  overview_zh: Wan2.1-Fun V1.1 1.3B Control Camera 是本 catalog 中 VideoX-Fun 家族已通过 GPU 验证的相机控制条目：完整的 1.3B 相机 checkpoint 与拆分的 Wan 组件在 WorldFoundry 工作区通过了真实 A100 推理。官方位姿条件路由在四步去噪后输出了 672x384 的九帧连贯 H.264 视频，989 个 transformer 张量全部精确匹配、无回退。
+  architecture: A 1.3B-parameter Wan2.1 diffusion transformer with the VideoX-Fun Control+i2v camera conditioning pathway. The checkpoint matched all 989 in-tree transformer tensors without fallback or skipped camera weights, confirming the conversion is exact.
+  architecture_zh: 1.3B 参数的 Wan2.1 扩散 Transformer，叠加 VideoX-Fun Control+i2v 相机条件通路。 checkpoint 与树内 989 个 transformer 张量全部匹配、无回退、无跳过的相机权重，确认转换精确。
+  usage_notes: 'This is the recommended starting point for VideoX-Fun camera control: smallest footprint and the only variant with recorded real-GPU validation. Supply explicit camera pose sequences; scale up to the 14B/Wan2.2 variants once your pipeline works here.'
+  usage_notes_zh: 这是 VideoX-Fun 相机控制的推荐起点：占用最小，且是唯一记录了真实 GPU 验证的变体。需显式提供相机位姿序列；流程跑通后再升级到 14B/Wan2.2 变体。
+  limitations:
+  - 1.3B scale trades visual fidelity for speed relative to the 14B/A14B variants.
+  limitations_zh:
+  - 相对 14B/A14B 变体，1.3B 规模以画质换速度。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-pose adherence for controlled i2v generation.
+    reason_zh: 受控图生视频的相机位姿跟随。

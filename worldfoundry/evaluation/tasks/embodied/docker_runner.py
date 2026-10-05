@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 from typing import Any, Mapping
 
 import yaml
+
+from .image_refs import resolve_docker_image, resolve_docker_platform
+
+ACCEPTED_LICENSES_ENV = "WORLDFOUNDRY_ACCEPTED_LICENSES"
 
 
 def inside_docker() -> bool:
@@ -25,21 +29,31 @@ def _docker_available(docker: str) -> None:
         raise RuntimeError("Docker daemon is not reachable")
 
 
-def _ensure_image(docker: str, image: str, *, source_image: str | None = None, pull: bool = False) -> None:
+def _ensure_image(
+    docker: str,
+    image: str,
+    *,
+    source_image: str | None = None,
+    platform: str | None = None,
+    pull: bool = False,
+) -> None:
     exists = subprocess.run([docker, "image", "inspect", image], capture_output=True).returncode == 0
     if exists or not pull:
         return
+    pull_cmd = [docker, "pull"]
+    if platform:
+        pull_cmd.extend(["--platform", platform])
     if source_image and source_image != image:
         source_exists = subprocess.run([docker, "image", "inspect", source_image], capture_output=True).returncode == 0
         if not source_exists:
-            rc = subprocess.call([docker, "pull", source_image])
+            rc = subprocess.call([*pull_cmd, source_image])
             if rc != 0:
                 raise RuntimeError(f"docker pull failed for {source_image} with exit code {rc}")
         rc = subprocess.call([docker, "tag", source_image, image])
         if rc != 0:
             raise RuntimeError(f"docker tag failed for {source_image} -> {image} with exit code {rc}")
         return
-    rc = subprocess.call([docker, "pull", image])
+    rc = subprocess.call([*pull_cmd, image])
     if rc != 0:
         raise RuntimeError(f"docker pull failed for {image} with exit code {rc}")
 
@@ -121,9 +135,8 @@ def build_docker_run_command(
 ) -> list[str]:
     """Build the ``docker run`` command for an embodied eval."""
     docker_cfg = dict(config.get("docker") or {})
-    image = docker_cfg.get("image")
-    if not image:
-        raise ValueError("docker.image is required")
+    image = resolve_docker_image(docker_cfg)
+    platform = resolve_docker_platform(docker_cfg)
 
     repo_root = _repo_root()
     command = _default_container_command(
@@ -148,7 +161,7 @@ def build_docker_run_command(
         "-e",
         "PYTHONPATH=/workspace/WorldFoundry:/workspace/WorldFoundry/src",
         "-e",
-        f"WORLDFOUNDRY_REPO_ROOT=/workspace/WorldFoundry",
+        "WORLDFOUNDRY_REPO_ROOT=/workspace/WorldFoundry",
         "-e",
         f"WORLDFOUNDRY_HOST_OUTPUT_DIR={output_dir}",
     ]
@@ -169,10 +182,15 @@ def build_docker_run_command(
         cmd.extend(["-v", os.path.expandvars(str(volume))])
     for env_value in docker_cfg.get("env") or ():
         cmd.extend(["-e", os.path.expandvars(str(env_value))])
+    accepted_licenses = os.environ.get(ACCEPTED_LICENSES_ENV, "").strip()
+    if accepted_licenses:
+        cmd.extend(["-e", f"{ACCEPTED_LICENSES_ENV}={accepted_licenses}"])
     if docker_cfg.get("cpus"):
         cmd.extend(["--cpus", str(docker_cfg["cpus"])])
     if docker_cfg.get("runtime"):
         cmd.extend(["--runtime", str(docker_cfg["runtime"])])
+    if platform:
+        cmd.extend(["--platform", platform])
     cmd.extend(_gpu_flags(docker_cfg.get("gpus", "all")))
     cmd.append(str(image))
     cmd.extend(command)
@@ -194,11 +212,16 @@ def run_embodied_via_docker(
         raise RuntimeError("'docker' executable not found")
     _docker_available(docker)
     docker_cfg = dict(config.get("docker") or {})
-    image = str(docker_cfg.get("image") or "")
-    if not image:
-        raise ValueError("docker.image is required")
+    image = resolve_docker_image(docker_cfg)
+    platform = resolve_docker_platform(docker_cfg)
     source_image = docker_cfg.get("source_image")
-    _ensure_image(docker, image, source_image=str(source_image) if source_image else None, pull=pull)
+    _ensure_image(
+        docker,
+        image,
+        source_image=str(source_image) if source_image else None,
+        platform=platform,
+        pull=pull,
+    )
 
     output_dir = Path(config.get("output_dir", "./results")).resolve()
     docker_config_path = write_docker_config(config, output_dir)

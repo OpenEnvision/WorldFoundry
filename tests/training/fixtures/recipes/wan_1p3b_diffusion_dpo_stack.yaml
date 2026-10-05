@@ -1,0 +1,47 @@
+schema: worldfoundry-post-training
+execution_owner: worldfoundry-native
+run:
+  id: wan-1p3b-diffusion-dpo-stack
+  output_dir: runs/wan-1p3b-diffusion-dpo-stack
+model:
+  recipe: wan2.1-t2v-1.3b
+  checkpoint: default
+tuning:
+  mode: lora
+  preset: wan-attention
+  rank: 64
+  alpha: 128
+data:
+  manifest: data/post_training/wan-diffusion-dpo-pairs.jsonl
+  cache: cache/post_training/wan-diffusion-dpo-pairs
+  split: train
+  shuffle: true
+  shuffle_seed: 42
+  tail_policy: drop
+algorithm:
+  type: diffusion-dpo
+  beta: 5000.0
+optimizer:
+  type: adamw
+  learning_rate: 0.00001
+  weight_decay: 0.0
+  betas: [0.9, 0.999]
+  epsilon: 0.00000001
+  max_grad_norm: 1.0
+runtime:
+  param_dtype: bfloat16
+  reduce_dtype: float32
+  activation_checkpoint: full
+  compile: false
+distributed:
+  backend: fsdp2
+  dp_replicate: 1
+  dp_shard: auto
+  cp: 1
+  tp: 1
+checkpoint:
+  save_every_steps: 50
+  async: true
+  export_every_steps: 50
+export:
+  format: peft

@@ -34,7 +34,7 @@ import torch
 import yaml
 from PIL import Image
 
-from worldfoundry.core.device import resolve_inference_dtype
+from worldfoundry.core.execution.device import resolve_inference_dtype
 
 from .runner import RDTRunner
 from .siglip import SiglipVisionTower

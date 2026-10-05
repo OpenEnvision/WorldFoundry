@@ -1,0 +1,48 @@
+---
+title: "SimWorld"
+description: "SimWorld：simulator-control；Runner 一致性待确认。"
+modelId: "simworld"
+pageSource: generated
+---
+
+SimWorld 是模拟器控制条目而非视频生成器：通过模拟器服务器驱动多智能体具身仿真（策略滚动、世界状态）。本 catalog 中路径已注册；模拟器服务器与资产保持运行时限制，记录的产物类型为 world_state。
+
+<ModelPaperFigures modelId="simworld" locale="zh" />
+
+记录论文为[arXiv 2512.01078](https://arxiv.org/abs/2512.01078)。
+
+代码：[SimWorld-AI/SimWorld](https://github.com/SimWorld-AI/SimWorld)。
+
+<ModelCommandBuilder modelId="simworld" locale="zh" />
+
+## 用来做什么
+
+用 `simworld` 做 catalog 世界模型推理。需要动作条件未来帧、而不是独立片段生成器时选它。
+
+架构内部细节仓库未记录——该条目登记的是仿真平台接口，不是神经网络。
+
+catalog 记录的任务包括 simulator-control、multi-agent-simulation、embodied.policy_rollout。别名包括 `simworld-ai`、`SimWorld-AI/SimWorld`。
+
+## 运行时契约
+
+产物 `world_state`、`simworld_runtime_plan.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `SimWorldPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。 缺失资产由计划报告，不视为 catalog 阻塞。 关键前置条件是一个运行中的模拟器服务器。
+
+需要外部模拟器服务器；无法独立生成。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run simworld --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+本卡片未记录公开 checkpoint id；按使用说明就位权重。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh simworld`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="simworld" locale="zh" />

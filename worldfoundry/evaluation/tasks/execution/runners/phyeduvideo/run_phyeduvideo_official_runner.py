@@ -10,6 +10,14 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping
 
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    resolve_env_path,
+    SCORECARD_SCHEMA_VERSION,
+    VIDEO_SUFFIXES,
+    build_import_metric_rows,
+    build_video_coverage,
+)
+
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
 from worldfoundry.evaluation.tasks.execution.runners.phyeduvideo.phyeduvideo_metrics import (
     METRIC_ORDER,
@@ -29,8 +37,6 @@ from worldfoundry.evaluation.tasks.execution.runners.phyeduvideo.phyeduvideo_run
     scorer_config_from_env,
 )
 
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -57,9 +63,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def _metric_rows(
@@ -68,52 +71,19 @@ def _metric_rows(
     source_path: Path,
     imported_via_run_official: bool,
 ) -> list[dict[str, Any]]:
-    direct_metrics = computed.get("metrics") if isinstance(computed.get("metrics"), Mapping) else {}
-    components = computed.get("components") if isinstance(computed.get("components"), Mapping) else {}
-    rows: list[dict[str, Any]] = []
-    for metric_id in METRIC_ORDER:
-        spec = METRIC_SPECS[metric_id]
-        score = direct_metrics.get(metric_id)
-        rows.append(
-            {
-                "metric_id": metric_id,
-                "name": spec["name"],
-                "available": score is not None,
-                "raw_score": score,
-                "normalized_score": score,
-                "score": score,
-                "higher_is_better": spec["higher_is_better"],
-                "group": spec["group"],
-                "source": "phyeduvideo_imported_results",
-                "source_path": str(source_path),
-                "evidence_scope": "result_artifact_import_only",
-                "imported_via_run_official": imported_via_run_official,
-                "components": components,
-                "reason": None if score is not None else "score_not_available_in_phyeduvideo_results",
-            }
-        )
-    return rows
+    return build_import_metric_rows(
+        metric_order=METRIC_ORDER,
+        metric_specs=METRIC_SPECS,
+        computed=computed,
+        source_path=source_path,
+        source_label="phyeduvideo_imported_results",
+        imported_flag_value=imported_via_run_official,
+        reason_template="score_not_available_in_phyeduvideo_results",
+    )
 
 
 def _coverage(expected_prompt_ids: set[str], generated_dir: Path | None) -> dict[str, Any]:
-    actual_names: set[str] = set()
-    if generated_dir is not None and generated_dir.exists():
-        for path in generated_dir.iterdir():
-            if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES:
-                actual_names.add(path.stem)
-    missing = sorted(expected_prompt_ids - actual_names)
-    unexpected = sorted(actual_names - expected_prompt_ids)
-    matched = sorted(expected_prompt_ids & actual_names)
-    return {
-        "expected_count": len(expected_prompt_ids),
-        "actual_count": len(actual_names),
-        "matched_count": len(matched),
-        "missing_count": len(missing),
-        "unexpected_count": len(unexpected),
-        "complete": bool(expected_prompt_ids) and not missing,
-        "missing_ids": missing[:50],
-        "unexpected_ids": unexpected[:50],
-    }
+    return build_video_coverage(expected_prompt_ids, generated_dir)
 
 
 def _scorecard(
@@ -219,8 +189,8 @@ def normalize_phyeduvideo_results(
 ) -> dict[str, Any]:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    generated_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
-    official_results_path = args.official_results_path or _env_path("WORLDFOUNDRY_PHYEDUVIDEO_RESULTS_PATH")
+    generated_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    official_results_path = args.official_results_path or resolve_env_path("WORLDFOUNDRY_PHYEDUVIDEO_RESULTS_PATH")
     if official_results_path is None:
         raise ValueError(
             "--official-results-path, WORLDFOUNDRY_PHYEDUVIDEO_RESULTS_PATH, or --run-official is required"
@@ -291,7 +261,7 @@ def normalize_phyeduvideo_results(
 def run_official_phyeduvideo(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    generated_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
     if generated_dir is None:
         raise ValueError("--generated-artifact-dir or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required for --run-official")
     repo_root = resolve_phyeduvideo_root(args.phyeduvideo_root)
@@ -390,3 +360,6 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+

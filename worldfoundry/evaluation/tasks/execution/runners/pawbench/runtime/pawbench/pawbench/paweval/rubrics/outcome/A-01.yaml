@@ -1,0 +1,37 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A-01
+track: calibration
+title_en: Coin flip
+outcome_question: Which label in ['heads', 'tails'] is visible on the coin in the
+  first decisive post-toss readout window?
+readout_policy: Read the first decisive post-action result window after the requested
+  flick/throw has actually occurred. Do not use the opening pre-action coin face.
+  The readout does not have to be the final video frame; use the earliest post-toss
+  frame or short frame window where the coin face is visible and no longer in active
+  flipping/spinning enough to identify heads or tails. If that face is readable and
+  later the hand occludes the coin or the coin drifts, keep the earliest decisive
+  label and record the later issue on the trust/readout side rather than relabeling.
+canonical_labels:
+- heads
+- tails
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['heads', 'tails'] can be decisively identified within
+  the readout window.
+- Only the initial pre-action face is visible; no post-flick/post-throw result can
+  be read.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'First-decisive-window rule: use the earliest post-action frame/window where the
+  coin result has committed; do not require the terminal frame and do not re-label
+  from later occlusion, drift, or transient states.'
+notes:
+- 'Scene title: Coin flip.'
+- Initial coin face is scene grounding, not outcome evidence.

@@ -28,3 +28,19 @@ runner_parity:
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries expose WorldFoundry pipeline targets;
   metadata-only entries retain upstream provenance without runnable WorldFoundry backends.
+docs:
+  publisher: Johns Hopkins University (CCVL)
+  publisher_kind: university
+  publisher_zh: 约翰斯·霍普金斯大学（CCVL 实验室）
+  overview: SpatialReasoner is a vision-language model from the JHU CCVL group focused on explicit, step-wise spatial reasoning over images and video. In this catalog it is an understanding entry — spatial and multimodal reasoning plus image/video QA — returning model_response artifacts.
+  overview_zh: SpatialReasoner 是约翰斯·霍普金斯大学 CCVL 组的视觉-语言模型，专注对图像与视频进行显式、分步的空间推理。在本 catalog 中它是理解类条目——空间与多模态推理加图像/视频问答——返回 model_response 产物。
+  architecture: A vision-language model with explicit 3D-aware spatial reasoning stages (per the upstream release at ccvl/SpatialReasoner). This repository records the prompt/image/video contract; scale and training details are not recorded here.
+  architecture_zh: 带显式 3D 感知空间推理阶段的视觉-语言模型（见上游 ccvl/SpatialReasoner 发布）。本仓库记录 prompt/image/video 契约；规模与训练细节仓库未记录。
+  usage_notes: Runner parity is pending. Pair it with generation entries to audit spatial consistency of generated worlds — e.g. object positions and relative depths.
+  usage_notes_zh: Runner parity 为 pending。可与生成条目配合，审查生成世界的空间一致性——例如物体位置与相对深度。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。

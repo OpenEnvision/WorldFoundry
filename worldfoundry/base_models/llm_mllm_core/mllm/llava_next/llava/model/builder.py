@@ -19,25 +19,53 @@ import shutil
 
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig, BitsAndBytesConfig
 import torch
+from worldfoundry.core.attention import resolve_transformers_attention_implementation
 from worldfoundry.base_models.llm_mllm_core.mllm.llava_next.llava.model import *
 from worldfoundry.base_models.llm_mllm_core.mllm.llava_next.llava.constants import DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
 from worldfoundry.base_models.llm_mllm_core.mllm.llava_next.llava.utils import rank0_print
 
 
-def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, load_4bit=False, device_map="auto", torch_dtype="float16",attn_implementation="flash_attention_2", customized_config=None, overwrite_config=None, **kwargs):
+def _single_device_from_map(device_map):
+    if isinstance(device_map, dict):
+        values = [value for value in device_map.values() if str(value) not in {"cpu", "disk"}]
+        if len({str(value) for value in values}) != 1:
+            return None
+        device_map = values[0]
+    if isinstance(device_map, int):
+        return torch.device("cuda", device_map)
+    value = str(device_map).strip().lower()
+    if value in {"auto", "balanced", "balanced_low_0", "sequential"}:
+        return None
+    try:
+        return torch.device(value)
+    except (RuntimeError, TypeError):
+        return None
+
+
+def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, load_4bit=False, device_map="auto", torch_dtype="float16",attn_implementation="auto", customized_config=None, overwrite_config=None, **kwargs):
     kwargs["device_map"] = device_map
+    attention_device = _single_device_from_map(device_map)
+    if attention_device is None and torch.cuda.is_available():
+        attention_device = torch.device("cuda", torch.cuda.current_device())
+    preferred_attention = None if attn_implementation in {None, "auto"} else attn_implementation
+    attn_implementation = resolve_transformers_attention_implementation(
+        preferred=preferred_attention,
+        device=attention_device,
+    )
 
     if load_8bit:
         kwargs["load_in_8bit"] = True
     elif load_4bit:
         kwargs["load_in_4bit"] = True
         kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16, bnb_4bit_use_double_quant=True, bnb_4bit_quant_type="nf4")
+    elif isinstance(torch_dtype, torch.dtype):
+        kwargs["torch_dtype"] = torch_dtype
     elif torch_dtype == "float16":
         kwargs["torch_dtype"] = torch.float16
     elif torch_dtype == "bfloat16":
         kwargs["torch_dtype"] = torch.bfloat16
     else:
-        import pdb;pdb.set_trace()
+        raise ValueError(f"Unsupported torch_dtype: {torch_dtype!r}")
 
     if customized_config is not None:
         kwargs["config"] = customized_config
@@ -289,8 +317,9 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
         vision_tower = model.get_vision_tower()
         if not vision_tower.is_loaded:
             vision_tower.load_model(device_map=device_map)
-        if device_map != "auto":
-            vision_tower.to(device="cuda", dtype=torch.float16)
+        vision_device = _single_device_from_map(device_map)
+        if vision_device is not None:
+            vision_tower.to(device=vision_device, dtype=kwargs.get("torch_dtype", torch.float16))
         image_processor = vision_tower.image_processor
 
     if hasattr(model.config, "max_sequence_length"):

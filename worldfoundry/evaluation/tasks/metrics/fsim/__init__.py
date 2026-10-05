@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-import numpy as np
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    import numpy as np
+
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .wrapper import compute_fsim
+compute_fsim = lazy_export(f"{__name__}.wrapper", "compute_fsim", owner=__name__)
 
 METRIC_ID = "fsim"
 ALIASES = ("feature-similarity-index", "fsimc")

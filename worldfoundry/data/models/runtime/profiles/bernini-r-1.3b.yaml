@@ -21,10 +21,11 @@ artifact_kind: generated_video
 artifact_filename: bernini-r-1.3b.mp4
 execution:
   backend_stage: official_in_tree_runtime
-  runtime_status: checkpoint_assets_pending_not_runnable_until_staged
+  runtime_status: checkpoint_gpu_validated
   integration_status: runtime_ported
   pipeline_binding: bernini-r-1.3b
 integration:
   status: runtime_ported
 notes:
 - Renderer-only 1.3B checkpoint fine-tuned from Wan2.1 1.3B.
+- The staged checkpoint completed a real 81-frame rv2v run at 848x480/16fps and 40 steps; quality and upstream output parity remain under review.

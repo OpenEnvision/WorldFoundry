@@ -1,7 +1,7 @@
 """Sora2 visual generation pipeline module."""
 
+import logging
 import os
-import sys
 import time
 from PIL import Image
 from typing import Optional, Dict, Any
@@ -15,6 +15,8 @@ _DEFAULT_ENDPOINT = "https://api.openai.com/v1"
 _API_KEY_ENV = ("SORA2_API_KEY", "SORA_API_KEY", "OPENAI_API_KEY")
 _ENDPOINT_ENV = ("SORA2_ENDPOINT", "SORA_ENDPOINT", "OPENAI_BASE_URL")
 _PLACEHOLDER_KEYS = {"your_api_key", "your api key"}
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_api_key(api_key: Optional[str]) -> str:
@@ -240,11 +242,7 @@ class Sora2Pipeline(PipelineABC):
 
         completed_statuses = ("completed", "succeeded", "success", "done")
         retry_count = 0
-
-        # 进度打印相关
-        bar_length = 30
-        progress_raw = getattr(video, "progress", 0)
-        progress = progress_raw if progress_raw is not None else 0
+        last_status = None
 
         while (
             video.status.lower() not in [s.lower() for s in completed_statuses]
@@ -259,29 +257,15 @@ class Sora2Pipeline(PipelineABC):
             progress = progress_raw if progress_raw is not None else 0
             status_lower = video.status.lower()
 
-            filled_length = int((progress / 100) * bar_length) if progress is not None else 0
-            bar = "=" * filled_length + "-" * (bar_length - filled_length)
-
-            if status_lower == "queued":
-                status_text = "Queued"
-            elif status_lower in ["submitted", "not_start"]:
-                status_text = "Submitted"
-            elif status_lower in ["in_progress", "processing", "running"]:
-                status_text = "Processing"
-            else:
-                status_text = video.status
-
-            progress_display = f"{progress:.1f}%" if progress is not None else "N/A"
-            sys.stdout.write(f"\r{status_text}: [{bar}] {progress_display} (Status: {video.status})")
-            sys.stdout.flush()
+            if video.status != last_status:
+                logger.info("Sora2 video %s: %s (progress %.1f%%)", video.id, video.status, progress)
+                last_status = video.status
 
             if status_lower in [s.lower() for s in completed_statuses]:
                 break
 
             time.sleep(poll_interval)
             retry_count += 1
-
-        sys.stdout.write("\n")
 
         if video.status.lower() in ["failed", "error"]:
             error_msg = getattr(getattr(video, "error", None), "message", "Unknown error")

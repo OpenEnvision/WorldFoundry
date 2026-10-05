@@ -6,8 +6,10 @@ environment_id: kinetix-jax
 id: kinetix
 name: Kinetix
 docker:
-  image: ghcr.io/allenai/vla-evaluation-harness/kinetix:latest
-  source_image: ghcr.io/allenai/vla-evaluation-harness/kinetix:latest
+  image: ghcr.io/allenai/vla-evaluation-harness/kinetix@sha256:79f06dcef9e0197b54078d47817208f02538bdfbd45338907300a6613b1f4e84
+  digest: sha256:79f06dcef9e0197b54078d47817208f02538bdfbd45338907300a6613b1f4e84
+  source_image: ghcr.io/allenai/vla-evaluation-harness/kinetix@sha256:79f06dcef9e0197b54078d47817208f02538bdfbd45338907300a6613b1f4e84
+  platform: linux/amd64
   python_env: kinetix
   gpus: all
 needs_new_env: true

@@ -2,9 +2,9 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from torch_fidelity.generative_model_base import GenerativeModelBase
-from torch_fidelity.helpers import get_kwarg, vassert, vprint
-from torch_fidelity.utils import (
+from .generative_model_base import GenerativeModelBase
+from .helpers import get_kwarg, vassert, vprint
+from .utils import (
     sample_random,
     batch_interp,
     create_sample_similarity,
@@ -71,7 +71,7 @@ def calculate_ppl(input_id, **kwargs):
         **kwargs,
     )
 
-    is_cond = input_desc["input_model_num_classes"] > 0
+    is_cond = input_model_num_classes > 0
 
     rng = np.random.RandomState(get_kwarg("rng_seed", kwargs))
 
@@ -120,15 +120,14 @@ def calculate_ppl(input_id, **kwargs):
 
     distances = np.concatenate(distances, axis=0)
 
-    cond, lo, hi = None, None, None
+    cond = np.ones(distances.shape, dtype=bool)
     if discard_percentile_lower is not None:
-        lo = np.percentile(distances, discard_percentile_lower, interpolation="lower")
-        cond = lo <= distances
+        lo = np.percentile(distances, discard_percentile_lower, method="lower")
+        cond &= lo <= distances
     if discard_percentile_higher is not None:
-        hi = np.percentile(distances, discard_percentile_higher, interpolation="higher")
-        cond = np.logical_and(cond, distances <= hi)
-    if cond is not None:
-        distances = np.extract(cond, distances)
+        hi = np.percentile(distances, discard_percentile_higher, method="higher")
+        cond &= distances <= hi
+    distances = distances[cond]
 
     out = {
         KEY_METRIC_PPL_MEAN: float(np.mean(distances)),

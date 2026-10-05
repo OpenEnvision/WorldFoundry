@@ -1,0 +1,65 @@
+---
+title: "Causal-Forcing"
+description: "清华 thu-ml 从 Wan2.1 蒸馏的因果视频学生。Studio 默认 chunk-wise 文生视频：832×480、81 帧、4 步。图生视频仅 frame-wise。官方仅推理运行时已内置；runner 一致性待验证。"
+modelId: "causal-forcing"
+pageSource: authored
+---
+
+Causal-Forcing 把双向 Wan2.1 教师蒸馏成**因果自回归**学生，让视频可以**按 chunk**或**按帧**生成，而不是一次双向出完整段。Causal-Forcing++ 是同一张卡片上的少步线（别名 `Causal Forcing++`、`causal-forcing-plus-plus`）。WorldFoundry 把官方仅推理树放在 `worldfoundry/synthesis/visual_generation/forcing/causal_forcing_runtime`，对外是 `CausalForcingPipeline`。这不是 [Self-Forcing](/zh/docs/guides/supported-models/self-forcing)，也不是 [Rolling-Forcing](/zh/docs/guides/supported-models/rolling-forcing)。
+
+<ModelPaperFigures modelId="causal-forcing" locale="zh" />
+
+官方论文是 [Causal Forcing: Autoregressive Diffusion Distillation Done Right for High-Quality Real-Time Interactive Video Generation](https://arxiv.org/abs/2602.02214)（ICML 2026，arXiv 2602.02214）。++ 文稿是 [arXiv 2605.15141](https://arxiv.org/abs/2605.15141)。项目页：[thu-ml.github.io/CausalForcing.github.io](https://thu-ml.github.io/CausalForcing.github.io)。代码：[thu-ml/Causal-Forcing](https://github.com/thu-ml/Causal-Forcing)。发布方：清华大学（thu-ml）。权重：`zhuhz22/Causal-Forcing`。
+
+Studio 默认对齐官方 chunk-wise CLI：`config_path: causal_forcing_dmd_chunkwise.yaml`，`checkpoint_path:` `$WORLDFOUNDRY_CKPT_DIR/Causal-Forcing/chunkwise/causal_forcing.pt`（也会解析 `zhuhz22--Causal-Forcing`）。Frame-wise 以及两个 ++ 文件（`causal-forcing++/framewise-2step.pt`、`framewise-1step.pt`）用这两个键切换。状态：**Runner 一致性待确认**——适配器走内置的 `inference.py`，但本 catalog 没有记录 checkpoint 驱动的 GPU 产物。
+
+<ModelCommandBuilder modelId="causal-forcing" locale="zh" />
+
+## 用来做什么
+
+从 **chunk-wise** 学生做**文生视频**。启动 `worldfoundry-eval run causal-forcing`。catalog schema 标了 `prompt`、`image`；官方路径默认是 T2V，只有传入 `images` 或设置 `i2v: true` 才走图生视频。产物：`causal-forcing.mp4`。`actions` 记录为 `seed`。
+
+**图生视频只支持 frame-wise。** 官方 `inference.py` 会断言 `num_frame_per_block: 1`，chunk-wise 默认线不能跑 I2V。传静帧之前，先把 `config_path:` / `checkpoint_path:` 切到 frame-wise 学生（或 ++ 的 frame-wise 文件）。I2V 会把静帧缩到 **480×832**，编码成首个 latent，再采样 `num_output_frames: 21` 减一。分布式 I2V 不受支持。
+
+只有你明确要 **1 或 2 步**采样时才用 ++。那些 YAML 对**第一帧仍走 4 步**（`denoising_step_list_first_chunk:` `[1000, 750, 500, 250]`，++ 记录的 ASD 首帧技巧）。不要把本运行时下的 `long_video/` 树当成 [Rolling-Forcing](/zh/docs/guides/supported-models/rolling-forcing)。
+
+片源质量看 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)。那是列出的评测入口，不是已收录的 WorldFoundry 排名。通过 `--pipeline.prompt` 提供提示词；外部批量提示词列表需单独准备，并将 `$WORLDFOUNDRY_FORCING_PROMPTS_ROOT` 指向其目录。
+
+## 运行时契约
+WorldFoundry `CausalForcingPipeline` 默认值（共享 forcing 运行时；`use_ema: false`，与 Self-Forcing / Rolling-Forcing 不同）：
+
+| 旋钮 | 默认 | 说明 |
+| --- | --- | --- |
+| 尺寸 | **832×480** | `default_config.yaml` 里 `width: 832`、`height: 480`；I2V 为 `Resize((480, 832))` |
+| 像素帧 | **81** | 由 `num_output_frames: 21` 经 Wan 时间压缩得到 |
+| 潜空间形状 | **21×16×60×104** | `image_or_video_shape: [1, 21, 16, 60, 104]`；I2V 噪声是 20 个 latent |
+| FPS | **16** | `write_video(..., fps=16)` |
+| `guidance_scale:` | **3.0** | chunk-wise / frame-wise / ++ 的 DMD 配置 |
+| `timestep_shift:` | **5.0** | 同一套 DMD YAML |
+| 步数（chunk-wise / frame-wise） | **4** | `denoising_step_list: [1000, 750, 500, 250]`，`denoising_loss_type: flow`，`warp_denoising_step: true` |
+| 步数（++） | **1 或 2** | 1 步 `[1000]`；2 步 `[1000, 500]`；外加首帧 4 步 |
+| `num_frame_per_block:` | **3** | frame-wise 与 ++ 为 **1** |
+| `seed:` | **0** | |
+| 精度 | **bfloat16** | 官方推理路径；空闲显存低于 **40 GB** 时文本编码器会换到 GPU 上做 swap |
+| `real_name:` | **Wan2.1-T2V-14B** | DMD YAML 里的教师名 |
+
+切换 variant 必须成对——不要把 chunk-wise checkpoint 配到 frame-wise YAML 上：
+
+| 线路 | `config_path:` | `checkpoint_path:` |
+| --- | --- | --- |
+| Chunk-wise（Studio 默认，T2V） | `causal_forcing_dmd_chunkwise.yaml` | `chunkwise/causal_forcing.pt` |
+| Frame-wise（I2V 必需） | `causal_forcing_dmd_framewise.yaml` | `framewise/causal_forcing.pt` |
+| ++ 2 步 | `causal_forcing_dmd_framewise_2step.yaml` | `causal-forcing++/framewise-2step.pt` |
+| ++ 1 步 | `causal_forcing_dmd_framewise_1step.yaml` | `causal-forcing++/framewise-1step.pt` |
+
+配置在 `worldfoundry/data/models/runtime/configs/causal_forcing/`。推理时 VAE 与 umT5 从 **`Wan2.1-T2V-1.3B`** 加载（`Wan2.1_VAE.pth`、`models_t5_umt5-xxl-enc-bf16.pth`）。若本地有 `Wan2.1-T2V-14B` 树，runner 也会做符号链接。完整一致性需要**所选 Causal-Forcing 配对**以及 wrapper 能解析的本地 Wan2.1 布局（`$WORLDFOUNDRY_WAN_MODELS_ROOT` 或 `$WORLDFOUNDRY_CKPT_DIR`）。
+
+## 在 WorldFoundry 中运行
+
+`worldfoundry-eval run causal-forcing`，环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。与 Self-Forcing 同一环境族。可选根目录：`$WORLDFOUNDRY_CAUSAL_FORCING_CKPT_ROOT`、`$WORLDFOUNDRY_CAUSAL_FORCING_REPO_ROOT`。catalog 许可证为 **unknown**——生产使用前请核对本仓库 GitHub / Hugging Face 卡片。catalog 未记录 VRAM。缺 Wan 或学生权重时运行时报错，不会下载。
+
+## 最小评测
+
+chunk-wise 文生视频，再跑 [VBench](/zh/docs/evaluation/benchmark-hub/vbench) 的 `custom_input` / `aesthetic_quality`。批量提示词列表需单独准备，并通过 `$WORLDFOUNDRY_FORCING_PROMPTS_ROOT` 选择目录。demo 一致性仍为 pending；有界 VBench 主键仍是 `aesthetic_quality`。
+
+<ModelRelatedRecipes modelId="causal-forcing" locale="zh" />

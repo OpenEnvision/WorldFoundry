@@ -1,0 +1,318 @@
+---
+title: 推理优化
+description: WorldFoundry 推理加速哪些可以开、哪些组合会被拒绝，以及如何确认开关真正生效。
+---
+
+<Callout type="warn" title="实验性质">
+这些优化仍是实验性质。它们可能变更，未必适用于每个模型，也不应被当作已支持的生产契约。
+</Callout>
+
+WorldFoundry 只把「有公开开关、且主链会消费」的技术算作可用。参数被接受不等于加速。forward 之后读 `runtime_optimization_report()` 里的 `requested / effective / fallbacks`。
+
+[可插拔 diffusion 加速](/zh/docs/guides/diffusion-acceleration)补充 Sol-Engine / FlashDreams 对照、原生 SANA/Wan 插件、撤销与请求隔离，以及完整视频测试通过和淘汰的配置。
+
+下面点名的开关，主要针对 **原生 Wan 2.1 / Wan 2.2** 管线（`Wan2p1*`、`Wan2p2*`，含 VACE）。Wan 2.5 / 2.6 / 2.7 是托管 API，没有本地 kernel 开关。其他原生 recipe 只共享一部分（dtype、offload，有的还有 attention 或 VAE tiling）。家族 runtime（LTX、CogVideoX 等）用自己的参数，不要把 Wan 的 key 抄过去。
+
+<Callout type="info" title="接受 ≠ 生效">
+缺 kernel、校准、进程组或 checkpoint 权重时，构建期失败，或明确走 dense / SDPA fallback。只有 wrapper（`*-wrapper-installed (runtime-pending)`）不算加速。
+</Callout>
+
+## 默认建议
+
+<Callout type="idea" title="首次运行 vs 吞吐">
+**首次运行 / 要接近官方观感。** 用目录默认值：`torch_dtype="bfloat16"`；显存够就 `offload_mode="resident"`（Studio 对 Wan2.2 TI2V-5B 的默认），不够再用 `async-block`。不要开 feature cache、近似 attention、量化、CUDA Graph、TAEW preview。官方 benchmark 不要减 steps 或改 CFG。
+
+**同一 checkpoint 追吞吐。** 继续常驻 BF16。按 GPU 把 `attention_backend` 设成真实的 Flash / Sage，再开 `fuse_qkv=True`、`fused_rope=True`、`static_cross_kv=True`。`compile=True` 只在 warmup 之后再开——第一次 compiled forward 会很慢。解码 OOM 或占比过高时，再开 Wan VAE 空间 tiling / 时间 chunk。只有在接受跳过 DiT step 时，才开**一种** feature cache。
+</Callout>
+
+## 可以做
+
+这些控制已经接入。用 `from_pretrained(...)`、Workspace 的 **load JSON**，或该模型 load schema 上的 `worldfoundry-eval run --pipeline.load.<kebab-name>`。
+
+### 精度与放置
+
+<KvCatalog heading="放置" vars rows={[
+  { name: "torch_dtype / dit_weight_dtype", hintLabel: "怎么开", hint: "bfloat16 / bf16", description: "DiT 用 BF16 跑。FP32 checkpoint 加载时转换。这是正常生产精度，不是额外实验。", reads: [{ label: "适用范围", value: "原生 Wan 2.1 / 2.2；以及其他把 dtype 传进 RuntimePolicy 的原生 recipe" }] },
+  { name: "offload_mode=resident", hintLabel: "别名", hint: "none / fast / resident", description: "权重量在 GPU。装得下时最快。Studio 在 H100 级卡上对 Wan2.2 TI2V-5B 默认 resident。", reads: [{ label: "适用范围", value: "调用 parse_offload_policy 的原生视觉 diffusion 加载器" }] },
+  { name: "offload_mode=async-block", hintLabel: "别名", hint: "block / cpu / layer", description: "逐层 CPU master + pinned H2D 预取（最多两层常驻）。只在显存紧时用。Wan VAE 仍常驻，只有 DiT offload。", reads: [{ label: "注意", value: "不能和量化、device_map=balanced 一起用" }] },
+  { name: "offload_mode=component", hintLabel: "怎么开", hint: "offload_mode=\"component\"", description: "整模块 CPU offload。该组件必须声明 vram_module_map。", reads: [{ label: "适用范围", value: "声明了 wrapper map 的组件" }] },
+  { name: "device_map=balanced", hintLabel: "怎么开", hint: "device_map=\"balanced\"", description: "把 transformer 层切到可见 GPU。要求 offload_mode=none，权重留在显存。", reads: [{ label: "适用范围", value: "声明了 layer_container 的模块" }] },
+  { name: "inplace_residual", hintLabel: "怎么开", hint: "inplace_residual=True", description: "Wan DiT 原地 residual，降低激活显存。仅推理；autograd 下会关掉。", reads: [{ label: "适用范围", value: "仅原生 Wan DiT" }] }
+]} />
+
+### Attention backend
+
+<KvCatalog heading="Backend" vars rows={[
+  { name: "attention_backend", hintLabel: "取值", hint: "auto / flash / flash2 / flash3 / flash4 / sage / sage3 / xformers / sdpa / torch", description: "dispatcher 选 kernel；provider 不可用或 shape 不合格时报告 SDPA。auto 是稳妥默认。", reads: [{ label: "适用范围", value: "原生 Wan；HunyuanVideo 也接受 attention_backend。Studio 下拉：auto、torch、flash_attn_2、flash_attn_3、sage、xformers" }] },
+  { name: "WORLDFOUNDRY_ATTENTION_BACKEND", hintLabel: "环境变量", hint: "auto / flash / cudnn / efficient / math", description: "调用 install_worldfoundry_inference_infra 的进程级 SDPA 策略。flash_attention_2 这类名字会映射到 auto，除非你在管线上钉死 dispatcher backend。", reads: [{ label: "相关", value: "WORLDFOUNDRY_ENABLE_TF32（默认开）、WORLDFOUNDRY_MATMUL_PRECISION=high、WORLDFOUNDRY_DETERMINISTIC=1" }] }
+]} />
+
+### 精确或数值等价的 Wan kernel
+
+<KvCatalog heading="Kernel" vars rows={[
+  { name: "fuse_qkv", hintLabel: "怎么开", hint: "fuse_qkv=True", description: "合并 Q/K/V 投影。可选 qkv_strategy=auto|packed|split 和 qkv_split_threshold（Studio 默认 8192）。", reads: [{ label: "适用范围", value: "原生 Wan DiT。forward 后确认 fused_blocks 和真实投影调用" }] },
+  { name: "fused_rope", hintLabel: "怎么开", hint: "fused_rope=True", description: "融合 3D RoPE。可与 Ulysses SP 组合（kernel 接收 rank offset 与 padding）。rope_precision 为 fp32 或 fp64。", reads: [{ label: "适用范围", value: "原生 Wan DiT" }] },
+  { name: "static_cross_kv", hintLabel: "怎么开", hint: "static_cross_kv=True", description: "复用本次请求的文本 cross-attention K/V。Studio 对 Wan2.2 TI2V-5B 默认打开。不能和 CUDA Graph 一起用。", reads: [{ label: "适用范围", value: "原生 Wan DiT" }] }
+]} />
+
+### Compile 与 CUDA Graph
+
+<KvCatalog heading="Compile" vars rows={[
+  { name: "compile", hintLabel: "怎么开", hint: "compile=True 或 torch_compile=True", description: "对绑定的 forward 做 torch.compile。可选 compile_mode（default / reduce-overhead / max-autotune / max-autotune-no-cudagraphs）、compile_backend、compile_fullgraph、compile_dynamic。第一次请求要付 compile + autotune 成本。", reads: [{ label: "另外", value: "走 compile_module_if_enabled 的进程可用 WORLDFOUNDRY_TORCH_COMPILE=1" }] },
+  { name: "cuda_graph", hintLabel: "怎么开", hint: "cuda_graph=True", description: "捕获并 replay 形状稳定的 Wan DiT 内层调用。默认关。和 Inductor 一起用时，compile_mode 必须是 max-autotune-no-cudagraphs，避免套娃 Graph。", reads: [{ label: "会拒绝", value: "sequence parallel、feature cache、近似 attention、static_cross_kv、自定义 Inductor compile_options" }] }
+]} />
+
+### 并行
+
+<KvCatalog heading="并行方式" vars rows={[
+  { name: "sequence_parallel / sp_degree", hintLabel: "怎么开", hint: "torchrun + sp_degree>=2", description: "原生 Ulysses SP：精确 attention，按 token 切卡。加载前需要 NCCL。Wan2.2 有 24 个 head，degree 必须整除 24（2、3、4、6、8、12）。", reads: [{ label: "会拒绝", value: "feature cache、近似 attention、CUDA Graph" }] },
+  { name: "cfg_parallel", hintLabel: "怎么开", hint: "cfg_parallel=2", description: "CFG 正负分支分两个 rank。world size 必须匹配 SP×CFG mesh。degree 只能是 1 或 2。", reads: [{ label: "会拒绝", value: "cfg_gate_step < 1.0" }] },
+  { name: "vae_parallel", hintLabel: "怎么开", hint: "vae_parallel=True 或显式 degree", description: "Wan VAE tile 按 rank 分片，再 typed all-gather。和 SP/CFG 一起用时，degree 必须等于完整 world size。需要 torchrun WORLD_SIZE>1。", reads: [{ label: "适用范围", value: "官方 Wan VAE，不是 TAEW preview" }] }
+]} />
+
+### Wan VAE 解码
+
+<KvCatalog heading="VAE" vars rows={[
+  { name: "vae_decode_autocast", hintLabel: "怎么开", hint: "vae_decode_autocast=\"bf16\"", description: "Wan decode 混精。相对 FP32 decode 有轻微数值差。", reads: [{ label: "适用范围", value: "原生 Wan VAE" }] },
+  { name: "vae_spatial_tiling", hintLabel: "怎么开", hint: "vae_spatial_tiling=True", description: "空间分 tile 解码。别名：vae_tiled_decode，或组件 tiled=True。默认 tile 34×34、stride 18×16。只切出 1 个 tile 不算 tiled 执行。", reads: [{ label: "不是同一个 flag", value: "vae_tiling 是 Hunyuan / Cosmos Predict2 的。Wan 忽略这个名字。" }] },
+  { name: "vae_temporal_chunk_size", hintLabel: "怎么开", hint: "vae_temporal_chunk_size=4", description: "因果时间 streaming 解码。chunk 之间保留 convolution cache。整段能装进一个 chunk 就不算 streaming。", reads: [{ label: "适用范围", value: "官方 Wan VAE" }] },
+  { name: "vae_channels_last_3d", hintLabel: "怎么开", hint: "vae_channels_last_3d=True", description: "把 Conv3d 权重量成 channels-last。VAE 没有 Conv3d 会失败。", reads: [{ label: "适用范围", value: "原生 Wan VAE" }] }
+]} />
+
+HunyuanVideo 和 Cosmos Predict2 只在各自管线上暴露 `vae_tiling`（Cosmos 还有 tile size/stride）。
+
+### 蒸馏 checkpoint
+
+Wan2.2 公开管线接受 `peft_adapter_path`，在校验 adapter / 基模 / target 后 merge PEFT LoRA。质量和步数属于那份蒸馏权重。没有匹配权重就没有单独的「4-step 模式」。
+
+### Feature cache（有损，只能选一种）
+
+可选、单 rank、互斥。每个 CFG 分支独立 cache。TeaCache 对 Wan2.1 1.3B / 14B T2V 与 I2V、Wan2.1 Fun / VACE 别名、Wan2.2 Fun / A14B、Wan2.2 TI2V-5B 有预设系数。其他 model ID 必须显式传 `coefficients`。
+
+<KvCatalog heading="Cache" vars rows={[
+  { name: "teacache", hintLabel: "怎么开", hint: "feature_cache=\"teacache\" 或 teacache=True", description: "按 residual 阈值（默认 0.26）加模型预设跳过 DiT step。也可 teacache=<threshold>。", reads: [{ label: "适用范围", value: "有预设或显式 coefficients 的原生 Wan denoiser" }] },
+  { name: "adacache", hintLabel: "怎么开", hint: "feature_cache=\"adacache\"", description: "自适应 residual cache。与其他 cache 一样，不能和 SP / CUDA Graph 组合。", reads: [{ label: "适用范围", value: "原生 Wan" }] },
+  { name: "magcache", hintLabel: "怎么开", hint: "magcache={\"ratios\": [...]}", description: "必须提供逐 step 校准 ratios。仓内没有 Wan2.2 预设。", reads: [{ label: "会 fail-closed", value: "magcache=True 却不给 ratios" }] },
+  { name: "blocktaylorseer", hintLabel: "怎么开", hint: "feature_cache={\"algorithm\": \"blocktaylorseer\"}", description: "Pinned LightX2V 逐 block self / cross / FFN 外推。默认 dense pattern [true, false, false, false]。", reads: [{ label: "适用范围", value: "原生 Wan，单 rank" }] },
+  { name: "taylorseer", hintLabel: "怎么开", hint: "feature_cache=\"taylorseer\"", description: "旧的 whole-stack residual 外推。不是 LightX2V 的逐 block 算法。默认 interval 4。", reads: [{ label: "适用范围", value: "原生 Wan，单 rank" }] },
+  { name: "custom", hintLabel: "怎么开", hint: "feature_cache={\"algorithm\": \"custom\", ...}", description: "LightX2V Tea 判定 + 一阶 stack residual。需要公开或显式 Tea 系数。", reads: [{ label: "适用范围", value: "原生 Wan，单 rank" }] },
+  { name: "firstblock / dualblock / dynamicblock", hintLabel: "怎么开", hint: "feature_cache={\"algorithm\": \"firstblock\", \"residual_diff_threshold\": ...}", description: "按 block 选择的 cache。必须给 residual_diff_threshold，没有质量安全默认值。", reads: [{ label: "适用范围", value: "原生 Wan，单 rank" }] },
+  { name: "cfg_gate_step", hintLabel: "别名", hint: "cfg_gate_fraction", description: "过了该比例的 step 后，复用 CFG delta，不再跑负分支。1.0（默认）是完整 CFG。", reads: [{ label: "会拒绝", value: "cfg_parallel=2" }] }
+]} />
+
+### 近似 attention（有损，必须显式开）
+
+不会自动选择。运行会标 `quality_tier="approximate"`。只有 Wan denoiser 设置了 `supports_approximate_attention`。
+
+<KvCatalog heading="稀疏" vars rows={[
+  { name: "sta", hintLabel: "怎么开", hint: "approximate_attention={\"kind\": \"sta\", ...}", description: "Sliding-tile attention。只接受已调优 grid：(36, 48, 48) 与 (18, 48, 80)。默认 Wan2.2 TI2V 121×704×1280 → (31, 22, 40) 会在 CUDA 前拒绝。", reads: [{ label: "适用范围", value: "原生 Wan，单 rank" }] },
+  { name: "vsa", hintLabel: "怎么开", hint: "approximate_attention={\"kind\": \"vsa\", ...}", description: "FastVideo 风格 video sparse attention。需要 3D sparse plan 和训练过的 gate_compress VSA-QAT 权重。缺 metadata 时降级为已记录的 exact attention。", reads: [{ label: "适用范围", value: "专用 VSA checkpoint，不是通用 dense Wan" }] },
+  { name: "vmoba", hintLabel: "怎么开", hint: "approximate_attention={\"kind\": \"vmoba\", ...}", description: "无权重 FastVideo router。chunk 必须整除实际 Wan patch grid。仓内默认 profile 只匹配 TI2V (31, 22, 40)。几何不对会 fail-closed。", reads: [{ label: "依赖", value: "fastvideo_kernel 的 MoBA symbol" }] },
+  { name: "fastvideo_sla / fastvideo_sagesla", hintLabel: "怎么开", hint: "kind=\"fastvideo_sla\"", description: "学出来的 Sparse-Linear Attention。checkpoint 必须有完整 proj_l。官方 dense Wan 和当前 FastVideo CausalWan Preview 会 fail-closed。SageSLA 还要 spas_sage_attn。", reads: [{ label: "不要", value: "在 dense checkpoint 上开，或用 LightX2V 的 sla 别名冒充" }] },
+  { name: "LightX2V sparse kinds", hintLabel: "种类", hint: "dynamic_sparse, sparge, nbhd, lightx2v_sla_mask, flexblock, lightx2v_spas_sage, draft_attn, radial_attn, rainfusion_attn, svg_attn, svg2_attn, lightx2v_svg_mask", description: "Pinned LightX2V 免训练稀疏通路。每次调用必须命中 pinned provider。有歧义的 sla / sagesla 别名不接受。", reads: [{ label: "依赖", value: "pinned LightX2V checkout 与匹配的 operator" }] }
+]} />
+
+STA / VSA / VMoBA 的 symbol 来自仓内 `thirdparty/fastvideo-kernel`（或已安装的匹配 `fastvideo_kernel` wheel）。本地编译：设置 `CUDA_HOME` 和 `CUDACXX`，在该目录跑 `./build.sh`。ThunderKittens C++ kernel 只在 Hopper `sm_90a` 编译（aarch64 宿主永远不编）；否则走 Triton fallback。FP4 attention / 量化 CUDA 扩展需要 Blackwell `sm_120a` 且 CUDA ≥ 12.8。FA4 CuTe block-sparse 是可选的 `flash_attn.cute` 附加件，不在默认构建里。
+
+### 量化（实验性）
+
+<KvCatalog heading="量化模式" vars rows={[
+  { name: "fp8 / nvfp4", hintLabel: "怎么开", hint: "quantization={\"mode\": \"fp8\", \"min_features\": 1024}", description: "打包的低精度 wrapper。不合格 shape 走 dense 并如实报告。这是数值近似，不是已认证质量预设。", reads: [{ label: "会拒绝", value: "block 或 disk offload" }] },
+  { name: "int8", hintLabel: "怎么开", hint: "quantization=\"int8\"", description: "大 GEMM 上的动态 per-token / per-channel W8A8 Triton。小 shape 保留 BF16（计为 dense_policy_calls，不是 fallback）。全链路 INT8 是可选的，默认质量不安全。", reads: [{ label: "实测", value: "一次完整 Wan INT8 smoke 打到了 kernel，但 latent / 视频质量失败（cosine ~0.91，视频 PSNR ~17）。只当校准，不当速度结论。" }] },
+  { name: "int4", hintLabel: "怎么开", hint: "quantization=\"int4\"", description: "打包 / groupwise 存储，再反量化 + dense。不是声称的 INT4 GEMM 加速。", reads: [{ label: "会拒绝", value: "block 或 disk offload" }] },
+  { name: "gguf", hintLabel: "怎么开", hint: "quantization=\"gguf\" 或 .gguf 文件", description: "真实 GGUF tensor loader 与压缩存储。当前 runtime 没有合格的 GGUF 低比特 GEMM。", reads: [{ label: "适用范围", value: "安装了可选 gguf 包时的原生 loader" }] }
+]} />
+
+### 仅 preview 解码
+
+`vae_preview_decoder_path` 会用 TAEW2.2 替换 Wan2.2 的 48 通道官方 VAE。这是快速、近似、只解码的 preview。官方 VAE 的 tiling、时间 chunk、VAE-parallel 不会生效，因为官方 decoder 根本没建。发布和官方 benchmark 不要用 TAEW。
+
+## 不可以做 / 不要改
+
+<KvCatalog heading="不要" rows={[
+  { name: "把配置当成加速证据", hint: "不算数", description: "只有 requested 没有 effective、pending wrapper、dense_policy_calls / SDPA fallback，都不是加速。" },
+  { name: "把 sequence parallel 和 cache、稀疏 attention、CUDA Graph 组合", hint: "构建期拒绝", description: "SP 需要跨 rank 同步 skip / 路由，当前没有。例外是 fused RoPE，它感知 SP。" },
+  { name: "把 CUDA Graph 和 feature cache、近似 attention、static_cross_kv 组合", hint: "构建期拒绝", description: "Graph replay 会冻住上一步或上一请求的 Python cache / 稀疏调度。" },
+  { name: "量化 + block 或 disk offload", hint: "构建期拒绝", description: "量化权重是 buffer；异步双层 offloader 只管理 Parameter。disk offload 也无法物化这次变换。" },
+  { name: "device_map=balanced + 任何 offload", hint: "构建期拒绝", description: "balanced 分片要求权重量在显存。" },
+  { name: "同时开两种 feature cache", hint: "构建期拒绝", description: "teacache、magcache、adacache、taylorseer、blocktaylorseer、custom 和 block cache 互斥。" },
+  { name: "MagCache 不给 ratios，或 TeaCache 既无预设也无系数", hint: "构建期拒绝", description: "未校准的 Wan2.2 MagCache 仓内没有 ratios。未知 TeaCache model ID 必须自己给 coefficients。" },
+  { name: "在默认 TI2V 121×704×1280 grid 上开 STA", hint: "CUDA 前拒绝", description: "只调过 (36, 48, 48) 和 (18, 48, 80)。" },
+  { name: "把 VMoBA profile 复用到别的分辨率或帧数", hint: "fail-closed", description: "chunk 必须整除真实 post-patch grid。先推导 grid。" },
+  { name: "在官方 dense Wan 上开 FastVideo SLA", hint: "fail-closed", description: "这些 checkpoint 没有 proj_l。不要用 LightX2V 的 sla / sagesla 别名冒充这条通路。" },
+  { name: "把 sage_attn2_k_int8_v_fp8 当 Wan 稀疏 provider", hint: "fail-closed", description: "该 registry 项需要量化 K/V 元组。Wan generator 提供浮点 K/V，也没有审计过的逐层 quantize cache。" },
+  { name: "把 INT8 / INT4 / GGUF 当默认质量路径", hint: "质量悬崖", description: "INT8 kernel 能跑起来，latent 仍可能毁掉。INT4 和 GGUF 在认证新 kernel 之前只是存储 + dense 计算。" },
+  { name: "把 TAEW2.2 当官方 VAE", hint: "仅 preview", description: "和 48 通道 Wan2.2 VAE 的颜色 / 结构不同。发布和 benchmark 用官方 decoder。" },
+  { name: "把这些 Wan 开关用到 API 或其他家族", hint: "未接入", description: "Wan 2.5+ API 不理这些。HunyuanVideo 只吃 dtype、offload、attention、vae_tiling。Cosmos Predict2 只吃 dtype、offload、vae_tiling。Echo-Memory 只有 offload_model。Matrix-Game 3.5 固定 BF16 RuntimePolicy。LTX-2.5 有自己的 offload_mode / quantization，不是这张表。" },
+  { name: "RuntimePolicy 里没有的 PyTorch 技巧", hint: "未接入", description: "在家族 runtime 上随便 torch.compile、sequential offload、装了 xFormers 却没选中、或社区 TeaCache monkey-patch，都是「PyTorch 能做」，不是 WorldFoundry 开关。归在这里，不要写进「可以做」。" },
+  { name: "改官方 benchmark 的 steps、CFG、尺寸，或打开有损 cache", hint: "不可比", description: "评分在评测章节。更快的非官方 schedule 是另一份 workload。" },
+  { name: "在 training build 上开推理加速", hint: "构建期拒绝", description: "训练禁止 offload、量化、Sage、TeaCache、CUDA Graph、fuse_qkv、static_cross_kv 以及其他推理 wrapper。" },
+  { name: "cfg_parallel degree 不是 2", hint: "构建期拒绝", description: "runner 只实现 degree 1 或 2；degree 2 需要已建立的双 rank CFG group。" }
+]} />
+
+<Callout type="warn" title="OOM 与首次编译成本">
+显存不够用 block offload。常驻 + INT8 且未开 expandable CUDA segments 时，额外 BF16 副本曾在 VAE 阶段 OOM。`torch.compile` 和 CUDA Graph 会让第一次请求慢很多，不要拿那次计时。
+</Callout>
+
+## 怎么打开
+
+同一组 load key 可以从 Python、CLI 或 Workspace 打开。
+
+<Callout type="info" title="嵌套对象不要写成 CLI flag">
+`feature_cache`、`approximate_attention`、`quantization` 放进 Python kwargs 或 load JSON，不要猜 CLI flag。
+</Callout>
+
+<Tabs items={['Python', 'CLI', 'Workspace']}>
+  <Tab>
+
+原生 Wan 2.1 / 2.2 的完整表面：
+
+```python
+from worldfoundry.pipelines.wan.pipeline_wan_2p2 import Wan2p2Pipeline
+
+pipe = Wan2p2Pipeline.from_pretrained(
+    model_path="/checkpoints/Wan2.2-TI2V-5B",
+    device="cuda",
+    # 放置
+    offload_mode="resident",
+    torch_dtype="bfloat16",
+    dit_weight_dtype="bf16",
+    # Attention 与精确 kernel
+    attention_backend="flash3",
+    fuse_qkv=True,
+    fused_rope=True,
+    static_cross_kv=True,
+    compile=False,
+    # 有损 — 最多一种 cache，且不要和 SP / CUDA Graph 一起：
+    # feature_cache={"algorithm": "teacache"},
+    # Wan VAE 解码
+    vae_decode_autocast="bf16",
+    vae_spatial_tiling=True,
+    vae_tile_size=(34, 34),
+    vae_tile_stride=(18, 16),
+    vae_temporal_chunk_size=4,
+)
+```
+
+  </Tab>
+  <Tab>
+
+该模型 load schema 上的 CLI：
+
+```bash
+worldfoundry-eval run wan2.2-ti2v-5b \
+  --pipeline.task-profile <task-profile> \
+  --pipeline.load.offload-mode resident \
+  --pipeline.load.attention-backend flash3 \
+  --pipeline.load.fuse-qkv true \
+  --pipeline.load.static-cross-kv true \
+  --output-dir tmp/worldfoundry_infer/wan2.2-ti2v-5b
+```
+
+  </Tab>
+  <Tab>
+
+与[运行推理](/zh/docs/guides/inference)同一条 job 路径：
+
+```bash
+python -m worldfoundry.studio.workspace_job infer \
+  --model-id wan2.2-ti2v-5b \
+  --load-json '{
+    "offload_mode": "resident",
+    "attention_backend": "flash3",
+    "fuse_qkv": true,
+    "static_cross_kv": true
+  }' \
+  --output-dir tmp/worldfoundry_infer/wan2.2-ti2v-5b
+```
+
+  </Tab>
+</Tabs>
+
+<KvCatalog heading="Studio 与多卡" rows={[
+  { name: "Workspace UI", hintLabel: "Studio", hint: "勾选 + 下拉", description: "compile、CPU offload、fused QKV、static cross-KV、fused RoPE、attention。嵌套对象仍放进 --load-json。" },
+  { name: "多卡", hintLabel: "怎么开", hint: "torchrun + sp_degree", description: "Sequence / CFG / VAE 并行需要 CUDA，且 world size 必须匹配。" }
+]} />
+
+## 确认实际跑了什么
+
+```python
+dit = pipe.native_pipeline.components.denoiser.runtime_optimization_report()
+vae = pipe.native_pipeline.components.decoder.runtime_optimization_report()
+print(dit["requested"], dit["effective"], dit["fallbacks"])
+print(vae["requested"], vae["effective"], vae["fallbacks"])
+```
+
+至少 forward 一次之后：
+
+- **Attention** — `attempts == successes > 0`，目标 fallback 为空。compile：`compiled_graph_traces > 0`。
+- **QKV / RoPE / static-KV** — 本请求有真实调用。static-KV：有 hits，且 `bypasses=0`。
+- **CUDA Graph** — `replay > 0`，且 `eager = capture_failed = 0`。
+- **VAE tile / chunk** — 最后一次窗口 `> 1`，lifetime 总数不算。
+- **量化** — `low_precision_kernel_calls > 0`。`dense_policy_calls` 是 BF16。
+
+## 下一步
+
+<Cards>
+  <Card title="运行推理" description="环境、CLI 与 Workspace 命令。" href="/zh/docs/guides/inference" />
+  <Card title="模型" description="挑选 model ID 和默认 profile。" href="/zh/docs/guides/supported-models" />
+  <Card title="Studio" description="Workspace 勾选与 load JSON。" href="/zh/docs/guides/studio" />
+</Cards>
+
+## 不引入 CUDA 同步的分阶段跟踪
+
+录制 Nsight Systems trace 时设置 `WORLDFOUNDRY_NVTX=1`。例如，把下列
+`inference.py` 换成现有推理脚本：
+
+```bash
+WORLDFOUNDRY_NVTX=1 nsys profile --trace=cuda,nvtx,osrt -o inference-trace python inference.py
+```
+
+标准 `NativeDiffusionRunner` 会标记 `worldfoundry.run`、`encode`、
+`denoise_step`、`denoiser.positive/negative` 和 `decode`。公共视频后处理、
+H.264 输出和打包 offload 分别标记 `worldfoundry.postprocess`、
+`worldfoundry.output.h264` 和 `worldfoundry.offload.h2d`。
+自定义 runner 仅继承其实际调用的公共方法中的标记。
+这些范围标记 CPU 提交工作的位置，不额外同步 CUDA，也不代表客户端显示延迟。
+未开启时不会导入 PyTorch 或探测 CUDA；无 CUDA 时为空操作。
+
+## offload 固定缓冲区与 GQA 兼容路径
+
+通过 Python 接口 `enable_layerwise_cpu_offload(..., reuse_buffers=True)` 显式开启后，连续权重会
+按 dtype 打包到对齐的 CPU 缓冲区，复用最多两个 CUDA 槽，并通过 CUDA event
+防止计算尚未结束时覆盖权重。报告新增 `buffer_mode` 和 `device_buffer_bytes`。
+非连续权重保留原布局，报告 `per-parameter`；也可用 `reuse_buffers=False`
+显式选择旧路径；默认仍为 `False`。
+
+打包路径要求 `torch.no_grad()` 或 `torch.inference_mode()`、顺序执行各层，
+且参数不共享底层存储。开启时拒绝 CUDA Graph capture 和 state-dict 操作。
+修改模型 dtype/device 或保存、加载权重前，先 disable。
+原地权重修改使用 `layerwise_offload_mutation_scope(layer)`；
+`handle.disable()` 会恢复 CPU 权重并移除 hook。
+固定槽改善的是显存和拷贝管理，并不保证所有层尺寸下吞吐都更高。
+
+公共 `scaled_dot_product_attention` 在显式选择 `backend="efficient"`，或兼容
+不支持 `enable_gqa` 的旧 SDPA 时，对 batch 相同的四维张量和共享 mask 使用
+分组 query 与零步长 K/V view。按 batch/head 指定的 mask 仍走显式 head 扩展。
+部分形状和布局仍可能触发 reshape 拷贝；原有 native GQA 选择保持不变。
+
+以下本地测量使用排除 warmup 的合成组件测试，记录 CUDA-event 耗时和峰值 allocated 显存，
+不代表完整模型 FPS。设计参考 FlashDreams
+[#637](https://github.com/NVIDIA/flashdreams/pull/637)、
+[#632](https://github.com/NVIDIA/flashdreams/pull/632) 和
+[#634](https://github.com/NVIDIA/flashdreams/pull/634)。
+
+2026-09-18 的本地组件测量：单张 H100 80GB、PyTorch 2.5.1+cu121、FP16，
+每个独立进程 warmup 10 轮、测量 50 轮：
+
+| 用例 | CUDA 耗时中位数 | 峰值 allocated 显存 |
+| --- | ---: | ---: |
+| offload：原有逐参数拷贝 | 0.932 ms | 37.38 MiB |
+| offload：打包固定槽 | 1.514 ms | 37.38 MiB |
+| GQA：显式复制 K/V head | 0.419 ms | 82 MiB |
+| GQA：分组 view | 0.358 ms | 19 MiB |
+
+Offload 使用 8 个宽度 1024 的 Linear 层，batch 64。GQA 使用
+Q `[1,32,256,64]`、K/V `[1,8,8192,64]` 和 efficient SDPA。
+打包 offload 将 H2D 拷贝次数减半，但这个小层用例耗时更高，因此保持显式可选。
+选择前需对实际模型及层尺寸测量。峰值显存包含进程中所有存活 tensor，不只是权重。

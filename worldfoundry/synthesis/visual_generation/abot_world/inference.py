@@ -15,21 +15,21 @@ import numpy as np
 import torch
 from PIL import Image, ImageOps
 
-from worldfoundry.base_models.diffusion_model.video.wan.models.abot_world import (
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.abot_world import (
     ABotWorldModel,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.inference_scheduler import (
+from worldfoundry.base_models.diffusion_model.schedulers import (
     InferenceFlowMatchScheduler,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.vae.taew2p2 import (
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.tae_22 import (
     TAEW22StreamingDecoder,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.t5 import (
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import (
     T5EncoderModel,
 )
-from worldfoundry.core.acceleration.quantization import replace_linear_with_float8
+from worldfoundry.core.acceleration.quantization.linear import replace_linear_with_float8
 from worldfoundry.core.kernels.capabilities import kernel_device_profile
-from worldfoundry.core.utils.image_utils import load_pil_image
+from worldfoundry.core.media.processing.image_utils import load_pil_image
 
 
 ACTION_KEYS = ("W", "A", "S", "D", "I", "J", "K", "L")
@@ -288,7 +288,7 @@ class ABotWorldInference:
         first_image: Image.Image,
         reference_images: Any,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.vae2_2 import (
+        from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_22 import (
             Wan2_2_VAE,
         )
 

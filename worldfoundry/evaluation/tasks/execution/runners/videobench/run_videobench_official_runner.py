@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+
+
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+
 import argparse
 import json
 import os
@@ -10,18 +14,22 @@ import time
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.evaluation.utils import REPO_ROOT
-
+from worldfoundry.core.execution.process import run_logged_subprocess
+from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
+from worldfoundry.evaluation.tasks.execution.framework.io import (
+    env_path,
+    load_json,
+    utc_now_iso,
+    write_json,
+    write_jsonl,
+)
+from worldfoundry.evaluation.utils import HFD_DATASET_CACHE_ROOT, REPO_ROOT, worldfoundry_hfd_dataset_root
 from worldfoundry.runtime.env import (  # type: ignore[reportMissingImports]  # noqa: E402
     resolve_data_dir,
     resolve_hf_cache_dir,
 )
-from worldfoundry.evaluation.utils import HFD_DATASET_CACHE_ROOT, worldfoundry_hfd_dataset_root
-from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
-from worldfoundry.evaluation.tasks.execution.framework.io import env_path, load_json, utc_now_iso, write_json, write_jsonl
 
 DEFAULT_VIDEOBENCH_ROOT = Path(__file__).resolve().parent / "runtime"
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 VIDEO_ARTIFACT_EXTENSIONS = frozenset({".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".gif"})
 HUMAN_ANNOTATION_REPO_ID = "Video-Bench/Video-Bench_human_annotation"
 OFFICIAL_VIDEOS_REPO_ID = "Video-Bench/Video-Bench_videos"
@@ -890,18 +898,16 @@ def run_videobench(args: argparse.Namespace) -> dict[str, Any]:
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{args.videobench_root}{os.pathsep}{env.get('PYTHONPATH', '')}".rstrip(os.pathsep)
     start = time.monotonic()
-    completed = subprocess.run(
+    completed = run_logged_subprocess(
         command,
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
         cwd=args.videobench_root,
         env=env,
-        capture_output=True,
-        text=True,
         timeout=args.timeout,
-        check=False,
+        start_new_session=False,
     )
     duration_seconds = time.monotonic() - start
-    stdout_path.write_text(completed.stdout, encoding="utf-8")
-    stderr_path.write_text(completed.stderr, encoding="utf-8")
 
     raw_results, upstream_results_path = collect_official_output(upstream_output_dir)
     return normalize_videobench_results(

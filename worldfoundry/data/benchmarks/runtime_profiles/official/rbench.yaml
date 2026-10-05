@@ -1,0 +1,70 @@
+benchmark_ids:
+- rbench
+blocked_reason: WorldFoundry reproduces the official RBench aggregation in tree; producing the inputs still
+  requires an external VLM judge (GPT or Qwen3-VL) and the GroundingDINO/SAM2/CoTracker/Q-Align operator stack
+  with their checkpoints.
+environment_id: worldfoundry-unified-cu128
+id: rbench
+name: RBench
+needs_new_env: false
+notes:
+- The in-tree scorer reads per-video VQA CSVs and motion results.json and recomputes both official tracks;
+  it never trusts the upstream summary CSVs.
+- gpt and qwen judge outputs live in sibling directories and are never mixed; pass --vlm-backend when both
+  are present.
+- Coverage is judged on scored video counts against the 650 official prompts, so a partial judge run cannot
+  report a complete suite.
+- rbench_overall is a WorldFoundry composite of the two official track scores and is emitted only when both
+  tracks are complete.
+preflight_command: PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
+  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile rbench --manifest
+  worldfoundry/data/benchmarks/runtime_profiles/official/rbench.yaml --output-dir
+  tmp/worldfoundry_preflight/rbench --json
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+pythonpath_roots:
+- .
+required_assets:
+  user_supplied_data_layout:
+  - <rbench_data_root>/prompts/<split>_prompts.json
+  - <rbench_data_root>/imgs/<split>/
+  user_supplied_result_layout:
+  - <results_root>/4_embodiments/<model>/<embodiment>/VQA/<vlm>/<question>/results.csv
+  - <results_root>/4_embodiments/<model>/<embodiment>/motion/results.json
+  - <results_root>/5_tasks/<model>/<task>/<vlm>/results.csv
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/rbench.yaml
+required_env: []
+optional_env:
+- WORLDFOUNDRY_RBENCH_RESULTS_PATH
+- WORLDFOUNDRY_RBENCH_DATA_ROOT
+- WORLDFOUNDRY_RBENCH_DATASET_ROOT
+- WORLDFOUNDRY_RBENCH_VLM_BACKEND
+- WORLDFOUNDRY_RBENCH_STRICT
+- WORLDFOUNDRY_BENCHMARK_DATA_ROOT
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+required_packages: []
+required_paths:
+- id: official_runner_script
+  path: worldfoundry/evaluation/tasks/execution/runners/rbench/run_rbench_official_runner.py
+- id: task_yaml
+  path: worldfoundry/data/benchmarks/tasks/external/rbench.yaml
+requires_cuda_visibility: false
+status: in_tree_official_aggregation_ready_judge_external
+optional_imports: []
+base_model_dependencies: []
+optional_base_model_dependencies:
+- rbench_dataset_assets
+validation_command:
+- worldfoundry-eval
+- zoo
+- benchmark-run
+- --benchmark-id
+- rbench
+- --mode
+- official-validation
+- --official-results-path
+- <rbench_results_root>
+- --result-model-id
+- <model_id>
+- --output-dir
+- <out>
+- --json

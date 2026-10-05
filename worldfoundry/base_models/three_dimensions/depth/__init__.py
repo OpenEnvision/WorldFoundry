@@ -15,7 +15,23 @@
 
 """Module for base_models -> three_dimensions -> depth -> __init__.py functionality."""
 
-from .base import DepthEstimationInput, DepthEstimationModel, DepthEstimationResult, DepthType
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .base import DepthEstimationInput, DepthEstimationModel, DepthEstimationResult, DepthType
+
+__all__ = ["DepthEstimationInput", "DepthEstimationModel", "DepthEstimationResult", "DepthType", "make_depth_model"]
+
+
+def __getattr__(name: str) -> Any:
+    # Importing an independent depth model must not load the ViPE adapter types.
+    if name in __all__ and name != "make_depth_model":
+        from . import base
+
+        value = getattr(base, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def make_depth_model(model: str):

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path, SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
 from worldfoundry.evaluation.tasks.execution.runners.physics_iq.physics_iq_metrics import (
     load_official_results,
     metric_specs,
@@ -30,8 +31,6 @@ from worldfoundry.evaluation.tasks.execution.runners.physics_iq.physics_iq_runti
 )
 from worldfoundry.evaluation.tasks.execution.runners.physics_iq.protocols import PhysicsIQProtocolSpec, resolve_protocol
 
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -62,9 +61,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def _coverage(expected_stems: set[str], generated_dir: Path | None) -> dict[str, Any]:
@@ -161,10 +157,10 @@ def normalize_physics_iq_results(
         limit=args.limit,
     )
 
-    generated_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
     results_path = args.official_results_path or args.raw_metrics_path
     if results_path is None:
-        env_result = _env_path("WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH")
+        env_result = resolve_env_path("WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH")
         results_path = env_result or discover_physics_iq_results([output_dir, generated_dir] if generated_dir else [output_dir])
     if results_path is None:
         raise ValueError("Provide --official-results-path/--raw-metrics-path or use --run-official.")
@@ -269,7 +265,7 @@ def normalize_physics_iq_results(
 def run_official_physics_iq(args: argparse.Namespace) -> dict[str, Any]:
     spec = resolve_protocol(benchmark_id=args.benchmark_id, protocol=args.protocol)
     descriptions_path = resolve_descriptions_path(explicit=args.descriptions_file, spec=spec)
-    generated_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
     if generated_dir is None and args.raw_metrics_path is None:
         raise ValueError("--generated-artifact-dir is required unless --raw-metrics-path is supplied.")
     summary = run_physics_iq_evaluation(

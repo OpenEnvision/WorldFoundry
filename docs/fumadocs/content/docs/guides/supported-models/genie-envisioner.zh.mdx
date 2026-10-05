@@ -1,0 +1,54 @@
+---
+title: "Genie Envisioner"
+description: "Genie Envisioner（AgiBot）：GE-base-fast 发布样例已复现；动作质量一致性待确认。"
+modelId: "genie-envisioner"
+pageSource: authored
+---
+
+Genie Envisioner 是智元机器人的机器人世界模型平台：以视频生成为骨干，预测动作条件下的机器人操作未来，可用于策略学习与评估。本 catalog 中其官方（WorldArena 收录的）源码已内置树内；执行待 Genie-Envisioner 与 LTX-Video checkpoint 及机器人任务资产就位。
+
+兼容启动器跑发布的 **GE-base** 多视角 transformer，配本地 LTX tokenizer、T5 和 VAE。官方历史输入要求 `input_views` 按 `head` / `left-wrist` / `right-wrist` 顺序传入三个相机目录组成的 JSON 列表，每个目录必须包含 `0.png` 到 `3.png`。默认的三张 ALOHA 单图会各自复制到四个历史槽位，只适合冒烟测试；合成三视角路径也只适合冒烟测试。发布的 GE-base-fast 视频样例已用四帧历史复现；动作质量一致性仍需要与 checkpoint 匹配的 AgiBot 或 LeRobot 轨迹。
+
+<ModelPaperFigures modelId="genie-envisioner" locale="zh" />
+
+记录论文为[arXiv 2508.05635](https://arxiv.org/abs/2508.05635)。
+
+项目页：[genie-envisioner.github.io](https://genie-envisioner.github.io/)。代码：[AgibotTech/Genie-Envisioner](https://github.com/AgibotTech/Genie-Envisioner)。
+
+论文：[arXiv 2508.05635](https://arxiv.org/abs/2508.05635)。项目页：[genie-envisioner.github.io](https://genie-envisioner.github.io/)。代码：[AgibotTech/Genie-Envisioner](https://github.com/AgibotTech/Genie-Envisioner)。权重：`agibot-world/Genie-Envisioner` 加 `Lightricks/LTX-Video`。GE-base-fast 发布视频样例已复现；**动作质量一致性仍待确认**。缺少必要 checkpoint 时，pipeline 返回 **blocked** 诊断。
+
+<ModelCommandBuilder modelId="genie-envisioner" locale="zh" />
+
+## 用来做什么
+
+用 `genie-envisioner` 根据相机历史和文本提示预测三视角机器人视频。当前 GE-base 视频启动器不读取动作数组；动作条件策略变体需要另行集成。
+
+记录的 checkpoint 显示其视频骨干基于 LTX-Video（Lightricks/LTX-Video），加上智元自有的世界模型权重（agibot-world/Genie-Envisioner）。运行时内置于 synthesis/visual_generation/genie_envisioner/genie_envisioner_runtime。该模型由智元机器人（AgiBot）发布。
+
+catalog 记录的任务包括机器人世界模型、图生视频、动作条件视频、robot-multiview-video；当前集成的 GE-base 视频路径只覆盖历史图像加文本条件的生成。别名包括 `genie_envisioner`、`genieenvisioner`、`genie-envisioner-sim`。模态上，它接受相机图像和文本，输出视频。
+
+记录的评测入口包括[WorldArena](/zh/docs/evaluation/benchmark-hub/worldarena)（该条目已收录于 WorldArena 的机器人世界模型评测）、[EWMBench](/zh/docs/evaluation/benchmark-hub/ewmbench)（具身世界模型视频预测质量）。
+
+## 运行时契约
+
+按官方历史输入推理时必填 `prompt`、`input_views`，其中三路目录各有四张编号 PNG 帧。`input_mode` 设为 `explicit-three-view`（默认值）。三张独立单图或 `synthetic-three-view` 的单图只验证冒烟路径。产物为 `genie-envisioner.mp4`。
+
+CLI task profile：`robot-multiview-video`。绑定的 pipeline 类是 `GenieEnvisionerPipeline`。
+
+发布的 GE-base-fast `sample_0` 配置已通过真实 GPU 推理和视频对照；其他配置与动作质量一致性仍待确认。
+
+`robot-multiview-video` 记录的冒烟默认值：height=192, width=256, num_inference_steps=5, guidance_scale=1.0, fps=8, seed=42。发布的 GE-base-fast 样例使用 50 步、5 fps。
+
+pipeline 解析内置推理入口，在 checkpoint 与任务资产就位前返回 blocked 运行时诊断。 提交任务前请就位两套记录的 checkpoint。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run genie-envisioner --pipeline.task-profile robot-multiview-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `agibot-world/Genie-Envisioner`、`Lightricks/LTX-Video`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh genie-envisioner`；下载缺失的公开权重时加 `--download`。
+
+状态：**GE-base-fast 发布视频样例已验证；动作质量一致性待确认**。
+
+<ModelRelatedRecipes modelId="genie-envisioner" locale="zh" />

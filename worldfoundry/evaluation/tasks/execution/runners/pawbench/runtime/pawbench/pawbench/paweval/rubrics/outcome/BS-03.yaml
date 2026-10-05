@@ -1,0 +1,52 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BS-03
+track: coverage
+title_en: Tablecloth Pull Under Objects
+outcome_question: Which tablecloth-pull outcome in ['objects_remain_in_place', 'objects_shift_but_upright',
+  'objects_scatter_on_table', 'one_object_falls_on_table', 'multiple_objects_fall_on_table', 'one_object_leaves_table',
+  'multiple_objects_leave_table'] is visible as the first decisive result?
+readout_policy: Read after the tablecloth has been pulled clear or object motion has settled enough to
+  count upright, scattered-on-table, fallen-on-table, or left-table states. Terminal object location and
+  upright/fallen count are the readout targets.
+canonical_labels:
+- objects_remain_in_place
+- objects_shift_but_upright
+- objects_scatter_on_table
+- one_object_falls_on_table
+- multiple_objects_fall_on_table
+- one_object_leaves_table
+- multiple_objects_leave_table
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- Object count, tabletop boundary, or upright/fallen state is hidden at the decisive moment.
+- None of the canonical labels ['objects_remain_in_place', 'objects_shift_but_upright', 'objects_scatter_on_table',
+  'one_object_falls_on_table', 'multiple_objects_fall_on_table', 'one_object_leaves_table', 'multiple_objects_leave_table']
+  can be decisively identified within the readout window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's reference protocol;
+  record it as out-of-schema.
+priority_rules:
+- 'First decisive readout is the terminal object state after the tablecloth pull: remain, upright shift,
+  scatter on table, fall on table, or leave table.'
+- multiple_objects_leave_table and one_object_leaves_table apply when target objects cross off the tabletop/support
+  area; table exit outranks on-table fall or scatter.
+- multiple_objects_fall_on_table and one_object_falls_on_table apply when objects fall/tip but remain
+  on the tabletop.
+- objects_scatter_on_table applies when objects separate or scatter across the tabletop while remaining
+  upright/on-table and without any stronger fall/leave-table outcome.
+- objects_shift_but_upright requires displacement while all objects remain upright and not broadly scattered.
+- objects_remain_in_place requires no meaningful displacement after cloth removal; do not use it for a
+  frozen scene where the tablecloth was not actually pulled.
+- 'Priority: multiple leave table > one leaves table > multiple fall on table > one falls on table > scatter
+  on table > shift upright > remain in place.'
+notes:
+- Outcome set separates on-table scatter, on-table falls, and leaving the table because they are different
+  terminal physical futures.
+- 'Track B: use metadata-derived priority rules, not a family template.'
+- 'Scene title: Tablecloth Pull Under Objects.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules are authored from
+  STAGBench metadata/action protocol.'

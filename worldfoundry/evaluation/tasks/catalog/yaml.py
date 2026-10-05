@@ -12,9 +12,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Mapping
 
-from worldfoundry.evaluation.tasks.catalog import BenchmarkSpec, WorldTaskConfig
-from worldfoundry.evaluation.tasks.catalog import CATALOG_TASK_SCHEMA_VERSION
-
+from worldfoundry.evaluation.tasks.catalog import CATALOG_TASK_SCHEMA_VERSION, BenchmarkSpec, WorldTaskConfig
 
 # Define schema version identifiers for task and benchmark YAML files.
 TASK_YAML_SCHEMA_VERSION = "worldfoundry-task"

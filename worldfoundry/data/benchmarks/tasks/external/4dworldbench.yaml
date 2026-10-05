@@ -62,7 +62,7 @@ metadata:
   status: integrated
   maturity: contract_ready
   release_status: experimental
-  open_source_status: in_tree_official_runtime
+  open_source_status: in_tree_runtime
   official_benchmark_verified: false
   integration_evidence: false
   leaderboard_valid: false
@@ -165,6 +165,28 @@ metadata:
     - --output-dir
     - <out>
     - --json
+  validation_command:
+  - python
+  - worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py
+  - --run-official
+  - --dataset-json
+  - <dataset.json>
+  - --model-name
+  - <model_name>
+  - --dimension
+  - perceptual_clip_iqa_metrics
+  - --generated-video-dir
+  - <generated_artifacts>
+  - --output-dir
+  - <out>
+  - --json
+  checkpoint_refs:
+  - id: keye_vl
+    env: WORLDFOUNDRY_4DWORLDBENCH_KEYE_MODEL
+  - id: droid_slam
+    env: WORLDFOUNDRY_4DWORLDBENCH_DROID_CKPT
+  - id: openai
+    env: OPENAI_API_KEY
 tasks:
   4dworldbench_standard:
     benchmark_name: 4dworldbench
@@ -179,6 +201,24 @@ tasks:
     - scorecard
     - dimension_result_json
     metric_ids:
+    - perceptual_clip_iqa_metrics
+    - perceptual_clip_aesthetic_metrics
+    - perceptual_fastvqa
+    - alignment_attribute_control
+    - alignment_relationship_control
+    - alignment_motion_control
+    - alignment_event_control
+    - alignment_scene_control
+    - alignment_camera_error_metrics
+    - physics_realism
+    - consistency_viewpoint
+    - consistency_motion_smoothness
+    - consistency_motion_qa
+    - consistency_style
+    - perceptual_quality
+    - condition_4d_alignment
+    - physical_realism_score
+    - four_d_consistency
     - four_d_worldbench_average
     metric_groups:
     - 4dworldbench
@@ -191,6 +231,8 @@ tasks:
       official_benchmark_verified: false
       integration_evidence: false
       leaderboard_valid: false
+      stage_metric_ids:
+      - four_d_worldbench_average
     runtime_requirements:
       results_path_env: WORLDFOUNDRY_4DWORLDBENCH_RESULTS_PATH
     artifact_contract:
@@ -200,6 +242,24 @@ tasks:
     evaluation_protocol:
     - name: in_tree_official_runtime
       metric_ids:
+      - perceptual_clip_iqa_metrics
+      - perceptual_clip_aesthetic_metrics
+      - perceptual_fastvqa
+      - alignment_attribute_control
+      - alignment_relationship_control
+      - alignment_motion_control
+      - alignment_event_control
+      - alignment_scene_control
+      - alignment_camera_error_metrics
+      - physics_realism
+      - consistency_viewpoint
+      - consistency_motion_smoothness
+      - consistency_motion_qa
+      - consistency_style
+      - perceptual_quality
+      - condition_4d_alignment
+      - physical_realism_score
+      - four_d_consistency
       - four_d_worldbench_average
       runner_target: worldfoundry.evaluation.tasks.contracts.external:FourDWorldBenchContract
       runner_script: worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py

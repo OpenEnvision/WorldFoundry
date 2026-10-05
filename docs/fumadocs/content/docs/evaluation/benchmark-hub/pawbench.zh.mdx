@@ -1,0 +1,74 @@
+---
+title: PAWBench
+description: "分布物理评测：50 场景 × 50 次 rollout。校准 TVD 与覆盖分开报。WorldFoundry 内置 PAWEval，不编造合并榜。"
+---
+
+PAWBench（上海交大、上海 AI Lab、Krea AI、Hugging Face、上海创智学院、通义实验室、港大）问的是重复生成能否恢复物理上有效未来的 **分布**，不是单条视频好不好看。官方规模：**50 个场景**（25 个带参考结果概率的校准场景，25 个覆盖场景）。完整运行每个场景生成 **50 条独立 rollout，共 2,500 条视频**。
+
+两条赛道分开报。上游 **没有定义合并标量**。
+
+- **校准** — `calibration_tvd_percent`（越低越好）：与参考结果分布的总变差距离。
+- **覆盖** — `coverage_percent`：在重复 rollout 中观察到的官方物理结果支撑比例。
+
+论文：[PAWBench](https://arxiv.org/abs/2608.27345)。项目：[pawbench.github.io](https://pawbench.github.io/)。代码：[Andrew0613/PAWBench](https://github.com/Andrew0613/PAWBench)（Apache-2.0）。数据：[`Andrew613/PAWBench`](https://huggingface.co/datasets/Andrew613/PAWBench)。
+
+WorldFoundry **仓内内置官方 PAWEval judge**。新打分默认走 OpenRouter 上的 Gemini 3.5 Flash；其他 OpenAI 兼容 judge 仅供分析。已有 `metrics.json` 或运行目录可离线导入。
+
+<BenchmarkPageSections id="pawbench" locale="zh" />
+
+## 如何运行
+
+```bash
+hf download Andrew613/PAWBench --repo-type dataset --local-dir /data/pawbench
+export OPENROUTER_API_KEY=<your-key>
+
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id pawbench \
+  --mode official-run \
+  --benchmark-data-root /data/pawbench \
+  --generated-artifact-dir /data/my-model-rollouts \
+  --output-dir tmp/pawbench/official-run \
+  --json
+```
+
+导入已有运行：
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id pawbench \
+  --mode official-validation \
+  --official-results-path /path/to/pawbench/run \
+  --output-dir tmp/pawbench/imported \
+  --json
+```
+
+产物包括 `scorecard.json`、`raw_metric_table.jsonl`、`per_sample_scores.jsonl`、`benchmark_contract.json`。仓内样本只是归一化 fixture。
+
+## Rollout、裁判与 `metrics.json`
+
+流程：benchmark 包 → 你的视频生成器 → rollout 目录 → PAWEval → `metrics.json`。生成器与裁判是不同模型。官方 runner 不加载视频模型，只打磁盘上已有的视频。额外 pip：`worldfoundry/data/benchmarks/requirements/pawbench.txt`。
+
+HF 下载包含场景表、源图、生成 prompt 与打分策略（100 条可审阅 rubric：每个场景一条结果 rubric + 一条可信度 rubric）。把完整 50 × 50 网格写成：
+
+```text
+my-model-rollouts/
+  <scene-id>/
+    r000.mp4
+    …
+    r049.mp4
+```
+
+官方 PAWEval 用 OpenRouter 上的 **Gemini 3.5 Flash**（`OPENROUTER_API_KEY`）。这条路径不需要 `OPENAI_API_KEY`。其他 OpenAI 兼容裁判（`--vlm-base-url`、`--vlm-model`、`--vlm-api-key-env`）只供分析，不能和官方表直接比。
+
+`--model-name` 是写进结果文件的标签，不加载权重。同一 benchmark、模型名、视频和裁判配置再跑会接着已完成的 rollout 判断。
+
+PAWEval 在运行目录写下 `run.json`、`checkpoint.jsonl`、`rows.jsonl`、`metrics.json`。完整运行是 `status: "ok"` 且没有 blocker。两条赛道均值分开：
+
+- 校准 TVD：`tracks.calibration.models.<model>.track_average`（越低越好）。
+- 覆盖：`tracks.coverage.models.<model>.track_average`（越高越好）。
+
+`status` 为 `"blocked"` 时，先修列出的缺视频 / 裁判 / 基础设施错误再报分。可信度 rubric 记录动作、连续性、过程失败，不改终点标签。
+
+单条 rollout 只是读出，不是模型分。例如 50 次抛硬币的正反面频率，用 TVD 对照场景参考分布。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

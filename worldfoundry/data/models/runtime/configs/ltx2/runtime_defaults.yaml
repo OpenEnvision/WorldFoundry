@@ -1,15 +1,42 @@
 schema_version: worldfoundry.runtime_defaults.v1
 defaults:
-  ltx2_i2v:
-    model_name: ltx2_i2v
-    generation_type: i2v
+  ltx2_t2v:
+    model_name: ltx2_t2v
+    generation_type: t2v
     version_hint: '2.0'
-    pipeline_variant: diffusers
+    checkpoint_path: ${WORLDFOUNDRY_CKPT_DIR}/Lightricks--LTX-2/ltx-2-19b-distilled.safetensors
+    spatial_upsampler_path: ${WORLDFOUNDRY_CKPT_DIR}/Lightricks--LTX-2/ltx-2-spatial-upscaler-x2-1.0.safetensors
+    gemma_root: ${WORLDFOUNDRY_CKPT_DIR}/Lightricks--LTX-2/text_encoder
+    offload_mode: disk
+    vae_tiling:
+      spatial_tile_size: 768
+      spatial_overlap: 64
+      temporal_tile_size: 80
+      temporal_overlap: 24
     height: 512
     width: 768
     num_frames: 121
     frame_rate: 24
-    num_inference_steps: 40
+    num_inference_steps: 11
+    enhance_prompt: false
+  ltx2_i2v:
+    model_name: ltx2_i2v
+    generation_type: i2v
+    version_hint: '2.0'
+    checkpoint_path: ${WORLDFOUNDRY_CKPT_DIR}/Lightricks--LTX-2/ltx-2-19b-distilled.safetensors
+    spatial_upsampler_path: ${WORLDFOUNDRY_CKPT_DIR}/Lightricks--LTX-2/ltx-2-spatial-upscaler-x2-1.0.safetensors
+    gemma_root: ${WORLDFOUNDRY_CKPT_DIR}/Lightricks--LTX-2/text_encoder
+    offload_mode: disk
+    vae_tiling:
+      spatial_tile_size: 768
+      spatial_overlap: 64
+      temporal_tile_size: 80
+      temporal_overlap: 24
+    height: 512
+    width: 768
+    num_frames: 121
+    frame_rate: 24
+    num_inference_steps: 11
     image_frame_index: 0
     image_strength: 1.0
     enhance_prompt: false
@@ -17,9 +44,8 @@ defaults:
     model_name: ltx2_3_i2v
     generation_type: i2v
     version_hint: '2.3'
-    pipeline_variant: distilled
-    checkpoint_path: ${WORLDFOUNDRY_CKPT_DIR}/LTX-2.3/ltx-2.3-22b-distilled-1.1.safetensors
-    spatial_upsampler_path: ${WORLDFOUNDRY_CKPT_DIR}/LTX-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors
+    checkpoint_path: ${WORLDFOUNDRY_CKPT_DIR}/Lightricks--LTX-2.3/ltx-2.3-22b-distilled-1.1.safetensors
+    spatial_upsampler_path: ${WORLDFOUNDRY_CKPT_DIR}/Lightricks--LTX-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors
     gemma_root: ${WORLDFOUNDRY_CKPT_DIR}/gemma-3-12b-it-qat-q4_0-unquantized
     offload_mode: disk
     vae_tiling:
@@ -31,7 +57,26 @@ defaults:
     width: 768
     num_frames: 121
     frame_rate: 24
-    num_inference_steps: 30
+    num_inference_steps: 11
     image_frame_index: 0
     image_strength: 1.0
+    enhance_prompt: false
+  ltx2_3_t2v:
+    model_name: ltx2_3_t2v
+    generation_type: t2v
+    version_hint: '2.3'
+    checkpoint_path: ${WORLDFOUNDRY_CKPT_DIR}/Lightricks--LTX-2.3/ltx-2.3-22b-distilled-1.1.safetensors
+    spatial_upsampler_path: ${WORLDFOUNDRY_CKPT_DIR}/Lightricks--LTX-2.3/ltx-2.3-spatial-upscaler-x2-1.1.safetensors
+    gemma_root: ${WORLDFOUNDRY_CKPT_DIR}/gemma-3-12b-it-qat-q4_0-unquantized
+    offload_mode: disk
+    vae_tiling:
+      spatial_tile_size: 768
+      spatial_overlap: 64
+      temporal_tile_size: 80
+      temporal_overlap: 24
+    height: 512
+    width: 768
+    num_frames: 121
+    frame_rate: 24
+    num_inference_steps: 11
     enhance_prompt: false

@@ -1,0 +1,62 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: A-07
+track: calibration
+title_en: Y-track branch
+scene_grounding:
+- 'Initial state must match: One small ball is at the visible release point of a Y-shaped
+  split apparatus.'
+- Apparatus geometry in the opening frames must match the source image.
+action_execution:
+- 'Required action: Release the ball once.'
+- Action must happen exactly once in the expected direction / region.
+target_requirements:
+- Scene-defining target, subject, and readout evidence must remain visible throughout the action.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+- The ball / puck must not re-appear at an inconsistent location after exiting the
+  apparatus.
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-readout state/region change: subject moves between label-defining states or regions after the first decisive readout.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+- 'Backward branch jump: ball jumps from one branch to the other after committing
+  past the split.'
+nonfailure_calibration:
+- The central top channel and the central approach into the split are valid parts of
+  the Y-track. Do not mark TRAJECTORY_INVALID only because the ball is centered
+  before it fully commits to a branch.
+- A readable right_path or left_path result can remain TRUSTED when the ball moves
+  continuously through the central approach and then along one branch. Mark a hard
+  trajectory failure only when the ball visibly crosses through a solid divider,
+  teleports, switches branches after commitment, or changes the label-defining side
+  after the first decisive branch frame.
+- Do not infer a solid-divider traversal from sparse sampled frames when the same
+  ball remains continuously visible and reaches a coherent lower branch/outlet.
+  Divider-adjacent or lower-center appearances are nonfatal unless there is direct
+  evidence of teleportation, branch switching after commitment, disappearance, or
+  a physically impossible wall crossing.
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Y-track branch.'
+- 'Geometry-sensitive scene: apparatus and region stability are fatal for strict trusted
+  metric.'

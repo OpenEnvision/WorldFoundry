@@ -10,43 +10,25 @@ operations on the metric registry.
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
-from .utils import json_dump, load_json_mapping, parse_key_value_mapping
 from worldfoundry.evaluation.utils import BENCHMARK_TASK_ROOT, TMP_ROOT
 
+from .presentation import print_details, print_notice, print_table, terminal_enabled
+from .utils import (
+    json_dump,
+    load_json_mapping,
+    parse_key_value_mapping,
+)
+from .utils import (
+    task_roots_from_args as _task_roots_from_args,
+)
 
 DEFAULT_TASK_ROOT = BENCHMARK_TASK_ROOT
 DEFAULT_BENCHMARK_TASK_ROOT = DEFAULT_TASK_ROOT
 
 
 # ── Plan helpers ────────────────────────────────────────────
-
-
-def _task_roots_from_args(args: argparse.Namespace) -> tuple[Path, ...]:
-    """Collect all task-root directories from CLI args and environment variables.
-
-    Merges paths from ``--task-root``, ``--include-path``, and the
-    ``WORLDFOUNDRY_TASK_ROOTS`` / ``WORLDFOUNDRY_BENCHMARK_INCLUDE_PATH`` env
-    vars, deduplicating by path value.
-
-    Args:
-        args: Parsed CLI namespace.
-
-    Returns:
-        Deduplicated tuple of :class:`Path` directories to search for
-        task definitions.
-    """
-    roots = list(args.task_root or ())
-    if not roots:
-        roots = [root for root in (DEFAULT_TASK_ROOT, DEFAULT_BENCHMARK_TASK_ROOT) if root.exists()]
-    for env_name in ("WORLDFOUNDRY_TASK_ROOTS", "WORLDFOUNDRY_BENCHMARK_INCLUDE_PATH"):
-        for item in os.environ.get(env_name, "").split(os.pathsep):
-            if item.strip():
-                roots.append(Path(item))
-    roots.extend(getattr(args, "include_path", None) or ())
-    return tuple(dict.fromkeys(Path(root) for root in roots))
 
 
 def _build_run_plan_from_cli_args(args: argparse.Namespace):
@@ -147,13 +129,17 @@ def _handle_plan_create(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(plan.to_dict())
     else:
-        payload = _plan_result_payload(plan)
-        print(
-            f"Plan {payload['fingerprint']}: mode={payload['mode']} "
-            f"task={payload['task_name'] or '-'} requests={payload['request_count']}"
-        )
-        if args.output_json:
-            print(f"wrote: {args.output_json}")
+        if terminal_enabled():
+            payload = _plan_result_payload(plan)
+            print_details("Plan created", {**payload, "saved_to": args.output_json})
+        else:
+            payload = _plan_result_payload(plan)
+            print(
+                f"Plan {payload['fingerprint']}: mode={payload['mode']} "
+                f"task={payload['task_name'] or '-'} requests={payload['request_count']}"
+            )
+            if args.output_json:
+                print(f"wrote: {args.output_json}")
     return 0
 
 def _handle_plan_show(args: argparse.Namespace) -> int:
@@ -172,14 +158,19 @@ def _handle_plan_show(args: argparse.Namespace) -> int:
         json_dump(plan.to_dict())
         return 0
     payload = _plan_result_payload(plan)
-    print(f"schema_version: {payload['schema_version']}")
-    print(f"fingerprint: {payload['fingerprint']}")
-    print(f"runner: {payload['runner']}")
-    print(f"mode: {payload['mode']}")
-    print(f"output_dir: {payload['output_dir']}")
-    print(f"task_name: {payload['task_name'] or '-'}")
-    print(f"benchmark_name: {payload['benchmark_name'] or '-'}")
-    print(f"request_count: {payload['request_count']}")
+    print_details(
+        "Run plan",
+        {
+            "schema_version": f"{payload['schema_version']}",
+            "fingerprint": f"{payload['fingerprint']}",
+            "runner": f"{payload['runner']}",
+            "mode": f"{payload['mode']}",
+            "output_dir": f"{payload['output_dir']}",
+            "task_name": f"{payload['task_name'] or '-'}",
+            "benchmark_name": f"{payload['benchmark_name'] or '-'}",
+            "request_count": f"{payload['request_count']}",
+        },
+    )
     return 0
 
 def _handle_plan_validate(args: argparse.Namespace) -> int:
@@ -198,10 +189,15 @@ def _handle_plan_validate(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(payload)
     else:
-        print(f"ok: {payload['ok']}")
-        print(f"fingerprint: {payload.get('fingerprint') or '-'}")
-        for issue in payload.get("issues", ()):
-            print(f"issue: {issue}")
+        if terminal_enabled():
+            print_details("Plan validation", {"ok": payload["ok"], "fingerprint": payload.get("fingerprint")})
+            for issue in payload.get("issues", ()):
+                print_notice(str(issue), level="error")
+        else:
+            print(f"ok: {payload['ok']}")
+            print(f"fingerprint: {payload.get('fingerprint') or '-'}")
+            for issue in payload.get("issues", ()):
+                print(f"issue: {issue}")
     return 0 if payload["ok"] else 1
 
 # ── Metric sub-command handlers ─────────────────────────────
@@ -222,6 +218,23 @@ def _handle_metric_list(args: argparse.Namespace) -> int:
     payload = [entry.to_dict() for entry in entries]
     if args.json:
         json_dump(payload)
+        return 0
+
+    if terminal_enabled():
+        print_table(
+            "Metrics",
+            ("Metric", "Family", "Aliases", "Description"),
+            [
+                (
+                    entry.id,
+                    entry.family,
+                    entry.aliases,
+                    entry.description
+                    + (f" Pattern: {entry.parameterized_prefix}<name>" if entry.parameterized_prefix else ""),
+                )
+                for entry in entries
+            ],
+        )
         return 0
 
     for entry in entries:
@@ -248,12 +261,17 @@ def _handle_metric_show(args: argparse.Namespace) -> int:
         json_dump(payload)
         return 0
 
-    print(f"id: {entry.id}")
-    print(f"resolved_metric_id: {args.metric_id}")
-    print(f"family: {entry.family}")
-    print(f"aliases: {', '.join(entry.aliases) if entry.aliases else '-'}")
-    print(f"parameterized_prefix: {entry.parameterized_prefix or '-'}")
-    print(f"description: {entry.description}")
+    print_details(
+        "Metric details",
+        {
+            "id": f"{entry.id}",
+            "resolved_metric_id": f"{args.metric_id}",
+            "family": f"{entry.family}",
+            "aliases": f"{(', '.join(entry.aliases) if entry.aliases else '-')}",
+            "parameterized_prefix": f"{entry.parameterized_prefix or '-'}",
+            "description": f"{entry.description}",
+        },
+    )
     return 0
 
 def _handle_metric_validate(args: argparse.Namespace) -> int:
@@ -271,14 +289,24 @@ def _handle_metric_validate(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(payload)
     else:
-        print(f"ok: {payload['ok']}")
-        for item in payload["metrics"]:
-            print(
-                f"metric: {item['metric_id']} registry_id={item['registry_id']} "
-                f"parameterized={item['parameterized']}"
+        if terminal_enabled():
+            print_details("Metric validation", {"ok": payload["ok"]})
+            print_table(
+                "Resolved metrics",
+                ("Metric", "Registry ID", "Parameterized"),
+                [(item["metric_id"], item["registry_id"], item["parameterized"]) for item in payload["metrics"]],
             )
-        for metric_id in payload["unknown_metrics"]:
-            print(f"unknown_metric: {metric_id}")
+            for metric_id in payload["unknown_metrics"]:
+                print_notice(f"Unknown metric: {metric_id}", level="error")
+        else:
+            print(f"ok: {payload['ok']}")
+            for item in payload["metrics"]:
+                print(
+                    f"metric: {item['metric_id']} registry_id={item['registry_id']} "
+                    f"parameterized={item['parameterized']}"
+                )
+            for metric_id in payload["unknown_metrics"]:
+                print(f"unknown_metric: {metric_id}")
     return 0 if payload["ok"] else 1
 
 

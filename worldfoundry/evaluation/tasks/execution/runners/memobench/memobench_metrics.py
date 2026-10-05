@@ -333,13 +333,18 @@ def _should_include_row(row: Mapping[str, Any], model_name: str | None) -> bool:
 
 
 def _iter_metric_values(row: Mapping[str, Any]) -> Iterable[tuple[str, float]]:
+    # The official run_eval.py CSV keeps both ImageRewardScore and its _pct
+    # diagnostic column after replacing ImageRewardScore with the composite.
+    # Count the metric once per clip even when both aliases are present.
+    seen: set[str] = set()
     for key in SCORE_JSON_KEYS:
         score_map = _parse_score_json(row.get(key))
         if score_map:
             for score_key, score_value in score_map.items():
                 metric_id = metric_id_for_key(score_key)
                 score = _number(score_value)
-                if metric_id is not None and score is not None:
+                if metric_id is not None and score is not None and metric_id not in seen:
+                    seen.add(metric_id)
                     yield metric_id, score
 
     for raw_key, raw_value in row.items():
@@ -347,7 +352,8 @@ def _iter_metric_values(row: Mapping[str, Any]) -> Iterable[tuple[str, float]]:
             continue
         metric_id = metric_id_for_key(raw_key)
         score = _number(raw_value)
-        if metric_id is not None and score is not None:
+        if metric_id is not None and score is not None and metric_id not in seen:
+            seen.add(metric_id)
             yield metric_id, score
 
 

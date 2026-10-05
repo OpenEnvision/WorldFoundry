@@ -10,7 +10,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping, TypeVar
 
-
 JsonValue = Any
 JsonMapping = Mapping[str, JsonValue]
 T = TypeVar("T", bound="JsonContract")

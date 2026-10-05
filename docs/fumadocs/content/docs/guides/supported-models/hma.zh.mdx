@@ -1,0 +1,33 @@
+---
+title: "HMA"
+description: "使用连续 MAR 或离散 MAGVIT 权重，按动作生成 LangTable 机器人视频。"
+modelId: "hma"
+pageSource: authored
+---
+
+HMA（异构掩码自回归）根据短图像历史和二维动作预测机器人后续观察。WorldFoundry 通过 `HMAPipeline` 调用[官方 HMA 源码](https://github.com/liruiw/HMA)及本地权重，不打包权重。记录的变体包括连续 MAR（`hma-mar-1b`）和离散 MAGVIT（`hma-magvit-362m`）。参见[论文](https://arxiv.org/abs/2502.04296)与[项目页](https://liruiw.github.io/hma)。
+
+<ModelPaperFigures modelId="hma" locale="zh" />
+
+<ModelCommandBuilder modelId="hma" locale="zh" />
+
+## 运行时输入
+
+默认 LangTable 路径将同一张图重复用作历史，并反复施加恒定动作，只适合加载与生成 smoke 测试。要运行配对轨迹，请将 `trajectory_path` 指向如下格式的 JSON 文件：
+
+```json
+{
+  "action_format": "raw_language_table_delta_yx",
+  "prompt_frames": ["frame_000.png", "frame_001.png", "frame_002.png"],
+  "actions": [
+    [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0],
+    [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]
+  ]
+}
+```
+
+示例对应默认 3 帧历史、生成 6 帧：`prompt_horizon - 1 + generated_frames` 共需 8 行有限的 `[delta_y, delta_x]`。若生成 8 帧，则需提供 10 行。图像路径相对 JSON 文件解析，也可使用绝对路径。权重内部会归一化原始动作，传入前不要重复归一化。输出首帧是历史最后一帧，后面接所请求的生成帧。使用上方命令构建器时，将初始观察设为历史最后一帧；`trajectory_path` 提供真正的多帧历史。
+
+连续权重需要本地 Stable Video Diffusion 时序 VAE；离散权重需要官方 MAGVIT2 tokenizer 权重（`hma_magvit_checkpoint`）。两者都需要就位官方源码和对应的 HMA 权重。公共入口已在一条配对 LangTable 轨迹上完成两个变体的真实 GPU 推理：离散版对真实动作有可见响应，连续版未复现后段机械臂运动。这只是单配置检查，不代表普适的控制质量评分。
+
+<ModelRelatedRecipes modelId="hma" locale="zh" />

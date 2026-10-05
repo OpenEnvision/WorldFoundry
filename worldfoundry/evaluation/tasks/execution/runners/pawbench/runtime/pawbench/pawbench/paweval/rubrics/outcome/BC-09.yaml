@@ -1,0 +1,53 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BC-09
+track: coverage
+title_en: Pinball Board Ball Release
+outcome_question: Which label in ['left_bin', 'middle_bin', 'right_bin', 'stuck_on_board']
+  is visible as the first decisive post-action result?
+readout_policy: Read the first decisive post-action result window after the requested
+  action completes. Qualifying frames are those where the relevant evidence is in
+  view and no longer in transition. Use the scene protocol's first-decisive-window
+  rule; terminal stability is not required unless the protocol names it.
+canonical_labels:
+- left_bin
+- middle_bin
+- right_bin
+- stuck_on_board
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['left_bin', 'middle_bin', 'right_bin', 'stuck_on_board']
+  can be decisively identified within the readout window.
+- The ball exits the apparatus off-screen before a decisive side / bin / path can
+  be identified.
+out_of_schema_rules:
+- Ball exits the pinball board, falls outside the mapped bin/board area, or stops
+  at an unmapped off-board location; record out-of-schema, not nearest legal bin.
+- Ball disappears, duplicates, teleports, or reappears in a terminal bin without continuous
+  board trajectory; record out-of-schema/trust failure and do not coerce the label.
+- Ball changes from one settled bin to another after the first decisive frame without
+  continuous visible motion; preserve first readout and flag post-result inconsistency.
+priority_rules:
+- 'First decisive readout is where the metal ball settles on the pinball board: `left_bin`,
+  `middle_bin`, `right_bin`, or `stuck_on_board`.'
+- 'Geometry: left_bin, middle_bin, and right_bin are the three bottom terminal bins
+  from camera-left to camera-right; `stuck_on_board` is a visible settled stop on
+  the board surface before any bin.'
+- 'Out-of-schema priority: if the ball exits the apparatus, disappears, rests outside
+  mapped bins/board, or later jumps across bins, do not force it into left_bin/middle_bin/right_bin/stuck_on_board.'
+- 'Tie-break: a visible settled bin beats transient path position; a visible stuck-on-board
+  rest beats guessing a hidden bin; if terminal region is cropped or occluded, return
+  `unreadable`.'
+notes:
+- 'Contact/trajectory scene: outcome label uses first decisive visible target interaction
+  or miss geometry.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules
+  are authored from STAGBench metadata/action protocol.'
+- 'Scene title: Pinball Board Ball Release.'
+geometry_policy: Camera-left, center, and camera-right bottom bins define left_bin,
+  middle_bin, and right_bin. stuck_on_board is a visible settled stop on the playing
+  surface before any bottom bin. Exits, off-board rests, disappearances, and post-settle
+  bin jumps are out-of-schema or trust failures, not nearest-bin labels.

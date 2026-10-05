@@ -1,0 +1,114 @@
+---
+title: WorldOlympiad
+description: "阿里达摩院长视频世界模型三项赛：物理、交互、3D。WorldFoundry 检入批量评测器；dry-run 已验证，1000 视频计分运行未验证。"
+---
+
+WorldOlympiad（阿里达摩院）是长视频世界模型的 **三项赛**。主键 `combined_score` 在单位区间上平均三条赛道：
+
+- **物理** — Qwen3-VL 置信加权物理问答，覆盖力学、热学、材料
+- **交互** — 逐 chunk 指令跟随、过渡平滑、全局一致性（原生 0–5，再归一化）
+- **几何** — Depth Anything 3 重建（高斯溅射、元视角、相机轨迹对齐；原生 0–3）
+
+论文：[WorldOlympiad](https://arxiv.org/abs/2606.11129)。项目：[alibaba-damo-academy.github.io/WorldOlympiad](https://alibaba-damo-academy.github.io/WorldOlympiad)。代码：[alibaba-damo-academy/WorldOlympiad](https://github.com/alibaba-damo-academy/WorldOlympiad)。数据：[`ziplab/WorldOlympiad`](https://huggingface.co/datasets/ziplab/WorldOlympiad)。钉选修订 **没有 LICENSE**。
+
+WorldFoundry **检入官方批量评测器**——不需要外部 checkout。计分运行需要 `--da3-src`、`--weights-dir`（DA3 / SAM3 / QwenVL / CLIP），以及正在运行的 QwenVL、SAM3、DA3 reward 服务。**`--run-official --dry-run` 与裁判输出归一化已验证；不声称已做计分三项赛。**
+
+`run_worldolympiad_official_runner.py --run-fixture` 读的是 `worldfoundry/data/benchmarks/assets/worldolympiad/cases/` 下的合成裁判 JSON（`general/case_fixture_001` 三条赛道，`gaming/case_fixture_002` 三条赛道，`embodied/case_fixture_003` 跳过几何）。这些文件编造视频、prompt、题目和分数，只对齐 `scripts/score_video_physical_3d.py` 的公开裁判 JSON **形状**，不能和任何 WorldOlympiad 成绩比较。
+
+<BenchmarkPageSections id="worldolympiad" locale="zh" />
+
+## 如何运行
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id worldolympiad \
+  --mode official-validation \
+  --official-results-path <case_root_or_judge_json> \
+  --output-dir tmp/worldolympiad/official-validation \
+  --json
+```
+
+`--official-results-path` 接受案例根、单个裁判 JSON、`summary.jsonl` 或汇总 JSON。用 `--skip-physical`、`--skip-interaction`、`--skip-3d` 跳过赛道。环境变量：`WORLDFOUNDRY_WORLDOLYMPIAD_RESULTS_PATH`、`WORLDFOUNDRY_WORLDOLYMPIAD_WEIGHTS_DIR`、`WORLDFOUNDRY_WORLDOLYMPIAD_DA3_SRC`。runner 拒绝把输出 / 权重路径放进已检入 runtime。
+
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/worldolympiad.yaml`，`worldfoundry/evaluation/tasks/execution/runners/worldolympiad`。额外 pip：`worldfoundry/data/benchmarks/requirements/worldolympiad.txt`。
+
+产物包括 `scorecard.json`（主键 `combined_score`）与 `per_case_metrics.jsonl`。
+
+## 案例布局与 pipeline 前缀
+
+批量打分要求每个案例一个目录，放在 domain 下（默认 `general`、`gaming`、`embodied`；自定义根用 `--root` + `--domain-name`）：
+
+```text
+outputs_batch/<domain>/<case_id>/
+  prompt.json
+  ref_<case_id>.mp4
+  <output_prefix>_gen_<case_id>.mp4
+  <output_prefix>_gen_<case_id>_chunk_timestamps.json
+```
+
+必需文件：`prompt.json`；`ref_*.mp4`；每个 pipeline 一条生成视频；时间戳名为 `<generated-stem>_chunk_timestamps.json`。分数写在视频旁边：`<output_prefix>_judge_<case_id>.json`。已有 judge JSON 默认跳过，方便续跑；`--force` 会重算。
+
+| Pipeline | 前缀 | 示例视频 |
+| --- | --- | --- |
+| `cosmos-predict` | `cosmos` | `cosmos_gen_<case_id>.mp4` |
+| `hunyuan-gamecraft` | `hunyuan_gamecraft` | `hunyuan_gamecraft_gen_<case_id>.mp4` |
+| `hunyuan-worldplay` | `hunyuan_worldplay` | `hunyuan_worldplay_gen_<case_id>.mp4` |
+| `lingbot-world` | `lingbot_world` | `lingbot_world_gen_<case_id>.mp4` |
+| `longlive` | `longlive` | `longlive_gen_<case_id>.mp4` |
+| `matrix-game2` | `matrix_game2` | `matrix_game2_gen_<case_id>.mp4` |
+| `rolling-forcing` | `rolling_forcing` | `rolling_forcing_gen_<case_id>.mp4` |
+| `wow` | `wow` | `wow_gen_<case_id>.mp4` |
+| `yume1p5` | `yume1p5` | `yume1p5_gen_<case_id>.mp4` |
+
+一个案例可以放多个 pipeline。`--pipelines` 选择要打的前缀，各自一份 judge JSON。非默认文件名：`--gen-pattern`、`--chunk-pattern`、`--ref-pattern`、`--output-name-template`。
+
+`prompt.json` 可以是列表，或带 `chunks` / `prompts` 的对象。每项是字符串或对象。文本键：`caption`、`prompt`、`text` 或 `description`。`action`、`interval`、`chunk_index` 可选，但交互打分建议带上：
+
+```json
+[
+  {
+    "interval": "[00:00, 00:15)",
+    "action": "turn left",
+    "caption": "A vehicle drives through a cone-marked course."
+  }
+]
+```
+
+chunk 时间戳把每个 prompt 区间映射到生成视频：
+
+```json
+{
+  "version": 1,
+  "fps": 28,
+  "chunks": [
+    {
+      "chunk_index": 0,
+      "source_interval": "[00:00, 00:15)",
+      "frame_start": 0,
+      "frame_end": 93,
+      "generated_start_sec": 0.0,
+      "generated_end_sec": 3.321428
+    }
+  ]
+}
+```
+
+## 服务、GPU 与批量产物
+
+计分运行需要 DA3 **源码树**（`--da3-src`，通常是 Depth-Anything-3 checkout），以及放在已检入 runtime **外面**的 DA3 / SAM3 / QwenVL / CLIP 权重。不必重装整套 DA3 conda。OpenRouter / OpenAI 兼容 VLM 可用 `.env` 里的 `base_url` 与 `api_key`。
+
+先把常驻服务拉起来，再把 URL 传给官方 runner：
+
+- QwenVL：`start_qwenvl_servers.py --gpus 0,1 --ports 8008,8009`
+- SAM3：`start_sam3_servers.py`（需要 Qwen URL）
+- DA3 reward：`start_reward_3d_servers.py`（需要 Qwen URL；通常加 `--no-lpips`）
+
+建议 8 卡：0–1 QwenVL，2 SAM3，3–4 DA3，5–7 打分 worker。
+
+vendor `evaluate_pipelines.py` 会写 `batch_manifests/<domain>_<pipeline>_{all,pending}.jsonl` 和 `batch_logs/<domain>_<pipeline>/`（`summary_latest.jsonl`、`score_summary.json`、`score_cases.csv`）。常用开关：`--list-pipelines`、`--limit N`、`--dry-run`、`--no-summarize`、`--skip-pair gaming:lingbot-world`。WorldFoundry 已验证的是 `--run-official --dry-run`；不声称已做 1000 视频计分三项赛。
+
+更底层的 vendor 工具（只用于调试）：`make_manifest.py`、`batch_scheduler.py`、`summarize_scores.py`、`scripts/score_video_physical_3d.py`。这些路径相对于 `worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad/`。
+
+物理赛道在仓内 runtime 里的细节：对 GT 与生成视频做 SAM3 mask / box，力学再用 DA3 质心进 3D；热学是题库；材料是视觉启发式（混色、溶解、可燃、硬度 / 形变），可再加 VLM。请走官方 runner，不要直接跑那些目录脚本。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

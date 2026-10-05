@@ -1,0 +1,71 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BA-06
+track: coverage
+title_en: Cat Tabletop Object Contact
+scene_grounding:
+- 'Initial state must match: A cat is poised near the edge of a table with a cup and
+  small tabletop objects visible.'
+- Opening frames must show the cat, table edge, cup, and small tabletop objects in
+  the same general geometry as the source image.
+action_execution:
+- 'Required action: Let the cat reach or step toward the tabletop objects once from
+  the current poised posture.'
+- Action must happen exactly once in the expected direction / region.
+- Action target must be identifiable in the same frame as the action onset (Track
+  B target acquisition).
+- The action must be visible as a single continuous event from the described initial
+  state; cuts, hidden starts, or repeated attempts are action-execution failures.
+- A legal no-entry/no-contact outcome still requires the reach/step opportunity and
+  readout window to be visible; absence of the setup/opportunity is an action-execution
+  failure, not a valid no-entry outcome.
+target_requirements:
+- Cat, table edge, cup, and small tabletop objects must remain visible enough to audit
+  tabletop entry, object contact, object displacement, cup displacement, and cup tip/spill.
+- Object/cup displacement must be caused by visible cat reach/step contact. Spontaneous
+  spills, off-screen causes, non-cat actors, or object teleport are POST_RESULT_INCONSISTENCY
+  or OBJECT_CONTINUITY_FAIL.
+- Cup displacement without spill and cup tip/spill must be visually separable. If the
+  cup moves but the spill/tip state is hidden or ambiguous, mark readout ambiguity
+  rather than guessing.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+- 'Identity continuity is fatal: the judged subject, target, and key apparatus must
+  not swap appearance, duplicate, vanish, or re-enter as a different object/person/animal.'
+- Cat body/paw position, cup identity, and small-object identities must remain trackable
+  across the entry/contact/displacement window.
+apparatus_stability:
+- Static apparatus (table edge, tabletop plane, cup, and small-object layout before
+  contact) must not drift, resize, or change color mid-run.
+- Table, cup, and small object positions must stay fixed until acted on by the cat.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Uncaused object motion: cup or small tabletop object moves, tips, or spills without
+  visible cat contact or another physically continuous cause allowed by the prompt.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Cat Tabletop Object Contact.'
+- 'Fatal severity cue: target/stimulus acquisition failure, impossible trajectory,
+  identity discontinuity, or post-result contradiction excludes strict trusted metrics
+  even if the outcome is readable.'
+- 'BA-06 trust cue: cat/table/object visibility, attribution to visible cat contact,
+  off-screen-cause rejection, and identity continuity are mandatory.'

@@ -52,6 +52,9 @@ catalog_policy:
     task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit parity run and expected artifact are
     recorded.
+official_sources:
+  project_page: https://doubiiu.github.io/projects/DynamiCrafter/
+  paper: https://arxiv.org/abs/2310.12190
 integration:
   status: integrated
   notes:
@@ -81,3 +84,25 @@ variants:
     status: integrated
   runner_parity:
     status: pending
+docs:
+  publisher: Tencent AI Lab / CUHK
+  publisher_kind: company
+  publisher_zh: 腾讯 AI Lab / 香港中文大学
+  overview: 'DynamiCrafter animates open-domain still images by leveraging video diffusion priors — you give it a picture (optionally a prompt) and it produces a plausible motion clip. The catalog records two runnable variants at different resolutions: dynamicrafter-512-i2v and dynamicrafter-1024-i2v, both wrapped as in-tree WorldFoundry runtimes with staged checkpoint environments.'
+  overview_zh: DynamiCrafter 借助视频扩散先验为开放域静态图片赋予动态——给它一张图（可附提示词），即可生成合理的运动视频。catalog 记录了两个不同分辨率的可运行 variant：dynamicrafter-512-i2v 与 dynamicrafter-1024-i2v，均封装为树内 WorldFoundry 运行时并配好了 checkpoint 环境。
+  architecture: DynamiCrafter is a U-Net-era latent video diffusion model with a dual-stream image conditioning design (CLIP image features plus VAE-encoded image latents), per its publication. This repository records the two resolution profiles and the standard prompt/image/video/actions input schema; finer internals are not recorded here.
+  architecture_zh: DynamiCrafter 属 U-Net 时代的潜空间视频扩散模型，采用双流图像条件设计（CLIP 图像特征加 VAE 编码的图像潜变量），见其论文。本仓库记录了两个分辨率 profile 与标准的 prompt/image/video/actions 输入 schema；更细的内部结构仓库未记录。
+  usage_notes: Both variants are wired but official long-config parity remains pending. Start with the 512 variant for speed; switch to 1024 for final quality. The manifest asks to keep redistribution gated until the upstream license is manually reviewed — treat outputs accordingly.
+  usage_notes_zh: 两个 variant 均已接通，但官方长配置的一致性验证仍在等待。建议先用 512 版求快，再用 1024 版出成品。 manifest 要求在人工审阅上游许可前保持再分发受限——请相应对待产出。
+  limitations:
+  - Official long-configuration parity is pending for both variants.
+  - Upstream license requires manual review before redistribution (recorded in the manifest).
+  - As an image animator it invents motion — it does not follow camera paths or action commands.
+  limitations_zh:
+  - 两个 variant 的官方长配置一致性均在等待验证。
+  - manifest 记录：再分发前需人工审阅上游许可。
+  - 作为图片动画器，它自行推断运动——不支持相机轨迹或动作指令。
+  recommended_benchmarks:
+  - id: aigcbench
+    reason: Image-to-video benchmark aligned with DynamiCrafter's task.
+    reason_zh: 与 DynamiCrafter 任务对齐的图生视频评测。

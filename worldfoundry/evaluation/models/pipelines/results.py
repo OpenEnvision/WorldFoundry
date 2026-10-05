@@ -71,8 +71,19 @@ def pipeline_metadata(
 
 
 def pipeline_result_status(result: Mapping[str, Any]) -> str:
-    """Extract and normalize status text from a pipeline result mapping."""
-    status = normalize_generation_status(result.get("status"))
+    """Extract and normalize status text from a pipeline result mapping.
+
+    In-process pipelines signal failure by raising (see
+    :func:`failed_generation_result`), so a mapping returned without an
+    explicit ``status`` is a successful return and defaults to
+    ``"succeeded"`` here. External/deserialized rows instead go through
+    :func:`~worldfoundry.evaluation.api.normalize_generation_status`, which
+    fail-closes missing statuses to ``"unknown"``.
+    """
+    raw = str(result.get("status") or "").strip()
+    if not raw:
+        return "succeeded"
+    status = normalize_generation_status(raw)
     return "succeeded" if is_generation_status_successful(status) else status
 
 
@@ -110,6 +121,7 @@ def generation_result_from_pipeline(
     invocation: PipelineInvocation,
     result: Mapping[str, Any],
     context: PipelineResultContext,
+    timings: Mapping[str, Any] | None = None,
 ) -> GenerationResult:
     """Normalize raw pipeline output mapping into a structured public :class:`GenerationResult`.
 
@@ -121,6 +133,9 @@ def generation_result_from_pipeline(
         invocation: The :class:`PipelineInvocation` that produced the result.
         result: Raw key-value mapping returned by the pipeline.
         context: :class:`PipelineResultContext` with model/task metadata.
+        timings: Optional timing measurements (e.g. ``generate_seconds``)
+            recorded by the caller around the pipeline invocation; forwarded
+            to the contract ``timings`` field.
 
     Returns:
         A fully-populated :class:`GenerationResult`.
@@ -140,6 +155,7 @@ def generation_result_from_pipeline(
         artifacts=artifacts,
         status=status,
         error=pipeline_result_error(result, status),
+        timings=dict(timings) if timings else None,
         metadata=pipeline_metadata(result=result, context=context),
     )
 

@@ -12,62 +12,55 @@ import torch
 import torch.distributed as dist
 from PIL import Image
 
-from worldfoundry.base_models.diffusion_model.video.ltx2.alayaworld import (
-    ALAYA_TRANSFORMER_KEY_OPS,
-    AlayaConditioning,
-    AlayaPrefix,
-    AlayaWorldModel,
-    AlayaWorldModelConfigurator,
+from worldfoundry.base_models.diffusion_model.loaders import CheckpointSpec
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.component import (
+    load_ltx_video_decoder_checkpoint,
+    load_ltx_video_encoder_checkpoint,
 )
-from worldfoundry.base_models.diffusion_model.video.ltx2.alayaworld_history import (
-    AlayaHistoryEncoder,
-    load_alaya_history_encoder,
-)
-from worldfoundry.base_models.diffusion_model.video.ltx2.ltx_core.components.patchifiers import (
-    VideoLatentPatchifier,
-    get_pixel_coords,
-)
-from worldfoundry.base_models.diffusion_model.video.ltx2.ltx_core.loader.single_gpu_model_builder import (
-    SingleGPUModelBuilder,
-)
-from worldfoundry.base_models.diffusion_model.video.ltx2.ltx_core.model.transformer.compiling import (
-    CompilationConfig,
-    compile_transformer,
-)
-from worldfoundry.base_models.diffusion_model.video.ltx2.ltx_core.model.transformer.modality import Modality
-from worldfoundry.base_models.diffusion_model.video.ltx2.ltx_core.model.video_vae import (
-    MEMORY_EFFICIENT_DECODE,
-    VAE_DECODER_COMFY_KEYS_FILTER,
-    VAE_ENCODER_COMFY_KEYS_FILTER,
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video import (
     SpatialTilingConfig,
     TemporalTilingConfig,
     TilingConfig,
-    VideoDecoderConfigurator,
-    VideoEncoderConfigurator,
 )
-from worldfoundry.base_models.diffusion_model.video.ltx2.ltx_core.text_encoders.gemma import (
-    GEMMA_LLM_KEY_OPS,
-    GEMMA_MODEL_OPS,
-    VIDEO_ONLY_EMBEDDINGS_PROCESSOR_KEY_OPS,
-    GemmaTextEncoderConfigurator,
-    VideoEmbeddingsProcessorConfigurator,
-    module_ops_from_gemma_root,
+from worldfoundry.base_models.diffusion_model.models.encoders.ltx.component import (
+    LTXVideoEmbeddingProcessorModule,
+    load_ltx_embedding_processor_module,
+    load_ltx_gemma_module,
 )
-from worldfoundry.base_models.diffusion_model.video.ltx2.ltx_core.types import (
+from worldfoundry.base_models.diffusion_model.models.encoders.ltx.tokenizer import LTXVGemmaTokenizer
+from worldfoundry.base_models.diffusion_model.models.networks.ltx.modality import Modality
+from worldfoundry.base_models.diffusion_model.models.representations.ltx.patchifiers import (
+    VideoLatentPatchifier,
+    get_pixel_coords,
+)
+from worldfoundry.base_models.diffusion_model.models.representations.ltx.types import (
     SpatioTemporalScaleFactors,
     VideoLatentShape,
 )
-from worldfoundry.base_models.diffusion_model.video.ltx2.ltx_core.utils import find_matching_file
-from worldfoundry.core.camera_trajectory import (
+from worldfoundry.base_models.diffusion_model.optimizations import RuntimePolicy
+from worldfoundry.core.geometry.trajectory import (
     camera_poses_to_adaln_actions,
     camera_trajectory_view_matrices,
     parse_camera_trajectory,
     select_adaln_actions,
 )
 from worldfoundry.runtime.compile_cache import configure_persistent_compile_cache
+from worldfoundry.synthesis.visual_generation.alayaworld.history_encoder import (
+    AlayaHistoryEncoder,
+    load_alaya_history_encoder,
+)
+from worldfoundry.synthesis.visual_generation.alayaworld.ltx_compiling import (
+    CompilationConfig,
+    compile_transformer,
+)
+from worldfoundry.synthesis.visual_generation.alayaworld.model import (
+    AlayaConditioning,
+    AlayaPrefix,
+    AlayaWorldModel,
+    load_alaya_world_model,
+)
 
 from .spatial import AlayaSpatialMemory, SpatialBank
-
 
 _LTX_SCALE_FACTORS = SpatioTemporalScaleFactors(time=8, height=32, width=32)
 
@@ -263,9 +256,7 @@ class AlayaWorldRuntime:
         self.decode_rank0_only = bool(decode_rank0_only)
         normalized_compile_mode = "none" if compile_mode is None else str(compile_mode).strip().lower()
         if normalized_compile_mode not in {"none", "default", "reduce-overhead", "max-autotune"}:
-            raise ValueError(
-                "compile_mode must be one of none, default, reduce-overhead, or max-autotune"
-            )
+            raise ValueError("compile_mode must be one of none, default, reduce-overhead, or max-autotune")
         self.compile_mode = normalized_compile_mode
         self.compile_backend = str(compile_backend)
         self.compile_fullgraph = bool(compile_fullgraph)
@@ -331,22 +322,16 @@ class AlayaWorldRuntime:
             if intrinsic.ndim == 2:
                 intrinsic = intrinsic.unsqueeze(0)
             if intrinsic.ndim not in (3, 4) or intrinsic.shape[-2:] != (3, 3):
-                raise ValueError(
-                    f"intrinsic must be [3,3], [B,3,3], or [B,F,3,3], got {tuple(intrinsic.shape)}"
-                )
+                raise ValueError(f"intrinsic must be [3,3], [B,3,3], or [B,F,3,3], got {tuple(intrinsic.shape)}")
             if intrinsic.ndim == 3 and camera.shape[0] == 1 and intrinsic.shape[0] == camera.shape[1]:
                 intrinsic = intrinsic.unsqueeze(0)
             if intrinsic.shape[0] not in (1, camera.shape[0]):
-                raise ValueError(
-                    f"intrinsic batch {intrinsic.shape[0]} does not match camera batch {camera.shape[0]}"
-                )
+                raise ValueError(f"intrinsic batch {intrinsic.shape[0]} does not match camera batch {camera.shape[0]}")
             available_latents = (camera.shape[1] - 1) // 8 + 1
             # Official rollout planning keeps one latent beyond the final
             # generated chunk.  This look-ahead preserves the exact camera/VAE
             # window contract used to prepare Alaya inference cases.
-            maximum_rounds = (
-                available_latents - 1 - (1 + self.history_frames)
-            ) // self.output_frames
+            maximum_rounds = (available_latents - 1 - (1 + self.history_frames)) // self.output_frames
             rounds = min(self.rounds, int(maximum_rounds))
             if rounds < 1:
                 raise ValueError(
@@ -370,58 +355,68 @@ class AlayaWorldRuntime:
         return camera, intrinsic.unsqueeze(0), self.rounds
 
     def _encode_prompt(self, prompt: str) -> torch.Tensor:
-        module_ops = module_ops_from_gemma_root(self.gemma_root)
-        model_folder = find_matching_file(self.gemma_root, "model*.safetensors").parent
-        weight_paths = tuple(str(path) for path in sorted(model_folder.rglob("*.safetensors")))
+        model_folder = Path(self.gemma_root)
+        weight_paths = tuple(str(path) for path in sorted(model_folder.glob("model-*.safetensors")))
         if not weight_paths:
             raise FileNotFoundError(f"no Gemma safetensors shards found below {model_folder}")
-        text_encoder = SingleGPUModelBuilder(
-            model_path=weight_paths,
-            model_class_configurator=GemmaTextEncoderConfigurator,
-            model_sd_ops=GEMMA_LLM_KEY_OPS,
-            module_ops=(GEMMA_MODEL_OPS, *module_ops),
-        ).build(device=self.device, dtype=self.dtype).eval()
-        hidden_states, attention_mask = text_encoder.encode(prompt)
-        del text_encoder
-        _cleanup_cuda()
-
-        processor = SingleGPUModelBuilder(
-            model_path=self.checkpoint_path,
-            model_class_configurator=VideoEmbeddingsProcessorConfigurator,
-            model_sd_ops=VIDEO_ONLY_EMBEDDINGS_PROCESSOR_KEY_OPS,
-        ).build(device=self.device, dtype=self.dtype).eval()
-        output = processor.process_hidden_states(hidden_states, attention_mask)
+        policy = self._prompt_runtime_policy(device=self.device, dtype=self.dtype)
+        gemma = load_ltx_gemma_module(CheckpointSpec(source=weight_paths), policy)
+        processor = load_ltx_embedding_processor_module(
+            CheckpointSpec(source=self.checkpoint_path),
+            policy,
+            video_only=True,
+        )
+        if not isinstance(processor, LTXVideoEmbeddingProcessorModule):
+            raise TypeError("Alaya prompt encoding requires the video-only LTX processor")
+        tokenizer = LTXVGemmaTokenizer(self.gemma_root, max_length=1024)
+        token_pairs = tokenizer.tokenize_with_weights(prompt)["gemma"]
+        execution_device = next(tensor.device for tensor in gemma.parameters() if tensor.device.type != "meta")
+        input_ids = torch.tensor(
+            [[int(pair[0]) for pair in token_pairs]],
+            device=execution_device,
+        )
+        attention_mask = torch.tensor(
+            [[int(pair[1]) for pair in token_pairs]],
+            device=execution_device,
+        )
+        encoded = gemma.model.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+        )
+        output = processor.processor.process_hidden_states(
+            encoded.hidden_states,
+            attention_mask,
+            padding_side="left",
+        )
         context = output.video_encoding.detach().to(device="cpu", dtype=self.dtype)
-        del processor, output, hidden_states, attention_mask
+        del gemma, processor, tokenizer, encoded, output, input_ids, attention_mask
         _cleanup_cuda()
         return context
 
+    @staticmethod
+    def _prompt_runtime_policy(*, device: torch.device, dtype: torch.dtype) -> RuntimePolicy:
+        """Keep the 12B Gemma prompt encoder below the generation VRAM peak."""
+
+        del device
+        return RuntimePolicy(device=torch.device("cpu"), dtype=dtype)
+
     def _build_vae(self):
-        encoder = SingleGPUModelBuilder(
-            model_path=self.checkpoint_path,
-            model_class_configurator=VideoEncoderConfigurator,
-            model_sd_ops=VAE_ENCODER_COMFY_KEYS_FILTER,
-        ).build(device=self.device, dtype=self.dtype).eval()
-        decoder = SingleGPUModelBuilder(
-            model_path=self.checkpoint_path,
-            model_class_configurator=VideoDecoderConfigurator,
-            model_sd_ops=VAE_DECODER_COMFY_KEYS_FILTER,
-            module_ops=(MEMORY_EFFICIENT_DECODE,),
-        ).build(device=self.device, dtype=self.dtype).eval()
-        return encoder, decoder
+        checkpoint = CheckpointSpec(source=self.checkpoint_path)
+        policy = RuntimePolicy(device=self.device, dtype=self.dtype)
+        encoder = load_ltx_video_encoder_checkpoint(checkpoint, policy)
+        decoder = load_ltx_video_decoder_checkpoint(checkpoint, policy)
+        return encoder.encoder, decoder.decoder
 
     def _build_transformer(self) -> tuple[AlayaWorldModel, AlayaHistoryEncoder]:
-        transformer = SingleGPUModelBuilder(
-            model_path=self.checkpoint_path,
-            model_class_configurator=AlayaWorldModelConfigurator,
-            model_sd_ops=ALAYA_TRANSFORMER_KEY_OPS,
-        ).build(device=self.device, dtype=self.dtype).eval()
+        checkpoint = CheckpointSpec(source=self.checkpoint_path)
+        policy = RuntimePolicy(device=self.device, dtype=self.dtype)
+        transformer = load_alaya_world_model(checkpoint, policy)
         transformer.action_adaln_embedder.freq_scale = self.action_freq_scale
         history = load_alaya_history_encoder(
-            self.checkpoint_path,
+            checkpoint,
             transformer.patchify_proj,
-            device=self.device,
-            dtype=self.dtype,
+            policy=policy,
             **self.history_options,
         )
         if self.context_parallel and dist.is_initialized() and dist.get_world_size() > 1:
@@ -726,6 +721,12 @@ class AlayaWorldRuntime:
                 intrinsic=intrinsic,
                 target_latent_start=target_base,
             )
+            # DA3 is only needed again while appending generated RGB frames.
+            # Keeping it on CUDA here overlaps it with the Alaya transformer,
+            # history encoder and both VAE halves, which exceeds an 80GB card.
+            # Preserve the exact DA3 depth path but run later updates from CPU.
+            spatial.offload_depth_model()
+            _cleanup_cuda()
 
         transformer, history_encoder = self._build_transformer()
         context = context.to(device=self.device, dtype=self.dtype)
@@ -787,10 +788,7 @@ class AlayaWorldRuntime:
         _cleanup_cuda()
 
         rank0_decode = not (
-            self.decode_rank0_only
-            and dist.is_initialized()
-            and dist.get_world_size() > 1
-            and dist.get_rank() != 0
+            self.decode_rank0_only and dist.is_initialized() and dist.get_world_size() > 1 and dist.get_rank() != 0
         )
         frames = None
         if rank0_decode:

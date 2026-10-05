@@ -1,168 +1,36 @@
 ---
 title: WorldArena
-description: 面向 embodied world model 的视频质量与功能效用统一 benchmark。
+description: "清华 FIB Lab 具身世界模型评测：感知质量加数据引擎 / 策略 / 规划器效用。"
 ---
 
-## 简介
+WorldArena（清华 FIB Lab）从两个轴评具身世界模型。主键 `ewm_score` 汇总具身世界模型表面。本目录 id 是 **`worldarena`**。
 
-WorldArena 从两个方向评测 embodied world model：perceptual video quality 和 functional utility。官方 benchmark 报告视频感知指标、embodied-task functionality、人类评分，以及统一的 `EWMScore`。它基于 RoboTwin 2.0 manipulation episodes，关注生成世界视频是否视觉合理、可控、物理可信，并且是否能帮助下游 embodied 任务。
+- **感知** — 视觉质量、运动质量、内容一致性、物理遵守、3D 精度、可控性、人体质量。
+- **功能** — 作为数据引擎（`data_engine_success`）、策略评估器（`policy_evaluator_correlation`）、动作规划器（`action_planner_success`）的效用。
 
-WorldFoundry 已将 Track 1 video-quality runtime 集成在仓内：`worldfoundry/evaluation/tasks/execution/runners/worldarena/`。官方 project page、paper 和 source 作为协议参考；使用 WorldFoundry 的集成路径时不需要额外准备官方源码树。
+论文：[WorldArena](https://arxiv.org/abs/2602.08971)。项目：[world-arena.ai](https://world-arena.ai/)。代码：[tsinghua-fib-lab/WorldArena](https://github.com/tsinghua-fib-lab/WorldArena)。
 
-## 评测什么
+WorldFoundry **接入官方视频质量指标 runtime**（`runners/worldarena/runtime/video_quality`），可一次评一个 `--dimension`（目录有界示例：`action_following`）。**一个真实已准备数据的 PSNR 组件已验证。完整 Track 1 与具身赛道未验证。** 功能效用指标需要视频质量 runtime 之外的具身任务证据。
 
-WorldArena 统一 embodied world model 的**感知视频质量**与**功能效用**。Track 1 在 6 个子维度上评 16 个感知指标；Track 2 在 RoboTwin 2.0 episode 上评测 world model 作为 data engine、policy evaluator 和 action planner 的能力。汇总指标 `EWMScore` 是归一化基础指标的算术平均，范围 0–100。
+<BenchmarkPageSections id="worldarena" locale="zh" />
 
-## Benchmark 设计
-
-| Track | 关注点 | 指标 |
-| --- | --- | --- |
-| Track 1 — Video quality | Visual、motion、content、physics、3D、controllability | 16 个基础指标 → 6 个维度汇总 |
-| Track 2 — Functional utility | Data engine gain、policy-evaluator correlation、action-planner success | 下游 embodied 任务结果 |
-| Human evaluation | Quality、instruction following、physical plausibility | [world-arena.ai](https://world-arena.ai/) 社区评分 |
-
-## 官方参考
-
-- Paper: [arXiv:2602.08971](https://arxiv.org/abs/2602.08971)
-- Project page 与 leaderboard: [world-arena.ai](https://world-arena.ai/)
-- 官方源码参考: [github.com/tsinghua-fib-lab/WorldArena](https://github.com/tsinghua-fib-lab/WorldArena)
-- 数据集: [WorldArena/WorldArena_Robotwin2.0](https://huggingface.co/datasets/WorldArena/WorldArena_Robotwin2.0)
-- 仓内 runner: `worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py`
-
-## 需要准备什么
-
-### 数据集
-
-下载 WorldArena RoboTwin 2.0 evaluation assets：
+## 如何运行
 
 ```bash
-export WORLDFOUNDRY_WORLDARENA_DATA_ROOT=/path/to/datasets/WorldArena_Robotwin2.0
-
-hf download WorldArena/WorldArena_Robotwin2.0 \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_WORLDARENA_DATA_ROOT}"
-```
-
-如果要做 leaderboard 形态评测，用官方 `test_dataset`。`val_dataset` 主要用于 online arena 和 qualitative comparison。
-
-### 生成视频
-
-Track 1 video-quality evaluation 要求你先根据初始帧和 instruction/action sequence 为每个 episode 生成视频。官方要求：
-
-| Driver type | 视频长度 |
-| --- | --- |
-| Text-driven | 121 frames |
-| Action-driven | 与 ground-truth trajectory 长度对齐 |
-
-建议使用至少 640x480 分辨率，并保持 24 fps 以贴近提交协议。
-
-原始生成视频通常先整理为：
-
-```text
-/path/to/worldarena/generated_videos/
-|-- <task>_<episode>.mp4
-`-- ...
-```
-
-video-quality runtime 消费 extracted-frame dataset。如果你有官方 `summary.json`，可以用仓内 preprocessing script 生成评测结构：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/worldarena/runtime/video_quality/preprocess_datasets.py \
-  --summary_json "${WORLDFOUNDRY_WORLDARENA_DATA_ROOT}/test_dataset/summary.json" \
-  --gen_video_dir /path/to/worldarena/generated_videos \
-  --output_base /path/to/worldarena/prepared
-```
-
-期望 prepared layout：
-
-```text
-/path/to/worldarena/prepared/
-|-- gt_dataset/
-|   `-- <task>/<episode>/prompt|video/
-`-- generated_dataset/
-    `-- <task>/<episode>/1/video/frame_00000.jpg
-```
-
-Action-following 指标可以使用单独的 `gt_dataset_action_following` 和 `generated_dataset_action_following` 根目录。
-
-### Checkpoint
-
-生成的 config 会优先使用 WorldFoundry base-model assets。完整 Track 1 scoring 可能需要 CLIP、DINO、MUSIQ、RAFT、SEA-RAFT、VFIMamba、Depth-Anything、Qwen2.5-VL、Qwen3-VL 和 SAM3。把 WorldArena 相关权重放到一个 checkpoint root 后传给 runner：
-
-```bash
-export WORLDFOUNDRY_WORLDARENA_CKPT_DIR=/path/to/checkpoints/worldarena
-```
-
-## 指标
-
-| Metric | 含义 |
-| --- | --- |
-| `visual_quality` | 汇总图像质量、美学分数，以及与真实 embodied video 的分布相似性。 |
-| `motion_quality` | 结合 dynamic degree、optical-flow intensity 和 motion smoothness。 |
-| `content_consistency` | 衡量场景、主体和 photometric consistency。 |
-| `physics_adherence` | 判断 robot-object 物理合理性和 trajectory accuracy。 |
-| `three_d_accuracy` | 衡量深度和 perspective plausibility。 |
-| `controllability` | 衡量 instruction、semantic 和 action-following alignment。 |
-| `data_engine_success` | 使用生成视频作为训练数据时的下游 policy success。 |
-| `policy_evaluator_correlation` | World-model rollout judgment 与 simulator success 的相关性。 |
-| `action_planner_success` | World model + inverse-dynamics head 的闭环规划成功率。 |
-| `human_quality` | 人类对质量、instruction following 和 physical plausibility 的评分。 |
-| `ewm_score` | WorldArena 归一化维度的官方聚合分。 |
-
-WorldFoundry 仓内执行目前聚焦 video-quality metric runtime。Functional-utility 和官方 leaderboard evidence 仍需要官方 Track 2 流程和提交产物。
-
-## 运行 Track 1 Video-Quality Metrics
-
-重新计算指标时使用 direct runner，因为它能显式传 prepared dataset roots 和 checkpoint root：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py \
   --run-official \
-  --generated-dataset-dir /path/to/worldarena/prepared/generated_dataset \
-  --gt-data-dir /path/to/worldarena/prepared/gt_dataset \
-  --ckpt-root "${WORLDFOUNDRY_WORLDARENA_CKPT_DIR}" \
-  --dimension image_quality motion_smoothness semantic_alignment depth_accuracy action_following \
-  --output-dir tmp/worldarena/video-quality \
+  --dimension action_following \
+  --config-path <worldarena_config.yaml> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/worldarena/official \
   --json
 ```
 
-如果你已经有 WorldArena config YAML，可以直接传入：
+真值比较用 `--gt-data-dir` / `--action-gt-data-dir`。权重从 `--ckpt-root` 解析。`--official-results-path` 导入已有结果文件。环境变量：`WORLDFOUNDRY_WORLDARENA_RESULTS_PATH`、`WORLDFOUNDRY_WORLDARENA_ROOT`。合同条目不要求 Hugging Face 数据集。
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py \
-  --run-official \
-  --config-path /path/to/worldarena_config.yaml \
-  --dimension image_quality motion_smoothness semantic_alignment \
-  --output-dir tmp/worldarena/video-quality-config \
-  --json
-```
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/worldarena.yaml`，`worldfoundry/evaluation/tasks/execution/runners/worldarena`。
 
-## 导入已有结果
+产物包括 `scorecard.json`（主键 `ewm_score`）。
 
-如果你已经有 WorldArena 产出的 `*_results.json`、`results.json` 或 summary file，使用公开 CLI 导入：
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id worldarena \
-  --mode official-validation \
-  --official-results-path /path/to/worldarena_results.json \
-  --generated-artifact-dir /path/to/worldarena/generated_videos \
-  --output-dir tmp/worldarena/imported \
-  --json
-```
-
-## 输出
-
-WorldFoundry 会写出：
-
-- `scorecard.json`
-- `raw_metric_table.jsonl`
-- 执行 video-quality runtime 时的 `worldarena_official_runtime.log`
-- runtime 输出目录下的 upstream `*_results.json`
-
-官方 leaderboard submission 仍需要按 WorldArena archive structure 保留生成视频和 model documentation。WorldFoundry scorecard 是本地证据；是否进入 leaderboard 仍以 WorldArena 官方提交流程为准。
-
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

@@ -16,9 +16,12 @@ from trajectory_filler import PoseTrajectoryFiller
 
 class Droid:
 
-  def __init__(self, args):
+  def __init__(self, args, net=None):
     super(Droid, self).__init__()
-    self.load_weights(args.weights)
+    if net is None:
+      self.load_weights(args.weights)
+    else:
+      self.net = net
     self.args = args
     self.disable_vis = args.disable_vis
 

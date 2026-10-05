@@ -54,3 +54,21 @@ catalog_category: three_d_four_d
 catalog_scope: 3D Gaussian-splatting catalog entries. Integrated entries expose in-tree
   WorldFoundry runtimes; externalized entries retain upstream provenance and runner glue
   without bundling license-gated source.
+docs:
+  publisher: NVIDIA
+  publisher_kind: company
+  publisher_zh: 英伟达（NVIDIA）
+  overview: 'Déjà View Looping Transformer (DVLT) is an NVIDIA multi-view reconstruction model covering 3D reconstruction, camera pose estimation, and depth from image collections, exporting GLB scenes. The WorldFoundry wrapper is lazy: it runs the external DVLT GLB export path only when CUDA, dependencies, source, inputs, and weights are all staged locally.'
+  overview_zh: Déjà View Looping Transformer（DVLT）是英伟达的多视图重建模型，覆盖 3D 重建、相机位姿估计与深度估计，输出 GLB 场景。WorldFoundry 的封装是惰性的：仅当 CUDA、依赖、源码、输入与权重全部本地就位时，才运行外部 DVLT 的 GLB 导出路径。
+  architecture: The catalog records a looping-transformer design for multi-view geometry (paper arXiv 2605.30215); the runtime source is externalized from the public release tree, so architecture internals beyond the recorded tasks are not stored here.
+  architecture_zh: catalog 记录其为面向多视图几何的 looping-transformer 设计（论文 arXiv 2605.30215）；运行时源码不在公开发布树内，除已记录任务外的架构细节此处未存。
+  usage_notes: Runner registration is wired; GPU parity is pending checkpoint and environment validation. The nvidia/dvlt checkpoint carries the NVIDIA non-commercial research/evaluation license — check terms before use. DVLTSynthesis fails fast on missing prerequisites.
+  usage_notes_zh: runner 注册已接好；GPU 一致性待 checkpoint 与环境验证。nvidia/dvlt checkpoint 使用英伟达非商用研究/评估许可——使用前请核对条款。DVLTSynthesis 在前置条件缺失时快速失败。
+  limitations:
+  - Checkpoint license is NVIDIA non-commercial research/evaluation only.
+  - Upstream runtime source is external to this repository; staging it is your responsibility.
+  - GPU parity is pending.
+  limitations_zh:
+  - checkpoint 许可仅限英伟达非商用研究/评估用途。
+  - 上游运行时源码在本仓库之外，需要自行就位。
+  - GPU 一致性待验证。

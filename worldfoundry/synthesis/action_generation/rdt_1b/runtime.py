@@ -76,7 +76,7 @@ class RDT1BRuntime:
         import torch
         from transformers import SiglipImageProcessor, SiglipVisionModel
 
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         from .runner import RDTRunner
 
@@ -309,8 +309,8 @@ class RDT1BRuntime:
         import torch
         from PIL import Image
 
-        from worldfoundry.core.utils.image_utils import load_pil_image
-        from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
+        from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 
         policy, image_processor, vision_model = self._load()
         state = self._state(observation)
@@ -504,7 +504,11 @@ def predict_action(
         image_height=option_int(options.get("image_height"), 480),
         jpeg_roundtrip=option_bool(options.get("jpeg_roundtrip"), True),
     )
-    cache_key = (checkpoint_path, device, runtime_options_cache_key(options))
+    # Per-call task text is carried in runtime_options by the public pipeline.
+    # Cache by the parsed model configuration so changing the instruction does
+    # not reload the 1B policy and SigLIP on every action step. T5 release is
+    # governed separately by release_text_encoder.
+    cache_key = (config.checkpoint_location, config.device, runtime_options_cache_key(config.__dict__))
     runtime = _RUNTIME_CACHE.setdefault(cache_key, RDT1BRuntime(config))
     return runtime.predict_action(
         instruction=instruction,

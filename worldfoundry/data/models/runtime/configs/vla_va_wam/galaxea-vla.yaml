@@ -10,7 +10,7 @@ policy_target: worldfoundry.synthesis.action_generation.galaxea_vla.runtime:pred
 torch_dtype: auto
 trust_remote_code: false
 local_files_only: true
-variant: r1lite_mobile
+variant: r1lite_arm
 prompt_template: "{bos_token}Task: {instruction}, "
 instruction_template: "[Low]: {instruction}"
 normalization_epsilon: 1.0e-8

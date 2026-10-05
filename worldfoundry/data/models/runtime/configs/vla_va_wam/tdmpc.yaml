@@ -1,8 +1,0 @@
-backend: lerobot_policy
-checkpoint_path: ${WORLDFOUNDRY_CKPT_DIR}/lerobot--tdmpc
-source_repo: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/lerobot
-source_subdir: src
-policy_target: lerobot.policies.tdmpc.modeling_tdmpc:TDMPCPolicy
-predict_method: predict_action_chunk
-action_contract: tdmpc_action
-runtime_backend: lerobot_tdmpc_policy

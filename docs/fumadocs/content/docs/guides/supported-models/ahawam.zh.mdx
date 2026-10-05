@@ -1,0 +1,43 @@
+---
+title: "AHA-WAM"
+description: "面向 RoboTwin 2.0 的世界-动作模型：视频+动作专家、六帧历史、16×14 块。MIT 许可。A100 Workspace 已验证；不是闭环分数。"
+modelId: "ahawam"
+pageSource: authored
+---
+
+AHA-WAM 是面向操作的**世界-动作模型**：视频专家和动作专家共享 **mixture cache**，让策略在推理时用上预测式世界建模。WorldFoundry 在进程内跑精确的视频/动作专家、mixture-cache 编辑器、**六帧**历史、两阶段块推理、Wan VAE 和 UMT5 编码器。训练器、模拟器和部署服务都排除。Pipeline：`AHAWAMPipeline`。别名 `aha-wam`、`aha-wam-robotwin` 解析到这里。
+
+<ModelPaperFigures modelId="ahawam" locale="zh" />
+
+官方论文见 [arXiv 2606.09811](https://arxiv.org/abs/2606.09811)。项目页：[serene-sivy.github.io/aha-wam](https://serene-sivy.github.io/aha-wam/)。代码：[Serene-SIVY/AHA-WAM](https://github.com/Serene-SIVY/AHA-WAM)。许可证：**MIT**。记录的策略：`SereneC/AHA-WAM-RoboTwin2.0`（`robotwin_ahawam.pt`）。VAE 与 UMT5 来自 `DiffSynth-Studio/Wan-Series-Converted-Safetensors`。
+
+已发布的 RoboTwin 2.0 checkpoint 在 **A100** 上完成真实 Workspace 推理：三个 ALOHA 视角加 **14 维**状态，返回有限的 **16×14** 开环块。catalog runner 仍是 未记录——这是数值 checkpoint 验证，不是闭环仿真分数。
+
+<ModelCommandBuilder modelId="ahawam" locale="zh" />
+
+## 用来做什么
+
+用三个 ALOHA 视角加状态跑 AHA-WAM 的 RoboTwin 动作块。
+
+启动 `worldfoundry-eval run ahawam`。
+
+评测入口：[RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin)（发布的 checkpoint 面向 RoboTwin 2.0 训练）。
+
+## 运行时契约
+
+必填 `image`、`prompt`；可选 `model_id`、`state`、`preferred_cameras`、`image_size`、`configured_action_horizon`、`action_chunk_size`、`default_chunks_per_video_prefill`；产物 `action_trace`、`ahawam_action_trace.json`。
+
+| 旋钮 | 记录值 |
+| --- | --- |
+| 图像尺寸 | **384×320** |
+| 动作时域 | **64** |
+| 块大小 | **16** |
+| 视频 prefill 块数 | **2**（随后刷新 KV；最多保留六条更早的 prefill） |
+
+所有资产从本地加载，**严格键匹配**。运行时不走 Hub 下载。VAE 与 UMT5 可以放在策略 GPU、CPU 或另一张 GPU；自动放置看显存阈值，不看 GPU 名字白名单。SDPA 按已安装 GPU 代数统一选择。
+
+## 在 WorldFoundry 中运行
+
+状态：**已验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `SereneC/AHA-WAM-RoboTwin2.0`、`DiffSynth-Studio/Wan-Series-Converted-Safetensors`、`Wan-AI/Wan2.1-T2V-1.3B` 就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run ahawam`。catalog 未记录 VRAM。
+
+<ModelRelatedRecipes modelId="ahawam" locale="zh" />

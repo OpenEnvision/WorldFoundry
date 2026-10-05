@@ -1,0 +1,52 @@
+---
+title: "MotionCtrl"
+description: "MotionCtrl from Tencent (ARC Lab); Verified."
+modelId: "motionctrl"
+pageSource: authored
+---
+
+MotionCtrl is a unified, flexible motion controller for video generation: it controls camera motion and object motion independently in one model (SIGGRAPH 2024). In this catalog the runner is verified — the camera-motion demo runs through the Workspace infer path with the staged MotionCtrl checkpoint and in-tree camera-pose fixture.
+
+<ModelPaperFigures modelId="motionctrl" locale="en" />
+
+The recorded paper is [arXiv 2312.03641](https://arxiv.org/abs/2312.03641).
+
+Project page: [wanquanf.github.io/MotionCtrl](https://wanquanf.github.io/MotionCtrl/). Code: [TencentARC/MotionCtrl](https://github.com/TencentARC/MotionCtrl).
+
+<ModelCommandBuilder modelId="motionctrl" locale="en" />
+
+## What it is for
+
+`motionctrl` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+
+Per the publication, a Camera Motion Control Module conditions on camera pose sequences and an Object Motion Control Module on trajectories, attached to an LVDM-family video base. WorldFoundry vendors the LVDM stack, control modules, sampler, default config, and motion fixtures under synthesis/visual_generation/motionctrl/motionctrl_runtime and loads them in-process. It is published by Tencent (ARC Lab).
+
+Catalog tasks include interactive-video.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-motion control adherence).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `frames`, and `fps`; artifacts `motionctrl.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `MotionCtrlPipeline`.
+
+Family status: **Verified**.
+
+The default camera/object motion fixture parameters are recorded in the runtime profile — start there. The upstream CLI is provenance only; benchmark scoring remains separate.
+
+Runtime code is vendored in-tree; checkpoints remain external assets under the normal hfd/ckpt cache.
+
+The upstream CLI is retained as provenance only; the WorldFoundry runtime loads the vendored architecture in-process and consumes local MotionCtrl checkpoint and condition assets.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run motionctrl --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `TencentARC/MotionCtrl` and `TencentARC/MotionCtrl_SVD`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh motionctrl`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="motionctrl" locale="en" />

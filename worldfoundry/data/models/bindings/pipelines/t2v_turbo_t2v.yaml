@@ -1,0 +1,14 @@
+schema_version: 2
+binding_id: t2v_turbo_t2v
+model_id: t2v_turbo_t2v
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.t2v_turbo.pipeline_t2v_turbo_t2v:T2VTurboT2VPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation
+aliases:
+- t2v-turbo-t2v
+- t2v-turbo

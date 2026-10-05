@@ -1,0 +1,54 @@
+---
+title: "Bernini-R 14B"
+description: "Bernini-R 14B（ByteDance）：文生图、图像编辑；Runner 一致性待确认; 独立环境 `worldfoundry-bernini-cu124`。"
+modelId: "bernini-r-14b"
+pageSource: authored
+---
+
+Bernini-R 14B 是字节 Bernini 系列的「仅渲染器」发布：14B 渲染模型单独打包，不含 7B 语义规划器。它保留同样的六类任务（文生图、图像编辑、文/视频/参考生视频），但直接使用你的输入，不经过规划阶段。 WorldFoundry 树内内置官方渲染器推理代码，加载 ByteDance/Bernini-R-Diffusers。
+
+<ModelPaperFigures modelId="bernini-r-14b" locale="zh" />
+
+记录论文为[Bernini: Latent Semantic Planning for Video Diffusion](https://arxiv.org/abs/2605.22344)（2026）。
+
+项目页：[bernini-ai.github.io](https://bernini-ai.github.io/)。代码：[bytedance/Bernini](https://github.com/bytedance/Bernini)。
+
+这不是规划+渲染的 [Bernini](/zh/docs/guides/supported-models/bernini)，也不是单卡的 [Bernini-R 1.3B](/zh/docs/guides/supported-models/bernini-r-1.3b)。
+
+同一篇论文：[Bernini: Latent Semantic Planning for Video Diffusion](https://arxiv.org/abs/2605.22344)。权重：`ByteDance/Bernini-R-Diffusers`（**apache-2.0**）。图像配方记录为**单卡**；视频配方可以打开显式 Ulysses 序列并行。GPU 产物一致性**待验证**。状态：**Runner 一致性待验证**。
+
+<ModelCommandBuilder modelId="bernini-r-14b" locale="zh" />
+
+## 用来做什么
+
+需要本系列的文生视频时选 `bernini-r-14b`：prompt 进、生成视频出。它是 catalog 上的 T2V 起步线，不是编辑器，也不是世界模型步进器。
+
+即 Bernini 两段式设计中的 14B 渲染网络，单独运行。manifest 记录：图像配方单卡可跑，视频配方可显式启用 Ulysses 序列并行加速。
+
+catalog 记录的任务包括 文生图、图像编辑、文生视频、视频到视频。别名包括 `bernini-r`、`bernini-r-diffusers`。模态上，它接受文本、图像、视频，输出图像、视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（检验渲染器本身的文生视频质量）。
+
+## 运行时契约
+
+可选 `prompt`、`task_type`、`neg_prompt`、`num_frames`、`height`；产物 `generated_image`、`generated_video`、`bernini-r-14b.mp4`。
+
+CLI task profile：`t2v`、`t2i`、`i2i`、`v2v`、`r2v`、`rv2v`。绑定的 pipeline 类是 `BerniniWorldFoundryPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+Runner parity 为 pending_gpu_validation。 用 task_type 选择任务；先在本地就位 Bernini-R-Diffusers checkpoint（apache-2.0）。 快速实验建议用 1.3B 兄弟条目；需要规划器+渲染器全流程时用旗舰 bernini 条目。
+
+Official renderer inference is vendored in-tree; no external Bernini checkout is used.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run bernini-r-14b --pipeline.task-profile t2v` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-bernini-cu124`（Python 3.11，CUDA 12.4，torch==2.5.1+cu124）。
+
+记录的权重仓库包括 `ByteDance/Bernini-R-Diffusers`、`ByteDance/Bernini-R-Diffusers`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh bernini-r-14b`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="bernini-r-14b" locale="zh" />

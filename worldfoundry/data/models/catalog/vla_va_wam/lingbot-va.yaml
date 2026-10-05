@@ -23,6 +23,7 @@ integration:
 license: apache-2.0
 name: LingBot-VA
 official_sources:
+  paper: https://arxiv.org/abs/2601.21998
   github:
     head_sha: 58c2ae5bac46bd8114065bea9d7d256eb67c16c3
     url: https://github.com/Robbyant/lingbot-va
@@ -83,3 +84,26 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records. Runner or pipeline targets are present
   only after a complete in-tree WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: Robbyant (Ant Group)
+  publisher_kind: company
+  publisher_zh: 蚂蚁灵波科技（Robbyant，蚂蚁集团）
+  overview: 'LingBot-VA is Robbyant''s video-action model served through a vendored server/client runtime: base plus RoboTwin and LIBERO-Long post-trained checkpoints are staged (Apache-2.0). On an 80GB CUDA GPU the base transformer passed CUDA forward, post-train checkpoints passed tensor probes, and libero-long server init reached websocket listen — full client rollout remains unverified.'
+  overview_zh: LingBot-VA 是蚂蚁灵波科技（Robbyant）的视频-动作模型，经内置的 server/client 运行时提供服务：base 加 RoboTwin 与 LIBERO-Long 后训练 checkpoint 均已就位（Apache-2.0）。在 80GB CUDA GPU 上，base transformer 通过 CUDA 前向，后训练 checkpoint 通过张量探针，libero-long 服务初始化可达 websocket 监听——完整客户端 rollout 尚未验证。
+  architecture: A transformer video-action backbone; staged configs set attn_mode=torch and build_server_command passes --checkpoint-dir to the vendored server. Architecture internals beyond the official repository pointer are not recorded in this repository.
+  architecture_zh: transformer 视频-动作骨干；就位配置设 attn_mode=torch，build_server_command 向内置服务传递 --checkpoint-dir。官方仓库指针之外的架构内部细节仓库未记录。
+  usage_notes: 'Runs use a server/client split: server init is verified with staged checkpoints, but official demo parity is not claimed until client rollout and action decoding are validated.'
+  usage_notes_zh: 运行采用 server/client 分离：服务初始化已用就位 checkpoint 验证，但在客户端 rollout 与动作解码验证前，不声称官方 demo parity。
+  limitations:
+  - Full client rollout/action decoding is unverified; demo parity is not claimed.
+  - Server-based runtime needs an 80GB-class GPU for the validated paths.
+  limitations_zh:
+  - 完整客户端 rollout/动作解码未验证；不声称 demo parity。
+  - 基于服务的运行时在已验证路径上需要 80GB 级 GPU。
+  recommended_benchmarks:
+  - id: libero
+    reason: Post-trained libero-long checkpoint is staged.
+    reason_zh: 已就位 libero-long 后训练 checkpoint。
+  - id: robotwin
+    reason: Post-trained RoboTwin checkpoint is staged.
+    reason_zh: 已就位 RoboTwin 后训练 checkpoint。

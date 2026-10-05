@@ -17,6 +17,11 @@ checkpoint_refs:
   local_dir: ${WORLDFOUNDRY_CKPT_DIR}/VGGT-Omega
   estimated_size_gb: 9.29
   license: cc-by-nc-4.0
+official_sources:
+  project_page: https://vggt-omega.github.io/
+  paper: https://arxiv.org/abs/2605.15195
+  github:
+    url: https://github.com/facebookresearch/vggt-omega
 integration:
   kind: pipeline_runner
   status: integrated
@@ -40,3 +45,19 @@ catalog_category: three_d_four_d
 catalog_scope: 3D Gaussian-splatting catalog entries. Integrated entries expose in-tree
   WorldFoundry runtimes; metadata-only entries retain upstream provenance without runnable
   backends.
+docs:
+  publisher: Meta AI
+  publisher_kind: company
+  publisher_zh: Meta AI
+  overview: 'VGGT-Omega is the extended VGGT release published under facebook/VGGT-Omega, covering 3D reconstruction, Gaussian splatting, and novel view synthesis. In this catalog it is verified with unusually strong evidence: single-image GPU parity against the pinned upstream commit passed with max_abs_diff=0.0 for comparable outputs, and the in-tree runner supports the official scene-export route.'
+  overview_zh: VGGT-Omega 是以 facebook/VGGT-Omega 发布的 VGGT 扩展版本，覆盖 3D 重建、高斯泼溅与新视角合成。本 catalog 中它以异常严格的证据验证：与固定上游 commit 的单图 GPU 一致性对比在可比输出上达到 max_abs_diff=0.0，树内 runner 支持官方场景导出路径。
+  architecture: It uses an official-architecture representation runner plus the existing WorldFoundry VGGTResult/save interface, emitting predictions.npz plus GLB scene artifacts. Weights stay under assets/checkpoints and are never committed into source files; the checkpoint license is CC-BY-NC-4.0.
+  architecture_zh: 它使用官方架构的表示 runner 加上现有的 WorldFoundry VGGTResult/save 接口，输出 predictions.npz 与 GLB 场景产物。权重存放于 assets/checkpoints、绝不提交进源码；checkpoint 许可为 CC-BY-NC-4.0。
+  usage_notes: Use this entry for the verified official scene-export route with WorldFoundry representation artifacts. It is distinct from the vggt (base) and vggt-world entries — pick by route, not by name.
+  usage_notes_zh: 需要已验证的官方场景导出路径与 WorldFoundry 表示产物时使用本条目。它与 vggt（基础版）及 vggt-world 条目相互独立——请按路径而非名称选择。
+  limitations:
+  - 'CC-BY-NC-4.0 checkpoint: non-commercial license terms apply downstream.'
+  - Verified scope is single-image parity plus scene export; broader multi-view coverage is tracked outside the catalog.
+  limitations_zh:
+  - checkpoint 为 CC-BY-NC-4.0：下游适用非商用许可条款。
+  - 已验证范围为单图一致性加场景导出；更广的多视图覆盖在 catalog 外跟踪。

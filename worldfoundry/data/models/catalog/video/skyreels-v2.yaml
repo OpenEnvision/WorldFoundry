@@ -51,17 +51,28 @@ checkpoint:
     license_status: manual_review_required
   notes: Representative public HF repos were metadata-checked only; license is reported
     as 'other'.
+official_sources:
+  paper: https://arxiv.org/abs/2504.13074
 integration:
   status: integrated
   notes:
-  - WorldFoundry route is complete; missing checkpoint/assets are reported at runtime.
+  - The 1.3B route is assembled from the shared native Wan graph, conditioner, VAE,
+    scheduler, initializer, loader, and runner.
 demo_parity:
   status: pending_visual_qa
-  notes: The in-tree SkyReels-V2 route is wired to the official DF runtime, but
-    release parity requires a 97-frame official-configuration Studio run with
-    coherent visual output.
-notes: Tracked as a current long-video/open-weight candidate; do not mark integrated
-  before official demo and runner parity pass.
+  notes: Checkpoint structure parity is complete; release parity still requires a
+    97-frame native artifact and visual QA.
+native_diffusion:
+  recipe_id: skyreels-v2
+  architecture: skyreels-v2-wan-df-1.3b
+  backend: worldfoundry-native-diffusion
+  checkpoint_graph_match: 830/830
+  shared_components:
+  - Wan UMT5 conditioner and tokenizer
+  - Wan video VAE and UniPC scheduler
+  - native loader, CFG runner, and block offload
+notes: The upstream graph is represented as an FPS-conditioned Wan capability; the
+  vendored CLI/pipeline is not an inference backend.
 catalog_category: video
 catalog_scope: Official GitHub and/or Hugging Face confirmed open-source or open-weight
   video generation models. Checkpoints are not tracked in git; local validation may
@@ -73,3 +84,25 @@ catalog_policy:
     id, sha, private, gated, license, and selected task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit
     parity run and expected artifact are recorded.
+docs:
+  publisher: Skywork AI (Kunlun)
+  publisher_kind: company
+  publisher_zh: 昆仑万维（Skywork AI）
+  overview: SkyReels-V2 is Skywork AI's open film-generation model family built on the Wan architecture, recorded here for text-to-video and image-to-video. WorldFoundry serves the 1.3B route assembled entirely from the shared native Wan graph, conditioner, VAE, scheduler, initializer, loader, and runner — the vendored CLI/pipeline is deliberately not an inference backend.
+  overview_zh: SkyReels-V2 是昆仑万维 Skywork AI 基于 Wan 架构的开源影视生成模型系列，本条目记录文生视频与图生视频。WorldFoundry 提供的 1.3B 路径完全由共享的原生 Wan 图、条件器、VAE、调度器、初始化器、加载器与 runner 装配——内置的 CLI/pipeline 被有意排除在推理后端之外。
+  architecture: 'The manifest records the upstream graph as an FPS-conditioned Wan capability: SkyReels-V2''s diffusion-forcing design conditions on frame rate to enable long-form generation. In WorldFoundry it is a native Wan-graph assembly with prompt/image inputs and a generated_video artifact.'
+  architecture_zh: manifest 将上游图记录为「FPS 条件化的 Wan 能力」：SkyReels-V2 的 diffusion-forcing 设计以帧率为条件支撑长视频生成。在 WorldFoundry 中它是原生 Wan 图装配，输入 prompt/image，产物 generated_video。
+  usage_notes: Integration is complete for the 1.3B route; no runner-parity record exists yet. Larger upstream checkpoints (5B/14B) are not the recorded route — stick to 1.3B for the supported path.
+  usage_notes_zh: 1.3B 路径集成已完成；尚无 runner parity 记录。上游更大的 checkpoint（5B/14B）不是已记录路径——受支持的路径请使用 1.3B。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  - Only the 1.3B assembly is recorded; larger upstream variants are out of scope here.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  - 仅记录 1.3B 装配；上游更大 variant 不在本条目范围内。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard T2V quality suite.
+    reason_zh: 标准文生视频质量评测。

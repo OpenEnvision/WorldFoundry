@@ -1,0 +1,79 @@
+{
+  "inputs": {
+    "distribution_matching": {
+      "score_sample": [
+        [[[2.0, 0.0], [4.0, 2.0]]],
+        [[[1.0, -1.0], [3.0, 5.0]]]
+      ],
+      "fake_score_clean": [
+        [[[2.0, 0.0], [3.0, 1.0]]],
+        [[[1.0, -1.0], [4.0, 3.0]]]
+      ],
+      "real_score_clean": [
+        [[[1.0, 1.0], [1.0, 1.0]]],
+        [[[0.0, 0.0], [2.0, 4.0]]]
+      ],
+      "normalization_axes": [1, 2, 3]
+    },
+    "softplus_gan": {
+      "real_logits": [2.0, -1.0],
+      "fake_logits": [-1.0, 2.0]
+    },
+    "teacher_guidance": {
+      "conditional": [3.0, -2.0],
+      "unconditional": [1.0, 4.0],
+      "scales": [0.0, 1.0]
+    },
+    "weighted_totals": {
+      "generator_components": {
+        "distribution_matching": [0.3333333333, 0.875],
+        "generator_adversarial": [1.3132616875, 0.1269280110]
+      },
+      "generator_weights": {
+        "distribution_matching": 1.5,
+        "generator_adversarial": 0.25
+      },
+      "guidance_components": {
+        "denoising": [0.5, 1.5],
+        "adversarial": [0.4401896986, 3.4401896986]
+      },
+      "guidance_weights": {
+        "denoising": 0.75,
+        "adversarial": 2.0
+      }
+    },
+    "cadence": {
+      "generator_update_interval": 3,
+      "global_steps": [0, 1, 2, 3, 4, 5, 6]
+    }
+  },
+  "expected": {
+    "distribution_matching": {
+      "normalizer": [1.5, 1.0],
+      "gradient": [
+        [[[0.6666666667, -0.6666666667], [1.3333333333, 0.0]]],
+        [[[1.0, -1.0], [2.0, -1.0]]]
+      ],
+      "proxy_per_sample": [0.3333333333, 0.875]
+    },
+    "softplus_gan": {
+      "generator": [1.3132616875, 0.1269280110],
+      "guidance": [0.4401896986, 3.4401896986]
+    },
+    "teacher_guidance": {
+      "scale_zero": [1.0, 4.0],
+      "scale_one": [3.0, -2.0]
+    },
+    "weighted_totals": {
+      "generator": [0.8283154219, 1.3442320028],
+      "guidance": [1.2553793972, 8.0053793972]
+    },
+    "cadence": {
+      "generator_due": [true, false, false, true, false, false, true],
+      "iteration_scheduler_steps": [1, 2, 3, 4, 5, 6, 7],
+      "generator_update_scheduler_steps": [1, 1, 1, 2, 2, 2, 3]
+    }
+  },
+  "atol": 1e-6,
+  "rtol": 1e-6
+}

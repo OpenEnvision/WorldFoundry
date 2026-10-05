@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import argparse
-from functools import lru_cache
 import json
 import os
 import re
 import shutil
 import subprocess
+from functools import lru_cache
+from pathlib import Path
 
 from worldfoundry.core.io.paths import conda_envs_root_path
 
@@ -22,6 +23,25 @@ TIER_MINIMUM_DRIVER = {
     "cu121": (12, 1),
     "cu124": (12, 4),
     "cu128": (12, 8),
+}
+# Keep each install range inside the releases published by its CUDA wheel
+# index. These are resolver constraints, not lockfiles.
+TIER_TORCH_SPECS: dict[str, dict[str, str]] = {
+    "cu121": {
+        "torch": "torch>=2.4,<2.6",
+        "torchvision": "torchvision>=0.19,<0.21",
+        "torchaudio": "torchaudio>=2.4,<2.6",
+    },
+    "cu124": {
+        "torch": "torch>=2.4,<2.7",
+        "torchvision": "torchvision>=0.19,<0.22",
+        "torchaudio": "torchaudio>=2.4,<2.7",
+    },
+    "cu128": {
+        "torch": "torch>=2.7,<2.12.0",
+        "torchvision": "torchvision>=0.22,<0.27.0",
+        "torchaudio": "torchaudio>=2.7,<2.12.0",
+    },
 }
 
 _LEGACY_PROFILE_TO_TIER = {
@@ -59,12 +79,22 @@ def cuda_version_tuple(version: str | None) -> tuple[int, int]:
         return (0, 0)
 
 
-@lru_cache(maxsize=1)
 def detect_nvidia_driver_cuda() -> str | None:
-    """Detect the NVIDIA driver CUDA version via ``nvidia-smi`` or env override."""
+    """Detect the NVIDIA driver CUDA version via ``nvidia-smi`` or env override.
+
+    The env override is read on every call so tests and long-lived processes
+    that change ``WORLDFOUNDRY_DETECTED_DRIVER_CUDA`` see the update; only the
+    ``nvidia-smi`` probe result is cached.
+    """
     override = os.environ.get("WORLDFOUNDRY_DETECTED_DRIVER_CUDA")
     if override:
         return override
+    return _detect_nvidia_driver_cuda_from_smi()
+
+
+@lru_cache(maxsize=1)
+def _detect_nvidia_driver_cuda_from_smi() -> str | None:
+    """Probe ``nvidia-smi`` once per process for the driver CUDA version."""
     nvidia_smi = shutil.which("nvidia-smi")
     if not nvidia_smi:
         return None
@@ -83,10 +113,28 @@ def detect_nvidia_driver_cuda() -> str | None:
     return match.group(1) if match else None
 
 
-def best_cuda_tier_for_driver(driver_cuda: str | None = None) -> str:
-    """Pick the highest supported tier that the local driver can run."""
+def best_cuda_tier_for_driver(
+    driver_cuda: str | None = None,
+    *,
+    allow_missing_driver: bool = True,
+) -> str:
+    """Pick the highest supported tier that the local driver can run.
 
-    driver = cuda_version_tuple(driver_cuda or detect_nvidia_driver_cuda())
+    Historical runtime callers retain the ``cu128`` fallback when no driver is
+    visible. Installer auto-detection disables that fallback so a CPU host does
+    not silently select a CUDA wheel tier and attempt a flash-attn source build.
+    """
+
+    detected = driver_cuda if driver_cuda is not None else detect_nvidia_driver_cuda()
+    driver = cuda_version_tuple(detected)
+    if driver == (0, 0):
+        if allow_missing_driver:
+            return DEFAULT_CUDA_TIER
+        raise ValueError(
+            "No NVIDIA driver CUDA version detected. Pass an explicit --cuda tier "
+            f"({'/'.join(SUPPORTED_CUDA_TIERS)}); on CPU-only hosts also use "
+            "--allow-no-cuda --skip-flash-attn."
+        )
     if driver >= (12, 8):
         return "cu128"
     if driver >= (12, 4):
@@ -162,10 +210,17 @@ def torch_wheel_index_url(tier: str = DEFAULT_CUDA_TIER) -> str:
     return TORCH_WHEEL_INDEX_TEMPLATE.format(tier=normalized)
 
 
-def _unified_env_prefix(tier: str = DEFAULT_CUDA_TIER) -> "Path":
-    """Resolve the filesystem prefix for the unified-tier conda environment."""
-    from pathlib import Path
+def torch_specs_for_tier(tier: str = DEFAULT_CUDA_TIER) -> dict[str, str]:
+    """Return a copy of the torch package constraints for one CUDA tier."""
 
+    normalized = normalize_cuda_profile(tier)
+    if normalized not in TIER_TORCH_SPECS:
+        normalized = DEFAULT_CUDA_TIER
+    return dict(TIER_TORCH_SPECS[normalized])
+
+
+def _unified_env_prefix(tier: str = DEFAULT_CUDA_TIER) -> Path:
+    """Resolve the filesystem prefix for the unified-tier conda environment."""
     override = os.environ.get("WORLDFOUNDRY_UNIFIED_ENV_PREFIX")
     if override:
         return Path(override).expanduser()
@@ -208,7 +263,7 @@ def resolve_install_tier(requested: str | None = None, *, driver_cuda: str | Non
         or "auto"
     )
     if value in {"", "auto"}:
-        return best_cuda_tier_for_driver(driver_cuda)
+        return best_cuda_tier_for_driver(driver_cuda, allow_missing_driver=False)
     value = _LEGACY_PROFILE_TO_TIER.get(value, value)
     if value not in SUPPORTED_CUDA_TIERS:
         raise ValueError(
@@ -234,6 +289,7 @@ def cuda_tier_report(requested: str | None = None, *, driver_cuda: str | None = 
         "minimum_driver_cuda": ".".join(str(part) for part in _tier_minimum_driver(tier)),
         "env_name": unified_env_name(tier),
         "torch_index_url": torch_wheel_index_url(tier),
+        "torch_specs": torch_specs_for_tier(tier),
         "supported_tiers": list(SUPPORTED_CUDA_TIERS),
     }
 
@@ -257,6 +313,7 @@ __all__ = [
     "DEFAULT_CUDA_TIER",
     "SUPPORTED_CUDA_TIERS",
     "TIER_MINIMUM_DRIVER",
+    "TIER_TORCH_SPECS",
     "UNIFIED_ENV_NAME_TEMPLATE",
     "TORCH_WHEEL_INDEX_TEMPLATE",
     "best_cuda_tier_for_driver",
@@ -267,6 +324,7 @@ __all__ = [
     "preferred_unified_tier",
     "resolve_install_tier",
     "resolve_cuda_tier",
+    "torch_specs_for_tier",
     "torch_wheel_index_url",
     "unified_env_enabled",
     "unified_env_exists",

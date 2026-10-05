@@ -1,0 +1,52 @@
+---
+title: "IRASim"
+description: "IRASim from ByteDance: robotics-world-model and video-generation; Planned."
+modelId: "irasim"
+pageSource: authored
+---
+
+IRASim (Interactive Real-Robot Action Simulator) generates realistic robot-arm videos from an initial frame plus an action trajectory — a learned simulator for robot data. In this catalog the model, diffusion, and inference pipeline modules are vendored in-tree; real generation waits on manually staged official checkpoint archives.
+
+<ModelPaperFigures modelId="irasim" locale="en" />
+
+The recorded paper is [arXiv 2406.14540](https://arxiv.org/abs/2406.14540).
+
+Project page: [gen-irasim.github.io](https://gen-irasim.github.io/). Code: [bytedance/IRASim](https://github.com/bytedance/IRASim).
+
+<ModelCommandBuilder modelId="irasim" locale="en" />
+
+## What it is for
+
+Pick `irasim` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+
+It is published by ByteDance.
+
+Catalog tasks include robotics-world-model, video-generation, and action-conditioned-generation. Catalog aliases include `ira-sim` and `ira_sim`. Documented outputs include video.
+
+Recorded evaluation entry points include [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) (Embodied world-model video prediction quality).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, and `fps`; artifacts `irasim.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `IRASimPipeline`.
+
+Family status: **Planned**.
+
+Published checkpoint archives are not HF model repos staged by the current downloader — supply checkpoints and task fixtures manually before expecting real video.
+
+Runtime source is vendored in-tree; full generation remains checkpoint- and fixture-gated.
+
+Upstream training dataloaders, evaluation scripts, and interactive application demos are pruned from the runtime package.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run irasim --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, Prepare Only).
+
+No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh irasim`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Planned**.
+
+<ModelRelatedRecipes modelId="irasim" locale="en" />

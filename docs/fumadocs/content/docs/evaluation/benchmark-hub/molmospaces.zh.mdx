@@ -1,126 +1,27 @@
 ---
 title: MolmoSpaces-Bench
-description: MolmoSpaces-Bench — 指标、依赖与运行命令。
+description: "Ai2 MolmoBot 评测阶梯：1000 episode 抓取与抓放。WorldFoundry 导入 rollout；不收录官方榜行。"
 ---
 
-## 简介
+MolmoSpaces-Bench 是艾伦人工智能研究所（Ai2）为 MolmoBot / MolmoSpaces 空间语言操作准备的**仿真评测**。论文中的训练数据（**MolmoBot-Data**）是 **170 万**条专家轨迹，生态数字为 **23.2 万**环境、**4.8 万**可操作物体——那**不是**本评测。评测本身是 **1000 episode** 阶梯：Pick MSProc / Classic / 照片级 Pick / Pick Random-Cam（20 秒），然后是 Pick&Place、PnP Next-To（5 cm）、PnP Color（40 秒）。官方表把**抓取阶段**成功率与**最终** / oracle 成功率分开。公开榜在 [molmospaces.allen.ai/leaderboard](https://molmospaces.allen.ai/leaderboard)；本 Hub **尚未**收录其行。
 
+论文：[MolmoBot](https://arxiv.org/abs/2603.16861)。项目：[allenai.github.io/MolmoBot](https://allenai.github.io/MolmoBot/)。代码：[allenai/MolmoBot](https://github.com/allenai/MolmoBot)。WorldFoundry 的 contract 划分名是 `pick_and_place`。
 
+WorldFoundry **导入**官方 rollout 导出。它**不跑** MolmoSpaces、不生成那 170 万条，也不把 Ai2 榜复制到本页。
 
-MolmoSpaces-Bench external benchmark manifest for spatial embodied policy evaluation.
+<BenchmarkPageSections id="molmospaces" locale="zh" />
 
-
-
-## 指标
-
-MolmoSpaces-Bench external benchmark manifest for spatial embodied policy evaluation.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/molmospaces.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `pick_success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `reward` | MoLMoSpaces 语言引导导航与交互 episode 的任务 reward。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `molmospaces-runtime`。
-- **单独配置：** 需要 benchmark 专用 conda 环境，不要与统一 runtime 混用。
-- Stage only the selected MolmoSpaces-Bench subset; the full public asset corpus is very large.
-
-### 测评数据
-
-- 待测模型输出目录：设置 `WORLDFOUNDRY_MOLMOSPACES_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/molmospaces`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/allenai--MolmoBot`
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_MOLMOSPACES_ROOT`
-- `WORLDFOUNDRY_MOLMOSPACES_RESULTS_PATH`
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id molmospaces \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/molmospaces/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/molmospaces/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id molmospaces \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/molmospaces/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id molmospaces --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_MOLMOSPACES_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+可选 `WORLDFOUNDRY_MOLMOSPACES_ROOT` 指向本地 runtime / 仓库。默认导入路径：`WORLDFOUNDRY_MOLMOSPACES_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/molmospaces.yaml`。产物：`scorecard.json`（主键 `success_rate`；另有 `pick_success_rate`）、`raw_results.jsonl`、`evaluation/summary.json`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

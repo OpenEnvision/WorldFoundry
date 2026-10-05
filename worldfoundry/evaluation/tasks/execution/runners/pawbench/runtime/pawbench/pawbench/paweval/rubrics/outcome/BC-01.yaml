@@ -1,0 +1,47 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BC-01
+track: coverage
+title_en: Ball Toss Into Cup
+outcome_question: Which label in ['clean_in_cup', 'contact_then_in_cup', 'cup_contact_then_out',
+  'near_miss_no_cup_contact', 'clear_miss'] is visible as the first decisive post-action
+  result?
+readout_policy: Read the first decisive post-action result window after the requested
+  action completes. Qualifying frames are those where the relevant evidence is in
+  view and no longer in transition. Use the scene protocol's first-decisive-window
+  rule; terminal stability is not required unless the protocol names it.
+canonical_labels:
+- clean_in_cup
+- contact_then_in_cup
+- cup_contact_then_out
+- near_miss_no_cup_contact
+- clear_miss
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['clean_in_cup', 'contact_then_in_cup', 'cup_contact_then_out',
+  'near_miss_no_cup_contact', 'clear_miss'] can be decisively identified within the
+  readout window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's
+  reference protocol; record it as out-of-schema.
+priority_rules:
+- 'First decisive readout is the ball/cup relation immediately after the single toss:
+  clean in-cup, contact-then-in, cup-contact out, near no-contact miss, or clear miss.'
+- Score labels require the ball to enter and remain visibly inside the cup mouth;
+  a bounce out after cup contact is `cup_contact_then_out`, not a score.
+- Use `contact_then_in_cup` rather than `clean_in_cup` when the ball visibly touches
+  rim/cup/hand/object before entering, even if the final terminal state is in cup.
+- Use `near_miss_no_cup_contact` only when the ball passes close to the cup without
+  visible cup/rim contact; use `clear_miss` when it is plainly away from the cup.
+- 'Tie-break: visible final in-cup beats cup-contact miss; cup-contact miss beats
+  no-contact miss; if contact or final containment is occluded, return `unreadable`.'
+notes:
+- 'Contact/trajectory scene: outcome label uses first decisive visible target interaction
+  or miss geometry.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules
+  are authored from STAGBench metadata/action protocol.'
+- 'Scene title: Ball Toss Into Cup.'

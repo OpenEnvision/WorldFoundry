@@ -1,5 +1,7 @@
 id: vbench
 name: VBench
+publisher: Nanyang Technological University
+publisher_kind: university
 benchmark_kind:
 - text-to-video
 - video-generation-quality
@@ -248,6 +250,9 @@ metrics:
   aggregator: mean
   output_unit: score
 runner:
+  workspace:
+    dispatch: vbench_classic
+  official_script: worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VBenchContract
   run_command: MASTER_ADDR="${MASTER_ADDR:-127.0.0.1}" MASTER_PORT="${WORLDFOUNDRY_VBENCH_MASTER_PORT:-29631}" 
     PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
@@ -326,6 +331,7 @@ runner:
   - Bounded official-run evidence is integrated; leaderboard-grade full-suite validation remains blocked below.
 integration:
   status: integrated
+  tier: in_tree
   evidence:
     report_path: tmp/benchmark_zoo/validation/vbench/report.json
     validation_dimension: aesthetic_quality

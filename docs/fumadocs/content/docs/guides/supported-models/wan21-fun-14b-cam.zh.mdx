@@ -1,0 +1,50 @@
+---
+title: "Wan2.1-Fun V1.1 14B Control Camera"
+description: "Wan2.1-Fun V1.1 14B Control Camera（Alibaba PAI (VideoX-Fun)）：相机可控视频、图生视频；Runner 一致性待确认。"
+modelId: "wan21-fun-14b-cam"
+pageSource: authored
+---
+
+Wan2.1-Fun V1.1 14B Control Camera 是阿里云 PAI 在 VideoX-Fun 家族中 Wan2.1 世代最大的相机控制 checkpoint：由显式相机位姿序列操控的图生视频。WorldFoundry 将 VideoX-Fun 内置树内（revision 403f1f7b），并为 alibaba-pai/Wan2.1-Fun-V1.1-14B-Control-Camera checkpoint 接通专用路由， Apache-2.0 许可。
+
+<ModelPaperFigures modelId="wan21-fun-14b-cam" locale="zh" />
+
+代码：[aigc-apps/VideoX-Fun](https://github.com/aigc-apps/VideoX-Fun)。
+
+<ModelCommandBuilder modelId="wan21-fun-14b-cam" locale="zh" />
+
+## 用来做什么
+
+`wan21-fun-14b-cam` 是记录的相机控制路由。按 catalog 相机路径推进时从这里起步。
+
+14B 参数的 Wan2.1 扩散 Transformer，叠加 VideoX-Fun Control-Camera 条件通路：相机外参作为控制信号与图像条件一同注入。更多内部细节仓库未记录。该模型由阿里云 PAI（VideoX-Fun）发布。
+
+catalog 记录的任务包括 相机可控视频、图生视频。模态上，它接受图像，输出视频。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（受控图生视频的相机位姿跟随）。
+
+不是 [Wan2.1](/zh/docs/guides/supported-models/wan2.1)、[Wan2.1 Fun 1.3B Cam](/zh/docs/guides/supported-models/wan21-fun-1p3b-cam)。 评测看 [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`frames`、`fps`、`height`；产物 `wan21-fun-14b-cam.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `Wan21Fun14BCameraPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+同路由的 1.3B 版本（wan21-fun-1p3b-cam）已有 GPU 验证可作参照；14B 路由本身已接通但 parity 仍为 pending。 相机位姿序列需显式提供。
+
+14B 规模意味着显存需求远高于 1.3B 变体。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run wan21-fun-14b-cam --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `alibaba-pai/Wan2.1-Fun-V1.1-14B-Control-Camera`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh wan21-fun-14b-cam`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="wan21-fun-14b-cam" locale="zh" />

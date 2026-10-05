@@ -10,9 +10,8 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = REPO_ROOT
@@ -20,7 +19,6 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from worldfoundry.evaluation.utils import load_manifest  # noqa: E402
-
 
 DEFAULT_MANIFEST_DIR = REPO_ROOT / "worldfoundry" / "data" / "models" / "catalog"
 DEFAULT_CACHE_DIR = REPO_ROOT / "cache" / "hfd"
@@ -126,6 +124,55 @@ class ModelManifest:
                         )
         return revisions
 
+    @property
+    def hf_repo_files(self) -> dict[str, list[str]]:
+        """Return explicitly requested files grouped by Hugging Face repo id."""
+
+        files: dict[str, list[str]] = {}
+
+        def add(repo_value: Any, filename_value: Any) -> None:
+            repo_id = _hf_repo_id_from_value(repo_value)
+            filename = _normalize_hf_filename(filename_value)
+            if not repo_id or not filename:
+                return
+            repo_files = files.setdefault(repo_id, [])
+            if filename not in repo_files:
+                repo_files.append(filename)
+
+        def mappings(value: Any) -> tuple[dict[str, Any], ...]:
+            if isinstance(value, dict):
+                values = value.values()
+            else:
+                values = value or ()
+            return tuple(item for item in values if isinstance(item, dict))
+
+        checkpoint = self.data.get("checkpoint")
+        if isinstance(checkpoint, dict):
+            add(checkpoint.get("hf_repo_id"), checkpoint.get("filename"))
+            for repo in mappings(checkpoint.get("repos")):
+                add(repo.get("id") or repo.get("repo_id"), repo.get("filename"))
+        for key in ("checkpoint_refs", "checkpoints"):
+            for repo in mappings(self.data.get(key)):
+                add(repo.get("repo_id") or repo.get("id"), repo.get("filename"))
+        for variant in self.data.get("variants") or ():
+            if not isinstance(variant, dict):
+                continue
+            for key in ("checkpoint_refs", "checkpoints"):
+                for repo in mappings(variant.get(key)):
+                    add(repo.get("repo_id") or repo.get("id"), repo.get("filename"))
+        official_sources = self.data.get("official_sources")
+        if isinstance(official_sources, dict):
+            for key in ("huggingface", "huggingface_models", "hf_models", "models"):
+                values = official_sources.get(key)
+                items = values if isinstance(values, list) else [values]
+                for item in items:
+                    if isinstance(item, dict):
+                        add(
+                            item.get("repo_id") or item.get("id") or item.get("url"),
+                            item.get("filename"),
+                        )
+        return files
+
 
 def _hf_repo_id_from_value(value: Any) -> str | None:
     if not isinstance(value, str) or not value.strip():
@@ -141,6 +188,17 @@ def _hf_repo_id_from_value(value: Any) -> str | None:
     if len(parts) < 2:
         return None
     return "/".join(parts[:2])
+
+
+def _normalize_hf_filename(value: Any) -> str | None:
+    """Normalize one repository-relative filename without allowing traversal."""
+
+    if not isinstance(value, str) or not value.strip():
+        return None
+    path = PurePosixPath(value.strip())
+    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+        return None
+    return path.as_posix()
 
 
 def _is_commit_like_revision(value: str | None) -> bool:
@@ -208,9 +266,10 @@ def build_download_command(
     downloader: list[str] | None = None,
     revision: str | None = None,
     max_workers: int | None = None,
+    filenames: list[str] | None = None,
 ) -> list[str]:
     prefix = downloader if downloader is not None else find_hf_downloader()
-    command = [*prefix, repo_id, "--cache-dir", str(cache_dir)]
+    command = [*prefix, repo_id, *(filenames or ()), "--cache-dir", str(cache_dir)]
     if revision:
         command.extend(["--revision", revision])
     if max_workers is not None:
@@ -266,9 +325,19 @@ def _direct_hfd_revision(repo_dir: Path) -> str | None:
     return next(iter(revisions)) if len(revisions) == 1 else None
 
 
-def check_local_checkpoint(repo_id: str, cache_dir: Path, expected_revision: str | None = None) -> dict[str, Any]:
+def check_local_checkpoint(
+    repo_id: str,
+    cache_dir: Path,
+    expected_revision: str | None = None,
+    required_files: list[str] | None = None,
+) -> dict[str, Any]:
     repo_dir = hf_cache_repo_dir(cache_dir, repo_id)
     direct_repo_dir = direct_hfd_repo_dir(cache_dir, repo_id)
+    normalized_required_files = [
+        filename
+        for value in (required_files or ())
+        if (filename := _normalize_hf_filename(value)) is not None
+    ]
     refs_dir = repo_dir / "refs"
     snapshots_dir = repo_dir / "snapshots"
     ref_name = expected_revision if expected_revision and not _is_commit_like_revision(expected_revision) else "main"
@@ -325,11 +394,21 @@ def check_local_checkpoint(repo_id: str, cache_dir: Path, expected_revision: str
     elif expected_revision:
         revision_matches = False
 
+    hf_required_files_ready = not normalized_required_files or any(
+        all((snapshot_dir / filename).is_file() for filename in normalized_required_files)
+        for snapshot_dir in snapshot_dirs
+    )
+    hf_missing_required_files = [
+        filename
+        for filename in normalized_required_files
+        if not any((snapshot_dir / filename).is_file() for snapshot_dir in snapshot_dirs)
+    ]
     hf_ready = (
         bool(snapshot_dirs)
         and all(path.exists() for path in snapshot_dirs)
         and file_count > 0
         and revision_matches
+        and hf_required_files_ready
         and not blocking_incomplete_files
         and not broken_links
     )
@@ -345,9 +424,15 @@ def check_local_checkpoint(repo_id: str, cache_dir: Path, expected_revision: str
         direct_revision_matches = direct_revision == expected_revision
     elif expected_revision:
         direct_revision_matches = bool(direct_revision)
+    direct_missing_required_files = [
+        filename
+        for filename in normalized_required_files
+        if not (direct_repo_dir / filename).is_file()
+    ]
     direct_ready = (
         bool(direct_files)
         and direct_revision_matches
+        and not direct_missing_required_files
         and not direct_incomplete_files
     )
     ready = hf_ready or direct_ready
@@ -366,6 +451,10 @@ def check_local_checkpoint(repo_id: str, cache_dir: Path, expected_revision: str
         "direct_hfd_revision": direct_revision,
         "direct_hfd_revision_matches": direct_revision_matches,
         "direct_hfd_ready": direct_ready,
+        "required_files": normalized_required_files,
+        "hf_required_files_ready": hf_required_files_ready,
+        "hf_missing_required_files": hf_missing_required_files,
+        "direct_hfd_missing_required_files": direct_missing_required_files,
         "incomplete_files": incomplete_files,
         "blocking_incomplete_files": blocking_incomplete_files,
         "orphan_incomplete_files": orphan_incomplete_files,
@@ -470,8 +559,15 @@ def download_manifest(
 
     if execute:
         revisions = manifest.hf_repo_revisions
+        repo_files = manifest.hf_repo_files
         commands = [
-            build_download_command(repo_id, cache_dir, revision=revisions.get(repo_id), max_workers=max_workers)
+            build_download_command(
+                repo_id,
+                cache_dir,
+                revision=revisions.get(repo_id),
+                max_workers=max_workers,
+                filenames=repo_files.get(repo_id),
+            )
             for repo_id in repo_ids
         ]
         env = os.environ.copy()
@@ -482,7 +578,12 @@ def download_manifest(
             for command in commands
         ]
         local_checks = [
-            check_local_checkpoint(repo_id, cache_dir, manifest.hf_repo_revisions.get(repo_id))
+            check_local_checkpoint(
+                repo_id,
+                cache_dir,
+                manifest.hf_repo_revisions.get(repo_id),
+                manifest.hf_repo_files.get(repo_id),
+            )
             for repo_id in repo_ids
         ] if check_local else []
         return {
@@ -504,6 +605,7 @@ def download_manifest(
         }
 
     revisions = manifest.hf_repo_revisions
+    repo_files = manifest.hf_repo_files
     commands = [
         build_download_command(
             repo_id,
@@ -511,11 +613,17 @@ def download_manifest(
             downloader=["hf", "download"],
             revision=revisions.get(repo_id),
             max_workers=max_workers,
+            filenames=repo_files.get(repo_id),
         )
         for repo_id in repo_ids
     ]
     local_checks = [
-        check_local_checkpoint(repo_id, cache_dir, manifest.hf_repo_revisions.get(repo_id))
+        check_local_checkpoint(
+            repo_id,
+            cache_dir,
+            manifest.hf_repo_revisions.get(repo_id),
+            manifest.hf_repo_files.get(repo_id),
+        )
         for repo_id in repo_ids
     ] if check_local else []
     return {

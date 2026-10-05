@@ -1,9 +1,4 @@
-import json
-import os
-from einops import rearrange
-import torch
-
-def Bench_actions_76():
+def Bench_actions_76(action_names=None, num_frames=65):
     actions_single_action = [
         "forward",
         "back",
@@ -45,8 +40,15 @@ def Bench_actions_76():
             double_action = f"{action}_{camera}"
             actions_to_test.append(double_action)
 
-    print("length of actions: ", len(actions_to_test))
     base_action = actions_single_action + actions_single_camera
+    if action_names is not None:
+        aliases = {"backward": "back", "backward_left": "back_left", "backward_right": "back_right"}
+        requested = [aliases.get(action, action) for action in action_names]
+        supported = set(actions_to_test + base_action + ["idle", "nomove"])
+        unknown = set(requested) - supported
+        if unknown:
+            raise ValueError(f"Unsupported Matrix-Game-1 interactions: {sorted(unknown)}")
+        actions_to_test = requested
 
     KEYBOARD_IDX = { 
         "forward": 0, "back": 1, "left": 2, "right": 3,
@@ -66,7 +68,9 @@ def Bench_actions_76():
     }
 
 
-    num_samples_per_action = 65
+    num_samples_per_action = int(num_frames)
+    if num_samples_per_action < 1:
+        raise ValueError("num_frames must be positive")
 
     data = []
 
@@ -76,9 +80,8 @@ def Bench_actions_76():
         mouse_condition = [[0,0] for _ in range(num_samples_per_action)] 
 
         for sub_act in base_action:
-            if not sub_act in action_name: # 只处理action_name包含的动作
+            if sub_act not in action_name: # 只处理action_name包含的动作
                 continue
-            print(f"action name: {action_name} sub_act: {sub_act}")
             if sub_act in CAMERA_VALUE_MAP: # camera_dr
                 mouse_condition = [CAMERA_VALUE_MAP[sub_act]
                                    for _ in range(num_samples_per_action)]
@@ -101,3 +104,17 @@ def Bench_actions_76():
         })
 
     return data
+
+
+def interaction_condition(interactions, num_frames):
+    """Spread requested command segments across one video using official controls."""
+    if not interactions or len(interactions) > num_frames:
+        raise ValueError("Provide between one and num_frames interaction segments.")
+    conditions = Bench_actions_76(interactions, num_frames=num_frames)
+    result = {"action_name": "requested", "keyboard_condition": [], "mouse_condition": []}
+    count, remainder = divmod(num_frames, len(conditions))
+    for index, condition in enumerate(conditions):
+        length = count + (index < remainder)
+        for key in ("keyboard_condition", "mouse_condition"):
+            result[key].extend(condition[key][:length])
+    return result

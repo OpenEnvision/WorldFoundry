@@ -1,0 +1,60 @@
+schema_version: 2
+model_id: evoke
+display_name: Evoke
+task_family: world_model
+groups: [world, video, camera_control, autoregressive_video, text_to_video, image_to_video, video_to_video]
+source_repos:
+- url: https://github.com/AlayaLab/Evoke
+  revision: 74d268516d95c8fceadd2378f91a73f9f187042b
+  in_tree_path: worldfoundry/synthesis/visual_generation/evoke/evoke_runtime
+checkpoints:
+- repo_id: AlayaLab/Evoke
+  revision: 7fa34ecef85754fde6f08996b1ece9d195dcd2f4
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/AlayaLab--Evoke
+  role: base_components_and_post_distillation_transformer
+  status: checkpoint_required_gpu_parity_pending
+  required_paths:
+  - evoke-base/vae
+  - evoke-base/scheduler
+  - evoke-base/text_encoder
+  - evoke-base/tokenizer
+  - evoke/stage3_post_distillation/transformer
+- repo_id: pkqbajng/ViGeo1.1
+  revision: 49103e6eeab888bae974251d3578b496bec711d7
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/pkqbajng--ViGeo1.1
+  role: geometric_state_depth_backend
+  status: required_for_camera_trajectory_runs
+  license: cc-by-nc-4.0
+  required_paths: [vigeo.pt]
+input_schema:
+  prompt: true
+  image: true
+  video: true
+  actions: [trajectory_npz, pose_path, camera_trajectory]
+artifact_kind: generated_world
+artifact_filename: evoke.mp4
+execution:
+  environment: _unified
+  backend_stage: independent_in_tree_runtime
+  runtime_status: checkpoint_backed_gpu_parity_pending
+  integration_status: runtime_ported
+  pipeline_binding: evoke
+  default_parameters:
+    mode: auto
+    width: 640
+    height: 384
+    num_chunks: 4
+    fps: 24
+    num_inference_steps: 3
+    guidance_scale: 1.0
+integration:
+  status: runtime_ported
+license: apache-2.0
+usage_restrictions:
+- ViGeo1.1 model weights are CC-BY-NC-4.0 and are not licensed for commercial use.
+notes:
+- Runtime source is always resolved from the bundled tree; external source checkouts are rejected.
+- Checkpoints are resolved strictly from local WorldFoundry/Hugging Face storage and all subprocess Hub clients run offline.
+- A supplied camera trajectory enables geometric state for i2v/v2v and requires the separately acquired ViGeo1.1 weights.
+- The released post-distillation checkpoint was trained with v2v conditioning; its i2v and t2v modes are upstream-documented zero-shot capabilities.
+- This is an inference compatibility port to the shared WorldFoundry environment, not a claim of parity with Evoke's pinned training stack.

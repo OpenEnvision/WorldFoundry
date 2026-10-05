@@ -1,5 +1,7 @@
 id: videoscore
 name: VideoScore
+publisher: University of Waterloo
+publisher_kind: university
 benchmark_kind:
 - video-reward-model
 - human-feedback
@@ -132,6 +134,15 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.videoscore.run_videoscore_official_runner
+    generated_arg: --frames-dir
+    dataset_root_arg: --dataset-root
+    supports_run_official: false
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    input_kind: generated_frames_dir_or_official_results
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoScoreContract
   validation_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
     worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py --videoscore-root 
@@ -187,6 +198,9 @@ runner:
   - Runner patches the transformers DynamicCache API mismatch locally; full-suite leaderboard remains pending.
 integration:
   status: integrated
+  tier: model_backed
+  hf_dataset_id: TIGER-Lab/VideoScore-Bench
+  judge_model_id: TIGER-Lab/VideoScore-v1.1
   evidence:
     official_benchmark_verified: false
     integration_evidence: false

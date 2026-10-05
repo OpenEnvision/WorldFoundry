@@ -1,0 +1,82 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BA-02
+track: coverage
+title_en: Dog Reaction to Approaching Stranger
+outcome_question: Which label in ['dog_approaches_person', 'dog_holds_position_facing_person',
+  'dog_turns_away_without_retreating', 'dog_retreats_or_avoids_person',
+  'dog_leaves_interaction_area', 'dog_shows_defensive_posture',
+  'dog_active_defensive_advance_or_contact'] is visible as the first decisive
+  post-approach dog reaction?
+readout_policy: Read the first decisive post-action result window after the requested
+  action completes. Qualifying frames are those where the relevant evidence is in
+  view and no longer in transition. Use the scene protocol's first-decisive-window
+  rule; terminal stability is not required unless the protocol names it.
+canonical_labels:
+- dog_approaches_person
+- dog_holds_position_facing_person
+- dog_turns_away_without_retreating
+- dog_retreats_or_avoids_person
+- dog_leaves_interaction_area
+- dog_shows_defensive_posture
+- dog_active_defensive_advance_or_contact
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- The dog body/head orientation, displacement, or defensive body language is hidden
+  during the decisive post-approach response.
+- None of the canonical labels ['dog_approaches_person', 'dog_holds_position_facing_person',
+  'dog_turns_away_without_retreating', 'dog_retreats_or_avoids_person',
+  'dog_leaves_interaction_area', 'dog_shows_defensive_posture',
+  'dog_active_defensive_advance_or_contact'] can be decisively identified within
+  the readout window.
+out_of_schema_rules:
+- The person never visibly approaches the dog, or the approach stimulus is not visible
+  enough to establish timing; do not coerce a frozen/no-action scene into
+  `dog_holds_position_facing_person`.
+- The dog, person, path geometry, or interaction region disappears, duplicates, swaps
+  identity, teleports, or changes via a cut.
+- The visible event is caused by a new off-screen stimulus rather than the requested
+  approaching stranger/person.
+- The video introduces a different animal/person or changes the scene so the BA-02
+  state-action trial is no longer recognizable.
+priority_rules:
+- First decisive readout is the dog reaction attributable to the approaching stranger
+  after the person visibly enters or continues through the dog interaction space;
+  do not classify the initial dog-facing-person pose as an outcome.
+- '`dog_active_defensive_advance_or_contact` applies when the dog lunges, charges,
+  snaps, bites, jumps toward, or otherwise makes an active defensive advance/contact
+  toward the person.'
+- '`dog_leaves_interaction_area` applies when the dog exits the path-side interaction
+  area, runs away, or moves far enough that the person-dog interaction is no longer
+  continuing.'
+- '`dog_shows_defensive_posture` applies when the dog shows clear defensive threat
+  or stress posture without active contact/advance, such as bared teeth, growling/open-mouth
+  threat, lowered or stiff crouch, hackles/raised fur, pinned ears, or a visibly
+  defensive stance.'
+- '`dog_retreats_or_avoids_person` applies when the dog backs away, sidesteps, arcs
+  around, or increases distance from the approaching person while remaining in the
+  interaction area.'
+- '`dog_turns_away_without_retreating` applies when the dog turns its head or body
+  away from the person without a clear retreat, distance increase, approach, or defensive
+  posture.'
+- '`dog_approaches_person` applies when the dog visibly moves toward or closes distance
+  to the approaching person without active defensive advance/contact.'
+- '`dog_holds_position_facing_person` applies when the dog remains in place and continues
+  facing/orienting to the person with no clear approach, turn-away, retreat, leaving,
+  defensive posture, or active defensive advance/contact.'
+- Do not use a no-orientation label for this scene; if dog/person orientation cannot
+  be read, return `unreadable`, and if the dog turns away visibly use
+  `dog_turns_away_without_retreating`.
+- 'Tie-break: active defensive advance/contact outranks leaving; leaving outranks
+  defensive posture; defensive posture outranks retreat/avoid; retreat/avoid outranks
+  turn-away; turn-away outranks approach; approach outranks holds-facing. If decisive
+  dog body language or person-dog timing is hidden, return `unreadable`.'
+notes:
+- 'Reaction scene: outcome label requires visible post-stimulus animal/person response,
+  not intent inference.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules
+  are authored from STAGBench metadata/action protocol.'
+- 'Scene title: Dog Reaction to Approaching Stranger.'

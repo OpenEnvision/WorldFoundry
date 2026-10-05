@@ -5,8 +5,9 @@ environment_id: giga-world-policy-py311
 id: libero
 name: LIBERO
 docker:
-  image: ghcr.io/allenai/vla-evaluation-harness/libero:latest
-  source_image: ghcr.io/allenai/vla-evaluation-harness/libero:latest
+  image: ghcr.io/openenvision/worldfoundry-embodied-libero:latest
+  source_image: ghcr.io/allenai/vla-evaluation-harness/libero@sha256:d0c45bc5a3720d569180e6b8dd92510da895f16c3cc509ccc76e4b4ffbb9e0f0
+  platform: linux/amd64
   python_env: libero
   gpus: all
 needs_new_env: false

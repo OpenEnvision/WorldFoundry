@@ -15,6 +15,7 @@ modalities:
 - world-generation
 name: DreamX-World 5B Cam
 official_sources:
+  paper: https://arxiv.org/abs/2606.16993
   github:
     confirmed_by: local_checkout
     confirmed_ref: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/DreamX-World
@@ -46,3 +47,26 @@ catalog_policy:
     papers, demos, or third-party mirrors.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: dreamx-world-5b-cam
+docs:
+  publisher: Alibaba (Amap, AMAP-ML)
+  publisher_kind: company
+  publisher_zh: 阿里巴巴（高德地图 AMAP-ML）
+  overview: 'DreamX-World 5B Cam is the camera-controlled profile of Amap''s DreamX-World: a resident runtime that generates world video under explicit camera-pose control, continuing from the previous final frame without subprocess or MP4 round trips. A real single-A100 run loaded both pinned checkpoints and generated four finite, decodable 1280x704 frames from the official example image.'
+  overview_zh: DreamX-World 5B Cam 是高德 DreamX-World 的相机控制档案：常驻运行时在显式相机位姿控制下生成世界视频，并从上一个最终帧续接，无需子进程或 MP4 往返。真实单 A100 运行加载两个固定 checkpoint，从官方示例图生成四帧有限、可解码的 1280x704 输出。
+  architecture: The camera-conditioned 5B runtime, diffusion pipeline, pose controls, VAE, and text-encoder adapters are integrated in-tree under synthesis/visual_generation/dreamx_world, running over Wan2.2 support checkpoints. The resident session caches weights and prompt embeddings and uses native 1+4k windows; multi-GPU inference offers 1/2/3/4/6/8-rank Ulysses sequence parallelism.
+  architecture_zh: 相机条件的 5B 运行时、扩散 pipeline、位姿控制、VAE 与文本编码器适配器集成于树内 synthesis/visual_generation/dreamx_world，运行于 Wan2.2 支持 checkpoint 之上。常驻会话缓存权重与提示词嵌入，使用原生 1+4k 窗口；多卡推理支持 1/2/3/4/6/8 rank 的 Ulysses 序列并行。
+  usage_notes: The verified single-A100 run used an 8-step 5-frame window — an integration smoke, not the default 30-step quality recipe. For quality output use the default recipe and expect longer runtimes.
+  usage_notes_zh: 已验证的单 A100 运行使用 8 步 5 帧窗口——这是集成冒烟测试，不是默认的 30 步质量配方。追求质量请使用默认配方并预期更长运行时间。
+  limitations:
+  - The validated run is an integration smoke; 30-step quality parity is a separate claim.
+  - Requires local DreamX 5B Cam plus Wan2.2 support checkpoints.
+  limitations_zh:
+  - 已验证运行为集成冒烟测试；30 步质量一致性是另一回事。
+  - 需要本地 DreamX 5B Cam 与 Wan2.2 支持 checkpoint。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-pose adherence of controlled rollouts.
+    reason_zh: 受控滚动生成的相机位姿贴合度。
+  - id: worldmodelbench
+    reason: General world-rollout quality.
+    reason_zh: 世界滚动生成的总体质量。

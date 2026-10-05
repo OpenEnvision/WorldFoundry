@@ -1,250 +1,45 @@
 ---
 title: PhyFPS-Bench-Gen
-description: "PhyFPS-Bench-Gen in WorldFoundry: Visual Chronometer runner, data layout, and metrics."
+description: "100-prompt chronometric audit: does Meta FPS match the PhyFPS implied by motion? All metrics lower-is-better. Not a physics-law bench."
 ---
 
-## What It Measures
+PhyFPS-Bench-Gen (TACO Group, Texas A&M) audits **chronometric hallucination**: whether a generator's declared container frame rate (**Meta FPS**) matches the physical speed implied by the motion (**PhyFPS**, from Visual Chronometer). It is **not** a law, grounding, education, or continuation bench.
 
-PhyFPS-Bench-Gen audits temporal speed consistency in generated videos. It compares a model's nominal or metadata frame rate, called Meta FPS, with the physical motion speed predicted by Visual Chronometer, called PhyFPS. The official prompt set is designed around dynamic scenes with humans, animals, vehicles, nature, fluids, camera motion, weather, and other motion cues while avoiding prompts that explicitly ask for slow motion, time lapse, or speed changes.
+The suite is **100 prompts**. Name outputs `0001.mp4` … `0100.mp4`. The predictor runs on sliding windows (`--stride`, `--clip-length`); the scorecard reports Meta-vs-PhyFPS error plus intra- and inter-video coefficients of variation. **Every metric is lower-is-better.**
 
-WorldFoundry vendors the Visual Chronometer inference runtime under the PhyFPS runner directory and can run prediction in-process. It can also import an existing `results.csv` produced in the same schema.
+Code: [taco-group/Visual_Chronometer](https://github.com/taco-group/Visual_Chronometer). Checkpoint: [xiangbog/Visual_Chronometer](https://huggingface.co/xiangbog/Visual_Chronometer) (`vc_common_10_60fps.ckpt`).
 
+WorldFoundry runs Visual Chronometer `predict.py` in tree and/or normalizes a caller `results.csv`. Alignment metrics need `WORLDFOUNDRY_PHYFPS_META_FPS` (or a manifest).
 
-## Official References
+<BenchmarkPageSections id="phyfps-bench-gen" locale="en" />
 
-| Resource | Link |
-| --- | --- |
-| GitHub | [github.com/taco-group/Visual_Chronometer](https://github.com/taco-group/Visual_Chronometer) |
-| HF checkpoint | [xiangbog/Visual_Chronometer](https://huggingface.co/xiangbog/Visual_Chronometer) |
-| In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py` |
+## How to run
 
-## Data And Artifacts
-
-The prompt manifest is a plain text file, one prompt per line:
-
-```text
-<phyfps_root>/
-  prompts.txt
-```
-
-WorldFoundry resolves it from:
-
-- `--prompt-manifest <path>`
-- `WORLDFOUNDRY_PHYFPS_BENCH_GEN_PROMPT_MANIFEST`
-- `WORLDFOUNDRY_PHYFPS_BENCH_GEN_ROOT/prompts.txt`
-- bundled benchmark assets, when present
-
-Generate one video per prompt and keep the files in one flat directory. The canonical WorldFoundry naming is four digits, starting at `0001.mp4`:
-
-```text
-<generated_videos>/
-  0001.mp4
-  0002.mp4
-  ...
-```
-
-Supported suffixes are `.mp4`, `.mov`, `.mkv`, `.webm`, and `.avi`. For formal full-suite evidence, the prompt count and generated-video stems must match the resolved manifest.
-
-## Dependencies And Checkpoints
-
-The in-tree runtime path is:
-
-```text
-worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer
-```
-
-The default config is `inference/configs/config_fps.yaml`. The default checkpoint is `inference/ckpts/vc_common_10_60fps.ckpt`. If that checkpoint is missing and `huggingface_hub` is installed, the runtime downloads `vc_common_10_60fps.ckpt` from `xiangbog/Visual_Chronometer`.
-
-Useful overrides:
-
-- `WORLDFOUNDRY_VISUAL_CHRONOMETER_ROOT`: alternate local Visual Chronometer runtime root.
-- `WORLDFOUNDRY_PHYFPS_DEVICE`: device used by the runner, default `cuda:0`.
-- `WORLDFOUNDRY_PHYFPS_META_FPS`: one Meta FPS value applied to all videos.
-- `WORLDFOUNDRY_PHYFPS_META_FPS_MANIFEST`: JSON map from video name or stem to Meta FPS.
-- `WORLDFOUNDRY_PHYFPS_BENCH_GEN_RESULTS_PATH`: existing `results.csv` to import.
-
-Meta FPS is required for `avg_error_fps` and `pct_error`. Consistency metrics can still be computed from PhyFPS predictions alone.
-
-## Supported Commands
-
-Set candidate videos and, for alignment metrics, Meta FPS:
+Import an existing `results.csv`:
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/phyfps/generated_videos
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id phyfps-bench-gen \
+  --mode official-validation \
+  --official-results-path <results.csv> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/phyfps-bench-gen/official-validation \
+  --json
+```
+
+Predict PhyFPS in tree (needs the VC-Common checkpoint and Meta FPS for alignment):
+
+```bash
 export WORLDFOUNDRY_PHYFPS_META_FPS=24
-```
-
-Run the public CLI with the integrated official runtime:
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id phyfps-bench-gen \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompts.txt \
-  --output-dir tmp/phyfps-bench-gen/run \
-  --env WORLDFOUNDRY_PHYFPS_META_FPS="${WORLDFOUNDRY_PHYFPS_META_FPS}" \
-  --json
-```
-
-Import an existing Visual Chronometer CSV through the public CLI:
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id phyfps-bench-gen \
-  --mode official-validation \
-  --official-results-path /path/to/results.csv \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompts.txt \
-  --output-dir tmp/phyfps-bench-gen/import \
-  --env WORLDFOUNDRY_PHYFPS_META_FPS=24 \
-  --json
-```
-
-Use the direct runner for arguments not surfaced by the public wrapper, such as `--stride`, `--clip-length`, `--device`, `--meta-fps`, or `--meta-fps-manifest`:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py \
   --run-official \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompts.txt \
-  --meta-fps 24 \
   --stride 4 \
-  --clip-length 30 \
-  --device cuda:0 \
-  --output-dir tmp/phyfps-bench-gen/run \
+  --output-dir tmp/phyfps_bench_gen/official \
   --json
 ```
 
-Direct import without running Visual Chronometer:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_phyfps_bench_gen_official_runner.py \
-  --official-results-path /path/to/results.csv \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --prompt-manifest /path/to/prompts.txt \
-  --meta-fps-manifest /path/to/meta_fps.json \
-  --output-dir tmp/phyfps-bench-gen/import \
-  --json
-```
-
-## Visual Chronometer
-
-Visual Chronometer is the in-tree PhyFPS predictor that powers this benchmark. It estimates the physical frame rate implied by visual motion (PhyFPS), which can differ from container metadata FPS: a clip encoded at 24 FPS may look physically closer to 35 FPS or 60 FPS.
-
-Use **PhyFPS-Bench-Gen** when you have the official 100-prompt suite and want Meta FPS alignment metrics (`avg_error_fps`, `pct_error`, `phyfps_bench_gen_average`).
-
-Use the **Visual Chronometer** benchmark id when you only need PhyFPS prediction and temporal-consistency metrics over an arbitrary generated-video directory, without a prompt manifest or Meta FPS target.
-
-| Surface | Benchmark id | Runner |
-| --- | --- | --- |
-| Full prompt suite + Meta FPS alignment | `phyfps-bench-gen` | `run_phyfps_bench_gen_official_runner.py` |
-| Arbitrary video directory, PhyFPS only | `visual-chronometer` | `run_visual_chronometer_official_runner.py` |
-
-Shared runtime root:
-
-```text
-worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/runtime/visual_chronometer
-```
-
-For Visual Chronometer-only scoring, put videos in one flat directory. Filenames become video ids in `results.csv`; there is no required numeric naming scheme:
-
-```text
-/path/to/generated/
-  prompt_000.mp4
-  prompt_001.mp4
-```
-
-Additional environment variables for the Visual Chronometer runner:
-
-| Variable | Use |
-| --- | --- |
-| `WORLDFOUNDRY_VISUAL_CHRONOMETER_DEVICE` | Device passed to prediction, default `cuda:0`. |
-| `WORLDFOUNDRY_VISUAL_CHRONOMETER_PREDICT_BACKEND` | Prediction backend, default `official`. |
-| `WORLDFOUNDRY_VISUAL_CHRONOMETER_RESULTS_PATH` | Existing `results.csv` for result import. |
-
-Run PhyFPS prediction without a prompt manifest:
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_visual_chronometer_official_runner.py \
-  --run-official \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/visual-chronometer/run \
-  --stride 4 \
-  --clip-length 30 \
-  --device "${WORLDFOUNDRY_VISUAL_CHRONOMETER_DEVICE:-cuda:0}" \
-  --json
-```
-
-Import an existing Visual Chronometer `results.csv` through the public CLI:
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id visual-chronometer \
-  --mode official-validation \
-  --official-results-path /path/to/results.csv \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/visual-chronometer/import \
-  --json
-```
-
-Python imports for the Visual Chronometer surface:
-
-```python
-from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.visual_chronometer_metrics import (
-    compute_visual_chronometer_metrics,
-    metric_rows_from_computed,
-)
-from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.run_visual_chronometer_official_runner import (
-    normalize_visual_chronometer_results,
-    run_official_visual_chronometer,
-)
-```
-
-Visual Chronometer metrics are `mean_phyfps`, `inter_video_cv`, `intra_video_cv`, and `visual_chronometer_average`. Lower variation metrics are better when comparing temporal stability; `mean_phyfps` is descriptive unless compared to a target metadata FPS.
-
-## Import Paths
-
-- Runner: `worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.run_phyfps_bench_gen_official_runner`
-- Metrics: `worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_metrics`
-- Prompt layout: `worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_prompts`
-- Prediction wrapper: `worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_predict`
-- Visual Chronometer runtime: `worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.visual_chronometer_runtime`
-
-## Result File Shape
-
-`results.csv` must contain these columns:
-
-```csv
-video,segment,start_frame,mid_frame,end_frame,predicted_phyfps
-0001.mp4,0,0,15,29,23.8
-0001.mp4,AVG,,,,24.1
-```
-
-The importer reads per-segment rows and an `AVG` row for each video. If an average row is missing, it computes the average from segment rows.
-
-Outputs under `--output-dir` include:
-
-- `scorecard.json`: run status, coverage, metrics, and Visual Chronometer summary.
-- `results.csv`: produced when `--run-official` executes prediction.
-- `raw_metric_table.jsonl`: one row per metric.
-- `per_sample_scores.jsonl`: per-video average PhyFPS and segment counts.
-
-## Metrics
-
-Primary metric: `phyfps_bench_gen_average`. Lower is better for every metric on this page.
-
-| Metric | Meaning |
-| --- | --- |
-| `avg_error_fps` | Mean absolute gap between Meta FPS and average PhyFPS. |
-| `pct_error` | Mean relative Meta-vs-PhyFPS error percentage. |
-| `inter_video_cv` | Coefficient of variation across per-video average PhyFPS values. |
-| `intra_video_cv` | Mean within-video coefficient of variation over sliding-window PhyFPS predictions. |
-| `phyfps_bench_gen_average` | Mean over available PhyFPS score families. |
+Outputs include `scorecard.json` (primary `phyfps_bench_gen_average`) and `results.csv`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

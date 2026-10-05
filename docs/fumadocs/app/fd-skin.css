@@ -1,0 +1,2428 @@
+/* Visual polish layer — defers tokens to app/styles/tokens.css. */
+
+/* ---------- Shared chrome (docs + home header tools) ---------- */
+.pi-doc-header-tools,
+.wf-home-site-header-tools {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+  gap: 0.75rem 1rem;
+  justify-content: flex-end;
+}
+
+.pi-nav {
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.pi-language-switch {
+  align-items: center;
+  background: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated));
+  border: 1px solid var(--pi-line);
+  border-radius: 999px;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 0.125rem;
+  padding: 0.125rem;
+}
+
+.pi-language-switch a {
+  border-radius: 999px;
+  color: var(--pi-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.3125rem 0.5625rem;
+  text-decoration: none;
+}
+
+.pi-language-switch a[aria-current='true'] {
+  background: var(--pi-surface-strong);
+  color: var(--pi-ink);
+}
+
+/* ---------- Docs shell ---------- */
+.pi-doc-frame {
+  margin-inline: auto;
+  max-width: min(100%, var(--pi-doc-frame-max-width));
+  width: 100%;
+}
+
+.pi-doc-shell {
+  --color-fd-background: var(--pi-paper);
+  --color-fd-foreground: var(--pi-ink);
+  --color-fd-muted-foreground: var(--pi-muted);
+  --color-fd-primary: var(--pi-brand-accent);
+  --color-fd-card: var(--pi-surface);
+  --color-fd-secondary: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated));
+  --color-fd-accent: color-mix(in srgb, var(--pi-brand-accent) 8%, var(--pi-paper));
+  color-scheme: light;
+}
+
+.pi-doc-header {
+  backdrop-filter: blur(16px) saturate(1.2);
+  background: color-mix(in srgb, var(--pi-paper) 82%, var(--pi-elevated));
+  border-bottom: 1px solid color-mix(in srgb, var(--pi-line) 65%, transparent);
+  position: sticky;
+  top: 0;
+  z-index: 41;
+}
+
+.dark .pi-doc-header {
+  background: color-mix(in srgb, var(--pi-paper) 92%, var(--pi-elevated));
+}
+
+.pi-doc-header-inner {
+  align-items: center;
+  gap: 0.75rem;
+  margin-inline: auto;
+  max-width: var(--pi-doc-frame-max-width);
+  min-height: 3.25rem;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+}
+
+.pi-doc-sidebar {
+  background: color-mix(in srgb, var(--pi-paper) 98%, var(--pi-elevated));
+  border-right: 1px solid color-mix(in srgb, var(--pi-line) 70%, transparent);
+  padding: 0.75rem 0.75rem 0;
+}
+
+.dark .pi-doc-sidebar {
+  background: color-mix(in srgb, var(--pi-paper) 96%, var(--pi-elevated));
+}
+
+.pi-doc-section-title {
+  color: var(--pi-muted);
+  font-size: var(--pi-doc-ui-xs);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  margin-bottom: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  text-transform: none;
+}
+
+.pi-doc-sidebar-title {
+  display: none;
+}
+
+.pi-doc-nav-group {
+  border-top: 0;
+  gap: 0.0625rem;
+  padding: 0;
+}
+
+.pi-doc-nav-group:first-child {
+  padding-top: 0;
+}
+
+.pi-doc-nav-group + .pi-doc-nav-group {
+  margin-top: 1.35rem;
+}
+
+.pi-doc-nav-group-active {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  margin-inline: 0;
+  padding: 0;
+}
+
+.pi-doc-nav-group-active .pi-doc-section-title {
+  color: var(--pi-muted);
+}
+
+.pi-doc-link {
+  background: transparent;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  color: color-mix(in srgb, var(--pi-ink) 72%, var(--pi-muted));
+  font-size: var(--pi-doc-ui-sm);
+  font-weight: 400;
+  line-height: 1.25rem;
+  padding: 0.45rem 0.55rem 0.45rem calc(0.55rem - 2px);
+}
+
+.pi-doc-link:hover {
+  background: transparent;
+  color: var(--color-fd-foreground);
+}
+
+.pi-doc-link-active,
+.pi-doc-link-active:hover {
+  background: transparent;
+  border-left-color: var(--pi-brand-accent);
+  box-shadow: none;
+  color: var(--pi-brand-accent);
+  font-weight: 500;
+  padding-left: calc(0.55rem - 2px);
+}
+
+.pi-doc-link-active::before {
+  display: none;
+}
+
+.dark .pi-doc-link-active,
+.dark .pi-doc-link-active:hover {
+  background: transparent;
+  color: var(--pi-brand-accent);
+}
+
+.dark .pi-doc-link-icon.is-active,
+.dark .pi-doc-link-active .pi-doc-link-icon {
+  color: var(--pi-brand-accent);
+}
+
+.pi-doc-main {
+  background:
+    radial-gradient(ellipse 120% 70% at 50% -18%, color-mix(in srgb, var(--pi-elevated) 45%, transparent), transparent 58%),
+    var(--pi-paper);
+  padding-bottom: 4rem;
+  padding-top: 2.25rem;
+}
+
+.dark .pi-doc-main {
+  background: var(--pi-paper);
+}
+
+.pi-doc-right-rail {
+  background: color-mix(in srgb, var(--pi-paper) 96%, var(--pi-elevated));
+  border-left: 1px solid color-mix(in srgb, var(--pi-line) 60%, transparent);
+  padding: 2rem 1rem 1.5rem;
+}
+
+.dark .pi-doc-right-rail {
+  background: color-mix(in srgb, var(--pi-paper) 94%, var(--pi-elevated));
+}
+
+.pi-doc-toc-title {
+  border-bottom: 0;
+  color: var(--color-fd-muted-foreground);
+  font-size: var(--pi-doc-ui-sm);
+  font-weight: 600;
+  letter-spacing: 0;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0;
+  text-transform: none;
+}
+
+.pi-doc-toc-links {
+  border-left: 1px solid color-mix(in srgb, var(--pi-ink) 12%, transparent);
+  gap: 0.0625rem;
+}
+
+.pi-doc-toc-links a {
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  font-size: var(--pi-doc-ui-sm);
+  margin-left: -1px;
+  padding: 0.25rem 0.5rem 0.25rem calc(0.625rem + var(--toc-indent));
+}
+
+.pi-doc-toc-links a::before {
+  display: none;
+}
+
+.pi-doc-toc-links a[data-branch-active='true']:not([data-active='true']) {
+  background: transparent;
+  border-left-color: color-mix(in srgb, var(--pi-brand-accent-soft) 45%, transparent);
+  color: var(--color-fd-foreground);
+  font-weight: 400;
+}
+
+.pi-doc-toc-links a[data-active='true'] {
+  background: transparent;
+  border-left-color: var(--pi-brand-accent);
+  border-radius: 0;
+  color: var(--pi-brand-accent);
+  font-weight: 500;
+}
+
+.pi-doc-actions {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  padding: 0.35rem 0 0;
+}
+
+.pi-doc-action-chip,
+.pi-doc-action-link {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: inherit;
+  font-weight: 400;
+  padding: 0;
+  transition: color 150ms ease, transform 160ms ease-out;
+}
+
+.pi-doc-action-chip:hover,
+.pi-doc-action-link:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.pi-doc-content {
+  font-size: var(--pi-doc-body-size);
+  letter-spacing: var(--pi-doc-body-tracking);
+  line-height: var(--pi-doc-body-leading);
+}
+
+.pi-doc-content p,
+.pi-doc-content li,
+.pi-doc-content a,
+.pi-doc-content strong {
+  letter-spacing: inherit;
+}
+
+.pi-doc-shell[lang='zh'] .pi-doc-content,
+.pi-doc-shell[lang='zh'] .pi-doc-content p,
+.pi-doc-shell[lang='zh'] .pi-doc-content li,
+.pi-doc-shell[lang='zh'] .pi-doc-description,
+.pi-doc-shell[lang='zh'] .pi-doc-title-row h1,
+.pi-doc-shell[lang='zh'] .pi-doc-article h1:not(.pi-brand-display):not(.pi-doc-welcome-title) {
+  letter-spacing: 0;
+}
+
+.pi-doc-content p {
+  color: color-mix(in srgb, var(--pi-ink) 92%, transparent);
+  font-size: var(--pi-doc-body-size);
+  line-height: var(--pi-doc-body-leading);
+  margin: 0 0 var(--pi-doc-paragraph-gap);
+  text-indent: 0 !important;
+}
+
+.pi-doc-content li {
+  font-size: var(--pi-doc-body-size);
+  line-height: var(--pi-doc-body-leading);
+  margin-bottom: var(--pi-doc-list-item-gap);
+  margin-top: var(--pi-doc-list-item-gap);
+}
+
+.pi-doc-content :where(ul, ol) {
+  margin: var(--pi-doc-list-gap) 0;
+  padding-left: var(--pi-doc-list-indent);
+}
+
+.pi-doc-content :where(strong, b) {
+  font-weight: 600;
+}
+
+.pi-doc-content h2 {
+  border-bottom: 0;
+  font-size: var(--pi-doc-h2-size);
+  font-weight: var(--pi-doc-h2-weight);
+  line-height: var(--pi-doc-h2-leading);
+  margin-bottom: var(--pi-doc-h2-mb);
+  margin-top: var(--pi-doc-h2-mt);
+  padding-bottom: 0;
+  scroll-margin-top: 5rem;
+}
+
+.pi-doc-content h3 {
+  font-size: var(--pi-doc-h3-size);
+  font-weight: var(--pi-doc-h3-weight);
+  line-height: var(--pi-doc-h3-leading);
+  margin-bottom: var(--pi-doc-h3-mb);
+  margin-top: var(--pi-doc-h3-mt);
+}
+
+.pi-doc-content h4 {
+  font-size: var(--pi-doc-h4-size);
+  font-weight: var(--pi-doc-h4-weight);
+  line-height: var(--pi-doc-h4-leading);
+  margin-bottom: var(--pi-doc-h4-mb);
+  margin-top: var(--pi-doc-h4-mt);
+}
+
+.pi-doc-title-row h1 {
+  font-size: var(--pi-doc-h1-size);
+  font-weight: var(--pi-doc-h1-weight);
+  letter-spacing: var(--pi-doc-h1-tracking);
+  line-height: var(--pi-doc-h1-leading);
+}
+
+.pi-doc-description {
+  color: var(--color-fd-muted-foreground);
+  font-size: var(--pi-doc-body-size);
+  letter-spacing: var(--pi-doc-body-tracking);
+  line-height: var(--pi-doc-body-leading);
+  margin-top: 0.75rem;
+}
+
+.pi-doc-breadcrumb {
+  font-size: 0.8125rem;
+  margin-bottom: 1rem;
+}
+
+.pi-doc-content a:not([data-card]):not(.wf-recipe-row):not(.wf-recipe-related-card):not(h2 a):not(h3 a):not(h4 a) {
+  color: var(--pi-brand-accent);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--pi-brand-accent) 32%, transparent);
+  text-underline-offset: 3px;
+}
+
+.pi-doc-content a:not([data-card]):not(.wf-recipe-row):not(.wf-recipe-related-card):not(h2 a):not(h3 a):not(h4 a):hover {
+  text-decoration-color: var(--pi-brand-accent);
+}
+
+.pi-doc-shell-api-hub .pi-doc-main a,
+.pi-doc-shell-api-hub .pi-doc-content a:not([data-card]):not(.wf-recipe-row):not(.wf-recipe-related-card):not(h2 a):not(h3 a):not(h4 a),
+.pi-doc-shell-api-hub .pi-doc-content a:not([data-card]):not(.wf-recipe-row):not(.wf-recipe-related-card):not(h2 a):not(h3 a):not(h4 a):hover,
+.pi-doc-content .wf-api-reference a,
+.pi-doc-content .wf-api-reference a:hover {
+  text-decoration: none !important;
+}
+
+.pi-doc-shell-api-hub .pi-doc-content a:not([data-card]):not(.wf-recipe-row):not(.wf-recipe-related-card):not(h2 a):not(h3 a):not(h4 a):hover {
+  color: var(--pi-brand-accent);
+  font-weight: 600;
+}
+
+.pi-doc-content a.wf-recipe-related-card,
+.pi-doc-content a.wf-recipe-related-card:hover {
+  color: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+
+.pi-doc-inline-toc:not([open]) summary,
+.pi-doc-inline-toc[open] {
+  border-radius: var(--pi-radius-lg);
+}
+
+.pi-doc-content figure.shiki {
+  border: 1px solid var(--color-fd-border) !important;
+  box-shadow: none !important;
+}
+
+.pi-doc-content .grid.gap-3.my-4 > a.rounded-lg.border.bg-fd-card {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.pi-doc-content .grid.gap-3.my-4 > a.rounded-lg.border.bg-fd-card:hover {
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 24%, var(--pi-line)) !important;
+}
+
+.pi-doc-content .my-4.rounded-xl.border.bg-fd-card:not(figure.shiki) {
+  box-shadow: none !important;
+}
+
+.pi-doc-pagination-link {
+  background: var(--color-fd-card);
+  border: 1px solid var(--color-fd-border);
+}
+
+.pi-doc-content pre {
+  border-radius: var(--pi-radius-lg) !important;
+  box-shadow: none !important;
+}
+
+.pi-doc-related-link,
+.pi-doc-pagination-link {
+  border-radius: var(--pi-radius-lg);
+  box-shadow: none;
+}
+
+.pi-doc-pagination-link:hover,
+.pi-doc-related-link:hover {
+  box-shadow: none;
+  transform: none;
+}
+
+.pi-doc-welcome-quicklink,
+.pi-doc-welcome-badge {
+  border-radius: var(--pi-radius-xl);
+  box-shadow: none;
+}
+
+/* ---------- Home: only polish content below hero (never .wf-home-stage) ---------- */
+.wf-home-main .wf-home-capability-card,
+.wf-home-main .wf-home-resource-card,
+.wf-home-main .wf-home-community-panel,
+.wf-home-main .wf-home-configurator {
+  border-radius: var(--pi-radius-xl);
+}
+
+.wf-home-main .wf-home-ecosystem-chips a {
+  border-radius: var(--pi-radius-xl);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-doc-pagination-link:hover,
+  .pi-doc-related-link:hover {
+    transform: none;
+  }
+}
+
+/* Keep hero overlay header transparent — do not restyle .wf-home-stage chrome. */
+.wf-home-stage .wf-home-site-header {
+  background: transparent;
+  backdrop-filter: none;
+  border-bottom: 0;
+}
+
+.wf-home-stage .wf-home-site-header-inner {
+  gap: 1rem 1.5rem;
+  padding: 1rem clamp(1rem, 2.4vw, 1.75rem);
+}
+
+.wf-home-stage .wf-home-site-header-tools {
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.75rem 1rem;
+}
+
+/* Shared pill nav — docs and home both use .wf-home-site-header. */
+.wf-home-site-header .pi-nav {
+  align-items: center;
+  background: var(--pi-hero-chrome-bg);
+  border: 1px solid var(--pi-hero-chrome-border);
+  border-radius: 999px;
+  box-shadow: var(--pi-shadow-soft);
+  display: inline-flex;
+  flex-shrink: 1;
+  gap: 0.1875rem;
+  min-width: 0;
+  padding: 0.1875rem;
+}
+
+.wf-home-site-header .pi-nav a {
+  background: transparent;
+  border-radius: 999px;
+  box-shadow: none;
+  color: var(--pi-text-on-hero-muted);
+  font-family:
+    'Noto Sans SC', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.2;
+  padding: 0.4375rem 0.8125rem;
+  text-decoration: none;
+  transition:
+    background 160ms var(--pi-ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+    color 160ms var(--pi-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+  white-space: nowrap;
+}
+
+.wf-home-site-header .pi-nav a[aria-current='page'] {
+  background: var(--pi-hero-chrome-active);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pi-brand-accent) 18%, transparent);
+  color: var(--pi-text-on-hero);
+  font-weight: 700;
+}
+
+.wf-home-site-header .pi-nav a:hover {
+  background: var(--pi-hero-chrome-hover);
+  box-shadow: none;
+  color: var(--pi-text-on-hero);
+  font-weight: 500;
+}
+
+.wf-home-stage .wf-home-site-header-tools > .pi-site-search-trigger {
+  margin-left: 0.375rem;
+  min-width: 7.75rem;
+  padding-inline: 0.75rem;
+  position: relative;
+}
+
+.wf-home-stage .wf-home-site-header-tools > .pi-site-search-trigger::before {
+  background: var(--pi-line);
+  content: '';
+  height: 1.375rem;
+  left: -0.625rem;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+}
+
+.wf-home-stage .wf-home-site-header .pi-site-search-trigger {
+  background: var(--pi-elevated) !important;
+  border-color: var(--pi-line) !important;
+  border-radius: 999px !important;
+  box-shadow: var(--pi-shadow-soft) !important;
+  color: var(--pi-ink) !important;
+  min-height: 2.125rem;
+}
+
+.wf-home-stage .wf-home-site-header .pi-site-search-trigger:hover {
+  background: var(--pi-paper-hover) !important;
+  border-color: var(--pi-soft-line) !important;
+}
+
+.wf-home-stage .wf-home-site-header .pi-site-search-trigger kbd {
+  background: color-mix(in srgb, var(--pi-paper) 72%, transparent) !important;
+  border-color: var(--pi-line) !important;
+  color: var(--pi-muted) !important;
+}
+
+.wf-home-stage .wf-home-site-header .pi-language-switch {
+  background: var(--pi-elevated);
+  border-color: var(--pi-line);
+  border-radius: 999px;
+  box-shadow: var(--pi-shadow-soft);
+  padding: 0.125rem;
+}
+
+.wf-home-stage .wf-home-site-header .pi-language-switch a {
+  border-radius: 999px;
+  color: var(--pi-text-on-hero-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  padding: 0.375rem 0.625rem;
+  text-transform: none;
+}
+
+.wf-home-stage .wf-home-site-header .pi-language-switch a[aria-current='true'],
+.wf-home-stage .wf-home-site-header .pi-language-switch a:hover {
+  background: var(--pi-hero-chrome-hover);
+  color: var(--pi-text-on-hero);
+}
+
+@media (max-width: 1180px) {
+  .wf-home-site-header .pi-nav a[href='/openenvision'] {
+    display: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .wf-home-site-header .pi-nav a[href='/events'] {
+    display: none;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-site-search-trigger {
+    min-width: 6.75rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .wf-home-stage .wf-home-site-header-tools {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 0.625rem;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-nav {
+    flex: 1 1 100%;
+    justify-content: center;
+    order: 2;
+    width: 100%;
+  }
+
+  .wf-home-stage .wf-home-site-header-tools > .pi-site-search-trigger::before {
+    display: none;
+  }
+
+  .wf-home-stage .wf-home-site-header-tools > .pi-site-search-trigger {
+    margin-left: 0;
+  }
+}
+
+/* Shared header tools must wrap on docs pages as well as the homepage. */
+@media (max-width: 900px) {
+  .wf-home-site-header .wf-home-site-header-tools {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-start;
+    margin-left: 0;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .wf-home-site-header .pi-nav {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    order: 2;
+    width: 100%;
+  }
+
+  .wf-home-site-header .pi-site-search-trigger {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .wf-home-site-header .pi-site-search-trigger kbd {
+    display: none;
+  }
+}
+
+/* Keep the homepage controls in two deliberate rows on narrow screens. */
+@media (max-width: 640px) {
+  .wf-home-stage .wf-home-site-header-inner {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 34px auto;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+
+  .wf-home-stage .pi-doc-header-brand {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .wf-home-stage .wf-home-site-header-tools {
+    display: contents;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-nav {
+    grid-column: 1 / 3;
+    grid-row: 2;
+    justify-content: flex-start;
+    order: initial;
+    width: auto;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-site-search-trigger {
+    grid-column: 2;
+    grid-row: 1;
+    flex: none;
+    font-size: 0 !important;
+    justify-content: center;
+    min-width: 34px !important;
+    padding-inline: 0 !important;
+    width: 34px !important;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-site-search-trigger kbd,
+  .wf-home-stage .wf-home-site-header .pi-site-search-trigger .ms-auto {
+    display: none !important;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-github-link {
+    display: none;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-theme-switch {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .wf-home-stage .wf-home-site-header .pi-language-switch {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: end;
+  }
+}
+
+/* ---------- Theme toggle (single light/dark button) ---------- */
+.pi-github-link {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--pi-radius-md);
+  color: var(--pi-muted);
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 2rem;
+  justify-content: center;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+  width: 2rem;
+}
+
+.pi-github-link:hover {
+  background: color-mix(in srgb, var(--pi-brand-accent) 10%, transparent);
+  color: var(--pi-ink);
+}
+
+.wf-home-stage .wf-home-site-header .pi-github-link {
+  color: var(--pi-text-on-hero-muted);
+}
+
+.wf-home-stage .wf-home-site-header .pi-github-link:hover {
+  background: var(--pi-hero-chrome-hover);
+  color: var(--pi-text-on-hero);
+}
+
+.dark .pi-github-link {
+  color: var(--pi-muted);
+}
+
+.dark .pi-github-link:hover {
+  background: color-mix(in srgb, var(--pi-brand-accent) 14%, transparent);
+  color: var(--pi-ink);
+}
+
+.pi-theme-switch {
+  background: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated));
+  border: 1px solid var(--pi-line);
+  border-radius: 999px;
+  flex-shrink: 0;
+  gap: 0;
+  overflow: hidden;
+  padding: 0.125rem;
+}
+
+.pi-theme-switch > svg {
+  border-radius: 999px;
+  height: 1.625rem;
+  padding: 0.3125rem;
+  width: 1.625rem;
+}
+
+.pi-theme-switch > svg:not([class*='bg-fd-accent']) {
+  color: var(--pi-muted);
+  opacity: 0.45;
+}
+
+.pi-theme-switch > svg[class*='bg-fd-accent'] {
+  background: var(--pi-surface-strong) !important;
+  color: var(--pi-ink) !important;
+}
+
+.wf-home-stage .wf-home-site-header .pi-theme-switch {
+  background: var(--pi-elevated);
+  border-color: var(--pi-line);
+  box-shadow: var(--pi-shadow-soft);
+  flex-shrink: 0;
+}
+
+.wf-home-stage .wf-home-site-header .pi-theme-switch > svg:not([class*='bg-fd-accent']) {
+  color: var(--pi-muted);
+  opacity: 1;
+}
+
+.wf-home-stage .wf-home-site-header .pi-theme-switch > svg[class*='bg-fd-accent'] {
+  background: var(--pi-hero-chrome-active) !important;
+  color: var(--pi-brand-accent) !important;
+}
+
+/* ---------- Dark: override global.css hardcoded light surfaces ---------- */
+.dark .pi-site-search-trigger {
+  background: color-mix(in srgb, var(--pi-paper) 72%, var(--pi-elevated)) !important;
+  border-color: var(--pi-line) !important;
+  color: var(--pi-ink) !important;
+}
+
+.dark .pi-site-search-trigger:hover {
+  background: var(--pi-elevated) !important;
+  border-color: var(--pi-soft-line) !important;
+}
+
+.dark .pi-site-search-trigger kbd {
+  background: color-mix(in srgb, var(--pi-paper) 80%, var(--pi-elevated)) !important;
+  border-color: var(--pi-line) !important;
+  color: var(--pi-muted) !important;
+}
+
+.dark .pi-doc-shell {
+  --color-fd-card: var(--pi-surface);
+  --color-fd-secondary: color-mix(in srgb, var(--pi-paper) 84%, var(--pi-elevated));
+  --pi-doc-frame-max-width: 92rem;
+  color-scheme: dark;
+}
+
+.dark .pi-doc-content figure.shiki,
+.dark .pi-doc-content .shiki,
+.dark .pi-doc-content pre,
+.dark .pi-doc-content figure.shiki > div[role='region'] {
+  --shiki-dark-bg: var(--pi-elevated) !important;
+  --shiki-light-bg: var(--pi-elevated) !important;
+  background: var(--pi-elevated) !important;
+  background-color: var(--pi-elevated) !important;
+  border-color: var(--pi-line) !important;
+  box-shadow: var(--pi-shadow-soft) !important;
+  color: var(--pi-ink) !important;
+}
+
+.dark .pi-doc-content figure.shiki pre,
+.dark .pi-doc-content pre.shiki {
+  background: var(--pi-elevated) !important;
+  background-color: var(--pi-elevated) !important;
+}
+
+.dark .pi-doc-content .shiki code span,
+.dark .pi-doc-content code.shiki span,
+.dark .pi-doc-content figure.shiki code span {
+  color: var(--shiki-dark, var(--shiki-light, var(--pi-ink))) !important;
+  font-style: var(--shiki-dark-font-style, var(--shiki-light-font-style)) !important;
+}
+
+.dark .pi-doc-content .grid.gap-3.my-4 > a.rounded-lg.border.bg-fd-card,
+.dark .pi-doc-content :where([data-card='true'], [class*='bg-fd-card']) {
+  background: var(--pi-surface) !important;
+  border-color: var(--pi-line) !important;
+}
+
+.dark .pi-doc-content .grid.gap-3.my-4 > a.rounded-lg.border.bg-fd-card:hover {
+  background: var(--pi-elevated) !important;
+  border-color: var(--pi-soft-line) !important;
+  box-shadow: var(--pi-shadow-soft) !important;
+}
+
+.dark .pi-doc-content :where([class*='bg-fd-background'], [class*='bg-fd-secondary']) {
+  background: color-mix(in srgb, var(--pi-paper) 82%, var(--pi-elevated)) !important;
+}
+
+.dark .pi-doc-content .wf-docs-tabs,
+.dark .pi-doc-content .my-4.flex.flex-col.overflow-hidden.rounded-xl.border.bg-fd-secondary {
+  background: color-mix(in srgb, var(--pi-paper) 78%, var(--pi-elevated)) !important;
+  border-color: var(--pi-soft-line) !important;
+  box-shadow: var(--pi-shadow-soft);
+}
+
+.dark .pi-doc-content .wf-docs-tabs [role='tablist'],
+.dark .pi-doc-content .my-4.flex.flex-col.overflow-hidden.rounded-xl.border.bg-fd-secondary .px-4 {
+  background: color-mix(in srgb, var(--pi-paper) 62%, var(--pi-elevated)) !important;
+  border-bottom-color: var(--pi-line);
+}
+
+.dark .pi-doc-content .wf-docs-tabs-trigger,
+.dark .pi-doc-content .my-4.flex.flex-col.overflow-hidden.rounded-xl.border.bg-fd-secondary button[data-state] {
+  color: color-mix(in srgb, var(--pi-ink) 72%, var(--pi-muted)) !important;
+}
+
+.dark .pi-doc-content .wf-docs-tabs-trigger:hover,
+.dark .pi-doc-content .my-4.flex.flex-col.overflow-hidden.rounded-xl.border.bg-fd-secondary button[data-state]:hover {
+  color: var(--pi-ink) !important;
+}
+
+.dark .pi-doc-content .wf-docs-tabs:has(> .wf-docs-tabs-input:nth-of-type(1):checked) [role='tablist'] > [data-tab-index='0'],
+.dark .pi-doc-content .wf-docs-tabs:has(> .wf-docs-tabs-input:nth-of-type(2):checked) [role='tablist'] > [data-tab-index='1'],
+.dark .pi-doc-content .wf-docs-tabs:has(> .wf-docs-tabs-input:nth-of-type(3):checked) [role='tablist'] > [data-tab-index='2'],
+.dark .pi-doc-content .wf-docs-tabs:has(> .wf-docs-tabs-input:nth-of-type(4):checked) [role='tablist'] > [data-tab-index='3'],
+.dark .pi-doc-content .wf-docs-tabs:has(> .wf-docs-tabs-input:nth-of-type(5):checked) [role='tablist'] > [data-tab-index='4'],
+.dark .pi-doc-content .wf-docs-tabs-trigger[data-state='active'],
+.dark .pi-doc-content .my-4.flex.flex-col.overflow-hidden.rounded-xl.border.bg-fd-secondary button[data-state='active'] {
+  background: color-mix(in srgb, var(--pi-brand-accent) 14%, var(--pi-elevated)) !important;
+  border-bottom-color: var(--pi-brand-accent) !important;
+  color: var(--pi-ink) !important;
+}
+
+.dark .pi-doc-content .wf-docs-tabs-panel,
+.dark .pi-doc-content :where([role='tabpanel']) {
+  background: color-mix(in srgb, var(--pi-paper) 90%, var(--pi-elevated)) !important;
+  color: var(--pi-ink);
+}
+
+.dark .pi-doc-content .wf-docs-tabs-panel :is(p, li, span, strong, code),
+.dark .pi-doc-content [role='tabpanel'] :is(p, li, span, strong) {
+  color: inherit;
+}
+
+.dark .pi-doc-content .wf-docs-tabs-panel > p {
+  color: var(--pi-muted);
+}
+
+.dark .pi-doc-content .wf-docs-tabs-panel > figure.shiki:only-child,
+.dark .pi-doc-content .wf-docs-tabs-panel > figure.shiki:last-child:not(:only-child) {
+  box-shadow: none !important;
+}
+
+.dark .pi-doc-content details {
+  background: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated));
+}
+
+.dark .pi-doc-content table {
+  background: var(--pi-elevated) !important;
+  border-color: var(--pi-line) !important;
+}
+
+.dark .pi-doc-content th {
+  background: color-mix(in srgb, var(--pi-paper) 82%, var(--pi-elevated)) !important;
+  color: var(--pi-ink) !important;
+}
+
+.dark .pi-doc-content td {
+  background: color-mix(in srgb, var(--pi-paper) 94%, var(--pi-elevated)) !important;
+  color: color-mix(in srgb, var(--pi-ink) 94%, var(--pi-muted)) !important;
+}
+
+.dark .pi-doc-content :where(td, th) {
+  border-color: var(--pi-line) !important;
+}
+
+.dark .pi-doc-content :where(td, th) :is(p, li, span, strong, em, a, code) {
+  color: inherit !important;
+}
+
+.dark .pi-doc-content table a {
+  color: var(--pi-brand-accent) !important;
+}
+
+.dark .pi-doc-hub-hero {
+  background: var(--pi-elevated);
+  border-color: var(--pi-line);
+  box-shadow: none;
+}
+
+.dark .pi-doc-hub-actions a:first-child,
+.dark .pi-doc-hub-actions a:hover {
+  background: var(--pi-brand-accent);
+  border-color: var(--pi-brand-accent);
+  color: var(--pi-paper);
+}
+
+.dark .pi-doc-content :where([class*='prose-no-margin'][class*='overflow-auto']) {
+  scrollbar-color: var(--pi-muted) color-mix(in srgb, var(--pi-paper) 80%, var(--pi-elevated));
+}
+
+/* Home content below hero */
+.dark .wf-home-main .wf-home-configurator {
+  background: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated));
+  border-color: var(--pi-soft-line);
+  box-shadow: var(--pi-shadow-card);
+}
+
+.dark .wf-home-main .wf-home-configurator-selection {
+  background: color-mix(in srgb, var(--pi-paper) 72%, var(--pi-elevated));
+}
+
+.dark .wf-home-main .wf-home-configurator-terminal {
+  background: color-mix(in srgb, var(--pi-paper) 70%, var(--pi-elevated));
+}
+
+.dark .wf-home-main .wf-home-configurator-terminal pre {
+  background: color-mix(in srgb, var(--pi-paper) 84%, var(--pi-elevated));
+}
+
+.dark .wf-home-main .wf-home-configurator-terminal code {
+  color: var(--pi-ink);
+}
+
+.dark .wf-home-main .wf-home-configurator-terminal-head button:hover {
+  background: var(--pi-elevated);
+}
+
+.dark .wf-home-main .wf-catalog-finder {
+  background: var(--wf-surface);
+  border-color: var(--pi-line);
+  box-shadow: var(--pi-shadow-card);
+}
+
+.dark .wf-home-main .wf-catalog-search {
+  background: color-mix(in srgb, var(--pi-paper) 78%, var(--pi-elevated));
+  border-color: var(--pi-line);
+}
+
+.dark .wf-home-main .wf-catalog-search:focus-within {
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 45%, var(--pi-line));
+}
+
+.dark .wf-home-main .wf-catalog-entry-id {
+  color: var(--pi-muted);
+  opacity: 0.78;
+}
+
+.dark .wf-home-main .wf-catalog-entry:hover .wf-catalog-entry-id {
+  opacity: 1;
+}
+
+.dark .pi-doc-content .wf-recipe-search {
+  background: color-mix(in srgb, var(--pi-paper) 82%, var(--pi-elevated));
+  border-color: var(--pi-line);
+}
+
+.dark .pi-doc-content .wf-recipe-search:focus-within {
+  background: var(--pi-elevated);
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 40%, var(--pi-line));
+}
+
+.dark .pi-doc-content .wf-recipe-family-tabs button {
+  background: transparent;
+  border-color: transparent;
+  color: var(--pi-muted);
+}
+
+.dark .pi-doc-content .wf-recipe-family-tabs button:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--pi-ink);
+}
+
+.dark .pi-doc-content .wf-recipe-family-tabs button.is-active {
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: var(--pi-brand-accent);
+  color: var(--pi-ink);
+}
+
+.dark .pi-doc-content .wf-recipe-family-tabs button.is-active span {
+  background: transparent;
+  color: var(--pi-muted);
+}
+
+.dark .pi-doc-content .wf-recipe-status-verified,
+.dark .pi-doc-content .wf-recipe-status-integrated {
+  background: color-mix(in srgb, var(--pi-brand-accent) 14%, var(--pi-elevated));
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 40%, var(--pi-line));
+  color: var(--pi-ink);
+}
+
+.dark .pi-doc-content .wf-recipe-task-chip {
+  background: color-mix(in srgb, var(--pi-elevated) 82%, var(--pi-paper));
+  border-color: var(--pi-line);
+  color: var(--pi-ink);
+}
+
+.dark .pi-doc-content .wf-recipe-task-chip.is-more {
+  background: color-mix(in srgb, var(--pi-brand-accent) 16%, var(--pi-elevated));
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 40%, var(--pi-line));
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder {
+  background: color-mix(in srgb, var(--pi-elevated) 72%, var(--pi-paper));
+  border-color: var(--pi-line);
+  box-shadow: none;
+  color: var(--pi-ink);
+  color-scheme: dark;
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-heading h2 {
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-heading-route {
+  background: color-mix(in srgb, var(--pi-ink) 5%, var(--pi-elevated));
+  border-color: var(--pi-line);
+  color: color-mix(in srgb, var(--pi-ink) 78%, var(--pi-muted));
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-heading-route-label,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-heading-route-module,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-heading-route-empty {
+  color: color-mix(in srgb, var(--pi-ink) 78%, var(--pi-muted));
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-heading-route-class {
+  background: transparent !important;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-heading-route-copy {
+  background: transparent;
+  color: color-mix(in srgb, var(--pi-ink) 72%, var(--pi-muted));
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-heading-route-copy:hover {
+  background: color-mix(in srgb, var(--pi-ink) 8%, transparent);
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-heading-route-copy.is-copied {
+  color: var(--pi-brand-accent);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-controls > label,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-controls > div {
+  background: transparent;
+  border-color: transparent;
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-controls span,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-runtime span {
+  color: color-mix(in srgb, var(--pi-ink) 82%, var(--pi-muted));
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-controls strong,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-controls select {
+  background-color: var(--pi-elevated);
+  border-color: var(--pi-line);
+  color: var(--pi-ink);
+  color-scheme: dark;
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-controls select option {
+  background-color: var(--pi-elevated);
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-controls strong code {
+  background: transparent !important;
+  color: color-mix(in srgb, var(--pi-ink) 72%, var(--pi-muted));
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-runtime > div {
+  background: color-mix(in srgb, var(--pi-ink) 5%, var(--pi-elevated));
+  border-color: transparent;
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-runtime strong,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-runtime code {
+  background: transparent !important;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contracts {
+  background: transparent;
+  border-color: var(--pi-soft-line);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contracts .wf-command-builder-disclosure {
+  background: transparent;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contracts .wf-command-builder-disclosure:hover {
+  background: transparent;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-profile-chip {
+  background: transparent;
+  border-color: transparent;
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contracts .wf-command-builder-disclosure code {
+  background: transparent !important;
+  border-color: transparent;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-profile-chip code {
+  background: transparent !important;
+  border-color: transparent;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contracts-counts,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-field-label,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-field-note,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contracts-lead,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contract h3,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contract > header b {
+  color: color-mix(in srgb, var(--pi-ink) 76%, var(--pi-muted));
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contract {
+  background: transparent;
+  border-color: transparent;
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contract-row {
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: var(--pi-soft-line);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contract-row-name,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-field-default code {
+  background: transparent !important;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-pill {
+  background: transparent;
+  border-color: transparent;
+  color: color-mix(in srgb, var(--pi-ink) 82%, var(--pi-muted));
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-pill.is-required {
+  background: transparent;
+  border-color: transparent;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-choices span,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-task-list span {
+  background: transparent;
+  border-color: transparent;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-value pre {
+  background: color-mix(in srgb, var(--pi-paper) 72%, var(--pi-elevated)) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: var(--pi-ink) !important;
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-value code,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-value p {
+  background: transparent !important;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-value button {
+  color: color-mix(in srgb, var(--pi-ink) 74%, var(--pi-muted));
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-value button:hover {
+  background: transparent;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-terminal,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-toolbar,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-tabs {
+  background: color-mix(in srgb, var(--pi-paper) 78%, var(--pi-elevated));
+  border-color: var(--pi-line);
+  scrollbar-color: transparent transparent;
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-tabs button {
+  background: transparent;
+  color: color-mix(in srgb, var(--pi-ink) 78%, var(--pi-muted));
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-tabs button:hover {
+  background: transparent;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-tabs button.is-active {
+  background: transparent;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-command,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-code {
+  background: color-mix(in srgb, var(--pi-elevated) 94%, var(--pi-paper));
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-copy {
+  background: transparent;
+  border-color: transparent;
+  color: color-mix(in srgb, var(--pi-ink) 74%, var(--pi-muted));
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-copy:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--pi-ink);
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-code pre,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-code code {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: var(--pi-ink) !important;
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-unavailable,
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-contract > p {
+  color: color-mix(in srgb, var(--pi-ink) 74%, var(--pi-muted));
+}
+
+.dark .pi-coming-soon {
+  background: color-mix(in srgb, var(--pi-paper) 86%, var(--pi-elevated));
+  border-color: var(--pi-line);
+}
+
+.dark .pi-doc-content .pi-studio-viz-overview,
+.dark .pi-doc-content .pi-studio-viz-card {
+  background: color-mix(in srgb, var(--pi-paper) 86%, var(--pi-elevated));
+  border-color: var(--pi-line);
+}
+
+.dark .pi-doc-content .pi-studio-viz-overview-caption {
+  background: color-mix(in srgb, var(--pi-paper) 92%, var(--pi-elevated));
+  color: var(--pi-muted);
+}
+
+.dark .pi-doc-content .pi-kv-catalog,
+.dark .pi-doc-content .pi-kv-catalog .pi-kv-group > h3 {
+  background: transparent;
+}
+
+.dark .pi-doc-content .pi-kv-catalog kbd {
+  background: color-mix(in srgb, var(--pi-ink) 8%, var(--pi-paper));
+  border-color: color-mix(in srgb, var(--pi-ink) 18%, var(--pi-line));
+  color: var(--pi-ink);
+}
+
+.dark .pi-doc-content .pi-studio-viz-card-status {
+  background: color-mix(in srgb, var(--pi-brand-accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 28%, var(--pi-line));
+  color: var(--pi-brand-accent);
+}
+
+.dark .pi-doc-content .pi-studio-viz-card-cmd code {
+  background: color-mix(in srgb, var(--pi-paper) 72%, var(--pi-elevated));
+  color: var(--pi-ink);
+}
+
+.dark .pi-doc-content .pi-studio-viz-card-planned .pi-studio-viz-card-image {
+  opacity: 0.58;
+}
+
+.dark .wf-home-main .wf-home-capability-card,
+.dark .wf-home-main .wf-home-resource-card,
+.dark .wf-home-main .wf-home-community-panel {
+  background: color-mix(in srgb, var(--pi-paper) 90%, var(--pi-elevated));
+  border-color: var(--pi-line);
+}
+
+.dark .wf-home-main .wf-home-community-link,
+.dark .wf-home-main .wf-home-community-qr {
+  background: color-mix(in srgb, var(--pi-paper) 86%, var(--pi-elevated));
+  border-color: var(--pi-line);
+}
+
+.dark .wf-home-main .wf-home-community-link:hover {
+  background: var(--pi-elevated);
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 35%, var(--pi-line));
+}
+
+.dark .wf-home-main .wf-home-community-link strong,
+.dark .wf-home-main .wf-home-community-qr strong {
+  color: var(--pi-ink);
+}
+
+.dark .wf-home-main .wf-home-community-link em,
+.dark .wf-home-main .wf-home-community-qr span {
+  color: var(--pi-muted);
+}
+
+.dark .wf-site-footer {
+  background: color-mix(in srgb, var(--pi-paper) 92%, var(--pi-elevated));
+  border-color: var(--pi-line);
+}
+
+.dark .wf-site-footer-column h2,
+.dark .wf-site-footer-copyright a {
+  color: var(--pi-ink);
+}
+
+.dark .wf-site-footer-column a:hover,
+.dark .wf-site-footer-copyright a:hover {
+  color: var(--pi-brand-accent);
+}
+
+.dark .wf-home-main .wf-home-ecosystem-chips a {
+  background: color-mix(in srgb, var(--pi-paper) 86%, var(--pi-elevated));
+  border-color: var(--pi-line);
+}
+
+.dark .wf-home-main .wf-home-ecosystem-chips a:hover {
+  background: var(--pi-elevated);
+  border-color: var(--pi-soft-line);
+}
+
+.dark .pi-open-logo {
+  background: var(--pi-elevated);
+  border-color: var(--pi-line);
+  box-shadow: none;
+}
+
+/* Keep publisher marks full-color on a neutral plate in dark mode. */
+.dark .wf-model-mark.has-logo {
+  background: color-mix(in srgb, var(--pi-paper) 70%, #f3efe6);
+  border-color: var(--pi-line);
+}
+
+.wf-model-mark.has-logo[data-logo='utaustin'] {
+  padding: 7px;
+}
+
+.dark .wf-model-mark.has-logo[data-logo='utaustin'] {
+  background: color-mix(in srgb, var(--pi-elevated) 78%, #3d2a18);
+  border-color: color-mix(in srgb, #bf5700 34%, var(--pi-line));
+}
+
+.dark .wf-model-mark.has-logo .wf-model-mark-image {
+  filter: none;
+  mix-blend-mode: normal;
+  opacity: 1;
+}
+
+/* ---------- Dark: docs welcome / intro page ---------- */
+.dark .pi-doc-welcome-workflow {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.dark .pi-doc-welcome-workflow-card {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.dark .pi-doc-welcome-workflow-stage:hover .pi-doc-welcome-workflow-card,
+.dark .pi-doc-welcome-workflow-stage:focus-within .pi-doc-welcome-workflow-card {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.dark .pi-doc-welcome-workflow-icon {
+  background: color-mix(in srgb, var(--pi-brand-accent) 12%, var(--pi-paper)) !important;
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 22%, var(--pi-line)) !important;
+  box-shadow: none !important;
+  color: var(--pi-brand-accent) !important;
+}
+
+.dark .pi-doc-welcome-workflow-index {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--pi-muted);
+}
+
+.dark .pi-doc-welcome-workflow-title {
+  color: var(--pi-ink) !important;
+}
+
+.dark .pi-doc-welcome-workflow-label {
+  color: var(--pi-brand-accent) !important;
+}
+
+.dark .pi-doc-welcome-workflow-caption {
+  border-top-color: var(--pi-line) !important;
+  color: var(--pi-muted) !important;
+}
+
+.dark .pi-doc-welcome-badge {
+  background: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated)) !important;
+  border-color: var(--pi-line) !important;
+  color: var(--pi-ink) !important;
+}
+
+.dark .pi-doc-welcome-badge:hover {
+  background: var(--pi-elevated) !important;
+  border-color: var(--pi-soft-line) !important;
+}
+
+.dark .pi-doc-welcome-badge-count {
+  color: var(--pi-muted) !important;
+}
+
+.dark .pi-doc-welcome-quicklink {
+  background: color-mix(in srgb, var(--pi-paper) 90%, var(--pi-elevated)) !important;
+  border-color: var(--pi-line) !important;
+  color: var(--pi-ink) !important;
+}
+
+.dark .pi-doc-welcome-quicklink:hover {
+  background: var(--pi-elevated) !important;
+  border-color: var(--pi-soft-line) !important;
+}
+
+.dark .pi-doc-welcome-quicklink-description {
+  color: var(--pi-muted) !important;
+}
+
+.dark .pi-doc-welcome-highlights-heading {
+  color: var(--pi-ink) !important;
+}
+
+.dark .pi-doc-welcome-highlights-group {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.dark .pi-doc-welcome-highlights-list {
+  color: color-mix(in srgb, var(--pi-ink) 92%, var(--pi-muted)) !important;
+}
+
+.dark .pi-doc-welcome-workflow-track::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--pi-ink) 42%, var(--pi-line)) 6%,
+    color-mix(in srgb, var(--pi-brand-accent) 58%, var(--pi-line)) 50%,
+    color-mix(in srgb, var(--pi-ink) 42%, var(--pi-line)) 94%,
+    transparent 100%
+  ) !important;
+  height: 1px;
+  opacity: 1;
+}
+
+.dark .pi-doc-welcome-workflow-track::after {
+  background: var(--pi-brand-accent) !important;
+  height: 1px;
+}
+
+.dark .pi-doc-welcome-body {
+  color: inherit;
+}
+
+.dark .pi-doc-welcome-ack > p,
+.dark .pi-doc-welcome-ack h3,
+.dark .pi-doc-welcome-ack-footer {
+  color: var(--pi-muted);
+}
+
+.dark .pi-doc-welcome-ack h3 {
+  color: var(--pi-ink);
+}
+
+/* ---------- Dark: MDX components (steps, callouts, tabs) ---------- */
+.dark .pi-doc-content .fd-step::before {
+  background: color-mix(in srgb, var(--pi-brand-accent) 18%, var(--pi-elevated)) !important;
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 28%, var(--pi-line)) !important;
+  color: var(--pi-brand-accent) !important;
+}
+
+.dark .pi-doc-content .fd-steps {
+  border-left-color: color-mix(in srgb, var(--pi-brand-accent) 35%, var(--pi-line)) !important;
+}
+
+.dark .pi-doc-content .my-4.rounded-xl.border.bg-fd-card:not(figure.shiki) {
+  background: color-mix(in srgb, var(--pi-paper) 90%, var(--pi-elevated)) !important;
+  border-color: var(--pi-line) !important;
+  box-shadow: none !important;
+}
+
+.dark .pi-doc-content .my-4.rounded-xl.border.bg-fd-card:not(figure.shiki) .font-medium,
+.dark .pi-doc-content .my-4.rounded-xl.border.bg-fd-card:not(figure.shiki) .text-fd-muted-foreground,
+.dark .pi-doc-content :where([class*='text-fd-muted-foreground']) {
+  color: var(--pi-muted) !important;
+}
+
+.dark .pi-doc-content .my-4.rounded-xl.border.bg-fd-card:not(figure.shiki) .text-fd-card-foreground,
+.dark .pi-doc-content :where([class*='text-fd-foreground'], [class*='text-fd-card-foreground']) {
+  color: var(--pi-ink) !important;
+}
+
+.dark .pi-doc-content .katex-display {
+  background: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated)) !important;
+  border-color: var(--pi-line) !important;
+}
+
+.dark .pi-doc-content :where([class*='prose-no-margin'][class*='overflow-auto']) {
+  scrollbar-color: var(--pi-muted) color-mix(in srgb, var(--pi-paper) 80%, var(--pi-elevated));
+}
+
+.dark .pi-doc-content pre:not(.shiki),
+.dark .pi-doc-content pre.shiki,
+.dark .pi-doc-content code:not(pre code) {
+  color: inherit;
+}
+
+.dark :is(.pi-doc-content, .wf-recipe-shell) .wf-command-builder-code :is(pre, code) {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: var(--pi-ink) !important;
+}
+
+.dark .pi-doc-inline-toc,
+.dark .pi-doc-inline-toc summary {
+  background: color-mix(in srgb, var(--pi-paper) 90%, var(--pi-elevated));
+  border-color: var(--pi-line);
+  color: var(--pi-ink);
+}
+
+.dark .pi-doc-pagination-link,
+.dark .pi-doc-related-link {
+  background: color-mix(in srgb, var(--pi-paper) 90%, var(--pi-elevated));
+  border-color: var(--pi-line);
+  color: var(--pi-ink);
+}
+
+.dark .pi-doc-pagination-link:hover,
+.dark .pi-doc-related-link:hover {
+  background: var(--pi-elevated);
+  border-color: var(--pi-soft-line);
+}
+
+.dark .pi-doc-actions {
+  background: transparent !important;
+}
+
+.dark .pi-doc-action-chip,
+.dark .pi-doc-action-link {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: inherit;
+}
+
+.dark .pi-doc-action-chip:hover,
+.dark .pi-doc-action-link:hover {
+  color: var(--pi-ink);
+}
+
+.dark .pi-doc-menu-button {
+  background: var(--pi-elevated) !important;
+  border-color: var(--pi-line) !important;
+  color: var(--pi-ink) !important;
+}
+
+.dark .wf-home-workflow-section .wf-system-workflow-stage {
+  background: color-mix(in srgb, var(--pi-paper) 90%, var(--pi-elevated));
+  border-color: var(--pi-line);
+}
+
+.dark .pi-doc-content .wf-system-workflow,
+.dark .pi-doc-content .wf-system-architecture {
+  background: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated)) !important;
+  border-color: var(--pi-line) !important;
+  box-shadow: var(--pi-shadow-soft) !important;
+  color: var(--pi-ink) !important;
+}
+
+.dark .pi-doc-content .wf-system-workflow-stage {
+  border-right-color: var(--pi-line) !important;
+}
+
+.dark .pi-doc-content .wf-system-workflow-stage > p:last-child,
+.dark .pi-doc-content .wf-system-workflow figcaption,
+.dark .pi-doc-content .wf-system-architecture figcaption {
+  color: var(--pi-muted) !important;
+}
+
+.dark .pi-doc-content .wf-system-workflow-stage h3,
+.dark .pi-doc-content .wf-system-workflow-stage .wf-system-workflow-label {
+  color: var(--pi-ink) !important;
+}
+
+.dark .pi-doc-content .wf-system-workflow-icon-wrap {
+  background: color-mix(in srgb, var(--pi-brand-accent) 12%, var(--pi-elevated)) !important;
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 24%, var(--pi-line)) !important;
+  color: var(--pi-brand-accent) !important;
+}
+
+.dark .pi-doc-welcome-quicklink-icon {
+  background: color-mix(in srgb, var(--pi-brand-accent) 14%, var(--pi-elevated)) !important;
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 22%, var(--pi-line)) !important;
+  color: var(--pi-brand-accent) !important;
+}
+
+/* ---------- Home hero: RoboDojo-scale overlapping media carousel ---------- */
+.wf-home-hero-carousel {
+  margin: 0 auto;
+  max-width: 100%;
+  width: 100%;
+}
+
+.wf-home-hero-carousel-viewport {
+  align-items: center;
+  display: flex;
+  height: clamp(32rem, 49vw, 57.1875rem);
+  justify-content: center;
+  overflow: visible;
+  perspective: 1800px;
+  position: relative;
+  width: 100%;
+}
+
+.wf-home-hero-carousel-track {
+  height: 100%;
+  position: relative;
+  width: 100%;
+}
+
+.wf-home-hero-card {
+  border: 0;
+  left: 50%;
+  margin: 0;
+  opacity: 0.45;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.86);
+  transition:
+    box-shadow 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  width: min(92%, 111.375rem);
+  will-change: transform, opacity;
+  z-index: 1;
+}
+
+.wf-home-hero-card.is-active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+  width: min(96vw, 111.375rem);
+  z-index: 3;
+}
+
+.wf-home-hero-card.is-prev {
+  transform: translate(calc(-50% - 38%), -50%) scale(0.84);
+  z-index: 2;
+}
+
+.wf-home-hero-card.is-next {
+  transform: translate(calc(-50% + 38%), -50%) scale(0.84);
+  z-index: 2;
+}
+
+.wf-home-hero-card-frame {
+  background: var(--pi-elevated);
+  border: 1px solid var(--pi-line);
+  border-radius: var(--pi-radius-xl);
+  box-shadow: var(--pi-shadow-card);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  transition: box-shadow 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.wf-home-hero-card.is-active .wf-home-hero-card-frame {
+  box-shadow:
+    0 24px 56px color-mix(in srgb, var(--pi-ink) 14%, transparent),
+    0 8px 24px color-mix(in srgb, var(--pi-ink) 8%, transparent);
+}
+
+.wf-home-hero-card.is-prev .wf-home-hero-card-frame,
+.wf-home-hero-card.is-next .wf-home-hero-card-frame {
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--pi-ink) 10%, transparent);
+}
+
+.wf-home-hero-card-media {
+  aspect-ratio: 1784 / 915;
+  background: color-mix(in srgb, var(--pi-ink) 6%, var(--pi-paper));
+  min-height: clamp(32rem, 49vw, 57.1875rem);
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.wf-home-hero-card-poster,
+.wf-home-hero-card-video,
+.wf-home-hero-card-image {
+  display: block;
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  object-position: center center;
+  position: absolute;
+  width: 100%;
+}
+
+/* Title/lead/CTA sit directly on the active video, RoboDojo-style. */
+.wf-home-hero-card-overlay {
+  align-items: flex-end;
+  display: flex;
+  inset: 0;
+  padding: clamp(1.5rem, 4vw, 3.25rem);
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+.wf-home-hero-card-overlay::before {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    transparent 30%,
+    rgba(10, 9, 7, 0.58) 78%,
+    rgba(10, 9, 7, 0.72) 100%
+  );
+  content: '';
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.wf-home-hero-carousel-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 1.125rem auto 0;
+  max-width: min(96vw, 111.375rem);
+  min-height: 2.75rem;
+  text-align: center;
+  width: 100%;
+}
+
+.wf-home-hero-carousel-caption strong {
+  color: var(--pi-ink);
+  font-size: 0.875rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.wf-home-hero-carousel-caption span {
+  color: var(--pi-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.wf-home-hero-carousel-controls {
+  align-items: center;
+  display: flex;
+  gap: 0.875rem;
+  justify-content: center;
+  margin-top: 0.875rem;
+  pointer-events: auto;
+}
+
+.wf-home-hero-carousel-nav {
+  align-items: center;
+  background: var(--pi-elevated);
+  border: 1px solid var(--pi-line);
+  border-radius: 999px;
+  color: var(--pi-ink);
+  cursor: pointer;
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+  width: 2rem;
+}
+
+.wf-home-hero-carousel-nav:hover {
+  background: var(--pi-paper-hover);
+  border-color: var(--pi-soft-line);
+  color: var(--pi-brand-accent);
+}
+
+.wf-home-hero-carousel-dots {
+  display: inline-flex;
+  gap: 0.375rem;
+}
+
+.wf-home-hero-carousel-dots button {
+  background: color-mix(in srgb, var(--pi-ink) 22%, transparent);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  height: 0.4375rem;
+  padding: 0;
+  transition:
+    background 160ms ease,
+    transform 160ms ease,
+    width 160ms ease;
+  width: 0.4375rem;
+}
+
+.wf-home-hero-carousel-dots button.is-active {
+  background: var(--pi-brand-accent);
+  transform: scale(1.05);
+  width: 1.375rem;
+}
+
+@media (max-width: 900px) {
+  .wf-home-hero-carousel-viewport {
+    aspect-ratio: 16 / 10;
+    height: auto;
+  }
+
+  .wf-home-hero-card-media {
+    aspect-ratio: 16 / 10;
+    min-height: 0;
+  }
+
+  .wf-home-hero-card.is-prev,
+  .wf-home-hero-card.is-next {
+    display: none;
+  }
+
+  .wf-home-hero-card,
+  .wf-home-hero-card.is-active {
+    top: 0;
+    transform: translate(-50%, 0) scale(1);
+    width: 100%;
+  }
+
+  .wf-home-hero-card-overlay {
+    padding: 1.25rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .wf-home-hero-carousel-viewport,
+  .wf-home-hero-card-media {
+    aspect-ratio: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .wf-home-hero-carousel-viewport,
+  .wf-home-hero-card-media {
+    aspect-ratio: 4 / 5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wf-home-hero-card {
+    transition: none;
+  }
+}
+
+/* ---------- Home hero: Fumadocs-style kicker ---------- */
+.wf-home-hero-kicker {
+  animation: wf-hero-copy-enter 760ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
+  color: #e7d3b3;
+  font-family:
+    'Noto Sans SC', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.45;
+  margin: 0 0 0.75rem;
+  max-width: 34em;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35);
+  text-transform: none;
+  text-wrap: balance;
+}
+
+.wf-home-main {
+  padding-top: clamp(1.5rem, 3vw, 2.5rem);
+}
+
+/* ---------- Fumadocs UI plugins ---------- */
+.pi-doc-content .wf-docs-zoom-image,
+.pi-doc-content .wf-docs-teaser-image {
+  border-radius: 0.5rem;
+  cursor: zoom-in;
+  max-width: 100%;
+}
+
+.wf-model-paper-thumb .wf-docs-zoom-image {
+  cursor: zoom-in;
+  max-width: 100%;
+}
+
+.pi-doc-content [data-rmiz] {
+  display: block;
+  max-width: 100%;
+}
+
+.wf-docs-zoom-overlay {
+  align-items: center;
+  background: var(--color-fd-background, var(--pi-paper));
+  cursor: zoom-out;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: fixed;
+  z-index: 80;
+}
+
+.wf-docs-zoom-overlay img {
+  cursor: zoom-out;
+  max-height: 96vh;
+  max-width: min(96vw, 1400px);
+  object-fit: contain;
+}
+
+.pi-doc-content .wf-docs-banner {
+  margin-bottom: 1rem;
+}
+
+.pi-doc-content :is([data-inline-toc], .not-prose.rounded-lg.border) {
+  margin: 1.25rem 0;
+}
+
+@keyframes wf-docs-pulse {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ---------- Quiet leftover shouty labels (source copy is already sentence case) ---------- */
+.pi-label,
+.pi-metric-quick-nav-group-title,
+.pi-metric-quick-nav.is-rail .pi-metric-quick-nav-group-title,
+.pi-doc-content .wf-model-recipe-identity p,
+.wf-model-recipe-facts dt span,
+.wf-recipe-records dt,
+.wf-recipe-facts dt,
+.wf-recipe-version-matrix dt,
+.wf-recipe-runtime-matrix dt,
+.wf-recipe-evidence-grid dt,
+.wf-recipe-contracts th,
+.wf-recipe-narrative-origin,
+.wf-recipe-highlights > span,
+.wf-recipe-hardware dt,
+.wf-recipe-what-is-meta dt,
+.wf-recipe-reference-meta dt,
+.wf-recipe-reference-peers > span,
+.wf-recipe-usage-workflow > h3,
+.wf-recipe-upstream-label,
+.wf-model-arch-diagram__label,
+.wf-cg-kicker,
+.wf-cg-lane,
+.wf-arch-kind,
+.wf-arch-lane,
+.wf-recipe-catalog-kicker,
+.wf-recipe-eyebrow,
+.wf-recipe-sidebar-identity > div > span,
+.wf-recipe-paper-quote span,
+.wf-recipe-source-links .wf-recipe-source-kind,
+.pi-env-entry-command span,
+.pi-doc-content .pi-env-catalog .pi-env-entry-body > p strong,
+.pi-studio-viz-card-status,
+.wf-home-main .wf-catalog-pane-kicker,
+.wf-home-main .wf-home-configurator-controls span,
+.wf-home-main .wf-home-configurator-terminal-head > span {
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.pi-doc-shell[lang='zh'] .pi-label,
+.pi-doc-shell[lang='zh'] .pi-doc-actions,
+.pi-doc-shell[lang='zh'] .wf-recipe-records dt,
+.pi-doc-shell[lang='zh'] .wf-recipe-facts dt,
+.pi-doc-shell[lang='zh'] .wf-command-builder-controls span {
+  letter-spacing: 0;
+}
+
+/* ---------- Focus + press feedback ---------- */
+.pi-doc-shell :is(a, button, select, summary, input, textarea):focus-visible,
+.pi-doc-header :is(a, button, select, summary, input):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--pi-brand-accent) 72%, transparent);
+  outline-offset: 2px;
+}
+
+.pi-doc-action-chip:active,
+.pi-doc-action-link:active,
+.pi-doc-welcome-badge:active,
+.pi-doc-welcome-quicklink:active,
+.wf-recipe-show-more:active,
+.wf-recipe-family-tabs button:active,
+.pi-doc-header .pi-nav a:active,
+.pi-language-switch a:active,
+.pi-github-link:active,
+.pi-site-search-trigger:active {
+  transform: scale(0.97);
+}
+
+.wf-command-builder-tabs button {
+  color: color-mix(in srgb, var(--pi-ink) 64%, var(--pi-muted));
+}
+
+.wf-command-builder-tabs button.is-active {
+  color: var(--pi-ink);
+}
+
+.pi-doc-content .wf-recipe-empty {
+  font-size: var(--pi-doc-ui-md);
+  text-align: center;
+}
+
+.pi-doc-shell-model-detail .pi-doc-actions {
+  margin-top: 0.85rem;
+  padding-top: 0.35rem;
+}
+
+/* ---------- Dark: leftover light surfaces ---------- */
+.dark .pi-doc-hub-card {
+  background: color-mix(in srgb, var(--pi-paper) 88%, var(--pi-elevated));
+  border-color: var(--pi-line);
+}
+
+.dark .pi-doc-hub-card:hover {
+  background: var(--pi-elevated);
+  border-color: color-mix(in srgb, var(--pi-brand-accent) 28%, var(--pi-line));
+  box-shadow: var(--pi-shadow-soft);
+}
+
+.dark .pi-doc-hub-card-strong,
+.dark .wf-api-catalog-card.is-guide {
+  background: color-mix(in srgb, var(--pi-paper) 82%, var(--pi-elevated));
+  border-color: color-mix(in srgb, var(--pi-ink) 18%, var(--pi-line));
+}
+
+.dark .pi-doc-content a.wf-recipe-row:hover {
+  background: color-mix(in srgb, var(--pi-elevated) 78%, transparent);
+}
+
+.dark .pi-doc-content blockquote {
+  background: color-mix(in srgb, var(--pi-paper) 86%, var(--pi-elevated));
+  border-color: var(--pi-line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-doc-action-chip:active,
+  .pi-doc-welcome-badge:active,
+  .pi-doc-welcome-quicklink:active,
+  .wf-recipe-show-more:active {
+    transform: none;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pi-doc-welcome-workflow-stage:hover .pi-doc-welcome-workflow-label {
+    color: var(--pi-ink);
+  }
+}
+
+/* ---------- Wave-1 polish: quieter chrome, one rhythm, fewer boxes ---------- */
+.pi-doc-header .pi-site-search-trigger {
+  background: color-mix(in srgb, var(--pi-paper) 62%, var(--pi-elevated)) !important;
+  border: 1px solid var(--pi-line) !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  font-size: 0.8125rem !important;
+  font-weight: 450;
+  justify-content: flex-start;
+  min-height: 2rem;
+  min-width: 11.5rem;
+  padding-inline: 0.7rem 0.5rem;
+}
+
+.pi-doc-header .pi-site-search-trigger:hover {
+  background: var(--pi-elevated) !important;
+  border-color: color-mix(in srgb, var(--pi-ink) 28%, var(--pi-line)) !important;
+}
+
+.pi-doc-header .pi-language-switch,
+.pi-doc-header .pi-theme-switch {
+  background: transparent;
+  box-shadow: none;
+}
+
+.pi-doc-header .pi-theme-switch {
+  border: 0;
+  gap: 0;
+  min-height: 0;
+  padding: 0;
+}
+
+.pi-doc-header .pi-theme-switch > svg {
+  height: 1.15rem;
+  padding: 0.15rem;
+  width: 1.15rem;
+}
+
+@media (max-width: 720px) {
+  .pi-doc-header .pi-nav {
+    display: none;
+  }
+
+  .pi-doc-header .pi-site-search-trigger {
+    min-width: 2.25rem;
+    padding-inline: 0.5rem;
+  }
+}
+
+.pi-doc-header .pi-language-switch a,
+.pi-doc-shell .pi-language-switch a {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pi-doc-header .pi-language-switch a[aria-current='true'],
+.pi-doc-header .pi-language-switch a:hover,
+.pi-doc-shell .pi-language-switch a[aria-current='true'],
+.pi-doc-shell .pi-language-switch a:hover {
+  background: color-mix(in srgb, var(--pi-ink) 7%, transparent);
+  color: var(--pi-ink);
+}
+
+.pi-doc-welcome-kicker {
+  font-size: var(--pi-doc-ui-sm);
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.pi-doc-welcome-workflow {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 8px 0 16px;
+  overflow: visible;
+  padding: 8px 0 16px;
+}
+
+.pi-doc-welcome-workflow-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 8px;
+  min-height: 0;
+  padding: 8px 4px 0;
+}
+
+.pi-doc-welcome-workflow-stage:hover .pi-doc-welcome-workflow-card,
+.pi-doc-welcome-workflow-stage:focus-within .pi-doc-welcome-workflow-card {
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.pi-doc-welcome-workflow-stage:active .pi-doc-welcome-workflow-card {
+  transform: scale(0.97);
+}
+
+.pi-doc-welcome-workflow-icon {
+  background: color-mix(in srgb, var(--pi-brand-accent) 8%, var(--pi-paper));
+  box-shadow: none;
+}
+
+.pi-doc-welcome-workflow-index {
+  background: transparent;
+  border: 0;
+  color: var(--pi-muted);
+  font-weight: 500;
+  letter-spacing: 0;
+  padding: 0;
+}
+
+.pi-doc-welcome-highlights {
+  margin-top: 24px;
+}
+
+.pi-doc-welcome-highlights-grid {
+  gap: 24px 32px;
+}
+
+.pi-doc-welcome-highlights-group {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0;
+  padding: 0;
+}
+
+.pi-doc-welcome-highlights-heading {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+@media (min-width: 720px) {
+  .pi-doc-welcome-highlights-group + .pi-doc-welcome-highlights-group {
+    border-left: 1px solid color-mix(in srgb, var(--pi-line) 70%, transparent);
+    padding-left: 32px;
+  }
+}
+
+.pi-doc-welcome-github {
+  margin-top: 8px;
+}
+
+.pi-doc-actions {
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  padding: 0.35rem 0 0;
+}
+
+.pi-doc-action-chip,
+.pi-doc-action-link {
+  background: transparent;
+  box-shadow: none;
+  font-weight: 400;
+}
+
+.pi-doc-hub-hero,
+.pi-doc-content > p:has(> img[src*='teaser']) img,
+.pi-doc-content img[src*='teaser'],
+.pi-open-logo {
+  box-shadow: none;
+  border-color: var(--pi-line);
+}
+
+.pi-doc-hub-actions a {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.wf-recipe-search {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--pi-line) 85%, transparent);
+  border-radius: 0.5rem;
+  min-height: 3rem;
+  padding: 0 1rem;
+}
+
+.wf-recipe-family-tabs {
+  margin: 16px 0 12px;
+}
+
+.wf-recipe-family-tabs button,
+.wf-recipe-family-tabs button:hover {
+  background: transparent;
+  transform: none;
+}
+
+.wf-recipe-family-tabs button.is-active {
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: var(--pi-brand-accent);
+  color: var(--pi-ink);
+}
+
+.wf-recipe-family-tabs button.is-active span {
+  background: transparent;
+  color: var(--pi-muted);
+}
+
+.dark .pi-doc-content .wf-recipe-family-tabs button {
+  background: transparent;
+  border-color: transparent;
+}
+
+.dark .pi-doc-content .wf-recipe-family-tabs button.is-active {
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: var(--pi-brand-accent);
+  color: var(--pi-ink);
+}
+
+.dark .pi-doc-content .wf-recipe-family-tabs button.is-active span {
+  background: transparent;
+  color: var(--pi-muted);
+}
+
+.wf-recipe-row-model {
+  gap: 12px;
+}
+
+.wf-recipe-row-identity {
+  gap: 8px;
+}
+
+.pi-doc-content a.wf-recipe-row {
+  animation: none;
+  padding: 16px 0;
+}
+
+.wf-command-builder {
+  animation: none;
+  box-shadow: none;
+}
+
+.wf-model-paper-thumb:hover .wf-docs-zoom-image,
+.wf-model-paper-thumb:hover img {
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--pi-ink) 8%, transparent);
+}
+
+.wf-home-button:active {
+  transform: scale(0.97);
+}
+
+.pi-doc-badge,
+.pi-studio-viz-card-status,
+.pi-metric-quick-nav-group-title,
+.pi-metric-quick-nav.is-rail .pi-metric-quick-nav-group-title {
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .wf-recipe-family-tabs button:hover {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-doc-header .pi-nav a:active,
+  .pi-language-switch a:active,
+  .pi-github-link:active,
+  .pi-site-search-trigger:active,
+  .wf-recipe-family-tabs button:active,
+  .wf-home-button:active,
+  .pi-doc-welcome-workflow-stage:active .pi-doc-welcome-workflow-card {
+    transform: none;
+  }
+}

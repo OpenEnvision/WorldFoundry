@@ -1,5 +1,7 @@
 id: t2vworldbench
 name: T2VWorldBench
+publisher: San Jose State University
+publisher_kind: university
 benchmark_kind:
 - text-to-video
 - world-knowledge
@@ -37,57 +39,48 @@ evaluation_surface:
   requires_runtime_release: false
   requires_generated_videos: true
 metrics:
-- id: physics_knowledge
-  name: Physics Knowledge
-  description: T2VWorldBench physics world-knowledge score.
+- id: quality
+  name: Quality
+  description: Minimum visual quality score emitted by the official evaluator.
   higher_is_better: true
-  leaderboard_key: physics
+  leaderboard_key: min_quality_score
   aggregator: mean
   output_unit: score
-- id: nature_knowledge
-  name: Nature Knowledge
-  description: T2VWorldBench nature world-knowledge score.
+- id: realism
+  name: Realism
+  description: Minimum realism score emitted by the official evaluator.
   higher_is_better: true
-  leaderboard_key: nature
+  leaderboard_key: min_realism_score
   aggregator: mean
   output_unit: score
-- id: activity_knowledge
-  name: Activity Knowledge
-  description: T2VWorldBench activity world-knowledge score.
+- id: relevance
+  name: Relevance
+  description: Minimum prompt relevance score emitted by the official evaluator.
   higher_is_better: true
-  leaderboard_key: activity
+  leaderboard_key: min_relevance_score
   aggregator: mean
   output_unit: score
-- id: culture_knowledge
-  name: Culture Knowledge
-  description: T2VWorldBench culture world-knowledge score.
+- id: consistency
+  name: Consistency
+  description: Minimum temporal consistency score emitted by the official evaluator.
   higher_is_better: true
-  leaderboard_key: culture
+  leaderboard_key: min_consistency_score
   aggregator: mean
   output_unit: score
-- id: causality_knowledge
-  name: Causality Knowledge
-  description: T2VWorldBench causality world-knowledge score.
+- id: final
+  name: Final
+  description: Minimum total score emitted by the official evaluator.
   higher_is_better: true
-  leaderboard_key: causality
-  aggregator: mean
-  output_unit: score
-- id: object_knowledge
-  name: Object Knowledge
-  description: T2VWorldBench object world-knowledge score.
-  higher_is_better: true
-  leaderboard_key: object
-  aggregator: mean
-  output_unit: score
-- id: world_knowledge_average
-  name: World Knowledge Average
-  description: Mean over available world-knowledge categories.
-  higher_is_better: true
-  leaderboard_key: world_knowledge_average
+  leaderboard_key: final_min_score
   aggregator: mean
   output_unit: score
   primary: true
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/t2vworldbench/run_t2vworldbench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.t2vworldbench.run_t2vworldbench_official_runner
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:T2VWorldBenchContract
   validation_command:
   - worldfoundry-eval
@@ -98,7 +91,7 @@ runner:
   - --mode
   - official-validation
   - --official-results-path
-  - <official_results.json>
+  - <model_video_assessment_scores.csv>
   - --generated-artifact-dir
   - <generated_videos>
   - --output-dir
@@ -127,6 +120,7 @@ runner:
   - WORLDFOUNDRY_T2VWORLDBENCH_RESULTS_PATH
 integration:
   status: integrated
+  tier: in_tree
   blocked_reasons:
   - Official repository/source metadata and the official-result normalizer are integrated.
   - Full validation requires generated videos and manually staged official Drive metadata/sample assets.
@@ -171,7 +165,7 @@ validation_command:
 - --mode
 - official-validation
 - --official-results-path
-- <official_results.json>
+- <model_video_assessment_scores.csv>
 - --generated-artifact-dir
 - <generated_videos>
 - --output-dir

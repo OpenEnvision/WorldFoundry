@@ -41,6 +41,7 @@ class CausalInferenceSession:
     initial_latent: Optional[torch.Tensor] = None
     last_model_ms: Optional[float] = None
     last_decode_ms: Optional[float] = None
+    invalidated: bool = False
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,7 @@ class CausalInferenceBlock:
     end_frame: int
     model_ms: Optional[float] = None
     decode_ms: Optional[float] = None
+    total_ms: Optional[float] = None
 
 def get_current_action(mode="universal"):
 
@@ -191,6 +193,18 @@ def cond_current(conditional_dict, current_start_frame, num_frame_per_block, rep
         return new_cond
 
 class CausalInferencePipeline(torch.nn.Module):
+    """One resident session with optional decoder/context-refresh overlap.
+
+    The caller serializes start, step, reset and close on a pipeline instance.
+    With ``overlap_vae_decode=True``, CUDA decoding uses a pipeline-owned stream
+    after denoising, while the caller stream refreshes clean generator caches.
+    A device event joins outputs and recurrent caches before caller-side copies
+    or the next chunk. Tensor stream records guard allocator lifetime; reset,
+    replacement sessions and close drain only the owned decoder stream. CPU
+    tensors use the explicitly reported synchronous fallback. The option stays
+    disabled by default; stream use alone does not establish a latency benefit.
+    """
+
     def __init__(
             self,
             args,
@@ -229,6 +243,13 @@ class CausalInferencePipeline(torch.nn.Module):
 
         self._session: Optional[CausalInferenceSession] = None
         self._last_block: Optional[CausalInferenceBlock] = None
+        # Calls on one pipeline are serialized by its resident session owner.
+        # The optional stream belongs to this pipeline, never to a global pool.
+        self.overlap_vae_decode = False
+        self._decode_stream = None
+        self._decode_stream_device = None
+        self._decode_complete = None
+        self._decode_overlap_runtime = {"calls": 0, "execution": "disabled"}
 
     @property
     def session(self) -> Optional[CausalInferenceSession]:
@@ -245,12 +266,53 @@ class CausalInferencePipeline(torch.nn.Module):
     def reset_session(self) -> None:
         """Drop the active rollout state without touching resident model weights."""
 
+        self._drain_decode_stream()
         self._session = None
         self._last_block = None
         self.kv_cache1 = None
         self.kv_cache_mouse = None
         self.kv_cache_keyboard = None
         self.crossattn_cache = None
+
+    def close(self) -> None:
+        """Drain the owned decoder stream and release the active session."""
+        self.reset_session()
+
+    def _drain_decode_stream(self) -> None:
+        stream = self._decode_stream
+        try:
+            if stream is not None:
+                stream.synchronize()
+        finally:
+            self._decode_stream = None
+            self._decode_stream_device = None
+            self._decode_complete = None
+
+    def _get_decode_stream(self, device):
+        if self._decode_stream is not None and self._decode_stream_device != device:
+            self._drain_decode_stream()
+        if self._decode_stream is None:
+            self._decode_stream = torch.cuda.Stream(device=device)
+            self._decode_stream_device = device
+        return self._decode_stream
+
+    def _record_decode_overlap(self, execution: str) -> None:
+        self._decode_overlap_runtime["execution"] = execution
+        applied = getattr(self, "_worldfoundry_applied_optimizations", None)
+        if applied is not None and self.overlap_vae_decode:
+            applied.effective["overlap_vae_decode"] = execution
+
+    @staticmethod
+    def _record_cache_stream(value, stream) -> None:
+        if isinstance(value, torch.Tensor):
+            if value.is_cuda:
+                value.record_stream(stream)
+        elif isinstance(value, Mapping):
+            for child in value.values():
+                CausalInferencePipeline._record_cache_stream(child, stream)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                CausalInferencePipeline._record_cache_stream(child, stream)
 
     def start_session(
         self,
@@ -282,6 +344,9 @@ class CausalInferencePipeline(torch.nn.Module):
             )
 
         batch_size = reference.shape[0]
+        # A replacement session releases recurrent caches only after its owned
+        # decoder stream finishes. It does not synchronize unrelated streams.
+        self.reset_session()
         self._initialize_kv_cache(
             batch_size=batch_size,
             dtype=reference.dtype,
@@ -401,7 +466,16 @@ class CausalInferencePipeline(torch.nn.Module):
         action: Optional[Mapping[str, torch.Tensor]] = None,
         profile: bool = False,
     ) -> CausalInferenceBlock:
-        """Generate exactly one latent block and retain every causal cache."""
+        """Generate one block; the resident owner serializes calls and reset.
+
+        Opt-in decode overlap shares only the read-only denoised latent between
+        streams. The caller stream joins decoding before outputs are returned;
+        cache reuse and caller-side copies follow ordinary CUDA stream ordering.
+        Reset/close or a failed overlapped block drains only the owned stream.
+        """
+
+        if session.invalidated:
+            raise RuntimeError("session was invalidated by a failed overlapped block; start a new session")
 
         expected_prefix = (session.batch_size, 16, self.num_frame_per_block)
         if noise.ndim != 5 or tuple(noise.shape[:3]) != expected_prefix:
@@ -434,7 +508,7 @@ class CausalInferencePipeline(torch.nn.Module):
             session.conditional_dict = updated_condition
 
         model_start = model_end = decode_end = None
-        if noise.is_cuda:
+        if profile and noise.is_cuda:
             timing_stream = torch.cuda.current_stream(session.device)
             model_start = torch.cuda.Event(enable_timing=True)
             model_end = torch.cuda.Event(enable_timing=True)
@@ -483,36 +557,81 @@ class CausalInferencePipeline(torch.nn.Module):
 
         assert denoised_pred is not None and timestep is not None
         context_timestep = torch.ones_like(timestep) * self.args.context_noise
-        self.generator(
-            noisy_image_or_video=denoised_pred,
-            conditional_dict=current_condition,
-            timestep=context_timestep,
-            kv_cache=session.kv_cache,
-            kv_cache_mouse=session.mouse_kv_cache,
-            kv_cache_keyboard=session.keyboard_kv_cache,
-            crossattn_cache=session.crossattn_cache,
-            current_start=start_frame * self.frame_seq_length,
-        )
+        overlap = self.overlap_vae_decode and noise.is_cuda
+        decode_start = block_end = None
+        caller_stream = torch.cuda.current_stream(session.device) if overlap else None
+        try:
+            if overlap:
+                decode_stream = self._get_decode_stream(session.device)
+                denoise_ready = torch.cuda.Event()
+                denoise_ready.record(caller_stream)
+                decode_stream.wait_event(denoise_ready)
+                denoised_pred.record_stream(decode_stream)
+                with torch.cuda.stream(decode_stream):
+                    if profile:
+                        decode_start = torch.cuda.Event(enable_timing=True)
+                        decode_start.record(decode_stream)
+                    video, decoded_cache = self.vae_decoder(
+                        denoised_pred.transpose(1, 2).half(), *session.vae_cache
+                    )
+                    if decode_end is None:
+                        decode_end = torch.cuda.Event()
+                    decode_end.record(decode_stream)
+                    self._decode_complete = decode_end
 
-        if model_end is not None:
-            model_end.record(torch.cuda.current_stream(session.device))
+            # The clean-context refresh owns only generator/action caches;
+            # decoding owns only the independent recurrent VAE feature cache.
+            self.generator(
+                noisy_image_or_video=denoised_pred,
+                conditional_dict=current_condition,
+                timestep=context_timestep,
+                kv_cache=session.kv_cache,
+                kv_cache_mouse=session.mouse_kv_cache,
+                kv_cache_keyboard=session.keyboard_kv_cache,
+                crossattn_cache=session.crossattn_cache,
+                current_start=start_frame * self.frame_seq_length,
+            )
+            if model_end is not None:
+                model_end.record(timing_stream)
 
+            if overlap:
+                caller_stream.wait_event(decode_end)
+                self._record_cache_stream((video, decoded_cache), caller_stream)
+                self._decode_overlap_runtime["calls"] += 1
+                self._record_decode_overlap("decode-stream-overlap-enqueued")
+            else:
+                video, decoded_cache = self.vae_decoder(
+                    denoised_pred.transpose(1, 2).half(), *session.vae_cache
+                )
+                if self.overlap_vae_decode:
+                    self._record_decode_overlap("synchronous (non-CUDA fallback)")
+
+            model_ms = decode_ms = total_ms = None
+            if profile and decode_end is not None:
+                assert model_start is not None and model_end is not None
+                if overlap:
+                    block_end = torch.cuda.Event(enable_timing=True)
+                    block_end.record(caller_stream)
+                    block_end.synchronize()
+                    model_ms = model_start.elapsed_time(model_end)
+                    decode_ms = decode_start.elapsed_time(decode_end)
+                    total_ms = model_start.elapsed_time(block_end)
+                else:
+                    decode_end.record(timing_stream)
+                    decode_end.synchronize()
+                    model_ms = model_start.elapsed_time(model_end)
+                    decode_ms = model_end.elapsed_time(decode_end)
+                    total_ms = model_ms + decode_ms
+        except BaseException:
+            if overlap:
+                session.invalidated = True
+                self._drain_decode_stream()
+            raise
+
+        session.vae_cache = decoded_cache
         session.current_start_frame += self.num_frame_per_block
-        decoded_input = denoised_pred.transpose(1, 2)
-        video, session.vae_cache = self.vae_decoder(
-            decoded_input.half(), *session.vae_cache
-        )
-
-        model_ms = decode_ms = None
-        if decode_end is not None:
-            decode_end.record(torch.cuda.current_stream(session.device))
-            torch.cuda.synchronize(device=session.device)
-            assert model_start is not None and model_end is not None
-            model_ms = model_start.elapsed_time(model_end)
-            decode_ms = model_end.elapsed_time(decode_end)
 
         if profile and model_ms is not None and decode_ms is not None:
-            total_ms = model_ms + decode_ms
             print(f"model_time: {model_ms}", flush=True)
             print(f"decode_time: {decode_ms}", flush=True)
             fps = video.shape[1] * 1000 / total_ms
@@ -527,6 +646,7 @@ class CausalInferencePipeline(torch.nn.Module):
             end_frame=session.current_start_frame,
             model_ms=model_ms,
             decode_ms=decode_ms,
+            total_ms=total_ms,
         )
         self._last_block = block
         return block
@@ -592,7 +712,9 @@ class CausalInferencePipeline(torch.nn.Module):
                 "k": torch.zeros([batch_size, kv_cache_size, 12, 128], dtype=dtype, device=device),
                 "v": torch.zeros([batch_size, kv_cache_size, 12, 128], dtype=dtype, device=device),
                 "global_end_index": torch.tensor([0], dtype=torch.long, device=device),
-                "local_end_index": torch.tensor([0], dtype=torch.long, device=device)
+                "local_end_index": torch.tensor([0], dtype=torch.long, device=device),
+                "_host_global_end_index": 0,
+                "_host_local_end_index": 0,
             })
 
         self.kv_cache1 = kv_cache1  # always store the clean cache
@@ -612,13 +734,17 @@ class CausalInferencePipeline(torch.nn.Module):
                 "k": torch.zeros([batch_size, kv_cache_size, 16, 64], dtype=dtype, device=device),
                 "v": torch.zeros([batch_size, kv_cache_size, 16, 64], dtype=dtype, device=device),
                 "global_end_index": torch.tensor([0], dtype=torch.long, device=device),
-                "local_end_index": torch.tensor([0], dtype=torch.long, device=device)
+                "local_end_index": torch.tensor([0], dtype=torch.long, device=device),
+                "_host_global_end_index": 0,
+                "_host_local_end_index": 0,
             })
             kv_cache_mouse.append({
                 "k": torch.zeros([batch_size * self.frame_seq_length, kv_cache_size, 16, 64], dtype=dtype, device=device),
                 "v": torch.zeros([batch_size * self.frame_seq_length, kv_cache_size, 16, 64], dtype=dtype, device=device),
                 "global_end_index": torch.tensor([0], dtype=torch.long, device=device),
-                "local_end_index": torch.tensor([0], dtype=torch.long, device=device)
+                "local_end_index": torch.tensor([0], dtype=torch.long, device=device),
+                "_host_global_end_index": 0,
+                "_host_local_end_index": 0,
             })
         self.kv_cache_keyboard = kv_cache_keyboard  # always store the clean cache
         self.kv_cache_mouse = kv_cache_mouse  # always store the clean cache

@@ -1,0 +1,52 @@
+---
+title: "Wan 2.6 API"
+description: "Wan 2.6 API from Alibaba (Tongyi Lab): image-to-video and hosted-api; Runner parity pending."
+modelId: "wan-2p6"
+pageSource: authored
+---
+
+Wan 2.6 API is the DashScope-hosted image-to-video endpoint for Alibaba's Wan 2.6 model. You provide a start image and receive a rendered clip from Alibaba Cloud; WorldFoundry records the request and stores the result in its standard artifact layout. The catalog lists wan2.6 and wan-2.6 as aliases. Choose this entry when you want the newer hosted Wan generation without local GPU setup.
+
+<ModelPaperFigures modelId="wan-2p6" locale="en" />
+
+Project page: [dashscope.aliyun.com](https://dashscope.aliyun.com/).
+
+<ModelCommandBuilder modelId="wan-2p6" locale="en" />
+
+## What it is for
+
+Use `wan-2p6` to hit the catalog hosted route. Local GPU artifacts are not what this page records.
+
+Wan 2.6 continues the Wan diffusion-transformer video family from Tongyi Lab; the API-served revision's precise architecture and parameters are not published, and this repository records only the hosted integration. It is published by Alibaba (Tongyi Lab).
+
+Catalog tasks include image-to-video and hosted-api. Catalog aliases include `wan2.6` and `wan-2.6`. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs), [Physics-IQ Original](/docs/evaluation/benchmark-hub/physics-iq) (Probes whether provider-side video models respect basic physical plausibility).
+
+Wan 2.6 on this card is DashScope **image-to-video**, not the local Wan weights and not [Wan 2.5](/docs/guides/supported-models/wan-2p5) T2V.
+
+Launch `worldfoundry-eval run wan-2p6`. Send a start image; take the returned clip. Sibling: [Wan 2.7 API](/docs/guides/supported-models/wan-2p7).
+
+## Runtime contract
+
+Optional `prompt`, `negative_prompt`, `input_path`, `seed`, and `reference_urls`.
+
+CLI task profiles: `default`. WorldFoundry binds `Wan2p6Pipeline`.
+
+Family status: **Runner parity pending**.
+
+The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Keys are issued via Alibaba Cloud DashScope (dashscope.aliyun.com).
+
+Hosted DashScope API Studio pipeline is available; users must provide their own provider API key.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run wan-2p6 --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+The environment profile is not recorded.
+
+Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh wan-2p6`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="wan-2p6" locale="en" />

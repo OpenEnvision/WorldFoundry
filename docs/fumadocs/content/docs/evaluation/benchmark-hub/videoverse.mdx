@@ -1,126 +1,32 @@
 ---
 title: VideoVerse
-description: VideoVerse world-model text-to-video evaluation in WorldFoundry.
+description: "OPPO 300-prompt world-model T2V bench: event-LCS plus binary QA. WorldFoundry runs Gemini / URL / local VLM judges; it does not invent a board."
 ---
 
-## What It Measures
+VideoVerse (OPPO Research Institute, with Sun Yat-sen and HK PolyU) asks how far a text-to-video generator is from a **world model**. Official size: **300 prompts**, each decomposed into ordered events with binary evaluation questions across **ten dimensions**. Families include QA accuracy, event coverage, temporal causality, world-knowledge consistency, and static / dynamic scene consistency. Judging combines **event-LCS** over detected event order with per-question verification.
 
-VideoVerse evaluates whether a text-to-video generator behaves like a video world model. The official benchmark focuses on event ordering, binary verification questions, static scene knowledge, dynamic event consistency, interaction, camera behavior, mechanics, and world-knowledge checks.
+Paper: [VideoVerse](https://arxiv.org/abs/2510.08398). Project: [naptmn.cn/Homepage_of_VideoVerse](https://www.naptmn.cn/Homepage_of_VideoVerse/). Code: [Zeqing-Wang/VideoVerse](https://github.com/Zeqing-Wang/VideoVerse). License: Apache-2.0.
 
-The canonical prompt suite has 300 prompts, 815 event units, and 793 verification checks. Each prompt record includes a `t2v_prompt` to generate from, event-order information, and yes/no checks used by the judge.
+WorldFoundry **runs the judge in tree** (Gemini default, URL, or local VLM) and normalizes `eval_res.json` through official event-LCS / verification logic. Prompt manifests are bundled. `--strict` enforces the canonical 300-prompt suite. Official path is integrated; a full credentialed suite is **not** release-verified.
 
+<BenchmarkPageSections id="videoverse" locale="en" />
 
-## Official References
-
-| Resource | Link |
-| --- | --- |
-| Project page | [naptmn.cn/Homepage_of_VideoVerse](https://www.naptmn.cn/Homepage_of_VideoVerse/) |
-| Paper | [arXiv:2510.08398](https://arxiv.org/abs/2510.08398) |
-| GitHub | [github.com/Zeqing-Wang/VideoVerse](https://github.com/Zeqing-Wang/VideoVerse) |
-| HF dataset | [NNaptmn/VideoVerse](https://huggingface.co/datasets/NNaptmn/VideoVerse) |
-| In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/videoverse/run_videoverse_official_runner.py` |
-
-## Assets And Data
-
-WorldFoundry keeps the VideoVerse runner and prompt assets in-tree:
-
-| Asset | Path |
-| --- | --- |
-| Task YAML | `worldfoundry/data/benchmarks/tasks/external/videoverse.yaml` |
-| Prompt manifest | `worldfoundry/data/benchmarks/assets/videoverse/prompt/prompts_of_VideoVerse.json` |
-| Decomposed prompt manifest | `worldfoundry/data/benchmarks/assets/videoverse/prompt/prompts_of_VideoVerse_decomposed.json` |
-| Runner | `worldfoundry/evaluation/tasks/execution/runners/videoverse/run_videoverse_official_runner.py` |
-
-The optional public dataset asset is tracked as `videoverse_dataset_assets` and resolves to the Hugging Face dataset `NNaptmn/VideoVerse` when local dataset material is needed.
-
-## Generated Artifacts
-
-Generate one video per prompt key. Put the videos directly under one directory and name each file with the prompt dictionary key:
-
-```text
-/path/to/videoverse/generated/
-  8f348e44-546c-4319-aefa-b860c02d9cbc.mp4
-  dc4fa681-8b4a-413d-9571-29af7aa36c2e.mp4
-  <prompt-id>.mp4
-```
-
-Supported video suffixes are `.mp4`, `.mov`, `.mkv`, `.webm`, `.avi`, and `.m4v`. For full-suite scoring, the directory should cover all 300 canonical prompt ids.
-
-## Dependencies
-
-For judge execution, set one of these backends:
-
-| Backend | Required settings |
-| --- | --- |
-| Gemini upload/API | `WORLDFOUNDRY_VIDEOVERSE_JUDGE_BACKEND=gemini` plus `GEMINI_API_KEY` or `WORLDFOUNDRY_VIDEOVERSE_GEMINI_API_KEY` |
-| Gemini URL mode | `WORLDFOUNDRY_VIDEOVERSE_JUDGE_BACKEND=url`, API key, and `WORLDFOUNDRY_VIDEOVERSE_VIDEO_BASE_URL` |
-| Local VLM | `WORLDFOUNDRY_VIDEOVERSE_JUDGE_BACKEND=local_vlm` and `WORLDFOUNDRY_VIDEOVERSE_LOCAL_VLM_PATH` |
-
-Gemini execution also needs the `google-genai` Python package in the runtime environment.
-
-## Commands
-
-Set the generated video directory:
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/videoverse/generated
-export WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR=tmp/videoverse/run
-```
-
-Run the in-tree judge and score the produced `eval_res.json`:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videoverse/run_videoverse_official_runner.py \
-  --run-official \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" \
-  --json
-```
-
-Import an existing official-shaped `eval_res.json` or metric JSON/JSONL:
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id videoverse \
   --mode official-validation \
-  --official-results-path /path/to/eval_res.json \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/videoverse/import \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/videoverse/official-validation \
   --json
 ```
 
-Use `--limit N` on the direct runner only for bounded development runs. Do not use limited runs for leaderboard comparison.
+`--run-official` judges generated videos against bundled `prompts_of_VideoVerse.json` / decomposed variant (`GEMINI_API_KEY` or `WORLDFOUNDRY_VIDEOVERSE_GEMINI_API_KEY`). Use `--prompt-manifest` only for non-standard assets. Default import: `WORLDFOUNDRY_VIDEOVERSE_RESULTS_PATH`. Shared asset: `videoverse_dataset_assets`.
 
-## Import Paths
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/videoverse.yaml`, `worldfoundry/data/benchmarks/assets/videoverse/prompt/`.
 
-If you need the scoring formula without launching the CLI, import:
-
-```python
-from worldfoundry.evaluation.tasks.execution.runners._benchmark_metrics.formulas import videoverse_subquestion_metrics
-```
-
-The CLI runner itself is importable as:
-
-```python
-from worldfoundry.evaluation.tasks.execution.runners.videoverse.run_videoverse_official_runner import (
-    normalize_videoverse_results,
-    run_official_videoverse,
-)
-```
-
-## Outputs
-
-The output directory contains:
-
-| File | Meaning |
-| --- | --- |
-| `scorecard.json` | Run status, coverage, eligibility, and leaderboard-facing metric values. |
-| `raw_metric_table.jsonl` | One row per metric. |
-| `per_sample_scores.jsonl` | Per-video or per-check rows derived from the official result file. |
-| `eval_res.json` | Written when `--run-official` executes the in-tree judge. |
-| `judge_responses.jsonl` | Raw judge responses from in-tree judge execution. |
-
-Metrics emitted by the runner are `qa_accuracy`, `event_coverage`, `temporal_causality`, `world_knowledge_consistency`, `static_scene_consistency`, `dynamic_event_consistency`, and `videoverse_average`. Higher is better for all seven metrics.
+Outputs include `scorecard.json` (primary `videoverse_average`), `eval_res.json`, and `judge_responses.jsonl`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

@@ -1,0 +1,73 @@
+schema_version: 2
+model_id: matrix-game-3.5-first-person
+display_name: Matrix-Game 3.5 First-Person Base
+task_family: world_model
+groups:
+- world
+- video
+- image_to_video
+- camera_control
+- long_horizon
+- memory_augmented
+source_repos:
+- url: https://github.com/Riemann-Dynamics/Matrix-Game-3.5
+  revision: 6c94dd787659aa19fac22581cd8bea54e65d813f
+  in_tree_path: worldfoundry/synthesis/visual_generation/matrix_game/matrix_game_3p5_runtime
+checkpoints:
+- role: matrix_game_3p5_dit
+  repo_id: RiemannDynamics/Matrix-Game-3.5-Base
+  filename: first-person.safetensors
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/RiemannDynamics--Matrix-Game-3.5-Base
+  status: public_upstream
+  required_paths:
+  - first-person.safetensors
+- role: wan_2p2_ti2v_5b_backbone
+  repo_id: Wan-AI/Wan2.2-TI2V-5B
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Wan-AI--Wan2.2-TI2V-5B
+  status: public_upstream
+  required_paths:
+  - diffusion_pytorch_model-00001-of-00003.safetensors
+  - diffusion_pytorch_model-00002-of-00003.safetensors
+  - diffusion_pytorch_model-00003-of-00003.safetensors
+  - models_t5_umt5-xxl-enc-bf16.pth
+  - Wan2.2_VAE.pth
+  - google/umt5-xxl/tokenizer_config.json
+- role: depth_estimator
+  repo_id: depth-anything/DA3NESTED-GIANT-LARGE-1.1
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1
+  status: public_upstream
+  required_paths:
+  - config.json
+  - model.safetensors
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  camera_npz: true
+  actions:
+  - camera_path
+artifact_kind: generated_world
+artifact_filename: matrix-game-3.5-first-person.mp4
+execution:
+  environment: matrix-game-3.5
+  backend_stage: native_diffusion
+  runtime_status: checkpoint_gpu_default_25_step_validated_official_sample_parity_pending
+  integration_status: integrated
+  pipeline_binding: matrix-game-3.5-first-person
+  defaults:
+    num_blocks: 1
+    steps: 25
+    cfg_scale: 5.0
+    seed: 3407
+    camera_convention: c2w
+integration:
+  status: integrated
+license: apache-2.0
+gpu_targets:
+- NVIDIA Ampere 40GB+
+- NVIDIA Hopper 40GB+
+notes:
+- Each block generates 84 new frames and consumes 84 camera poses; the exported history also includes the anchor frame.
+- The currently released checkpoint is the 25-step bidirectional 5B base model, not the announced few-step real-time distilled model.
+- The public runtime retains only the generated rollout and provenance needed to reproduce inference; copied validation panels, debug videos, and latent dumps are not runtime outputs.
+- A default 25-step, one-block A100 80GB run passed on 2026-07-20 with 85 non-empty 1280x704 frames at 16 fps; upstream official-sample parity and benchmark scoring are still pending.

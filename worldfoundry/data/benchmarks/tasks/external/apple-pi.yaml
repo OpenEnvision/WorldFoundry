@@ -1,0 +1,153 @@
+benchmark: apple-pi
+name: Apple-PI
+description: Law-grounded physical reasoning benchmark with perception, formulation, and deduction subtracks.
+tags:
+- benchmark-zoo
+- apple-pi
+- physics
+- physical-reasoning
+- video-generation
+splits:
+- standard
+metrics:
+  perception_text: {aggregation: mean}
+  perception_graphic: {aggregation: mean}
+  formulation_text: {aggregation: mean}
+  formulation_graphic: {aggregation: mean}
+  deduction: {aggregation: mean, primary: true}
+  apple_pi_average: {aggregation: mean}
+metadata:
+  source_kind: benchmark_zoo
+  benchmark_id: apple-pi
+  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:ApplePIContract
+  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id apple-pi --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/apple-pi --json
+  runtime:
+    kind: in_tree_model_backed
+    evaluator: worldfoundry.evaluation.tasks.execution.runners.apple_pi.apple_pi_runtime:evaluate_native_apple_pi
+    results_path_env: WORLDFOUNDRY_APPLE_PI_RESULTS_PATH
+    gt_dir_env: WORLDFOUNDRY_APPLE_PI_GT_DIR
+    prediction_dir_env: WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR
+    root: worldfoundry/evaluation/tasks/execution/runners/apple_pi
+    root_env: WORLDFOUNDRY_APPLE_PI_ROOT
+  release_status: experimental
+  maturity: verified_runner
+  open_source_status: in_tree_runtime
+  official_benchmark_verified: false
+  integration_evidence: false
+  leaderboard_valid: false
+  requires:
+  - Apple-PI GT directory following the upstream dataset contract.
+  - Three independent prediction rollouts per case and subtrack in the upstream layout.
+  - Gemini API key for production judging; SAM3 and MoGe-2 use the shared WorldFoundry checkpoint capabilities.
+  blockers:
+  - The upstream GT dataset is documented but not public at the time of integration.
+  - Full-suite official execution and leaderboard parity have not been verified in this workspace.
+  - SAM3 and MoGe-2 objective metrics require the shared WorldFoundry checkpoints and compatible environment.
+  data_refs:
+    task_yaml: worldfoundry/data/benchmarks/tasks/external/apple-pi.yaml
+    prediction_format: https://github.com/21yrm/Apple-PI/blob/main/docs/PREDICTION_FORMAT.md
+    gt_format: https://github.com/21yrm/Apple-PI/blob/main/docs/GT_FORMAT.md
+  checkpoint_refs:
+  - id: sam3
+    hf_repo_id: facebook/sam3
+    local_env: WORLDFOUNDRY_APPLE_PI_SAM3_CHECKPOINT
+  - id: moge_v2_vitl_normal
+    hf_repo_id: Ruicheng/moge-2-vitl-normal
+    local_env: WORLDFOUNDRY_APPLE_PI_MOGE_CHECKPOINT
+  base_model_dependencies: [sam3, moge_v2_vitl_normal]
+  runner_availability:
+    available: true
+    runner_target: worldfoundry.evaluation.tasks.contracts.external:ApplePIContract
+    runner_script_available: true
+    task_yaml_available: true
+    runtime_verified: false
+    normalizer_verified: false
+    surface: in_tree_model_backed_evaluator
+  validation_command:
+  - ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+  - -m
+  - worldfoundry.evaluation.tasks.execution.runners.apple_pi.run_apple_pi_official_runner
+  - --run-official
+  - --gt-dir
+  - ${WORLDFOUNDRY_APPLE_PI_GT_DIR}
+  - --pred-dir
+  - ${WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR}
+  - --judge-backend
+  - mock
+  - --output-dir
+  - <out>
+  - --json
+  artifact_layout:
+    generated_artifact_dir_env: WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR
+    output_artifact: benchmark_scorecard
+    filename_template: scorecard.json
+tasks:
+  apple_pi_standard:
+    benchmark_name: apple-pi
+    protocol: in_tree_official_runtime
+    capability_track: law_grounded_physical_reasoning
+    input_keys:
+    - apple_pi_gt_dir
+    - apple_pi_prediction_dir
+    - apple_pi_submission_json
+    - prompt_jsonl
+    - official_results_path
+    output_keys:
+    - scorecard
+    - raw_metric_table
+    - per_sample_scores
+    - benchmark_contract
+    - apple_pi_results
+    metric_ids:
+    - perception_text
+    - perception_graphic
+    - formulation_text
+    - formulation_graphic
+    - deduction
+    - apple_pi_average
+    metric_groups:
+    - apple_pi_perception
+    - apple_pi_formulation
+    - apple_pi_deduction
+    tags:
+    - benchmark-zoo
+    - apple-pi
+    - physics
+    dataset:
+      hf_dataset_id: yaorunmao/Apple-PI-GT
+      status: documented_not_yet_public
+      num_rollouts: 3
+      subtracks: [perception_text, perception_graphic, formulation_text, formulation_graphic, deduction]
+    runtime_requirements:
+      gt_dir_env: WORLDFOUNDRY_APPLE_PI_GT_DIR
+      prediction_dir_env: WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR
+      gemini_api_key_env: GEMINI_API_KEY
+      judge_backend_env: WORLDFOUNDRY_APPLE_PI_JUDGE_BACKEND
+      sam3_checkpoint_env: WORLDFOUNDRY_APPLE_PI_SAM3_CHECKPOINT
+      moge_checkpoint_env: WORLDFOUNDRY_APPLE_PI_MOGE_CHECKPOINT
+      base_model_dependencies: [sam3, moge_v2_vitl_normal]
+    artifact_contract:
+      required:
+        apple_pi_prediction_dir: {kind: directory}
+        submission_json: {kind: json}
+      optional:
+        official_results_path: {kind: json}
+        prompt_jsonl: {kind: jsonl}
+    evaluation_protocol:
+    - name: in_tree_official_runtime
+      metric_ids:
+      - perception_text
+      - perception_graphic
+      - formulation_text
+      - formulation_graphic
+      - deduction
+      - apple_pi_average
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:ApplePIContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py
+    metadata:
+      source_kind: benchmark_zoo
+      benchmark_id: apple-pi
+      official_benchmark_verified: false
+      integration_evidence: false
+      leaderboard_valid: false

@@ -127,6 +127,9 @@ class PaliGemmaMultiModalProjector(nn.Module):
 
     def forward(self, image_features: torch.Tensor) -> torch.Tensor:
         """Project vision features to the transformer hidden size."""
+        # The vision tower's final layer norm can return fp32 features even when
+        # the checkpoint was loaded in bf16. Match the projector's weight dtype.
+        image_features = image_features.to(dtype=self.linear.weight.dtype)
         hidden_states = self.linear(image_features)
         return hidden_states
 

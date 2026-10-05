@@ -1,0 +1,42 @@
+---
+title: Apple-PI
+description: "Law-grounded physical intelligence on the 400-video Orchard set: Perception → Formulation → Deduction. WorldFoundry scores GT and predictions; it does not generate the videos."
+---
+
+Apple-π (NTU S-Lab) asks whether a **video model reasons with physical law**, not whether the pixels look plausible. **Orchard** is **400** classical-mechanics videos over **10** canonical tasks (nine single-law tasks plus one multi-law composition), from simulation, lab recordings, and internet footage. The protocol is chain-of-frames on an infographic-annotated first frame: **Perception** (read quantities / ground objects), **Formulation** (pick the law / predict a target-time state), **Deduction** (full law-consistent trajectory). Perception and Formulation each split into text and graphic, so there are **five** subtracks. Official scoring is hybrid: Gemini judging plus SAM3 / MoGe / trajectory-overlap / velocity-error. Predictions are **three** independent rollouts per case and subtrack; frame 0 is the condition.
+
+Paper: [Apple-π](https://arxiv.org/abs/2607.16401). Project: [21yrm.github.io/Apple-PI-homepage](https://21yrm.github.io/Apple-PI-homepage/). Code: [21yrm/Apple-PI](https://github.com/21yrm/Apple-PI) (Apache-2.0). Formats: [GT_FORMAT.md](https://github.com/21yrm/Apple-PI/blob/main/docs/GT_FORMAT.md), [PREDICTION_FORMAT.md](https://github.com/21yrm/Apple-PI/blob/main/docs/PREDICTION_FORMAT.md).
+
+WorldFoundry **evaluates** in tree (`run_apple_pi_official_runner.py`): it reads upstream-layout GT and prediction directories. It does **not** run video-model inference. You can also **import** a finished Apple-PI result JSON. `apple_pi_average` is a WorldFoundry mean of available subtracks, not an official composite.
+
+<BenchmarkPageSections id="apple-pi" locale="en" />
+
+## How to run
+
+Score the deduction subtrack against staged GT (Gemini key for real judging; SAM3 / MoGe-2 ride existing WorldFoundry capability paths):
+
+```bash
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py \
+  --run-official \
+  --gt-dir "${WORLDFOUNDRY_APPLE_PI_GT_DIR}" \
+  --pred-dir "${WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR}" \
+  --subtrack deduction \
+  --output-dir tmp/apple_pi/deduction \
+  --json
+```
+
+Import an existing result file:
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id apple-pi \
+  --mode official-validation \
+  --official-results-path <apple_pi_results.json> \
+  --output-dir tmp/apple-pi/official-validation \
+  --json
+```
+
+`--no-foundation-models` and `--judge-backend mock` are wiring only. Env: `WORLDFOUNDRY_APPLE_PI_GT_DIR`, `WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR`, `WORLDFOUNDRY_APPLE_PI_RESULTS_PATH`, `WORLDFOUNDRY_APPLE_PI_JUDGE_BACKEND`, `WORLDFOUNDRY_APPLE_PI_SAM3_CHECKPOINT`, `WORLDFOUNDRY_APPLE_PI_MOGE_CHECKPOINT`. Manifest: `worldfoundry/data/benchmarks/tasks/external/apple-pi.yaml`. Outputs: `scorecard.json` (primary `deduction`), `raw_metric_table.jsonl`, `per_sample_scores.jsonl`, `benchmark_contract.json`.
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

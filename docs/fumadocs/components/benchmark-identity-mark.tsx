@@ -1,6 +1,6 @@
 import { withBasePath } from '@/lib/site-path';
 
-import logoMap from '@/lib/model-logo-map.json';
+import { resolveBenchmarkOrg } from '@/lib/model-org-identity';
 
 type BenchmarkIdentityMarkProps = {
   id: string;
@@ -9,15 +9,6 @@ type BenchmarkIdentityMarkProps = {
   logoKey?: string;
   size?: 'small' | 'medium' | 'large';
 };
-
-type LogoAsset = {
-  key: string;
-  src: string;
-  label: string;
-};
-
-const logos = logoMap.logos as Record<string, LogoAsset>;
-const benchmarkLogos = (logoMap.benchmarkLogos ?? {}) as Record<string, string>;
 
 function initials(name: string) {
   const cleaned = name.replace(/[^a-zA-Z0-9]+/g, ' ').trim();
@@ -40,11 +31,6 @@ function initials(name: string) {
   return word.slice(0, 2).toUpperCase();
 }
 
-function logoFor(id: string, logoKey?: string) {
-  const key = logoKey || benchmarkLogos[id];
-  return key ? logos[key] : undefined;
-}
-
 export function BenchmarkIdentityMark({
   id,
   name,
@@ -52,27 +38,28 @@ export function BenchmarkIdentityMark({
   logoKey,
   size = 'medium',
 }: BenchmarkIdentityMarkProps) {
-  const asset = logoFor(id, logoKey);
+  const org = resolveBenchmarkOrg(id, logoKey);
+  const hasLogo = Boolean(org?.src);
 
   return (
     <span
-      className={`wf-model-mark wf-model-mark-${size} wf-benchmark-mark${asset ? ' has-logo' : ''}`}
+      className={`wf-model-mark wf-model-mark-${size} wf-benchmark-mark${hasLogo ? ' has-logo' : ''}`}
       data-category={category}
-      data-logo={asset?.key}
-      title={asset?.label ?? name}
+      data-logo={org?.key}
+      title={org?.name ?? name}
       aria-hidden="true"
     >
-      {asset ? (
+      {org?.src ? (
         <img
           className="wf-model-mark-image"
-          src={withBasePath(asset.src)}
+          src={withBasePath(org.src)}
           alt=""
           width={200}
           height={200}
           draggable={false}
         />
       ) : (
-        <span>{initials(name)}</span>
+        <span>{org?.abbr ?? initials(name)}</span>
       )}
     </span>
   );

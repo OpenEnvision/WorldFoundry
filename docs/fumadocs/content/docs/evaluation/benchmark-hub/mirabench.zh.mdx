@@ -1,108 +1,25 @@
 ---
 title: MiraBench
-description: MiraData 的长视频生成评测，包含仓内 official runtime 和可运行 score/import 命令。
+description: "腾讯 ARC 的长视频评测（随 MiraData）：150 条 prompt、17 个官方指标。WorldFoundry 内置打分器，不编造榜单。"
 ---
 
-## 简介
+MiraBench（腾讯 ARC Lab）是 **MiraData** 的评测半边。MiraData 是带结构化字幕的长视频数据集。它从六个视角打分：时间一致性、时间运动强度、3D 一致性、视觉质量、文本-视频对齐、分布一致性。官方打分器暴露 **17 个指标**（DINO/CLIP 时间一致性、RAFT 风格运动、3D 重建误差、美学 / 成像质量、ViCLIP 对齐、FVD / FID / KID）。标准套件是 **150 条 prompt**。许可证：GPL-3.0。
 
-MiraBench 是 MiraData 引入的长视频生成评测组件。MiraData 是一个带结构化 captions 的 large-scale long-video dataset。MiraBench 从六个角度评估长视频生成：temporal consistency、temporal motion strength、3D consistency、visual quality、text-video alignment 和 distribution consistency。官方 scorer 暴露 17 个指标，包括 DINO/CLIP temporal consistency、RAFT-style motion strength、3D reconstruction errors、aesthetic/imaging quality、ViCLIP alignment、FVD、FID 和 KID。
+论文：[MiraData](https://arxiv.org/abs/2407.06358)。项目：[mira-space.github.io](https://mira-space.github.io/)。数据：[`TencentARC/MiraData`](https://huggingface.co/datasets/TencentARC/MiraData)。代码：[mira-space/MiraData](https://github.com/mira-space/MiraData)。
 
-WorldFoundry 已经把 MiraBench runtime 集成在 `worldfoundry/evaluation/tasks/execution/runners/mirabench/runtime/mirabench`，公开 runner 是 `worldfoundry/evaluation/tasks/execution/runners/mirabench/run_mirabench_official_runner.py`。
+WorldFoundry **仓内内置 runtime**（`calculate_score.py`），并把 `average_score.csv` 转成 scorecard。`WORLDFOUNDRY_MIRABENCH_SCORER_BACKEND=mock` 只是接线。
 
-官方参考：
+<BenchmarkPageSections id="mirabench" locale="zh" />
 
-- Project page: [mira-space.github.io](https://mira-space.github.io/)
-- Paper: [arXiv:2407.06358](https://arxiv.org/abs/2407.06358)
-- Dataset: [TencentARC/MiraData](https://huggingface.co/datasets/TencentARC/MiraData)
-- Official source reference: [mira-space/MiraData](https://github.com/mira-space/MiraData)
-
-## 评测协议
-
-MiraBench 使用带结构化 captions 的 metadata CSV。WorldFoundry 内置了官方 example files：
-
-```text
-worldfoundry/data/benchmarks/assets/mirabench/data/evaluation_example/meta_generated.csv
-worldfoundry/data/benchmarks/assets/mirabench/data/evaluation_example/meta_gt.csv
-```
-
-完整运行时准备一个包含以下列的 `meta_generated.csv`：
-
-```text
-video_idx,video_path,short_caption,dense_caption,main_object_caption,background_caption,style_caption,camera_caption
-```
-
-runner 会根据 `video_idx` materialize generated-video paths，因此生成视频按下面方式放置：
-
-```text
-/path/to/mirabench/generated_videos/
-  1.mp4
-  2.mp4
-  ...
-  150.mp4
-```
-
-canonical benchmark prompt set 包含 150 条 prompts。需要缺失视频直接失败时使用 `--strict`。
-
-主指标是 `mirabench_average`。
-
-| Metric | 含义 |
-| --- | --- |
-| `dynamic_degree`, `tracking_strength` | 运动强度和长程 tracking strength。 |
-| `dino_temporal_consistency`, `clip_temporal_consistency`, `temporal_motion_smoothness` | 时序结构、语义连续性和运动平滑度。 |
-| `mean_absolute_error`, `root_mean_square_error` | 3D consistency errors；越低越好。 |
-| `aesthetic_quality`, `imaging_quality` | 视觉质量指标。 |
-| `camera_alignment`, `main_object_alignment`, `background_alignment`, `style_alignment`, `overall_alignment` | 结构化 caption alignment 指标。 |
-| `fvd`, `fid`, `kid` | 分布指标；越低越好。 |
-| `mirabench_average` | 官方 aggregate，或可用指标的均值。 |
-
-## 数据与权重准备
-
-从 WorldFoundry 仓库根目录开始：
+## 如何运行
 
 ```bash
-cd /path/to/WorldFoundry
 export WORLDFOUNDRY_MIRABENCH_META_CSV=/path/to/mirabench/meta_generated.csv
 export WORLDFOUNDRY_MIRABENCH_GT_META_CSV=/path/to/mirabench/meta_gt.csv
 export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/mirabench/generated_videos
-```
-
-如果需要官方 released metadata，可以从 Hugging Face 下载 MiraData metadata：
-
-```bash
-hf download TencentARC/MiraData \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/MiraData
-```
-
-准备 `calculate_score.py` 使用的 scorer checkpoints：
-
-```bash
 export WORLDFOUNDRY_MIRABENCH_CKPT_PATH=/path/to/mirabench/data/ckpt
-export WORLDFOUNDRY_MIRABENCH_SCORER_BACKEND=official
-export WORLDFOUNDRY_MIRABENCH_DEVICE=cuda
-```
 
-快速本地 wiring run 可以设置 `WORLDFOUNDRY_MIRABENCH_SCORER_BACKEND=mock` 写出 deterministic placeholder metrics。这个 backend 不能用于报告 benchmark 数字。
-
-## 生成候选视频
-
-使用 `meta_generated.csv` 里的 `dense_caption` 或 `short_caption` 字段作为生成 prompts。对于 WorldFoundry 已集成模型，使用对应 synthesis workflow 跑这些 prompts，然后按 `video_idx` 导出一个视频：
-
-```text
-/path/to/mirabench/generated_videos/
-  1.mp4
-  2.mp4
-  ...
-```
-
-## 运行 Official Scoring
-
-运行仓内 MiraBench official scorer：
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/mirabench/run_mirabench_official_runner.py \
   --run-official \
   --meta-csv "${WORLDFOUNDRY_MIRABENCH_META_CSV}" \
@@ -112,25 +29,7 @@ PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
   --json
 ```
 
-official backend 会 dispatch 仓内 `calculate_score.py`，materialize 一个带绝对视频路径的 generated meta CSV，并把产出的 `average_score.csv` 转成 WorldFoundry scorecard。
-
-## 导入已有结果
-
-如果你已经有 MiraBench `average_score.csv` 或等价 JSON/CSV result export，可以直接导入：
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/mirabench/run_mirabench_official_runner.py \
-  --official-results-path /path/to/mirabench/average_score.csv \
-  --meta-csv "${WORLDFOUNDRY_MIRABENCH_META_CSV}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/mirabench/imported \
-  --json
-```
-
-也可以通过统一 benchmark 入口导入同一个结果：
+导入 `average_score.csv`：
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
@@ -142,14 +41,10 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-## 输出文件
+视频命名 `1.mp4` … `150.mp4`（来自 `video_idx`）。示例 meta 捆绑在 `worldfoundry/data/benchmarks/assets/mirabench/data/evaluation_example/`。`--strict` 会在缺 prompt 视频时失败。完整打分需要 AMT、ViCLIP、MUSIQ、FVD/FID/KID 与 3D 一致性资产。
 
-运行会写出：
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/mirabench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/mirabench/runtime/mirabench`。
 
-- `scorecard.json`: WorldFoundry 统一 scorecard，包含可用 MiraBench metrics。
-- `mirabench_average_score.json`: official average score output 的 normalized copy。
-- `raw_metric_table.jsonl`: scorecard 使用的 metric rows。
-- `per_sample_scores.jsonl`: 当结果文件暴露 sample-level values 时写出逐视频结果。
-- `upstream_scorer/`: 使用 `--run-official` 时 materialized meta CSV、extracted frames 和 official scorer outputs。
+产物包括 `scorecard.json`（主键 `mirabench_average`）与 `mirabench_average_score.json`。
 
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

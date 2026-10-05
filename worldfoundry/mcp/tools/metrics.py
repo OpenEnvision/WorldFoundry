@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from fnmatch import fnmatchcase
 from typing import Any
 
 from worldfoundry.evaluation.tasks.metrics.registry import (
     default_metric_registry,
     list_metric_registry_entries,
 )
+
+from .query import matches_query
 
 
 def list_metrics_payload(
@@ -26,7 +27,7 @@ def list_metrics_payload(
         if tag and tag.casefold() not in {item.casefold() for item in entry.tags}:
             continue
         payload = entry.to_dict()
-        if query and not _matches(
+        if query and not matches_query(
             query,
             entry.id,
             *entry.aliases,
@@ -50,16 +51,6 @@ def show_metric_payload(metric_id: str) -> dict[str, Any]:
         payload["requested_metric_id"] = metric_id
         payload["canonical_metric_id"] = canonical
     return payload
-
-
-def _matches(query: str, *values: object) -> bool:
-    needle = query.casefold()
-    glob_query = any(char in needle for char in "*?[]")
-    return any(
-        fnmatchcase(str(value).casefold(), needle) if glob_query else needle in str(value).casefold()
-        for value in values
-        if value
-    )
 
 
 __all__ = ["list_metrics_payload", "show_metric_payload"]

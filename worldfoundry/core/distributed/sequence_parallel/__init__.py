@@ -1,5 +1,23 @@
-# Shared Sequence Parallel (SP) infrastructure.
-# Re-exports the core API from the in-tree Wan base-model package.
+"""Sequence Parallel (SP) infrastructure: process state, NCCL, and all-to-all.
+
+SP shards the *sequence* after an all-to-all on heads (Ulysses). This
+subpackage owns groups (``get_sp_*`` / ``get_tp_*``), 4D all-to-all, and
+device communicators (CUDA NCCL vs CPU gloo). It is not Context Parallel
+by itself — CP split/cat lives in ``context_parallel``; attention kernels
+in ``worldfoundry.core.attention`` must use both together.
+
+Imported lazily by model code; ``device_communicators`` stay optional so
+CPU-only tests do not load pynccl.
+
+Public surface: group accessors and init/cleanup from :mod:`.parallel_state`,
+the four collective wrappers in :mod:`.communication_op`, and the
+metadata-store helpers in :mod:`.utils`.
+"""
+
+# ──────────────────────────────────────────────────────────────────────────
+# Re-exports — keep device_communicators / logger / envs out of this table
+# so ``import sequence_parallel`` stays safe on CPU-only test ranks
+# ──────────────────────────────────────────────────────────────────────────
 
 from .communication_op import (
     sequence_model_parallel_all_gather,

@@ -2,18 +2,16 @@ conda_packages:
 - python
 - pip
 - ffmpeg
-cuda_profile: cu124
+cuda_profile: cu128
 driver_status: compatible
-env_name: HunyuanVideo
+env_name: worldfoundry-unified-cu128
 env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
 model_id: hunyuanvideo-t2v
 notes:
-- Use the prebuilt HunyuanVideo env for the in-tree HunyuanVideo CLI stack; diffusers 0.31 compatibility keeps it isolated
-  from the shared CUDA 12.8 runtime.
+- Uses the unified native diffusion environment; no Diffusers or xFuser backend is required.
 pip_packages:
 - torch
 - torchvision
-- diffusers==0.31.0
 - transformers
 - accelerate
 - safetensors
@@ -21,8 +19,7 @@ pip_packages:
 - imageio-ffmpeg
 - opencv-python
 - sentencepiece
-python: '3.10'
+python: '3.11'
 validation_imports:
 - torch
-- diffusers
 - transformers

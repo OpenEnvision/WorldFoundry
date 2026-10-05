@@ -6,7 +6,7 @@
 from PIL import Image
 from tqdm import tqdm
 from typing import *
-import clip
+from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
 import os
 import json
 import re

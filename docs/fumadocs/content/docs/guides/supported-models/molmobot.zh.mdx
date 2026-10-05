@@ -1,0 +1,28 @@
+---
+title: "MolmoBot"
+description: "MolmoBot DROID 与 Pi0-DROID 策略已通过权重驱动的离线 GPU 动作推理。"
+modelId: "molmobot"
+pageSource: authored
+---
+
+MolmoBot 是 AI2 的机器人策略家族。WorldFoundry 通过仓内推理 Pipeline 提供基于 OLMo 的动作块路径，以及独立的 Pi0-DROID 关节位置路径。
+
+<ModelPaperFigures modelId="molmobot" locale="zh" />
+
+参见[论文 arXiv 2603.16861](https://arxiv.org/abs/2603.16861)、[项目主页](https://allenai.github.io/MolmoBot)和[官方仓库](https://github.com/allenai/MolmoBot)。
+
+## 已验证变体
+
+发布的 `MolmoBot-DROID` 和 `MolmoBot-Img-DROID` 权重已在含双相机与机器人状态的真实 DROID 观测上完成离线 GPU 动作推理。发布的 `MolmoBot-Pi0-DROID` 权重则在同一观测上分别通过未修改的官方 `PiJointPosPolicy` 和公开的 `MolmoBotPipeline` 前向。Pi0 适配器准备的双相机张量、7 维手臂状态、2 维夹爪状态和任务提示与官方策略一致；两条路径均输出有限的 7 维手臂与 1 维夹爪动作。采样具有随机性，不能要求两个动作数值逐项相同。
+
+基于 OLMo 的 DROID 权重采用 Apache-2.0；Pi0-DROID 权重标注为 [Gemma 许可](https://huggingface.co/allenai/MolmoBot-Pi0-DROID)。`MolmoBot-RBY1Multitask` 已入目录，但尚未在这里验证。
+
+## 运行时契约
+
+输入任务提示、`exo_camera_1` 与 `wrist_camera` 图像，以及对应的机器人状态。Pi0-DROID 已验证的状态包含 7 个手臂关节位置和 2 个夹爪值；输出动作包含手臂 `(7,)` 与夹爪 `(1,)`。使用发布的 `allenai/MolmoBot-Pi0-DROID` 权重，并通过 `MolmoBotPipeline.from_pretrained(..., variant="pi0_droid")` 选择 Pi0 路径。它需要固定版本的独立 OpenPI 依赖及 PaliGemma tokenizer；仓内公开适配器不会加载 MolmoSpaces 仿真器。
+
+## 验证边界
+
+这些是对权重加载、观测预处理和有限动作输出的离线检查。对仿真训练的 Pi0 策略而言，真实 DROID 观测属于训练分布外。尚未测量闭环机器人执行、任务成功率或动作语义质量。
+
+<ModelRelatedRecipes modelId="molmobot" locale="zh" />

@@ -1,0 +1,29 @@
+schema_version: 2
+model_id: wan2.2-i2v-a14b
+display_name: Wan2.2 I2V A14B
+task_family: video_generation
+groups:
+- video
+source_repos:
+- url: https://github.com/Wan-Video/Wan2.2
+checkpoints:
+- repo_id: Wan-AI/Wan2.2-I2V-A14B
+  revision: 206a9ee1b7bfaaf8f7e4d81335650533490646a3
+  role: i2v_checkpoint
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions:
+  - seed
+artifact_kind: generated_video
+artifact_filename: wan2.2-i2v-a14b.mp4
+execution:
+  backend_stage: in_tree_runtime_plan
+  runtime_status: official_demo_parity_pending
+  integration_status: integrated
+  pipeline_binding: wan2.2-i2v-a14b
+integration:
+  status: integrated
+notes:
+- Native dual-expert runtime using the official high/low-noise checkpoint pair.

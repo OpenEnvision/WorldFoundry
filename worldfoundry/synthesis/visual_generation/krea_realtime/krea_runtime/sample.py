@@ -1,20 +1,16 @@
-import os
 import asyncio
+import os
 import time
-import torch
-import numpy as np
 from pathlib import Path
-from PIL import Image
+
+import numpy as np
+import torch
 import torchvision.transforms.functional as TF
+from PIL import Image
+from release_server import GenerateParams, GenerationSession, Models, load_all, load_merge_config
 from tqdm import tqdm
 
-from release_server import (
-    load_merge_config, 
-    load_all, 
-    GenerateParams, 
-    GenerationSession,
-    Models
-)
+from worldfoundry.core.io.paths import package_data_path
 
 torch.set_grad_enabled(False)
 
@@ -148,7 +144,7 @@ def create_video_from_frames(frames_dir: Path, output_path: Path, fps: int = 30)
 
 def sample_videos(
     prompts_list,
-    config_path: str = "configs/self_forcing_server_14b.yaml",
+    config_path: str = str(package_data_path('models', 'runtime', 'configs', 'krea_realtime', 'self_forcing_server_14b.yaml')),
     output_dir: str = "outputs/samples",
     params: GenerateParams = None,
     models: Models = None,

@@ -1,5 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # Adapted from https://github.com/vllm-project/vllm/blob/v0.7.3/vllm/distributed/device_communicators/pynccl.py
+"""Optional PyNCCL communicator when the in-tree NCCL wrapper is built.
+
+Sequence-parallel all-to-all must run inside a CUDA Graph. Torch's
+``dist.all_to_all`` launches host-side work that breaks capture.
+:class:`PyNcclCommunicator` talks to NCCL through the ctypes wrapper
+in :mod:`.pynccl_wrapper` so collectives are graph-safe.
+
+Construction is a no-op when the world size is 1 or the NCCL library
+cannot be loaded; callers then fall back to the torch process-group path.
+
+Not a torch.distributed ProcessGroup. Unique-id exchange must use a
+non-NCCL group (gloo or :class:`StatelessProcessGroup`) so init does
+not nest NCCL inside NCCL. Each communicator binds one CUDA device.
+
+Public surface: :class:`PyNcclCommunicator`.
+"""
 
 # ===================== import region =====================
 import torch
@@ -22,7 +38,14 @@ from .pynccl_wrapper import (
 logger = init_logger(__name__)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Graph-safe NCCL communicator — disabled when world_size==1 or lib missing
+# ──────────────────────────────────────────────────────────────────────────
+
+
 class PyNcclCommunicator:
+    """Graph-safe NCCL collectives via the in-tree ctypes wrapper."""
+
     def __init__(
         self,
         group: ProcessGroup | StatelessProcessGroup,
@@ -112,6 +135,13 @@ class PyNcclCommunicator:
             del data
 
     def all_reduce(self, in_tensor: torch.Tensor, op: ReduceOp = ReduceOp.SUM, stream=None) -> torch.Tensor:
+        """Out-of-place NCCL all-reduce on ``self.device``; ``None`` if disabled.
+
+        Tensor must already live on the communicator device — a mismatch
+        is an illegal-memory-access, not a silent copy. Default stream is
+        the patched :func:`~..cuda_utils.current_stream` so CUDA Graph
+        capture records the launch.
+        """
         if self.disabled:
             return None
         # nccl communicator created on a specific device
@@ -137,6 +167,7 @@ class PyNcclCommunicator:
         return out_tensor
 
     def all_gather(self, output_tensor: torch.Tensor, input_tensor: torch.Tensor, stream=None):
+        """Fill ``output_tensor`` from every rank's ``input_tensor``; no-op if disabled."""
         if self.disabled:
             return
         # nccl communicator created on a specific device
@@ -158,8 +189,9 @@ class PyNcclCommunicator:
         )
 
     def reduce_scatter(
-        self, output_tensor: torch.Tensor, input_tensor: torch.Tensor, op: ReduceOp = ReduceOp.SUM, stream=None
+        self, output_tensor: torch.Tensor, input_tensor: torch.Tensor,         op: ReduceOp = ReduceOp.SUM, stream=None
     ):
+        """Reduce-scatter into ``output_tensor``; count is the *output* numel per rank."""
         if self.disabled:
             return
         # nccl communicator created on a specific device
@@ -182,6 +214,7 @@ class PyNcclCommunicator:
         )
 
     def send(self, tensor: torch.Tensor, dst: int, stream=None):
+        """Point-to-point send; ``dst`` is the rank *inside this communicator*."""
         if self.disabled:
             return
         assert tensor.device == self.device, (
@@ -199,6 +232,7 @@ class PyNcclCommunicator:
         )
 
     def recv(self, tensor: torch.Tensor, src: int, stream=None):
+        """Point-to-point recv into ``tensor``; ``src`` is the communicator-local rank."""
         if self.disabled:
             return
         assert tensor.device == self.device, (
@@ -216,6 +250,7 @@ class PyNcclCommunicator:
         )
 
     def broadcast(self, tensor: torch.Tensor, src: int, stream=None):
+        """In-place broadcast; NCCL still requires the root to pass a recv buffer."""
         if self.disabled:
             return
         assert tensor.device == self.device, (

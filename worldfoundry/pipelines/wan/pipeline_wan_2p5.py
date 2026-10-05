@@ -1,6 +1,7 @@
-"""Wan 2P5 visual generation pipeline module."""
+"""Wan 2.5 hosted-API visual generation pipeline module."""
 
-# 这里面包含了sora2， veo3 和wan2.5，主要包含api调用
+import logging
+
 from ..pipeline_utils import PipelineABC
 from PIL import Image
 from typing import Optional, Dict, Any
@@ -8,10 +9,12 @@ from http import HTTPStatus
 
 from ...operators.wan_2p5_operator import Wan2p5Operator
 from ...synthesis.visual_generation.wan.wan_2p5_synthesis import Wan2p5Synthesis
-from ..api_runtime import resolve_api_key
+from ..api_runtime import load_api_pipeline_from_pretrained, resolve_api_key
 
 
 _API_KEY_ENV = ("DASHSCOPE_API_KEY", "WAN_API_KEY", "ALIYUN_API_KEY")
+
+logger = logging.getLogger(__name__)
 
 
 class Wan2p5Pipeline(PipelineABC):
@@ -41,7 +44,28 @@ class Wan2p5Pipeline(PipelineABC):
         self.api_key = api_key
         self.operator = operator
         self.synthesis_model = synthesis_model
-    
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        model_path: Any = None,
+        required_components: Optional[Dict[str, Any]] = None,
+        device: str = "cuda",
+        model_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> "Wan2p5Pipeline":
+        """Build the API-only pipeline through the unified loader contract."""
+        return load_api_pipeline_from_pretrained(
+            cls,
+            model_path=model_path,
+            required_components=required_components,
+            device=device,
+            model_id=model_id,
+            default_endpoint="https://dashscope.aliyuncs.com/api/v1",
+            service_name="Wan 2.5",
+            **kwargs,
+        )
+
     @classmethod
     def api_init(
         cls,
@@ -142,8 +166,6 @@ class Wan2p5Pipeline(PipelineABC):
         prompt_extend: bool = True,
         watermark: bool = False,
         seed: Optional[int] = None,
-        save_content: bool = True,
-        output_dir: str = "./output/wan25",
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -205,8 +227,8 @@ class Wan2p5Pipeline(PipelineABC):
         
         # 检查响应状态
         if response and hasattr(response, 'status_code') and response.status_code == HTTPStatus.OK:
-            print(f"API调用成功，状态码: {response.status_code}")
-            
+            logger.info("Wan2.5 API call succeeded with status code %s", response.status_code)
+
             video_url = None
             task_id = None
             if hasattr(response, 'output') and response.output:
@@ -218,9 +240,13 @@ class Wan2p5Pipeline(PipelineABC):
             result['task_id'] = task_id
         else:
             if response and hasattr(response, 'status_code'):
-                print(f"API调用失败，状态码: {response.status_code}")
-                if hasattr(response, 'message'):
-                    print(f"错误信息: {response.message}")
+                logger.error(
+                    "Wan2.5 API call failed with status code %s: %s",
+                    response.status_code,
+                    getattr(response, 'message', ''),
+                )
+            else:
+                logger.error("Wan2.5 API call failed without a usable response object")
             result['video_url'] = None
             result['task_id'] = None
         

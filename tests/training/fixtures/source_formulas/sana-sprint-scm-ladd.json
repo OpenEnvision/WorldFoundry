@@ -1,0 +1,60 @@
+{
+  "inputs": {
+    "official_profile": {
+    "sigma_data": 0.5,
+    "generator_logit_mean": 0.2,
+    "generator_logit_std": 1.6,
+    "discriminator_logit_mean": -0.6,
+    "discriminator_logit_std": 1.0,
+    "guidance_embedding_scale": 0.1,
+    "teacher_guidance_scales": [4.0, 4.5, 5.0],
+    "discriminator_head_block_ids": [2, 8, 14, 19],
+    "tangent_warmup_steps": 4000,
+    "tangent_normalization_constant": 0.1,
+    "consistency_weight": 1.0,
+    "adversarial_weight": 0.5,
+    "largest_time_enabled": true,
+    "largest_time": 1.5708,
+    "max_time_probability": 0.5,
+    "misaligned_pairs": true,
+    "independent_real_fake_discriminator_times": true,
+      "adversarial_loss": "hinge"
+    },
+    "flow_to_trig": {
+      "trig_timesteps": [0.2, 0.8],
+      "scaled_trig_latents": [[1.2], [-0.7]],
+      "flow_velocity": [[-0.3], [0.4]]
+    },
+    "tangent": {
+      "noisy_latents": [[1.0, -2.0], [0.5, 1.5]],
+      "stopped_velocity": [[0.2, 0.4], [-0.1, 0.3]],
+      "directional_derivative": [[0.05, -0.2], [0.4, 0.1]],
+      "teacher_path_velocity": [[0.3, 0.1], [-0.2, 0.5]],
+      "trig_timesteps": [0.4, 0.9],
+      "warmup_ratio": 0.25
+    },
+    "hinge": {
+      "real_logits": [1.4, 0.2, -0.5],
+      "fake_logits": [-0.4, 0.3, 1.2]
+    }
+  },
+  "expected": {
+    "flow_to_trig": {
+      "flow_timesteps": [0.16854439517746156, 0.5073014372306361],
+      "flow_latents": [[1.0180397417334117], [-0.49502751920062005]],
+      "trig_velocity": [[0.5409835161407394], [0.29309488023753066]]
+    },
+    "tangent": {
+      "normalized_tangent": [[0.3067479431629181, 0.4970431923866272], [-0.6048433780670166, -0.21444644033908844]],
+      "tangent_norm": [0.14042922854423523, 0.17912237346172333]
+    },
+    "hinge": {
+      "generator": -0.3666666666666667,
+      "real": 0.7666666666666667,
+      "fake": 1.3666666666666667,
+      "discriminator": 1.0666666666666667
+    }
+  },
+  "atol": 0.000001,
+  "rtol": 0.000001
+}

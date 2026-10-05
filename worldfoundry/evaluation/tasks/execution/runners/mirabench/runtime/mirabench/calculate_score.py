@@ -1,20 +1,106 @@
 import argparse
-import pandas as pd
-import os
+import csv
+import gc
 import json
-import subprocess
-from evaluation import metrics_calculator
+import os
+from concurrent.futures import ThreadPoolExecutor
+
+import pandas as pd
+import torch
 from tqdm import tqdm
 
-def extract_frames(video_path,store_image_folder):
-    if not os.path.exists(store_image_folder):
-        os.makedirs(store_image_folder)
+from evaluation import metrics_calculator
+from worldfoundry.core.io import extract_video_frames_to_directory
 
-    subprocess.run(
-        ["ffmpeg", "-i", str(video_path), os.path.join(store_image_folder, "frames_%d.png")],
-        check=True,
+
+THREE_D_METRICS = frozenset(
+    {
+        "3D_consistency_num_pts",
+        "3D_consistency_num_inliers_F",
+        "3D_consistency_keep_ratio",
+        "3D_consistency_mean_err",
+        "3D_consistency_rmse",
+    }
+)
+TEXT_VIDEO_METRICS = frozenset(
+    {
+        "camera_alignment",
+        "main_object_alignment",
+        "background_alignment",
+        "style_alignment",
+        "overall_consistency",
+    }
+)
+
+
+def extract_frames(video_path, store_image_folder):
+    timeout = float(os.environ.get("WORLDFOUNDRY_MIRABENCH_FRAME_TIMEOUT_SECONDS", "300"))
+    return extract_video_frames_to_directory(
+        video_path,
+        store_image_folder,
+        threads=1,
+        timeout_seconds=timeout,
     )
-    
+
+
+def metric_groups(metrics):
+    groups = []
+    consumed = set()
+    for metric in metrics:
+        if metric in consumed:
+            continue
+        if metric in THREE_D_METRICS:
+            shared = THREE_D_METRICS
+        elif metric in TEXT_VIDEO_METRICS:
+            shared = TEXT_VIDEO_METRICS
+        else:
+            shared = {metric}
+        group = tuple(candidate for candidate in metrics if candidate in shared and candidate not in consumed)
+        groups.append(group)
+        consumed.update(group)
+    return groups
+
+
+def optional_value(value):
+    return None if pd.isna(value) else value
+
+
+def frame_worker_count(sample_count):
+    configured = os.environ.get("WORLDFOUNDRY_MIRABENCH_FRAME_WORKERS", "").strip()
+    if configured:
+        workers = int(configured)
+        if workers < 1:
+            raise ValueError("WORLDFOUNDRY_MIRABENCH_FRAME_WORKERS must be positive")
+        return min(workers, max(sample_count, 1))
+    return min(4, os.cpu_count() or 1, max(sample_count, 1))
+
+
+def write_video_scores(path, samples, metrics, values):
+    temporary_path = f"{path}.tmp.{os.getpid()}"
+    try:
+        with open(temporary_path, "w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["video_id", *metrics])
+            for sample_index, sample in enumerate(samples):
+                writer.writerow(
+                    [sample["video_id"], *(values[metric][sample_index] for metric in metrics)]
+                )
+        os.replace(temporary_path, path)
+    finally:
+        if os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+
+
+def write_average_score(path, payload):
+    temporary_path = f"{path}.tmp.{os.getpid()}"
+    try:
+        with open(temporary_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=4)
+        os.replace(temporary_path, path)
+    finally:
+        if os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--meta_file", type=str,default="data/evaluation_example/meta_generated.csv")
@@ -77,98 +163,120 @@ if "fvd&kvd" in metrics:
 else:
     calculate_fvd=False
 
-My_Metrics_Calculator=metrics_calculator(metrics,ckpt_path=ckpt_path,device=device)
+os.makedirs(output_folder, exist_ok=True)
+video_score_path=os.path.join(output_folder,"video_score.csv")
 
-metrics_result_pd=pd.DataFrame(columns=["video_id"]+metrics)
-
-for row_idx in tqdm(range(meta_info.shape[0])):
+samples=[]
+for row_idx in range(meta_info.shape[0]):
     present_test_case=meta_info.iloc[row_idx]
     video_idx=present_test_case["video_idx"]
-    video_path=present_test_case["video_path"]
-    short_caption=present_test_case["short_caption"]
-    dense_caption=present_test_case["dense_caption"]
-    main_object_caption=present_test_case["main_object_caption"]
-    background_caption=present_test_case["background_caption"]
-    style_caption=present_test_case["style_caption"]
-    camera_caption=present_test_case["camera_caption"]
-    
-    print(f"================ Video Index {video_idx} ================")
-    store_image_folder=os.path.join(frame_dir,str(video_idx))
-    if os.path.exists(store_image_folder) and len(os.listdir(store_image_folder))!=0:
-        print(f"{store_image_folder} already exists! Please change another folder to avoid overwrite!")
-    else:
-        print("Extracting frames...")
-        extract_frames(video_path,store_image_folder)
-        print("Finish extracting frames")
+    samples.append(
+        {
+            "video_id": video_idx,
+            "video_path": present_test_case["video_path"],
+            "frame_dir": os.path.join(frame_dir, str(video_idx)),
+            "short_caption": optional_value(present_test_case["short_caption"]),
+            "dense_caption": optional_value(present_test_case["dense_caption"]),
+            "main_object_caption": optional_value(present_test_case["main_object_caption"]),
+            "background_caption": optional_value(present_test_case["background_caption"]),
+            "style_caption": optional_value(present_test_case["style_caption"]),
+            "camera_caption": optional_value(present_test_case["camera_caption"]),
+        }
+    )
 
-    print(f"================ Calculating Metrics of Index {video_idx} ================")
-    present_result=[video_idx]
-    
-    for metric in metrics:
-        try:
-            print(f"calculating metrics {metric}")
-            present_result.append(My_Metrics_Calculator(metric,store_image_folder,video_path,short_caption,dense_caption,main_object_caption,background_caption,style_caption,camera_caption))
-        except Exception as e:
-            print(f"Error in calculating metrics {metric}: {e}")
-            present_result.append(None)
+print(f"Extracting frames for {len(samples)} videos...")
+with ThreadPoolExecutor(max_workers=frame_worker_count(len(samples))) as executor:
+    list(executor.map(lambda sample: extract_frames(sample["video_path"], sample["frame_dir"]), samples))
+print("Finished extracting frames")
 
+metric_values={metric: [None] * len(samples) for metric in metrics}
+write_video_scores(video_score_path, samples, metrics, metric_values)
+for group in metric_groups(metrics):
+    print(f"================ Calculating metric group: {', '.join(group)} ================")
+    calculator=metrics_calculator(list(group),ckpt_path=ckpt_path,device=device)
+    try:
+        for sample_index, sample in enumerate(tqdm(samples)):
+            for metric in group:
+                try:
+                    metric_values[metric][sample_index] = calculator(
+                        metric,
+                        sample["frame_dir"],
+                        sample["video_path"],
+                        sample["short_caption"],
+                        sample["dense_caption"],
+                        sample["main_object_caption"],
+                        sample["background_caption"],
+                        sample["style_caption"],
+                        sample["camera_caption"],
+                    )
+                except Exception as exc:
+                    print(f"Error in calculating metric {metric} for video {sample['video_id']}: {exc}")
+    finally:
+        del calculator
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    write_video_scores(video_score_path, samples, metrics, metric_values)
+    print(f"Saved metric-group checkpoint in {video_score_path}")
 
-    metrics_result_pd.loc[len(metrics_result_pd.index)] = present_result
-    print(f"Success for video: {video_idx}")
+metrics_result_pd=pd.DataFrame(metric_values)
+mean_metrics_result_dict={
+    metric: None if pd.isna(value) else float(value)
+    for metric, value in metrics_result_pd.apply(pd.to_numeric, errors="coerce").mean().items()
+}
 
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    metrics_result_pd.to_csv(os.path.join(output_folder,"video_score.csv"),index=False)
-    print(f'Saved each video score in {os.path.join(output_folder,"video_score.csv")}')
-
-mean_metrics_result_pd=metrics_result_pd.mean()
-mean_metrics_result_dict=mean_metrics_result_pd.to_dict()
-mean_metrics_result_dict.pop("video_id")
-
-with open(os.path.join(output_folder,"average_score.csv"),"w") as f:
-    json.dump(mean_metrics_result_dict,f,indent=4)
-print(f'Saved average score in {os.path.join(output_folder,"average_score.csv")}')
-print("Finish")
+average_score_path=os.path.join(output_folder,"average_score.csv")
+write_average_score(average_score_path, mean_metrics_result_dict)
+print(f'Saved average score in {average_score_path}')
 
 if calculate_fvd or calculate_fid:
     gt_meta_info=pd.read_csv(gt_meta_file)
+    gt_samples=[]
     for row_idx in range(gt_meta_info.shape[0]):
         present_test_case=gt_meta_info.iloc[row_idx]
         video_idx=present_test_case["video_idx"]
-        video_path=present_test_case["video_path"]
-        
-        store_gt_image_folder=os.path.join(gt_frame_dir,str(video_idx))
-        print(f"================ GT Video Index {video_idx} ================")
-        if os.path.exists(store_gt_image_folder) and len(os.listdir(store_gt_image_folder))!=0:
-            print(f"{store_gt_image_folder} already exists! Please change another folder to avoid overwrite!")
-        else:
-            print("Extracting frames...")
-            extract_frames(video_path,store_gt_image_folder)
-            print("Finish extracting frames")
+        gt_samples.append(
+            {
+                "video_path": present_test_case["video_path"],
+                "frame_dir": os.path.join(gt_frame_dir, str(video_idx)),
+            }
+        )
+    print(f"Extracting frames for {len(gt_samples)} ground-truth videos...")
+    with ThreadPoolExecutor(max_workers=frame_worker_count(len(gt_samples))) as executor:
+        list(
+            executor.map(
+                lambda sample: extract_frames(sample["video_path"], sample["frame_dir"]),
+                gt_samples,
+            )
+        )
+    print("Finished extracting ground-truth frames")
 
 if calculate_fvd:
     try:
         print(f"calculating metrics fvd kvd")
         from evaluation.fvd import EvaluateFVD
         mean_metrics_result_dict["fvd"], mean_metrics_result_dict["kvd"]=EvaluateFVD(frame_dir,gt_frame_dir, ckpt_path, device)
-    except Exception as e:
-        print(f"Error in calculating metrics fvd kvd: {e}")
-
-with open(os.path.join(output_folder,"average_score.csv"),"w") as f:
-    json.dump(mean_metrics_result_dict,f,indent=4)
-print(f'Saved average score in {os.path.join(output_folder,"average_score.csv")}')
-print("Finish")
+    except Exception as exc:
+        print(f"Error in calculating metrics fvd kvd: {exc}")
+    finally:
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    write_average_score(average_score_path, mean_metrics_result_dict)
+    print(f'Saved average score in {average_score_path}')
 
 if calculate_fid:
     try:
         print(f"calculating metrics fid kid")
         from evaluation.fid import EvaluateFID
         mean_metrics_result_dict["fid"], mean_metrics_result_dict["kid"]=EvaluateFID(frame_dir, gt_frame_dir, ckpt_path, device)
-    except Exception as e:
-        print(f"Error in calculating metrics fid kid: {e}")
+    except Exception as exc:
+        print(f"Error in calculating metrics fid kid: {exc}")
+    finally:
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    write_average_score(average_score_path, mean_metrics_result_dict)
+    print(f'Saved average score in {average_score_path}')
 
-with open(os.path.join(output_folder,"average_score.csv"),"w") as f:
-    json.dump(mean_metrics_result_dict,f,indent=4)
-print(f'Saved average score in {os.path.join(output_folder,"average_score.csv")}')
 print("Finish")

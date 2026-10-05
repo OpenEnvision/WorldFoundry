@@ -1,0 +1,35 @@
+schema_version: 2
+model_id: sana-video-2b-480p
+display_name: SANA Video 2B 480p
+task_family: video_generation
+groups:
+- video
+- text_to_video
+- sana
+checkpoints:
+- local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Efficient-Large-Model--SANA-Video_2B_480p
+  repo_id: Efficient-Large-Model/SANA-Video_2B_480p
+  role: sana_video_denoiser
+  required_paths:
+  - checkpoints/SANA_Video_2B_480p.pth
+- local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Efficient-Large-Model--gemma-2-2b-it
+  repo_id: Efficient-Large-Model/gemma-2-2b-it
+  role: text_encoder
+- local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Wan-AI--Wan2.1-T2V-1.3B
+  repo_id: Wan-AI/Wan2.1-T2V-1.3B
+  role: video_vae
+  required_paths:
+  - Wan2.1_VAE.pth
+input_schema:
+  prompt: true
+  image: false
+  video: false
+artifact_kind: generated_video
+artifact_filename: sana-video-2b-480p.mp4
+execution:
+  backend_stage: in_tree_native_diffusion
+  runtime_status: checkpoint_graph_validated_gpu_smoke_pending
+  integration_status: integrated
+  pipeline_binding: sana-video-2b-480p
+integration:
+  status: integrated

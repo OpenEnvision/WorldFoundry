@@ -12,11 +12,35 @@ _TARGET_PREFIXES = (
     ),
     (
         "groot.vla.model.dreamzero.modules.wan_video_dit_action_casual_chunk",
-        "worldfoundry.synthesis.action_generation.dreamzero.modeling.wan_dit",
+        "worldfoundry.base_models.diffusion_model.models.networks.wan.variants.dreamzero.action",
     ),
     (
-        "groot.vla.model.dreamzero.modules.",
-        "worldfoundry.base_models.diffusion_model.video.wan.wan_dreamzero.modules.",
+        "groot.vla.model.dreamzero.modules.wan_video_text_encoder",
+        "worldfoundry.base_models.diffusion_model.models.encoders.wan.model",
+    ),
+    (
+        "groot.vla.model.dreamzero.modules.wan_video_image_encoder",
+        "worldfoundry.base_models.diffusion_model.models.encoders.wan.image",
+    ),
+    (
+        "groot.vla.model.dreamzero.modules.wan_video_vae",
+        "worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model",
+    ),
+    (
+        "groot.vla.model.dreamzero.modules.wan_video_dit",
+        "worldfoundry.base_models.diffusion_model.models.networks.wan.model",
+    ),
+    (
+        "groot.vla.model.dreamzero.modules.wan_video_camera_controller",
+        "worldfoundry.base_models.diffusion_model.models.networks.wan.adapter",
+    ),
+    (
+        "groot.vla.model.dreamzero.modules.flow_match_scheduler",
+        "worldfoundry.core.nn.diffusion.schedulers",
+    ),
+    (
+        "groot.vla.model.dreamzero.modules.flow_unipc_multistep_scheduler",
+        "worldfoundry.base_models.diffusion_model.schedulers.flow_unipc",
     ),
     (
         "groot.vla.model.dreamzero.action_head.wan_flow_matching_action_tf",
@@ -48,7 +72,11 @@ _TARGET_PREFIXES = (
 _ALLOWED_INFERENCE_TARGET_PREFIXES = (
     "worldfoundry.synthesis.action_generation.dreamzero.",
     "worldfoundry.synthesis.action_generation.gr00t.modeling.dit.",
-    "worldfoundry.base_models.diffusion_model.video.wan.wan_dreamzero.modules.",
+    "worldfoundry.base_models.diffusion_model.models.networks.wan.",
+    "worldfoundry.base_models.diffusion_model.models.encoders.wan.",
+    "worldfoundry.base_models.diffusion_model.models.autoencoders.wan.",
+    "worldfoundry.base_models.diffusion_model.schedulers.flow_unipc.",
+    "worldfoundry.core.nn.diffusion.schedulers.",
 )
 
 

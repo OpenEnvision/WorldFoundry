@@ -1,0 +1,48 @@
+---
+title: "JoyAI-Echo 1.5 / Echo-LongVideo"
+description: "JoyAI-Echo 1.5 / Echo-LongVideo（JD.com (JoyAI / Echo Team)）：参考图生成视频、音视频联合生成；Runner 一致性待确认; 独立环境 `joyai-echo-longvideo`。"
+modelId: "joyai-echo-longvideo"
+pageSource: authored
+---
+
+JoyAI-Echo 1.5 是仅推理的长时程音视频生成模型。R2V 请求可组合提示词、可选首帧与最多七个有序图像/音频记忆槽，使角色身份、声音与故事上下文在可独立编辑的镜头间延续。
+
+<ModelPaperFigures modelId="joyai-echo-longvideo" locale="zh" />
+
+代码：[jd-opensource/JoyAI-Echo](https://github.com/jd-opensource/JoyAI-Echo)。
+
+<ModelCommandBuilder modelId="joyai-echo-longvideo" locale="zh" />
+
+## 用来做什么
+
+在 WorldFoundry 里用 `joyai-echo-longvideo` 做 catalog 文生视频推理。这条配方让你按已记录的 T2V profile 启动，而不用自己拼上游 demo。
+
+该版本基于 LTX-2.3，加入少步 DMD 生成与成对跨模态记忆库。WorldFoundry 将官方 Python 3.11、PyTorch 2.8、CUDA 12.8 运行环境保持外置，并通过已发布 CLI 契约调用。该模型由京东（JoyAI / Echo 团队）发布。
+
+catalog 记录的任务包括 参考图生成视频、音视频联合生成、长视频生成。别名包括 `joyai-echo`、`echo-longvideo`、`joyai-echo-1.5`。
+
+记录的评测入口包括[ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench)（评测生成镜头间的长时程时间连续性）、[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（基础视频质量与运动评测）。
+
+JoyAI Echo 长参考生视频。不是 WM 卡。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`frames`、`fps`；产物 `generated_video`、`joyai-echo-longvideo.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `JoyAIEchoLongVideoPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+请检出记录的 JoyAI-Echo revision，准备专用环境，并传入 source_root、本地 Echo checkpoint 与受限访问的 Gemma checkpoint。 生成必须显式设置 execute=True。 FP4 还需 NVIDIA ModelOpt，生产级语音记忆提取需完成上游 MSST 设置。
+
+Command construction and official request-schema mapping are CPU-tested.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run joyai-echo-longvideo --pipeline.task-profile interactive-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+记录的权重仓库包括 `jdopensource/JoyAI-Echo`、`google/gemma-3-12b-it`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh joyai-echo-longvideo`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="joyai-echo-longvideo" locale="zh" />

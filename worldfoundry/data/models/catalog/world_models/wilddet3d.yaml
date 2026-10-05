@@ -13,6 +13,8 @@ source:
   hf_repo_id: allenai/WildDet3D
   license: other:sam-license
 official_sources:
+  paper: https://arxiv.org/abs/2604.08626
+  project_page: https://allenai.github.io/WildDet3D/
   github:
     url: https://github.com/allenai/WildDet3D
     head_sha: 1b8aa52b6ff3f00d0ebfa07175efc0c0c440964a
@@ -24,14 +26,29 @@ runtime_profile: runtime-profile:wilddet3d
 integration:
   status: runtime_ported
   notes:
-  - WildDet3D official inference route is registered; detector assets are runtime-gated.
+  - The pinned official WildDet3D detector is launched through a small WorldFoundry adapter; source, submodules, and checkpoints remain external.
 runner_parity:
-  status: implemented_checkpoint_pending
+  status: selected_checkpoint_gpu_validated
   notes:
-  - resolve_model_zoo_config and pipeline import are expected to pass; real generation
-    emits a runtime plan until required checkpoints/assets are staged.
+  - RGB images and comma-separated text classes run through official preprocessing and detector inference; missing assets are reported by the runtime preflight.
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry
   runtimes; blocked entries retain upstream provenance without runnable backends.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: wilddet3d
+docs:
+  publisher: Allen Institute for AI (AI2)
+  publisher_kind: lab
+  publisher_zh: 艾伦人工智能研究所（AI2）
+  overview: 'WildDet3D from the Allen Institute for AI recovers 3D object boxes from unconstrained RGB imagery. WorldFoundry calls the pinned official detector through a small adapter and stores its detections and depth map in a NumPy archive.'
+  overview_zh: 艾伦人工智能研究所（AI2）的 WildDet3D 从真实 RGB 图像中恢复物体的三维框。WorldFoundry 通过薄适配器调用固定版本的官方检测器，将检测框和深度图保存为 NumPy 文件。
+  architecture: 'This is a perception entry, not a video generator. The official model combines SAM3 image features and LingBot-Depth geometry; upstream source and submodules are loaded from a pinned external checkout.'
+  architecture_zh: 这是感知模型，而非视频生成器。官方模型结合 SAM3 图像特征与 LingBot-Depth 几何信息；源码和子模块从仓库外的固定版本检出加载。
+  usage_notes: 'Provide image_path and comma-separated classes in the prompt; optionally provide intrinsics_path for a finite 3x3 .npy matrix. Stage the full allenai/WildDet3D checkpoint, robbyant/lingbot-depth-postrain-dc-vitl14/model.pt, and pinned official checkout with submodules. The upstream source uses the SAM License.'
+  usage_notes_zh: '传入 image_path，并用英文逗号分隔 prompt 中的检测类别；可选传入 3x3 的 intrinsics_path（.npy）。需要完整的 allenai/WildDet3D checkpoint、robbyant/lingbot-depth-postrain-dc-vitl14/model.pt，以及含子模块的官方固定版本源码。上游源码使用 SAM License。'
+  limitations:
+  - 'Perception-only: no video or world generation output.'
+  - License is recorded as other:sam-license; review before commercial use.
+  limitations_zh:
+  - 仅感知：不产出视频或世界生成结果。
+  - 许可记录为 other:sam-license；商用前请审查。

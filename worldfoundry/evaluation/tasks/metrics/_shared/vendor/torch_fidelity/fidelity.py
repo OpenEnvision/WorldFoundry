@@ -6,10 +6,10 @@ import sys
 
 import torch
 
-from torch_fidelity.defaults import DEFAULTS
-from torch_fidelity.helpers import process_deprecations
-from torch_fidelity.metrics import calculate_metrics
-from torch_fidelity.registry import (
+from .defaults import DEFAULTS
+from .helpers import process_deprecations
+from .metrics import calculate_metrics
+from .registry import (
     FEATURE_EXTRACTORS_REGISTRY,
     DATASETS_REGISTRY,
     SAMPLE_SIMILARITY_REGISTRY,

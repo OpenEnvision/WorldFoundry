@@ -1,0 +1,52 @@
+---
+title: "EventVLA"
+description: "EventVLA from Shanghai AI Laboratory (InternRobotics): vla and vla action prediction; Runner parity pending."
+modelId: "eventvla"
+pageSource: authored
+---
+
+EventVLA from InternRobotics is a long-horizon-memory VLA: on top of a Qwen3-VL-4B base it adds an event head, temporal anchors, and a raw keyframe-image memory so the policy remembers what already happened in long tasks. The Apache-2.0 ganlinyang/EventVLA checkpoint collection is recorded with the RoboTwin-MeM subfolder as the default policy.
+
+<ModelPaperFigures modelId="eventvla" locale="en" />
+
+The recorded paper is [arXiv 2606.20092](https://arxiv.org/abs/2606.20092).
+
+Project page: [ganlin-yang.github.io/EventVLA.github.io](https://ganlin-yang.github.io/EventVLA.github.io/). Code: [InternRobotics/EventVLA](https://github.com/InternRobotics/EventVLA).
+
+Paper: [arXiv 2606.20092](https://arxiv.org/abs/2606.20092). Project: [ganlin-yang.github.io/EventVLA.github.io](https://ganlin-yang.github.io/EventVLA.github.io/). Code: [InternRobotics/EventVLA](https://github.com/InternRobotics/EventVLA). Weights: `ganlinyang/EventVLA` with default subfolder **RoboTwin-MeM**. Code license: **MIT** (collection also noted Apache-2.0 on the card). Runtime: Verified. Catalog still says **no GPU rollout validation** beyond that Workspace evidence — treat it as numerical, not a closed-loop score.
+
+<ModelCommandBuilder modelId="eventvla" locale="en" />
+
+## What it is for
+
+Use `eventvla` for vision-language-action inference on this card. The recipe exists so you can launch the recorded policy profile.
+
+Qwen3-VL encoding feeds action-token gathering and a checkpoint-compatible MLP action head; the event head plus temporal anchors maintain episodic structure while keyframe images form the memory. All of it runs in process in-tree. It is published by Shanghai AI Laboratory (InternRobotics).
+
+Catalog tasks include vla, vla action prediction, and vla long horizon memory. Catalog aliases include `event-vla` and `eventvla-robotwin-mem`.
+
+Recorded evaluation entry points include [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin) (The RoboTwin-MeM checkpoint targets RoboTwin memory tasks).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `eventvla_action_trace.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `EventVLAPipeline`.
+
+Family status: **Runner parity pending**.
+
+Stage the EventVLA checkpoint (subfolder RoboTwin-MeM) and the Qwen3-VL-4B-Instruct base locally. Training, datasets, simulators, benchmark launchers, and WebSocket transport are excluded.
+
+Qwen3-VL encoding, action-token gathering, the checkpoint-compatible MLP action head, event head, temporal anchors, and raw keyframe-image memory run in process.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run eventvla --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch>=2.6.0).
+
+Recorded weight repositories include `ganlinyang/EventVLA` and `Qwen/Qwen3-VL-4B-Instruct`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh eventvla`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="eventvla" locale="en" />

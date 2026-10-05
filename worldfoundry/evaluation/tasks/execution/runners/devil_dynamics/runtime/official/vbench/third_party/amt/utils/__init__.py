@@ -1,1 +1,0 @@
-"""AMT utility compatibility package."""

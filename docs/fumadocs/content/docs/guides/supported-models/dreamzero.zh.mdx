@@ -1,0 +1,52 @@
+---
+title: "NVIDIA DreamZero"
+description: "NVIDIA DreamZero（NVIDIA (GEAR Lab)）：wam、world_action_model；Runner 一致性待确认; 2 个 variant。"
+modelId: "dreamzero"
+pageSource: authored
+---
+
+英伟达 DreamZero 是将视频预测与机器人控制耦合的世界-动作模型（WAM）：DROID 与 AgiBot checkpoint 以 Apache-2.0 发布（GEAR-Dreams 组织）。WorldFoundry 将推理专用模型、预处理、分布式服务、 WebSocket 客户端与无 pickle 的 NumPy msgpack 协议内置树内；两个 checkpoint 均在 CUDA 12.9 运行时通过 GPU 探针。
+
+<ModelPaperFigures modelId="dreamzero" locale="zh" />
+
+记录论文为[arXiv 2602.15922](https://arxiv.org/abs/2602.15922)。
+
+项目页：[dreamzero0.github.io](https://dreamzero0.github.io/)。代码：[dreamzero0/dreamzero](https://github.com/dreamzero0/dreamzero)。
+
+<ModelCommandBuilder modelId="dreamzero" locale="zh" />
+
+## 用来做什么
+
+做世界-动作建模时选 `dreamzero-droid`：世界条件观测进、预测动作出。catalog 标成 WAM 路由、而不是纯 VLA 或视频模型时用它。
+
+默认 14B 服务使用两个 CUDA rank，Wan2.2 5B 入口可单 rank 运行。checkpoint 控制的 Hydra target 被重写并限定在树内推理模块白名单内，绝不执行 checkpoint Python。该模型由英伟达（GEAR 实验室）发布。
+
+catalog 记录的任务包括 wam、world_action_model、wam.world_action_modeling、机器人策略。别名包括 `dreamzero-droid`、`dreamzero-agibot`、`DreamZero-DROID`。同系列还有 `dreamzero-agibot`。
+
+记录的评测入口包括[EWMBench](/zh/docs/evaluation/benchmark-hub/ewmbench)（具身控制的世界-动作建模质量）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`fps`、`checkpoint_dir`；产物 `dreamzero_action_trace.json`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `DreamZeroPipeline`。
+
+起步 variant 是 `dreamzero-droid`。catalog 登记了 2 个 variant（上方卡片）：`dreamzero-droid`（`wam.world_action_modeling`）：Runner 一致性待确认、`dreamzero-agibot`（`wam.post_training_base`）：Runner 一致性待确认。系列状态：**Runner 一致性待确认**。
+
+将 DreamZero-DROID 或 DreamZero-AgiBot 就位于 WORLDFOUNDRY_HFD_ROOT；需要 CUDA 12.9 运行时。 DROID 面向真实机械臂数据分布，AgiBot 面向 AgiBot 本体。
+
+需要 CUDA 12.9；14B 默认配置需两个 GPU rank。
+
+官方 DROID / RoboArena 观测：**两路外相机**、腕部相机、关节、夹爪、提示词、`session_id`。默认 **14B** 服务器用 **两个 CUDA rank**；Wan2.2 **5B** 可单卡。checkpoint 里的 Python **从不执行**。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run dreamzero-droid --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-dreamzero-cu129`（Python 3.11，CUDA 12.9，torch==2.8.0）。
+
+记录的权重仓库包括 `GEAR-Dreams/DreamZero-DROID`、`GEAR-Dreams/DreamZero-AgiBot`、`GEAR-Dreams/DreamZero-DROID` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh dreamzero-droid`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="dreamzero" locale="zh" />

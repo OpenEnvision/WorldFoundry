@@ -14,19 +14,22 @@ from dataclasses import dataclass
 from tqdm import tqdm
 
 from worldfoundry.core.model_loading import ModelConfig
-from worldfoundry.base_models.diffusion_model.diffsynth.diffusion.base_pipeline import BasePipeline, PipelineUnit, PipelineUnitRunner
+from worldfoundry.base_models.diffusion_model.runners import (
+    InferenceStage,
+    InferenceStageRunner,
+    StagedDiffusionPipeline,
+)
 from ..models.model_manager import ModelManager, load_state_dict
 from ..models.wan_video_dit import WanModel, RMSNorm, sinusoidal_embedding_1d
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_dit_s2v import rope_precompute
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_text_encoder import WanTextEncoder, T5RelativeEmbedding, T5LayerNorm
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.s2v import rope_precompute
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import WanTextEncoder, T5RelativeEmbedding, T5LayerNorm
 from ..models.wan_video_vae import WanVideoVAE, RMS_norm, CausalConv3d, Upsample
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_image_encoder import WanImageEncoder
+from worldfoundry.base_models.diffusion_model.models.encoders.wan import WanImageEncoder, WanPrompter
 from ..models.wan_video_vace import VaceWanModel
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_motion_controller import WanMotionControllerModel
-from worldfoundry.base_models.diffusion_model.diffsynth.schedulers.flow_match import FlowMatchScheduler
-from worldfoundry.base_models.diffusion_model.diffsynth.prompters import WanPrompter
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants import WanMotionControllerModel
+from worldfoundry.core.nn import FlowMatchScheduler
 from worldfoundry.core.vram import enable_vram_management, AutoWrappedModule, AutoWrappedLinear, WanAutoCastLayerNorm
-from worldfoundry.base_models.diffusion_model.diffsynth.lora import GeneralLoRALoader
+from worldfoundry.core.model_loading import GeneralLoRALoader
 
 import torch
 import numpy as np
@@ -108,7 +111,7 @@ def _require_local_model_config(model_config: ModelConfig, label: str) -> ModelC
 
 
 
-class WanVideoPipeline(BasePipeline):
+class WanVideoPipeline(StagedDiffusionPipeline):
 
     def __init__(self, device="cuda", torch_dtype=torch.bfloat16, tokenizer_path=None):
         super().__init__(
@@ -127,7 +130,7 @@ class WanVideoPipeline(BasePipeline):
         self.audio_encoder = None
         self.in_iteration_models = ("dit", "motion_controller", "vace")
         self.in_iteration_models_2 = ("dit2", "motion_controller", "vace")
-        self.unit_runner = PipelineUnitRunner()
+        self.unit_runner = InferenceStageRunner()
         self.units = [
             WanVideoUnit_ShapeChecker(),
             WanVideoUnit_NoiseInitializer(),
@@ -362,7 +365,7 @@ class WanVideoPipeline(BasePipeline):
             
     def enable_usp(self):
         from xfuser.core.distributed import get_sequence_parallel_world_size
-        from worldfoundry.core.attention.patch_xdit_context_parallel import (
+        from worldfoundry.core.attention.parallel.patch_xdit_context_parallel import (
             usp_attn_forward,
             usp_dit_forward,
         )
@@ -786,7 +789,7 @@ class WanVideoPipeline(BasePipeline):
 
         return video
 
-class WanVideoUnit_ShapeChecker(PipelineUnit):
+class WanVideoUnit_ShapeChecker(InferenceStage):
     def __init__(self):
         super().__init__(input_params=("height", "width", "num_frames"))
 
@@ -796,7 +799,7 @@ class WanVideoUnit_ShapeChecker(PipelineUnit):
 
 
 
-class WanVideoUnit_NoiseInitializer(PipelineUnit):
+class WanVideoUnit_NoiseInitializer(InferenceStage):
     def __init__(self):
         super().__init__(input_params=("height", "width", "num_frames", "seed", "rand_device", "vace_reference_image"))
 
@@ -812,7 +815,7 @@ class WanVideoUnit_NoiseInitializer(PipelineUnit):
     
 
 
-class WanVideoUnit_InputVideoEmbedder(PipelineUnit):
+class WanVideoUnit_InputVideoEmbedder(InferenceStage):
     def __init__(self):
         super().__init__(
             input_params=("input_video", "noise", "tiled", "tile_size", "tile_stride", "vace_reference_image"),
@@ -838,7 +841,7 @@ class WanVideoUnit_InputVideoEmbedder(PipelineUnit):
 
 
 
-class WanVideoUnit_PromptEmbedder(PipelineUnit):
+class WanVideoUnit_PromptEmbedder(InferenceStage):
     def __init__(self):
         super().__init__(
             seperate_cfg=True,
@@ -854,7 +857,7 @@ class WanVideoUnit_PromptEmbedder(PipelineUnit):
 
 
 
-class WanVideoUnit_ImageEmbedder(PipelineUnit):
+class WanVideoUnit_ImageEmbedder(InferenceStage):
     """
     Deprecated
     """
@@ -895,7 +898,7 @@ class WanVideoUnit_ImageEmbedder(PipelineUnit):
 
 
 
-class WanVideoUnit_ImageEmbedderCLIP(PipelineUnit):
+class WanVideoUnit_ImageEmbedderCLIP(InferenceStage):
     def __init__(self):
         super().__init__(
             input_params=("input_image", "end_image", "height", "width"),
@@ -917,7 +920,7 @@ class WanVideoUnit_ImageEmbedderCLIP(PipelineUnit):
     
 
 
-class WanVideoUnit_ImageEmbedderVAE(PipelineUnit):
+class WanVideoUnit_ImageEmbedderVAE(InferenceStage):
     def __init__(self):
         super().__init__(
             input_params=("input_image", "end_image", "num_frames", "height", "width", "tiled", "tile_size", "tile_stride"),
@@ -951,7 +954,7 @@ class WanVideoUnit_ImageEmbedderVAE(PipelineUnit):
 
 
 
-class WanVideoUnit_ImageEmbedderFused(PipelineUnit):
+class WanVideoUnit_ImageEmbedderFused(InferenceStage):
     """
     Encode input image to latents using VAE. This unit is for Wan-AI/Wan2.2-TI2V-5B.
     """
@@ -972,7 +975,7 @@ class WanVideoUnit_ImageEmbedderFused(PipelineUnit):
 
 
 
-class WanVideoUnit_FunControl(PipelineUnit):
+class WanVideoUnit_FunControl(InferenceStage):
     def __init__(self):
         super().__init__(
             input_params=("control_video", "num_frames", "height", "width", "tiled", "tile_size", "tile_stride", "clip_feature", "y", "latents"),
@@ -997,7 +1000,7 @@ class WanVideoUnit_FunControl(PipelineUnit):
     
 
 
-class WanVideoUnit_FunReference(PipelineUnit):
+class WanVideoUnit_FunReference(InferenceStage):
     def __init__(self):
         super().__init__(
             input_params=("reference_image", "height", "width", "reference_image"),
@@ -1019,7 +1022,7 @@ class WanVideoUnit_FunReference(PipelineUnit):
 
 
 
-class WanVideoUnit_FunCameraControl(PipelineUnit):
+class WanVideoUnit_FunCameraControl(InferenceStage):
     def __init__(self):
         super().__init__(
             input_params=("height", "width", "num_frames", "camera_control_direction", "camera_control_speed", "camera_control_origin", "latents", "input_image", "tiled", "tile_size", "tile_stride"),
@@ -1069,7 +1072,7 @@ class WanVideoUnit_FunCameraControl(PipelineUnit):
 
 
 
-class WanVideoUnit_SpeedControl(PipelineUnit):
+class WanVideoUnit_SpeedControl(InferenceStage):
     def __init__(self):
         super().__init__(input_params=("motion_bucket_id",))
 
@@ -1081,7 +1084,7 @@ class WanVideoUnit_SpeedControl(PipelineUnit):
 
 
 
-class WanVideoUnit_VACE(PipelineUnit):
+class WanVideoUnit_VACE(InferenceStage):
     def __init__(self):
         super().__init__(
             input_params=("vace_video", "vace_video_mask", "vace_reference_image", "vace_scale", "height", "width", "num_frames", "tiled", "tile_size", "tile_stride"),
@@ -1132,7 +1135,7 @@ class WanVideoUnit_VACE(PipelineUnit):
 
 
 
-class WanVideoUnit_UnifiedSequenceParallel(PipelineUnit):
+class WanVideoUnit_UnifiedSequenceParallel(InferenceStage):
     def __init__(self):
         super().__init__(input_params=())
 
@@ -1144,7 +1147,7 @@ class WanVideoUnit_UnifiedSequenceParallel(PipelineUnit):
 
 
 
-class WanVideoUnit_TeaCache(PipelineUnit):
+class WanVideoUnit_TeaCache(InferenceStage):
     def __init__(self):
         super().__init__(
             seperate_cfg=True,
@@ -1159,7 +1162,7 @@ class WanVideoUnit_TeaCache(PipelineUnit):
 
 
 
-class WanVideoUnit_CfgMerger(PipelineUnit):
+class WanVideoUnit_CfgMerger(InferenceStage):
     def __init__(self):
         super().__init__(take_over=True)
         self.concat_tensor_names = ["context", "clip_feature", "y", "reference_latents"]
@@ -1180,7 +1183,7 @@ class WanVideoUnit_CfgMerger(PipelineUnit):
         return inputs_shared, inputs_posi, inputs_nega
 
 
-class WanVideoUnit_S2V(PipelineUnit):
+class WanVideoUnit_S2V(InferenceStage):
     def __init__(self):
         super().__init__(
             take_over=True,
@@ -1262,7 +1265,7 @@ class WanVideoUnit_S2V(PipelineUnit):
         return audio_embeds, pose_latents, len(audio_embeds)
 
 
-class WanVideoPostUnit_S2V(PipelineUnit):
+class WanVideoPostUnit_S2V(InferenceStage):
     def __init__(self):
         super().__init__(input_params=("latents", "motion_latents", "drop_motion_frames"))
 

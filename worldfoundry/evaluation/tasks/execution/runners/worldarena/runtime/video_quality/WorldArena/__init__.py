@@ -7,7 +7,7 @@ from pathlib import Path
 import importlib.util
 import json
 
-from .distributed import get_rank, print0
+from worldfoundry.core.distributed.collectives.evaluation import get_rank, print0
 
 import re
 from collections import defaultdict
@@ -424,7 +424,6 @@ class WorldArenaBenchmark(object):
 
             with open(json_path, "r") as f:
                 results_dict = json.load(f)
-
 
 
 

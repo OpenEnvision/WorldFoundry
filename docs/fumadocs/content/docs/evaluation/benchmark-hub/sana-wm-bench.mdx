@@ -1,0 +1,42 @@
+---
+title: SANA-WM 80-Scene Benchmark
+description: "NVIDIA 80-scene world-model bench: VBench quality, revisit consistency, camera pose, long-horizon drift. WorldFoundry owns the evaluator; it does not invent a board."
+---
+
+The SANA-WM 80-Scene Benchmark accompanies NVIDIA's SANA world-model work. Each of two splits (`simple_60s`, `hard_60s`) holds **80 scenes**: a conditioning image plus a **961-frame, 16 FPS** camera trajectory. The world model must roll out **one minute** of video per scene. Four families:
+
+- **VBench-style quality** — visual / temporal dimensions; primary key `vbench_overall`.
+- **Revisit consistency** — PSNR / SSIM / LPIPS on frame pairs where the trajectory returns to a prior viewpoint.
+- **Camera pose** — rotation error (degrees), relative translation error, relative motion consistency vs the target trajectory.
+- **`delta_iq`** — imaging-quality drop across temporal windows (long-horizon drift; lower is better).
+
+Code: [NVlabs/Sana](https://github.com/NVlabs/Sana). Data: [`Efficient-Large-Model/SANA-WM-Bench`](https://huggingface.co/datasets/Efficient-Large-Model/SANA-WM-Bench) (Apache-2.0).
+
+WorldFoundry **implements the evaluator in tree**. It reuses resident VBench and Pi3 rather than executing an NVlabs/Sana checkout at score time. Pose inference is a separately schedulable GPU stage; only `eval_poses.json` is consumed.
+
+<BenchmarkPageSections id="sana-wm-bench" locale="en" />
+
+## How to run
+
+```bash
+hf download Efficient-Large-Model/SANA-WM-Bench --repo-type dataset \
+  --local-dir "${WORLDFOUNDRY_SANA_WM_BENCH_DATASET_ROOT}"
+
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/sana_wm_bench/run_sana_wm_bench_official_runner.py \
+  --run-official \
+  --dataset-root "${WORLDFOUNDRY_SANA_WM_BENCH_DATASET_ROOT}" \
+  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --split simple_60s \
+  --metrics vbench,revisit,temporal \
+  --output-dir tmp/sana_wm_bench/official \
+  --json
+```
+
+Name videos `<scene_id>_generated.mp4`. `--metrics` selects `vbench,revisit,temporal,camera`. `--max-pairs` bounds revisit pairs; `--revisit-lpips` adds LPIPS. Camera metrics need `--pose-results-path` / `eval_poses.json` (radians converted to degrees on import). Dataset layout: `images/<scene_id>.png`, `<split>/sanawm_export_v2/<scene_id>.npz`, `run_manifest.jsonl`.
+
+In-tree pointer: `worldfoundry/data/benchmarks/tasks/external/sana-wm-bench.yaml`.
+
+Outputs include `scorecard.json` (primary `vbench_overall`) and `raw_metric_table.jsonl`.
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

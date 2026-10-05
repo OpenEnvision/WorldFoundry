@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="HappyOyster">
+  <rect width="128" height="128" rx="28" fill="#1f3d4d"/>
+  <ellipse cx="64" cy="78" rx="38" ry="22" fill="#c9d6c4"/>
+  <ellipse cx="64" cy="70" rx="30" ry="16" fill="#8aa39a"/>
+  <circle cx="64" cy="58" r="12" fill="#f4e3b0"/>
+</svg>

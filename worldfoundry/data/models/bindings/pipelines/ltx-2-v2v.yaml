@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: ltx-2-v2v
+model_id: ltx-2-v2v
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.ltx2.pipeline_ltx2_v2v:LTX2V2VPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

@@ -1,126 +1,27 @@
 ---
 title: MolmoSpaces-Bench
-description: MolmoSpaces-Bench — metrics, requirements, and run commands.
+description: "Ai2 MolmoBot eval ladder: 1,000-episode pick and pick-and-place. WorldFoundry imports rollouts; it does not ingest the official board."
 ---
 
-## About
+MolmoSpaces-Bench is Allen Institute for AI's **simulation eval** for MolmoBot / MolmoSpaces spatial-language manipulation. The paper's training dump (**MolmoBot-Data**) is **1.7 million** expert trajectories in an ecosystem cited as **232k** environments and **48k** manipulable objects — that is **not** the bench. The bench is a **1,000-episode** ladder: Pick MSProc / Classic / photorealistic Pick / Pick Random-Cam (20 s), then Pick&Place, PnP Next-To (5 cm), PnP Color (40 s). Official tables split **pick-stage** success from **final** / oracle success. A public board lives at [molmospaces.allen.ai/leaderboard](https://molmospaces.allen.ai/leaderboard); this hub has **not** ingested its rows.
 
+Paper: [MolmoBot](https://arxiv.org/abs/2603.16861). Project: [allenai.github.io/MolmoBot](https://allenai.github.io/MolmoBot/). Code: [allenai/MolmoBot](https://github.com/allenai/MolmoBot). WorldFoundry's contract split name is `pick_and_place`.
 
+WorldFoundry **imports** official rollout exports. It does **not** run MolmoSpaces, generate the 1.7M set, or copy the Ai2 board into this page.
 
-MolmoSpaces-Bench external benchmark manifest for spatial embodied policy evaluation.
+<BenchmarkPageSections id="molmospaces" locale="en" />
 
-
-
-## Metrics
-
-MolmoSpaces-Bench external benchmark manifest for spatial embodied policy evaluation.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/molmospaces.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `pick_success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `reward` | Task reward from MoLMoSpaces language-guided navigation and interaction episodes. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `molmospaces-runtime`.
-- **Separate setup:** this benchmark expects a dedicated conda env rather than the unified runtime.
-- Stage only the selected MolmoSpaces-Bench subset; the full public asset corpus is very large.
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_MOLMOSPACES_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/molmospaces`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/allenai--MolmoBot`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_MOLMOSPACES_ROOT`
-- `WORLDFOUNDRY_MOLMOSPACES_RESULTS_PATH`
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id molmospaces \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/molmospaces/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/molmospaces/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id molmospaces \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/molmospaces/official-run \
-  --json
-```
-
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id molmospaces --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_MOLMOSPACES_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+Optional `WORLDFOUNDRY_MOLMOSPACES_ROOT` points at a local runtime/repo. Default import path: `WORLDFOUNDRY_MOLMOSPACES_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/molmospaces.yaml`. Outputs: `scorecard.json` (primary `success_rate`; also `pick_success_rate`), `raw_results.jsonl`, `evaluation/summary.json`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

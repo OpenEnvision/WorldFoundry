@@ -1,5 +1,7 @@
 id: robotwin
 name: RoboTwin 2.0
+publisher: The University of Hong Kong
+publisher_kind: university
 benchmark_kind:
 - vla
 - embodied-action
@@ -67,6 +69,9 @@ dataset_refs:
   - optional_large
   - LeRobot unified conversion
 runner:
+  normalization:
+    dispatch: embodied
+    embodied_track: vla
   runner_target: worldfoundry.evaluation.tasks.contracts.external:RoboTwinContract
   run_command:
   - worldfoundry-eval

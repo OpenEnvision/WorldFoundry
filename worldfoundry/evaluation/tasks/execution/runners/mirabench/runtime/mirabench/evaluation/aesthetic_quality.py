@@ -1,56 +1,94 @@
-import os
+"""Batched LAION aesthetic-quality metric used by MiraBench."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
 import torch
-import torch.nn as nn
-import numpy as np
 from PIL import Image
 from torchvision import transforms
-import torch.nn.functional as F
-from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize, ToPILImage
-from worldfoundry.base_models.capabilities import vbench_asset_path
+from torchvision.transforms import CenterCrop, Compose, Normalize, Resize
+
+from worldfoundry.core.media.codecs.video import list_numbered_frame_paths
+from worldfoundry.core.execution.inference_runtime import (
+    adaptive_batched_inference,
+    resolve_inference_batch_size,
+)
+from worldfoundry.evaluation.tasks.metrics._shared.aesthetic import (
+    load_laion_aesthetic_linear_head,
+)
+
 try:
     from torchvision.transforms import InterpolationMode
+
     BICUBIC = InterpolationMode.BICUBIC
-    BILINEAR = InterpolationMode.BILINEAR
 except ImportError:
     BICUBIC = Image.BICUBIC
-    BILINEAR = Image.BILINEAR
+
 
 def get_aesthetic_model(cache_folder):
-    """load the aethetic model"""
-    path_to_model = cache_folder + "/aesthetic_model/sa_0_4_vit_l_14_linear.pth"
-    if not os.path.exists(path_to_model):
-        path_to_model = str(vbench_asset_path("vbench_aesthetic_linear_checkpoint"))
-    m = nn.Linear(768, 1)
-    s = torch.load(path_to_model)
-    m.load_state_dict(s)
-    m.eval()
-    return m
+    """Load the LAION aesthetic linear head (delegates to the shared in-tree loader)."""
+
+    candidate = Path(cache_folder) / "aesthetic_model" / "sa_0_4_vit_l_14_linear.pth"
+    return load_laion_aesthetic_linear_head(candidate if candidate.is_file() else None)
+
 
 def clip_transform(n_px):
-    return Compose([
-        Resize(n_px, interpolation=BICUBIC),
-        CenterCrop(n_px),
-        transforms.Lambda(lambda x: x.float().div(255.0)),
-        Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
-    ])
+    return Compose(
+        [
+            Resize(n_px, interpolation=BICUBIC),
+            CenterCrop(n_px),
+            transforms.Lambda(lambda value: value.float().div(255.0)),
+            Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+        ]
+    )
 
-def EvaluateLaionAesthetic(aesthetic_model, clip_model, preprocess, store_image_folder, device):
-    aesthetic_model.eval()
-    aesthetic_model=aesthetic_model.to(clip_model.dtype)
+
+def _load_frame(path: Path, preprocess):
+    with Image.open(path) as image:
+        return preprocess(image.convert("RGB"))
+
+
+def EvaluateLaionAesthetic(
+    aesthetic_model,
+    clip_model,
+    preprocess,
+    store_image_folder,
+    device,
+    batch_size=16,
+):
+    """Evaluate frames in bounded CLIP batches and synchronize only once."""
+
+    if int(batch_size) < 1:
+        raise ValueError("batch_size must be positive")
+    frame_paths = list_numbered_frame_paths(store_image_folder)
+    if not frame_paths:
+        raise ValueError("aesthetic quality requires at least one frame")
+    images = torch.stack([_load_frame(path, preprocess) for path in frame_paths])
+    if torch.device(device).type == "cuda":
+        images = images.pin_memory()
+
+    aesthetic_model.eval().to(dtype=clip_model.dtype)
     clip_model.eval()
-    with torch.no_grad():
-        tmp_paths = [os.path.join(store_image_folder, "frames_" + str(f) + ".png") for f in range(1,1+len(os.listdir(store_image_folder)))]
-        images = []
+    resolved_batch_size = resolve_inference_batch_size(
+        int(batch_size),
+        device=device,
+        scope="mirabench_aesthetic",
+    )
 
-        for tmp_path in tmp_paths:
-            images.append(preprocess(Image.open(tmp_path)))
-        images = torch.stack(images)
-            
-        images = images.to(device)
-        scores=[]
-        for i in range(images.shape[0]):
-            image_features = clip_model.encode_image(images[[i]])
-            image_features = F.normalize(image_features, dim=-1, p=2)
-            aesthetic_scores = aesthetic_model(image_features).squeeze()
-            scores.append(aesthetic_scores.item())
-    return np.mean(scores)
+    def score_batch(batch):
+        features = torch.nn.functional.normalize(clip_model.encode_image(batch), dim=-1, p=2)
+        return aesthetic_model(features).reshape(-1)
+
+    scores = adaptive_batched_inference(
+        images,
+        score_batch,
+        batch_size=resolved_batch_size,
+        device=device,
+        pad_to_batch_size=True,
+        scope="mirabench_aesthetic",
+    )
+    return float(scores.mean().item())
+
+
+__all__ = ["EvaluateLaionAesthetic", "clip_transform", "get_aesthetic_model"]

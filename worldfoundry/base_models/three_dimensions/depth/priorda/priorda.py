@@ -1,12 +1,13 @@
 # This file includes code originally from the PriorDA repository:
 # https://github.com/SpatialVision/Prior-Depth-Anything
-# Licensed under the Apache-2.0 License. See THIRD_PARTY_LICENSES.md for details.
+# Licensed under the Apache-2.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
 """Module for base_models -> three_dimensions -> depth -> priorda -> priorda.py functionality."""
 
 import os
 import time
 from collections import OrderedDict
+from pathlib import Path
 from typing import Union
 
 import numpy as np
@@ -18,6 +19,27 @@ from .dav2 import build_backbone
 from .depth_completion import DepthCompletion
 from .sparse_sampler import SparseSampler
 from .utils import Arguments, depth2disparity, disparity2depth
+
+
+def resolve_priorda_file(filename: str, explicit_dir: str | None = None) -> str:
+    """Resolve one PriorDA checkpoint without touching the network when a local copy exists."""
+    candidates: list[Path] = []
+    if explicit_dir:
+        candidates.append(Path(explicit_dir) / filename)
+    env_dir = os.environ.get("WORLDFOUNDRY_PRIORDA_DIR", "").strip()
+    if env_dir:
+        candidates.append(Path(env_dir).expanduser() / filename)
+    for key in ("WORLDFOUNDRY_CKPT_DIR", "WORLDARENA_CHECKPOINT_ROOT"):
+        root = os.environ.get(key, "").strip()
+        if root:
+            candidates.append(Path(root).expanduser() / "Prior-Depth-Anything" / filename)
+    for path in candidates:
+        if path.is_file() and path.stat().st_size > 0:
+            return str(path)
+    if os.environ.get("HF_HUB_OFFLINE") == "1" or os.environ.get("TRANSFORMERS_OFFLINE") == "1":
+        searched = ", ".join(str(path) for path in candidates) or filename
+        raise FileNotFoundError(f"PriorDA weight missing offline: {filename} (searched {searched})")
+    return hf_hub_download(repo_id=Arguments().repo_name, filename=filename)
 
 
 class PriorDepthAnything(nn.Module):
@@ -61,10 +83,7 @@ class PriorDepthAnything(nn.Module):
         if self.args.frozen_model_size in ["vitg"]:
             raise ValueError(f"{self.args.frozen_model_size} coming soon...")
         fmde_name = f"depth_anything_v2_{self.args.frozen_model_size}.pth"  # Download model checkpoints
-        if fmde_dir is None:
-            fmde_path = hf_hub_download(repo_id=self.args.repo_name, filename=fmde_name)
-        else:
-            fmde_path = os.path.join(fmde_dir, fmde_name)
+        fmde_path = resolve_priorda_file(fmde_name, fmde_dir)
 
         # Initialize Frozon-MDE.
         self.completion = DepthCompletion.build(args=self.args, fmde_path=fmde_path, device=device)
@@ -74,10 +93,7 @@ class PriorDepthAnything(nn.Module):
             if self.args.conditioned_model_size in ["vitl", "vitg"]:
                 raise ValueError(f"{self.args.conditioned_model_size} coming soon...")
             cmde_name = f"depth_anything_v2_{self.args.conditioned_model_size}.pth"  # Download model checkpoints
-            if cmde_dir is None:
-                cmde_path = hf_hub_download(repo_id=self.args.repo_name, filename=cmde_name)
-            else:
-                cmde_path = os.path.join(cmde_dir, cmde_name)
+            cmde_path = resolve_priorda_file(cmde_name, cmde_dir)
 
             # Initialize and load preptrained `prior-depth-anything` models.
             model = build_backbone(
@@ -98,10 +114,7 @@ class PriorDepthAnything(nn.Module):
             device: The device.
         """
         ckpt_name = f"prior_depth_anything_{self.args.conditioned_model_size}.pth"
-        if ckpt_dir is None:
-            ckpt_path = hf_hub_download(repo_id=self.args.repo_name, filename=ckpt_name)
-        else:
-            ckpt_path = os.path.join(ckpt_dir, ckpt_name)
+        ckpt_path = resolve_priorda_file(ckpt_name, ckpt_dir)
 
         state_dict = torch.load(ckpt_path, map_location="cpu")
 

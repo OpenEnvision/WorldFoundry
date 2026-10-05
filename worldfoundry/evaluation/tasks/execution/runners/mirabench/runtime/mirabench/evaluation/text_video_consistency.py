@@ -1,12 +1,12 @@
 import os
 import json
 import random
+from weakref import WeakKeyDictionary
+
 import numpy as np
 
 import torch
-import clip
 from worldfoundry.base_models.perception_core.video_text.viclip import SimpleTokenizer, ViCLIP
-import numpy as np
 from PIL import Image
 from torchvision import transforms
 import torch.nn.functional as F
@@ -28,7 +28,12 @@ def clip_transform(n_px):
         Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
     ])
 
-def get_text_features(model, input_text, tokenizer, text_feature_dict={}):
+_TEXT_FEATURE_CACHES = WeakKeyDictionary()
+
+
+def get_text_features(model, input_text, tokenizer):
+    del tokenizer
+    text_feature_dict = _TEXT_FEATURE_CACHES.setdefault(model, {})
     if input_text in text_feature_dict:
         return text_feature_dict[input_text]
     text_template= f"{input_text}"
@@ -39,7 +44,7 @@ def get_text_features(model, input_text, tokenizer, text_feature_dict={}):
     return text_features
 
 def get_vid_features(model, input_frames):
-    with torch.no_grad():
+    with torch.inference_mode():
         clip_feat = model.encode_vision(input_frames,test=True).float()
         clip_feat /= clip_feat.norm(dim=-1, keepdim=True)    
     return clip_feat
@@ -114,17 +119,32 @@ def read_frames_decord_by_fps(
     return frames
     
 
-def EvaluateTextVideoConsistency(clip_model, video_path, tokenizer, device, text, sample="middle"):
+def get_video_feature(clip_model, video_path, device, sample="middle"):
     image_transform = clip_transform(224)
-    query=text
-    # text = clip.tokenize([text]).to(device)
-   
-    with torch.no_grad():
+    with torch.inference_mode():
         images = read_frames_decord_by_fps(video_path, num_frames=8, sample=sample)
         images = image_transform(images)
-        images = images.to(device)
-        clip_feat = get_vid_features(clip_model,images.unsqueeze(0))
+        images = images.to(device, non_blocking=True)
+        return get_vid_features(clip_model, images.unsqueeze(0))
+
+
+def EvaluateTextVideoConsistency(
+    clip_model,
+    video_path,
+    tokenizer,
+    device,
+    text,
+    sample="middle",
+    video_feature=None,
+):
+    query = text
+    with torch.inference_mode():
+        clip_feat = (
+            video_feature
+            if video_feature is not None
+            else get_video_feature(clip_model, video_path, device, sample=sample)
+        )
         text_feat = get_text_features(clip_model, query, tokenizer)
         logit_per_text =  clip_feat @ text_feat.T
-        score_per_video =  float(logit_per_text[0][0].cpu())
+        score_per_video = float(logit_per_text[0][0].item())
     return score_per_video

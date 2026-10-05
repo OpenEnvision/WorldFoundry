@@ -4,6 +4,16 @@ from math import isqrt
 from typing import Literal
 
 import torch
+
+from worldfoundry.base_models.three_dimensions.three_d_four_d.runtime_extension_overlay import (
+    add_runtime_extension_overlay,
+)
+
+add_runtime_extension_overlay(
+    "diff_gaussian_rasterization",
+    environment_variable="WORLDFOUNDRY_DIFF_GAUSSIAN_RASTERIZATION_EXTENSION_DIR",
+)
+
 from diff_gaussian_rasterization import (
     GaussianRasterizationSettings,
     GaussianRasterizer,
@@ -130,7 +140,7 @@ def render_cuda(
 
         row, col = torch.triu_indices(3, 3)
 
-        image, radii = rasterizer(
+        rendered = rasterizer(
             means3D=gaussian_means[i],
             means2D=mean_gradients,
             shs=shs[i] if use_sh else None,
@@ -138,6 +148,7 @@ def render_cuda(
             opacities=gaussian_opacities[i, ..., None],
             cov3D_precomp=gaussian_covariances[i, :, row, col],
         )
+        image, radii = rendered[:2]
         all_images.append(image)
         all_radii.append(radii)
     return torch.stack(all_images)
@@ -241,7 +252,7 @@ def render_cuda_orthographic(
 
         row, col = torch.triu_indices(3, 3)
 
-        image, radii = rasterizer(
+        rendered = rasterizer(
             means3D=gaussian_means[i],
             means2D=mean_gradients,
             shs=shs[i] if use_sh else None,
@@ -249,6 +260,7 @@ def render_cuda_orthographic(
             opacities=gaussian_opacities[i, ..., None],
             cov3D_precomp=gaussian_covariances[i, :, row, col],
         )
+        image, radii = rendered[:2]
         all_images.append(image)
         all_radii.append(radii)
     return torch.stack(all_images)

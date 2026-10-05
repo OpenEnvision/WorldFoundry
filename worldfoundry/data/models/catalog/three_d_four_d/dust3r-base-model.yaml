@@ -12,6 +12,7 @@ source:
   official_repo_url: https://github.com/naver/dust3r
   license: CC-BY-NC-SA-4.0
 official_sources:
+  paper: https://arxiv.org/abs/2312.14132
   github:
     url: https://github.com/naver/dust3r
   project_page: https://dust3r.europe.naverlabs.com/
@@ -30,3 +31,19 @@ runner_parity:
   - Workspace loaded the official DUSt3R base checkpoint and exported a finite 10,000-point reconstruction from two views on 2026-07-11.
 catalog_category: three_d_four_d
 catalog_scope: Independent geometric prior integrations used by 3D and world-model runtimes.
+docs:
+  publisher: NAVER Labs Europe
+  publisher_kind: company
+  publisher_zh: NAVER 欧洲实验室（NAVER Labs Europe）
+  overview: 'DUSt3R Base Model is the base-model profile of the DUSt3R catalog entry: the concrete checkpoint surface used by the shared geometry-prior contract. It is verified — the Workspace loaded the official base checkpoint and exported a finite 10,000-point reconstruction from two views on 2026-07-11.'
+  overview_zh: DUSt3R Base Model 是 DUSt3R catalog 条目的基础模型档案：共享 geometry-prior 契约实际使用的 checkpoint 面。它已验证——Workspace 于 2026-07-11 加载官方基础 checkpoint，并从两个视图导出了 10,000 点的有限重建。
+  architecture: Same architecture as the dust3r entry (ViT pointmap regressor); this profile pins the base checkpoint and is not a standalone pipeline runner.
+  architecture_zh: 与 dust3r 条目同架构（ViT 点图回归器）；本档案固定基础 checkpoint，不是独立的 pipeline runner。
+  usage_notes: It is integrated as an independent geometry prior under worldfoundry/base_models and exposed through the shared geometry-prior pipeline/operator contract. Higher-level pipelines (e.g. ViPE) import it from this canonical owner instead of keeping private copies. Prefer citing the dust3r entry for provenance; use this profile id when configuring the prior explicitly.
+  usage_notes_zh: 它作为独立几何先验集成在 worldfoundry/base_models 下，通过共享的 geometry-prior pipeline/operator 契约对外暴露。上层管线（如 ViPE）从这一规范位置导入它，而不是各自保留私有副本。溯源请引用 dust3r 条目；显式配置该先验时使用本档案 id。
+  limitations:
+  - CC-BY-NC-SA-4.0 license applies (inherited from upstream).
+  - Not a standalone runner — always consumed through the geometry-prior contract.
+  limitations_zh:
+  - 继承上游的 CC-BY-NC-SA-4.0 许可。
+  - 不是独立 runner——始终通过 geometry-prior 契约调用。

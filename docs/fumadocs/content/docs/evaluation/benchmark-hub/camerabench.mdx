@@ -1,143 +1,175 @@
 ---
 title: CameraBench
-description: Camera-motion understanding benchmark with in-tree WorldFoundry result aggregation.
+description: "CMU camera-motion bench: binary classification, VQA, retrieval, and captioning. WorldFoundry aggregates official scores; it does not invent a board."
 ---
 
-## About
+CameraBench (Carnegie Mellon) asks whether a video model **understands camera motion** — pan, tilt, dolly, and the rest of a cinematographer-designed taxonomy, refined by expert annotation. Four families:
 
-CameraBench evaluates whether a video model understands camera motion rather than only producing visually pleasing clips. It focuses on motions such as pan, tilt, roll, zoom, tracking, and follow, and asks whether the generated or retrieved video matches the intended camera behavior.
+- **Binary classification** — `camera_motion_average_precision` and `camera_motion_roc_auc`.
+- **VQA** — yes / no and question accuracy about the camera.
+- **Retrieval** — text, image, and group retrieval of matching motions.
+- **Caption** — caption quality. GPT judging is opt-in (`OPENAI_API_KEY`, disable with `--no-gpt`).
 
-The benchmark was introduced with the CameraBench project and paper, "Towards Understanding Camera Motions in Any Video". The public benchmark release includes a test split on Hugging Face and fine-tuned Qwen2.5-VL camera-motion scorers. WorldFoundry does not require users to fetch an external source tree: the result importer and metric aggregation code live in this repository under `worldfoundry/evaluation/tasks/execution/runners/camerabench/`.
+`camerabench_average` is the mean over available official families. In WorldFoundry the same labels can also seed camera-control generation prompts; that is a downstream use, not a hidden leaderboard.
 
-WorldFoundry currently covers the reproducible aggregation stage. You provide either an official CameraBench result JSON or a prepared CameraBench `score_dir`, and WorldFoundry writes a standard scorecard. Producing the raw CameraBench score JSONs from videos still requires the CameraBench scorer assets and the fine-tuned VLM checkpoints described below.
+Paper: [CameraBench](https://arxiv.org/abs/2504.15376). Project: [linzhiqiu.github.io/papers/camerabench](https://linzhiqiu.github.io/papers/camerabench/). Code: [sy77777en/CameraBench](https://github.com/sy77777en/CameraBench), scoring stack [linzhiqiu/t2v_metrics](https://github.com/linzhiqiu/t2v_metrics). Data: [`syCen/CameraBench`](https://huggingface.co/datasets/syCen/CameraBench) (CC-BY-4.0).
 
+WorldFoundry **aggregates prepared `score_dir` files** or imports official JSON. VLM / SfM score generation stays upstream. Shared geometry stack: `camera_geometry_stack` (VGGT, MoGe, UniDepth, RAFT).
 
-## Official References
+<BenchmarkPageSections id="camerabench" locale="en" />
 
-| Resource | Link |
-| --- | --- |
-| Project page | [linzhiqiu.github.io/papers/camerabench](https://linzhiqiu.github.io/papers/camerabench/) |
-| Paper | [arXiv:2504.15376](https://arxiv.org/abs/2504.15376) |
-| GitHub | [github.com/sy77777en/CameraBench](https://github.com/sy77777en/CameraBench) |
-| HF dataset | [syCen/CameraBench](https://huggingface.co/datasets/syCen/CameraBench) |
-| In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/camerabench/run_camerabench_official_runner.py` |
+## How to run
 
-## What To Prepare
-
-### Dataset
-
-Download the public test assets from Hugging Face:
+Import official JSON (strict coverage):
 
 ```bash
-hf download syCen/CameraBench \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/CameraBench
+WORLDFOUNDRY_CAMERABENCH_STRICT=1 worldfoundry-eval zoo benchmark-run \
+  --benchmark-id camerabench \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --benchmark-data-root <camerabench_data_root> \
+  --output-dir tmp/camerabench/official-validation \
+  --json
 ```
 
-The local root should contain the test metadata and video assets:
-
-```text
-/path/to/datasets/CameraBench/
-|-- test.jsonl
-`-- videos_gif/
-    |-- *.gif
-    `-- ...
-```
-
-Use this path for `WORLDFOUNDRY_CAMERABENCH_DATA_ROOT` or `--benchmark-data-root`.
-
-### Scorer Checkpoints
-
-CameraBench reports use fine-tuned Qwen2.5-VL camera-motion models. Download checkpoints from Hugging Face into your normal model cache or a shared checkpoint directory:
+Aggregate a prepared score directory:
 
 ```bash
-hf download chancharikm/qwen2.5-vl-7b-cam-motion  --local-dir /path/to/checkpoints/qwen2.5-vl-7b-cam-motion
-hf download chancharikm/qwen2.5-vl-32b-cam-motion --local-dir /path/to/checkpoints/qwen2.5-vl-32b-cam-motion
-hf download chancharikm/qwen2.5-vl-72b-cam-motion --local-dir /path/to/checkpoints/qwen2.5-vl-72b-cam-motion
-```
-
-The WorldFoundry base-model tree already contains reusable Qwen/VQAScore infrastructure under `worldfoundry/base_models/`. Keep checkpoint paths outside the source tree unless you are preparing a local release bundle.
-
-### Score Directory
-
-The in-tree CameraBench runner consumes prepared JSON score files. The expected filenames are:
-
-```text
-/path/to/camerabench/score_dir/
-|-- classification_scores_*.json
-|-- vqa_retrieval_scores_*.json
-`-- caption_results_*.json
-```
-
-Each file should include a top-level `scores` list and optional `metadata` with `model_name`, `checkpoint`, and `split_name`. These are the same score families used by the official CameraBench evaluation code: binary camera-motion classification, VQA/retrieval, and caption matching.
-
-## Run Evaluation
-
-### Aggregate A Prepared Score Directory
-
-```bash
-export WORLDFOUNDRY_CAMERABENCH_DATA_ROOT=/path/to/datasets/CameraBench
-export WORLDFOUNDRY_CAMERABENCH_SCORE_DIR=/path/to/camerabench/score_dir
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/camerabench/run_camerabench_official_runner.py \
-  --score-dir "${WORLDFOUNDRY_CAMERABENCH_SCORE_DIR}" \
-  --benchmark-data-root "${WORLDFOUNDRY_CAMERABENCH_DATA_ROOT}" \
-  --task all \
-  --mode both \
+WORLDFOUNDRY_CAMERABENCH_STRICT=1 worldfoundry-eval zoo benchmark-run \
+  --benchmark-id camerabench \
+  --mode official-validation \
+  --score-dir <score_dir> \
+  --benchmark-data-root <camerabench_data_root> \
   --output-dir tmp/camerabench/score-dir \
   --json
 ```
 
-To run only part of the suite, set `--task binary`, `--task vqa_retrieval`, or `--task caption`. Caption matching can use an API-backed judge when you pass `--openai-api-key "$OPENAI_API_KEY"`; omit caption if your local reproduction only covers binary and VQA/retrieval metrics.
-
-### Use The Public CLI
-
 ```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id camerabench \
-  --mode official-validation \
-  --score-dir "${WORLDFOUNDRY_CAMERABENCH_SCORE_DIR}" \
-  --benchmark-data-root "${WORLDFOUNDRY_CAMERABENCH_DATA_ROOT}" \
-  --output-dir tmp/camerabench/score-dir-cli \
-  --json
+hf download syCen/CameraBench --repo-type dataset \
+  --local-dir cache/worldfoundry/data/hfd_datasets/syCen/CameraBench
 ```
 
-### Import Existing Official Results
+`--task` restricts to one family. Env: `WORLDFOUNDRY_CAMERABENCH_DATA_ROOT`, `WORLDFOUNDRY_CAMERABENCH_RESULTS_PATH`, `WORLDFOUNDRY_CAMERABENCH_SCORE_DIR`.
 
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id camerabench \
-  --mode official-validation \
-  --official-results-path /path/to/camerabench_results.json \
-  --benchmark-data-root "${WORLDFOUNDRY_CAMERABENCH_DATA_ROOT}" \
-  --output-dir tmp/camerabench/imported \
-  --json
+In-tree pointer: `worldfoundry/data/benchmarks/tasks/external/camerabench.yaml`.
+
+Outputs include `scorecard.json` (primary `camerabench_average`), `camera_predictions.jsonl` when present, and `raw_metric_table.jsonl`.
+
+## Two-stage official protocol
+
+CameraBench splits **method-specific scoring** from **method-agnostic metrics**. WorldFoundry is Script 2: it aggregates a prepared `score_dir` or imports official JSON. Script 1 (Qwen-2.5-VL, MegaSAM, or your own method) stays upstream. Swap only Script 1; keep the JSON contracts below.
+
+Videos used by the official scripts come from [`syCen/Videos4CameraBnech`](https://huggingface.co/datasets/syCen/Videos4CameraBnech) (note the upstream spelling). A typical data root looks like:
+
+```text
+<data_root>/
+  binary_classification/
+  vqa_and_retrieval/          # one folder per skill
+  caption_data.json
+  videos/                     # optional local copy of the video set
 ```
 
-Use this path when you already have the JSON output from a prior CameraBench evaluation and only need a WorldFoundry scorecard for comparison with other benchmarks.
+`HF_TOKEN` may be required when a Script 1 model downloads weights.
 
-## Metrics
+### Binary classification
 
-| Metric | Meaning |
-| --- | --- |
-| `camera_motion_average_precision` | Mean average precision for binary camera-motion classification. |
-| `camera_motion_roc_auc` | ROC-AUC for binary camera-motion classification. |
-| `camera_vqa_accuracy` | Mean of yes/no and question-level CameraBench VQA accuracy. |
-| `camera_retrieval_accuracy` | Mean of text, image, and group retrieval accuracy. |
-| `camera_caption_score` | Caption agreement score from prepared CameraBench caption outputs. |
-| `camerabench_average` | Mean over the available CameraBench metric families. |
+Splits:
 
-## Outputs
+- Movement: `Move_Up`, `Move_Down`, `Move_In`, `Move_Out`, `Move_Left`, `Move_Right`
+- Rotation: `Pan_Left`, `Pan_Right`, `Roll_Clockwise`, `Roll_Counterclockwise`, `Tilt_Down`, `Tilt_Up`
+- Zooming: `Zoom_In`, `Zoom_Out`
+- Static: `Static`
 
-The runner writes:
+Auto-discovery looks for `vqa_scores_*.json` (or `classification_scores_*.json` for custom methods). Required record:
 
-- `scorecard.json`
-- `camera_predictions.jsonl`
-- `raw_metric_table.jsonl`
-- `upstream_stdout.log`
-- `upstream_stderr.log`
+```json
+{
+  "metadata": {
+    "method_type": "Your_Method_Name",
+    "model_name": "your_model_name",
+    "checkpoint": "optional_checkpoint_path",
+    "split_name": "Move_Down",
+    "generation_timestamp": "2025-01-XX"
+  },
+  "scores": [
+    {
+      "sample_id": "0",
+      "video_path": "path/to/video.mp4",
+      "question": "Is the camera moving downward?",
+      "ground_truth_label": "yes",
+      "method": "your_method_identifier",
+      "score": 0.85,
+      "error": null
+    }
+  ]
+}
+```
 
-For a leaderboard-quality reproduction, make sure the local dataset root covers the full test split and the score directory contains all metric families you intend to report.
+### VQA and retrieval
 
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)
+Skills: `complex_description`, `confusable_motion`, `has_motion`, `motion_and_steadiness`, `motion_direction`, `motion_speed`, `only_motion`, `scene_dynamics`, `tracking_shot`.
+
+Auto-discovery looks for `vqa_retrieval_scores_*.json`. Official evaluation can run `--mode vqa`, `--mode retrieval`, or both. Required record:
+
+```json
+{
+  "metadata": {
+    "method_type": "Your_Method_Name",
+    "model_name": "your_model_name",
+    "skill_name": "confusable_motion",
+    "task_name": "backward_camera_only_vs_backward_ground_only",
+    "split_name": "confusable_motion"
+  },
+  "scores": [
+    {
+      "sample_id": "0",
+      "pos_video": "path/to/positive_video.mp4",
+      "neg_video": "path/to/negative_video.mp4",
+      "pos_question": "Is the camera moving backward?",
+      "neg_question": "Is the ground moving backward?",
+      "method": "your_method_identifier",
+      "yes_scores": {
+        "pos_text_pos_image": 0.85,
+        "pos_text_neg_image": 0.23,
+        "neg_text_pos_image": 0.31,
+        "neg_text_neg_image": 0.78
+      },
+      "no_scores": {
+        "pos_text_pos_image": 0.15,
+        "pos_text_neg_image": 0.77,
+        "neg_text_pos_image": 0.69,
+        "neg_text_neg_image": 0.22
+      },
+      "error": null
+    }
+  ]
+}
+```
+
+### Captioning
+
+Auto-discovery looks for `caption_results_*.json`. GPT-4o judging needs `OPENAI_API_KEY`; WorldFoundry `--no-gpt` skips it. Required record:
+
+```json
+{
+  "metadata": {
+    "method_type": "Your_Method_Name",
+    "model_name": "your_model_name"
+  },
+  "captions": [
+    {
+      "sample_id": "0",
+      "video_path": "path/to/video.mp4",
+      "question": "Describe the camera motion in this video.",
+      "reference_answer": "The camera pans left while moving forward",
+      "method": "your_method_identifier",
+      "generated_caption": "The camera is panning to the left and moving forward smoothly",
+      "error": null
+    }
+  ]
+}
+```
+
+Catch Script 1 failures and store them as a string in `error`. Sample counts (total / success / fail) are derived from the file; do not invent them. Unique ids are built from `model_name`, `checkpoint`, and `split_name`.
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

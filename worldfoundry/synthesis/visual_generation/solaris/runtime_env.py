@@ -89,7 +89,6 @@ def _candidate_runtime(path_value: Path) -> Optional[Path]:
     # Sentinel files expected in a valid Solaris runtime directory.
     sentinels = [
         ("src", "inference.py"),
-        ("config", "inference.yaml"),
     ]
     # Check if the sentinels exist directly under path_value.
     if all(path_value.joinpath(*parts).is_file() for parts in sentinels):
@@ -177,7 +176,7 @@ def resolve_runtime_root(runtime_root: Optional[str] = None) -> str:
     if runtime_root:
         raise FileNotFoundError(
             f"Solaris runtime not found at '{runtime_root}'. "
-            "Expected a directory containing 'src/inference.py' and 'config/inference.yaml'."
+            "Expected a directory containing 'src/inference.py'; bundled configs are under worldfoundry/data/models/runtime/configs/solaris."
         )
     raise FileNotFoundError(
         "Unable to locate the Solaris inference runtime. Expected the in-tree "

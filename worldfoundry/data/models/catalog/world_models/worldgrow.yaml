@@ -13,6 +13,8 @@ source:
   hf_repo_id: UranusITS/WorldGrow
   license: manual_review:missing_root_license
 official_sources:
+  project_page: https://world-grow.github.io/
+  paper: https://arxiv.org/abs/2510.21682
   github:
     url: https://github.com/world-grow/WorldGrow
     head_sha: 1f2ac49c30fd1390a810a201019ed26c02487883
@@ -36,3 +38,23 @@ catalog_scope: World-model catalog entries. Integrated entries expose in-tree Wo
   runtimes; blocked entries retain upstream provenance without runnable backends.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: worldgrow
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'WorldGrow generates worlds by expansion: starting from a seed scene it progressively grows coherent 3D world blocks, targeting interactive world generation and scene extension. The UranusITS/WorldGrow checkpoint is confirmed on Hugging Face; WorldFoundry registers the official source route in-tree with checkpoints and TRELLIS assets runtime-gated.'
+  overview_zh: WorldGrow 以扩张方式生成世界：从种子场景出发逐步生长出连贯的 3D 世界块，面向交互式世界生成与场景扩展。Hugging Face 上的 UranusITS/WorldGrow checkpoint 已确认；WorldFoundry 树内注册了官方源码路由，checkpoint 与 TRELLIS 资产为运行时门控。
+  architecture: The runtime dependency on TRELLIS assets indicates a structured-3D-latent generation backbone extended with block-wise scene growth. Architecture internals beyond the official repository pointer (world-grow/WorldGrow, pinned head 1f2ac49c) are not recorded in this repository.
+  architecture_zh: 对 TRELLIS 资产的运行时依赖表明其以结构化 3D 隐变量生成为骨干、叠加分块场景生长。官方仓库指针（world-grow/WorldGrow，锁定 head 1f2ac49c）之外的架构内部细节仓库未记录。
+  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. Stage both the WorldGrow checkpoint and TRELLIS assets before real runs.
+  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。真实运行前需同时就位 WorldGrow checkpoint 与 TRELLIS 资产。
+  limitations:
+  - Root license is under manual review (missing root license upstream).
+  - Checkpoints/TRELLIS assets are runtime-gated; no GPU validation is recorded in this repository.
+  limitations_zh:
+  - 根许可证处于人工审查状态（上游缺失根 LICENSE）。
+  - checkpoint/TRELLIS 资产为运行时门控；仓库未记录 GPU 验证。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Growable 3D world coherence and quality.
+    reason_zh: 可生长 3D 世界的连贯性与质量。

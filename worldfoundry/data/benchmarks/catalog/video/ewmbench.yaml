@@ -1,5 +1,7 @@
 id: ewmbench
 name: EWMBench
+publisher: AgiBot
+publisher_kind: company
 benchmark_kind:
 - embodied-world-model
 - video-generation-quality
@@ -80,6 +82,18 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  scoring:
+    engines: [in_tree]
+    hooks:
+      in_tree: worldfoundry.evaluation.tasks.execution.runners.ewmbench.ewmbench_in_tree_evaluator:IN_TREE_CONFIG
+  normalization:
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.ewmbench.run_ewmbench_official_runner
+    generated_arg: null
+    limit_arg: --limit
+    supports_fixture: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:EWMBenchContract
   validation_command:
   - worldfoundry-eval
@@ -118,6 +132,7 @@ runner:
   - WORLDFOUNDRY_EWMBENCH_RESULTS_PATH
 integration:
   status: integrated
+  tier: in_tree
   evidence:
     framework_validation: worldfoundry-eval zoo benchmark-run --benchmark-id ewmbench --mode official-validation
       --official-results-path <official_results.json> --generated-artifact-dir <generated_frames_or_videos> --output-dir

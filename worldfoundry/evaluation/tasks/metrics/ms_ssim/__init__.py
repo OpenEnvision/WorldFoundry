@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .compute import compute_ms_ssim
+compute_ms_ssim = lazy_export(f"{__name__}.compute", "compute_ms_ssim", owner=__name__)
 
 METRIC_ID = "ms_ssim"
 ALIASES = ("ms-ssim",)

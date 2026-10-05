@@ -5,7 +5,6 @@ server:
   url: ws://localhost:8000
 benchmark_id: robocerebra
 benchmark_kwargs:
-  robocerebra_root: /workspace/RoboCerebra_Bench
   task_types:
     - Ideal
   seed: 7

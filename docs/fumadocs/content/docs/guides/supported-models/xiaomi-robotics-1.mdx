@@ -1,0 +1,50 @@
+---
+title: "Xiaomi-Robotics-1"
+description: "Xiaomi-Robotics-1 from Xiaomi Robotics: vla and vla action prediction; Runner parity pending; dedicated `worldfoundry-xiaomi-robotics-1-cu128`."
+modelId: "xiaomi-robotics-1"
+pageSource: authored
+---
+
+Xiaomi-Robotics-1 is Xiaomi's next-generation VLA (Apache-2.0): a Qwen3-VL policy-token graph with a rectified-flow DiT action decoder emitting relative actions. The public repository at the pinned revision carries the report and release announcement; the inference source snapshot used here is integrated in-tree, and checkpoints stage into WORLDFOUNDRY_CKPT_DIR.
+
+<ModelPaperFigures modelId="xiaomi-robotics-1" locale="en" />
+
+The recorded paper is [arXiv 2607.15330](https://arxiv.org/abs/2607.15330).
+
+Code: [XiaomiRobotics/Xiaomi-Robotics-1](https://github.com/XiaomiRobotics/Xiaomi-Robotics-1).
+
+<ModelCommandBuilder modelId="xiaomi-robotics-1" locale="en" />
+
+## What it is for
+
+Use `xiaomi-robotics-1` for vision-language-action inference on this card. The recipe exists so you can launch the recorded policy profile.
+
+A Qwen3-VL backbone produces policy tokens consumed by a rectified-flow DiT that decodes relative actions; preprocessing and normalization extraction are in-tree. Checkpoint-side Python is parsed only as literal normalization metadata and never executed. It is published by Xiaomi Robotics.
+
+Catalog tasks include vla, vla action prediction, vla policy rollout, and robot policy. Catalog aliases include `xr1` and `xiaomi-robotics-one`.
+
+Not [Xiaomi Robotics 0](/docs/guides/supported-models/xiaomi-robotics-0).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `xiaomi_robotics_1_action_trace.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `XiaomiRobotics1Pipeline`.
+
+Family status: **Runner parity pending**.
+
+Stage checkpoints under $\{WORLDFOUNDRY_CKPT_DIR\}/embodied_action/xiaomi-robotics-1. Model, processor, device, dtype, attention backend, and checkpoint loading are local-only.
+
+The Qwen3-VL policy-token graph, rectified-flow DiT, preprocessing, normalization extraction, and relative-action decoding are in tree.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run xiaomi-robotics-1 --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the dedicated environment `worldfoundry-xiaomi-robotics-1-cu128` (Python 3.12, CUDA 12.8, torch==2.8.0).
+
+No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh xiaomi-robotics-1`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="xiaomi-robotics-1" locale="en" />

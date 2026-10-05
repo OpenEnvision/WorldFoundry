@@ -1,0 +1,55 @@
+{
+  "video": "cases/gaming/case_fixture_002/wf_fixture_gen_case_fixture_002.mp4",
+  "gt_video": "cases/gaming/case_fixture_002/ref_case_fixture_002.mp4",
+  "prompt": "Synthetic fixture prompt. Not an upstream WorldOlympiad record.",
+  "physical": {
+    "score": 0.4,
+    "score_scale": "0-1",
+    "default_if_no_related": 0.5,
+    "question_count": 3,
+    "related_question_count": 2,
+    "compliant_question_count": 1,
+    "dimension_scores": {
+      "mechanics": 0.4,
+      "thermotics": null,
+      "material": 0.4
+    },
+    "results": [
+      {"question_id": "fixture_mech_1", "dimension": "mechanics", "related": true, "compliant": true, "confidence": 0.8},
+      {"question_id": "fixture_mat_1", "dimension": "material", "related": true, "compliant": false, "confidence": 0.5},
+      {"question_id": "fixture_thermo_1", "dimension": "thermotics", "related": false, "compliant": null, "confidence": 0.0}
+    ]
+  },
+  "interaction": {
+    "summary": {
+      "chunk_mean": 2.8,
+      "transition_mean": 2.4,
+      "global_score": 2.9,
+      "overall": 2.7
+    },
+    "overall_raw": 2.7,
+    "overall_raw_scale": "0-5",
+    "score": 0.54,
+    "score_scale": "0-1"
+  },
+  "clip_interaction": {
+    "summary": {
+      "semantic_adherence": 0.21,
+      "num_scored_chunks": 3,
+      "num_chunks": 3,
+      "num_scored_frames": 24
+    }
+  },
+  "three_d": {
+    "video_id": 0,
+    "gs_score": 0.5,
+    "meta_score": 0.35,
+    "camera_motion_score": 0.35,
+    "final_score": 1.2,
+    "final_score_raw": 1.2,
+    "final_score_raw_scale": "0-3",
+    "final_score_normalized": 0.4,
+    "final_score_normalized_scale": "0-1"
+  },
+  "combined_score": 0.4467
+}

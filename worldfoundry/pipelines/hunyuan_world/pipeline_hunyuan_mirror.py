@@ -1,21 +1,28 @@
-"""Hunyuan Mirror visual generation pipeline module."""
+"""Hunyuan Mirror visual generation pipeline module.
 
-from ..pipeline_utils import PipelineABC
+Input image(s), output 3D reconstruction (depth, normal, point cloud,
+gaussians). Loads operators and the WorldMirror representation model.
 """
-input image and output 3D reconstruction (depth, normal, point cloud, gaussians, colmap)
-load operators and WorldMirror representation model
-"""
-import torch
-import numpy as np
+
+import logging
 import os
 import time
 from pathlib import Path
-from PIL import Image
-from typing import Optional, Any, Dict, List
-import cv2
+from typing import Any, Dict, List, Optional
 
+import cv2
+import numpy as np
+import torch
+from PIL import Image
+
+from worldfoundry.core.io import artifact_root_path
+from worldfoundry.core.io.paths import checkpoint_root_path
+
+from ..pipeline_utils import PipelineABC
 
 _OUTPUT_FILE_SUFFIXES = {".mp4", ".mov", ".webm", ".ply", ".zip"}
+
+logger = logging.getLogger(__name__)
 
 
 class HunyuanMirrorPipeline(PipelineABC):
@@ -27,23 +34,22 @@ class HunyuanMirrorPipeline(PipelineABC):
     def __init__(self,
                  operators: Optional[Any] = None,
                  represent_model: Optional[Any] = None,
-                 output_path: str = "./output/hunyuan_mirror",
+                 output_path: Optional[str] = None,
                  device: str = 'cuda'):
         """Initialize the pipeline and configure runtime components."""
         self.operators = operators
         self.represent_model = represent_model
-        self.output_path = Path(output_path)
+        # Default to the framework artifact root instead of the caller CWD; the
+        # directory is only created when results are actually saved.
+        self.output_path = Path(output_path) if output_path else artifact_root_path() / "hunyuan_mirror"
         self.device = device
-        
-        # Create output directory
-        self.output_path.mkdir(parents=True, exist_ok=True)
     
     @classmethod
     def from_pretrained(cls,
                         model_path: str | Dict[str, Any] | None = "tencent/HunyuanWorld-Mirror",
                         required_components: Optional[Dict[str, Any]] = None,
                         local_model_path: Optional[str] = None,
-                        output_path: str = "./output/hunyuan_mirror",
+                        output_path: Optional[str] = None,
                         device: str = "cuda",
                         **kwargs) -> 'HunyuanMirrorPipeline':
         """
@@ -74,8 +80,8 @@ class HunyuanMirrorPipeline(PipelineABC):
             actual_model_path = model_path or "tencent/HunyuanWorld-Mirror"
         
         # Load representation model
-        print(f"Loading HunyuanWorld-Mirror model from {actual_model_path}")
-        from ...representations.point_clouds_generation.hunyuan_world.hunyuan_world_mirror_representation import (
+        logger.info("Loading HunyuanWorld-Mirror model from %s", actual_model_path)
+        from worldfoundry.base_models.three_dimensions.point_clouds.hunyuan_mirror.runtime import (
             HunyuanWorldMirrorRepresentation,
         )
 
@@ -214,11 +220,11 @@ class HunyuanMirrorPipeline(PipelineABC):
         # Preprocess images
         imgs = prepare_images_to_tensor(image_paths, target_size=518, resize_strategy="crop").to(self.device)
         B, S, C, H, W = imgs.shape
-        
-        print(f"📸 Loaded {S} images with shape {imgs.shape}")
-        
+
+        logger.info("Loaded %d images with shape %s", S, tuple(imgs.shape))
+
         # Inference
-        print("\n🚀 Starting inference pipeline...")
+        logger.info("Starting inference pipeline...")
         start_time = time.time()
         
         use_amp = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
@@ -229,22 +235,30 @@ class HunyuanMirrorPipeline(PipelineABC):
             with torch.amp.autocast('cuda', enabled=bool(use_amp), dtype=amp_dtype):
                 views = {"img": imgs}
                 predictions = self.represent_model(views=views, cond_flags=cond_flags)
-        
-        print(f"🕒 Inference time: {time.time() - start_time:.3f} seconds")
+
+        logger.info("Inference time: %.3f seconds", time.time() - start_time)
         
         # Sky mask segmentation (if needed)
         sky_mask = None
         if apply_sky_mask:
-            print("\n🌤️  Computing sky masks...")
+            logger.info("Computing sky masks...")
             import onnxruntime
-            from worldfoundry.core.io.artifacts import download_file_from_url, segment_sky
 
-            if not os.path.exists("skyseg.onnx"):
-                print("Downloading skyseg.onnx...")
+            from worldfoundry.core.media.artifacts import (
+                download_file_from_url,
+                segment_sky,
+            )
+
+            # Keep the auxiliary weight under the framework checkpoint root
+            # instead of the process CWD (avoids re-downloads and CWD pollution).
+            skyseg_path = checkpoint_root_path("skyseg", "skyseg.onnx")
+            if not skyseg_path.exists():
+                skyseg_path.parent.mkdir(parents=True, exist_ok=True)
+                logger.info("Downloading skyseg.onnx to %s...", skyseg_path)
                 download_file_from_url(
-                    "https://huggingface.co/JianyuanWang/skyseg/resolve/main/skyseg.onnx", "skyseg.onnx"
+                    "https://huggingface.co/JianyuanWang/skyseg/resolve/main/skyseg.onnx", str(skyseg_path)
                 )
-            skyseg_session = onnxruntime.InferenceSession("skyseg.onnx")
+            skyseg_session = onnxruntime.InferenceSession(str(skyseg_path))
             sky_mask_list = []
             for i, img_path in enumerate(image_paths or [f"image_{i}" for i in range(S)]):
                 sky_mask_frame = segment_sky(img_path, skyseg_session)
@@ -254,7 +268,7 @@ class HunyuanMirrorPipeline(PipelineABC):
                 sky_mask_list.append(sky_mask_frame)
             sky_mask = np.stack(sky_mask_list, axis=0)  # [S, H, W]
             sky_mask = sky_mask > 0  # Binary mask: True = non-sky, False = sky
-            print(f"✅ Sky masks computed for {S} frames")
+            logger.info("Sky masks computed for %d frames", S)
         else:
             # Create dummy sky mask (all True = keep all points)
             sky_mask = np.ones((S, H, W), dtype=bool)
@@ -300,7 +314,7 @@ class HunyuanMirrorPipeline(PipelineABC):
         # Prepare pointmap data for filtering and saving
         pointmap_data = None
         if "pts3d" in predictions:
-            print("Computing filter mask for pointmap...")
+            logger.info("Computing filter mask for pointmap...")
             
             # Prepare data for mask computation
             pts3d_conf_np = predictions["pts3d_conf"][0].detach().cpu().numpy()  # [S, H, W]
@@ -376,7 +390,9 @@ class HunyuanMirrorPipeline(PipelineABC):
             save_normal: Whether to save normal maps
             save_gs: Whether to save gaussians
             save_rendered: Whether to save rendered video
-            save_colmap: Whether to save COLMAP reconstruction
+            save_colmap: Reserved. COLMAP export is not implemented yet; this
+                flag currently only creates the empty ``sparse/0`` directory
+                layout expected by COLMAP-style consumers.
             
         Returns:
             Dictionary containing paths to saved files
@@ -403,6 +419,7 @@ class HunyuanMirrorPipeline(PipelineABC):
         )
         
         # Create output directories
+        self.output_path.mkdir(parents=True, exist_ok=True)
         images_dir = self.output_path / "images"
         images_dir.mkdir(exist_ok=True)
         images_resized_dir = self.output_path / "images_resized"
@@ -434,7 +451,7 @@ class HunyuanMirrorPipeline(PipelineABC):
         if pointmap_data is not None and save_pointmap:
             ply_path = self.output_path / "pts_from_pointmap.ply"
             save_scene_ply(ply_path, pointmap_data['filtered_pts'], pointmap_data['filtered_colors'])
-            print(f"  - Saved {len(pointmap_data['filtered_pts'])} filtered points to {ply_path}")
+            logger.info("Saved %d filtered points to %s", len(pointmap_data['filtered_pts']), ply_path)
             save_results['pointmap_path'] = str(ply_path)
         
         # Save depthmap
@@ -443,14 +460,14 @@ class HunyuanMirrorPipeline(PipelineABC):
                 # Save both PNG (for visualization) and NPY (for actual depth values)
                 save_depth_png(depth_dir / f"depth_{i:04d}.png", predictions["depth"][0, i, :, :, 0])
                 save_depth_npy(depth_dir / f"depth_{i:04d}.npy", predictions["depth"][0, i, :, :, 0])
-            print(f"  - Saved {S} depth maps to {depth_dir} (both PNG and NPY formats)")
+            logger.info("Saved %d depth maps to %s (both PNG and NPY formats)", S, depth_dir)
             save_results['depth_dir'] = str(depth_dir)
         
         # Save normalmap
         if "normals" in predictions and save_normal:
             for i in range(S):
                 save_normal_png(normal_dir / f"normal_{i:04d}.png", predictions["normals"][0, i])
-            print(f"  - Saved {S} normal maps to {normal_dir}")
+            logger.info("Saved %d normal maps to %s", S, normal_dir)
             save_results['normal_dir'] = str(normal_dir)
         
         # Save Gaussians PLY and render video
@@ -483,12 +500,12 @@ class HunyuanMirrorPipeline(PipelineABC):
                 e4x4 = predictions['camera_poses']
                 k3x3 = predictions['camera_intrs']
                 render_interpolated_video(self.represent_model.gs_renderer, predictions["splats"], e4x4, k3x3, (H, W), self.output_path / "rendered", interp_per_pair=15, loop_reverse=num_views==1)
-                print(f"  - Saved rendered.mp4 to {self.output_path}")
+                logger.info("Saved rendered_rgb.mp4 to %s", self.output_path)
             else:
-                print(f"⚠️  Not set save_rendered flag, skipping video rendering")
+                logger.info("save_rendered flag not set, skipping video rendering")
             
             save_results['gaussians_path'] = str(ply_path)
-            rendered_video = self.output_path / "rendered.mp4"
+            rendered_video = self.output_path / "rendered_rgb.mp4"
             save_results['rendered_video_path'] = str(rendered_video) if save_rendered and rendered_video.exists() else None
         
         return save_results
@@ -595,59 +612,65 @@ class HunyuanMirrorPipeline(PipelineABC):
 
         output_dir = kwargs.pop("output_dir", None)
         requested_output = output_path or output_dir
+        # Apply a per-call output override without leaking it into later calls
+        # (the previous behavior permanently rebound ``self.output_path``).
+        previous_output_path = self.output_path
         if requested_output:
             requested = Path(str(requested_output)).expanduser()
             self.output_path = requested.with_suffix("") if requested.suffix.lower() in _OUTPUT_FILE_SUFFIXES else requested
             self.output_path.mkdir(parents=True, exist_ok=True)
-        
-        results = self.process_images(
-            image_paths=image_path,
-            confidence_percentile=confidence_percentile,
-            edge_normal_threshold=edge_normal_threshold,
-            edge_depth_threshold=edge_depth_threshold,
-            apply_confidence_mask=apply_confidence_mask,
-            apply_edge_mask=apply_edge_mask,
-            apply_sky_mask=apply_sky_mask,
-            cond_flags=cond_flags
-        )
-        if not requested_output:
-            return results
 
-        saved = self.save_results(
-            results,
-            save_pointmap=bool(kwargs.pop("save_pointmap", True)),
-            save_depth=bool(kwargs.pop("save_depth", True)),
-            save_normal=bool(kwargs.pop("save_normal", True)),
-            save_gs=bool(kwargs.pop("save_gs", True)),
-            save_rendered=bool(kwargs.pop("save_rendered", True)),
-            save_colmap=bool(kwargs.pop("save_colmap", True)),
-        )
-        preview_image = None
-        for candidate in (
-            self.output_path / "images_resized" / "image_0001.png",
-            self.output_path / "images" / "image_0001.png",
-            self.output_path / "depth" / "depth_0000.png",
-            self.output_path / "normal" / "normal_0000.png",
-        ):
-            if candidate.is_file():
-                preview_image = str(candidate)
-                break
-        preview_video = saved.get("rendered_video_path")
-        preview_model = saved.get("gaussians_path") or saved.get("pointmap_path")
-        return {
-            "status": "succeeded",
-            "runtime": "hunyuanworld-mirror",
-            "artifact_kind": "generated_3d_asset",
-            "artifact_path": str(self.output_path),
-            "run_dir": str(self.output_path),
-            "preview_video": preview_video if isinstance(preview_video, str) and Path(preview_video).is_file() else None,
-            "preview_image": preview_image,
-            "model_path": preview_model if isinstance(preview_model, str) and Path(preview_model).is_file() else None,
-            "metadata": {
-                "saved_outputs": saved,
-                "image_count": int(results.get("S", 0)) if isinstance(results, dict) else 0,
-            },
-        }
+        try:
+            results = self.process_images(
+                image_paths=image_path,
+                confidence_percentile=confidence_percentile,
+                edge_normal_threshold=edge_normal_threshold,
+                edge_depth_threshold=edge_depth_threshold,
+                apply_confidence_mask=apply_confidence_mask,
+                apply_edge_mask=apply_edge_mask,
+                apply_sky_mask=apply_sky_mask,
+                cond_flags=cond_flags
+            )
+            if not requested_output:
+                return results
+
+            saved = self.save_results(
+                results,
+                save_pointmap=bool(kwargs.pop("save_pointmap", True)),
+                save_depth=bool(kwargs.pop("save_depth", True)),
+                save_normal=bool(kwargs.pop("save_normal", True)),
+                save_gs=bool(kwargs.pop("save_gs", True)),
+                save_rendered=bool(kwargs.pop("save_rendered", True)),
+                save_colmap=bool(kwargs.pop("save_colmap", True)),
+            )
+            preview_image = None
+            for candidate in (
+                self.output_path / "images_resized" / "image_0001.png",
+                self.output_path / "images" / "image_0001.png",
+                self.output_path / "depth" / "depth_0000.png",
+                self.output_path / "normal" / "normal_0000.png",
+            ):
+                if candidate.is_file():
+                    preview_image = str(candidate)
+                    break
+            preview_video = saved.get("rendered_video_path")
+            preview_model = saved.get("gaussians_path") or saved.get("pointmap_path")
+            return {
+                "status": "succeeded",
+                "runtime": "hunyuanworld-mirror",
+                "artifact_kind": "generated_3d_asset",
+                "artifact_path": str(self.output_path),
+                "run_dir": str(self.output_path),
+                "preview_video": preview_video if isinstance(preview_video, str) and Path(preview_video).is_file() else None,
+                "preview_image": preview_image,
+                "model_path": preview_model if isinstance(preview_model, str) and Path(preview_model).is_file() else None,
+                "metadata": {
+                    "saved_outputs": saved,
+                    "image_count": int(results.get("S", 0)) if isinstance(results, dict) else 0,
+                },
+            }
+        finally:
+            self.output_path = previous_output_path
     
     def save_pretrained(self, save_directory: str):
         """保存模型到指定目录"""
@@ -665,4 +688,4 @@ class HunyuanMirrorPipeline(PipelineABC):
         }
         
         torch.save(config, os.path.join(save_directory, "pipeline_config.pt"))
-        print(f"Pipeline saved to {save_directory}")
+        logger.info("Pipeline saved to %s", save_directory)

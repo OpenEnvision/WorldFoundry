@@ -1,0 +1,273 @@
+---
+title: Pluggable diffusion acceleration
+description: Native plugin contracts, the Sol-Engine and FlashDreams comparison, and measured H100 results.
+---
+
+Native-precision Wan MHA fusion preserves final latents and RGB bit for bit on two H100 test seeds: **1.19%–1.42%** speedup at 17 frames and **0.60%–0.66%** at 41 frames. Plugins are configured per model, support removal, and default off.
+
+## Upstream comparison
+
+The audit uses [FlashDreams `91c906b`](https://github.com/NVIDIA/flashdreams/tree/91c906b69992f63fb19907a25cd805fb783d314a) and [Sana Sol-Engine `670482d`](https://github.com/NVlabs/Sana/tree/670482d8a857d578ac8a2ea89b052d0fb47badba). Distinguish callable native integrations from optional packages and forwarded flags.
+
+| Technique | Upstream approach | Existing WorldFoundry support and this change |
+| --- | --- | --- |
+| Attention kernels | FlashDreams Triton FA2/TMA, cuDNN and native FP8; Sol Flash/cuDNN and Sol-Attn | Existing SDPA, FA2/3/4, Sage/Sage3, xFormers, TMA and native cuDNN FP8. Adds a shared Sol dispatcher and independent Wan self/cross policies. |
+| Block fusion | AdaLN, residual gates, QK norm/RoPE, projection and FFN glue | Existing common kernels and Wan QKV/RoPE/FFN transforms. Adds removable SANA adapters; defaults retain native normalization and token strides. |
+| Invariant/history reuse | Text cross-KV, streaming KV and stable cache layouts | Existing Wan cross-KV and several autoregressive caches. Adds removable cross-KV projection fusion with derived packed weights and static-cache miss support. Raw KV, rotated KV and recurrent linear-attention states retain separate contracts. |
+| Feature cache | Sol EasyCache, TeaCache and model-specific controllers | Existing Tea/Ada/Mag/Taylor/block caches, mostly Wan. Adds native EasyCache for stateless SanaMS/SanaMSVideo and WanModel, plus locally tested global-to-local schedules for resident Wan2.2 dual experts. |
+| Quantization | FlashDreams separate projection/attention precision; Sol documents FP8 and SVDQuant/Nunchaku | Existing FP8, INT8, INT4, NVFP4 paths; some low-bit modes still dequantize into dense GEMMs. Adds reversible selective FP8, calibrated native packed SVDQuant, and independent Wan self/cross MHA schedules. The SVDQuant weight format is independent and not Nunchaku binary-compatible. |
+| Lightweight codec | FlashDreams uses a matched pruned Wan2.1 LightVAE encoder and calibrated native FP8 implementation | Adds the matched native base24/16-latent architecture, strict checkpoint admission and calibrated FP8 encoder convolutions using an independent Triton implicit GEMM. Norms, caches and decoding remain FP32. |
+| Compile, graphs, parallelism | Regional compile, stable-shape capture and model-specific pipelines | Existing compile/cache, CUDA Graph, SP/CFG/VAE parallelism and offload. Plugins preserve existing cache/Graph/SP restrictions. |
+| Composition search | Sol model/hardware/quality-budget search | Existing operator autotuning. Adds fixed-candidate real native SANA/Wan generation search, scoped to the tested prompt, seeds, geometry and device. |
+
+HyperFlow already forwards `--sol-attn` upstream, and WorldGen already has an optional Flux/Nunchaku path. Those do not establish shared native Wan/SANA support. Native packed SVDQuant, independent MHA precision/kernel schedules and calibrated FP8 encoder execution are now integrated with restricted contracts. Nunchaku checkpoint compatibility, FP8 TMA, streaming KV and steady-state graph combinations remain unsupported.
+
+Sources: [FlashDreams accelerated](https://github.com/NVIDIA/flashdreams/blob/91c906b69992f63fb19907a25cd805fb783d314a/docs/source/developer_guides/flashdreams_accelerated.md), Sol [kernel](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/kernel.md), [cache](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/cache.md), [quant](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/quant.md), and [Sol-Attn](https://github.com/NVlabs/Sana/blob/670482d8a857d578ac8a2ea89b052d0fb47badba/site_docs/techniques/sparse/sol_attn.md). The EasyCache controller independently implements the [upstream algorithm](https://github.com/H-EmbodVis/EasyCache/tree/bfc63232cfae8c77e2dccf9d72b8f2f56bd995b8).
+
+## Ownership and lifecycle
+
+| Layer | File under `worldfoundry/` | Responsibility |
+| --- | --- | --- |
+| Installer | `core/acceleration/plugins.py` | Registry, prepared plans, conflicts, atomic groups, rollback and removal |
+| Request state | `core/acceleration/easycache.py` | Online drift estimates, condition snapshots, dense/reuse decisions and receipts |
+| Model adapters | `base_models/diffusion_model/optimizations/plugins.py` | Checkpoint graph and composition validation; reversible model-local attributes |
+| SANA seam | `base_models/diffusion_model/models/networks/sana/block_ops.py` | Norm/modulation/residual glue with training, DropPath and custom norm semantics |
+| Sol provider | `core/attention/backends/sol.py` | Optional dependency boundary and dtype/shape/parameter validation |
+| Selected precision | `base_models/diffusion_model/optimizations/precision.py` | Explicit projection selection, retained originals, fixed placement and scaled FP8 execution |
+| Cross-KV fusion | `base_models/diffusion_model/optimizations/kv_fusion.py` | Nonpersistent packed execution weights, source-version refresh and receipts |
+| Expert schedule | `base_models/diffusion_model/optimizations/wan/expert_schedule.py` | Immutable global-to-local indices for each expert phase |
+| Matched student codec | `base_models/diffusion_model/models/autoencoders/wan/variants/light_21.py` | Native student architecture and complete key/shape validation; codec adapter lives in `component.py` |
+
+Tests live in core and native model suites; reproducible diagnostics live in `benchmarks/inference/`. Installation prepares every plan before mutation and undoes earlier changes on failure. Fusion and cache adapters preserve checkpoint parameters and state-dict keys. Selective FP8 retains the original modules for removal, but its active wrappers are an inference view: uninstall before saving/loading a canonical state dict, changing placement/dtype, training or editing weights.
+
+Model-owned guards track active forwards and explicit request IDs even before any plugin is installed. Installation and removal both reject active requests; preparing a dual-expert request guards both models before either expert runs. Native runners release ownership on success and failure. Changing plugins requires an idle model; compiled models and runtimes with a CUDA Graph owner must be rebuilt. These guards cover framework-owned denoisers; direct module callers remain responsible for avoiding concurrent mutation.
+
+EasyCache owns state per explicit request ID and CFG branch. Native request finalization releases tensors on success and failure, retaining bounded JSON receipts. Snapshots detect in-place edits to inference-tensor conditions. Threshold `0.0` executes every original block and returns the dense output directly.
+
+The loader applies shared configuration only to DiTs declaring `supports_acceleration_plugins`. The assembler rejects denoisers that accept requested plugins without installing them. Installation reports always say `execution_verified=False`; kernel execution and skipped blocks require separate receipts.
+
+## Configuration
+
+```python
+import torch
+from worldfoundry.base_models.diffusion_model.pipeline import NativeDiffusionPipeline
+from worldfoundry.core.model_loading.policy import RuntimePolicy
+
+policy = RuntimePolicy(
+    device="cuda", dtype=torch.bfloat16,
+    options={"accelerations": {"sana_block_fusion": True}},
+)
+pipeline = NativeDiffusionPipeline.from_pretrained("sana-video-2b-480p", policy=policy)
+# Run an ordinary DiffusionRequest, then inspect that request's report.
+report = pipeline.components.denoiser.runtime_optimization_report()
+```
+
+An already loaded idle model can also use a removable session, without changing environment variables:
+
+```python
+from worldfoundry.base_models.diffusion_model.optimizations.plugins import (
+    diffusion_acceleration_registry,
+    install_diffusion_accelerations,
+)
+
+model = pipeline.components.denoiser.model
+existing = getattr(model, "_worldfoundry_accelerations", None)
+if existing is not None:
+    existing.uninstall()
+session = install_diffusion_accelerations(model, {"easycache": {"threshold": 0.0}}, policy)
+# Native runner finally blocks finalize requests; direct callers use end_request.
+session.uninstall()
+
+registry = diffusion_acceleration_registry()
+# registry.register("custom_kernel", prepare_factory)
+# Preparation validates without mutation; activation returns a reversible handle.
+```
+
+Choose load-time configuration or manual installation; uninstall the current session before replacing it. Component options override runtime options. Public native pipeline load arguments also accept `accelerations={...}`.
+
+| Plugin | Defaults and supported contract |
+| --- | --- |
+| `sana_block_fusion` | `backend=auto`, `min_elements=12582912`; small inputs, autograd and unsupported layouts retain eager execution. Defaults: `fuse_layer_norm=False`, `repack_tokens=False`. The current LayerNorm path preserves the vendor reduction and fuses the following AdaLN arithmetic. Native token strides guard this path into eager execution; enabling repacking admits the combined path, which fails the current full-video quality gate. |
+| `easycache` | Requires an explicit nonnegative threshold. Learns dense input/output change ratios and estimates accumulated drift before reusing `current_input + last_dense_transform`. This is an **embedded-token-block-stack** variant, not every upstream raw-latent variant. |
+| `attention_policy` | Native Wan self/cross selection. Sol accepts self only: BF16, head dimension 128, no mask/backward, `kv_splits=1`. Invalid parameters or unavailable dependencies fail without a silent dense fallback. |
+| `selective_fp8` | Requires explicit `include` module-path globs; optional `exclude`. Defaults: `min_features=1024`, `scaling=rowwise`, `use_fast_accum=False`. Plain eligible Wan/SANA block linears only; actual scaled-GEMM receipts distinguish CUDA FP8 from dense fallback. |
+| `wan_cross_kv_fusion` | Native Wan text K/V packing. Defaults: `min_tokens=256`, `include_image=False`; smaller contexts run the original separate projections. Preserves canonical parameters, permitting native GEMM reduction-rounding differences. |
+
+EasyCache rejects streaming, camera/control subclasses, offload, compile, CUDA Graph, SP, other feature caches, approximate processors and inplace residuals. Resident native Wan2.2 dual experts now have the restricted schedule contract below. Conditions must contain tensors, mappings, lists/tuples and scalars. Block callbacks must preserve their inputs. Scoped attention rejects unvalidated Graph/SP/approximate-processor compositions; the Wan Sol path also rejects compile.
+
+Wan Sol configuration, after installing the provider in an isolated environment:
+
+```python
+policy = RuntimePolicy(
+    device="cuda", dtype=torch.bfloat16,
+    options={
+        "dit_weight_dtype": "bf16",
+        "accelerations": {"attention_policy": {
+            "self": {"backend": "sol_attn", "tau": 1.0}, "cross": "torch",
+        }},
+    },
+)
+```
+
+The tested environment uses sol-attn 0.5.0, PyTorch 2.10.0+cu128, Triton 3.6.0, CUTLASS DSL 4.8.0, cuda-python 13.4.1 and apache-tvm-ffi 0.1.14.post1. Install the pinned Sol branch's `techniques/sparse_backends` in a separate environment. The common probe requires at least PyTorch 2.10, CUDA 12.8, Triton 3.6 and sol-attn 0.5.
+
+This Sol provider consumes BF16 Q/K/V; it is separate from the selective FP8 projection plugin. With the default `compress_kv=True`, `tau=0` still routes against a mean threshold and can compress K/V. It is not a dense-attention setting. `compress_kv=False` explicitly disables compression while retaining the Sol kernel and its numerical rounding; this remains an approximate candidate requiring full-generation validation.
+
+## Selected projection precision and cross-KV packing
+
+Select Wan FFN projections without changing attention or normalization precision:
+
+```python
+policy = RuntimePolicy(
+    device="cuda", dtype=torch.bfloat16,
+    options={
+        "dit_weight_dtype": "bf16",
+        "accelerations": {"selective_fp8": {
+            "include": ["blocks.*.ffn.0", "blocks.*.ffn.2"],
+            "scaling": "rowwise", "use_fast_accum": False,
+        }},
+    },
+)
+```
+
+Supported graphs are native WanModel and stateless Sana/SanaMS/SanaMSVideo with their default blocks. Selection must match eligible plain linears; unmatched patterns, tied storage, hooks on replaced Linear modules, customized forwards and unsupported checkpoint graphs fail before mutation. Parent pre/post hooks remain in the call path. CPU or small CUDA workloads may execute the retained original dense operator, which is recorded as fallback and cannot establish an FP8 speedup. CUDA low-precision GEMMs use `torch._scaled_mm`; this is not a native packed SVDQuant kernel.
+
+Original dense weights remain resident for exact restoration; FP8 execution weights and scales add memory. This plugin optimizes compute and does not promise weight-memory savings. It rejects generic quantization, feature/static-KV caches, approximate attention, offload, compile, Graph and SP. Default SANA pointwise fusion is an allowed candidate, but the combined generation quality still needs validation.
+
+Wan K/V packing is independently selectable:
+
+```python
+policy = RuntimePolicy(
+    device="cuda", dtype=torch.bfloat16,
+    options={"accelerations": {"wan_cross_kv_fusion": {
+        "min_tokens": 256, "include_image": False,
+    }}},
+)
+```
+
+This adapter keeps the original K/V Parameters and checkpoint keys, adding derived packed tensors. At Wan2.2 5B width 3072 across 30 blocks, text K/V packing alone adds about **1.1 GiB** of BF16 weights. Native default cross-attention and static-KV cache misses share the same projection seam; cache hits reuse their existing entries. Existing static-KV entries must be invalidated before installation. Removal clears packed tensors and invalidates cached results so the next call uses the original schedule.
+
+Ordinary parameter operations, checkpoint assignment and dtype/device conversion refresh packed weights by source identity/version. Raw `.data` edits require reinstallation; weight or conditioning changes also retain the existing static-cache invalidation requirement. Custom processors, hooked/overridden projections, training, compile, capture, offload and SP are rejected. Selecting the same cross K/V through `selective_fp8` conflicts before activation, regardless of option order. The runtime counters separately report text/image packed calls and dense bypasses.
+
+## Matched Wan2.1 LightVAE
+
+The explicit `lightvae-wan21` codec variant uses [LightX2V's student checkpoint](https://huggingface.co/lightx2v/Autoencoders/resolve/main/lightvaew2_1.pth): 32,208,043 bytes, SHA256 `d5d6b094d4829fb03b6179be2cf4589baab21c9fea1ca70dcaa8c85ba8183ec9`. All **194** keys and shapes match the native base24 architecture: 24/48/96 feature channels, 16 latent channels and 11 encoder downsample blocks. It shares Wan16 mean/std, BCTHW layout and 8× spatial/4× temporal compression. Teacher base96 or Wan2.2 48-channel weights fail strict admission.
+
+This is a codec architecture choice using different learned weights. The report always marks it **algorithmically approximate**, even when its implementation matches the independent student reference. Rebuild the codec with teacher weights to restore the teacher architecture. FP32 resident CPU/CUDA inference is the supported path; other build purposes, lower precision/autocast, tiling, extra temporal chunking, parallel decode, offload, generic quantization, compile, Graph and SP remain rejected.
+
+SANA-Video 480p defaults to tiled codec execution, so explicitly disable it when selecting this variant:
+
+```python
+pipeline = NativeDiffusionPipeline.from_pretrained(
+    "sana-video-2b-480p",
+    policy=RuntimePolicy(device="cuda", dtype=torch.bfloat16),
+    checkpoint_overrides={"codec": "/path/to/lightvaew2_1.pth"},
+    component_options={"latent_encoder:codec": {
+        "variant": "lightvae-wan21", "tiled": False, "dtype": torch.float32,
+    }},
+)
+```
+
+Wan recipes use their existing `vae` checkpoint override instead of SANA's `codec` binding. Standalone consumers use `load_wan_video_codec(path, variant="lightvae-wan21", device="cuda", dtype=torch.float32)`. No global decoder substitution occurs. CPU/H100 tests compare the official student against independent `reference_21.WanVAE_(dim=24)`, including first/body cache transitions, repeat-call reset, encode/decode and honest call receipts. Matching architecture and implementation does not certify student-vs-teacher video quality.
+
+## Calibrated plugins and independent MHA schedules
+
+All new plugins default off. Numerical providers live under `core/acceleration/quantization/` and `core/attention/`; checkpoint graph and lifecycle adapters live under `base_models/diffusion_model/optimizations/`. Shared `projection_selection.py` and `guards.py` keep projection admission and fixed-weight lifecycle checks consistent.
+
+| Entry point | Execution contract | Boundaries |
+| --- | --- | --- |
+| `svdquant: {artifact: path}` | Offline channel calibration, smoothing, deterministic low-rank decomposition and group-64 packed W4A4 residuals; integer register unpacking feeds INT8 tensor-core dots; separate low-rank down GEMM with up projection fused into the epilogue | Selected native Wan/SANA linears; CUDA SM80+, FP16/BF16, eager no-grad. No dense residual-weight expansion or silent dense fallback. Original modules stay resident for removal, so total weight-memory savings are not claimed. |
+| `optimized_mha` | Independent Wan self/cross fusion, projection/output precision and SDPA; original RMSNorm, RoPE, image/text split and canonical parameters | Fusion `none/kv/qkv`; cross qkv means separate Q plus fused KV. Precision `native/fp8_e4m3/fp8_e5m2/int8`; E5M2 uses a separate Triton GEMM. |
+| MHA SDPA | `torch/cudnn/fa2`; explicit `quantized_sdpa=True` casts raw unscaled E4M3 Q/K/V; pointer FA2 also quantizes P in P@V | FP8 SDPA uses pointer FA2 or optional cuDNN Frontend. TMA supports native-precision FA2 only and requires Triton ≥3.5. Older Triton pointer FA2 uses a validated fixed tile to avoid Hopper compiler-abort configurations. |
+| Codec `fp8_calibration=path` | Calibrated E4M3 implicit GEMM for selected matched Wan21 LightVAE encoder Conv2d/Conv3d; original `CausalConv3d.forward` and caching | SM90+, resident FP32, untiled. Decoder, normalization, SDPA math and caches remain FP32; selected attention convolution projections are quantized. This is not a port of the entire FlashDreams C++ codec. |
+
+MHA receipts distinguish actual low-precision kernels from dense/fallback projection calls. Existing providers may retain dense execution for small GEMMs; diagnostics require every configured module and projection to execute and reject any dense/fallback calls in requested quantized projections.
+
+```python
+policy = RuntimePolicy(
+    device="cuda", dtype=torch.bfloat16,
+    options={"dit_weight_dtype": "bf16", "accelerations": {
+        "optimized_mha": {
+            "self": {"fusion": "qkv", "sdpa_backend": "torch"},
+            "cross": {"fusion": "kv", "sdpa_backend": "torch"},
+        },
+    }},
+)
+# Evaluate SVDQuant separately after exporting checkpoint-bound calibration:
+svd_options = {"svdquant": {"artifact": "/path/to/svdquant.pt"}}
+```
+
+Calibration artifacts load with `weights_only=True` and record source-parameter SHA256, tensor geometry, provenance and observed calls. Weight or convolution-geometry mismatches reject installation before mutation. `worldfoundry-svdquant-v1` is an independent layout and cannot consume Nunchaku packed checkpoints. INT4 represents only the residual branch; low-rank and quantized branches jointly determine accuracy.
+
+```bash
+PYTHONPATH=. python benchmarks/inference/calibrate_plugins.py svdquant \
+  --assets "$ASSETS" --include 'blocks.*.ffn.0' 'blocks.*.ffn.2' \
+  --rank 32 --frames 17 --out /tmp/calibration-new/svdquant.pt \
+  --save-references /tmp/calibration-new/rgb
+PYTHONPATH=. python benchmarks/inference/calibrate_plugins.py lightvae_fp8 \
+  --checkpoint /path/to/lightvaew2_1.pth \
+  --reference /tmp/calibration-new/rgb/calibration_11.pt /tmp/calibration-new/rgb/calibration_12.pt \
+  --include 'model.encoder.*' 'model.conv1' --frames 17 \
+  --out /tmp/calibration-new/lightvae-fp8.pt
+```
+
+Calibration uses distinct prompts with seeds 11/12; evaluation uses held-out seeds 42/43. Pass `fp8_calibration` to `load_wan_video_codec` or codec component options, or use runtime option `vae_fp8_calibration`; the explicit `lightvae-wan21` variant is required.
+
+`benchmarks/inference/lightvae_fp8.py` compares FP32 and FP8 encoders from the identical student checkpoint through a common unchanged FP32 student decoder. It isolates quantization drift and does not replace student/teacher quality validation. Every selected convolution must execute. Input clipping remains a quantization diagnostic; finite outputs can be timed with quality recorded separately.
+
+```bash
+PYTHONPATH=. python benchmarks/inference/lightvae_fp8.py \
+  --checkpoint /path/to/lightvaew2_1.pth --artifact /path/to/lightvae-fp8.pt \
+  --reference /path/to/reference_42.pt /path/to/reference_43.pt \
+  --rounds 3 --out /tmp/lightvae-fp8-diagnostic-new
+```
+
+These plugins require fixed placement, eval and eager inference. Uninstall before editing weights, loading checkpoints or moving the model. MHA and FP8 codec retain canonical state dicts; active SVDQuant wrappers reject canonical checkpoint serialization. Existing cache, compile, Graph and SP restrictions remain in force.
+
+## Resident dual-expert EasyCache
+
+Native Wan2.2 routed denoisers prepare an immutable full request schedule before the first CFG evaluation. A monotone high-to-low schedule maps global steps to each expert's local zero-based index and local phase length, so low-noise EasyCache starts at zero and warmup/final dense gates apply to its own phase. High/low models and CFG branches own separate residual state; malformed schedules, changed timesteps, duplicate/noncontiguous calls and incomplete phases fail explicitly.
+
+Both independent native WanDenoiser experts must enable EasyCache. The supported composition is resident eager execution with dense single-rank CFG (`cfg_parallel_degree=1`, `cfg_gate_step=1.0`), without other caches, Graph, compile, SP, approximate attention or inplace residuals. Native runners prepare/finalize the schedule automatically; direct denoiser callers must call `prepare_request_schedule(request_id, schedule)` and finalize with `end_request`. Local tests cover routing, phase warmup/final gates, CFG/request isolation and exception cleanup. Real A14B generation quality and speed are not established by these tests.
+
+## Validation and performance measurement
+
+`native_plugins.py` evaluates candidate JSON on native SANA/Wan; `lightvae.py` compares teacher/student decoders; `lightvae_encoder.py` compares encoders through a common teacher decoder; `lightvae_fp8.py` compares FP32/FP8 encoders from the same student checkpoint.
+
+Diagnostics record quality, execution and paired latency separately. The default comparison budget is latent relative L2 ≤0.03, PSNR ≥33 dB and minimum frame SSIM ≥0.98. Executed candidates with finite outputs are timed even when they miss this budget, with status `measured_quality_tradeoff`. Automatic recommendations still require the quality budget and stable speedup. Use `--quality-only` to omit timing.
+
+Nonfinite outputs, unexecuted optimizations and shared GPUs do not qualify for performance results. At least three alternating paired rounds exclude loading, installation and JIT; timed execution and outputs are checked against their pilots. FP8 clipping remains a diagnostic and does not imply a kernel failed to execute.
+
+Use a committed worktree for reproducible runs. Records include the Git revision, environment, configuration and input file sizes/modification times. Input changes invalidate the run; calibrated plugins still verify parameter digests. Diagnostics do not scan unrelated model sources or repeatedly read entire checkpoints to hash them. Parent pre/post hooks remain supported; hooks on replaced or bypassed Linear modules require removal.
+
+```bash
+PYTHONPATH=. python benchmarks/inference/native_plugins.py \
+  --model wan2.1-t2v-1.3b --assets "$ASSETS" \
+  --candidates /path/to/candidates.json --out /tmp/native-plugin-results
+PYTHONPATH=. python benchmarks/inference/lightvae_encoder.py \
+  --teacher /path/to/Wan2.1_VAE.pth --student /path/to/lightvaew2_1.pth \
+  --reference /path/to/reference_42.pt --reference /path/to/reference_43.pt \
+  --rounds 3 --out /tmp/lightvae-encoder-results
+```
+
+## H100 measurements
+
+These records use implementation revision `183147e3`: Wan1.3B, 320×576, 20 steps, CFG 6, shift 7, seeds 42/43. Percentages denote speedup relative to 1. Raw JSON contains quality metrics, execution receipts and paired timings.
+
+| Candidate | Result | Evidence and limits |
+| --- | --- | --- |
+| Native-precision MHA, self QKV + cross KV, 17 frames | Final latents/RGB bitwise identical for both seeds | **1.014243×/1.011870×**, CI95 **[1.012128, 1.017954]/[1.010975, 1.015053]**. Every timed output matches its pilot; execution and sampled GPU gates pass. [Record](/measurements/wan-mha-quality-timing-2026-10-04.json). |
+| Same configuration, 41 frames | Bitwise identical for both seeds | **1.005988×/1.006554×**, CI95 **[1.003248, 1.033685]/[1.006424, 1.007259]**. [Record](/measurements/wan-mha-41f-quality-timing-2026-10-04.json). |
+| Pointer FA2, FP8 SDPA, FP8/INT8 self projections, 17 frames | All eight cases execute their requested kernels but fail quality | Relative L2 **0.0966–0.3870**; minimum frame SSIM **0.6442–0.9295**. No timing. [Record](/measurements/wan-mha-quality-timing-2026-10-04.json). |
+| Rank32 SVDQuant, all FFN / final-block FFN | All four cases execute packed kernels but fail quality | All-FFN relative L2 **0.5033/0.4037**; block 29 only **0.0925/0.1455**. No dense/fallback or timing. [Record](/measurements/wan-svdquant-quality-2026-10-04.json). |
+| Full FP8 LightVAE encoder, 32 convolutions | Both cases fail latent quality | Relative L2 **0.2568/0.2511**. Passing PSNR/SSIM cannot override the latent budget; seed 42 also clips input operands. [Record](/measurements/lightvae-fp8-full-quality-2026-10-04.json). |
+| LightVAE `downsamples.0.residual.6` only | Both cases pass quality/execution but run slower | Relative L2 **0.01082/0.01106**; encoder speedup **0.95264×/0.92091×**. [Record](/measurements/lightvae-fp8-residual-quality-timing-2026-10-04.json). |
+| LightVAE `middle.1.proj` only | Both cases pass quality/execution; no stable speed certification | Relative L2 **0.000979/0.000983**; encoder speedup **1.00769×/1.00349×**. Seed 43 CI95 **[0.98503, 1.01022]** crosses 1. [Record](/measurements/lightvae-fp8-projection-quality-timing-2026-10-04.json). |
+
+SANA pointwise fusion with native strides preserves both seeds bit for bit, measuring 1.0051×/1.0015×. One confidence interval crosses 1, so there is no stable speedup recommendation. [SANA measurements](/measurements/sana-vendor-norm-quality-timing-2026-10-04.json).
+
+## Current limitations
+
+Measurements cover the fixed inputs above. Broader generation quality remains to be evaluated. Quantization, caching, sparse attention and lightweight encoders require quality checks appropriate to their intended use. Encoder-only timings and full-generation timings are evaluated separately.
+
+Native plugin combinations with cache/compile/Graph/SP, Nunchaku checkpoint compatibility and FP8 TMA still need adapters. Existing incompatibility checks remain active; see each plugin's configuration contract. Original modules are retained for removal, so SVDQuant does not currently reduce total retained weight memory.

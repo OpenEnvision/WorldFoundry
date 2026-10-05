@@ -1,124 +1,82 @@
 ---
-title: Add a Model
-description: Checklist for adding model manifests, runtime profiles, runners, checkpoints, operators, and pipelines.
+title: Add a model
+description: How to land a WorldFoundry model integration — pipeline, operator, runtime, catalog, and the evidence a first PR needs.
 ---
 
-## Introduction
+Adding a model to WorldFoundry is not “drop a checkpoint into a folder and hope the CLI finds it.” The catalog records identity and provenance. A pipeline loads weights and runs inference. An operator turns a `GenerationRequest` into the inputs that pipeline understands. A binding tells the evaluation runner which class to import. A runtime profile describes the environment and assets. None of those pieces is optional if you want the model to be a first-class, rerunnable method in this repository.
 
-Keep the first model PR narrow: one model family, one operator, one pipeline, one runtime profile if needed, one resolved runner path, and one focused run-evidence report.
+This guide walks through that route in the order a reviewer will look at it. The companion pages are [Models](/docs/guides/supported-models) for existing IDs, [Run inference](/docs/guides/inference) for launching a demo, [Local assets](/docs/guides/local-assets) for checkpoint layout, and [Design](/docs/overview/design) for why generation and scoring stay on opposite sides of an artifact boundary.
 
-A good first PR proves the route works end to end. It does not need to cover every task variant, every checkpoint, or every benchmark cell on day one.
+## Keep the first PR narrow
 
-## Implementation areas
+The first pull request should prove one route end to end. Pick one model family, one operator, one pipeline, one runtime profile if the environment is not the unified default, one resolved runner path, and one focused run-evidence report. That is enough to show that catalog → binding → operator → pipeline → artifact works on a machine a reviewer can reconstruct.
 
-Each model integration touches a few fixed surfaces. Use this list to decide where your diff should land:
+Do not wait until every checkpoint variant, every task alias, and every benchmark cell is green. Those can follow once the spine exists. A wide first PR that also rewrites shared loaders, invents a second binding parser, or vendors a training tree is harder to review and easier to regress.
 
-- **Pipeline and operator** — Public model entrypoint plus input shaping for prompts, images, video, camera controls, actions, and interaction state.
-- **Runtime implementation** — Inference code under the appropriate synthesis, representation, or base-model package.
-- **Evaluation binding** — Canonical route resolution so the CLI and benchmark runner can find the method.
-- **Catalog metadata** — Source, license, checkpoint refs, task coverage, runtime profile, blockers, and support state.
-- **Focused checks** — Small deterministic tests or helper commands that prove the changed runner surface.
+## What an integration actually touches
 
-## Runnable route contract
+A WorldFoundry model is a stack of five surfaces. The pipeline is the public entrypoint: a class under `worldfoundry/pipelines/<family>/` that exposes `from_pretrained()` and a deterministic `process()` or `__call__()`. That class owns checkpoint construction and the native generate call. It should not parse prompts, decode camera trajectories, or decide which image tensor is “the first frame.” That work belongs to the operator.
 
-WorldFoundry resolves every runnable method through the same public contract. Before adding shortcuts, confirm these rules:
+The operator lives under `worldfoundry/operators/`. Every runnable method needs one, even when the first version is thin. Its job is to validate the request, load media, parse camera or action controls, and shape interaction state so the pipeline sees a stable, typed input. If you skip the operator and stuff that logic into the pipeline, the next benchmark or Studio form will have nowhere clean to attach.
 
-- **Pipeline** — Every runnable method must resolve to a concrete pipeline class through catalog `pipeline_target` or `evaluation/models/pipelines/bindings.py`.
-- **Operator** — Every runnable pipeline must own an operator, even when the first implementation is thin. Put input validation, media loading, camera/action parsing, and interaction shaping there.
-- **Runtime profile** — Runtime profiles describe environment, checkpoints, commands, and execution metadata. They do not replace a pipeline/operator route and must not be the only support claim.
-- **Binding source** — Keep route normalization in `evaluation/models/pipelines/bindings.py`; do not add parallel parsers in catalog, loading, resolver, or check code.
-- **Base-model code** — `base_models/perception_core` and `base_models/three_dimensions` are inference/runtime primitives only. Do not add training loops, dataset builders, dataloaders, augmentation pipelines, or callbacks there.
+Backend-specific inference code — the vendor `inference.py`, the transformer block, the tokenizer wrapper — belongs in `worldfoundry/synthesis/`, `worldfoundry/base_models/`, following the layout already used by that family. Those packages are runtime primitives. They are not a place for training loops, dataset builders, dataloaders, augmentation pipelines, or Lightning callbacks.
 
-## Implementation checklist
+The evaluation binding is how CLI, TUI, and the generic benchmark runner find the method. Resolution always goes through catalog `pipeline_target` or `pipeline_binding`, then through `worldfoundry/evaluation/models/pipelines/bindings.py`. That file is the only place that should normalize route strings. Do not add a second parser in catalog loading, in the resolver, or in a check helper.
 
-<Steps>
-  <Step>
-    Add or update the pipeline under `worldfoundry/pipelines/<family>/`; it must expose `from_pretrained()` and a deterministic `process()` / `__call__()` contract.
-  </Step>
-  <Step>
-    Add or update the operator under `worldfoundry/operators/`; do this for every runnable method, not only for complex input paths.
-  </Step>
-  <Step>
-    Keep backend-specific inference code inside `base_models/`, `synthesis/`, or `representations/` according to the existing layout. Do not commit training/data-processing helper trees into perception or 3D base-model packages.
-  </Step>
-  <Step>
-    Register the route through catalog YAML `pipeline_target` or the canonical binding helpers in `evaluation/models/pipelines/bindings.py`.
-  </Step>
-  <Step>
-    Add an inference handler in `worldfoundry/evaluation/models/pipelines/handlers.py` only when the model can participate in the generic benchmark runner.
-  </Step>
-  <Step>
-    Add or update the relevant `worldfoundry/data/models/catalog/<category>/<model-id>.yaml` entry with source, license, checkpoint refs, tasks, runtime profile, and integration status.
-  </Step>
-  <Step>
-    Add a small model-zoo check helper when official demo settings can be compared.
-  </Step>
-  <Step>
-    Add a focused regression for deterministic runner behavior.
-  </Step>
-</Steps>
+Finally, catalog metadata is the public record. The YAML under `worldfoundry/data/models/catalog/<category>/<model-id>.yaml` holds source, license, checkpoint refs, task coverage, runtime profile, blockers, and `integration.status`. The support matrix does not trust those fields as proof. It recomputes readiness from staged evidence.
 
-## Status rules
+## The runnable route contract
 
-Catalog fields describe intent; staged evidence decides whether the support matrix agrees.
+WorldFoundry resolves every runnable method through the same public contract. A method is runnable only when a concrete pipeline class can be imported. You name that class with `pipeline_target` (`module:Class`) or with a `pipeline_binding` id that bindings.py already knows. If neither is present, `worldfoundry-eval run <model-id>` will fail before any GPU work starts, and that is intentional.
 
-- **`source.status=open_source`** — Official public source is available and license metadata is recorded.
-- **`source.status=api`** — Model is accessed through a hosted provider or private service boundary.
-- **`source.status=closed`** — Public runnable source/checkpoint is not available.
-- **`integration_status=planned`** — Source or code exists, but required runnable checks are incomplete.
-- **`integration_status=blocked`** — Source, license, checkpoint, dependency, API, or hardware condition prevents runnable integration.
-- **`integration_status=integrated`** — Required runnable checks pass and the report is fresh for the current manifest.
+A runtime profile is not a substitute for that route. Profiles describe conda or Docker environment, checkpoint roles, launch commands, and execution metadata. They help a machine *prepare* to run. They do not, by themselves, count as “this model is integrated.” A catalog row that only lists a profile and no pipeline will stay planned or blocked.
 
-Manifest claims alone are not trusted. The support matrix recomputes readiness from staged evidence.
+`base_models/perception_core` and `base_models/three_dimensions` follow the same rule more strictly: inference and runtime helpers only. If the official tree ships a training script next to `inference.py`, leave the training side out of the in-tree package. Port the infer path; do not import the trainer.
 
-## Useful commands
+## Implement the route
 
-<Tabs items={['Discover', 'Check local', 'Download', 'Fetch', 'Evaluate']}>
-  <Tab>
+Start with the pipeline. Put it under `worldfoundry/pipelines/<family>/` so the family stays browsable. `from_pretrained()` should accept the same kinds of arguments the loader already knows how to pass — model path or options dict, device, model id — and should fail loudly when a required checkpoint is missing. `process()` / `__call__()` should return something the WorldFoundry runner can wrap as a `GenerationResult`: status, timings, errors, and durable artifact paths. Do not return an in-memory tensor as the only output. Evaluation and Studio need a file they can reopen after the process exits.
+
+Add the operator in the same change set. Even a first-pass operator that only checks “prompt is a string” and “image path exists” is better than a pipeline that silently accepts a dict of unknown keys. As the model grows — multi-view, action chunks, camera rigs — keep that growth in the operator so the pipeline stays a checkpoint runner.
+
+Place the vendor or in-house inference implementation according to the existing tree. Video synthesis usually lands under `synthesis/visual_generation/`. Interactive world models often sit next to a sibling that already vendors an official infer-only runtime. Perception and 3D helpers go under `base_models/`. Do not commit a second copy of the architecture under `cache/` and then import it from there. If the runner needs Python modules, those modules live under `worldfoundry/` and get reviewed with the rest of the PR.
+
+Register the route. The simplest form is a `pipeline_target` on the catalog YAML. If several aliases or a runtime profile should share one class, add or update a binding under `worldfoundry/data/models/bindings/pipelines/` and let `bindings.py` resolve it. The generic benchmark runner adapts pipeline calls in `worldfoundry/evaluation/models/pipelines/invocation.py`. Update that adapter only when the new pipeline needs an invocation form it does not already support. A working `worldfoundry-eval run <model-id>` path is the milestone.
+
+Write or update the catalog entry last, after the class names exist, so the YAML cannot claim a target that does not import. Record source URLs, license, Hugging Face `repo_id`s, local `checkpoint` roles, tasks, `runtime_profile`, and an honest `integration.status`. Use `planned` until a check report exists. Use `blocked` when a missing license, checkpoint, API key, or GPU class prevents a run. Use `integrated` only after the required checks pass and the report hashes still match the current manifest.
+
+If the official demo has a published command line you can compare against, add a small model-zoo check helper. Add a focused regression under `tests/` (manual streaming demos live in `tests/stream/`) for the deterministic parts: request shaping, path resolution, and “missing checkpoint raises.” Do not gate the PR on a multi-hour video run unless that is the only way the route can be shown.
+
+## Catalog status is a claim, evidence is the proof
+
+`source.status` describes how the weights and code are obtained. `open_source` means official public source exists and license metadata is recorded. `api` means a hosted provider or private service is the only execution surface. `closed` means there is no public runnable source or checkpoint. Those labels are about provenance, not about whether WorldFoundry can run the model today.
+
+`integration.status` is the WorldFoundry-side claim. `planned` means source or code is in tree but the runnable checks are incomplete. `blocked` means a concrete condition — license, checkpoint, dependency, API, or hardware — stops the run. `integrated` means the required checks passed and the report is still fresh for the current manifest hash. If you bump the YAML without regenerating the report, the support matrix treats the evidence as stale and will not agree with the label.
+
+## Discover, stage, and run
+
+After the YAML is in the catalog tree, confirm the zoo can see it. From the unified environment:
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo models --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-show --model-id <model-id-or-alias> --include-manifest --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-specs --model-id <model-id> --json
+worldfoundry-eval zoo models --json
+worldfoundry-eval zoo model-show --model-id <model-id-or-alias> --include-manifest --json
+worldfoundry-eval zoo model-specs --model-id <model-id> --json
 ```
 
-  </Tab>
-  <Tab>
+`model-show` is the fastest way to see whether aliases, `pipeline_target`, checkpoint roles, and the runtime profile parsed the way you intended. `model-specs` is the compact view of what a runner will actually consume.
+
+Staging checkpoints is separate from claiming them. `--check-local` only reports whether the configured cache already has the files:
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-download --check-local \
-  --model-id <model-id> \
-  --json
+worldfoundry-eval zoo model-download --check-local --model-id <model-id> --json
 ```
 
-  </Tab>
-  <Tab>
+On a machine that is allowed to fetch weights, add `--execute` and, if you need to pin the destination, `--repo-id` and `--cache-dir`. Write a download report with `--report-path tmp/model_zoo/download/<model-id>.json` so a reviewer can see what landed without copying blobs into git. Flags such as `--disable-xet`, `--disable-hf-transfer`, `--timeout`, and `--retries` belong only on that fetch machine.
+
+A first end-to-end inference check uses the model runner, not a benchmark:
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-download \
-  --model-id <model-id> \
-  --repo-id <org/name> \
-  --cache-dir /path/to/checkpoints \
-  --check-local \
-  --report-path tmp/model_zoo/download/<model-id>.json \
-  --json
-```
-
-  </Tab>
-  <Tab>
-
-```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo model-download --check-local \
-  --model-id <model-id> \
-  --execute \
-  --json
-```
-
-  </Tab>
-  <Tab>
-
-```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval evaluate \
+worldfoundry-eval evaluate \
   --mode model \
   --model-id <model-id> \
   --model-manifest-dir worldfoundry/data/models/catalog \
@@ -128,35 +86,33 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval evaluate \
   --json
 ```
 
-  </Tab>
-</Tabs>
+`artifact_count` only asks “did a file appear.” That is enough to prove the route. Scoring with a real benchmark protocol is a later PR, and it must consume the `GenerationResult` artifacts rather than calling the pipeline from inside a metric. If you are still choosing an environment, start from [Run inference](/docs/guides/inference) and the unified bootstrap; if the model needs a dedicated conda profile, install it with `bash scripts/setup/model_env_install.sh --model <model-id>` instead of guessing a prefix.
 
-Add `--execute`, `--disable-xet`, `--disable-hf-transfer`, `--timeout`, or `--retries` only on a machine allowed to fetch checkpoints.
+## What the check report must contain
 
-## Run-evidence report
+The model check command writes under `tmp/model_zoo/validation/<model-id>/`. The report is the object the support matrix hashes. It should record the manifest entry hash, the check-script hash, the git commit, per-stage results, any blockers, and the next action. If the YAML moves and the report does not, readiness falls back even when `integration.status` still says `integrated`.
 
-The model check command writes a report under `tmp/model_zoo/validation/<model-id>`. The report should include manifest entry hash, check script hash, git commit, stage results, blockers, and next action. If those drift, the support matrix treats the report as stale.
+Treat that directory as evidence, not as a cache of weights. Put checkpoints under `${WORLDFOUNDRY_CKPT_DIR}` or the Hugging Face cache; put generated videos under `tmp/` or `${WORLDFOUNDRY_ARTIFACT_DIR}`.
 
-## PR evidence
+## What a reviewer needs in the PR
 
-Attach enough context for a reviewer to rerun your path without guessing machine state:
+A reviewer should be able to rerun your path without asking which GPU node you used or which hidden env var made it work. Attach the catalog YAML diff, `tmp/model_zoo/validation/<model-id>/report.json`, the cache location and Hugging Face `repo_id` (not the weights), the official demo command with raw logs and the artifact it produced, the WorldFoundry runner command with its output path, and the focused tests. When you promote status, refresh `tmp/preflight_report.md` so the support matrix and the PR tell the same story.
 
-- **Manifest diff** — Relevant `worldfoundry/data/models/catalog/<category>/<model-id>.yaml` entry.
-- **Source checks** — `tmp/model_zoo/validation/<model-id>/report.json`.
-- **Checkpoint state** — Cache location and repo id, without committing the checkpoint.
-- **Demo parity** — Official command, raw logs, generated artifact path.
-- **Runner parity** — WorldFoundry runner command and output artifact path.
-- **Tests** — Focused files under `test/` or `test_stream/`.
-- **Support matrix** — Refreshed `tmp/preflight_report.md` when promoting status.
+Do not commit checkpoints, generated videos, local caches, API keys, or private assets. Those belong in the report as paths and hashes.
 
-Do not commit checkpoints, generated videos, local caches, API keys, or private assets.
+## Cache and runtime hygiene
 
-## Cache Boundary
+Cache directories are for temporary downloads, checkpoint copies, dataset mirrors, official-runtime clone caches, generated previews, and logs. They are not a second `worldfoundry/` tree. An in-tree runner must not import Python modules from a cache path. If the official repo is cloned only to harvest `inference.py`, vendor the infer-only slice under the appropriate package and delete the training side.
 
-Cache paths are allowed only for temporary downloads, checkpoint copies, dataset mirrors, official-runtime clone caches, generated previews, and logs. Do not put model architecture code in `cache/`, and do not make an in-tree runner import Python modules from a cache path. If the runner requires architecture code, place that code under `worldfoundry/` and review it with the model integration.
+Transforms that actually run at inference time may stay in the runtime package — GroundingDINO `util.transforms`, DUST3R crop helpers, DROID-SLAM RGB-D geometry. Training datasets, dataloaders, losses, callbacks, augmentation-only modules, and experiment scripts should not. `pixelsplat` is the current exception under 3D base models because it still uses the official Lightning test runner and a dataset-shaped loader. Treat that as debt to port into a pure inference runner, not as a pattern for the model you are adding.
 
-## Runtime hygiene
+## Model homepage
 
-Inference transforms that are needed at runtime may live in the relevant package, such as GroundingDINO `util.transforms`, DUST3R cropping/transforms, or DROID-SLAM RGB-D geometry helpers. Training datasets, dataloaders, losses, callbacks, augmentation-only modules, and experiment scripts should stay out of the runtime package unless the framework starts supporting in-repo training for that family.
+Each model article lives in its own file: `docs/fumadocs/content/docs/guides/supported-models/<model-id>.mdx` and the paired `.zh.mdx`. The Models catalog still links to `/docs/guides/supported-models/<model-id>`.
 
-`pixelsplat` is the current exception under 3D base models because it still uses the official Lightning test runner and dataset-shaped loader. Treat it as technical debt to port into a pure inference runner, not as a pattern for new integrations.
+`npm --prefix docs/fumadocs run models:generate` writes an initial page from the catalog `docs:` block and the recipe JSON. Edit that file for model-specific narrative — overview, architecture, figures, extra sections. Shared widgets stay embeddable:
+
+- `<ModelCommandBuilder modelId="<model-id>" locale="en" />` — run-command box
+- `<ModelRelatedRecipes modelId="<model-id>" locale="en" />` — same-family links
+
+To keep hand edits, set `pageSource: authored` in the frontmatter. Generated pages keep `pageSource: generated` and will be refreshed on the next generate. YAML `docs.overview` only seeds a generated page; it does not render the article once you own the MDX file.

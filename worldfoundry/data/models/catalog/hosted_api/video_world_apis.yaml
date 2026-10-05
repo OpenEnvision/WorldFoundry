@@ -9,6 +9,8 @@ models:
       official_repo_url: https://www.minimax.io/
     runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
     pipeline_binding: hailuo-2p3
+    official_sources:
+      project_page: https://www.minimax.io/
     integration:
       status: integrated
       notes:
@@ -19,6 +21,31 @@ models:
       status: not_applicable
       notes:
         - API output parity depends on provider-side model versioning and account access.
+    docs:
+      publisher: MiniMax
+      publisher_kind: company
+      publisher_zh: MiniMax（稀宇科技）
+      overview: Hailuo 2.3 is MiniMax's hosted video generation service, recorded in this catalog for image-to-video and joint audio-video generation. You hand it a start image (plus an optional prompt) and it returns a finished clip rendered on MiniMax's infrastructure — WorldFoundry never runs the model itself. The catalog also lists the aliases minimax-i2v and minimax_i2v for this entry, so older configs keep resolving. Use it when you want MiniMax's production quality inside WorldFoundry's Studio workflow without managing GPUs.
+      overview_zh: Hailuo 2.3（海螺 2.3）是 MiniMax 的托管视频生成服务，本 catalog 将其记录为图生视频与音视频联合生成两类任务。你提供一张起始图（可附文本提示词），它在 MiniMax 的基础设施上渲染出成片—— WorldFoundry 本身不运行该模型。该条目还登记了 minimax-i2v、minimax_i2v 两个别名，旧配置可以继续解析。适合在不管理 GPU 的前提下，把 MiniMax 的生产级生成质量接入 WorldFoundry 的 Studio 工作流。
+      architecture: 'This is a hosted, provider-operated model: the vendor has not published its architecture, parameter count, or training recipe, and this repository does not record them. What WorldFoundry records is the integration surface only — a Studio pipeline that submits requests to the provider endpoint and collects the returned video artifacts.'
+      architecture_zh: 这是由服务方托管运行的模型：厂商未公开其架构、参数规模或训练细节，本仓库也未记录这些信息。WorldFoundry 记录的只是集成层——一条向服务方端点提交请求并回收生成视频产物的 Studio pipeline。
+      usage_notes: 'The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Point the pipeline at your MiniMax platform key before launching jobs.'
+      usage_notes_zh: Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。启动任务前，请先在 pipeline 中配置你的 MiniMax 开放平台 key。
+      limitations:
+      - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+      - The provider controls model versioning, so outputs can change over time without any change in this repository — the manifest records runner parity as not applicable for this reason.
+      - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+      limitations_zh:
+      - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+      - 模型版本由服务方控制，输出可能随时间变化而与本仓库无关——因此 manifest 将 runner parity 记录为 not applicable。
+      - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+      recommended_benchmarks:
+      - id: vbench
+        reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs.
+        reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+      - id: physics-iq
+        reason: Probes whether provider-side video models respect basic physical plausibility.
+        reason_zh: 检验服务方视频模型是否遵循基本物理合理性。
 
   - id: kling-api
     name: Kling API
@@ -37,6 +64,35 @@ models:
       status: not_applicable
     runner_parity:
       status: not_applicable
+    docs:
+      publisher: Kuaishou
+      publisher_kind: company
+      publisher_zh: 快手（Kuaishou）
+      overview: Kling API is the hosted endpoint for Kuaishou's Kling video generation family, recorded here for text-to-video and image-to-video. Prompts or reference images are submitted to Kuaishou's service and the rendered clips come back as WorldFoundry artifacts. This entry exists so hosted Kling runs sit next to locally-run open models in the same Studio result format, making side-by-side comparison practical.
+      overview_zh: Kling API 是快手「可灵」视频生成系列的托管接入点，catalog 记录了文生视频与图生视频两类任务。提示词或参考图会提交到快手的服务端，渲染好的视频以 WorldFoundry 产物的形式返回。设立该条目的目的，是让托管的可灵结果与本地运行的开源模型共用同一套 Studio 结果格式，方便直接对比。
+      architecture: 'This is a hosted, provider-operated model: the vendor has not published its architecture, parameter count, or training recipe, and this repository does not record them. What WorldFoundry records is the integration surface only — a Studio pipeline that submits requests to the provider endpoint and collects the returned video artifacts.'
+      architecture_zh: 这是由服务方托管运行的模型：厂商未公开其架构、参数规模或训练细节，本仓库也未记录这些信息。WorldFoundry 记录的只是集成层——一条向服务方端点提交请求并回收生成视频产物的 Studio pipeline。
+      usage_notes: 'The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Credentials come from the Kling open platform (app.klingai.com).'
+      usage_notes_zh: Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。凭据需在可灵开放平台（app.klingai.com）申请。
+      limitations:
+      - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+      - The provider controls model versioning, so outputs can change over time without any change in this repository — the manifest records runner parity as not applicable for this reason.
+      - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+      limitations_zh:
+      - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+      - 模型版本由服务方控制，输出可能随时间变化而与本仓库无关——因此 manifest 将 runner parity 记录为 not applicable。
+      - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+      recommended_benchmarks:
+      - id: vbench
+        reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs.
+        reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+      - id: physics-iq
+        reason: Probes whether provider-side video models respect basic physical plausibility.
+        reason_zh: 检验服务方视频模型是否遵循基本物理合理性。
+
+    official_sources:
+
+      project_page: https://app.klingai.com/
 
   - id: luma-ray2
     name: Luma Ray2
@@ -55,6 +111,35 @@ models:
       status: not_applicable
     runner_parity:
       status: not_applicable
+    docs:
+      publisher: Luma AI
+      publisher_kind: company
+      publisher_zh: Luma AI
+      overview: Luma Ray2 is Luma AI's hosted video generation model, cataloged for text-to-video and image-to-video. WorldFoundry's Studio pipeline wraps the Luma API so a prompt or a start frame turns into a downloadable clip inside the normal WorldFoundry result layout. Nothing about the model runs locally; this entry is the bookkeeping and plumbing for the hosted route.
+      overview_zh: Luma Ray2 是 Luma AI 的托管视频生成模型，catalog 记录其文生视频与图生视频能力。 WorldFoundry 的 Studio pipeline 封装了 Luma API：一条提示词或一帧起始图，最终以标准 WorldFoundry 结果目录中的可下载视频呈现。模型本身完全不在本地运行；该条目承担的是托管路径的记录与管道工作。
+      architecture: 'This is a hosted, provider-operated model: the vendor has not published its architecture, parameter count, or training recipe, and this repository does not record them. What WorldFoundry records is the integration surface only — a Studio pipeline that submits requests to the provider endpoint and collects the returned video artifacts.'
+      architecture_zh: 这是由服务方托管运行的模型：厂商未公开其架构、参数规模或训练细节，本仓库也未记录这些信息。WorldFoundry 记录的只是集成层——一条向服务方端点提交请求并回收生成视频产物的 Studio pipeline。
+      usage_notes: 'The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Keys are issued through Luma''s developer platform (lumalabs.ai).'
+      usage_notes_zh: Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。API key 通过 Luma 开发者平台（lumalabs.ai）签发。
+      limitations:
+      - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+      - The provider controls model versioning, so outputs can change over time without any change in this repository — the manifest records runner parity as not applicable for this reason.
+      - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+      limitations_zh:
+      - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+      - 模型版本由服务方控制，输出可能随时间变化而与本仓库无关——因此 manifest 将 runner parity 记录为 not applicable。
+      - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+      recommended_benchmarks:
+      - id: vbench
+        reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs.
+        reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+      - id: physics-iq
+        reason: Probes whether provider-side video models respect basic physical plausibility.
+        reason_zh: 检验服务方视频模型是否遵循基本物理合理性。
+
+    official_sources:
+
+      project_page: https://lumalabs.ai/
 
   - id: runway-gen4p5
     name: Runway Gen-4.5
@@ -74,6 +159,35 @@ models:
       status: not_applicable
     runner_parity:
       status: not_applicable
+    docs:
+      publisher: Runway
+      publisher_kind: company
+      publisher_zh: Runway
+      overview: Runway Gen-4.5 is Runway's hosted image-to-video model. Give it a start image and it returns an animated clip generated on Runway's service; the catalog keeps the legacy aliases gen_3_i2v and gen-3-i2v pointing at this entry so earlier WorldFoundry configs still resolve. Like every hosted_api entry, it exists so provider-rendered results flow through the same Studio pipeline and artifact format as local models.
+      overview_zh: Runway Gen-4.5 是 Runway 的托管图生视频模型。提供一张起始图，它在 Runway 服务端生成动态视频； catalog 保留了 gen_3_i2v、gen-3-i2v 两个历史别名指向本条目，保证早期 WorldFoundry 配置继续可用。与所有 hosted_api 条目一样，它的意义在于让服务方渲染的结果走进与本地模型一致的 Studio pipeline 与产物格式。
+      architecture: 'This is a hosted, provider-operated model: the vendor has not published its architecture, parameter count, or training recipe, and this repository does not record them. What WorldFoundry records is the integration surface only — a Studio pipeline that submits requests to the provider endpoint and collects the returned video artifacts.'
+      architecture_zh: 这是由服务方托管运行的模型：厂商未公开其架构、参数规模或训练细节，本仓库也未记录这些信息。WorldFoundry 记录的只是集成层——一条向服务方端点提交请求并回收生成视频产物的 Studio pipeline。
+      usage_notes: 'The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Runway API credentials are managed in your Runway workspace settings.'
+      usage_notes_zh: Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。Runway 的 API 凭据在其工作区设置中管理。
+      limitations:
+      - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+      - The provider controls model versioning, so outputs can change over time without any change in this repository — the manifest records runner parity as not applicable for this reason.
+      - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+      limitations_zh:
+      - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+      - 模型版本由服务方控制，输出可能随时间变化而与本仓库无关——因此 manifest 将 runner parity 记录为 not applicable。
+      - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+      recommended_benchmarks:
+      - id: vbench
+        reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs.
+        reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+      - id: physics-iq
+        reason: Probes whether provider-side video models respect basic physical plausibility.
+        reason_zh: 检验服务方视频模型是否遵循基本物理合理性。
+
+    official_sources:
+
+      project_page: https://runwayml.com/
 
   - id: sora2
     name: Sora2
@@ -92,6 +206,37 @@ models:
       status: not_applicable
     runner_parity:
       status: not_applicable
+    docs:
+      publisher: OpenAI
+      publisher_kind: company
+      publisher_zh: OpenAI
+      overview: Sora2 is the catalog entry for OpenAI's Sora 2 hosted video model, recorded for text-to-video and image-to-video. Prompts are submitted to OpenAI's API and the generated clips are stored as standard WorldFoundry artifacts, letting Sora 2 output be evaluated with the same tooling as any local model in this repository. WorldFoundry does not, and cannot, run Sora locally — the entry records only the hosted integration.
+      overview_zh: Sora2 是 OpenAI Sora 2 托管视频模型在本 catalog 中的条目，记录了文生视频与图生视频任务。提示词提交给 OpenAI 的 API，生成的视频以标准 WorldFoundry 产物保存，使 Sora 2 的输出能够用与仓库内本地模型相同的工具链来评测。WorldFoundry 不会（也无法）在本地运行 Sora——该条目仅记录托管集成。
+      architecture: OpenAI has publicly described the original Sora as a diffusion transformer operating on spacetime patches of video latents; beyond that public statement, no architecture, scale, or training details for Sora 2 are disclosed, and this repository records none.
+      architecture_zh: OpenAI 曾公开将初代 Sora 描述为在视频潜空间时空 patch 上运行的扩散 Transformer；除这一公开表述外，Sora 2 的架构、规模与训练细节均未披露，本仓库亦未记录。
+      usage_notes: 'The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Access requires an OpenAI account with Sora API availability in your region and tier.'
+      usage_notes_zh: Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。使用前需确认你的 OpenAI 账号在所在地区与订阅层级下拥有 Sora API 权限。
+      limitations:
+      - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+      - The provider controls model versioning, so outputs can change over time without any change in this repository — the manifest records runner parity as not applicable for this reason.
+      - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+      - Sora API access is region- and tier-gated by OpenAI; availability is outside this repository's control.
+      limitations_zh:
+      - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+      - 模型版本由服务方控制，输出可能随时间变化而与本仓库无关——因此 manifest 将 runner parity 记录为 not applicable。
+      - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+      - Sora API 的访问受 OpenAI 的地区与层级限制，可用性不受本仓库控制。
+      recommended_benchmarks:
+      - id: vbench
+        reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs.
+        reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+      - id: physics-iq
+        reason: Probes whether provider-side video models respect basic physical plausibility.
+        reason_zh: 检验服务方视频模型是否遵循基本物理合理性。
+
+    official_sources:
+
+      project_page: https://openai.com/sora/
 
   - id: veo3
     name: Veo3
@@ -110,6 +255,35 @@ models:
       status: not_applicable
     runner_parity:
       status: not_applicable
+    docs:
+      publisher: Google DeepMind
+      publisher_kind: company
+      publisher_zh: Google DeepMind
+      overview: Veo3 is the catalog entry for Google DeepMind's Veo 3 hosted video model, recorded for text-to-video and image-to-video. WorldFoundry submits generation requests through Google's API and collects the rendered clips as artifacts, so Veo 3 results can be lined up against open models in the same evaluation harness. The model itself never leaves Google's infrastructure.
+      overview_zh: Veo3 是 Google DeepMind 的 Veo 3 托管视频模型在本 catalog 中的条目，记录文生视频与图生视频任务。 WorldFoundry 通过 Google 的 API 提交生成请求并把渲染结果收为产物，使 Veo 3 的结果可以与开源模型在同一套评测框架下对比。模型本体始终运行在 Google 的基础设施上。
+      architecture: 'This is a hosted, provider-operated model: the vendor has not published its architecture, parameter count, or training recipe, and this repository does not record them. What WorldFoundry records is the integration surface only — a Studio pipeline that submits requests to the provider endpoint and collects the returned video artifacts.'
+      architecture_zh: 这是由服务方托管运行的模型：厂商未公开其架构、参数规模或训练细节，本仓库也未记录这些信息。WorldFoundry 记录的只是集成层——一条向服务方端点提交请求并回收生成视频产物的 Studio pipeline。
+      usage_notes: 'The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Veo access is provisioned through Google''s AI developer offerings (e.g. the Gemini API); regional availability applies.'
+      usage_notes_zh: Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。Veo 的访问通过 Google 的 AI 开发者产品（如 Gemini API）开通，并受地区可用性限制。
+      limitations:
+      - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+      - The provider controls model versioning, so outputs can change over time without any change in this repository — the manifest records runner parity as not applicable for this reason.
+      - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+      limitations_zh:
+      - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+      - 模型版本由服务方控制，输出可能随时间变化而与本仓库无关——因此 manifest 将 runner parity 记录为 not applicable。
+      - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+      recommended_benchmarks:
+      - id: vbench
+        reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs.
+        reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+      - id: physics-iq
+        reason: Probes whether provider-side video models respect basic physical plausibility.
+        reason_zh: 检验服务方视频模型是否遵循基本物理合理性。
+
+    official_sources:
+
+      project_page: https://deepmind.google/technologies/veo/
 
   - id: wan-2p5
     name: Wan 2.5 API
@@ -129,6 +303,35 @@ models:
       status: not_applicable
     runner_parity:
       status: not_applicable
+    docs:
+      publisher: Alibaba (Tongyi Lab)
+      publisher_kind: company
+      publisher_zh: 阿里巴巴（通义实验室）
+      overview: 'Wan 2.5 API is the hosted DashScope endpoint for Alibaba''s Wan 2.5 video generation model, recorded for text-to-video and image-to-video. Unlike the open-weight Wan releases that WorldFoundry runs locally elsewhere in this catalog, this entry covers the provider-hosted generation path: requests go to Alibaba Cloud DashScope and finished clips come back as artifacts. Aliases wan2.5 and wan-2.5 also resolve here.'
+      overview_zh: Wan 2.5 API 是阿里巴巴通义万相 Wan 2.5 视频生成模型的 DashScope 托管接入点，记录文生视频与图生视频任务。与本 catalog 中可本地运行的开源 Wan 权重不同，本条目覆盖的是服务方托管的生成路径：请求发往阿里云 DashScope，成片以产物形式返回。别名 wan2.5、wan-2.5 同样解析到本条目。
+      architecture: The hosted Wan 2.5 shares the Wan family lineage (diffusion-transformer video generation developed by Alibaba's Tongyi Lab), but Alibaba has not published the exact architecture or scale of the API-served revision, and this repository records only the endpoint integration.
+      architecture_zh: 托管版 Wan 2.5 属于 Wan 系列（阿里通义实验室研发的扩散 Transformer 视频生成模型），但 API 所服务修订版的确切架构与规模并未公开，本仓库仅记录端点集成信息。
+      usage_notes: 'The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Keys are issued via Alibaba Cloud DashScope (dashscope.aliyun.com).'
+      usage_notes_zh: Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。API key 通过阿里云 DashScope（dashscope.aliyun.com）开通。
+      limitations:
+      - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+      - The provider controls model versioning, so outputs can change over time without any change in this repository — the manifest records runner parity as not applicable for this reason.
+      - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+      limitations_zh:
+      - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+      - 模型版本由服务方控制，输出可能随时间变化而与本仓库无关——因此 manifest 将 runner parity 记录为 not applicable。
+      - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+      recommended_benchmarks:
+      - id: vbench
+        reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs.
+        reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+      - id: physics-iq
+        reason: Probes whether provider-side video models respect basic physical plausibility.
+        reason_zh: 检验服务方视频模型是否遵循基本物理合理性。
+
+    official_sources:
+
+      project_page: https://dashscope.aliyun.com/
 
   - id: wan-2p6
     name: Wan 2.6 API
@@ -148,6 +351,35 @@ models:
       status: not_applicable
     runner_parity:
       status: not_applicable
+    docs:
+      publisher: Alibaba (Tongyi Lab)
+      publisher_kind: company
+      publisher_zh: 阿里巴巴（通义实验室）
+      overview: Wan 2.6 API is the DashScope-hosted image-to-video endpoint for Alibaba's Wan 2.6 model. You provide a start image and receive a rendered clip from Alibaba Cloud; WorldFoundry records the request and stores the result in its standard artifact layout. The catalog lists wan2.6 and wan-2.6 as aliases. Choose this entry when you want the newer hosted Wan generation without local GPU setup.
+      overview_zh: Wan 2.6 API 是阿里 Wan 2.6 模型的 DashScope 托管图生视频接入点。你提供起始图，阿里云返回渲染好的视频；WorldFoundry 记录请求并按标准产物布局保存结果。catalog 中登记了 wan2.6、wan-2.6 两个别名。想在无本地 GPU 的情况下使用较新的托管 Wan 版本时选择本条目。
+      architecture: Wan 2.6 continues the Wan diffusion-transformer video family from Tongyi Lab; the API-served revision's precise architecture and parameters are not published, and this repository records only the hosted integration.
+      architecture_zh: Wan 2.6 延续通义实验室 Wan 系列扩散 Transformer 视频模型的脉络；API 所服务修订版的确切架构与参数未公开，本仓库仅记录托管集成信息。
+      usage_notes: 'The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Keys are issued via Alibaba Cloud DashScope (dashscope.aliyun.com).'
+      usage_notes_zh: Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。API key 通过阿里云 DashScope（dashscope.aliyun.com）开通。
+      limitations:
+      - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+      - The provider controls model versioning, so outputs can change over time without any change in this repository — the manifest records runner parity as not applicable for this reason.
+      - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+      limitations_zh:
+      - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+      - 模型版本由服务方控制，输出可能随时间变化而与本仓库无关——因此 manifest 将 runner parity 记录为 not applicable。
+      - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+      recommended_benchmarks:
+      - id: vbench
+        reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs.
+        reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+      - id: physics-iq
+        reason: Probes whether provider-side video models respect basic physical plausibility.
+        reason_zh: 检验服务方视频模型是否遵循基本物理合理性。
+
+    official_sources:
+
+      project_page: https://dashscope.aliyun.com/
 
   - id: wan-2p7
     name: Wan 2.7 API
@@ -167,6 +399,35 @@ models:
       status: not_applicable
     runner_parity:
       status: not_applicable
+    docs:
+      publisher: Alibaba (Tongyi Lab)
+      publisher_kind: company
+      publisher_zh: 阿里巴巴（通义实验室）
+      overview: Wan 2.7 API is the newest DashScope-hosted Wan endpoint in this catalog, recorded for image-to-video. It follows the same integration pattern as the Wan 2.5/2.6 entries — WorldFoundry submits the start image to Alibaba Cloud and archives the returned clip — and carries aliases wan2.7 and wan-2.7. Keep in mind the exact served model revision is controlled by Alibaba, not this repo.
+      overview_zh: Wan 2.7 API 是本 catalog 中最新的 DashScope 托管 Wan 接入点，记录图生视频任务。集成方式与 Wan 2.5/2.6 条目一致——WorldFoundry 把起始图提交给阿里云并归档返回的视频——并带有 wan2.7、wan-2.7 两个别名。注意实际服务的模型修订版由阿里控制，而非本仓库。
+      architecture: Wan 2.7 belongs to Tongyi Lab's Wan video-generation family; its API-served architecture and scale are not published, and this repository records only the endpoint integration.
+      architecture_zh: Wan 2.7 属于通义实验室的 Wan 视频生成系列；其 API 版本的架构与规模未公开，本仓库仅记录端点集成信息。
+      usage_notes: 'The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Keys are issued via Alibaba Cloud DashScope (dashscope.aliyun.com).'
+      usage_notes_zh: Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。API key 通过阿里云 DashScope（dashscope.aliyun.com）开通。
+      limitations:
+      - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+      - The provider controls model versioning, so outputs can change over time without any change in this repository — the manifest records runner parity as not applicable for this reason.
+      - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+      limitations_zh:
+      - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+      - 模型版本由服务方控制，输出可能随时间变化而与本仓库无关——因此 manifest 将 runner parity 记录为 not applicable。
+      - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+      recommended_benchmarks:
+      - id: vbench
+        reason: Standard multi-dimension quality suite for comparing hosted text/image-to-video outputs.
+        reason_zh: 对比托管文/图生视频输出的标准多维质量评测。
+      - id: physics-iq
+        reason: Probes whether provider-side video models respect basic physical plausibility.
+        reason_zh: 检验服务方视频模型是否遵循基本物理合理性。
+
+    official_sources:
+
+      project_page: https://dashscope.aliyun.com/
 
   - id: worldlabs
     name: World Labs API
@@ -185,3 +446,29 @@ models:
       status: not_applicable
     runner_parity:
       status: not_applicable
+    docs:
+      publisher: World Labs
+      publisher_kind: company
+      publisher_zh: World Labs
+      overview: World Labs API is the hosted entry for World Labs' generative world service, recorded for world-generation and asset outputs rather than flat video. Instead of returning a clip, the service produces explorable 3D world content on World Labs' infrastructure; WorldFoundry archives what the API returns as artifacts. This is the only hosted_api entry in the catalog aimed at world generation instead of video generation.
+      overview_zh: World Labs API 是 World Labs 生成式世界服务的托管条目，记录的任务是世界生成与资产输出，而非普通视频。服务在 World Labs 的基础设施上生成可探索的 3D 世界内容，WorldFoundry 将 API 返回的内容归档为产物。这是 catalog 中唯一面向世界生成（而非视频生成）的 hosted_api 条目。
+      architecture: World Labs has not published the architecture behind its world generation service; this repository records only the hosted endpoint integration and the artifact kinds it returns.
+      architecture_zh: World Labs 未公开其世界生成服务背后的架构；本仓库仅记录托管端点的集成方式及其返回的产物类型。
+      usage_notes: 'The catalog marks this entry as integrated: the hosted-API Studio pipeline is available, but you must supply your own provider API key and account. No weights are downloaded and no GPU environment is provisioned locally — generation happens on the provider side, so cost, quota, and content policy follow your provider account. Access is provisioned through World Labs'' platform (worldlabs.ai).'
+      usage_notes_zh: Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。访问权限通过 World Labs 平台（worldlabs.ai）开通。
+      limitations:
+      - Requires a paid provider account and API key; WorldFoundry does not ship credentials.
+      - The provider controls model versioning, so outputs can change over time without any change in this repository — the manifest records runner parity as not applicable for this reason.
+      - No local weights, no offline mode, and no reproducibility pinning beyond the request parameters WorldFoundry stores.
+      limitations_zh:
+      - 需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+      - 模型版本由服务方控制，输出可能随时间变化而与本仓库无关——因此 manifest 将 runner parity 记录为 not applicable。
+      - 没有本地权重、不支持离线运行；除 WorldFoundry 保存的请求参数外，无法进一步固定可复现性。
+      recommended_benchmarks:
+      - id: worldscore
+        reason: Unified benchmark for scoring generated explorable worlds.
+        reason_zh: 评估可探索生成世界的统一基准。
+
+    official_sources:
+
+      project_page: https://www.worldlabs.ai/

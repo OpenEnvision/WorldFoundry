@@ -7,6 +7,7 @@ availability: open_source
 provider: official_repo
 license: mixed-mit-apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2402.03766
   github:
     url: https://github.com/liyaxuanliyaxuan/TinyVLA
     head_sha: 94f441827b45e4f76316ef6a0ae443736dc93a5d
@@ -29,7 +30,7 @@ checkpoint:
   - task config.json containing action dimensions and head type
   - dataset_stats.pkl, JSON, or NPZ
 integration:
-  status: in_tree_checkpoint_gated_runtime
+  status: integrated
   notes:
   - LLaVA-Pythia, CLIP/SigLIP vision fusion, ACT, and conditional 1D diffusion action heads execute in process.
   - Both merged weights and local LoRA plus non-LoRA action tensors are supported without source checkouts or remote code.
@@ -45,3 +46,19 @@ pipeline_binding: tinyvla
 runtime_profile: runtime-profile:tinyvla
 catalog_category: vla_va_wam
 schema_version: 2
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'TinyVLA targets fast, data-efficient VLA at sub-billion scale: LLaVA-Pythia backbones (400M / 700M / 1.3B released on the Hub) with ACT or conditional 1D-diffusion action heads. The published Hub models are VLM backbones for policy training — not task-trained robot checkpoints — so the in-tree runtime is checkpoint-gated until you stage a trained task policy.'
+  overview_zh: TinyVLA 追求亚十亿级的快速、数据高效 VLA：LLaVA-Pythia 骨干（Hub 上发布 400M / 700M / 1.3B）配 ACT 或条件 1D 扩散动作头。Hub 上发布的模型是用于策略训练的 VLM 骨干——并非任务训练好的机器人 checkpoint——因此树内运行时为 checkpoint 门控，需自行就位训练好的任务策略。
+  architecture: LLaVA-Pythia multimodal backbones with CLIP/SigLIP vision fusion and swappable action heads (ACT or conditional 1D diffusion), executed fully in process. Both merged weights and local LoRA plus non-LoRA action tensors are supported.
+  architecture_zh: LLaVA-Pythia 多模态骨干配 CLIP/SigLIP 视觉融合与可换动作头（ACT 或条件 1D 扩散），全部进程内执行。支持合并权重与本地 LoRA 加非 LoRA 动作张量两种形式。
+  usage_notes: Runtime construction fails early until a compatible task checkpoint, its config.json (action dimensions and head type), and dataset statistics are staged locally.
+  usage_notes_zh: 在本地就位兼容的任务 checkpoint、含动作维度与头类型的 config.json 及数据集统计前，运行时构建会尽早失败。
+  limitations:
+  - No public task-trained action checkpoint; released Hub models are backbones only.
+  - Mixed MIT/Apache-2.0 licensing across components.
+  limitations_zh:
+  - 无公开任务训练动作 checkpoint；Hub 发布仅为骨干。
+  - 组件许可为 MIT/Apache-2.0 混合。

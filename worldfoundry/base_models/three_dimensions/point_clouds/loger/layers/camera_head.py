@@ -5,7 +5,7 @@ import torch.nn as nn
 from copy import deepcopy
 import torch.nn.functional as F
 
-from worldfoundry.base_models.three_dimensions.point_clouds.pi3.pi3.models.layers.camera_head import ResConvBlock
+from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.models.layers.camera_head import ResConvBlock
 
 # code adapted from 'https://github.com/nianticlabs/marepo/blob/9a45e2bb07e5bb8cb997620088d352b439b13e0e/transformer/transformer.py#L172'
 

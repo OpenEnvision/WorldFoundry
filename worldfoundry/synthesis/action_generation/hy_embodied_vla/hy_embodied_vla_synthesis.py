@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io.serialization import write_json
+from worldfoundry.core.io.formats.serialization import write_json
 from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
 from worldfoundry.synthesis.action_generation.base_action_synthesis import ActionModelSynthesis
 

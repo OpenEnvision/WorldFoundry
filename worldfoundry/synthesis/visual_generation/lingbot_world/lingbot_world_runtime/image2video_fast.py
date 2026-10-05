@@ -15,19 +15,20 @@ import torchvision.transforms.functional as TF
 from tqdm import tqdm
 
 from worldfoundry.core import autocast_context
-from worldfoundry.core.distributed.block_fsdp import shard_model
-from worldfoundry.core.attention.causal_rope_sequence_parallel import (
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
+from worldfoundry.core.attention.parallel.causal_rope_sequence_parallel import (
     sp_attn_forward_causal,
     sp_attn_forward_causal_chunked,
     sp_dit_forward_causal,
     sp_dit_forward_causal_chunked,
 )
-from worldfoundry.core.distributed.sequence_ops import get_world_size
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.lingbot_model_fast import WanModelFast
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.t5 import T5EncoderModel
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.vae2_1 import Wan2_1_VAE
+from worldfoundry.core.distributed.sequence_parallel.ops import get_world_size
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.lingbot.fast import WanModelFast
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import T5EncoderModel
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21_streaming import Wan2_1_VAE
 
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
+from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import FlowUniPCMultistepScheduler
+from .distributed import distributed_barrier
 from .utils.cam_utils import (
     compute_relative_poses,
     interpolate_camera_poses,
@@ -221,8 +222,7 @@ class WanI2VFast:
                     attention_forward, block.self_attn)
             model.forward = types.MethodType(model_forward, model)
 
-        if dist.is_initialized():
-            dist.barrier()
+        distributed_barrier(self.device)
 
         if dit_fsdp:
             model = shard_fn(model)
@@ -568,8 +568,7 @@ class WanI2VFast:
         if offload_model:
             gc.collect()
             torch.cuda.synchronize()
-        if dist.is_initialized():
-            dist.barrier()
+        distributed_barrier(self.device)
 
         return videos[0] if self.rank == 0 else None
 

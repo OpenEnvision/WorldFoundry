@@ -1,5 +1,7 @@
 id: iworld-bench
 name: iWorld-Bench
+publisher: Tsinghua University
+publisher_kind: university
 benchmark_kind:
 - interactive-world-model
 - action-control
@@ -102,6 +104,17 @@ metrics:
   name: iWorld-Bench Average
   primary: true
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py
+  pass_benchmark_id: false
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.iworldbench.run_iworldbench_official_runner
+    dataset_root_arg: --dataset-root
+    metric_arg: --metric
+    limit_arg: --limit
+    split_arg: --split
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    supports_fixture: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:IWorldBenchContract
   run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
     worldfoundry/evaluation/tasks/execution/runners/iworldbench/run_iworldbench_official_runner.py --run-official
@@ -130,6 +143,7 @@ runner:
     runtime; the bounded pixel-only `memory` component does not require VIPe.
 integration:
   status: integrated
+  tier: in_tree
   limitations:
   - Leaderboard-grade claims require full generated-video coverage and official metric dependencies.
   - Full `memory_ability`, trajectory, action-control, and camera-following paths require VIPe/VBench assets; bounded

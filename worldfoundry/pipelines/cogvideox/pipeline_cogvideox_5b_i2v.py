@@ -11,9 +11,9 @@ from ...synthesis.visual_generation.cogvideox.cogvideox_5b_i2v_synthesis import 
 
 
 DEFAULT_COGVIDEOX_5B_I2V_PROMPT = (
-    "First-person cinematic flight on a dragon through a lush jungle toward "
-    "a towering ancient stone castle, with smooth forward camera motion, "
-    "detailed fantasy world, natural lighting."
+    "A young man holding a bright sparkler gently turns his head and smiles as "
+    "sparks scatter through the night air, with a subtle cinematic camera dolly, "
+    "stable facial details, and natural motion."
 )
 
 

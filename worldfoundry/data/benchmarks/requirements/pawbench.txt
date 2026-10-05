@@ -1,0 +1,9 @@
+accelerate>=1.0
+diffusers>=0.35
+imageio[ffmpeg]>=2.34
+opencv-python-headless>=4.9
+PyYAML>=6.0
+pytest>=8
+ruff>=0.5
+torch>=2.4
+transformers>=4.45

@@ -9,7 +9,8 @@ from torch import Tensor, nn
 
 from ....geometry.projection import get_world_rays
 from worldfoundry.base_models.three_dimensions.point_clouds.pixelsplat.src.misc.sh_rotation import rotate_sh
-from .gaussians import build_covariance
+from worldfoundry.core.geometry.transforms import rotation_matrix_to_quaternion_xyzw
+from .gaussians import build_covariance, quaternion_to_matrix
 
 
 @dataclass
@@ -108,15 +109,18 @@ class GaussianAdapter(nn.Module):
         origins, directions = get_world_rays(coordinates, extrinsics, intrinsics)
         means = origins + directions * depths[..., None]
 
+        # PLY export needs the same world-space orientation as the renderer.
+        world_rotations = rotation_matrix_to_quaternion_xyzw(
+            c2w_rotations @ quaternion_to_matrix(rotations)
+        )
+
         return Gaussians(
             means=means,
             covariances=covariances,
             harmonics=rotate_sh(sh, c2w_rotations[..., None, :, :]),
             opacities=opacities,
-            # Note: These aren't yet rotated into world space, but they're only used for
-            # exporting Gaussians to ply files. This needs to be fixed...
             scales=scales,
-            rotations=rotations.broadcast_to((*scales.shape[:-1], 4)),
+            rotations=world_rotations.broadcast_to((*scales.shape[:-1], 4)),
         )
 
     def get_scale_multiplier(

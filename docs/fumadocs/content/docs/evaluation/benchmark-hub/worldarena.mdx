@@ -1,168 +1,36 @@
 ---
 title: WorldArena
-description: Unified embodied world-model benchmark for video quality and functional utility.
+description: "Tsinghua FIB Lab embodied world-model bench: perceptual quality plus data-engine / policy / planner utility."
 ---
 
-## About
+WorldArena (Tsinghua FIB Lab) evaluates embodied world models on two axes. Primary `ewm_score` aggregates the embodied-world-model surface. This catalog id is **`worldarena`**.
 
-WorldArena evaluates embodied world models along two axes: perceptual video quality and functional utility. The official benchmark reports video perception metrics, embodied-task functionality, human ratings, and the unified `EWMScore`. It is built around RoboTwin 2.0 manipulation episodes and asks whether generated world videos are visually plausible, controllable, physically meaningful, and useful for downstream embodied tasks.
+- **Perceptual** — visual quality, motion quality, content consistency, physics adherence, 3D accuracy, controllability, human quality.
+- **Functional** — utility as a data engine (`data_engine_success`), policy evaluator (`policy_evaluator_correlation`), and action planner (`action_planner_success`).
 
-WorldFoundry integrates the Track 1 video-quality runtime in tree under `worldfoundry/evaluation/tasks/execution/runners/worldarena/`. The official project page, paper, and source are protocol references; WorldFoundry users do not need a separate benchmark source tree for the integrated video-quality path.
+Paper: [WorldArena](https://arxiv.org/abs/2602.08971). Project: [world-arena.ai](https://world-arena.ai/). Code: [tsinghua-fib-lab/WorldArena](https://github.com/tsinghua-fib-lab/WorldArena).
 
-## What It Measures
+WorldFoundry **integrates the official video-quality metric runtime** (`runners/worldarena/runtime/video_quality`) and can score one `--dimension` at a time (catalog-bounded example: `action_following`). **One real prepared-data PSNR component is verified. Full Track 1 and the embodied tracks are not.** Functional-utility metrics need embodied task evidence outside the video-quality runtime.
 
-WorldArena unifies **perceptual video quality** and **functional utility** for embodied world models. Track 1 scores 16 perception metrics across 6 sub-dimensions; Track 2 evaluates world models as data engines, policy evaluators, and action planners on RoboTwin 2.0 episodes. The holistic `EWMScore` is the arithmetic mean of normalized base metrics on a 0–100 scale.
+<BenchmarkPageSections id="worldarena" locale="en" />
 
-## Benchmark Design
-
-| Track | Focus | Metrics |
-| --- | --- | --- |
-| Track 1 — Video quality | Visual, motion, content, physics, 3D, controllability | 16 base metrics → 6 dimension aggregates |
-| Track 2 — Functional utility | Data engine gain, policy-evaluator correlation, action-planner success | Downstream embodied task outcomes |
-| Human evaluation | Quality, instruction following, physical plausibility | Community ratings on [world-arena.ai](https://world-arena.ai/) |
-
-## Official References
-
-- Paper: [arXiv:2602.08971](https://arxiv.org/abs/2602.08971)
-- Project page and leaderboard: [world-arena.ai](https://world-arena.ai/)
-- Official source reference: [github.com/tsinghua-fib-lab/WorldArena](https://github.com/tsinghua-fib-lab/WorldArena)
-- Dataset: [WorldArena/WorldArena_Robotwin2.0](https://huggingface.co/datasets/WorldArena/WorldArena_Robotwin2.0)
-- In-tree runner: `worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py`
-
-## What To Prepare
-
-### Dataset
-
-Download the WorldArena RoboTwin 2.0 evaluation assets:
+## How to run
 
 ```bash
-export WORLDFOUNDRY_WORLDARENA_DATA_ROOT=/path/to/datasets/WorldArena_Robotwin2.0
-
-hf download WorldArena/WorldArena_Robotwin2.0 \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_WORLDARENA_DATA_ROOT}"
-```
-
-Use the official `test_dataset` for leaderboard-style evaluation. `val_dataset` is intended for the online arena and qualitative comparison.
-
-### Generated Videos
-
-For Track 1 video-quality evaluation, generate one video per requested episode from the provided initial frame and instruction or action sequence. The official requirements are:
-
-| Driver type | Video length |
-| --- | --- |
-| Text-driven | 121 frames |
-| Action-driven | Match the ground-truth trajectory length |
-
-Use at least 640x480 resolution when possible, and keep 24 fps for submission parity.
-
-Raw generated videos usually start as:
-
-```text
-/path/to/worldarena/generated_videos/
-|-- <task>_<episode>.mp4
-`-- ...
-```
-
-The video-quality runtime consumes extracted-frame datasets. You can prepare them with the in-tree preprocessing script when you have the official `summary.json`:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/worldarena/runtime/video_quality/preprocess_datasets.py \
-  --summary_json "${WORLDFOUNDRY_WORLDARENA_DATA_ROOT}/test_dataset/summary.json" \
-  --gen_video_dir /path/to/worldarena/generated_videos \
-  --output_base /path/to/worldarena/prepared
-```
-
-Expected prepared layout:
-
-```text
-/path/to/worldarena/prepared/
-|-- gt_dataset/
-|   `-- <task>/<episode>/prompt|video/
-`-- generated_dataset/
-    `-- <task>/<episode>/1/video/frame_00000.jpg
-```
-
-Action-following metrics may use separate `gt_dataset_action_following` and `generated_dataset_action_following` roots.
-
-### Checkpoints
-
-The generated config points to WorldFoundry base-model assets when available. Full Track 1 scoring can require CLIP, DINO, MUSIQ, RAFT, SEA-RAFT, VFIMamba, Depth-Anything, Qwen2.5-VL, Qwen3-VL, and SAM3 assets. Put benchmark-specific weights under a checkpoint root and pass it to the runner:
-
-```bash
-export WORLDFOUNDRY_WORLDARENA_CKPT_DIR=/path/to/checkpoints/worldarena
-```
-
-## Metrics
-
-| Metric | Meaning |
-| --- | --- |
-| `visual_quality` | Aggregates image quality, aesthetic score, and distribution similarity to real embodied videos. |
-| `motion_quality` | Combines dynamic degree, optical-flow intensity, and motion smoothness. |
-| `content_consistency` | Measures scene, subject, and photometric consistency. |
-| `physics_adherence` | Judges robot-object plausibility and trajectory accuracy. |
-| `three_d_accuracy` | Measures depth and perspective plausibility. |
-| `controllability` | Measures instruction, semantic, and action-following alignment. |
-| `data_engine_success` | Downstream policy success when generated video is used as training data. |
-| `policy_evaluator_correlation` | Correlation between world-model rollout judgment and simulator success. |
-| `action_planner_success` | Closed-loop planning success with a world model and inverse-dynamics head. |
-| `human_quality` | Human ratings of quality, instruction following, and physical plausibility. |
-| `ewm_score` | Official aggregate over normalized WorldArena dimensions. |
-
-WorldFoundry's in-tree execution currently focuses on the video-quality metric runtime. Functional-utility and official leaderboard evidence require the official Track 2 process and submitted artifacts.
-
-## Run Track 1 Video-Quality Metrics
-
-Use the direct runner when recomputing metrics because it exposes the prepared dataset roots and checkpoint root:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py \
   --run-official \
-  --generated-dataset-dir /path/to/worldarena/prepared/generated_dataset \
-  --gt-data-dir /path/to/worldarena/prepared/gt_dataset \
-  --ckpt-root "${WORLDFOUNDRY_WORLDARENA_CKPT_DIR}" \
-  --dimension image_quality motion_smoothness semantic_alignment depth_accuracy action_following \
-  --output-dir tmp/worldarena/video-quality \
+  --dimension action_following \
+  --config-path <worldarena_config.yaml> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/worldarena/official \
   --json
 ```
 
-If you already have a WorldArena config YAML, pass it directly:
+Ground-truth comparisons take `--gt-data-dir` / `--action-gt-data-dir`. Weights resolve from `--ckpt-root`. `--official-results-path` imports an existing result file. Env: `WORLDFOUNDRY_WORLDARENA_RESULTS_PATH`, `WORLDFOUNDRY_WORLDARENA_ROOT`. No Hugging Face dataset is required by the contract.
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py \
-  --run-official \
-  --config-path /path/to/worldarena_config.yaml \
-  --dimension image_quality motion_smoothness semantic_alignment \
-  --output-dir tmp/worldarena/video-quality-config \
-  --json
-```
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/worldarena.yaml`, `worldfoundry/evaluation/tasks/execution/runners/worldarena`.
 
-## Import Existing Results
+Outputs include `scorecard.json` (primary `ewm_score`).
 
-Use this when you already have `*_results.json`, `results.json`, or a summary file from WorldArena:
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id worldarena \
-  --mode official-validation \
-  --official-results-path /path/to/worldarena_results.json \
-  --generated-artifact-dir /path/to/worldarena/generated_videos \
-  --output-dir tmp/worldarena/imported \
-  --json
-```
-
-## Outputs
-
-WorldFoundry writes:
-
-- `scorecard.json`
-- `raw_metric_table.jsonl`
-- `worldarena_official_runtime.log` when the video-quality runtime is executed
-- upstream `*_results.json` files under the runtime output directory
-
-For official leaderboard submission, keep the generated videos and model documentation in the official WorldArena archive structure. WorldFoundry scorecards are local evidence; leaderboard inclusion still follows the WorldArena submission process.
-
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

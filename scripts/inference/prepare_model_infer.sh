@@ -28,7 +28,7 @@ Example:
 
 RollingForcing downloads prefer ModelScope when its Python package is available.
 Set WORLDFOUNDRY_HF_ENDPOINT (or HF_ENDPOINT) to override its Hugging Face
-fallback endpoint; the fallback defaults to https://hf-mirror.com.
+fallback endpoint. WorldFoundry does not select a third-party mirror by default.
 EOF
   if [[ -z "$MODEL_ID" ]]; then
     exit 2
@@ -286,8 +286,12 @@ PY
 }
 
 download_hf_with_mirror() {
-  local endpoint="${WORLDFOUNDRY_HF_ENDPOINT:-${HF_ENDPOINT:-https://hf-mirror.com}}"
-  HF_ENDPOINT="$endpoint" HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}" hf download "$@"
+  local endpoint="${WORLDFOUNDRY_HF_ENDPOINT:-${HF_ENDPOINT:-}}"
+  if [[ -n "$endpoint" ]]; then
+    HF_ENDPOINT="$endpoint" HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}" hf download "$@"
+  else
+    HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}" hf download "$@"
+  fi
 }
 
 verify_rolling_forcing_checkpoint() {
@@ -348,63 +352,88 @@ download_rolling_forcing_assets() {
 
 prepare_hunyuanvideo_t2v_layout() {
   local target_root="${WORLDFOUNDRY_CKPT_DIR}/HunyuanVideo"
+  local primary_root="${WORLDFOUNDRY_CKPT_DIR}/xtuner--llava-llama-3-8b-v1_1-transformers"
+  local clip_root="${WORLDFOUNDRY_CKPT_DIR}/openai--clip-vit-large-patch14"
   if [[ "$DOWNLOAD" == "1" ]]; then
     hf download tencent/HunyuanVideo --local-dir "$target_root"
+    hf download xtuner/llava-llama-3-8b-v1_1-transformers \
+      --exclude '*.bin' --exclude '*.gguf' --exclude '*.h5' --exclude '*.msgpack' \
+      --local-dir "$primary_root"
+    hf download openai/clip-vit-large-patch14 \
+      --include '*.json' --include '*.txt' --include '*.safetensors' \
+      --local-dir "$clip_root"
   fi
 
   link_if_present "${WORLDFOUNDRY_HFD_ROOT}/tencent--HunyuanVideo" "$target_root"
+  link_if_present \
+    "${WORLDFOUNDRY_HFD_ROOT}/xtuner--llava-llama-3-8b-v1_1-transformers" \
+    "$primary_root"
+  link_if_present "${WORLDFOUNDRY_HFD_ROOT}/openai--clip-vit-large-patch14" "$clip_root"
 
   cat <<EOF
 
-HunyuanVideo T2V checkpoint layout expected by the in-tree official runtime:
+HunyuanVideo T2V checkpoint layout expected by the native recipe:
   ${target_root}
     hunyuan-video-t2v-720p/transformers/mp_rank_00_model_states.pt
     hunyuan-video-t2v-720p/vae/
-    text_encoder/
-    text_encoder_2/
+  ${primary_root}
+    config.json
+    model*.safetensors
+  ${clip_root}
+    config.json
+    model.safetensors
 
 Environment:
-  This original HunyuanVideo T2V runtime uses the dedicated HunyuanVideo conda
-  profile because it is pinned to the official diffusers 0.31 stack:
+  This recipe uses the unified native diffusion environment:
     bash scripts/setup/model_env_install.sh --model hunyuanvideo-t2v
 
-Validated Studio demo:
-  model-id=hunyuanvideo-t2v, torchrun --nproc_per_node=8, 129 frames, 720x1280,
-  50 steps, prompt "A cat walks on the grass, realistic style.", seed 42.
+Validation status:
+  Registry and causal-VAE checkpoint structure pass. The historical 8-rank
+  artifact predates the native cutover; native CUDA artifact parity is pending.
 
 EOF
 }
 
 prepare_hunyuanvideo_i2v_layout() {
   local target_root="${WORLDFOUNDRY_CKPT_DIR}/HunyuanVideo-I2V"
+  local primary_root="${WORLDFOUNDRY_CKPT_DIR}/xtuner--llava-llama-3-8b-v1_1-transformers"
+  local clip_root="${WORLDFOUNDRY_CKPT_DIR}/openai--clip-vit-large-patch14"
   if [[ "$DOWNLOAD" == "1" ]]; then
     hf download tencent/HunyuanVideo-I2V --local-dir "$target_root"
-    hf download xtuner/llava-llama-3-8b-v1_1-transformers --local-dir "$target_root/text_encoder_i2v"
-    hf download openai/clip-vit-large-patch14 --local-dir "$target_root/text_encoder_2"
+    hf download xtuner/llava-llama-3-8b-v1_1-transformers \
+      --exclude '*.bin' --exclude '*.gguf' --exclude '*.h5' --exclude '*.msgpack' \
+      --local-dir "$primary_root"
+    hf download openai/clip-vit-large-patch14 \
+      --include '*.json' --include '*.txt' --include '*.safetensors' \
+      --local-dir "$clip_root"
   fi
 
   link_if_present "${WORLDFOUNDRY_HFD_ROOT}/tencent--HunyuanVideo-I2V" "$target_root"
-  link_if_present "${WORLDFOUNDRY_HFD_ROOT}/xtuner--llava-llama-3-8b-v1_1-transformers" "$target_root/text_encoder_i2v"
-  link_if_present "${WORLDFOUNDRY_HFD_ROOT}/openai--clip-vit-large-patch14" "$target_root/text_encoder_2"
+  link_if_present \
+    "${WORLDFOUNDRY_HFD_ROOT}/xtuner--llava-llama-3-8b-v1_1-transformers" \
+    "$primary_root"
+  link_if_present "${WORLDFOUNDRY_HFD_ROOT}/openai--clip-vit-large-patch14" "$clip_root"
 
   cat <<EOF
 
-HunyuanVideo I2V checkpoint layout expected by the in-tree official runtime:
+HunyuanVideo I2V checkpoint layout expected by the native recipe:
   ${target_root}
     hunyuan-video-i2v-720p/transformers/mp_rank_00_model_states.pt
     hunyuan-video-i2v-720p/vae/
-    text_encoder_i2v/
-    text_encoder_2/
+  ${primary_root}
+    config.json
+    model*.safetensors
+  ${clip_root}
+    config.json
+    model.safetensors
 
 Environment:
-  HunyuanVideo I2V reuses the dedicated HunyuanVideo conda profile with xfuser
-  available for the official 8-rank sequence-parallel demo:
+  This recipe uses the unified native diffusion environment:
     bash scripts/setup/model_env_install.sh --model hunyuanvideo-i2v
 
-Validated Studio demo target:
-  model-id=hunyuanvideo-i2v, torchrun --nproc_per_node=8, official stability
-  recipe, 129 frames, 720p, 50 steps, flow_shift=7.0, seed 0, input
-  worldfoundry/data/test_cases/hunyuanvideo_i2v/0.jpg.
+Validation status:
+  Registry assembly passes. The historical 8-rank artifact predates the native
+  cutover; native CUDA artifact parity is pending.
 
 EOF
 }
@@ -413,13 +442,21 @@ prepare_hunyuanvideo15_layout() {
   local target_root="${WORLDFOUNDRY_CKPT_DIR}/HunyuanVideo-1.5"
   if [[ "$DOWNLOAD" == "1" ]]; then
     hf download tencent/HunyuanVideo-1.5 --local-dir "$target_root"
-    hf download Qwen/Qwen2.5-VL-7B-Instruct --local-dir "$target_root/text_encoder/llm"
+    hf download Qwen/Qwen2.5-VL-7B-Instruct \
+      --exclude '*.bin' --exclude '*.gguf' --exclude '*.h5' --exclude '*.msgpack' \
+      --local-dir "$target_root/text_encoder/llm"
     hf download google/byt5-small --local-dir "$target_root/text_encoder/byt5-small"
+    if [[ ! -f "$target_root/text_encoder/byt5-small/model.safetensors" ]]; then
+      "${WORLDFOUNDRY_SAFE_CONVERTER_PYTHON:-$PYTHON_BIN}" \
+        scripts/inference/convert_hunyuan_byt5_to_safetensors.py \
+        "$target_root/text_encoder/byt5-small"
+    fi
     hf download black-forest-labs/FLUX.1-Redux-dev --local-dir "$target_root/vision_encoder/siglip"
-    "$PYTHON_BIN" - <<PY
-from modelscope.hub.snapshot_download import snapshot_download
-snapshot_download('AI-ModelScope/Glyph-SDXL-v2', local_dir='${target_root}/text_encoder/Glyph-SDXL-v2')
-PY
+    hf download multimodalart/glyph-sdxl-v2-byt5-small model.safetensors \
+      --local-dir "$target_root/text_encoder/Glyph-SDXL-v2/checkpoints"
+    hf download multimodalart/glyph-sdxl-v2-byt5-small \
+      assets/color_idx.json assets/multilingual_10-lang_idx.json \
+      --local-dir "$target_root/text_encoder/Glyph-SDXL-v2"
   fi
 
   link_if_present "${WORLDFOUNDRY_CKPT_DIR}/Qwen2.5-VL-7B-Instruct" "$target_root/text_encoder/llm"
@@ -429,7 +466,7 @@ PY
 
   cat <<EOF
 
-HunyuanVideo-1.5 checkpoint layout expected by the in-tree official runtime:
+HunyuanVideo-1.5 checkpoint layout expected by the native recipes:
   ${target_root}
     text_encoder/llm              # Qwen/Qwen2.5-VL-7B-Instruct
     text_encoder/byt5-small       # google/byt5-small
@@ -479,7 +516,8 @@ prepare_cosmos3_layout() {
 Cosmos3 checkpoint layout:
   Repository: ${repo_id}
   Pinned revision: ${revision}
-  The repository already has an official Diffusers layout; no conversion is required.
+  The repository component layout is consumed directly by WorldFoundry's native loader;
+  no persistent checkpoint conversion is required.
   This script downloads/checks the exact revision in the native Hugging Face cache:
     ${CACHE_DIR}/models--${repo_id//\//--}/snapshots/${revision}/model_index.json
   Direct HFD aliases are accepted only when .hfd/repo_metadata.json records the same revision.
@@ -488,11 +526,9 @@ Cosmos3 checkpoint layout:
 Environment:
   bash scripts/setup/model_env_install.sh --model ${MODEL_ID}
 
-Safety checker:
-  The official default requires cosmos-guardrail and approved Hugging Face access to
-  nvidia/Cosmos-1.0-Guardrail. Set an authorized HF_TOKEN after accepting its access terms.
-  For an explicitly unscreened run, set enable_safety_checker=false at load time and
-  enable_safety_check=false at call time; Workspace manifests preserve both settings.
+Runtime architecture:
+  Transformer, Wan VAE38, AVAE sound decoder, tokenizer, and flow-UniPC are assembled
+  through the shared native diffusion infra. Diffusers is not a runtime dependency.
 EOF
 }
 
@@ -508,7 +544,7 @@ import os
 import sys
 from pathlib import Path
 
-from worldfoundry.base_models.diffusion_model.video.cosmos3.worldfoundry_runtime import Cosmos3Runtime
+from worldfoundry.synthesis.visual_generation.cosmos.cosmos3_runtime import Cosmos3Runtime
 
 repo_id = os.environ["REPO_ID"]
 expected = os.environ["EXPECTED_REVISION"]
@@ -1506,7 +1542,7 @@ Suggested inference command:
     --device cuda
 
 For Matrix-Game-style navigation demos:
-  bash scripts/inference/test_nav_video_gen.sh ${INFER_MODEL_ID} --output-dir ${OUTPUT_DIR}
+  bash scripts/inference/run_infer.sh --category navigation-video --model ${INFER_MODEL_ID} --output-dir ${OUTPUT_DIR}
 EOF
 fi
 

@@ -1,0 +1,47 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BM-04
+track: coverage
+title_en: Tape Peel from Cardboard
+outcome_question: Which label in ['clean_full_peel', 'partial_peel_tape_still_attached',
+  'tape_tears', 'cardboard_surface_tears', 'tape_curls_or_reattaches_without_full_removal']
+  is visible as the first decisive post-action result?
+readout_policy: Read after the single continuous tape-peel action has settled or
+  the pulling force visibly stops. Qualifying frames must show the tape, adhesive
+  edge, and cardboard surface clearly enough to choose clean full peel, partial
+  attachment, tape tear, cardboard tear, or curl/reattach. Do not label an early
+  partial peel if the same continuous peel later becomes a clean full peel or tear.
+canonical_labels:
+- clean_full_peel
+- partial_peel_tape_still_attached
+- tape_tears
+- cardboard_surface_tears
+- tape_curls_or_reattaches_without_full_removal
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['clean_full_peel', 'partial_peel_tape_still_attached',
+  'tape_tears', 'cardboard_surface_tears', 'tape_curls_or_reattaches_without_full_removal']
+  can be decisively identified within the readout window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's
+  reference protocol; record it as out-of-schema.
+priority_rules:
+- 'Readout timing: use the first clear post-peel state after the continuous peel
+  settles or force stops; choose the strongest action-caused material outcome visible
+  in that response window.'
+- '`cardboard_surface_tears` has highest priority when cardboard fibers or surface
+  layers lift or rip under the tape.'
+- '`tape_tears` applies when the tape strip itself tears, splits, or breaks before
+  a clean full removal.'
+- '`clean_full_peel` requires the tape to come off as one strip without cardboard
+  damage; `partial_peel_tape_still_attached` requires remaining adhesive attachment.'
+- '`tape_curls_or_reattaches_without_full_removal` applies when the tape curls,
+  folds back, or sticks again before full removal; return `unreadable` if the peel
+  edge is hidden.'
+notes:
+- 'Track B: use metadata-derived priority rules, not a family template.'
+- 'Scene title: Tape Peel from Cardboard.'

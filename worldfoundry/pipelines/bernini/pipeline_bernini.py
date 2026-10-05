@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
-from worldfoundry.core.io import copy_uri, is_remote_uri, local_path_for_uri, uri_to_local_path
+from worldfoundry.core.io import artifact_root_path, copy_uri, is_remote_uri, local_path_for_uri, uri_to_local_path
 from worldfoundry.core.utils import load_pil_image, materialize_image_input
-from worldfoundry.evaluation.models.pipelines.invocation import PipelineInvocation
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
 from worldfoundry.synthesis.visual_generation.bernini.worldfoundry_runtime import (
     MODEL_CONFIG_KEYS,
     BerniniRuntime,
     infer_task_type,
 )
+
+if TYPE_CHECKING:
+    from worldfoundry.core.contracts import PipelineInvocation
 
 GENERATION_KEYS = frozenset(
     {
@@ -204,7 +206,11 @@ class BerniniWorldFoundryPipeline(PipelineABC):
         return_dict: bool = False,
         **kwargs: Any,
     ) -> Any:
-        target = Path(output_path or f"tmp/pipeline_eval/{self.runtime.variant.model_id}.mp4")
+        target = (
+            Path(output_path)
+            if output_path
+            else artifact_root_path() / "pipeline_eval" / f"{self.runtime.variant.model_id}.mp4"
+        )
         images = self._first_present(
             images,
             kwargs.pop("image", None),

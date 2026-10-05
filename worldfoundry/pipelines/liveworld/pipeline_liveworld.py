@@ -9,6 +9,8 @@ from worldfoundry.synthesis.visual_generation.liveworld import LiveWorldSynthesi
 
 
 class LiveWorldPipeline(PipelineABC):
+    MODEL_PATH_OPTION = "checkpoint_path"
+
     def __init__(self, synthesis_model: LiveWorldSynthesis, *, device: str = "cuda") -> None:
         self.synthesis_model = synthesis_model
         self.device = device
@@ -40,10 +42,12 @@ class LiveWorldPipeline(PipelineABC):
         **kwargs: Any,
     ) -> Any:
         kwargs.pop("operator_kwargs", None)
+        kw_image_path = kwargs.pop("image_path", None)
+        kw_video_path = kwargs.pop("video_path", None)
         result = self.synthesis_model.predict(
             prompt=prompt,
-            image_path=images or kwargs.pop("image_path", None),
-            video_path=video or kwargs.pop("video_path", None),
+            image_path=images or kw_image_path,
+            video_path=video or kw_video_path,
             output_path=output_path,
             return_dict=True,
             **kwargs,

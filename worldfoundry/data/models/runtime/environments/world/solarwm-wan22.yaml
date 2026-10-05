@@ -1,0 +1,46 @@
+schema_version: 2
+environment_id: solarwm
+model_id: solarwm
+env_name: worldfoundry-solarwm-wan22-cu124
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.10'
+cuda_profile: cu124
+driver_status: compatible
+channels:
+- conda-forge
+conda_packages:
+- python=3.10
+- pip
+- ffmpeg
+- ninja
+- cuda-nvcc=12.4
+pip_extra_index_url: https://download.pytorch.org/whl/cu124
+pip_packages:
+- torch==2.5.1+cu124
+- diffusers==0.38.0
+- transformers==5.12.1
+- peft==0.20.0
+- safetensors>=0.4
+- einops>=0.8
+- decord>=0.6
+- PyYAML>=6.0
+- numpy>=1.24
+- ftfy>=6.2
+- omegaconf>=2.3
+- regex>=2024.0
+validation_imports:
+- torch
+- diffusers
+- transformers
+- peft
+- flash_attn
+- safetensors
+- einops
+- decord
+- yaml
+- numpy
+notes:
+- Pins the official SolarWM Wan2.2 release-tested Python 3.10, PyTorch 2.5.1/CUDA 12.4, Diffusers 0.38.0, Transformers 5.12.1, PEFT 0.20.0, and FlashAttention 2.8.3 stack.
+- FlashAttention is installed after PyTorch with build isolation disabled by the model-environment installer, matching the official Wan setup order.
+- SolarWM source is intentionally not installed into this environment; the runtime adapter adds the pinned user-staged checkout's src directory to PYTHONPATH.
+- LTX-2.5 and MiniMax-H3 require different Python/CUDA/model stacks and are not routed through this environment.

@@ -1,0 +1,50 @@
+---
+title: "LingBot-World Base Act"
+description: "Robbyant's action-conditioned world video model; checkpoint-backed inference is verified."
+modelId: "lingbot-world-act"
+pageSource: authored
+---
+
+LingBot-World Base Act is the action-conditioned sibling of LingBot-World: instead of camera poses it consumes an action matrix, making it the interactive-control profile of the family. It is independently cataloged and resolves the official Base-Act preview checkpoint — Base-Cam is never substituted.
+
+<ModelPaperFigures modelId="lingbot-world-act" locale="en" />
+
+The recorded paper is [arXiv 2601.20540](https://arxiv.org/abs/2601.20540).
+
+Project page: [technology.robbyant.com/lingbot-world](https://technology.robbyant.com/lingbot-world). Code: [robbyant/lingbot-world](https://github.com/robbyant/lingbot-world).
+
+<ModelCommandBuilder modelId="lingbot-world-act" locale="en" />
+
+## What it is for
+
+`lingbot-world-act` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+
+The inference path reuses the in-tree LingBot runtime and central Wan base modules (apache-2.0). Inputs are prompt, image, pose, and action_matrix. It is published by Robbyant (Ant Group).
+
+Catalog tasks include interactive-world-model and action-conditioned-video.
+
+Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Action-conditioned world-rollout quality).
+
+## Runtime contract
+
+Optional `prompt`, `image`, `pose`, `action_matrix`, and `seed`; artifacts `lingbot-world-act.mp4`.
+
+CLI task profiles: `interactive-world-model`, `action-conditioned-video`, and `world_model`. WorldFoundry binds `LingBotPipeline`.
+
+Family status: **Public runner verified for the 17-frame, 8-step configuration**.
+
+The local Base-Act preview weights produced a 49-frame, 40-step video from a real room image with a forward camera path and a nonzero action matrix. The public WorldFoundry runner also generated a 17-frame, 8-step clip from the official cat image and forward WASD actions in the dedicated LingBot environment. Its 544 × 720, 16 fps MP4 decoded fully and showed clear, changing content. These runs show the action payload is accepted and video is generated; they do not isolate the effect of the action signal or measure action adherence.
+
+Base-Act is independently cataloged and resolves the official action checkpoint rather than Base-Cam.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run lingbot-world-act --pipeline.task-profile interactive-world-model`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+Use the dedicated `lingbot-world` environment (Python 3.10, CUDA 12.1). The unified environment previously produced near-black act2cam output.
+
+Recorded weight repositories include `robbyant/lingbot-world-base-act-preview`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lingbot-world-act`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Public runner verified for the 17-frame, 8-step configuration**. The official 161-frame recipe remains untested.
+
+<ModelRelatedRecipes modelId="lingbot-world-act" locale="en" />

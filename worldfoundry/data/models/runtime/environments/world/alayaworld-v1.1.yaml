@@ -1,0 +1,37 @@
+schema_version: 2
+model_id: alayaworld-v1.1
+env_name: alayaworld-v1.1
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+conda_packages:
+- python
+- pip
+- ffmpeg
+pip_packages:
+- torch>=2.6
+- torchvision
+- transformers>=4.49
+- safetensors
+- accelerate
+- einops
+- numpy
+- pillow
+- pyyaml
+- imageio
+- imageio-ffmpeg
+- sentencepiece
+- diffusers
+- easydict
+- decord
+- scipy
+- opencv-python
+- huggingface-hub
+- tqdm
+validation_imports:
+- torch
+- yaml
+- worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.component
+- worldfoundry.synthesis.visual_generation.alayaworld_v11
+notes:
+- CUDA inference dependencies are optional and separate from the CPU catalog installation.

@@ -25,11 +25,11 @@ from matrixgame.sample.pipeline_matrixgame import MatrixGameVideoPipeline
 from matrixgame.vae_variants import get_vae
 from matrixgame.encoder_variants import get_text_enc
 from worldfoundry.synthesis.visual_generation.matrix_game import MGVideoDiffusionTransformerI2V
-from worldfoundry.base_models.diffusion_model.video.hunyuan_video.diffusion.schedulers.scheduling_flow_match_discrete import (
-    FlowMatchDiscreteScheduler,
+from worldfoundry.base_models.diffusion_model.schedulers.hunyuan_compat import (
+    HunyuanVideoFlowMatchDiscreteScheduler as FlowMatchDiscreteScheduler,
 )
 from tools.visualize import process_video
-from condtions import Bench_actions_76
+from condtions import Bench_actions_76, interaction_condition
 from teacache_forward import teacache_forward
 
 
@@ -140,6 +140,8 @@ class VideoGenerator:
         Returns:
             List of image file paths
         """
+        if os.path.isfile(root_dir):
+            return [root_dir]
         image_extensions = ('*.png', '*.jpg', '*.jpeg')
         image_paths = []
         
@@ -235,7 +237,11 @@ class VideoGenerator:
         os.makedirs(self.args.output_path, exist_ok=True)
         
         # Load conditions
-        conditions = Bench_actions_76()
+        interactions = getattr(self.args, "interactions", None)
+        conditions = (
+            [interaction_condition(interactions, self.video_length)]
+            if interactions else Bench_actions_76(num_frames=self.video_length)
+        )
         if getattr(self.args, "max_conditions", None):
             conditions = conditions[:self.args.max_conditions]
         print(f"Found {len(conditions)} conditions to process")
@@ -300,6 +306,8 @@ def parse_args() -> argparse.Namespace:
                         help="Maximum number of images to process from the input directory.")
     parser.add_argument("--max_conditions", type=int, default=None,
                         help="Maximum number of action conditions to process.")
+    parser.add_argument("--interactions", nargs="+", default=None,
+                        help="Ordered command segments for a single generated video.")
     
     # Mouse icon parameters
     parser.add_argument("--mouse_icon_path", type=str, 

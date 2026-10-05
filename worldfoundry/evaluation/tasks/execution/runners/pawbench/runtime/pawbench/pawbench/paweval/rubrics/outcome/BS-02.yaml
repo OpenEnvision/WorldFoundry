@@ -1,0 +1,45 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BS-02
+track: coverage
+title_en: Red-Marked Block Tower Removal
+outcome_question: Which block-tower outcome in ['tower_remains_standing_after_removal', 'tower_remains_standing_but_displaced',
+  'top_section_collapse', 'side_section_collapse', 'full_collapse'] is visible as the first decisive result
+  after the red-marked block pull?
+readout_policy: Read after the red-marked middle support block is visibly acquired/pulled and the tower
+  response is visible. Use terminal standing/displaced/collapse state rather than transient sway alone.
+canonical_labels:
+- tower_remains_standing_after_removal
+- tower_remains_standing_but_displaced
+- top_section_collapse
+- side_section_collapse
+- full_collapse
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- The marked-block pull or resulting tower support/collapse state is hidden at the decisive moment.
+- None of the canonical labels ['tower_remains_standing_after_removal', 'tower_remains_standing_but_displaced',
+  'top_section_collapse', 'side_section_collapse', 'full_collapse'] can be decisively identified within
+  the readout window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's reference protocol;
+  record it as out-of-schema.
+priority_rules:
+- First decisive readout is the terminal tower response after the red-marked block is visibly acquired/pulled.
+- full_collapse has highest priority when the tower loses global structure or most blocks fall.
+- top_section_collapse and side_section_collapse apply to localized collapse by visible region.
+- tower_remains_standing_but_displaced means the tower remains standing but shifts, leans, or is visibly
+  displaced after removal.
+- tower_remains_standing_after_removal means the marked block is removed and the remaining tower stays
+  essentially unchanged/upright.
+- Terminal collapse/displacement overrides transient stability; a transient sway that settles without
+  displacement is tower_remains_standing_after_removal.
+notes:
+- Outcome set uses terminal standing/displaced state rather than transient sway as a denominator-bearing
+  label.
+- 'Track B: use metadata-derived priority rules, not a family template.'
+- 'Scene title: Red-Marked Block Tower Removal.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules are authored from
+  STAGBench metadata/action protocol.'

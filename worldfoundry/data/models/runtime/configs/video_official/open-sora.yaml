@@ -7,9 +7,30 @@ runtime:
   - ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/synthesis/visual_generation/open_sora/open_sora_runtime
   checkpoint_candidates:
   - $WORLDFOUNDRY_CKPT_DIR/OpenSora-STDiT-v3
+  - $WORLDFOUNDRY_CKPT_DIR/hpcai-tech--OpenSora-STDiT-v3
   - $WORLDFOUNDRY_HFD_ROOT/hpcai-tech--OpenSora-STDiT-v3
+  required_paths:
+  - id: stdit_config
+    path: config.json
+  - id: stdit_weights
+    path: model.safetensors
+  - id: video_vae_config
+    path: $WORLDFOUNDRY_HFD_ROOT/hpcai-tech--OpenSora-VAE-v1.2/config.json
+  - id: video_vae_weights
+    path: $WORLDFOUNDRY_HFD_ROOT/hpcai-tech--OpenSora-VAE-v1.2/model.safetensors
+  - id: text_encoder_config
+    path: $WORLDFOUNDRY_HFD_ROOT/DeepFloyd--t5-v1_1-xxl-safetensors/config.json
+  - id: text_encoder_index
+    path: $WORLDFOUNDRY_HFD_ROOT/DeepFloyd--t5-v1_1-xxl-safetensors/model.safetensors.index.json
+    hint: Run the Open-Sora convert_t5_to_safetensors.py tool with --source <DeepFloyd .bin directory> and --output <sibling DeepFloyd--t5-v1_1-xxl-safetensors directory>.
+  - id: text_encoder_shard_1
+    path: $WORLDFOUNDRY_HFD_ROOT/DeepFloyd--t5-v1_1-xxl-safetensors/model-00001-of-00002.safetensors
+  - id: text_encoder_shard_2
+    path: $WORLDFOUNDRY_HFD_ROOT/DeepFloyd--t5-v1_1-xxl-safetensors/model-00002-of-00002.safetensors
+  - id: text_encoder_tokenizer
+    path: $WORLDFOUNDRY_HFD_ROOT/DeepFloyd--t5-v1_1-xxl-safetensors/spiece.model
   defaults:
-    config: configs/opensora-v1-2/inference/sample.py
+    config: ${WORLDFOUNDRY_DATA_ROOT}/models/runtime/configs/open_sora/opensora-v1-2/inference/sample.py
     num_frames: 51
     resolution: 480p
     aspect_ratio: "9:16"
@@ -18,11 +39,12 @@ runtime:
     aes: 6.5
     seed: 1024
   env:
-    OPENSORA_VAE_PATH: "$WORLDFOUNDRY_CKPT_DIR/hfd/hpcai-tech--OpenSora-VAE-v1.2"
+    OPENSORA_VAE_PATH: "$WORLDFOUNDRY_HFD_ROOT/hpcai-tech--OpenSora-VAE-v1.2"
+    OPENSORA_TEXT_ENCODER_PATH: "$WORLDFOUNDRY_HFD_ROOT/DeepFloyd--t5-v1_1-xxl-safetensors"
   command:
   - "{python}"
   - "{repo_root}/scripts/inference.py"
-  - "{repo_root}/{config}"
+  - "{config}"
   - "--ckpt-path"
   - "{checkpoint_path}"
   - "--prompt"
@@ -50,5 +72,6 @@ runtime:
 notes:
 - Open-Sora v1.2 inference source is vendored under worldfoundry/synthesis/visual_generation/open_sora/open_sora_runtime.
 - This route must not resolve code from an external Open-Sora checkout; only checkpoints and caches may be external.
-- Text encoder assets use OPENSORA_TEXT_ENCODER_PATH when set, then the local MAGI-1 T5-XXL cache when present, otherwise the official DeepFloyd/t5-v1_1-xxl HF id.
-- Defaults follow the official Hugging Face demo quality preset: 480p, 2s/51 frames, 30 sampling steps, cfg 7.0, seed 1024, and no forced motion score.
+- Convert the published DeepFloyd .bin shards into a separate sibling DeepFloyd--t5-v1_1-xxl-safetensors directory with tools/convert_t5_to_safetensors.py before inference. The original checkpoint remains untouched.
+- Direct loading of the published .bin shards with Transformers 4.57+ requires torch 2.6 or newer; the converted safetensors load in the pinned torch 2.5.1 environment.
+- 'Defaults follow the official Hugging Face demo quality preset: 480p, 2s/51 frames, 30 sampling steps, cfg 7.0, seed 1024, and no forced motion score.'

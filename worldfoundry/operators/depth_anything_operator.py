@@ -94,7 +94,7 @@ class DepthAnythingOperator(BaseOperator):
         Returns:
             Visualization-ready depth image
         """
-        from worldfoundry.core.io.artifacts import prepare_depth_visualization
+        from worldfoundry.core.media.artifacts import prepare_depth_visualization
 
         return prepare_depth_visualization(depth, grayscale=grayscale)
 
@@ -128,7 +128,7 @@ class DepthAnythingOperator(BaseOperator):
         Args:
             input_signal: Visual input signal - can be:
                 - Image file path (str)
-                - Numpy array (H, W, 3) in RGB or BGR format
+                - Numpy array (H, W, 3) in RGB format
                 - Torch tensor (C, H, W) or (1, C, H, W) in CHW format
 
         Returns:
@@ -143,14 +143,16 @@ class DepthAnythingOperator(BaseOperator):
                 image_rgb = input_signal.permute(1, 2, 0).cpu().numpy()
             else:
                 image_rgb = input_signal[0].permute(1, 2, 0).cpu().numpy()
-            if image_rgb.max() > 1.0:
+            # Integer dtypes are always 0-255; the value-range check is only a
+            # fallback for float inputs whose scale is ambiguous.
+            if np.issubdtype(image_rgb.dtype, np.integer) or image_rgb.max() > 1.0:
                 image_rgb = image_rgb / 255.0
         elif isinstance(input_signal, np.ndarray):
-            image_rgb = input_signal / 255.0 if input_signal.max() > 1.0 else input_signal
-            # Convert BGR to RGB if needed (heuristic: if first channel mean > last channel mean)
-            if len(image_rgb.shape) == 3 and image_rgb.shape[2] == 3:
-                if image_rgb[..., 0].mean() > image_rgb[..., 2].mean():
-                    image_rgb = image_rgb[..., ::-1]
+            # Array inputs are expected in RGB channel order.
+            if np.issubdtype(input_signal.dtype, np.integer) or input_signal.max() > 1.0:
+                image_rgb = input_signal / 255.0
+            else:
+                image_rgb = input_signal
         else:
             # Assume it's a file path
             raw_image = cv2.imread(input_signal)
@@ -237,10 +239,3 @@ class DepthAnythingOperator(BaseOperator):
             result["num_frames"] = num_frames
 
         return result
-
-    def delete_last_interaction(self):
-        """Delete the last interaction from current_interaction list."""
-        if len(self.current_interaction) > 0:
-            self.current_interaction = self.current_interaction[:-1]
-        else:
-            raise ValueError("No interaction to delete.")

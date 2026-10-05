@@ -1,0 +1,54 @@
+---
+title: "SANA-WM"
+description: "SANA-WM from NVIDIA: world-model and camera-controlled-video; Runner parity pending; dedicated `sana`."
+modelId: "sana-wm"
+pageSource: authored
+---
+
+SANA-WM is a world model built on NVIDIA's efficient Sana architecture: a two-stage design (interactive stage plus LTX-2 refiner) that generates camera-controlled world video with a resident multi-GPU pipeline. A real Workspace run partitioned the components across four A100s and generated eight finite, decodable 1280x704 frames from a nine-frame native window.
+
+<ModelPaperFigures modelId="sana-wm" locale="en" />
+
+The recorded paper is [SANA-WM: Efficient Minute-Scale World Modeling with Hybrid Linear Diffusion Transformer](https://arxiv.org/abs/2605.15178) (2026).
+
+Project page: [nvlabs.github.io/Sana/WM](https://nvlabs.github.io/Sana/WM/). Code: [NVlabs/Sana](https://github.com/NVlabs/Sana).
+
+The paper is [SANA-WM: Efficient Minute-Scale World Modeling with Hybrid Linear Diffusion Transformer](https://arxiv.org/abs/2605.15178). Project page: [nvlabs.github.io/Sana/WM](https://nvlabs.github.io/Sana/WM). Code: [NVlabs/Sana](https://github.com/NVlabs/Sana).
+
+<ModelCommandBuilder modelId="sana-wm" locale="en" />
+
+## What it is for
+
+Use `sana-wm-streaming` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+
+Camera actions follow the current official SANA-WM controls: `w/s` move forward/back, `a/d` yaw left/right, `j/l` strafe left/right, and `i/k` pitch up/down. Held actions use the official default speeds of 0.025 units and 0.6° per frame, with a gradual stop after release. Pass one action for each transition after the initial image, or provide explicit `camera_to_world` poses.
+
+SANA-WM reuses the canonical Sana network, encoder, autoencoder, scheduler, and recipe roles — no modality-owned Sana runtime remains (paper arXiv 2605.15178, apache-2.0). The interactive pipeline keeps its two-stage model resident and advances with native 8k+1 temporal windows; the quality profile keeps the bidirectional stage and LTX-2 refiner enabled.
+
+Catalog tasks include world-model, camera-controlled-video, and controllable-world-generation. Catalog aliases include `sana world model`, `sana-wm-2.6b`, `sana-wm-streaming`, and `Efficient-Large-Model/SANA-WM_streaming`.
+
+Recorded evaluation entry points include [SANA-WM 80-Scene Benchmark](/docs/evaluation/benchmark-hub/sana-wm-bench) (The dedicated SANA-WM benchmark recorded in this repository), [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-control adherence of world rollouts).
+
+Not [SANA](/docs/guides/supported-models/sana). Score on [SANA-WM 80-Scene Benchmark](/docs/evaluation/benchmark-hub/sana-wm-bench) and [CameraBench](/docs/evaluation/benchmark-hub/camerabench).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `guidance_scale`; artifacts `sana-wm-streaming.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `SanaWMPipeline`.
+
+Family status: **Runner parity pending**.
+
+The validated four-A100 run is a four-stage smoke that confirms execution and coherent conditioning — it does not claim the default 60-step quality recipe. Component placement across GPUs is configurable.
+
+WorldFoundry registers an in-tree resident pipeline with configurable multi-GPU component placement.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run sana-wm-streaming --pipeline.task-profile interactive-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+Recorded weight repositories include `Efficient-Large-Model/SANA-WM_streaming` and `Efficient-Large-Model/SANA-WM_bidirectional`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh sana-wm-streaming`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="sana-wm" locale="en" />

@@ -55,6 +55,9 @@ class FastWAMRuntimeConfig:
     rand_device: str = "cpu"
     tiled: bool = False
     binarize_libero_gripper: bool = False
+    action_infer_mode: str = "first_frame"
+    num_video_frames: int = 5
+    video_infer_shift: float = 5.0
 
 class FastWAMRuntime:
     """Persistent released-checkpoint FastWAM runtime."""
@@ -62,8 +65,12 @@ class FastWAMRuntime:
     def __init__(self, config: FastWAMRuntimeConfig) -> None:
         if not config.local_files_only:
             raise ValueError("FastWAM requires local_files_only=true; runtime downloads are disabled")
-        if config.variant not in {"libero", "robotwin"}:
+        if config.variant not in {"libero", "libero_optional_idm", "robotwin"}:
             raise ValueError(f"Unsupported FastWAM variant: {config.variant!r}")
+        if config.action_infer_mode not in {"first_frame", "idm"}:
+            raise ValueError(f"Unsupported FastWAM action_infer_mode: {config.action_infer_mode!r}")
+        if config.action_infer_mode == "idm" and config.variant != "libero_optional_idm":
+            raise ValueError("FastWAM IDM mode requires the LIBERO Optional IDM checkpoint")
         if config.action_dim <= 0 or config.proprio_dim <= 0:
             raise ValueError("FastWAM action_dim and proprio_dim must be positive")
         if config.image_height <= 0 or config.image_width <= 0:
@@ -99,7 +106,7 @@ class FastWAMRuntime:
     def _resolve_release(self) -> tuple[Path, Path]:
         if self._release_root is not None and self._checkpoint_file is not None:
             return self._release_root, self._checkpoint_file
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         direct = self._existing_path(self.config.checkpoint_location)
         if direct is not None and direct.is_file():
@@ -140,7 +147,7 @@ class FastWAMRuntime:
         required_files: Sequence[str],
         allow_patterns: Sequence[str] | None = None,
     ) -> Path:
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         direct = self._existing_path(explicit)
         location = str(direct) if direct is not None else reference
@@ -174,9 +181,9 @@ class FastWAMRuntime:
         import torch
         from torch import nn
 
-        from worldfoundry.core.checkpoint.assignment import assign_state_dict_strict
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
-        from worldfoundry.core.model_loading.file import load_state_dict, load_torch_checkpoint
+        from worldfoundry.core.model_loading.checkpoints.assignment import assign_state_dict_strict
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.model_loading.checkpoints.file import load_state_dict, load_torch_checkpoint
 
         from .action_dit import ActionDiT
         from .mot import MoT
@@ -247,6 +254,7 @@ class FastWAMRuntime:
             dtype=dtype,
             action_infer_shift=self.config.action_infer_shift,
             action_num_train_timesteps=self.config.action_num_train_timesteps,
+            video_infer_shift=self.config.video_infer_shift,
             vae_tile_size=tuple(int(value) for value in self.config.vae_tile_size),
             vae_tile_stride=tuple(int(value) for value in self.config.vae_tile_stride),
         ).eval()
@@ -260,8 +268,8 @@ class FastWAMRuntime:
             return self._tokenizer, self._text_encoder
         import torch
 
-        from worldfoundry.core.checkpoint.assignment import assign_state_dict_strict
-        from worldfoundry.core.model_loading.file import load_state_dict
+        from worldfoundry.core.model_loading.checkpoints.assignment import assign_state_dict_strict
+        from worldfoundry.core.model_loading.checkpoints.file import load_state_dict
 
         from .wan_video_text_encoder import HuggingfaceTokenizer, WanTextEncoder
 
@@ -394,7 +402,7 @@ class FastWAMRuntime:
             offset = -1.0 - scale * minimum
             offset[ignore] = -minimum[ignore]
             values = (values - offset) / scale
-        if self.config.variant == "libero":
+        if self.config.variant.startswith("libero"):
             values[..., -1] = -(values[..., -1] * 2.0 - 1.0)
             if self.config.binarize_libero_gripper:
                 values[..., -1] = np.sign(values[..., -1])
@@ -438,7 +446,7 @@ class FastWAMRuntime:
         if isinstance(image, Image.Image):
             return image
         if isinstance(image, (str, Path)):
-            from worldfoundry.core.utils.image_utils import load_pil_image
+            from worldfoundry.core.media.processing.image_utils import load_pil_image
 
             return load_pil_image(image, first_sequence_item=False)
         return Image.fromarray(np.asarray(image).astype(np.uint8))
@@ -474,7 +482,7 @@ class FastWAMRuntime:
         import numpy as np
         import torch
 
-        from worldfoundry.core.utils.image_utils import load_pil_image
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
 
         image_mapping = image if isinstance(image, Mapping) else {}
         image_sequence = (
@@ -485,7 +493,7 @@ class FastWAMRuntime:
         combined = first_present(observation, "combined_image", "model_image")
         if combined is None:
             combined = first_present(image_mapping, "combined_image", "model_image")
-        if self.config.variant == "libero":
+        if self.config.variant.startswith("libero"):
             explicit_views = (
                 first_present(
                     observation,
@@ -537,7 +545,7 @@ class FastWAMRuntime:
         if combined is not None:
             source = load_pil_image(combined, first_sequence_item=False)
             array = self._resize(source, self.config.image_width, self.config.image_height)
-        elif self.config.variant == "libero":
+        elif self.config.variant.startswith("libero"):
             primary = first_present(
                 observation,
                 "image",
@@ -596,7 +604,7 @@ class FastWAMRuntime:
             left = self._resize(left, 160, 128)
             right = self._resize(right, 160, 128)
             array = np.concatenate([head, np.concatenate([left, right], axis=1)], axis=0)
-        tensor = torch.from_numpy(np.ascontiguousarray(array)).permute(2, 0, 1).unsqueeze(0)
+        tensor = torch.from_numpy(np.array(array, copy=True, order="C")).permute(2, 0, 1).unsqueeze(0)
         tensor = tensor.to(device=self._device, dtype=self._dtype)
         return tensor * (2.0 / 255.0) - 1.0
 
@@ -649,9 +657,15 @@ class FastWAMRuntime:
         ).unsqueeze(0)
         image_tensor = self._image_tensor(observation, image)
         context, context_mask = self._context(instruction, observation)
-        action = policy.infer_action(
+        infer = (
+            policy.infer_action_idm
+            if self.config.action_infer_mode == "idm"
+            else policy.infer_action
+        )
+        action = infer(
             input_image=image_tensor,
             action_horizon=int(self.config.action_horizon),
+            **({"num_video_frames": int(self.config.num_video_frames)} if self.config.action_infer_mode == "idm" else {}),
             proprio=proprio,
             context=context,
             context_mask=context_mask,
@@ -671,6 +685,8 @@ class FastWAMRuntime:
             runtime="worldfoundry.fastwam.in_tree_runtime",
             metadata={
                 "variant": self.config.variant,
+                "action_infer_mode": self.config.action_infer_mode,
+                "num_video_frames": self.config.num_video_frames if self.config.action_infer_mode == "idm" else None,
                 "action_shape": list(actions.shape),
                 "action_horizon": int(self.config.action_horizon),
                 "denoising_steps": int(self.config.num_inference_steps),
@@ -725,7 +741,9 @@ def predict_action(
     )
     if not checkpoint:
         raise ValueError("FastWAM checkpoint_path or checkpoint_ref is required")
-    sigma_value = effective.get("sigma_shift")
+    # The Optional IDM release was trained/evaluated with shift 1.0, while the
+    # base variants use 5.0. Keep checkpoint-specific values authoritative.
+    sigma_value = variant_options.get("sigma_shift", effective.get("sigma_shift"))
     config = FastWAMRuntimeConfig(
         checkpoint_location=checkpoint,
         variant=variant_name,
@@ -743,7 +761,11 @@ def predict_action(
         action_config=dict(_required_option(effective, "action_config")),
         vae_mean=tuple(_required_option(effective, "vae_mean")),
         vae_std=tuple(_required_option(effective, "vae_std")),
-        action_infer_shift=float(_required_option(effective, "action_infer_shift")),
+        action_infer_shift=float(
+            variant_options["action_infer_shift"]
+            if "action_infer_shift" in variant_options
+            else _required_option(effective, "action_infer_shift")
+        ),
         action_num_train_timesteps=int(
             _required_option(effective, "action_num_train_timesteps")
         ),
@@ -774,6 +796,9 @@ def predict_action(
         rand_device=str(effective.get("rand_device") or "cpu"),
         tiled=option_bool(effective.get("tiled"), False),
         binarize_libero_gripper=option_bool(effective.get("binarize_libero_gripper"), False),
+        action_infer_mode=str(effective.get("action_infer_mode") or "first_frame"),
+        num_video_frames=option_int(effective.get("num_video_frames"), 5),
+        video_infer_shift=option_float(effective.get("video_infer_shift"), 5.0),
     )
     cache_key = (config.checkpoint_location, runtime_options_cache_key(config.__dict__))
     runtime = _RUNTIME_CACHE.get(cache_key)

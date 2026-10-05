@@ -27,3 +27,19 @@ catalog_scope: World-model catalog entries. Integrated entries expose in-tree Wo
   runtimes; blocked entries retain upstream provenance without runnable backends.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: happyoyster
+docs:
+  publisher: HappyOyster (commercial product)
+  publisher_kind: company
+  publisher_zh: HappyOyster（商业产品，机构主体未记录）
+  overview: HappyOyster is a commercial world-model API product recorded by its product site (happyoyster.cn) rather than a code repository. In this catalog only the API route metadata is registered — WorldFoundry tracks the product for landscape completeness, and no runnable API client or generation pipeline is registered.
+  overview_zh: HappyOyster 是商业世界模型 API 产品，本仓库以产品官网（happyoyster.cn）而非代码仓库记录。本 catalog 中仅注册了 API 路径元数据——WorldFoundry 出于生态完整性跟踪该产品，未注册可运行的 API 客户端或生成 pipeline。
+  architecture: 'This is a hosted commercial product: the vendor has not published its architecture and this repository does not record it. Only the world-model/API-product task tags are recorded.'
+  architecture_zh: 这是托管的商业产品：厂商未公开其架构，本仓库亦未记录。仅记录 world-model/API 产品的任务标签。
+  usage_notes: API credentials and endpoint are runtime-gated. Real usage would require a vendor account; the current entry emits a runtime plan only.
+  usage_notes_zh: API 凭据与端点受运行时限制。真实使用需要厂商账号；当前条目仅输出运行时计划。
+  limitations:
+  - No runnable API client is registered — metadata-only entry.
+  - Vendor architecture, pricing, and quality are not recorded in this repository.
+  limitations_zh:
+  - 未注册可运行的 API 客户端——仅元数据条目。
+  - 厂商架构、定价与质量本仓库未记录。

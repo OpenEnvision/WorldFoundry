@@ -3,6 +3,7 @@ availability: open_source
 checkpoints:
 - nvidia/Cosmos-Predict2.5-2B
 - nvidia/Cosmos-Predict2.5-14B
+- nvidia/Cosmos-Reason1-7B
 family: NVIDIA Cosmos
 id: cosmos-predict-2.5
 aliases:
@@ -10,14 +11,15 @@ aliases:
   - cosmos-predict-2p5
 integration:
   notes:
-  - Cosmos Predict 2.5 runtime now resolves only local in-tree/cache artifacts; runtime
-    download paths were removed.
-  - Predict transformer, Reason1, and Wan VAE artifacts resolve locally; full import
-    still requires a diffusers-enabled runtime environment.
-  - Official robot_pouring examples are video2world and require materialized demo
-    media; the Studio in-tree wrapper currently defaults to text2world/image2world
-    and promotes legacy 17-frame/4-step compact defaults to full validation defaults.
-  status: runtime_ported
+  - Predict 2.5 is assembled from the canonical native denoiser, conditioner, latent
+    initializer, scheduler, decoder, loader, and offload roles without Diffusers.
+  - Official 2B and 14B EMA transformer structures match 569/569 and 729/729 tensors;
+    Reason1 language weights match 338/338 and the shared Wan VAE matches 194/194.
+  - Image/video conditioning and positive classifier-free guidance are expressed through
+    shared runner contracts rather than a model-specific runtime architecture.
+  - The checkpoint-backed 2B text-to-world route completed 35 denoising steps and
+    decoded all 93 frames at 1280x704; 14B end-to-end GPU parity remains pending.
+  status: integrated
 license: other:nvidia-open-model-license
 modalities:
 - text-to-video
@@ -31,10 +33,10 @@ runtime_profile: runtime-profile:cosmos-predict2.5-2b
 starred: true
 variants:
 - runner_parity:
-    blocked_reasons:
-    - Requires accepted NVIDIA model license, official demo artifact, and WorldFoundry
-      runner parity run.
-    status: planned
+    status: verified
+    notes:
+    - The native 2B route completed a 35-step, 93-frame, 1280x704 checkpoint-backed
+      Studio/API run with all frames decodable and unique.
   checkpoint_refs:
   - gated: auto
     license: other:nvidia-open-model-license
@@ -42,26 +44,32 @@ variants:
     repo_id: nvidia/Cosmos-Predict2.5-2B
     requires_auth: true
     revision: f176dc95b4a70f53ce01c4b302851595e7322b00
+    filename: base/post-trained/81edfebe-bd6a-4039-8c1d-737df1a790bf_ema_bf16.pt
   demo_parity:
-    status: pending_demo
+    status: verified
+    notes: The full sequence preserves the nighttime bus terminal, bus, road, lighting,
+      and background geometry with subtle continuous motion.
   id: cosmos-predict-2.5-2b
+  integration_status: integrated
   provider: official_repo
   runtime_profile: cosmos-predict2.5-2b
   task: world-generation
 - runner_parity:
     blocked_reasons:
-    - Requires high-memory GPU validation, official demo artifact, and WorldFoundry
-      runner parity run.
-    status: planned
+    - Native checkpoint structure passes; high-memory GPU output parity and an official
+      demo artifact remain pending.
+    status: pending
   checkpoint_refs:
   - gated: false
     license: other:nvidia-open-model-license
     private: false
     repo_id: nvidia/Cosmos-Predict2.5-14B
     revision: 71ebf3e8af30ecfe440bf0481115975fcc052b46
+    filename: base/post-trained/e21d2a49-4747-44c8-ba44-9f6f9243715f_ema_bf16.pt
   demo_parity:
-    status: pending_demo
+    status: structural_validation_passed
   id: cosmos-predict-2.5-14b
+  integration_status: integrated
   provider: official_repo
   runtime_profile: cosmos-predict2.5-14b
   task: world-generation
@@ -72,10 +80,13 @@ tasks:
 - world-generation
 runner_parity:
   notes:
-  - In-tree CosmosPredict2p5Pipeline is registered; full parity remains gated by
-    local NVIDIA checkpoints, accepted license, and GPU validation.
-  status: implemented_checkpoint_pending
+  - The public CosmosPredict2p5Pipeline directly invokes the native recipes; the 2B
+    text-to-world route is verified at 1280x704 for 93 frames and 35 steps.
+  - The 14B route still requires end-to-end GPU output validation.
+  status: pending
 official_sources:
+  paper: https://arxiv.org/abs/2511.00062
+  project_page: https://research.nvidia.com/labs/dir/cosmos-predict2.5
   github:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
@@ -99,3 +110,26 @@ catalog_policy:
   open_source_rule: Only mark open_source when an official GitHub repository or official
     Hugging Face model page was confirmed. Do not infer checkpoint availability from
     papers, demos, or third-party mirrors.
+docs:
+  publisher: NVIDIA
+  publisher_kind: company
+  publisher_zh: 英伟达（NVIDIA）
+  overview: 'Cosmos Predict 2.5 is NVIDIA''s world foundation model for physical AI: text, image, or video in — world video out, with 2B and 14B variants. In this catalog it is assembled natively from WorldFoundry''s canonical denoiser, conditioner, scheduler, decoder, and loader roles without Diffusers; official EMA transformer structures match 569/569 (2B) and 729/729 (14B) tensors, Reason1 language weights match 338/338, and the shared Wan VAE matches 194/194.'
+  overview_zh: Cosmos Predict 2.5 是英伟达面向物理 AI 的世界基础模型：输入文本、图像或视频，输出世界视频，含 2B 与 14B 两个 variant。本 catalog 中它由 WorldFoundry 规范的去噪器、条件器、调度器、解码器与加载器角色原生组装、不依赖 Diffusers；官方 EMA transformer 结构 2B 匹配 569/569、14B 匹配 729/729 张量， Reason1 语言权重匹配 338/338，共享 Wan VAE 匹配 194/194。
+  architecture: Predict 2.5 unifies text/image/video-to-world generation in one flow-based model with a Reason1 language conditioner and shared Wan VAE. Image/video conditioning and positive classifier-free guidance are expressed through shared runner contracts rather than a model-specific runtime.
+  architecture_zh: Predict 2.5 用单一流模型统一文/图/视频到世界生成，配 Reason1 语言条件器与共享 Wan VAE。图像/视频条件与正向 CFG 通过共享 runner 契约表达，而非模型专属运行时。
+  usage_notes: The public CosmosPredict2p5Pipeline invokes the native recipes directly. The 2B text-to-world route is verified at 1280x704 for 93 frames and 35 steps; the 14B route still requires end-to-end GPU output validation. NVIDIA checkpoint access remains gated.
+  usage_notes_zh: 公开的 CosmosPredict2p5Pipeline 直接调用原生配方。2B 文生世界路径已按 1280x704、93 帧、35 步完成验证；14B 路径仍需端到端 GPU 输出验证。NVIDIA checkpoint 访问仍受许可控制。
+  limitations:
+  - End-to-end GPU output parity for the 14B variant is pending.
+  - Checkpoint access is gated by NVIDIA.
+  limitations_zh:
+  - 14B variant 的端到端 GPU 输出一致性待验证。
+  - checkpoint 权限由英伟达管控。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: World-generation quality across conditions.
+    reason_zh: 各条件下世界生成质量评测。
+  - id: physics-iq
+    reason: Physical plausibility of predicted world video.
+    reason_zh: 预测世界视频的物理合理性。

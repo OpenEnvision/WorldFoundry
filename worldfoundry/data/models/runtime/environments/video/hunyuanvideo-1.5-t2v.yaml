@@ -8,15 +8,12 @@ env_name: worldfoundry-unified-cu128
 env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
 model_id: hunyuanvideo-1.5-t2v
 notes:
-- Uses the unified CUDA 12.8 environment for the in-tree HunyuanVideo 1.5 generate.py runtime. Optional rewrite/cache/SageAttention/FP8
-  paths are disabled in the default runtime config.
+- Uses the unified native diffusion environment. Optional Flash and Sage attention backends remain opt-in.
 pip_packages:
 - torch
 - torchvision
-- diffusers>=0.35.0
 - transformers>=4.57.1
 - accelerate
-- peft>=0.17.0
 - safetensors
 - imageio
 - imageio-ffmpeg
@@ -25,6 +22,4 @@ pip_packages:
 python: '3.11'
 validation_imports:
 - torch
-- diffusers
 - transformers
-- peft

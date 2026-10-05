@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -184,6 +185,12 @@ class DVLTRuntime:
         if not allow_cpu and not str(self.device).startswith("cuda"):
             return "DVLT official-quality inference requires a CUDA GPU; pass allow_cpu=True to force a local CPU run."
         checkpoint = str(self.checkpoint_path)
+        offline = any(
+            os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+            for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "WORLDFOUNDRY_OFFLINE")
+        )
+        if offline and ("://" in checkpoint or not self._is_local_reference(checkpoint)):
+            return "DVLT offline mode is enabled; provide an existing local checkpoint_path."
         if self._is_local_reference(checkpoint) and not Path(checkpoint).expanduser().exists():
             return f"DVLT checkpoint_path is missing: {checkpoint}"
         missing = self._missing_dependencies()

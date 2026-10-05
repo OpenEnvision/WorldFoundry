@@ -15,7 +15,6 @@ from flax import nnx
 from tqdm import tqdm
 
 import src.utils.sharding as sharding_utils
-import src.utils.wandb as wandb_utils
 from src.data.dataset import VideoReadError
 from src.models.model_loaders import get_jax_clip_model, get_vae_model
 from src.utils.config import get_obj_from_str, instantiate_from_config

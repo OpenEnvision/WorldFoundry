@@ -24,7 +24,7 @@ from torch import Tensor
 from torch.nn.init import trunc_normal_
 
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext.xformers import index_select_cat, memory_efficient_attention, scaled_index_add
-from worldfoundry.core.nn.module_utils import named_apply
+from worldfoundry.core.nn.blocks.module_utils import named_apply
 
 logger = logging.getLogger(__name__)
 

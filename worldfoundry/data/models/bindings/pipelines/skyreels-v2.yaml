@@ -3,7 +3,7 @@ binding_id: skyreels-v2
 model_id: skyreels-v2
 runner: worldfoundry.pipeline
 pipeline:
-  target: worldfoundry.pipelines.video_official.pipeline_official_video:SkyReelsV2Pipeline
+  target: worldfoundry.pipelines.skyreels_v2.pipeline_skyreels_v2:SkyReelsV2Pipeline
   loading:
     method: from_pretrained
     signature: unified

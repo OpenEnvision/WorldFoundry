@@ -1,0 +1,54 @@
+schema_version: 2
+model_id: open-dreamer
+display_name: Open Dreamer
+task_family: world_model
+groups:
+- world
+- game
+- minecraft
+source_repos:
+- url: https://github.com/reactor-team/open-dreamer
+  revision: 829263d2089744afb311677eb4d7900dd14ebfbc
+  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/open-dreamer-inference
+  role: official_inference_checkout
+  required_paths:
+  - inference.py
+  - pipeline/models.py
+- url: https://github.com/next-state/open-dreamer
+  revision: 5a4127fcbbd37b3cd9237904d645fb11348bab28
+  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/open-dreamer
+  role: official_training_checkout
+checkpoints:
+- role: dynamics_and_tokenizer_orbax_bundle
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/open-dreamer
+  status: checkpoint_not_published
+input_schema:
+  prompt: true
+  image: true
+  video: true
+  actions:
+  - minecraft_action
+  - world_action
+  - interaction
+artifact_kind: generated_world
+artifact_filename: open-dreamer.mp4
+execution:
+  environment: open-dreamer
+  backend_stage: in_tree_runtime_manifest
+  runtime_status: route_ready_assets_pending
+  integration_status: runtime_ported
+  pipeline_binding: open-dreamer
+integration:
+  status: runtime_ported
+notes:
+- Open Dreamer source is never vendored; upstream publishes an all-rights-reserved notice. WorldFoundry
+  binds the checkout at ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/open-dreamer-inference, or at
+  $WORLDFOUNDRY_OPEN_DREAMER_SOURCE when that variable is set.
+- The rollout runs in the checkout's own CUDA-12 JAX environment. The adapter prefers the checkout's
+  .venv/bin/python (created by `uv sync`) and falls back to python_executable when supplied.
+- Upstream has not released downloadable weights; the Orbax checkpoint must be trained with
+  https://github.com/next-state/open-dreamer or supplied via checkpoint_path.
+- Context clips must be RGB 368x640, or 360x640 so the entrypoint can zero-pad them to the trained shape.
+  Pass the clip as video= or input_mp4=; the pipeline promotes a filesystem video path into input_mp4.
+- Interactions without an explicit actions_path are rendered to Minecraft/VPT action JSONL beside the
+  output artifact; context frames are emitted as no-ops because their true actions are unknown.

@@ -1,190 +1,41 @@
 ---
 title: WBench
-description: Run WBench in WorldFoundry with the in-tree multi-turn video world-model evaluator.
+description: "Meituan LongCat multi-turn video world-model bench: 28 metrics, five axes. WorldFoundry ships the metric runtime; a one-video flicker run is not the 289-case protocol."
 ---
 
-## About
+WBench (Meituan LongCat) evaluates **multi-turn interactive video world models** along five axes that roll into `wbench_average`:
 
-WBench is a multi-turn interactive video world-model benchmark. It evaluates whether a model can keep rendering quality, scene setting, user control, temporal consistency, and physical plausibility across repeated interactions. The public benchmark covers 289 cases and 1,058 interaction turns, with four interaction types: navigation, subject action, event editing, and perspective switching.
+- **Quality** — aesthetic, imaging, flicker, dynamics, smoothness, HPSv3
+- **Setting** — scene / subject adherence
+- **Interaction** — navigation trajectory, event edits, subject actions, perspective switches
+- **Consistency** — background, segment continuity, perspective, subject, geometric / photometric reconstruction, spatial (incl. gated)
+- **Physical** — visual plausibility, causal fidelity
 
-The benchmark is designed for multiple control interfaces. Text-conditioned models run all 289 cases. Camera-conditioned and action-conditioned models run the 158 navigation cases, where WBench maps text, 6-DoF camera pose, and discrete actions into a comparable navigation protocol.
+Paper: [WBench](https://arxiv.org/abs/2605.25874). Project: [meituan-longcat.github.io/WBench](https://meituan-longcat.github.io/WBench/). Code: [meituan-longcat/WBench](https://github.com/meituan-longcat/WBench). Data: [`meituan-longcat/WBench`](https://huggingface.co/datasets/meituan-longcat/WBench). Weights: [`meituan-longcat/WBench-weights`](https://huggingface.co/meituan-longcat/WBench-weights).
 
-WorldFoundry integrates the WBench runtime in tree. The official GitHub repository, paper, project page, Hugging Face data, and Hugging Face weights are protocol and asset references; the WorldFoundry workflow does not require an external benchmark source checkout.
+WorldFoundry **checks in the metric runtime** (HPSv3, TransNetV2, PAVRM, DreamSim, MegaSAM pose precompute). A **real single-video `temporal_flickering` component is verified**; the **289-case multi-turn protocol is not**. `--official-results-path` imports `report.json` or per-metric directories.
 
-## What It Measures
+<BenchmarkPageSections id="wbench" locale="en" />
 
-WBench is a **multi-turn interactive** video world-model benchmark. It evaluates whether a model can keep rendering quality, scene setting, user control, temporal consistency, and physical plausibility across repeated interactions — 289 cases, 1,058 turns, and 22 human-validated metrics.
-
-## Sources
-
-- Paper: [WBench: A Comprehensive Multi-turn Benchmark for Interactive Video World Model Evaluation](https://arxiv.org/abs/2605.25874)
-- Project page and leaderboard: [meituan-longcat.github.io/WBench](https://meituan-longcat.github.io/WBench/)
-- Official source reference: [github.com/meituan-longcat/WBench](https://github.com/meituan-longcat/WBench)
-- Dataset: [meituan-longcat/WBench](https://huggingface.co/datasets/meituan-longcat/WBench)
-- Example submissions: [meituan-longcat/WBench-examples](https://huggingface.co/datasets/meituan-longcat/WBench-examples)
-- Metric weights: [meituan-longcat/WBench-weights](https://huggingface.co/meituan-longcat/WBench-weights)
-
-## Evaluation Protocol
-
-Generated videos use the official WBench work directory layout:
-
-```text
-work_dirs/<model_name>/
-  videos/
-    case_<id>_combined.mp4
-  evaluation/
-    <metric>/
-      case_<id>.json
-    report.json
-```
-
-`<id>` is the case JSON id, not the case filename. A full multi-turn clip is stored as one `case_<id>_combined.mp4` file. If a model emits turns with unequal frame counts, prepare `turns.json` for leaderboard submission so per-turn metrics can split the combined video correctly.
-
-| Dimension | Metrics |
-| --- | --- |
-| Quality | `aesthetic_quality`, `imaging_quality`, `temporal_flickering`, `dynamic_degree`, `motion_smoothness`, `hpsv3_quality` |
-| Setting | `scene_adherence`, `subject_adherence` |
-| Interaction | `navigation_trajectory`, `event_edit_adherence`, `subject_action_adherence`, `perspective_switch_adherence` |
-| Consistency | `background_consistency`, `segment_continuity`, `perspective_consistency`, `subject_consistency`, `geometric_consistency`, `photometric_consistency`, `spatial_consistency`, `gated_spatial_consistency` |
-| Physical | `visual_plausibility`, `causal_fidelity` |
-| Primary | `wbench_average`, computed from the five dimension scores when available |
-
-## WorldFoundry Integration
-
-WorldFoundry's integrated runtime lives at:
-
-```text
-worldfoundry/evaluation/tasks/execution/runners/wbench/runtime/wbench
-```
-
-The runner entry point is:
-
-```text
-worldfoundry/evaluation/tasks/execution/runners/wbench/run_wbench_official_runner.py
-```
-
-The direct runner can execute the checked-in WBench runtime with `--run-official`, or it can ingest an existing `report.json` or per-metric `evaluation/` directory and write a WorldFoundry `scorecard.json`. The runtime uses WorldFoundry base-model assets for shared perception components where available, and WBench-specific weights are supplied through `WBENCH_WEIGHTS_DIR`.
-
-WBench has both local metric dependencies and API-backed VLM metrics. For full metric recomputation you need generated videos, WBench data cases and masks, metric weights, CUDA packages, and VLM credentials for the official VLM metrics.
-
-## Prepare Data And Assets
-
-Start from the WorldFoundry repository root:
+## How to run
 
 ```bash
-cd /path/to/WorldFoundry
-export WORLDFOUNDRY_REPO_ROOT="$PWD"
-export PYTHONPATH="$WORLDFOUNDRY_REPO_ROOT:${PYTHONPATH:-}"
-```
-
-Prepare the WBench runtime, data, work directory, and metric weights:
-
-```bash
-export WORLDFOUNDRY_WBENCH_ROOT="$WORLDFOUNDRY_REPO_ROOT/worldfoundry/evaluation/tasks/execution/runners/wbench/runtime/wbench"
-export WORLDFOUNDRY_WBENCH_WORK_DIR=/path/to/wbench/work_dirs
-export WORLDFOUNDRY_WBENCH_MODEL_NAME=my_model
-export WBENCH_WEIGHTS_DIR=/path/to/wbench/weights
-
-hf download meituan-longcat/WBench \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_WBENCH_ROOT}/data" \
-  --exclude "splits/*"
-
-hf download meituan-longcat/WBench-weights \
-  --local-dir "${WBENCH_WEIGHTS_DIR}"
-```
-
-Place generated videos under:
-
-```text
-${WORLDFOUNDRY_WBENCH_WORK_DIR}/${WORLDFOUNDRY_WBENCH_MODEL_NAME}/videos/
-```
-
-For a text-conditioned model, cover all 289 cases. For a camera-conditioned or action-conditioned model, cover the 158 navigation cases. Set `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` to the same video directory so WorldFoundry can record coverage metadata:
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR="${WORLDFOUNDRY_WBENCH_WORK_DIR}/${WORLDFOUNDRY_WBENCH_MODEL_NAME}/videos"
-```
-
-For VLM metrics:
-
-```bash
-export VLM_API_KEY=<your-vlm-api-key>
-export VLM_API_URL=${VLM_API_URL:-https://ark.cn-beijing.volces.com/api/v3}
-export VLM_MODEL_NAME=${VLM_MODEL_NAME:-doubao-seed-2-0-lite-260215}
-```
-
-For local visual plausibility scoring, provide the PAVRM model path:
-
-```bash
-export WORLDFOUNDRY_WBENCH_PAVRM_MODEL_DIR=/path/to/pavrm_model
-```
-
-## Run Evaluation
-
-Run the full in-tree WBench metric pipeline:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/wbench/run_wbench_official_runner.py \
   --run-official \
-  --wbench-root "${WORLDFOUNDRY_WBENCH_ROOT}" \
-  --work-dir "${WORLDFOUNDRY_WBENCH_WORK_DIR}" \
-  --weights-dir "${WBENCH_WEIGHTS_DIR}" \
-  --model-name "${WORLDFOUNDRY_WBENCH_MODEL_NAME}" \
-  --phase all \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/wbench/official-run \
+  --model-name <model_name> \
+  --phase gpu \
+  --metrics temporal_flickering \
+  --dataset-root <WBench_dataset> \
+  --generated-artifact-dir <one_officially_named_generated_video> \
+  --output-dir tmp/wbench/flicker \
   --json
 ```
 
-For a staged run, the official runtime also supports phases:
+`--submission-protocol text_multi_turn|camera_conditioned|action_conditioned` only when videos truly follow that official multi-turn interface. Env: `WORLDFOUNDRY_WBENCH_RESULTS_PATH`, `WORLDFOUNDRY_WBENCH_ROOT`. Shared stack: `video_world_perception_stack`.
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/wbench/run_wbench_official_runner.py \
-  --run-official \
-  --wbench-root "${WORLDFOUNDRY_WBENCH_ROOT}" \
-  --work-dir "${WORLDFOUNDRY_WBENCH_WORK_DIR}" \
-  --model-name "${WORLDFOUNDRY_WBENCH_MODEL_NAME}" \
-  --phase report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/wbench/report-only \
-  --json
-```
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/wbench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/wbench`.
 
-If you already have `report.json` or an official `evaluation/` directory, import it through the public benchmark entry point:
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id wbench \
-  --mode official-validation \
-  --official-results-path "${WORLDFOUNDRY_WBENCH_WORK_DIR}/${WORLDFOUNDRY_WBENCH_MODEL_NAME}/evaluation/report.json" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/wbench/official-validation \
-  --json
-```
-
-## Outputs
-
-WorldFoundry writes:
-
-- `scorecard.json`
-- `raw_metric_table.jsonl`
-- `report.json` when the official runtime produced or imported it
-- WBench runtime logs under the selected `--output-dir`
-
-For leaderboard submission, the official package is:
-
-```text
-<model_name>/
-  meta.json
-  report.json
-  turns.json
-  videos/
-    case_<id>_combined.mp4
-```
-
-The official WBench process accepts either self-evaluated scores plus videos, or videos only for the WBench team to evaluate. WorldFoundry does not run or host your model for that process; it prepares local scorecards and artifacts from the assets you provide.
+Outputs include `scorecard.json` (primary `wbench_average`).
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

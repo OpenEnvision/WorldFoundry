@@ -168,9 +168,7 @@ class DepthAnything3Operator(BaseOperator):
             array = np.clip(array, 0, 255)
 
         array = array.astype(np.uint8)
-
-        if array.shape[-1] == 3 and array[..., 0].mean() > array[..., 2].mean():
-            array = array[..., ::-1]
+        # Array inputs are expected in RGB channel order; no BGR guessing.
         return array
 
     def _coerce_single_image(self, input_signal: Any) -> Union[str, np.ndarray]:

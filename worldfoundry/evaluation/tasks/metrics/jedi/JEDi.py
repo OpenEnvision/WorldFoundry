@@ -20,38 +20,23 @@ class JEDiMetric:
         return mmd_poly(self.train_features, self.test_features, degree=2, coef0=0)*100
 
     def load_features(self, train_loader=None, test_loader=None, num_samples=5000):
-        if os.path.exists(f'{self.feature_path}/train.npy'):
-            self.train_features = np.load(f'{self.feature_path}/train.npy')
-        else:
-            if not hasattr(self, 'vjepa'):
-                from .V_JEPA import VJEPA
+        try:
+            for split, loader in (("train", train_loader), ("test", test_loader)):
+                filename = f'{self.feature_path}/{split}.npy' if self.feature_path is not None else None
+                if filename is not None and os.path.exists(filename):
+                    features = np.load(filename)[:num_samples]
+                else:
+                    assert loader is not None, f"{split}_loader is not provided"
+                    if not hasattr(self, 'vjepa'):
+                        from .V_JEPA import VJEPA
 
-                self.vjepa = VJEPA(model_dir=self.model_dir, config_fname=self.config_path)
-            
-            print("Computing features for training set")
-            assert train_loader is not None, "train_loader is not provided"
-            # Compute features for training set; train_loader batch shape = (B, T, C, H, W); range = [0, 1]
-            self.train_features = feature_aggregator(
-                self.vjepa, train_loader, num_samples=num_samples,
-                filename=f'{self.feature_path}/train.npy' if self.feature_path is not None else None
-            )
-        
-        if os.path.exists(f'{self.feature_path}/test.npy'):
-            self.test_features = np.load(f'{self.feature_path}/test.npy')
-        else:
-            if not hasattr(self, 'vjepa'):
-                from .V_JEPA import VJEPA
-
-                self.vjepa = VJEPA(model_dir=self.model_dir, config_fname=self.config_path)
-            
-            print("Computing features for testing set")
-            assert test_loader is not None, "test_loader is not provided"
-            # Compute features for testing set; test_loader batch shape = (B, T, C, H, W); range = [0, 1]
-            self.test_features = feature_aggregator(
-                self.vjepa, test_loader, num_samples=num_samples,
-                filename=f'{self.feature_path}/test.npy' if self.feature_path is not None else None
-            )
-        
-        if hasattr(self, 'vjepa'):
-            model_cleanup(self.vjepa)
+                        self.vjepa = VJEPA(model_dir=self.model_dir, config_fname=self.config_path)
+                    print(f"Computing features for {split} set")
+                    # Loader batches: (B, T, C, H, W), range [0, 1].
+                    features = feature_aggregator(self.vjepa, loader, num_samples=num_samples, filename=filename)
+                setattr(self, f'{split}_features', features)
+        finally:
+            if hasattr(self, 'vjepa'):
+                del self.vjepa
+                model_cleanup()
         return self.train_features, self.test_features

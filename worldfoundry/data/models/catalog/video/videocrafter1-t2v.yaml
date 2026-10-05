@@ -11,6 +11,9 @@ provider: official_repo
 source:
   status: open_source
   official_repo_url: https://github.com/VideoCrafter/VideoCrafter
+official_sources:
+  project_page: https://ailab-cvc.github.io/videocrafter2/
+  paper: https://arxiv.org/abs/2401.09047
 integration:
   status: integrated
   notes:
@@ -32,3 +35,25 @@ catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries
   expose WorldFoundry pipeline targets; metadata-only entries retain upstream provenance
   without runnable WorldFoundry backends.
+docs:
+  publisher: Tencent AI Lab
+  publisher_kind: company
+  publisher_zh: 腾讯 AI Lab
+  overview: VideoCrafter1 T2V is the text-to-video member of the VideoCrafter1 release, generating clips up to 1024x576 from a prompt. The in-tree infer-only runtime wraps the official text-to-video 1024 path with local checkpoint, fps, frame count, and seed controls.
+  overview_zh: VideoCrafter1 T2V 是 VideoCrafter1 发布中的文生视频成员，按提示词生成最高 1024x576 的视频。树内仅推理运行时封装官方 1024 文生视频路径，提供本地 checkpoint、fps、帧数与 seed 控制。
+  architecture: U-Net latent video diffusion at up to 1024x576 (per the upstream release). Checkpoint provenance is tracked on the family entry; training and download scripts are excluded.
+  architecture_zh: U-Net 潜空间视频扩散，最高 1024x576（见上游发布）。checkpoint 溯源在系列条目跟踪；训练与下载脚本已排除。
+  usage_notes: Runner parity is pending. Prefer VideoCrafter2 T2V for better visual quality from the same family, or the DiT entries for current-generation quality.
+  usage_notes_zh: Runner parity 为 pending。同系列中建议优先 VideoCrafter2 T2V 以获得更好画质，或直接使用 DiT 条目获得当前一代质量。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  - Legacy generation quality; the older HF cards also need license review.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  - 属旧代质量；较早的 HF 卡片同样需要许可审阅。
+  recommended_benchmarks:
+  - id: evalcrafter
+    reason: Companion benchmark of the VideoCrafter effort.
+    reason_zh: VideoCrafter 项目的配套评测。

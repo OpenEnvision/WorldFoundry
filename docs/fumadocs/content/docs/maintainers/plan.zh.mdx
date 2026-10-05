@@ -7,7 +7,7 @@ WorldFoundry 面向 world model、视频生成与 embodied 策略的统一框架
 
 ## 社区集成
 
-World model 社区迭代很快：新架构、训练 recipe 和开源 checkpoint 持续涌现。WorldFoundry 需要保持「可集成的工作台」，而不是某一时刻研究线的静态快照。
+World model 社区迭代很快：新架构、训练 recipe 和开源 checkpoint 持续涌现。WorldFoundry 需要保持“可集成的工作台”，而不是某一时刻研究线的静态快照。
 
 我们会扩展 catalog 对 world model、video gen 与 embodied model（VLA、diffusion policy、simulator 等）的覆盖。优先接入维护活跃、推理或评测路径清晰、能在公开 checkpoint 上跑通的项目，而不是依赖私有 fork。
 
@@ -31,7 +31,7 @@ WorldFoundry 通过集成大量上游 runtime 长大。下一阶段是在**共�
 
 Studio 与文档站是多数用户的主入口，应体现 catalog 广度，而不是调试控制台。
 
-近期 UX 目标：更快的模型发现（筛选、profile、readiness 提示）、更清晰的运行配置（环境、checkpoint、profile 驱动的多卡默认项）、更丰富的产物审查（视频、action trace、3D 导出、外部路径）。CLI / TUI 继续服务高级用户；Studio 应覆盖常见的「选模型 → 运行 → 查看」闭环，减少手填 env 与导出路径。
+近期 UX 目标：更快的模型发现（筛选、profile、readiness 提示）、更清晰的运行配置（环境、checkpoint、profile 驱动的多卡默认项）、更丰富的产物审查（视频、action trace、3D 导出、外部路径）。CLI / TUI 继续服务高级用户；Studio 应覆盖常见的“选模型 → 运行 → 查看”闭环，减少手填 env 与导出路径。
 
 文档保持叙述优先：inference / evaluation 有独立 hub，细节落在 catalog 与 reference 页，避免大矩阵重复。本主题的改动应同步中英文，并与 UI 调用的 runtime 契约一致。
 

@@ -1,0 +1,50 @@
+---
+title: "EgoWM"
+description: "Egocentric navigation world model on SVD with paired 3-DoF action and 25-DoF state/action inference."
+modelId: "egowm"
+pageSource: authored
+---
+
+EgoWM predicts the **first-person** video a moving agent would see, given a view plus navigation actions. The 3-DoF and 25-DoF checkpoints use a **Stable Video Diffusion** backbone (`anuragba/egowm`). WorldFoundry runs both through a user-staged official source checkout as `EgoWMPipeline`.
+
+Paper: [arXiv 2601.15284](https://arxiv.org/abs/2601.15284). Project: [egowm.github.io](https://egowm.github.io/). Code: [miccooper9/egowm](https://github.com/miccooper9/egowm).
+
+The runtime plan reports missing source, checkpoints, or input conditions before generation. Runner: `implemented`.
+
+<ModelPaperFigures modelId="egowm" locale="en" />
+
+<ModelCommandBuilder modelId="egowm" locale="en" />
+
+## What it is for
+
+Egocentric navigation world model with action-conditioned 3-DoF and state/action-conditioned 25-DoF variants.
+
+The default 25-DoF route needs an image and physical conditions from the same trajectory.
+
+## Runtime contract
+
+Required: `image` and `prompt`; optional: `video`; `actions`: navigation_action, egocentric_action; artifacts: `generated_video` and `egowm.mp4`.
+
+| Knob | Default |
+| --- | --- |
+| Size | **512×512** |
+| Frames | **8** |
+| Steps | **25** |
+| FPS | **7** |
+| Seed | **42** |
+| `motion_bucket_id` | **180** |
+| 25-DoF conditions | Paired `conditions_path` JSON with physical state/actions |
+| 3-DoF actions | Paired `actions_path` JSON with normalized actions |
+| Student | `$WORLDFOUNDRY_CKPT_DIR/anuragba--egowm/svd_25dof_nav.pth` |
+| SVD base | `stabilityai/stable-video-diffusion-img2vid` |
+| Source | `$WORLDFOUNDRY_MODEL_SOURCE_DIR/egowm` commit `4a24b6fb` |
+
+The default `variant=25dof` requires an explicit initial image and a JSON file with `physical_initial_state` (25 numbers) and `physical_actions` (one 25-number row per generated frame). Actions are physical differences between robot states sampled six source-video frames apart. The runner applies the official navigation state and action normalization. The image must belong to the same trajectory; no image is supplied by default. Use `smoke_synthetic=true` only to check that the model loads and generates; its zero state and synthetic actions do not validate robot motion.
+
+For paired 3-DoF inference, set `variant=3dof`, select `svd_3dof_nav.pth`, and provide the matching initial image plus `actions_path` JSON: `{"normalized_actions": [[x, y, yaw], ...]}` with exactly one row per generated frame. The x/y values must already use the official 3-DoF normalization (SCAND uses x bounds `[-2.5, 5]` and y bounds `[-4, 4]` after local-coordinate conversion and division by 0.38 m); yaw is a wrapped radian difference. `conditions_path` applies only to 25-DoF. The alternative `action_scale` adds a constant normalized x offset from the zero-displacement baseline of `-1/3` on every frame; it is a synthetic smoke control, not a paired motion test.
+
+## Run in WorldFoundry
+
+Status: **One paired 25-DoF EVE1x sample and one paired 3-DoF SCAND test trajectory verified on GPU**. Each public route generated eight future frames plus the input. For SCAND, the public 3-DoF pipeline and the official constant-guidance pipeline produced pixel-identical frames with the same image, actions, checkpoint, and seed. The paired forward action advanced the hallway view; synthetic stationary and reverse controls remained nearly stationary. This is a single-trajectory observation, not evidence of calibrated displacement or reliable reverse motion. Stage the matching EgoWM checkpoint and SVD base model locally; missing files are reported by the runtime plan. Catalog VRAM is unset.
+
+<ModelRelatedRecipes modelId="egowm" locale="en" />

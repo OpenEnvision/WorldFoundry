@@ -1,0 +1,23 @@
+schema_version: worldfoundry.runtime_defaults.v1
+
+x-matrix-game-3p5-common: &matrix_game_3p5_common
+  checkpoint_path: null
+  wan_dir: null
+  tokenizer_dir: null
+  da3_dir: null
+  python_executable: null
+  device: cuda
+  num_blocks: 1
+  steps: 25
+  cfg_scale: 5.0
+  seed: 3407
+  camera_convention: c2w
+  keep_workspace: false
+  timeout_seconds: null
+  extra_args: []
+
+defaults:
+  matrix-game-3.5-first-person:
+    <<: *matrix_game_3p5_common
+  matrix-game-3.5-third-person:
+    <<: *matrix_game_3p5_common

@@ -4,17 +4,20 @@ from typing import List, Optional
 import torch
 from omegaconf import OmegaConf
 
-from worldfoundry.base_models.diffusion_model.video.wan.inference_scheduler import (
+from worldfoundry.base_models.diffusion_model.schedulers import (
     InferenceFlowMatchScheduler,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.runtime_components import (
-    WanTextEncoder as _WanTextEncoder,
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.resident import (
     WanVAEWrapper as _WanVAEWrapper,
 )
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.resident import (
+    WanTextEncoder as _WanTextEncoder,
+)
 from worldfoundry.core.io.paths import resolve_data_path
-from worldfoundry.base_models.diffusion_model.video.wan.variants.magic_world import (
-    CausalWanModel,
-    WanModel,
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.magic_world.causal import CausalWanModel
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.magic_world.model import WanModel
+from worldfoundry.base_models.diffusion_model.loaders.wan_variant import (
+    load_wan_transformer,
 )
 
 
@@ -73,19 +76,25 @@ class WanDiffusionWrapper(torch.nn.Module):
                 transformer_root = model_name
 
         if is_causal:
-            self.model = CausalWanModel.from_pretrained(
-                            transformer_root,
-                            transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs']),
-                            low_cpu_mem_usage=True,
-                            torch_dtype=weight_dtype
-                        )
+            self.model = load_wan_transformer(
+                CausalWanModel,
+                transformer_root,
+                additional_kwargs=OmegaConf.to_container(
+                    config["transformer_additional_kwargs"], resolve=True
+                ),
+                low_cpu_mem_usage=True,
+                torch_dtype=weight_dtype,
+            )
         else:
-            self.model = WanModel.from_pretrained(
-                            transformer_root,
-                            transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs']),
-                            low_cpu_mem_usage=True,
-                            torch_dtype=weight_dtype,
-                        )
+            self.model = load_wan_transformer(
+                WanModel,
+                transformer_root,
+                additional_kwargs=OmegaConf.to_container(
+                    config["transformer_additional_kwargs"], resolve=True
+                ),
+                low_cpu_mem_usage=True,
+                torch_dtype=weight_dtype,
+            )
         self.model.eval()
 
         # For non-causal diffusion, all frames share the same timestep

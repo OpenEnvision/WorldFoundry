@@ -13,9 +13,6 @@ from typing import Any
 
 import numpy as np
 
-from .runtime_env import ensure_fantasy_world_runtime
-
-
 def build_camera_params(
     camera_source: Any,
     image_size: tuple[int, int],
@@ -49,8 +46,6 @@ def build_camera_params(
                     does not contain "cameras_interp".
         TypeError: If `camera_source` is of an unsupported type.
     """
-    ensure_fantasy_world_runtime()
-    # Defer import to avoid circular dependencies and ensure runtime environment is set
     from . import utils as fw_utils
 
     if camera_source is None:
@@ -180,8 +175,6 @@ def save_prediction_artifacts(
     Raises:
         ValueError: If an unsupported `mask_operator` is provided.
     """
-    ensure_fantasy_world_runtime()
-    # Defer import to avoid circular dependencies and ensure runtime environment is set
     from . import utils as fw_utils
 
     scene_dir = Path(output_dir).expanduser().resolve() / scene_name

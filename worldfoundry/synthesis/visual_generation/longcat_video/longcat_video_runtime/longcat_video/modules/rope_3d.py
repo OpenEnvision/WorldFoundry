@@ -9,7 +9,7 @@ import torch.nn as nn
 
 from einops import rearrange, repeat
 
-from worldfoundry.core.distributed import context_parallel_util
+from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
 
 
 def broadcat(tensors, dim=-1):
@@ -96,12 +96,13 @@ class RotaryPositionalEmbedding(nn.Module):
 
         return freqs
 
-    def forward(self, q, k, grid_size):
+    def forward(self, q, k, grid_size, *, query_start=0):
         """3D RoPE.
 
         Args:
             query: [B, head, seq, head_dim]
             key: [B, head, seq, head_dim]
+            query_start: Offset of the query segment in the local flattened grid.
         Returns:
             query and key with the same shape as input.
         """
@@ -114,7 +115,11 @@ class RotaryPositionalEmbedding(nn.Module):
         freqs_cis = freqs_cis.float().to(q.device)
         cos, sin = freqs_cis.cos(), freqs_cis.sin()
         cos, sin = rearrange(cos, 'n d -> 1 1 n d'), rearrange(sin, 'n d -> 1 1 n d')
-        q_ = (q_ * cos) + (rotate_half(q_) * sin)
+        query_end = query_start + q.shape[-2]
+        if query_start < 0 or query_end > cos.shape[-2]:
+            raise ValueError("query segment must lie inside the RoPE grid")
+        q_cos, q_sin = cos[:, :, query_start:query_end], sin[:, :, query_start:query_end]
+        q_ = (q_ * q_cos) + (rotate_half(q_) * q_sin)
         k_ = (k_ * cos) + (rotate_half(k_) * sin)
 
         return q_.type_as(q), k_.type_as(k)

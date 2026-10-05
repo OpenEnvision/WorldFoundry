@@ -12,38 +12,10 @@ import os
 from PIL import Image
 from .utils import load_dimension_info
 from ..paths import keye_model_path
+from worldfoundry.core.attention import resolve_transformers_attention_implementation
+from worldfoundry.core.utils import extract_yes_no_answer, resolve_generation_max_new_tokens
 from tqdm import tqdm
 warnings.filterwarnings("ignore")
-import re
-
-import json
-
-
-
-def extract_yes_no_answer(text):
-    # If input is a list, take the first element
-    if isinstance(text, list):
-        if len(text) > 0:
-            text = text[0]
-        else:
-            return "no"  
-    
-    # Ensure text is a string
-    if not isinstance(text, str):
-        text = str(text)
-    
-    text = text.lower().strip()
-    
-    boxed_pattern = r'\\boxed\{([^}]+)\}'
-    boxed_match = re.search(boxed_pattern, text)
-    if boxed_match:
-        boxed_content = boxed_match.group(1).lower()
-        if "yes" in boxed_content:
-            return "yes"
-        elif "no" in boxed_content:
-            return "no"
-        
-
 
 
 def Keye2_5VL_Video(prompt_dict_ls,model,processor,fps,device):
@@ -51,6 +23,7 @@ def Keye2_5VL_Video(prompt_dict_ls,model,processor,fps,device):
     valid_num = 0
     video_num = 0
     processed_json = []
+    max_new_tokens = resolve_generation_max_new_tokens(512, scope="4d_worldbench")
 
     for prompt_dict in tqdm(prompt_dict_ls):
         base_question = prompt_dict['auxiliary_info']
@@ -68,11 +41,10 @@ def Keye2_5VL_Video(prompt_dict_ls,model,processor,fps,device):
                 "question_details": []
             }
             score = 0
+            vision_inputs = None
             for i in range(len(base_question)):
                 print(f"\n--- Processing question {i+1}/{len(base_question)} ---")
                 print(f"Question: {base_question[i]}")
-
-                torch.cuda.empty_cache()
 
                 # Initialize detailed information for current question
                 question_detail = {
@@ -118,7 +90,9 @@ def Keye2_5VL_Video(prompt_dict_ls,model,processor,fps,device):
                     messages, tokenize=False, add_generation_prompt=True
                 )
 
-                image_inputs,video_inputs,mm_processor_kwargs = process_vision_info(messages)
+                if vision_inputs is None:
+                    vision_inputs = process_vision_info(messages)
+                image_inputs, video_inputs, mm_processor_kwargs = vision_inputs
 
                 inputs = processor(
                     text=[text],
@@ -134,7 +108,7 @@ def Keye2_5VL_Video(prompt_dict_ls,model,processor,fps,device):
 
                 generated_ids = model.generate(
                     **inputs,
-                    max_new_tokens=4096,
+                    max_new_tokens=max_new_tokens,
                 )
 
 # Extract generated tokens (excluding input tokens)
@@ -146,22 +120,12 @@ def Keye2_5VL_Video(prompt_dict_ls,model,processor,fps,device):
                     generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
                 )
 
-                print(f"Keye answer: {output_text[0]}")
-                # breakpoint()
-                if "<analysis>" in output_text[0]:
-                    answer = output_text[0].split("</analysis>")[1]
-                elif "<think>" in output_text[0]:
-                    start_index = output_text[0].find("<answer>")
-                    end_index = output_text[0].find("</answer>")
-                    answer = output_text[0][start_index + len("<answer>"):end_index]
-
-                # answer = output_text[0].split("<answer>")[1].lower()              
-                question_detail["is_yes"] = True if "yes" in answer.lower() else False
-
-                question_detail["keye_answer"] = output_text[0]
-                question_detail["extract_answer"] = answer.lower()
-                # question_detail["is_yes"] = question_detail["extract_answer"] == "yes"
-                # print(f"Keye answer: {output_text[0]}")
+                raw_answer = output_text[0]
+                answer = extract_yes_no_answer(raw_answer)
+                print(f"Keye answer: {raw_answer}")
+                question_detail["keye_answer"] = raw_answer
+                question_detail["extract_answer"] = answer
+                question_detail["is_yes"] = answer == "yes"
                 if question_detail["is_yes"]:
                     score += 1
                     print(f"Answer is yes")
@@ -187,7 +151,7 @@ def compute_consistency_motion_qa_metrics(json_dir, device, submodules_dict, **k
     keye_model_path(),
         torch_dtype="auto",
         device_map=device,
-        attn_implementation="flash_attention_2",
+        attn_implementation=resolve_transformers_attention_implementation(device=device),
         trust_remote_code=True,
     )
     min_pixels = 256*28*28
@@ -199,7 +163,11 @@ def compute_consistency_motion_qa_metrics(json_dir, device, submodules_dict, **k
     
     print("Model loaded successfully")
     video_details = Keye2_5VL_Video(prompt_dict_ls, model,processor,fps=2,device=device)
-    final_average_score = sum([d["video_results"] for d in video_details]) / len(video_details)
+    final_average_score = (
+        sum(d["video_results"] for d in video_details) / len(video_details)
+        if video_details
+        else 0.0
+    )
     output_dir = os.path.dirname(json_dir)
     dim_name = os.path.splitext(os.path.basename(json_dir))[0]
     model_name = kwargs.get('model', '')

@@ -7,12 +7,12 @@ for generating images from text prompts.
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.core.io import file_sha256
+from worldfoundry.core.io.paths import hfd_root_path
 from worldfoundry.core.io.paths import package_module_root as package_root
-from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path
 
 
 def _resolve_hfd_root() -> Path:
@@ -20,12 +20,12 @@ def _resolve_hfd_root() -> Path:
     return hfd_root_path()
 
 
-# Default path for the main Show-O pretrained model.
-DEFAULT_SHOW_O_MODEL = _resolve_hfd_root() / "showlab--show-o-512x512"
+# Default paths follow the owner-prefixed layout produced by the checkpoint downloader.
+DEFAULT_SHOW_O_MODEL = _resolve_hfd_root() / "showlab--show-o"
 # Default path for the VQGAN model used by Show-O.
-DEFAULT_SHOW_O_VQ_MODEL = checkpoint_root_path("magvitv2")
+DEFAULT_SHOW_O_VQ_MODEL = _resolve_hfd_root() / "showlab--magvitv2"
 # Default path for the LLM model used for text understanding in Show-O.
-DEFAULT_SHOW_O_LLM_MODEL = checkpoint_root_path("phi-1_5")
+DEFAULT_SHOW_O_LLM_MODEL = _resolve_hfd_root() / "microsoft--phi-1_5"
 
 
 class ShowORuntime:
@@ -46,7 +46,7 @@ class ShowORuntime:
         pretrained_model_path: str | Path = DEFAULT_SHOW_O_MODEL,
         vq_model_path: str | Path = DEFAULT_SHOW_O_VQ_MODEL,
         llm_model_path: str | Path = DEFAULT_SHOW_O_LLM_MODEL,
-        resolution: int = 512,
+        resolution: int = 256,
         batch_size: int = 1,
         guidance_scale: float = 3.0,
         generation_timesteps: int = 18,
@@ -123,7 +123,7 @@ class ShowORuntime:
             ),
             vq_model_path=options.get("vq_model_path") or options.get("vq_model_name") or DEFAULT_SHOW_O_VQ_MODEL,
             llm_model_path=options.get("llm_model_path") or DEFAULT_SHOW_O_LLM_MODEL,
-            resolution=int(options.get("resolution", 512)),
+            resolution=int(options.get("resolution", 256)),
             batch_size=int(options.get("batch_size", 1)),
             guidance_scale=float(options.get("guidance_scale", 3.0)),
             generation_timesteps=int(options.get("generation_timesteps", 18)),
@@ -229,8 +229,8 @@ class ShowORuntime:
         # Explicitly import the module to ensure it's available in the current context.
         importlib.import_module("worldfoundry.synthesis.visual_generation.show_o.show_o_runtime")
         # Now that the path is set, we can import Showo and other local modules.
-        from models import Showo
         from inference_support.prompting_utils import UniversalPrompting
+        from models import Showo
 
         config = self._runtime_config(**overrides)
         # Determine the actual device, defaulting to 'cpu' if 'cuda' is not available.
@@ -310,8 +310,8 @@ class ShowORuntime:
         from PIL import Image
 
         runtime = self._ensure_runtime(**kwargs)  # Ensure runtime components are loaded.
-        from models import get_mask_chedule
         from inference_support.prompting_utils import create_attention_mask_predict_next
+        from models import get_mask_chedule
 
         config = runtime["config"]
         model = runtime["model"]
@@ -384,7 +384,7 @@ class ShowORuntime:
             "model_id": self.model_id,
             "artifact_kind": "generated_image",
             "artifact_path": str(target),
-            "artifact_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "artifact_sha256": file_sha256(target),
             "runtime": "worldfoundry.show_o.in_tree_runtime",
             "backend_quality": "in_tree_runtime",
             "mode": mode,

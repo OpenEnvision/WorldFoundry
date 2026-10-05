@@ -31,7 +31,7 @@ artifact_filename: ac3d.mp4
 execution:
   environment: ac3d
   backend_stage: official_in_tree_runtime
-  runtime_status: official_in_tree_runtime_ready
+  runtime_status: official_in_tree_runtime_checkpoint_assets_required
   integration_status: integrated
   pipeline_binding: ac3d
 integration:

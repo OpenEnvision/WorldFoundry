@@ -1,7 +1,6 @@
 import os
 import json
 import numpy as np
-import clip
 from PIL import Image
 import torch
 import torch.nn as nn
@@ -19,7 +18,7 @@ from timm.models import create_model
 from worldfoundry.base_models.perception_core.action_recognition.umt.models.modeling_finetune import vit_large_patch16_224
 from tqdm import tqdm
 
-from .distributed import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     all_gather,

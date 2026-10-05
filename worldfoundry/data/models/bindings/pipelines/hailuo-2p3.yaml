@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: hailuo-2p3
+model_id: hailuo-2p3
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.minimax.pipeline_hailuo_2p3:Hailuo2p3Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

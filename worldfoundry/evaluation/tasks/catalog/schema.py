@@ -1,11 +1,35 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.api.json_contract import JsonContract, require_mapping, to_plain
 from worldfoundry.evaluation.utils import load_manifest
+
+from .runner_kinds import (
+    IN_TREE_EXECUTION_KINDS,
+    IN_TREE_RESULT_NORMALIZER_KINDS,
+    normalize_runner_kind,
+)
+
+_LOGGER = logging.getLogger(__name__)
+_WARNED_UNRECOGNIZED_STATUSES: set[tuple[str, str]] = set()
+
+
+def _warn_unrecognized_status(kind: str, value: str, fallback: str) -> None:
+    """Log (once per value) when a free-text status silently degrades to a fallback."""
+    key = (kind, value)
+    if key in _WARNED_UNRECOGNIZED_STATUSES:
+        return
+    _WARNED_UNRECOGNIZED_STATUSES.add(key)
+    _LOGGER.warning(
+        "unrecognized catalog %s status %r degrades to %r; add an alias or fix the manifest if this is unintended",
+        kind,
+        value,
+        fallback,
+    )
 
 SOURCE_STATUSES = frozenset({"open_source", "api", "closed", "unknown"})
 OPEN_SOURCE_STATUSES = frozenset(
@@ -36,6 +60,7 @@ _OPEN_SOURCE_ALIASES = frozenset(
         "confirmed_official_code_but_not_benchmark_dataset",
         "confirmed_official_code_no_official_hf_dataset",
         "confirmed_official_code_and_partial_hf_data",
+        "confirmed_official_code_in_github",
         "confirmed_official_code_model_and_data",
         "confirmed_public_hf",
         "confirmed_public_hf_dataset",
@@ -50,12 +75,51 @@ _UNKNOWN_SOURCE_ALIASES = frozenset(
         "blocked_project_page_only",
         "paper_only",
         "unconfirmed",
+        # Manifest-level ``status`` fields record in-tree runtime readiness,
+        # not source availability.  ``from_dict`` falls back to that field for
+        # ``source.status`` when no explicit source status is declared, so
+        # these readiness states are registered here as carrying no source
+        # signal (they normalize to ``unknown`` without the drift warning).
+        "bounded_official_generative_numeracy_verified",
+        "bounded_official_long_temporal_flickering_unified_verified_full_suite_pending",
+        "in_tree_official_runtime_ready_full_upstream_pending",
+        "in_tree_runtime_ready",
+        "official_runtime_ready_real_data_validation_pending",
+        "official_runtime_start_ready",
     }
 )
 _API_ALIASES = frozenset({"api", "commercial_api", "restricted_api"})
 _CLOSED_ALIASES = frozenset({"closed", "closed_source", "proprietary"})
 _PENDING_INTEGRATION_ALIASES = frozenset({"pending", "todo", "not_started", "not_applicable"})
 _PENDING_VERIFICATION_ALIASES = frozenset({"pending_runner", "pending_validation", "pending_verification"})
+# Registered release-status vocabulary used by the checked-in catalog.  The
+# importer/scorer family only normalizes results, so it maps to the
+# ``in_tree_result_normalizer`` bucket; the remaining ``in_tree_*`` states
+# assert an in-tree runtime surface and map to ``in_tree_runtime``.
+_IN_TREE_NORMALIZER_OPEN_SOURCE_ALIASES = frozenset(
+    {
+        "in_tree_result_importer_and_bounded_aggregator",
+        "in_tree_result_importer_and_bounded_caption_qa",
+        "in_tree_scorer_with_external_probe_checkout",
+    }
+) | IN_TREE_RESULT_NORMALIZER_KINDS
+_IN_TREE_RUNTIME_OPEN_SOURCE_ALIASES = frozenset(
+    {
+        "in_tree_clean_reimplementation",
+        "in_tree_runtime_bounded_official_component_verified",
+    }
+) | IN_TREE_EXECUTION_KINDS
+# Maturity states describing an implemented-but-not-fully-verified runner
+# surface.  Bounded/component verification intentionally does NOT promote to
+# ``verified_runner`` (partial evidence must not claim full verification).
+_CONTRACT_READY_MATURITY_ALIASES = frozenset(
+    {
+        "official_runtime_ready",
+        "official_runtime_integrated_data_required",
+        "runtime_ready",
+        "bounded_official_component_verified",
+    }
+)
 _OFFICIAL_DATASET_SOURCE_KEYS = ("huggingface_dataset", "huggingface_datasets", "hf_datasets", "datasets")
 
 JsonValue = Any
@@ -262,6 +326,8 @@ def _normalize_source_status(value: Any) -> str:
         return "api"
     if normalized in _CLOSED_ALIASES:
         return "closed"
+    if normalized:
+        _warn_unrecognized_status("source", normalized, "unknown")
     return "unknown"
 
 
@@ -283,6 +349,8 @@ def _normalize_integration_status(value: Any) -> str:
         return "blocked"
     if normalized in _PENDING_INTEGRATION_ALIASES or normalized.startswith("pending"):
         return "planned"
+    if normalized:
+        _warn_unrecognized_status("integration", normalized, "planned")
     return "planned"
 
 
@@ -325,6 +393,12 @@ def _normalize_open_source_status(value: Any) -> str:
         return "preflight_only"
     if normalized == "normalizer":
         return "normalizer_only"
+    if normalized in _IN_TREE_NORMALIZER_OPEN_SOURCE_ALIASES:
+        return "in_tree_result_normalizer"
+    if normalized in _IN_TREE_RUNTIME_OPEN_SOURCE_ALIASES:
+        return "in_tree_runtime"
+    if normalized and normalized != "planned":
+        _warn_unrecognized_status("open_source", normalized, "planned")
     return "planned"
 
 
@@ -337,6 +411,13 @@ def _normalize_maturity_status(value: Any) -> str:
     Returns:
         The canonical maturity status.
     """
+    if isinstance(value, Mapping):
+        # Legacy fallback path: ``from_dict`` passes the whole ``integration``
+        # mapping when no explicit ``maturity`` is declared.  Maturity is a
+        # manifest-declared field, so a nested integration mapping never
+        # implied a maturity level (and must not trigger the unrecognized
+        # status warning below).
+        return "planned"
     normalized = str(value or "planned").strip().lower().replace("-", "_")
     if normalized in MATURITY_STATUSES:
         return normalized
@@ -344,8 +425,12 @@ def _normalize_maturity_status(value: Any) -> str:
         return "verified_runner"
     if normalized in {"preflight_only", "normalizer_only", "contract", "contract_only"}:
         return "contract_ready"
+    if normalized in _CONTRACT_READY_MATURITY_ALIASES:
+        return "contract_ready"
     if normalized.startswith("blocked"):
         return "blocked"
+    if normalized and normalized != "planned":
+        _warn_unrecognized_status("maturity", normalized, "planned")
     return "planned"
 
 
@@ -891,7 +976,10 @@ class BenchmarkRunnerSpec(JsonSerializable):
         object.__setattr__(self, "env", _to_plain(self.env) if isinstance(self.env, Mapping) else {})
         object.__setattr__(self, "assets", _to_plain(self.assets) if isinstance(self.assets, Mapping) else {})
         object.__setattr__(self, "dependency_profile", _optional_str(self.dependency_profile))
-        object.__setattr__(self, "runtime", _to_plain(self.runtime) if isinstance(self.runtime, Mapping) else {})
+        runtime = dict(_to_plain(self.runtime)) if isinstance(self.runtime, Mapping) else {}
+        if "kind" in runtime:
+            runtime["kind"] = normalize_runner_kind(runtime["kind"], context="BenchmarkRunnerSpec.runtime.kind")
+        object.__setattr__(self, "runtime", runtime)
         object.__setattr__(self, "expected_artifacts", _tuple_of_artifacts(self.expected_artifacts))
         object.__setattr__(
             self,

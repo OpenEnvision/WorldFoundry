@@ -9,8 +9,13 @@ source_repos:
 - url: https://github.com/SpatialVision/Prior-Depth-Anything
 checkpoints:
 - repo_id: Rain729/Prior-Depth-Anything
-  filename: prior_depth_anything_vits.pth
+  revision: 25b3bfcf85209fb015e3b15259f4df8b6f13bb16
+  filename: prior_depth_anything_vitb.pth
   role: priorda_checkpoint
+- repo_id: Rain729/Prior-Depth-Anything
+  revision: 25b3bfcf85209fb015e3b15259f4df8b6f13bb16
+  filename: depth_anything_v2_vitb.pth
+  role: frozen_and_conditioned_backbone_initialization
 input_schema:
   prompt: false
   image: true

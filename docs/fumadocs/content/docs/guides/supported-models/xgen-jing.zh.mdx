@@ -1,0 +1,41 @@
+---
+title: XGEN-JING
+description: 复用 MiniMax-H3 基础模型的相机控制与音视频联合生成。
+pageSource: authored
+---
+
+`xgen-jing` 接入公开发布的 **JING-Flash-v1 四步双向模型**。Transformer 继承 WorldFoundry 的 MiniMax-H3；注意力、投影、RoPE、AdaLN、MLP 和输出头继续共用。扩展仅增加相机 FiLM、逐段独立文本细化，以及全局媒体／段内文本可见性。Qwen3-VL、潜变量几何、Euler 更新和媒体写出复用现有代码，音视频 VAE 直接使用 Diffusers 的 H3 实现。
+
+```python
+from worldfoundry.pipelines.xgen_jing import XGENJINGPipeline
+
+pipe = XGENJINGPipeline.from_pretrained(
+    model_path="/checkpoints/XGENlabs--XGEN-JING",
+    base_model_path="/checkpoints/MiniMax-H3",  # Diffusers 组件目录
+    device="cuda:0",
+    cpu_offload=True,
+)
+result = pipe(
+    reference_images=["character.jpg", "bakery.jpg"],
+    chunks=[
+        {"prompt": "First-person view, walk into the bakery in <Picture 2>.",
+         "repeat": 2, "control": ["w", "w,a"]},
+        {"prompt": "Stop and look at the person in <Picture 1>.",
+         "repeat": 1, "control": [""]},
+    ],
+    height=544, width=960, seed=42,
+    output_path="jing.mp4", return_dict=True,
+)
+```
+
+权重目录需要 `jing_flash_v1/config.json`、分片索引及全部权重分片，也可直接指向 `jing_flash_v1`。基础目录提供 `text_encoder`、`tokenizer`、`processor`、`vae`、`audio_vae`、`scheduler` 和 `audio_scheduler`，采用 Diffusers 格式。本地严格加载；普通 H3 Transformer 权重不能代替 JING。依赖 Diffusers >=0.40.0 中的 H3 codec 和支持 Qwen3-VL 的 Transformers（验证环境为 5.12.1）。运行时会在加载大型模型前检查两个 codec。
+
+`w/s/a/d` 控制前后左右平移，`i/k/j/l` 控制向上／下看及左／右转头。逗号分隔组合键，相反键互相抵消。每段控制列表长度必须等于 `repeat`；空字符串仍输入学习到的零相机控制。最多五张参考图按输入顺序编号为 `<Picture 1>` 等；省略参考图即文生音视频。第一张图拉伸到画布，其余图片保持宽高比缩放并居中裁切。
+
+默认 `first_chunk_size=2`：`N` 个 slice 输出 `17*N+5` 帧，可从 chunks/slices 自动推断 `num_frames`。显式帧数向上对齐 `17*n+5`，对齐后必须匹配 slice 数量。`first_chunk_size=0` 则为 `N-1` 个完整段加最后短段。高宽必须为 32 的倍数。输出为 24 FPS 视频和 32 kHz 双声道音频，固定四步采样、独立音视频 shift，无 CFG 或负面提示词。
+
+文本、Transformer、codec 分阶段运行，默认 Transformer CPU offload 支持单卡，但会增加传输时间；`cpu_offload=False` 可常驻所选 GPU。本入口不提供分布式序列并行。`save_latents=True` 会在 MP4 旁保存生成的音视频潜变量，输出裁剪前执行有限值检查。
+
+公开的 JING-Flash-v1 与 MiniMax-H3 权重已通过两项单卡文生视频测试：448×256 使用 `cpu_offload=False`，默认 960×544 画布使用 `cpu_offload=True`，均为 22 帧、四步。公共 pipeline 均产出可完整解码的 24 FPS H.264 视频及 32 kHz 双声道 AAC 音轨；两段画面都显示金毛犬在草地上连贯奔跑。这些运行尚不能证明参考图、相机控制准确性、长片质量或一般提示词质量。因果模型及流式观察历史推理尚未公开，不作为已支持能力。
+
+来源：[XGEN-JING](https://github.com/XGEN-Labs/XGEN-JING)，提交 `cbeec31630d63a981a8e40d6e79c71a188a7d8c9`；[权重](https://huggingface.co/XGENlabs/XGEN-JING)，版本 `8153db624fa4fa573d2e0c5335b515882efff30d`。署名与 MiniMax H3 Community License 集中记录在根目录 `THIRD-PARTY-NOTICES`。

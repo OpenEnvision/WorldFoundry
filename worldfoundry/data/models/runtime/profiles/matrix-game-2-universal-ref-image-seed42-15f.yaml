@@ -22,11 +22,14 @@ artifact_filename: matrix-game-2-universal-ref-image-seed42-15f.mp4
 execution:
   environment: _unified
   backend_stage: in_tree_runtime_ready
-  runtime_status: official_demo_parity_pending
+  runtime_status: official_actions_gpu_parity_verified_15_latent_frames
   integration_status: integrated
   pipeline_binding: matrix-game-2-universal-ref-image-seed42-15f
 integration:
   status: integrated
 notes:
-- Runtime profile records stable environment, checkpoint, and parameter assumptions
-  only; run readiness is kept in release run manifests.
+- The official and WorldFoundry entrypoints both generated 57 decoded RGB frames
+  from 15 requested latent frames using the same reference image, seed 42,
+  and official benchmark actions. The repaired runner matched official action
+  tensors exactly and had mean decoded RGB absolute difference 4.762.
+- This short configuration does not validate long interactive rollouts.

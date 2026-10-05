@@ -6,8 +6,10 @@ environment_id: worldfoundry-unified-cu128
 id: mikasa
 name: MiKASA-Robo
 docker:
-  image: ghcr.io/allenai/vla-evaluation-harness/mikasa-robo:latest
-  source_image: ghcr.io/allenai/vla-evaluation-harness/mikasa-robo:latest
+  image: ghcr.io/allenai/vla-evaluation-harness/mikasa-robo@sha256:3f63627e79d06e9de97a218a09293f73c9ab5892b591585f04dde0af894a6e18
+  digest: sha256:3f63627e79d06e9de97a218a09293f73c9ab5892b591585f04dde0af894a6e18
+  source_image: ghcr.io/allenai/vla-evaluation-harness/mikasa-robo@sha256:3f63627e79d06e9de97a218a09293f73c9ab5892b591585f04dde0af894a6e18
+  platform: linux/amd64
   python_env: mikasa
   gpus: all
 needs_new_env: false

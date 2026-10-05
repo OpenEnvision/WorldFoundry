@@ -17,6 +17,7 @@ integration:
 license: apache-2.0
 name: DB-CogACT / Dexbotic
 official_sources:
+  paper: https://arxiv.org/abs/2510.23511
   github:
     head_sha: 0f5ae6382bf0
     url: https://github.com/Dexmal/dexbotic
@@ -62,3 +63,27 @@ runner_parity:
   - Workspace inference uses the in-tree Dexbotic package alias and configured Dexmal/libero-db-cogact assets.
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile planning records.
+docs:
+  publisher: Dexmal
+  publisher_kind: company
+  publisher_zh: Dexmal（原力灵机）
+  overview: 'DB-CogACT is the CogACT recipe rebuilt inside Dexmal''s Dexbotic framework, with an unusually complete released checkpoint zoo: single-arm and dual-arm foundations plus task checkpoints for LIBERO, CALVIN, and SimplerEnv, all Apache-2.0. WorldFoundry constructs the official Dexbotic policy in-process from a vendored inference subset and emits LIBERO action traces without an external checkout.'
+  overview_zh: DB-CogACT 是在 Dexmal 的 Dexbotic 框架内重建的 CogACT 配方，发布的 checkpoint 阵容相当完整：单臂与双臂基础模型，外加 LIBERO、CALVIN、SimplerEnv 任务 checkpoint，全部 Apache-2.0。 WorldFoundry 从内置推理子集在进程内构建官方 Dexbotic 策略，无需外部 checkout 即输出 LIBERO 动作轨迹。
+  architecture: 'The Dexbotic v1 inference contract is recorded: requests carry observation.prompt and observation images, and the policy follows the CogACT VLM-plus-DiT-action design re-implemented in Dexbotic. The vendored infer subset lives under worldfoundry/synthesis/action_generation/db_cogact/db_cogact_runtime.'
+  architecture_zh: 仓库记录 Dexbotic v1 推理契约：请求携带 observation.prompt 与观测图像，策略沿用 CogACT 的 VLM+DiT 动作设计并在 Dexbotic 中重实现。内置推理子集位于 worldfoundry/synthesis/action_generation/db_cogact/db_cogact_runtime。
+  usage_notes: 'Pick the checkpoint matching your benchmark: libero-db-cogact, calvin-db-cogact, or simpler-db-cogact; SArm/HArm foundations serve fine-tuning. Integration status is checkpoint_backed_runtime_ready.'
+  usage_notes_zh: 按基准选择 checkpoint：libero-db-cogact、calvin-db-cogact 或 simpler-db-cogact；SArm/HArm 基础模型用于微调。集成状态为 checkpoint_backed_runtime_ready。
+  limitations:
+  - GPU rollout parity beyond the LIBERO action-trace path is not recorded in this repository.
+  limitations_zh:
+  - 除 LIBERO 动作轨迹路径外的 GPU rollout parity 仓库未记录。
+  recommended_benchmarks:
+  - id: libero
+    reason: Dedicated libero-db-cogact checkpoint.
+    reason_zh: 有专门的 libero-db-cogact checkpoint。
+  - id: calvin
+    reason: Dedicated calvin-db-cogact checkpoint.
+    reason_zh: 有专门的 calvin-db-cogact checkpoint。
+  - id: simpler-env
+    reason: Dedicated simpler-db-cogact checkpoint.
+    reason_zh: 有专门的 simpler-db-cogact checkpoint。

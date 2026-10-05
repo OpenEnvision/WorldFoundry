@@ -2,11 +2,11 @@ import torch
 import torch.nn.functional as F
 import torchvision
 
-from torch_fidelity.feature_extractor_base import FeatureExtractorBase
-from torch_fidelity.helpers import vassert, text_to_dtype
+from .feature_extractor_base import FeatureExtractorBase
+from .helpers import vassert, text_to_dtype
 
-from torch_fidelity.interpolate_compat_tensorflow import interpolate_bilinear_2d_like_tensorflow1x
-from torch_fidelity.utils_torchvision import torchvision_load_pretrained_vgg16
+from .interpolate_compat_tensorflow import interpolate_bilinear_2d_like_tensorflow1x
+from .utils_torchvision import torchvision_load_pretrained_vgg16
 
 
 class FeatureExtractorVGG16(FeatureExtractorBase):

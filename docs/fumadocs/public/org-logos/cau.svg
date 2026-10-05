@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Chung-Ang University">
+  <circle cx="64" cy="64" r="58" fill="#003876"/>
+  <circle cx="64" cy="64" r="50" fill="none" stroke="#c5a46e" stroke-width="4"/>
+  <text x="64" y="76" text-anchor="middle" fill="#c5a46e" font-family="Georgia, 'Times New Roman', serif" font-size="28" font-weight="700">CAU</text>
+</svg>

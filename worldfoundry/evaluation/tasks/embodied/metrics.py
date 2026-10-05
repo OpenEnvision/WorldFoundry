@@ -18,7 +18,7 @@ from worldfoundry.evaluation.api import (
     MetricResult,
     is_generation_result_successful,
 )
-
+from worldfoundry.evaluation.tasks.metrics.registry import default_metric_registry
 
 # Default set of metrics that this module recognizes and supports mapping.
 DEFAULT_METRIC_IDS = (
@@ -186,7 +186,11 @@ class ResultFieldMetric:
     field_names: tuple[str, ...] = ()
     version: str = "1.0"
     required_artifacts: tuple[str, ...] = ()
-    higher_is_better: bool | None = True
+    higher_is_better: bool | None = None
+
+    @property
+    def parameters(self) -> Mapping[str, Any]:
+        return {"field_names": self.field_names}
 
     def __post_init__(self) -> None:
         """Normalizes and sets attribute values after initialization.
@@ -293,7 +297,13 @@ def metric_from_id(metric_id: str) -> ResultFieldMetric:
         "normalized_return": ("normalized_return", "return", "reward"),
         "world_state_consistency": ("world_state_consistency", "state_consistency", "consistency"),
     }
-    return ResultFieldMetric(name=metric_id, field_names=aliases.get(metric_id, (metric_id,)))
+    try:
+        direction = default_metric_registry().get(metric_id).higher_is_better
+    except KeyError:
+        direction = True if metric_id in DEFAULT_METRIC_IDS or metric_id in aliases else None
+    return ResultFieldMetric(
+        name=metric_id, field_names=aliases.get(metric_id, (metric_id,)), higher_is_better=direction,
+    )
 
 
 def default_metric_ids_for_track(track: str) -> tuple[str, ...]:

@@ -1,8 +1,7 @@
-backend: hf_auto_action_model
-checkpoint_path: ${WORLDFOUNDRY_CKPT_DIR}/chenhao01--LaST-R1
+backend: last_r1_official_transformers_policy
+checkpoint_path: ${WORLDFOUNDRY_CKPT_DIR}/chenhao01--LaST-R1/LaST-R1-RL/last-r1-rl-libero_10
 source_repo: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/LaST-R1
 torch_dtype: bfloat16
 trust_remote_code: false
-predict_method: predict_action
 action_contract: last_r1_vla_action
 runtime_backend: last_r1_official_transformers_policy

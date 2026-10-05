@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.data as data
 
-from worldfoundry.core.io.artifacts import flow_to_image
+from worldfoundry.core.media.artifacts import flow_to_image
 
 from .core.parser import parse_args
 from .core.raft import RAFT

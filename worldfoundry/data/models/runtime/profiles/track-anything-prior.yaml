@@ -1,6 +1,6 @@
 schema_version: 2
 model_id: track-anything-prior
-display_name: Segment and Track Anything Prior
+display_name: Segment and Track Anything
 task_family: three_dimension
 groups:
 - 3d
@@ -12,6 +12,9 @@ checkpoints:
 - uri: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
   filename: sam_vit_b_01ec64.pth
   role: sam_vit_b_checkpoint
+- uri: https://drive.google.com/uc?id=1QoChMkTVxdYZ_eBlZhK2acq9KMQZccPJ
+  filename: R50_DeAOTL_PRE_YTB_DAV.pth
+  role: aot_deaotl_checkpoint
 - repo_id: ShilongLiu/GroundingDINO
   filename: groundingdino_swint_ogc.pth
   role: groundingdino_checkpoint

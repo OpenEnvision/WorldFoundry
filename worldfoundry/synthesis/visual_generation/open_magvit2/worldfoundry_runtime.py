@@ -5,14 +5,13 @@ within the WorldFoundry framework. It handles model loading, configuration resol
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io.paths import package_module_root as package_root
+from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import hfd_root_path
+from worldfoundry.core.io.paths import package_module_root as package_root
 from worldfoundry.evaluation.utils import worldfoundry_data_path
-
 
 # Root directory for default Open-MAGVIT2 runtime configurations within worldfoundry data.
 DEFAULT_OPEN_MAGVIT2_CONFIG_ROOT = worldfoundry_data_path("models", "runtime", "configs", "open_magvit2")
@@ -351,7 +350,7 @@ class OpenMAGVIT2Runtime:
             "model_id": self.model_id,
             "artifact_kind": "generated_image",
             "artifact_path": str(target),
-            "artifact_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),  # Calculate SHA256 of the generated image.
+            "artifact_sha256": file_sha256(target),
             "runtime": "worldfoundry.open_magvit2.in_tree_runtime",
             "backend_quality": "in_tree_runtime",
             "class_id": int(kwargs.get("class_id", self.class_id)),

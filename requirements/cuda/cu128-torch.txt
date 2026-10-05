@@ -1,0 +1,8 @@
+# Torch wheel constraints for the cu128 CUDA bucket.
+#
+# These bounds must match worldfoundry.runtime.cuda_tiers.TIER_TORCH_SPECS.
+# This is a drift-check stub, not a full lockfile.
+
+torch>=2.7,<2.12.0
+torchvision>=0.22,<0.27.0
+torchaudio>=2.7,<2.12.0

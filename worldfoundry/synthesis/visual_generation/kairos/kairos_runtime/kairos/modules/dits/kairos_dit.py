@@ -1,4 +1,5 @@
 import os
+import warnings
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,7 +7,14 @@ import math
 from typing import Tuple, Optional
 from einops import rearrange
 from transformers.activations import ACT2CLS
-from apex.normalization.fused_layer_norm import FusedRMSNorm
+
+try:
+    from apex.normalization.fused_layer_norm import FusedRMSNorm
+except ModuleNotFoundError:
+    # Apex is an optional optimization. ``nn.RMSNorm`` has the same learned
+    # weight layout and epsilon contract, so official checkpoints load without
+    # conversion when Apex is unavailable in the unified environment.
+    FusedRMSNorm = nn.RMSNorm
 
 FLASH_ATTN_2_AVAILABLE = False
 FLASH_ATTN_3_AVAILABLE = False
@@ -39,15 +47,11 @@ if FLAGS_KAIROS_CUDA_SM in SUPPORTED_ARCHS:
         SAGE_ATTN_AVAILABLE = True
     except ModuleNotFoundError:
         SAGE_ATTN_AVAILABLE = False
-try:
-    from fla.layers import GatedDeltaNet
-except ModuleNotFoundError:
-    pass
+from fla.layers import GatedDeltaNet
+from fla.models.utils import Cache as FlaCache
 
 from kairos.apis.builder import DITS
 from torch.distributed import ProcessGroup, get_process_group_ranks
-from kairos_fla.layers.gated_deltanet_with_tp import GatedDeltaNet as GatedDeltaNetWithTP
-from kairos_fla.models.utils import Cache as fla_Cahce
 import torch.distributed as dist
 from kairos.modules.utils import parallel_state, FLAGS_KAIROS_IS_METAX
 from kairos.modules.utils.tp_utils import build_tp_chunk_list, all2all_seq_to_head, all2all_head_to_seq, _gather_input_sp, _distribute_input_sp
@@ -200,8 +204,123 @@ def rope_apply_for_3d_kernel(
             mask=mask_elem,
         )
 
-def flash_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, num_heads: int, 
-                    compatibility_mode=False, attn_mask=None, window_size=(-1, -1), return_attn_probs=False):
+def _slice_attention_mask(attn_mask, q_start, q_end, k_start, k_end, q_len, k_len):
+    if attn_mask is None:
+        return None
+    if not torch.is_tensor(attn_mask):
+        raise TypeError("attn_mask must be a torch.Tensor")
+    mask = attn_mask
+    if mask.ndim >= 2 and mask.shape[-2] == q_len:
+        mask = mask[..., q_start:q_end, :]
+    if mask.shape[-1] == k_len:
+        mask = mask[..., k_start:k_end]
+    if mask.dtype != torch.bool and not torch.is_floating_point(mask):
+        mask = mask.to(torch.bool)
+    return mask
+
+
+def _pytorch_sdpa_attention(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    *,
+    attn_mask=None,
+    window_size=(-1, -1),
+    causal=False,
+    return_softmax_lse=False,
+):
+    """FlashAttention-compatible SDPA fallback for ``[B, S, H, D]`` tensors."""
+    q = rearrange(q, "b s n d -> b n s d")
+    k = rearrange(k, "b s n d -> b n s d")
+    v = rearrange(v, "b s n d -> b n s d")
+    q_len, k_len = q.shape[-2], k.shape[-2]
+    left, right = window_size
+    if left < -1 or right < -1:
+        raise ValueError(f"window_size values must be -1 or non-negative, got {window_size}")
+
+    restricted = causal or left >= 0 or right >= 0
+    if not restricted and not return_softmax_lse:
+        mask = _slice_attention_mask(attn_mask, 0, q_len, 0, k_len, q_len, k_len)
+        output = F.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0)
+        return rearrange(output, "b n s d -> b s n d")
+
+    # A dense [S_q, S_k] local-window mask can exceed GPU memory for the
+    # 480p Kairos sequence. Query chunking keeps the exact FlashAttention
+    # bottom-right-aligned window semantics while bounding temporary memory.
+    try:
+        chunk_size = max(1, int(os.environ.get("WORLDFOUNDRY_KAIROS_SDPA_QUERY_CHUNK_SIZE", "256")))
+    except ValueError as exc:
+        raise ValueError("WORLDFOUNDRY_KAIROS_SDPA_QUERY_CHUNK_SIZE must be an integer") from exc
+    outputs = []
+    lse_chunks = []
+    alignment = k_len - q_len
+    scale = 1.0 / math.sqrt(q.shape[-1])
+
+    for q_start in range(0, q_len, chunk_size):
+        q_end = min(q_start + chunk_size, q_len)
+        first_center = q_start + alignment
+        last_center = q_end - 1 + alignment
+        k_start = 0 if left < 0 else max(0, first_center - left)
+        k_end = k_len if right < 0 else min(k_len, last_center + right + 1)
+        if causal:
+            k_end = min(k_end, last_center + 1)
+        k_start = min(k_start, k_len)
+        k_end = max(k_start, k_end)
+
+        q_chunk = q[..., q_start:q_end, :]
+        if k_end == k_start:
+            outputs.append(torch.zeros_like(q_chunk))
+            if return_softmax_lse:
+                lse_chunks.append(
+                    torch.full(q_chunk.shape[:-1], -torch.inf, device=q.device, dtype=torch.float32)
+                )
+            continue
+
+        k_chunk = k[..., k_start:k_end, :]
+        v_chunk = v[..., k_start:k_end, :]
+        q_positions = torch.arange(q_start, q_end, device=q.device) + alignment
+        k_positions = torch.arange(k_start, k_end, device=q.device)
+        allowed = torch.ones((q_end - q_start, k_end - k_start), device=q.device, dtype=torch.bool)
+        if left >= 0:
+            allowed &= k_positions.unsqueeze(0) >= (q_positions - left).unsqueeze(1)
+        if right >= 0:
+            allowed &= k_positions.unsqueeze(0) <= (q_positions + right).unsqueeze(1)
+        if causal:
+            allowed &= k_positions.unsqueeze(0) <= q_positions.unsqueeze(1)
+        allowed = allowed.view(1, 1, q_end - q_start, k_end - k_start)
+
+        mask = _slice_attention_mask(
+            attn_mask, q_start, q_end, k_start, k_end, q_len, k_len
+        )
+        if mask is None:
+            mask = allowed
+        elif mask.dtype == torch.bool:
+            mask = mask & allowed
+        else:
+            mask = mask.masked_fill(~allowed, -torch.inf)
+
+        output = F.scaled_dot_product_attention(
+            q_chunk, k_chunk, v_chunk, attn_mask=mask, dropout_p=0.0
+        )
+        outputs.append(output)
+        if return_softmax_lse:
+            logits = torch.matmul(q_chunk.float(), k_chunk.float().transpose(-2, -1)) * scale
+            if mask.dtype == torch.bool:
+                logits = logits.masked_fill(~mask, -torch.inf)
+            else:
+                logits = logits + mask.float()
+            lse_chunks.append(torch.logsumexp(logits, dim=-1))
+
+    output = torch.cat(outputs, dim=-2)
+    output = rearrange(output, "b n s d -> b s n d")
+    if return_softmax_lse:
+        return output, torch.cat(lse_chunks, dim=-1)
+    return output
+
+
+def flash_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, num_heads: int,
+                    compatibility_mode=False, attn_mask=None, window_size=(-1, -1),
+                    return_attn_probs=False, causal=False):
     
     # ***************************************
     # debug code
@@ -209,15 +328,23 @@ def flash_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, num_heads
     #     compatibility_mode = True
     # debug code
     # ***************************************
+    if q.ndim != 4 or k.ndim != 4 or v.ndim != 4:
+        raise ValueError("q, k, and v must have shape [batch, sequence, heads, head_dim]")
+    if q.shape[2] != num_heads or k.shape[2] != num_heads or v.shape[2] != num_heads:
+        raise ValueError(f"expected {num_heads} attention heads")
     if compatibility_mode or attn_mask is not None:
-        q = rearrange(q, "b s n d -> b n s d")
-        k = rearrange(k, "b s n d -> b n s d")
-        v = rearrange(v, "b s n d -> b n s d")
-        x = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
-        x = rearrange(x, "b n s d -> b s n d")
+        return _pytorch_sdpa_attention(
+            q,
+            k,
+            v,
+            attn_mask=attn_mask,
+            window_size=window_size,
+            causal=causal,
+            return_softmax_lse=return_attn_probs,
+        )
     elif FLASH_ATTN_3_AVAILABLE:
         x = flash_attn_interface.flash_attn_func(
-            q, k, v, window_size=window_size,
+            q, k, v, window_size=window_size, causal=causal,
             return_attn_probs=return_attn_probs
         )
         if return_attn_probs:
@@ -225,20 +352,27 @@ def flash_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, num_heads
             return x, probs
     elif FLASH_ATTN_2_AVAILABLE:
         x = flash_attn.flash_attn_func(
-            q, k, v, window_size=window_size,
+            q, k, v, window_size=window_size, causal=causal,
             return_attn_probs=return_attn_probs
         )
         if return_attn_probs:
             x, probs = x[0], x[1]
             return x, probs
-    elif SAGE_ATTN_AVAILABLE:
+    elif SAGE_ATTN_AVAILABLE and window_size == (-1, -1) and not causal and not return_attn_probs:
         q = rearrange(q, "b s n d -> b n s d")
         k = rearrange(k, "b s n d -> b n s d")
         v = rearrange(v, "b s n d -> b n s d")
         x = sageattn(q, k, v)
         x = rearrange(x, "b n s d -> b s n d")
     else:
-        raise RuntimeError("do not use pytorch attention")
+        return _pytorch_sdpa_attention(
+            q,
+            k,
+            v,
+            window_size=window_size,
+            causal=causal,
+            return_softmax_lse=return_attn_probs,
+        )
     return x
 
 
@@ -628,15 +762,6 @@ def _get_owner_chunk_info(chunk_id, chunk_size, local_seq_len):
     owner_local_end = owner_local_start + chunk_size
     return owner_rank, owner_local_start, owner_local_end
 
-def _all_gather_seq_chunk(o_seq_part, group, q_len=None):
-    world_size = dist.get_world_size(group)
-    gather_list = [torch.empty_like(o_seq_part) for _ in range(world_size)]
-    dist.all_gather(gather_list, o_seq_part.contiguous(), group=group)
-    out = torch.cat(gather_list, dim=1).contiguous()
-    if q_len is not None and out.shape[1] > q_len:
-        out = out[:, :q_len, :]
-    return out
-
 class DiTBlock(nn.Module):
     def __init__(self, 
         has_image_input: bool,
@@ -689,26 +814,26 @@ class DiTBlock(nn.Module):
         if self.use_linear_attn:
             assert gateddeltanet_layer_idx >= 0
 
-            # getaeddeltanet用tp并行
+            # Upstream FLA does not expose the custom Kairos tensor-parallel
+            # implementation. Keep the option for config compatibility and
+            # run a semantically equivalent replicated layer on every rank.
+            self.gated_delta_is_replicated = True
             if self.use_tp_in_getaeddeltanet and self.world > 1:
-                self.gated_delta = GatedDeltaNetWithTP(
-                    hidden_size=dim,
-                    num_heads=num_heads,
-                    mode="chunk",
-                    use_gate=True,
-                    norm_eps=eps,
-                    tp_num_splits=self.context_group_size,
-                    tp_group=self.context_group,
-                    layer_idx=gateddeltanet_layer_idx,
+                warnings.warn(
+                    "use_tp_in_getaeddeltanet=True is retained for configuration "
+                    "compatibility, but upstream fla.layers.GatedDeltaNet has no "
+                    "Kairos tensor-parallel optimization. GatedDeltaNet will run "
+                    "replicated on every rank, increasing per-rank compute and memory.",
+                    RuntimeWarning,
+                    stacklevel=2,
                 )
-            else:
-                self.gated_delta = GatedDeltaNet(hidden_size=dim,
-                                                num_heads=num_heads,
-                                                mode='chunk',
-                                                use_gate=True,
-                                                norm_eps=eps,
-                                                layer_idx=gateddeltanet_layer_idx
-                                                )
+            self.gated_delta = GatedDeltaNet(hidden_size=dim,
+                                            num_heads=num_heads,
+                                            mode='chunk',
+                                            use_gate=True,
+                                            norm_eps=eps,
+                                            layer_idx=gateddeltanet_layer_idx
+                                            )
         else:
             assert gateddeltanet_layer_idx == -1
             if self.use_tp_in_self_attn and self.world > 1:
@@ -790,7 +915,7 @@ class DiTBlock(nn.Module):
             num_chunks = total_seq_len // chunk_size
 
             attn_out_local = torch.empty_like(input_x_local)
-            cache = fla_Cahce.from_legacy_cache()
+            cache = FlaCache.from_legacy_cache()
 
             for chunk_id in range(num_chunks):
                 if world_size > 1:
@@ -820,7 +945,10 @@ class DiTBlock(nn.Module):
                         use_cache=True
                     )
 
-                    o_seq_chunk = _all_gather_seq_chunk(out_chunk, self.context_group,  q_len=x_chunk.shape[1])
+                    # The upstream fallback is replicated: every rank receives
+                    # the full input chunk and produces the full output chunk.
+                    # Gathering would duplicate the sequence across ranks.
+                    o_seq_chunk = out_chunk
 
                     if rank == owner_rank:
                         attn_out_local[:, owner_local_start:owner_local_end, :] = o_seq_chunk

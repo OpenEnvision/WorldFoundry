@@ -153,11 +153,13 @@ WARP_AS_HISTORY_VARIANTS: dict[str, WarpAsHistoryVariant] = {
         display_name="Warp-as-History",
         task="image-to-video-camera-control",
         model_path=_prefer_existing_path(
+            checkpoint_root() / "BestWishYsh--Helios-Distilled",
             checkpoint_root() / "Helios-Distilled",
             checkpoint_root() / "helios-distilled",
             checkpoint_root() / "hfd" / "custom--Helios-Distilled",
         ),
         lora_path=_prefer_existing_path(
+            checkpoint_root() / "yyfz233--warp-as-history" / "visible_lora_state_step1000.safetensors",
             checkpoint_root() / "warp-as-history" / "visible_lora_state_step1000.safetensors",
         ),
         demo_csv_path="data/demo/bmx-trees.csv",

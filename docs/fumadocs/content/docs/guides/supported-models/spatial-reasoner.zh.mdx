@@ -1,0 +1,46 @@
+---
+title: "SpatialReasoner"
+description: "SpatialReasoner（Johns Hopkins University (CCVL)）：多模态推理、空间推理；Runner 一致性待确认。"
+modelId: "spatial-reasoner"
+pageSource: generated
+---
+
+SpatialReasoner 是约翰斯·霍普金斯大学 CCVL 组的视觉-语言模型，专注对图像与视频进行显式、分步的空间推理。在本 catalog 中它是理解类条目——空间与多模态推理加图像/视频问答——返回 model_response 产物。
+
+<ModelPaperFigures modelId="spatial-reasoner" locale="zh" />
+
+代码：[ccvl/SpatialReasoner](https://huggingface.co/ccvl/SpatialReasoner)。
+
+<ModelCommandBuilder modelId="spatial-reasoner" locale="zh" />
+
+## 用来做什么
+
+用 `spatial-reasoner` 做本卡的多模态推理。
+
+带显式 3D 感知空间推理阶段的视觉-语言模型（见上游 ccvl/SpatialReasoner 发布）。本仓库记录 prompt/image/video 契约；规模与训练细节仓库未记录。该模型由约翰斯·霍普金斯大学（CCVL 实验室）发布。
+
+catalog 记录的任务包括 多模态推理、空间推理、图像问答、视频问答。别名包括 `spatial_reasoner`、`ccvl/SpatialReasoner`。
+
+## 运行时契约
+
+可选 `prompt`、`image`、`video`、`seed`、`frames`；产物 `spatial-reasoner.json`。
+
+CLI task profile：`multimodal-reasoning`、`spatial-reasoning`、`image-question-answering`、`video-question-answering`、`video_generation`。绑定的 pipeline 类是 `SpatialReasonerPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+可与生成条目配合，审查生成世界的空间一致性——例如物体位置与相对深度。
+
+Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run spatial-reasoner --pipeline.task-profile multimodal-reasoning` 跑推理路由。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `ccvl/SpatialReasoner`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh spatial-reasoner`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="spatial-reasoner" locale="zh" />

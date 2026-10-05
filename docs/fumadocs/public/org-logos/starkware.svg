@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="StarkWare">
+  <rect width="128" height="128" rx="28" fill="#0c0c0c"/>
+  <path fill="#ec796b" d="M64 16 96 96H80l-6-16H54l-6 16H32L64 16zm0 28-8 22h16l-8-22z"/>
+</svg>

@@ -1,0 +1,48 @@
+---
+title: "MonST3R"
+description: "MonST3R（Google DeepMind / UC Berkeley）：3D 与 4D；已验证。"
+modelId: "monst3r"
+pageSource: authored
+---
+
+MonST3R 把 DUSt3R 的点图方法扩展到动态场景：直接从视频逐时刻估计几何，在不假设静态场景的前提下同时恢复形状与运动。本 catalog 中它已完整验证——CUDA Studio 任务于 2026-07-10 通过树内 demo.py 子进程适配器产出含 51 个几何体、点数据有限的合法 GLB v2 场景。
+
+<ModelPaperFigures modelId="monst3r" locale="zh" />
+
+项目页：[monst3r-project.github.io](https://monst3r-project.github.io/)。代码：[Junyi42/monst3r](https://github.com/Junyi42/monst3r)。
+
+论文是 [Paper](https://monst3r-project.github.io/files/monst3r_paper.pdf)。项目页：[monst3r-project.github.io](https://monst3r-project.github.io)。代码：[Junyi42/monst3r](https://github.com/Junyi42/monst3r)。
+
+<ModelCommandBuilder modelId="monst3r" locale="zh" />
+
+## 用来做什么
+
+做前馈几何时选 `monst3r`：视图进、重建/轨迹/点云出。需要 catalog 的 3D 路由、而不是仅深度先验时用它。
+
+按上游论文，MonST3R 在动态数据上微调 DUSt3R 的点图回归器，使点图按时刻估计；下游优化将其对齐为 4D 场景。WorldFoundry 将推理组件内置树内，并生成 GLB 场景产物。该模型由Google DeepMind / 加州大学伯克利分校发布。
+
+catalog 记录的任务包括 geometry estimation in the presence of motion。
+
+## 运行时契约
+
+可选 `input_path`、`frames`、`fps`、`weights`、`model_name`；产物 `generated_4d_scene`、`monst3r.glb`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `MonST3RPipeline`。
+
+系列状态：**已验证**。
+
+Studio 默认关闭可选的光流损失，因此 RAFT2/SAM2 资产缺失不会阻塞预览输出。 若要完整对齐官方动态掩码效果，请在运行时环境中配置 MonST3R、RAFT 与 SAM2 资产。
+
+WorldFoundry vendors the MonST3R infer-time components in-tree.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run monst3r --pipeline.task-profile default` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+本卡片未记录公开 checkpoint id；按使用说明就位权重。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh monst3r`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="monst3r" locale="zh" />

@@ -69,6 +69,9 @@ catalog_policy:
   github: Validated with git ls-remote, preferring git ls-remote --symref <repo>.git HEAD for default branch and HEAD SHA.
   huggingface: Validated with the Hugging Face /api/models endpoint. Recorded repo id, sha, private, gated, license, and selected task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit parity run and expected artifact are recorded.
+official_sources:
+  project_page: https://easyanimate.github.io/
+  paper: https://arxiv.org/abs/2405.18991
 integration:
   status: integrated
   notes:
@@ -78,3 +81,26 @@ runner_parity:
   notes:
     - The fix uses the official V5.1 Flow scheduler, InP checkpoint, and height/width to sample_size mapping.
     - Per-run visual QA and artifact checks are tracked outside the model catalog.
+docs:
+  publisher: Alibaba (PAI)
+  publisher_kind: company
+  publisher_zh: 阿里巴巴（PAI 团队）
+  overview: EasyAnimate is Alibaba PAI's DiT-based video generation project, covering text-to-video, image-to-video, and video-to-video. WorldFoundry wraps the V5.1 image-to-video runtime in-tree; the same independent runtime is reused by WRBench camera-control evaluation, so it never resolves an external source checkout. Aliases easyanimate_i2v and easyanimate-i2v resolve here.
+  overview_zh: EasyAnimate 是阿里 PAI 团队基于 DiT 的视频生成项目，覆盖文生视频、图生视频与视频到视频。 WorldFoundry 在树内封装了其 V5.1 图生视频运行时；WRBench 相机控制评测复用同一独立运行时，从不解析外部源码检出。别名 easyanimate_i2v、easyanimate-i2v 解析到本条目。
+  architecture: 'The recorded route uses the official V5.1 Flow scheduler with the InP (inpainting-style image-conditioned) checkpoint family and a height/width-to-sample_size mapping. The manifest notes the distinction explicitly: `*-InP` checkpoints are the I2V demos, while the non-InP EasyAnimateV5.1-7b-zh checkpoint is the text-to-video model.'
+  architecture_zh: 记录的路径使用官方 V5.1 Flow 调度器、InP（图像条件补全式）checkpoint 系列，以及 height/width 到 sample_size 的映射。manifest 特别注明：`*-InP` checkpoint 对应 I2V demo，非 InP 的 EasyAnimateV5.1-7b-zh 才是文生视频模型。
+  usage_notes: Integration is complete; runner parity is pending with per-run visual QA tracked outside the catalog. When picking checkpoints, remember the InP/non-InP distinction above — using the wrong family is the most common configuration mistake. Official code lives at aigc-apps/EasyAnimate with checkpoints under the alibaba-pai HF org.
+  usage_notes_zh: 集成已完成；runner parity 为 pending，每次运行的视觉 QA 在 catalog 外跟踪。选择 checkpoint 时牢记上述 InP/非 InP 之分——选错系列是最常见的配置错误。官方代码在 aigc-apps/EasyAnimate，checkpoint 在 alibaba-pai 的 HF 组织下。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  recommended_benchmarks:
+  - id: vbench
+    reason: General video generation quality suite.
+    reason_zh: 通用视频生成质量评测。
+  - id: camerabench
+    reason: Relevant because WRBench camera control reuses this runtime.
+    reason_zh: WRBench 相机控制复用该运行时，因此相机评测相关。

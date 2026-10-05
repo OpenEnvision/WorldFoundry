@@ -9,22 +9,25 @@ source:
   status: open_source
   official_repo_url: https://github.com/gaoyuezhou/dino_wm
 official_sources:
+  paper: https://arxiv.org/abs/2411.04983
   project_page: https://dino-wm.github.io/
   github:
     url: https://github.com/gaoyuezhou/dino_wm
 integration:
   status: integrated
   notes:
-  - WorldFoundry vendors the official DINO-WM planning/evaluation route in-tree under synthesis/visual_generation/world_model/dino_wm.
+  - WorldFoundry vendors the official DINO-WM planning/evaluation route in-tree under synthesis/visual_generation/dino_wm.
   - The WorldFoundry infer entrypoint loads runtime configs from worldfoundry/data/models/runtime/configs/dino_wm/conf.
   - The vendored `dino_wm/env/` simulators are required for official planning runs and are intentionally kept in-tree.
-  - Execution remains checkpoint/task-asset gated but no longer depends on an external repo checkout.
+  - The wall_single route completed checkpoint-backed inference with official wall trajectories; other task routes still require their own assets and validation.
 runner_parity:
-  status: pending
+  status: verified_inference_only
   notes:
-  - The pipeline resolves the in-tree infer.py wrapper and official planning_main route.
-  - Full runtime parity remains blocked until the OSF checkpoint/task-asset layout
-    is staged; per-run validation evidence is tracked outside the model catalog.
+  - The public wall_single route loaded the released epoch-65 checkpoint, official wall trajectories, and DINOv2 encoder;
+    GPU inference completed and produced two fully decodable 26-frame MP4 artifacts with finite result metrics.
+  - These small-budget wall runs verify execution only. One target was already within the task's success threshold, while
+    a nontrivial target was not solved; neither establishes planning quality.
+  - The released pusht and point_maze checkpoints have not been validated with their task datasets and simulators.
 runtime_profile: runtime-profile:dino-wm
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: dino-wm
@@ -33,3 +36,21 @@ output_artifacts:
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes; blocked
   entries retain upstream provenance without runnable backends.
+docs:
+  publisher: New York University (NYU)
+  publisher_kind: university
+  publisher_zh: 纽约大学（NYU）
+  overview: 'DINO-WM builds world models on pre-trained DINOv2 visual features instead of pixels: it predicts future patch features and plans robot behavior by optimizing action sequences against a goal feature state — zero-shot planning without reconstruction. In this catalog the official planning/evaluation route is vendored in-tree, including the required env simulators.'
+  overview_zh: DINO-WM 在预训练 DINOv2 视觉特征（而非像素）上构建世界模型：预测未来 patch 特征，并通过针对目标特征状态优化动作序列来规划机器人行为——无需重建即可零样本规划。本 catalog 中官方规划/评估路径已内置树内，包括必需的 env 仿真器。
+  architecture: Per the upstream project, a ViT predictor rolls DINOv2 patch features forward conditioned on actions; planning is model-predictive control in feature space. The infer entrypoint loads runtime configs from data/models/runtime/configs/dino_wm/conf, and the vendored dino_wm/env simulators are intentionally kept in-tree for official planning runs.
+  architecture_zh: 按上游项目，ViT 预测器在动作条件下向前滚动 DINOv2 patch 特征；规划是特征空间中的模型预测控制。推理入口从 data/models/runtime/configs/dino_wm/conf 加载运行时配置，内置的 dino_wm/env 仿真器为官方规划运行有意保留在树内。
+  usage_notes: The wall_single planning route requires its released model_latest.pth, a DINOv2 encoder, and DATASET_DIR set to the parent directory containing the complete official wall_single trajectory dataset. These assets are not bundled with WorldFoundry; the in-tree runtime no longer needs an external DINO-WM checkout.
+  usage_notes_zh: wall_single 规划路径需要发布的 model_latest.pth、DINOv2 编码器，并将 DATASET_DIR 指向包含完整官方 wall_single 轨迹数据集的父目录。这些资源不随 WorldFoundry 分发；仓内运行时不再需要外部 DINO-WM 检出。
+  limitations:
+  - Only wall_single has checkpoint-backed GPU inference evidence; pusht and point_maze remain untested.
+  - The wall smoke tests do not establish planning quality or general task success.
+  - 'The model predicts in feature space; the MP4 is a simulator/planning visualization, not pixel generation.'
+  limitations_zh:
+  - 只有 wall_single 具备权重驱动的 GPU 推理证据；pusht 和 point_maze 尚未验证。
+  - wall 简短测试不能证明规划质量或一般任务成功率。
+  - 模型在特征空间中预测；MP4 是仿真/规划可视化，并非像素生成。

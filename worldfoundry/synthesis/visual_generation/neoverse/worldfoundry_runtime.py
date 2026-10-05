@@ -32,7 +32,7 @@ def _pil_to_tensor(image) -> torch.Tensor:
 
 
 class NeoVerseOfficialRuntime:
-    """Lazy bridge to the vendored official NeoVerse DiffSynth pipeline."""
+    """Native NeoVerse runtime assembled from shared Wan components."""
 
     def __init__(
         self,
@@ -89,7 +89,28 @@ class NeoVerseOfficialRuntime:
     ) -> "NeoVerseOfficialRuntime":
         del args, kwargs
         ensure_neoverse_runtime()
-        from worldfoundry.base_models.diffusion_model.diffsynth.pipelines.wan_video_neoverse import (
+        from worldfoundry.base_models.diffusion_model.models.autoencoders.wan import (
+            WanVideoVAE,
+            WanVideoVAEStateDictConverter,
+        )
+        from worldfoundry.base_models.diffusion_model.models.denoisers.wan import (
+            WAN21_T2V_14B_CONFIG,
+            WanModelStateDictConverter,
+        )
+        from worldfoundry.base_models.diffusion_model.models.encoders.wan import WanTextEncoder
+        from worldfoundry.base_models.diffusion_model.models.networks.wan import WanModel
+        from worldfoundry.base_models.diffusion_model.models.networks.wan.variants import (
+            NeoVerseControlBranch,
+            NeoVerseControlBranchDictConverter,
+        )
+        from worldfoundry.synthesis.visual_generation.neoverse.native.worldmirror import (
+            NeoVerseWorldMirror,
+        )
+        from worldfoundry.core.model_loading import hash_state_dict_keys, load_model, load_state_dict
+        from worldfoundry.synthesis.visual_generation.neoverse.native.depth_anything_reconstructor import (
+            DepthAnything3Reconstructor,
+        )
+        from worldfoundry.synthesis.visual_generation.neoverse.native.pipeline import (
             WanVideoNeoVersePipeline,
         )
 
@@ -105,9 +126,84 @@ class NeoVerseOfficialRuntime:
             use_lora=not disable_lora,
         )
 
-        pipeline = WanVideoNeoVersePipeline.from_pretrained(
-            local_model_path=str(model_dir),
-            reconstructor_path=str(resolved_reconstructor_path),
+        diffusion_files = sorted(model_dir.glob("diffusion_pytorch_model*.safetensors"))
+        if not diffusion_files:
+            raise FileNotFoundError(f"NeoVerse diffusion checkpoint shards not found in {model_dir}")
+        tokenizer_path = model_dir / "google" / "umt5-xxl"
+        if not tokenizer_path.is_dir():
+            tokenizer_path = model_dir / "google"
+
+        combined_state = load_state_dict(
+            [str(path) for path in diffusion_files],
+            torch_dtype=weight_dtype,
+            device="cpu",
+        )
+        dit_state, dit_config = WanModelStateDictConverter().from_civitai(combined_state)
+        dit = load_model(
+            WanModel,
+            path=None,
+            config=dit_config or WAN21_T2V_14B_CONFIG,
+            torch_dtype=weight_dtype,
+            device="cpu",
+            state_dict=dit_state,
+        )
+        control_state, control_config = NeoVerseControlBranchDictConverter().from_civitai(combined_state)
+        control_branch = load_model(
+            NeoVerseControlBranch,
+            path=None,
+            config=control_config,
+            torch_dtype=weight_dtype,
+            device="cpu",
+            state_dict=control_state,
+            strict=False,
+        )
+        text_encoder = load_model(
+            WanTextEncoder,
+            str(model_dir / "models_t5_umt5-xxl-enc-bf16.pth"),
+            torch_dtype=weight_dtype,
+            device="cpu",
+        )
+        vae = load_model(
+            WanVideoVAE,
+            str(model_dir / "Wan2.1_VAE.pth"),
+            torch_dtype=weight_dtype,
+            device="cpu",
+            state_dict_converter=WanVideoVAEStateDictConverter().from_civitai,
+        )
+
+        reconstructor_state = load_state_dict(str(resolved_reconstructor_path), device="cpu")
+        reconstructor_hash = hash_state_dict_keys(reconstructor_state)
+        if reconstructor_hash == "1a1d001a35f78f3a7796a1e719ead340":
+            reconstructor_class = NeoVerseWorldMirror
+        elif reconstructor_hash == "252f1c3923a62665aee9b32f1b18afb5":
+            reconstructor_class = DepthAnything3Reconstructor
+        else:
+            raise ValueError(f"Unsupported NeoVerse reconstructor checkpoint layout: {reconstructor_hash}")
+        converted_reconstructor, reconstructor_config = reconstructor_class.state_dict_converter().from_civitai(
+            reconstructor_state
+        )
+        reconstructor_config = dict(reconstructor_config)
+        strict_reconstructor = bool(reconstructor_config.pop("strict_load", True))
+        reconstructor_dtype = (
+            torch.float32 if reconstructor_config.pop("upcast_to_float32", False) else weight_dtype
+        )
+        reconstructor = load_model(
+            reconstructor_class,
+            path=None,
+            config=reconstructor_config,
+            torch_dtype=reconstructor_dtype,
+            device="cpu",
+            state_dict=converted_reconstructor,
+            strict=strict_reconstructor,
+        )
+
+        pipeline = WanVideoNeoVersePipeline.from_components(
+            text_encoder=text_encoder,
+            dit=dit,
+            vae=vae,
+            control_branch=control_branch,
+            reconstructor=reconstructor,
+            tokenizer_path=str(tokenizer_path),
             lora_path=str(resolved_lora_path) if resolved_lora_path else None,
             lora_alpha=lora_alpha,
             device=resolved_device,
@@ -170,7 +266,7 @@ class NeoVerseOfficialRuntime:
         use_first_frame: bool = True,
     ):
         ensure_neoverse_runtime()
-        from worldfoundry.base_models.diffusion_model.diffsynth.utils.neoverse_auxiliary import (
+        from worldfoundry.synthesis.visual_generation.neoverse.native.auxiliary import (
             CameraTrajectory,
         )
 
@@ -293,7 +389,7 @@ class NeoVerseOfficialRuntime:
     ):
         del kwargs
         ensure_neoverse_runtime()
-        from worldfoundry.base_models.diffusion_model.diffsynth.utils.neoverse_auxiliary import (
+        from worldfoundry.synthesis.visual_generation.neoverse.native.auxiliary import (
             homo_matrix_inverse,
             load_video,
         )

@@ -9,6 +9,7 @@ import torch
 
 
 def to_tensor(image: np.ndarray, device: torch.device) -> torch.Tensor:
+    """Convert image pixels to a float NCHW tensor, preserving their original scale."""
     arr = np.asarray(image)
     if arr.ndim == 2:
         arr = np.stack([arr, arr, arr], axis=-1)
@@ -17,8 +18,6 @@ def to_tensor(image: np.ndarray, device: torch.device) -> torch.Tensor:
     if arr.shape[-1] == 4:
         arr = arr[..., :3]
     tensor = torch.from_numpy(arr).permute(2, 0, 1).float()
-    if tensor.max() > 1.0:
-        tensor = tensor / 255.0
     return tensor.unsqueeze(0).to(device)
 
 
@@ -29,6 +28,8 @@ def resolve_device(device: str | None) -> torch.device:
 
 
 def default_data_range(reference: np.ndarray, generated: np.ndarray) -> float:
+    if reference.dtype == np.uint8 or generated.dtype == np.uint8:
+        return 255.0
     return 1.0 if max(reference.max(), generated.max()) <= 1.0 else 255.0
 
 

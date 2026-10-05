@@ -1,13 +1,13 @@
 import os
 
-from torch_fidelity.datasets import TransformPILtoRGBTensor, Cifar10_RGB, Cifar100_RGB, STL10_RGB
-from torch_fidelity.feature_extractor_base import FeatureExtractorBase
-from torch_fidelity.feature_extractor_clip import FeatureExtractorCLIP
-from torch_fidelity.feature_extractor_dinov2 import FeatureExtractorDinoV2
-from torch_fidelity.feature_extractor_inceptionv3 import FeatureExtractorInceptionV3
-from torch_fidelity.feature_extractor_vgg16 import FeatureExtractorVGG16
-from torch_fidelity.helpers import vassert
-from torch_fidelity.noise import (
+from .datasets import TransformPILtoRGBTensor, Cifar10_RGB, Cifar100_RGB, STL10_RGB
+from .feature_extractor_base import FeatureExtractorBase
+from .feature_extractor_clip import FeatureExtractorCLIP
+from .feature_extractor_dinov2 import FeatureExtractorDinoV2
+from .feature_extractor_inceptionv3 import FeatureExtractorInceptionV3
+from .feature_extractor_vgg16 import FeatureExtractorVGG16
+from .helpers import vassert
+from .noise import (
     random_normal,
     random_unit,
     random_uniform_0_1,
@@ -15,8 +15,8 @@ from torch_fidelity.noise import (
     batch_slerp_any,
     batch_slerp_unit,
 )
-from torch_fidelity.sample_similarity_base import SampleSimilarityBase
-from torch_fidelity.sample_similarity_lpips import SampleSimilarityLPIPS
+from .sample_similarity_base import SampleSimilarityBase
+from .sample_similarity_lpips import SampleSimilarityLPIPS
 
 DATASETS_REGISTRY = dict()
 FEATURE_EXTRACTORS_REGISTRY = dict()

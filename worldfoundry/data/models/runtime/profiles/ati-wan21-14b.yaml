@@ -8,7 +8,7 @@ source_repos:
   revision: 1a002caf7bb55cfb016dcc670c357bd803af3a0d
   in_tree_path: worldfoundry/synthesis/visual_generation/ati/ati_runtime
 - url: https://github.com/Wan-Video/Wan2.1
-  in_tree_path: worldfoundry/base_models/diffusion_model/video/wan/official_wan2_1_runtime
+  in_tree_path: worldfoundry/base_models/diffusion_model/models
 checkpoints:
 - repo_id: bytedance-research/ATI
   revision: a92e2fac1f89b68f0c251942888dbdc0c15bcc4e
@@ -24,10 +24,12 @@ artifact_filename: ati-wan21-14b.mp4
 execution:
   environment: _unified
   backend_stage: independent_in_tree_runtime
-  runtime_status: checkpoint_assets_pending_not_runnable_until_staged
-  integration_status: runtime_ported
+  runtime_status: checkpoint_backed_gpu_inference_verified
+  integration_status: component_verified
   pipeline_binding: ati-wan21-14b
-integration: {status: runtime_ported}
+integration: {status: component_verified}
 notes:
 - The official ATI inference delta reuses WorldFoundry's central in-tree Wan2.1 base implementation.
 - No source checkout or runtime download is permitted; only locally staged checkpoints are resolved.
+- An 81-frame local GPU inference with ATI and Wan2.1 I2V 480P weights has been verified;
+  quantitative point-trajectory adherence is still unmeasured.

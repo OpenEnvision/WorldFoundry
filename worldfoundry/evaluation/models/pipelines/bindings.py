@@ -8,6 +8,7 @@ contributions.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -16,6 +17,8 @@ from typing import Any, Mapping
 import yaml
 
 from worldfoundry.evaluation.utils import DATA_ROOT
+
+LOGGER = logging.getLogger(__name__)
 
 # ── Constants & type aliases ───────────────────────────────────────────
 
@@ -97,6 +100,7 @@ class PipelineBindingRegistry:
 
     def __init__(self, bindings: tuple[PipelineBinding, ...] = ()) -> None:
         """Initialize the registry with a collection of PipelineBindings."""
+        self._frozen = False
         self._bindings: dict[str, PipelineBinding] = {}
         self._aliases: dict[str, PipelineBinding] = {}
         for binding in bindings:
@@ -104,6 +108,11 @@ class PipelineBindingRegistry:
 
     def register(self, binding: PipelineBinding) -> None:
         """Register a single PipelineBinding and its aliases into the registry."""
+        if self._frozen:
+            raise RuntimeError(
+                "cannot register on a cached PipelineBindingRegistry; "
+                "construct a new instance or call clear_pipeline_binding_registry_cache()"
+            )
         binding.validate()
         for key in (binding.binding_id, binding.model_id):
             normalized = _binding_key(key)
@@ -162,7 +171,13 @@ def runtime_profile_id(value: Any, *, default: str = "") -> str:
 
 
 def runtime_profile_execution_metadata(value: Any) -> dict[str, Any]:
-    """Load a runtime profile and return its execution metadata."""
+    """Load a runtime profile and return its execution metadata.
+
+    An unknown profile id is tolerated (logged, empty metadata returned) so
+    routing can fall through to the next priority. Genuine loading failures
+    (corrupt YAML, broken environment) propagate so they stay visible instead
+    of silently degrading the route.
+    """
     profile_id = runtime_profile_id(value)
     if not profile_id:
         return {}
@@ -170,8 +185,15 @@ def runtime_profile_execution_metadata(value: Any) -> dict[str, Any]:
         from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile
 
         profile = load_runtime_profile(profile_id, check_conda_env_exists=False)
-    except Exception:
+    except KeyError:
+        LOGGER.warning(
+            "Runtime profile %r not found; continuing without profile metadata.",
+            profile_id,
+        )
         return {}
+    except Exception as exc:
+        LOGGER.warning("Failed to load runtime profile %r: %s", profile_id, exc)
+        raise
     metadata: dict[str, Any] = {
         "runtime_profile": value,
         "resolved_runtime_profile": profile_id,
@@ -213,12 +235,23 @@ def _binding_paths(root: str | Path | None = None) -> tuple[Path, ...]:
 
 
 def load_pipeline_binding(path: str | Path) -> PipelineBinding:
-    """Load and validate a PipelineBinding from a YAML file."""
-    payload = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    """Load and validate a PipelineBinding from a YAML file.
+
+    Parse and validation errors are re-raised with the file path in the
+    message so one broken file inside the bindings tree is locatable.
+    """
+    resolved = Path(path)
+    try:
+        payload = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise yaml.YAMLError(f"failed to parse pipeline binding {resolved}: {exc}") from exc
     if not isinstance(payload, Mapping):
-        raise TypeError(f"pipeline binding file must contain a mapping: {path}")
-    binding = PipelineBinding.from_mapping(payload)
-    binding.validate()
+        raise TypeError(f"pipeline binding file must contain a mapping: {resolved}")
+    try:
+        binding = PipelineBinding.from_mapping(payload)
+        binding.validate()
+    except (TypeError, ValueError) as exc:
+        raise type(exc)(f"{resolved}: {exc}") from exc
     return binding
 
 
@@ -231,13 +264,26 @@ def load_pipeline_bindings(root: str | Path | None = None) -> tuple[PipelineBind
 def _cached_pipeline_binding_registry(root_text: str) -> PipelineBindingRegistry:
     """Cache and load the PipelineBindingRegistry from a root directory string."""
     root = Path(root_text) if root_text else DEFAULT_PIPELINE_BINDINGS_ROOT
-    return PipelineBindingRegistry(load_pipeline_bindings(root))
+    registry = PipelineBindingRegistry(load_pipeline_bindings(root))
+    registry._frozen = True
+    return registry
 
 
 def load_pipeline_binding_registry(root: str | Path | None = None) -> PipelineBindingRegistry:
-    """Load and cache the PipelineBindingRegistry from the bindings root."""
+    """Load and cache the PipelineBindingRegistry from the bindings root.
+
+    The returned registry is a process-wide cached instance and is frozen —
+    ``register`` raises.  Use :func:`merge_pipeline_binding_plugins` for
+    per-call overlays.  Call :func:`clear_pipeline_binding_registry_cache`
+    after editing binding YAML inside a long-lived process.
+    """
     root_text = "" if root is None else str(Path(root))
     return _cached_pipeline_binding_registry(root_text)
+
+
+def clear_pipeline_binding_registry_cache() -> None:
+    """Clear the cached PipelineBindingRegistry instances."""
+    _cached_pipeline_binding_registry.cache_clear()
 
 
 # ── Merge & resolution ────────────────────────────────────────────────
@@ -250,10 +296,16 @@ def merge_pipeline_binding_plugins(
     """Return a per-call registry with built-ins first and plugins second."""
 
     merged = PipelineBindingRegistry(registry.list())
-    for _, binding in sorted(plugin_bindings.items(), key=lambda item: item[0]):
+    for slug, binding in sorted(plugin_bindings.items(), key=lambda item: item[0]):
         try:
             merged.register(binding)
-        except ValueError:
+        except ValueError as exc:
+            LOGGER.warning(
+                "Skipping plugin pipeline binding %r from slug %r: %s",
+                binding.binding_id,
+                slug,
+                exc,
+            )
             continue
     return merged
 
@@ -395,6 +447,7 @@ __all__ = [
     "PipelineBinding",
     "PipelineBindingRegistry",
     "first_text",
+    "clear_pipeline_binding_registry_cache",
     "load_pipeline_binding",
     "load_pipeline_binding_registry",
     "load_pipeline_binding_registry_with_plugins",

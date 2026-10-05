@@ -1,0 +1,54 @@
+---
+title: "CameraCtrl"
+description: "CameraCtrl from The Chinese University of Hong Kong / Shanghai AI Laboratory: world and video; Verified."
+modelId: "cameractrl"
+pageSource: authored
+---
+
+CameraCtrl pioneered plug-and-play camera control for text-to-video diffusion: it trains a camera encoder over Plücker embeddings so trajectories can steer generation without retraining the base model. In this catalog both integration and runner are verified — the in-tree synthesis backend follows the official trajectory text-to-video demo contract in the unified environment profile.
+
+<ModelPaperFigures modelId="cameractrl" locale="en" />
+
+The recorded paper is [arXiv 2404.02101](https://arxiv.org/abs/2404.02101).
+
+Project page: [hehao13.github.io/projects-CameraCtrl](https://hehao13.github.io/projects-CameraCtrl/). Code: [hehao13/CameraCtrl](https://github.com/hehao13/CameraCtrl).
+
+The official paper is on [arXiv 2404.02101](https://arxiv.org/abs/2404.02101). Project: [hehao13.github.io/projects-CameraCtrl](https://hehao13.github.io/projects-CameraCtrl/). Code: [hehao13/CameraCtrl](https://github.com/hehao13/CameraCtrl). Weights: `hehao13/CameraCtrl`. License: **MIT**. Publisher: CUHK / Shanghai AI Laboratory.
+
+This is **not** [AC3D](/docs/guides/supported-models/ac3d) (CogVideoX ControlNet) and **not** [ATI](/docs/guides/supported-models/ati-wan21-14b) (Wan2.1 point tracks).
+
+<ModelCommandBuilder modelId="cameractrl" locale="en" />
+
+## What it is for
+
+`cameractrl` is the recorded camera-control route. Start here to follow a catalog camera path.
+
+Per the publication (arXiv 2404.02101), camera poses are encoded as Plücker embeddings and injected through a trainable camera encoder attached to a frozen video diffusion base (AnimateDiff in the official release). WorldFoundry vendors the runtime under synthesis/visual_generation/cameractrl/cameractrl_runtime; checkpoints stay in the normal hfd/ckpt cache. It is published by The Chinese University of Hong Kong / Shanghai AI Laboratory.
+
+Catalog tasks include world, video, camera control, and world model. Documented outputs include video.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (The standard camera-trajectory adherence evaluation).
+
+## Runtime contract
+
+Optional `prompt`, `trajectory_file`, `frames`, `fps`, and `height`; artifacts `cameractrl.mp4`.
+
+CLI task profiles: `trajectory-video`. WorldFoundry binds `CameraCtrlPipeline`.
+
+Family status: **Verified**.
+
+Recorded `trajectory-video` defaults: frames=16, fps=8, height=256, width=384, guidance_scale=14.0, seed=42.
+
+The runner follows the official demo trajectory contract — supply a camera trajectory file and a text prompt.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run cameractrl --pipeline.task-profile trajectory-video` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 11.3).
+
+Recorded weight repositories include `hehao13/CameraCtrl`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh cameractrl`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="cameractrl" locale="en" />

@@ -1,0 +1,68 @@
+---
+title: LARYBench
+description: "Meituan LongCat latent-action probe: extract, classify, and regress robot actions. WorldFoundry ships the three-stage runtime; it does not invent a board."
+---
+
+LARYBench (Meituan LongCat) asks whether a video / world model's **latent actions** still contain real robot-action information. It is not a text-to-video beauty contest. The official pipeline has three stages over **CALVIN**, **VLABench**, **AgiBot-Beta**, and **RoboCOIN**:
+
+- **Extract** — run a representation model over one metadata table, write latent-action CSVs, score `extraction_coverage`.
+- **Classify** — probe discrete action classes (`top1_accuracy`, `macro_f1`, `weighted_f1`).
+- **Regress** — probe continuous robot actions (`val_seen_mse`, `val_unseen_mse`) with `--action-mode absolute|relative`.
+
+Paper: [LARYBench](https://arxiv.org/abs/2604.11689). Project: [meituan-longcat.github.io/LARYBench](https://meituan-longcat.github.io/LARYBench/). Code / data: [meituan-longcat/LARYBench](https://github.com/meituan-longcat/LARYBench) and [`meituan-longcat/LARYBench`](https://huggingface.co/datasets/meituan-longcat/LARYBench) (MIT).
+
+WorldFoundry **ships the stage drivers** in tree (`cli.py`, `extract.py`, `classification.py`, `regression.py`, `run_larybench_official_runner.py`). Extraction partitions one metadata table across the selected GPUs and merges CSVs; classification runs one local process per GPU; regression uses Accelerate across `CUDA_VISIBLE_DEVICES`. Official `classification_summary.json` / `best_result.json` can be imported without loading datasets or checkpoints.
+
+<BenchmarkPageSections id="larybench" locale="en" />
+
+## How to run
+
+Import an official classify or regress export:
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id larybench \
+  --mode official-validation \
+  --official-results-path /path/to/classification_summary.json \
+  --output-dir tmp/larybench/official-validation \
+  --json
+```
+
+For regression, pass the official `best_result.json` instead; the runner infers the stage from the filename.
+
+Full extract → classify → regress needs staged shards. Default import path when you omit `--official-results-path` is `WORLDFOUNDRY_LARYBENCH_RESULTS_PATH`.
+
+```bash
+export DATA_DIR=/path/to/larybench/shards
+export LARY_METADATA_DIR=/path/to/larybench/metadata
+export LARY_LA_DIR=/path/to/larybench/latent_actions
+export MODEL_DIR=/path/to/representation_checkpoints
+
+hf download meituan-longcat/LARYBench --repo-type dataset --local-dir "${DATA_DIR}"
+
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py \
+  --run-official \
+  --stage extract \
+  --dataset calvin \
+  --model <representation_model> \
+  --dataset-root "${DATA_DIR}" \
+  --metadata-root "${LARY_METADATA_DIR}" \
+  --latent-action-root "${LARY_LA_DIR}" \
+  --model-root "${MODEL_DIR}" \
+  --output-dir tmp/larybench/extract \
+  --json
+```
+
+Classify needs `--dim` and `--classes`. Regress accepts `--action-mode absolute|relative` and optional `--global-stats-json` / `--val-unseen-csv`. Layout env vars: `DATA_DIR`, `LARY_METADATA_DIR`, `LARY_LA_DIR`, `MODEL_DIR`, optional `WORLDFOUNDRY_LARYBENCH_ROOT`.
+
+In-tree pointers:
+
+```text
+worldfoundry/data/benchmarks/tasks/external/larybench.yaml
+worldfoundry/evaluation/tasks/execution/runners/larybench/
+```
+
+Outputs under `--output-dir` include `scorecard.json` (primary `extraction_coverage`), `benchmark_contract.json`, and `raw_metric_table.jsonl`.
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

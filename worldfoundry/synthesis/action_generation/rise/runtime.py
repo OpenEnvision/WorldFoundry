@@ -224,7 +224,7 @@ class RiseRuntime:
 
         import torch
 
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
         from worldfoundry.synthesis.action_generation.openpi import config as openpi_config
         from worldfoundry.synthesis.action_generation.openpi import policy_loader
         from worldfoundry.synthesis.action_generation.openpi.modeling.pi0_config import Pi0Config

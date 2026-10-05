@@ -4,6 +4,8 @@ import os
 import torch
 from EWMBench.utils import load_dimension_info
 from worldfoundry.base_models.llm_mllm_core.mllm.qwen.qwen_vl_utils import process_vision_info
+from worldfoundry.core.execution.device import get_current_torch_device, resolve_inference_dtype
+from worldfoundry.core.execution.inference_runtime import resolve_generation_max_new_tokens
 from tqdm import tqdm
 from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
 
@@ -18,7 +20,7 @@ def inference(
     processor,
     video_path,
     prompt,
-    max_new_tokens=2048,
+    max_new_tokens=None,
     total_pixels=20480 * 28 * 28,
     min_pixels=16 * 28 * 28,
 ):
@@ -36,6 +38,9 @@ def inference(
 
     image_inputs, video_inputs, video_kwargs = process_vision_info([messages], return_video_kwargs=True)
     fps_inputs = video_kwargs["fps"]
+    if isinstance(fps_inputs, (list, tuple)):
+        fps_inputs = fps_inputs[0] if fps_inputs else None
+    max_new_tokens = max_new_tokens or resolve_generation_max_new_tokens(512, scope="worldarena_caption")
     try:
         inputs = processor(
             text=[text],
@@ -45,9 +50,10 @@ def inference(
             padding=True,
             return_tensors="pt",
         )
-        inputs = inputs.to("cuda")
+        inputs = inputs.to(model.device)
 
-        outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
+        with torch.inference_mode():
+            outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
 
         generated_ids = [output_ids[len(input_ids) :] for input_ids, output_ids in zip(inputs.input_ids, outputs)]
         output_text = processor.batch_decode(
@@ -56,7 +62,7 @@ def inference(
 
     except Exception as e:
         print(f"Error: {str(e)}")
-        output_text = "Error: " + str(e)
+        output_text = ["Error: " + str(e)]
 
     return output_text[0]
 
@@ -93,11 +99,13 @@ def prepare_prompt(video_path):
 
 
 def caption_reference(model_name, model_path, video_folder_root, save_path, **kwargs):
+    device = get_current_torch_device()
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         model_path,
-        torch_dtype=torch.bfloat16,
-        device_map="cuda:0",
+        torch_dtype=resolve_inference_dtype(device),
+        device_map=str(device),
     )
+    model.eval()
 
     processor = AutoProcessor.from_pretrained(model_path)
 

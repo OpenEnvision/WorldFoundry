@@ -1,126 +1,27 @@
 ---
 title: RoboCerebra
-description: RoboCerebra — metrics, requirements, and run commands.
+description: "NeurIPS 2025 long-horizon household bench (1,000 trajectories, 100 variants). WorldFoundry imports official rollouts; it does not run LIBERO."
 ---
 
-## About
+RoboCerebra (Beihang CoLa Lab, NeurIPS 2025) tests **System-2** planning on long household sequences, not reactive System-1 control. The release is **1,000** human-annotated trajectories over **100** task variants (mean **9.1** atomic steps; horizons on the order of **3,000** simulation steps) on a **LIBERO**-based stack. Published eval is **600** rollouts (**60** tasks × **10** trials) with anchor-aligned planner / VLA handoffs. Six official conditions: **Ideal**, **Memory Exploration**, **Memory Execution**, **Random Disturbance**, **Observation Mismatching**, and **Mix**.
 
+Paper: [RoboCerebra](https://arxiv.org/abs/2506.06677). Project: [robocerebra.github.io](https://robocerebra.github.io/). Code: [buaa-colalab/RoboCerebra](https://github.com/buaa-colalab/RoboCerebra).
 
+WorldFoundry **imports** official result exports (`worldfoundry-eval zoo benchmark-run --mode official-validation`). It does **not** run the bundled LIBERO simulator, collect rollouts, or host the hierarchical VLM planner + VLA controller. Declare the six-way condition split on the export if you want comparable numbers.
 
-RoboCerebra external benchmark manifest for cognitive embodied manipulation tasks.
+<BenchmarkPageSections id="robocerebra" locale="en" />
 
-
-
-## Metrics
-
-RoboCerebra external benchmark manifest for cognitive embodied manipulation tasks.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/robocerebra.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `episode_success` | Share of episodes or tasks that complete successfully. |
-| `reward` | Task reward from RoboCerebra long-horizon reasoning and manipulation rollouts. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `worldfoundry-unified-cu128`.
-- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
-- WorldFoundry provides contract and official result normalization for caller-provided RoboCerebra outputs.
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_ROBOCEREBRA_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/robocerebra`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/buaa-colalab--RoboCerebra`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_ROBOCEREBRA_ROOT`
-- `WORLDFOUNDRY_ROBOCEREBRA_RESULTS_PATH`
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id robocerebra \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robocerebra/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/robocerebra/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id robocerebra \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robocerebra/official-run \
-  --json
-```
-
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id robocerebra --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_ROBOCEREBRA_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+Optional `WORLDFOUNDRY_ROBOCEREBRA_ROOT` points at a local bench/runtime root. Default import path: `WORLDFOUNDRY_ROBOCEREBRA_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/robocerebra.yaml`. Outputs: `scorecard.json` (primary `success_rate`), `raw_results.jsonl`, `evaluation/summary.json`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

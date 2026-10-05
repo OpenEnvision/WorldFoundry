@@ -1,0 +1,52 @@
+---
+title: "MolmoAct2"
+description: "MolmoAct2 from Allen Institute for AI (AI2): vla and vla action prediction; Verified; 5 variants."
+modelId: "molmoact2"
+pageSource: authored
+---
+
+MolmoAct2 is AI2's second-generation action reasoning model with an unusually broad Apache-2.0 checkpoint zoo: base, Think (depth-reasoning), DROID (Franka), Bimanual YAM, SO100/101, and LIBERO variants are all confirmed. WorldFoundry ports the official DROID/YAM predict_action server contracts into an in-tree action_trace pipeline with no external checkout dependency.
+
+<ModelPaperFigures modelId="molmoact2" locale="en" />
+
+The recorded paper is [arXiv 2605.02881](https://arxiv.org/abs/2605.02881).
+
+Code: [allenai/molmoact2](https://github.com/allenai/molmoact2).
+
+<ModelCommandBuilder modelId="molmoact2" locale="en" />
+
+## What it is for
+
+`molmoact2-droid` is the recorded instruction-to-action line. Start here when you need a WorldFoundry VLA rollout rather than a video generator.
+
+MolmoAct2 builds on the Molmo open VLM line with action-reasoning heads; the Think variant adds depth-based reasoning before acting. Configured DROID, YAM, SO100, LIBERO, and Think-LIBERO profiles expose checkpoint-backed action_trace routes. It is published by Allen Institute for AI (AI2).
+
+Catalog tasks include vla, vla action prediction, vla policy rollout, and robot policy. Catalog aliases include `molmo-act2`, `molmoact`, `molmoact2-droid`, and `molmoact2-yam`. Also recorded: `molmoact2-bimanual-yam`, `molmoact2-so100-101`, `molmoact2-libero`.
+
+Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub/libero) (Dedicated LIBERO and Think-LIBERO checkpoints).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, and `fps`; artifacts `action_trace` and `molmoact2_action_trace.json`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `MolmoAct2Pipeline`.
+
+Start on `molmoact2-droid`. The family registers 5 catalog variants (cards above): `molmoact2-droid` (`vla.policy_rollout`) — Static load only; `molmoact2-bimanual-yam` (`vla.policy_rollout`) — Static load only; `molmoact2-so100-101` (`vla.policy_rollout`) — Static load only; `molmoact2-libero` (`vla.policy_rollout`) — Static load only; `molmoact2-think-libero` (`vla.policy_rollout`) — Static load only. Family status: **Verified**.
+
+Pick the checkpoint per embodiment: DROID for Franka arms, BimanualYAM for dual-arm YAM, SO100_101 for SO-ARM, LIBERO/Think-LIBERO for simulation. Integration is Static load onlyally verified.
+
+WorldFoundry in-tree MolmoAct2 runtime lives under worldfoundry/synthesis/action_generation/molmoact2 and no longer depends on the external molmoact2 checkout at runtime.
+
+Runnable / integrated: `molmoact2-droid`, `molmoact2-bimanual-yam`, `molmoact2-so100-101`, `molmoact2-libero`, and `molmoact2-think-libero`.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run molmoact2-droid --pipeline.task-profile interactive-video` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `allenai/MolmoAct2-DROID`, `allenai/MolmoAct2-BimanualYAM`, and `allenai/MolmoAct2-SO100_101` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh molmoact2-droid`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; status: **Verified**.
+
+<ModelRelatedRecipes modelId="molmoact2" locale="en" />

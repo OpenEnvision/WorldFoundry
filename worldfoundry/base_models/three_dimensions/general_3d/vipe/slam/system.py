@@ -45,6 +45,7 @@ from .components.inner_filler import FilledReturn, InnerFiller
 from .components.motion_filter import MotionFilter
 from .components.sparse_tracks import build_sparse_tracks
 from .interface import SLAMOutput
+from .constants import SLAM_PER_VIDEO_COMPONENTS
 from .networks.droid_net import DroidNet
 
 
@@ -139,18 +140,12 @@ class SLAMSystem:
         # Network weights are immutable during inference and can be reused
         # across videos. Per-video graph/buffer state is rebuilt below.
         self.droid_net: DroidNet | None = None
+        self.metric_depth = None
 
     def _build_components(self):
         """Helper function to build components."""
-        per_video_components = (
-            "inner_filler",
-            "backend",
-            "frontend",
-            "motion_filter",
-            "buffer",
-            "sparse_tracks",
-            "metric_depth",
-        )
+        # metric_depth / droid_net are weight holders, not per-video graph state.
+        per_video_components = SLAM_PER_VIDEO_COMPONENTS
         for name in per_video_components:
             self.__dict__.pop(name, None)
         if self.droid_net is None:
@@ -185,9 +180,10 @@ class SLAMSystem:
             Adding more views requires adding factors to the graph to keep the null-space. 
             This is currently not supported for now."""
 
-            self.metric_depth = make_depth_model(self.config.keyframe_depth)
-            if self.config.camera_type not in self.metric_depth.supported_camera_types:
-                self.metric_depth = PinholeDepthAdapter(self.metric_depth)
+            if self.metric_depth is None:
+                self.metric_depth = make_depth_model(self.config.keyframe_depth)
+                if self.config.camera_type not in self.metric_depth.supported_camera_types:
+                    self.metric_depth = PinholeDepthAdapter(self.metric_depth)
 
             assert self.metric_depth.depth_type in [
                 DepthType.METRIC_DEPTH,

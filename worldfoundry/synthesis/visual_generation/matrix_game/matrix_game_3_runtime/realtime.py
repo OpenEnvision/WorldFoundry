@@ -20,7 +20,7 @@ import torch
 import torch.nn.functional as torch_F
 from PIL import Image
 
-from worldfoundry.core.realtime import RealtimeSpec
+from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
 
 _KEY_TO_ACTION = {
     "w": "forward",
@@ -561,7 +561,7 @@ class MatrixGame3RealtimeSession:
         condition_ms = (time.perf_counter() - condition_started) * 1000.0
 
         scheduler_class = importlib.import_module(
-            "worldfoundry.base_models.diffusion_model.video.wan.core.solvers"
+            "worldfoundry.base_models.diffusion_model.schedulers"
         ).FlowUniPCMultistepScheduler
         scheduler = scheduler_class()
         scheduler.set_timesteps(

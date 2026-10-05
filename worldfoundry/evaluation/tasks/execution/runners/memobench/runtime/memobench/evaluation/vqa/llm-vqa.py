@@ -135,12 +135,20 @@ def frames_to_video(frames_dir, fps=16):
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(tmp.name, fourcc, fps, (w, h))
-    for path in frame_paths:
-        frame = cv2.imread(path)
-        if frame is not None:
-            writer.write(frame)
-    writer.release()
-    return tmp.name
+    try:
+        for path in frame_paths:
+            frame = cv2.imread(path)
+            if frame is not None:
+                writer.write(frame)
+        return tmp.name
+    except Exception:
+        try:
+            os.unlink(tmp.name)
+        except FileNotFoundError:
+            pass
+        raise
+    finally:
+        writer.release()
 
 
 
@@ -406,47 +414,51 @@ if __name__ == "__main__":
             print(f"  Direct mp4: {direct_mp4}")
             video_for_eval = direct_mp4
 
-        # Load questions
-        q_path = os.path.join(args.questions_dir, f"{clip_id}-questions.csv")
-        if not os.path.exists(q_path):
-            print(f"[WARN] Questions not found: {q_path} — skipping")
-            if tmp_video is not None:
-                os.unlink(tmp_video)
-            failed += 1
-            continue
-        with open(q_path, newline='', encoding='utf-8') as f:
-            q_rows = list(csv.DictReader(f))
-        if not q_rows or not q_rows[0].get("Final questions"):
-            print(f"[WARN] No 'Final questions' in {q_path} — skipping")
-            if tmp_video is not None:
-                os.unlink(tmp_video)
-            failed += 1
-            continue
-        questions = q_rows[0]["Final questions"]
-        questions_json = json.loads(questions)
+        try:
+            # Load questions
+            q_path = os.path.join(args.questions_dir, f"{clip_id}-questions.csv")
+            if not os.path.exists(q_path):
+                print(f"[WARN] Questions not found: {q_path} — skipping")
+                failed += 1
+                continue
+            with open(q_path, newline='', encoding='utf-8') as f:
+                q_rows = list(csv.DictReader(f))
+            if not q_rows or not q_rows[0].get("Final questions"):
+                print(f"[WARN] No 'Final questions' in {q_path} — skipping")
+                failed += 1
+                continue
+            questions = q_rows[0]["Final questions"]
+            questions_json = json.loads(questions)
 
-        # Evaluate via Gemini (with retry on transient errors)
-        evaluation_json = None
-        max_retries = 1
-        for attempt in range(1, max_retries + 1):
-            try:
-                raw = evaluate_video(video_for_eval, questions)
-                evaluation_json = extract_json(raw)
-                break  # success
-            except Exception as e:
-                err_str = str(e)
-                is_transient = any(k in err_str for k in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "high demand"])
-                if is_transient and attempt < max_retries:
-                    wait = 30 * attempt  # 30s, 60s, 90s, 120s
-                    print(f"[RETRY {attempt}/{max_retries}] {clip_id}: {e}")
-                    print(f"  Waiting {wait}s before retry...")
-                    time.sleep(wait)
-                else:
-                    print(f"[ERROR] {clip_id}: {e}")
-                    failed += 1
-                    break
-        if tmp_video is not None:
-            os.unlink(tmp_video)  # clean up compiled temp file only
+            # Evaluate via Gemini (with retry on transient errors)
+            evaluation_json = None
+            max_retries = 1
+            for attempt in range(1, max_retries + 1):
+                try:
+                    raw = evaluate_video(video_for_eval, questions)
+                    evaluation_json = extract_json(raw)
+                    break  # success
+                except Exception as e:
+                    err_str = str(e)
+                    is_transient = any(
+                        k in err_str
+                        for k in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "high demand"]
+                    )
+                    if is_transient and attempt < max_retries:
+                        wait = 30 * attempt  # 30s, 60s, 90s, 120s
+                        print(f"[RETRY {attempt}/{max_retries}] {clip_id}: {e}")
+                        print(f"  Waiting {wait}s before retry...")
+                        time.sleep(wait)
+                    else:
+                        print(f"[ERROR] {clip_id}: {e}")
+                        failed += 1
+                        break
+        finally:
+            if tmp_video is not None:
+                try:
+                    os.unlink(tmp_video)
+                except FileNotFoundError:
+                    pass
 
         if evaluation_json is None:
             continue

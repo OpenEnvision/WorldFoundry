@@ -1,0 +1,31 @@
+---
+title: "Warp-as-History"
+description: "相机可控图生视频：沿相机轨迹 warp 静帧再细化。独立环境；官方 33 帧 / 16 fps demo 已 GPU 验证。"
+modelId: "warp-as-history"
+pageSource: authored
+---
+
+Warp-as-History（WAH）是相机可控的**图生视频**方法。论文是 [Warp-as-History: Generalizable Camera-Controlled Video Generation from One Training Video](https://arxiv.org/abs/2605.15182)（arXiv 2605.15182），项目页 [yyfz.github.io/warp-as-history](https://yyfz.github.io/warp-as-history)，代码 [yyfz/Warp-as-History](https://github.com/yyfz/Warp-as-History)（**Apache-2.0**）。论文作者单位为上海交通大学与上海人工智能实验室；本 catalog 卡片仍没有单独的机构字段。别名 `wah`、`warp_as_history`、`yyfz233/warp-as-history` 解析到本页。
+
+<ModelPaperFigures modelId="warp-as-history" locale="zh" />
+
+推理时沿请求的相机轨迹对静帧做几何 warp，把这些 warp 当作**伪历史**，送进冻结的 **Helios-Distilled** 视频模型加任务 LoRA。可见 token 选择会丢掉没有有效源的 warp 区域。WorldFoundry 把官方运行时内置在 `worldfoundry/synthesis/visual_generation/warp_as_history`。集成与 runner 状态均为 **verified**：就位 Helios-Distilled 与 LoRA 后通过 GPU 一致性，复现了官方 BMX / 涂鸦 warp 视频 demo。
+
+<ModelCommandBuilder modelId="warp-as-history" locale="zh" />
+
+## 用来做什么
+
+用一张图做相机运动。必填 `prompt` 与 `image`；可选 `video`；`actions` 记录为 `warp_video`、`camera_path`。产物：经 `WarpAsHistoryPipeline` 写出的 `warp-as-history.mp4`。已验证配方是 `--pipeline.task-profile official-demo-video`。
+
+官方 demo 契约固定 **33 帧**、**16 fps**、**384×640**、seed **42**。相机跟随评测看 [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)——那是匹配的评测套件，不是已收录的 WorldFoundry 排名。
+
+就位三份外部缓存：`BestWishYsh/Helios-Distilled`（基座）、`yyfz233/warp-as-history`（`visible_lora_state_step1000.safetensors`），以及从相机位姿渲染 warp 时需要的 `yyfz233/Pi3X`（`model.safetensors`）。用 `model_path` / `lora_path` / `pi3x_ckpt_path` 或 `WAH_HELIOS_DISTILLED_PATH` / `WAH_LORA_PATH` / `WAH_PI3X_CKPT_PATH` 注入。除非从位姿而不是现成 warp 视频起步，否则 Pi3X 可选。
+
+## 运行时契约
+只用独立环境：`warp-as-history` 固定 **Python 3.10**、**CUDA 12.1**、**torch==2.5.0**。不要放进统一环境。后端阶段是 `in_tree_official_cli`。相机轨迹偏离输入视角过远时，warp 历史和成片都会变差。
+
+## 在 WorldFoundry 中运行
+
+先 `bash scripts/setup/model_env_install.sh --model warp-as-history`，再跑 `worldfoundry-eval run warp-as-history --pipeline.task-profile official-demo-video`。逐次视觉质检仍在 catalog 外跟踪。
+
+<ModelRelatedRecipes modelId="warp-as-history" locale="zh" />

@@ -1,0 +1,54 @@
+---
+title: "GigaWorld-0"
+description: "GigaWorld-0（GigaAI）：机器人世界模型、视频生成；Runner 一致性待确认。"
+modelId: "giga-world-0"
+pageSource: authored
+---
+
+GigaWorld-0 是极佳科技开源的机器人世界模型系列：面向动作条件机器人数据生成训练的视频生成模型，记录了 pretrain 与 GR1 专用两个 2B checkpoint。本 catalog 中其官方（WorldArena 收录的）源码已内置树内；执行待 checkpoint 与任务资产就位。
+
+另外记录了 `google-t5/t5-11b` 和 `Wan-AI/Wan2.1-T2V-1.3B-Diffusers`。旧的 T5-11B PyTorch pickle 必须**转换一次**（仅权重加载）到仅编码器的 safetensors 目录（在隔离的 Torch 2.6+ 环境跑 `scripts/inference/convert_t5_11b_encoder_to_safetensors.py`）。正常推理只读 safetensors。
+
+<ModelPaperFigures modelId="giga-world-0" locale="zh" />
+
+记录论文为[arXiv 2511.19861](https://arxiv.org/abs/2511.19861)。
+
+项目页：[giga-world-0.github.io](https://giga-world-0.github.io/)。代码：[open-gigaai/giga-world-0](https://github.com/open-gigaai/giga-world-0)。代码：[open-gigaai/giga-models](https://github.com/open-gigaai/giga-models)。
+
+论文：[arXiv 2511.19861](https://arxiv.org/abs/2511.19861)。项目页：[giga-world-0.github.io](https://giga-world-0.github.io/)。代码：[open-gigaai/giga-world-0](https://github.com/open-gigaai/giga-world-0)。Runner：**`Runner 一致性待确认`**。checkpoint 和任务资产就位前，pipeline 返回 **blocked** 诊断。单图低步数冒烟只验证 checkpoint 能跑——**不是**官方 GR1 数据或全质量采样一致性。该冒烟在统一环境默认走 Torch SDPA；官方 NATTEN 质量需要暴露 `neighborhood_attention_generic` 的轮子（Torch 2.5 的 NATTEN 0.17.5 **没有**）。
+
+<ModelCommandBuilder modelId="giga-world-0" locale="zh" />
+
+## 用来做什么
+
+需要动作条件世界步进时选 `giga-world-0`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
+
+记录两个 2B 视频 checkpoint——open-gigaai 下的 GigaWorld-0-Video-Pretrain-2b 与 GigaWorld-0-Video-GR1-2b。除已记录任务外的架构内部细节仓库未存。该模型由极佳科技（GigaAI）发布。
+
+catalog 记录的任务包括 机器人世界模型、视频生成、action-conditioned-generation、robot-image-to-video。别名包括 `giga_world_0`、`gigaworld-0`、`gigaworld0`。输出模态为视频。
+
+记录的评测入口包括[WorldArena](/zh/docs/evaluation/benchmark-hub/worldarena)（该条目已收录于 WorldArena 的机器人世界模型评测）、[EWMBench](/zh/docs/evaluation/benchmark-hub/ewmbench)（具身世界模型视频预测质量）。
+
+## 运行时契约
+
+必填 `prompt`、`image`；可选 `video`、`actions` (robot_action, world_action)；产物 `giga-world-0.mp4`。
+
+记录的任务 profile：`robotics-world-model`、`video-generation`、`action-conditioned-generation`、`robot-image-to-video`。绑定的 pipeline 类是 `GigaWorld0Pipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+`robot-image-to-video` 记录默认值：height=480, width=640, num_frames=61, num_inference_steps=30, guidance_scale=1.0, fps=16。
+
+pipeline 解析内置推理入口，在 checkpoint 与任务资产就位前返回 blocked 运行时诊断。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run giga-world-0 --pipeline.task-profile robot-image-to-video` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu121`（Python 3.11，CUDA 12.1，torch==2.5.1）。
+
+记录的权重仓库包括 `open-gigaai/GigaWorld-0-Video-Pretrain-2b`、`open-gigaai/GigaWorld-0-Video-GR1-2b`、`google-t5/t5-11b` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh giga-world-0`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="giga-world-0" locale="zh" />

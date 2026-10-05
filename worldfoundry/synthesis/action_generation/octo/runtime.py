@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import importlib
 import json
 import os
@@ -9,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
 
 from .compat import install_jax_compatibility
@@ -76,8 +76,8 @@ def select_octo_checkpoint(
 
 
 def _load_image_array(image: Any, *, size: tuple[int, int]) -> tuple[Any, str]:
-    from PIL import Image
     import numpy as np
+    from PIL import Image
 
     if image is None:
         raise ValueError("Octo runtime requires an RGB observation image.")
@@ -197,7 +197,7 @@ class OctoRuntime:
             "duration_seconds": round(time.monotonic() - started, 3),
         }
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        artifact_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+        artifact_hash = file_sha256(target)
         return {
             "status": "success",
             "model_id": "octo",

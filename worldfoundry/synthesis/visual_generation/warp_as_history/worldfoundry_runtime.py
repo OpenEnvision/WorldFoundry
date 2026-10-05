@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import os
 import shutil
@@ -9,7 +8,11 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.base_models.three_dimensions.point_clouds.pi3 import SOURCE_ROOT as PI3_SOURCE_ROOT
+from worldfoundry.base_models.three_dimensions.point_clouds.pi3_source import (
+    SOURCE_ROOT as PI3_SOURCE_ROOT,
+    ensure_import_paths as ensure_pi3_import_paths,
+)
+from worldfoundry.core.io import file_sha256
 
 from .variants import (
     WARP_AS_HISTORY_VARIANTS,
@@ -153,7 +156,7 @@ class WarpAsHistoryRuntime:
 
     @staticmethod
     def _sha256(path: Path) -> str:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        return file_sha256(path)
 
     @staticmethod
     def _copy_artifact(source: Path, target: Path) -> Path:
@@ -174,8 +177,8 @@ class WarpAsHistoryRuntime:
                 raise FileNotFoundError(f"Warp-as-History input image not found: {path}")
             return path.resolve()
 
-        from PIL import Image
         import numpy as np
+        from PIL import Image
 
         work_dir.mkdir(parents=True, exist_ok=True)
         target = work_dir / "first_frame.png"
@@ -368,7 +371,11 @@ class WarpAsHistoryRuntime:
         enable_optional_attention: bool,
     ) -> dict[str, Any]:
         self._ensure_runtime_importable()
-        from warp_as_history.infer import infer_plan_kwargs
+        from warp_as_history.infer import infer_plan_kwargs, load_demo_row
+
+        sample = load_demo_row(csv_path)
+        if sample["warp_video_path"] is None and sample["camera_poses_path"] is not None:
+            ensure_pi3_import_paths()
 
         return infer_plan_kwargs(
             csv_path=csv_path,

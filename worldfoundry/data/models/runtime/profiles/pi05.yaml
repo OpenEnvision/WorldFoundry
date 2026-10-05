@@ -2,15 +2,15 @@ artifact_filename: pi05_action_trace.json
 artifact_kind: action_trace
 backend_stage: in_tree_runtime
 checkpoints:
-- local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openpi/openpi-assets/checkpoints/pi05_libero
+- local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openpi-assets/checkpoints/pi05_libero
   path: gs://openpi-assets/checkpoints/pi05_libero
   role: pi05_libero_demo_checkpoint
   status: orbax_checkpoint_metadata_validated
-- local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openpi/openpi-assets/checkpoints/pi05_droid
+- local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openpi-assets/checkpoints/pi05_droid
   path: gs://openpi-assets/checkpoints/pi05_droid
   role: pi05_droid_checkpoint
   status: orbax_checkpoint_metadata_validated
-- local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openpi/openpi-assets/checkpoints/pi05_base
+- local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openpi-assets/checkpoints/pi05_base
   path: gs://openpi-assets/checkpoints/pi05_base
   role: pi05_base_checkpoint
   status: orbax_checkpoint_metadata_validated
@@ -30,9 +30,11 @@ integration_status: runtime_ported
 notes:
 - pi0.5 is a concrete OpenPI algorithm entry routed through the in-tree OpenPI runtime.
 - WorldFoundry keeps the inference-only OpenPI runtime directly under worldfoundry/synthesis/action_generation/openpi.
-- Default runtime config uses the ready pi05_libero policy config; all three declared
-  Orbax checkpoints are locally staged and their metadata trees are validated.
+- Default runtime config uses pi05_libero. Stage its Orbax checkpoint under the
+  same openpi-assets root used by the OpenPI profile, or pass an explicit path.
+- Metadata checks alone do not establish that pi05_base or pi05_droid can run.
+- The independent pi05 public binding produced finite 10x7 actions with pi05_libero on GPU2 from synthetic dual-camera images and checkpoint-mean state; no LIBERO task-success claim.
 - This profile emits action_trace artifacts and is not a video-generation profile.
-runtime_status: in_tree_openpi_pi05_runtime_ported_pi05_libero_gpu_readiness_in_family_profile
+runtime_status: pi05_libero_public_binding_checkpoint_gpu_validated
 task_family: vla_policy
-verification_status: family_checkpoint_readiness_available
+verification_status: pi05_libero_action_trace_gpu_ready_synthetic_inputs

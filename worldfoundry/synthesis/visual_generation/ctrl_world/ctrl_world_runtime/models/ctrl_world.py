@@ -14,9 +14,6 @@ from accelerate.logging import get_logger
 from tqdm.auto import tqdm
 import json
 from decord import VideoReader, cpu
-import wandb
-import swanlab
-import mediapy
 
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False, extra_tokens=0):
@@ -114,10 +111,15 @@ class CrtlWorld(nn.Module):
         self.args = args
 
         # load from pretrained stable video diffusion
-        self.pipeline = StableVideoDiffusionPipeline.from_pretrained(args.svd_model_path)
+        self.pipeline = StableVideoDiffusionPipeline.from_pretrained(
+            args.svd_model_path,
+            torch_dtype=args.dtype,
+            variant="fp16" if args.dtype in (torch.float16, torch.bfloat16) else None,
+            local_files_only=True,
+        )
         # repalce the unet to support frame_level pose condition
         print("replace the unet to support action condition and frame_level pose!")
-        unet = UNetSpatioTemporalConditionModel()
+        unet = UNetSpatioTemporalConditionModel().to(dtype=args.dtype)
         unet.load_state_dict(self.pipeline.unet.state_dict(), strict=False)
         self.pipeline.unet = unet
         
@@ -133,9 +135,13 @@ class CrtlWorld(nn.Module):
         self.unet.enable_gradient_checkpointing()
 
         # SVD is a img2video model, load a clip text encoder
-        from transformers import AutoTokenizer, CLIPTextModelWithProjection
-        self.text_encoder = CLIPTextModelWithProjection.from_pretrained(args.clip_model_path)
-        self.tokenizer = AutoTokenizer.from_pretrained(args.clip_model_path,use_fast=False)
+        from transformers import AutoTokenizer, CLIPConfig, CLIPTextModelWithProjection
+        # The released Ctrl-World state dict contains all text_encoder weights.
+        # Construct from the trusted JSON config instead of loading the legacy
+        # CLIP PyTorch .bin, which transformers correctly blocks on torch<2.6.
+        clip_config = CLIPConfig.from_pretrained(args.clip_model_path, local_files_only=True)
+        self.text_encoder = CLIPTextModelWithProjection(clip_config.text_config).to(dtype=args.dtype)
+        self.tokenizer = AutoTokenizer.from_pretrained(args.clip_model_path, use_fast=False, local_files_only=True)
         self.text_encoder.requires_grad_(False)
 
         # initialize an action projector

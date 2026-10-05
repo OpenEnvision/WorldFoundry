@@ -1,0 +1,33 @@
+schema_version: 2
+model_id: solarwm
+env_name: solarwm
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.10'
+cuda_profile: cu124
+conda_packages:
+- python
+- pip
+- ffmpeg
+pip_packages:
+- torch==2.5.1
+- torchvision==0.20.1
+- diffusers==0.38.0
+- transformers==5.12.1
+- peft==0.20.0
+- flash-attn==2.8.3
+- ftfy
+- omegaconf
+- regex
+- pyyaml
+- safetensors
+- numpy
+- Pillow
+- imageio
+- imageio-ffmpeg
+validation_imports:
+- torch
+- yaml
+- worldfoundry.synthesis.visual_generation.solarwm
+notes:
+- Default environment is the Wan route only. LTX and H3 require separate official environments; pass python_executable explicitly.
+- CUDA inference dependencies are optional and separate from the CPU catalog installation.

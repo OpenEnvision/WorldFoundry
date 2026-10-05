@@ -3,7 +3,7 @@ from einops import rearrange
 import torch
 import torch.nn as nn
 
-from worldfoundry.base_models.diffusion_model.video.wan.vae.action_wan2p1 import (
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.action_21 import (
     AttentionBlock, CausalConv3d, RMS_norm, ResidualBlock, Upsample)
 
 

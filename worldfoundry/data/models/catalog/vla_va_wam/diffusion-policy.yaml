@@ -13,6 +13,8 @@ integration:
   status: integrated
 name: Diffusion Policy
 official_sources:
+  paper: https://arxiv.org/abs/2303.04137
+  project_page: https://diffusion-policy.cs.columbia.edu/
   github:
     head_sha: 5ba07ac6661db573af695b419a7947ecb704690f
     url: https://github.com/real-stanford/diffusion_policy
@@ -34,3 +36,17 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile
   planning records. Runner or pipeline targets are present only after a complete in-tree WorldFoundry model runtime is registered
   and validated.
+docs:
+  publisher: Stanford University (REAL Lab)
+  publisher_kind: university
+  publisher_zh: 斯坦福大学（REAL 实验室）
+  overview: Diffusion Policy is the landmark visuomotor policy that models action generation as conditional denoising diffusion, substantially improving multimodal action distributions over regression policies. WorldFoundry vendors the low-dimensional PushT variant in-tree, reconstructed from an offline-converted, fully resolved config with tensor-only state dictionaries.
+  overview_zh: Diffusion Policy 是里程碑式的视觉运动策略：将动作生成建模为条件去噪扩散，相比回归策略大幅改进多模态动作分布。WorldFoundry 内置其低维 PushT 变体，从离线转换、完全解析的配置与纯张量 state dict 重建。
+  architecture: A denoising diffusion model over action sequences conditioned on observations. The in-tree runtime is the released low-dimensional PushT policy; the converted checkpoint passed weights-only reload, strict model/EMA restoration, CPU loading, and a finite GPU action probe.
+  architecture_zh: 在观测条件下对动作序列做去噪扩散。树内运行时为发布的低维 PushT 策略；转换后的 checkpoint 通过了 weights-only 重载、严格 model/EMA 恢复、CPU 加载与有限 GPU 动作探针。
+  usage_notes: The executable dill workspace checkpoint is rejected at runtime with no unsafe deserialization fallback — conversion must happen once in a trusted offline environment. The predict_action route emits the configured low-dimensional PushT action schema.
+  usage_notes_zh: 可执行的 dill workspace checkpoint 在运行时被拒绝，且无不安全反序列化回退——转换必须在可信离线环境中一次性完成。predict_action 路由输出配置的低维 PushT 动作 schema。
+  limitations:
+  - Only the low-dimensional PushT variant is vendored; image-based variants are not in-tree.
+  limitations_zh:
+  - 仅内置低维 PushT 变体；基于图像的变体不在树内。

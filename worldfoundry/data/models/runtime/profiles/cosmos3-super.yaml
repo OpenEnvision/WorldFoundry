@@ -22,10 +22,10 @@ input_schema:
 artifact_kind: generated_world
 artifact_filename: cosmos3-super.mp4
 execution:
-  backend_stage: in_tree_diffusers_inference
+  backend_stage: native_diffusion_inference
   checkpoint_revision_policy: exact_sha_for_verified_runs
   load_sound_tokenizer: true
-  runtime_status: exact_revision_four_gpu_workspace_t2i_smoke_passed
+  runtime_status: native_recipe_registered_structural_validation_pending_gpu
   integration_status: integrated
   pipeline_binding: cosmos3-super
   environment: cosmos3
@@ -35,12 +35,8 @@ notes:
 - The in-tree generator supports optional synchronized sound and structured policy,
   forward-dynamics, and inverse-dynamics action inference. Reasoner, training, and serving
   workflows are not part of this infer-only profile.
-- The exact Super revision completed a real 256x256 two-step Workspace T2I smoke on four
-  A100-SXM4-80GB GPUs with the safe decoder-layer-only balanced map. This validates execution,
-  not official-resolution or output-quality parity.
+- Super uses the same native checkpoint-shaped transformer and shared codec/scheduler roles
+  as Nano. End-to-end native multi-GPU execution and output parity remain pending.
 - Verified runs must use revision e0262be9d8f7586bc24c069a2aed2b665bdff266 explicitly; directory
   presence without matching .hfd metadata or an exact HF snapshot is not current-revision evidence.
-- The shared default safety runtime passed offline GPU construction and a Nano Workspace run with
-  exact Guardrail/Qwen3Guard revisions. A combined Super-plus-safety Workspace run is not recorded;
-  the gated NVIDIA repository still requires authorization on a fresh machine.
-- Super synchronized-sound and action-task Workspace evidence remains pending.
+- Super synchronized-sound and action-task native GPU evidence remains pending.

@@ -1,206 +1,41 @@
 ---
 title: World-in-World
-description: Practical WorldFoundry runner notes for World-in-World closed-loop utility metrics.
+description: "ICLR 2026 oral closed-loop utility bench: does the world model help the agent succeed? WorldFoundry imports task summaries; it does not run the loop."
 ---
 
-## What It Measures
+World-in-World (Johns Hopkins, with PKU, Princeton, MIT, and Harvard; ICLR 2026 Oral) benchmarks generative world models in a **closed loop** that mirrors agent–environment interaction. **Task success beats visual quality.** A unified online planner and a standardized action API cover four environments:
 
-World-in-World evaluates visual world models by **closed-loop embodied utility** instead of open-loop video appearance. Task success in embodied environments is the primary signal — high visual quality does not guarantee high task success.
+- Active Recognition
+- Active Embodied QA
+- Image-Goal Navigation (success + SPL)
+- Robotic Manipulation
 
-## Benchmark Design
+The paper's findings: visual quality alone does not guarantee success (controllability matters more); action-observation post-training beats upgrading the video generator; inference-time compute helps closed-loop performance.
 
-| Task | Primary metrics | What it tests |
-| --- | --- | --- |
-| Active Recognition (AR) | `active_recognition_success_rate` | Explore a scene and identify the target object |
-| Image-Goal Navigation (IGNav) | `image_goal_navigation_success_rate`, `image_goal_navigation_spl` | Reach an image-specified goal with path efficiency |
-| Active Embodied QA (AEQA) | `active_embodied_qa_score`, `active_embodied_qa_spl` | Answer questions while navigating efficiently |
-| Robotic Manipulation | `robotic_manipulation_success_rate` | Closed-loop manipulation task success |
+`world_in_world_average` is the mean over available closed-loop metrics.
 
-The platform provides a unified online planning strategy and standardized action API. Key findings from the official project: controllability matters more than visuals; action-observation post-training scaling beats upgrading pretrained generators; more inference-time rollouts improve closed-loop performance.
+Paper: [World-in-World](https://arxiv.org/abs/2510.18135). Project: [world-in-world.github.io](https://world-in-world.github.io/). Code: [World-In-World/world-in-world](https://github.com/World-In-World/world-in-world).
 
-## Overview
+WorldFoundry is a **result importer**. Closed-loop environments, planners, workers, and task scorers execute **upstream**. Bundled assets support parsing and coverage checks only.
 
-World-in-World evaluates visual world models by closed-loop embodied utility instead of open-loop video appearance alone. The task families are Active Recognition, Image-Goal Navigation, Active Embodied QA, and Robotic Manipulation.
+<BenchmarkPageSections id="world-in-world" locale="en" />
 
-WorldFoundry ships the benchmark adapter and metric aggregation code in-tree:
-
-```text
-worldfoundry/evaluation/tasks/execution/runners/world_in_world/run_world_in_world_official_runner.py
-worldfoundry/evaluation/tasks/execution/runners/world_in_world/world_in_world_runtime.py
-worldfoundry/evaluation/tasks/execution/runners/world_in_world/world_in_world_official_runtime.py
-worldfoundry/evaluation/tasks/execution/runners/world_in_world/world_in_world_metrics.py
-worldfoundry/evaluation/tasks/execution/runners/world_in_world/runtime/official
-worldfoundry/data/benchmarks/assets/world-in-world
-```
-
-Users should not clone the official repos for normal WorldFoundry evaluation. The upstream World-in-World README is the protocol reference for producing rollouts and task summaries. WorldFoundry currently consumes those summaries and writes normalized scorecards; it does not start the Habitat, VLM, SAM2, world-model, or manipulation servers.
-
-Protocol references:
-
-- Paper: [World-in-World: World Models in a Closed-Loop World](https://arxiv.org/abs/2510.18135)
-- Project page: [world-in-world.github.io](https://world-in-world.github.io/)
-- Source reference: [github.com/World-In-World/world-in-world](https://github.com/World-In-World/world-in-world)
-- Dataset page: [zonszer/WIW_datasets](https://huggingface.co/datasets/zonszer/WIW_datasets)
-
-## Prepare Data And Assets
-
-Start from the WorldFoundry repository root:
-
-```bash
-cd /path/to/WorldFoundry
-export WORLDFOUNDRY_REPO_ROOT="$PWD"
-export PYTHONPATH="$WORLDFOUNDRY_REPO_ROOT:${PYTHONPATH:-}"
-```
-
-WorldFoundry includes OpenEQA prompt assets for the default AEQA path:
-
-```text
-worldfoundry/data/benchmarks/assets/world-in-world/
-  subtrees/open-eqa/data/open-eqa-184.json
-  subtrees/open-eqa/data/open-eqa-41.json
-  sample_results.csv
-```
-
-For fuller AR, IGNav, AEQA, or manipulation evidence, prepare a local asset root. The runner can read task manifests from this root through `WORLDFOUNDRY_WORLD_IN_WORLD_ASSETS_ROOT`:
-
-```bash
-export WORLDFOUNDRY_WORLD_IN_WORLD_ASSETS_ROOT=/path/to/world-in-world/assets
-
-hf download zonszer/WIW_datasets \
-  eval_datasets/AR/episodes_AR.json.gz \
-  eval_datasets/IGNav/episodes_IGNav.json.gz \
-  eval_datasets/IGNav/igdataset_goal_imgs.zip \
-  eval_datasets/AEQA/episodes_AEQA.json.gz \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_WORLD_IN_WORLD_ASSETS_ROOT}/data/WIW_datasets"
-```
-
-If you are producing the summaries with the upstream rollout workflow, also prepare the scene and policy assets expected by that workflow:
-
-```text
-${WORLDFOUNDRY_WORLD_IN_WORLD_ASSETS_ROOT}/data/scene_datasets/hm3d/val/
-${WORLDFOUNDRY_WORLD_IN_WORLD_ASSETS_ROOT}/data/scene_datasets/mp3d/
-SAM2 or Grounding SAM2 weights for AR and AEQA when used
-VLM policy checkpoints or hosted VLM credentials
-World-model checkpoints used by the rollout server
-Manipulation simulator assets and 3D-Diffuser/OpenPI checkpoints when used
-```
-
-Point WorldFoundry at the generated artifacts and result summary:
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/world-in-world/generated_artifacts
-export WORLDFOUNDRY_WORLD_IN_WORLD_RESULTS_PATH="${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}/world_in_world_metrics.json"
-export WORLDFOUNDRY_WORLD_IN_WORLD_TASK=AEQA
-```
-
-The generated artifact directory should contain either `metrics.json` or `world_in_world_metrics.json`. Optional videos are used for prompt coverage checks and should be named by prompt id:
-
-```text
-/path/to/world-in-world/generated_artifacts/
-  world_in_world_metrics.json
-  f2e82760-5c3c-41b1-88b6-85921b9e7b32.mp4
-  traces/
-    f2e82760-5c3c-41b1-88b6-85921b9e7b32.json
-```
-
-Accepted result summaries are JSON objects with direct metric IDs or task summaries, or CSV files with `metric_id,score` columns. For task summaries, the runner maps `accuracy` to Active Recognition, `sr` and `spl` to IGNav, `mean_score` and `mean_efficiency` to AEQA, and `success_rate` to Manipulation.
-
-## Run Commands
-
-Run the direct in-tree runner against metrics under the generated artifact directory:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/world_in_world/run_world_in_world_official_runner.py \
-  --run-official \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --task "${WORLDFOUNDRY_WORLD_IN_WORLD_TASK}" \
-  --output-dir tmp/world-in-world/direct-official-run \
-  --json
-```
-
-Import an explicit result file through the direct runner:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/world_in_world/run_world_in_world_official_runner.py \
-  --official-results-path /path/to/world_in_world_metrics.json \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --task "${WORLDFOUNDRY_WORLD_IN_WORLD_TASK}" \
-  --output-dir tmp/world-in-world/direct-official-validation \
-  --json
-```
-
-Use the public CLI for the in-tree run path:
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id world-in-world \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/world-in-world/official-run \
-  --json
-```
-
-Use the public CLI to import an existing result summary:
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id world-in-world \
   --mode official-validation \
-  --official-results-path /path/to/world_in_world_metrics.json \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/world-in-world/official-validation \
   --json
 ```
 
-## Metrics
+Optional `--task` / `--exp-id` scope the import. Default: `WORLDFOUNDRY_WORLD_IN_WORLD_RESULTS_PATH`.
 
-All primary World-in-World metrics are higher-is-better. Rates and normalized scores are reported on a 0 to 1 scale.
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/world-in-world.yaml`, `worldfoundry/data/benchmarks/assets/world-in-world`, `worldfoundry/evaluation/tasks/execution/runners/world_in_world`.
 
-| Metric ID | Meaning |
-| --- | --- |
-| `active_recognition_success_rate` | Success rate for exploring a scene and identifying the target object. |
-| `image_goal_navigation_success_rate` | Fraction of IGNav episodes that reach the image-specified goal. |
-| `image_goal_navigation_spl` | IGNav success weighted by path efficiency. |
-| `active_embodied_qa_score` | Mean answer correctness for active embodied QA. |
-| `active_embodied_qa_spl` | Active embodied QA score weighted by path efficiency. |
-| `robotic_manipulation_success_rate` | Manipulation task success rate from supplied result summaries. |
-| `interaction_trace_consistency` | Consistency between predicted and executed interaction traces when supplied. |
-| `world_in_world_average` | Mean over available utility metrics and the primary WorldFoundry score. |
+Outputs include `scorecard.json` (primary `world_in_world_average`).
 
-The in-tree parser can also carry video-quality values such as FVD, SSIM, PSNR, and LPIPS in the component metadata when they appear in a summary, but they are not part of the primary metric order above.
-
-## Output Layout
-
-Direct `--run-official` writes:
-
-```text
-tmp/world-in-world/direct-official-run/
-  scorecard.json
-  raw_metric_table.jsonl
-  world_in_world_metrics.json
-```
-
-Direct explicit-result imports write:
-
-```text
-tmp/world-in-world/direct-official-validation/
-  scorecard.json
-  raw_metric_table.jsonl
-```
-
-Public CLI runs also write a `runner_runtime_report.json` file and specialized runner stdout/stderr logs under the requested output directory. Treat `scorecard.json` and `raw_metric_table.jsonl` as the stable outputs.
-
-## Runtime Notes
-
-World-in-World worker launch configuration is environment-variable driven; it
-does not contain machine-local conda paths. Worker commands default to the
-current Python interpreter and in-tree relative scripts. Override a worker with
-`WORLDFOUNDRY_WORLD_IN_WORLD_<WORKER>_CMD`, or override only its interpreter with
-`WORLDFOUNDRY_WORLD_IN_WORLD_<WORKER>_PYTHON`. Checkpoint-specific variables use
-the same prefix, for example `WORLDFOUNDRY_WORLD_IN_WORLD_SAM2_WORKER_CKPT_PATH`,
-`WORLDFOUNDRY_WORLD_IN_WORLD_SAM2_WORKER_CFG_PATH`,
-`WORLDFOUNDRY_WORLD_IN_WORLD_FTWAN21_WORKER_LORA_PATH`, and
-`WORLDFOUNDRY_WORLD_IN_WORLD_NWM_WORKER_CKPT_PATH`.
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

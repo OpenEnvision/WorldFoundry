@@ -1,0 +1,46 @@
+---
+title: "LoGeR"
+description: "LoGeR：3D 重建、轨迹；已验证。"
+modelId: "loger"
+pageSource: generated
+---
+
+LoGeR 从输入视图重建 3D 场景、相机轨迹与点云，是本 catalog 中已验证的 3D 路径之一： checkpoint 加载的 Studio 推理产出有限位姿、深度与 601,570 顶点的点云，证据记录在 inference_evidence.yaml。
+
+<ModelPaperFigures modelId="loger" locale="zh" />
+
+记录论文为[arXiv 2603.03269](https://arxiv.org/abs/2603.03269)。
+
+项目页：[LoGeR-project.github.io](https://LoGeR-project.github.io/)。代码：[Junyi42/LoGeR](https://github.com/Junyi42/LoGeR)。
+
+<ModelCommandBuilder modelId="loger" locale="zh" />
+
+## 用来做什么
+
+做前馈几何时选 `loger`：视图进、重建/轨迹/点云出。需要 catalog 的 3D 路由、而不是仅深度先验时用它。
+
+catalog 记录其为「重建+轨迹」模型，导出二进制 PLY 产物；发表机构与架构内部细节仓库未记录（上游：Junyi42/LoGeR，apache-2.0）。
+
+catalog 记录的任务包括 3D 重建、轨迹、点云。输出模态为点云。
+
+## 运行时契约
+
+可选 `input_path`、`interactions`、`task_type`、`camera_view`、`visualize_ops`；产物 `result.ply`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `LoGeRPipeline`。
+
+系列状态：**已验证**。
+
+已在共享 worldfoundry-unified-cu128 环境中端到端验证——点云导航管线的可靠选择。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run loger --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `Junyi42/LoGeR`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh loger`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="loger" locale="zh" />

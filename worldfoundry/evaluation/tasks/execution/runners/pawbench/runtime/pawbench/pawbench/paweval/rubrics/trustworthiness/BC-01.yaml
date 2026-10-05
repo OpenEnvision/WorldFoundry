@@ -1,0 +1,63 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BC-01
+track: coverage
+title_en: Ball Toss Into Cup
+scene_grounding:
+- 'Initial state must match: A hand holds one ball at the visible pre-toss position
+  near a cup on a table.'
+- Apparatus geometry in the opening frames must match the source image.
+action_execution:
+- 'Required action: Toss the ball once from the visible hand pose toward the cup.'
+- Action must happen exactly once in the expected direction / region.
+- Action target must be identifiable in the same frame as the action onset (Track
+  B target acquisition).
+- The action must be visible as a single continuous event from the described initial
+  state; cuts, hidden starts, or repeated attempts are action-execution failures.
+- For contact labels, the object trajectory from release/kick/throw/roll to target
+  or miss must be continuous enough to audit contact.
+target_requirements:
+- Cup mouth/rim and tossed ball must be visible at release, flight, and first cup-contact
+  or miss frame.
+- The toss must be aimed at the cup from the visible hand pose; a throw to a different
+  target or second ball is OBJECT_ACQUISITION_FAIL.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+- 'Identity continuity is fatal: the judged subject, target, and key apparatus must
+  not swap appearance, duplicate, vanish, or re-enter as a different object/person/animal.'
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-readout state/region change: subject moves between label-defining states or regions after the first decisive readout.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+- Outcome label changes (e.g., from miss to score) via a non-physical motion after
+  the first decisive contact frame.
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+- After the first cup result, the ball must not jump into or out of the cup without
+  visible bounce/roll contact.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Ball Toss Into Cup.'
+- 'Fatal severity cue: target/stimulus acquisition failure, impossible trajectory,
+  identity discontinuity, or post-result contradiction excludes strict trusted metrics
+  even if the outcome is readable.'
+- 'BC contact trust cue: target contact/hit/miss geometry, continuous trajectory,
+  collision consistency, and apparatus stability are mandatory.'

@@ -1,0 +1,50 @@
+---
+title: "InSpatio-World"
+description: "InSpatio-World：新视角合成；已验证。"
+modelId: "inspatio-world"
+pageSource: generated
+---
+
+InSpatio-World 是 1.3B 的视频条件世界生成器：给定一段视频与目标轨迹，合成同一世界的轨迹条件新视角。本 catalog 中它已完整验证——树内 pipeline 于 2026-07-10 经 Workspace 生成并通过视觉验证 297 帧视频，所有默认组件均从本地 checkpoint 存储解析。
+
+<ModelPaperFigures modelId="inspatio-world" locale="zh" />
+
+记录论文为[arXiv 2604.07209](https://arxiv.org/abs/2604.07209)。
+
+项目页：[inspatio.github.io/inspatio-world](https://inspatio.github.io/inspatio-world/)。代码：[inspatio/inspatio-world](https://github.com/inspatio/inspatio-world)。代码：[madebyollin/taehv](https://github.com/madebyollin/taehv)。
+
+<ModelCommandBuilder modelId="inspatio-world" locale="zh" />
+
+## 用来做什么
+
+`inspatio-world` 是记录的重建线。从记录的视图写出几何时从这里起步。
+
+记录的 checkpoint 为 inspatio/world（apache-2.0）；官方推理源码保留在树内。可选的 use_tae 路径会从共享 checkpoint 根解析 taew2_1.pth，但默认 Wan VAE 路径不需要它。
+
+catalog 记录的任务包括 video-conditioned-world-generation、trajectory-conditioned-video、新视角合成。别名包括 `inspatio-world-1.3b`。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（生成视角的轨迹跟随精度）。
+
+## 运行时契约
+
+必填 `input_path`；可选 `prompt`、`traj_txt_path`、`skip_step1`、`skip_step2`、`skip_step3`；产物 `inspatio-world.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `InspatioWorldPipeline`。
+
+系列状态：**已验证**。
+
+所有默认组件仅从本地 checkpoint 存储解析——请先就位 inspatio/world 权重，再运行标准 pipeline。
+
+设计上以视频为条件：需要输入视频，而不仅是图像或提示词。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run inspatio-world --pipeline.task-profile default` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `inspatio/world`、`Wan-AI/Wan2.1-T2V-1.3B`、`depth-anything/DA3NESTED-GIANT-LARGE-1.1` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh inspatio-world`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**已验证**。
+
+<ModelRelatedRecipes modelId="inspatio-world" locale="zh" />

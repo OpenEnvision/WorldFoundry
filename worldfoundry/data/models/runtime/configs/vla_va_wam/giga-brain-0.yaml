@@ -3,7 +3,7 @@ compile_policy: true
 autoregressive_mode_only: false
 enable_2d_traj_output: false
 model_path: ${WORLDFOUNDRY_HFD_ROOT}/open-gigaai--GigaBrain-0.1-3.5B-Base
-norm_stats_path: ${WORLDFOUNDRY_REPO_ROOT}/../data/lerobot__robotwin_unified/meta/stats.json
+norm_stats_path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/lerobot__robotwin_unified/meta/stats.json
 tokenizer_model_path: ${WORLDFOUNDRY_HFD_ROOT}/google--paligemma-3b-pt-224
 fast_tokenizer_path: ${WORLDFOUNDRY_HFD_ROOT}/physical-intelligence--fast
 delta_mask: 1,1,1,1,1,1,0,1,1,1,1,1,1,0

@@ -96,7 +96,7 @@ class Gen3COperator(BaseOperator):
         """Process perception inputs like images, videos, and reference frames."""
         if images is None:
             raise ValueError("GEN3C expects an input image.")
-        from ..base_models.diffusion_model.video.cosmos.cosmos1.cosmos_predict1_gen3c import load_pil_image
+        from worldfoundry.core import load_pil_image
 
         return load_pil_image(images)
 

@@ -1,8 +1,26 @@
 """Model-agnostic normalization helpers for continuous robot actions.
 
-The functions in this module intentionally depend only on NumPy.  Policy
-integrations can therefore share the checkpoint-statistics contract without
-copying model-specific post-processing code or importing a training stack.
+Policy checkpoints ship a statistics mapping (min/max, quantiles, or
+mean/std) that describes how actions were scaled during training.
+:func:`normalize_action_values` applies that transform along the last
+axis; :func:`unnormalize_action_values` is the inverse used when a
+policy's output must be sent to an environment. Both are NumPy-only so
+control-plane code can share the contract without importing a training
+stack or a specific robot adapter.
+
+Accepted statistic layouts:
+
+- Direct: ``{"min": ..., "max": ...}`` (or ``q01``/``q99``, ``mean``/``std``).
+- Dataset-keyed: ``{"robot_name": {"action": {...}}}``. When more than
+  one dataset key is present, :func:`select_modality_statistics` requires
+  an explicit ``key``.
+
+Modes: ``min_max`` (and aliases ``q99`` / ``quantile`` / ``bounds``)
+map a low/high pair onto ``[-1, 1]``; ``mean_std`` / ``standard`` /
+``zscore`` center by mean and divide by std; ``identity`` / ``none``
+leave values unchanged. An optional per-dimension ``mask`` skips
+unnormalized channels (for example discrete gripper bits). Degenerate
+ranges (``high == low`` or ``std == 0``) are left untouched.
 """
 
 from __future__ import annotations
@@ -32,6 +50,20 @@ def select_modality_statistics(
     Both common layouts are accepted: a direct ``{"min": ..., "max": ...}``
     mapping and a dataset-keyed ``{"robot": {"action": {...}}}`` mapping.
     Dataset-key selection is strict when more than one key is available.
+
+    Args:
+        dataset_statistics: Checkpoint statistics mapping.
+        modality: Nested key under a dataset entry (default ``"action"``).
+        key: Dataset name when *dataset_statistics* is multi-key. Omit
+            only when a single key (or a direct stats mapping) is present.
+
+    Returns:
+        ``(resolved_key, stats_mapping)``. *resolved_key* is ``None`` when
+        the input was already a direct statistics mapping.
+
+    Raises:
+        ValueError: Empty input, or multiple dataset keys with no *key*.
+        KeyError: *key* is missing or has no *modality* mapping.
     """
 
     if not isinstance(dataset_statistics, Mapping) or not dataset_statistics:
@@ -63,6 +95,7 @@ def _coerce_values_and_mask(
     values: Any,
     statistics: Mapping[str, Any],
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Copy *values* to a writable float array and align the optional per-dim mask."""
     array = np.asarray(values)
     if array.ndim == 0:
         raise ValueError("Action values must have at least one dimension.")
@@ -80,6 +113,7 @@ def _coerce_values_and_mask(
 
 
 def _stat_vector(statistics: Mapping[str, Any], name: str, width: int, dtype: np.dtype) -> np.ndarray:
+    """Load one 1-D statistic; width must match the action last-axis, or the scale is wrong."""
     if name not in statistics:
         raise KeyError(f"Normalization statistics are missing {name!r}.")
     vector = np.asarray(statistics[name], dtype=dtype)
@@ -95,7 +129,21 @@ def normalize_action_values(
     mode: str = "min_max",
     clip: float | None = None,
 ) -> np.ndarray:
-    """Normalize action values using checkpoint statistics along the last axis."""
+    """Normalize action values using checkpoint statistics along the last axis.
+
+    Args:
+        values: Array-like with at least one dimension. The last axis is
+            the action width and must match each statistic vector.
+        statistics: Selected modality mapping from
+            :func:`select_modality_statistics`.
+        mode: ``min_max`` (default), ``q99`` / ``quantile`` / ``bounds``,
+            ``mean_std`` / ``standard`` / ``zscore``, or ``identity``.
+        clip: When set, clamp masked channels to ``[-clip, clip]`` after
+            normalization.
+
+    Returns:
+        A writable ``float`` array with the same shape as *values*.
+    """
 
     normalized, mask = _coerce_values_and_mask(values, statistics)
     normalized_mode = str(mode).strip().lower().replace("-", "_")
@@ -127,7 +175,20 @@ def unnormalize_action_values(
     *,
     mode: str = "min_max",
 ) -> np.ndarray:
-    """Convert normalized policy outputs back to environment-space actions."""
+    """Convert normalized policy outputs back to environment-space actions.
+
+    Inverse of :func:`normalize_action_values` for the same *mode* and
+    *statistics*. Masked-off channels are copied through unchanged.
+    Unlike the forward path, this function does not clip.
+
+    Args:
+        normalized_values: Policy outputs in the normalized space.
+        statistics: Same modality mapping used at normalize time.
+        mode: Must match the mode used to produce *normalized_values*.
+
+    Returns:
+        Environment-space actions with the same shape as the input.
+    """
 
     actions, mask = _coerce_values_and_mask(normalized_values, statistics)
     normalized_mode = str(mode).strip().lower().replace("-", "_")

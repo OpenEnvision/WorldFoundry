@@ -10,9 +10,6 @@ from torchvision import transforms
 from plyfile import PlyData, PlyElement
 import numpy as np
 
-from worldfoundry.base_models.three_dimensions.point_clouds.pi3.pi3.utils.basic import (
-    load_multimodal_data, tensor_to_pil, array_to_pil, rotate_target_dim_to_last_axis, write_ply
-)
 
 def load_images_as_tensor(path='data/truck', interval=1, PIXEL_LIMIT=255000, Target_W=None, Target_H=None):
     """

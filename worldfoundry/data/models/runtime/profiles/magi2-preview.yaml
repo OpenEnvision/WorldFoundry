@@ -1,0 +1,51 @@
+schema_version: 2
+model_id: magi2-preview
+display_name: MAGI-2 Preview (audio-video, MoE)
+task_family: video_generation
+groups:
+- video
+- audio
+source_repos:
+- url: https://github.com/SandAI-org/MAGI-2-preview
+checkpoints:
+- repo_id: sand-ai/MAGI-2-preview
+  revision: main
+  role: preview_transformer
+- repo_id: sand-ai/MAGI-2-preview
+  revision: main
+  role: refiner_transformer
+- repo_id: sand-ai/MAGI-2-preview
+  revision: main
+  role: video_vae
+- repo_id: sand-ai/MAGI-2-preview
+  revision: main
+  role: turbo_vae
+- repo_id: sand-ai/MAGI-2-preview
+  revision: main
+  role: audio_vae
+- repo_id: sand-ai/MAGI-2-preview
+  revision: main
+  role: text_encoder
+input_schema:
+  prompt: true
+  image: false
+  video: false
+  audio: false
+  actions:
+  - seed
+  - task
+artifact_kind: generated_video
+artifact_filename: magi2-preview.mp4
+execution:
+  backend_stage: in_tree_runtime_plan
+  runtime_status: checkpoint_runtime_required
+  integration_status: planned
+  pipeline_binding: magi2-preview
+integration:
+  status: planned
+notes:
+- MAGI-2-preview 114B MoE (256 experts, top-6, 6B active/token) audio+video DiT, ported from SandAI Apache-2.0.
+- This adapter supports preview-only T2V with joint audio. Image conditioning and the upstream refiner stage are not implemented and are rejected.
+- Preview video uses 12.5 fps and the released stride-8 latent geometry. The native preset uses 100 steps, shift 7, video guidance 5, audio guidance 7, and negative-prompt conditioning.
+- The released checkpoint supports 10-second clips only; other durations are rejected before loading weights. The default landscape preview is 896x512.
+- Upstream targets 8xHopper; this port collapses cp/ep/dp to single-GPU (sequential residency for the 114B MoE).

@@ -1,164 +1,163 @@
-"""Vchitect 2 T2V visual generation pipeline module."""
+"""Public Vchitect-2 pipeline backed by WorldFoundry native diffusion."""
 
 from __future__ import annotations
 
-from ...synthesis.visual_generation.memory.video import VideoArtifactMemory
-from ..pipeline_utils import PipelineABC
-from typing import Any, Dict, Optional
+import secrets
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
 
-from ...operators.runtime_video_operator import RuntimeVideoOperator
-from ...synthesis.visual_generation.vchitect.vchitect_2_t2v_synthesis import Vchitect2T2VSynthesis
+import torch
+
+from worldfoundry.base_models.diffusion_model import NativeDiffusionPipeline
+from worldfoundry.base_models.diffusion_model.contracts import DiffusionRequest, SamplingConfig
+from worldfoundry.base_models.diffusion_model.optimizations import RuntimePolicy, parse_offload_policy, parse_torch_dtype
+from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
+from worldfoundry.operators.runtime_video_operator import RuntimeVideoOperator
+from worldfoundry.synthesis.visual_generation.memory.video import VideoArtifactMemory
+
+from ..pipeline_utils import PipelineABC
 
 
 class Vchitect2T2VPipeline(PipelineABC):
-    """Independent WorldFoundry pipeline for Vchitect2T2V."""
-
     MODEL_ID = "vchitect-2-t2v"
-    SYNTHESIS_CLS = Vchitect2T2VSynthesis
-    generation_type = "t2v"
+    DEFAULT_HEIGHT = 432
+    DEFAULT_WIDTH = 768
+    DEFAULT_NUM_FRAMES = 40
+    DEFAULT_NUM_INFERENCE_STEPS = 100
+    DEFAULT_GUIDANCE_SCALE = 7.5
+    DEFAULT_FPS = 8
 
-    def __init__(
-        self,
-        model_id: str | None = None,
-        operator: Optional[RuntimeVideoOperator] = None,
-        synthesis_model=None,
-        memory_module: Optional[VideoArtifactMemory] = None,
-        device: str = "cuda",
-    ) -> None:
-        """Initialize the pipeline and configure runtime components."""
-        self.model_id = model_id or self.MODEL_ID
-        self.synthesis_model = synthesis_model
-        self.generation_type = getattr(synthesis_model, "generation_type", self.generation_type)
-        self.model_name = getattr(synthesis_model, "model_name", None)
-        self.operator = operator or RuntimeVideoOperator(generation_type=self.generation_type)
-        self.memory_module = memory_module or VideoArtifactMemory(model_id='vchitect-2-t2v')
-        self.device = device
+    def __init__(self, *, native_pipeline: NativeDiffusionPipeline, device: str) -> None:
+        super().__init__(
+            model_id=self.MODEL_ID,
+            operator=RuntimeVideoOperator(generation_type="t2v"),
+            memory_module=VideoArtifactMemory(model_id=self.MODEL_ID),
+            device=device,
+        )
+        self.native_pipeline = native_pipeline
+        self.synthesis_model = native_pipeline
+        self.generation_type = "t2v"
+        self.model_name = self.MODEL_ID
 
     @classmethod
     def from_pretrained(
         cls,
-        model_path: Optional[str] = None,
-        required_components: Optional[Dict[str, Any]] = None,
+        model_path: str | Mapping[str, Any] | None = None,
+        required_components: Mapping[str, Any] | None = None,
         device: str = "cuda",
-        model_id: str | None = None,
-        lazy: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ) -> "Vchitect2T2VPipeline":
-        """Load the pipeline from pretrained checkpoints and configurations."""
-        options: Dict[str, Any] = {}
-        if isinstance(model_path, dict):
-            options.update(model_path)
-            resolved_model_path = options.pop("model_path", None) or options.pop("pretrained_model_path", None)
-        else:
-            resolved_model_path = model_path
-        required_components = dict(required_components or {})
-        generator_overrides = dict(required_components)
-        generator_overrides.update(options)
-        generator_overrides.update(kwargs)
-        resolved_model_id = str(generator_overrides.pop("model_id", None) or model_id or cls.MODEL_ID)
-        generator_overrides.setdefault("model_name", resolved_model_id)
-        if "plan_only" in generator_overrides:
-            raise ValueError("Vchitect no longer supports plan_only; provide checkpoints and run the real runtime.")
-
-        synthesis_model = cls.SYNTHESIS_CLS.from_pretrained(
-            pretrained_model_path=resolved_model_path,
-            device=device,
-            lazy=lazy,
-            generator_overrides=generator_overrides,
+        options = dict(model_path) if isinstance(model_path, Mapping) else {}
+        options.update(required_components or {})
+        options.update(kwargs)
+        source = options.get("checkpoint_path", options.get("model_path", model_path))
+        overrides = None
+        if isinstance(source, (str, Path)):
+            value = str(source)
+            root = value if "://" in value else str(Path(value).expanduser())
+            overrides = {name: root for name in ("transformer", "vae", "resources")}
+        native = NativeDiffusionPipeline.from_pretrained(
+            cls.MODEL_ID,
+            policy=RuntimePolicy(
+                device=torch.device(device),
+                dtype=parse_torch_dtype(options.get("torch_dtype", options.get("dtype")), owner="Vchitect"),
+                offload=parse_offload_policy(
+                    options.get("offload_mode", "block"),
+                    allow_disk=False,
+                    owner="Vchitect",
+                ),
+            ),
+            checkpoint_overrides=overrides,
         )
-        return cls(
-            model_id=resolved_model_id,
-            operator=RuntimeVideoOperator(generation_type=synthesis_model.generation_type),
-            synthesis_model=synthesis_model,
-            memory_module=VideoArtifactMemory(model_id='vchitect-2-t2v'),
-            device=device,
-        )
+        return cls(native_pipeline=native, device=device)
 
-    def process(self, prompt: str = "", images=None, **kwargs) -> Dict[str, Any]:
-        """Process and normalize input arguments and conditions for inference."""
-        del kwargs
-        self.operator.get_interaction(prompt)
-        try:
-            interaction = self.operator.process_interaction()
-        finally:
-            self.operator.delete_last_interaction()
-        perception = self.operator.process_perception(images=images)
+    @classmethod
+    def plan(cls, model_path=None, required_components=None, **kwargs: Any) -> dict[str, Any]:
+        options = dict(model_path) if isinstance(model_path, Mapping) else {}
+        options.update(required_components or {})
+        options.update(kwargs)
+        source = options.get("checkpoint_path", options.get("model_path", model_path))
         return {
-            "prompt": interaction["processed_prompt"],
-            "images": perception["images"],
+            "model_id": cls.MODEL_ID,
+            "checkpoint": str(source) if source is not None else None,
+            "backend": "worldfoundry-native-diffusion",
+            "native_inference": True,
+            "blocked": False,
         }
+
+    def process(self, prompt: str | list[str] = "", images: Any = None, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        if images is not None:
+            raise ValueError("Vchitect-2 is text-to-video and does not accept images")
+        values = prompt if isinstance(prompt, list) else [prompt]
+        processed = []
+        for value in values:
+            self.operator.get_interaction(value)
+            try:
+                interaction = self.operator.process_interaction()
+            finally:
+                self.operator.delete_last_interaction()
+            processed.append(str(interaction["processed_prompt"]))
+        return {"prompt": processed if isinstance(prompt, list) else processed[0]}
 
     def __call__(
         self,
-        prompt: str = "",
-        images=None,
-        output_path: Optional[str] = None,
-        fps: Optional[int] = None,
+        prompt: str | list[str] = "",
+        images: Any = None,
+        negative_prompt: str | list[str] | None = "",
+        output_path: str | Path | None = None,
+        fps: int | None = None,
         return_dict: bool = False,
-        **kwargs,
-    ):
-        """Execute the complete pipeline generation flow."""
-        if self.synthesis_model is None:
-            raise RuntimeError("Synthesis model is not loaded. Use from_pretrained() first.")
-
+        height: int | None = None,
+        width: int | None = None,
+        num_frames: int | None = None,
+        num_inference_steps: int | None = None,
+        guidance_scale: float | None = None,
+        seed: int = 0,
+        output_type: str = "video",
+        **kwargs: Any,
+    ) -> Any:
+        del kwargs
         processed = self.process(prompt=prompt, images=images)
-        result = self.synthesis_model.predict(
-            prompt=processed["prompt"],
-            images=processed["images"],
-            output_path=output_path,
-            fps=fps,
-            return_dict=True,
-            **kwargs,
+        output = self.native_pipeline(
+            DiffusionRequest(
+                prompt=processed["prompt"],
+                negative_prompt=negative_prompt,
+                height=int(height or self.DEFAULT_HEIGHT),
+                width=int(width or self.DEFAULT_WIDTH),
+                num_frames=int(num_frames or self.DEFAULT_NUM_FRAMES),
+                sampling=SamplingConfig(
+                    num_inference_steps=int(num_inference_steps or self.DEFAULT_NUM_INFERENCE_STEPS),
+                    guidance_scale=float(guidance_scale if guidance_scale is not None else self.DEFAULT_GUIDANCE_SCALE),
+                    seed=secrets.randbits(63) if int(seed) < 0 else int(seed),
+                ),
+                inputs={"return_latent": output_type == "latent", "fps": int(fps or self.DEFAULT_FPS)},
+            )
         )
-        if return_dict:
-            return result
-        return result["video"]
+        artifact_path = None
+        if output_path is not None and output_type != "latent":
+            artifact_path = save_image_or_video_tensor(output.sample, output_path, fps=int(fps or self.DEFAULT_FPS))
+        result = {
+            "video": output.sample,
+            "generated_video": output.sample,
+            "latents": output.latents,
+            "artifact_path": artifact_path,
+            "generated_video_path": artifact_path,
+            "model_name": self.MODEL_ID,
+            "generation_type": "t2v",
+            "metadata": dict(output.metadata),
+        }
+        return result if return_dict else (artifact_path or output.sample)
 
-    def stream(
-        self,
-        prompt: str = "",
-        images=None,
-        output_path: Optional[str] = None,
-        fps: Optional[int] = None,
-        return_dict: bool = False,
-        **kwargs,
-    ):
-        """Stream visual generation outputs chunk by chunk."""
-        if self.memory_module is None:
-            raise ValueError("memory_module is not initialized")
+    def stream(self, prompt: str = "", images: Any = None, **kwargs: Any) -> Any:
+        result = self(prompt=prompt, images=images, return_dict=True, **kwargs)
+        value = result.get("artifact_path") or result["video"]
+        self.memory_module.record(value, metadata={"prompt": prompt, "model_name": self.MODEL_ID})
+        return value
 
-        current_images = images
-        if current_images is None and self.generation_type == "i2v":
-            current_images = self.memory_module.select(prefer_type="image")
-            if current_images is None:
-                raise ValueError("stream() for i2v models requires an initial image on the first call.")
-        elif current_images is not None:
-            self.memory_module.record(current_images, metadata={"kind": "input_image"})
+    def get_synthesis_model(self) -> NativeDiffusionPipeline:
+        return self.native_pipeline
 
-        result = self(
-            prompt=prompt,
-            images=current_images,
-            output_path=output_path,
-            fps=fps,
-            return_dict=True,
-            **kwargs,
-        )
-        self.memory_module.record(
-            result["video"],
-            metadata={
-                "prompt": prompt,
-                "model_name": self.model_name,
-                "generation_type": self.generation_type,
-            },
-        )
-        if return_dict:
-            return result
-        return result["video"]
 
-    def get_operator(self) -> RuntimeVideoOperator:
-        """Get operator for Vchitect2T2VPipeline."""
-        return self.operator
-
-    def get_synthesis_model(self):
-        """Get synthesis model for Vchitect2T2VPipeline."""
-        return self.synthesis_model
+__all__ = ["Vchitect2T2VPipeline"]

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+
+
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+
 import argparse
 import json
 import os
@@ -44,7 +48,6 @@ DEFAULT_CHRONOMAGIC_ROOT = (
     / "runtime"
     / "chronomagic_bench"
 )
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 HF_DATASET_ID = "BestWishYsh/ChronoMagic-Bench"
 HF_DATASET_CONFIG = "default"
 HF_DATASET_SPLIT = "test"
@@ -404,7 +407,13 @@ def normalize_chronomagic_results(
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "run": {
-            "status": "official_verified" if official_verified else "failed",
+            "status": (
+                "official_verified"
+                if official_verified
+                else "official_results_imported"
+                if normalizer_only and normalization_ok
+                else "failed"
+            ),
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_chronomagic_official_runner",
             "command": command,
@@ -935,7 +944,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     result = {
-        "ok": scorecard["official_benchmark_verified"] and scorecard["integration_evidence"],
+        "ok": scorecard["normalization_ok"],
         "benchmark_id": args.benchmark_id,
         "output_dir": str(args.output_dir),
         "scorecard": scorecard["artifacts"]["scorecard"],

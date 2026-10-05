@@ -13,27 +13,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Fixed feature switches for the inference-only runtime."""
+"""Fixed feature switches for the inference-only runtime.
+
+The flag values are snapshots taken when this module is first imported;
+changing ``os.environ`` afterwards has no effect (tests that need different
+flags must reload the module). Each flag accepts the framework-standard
+``WORLDFOUNDRY_*`` variable and falls back to the legacy ``COSMOS_*``
+spelling that vendored Cosmos code documents.
+"""
 
 import os
 from dataclasses import dataclass
 
+# ──────────────────────────────────────────────────────────────────────────
+# Import-time snapshots — WORLDFOUNDRY_* first, then legacy COSMOS_*
+# ──────────────────────────────────────────────────────────────────────────
+
 
 def _env_bool(name: str, default: bool = False) -> bool:
-    value = os.environ.get(name)
+    """Read a boolean flag from WORLDFOUNDRY_<name>, falling back to COSMOS_<name>."""
+
+    value = os.environ.get(f"WORLDFOUNDRY_{name}")
+    if value is None:
+        value = os.environ.get(f"COSMOS_{name}")
     return default if value is None else value.lower() in {"1", "true", "yes", "y", "on"}
 
 
-INTERNAL = _env_bool("COSMOS_INTERNAL")
-VALIDATION = _env_bool("COSMOS_VALIDATION")
-VERBOSE = _env_bool("COSMOS_VERBOSE")
-EXPERIMENTAL_CHECKPOINTS = _env_bool("COSMOS_EXPERIMENTAL_CHECKPOINTS")
-SMOKE = _env_bool("COSMOS_SMOKE")
-TRAINING = False
+INTERNAL = _env_bool("INTERNAL")
+VALIDATION = _env_bool("VALIDATION")
+VERBOSE = _env_bool("VERBOSE")
+EXPERIMENTAL_CHECKPOINTS = _env_bool("EXPERIMENTAL_CHECKPOINTS")
 
 
 @dataclass(frozen=True)
 class Flags:
+    """Frozen bundle of the import-time snapshots for structured config trees."""
+
     internal: bool = INTERNAL
     validation: bool = VALIDATION
     verbose: bool = VERBOSE
@@ -47,8 +62,6 @@ __all__ = [
     "EXPERIMENTAL_CHECKPOINTS",
     "FLAGS",
     "INTERNAL",
-    "SMOKE",
-    "TRAINING",
     "VALIDATION",
     "VERBOSE",
     "Flags",

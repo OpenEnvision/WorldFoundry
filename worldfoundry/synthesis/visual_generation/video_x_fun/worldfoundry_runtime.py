@@ -14,6 +14,39 @@ from worldfoundry.core.io.paths import resolve_data_path, resolve_local_hf_model
 from worldfoundry.runtime.in_tree_cli import ensure_in_tree_runtime, execute_in_tree, require_path
 
 
+WAN21_CAMERA_COMPONENT_FILES = (
+    "config.json",
+    "diffusion_pytorch_model.safetensors",
+    "Wan2.1_VAE.pth",
+    "models_t5_umt5-xxl-enc-bf16.pth",
+    "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth",
+    "google/umt5-xxl/spiece.model",
+    "google/umt5-xxl/tokenizer.json",
+    "google/umt5-xxl/tokenizer_config.json",
+)
+WAN22_5B_CAMERA_COMPONENT_FILES = (
+    "config.json",
+    "diffusion_pytorch_model.safetensors",
+    "Wan2.2_VAE.pth",
+    "models_t5_umt5-xxl-enc-bf16.pth",
+    "google/umt5-xxl/spiece.model",
+    "google/umt5-xxl/tokenizer.json",
+    "google/umt5-xxl/tokenizer_config.json",
+)
+WAN22_A14B_CAMERA_COMPONENT_FILES = (
+    "configuration.json",
+    "low_noise_model/config.json",
+    "low_noise_model/diffusion_pytorch_model.safetensors",
+    "high_noise_model/config.json",
+    "high_noise_model/diffusion_pytorch_model.safetensors",
+    "Wan2.1_VAE.pth",
+    "models_t5_umt5-xxl-enc-bf16.pth",
+    "google/umt5-xxl/spiece.model",
+    "google/umt5-xxl/tokenizer.json",
+    "google/umt5-xxl/tokenizer_config.json",
+)
+
+
 def _replace_assignment(source: str, name: str, value: Any) -> str:
     pattern = re.compile(rf"(?m)^{re.escape(name)}\s*=.*$")
     replacement = f"{name:<24}= {value!r}"
@@ -45,6 +78,7 @@ class _WanFunCameraRuntime:
     TRANSFORMER_CONFIG_OVERRIDES: Mapping[str, Any] = {}
     TRANSFORMER_SCHEMA_SHA256 = ""
     TRANSFORMER_TENSOR_COUNT = 0
+    REQUIRED_COMPONENT_FILES = WAN21_CAMERA_COMPONENT_FILES
 
     def __init__(
         self,
@@ -96,6 +130,7 @@ class _WanFunCameraRuntime:
         fps: int,
         num_inference_steps: int,
         seed: int,
+        enable_teacache: bool,
     ) -> Path:
         upstream = require_path(self.repo_root / self.ENTRYPOINT, f"{self.MODEL_ID} entrypoint", kind="file")
         source = upstream.read_text(encoding="utf-8")
@@ -119,6 +154,7 @@ class _WanFunCameraRuntime:
             "prompt": prompt.strip(),
             "seed": int(seed),
             "num_inference_steps": int(num_inference_steps),
+            "enable_teacache": bool(enable_teacache),
             "save_path": str(native_output),
         }
         for name, value in values.items():
@@ -170,16 +206,7 @@ class _WanFunCameraRuntime:
     def _materialize_checkpoint_view(self, destination: Path, checkpoint: Path) -> Path:
         """Compose split official assets without copying or mutating checkpoints."""
 
-        required = (
-            "config.json",
-            "diffusion_pytorch_model.safetensors",
-            "Wan2.1_VAE.pth",
-            "models_t5_umt5-xxl-enc-bf16.pth",
-            "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth",
-            "google/umt5-xxl/spiece.model",
-            "google/umt5-xxl/tokenizer.json",
-            "google/umt5-xxl/tokenizer_config.json",
-        )
+        required = self.REQUIRED_COMPONENT_FILES
         if all((checkpoint / relative).is_file() for relative in required):
             return checkpoint
         if not self.BASE_COMPONENT_REPO or not self.IMAGE_ENCODER_COMPONENT_REPO:
@@ -240,6 +267,7 @@ class _WanFunCameraRuntime:
         fps: int = 16,
         num_inference_steps: int = 50,
         seed: int = 43,
+        enable_teacache: bool = True,
         return_dict: bool = True,
         **_: Any,
     ) -> Any:
@@ -264,6 +292,7 @@ class _WanFunCameraRuntime:
             fps=fps,
             num_inference_steps=num_inference_steps,
             seed=seed,
+            enable_teacache=enable_teacache,
         )
         env = dict(self.env)
         if self.device.startswith("cuda:") and "CUDA_VISIBLE_DEVICES" not in env:
@@ -310,6 +339,7 @@ class Wan22Fun5BCameraRuntime(_WanFunCameraRuntime):
     CHECKPOINT_REPO = "alibaba-pai--Wan2.2-Fun-5B-Control-Camera"
     ENTRYPOINT = "examples/wan2.2_fun/predict_v2v_control_ref_5b.py"
     CONFIG = "wan2.2/wan_civitai_5b.yaml"
+    REQUIRED_COMPONENT_FILES = WAN22_5B_CAMERA_COMPONENT_FILES
 
 
 class Wan22FunA14BCameraRuntime(_WanFunCameraRuntime):
@@ -317,6 +347,7 @@ class Wan22FunA14BCameraRuntime(_WanFunCameraRuntime):
     CHECKPOINT_REPO = "alibaba-pai--Wan2.2-Fun-A14B-Control-Camera"
     ENTRYPOINT = "examples/wan2.2_fun/predict_v2v_control_ref.py"
     CONFIG = "wan2.2/wan_civitai_i2v.yaml"
+    REQUIRED_COMPONENT_FILES = WAN22_A14B_CAMERA_COMPONENT_FILES
 
 
 __all__ = [

@@ -11,7 +11,12 @@ source_repos:
 checkpoints:
 - role: image_to_video_checkpoint
   repo_id: VideoCrafter/Image2Video-512
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/video_models/videocrafter_i2v_512_v1.ckpt
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/VideoCrafter--Image2Video-512/model.ckpt
+- role: image_encoder
+  repo_id: laion/CLIP-ViT-H-14-laion2B-s32B-b79K
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/laion--CLIP-ViT-H-14-laion2B-s32B-b79K
+  required_paths:
+  - open_clip_pytorch_model.bin
 input_schema:
   prompt: true
   image: true

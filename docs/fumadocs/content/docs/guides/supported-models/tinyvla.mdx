@@ -1,0 +1,48 @@
+---
+title: "TinyVLA"
+description: "TinyVLA: vla and vla action prediction; Runner parity pending."
+modelId: "tinyvla"
+pageSource: generated
+---
+
+TinyVLA targets fast, data-efficient VLA at sub-billion scale: LLaVA-Pythia backbones (400M / 700M / 1.3B released on the Hub) with ACT or conditional 1D-diffusion action heads. The published Hub models are VLM backbones for policy training — not task-trained robot checkpoints — so the in-tree runtime is checkpoint-gated until you stage a trained task policy.
+
+<ModelPaperFigures modelId="tinyvla" locale="en" />
+
+The recorded paper is [arXiv 2402.03766](https://arxiv.org/abs/2402.03766).
+
+Code: [liyaxuanliyaxuan/TinyVLA](https://github.com/liyaxuanliyaxuan/TinyVLA).
+
+<ModelCommandBuilder modelId="tinyvla" locale="en" />
+
+## What it is for
+
+`tinyvla` is the recorded instruction-to-action line. Start here when you need a WorldFoundry VLA rollout rather than a video generator.
+
+LLaVA-Pythia multimodal backbones with CLIP/SigLIP vision fusion and swappable action heads (ACT or conditional 1D diffusion), executed fully in process. Both merged weights and local LoRA plus non-LoRA action tensors are supported.
+
+Catalog tasks include vla, vla action prediction, and embodied policy. Catalog aliases include `tiny-vla` and `llava-pythia-vla`.
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `tinyvla_action_trace.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `TinyVLAPipeline`.
+
+Family status: **Runner parity pending**.
+
+Runtime construction fails early until a compatible task checkpoint, its config.json (action dimensions and head type), and dataset statistics are staged locally.
+
+LLaVA-Pythia, CLIP/SigLIP vision fusion, ACT, and conditional 1D diffusion action heads execute in process.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run tinyvla --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch>=2.5).
+
+Recorded weight repositories include `lesjie/Llava-Pythia-400M`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh tinyvla`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="tinyvla" locale="en" />

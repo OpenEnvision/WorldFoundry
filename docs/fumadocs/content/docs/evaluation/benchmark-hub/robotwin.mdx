@@ -1,132 +1,37 @@
 ---
 title: RoboTwin 2.0
-description: RoboTwin 2.0 — metrics, requirements, and run commands.
+description: "50 dual-arm tasks, 731 objects, five embodiments, strong domain randomization. WorldFoundry imports official eval_result files — it does not claim the public board."
 ---
 
-## About
+RoboTwin 2.0 (The University of Hong Kong and Shanghai AI Laboratory, with AgileX) is a **bimanual** SAPIEN benchmark, not a video-generation suite. The paper instantiates **50** dual-arm tasks on **RoboTwin-OD** (**731** objects, **147** categories) across **five** embodiments: Aloha-AgileX, ARX-X5, Piper, Franka Panda, and UR5-WSG. Domain randomization is five axes — clutter, lighting, background, tabletop height, language — and **clean** vs **randomized** success are reported separately. The companion dump is **100k+** expert trajectories (`TianxingChen/RoboTwin2.0`).
 
+Paper: [RoboTwin 2.0](https://arxiv.org/abs/2506.18088). Project: [robotwin-platform.github.io](https://robotwin-platform.github.io/). Docs: [usage / configurations](https://robotwin-platform.github.io/doc/). Code: [RoboTwin-Platform/RoboTwin](https://github.com/RoboTwin-Platform/RoboTwin). Official board: [leaderboard](https://robotwin-platform.github.io/leaderboard) — **not ingested** here.
 
+WorldFoundry **imports** official `eval_result/_result.txt` (layout `eval_result/{task}/{policy}/{config}/{ckpt}/{timestamp}/_result.txt`) or structured JSON/CSV. Offline normalization needs no simulator. Real parity still needs the upstream **SAPIEN / Curobo** stack and the official `policy/*/eval.sh` scripts. A 2026-05-25 bounded local check reached CUDA allocation; `script/test_render.py` hit the timeout, so rendering is **not** claimed green. Shared stack: `robotwin_dataset_assets`.
 
-RoboTwin 2.0 is a bimanual manipulation benchmark with diverse tasks and sim-to-real oriented evaluation.
+<BenchmarkPageSections id="robotwin" locale="en" />
 
-
-
-## Metrics
-
-RoboTwin 2.0 external benchmark task manifest for bimanual embodied manipulation policy rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/robotwin.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `episode_success` | Share of episodes or tasks that complete successfully. |
-| `bimanual_task_success` | Share of episodes or tasks that complete successfully. |
-| `domain_randomization_success` | Share of episodes or tasks that complete successfully. |
-| `clean_success` | Share of episodes or tasks that complete successfully. |
-| `randomized_success` | Share of episodes or tasks that complete successfully. |
-| `reward` | Cumulative reward on RoboTwin dual-arm manipulation episodes in the official benchmark suite. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `docker:robotwin`.
-- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
-- Embodied simulator dependencies are isolated in the VLA evaluation harness Docker image; WorldFoundry does not ship a RoboTwin conda setup script.
-- Host-side WorldFoundry only needs Docker access, the policy/model server, and mounted assets/results.
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_ROBOTWIN_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_HFD_DATASET_ROOT}/TianxingChen__RoboTwin2.0`
-- `${WORLDFOUNDRY_HFD_DATASET_ROOT}/lerobot__robotwin_unified`
-
-### Checkpoints & assets
-
-- Base-model / metric dependencies: `robotwin_dataset_assets`.
-- Default metric-checkpoint paths and override env vars are listed in the [local assets guide](/docs/guides/local-assets).
-
-### Key environment variables
-
-- `WORLDFOUNDRY_ROBOTWIN_RESULTS_PATH`
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id robotwin \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robotwin/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/robotwin/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
+`--official-results-path` may point at a `_result.txt` tree or a JSON/CSV export. Optional `WORLDFOUNDRY_ROBOTWIN_ROOT` overrides the runtime/repo root. Default import path: `WORLDFOUNDRY_ROBOTWIN_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/robotwin.yaml`.
 
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id robotwin \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robotwin/official-run \
-  --json
+In-tree pointers:
+
+```text
+cache/worldfoundry/data/hfd_datasets/TianxingChen__RoboTwin2.0
+cache/worldfoundry/data/hfd_datasets/lerobot__robotwin_unified
+cache/vla_va_wam/repos/RoboTwin-Platform--RoboTwin
 ```
 
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval embodied run --config worldfoundry/data/benchmarks/eval_configs/embodied/robotwin/eval.yaml
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official benchmark runtime or preflight validation
-
-### Environment
-
-- `WORLDFOUNDRY_ROBOTWIN_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `benchmark_contract.json`
-- `task_manifest.json`
-- `official_command_manifest.json`
-- `simulator_validation.json`
-- `raw_metric_table.jsonl`
-- `evaluation/per_sample_metrics.jsonl`
-
-
+Outputs: `scorecard.json` (primary `success_rate`), `benchmark_contract.json`, `task_manifest.json`, `official_command_manifest.json`, `simulator_validation.json`, `raw_metric_table.jsonl`, and `evaluation/per_sample_metrics.jsonl`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

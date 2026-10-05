@@ -102,6 +102,33 @@ metadata:
     normalizer_verified: true
     surface: wrbench_official_in_tree
   integration_status: integrated
+  validation_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - wrbench
+  - --mode
+  - official-validation
+  - --official-results-path
+  - <official_results.json_or_csv>
+  - --generated-artifact-dir
+  - <generated_videos>
+  - --output-dir
+  - <out>
+  - --json
+  checkpoint_refs: []
+  artifact_layout:
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+    results_path_env: WORLDFOUNDRY_WRBENCH_RESULTS_PATH
+    output_artifact: benchmark_scorecard
+    filename_template: scorecard.json
+  requires:
+  - in-tree WRBench runtime and Natural-25 assets
+  - generated videos and camera sidecars for a new model evaluation
+  - WRBench scorer runtime configuration for full D1-D6 execution
+  blockers:
+  - Leaderboard parity requires complete Natural-25 generation plus VGGT-Omega, DINOv2, Qwen3.5, and Qwen3-VL checkpoints.
 tasks:
   wrbench_natural25:
     benchmark_name: wrbench
@@ -153,8 +180,27 @@ tasks:
       runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
       runner_script: worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
       official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id wrbench --mode official-validation --official-results-path <official_results.json_or_csv> --generated-artifact-dir <generated_videos> --output-dir <out> --json
+    - name: in_tree_official_runtime
+      metric_ids:
+      - d1_cam_prec
+      - d1_cam_align_common_yaw
+      - d1_cam_align_static_hold
+      - d2_visual_integrity
+      - d3_visible_spatial_consistency
+      - d4_visible_state_consistency
+      - d5_reobservation_spatial_consistency
+      - d6_reobservation_state_consistency
+      - wrbench_average
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
     runtime_requirements:
       in_tree_runtime: worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench
       generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
       results_path_env: WORLDFOUNDRY_WRBENCH_RESULTS_PATH
       runtime_config_env: WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG
+    metadata:
+      source_kind: benchmark_zoo
+      benchmark_id: wrbench
+      official_benchmark_verified: false
+      integration_evidence: false
+      leaderboard_valid: false

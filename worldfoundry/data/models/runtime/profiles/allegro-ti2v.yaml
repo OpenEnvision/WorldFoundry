@@ -25,6 +25,11 @@ execution:
   runtime_status: official_demo_parity_pending
   integration_status: integrated
   pipeline_binding: allegro-ti2v
+  defaults:
+    num_frames: 88
+    height: 720
+    width: 1280
+    fps: 15
 integration:
   status: integrated
 notes:

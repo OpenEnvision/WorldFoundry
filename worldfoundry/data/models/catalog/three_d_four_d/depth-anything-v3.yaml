@@ -13,6 +13,8 @@ source:
   official_repo_url: https://github.com/ByteDance-Seed/Depth-Anything-3
   license: apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2511.10647
+  project_page: https://depth-anything-3.github.io/
   github:
     url: https://github.com/ByteDance-Seed/Depth-Anything-3
   huggingface:
@@ -31,3 +33,17 @@ runner_parity:
   - Per-run validation evidence is tracked outside the model catalog.
 catalog_category: three_d_four_d
 catalog_scope: Independent geometric prior integrations used by 3D and world-model runtimes.
+docs:
+  publisher: ByteDance (Seed)
+  publisher_kind: company
+  publisher_zh: 字节跳动（Seed 团队）
+  overview: 'Depth Anything 3 is ByteDance Seed''s geometry foundation model: beyond monocular depth it predicts consistent geometry from multiple views. This entry registers the in-tree official SOH export route, separate from the depth-anything-v3-prior geometry-prior profile.'
+  overview_zh: Depth Anything 3 是字节 Seed 团队的几何基础模型：在单目深度之外还能从多视角预测一致几何。本条目注册树内官方 SOH 导出路径，与 depth-anything-v3-prior 的几何先验档案相互独立。
+  architecture: DA3 uses a plain-transformer backbone with a depth-ray prediction target, spanning monocular depth through multi-view geometry (per the upstream release). Weights are apache-2.0; this entry's runtime specifics live in its recorded route.
+  architecture_zh: DA3 采用朴素 Transformer 主干与「深度-射线」预测目标，覆盖单目深度到多视角几何（见上游发布）。权重为 apache-2.0；本条目的运行时细节在其记录路径中。
+  usage_notes: Integration is runtime_ported with runner parity pending. If you only need a depth prior for another pipeline, use depth-anything-v3-prior; this entry is for the full export route.
+  usage_notes_zh: 集成为 runtime_ported，runner parity 待验证。若只需为其它管线提供深度先验，请用 depth-anything-v3-prior；本条目面向完整导出路径。
+  limitations:
+  - Runner parity is pending; per-run validation evidence is tracked outside the catalog.
+  limitations_zh:
+  - runner parity 待验证；每次运行的验证证据在 catalog 外跟踪。

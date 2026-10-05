@@ -8,6 +8,7 @@ dictionary suitable for MCP tool responses.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
@@ -18,6 +19,13 @@ from urllib.request import Request, urlopen
 
 # Default Studio workspace URL, overrideable via the ``WORLDFOUNDRY_STUDIO_WORKSPACE_URL`` environment variable.
 DEFAULT_STUDIO_WORKSPACE_URL = os.environ.get("WORLDFOUNDRY_STUDIO_WORKSPACE_URL", "http://127.0.0.1:7870")
+
+# Finite default wait budget: an agent tool call must never park the MCP
+# server on an unbounded poll loop by default. Pass ``timeout_s=0`` (or a
+# negative value) explicitly to opt in to an unlimited wait.
+DEFAULT_STUDIO_WAIT_TIMEOUT_S = 600.0
+
+_TERMINAL_STUDIO_JOB_STATUSES = frozenset({"completed", "failed", "cancelled", "canceled"})
 
 
 # ── Model discovery ────────────────────────────────────────────────────
@@ -116,7 +124,7 @@ def submit_studio_inference_payload(
     load_kwargs: dict[str, Any] | None = None,
     env_overrides: dict[str, str] | None = None,
     wait: bool = False,
-    wait_timeout_s: float = 0,
+    wait_timeout_s: float = DEFAULT_STUDIO_WAIT_TIMEOUT_S,
     poll_interval_s: float = 5,
     timeout_s: float = 30,
 ) -> dict[str, Any]:
@@ -137,7 +145,8 @@ def submit_studio_inference_payload(
         load_kwargs: Keyword arguments passed to model loading.
         env_overrides: Environment variable overrides for the job.
         wait: Poll the job until it reaches a terminal state.
-        wait_timeout_s: Maximum seconds to wait (0 = unlimited).
+        wait_timeout_s: Maximum seconds to wait (0 or negative = unlimited;
+            default ``DEFAULT_STUDIO_WAIT_TIMEOUT_S``).
         poll_interval_s: Seconds between status polls.
         timeout_s: HTTP request timeout for the initial submission.
 
@@ -166,6 +175,64 @@ def submit_studio_inference_payload(
         job_id = str(job.get("id") or job.get("job_id") or "")
         if job_id:
             return wait_for_studio_job_payload(
+                job_id,
+                base_url=base_url,
+                timeout_s=wait_timeout_s,
+                poll_interval_s=poll_interval_s,
+            )
+    return job
+
+
+async def submit_studio_inference_payload_async(
+    *,
+    model_id: str,
+    base_url: str | None = None,
+    variant_id: str = "",
+    task_profile_id: str = "",
+    prompt: str = "",
+    negative_prompt: str = "",
+    input_path: str = "",
+    backend: str = "",
+    device: str = "",
+    params: dict[str, Any] | None = None,
+    call_kwargs: dict[str, Any] | None = None,
+    load_kwargs: dict[str, Any] | None = None,
+    env_overrides: dict[str, str] | None = None,
+    wait: bool = False,
+    wait_timeout_s: float = DEFAULT_STUDIO_WAIT_TIMEOUT_S,
+    poll_interval_s: float = 5,
+    timeout_s: float = 30,
+) -> dict[str, Any]:
+    """Event-loop-safe variant of :func:`submit_studio_inference_payload`.
+
+    The blocking HTTP submission runs in a worker thread and any follow-up
+    polling awaits :func:`wait_for_studio_job_payload_async`, so long waits
+    never stall the MCP server event loop (CM-26).
+    """
+
+    job = await asyncio.to_thread(
+        lambda: submit_studio_inference_payload(
+            model_id=model_id,
+            base_url=base_url,
+            variant_id=variant_id,
+            task_profile_id=task_profile_id,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            input_path=input_path,
+            backend=backend,
+            device=device,
+            params=params,
+            call_kwargs=call_kwargs,
+            load_kwargs=load_kwargs,
+            env_overrides=env_overrides,
+            wait=False,
+            timeout_s=timeout_s,
+        )
+    )
+    if wait:
+        job_id = str(job.get("id") or job.get("job_id") or "")
+        if job_id:
+            return await wait_for_studio_job_payload_async(
                 job_id,
                 base_url=base_url,
                 timeout_s=wait_timeout_s,
@@ -226,17 +293,21 @@ def wait_for_studio_job_payload(
     job_id: str,
     *,
     base_url: str | None = None,
-    timeout_s: float = 0,
+    timeout_s: float = DEFAULT_STUDIO_WAIT_TIMEOUT_S,
     poll_interval_s: float = 5,
 ) -> dict[str, Any]:
     """Poll a Studio job until it reaches a terminal status or timeout.
 
     Terminal statuses are: ``completed``, ``failed``, ``cancelled``, ``canceled``.
 
+    Blocking variant for synchronous scripts; server code must use
+    :func:`wait_for_studio_job_payload_async` instead.
+
     Args:
         job_id: Studio job identifier to poll.
         base_url: Studio workspace base URL (optional).
-        timeout_s: Maximum seconds to wait (0 = unlimited).
+        timeout_s: Maximum seconds to wait (0 or negative = unlimited;
+            default ``DEFAULT_STUDIO_WAIT_TIMEOUT_S``).
         poll_interval_s: Seconds between status polls.
 
     Returns:
@@ -247,11 +318,41 @@ def wait_for_studio_job_payload(
     deadline = None if timeout_s <= 0 else time.monotonic() + timeout_s
     while True:
         payload = get_studio_job_payload(job_id, base_url=base_url, timeout_s=max(1.0, min(poll_interval_s, 30.0)))
-        if str(payload.get("status") or "").lower() in {"completed", "failed", "cancelled", "canceled"}:
+        if str(payload.get("status") or "").lower() in _TERMINAL_STUDIO_JOB_STATUSES:
             return payload
         if deadline is not None and time.monotonic() >= deadline:
             return payload
         time.sleep(max(0.25, poll_interval_s))
+
+
+async def wait_for_studio_job_payload_async(
+    job_id: str,
+    *,
+    base_url: str | None = None,
+    timeout_s: float = DEFAULT_STUDIO_WAIT_TIMEOUT_S,
+    poll_interval_s: float = 5,
+) -> dict[str, Any]:
+    """Event-loop-safe variant of :func:`wait_for_studio_job_payload`.
+
+    Polls with ``asyncio.sleep`` and runs each blocking HTTP status request in
+    a worker thread, mirroring the ``evaluate`` tool's wait loop, so a long
+    Studio job can never wedge the MCP server event loop (CM-26).
+    """
+
+    deadline = None if timeout_s <= 0 else time.monotonic() + timeout_s
+    while True:
+        payload = await asyncio.to_thread(
+            lambda: get_studio_job_payload(
+                job_id,
+                base_url=base_url,
+                timeout_s=max(1.0, min(poll_interval_s, 30.0)),
+            )
+        )
+        if str(payload.get("status") or "").lower() in _TERMINAL_STUDIO_JOB_STATUSES:
+            return payload
+        if deadline is not None and time.monotonic() >= deadline:
+            return payload
+        await asyncio.sleep(max(0.25, poll_interval_s))
 
 
 def stop_studio_job_payload(
@@ -439,6 +540,7 @@ def _normalize_base_url(base_url: str | None) -> str:
 
 
 __all__ = [
+    "DEFAULT_STUDIO_WAIT_TIMEOUT_S",
     "DEFAULT_STUDIO_WORKSPACE_URL",
     "get_studio_job_logs_payload",
     "get_studio_job_payload",
@@ -449,5 +551,7 @@ __all__ = [
     "list_studio_models_payload",
     "stop_studio_job_payload",
     "submit_studio_inference_payload",
+    "submit_studio_inference_payload_async",
     "wait_for_studio_job_payload",
+    "wait_for_studio_job_payload_async",
 ]

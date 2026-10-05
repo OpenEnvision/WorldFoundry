@@ -17,8 +17,7 @@ def compute_ms_ssim(
     from torchmetrics.image import MultiScaleStructuralSimilarityIndexMeasure
 
     device_t = resolve_device(device)
-    if data_range is None:
-        data_range = default_data_range(reference, generated)
+    data_range = default_data_range(reference, generated) if data_range is None else data_range
     metric = MultiScaleStructuralSimilarityIndexMeasure(data_range=data_range).to(device_t)
     ref = to_tensor(reference, device_t)
     gen = to_tensor(generated, device_t)

@@ -1,132 +1,27 @@
 ---
 title: RLBench
-description: RLBench — metrics, requirements, and run commands.
+description: "100 hand-designed vision-guided tasks on CoppeliaSim / PyRep. WorldFoundry imports official rollouts — it does not run the simulator."
 ---
 
-## About
+RLBench (IEEE RA-L / ICRA 2020) is Imperial College London's Dyson Robotics Lab benchmark: **100** unique, hand-designed manipulation tasks for a **Franka Panda** in **CoppeliaSim** (via **PyRep**). Each task has procedural variations (object poses, goals). A motion planner can emit **unlimited** demonstrations, so the same suite supports imitation learning, RL, and a **few-shot** protocol. Observations are multi-camera vision plus state / language.
 
+Paper: [RLBench: The Robot Learning Benchmark & Learning Environment](https://arxiv.org/abs/1909.12271). Project: [sites.google.com/view/rlbench](https://sites.google.com/view/rlbench). Code: [stepjam/RLBench](https://github.com/stepjam/RLBench). GitHub license metadata in this catalog is `other:noassertion_github_api` — read the upstream terms before reuse.
 
+WorldFoundry is **official-results only**. You run CoppeliaSim / PyRep / the official task assets upstream, then `official-validation` normalizes JSON/CSV. No in-tree simulator. Declare the task list and the protocol (few-shot vs IL vs RL) with the export.
 
-RLBench external benchmark task manifest for CoppeliaSim/PyRep robot manipulation rollouts.
+<BenchmarkPageSections id="rlbench" locale="en" />
 
-
-
-## Metrics
-
-RLBench external benchmark task manifest for CoppeliaSim/PyRep robot manipulation rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/rlbench.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `episode_success` | Share of episodes or tasks that complete successfully. |
-| `reward` | Sparse or shaped reward accumulated over RLBench tabletop manipulation episode horizons. |
-| `normalized_return` | RLBench return normalized to [0, 1] against demonstration or success benchmarks. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `needs-rlbench-pyrep-coppeliasim-env`.
-- **Separate setup:** this benchmark expects a dedicated conda env rather than the unified runtime.
-- RLBench 需要 CoppeliaSim/PyRep 组合环境；当前只记录 env vars 和 task manifest，不启动 simulator。
-
-### Evaluation data
-
-- RLBench is simulator-backed; WorldFoundry normalizes policy rollout results while CoppeliaSim/PyRep execution remains explicit.
-- Candidate model outputs: set `WORLDFOUNDRY_RLBENCH_RESULTS_PATH` to the generated-video or rollout artifact root.
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_RLBENCH_ROOT`
-- `COPPELIASIM_ROOT`
-- `WORLDFOUNDRY_RLBENCH_RESULTS_PATH`
-
-### Verify setup
-
-```bash
-PYTHONPATH=. ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile rlbench --manifest worldfoundry/data/benchmarks/runtime_profiles/official/rlbench.yaml --output-dir tmp/worldfoundry_preflight/rlbench --json
-```
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id rlbench \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/rlbench/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/rlbench/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id rlbench \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/rlbench/official-run \
-  --json
-```
-
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id rlbench --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official RLBench repository checkout
-- CoppeliaSim and PyRep runtime
-- RLBench task assets
-- Benchmark-specific policy checkpoint
-
-### Environment
-
-- `WORLDFOUNDRY_RLBENCH_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-
-
+Default import path when you omit `--official-results-path` is `WORLDFOUNDRY_RLBENCH_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/rlbench.yaml`. Outputs: `scorecard.json` (primary `success_rate`) and `raw_results.jsonl`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

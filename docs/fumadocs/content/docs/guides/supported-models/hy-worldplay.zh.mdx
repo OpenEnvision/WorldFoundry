@@ -1,0 +1,52 @@
+---
+title: "HY-WorldPlay"
+description: "HY-WorldPlay（Tencent (Hunyuan)）：世界模型、video；已验证。"
+modelId: "hy-worldplay"
+pageSource: authored
+---
+
+HY-WorldPlay 是腾讯的实时交互世界视频模型：从一张图出发，跟随位姿/动作输入向前滚动世界——混元世界栈的交互分支。本 catalog 中 runner 已按官方 image-pose-video 路径与官方 8 卡执行档案验证。
+
+<ModelPaperFigures modelId="hy-worldplay" locale="zh" />
+
+记录论文为[arXiv 2602.09022](https://arxiv.org/abs/2602.09022)。
+
+项目页：[3d-models.hunyuan.tencent.com/world](https://3d-models.hunyuan.tencent.com/world/)。代码：[Tencent-Hunyuan/HY-WorldPlay](https://github.com/Tencent-Hunyuan/HY-WorldPlay)。
+
+<ModelCommandBuilder modelId="hy-worldplay" locale="zh" />
+
+## 用来做什么
+
+需要动作条件世界步进时选 `hy-worldplay`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
+
+记录的 checkpoint 组合揭示其装配：tencent/HY-WorldPlay 动作权重叠加 tencent/HunyuanVideo-1.5 视频模型支持资产，辅以 Qwen2.5-VL-7B-Instruct、byt5-small 与 FLUX.1-Redux-dev 支持组件。树内 pipeline 遵循官方 demo 契约。该模型由腾讯（混元）发布。
+
+catalog 记录的任务包括 世界模型、video。别名包括 `hunyuan-worldplay`、`hunyuanworldplay`。输出模态为视频。
+
+记录的评测入口包括[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（交互式世界滚动生成质量）、[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（位姿/相机跟随精度）。
+
+HY-WorldPlay 交互回放。不是 HY-World 2.0。
+
+## 运行时契约
+
+可选 `image`、`prompt`、`interactions`、`num_frames`、`fps`；产物 `hy-worldplay.mp4`。
+
+CLI task profile：`official-image-pose-video`。绑定的 pipeline 类是 `HunyuanWorldPlayPipeline`。
+
+系列状态：**已验证**。
+
+`official-image-pose-video` 记录默认值：num_frames=125, fps=24, height=480, width=832, num_inference_steps=4, seed=1。
+
+官方路径使用 8 个 torchrun rank——请准备多卡主机并就位全部五套记录的 checkpoint。 完整 benchmark 打分与更长交互套件是独立工作。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run hy-worldplay --pipeline.task-profile official-image-pose-video` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `tencent/HY-WorldPlay`、`tencent/HunyuanVideo-1.5`、`Qwen/Qwen2.5-VL-7B-Instruct` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh hy-worldplay`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="hy-worldplay" locale="zh" />

@@ -1,0 +1,39 @@
+---
+title: RBench
+description: "PKU / ByteDance Seed robot I2V bench (ICML 2026): 650 image-text cases. WorldFoundry aggregates official VLM and operator rows; it does not invent a board."
+---
+
+RBench (ReVidgen; Peking University DAGroup and ByteDance Seed; ICML 2026) evaluates **robot-oriented image-to-video**. **650** image-text cases:
+
+- **Task track** — 250 cases: common manipulation, long-horizon planning, multi-entity collaboration, spatial relationship, visual reasoning.
+- **Embodiment track** — 400 cases: dual-arm, humanoid, single-arm, quadruped.
+
+Videos are scored by a VLM judge (GPT or Qwen3-VL) on physical plausibility, task adherence, and stability, plus operator metrics (motion smoothness / amplitude) from GroundingDINO / SAM2 / CoTracker / Q-Align. The paper reports **0.96 Spearman** with humans. Companion training data: RoVid-X (4M annotated robot clips). License: CC-BY-4.0.
+
+Paper: [RBench](https://arxiv.org/abs/2601.15282). Code: [DAGroup-PKU/ReVidgen](https://github.com/DAGroup-PKU/ReVidgen). Data: [`DAGroup-PKU/RBench`](https://huggingface.co/datasets/DAGroup-PKU/RBench).
+
+WorldFoundry **reproduces official `eval/4_embodiments` and `eval/5_tasks` aggregation** (option-to-score mapping, min-max, PAS and consistency penalties, amplitude filter). It does not run the VLM or the operator stack. `rbench_overall` is a **WorldFoundry composite** of the two track scores, not a published RBench number. GPT and Qwen outputs are never mixed.
+
+<BenchmarkPageSections id="rbench" locale="en" />
+
+## How to run
+
+```bash
+hf download DAGroup-PKU/RBench --repo-type dataset --local-dir <rbench_data_root>
+
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id rbench \
+  --mode official-validation \
+  --official-results-path <rbench_results_root> \
+  --result-model-id <model_id> \
+  --output-dir tmp/rbench/official-validation \
+  --json
+```
+
+`--track` restricts to one track. `--vlm-backend` selects GPT or Qwen when both trees exist. `--generated-artifact-dir` adds coverage reporting. Env: `WORLDFOUNDRY_RBENCH_RESULTS_PATH`, `WORLDFOUNDRY_RBENCH_DATA_ROOT`, `WORLDFOUNDRY_RBENCH_VLM_BACKEND`.
+
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/rbench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/rbench`.
+
+Outputs include `scorecard.json` (primary `rbench_overall`) and `track_breakdown.json`.
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

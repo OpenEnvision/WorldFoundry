@@ -1,0 +1,52 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A-07
+track: calibration
+title_en: Y-track branch
+outcome_question: Which label in ['left_path', 'right_path'] is visible as the first
+  decisive post-action result?
+readout_policy: Read after the requested release has actually occurred. Use the first
+  short readable window where the ball is clearly in one downstream branch or outlet
+  past the split. Central approach frames, near-split frames, and ambiguous divider-adjacent
+  transients do not qualify. Later same-branch bounce, brief occlusion, or video-end
+  artifacts do not relabel the outcome.
+canonical_labels:
+- left_path
+- right_path
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['left_path', 'right_path'] can be decisively identified
+  within the readout window.
+- The ball is occluded or goes off-screen before a decisive side / bin / path can
+  be identified. If a visible off-support exit is established, use out-of-schema
+  instead.
+out_of_schema_rules:
+- Ball visibly gets stuck at the split or leaves the Y-track apparatus; this is out-of-schema,
+  not nearest-legal.
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'First-decisive-window rule: use the first short readable post-release window where
+  the ball has committed to a downstream branch; do not re-label from later same-branch
+  bounce, occlusion, or transient states.'
+- Path commitment past the split is the readout, but only after the ball is clearly
+  in a downstream branch/outlet. Post-split transients at the walls or central
+  divider do not decide the label.
+- Left/right are image-coordinate labels from the viewer's perspective. The branch
+  or outlet on the viewer's right is `right_path`; the branch or outlet on the
+  viewer's left is `left_path`.
+notes:
+- 'Path-branch scene: readout is the committed branch past the split, not the terminal
+  resting state.'
+- 'Scene title: Y-track branch.'
+- 'Calibration support: canonical labels are the reference-probability-bearing support
+  of the intended experiment. Visibly stuck, exited, outside-region, or no-committed-region
+  terminal states are out-of-schema/invalid rather than extra outcome labels.'
+geometry_policy: Left_path is the viewer-left branch/outlet of the Y-track; right_path
+  is the viewer-right branch/outlet. Path is decided at the first frame where the
+  ball is clearly in one downstream branch or terminal outlet, not while the ball is
+  still near the central splitter/divider.

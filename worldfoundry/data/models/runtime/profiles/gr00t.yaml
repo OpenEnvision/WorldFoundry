@@ -2,6 +2,10 @@ artifact_filename: gr00t_action_trace.json
 artifact_kind: action_trace
 backend_stage: in_tree_runtime
 checkpoints:
+- local_dir: ${WORLDFOUNDRY_HFD_ROOT}/nvidia--GR00T-N1-2B
+  repo_id: nvidia/GR00T-N1-2B
+  role: gr1_demo_checkpoint
+  status: local_checkpoint_staged_official_n1_worker_gpu_predict_verified
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/nvidia--GR00T-N1.7-LIBERO
   repo_id: nvidia/GR00T-N1.7-LIBERO
   role: libero_10_demo_checkpoint
@@ -24,6 +28,7 @@ integration_status: integrated
 notes:
 - VLA policy profile for GR00T-style humanoid/generalist robot actions.
 - The staged GR00T-N1.7-LIBERO asset contains only the official libero_10 runtime subset; inference performs no download.
+- The original GR00T-N1-2B checkpoint uses the pinned official n1-release worker and a separate Transformers 4.45.2 environment; configure n1_source_dir and n1_python before inference.
 - WorldFoundry retains the GR00T configs, data transforms, model, and policy runtime
   under worldfoundry/synthesis/action_generation/gr00t. py_compile,
   import/from_pretrained, checkpoint metadata parsing, local backbone resolution, and checkpoint-backed prediction are implemented. Concrete local model and processor classes are used with checkpoint-hosted Python disabled.

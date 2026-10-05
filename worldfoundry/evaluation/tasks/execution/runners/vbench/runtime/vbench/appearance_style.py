@@ -4,11 +4,11 @@ import numpy as np
 from tqdm import tqdm
 
 import torch
-import clip
 from PIL import Image
 from vbench.utils import load_video, load_dimension_info, clip_transform, read_frames_decord_by_fps, clip_transform_Image
+from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
 
-from .distributed import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     all_gather,

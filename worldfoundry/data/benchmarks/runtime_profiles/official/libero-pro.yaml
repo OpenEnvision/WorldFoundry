@@ -6,8 +6,10 @@ environment_id: worldfoundry-unified-cu128
 id: libero-pro
 name: LIBERO-Pro
 docker:
-  image: ghcr.io/allenai/vla-evaluation-harness/libero-pro:latest
-  source_image: ghcr.io/allenai/vla-evaluation-harness/libero-pro:latest
+  image: ghcr.io/allenai/vla-evaluation-harness/libero-pro@sha256:b93d44f5d8e60e8233526ca594c895244c9939ba1867c31f92cd02e216c450fb
+  digest: sha256:b93d44f5d8e60e8233526ca594c895244c9939ba1867c31f92cd02e216c450fb
+  source_image: ghcr.io/allenai/vla-evaluation-harness/libero-pro@sha256:b93d44f5d8e60e8233526ca594c895244c9939ba1867c31f92cd02e216c450fb
+  platform: linux/amd64
   python_env: libero
   gpus: all
 needs_new_env: false

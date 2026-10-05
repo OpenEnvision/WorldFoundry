@@ -1,0 +1,60 @@
+{
+  "report_kind": "native_acceleration_completion_release_validation_v1",
+  "recorded_at_utc": "2026-10-03T20:15:37.365536+00:00",
+  "branch": "release/public-inference-20260909",
+  "tested_release_commit": "31fb97a0ac8394790bdce627e04ae418f91d4b5c",
+  "measured_implementation_commit": "183147e331c40e09b827a6e6f41fc0ec5c162204",
+  "status": "passed",
+  "suites": [
+    {
+      "suite": "targeted_model_core_diagnostics",
+      "pytest_summary": "726 passed, 4 skipped, 4 warnings in 80.36s (0:01:20)",
+      "passed": 726,
+      "skipped": 4,
+      "test_paths": [
+        "tests/core/acceleration",
+        "tests/core/attention/test_mha_schedule.py",
+        "tests/core/test_sol_attention.py",
+        "tests/core/test_diffusion_rounding.py",
+        "tests/core/test_kernel_dispatch_receipt.py",
+        "tests/base_models/diffusion_model/optimizations",
+        "tests/base_models/diffusion_model/models/denoisers",
+        "tests/base_models/diffusion_model/models/autoencoders",
+        "tests/base_models/diffusion_model/loaders/test_module_acceleration_plugins.py",
+        "tests/base_models/test_wan22_a14b_inference.py",
+        "tests/benchmarks/test_plugin_diagnostics.py",
+        "tests/benchmarks/test_lightvae_encoder.py"
+      ],
+      "raw_log_bytes": 2964,
+      "raw_log_sha256": "6aeb16dd9e4ac49ae771e831fbc81475d7c35d6c6c5b435b04c224e5b4762f23"
+    },
+    {
+      "suite": "public_cpu_whitelist",
+      "pytest_summary": "584 passed, 9 warnings, 4 subtests passed in 156.49s (0:02:36)",
+      "passed": 584,
+      "skipped": 0,
+      "test_paths": "repository default pytest testpaths with CUDA_VISIBLE_DEVICES empty",
+      "raw_log_bytes": 3290,
+      "raw_log_sha256": "cc4e7fa5b5b8775605832d7be9b370e70849954f3b30e487d0fa1fea908c4220"
+    },
+    {
+      "suite": "isolated_attention_sol",
+      "pytest_summary": "37 passed, 12 warnings in 26.88s",
+      "passed": 37,
+      "skipped": 0,
+      "test_paths": [
+        "tests/core/attention/test_mha_schedule.py",
+        "tests/core/test_sol_attention.py"
+      ],
+      "raw_log_bytes": 3808,
+      "raw_log_sha256": "d1c2ec771cb1cef077cf79824c92dfaee3daf99132e6f38ffa30c712ca14e639"
+    }
+  ],
+  "scope_notes": [
+    "All suites ran on the clean merged release worktree. Subsequent changes only add validation documentation.",
+    "The main Torch 2.5.1+cu121 suite skips optional TMA, cuDNN Frontend FP8 and two Sol CUDA tests; the isolated Torch 2.10/cu128, Triton 3.6 environment executes them.",
+    "Public CPU whitelist also reports four passed subtests. These suites overlap; counts must not be summed or described as repository-wide testing.",
+    "Real generation and codec diagnostics preserve their measured source/input hashes and original runtime revision.",
+    "Two updated MDX guides compiled successfully and every measurement link resolves to valid JSON."
+  ]
+}

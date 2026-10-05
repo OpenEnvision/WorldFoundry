@@ -1,12 +1,18 @@
 artifact_filename: step_video_t2v.mp4
 artifact_kind: generated_video
-backend_stage: in_tree_runtime_plan
+backend_stage: native_diffusion
 id: step-video-t2v
 input_schema:
   image: false
   prompt: true
-integration_status: planned
+integration_status: integrated
 notes:
-- WorldFoundry vendors the Step-Video-T2V model, diffusion, text encoder, VAE, and parallel inference code under worldfoundry/base_models/diffusion_model/video/step_video/step_video_runtime.
-- Full generation remains gated on multi-GPU execution, caption/VAE API services, and staged Step-Video checkpoints.
-runtime_status: in_tree_step_video_runtime_ported_multigpu_services_pending
+- Step-Video-T2V is assembled from the canonical denoiser, conditioner, initializer,
+  scheduler, and decoder roles under worldfoundry/base_models/diffusion_model.
+- Prompt encoding and VAE decoding run in-process. The old Diffusers/xFuser runtime
+  and caption/VAE HTTP services are not used.
+- A 2026-09-26 single-H100 run decoded all 204 frames at 992x544, 25 FPS,
+  with 50 steps, CFG 9, and time shift 13. Visual review found a coherent
+  surfing-cat scene with sustained board and water motion for this prompt.
+  Official pixel parity and benchmark scores remain untested.
+runtime_status: checkpoint_backed_204f_gpu_inference_verified

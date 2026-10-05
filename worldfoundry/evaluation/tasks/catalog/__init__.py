@@ -24,7 +24,6 @@ from worldfoundry.evaluation.api.json_contract import (
 )
 from worldfoundry.evaluation.api.tasks import EvaluationProtocolSpec
 
-
 CATALOG_TASK_SCHEMA_VERSION = "worldfoundry-catalog-task"
 CATALOG_BENCHMARK_SCHEMA_VERSION = "worldfoundry-catalog-benchmark"
 

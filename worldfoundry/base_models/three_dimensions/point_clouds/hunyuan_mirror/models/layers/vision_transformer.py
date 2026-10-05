@@ -13,8 +13,8 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 from torch.nn.init import trunc_normal_
-from worldfoundry.core.nn.layers import Mlp, PatchEmbed, SwiGLUFFNFused
-from worldfoundry.core.nn.module_utils import named_apply
+from worldfoundry.core.nn.blocks.layers import Mlp, PatchEmbed, SwiGLUFFNFused
+from worldfoundry.core.nn.blocks.module_utils import named_apply
 from .attention import MemEffAttention
 from .block import NestedTensorBlock as Block
 from ...utils.logger import RankedLogger

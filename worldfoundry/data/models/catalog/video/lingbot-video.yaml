@@ -18,6 +18,7 @@ source:
   hf_repo_id: robbyant/lingbot-video-dense-1.3b
   license: apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2607.07675
   project_page: https://technology.robbyant.com/lingbot-video
   github:
     url: https://github.com/Robbyant/lingbot-video
@@ -46,9 +47,32 @@ runner_parity:
   status: pending
   notes:
   - The direct Diffusers, optional SGLang, FSDP, context-parallel, CFG-parallel, and refiner code paths are preserved.
-  - Full checkpoint-backed artifact and visual parity validation remains pending.
+  - A checkpoint-backed MoE T2V short clip has been compared with the pinned official runner;
+    pixel-exact parity, the five-second recipe, refiner, and other modes remain pending.
 runtime_profile: runtime-profile:lingbot-video
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: lingbot-video
 catalog_category: video
 schema_version: 2
+docs:
+  publisher: Robbyant (Ant Group)
+  publisher_kind: company
+  publisher_zh: 蚂蚁灵波科技（Robbyant，蚂蚁集团）
+  overview: 'LingBot-Video is Robbyant''s video generation family, recorded for text-to-image, text-to-video, text+image-to-video, and video refinement. Two checkpoint lines are recorded: a dense 1.3B model and a MoE 30B-A3B model that ships with a refiner. WorldFoundry flattens the inference package in-tree under synthesis/visual_generation/lingbot_video and deliberately excludes the prompt rewriter, training, and benchmark sources.'
+  overview_zh: LingBot-Video 是蚂蚁灵波（Robbyant）的视频生成系列，记录了文生图、文生视频、图文生视频与视频细化四类任务。catalog 记录两条 checkpoint 线：稠密 1.3B 模型与带细化器的 MoE 30B-A3B 模型。WorldFoundry 将推理包平铺在树内 synthesis/visual_generation/lingbot_video 下，并有意排除了提示词改写、训练与评测源码。
+  architecture: The dense 1.3B and MoE 30B-A3B (3B active) checkpoints share the inference surface; the MoE line adds a refiner stage. The preserved code paths include direct Diffusers, optional SGLang, FSDP, context-parallel, and CFG-parallel execution. The upstream-recommended stack pins a dedicated Transformers 5 / Diffusers 0.39 environment.
+  architecture_zh: 稠密 1.3B 与 MoE 30B-A3B（激活 3B）两个 checkpoint 共享同一推理面；MoE 线增加了细化阶段。保留的代码路径包括直连 Diffusers、可选 SGLang、FSDP、上下文并行与 CFG 并行。上游推荐栈要求专用的 Transformers 5 / Diffusers 0.39 环境。
+  usage_notes: 'Full checkpoint-backed artifact and visual parity are pending. The released Dense 1.3B checkpoint already has a recorded 121-frame, 832x480 quality-oriented Workspace artifact. Note one quirk from the profile: T2I produces an image even though the default artifact type is the T2V video route. Dense and MoE weights are external (apache-2.0) and never tracked in git.'
+  usage_notes_zh: 完整的 checkpoint 加载产物与视觉一致性仍在等待。已发布的稠密 1.3B checkpoint 已有一次记录在案的 121 帧、832x480 质量导向 Workspace 产物。注意 profile 中的一个细节：即使默认产物类型是 T2V 视频路径， T2I 也会产出图像。稠密与 MoE 权重均为外部资产（apache-2.0），不入 git。
+  limitations:
+  - Full checkpoint-backed artifact and visual parity validation remains pending.
+  - Requires the dedicated Transformers 5 / Diffusers 0.39 environment recorded upstream.
+  - Prompt rewriter and training surfaces are outside this integration.
+  limitations_zh:
+  - 完整 checkpoint 加载的产物与视觉一致性验证仍在等待。
+  - 需要上游记录的专用 Transformers 5 / Diffusers 0.39 环境。
+  - 提示词改写与训练相关能力不在本集成范围内。
+  recommended_benchmarks:
+  - id: vbench
+    reason: General T2V quality suite for both checkpoint lines.
+    reason_zh: 两条 checkpoint 线通用的文生视频质量评测。

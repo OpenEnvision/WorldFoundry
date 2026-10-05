@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from worldfoundry.evaluation.tasks.execution.framework.io import optional_float
+from worldfoundry.evaluation.tasks.execution.framework.io import coerce_unit_score, optional_float
 
 JsonValue = Any
 
@@ -250,21 +250,7 @@ def _unit_score(value: JsonValue, *, scale_max: float | None = None) -> float | 
         value: Official score, percentage, boolean, or Likert value.
         scale_max: Optional scale maximum for ordinal scores.
     """
-
-    if isinstance(value, bool):
-        return 1.0 if value else 0.0
-    numeric = optional_float(value)
-    if numeric is None:
-        return None
-    if scale_max is not None:
-        return min(1.0, max(0.0, numeric / scale_max))
-    if numeric < 0:
-        return None
-    if numeric <= 1:
-        return numeric
-    if numeric <= 100:
-        return numeric / 100.0
-    return None
+    return coerce_unit_score(value, scale_max=scale_max, allow_bool=True)
 
 
 

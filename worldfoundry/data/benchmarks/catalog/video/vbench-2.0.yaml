@@ -1,5 +1,7 @@
 id: vbench-2.0
 name: VBench-2.0
+publisher: Nanyang Technological University
+publisher_kind: university
 benchmark_kind:
 - intrinsic-faithfulness
 - physics
@@ -130,6 +132,9 @@ metrics:
   unit: score
   primary: true
 runner:
+  workspace:
+    dispatch: vbench_series
+  official_script: worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VBench2Contract
   validation_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
     worldfoundry/evaluation/tasks/execution/runners/vbench_2_0/run_vbench_2_0_official_runner.py --benchmark-id 
@@ -190,6 +195,7 @@ runner:
   - Normalizer-only validation is not treated as integrated runtime evidence.
 integration:
   status: integrated
+  tier: in_tree
   evidence:
     official_component_verified: true
     official_benchmark_verified: false

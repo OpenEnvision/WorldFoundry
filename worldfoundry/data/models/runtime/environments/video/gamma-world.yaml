@@ -12,7 +12,6 @@ conda_packages:
 - cuda-nvcc
 pip_packages:
 - torch==2.7.0
-- torchvision
 - transformer-engine==2.2.0
 - flash-attn==2.7.3
 - natten==0.21.0
@@ -20,7 +19,6 @@ pip_packages:
 - xformers
 - torchao
 - transformers==4.51.3
-- diffusers>=0.35.2
 - accelerate
 - attrs>=25.4.0
 - cloudpickle
@@ -28,11 +26,9 @@ pip_packages:
 - einops>=0.8.1
 - fvcore
 - huggingface-hub>=0.36.0
-- hydra-core>=1.3.2
 - iopath
 - loguru
 - numpy>=2.0.0
-- omegaconf>=2.3.0
 - peft>=0.17.1
 - pillow>=11.3.0
 - pyyaml
@@ -42,14 +38,11 @@ pip_packages:
 - tqdm
 validation_imports:
 - torch
-- torchvision
-- hydra
-- omegaconf
 - transformers
 - transformer_engine
 - megatron.core
 - safetensors
 notes:
 - Gamma-World requires Linux x86-64, glibc 2.35 or newer, an Ampere-or-newer GPU, and the upstream CUDA 12.8/Torch 2.7 ABI.
-- Dependencies are the inference subset of the upstream CUDA 12.8/Torch 2.7 profile; no external source checkout or cosmos-oss source package is required.
+- Dependencies are the native inference subset of the upstream CUDA 12.8/Torch 2.7 profile; Hydra, Diffusers, TorchVision, and external source checkouts are not used.
 - Training, dataset, callback, optimizer, and evaluation dependencies are intentionally omitted.

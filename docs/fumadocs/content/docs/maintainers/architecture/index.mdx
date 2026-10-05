@@ -1,56 +1,77 @@
 ---
 title: Architecture
-description: High-level principles behind WorldFoundry workflows, model runtimes, benchmark execution, and evidence tracking.
+description: How a run moves from a command to artifacts, scores, and evidence — and which layer owns each step.
 ---
 
-## Purpose
+WorldFoundry separates **model execution** from **benchmark scoring**, and joins them with files you can still read after the process exits.
 
-The architecture docs explain how the repository works at the subsystem level. They are not a file-by-file source index. Use them to understand the concepts, choose the right workflow, and decide which layer owns a change. The pages are written as narrative prose: they explain responsibilities and data flow first, then reference key paths only when needed. For end-to-end run flow and evaluation internals, start with [Workflow](/docs/maintainers/architecture/workflow) and [Evaluation Core](/docs/maintainers/architecture/evaluation-core).
+A model writes normalized artifacts. A benchmark scores those artifacts — never the checkpoint. The runner records what actually happened. That is why a video model and a vision-language-action (VLA) policy can share the same `GenerationResult` rows and `scorecard.json`, even though inference lives in different runtimes. It is also why you can generate once, inspect the files, and score them later without loading the model again.
 
-**Who should read this:** maintainers adding models or benchmarks, reviewers tracing a run from CLI to scorecard, and anyone debugging why a catalog entry says "supported" but a run still fails. **When to start here:** after [Quickstart](/docs/quickstart) if you need the mental model behind the commands—not before your first successful run. Pick a subpage from the cards below once you know which layer you are changing.
+<ArchDiagram id="system" />
+
+The picture is one run: a surface turns intent into a request, execution either generates or scores (or both), and reporting writes the evidence. Catalog metadata, the native diffusion kernel, and Studio sit *beside* that path. They have their own ownership rules, but they are not extra boxes on the spine.
+
+Read this after a first successful [Quickstart](/docs/quickstart) run, when the commands need a mental model. The [Design](/docs/overview/design) page is the coarser four-layer map; when a change is about ownership, use the list below.
+
+After an evaluate run finishes, the output directory *is* the contract. You should be able to open `requests.jsonl` and `results.jsonl` (one row per sample), `metrics/summary.json`, `scorecard.json` (eligibility; `report.md` is derived from it), and `run_manifest.json` (identity and status). If a file is missing, [Workflow](/docs/maintainers/architecture/workflow) shows which stage should have written it.
+
+## Who owns what
+
+Layers talk only through serializable contracts — `GenerationRequest`, `GenerationResult`, `BenchmarkSpec`, and the scorecard fields. They do not share globals or machine-local paths. If a fix belongs in model runtime, scoring logic should not leak into a runner. If it belongs in reporting, the code should not assume a checkpoint layout.
+
+- **Surfaces and orchestration** — Commands, run modes, resume, and output locations. Not model-specific inference.
+- **Model runtime** — Pipelines, operators, local runtimes, hosted APIs, and normalized generation results. Not benchmark scoring.
+- **Native diffusion** — The sampling loop and local diffusion contracts under `worldfoundry/base_models/diffusion_model`. Not an upstream pipeline framework, and not orchestration or evaluation.
+- **Benchmark runtime** — Manifests, datasets, evaluators, metrics, and result normalization. Not model loading or checkpoint setup.
+- **Catalog and readiness** — Metadata, provenance, assets, environment needs, blockers, and support status. Not runtime behavior that the code cannot actually run.
+- **Reporting** — Manifests, summaries, `report.md`, `scorecard.json`, and leaderboard eligibility. Not hiding missing assets or skipped work.
+- **Studio** — Interactive preview on the same catalog and runtime contracts. Not core logic that only works inside the UI.
+
+## Principles that settle arguments
+
+These are the usual forks in a review: why a catalog row can describe intent before the code lands, why official validation is not the same as a benchmark run, and why even a simple artifact check still writes a manifest.
+
+- **One public runner contract** — Every model path should end as the same result shape, so a benchmark does not care which runtime wrote the file.
+- **Operator plus pipeline** — A runnable method needs both, so inputs stay explicit and repeatable.
+- **Evidence over claims** — A catalog entry may describe intent. Support status has to match something that actually runs.
+- **External code is provenance first** — Official repos and checkpoints are recorded. A machine-local checkout is not a runtime dependency.
+- **One native diffusion kernel** — Upstream trees are implementation references, not backends. A reusable sampling algorithm has one WorldFoundry copy.
+- **Official validation is not benchmark parity** — Importing official files proves the result pipeline. Benchmark-ready still needs real data, metrics, and a scorecard.
+
+## Where to go next
+
+Most work crosses two pages. Adding a model means [Model runtime](/docs/maintainers/architecture/model-runtime) and [Evaluation core](/docs/maintainers/architecture/evaluation-core). Adding a benchmark means [Benchmarks and data](/docs/maintainers/architecture/benchmarks-data) and [Workflow](/docs/maintainers/architecture/workflow).
+
+**Follow a run**
 
 <Cards>
-  <Card title="Workflow" description="Follow a run from CLI input to artifacts, metrics, scorecards, and reports." href="/docs/maintainers/architecture/workflow" />
-  <Card title="Evaluation Core" description="Understand requests, runners, metrics, reports, and scorecards." href="/docs/maintainers/architecture/evaluation-core" />
-  <Card title="Model Runtime" description="Narrative guide to pipelines, operators, runtime entrypoints, and artifact contracts, with OpenVLA as the reference implementation." href="/docs/maintainers/architecture/model-runtime" />
-  <Card title="Benchmarks and Data" description="Understand benchmark manifests, datasets, official evaluators, and readiness checks." href="/docs/maintainers/architecture/benchmarks-data" />
-  <Card title="Studio Internals" description="Understand the interactive preview shell and how it uses the same runtime contracts." href="/docs/maintainers/architecture/studio-internals" />
+  <Card title="Workflow" description="One evaluation from the CLI to artifacts, metrics, scorecards, and reports." href="/docs/maintainers/architecture/workflow" />
+  <Card title="Surfaces and orchestration" description="How CLI, TUI, and MCP turn intent into a request the runner can execute." href="/docs/maintainers/architecture/surfaces-orchestration" />
+  <Card title="Evaluation core" description="Dispatch, the three run paths, metrics, and the scorecard." href="/docs/maintainers/architecture/evaluation-core" />
 </Cards>
 
-## Core Idea
+**Change a model or a benchmark**
 
-WorldFoundry separates model execution from benchmark scoring. A model produces normalized artifacts; a benchmark evaluates those artifacts; the runner records evidence about what actually happened. This separation lets the same framework handle video generation, 3D/4D assets, world-action rollouts, hosted APIs, and embodied policies without rewriting every benchmark for every model family.
+<Cards>
+  <Card title="Model runtime" description="Pipelines, operators, and the artifact contract. OpenVLA is the worked example." href="/docs/maintainers/architecture/model-runtime" />
+  <Card title="Runtime assembly" description="Base-class roles for pipeline, operator, synthesis, representation, and memory." href="/docs/maintainers/architecture/runtime-assembly" />
+  <Card title="Native diffusion" description="The framework-owned sampling kernel and where research extensions plug in." href="/docs/maintainers/architecture/native-diffusion" />
+  <Card title="Core infrastructure" description="Shared loading, attention, distributed, VRAM, kernels, and memory in worldfoundry/core." href="/docs/maintainers/architecture/core-infrastructure" />
+  <Card title="Benchmarks and data" description="Manifests, datasets, official evaluators, and readiness checks." href="/docs/maintainers/architecture/benchmarks-data" />
+  <Card title="Studio internals" description="The preview shell, using the same execution contracts as CLI." href="/docs/maintainers/architecture/studio-internals" />
+</Cards>
 
-For example, a video model run and a VLA policy run both end with `GenerationResult` rows and a `scorecard.json`, even though inference happens in completely different runtimes. Benchmarks never import model checkpoints directly—they consume the normalized artifact contract that runners write to disk.
+**Look something up**
 
-## Main Layers
+<Cards>
+  <Card title="Codebase map" description="Directory → responsibility, plus the first file to open in each package." href="/docs/maintainers/architecture/file-index" />
+</Cards>
 
-When you change behavior, ask which layer should own it. If the fix belongs in model runtime, it should not leak scoring logic into a runner. If it belongs in reporting, it should not assume a particular checkpoint layout. Layers communicate through serializable contracts (`GenerationRequest`, `GenerationResult`, `BenchmarkSpec`, scorecard fields), not through shared globals or machine-local paths.
+If you came here with a task rather than a layer:
 
-- **CLI and orchestration** owns user commands, run modes, suites, resume behavior, and output locations. It should not own model-specific inference details.
-- **Model runtime** owns pipelines, operators, local runtimes, hosted API wrappers, and normalized generation results. It should not own benchmark scoring logic.
-- **Benchmark runtime** owns benchmark manifests, datasets, evaluators, metrics, and result normalization. It should not own model loading or checkpoint-specific setup.
-- **Catalog and readiness** owns model/benchmark metadata, source provenance, assets, environment requirements, blockers, and support status. It should not describe runtime behavior that is not backed by code.
-- **Reporting** owns manifests, summaries, reports, scorecards, and leaderboard eligibility decisions. It should not hide missing assets or skipped work.
-- **Studio** owns interactive preview and inspection using the same catalog and runtime contracts. It should not contain core logic that only works inside the UI.
-
-## Design Principles
-
-These principles resolve day-to-day tradeoffs. They explain why official validation exists separately from official benchmark runs, why catalog metadata can describe intent before code lands, and why every run writes manifests and ledgers even when metrics are simple artifact checks.
-
-- **One public runner contract** — Every model path should eventually produce the same normalized result shape.
-- **Operator plus pipeline** — Runnable methods need both a pipeline and an operator so inputs are explicit and repeatable.
-- **Evidence over claims** — Catalog entries can describe intent, but support status must match real runnable evidence.
-- **External code is provenance first** — Official repos and checkpoints are tracked, but machine-local paths are not runtime dependencies.
-- **Official validation is not benchmark parity** — Official-validation import proves result normalization against real files; benchmark readiness needs real data, metrics, and scorecards.
-
-## Common Reading Paths
-
-Most tasks touch two layers. Adding a model means both [Model Runtime](/docs/maintainers/architecture/model-runtime) and [Evaluation Core](/docs/maintainers/architecture/evaluation-core). Adding a benchmark means [Benchmarks and Data](/docs/maintainers/architecture/benchmarks-data) plus [Workflow](/docs/maintainers/architecture/workflow).
-
-- **Run an evaluation** — Start with [Quickstart](/docs/quickstart), then [Evaluation Guide](/docs/evaluation) and [CLI Reference](/docs/reference/cli).
-- **Choose a model** — Start with [Supported Models](/docs/guides/supported-models), then `worldfoundry-eval zoo model-show`, `zoo model-download --check-local`, and per-profile `preflight runtime --profile <benchmark-id>`.
-- **Add a model** — Start with [Add a Model](/docs/guides/add-model), then [Model Runtime](/docs/maintainers/architecture/model-runtime).
-- **Add a benchmark** — Start with [Add a Benchmark](/docs/guides/add-benchmark), then [Benchmarks and Data](/docs/maintainers/architecture/benchmarks-data).
-- **Understand output artifacts** — Start with [Evaluation Core](/docs/maintainers/architecture/evaluation-core), then inspect `report.md`, `scorecard.json`, and metrics summaries from a real run.
-- **Check support status** — Start with [Supported Models](/docs/guides/supported-models), then `zoo model-show` / `zoo benchmark-show`.
+- **Run an evaluation** — [Quickstart](/docs/quickstart), then [Evaluation](/docs/evaluation) and the [CLI reference](/docs/reference/cli).
+- **Pick a model** — [Supported models](/docs/guides/supported-models), then `worldfoundry-eval zoo model-show` and `preflight runtime --profile <benchmark-id>`.
+- **Add a model** — [Add a model](/docs/guides/add-model), then [Model runtime](/docs/maintainers/architecture/model-runtime).
+- **Add a benchmark** — [Add a benchmark](/docs/guides/add-benchmark), then [Benchmarks and data](/docs/maintainers/architecture/benchmarks-data).
+- **Read a run's leftovers** — [Evaluation core](/docs/maintainers/architecture/evaluation-core), then `report.md`, `scorecard.json`, and the metrics summary from a real output directory.
+- **Check support status** — [Supported models](/docs/guides/supported-models), then `zoo model-show` / `zoo benchmark-show`.

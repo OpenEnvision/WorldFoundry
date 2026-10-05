@@ -1,0 +1,29 @@
+---
+title: "Helios"
+description: "北大 / ByteDance 的 14B 自回归长视频模型，权重从 Wan2.1-T2V-14B 出发。Distilled / Mid / Base 三个 variant，独立 Helios 环境。"
+modelId: "helios"
+pageSource: authored
+---
+
+Helios 是北京大学袁粒课题组（联合 ByteDance / Canva）的 14B **自回归**视频生成器。它从 **Wan2.1-T2V-14B** 权重出发，按块生成长视频，而不是每段都跑一遍双向 Wan。论文是 [Helios: Real Real-Time Long Video Generation Model](https://arxiv.org/abs/2603.04379)；项目页是 [pku-yuangroup.github.io/Helios-Page](https://pku-yuangroup.github.io/Helios-Page/)。作者的头条主张是单卡 H100 上 **19.5 FPS** 的分钟级生成，速度故事不靠 KV-cache、稀疏注意力或量化。
+
+<ModelPaperFigures modelId="helios" locale="zh" />
+
+WorldFoundry 内置推理实现，并暴露三个 checkpoint。**`helios-distilled`**（默认）是快线：大约 **3** 步采样、去掉 CFG。**`helios-mid`** 加上 Pyramid Unified Predictor-Corrector 做 token 压缩。**`helios-base`** 是质量线（官方金字塔 **[20,20,20]**，大约 **50** 步）。Distilled 常驻会话保留原生 **9 latent / 33 帧**历史，并在分段之间接受 `prompt_update`——没有键盘或相机控制。
+
+树内 pipeline 按 **33 帧**一块生成，并把请求长度向上取整。记录默认值：**384×640**、请求 **240** 帧、**24 fps**、`num_inference_steps=50`（Distilled 会压到约 3 步）。默认路径同时接受文生视频、图生视频和视频到视频。运行时还暴露组 offload 与多 GPU context parallelism。
+
+<ModelCommandBuilder modelId="helios" locale="zh" />
+
+## 用来做什么
+
+双向 Wan2.1-14B 太慢、又要长视频时用它。迭代从 `helios-distilled` 开始；只有需要质量配方并愿意等的时候才换 `helios-base`。长时程看 [ChronoMagic-Bench](/zh/docs/evaluation/benchmark-hub/chronomagic-bench)；短片段质量看 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)。都不是已收录的 WorldFoundry 榜。
+
+## 运行时契约
+必填：`prompt`。可选：`negative_prompt`、`num_frames`、`height`、`width`、`fps`、`num_inference_steps`、`guidance_scale`（默认 `auto`）。Pipeline：`HeliosPipeline`。产物：生成视频。Unified History Injection 总是同时喂一段干净历史和一段带噪未来，长 rollout 比朴素自回归更不容易漂。
+
+## 在 WorldFoundry 中运行
+
+使用独立环境 `worldfoundry-helios-cu128`（Python 3.11.2，CUDA 12.8，`torch==2.10.0`）。启动 `worldfoundry-eval run helios-distilled`（或 `helios-mid` / `helios-base`），任务 profile 为 `text-to-video`。runner 状态是 **pending visual QA**：轻量导入预检已有单测，但完整 **240 请求帧**视觉一致性仍要该环境加 GPU。记录的 Base A100 smoke 用的是 3 步 `[1,1,1]` 金字塔——只证明链路可跑、产物非空，**不是**官方 `[20,20,20]` 质量配方。权重：`BestWishYsh/Helios-Distilled`、`Helios-Mid`、`Helios-Base`。
+
+<ModelRelatedRecipes modelId="helios" locale="zh" />

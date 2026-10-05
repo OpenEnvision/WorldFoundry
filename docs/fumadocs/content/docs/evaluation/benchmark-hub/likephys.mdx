@@ -1,0 +1,49 @@
+---
+title: LikePhys
+description: "Oxford likelihood probe: does a video diffusion model prefer physically valid clips over matched implausible ones? No generated-video input."
+---
+
+LikePhys (University of Oxford, ICLR 2026) is a **training-free likelihood probe**, not a generation bench. It does **not** score videos you generate. For each of **12 simulated scenarios** (rigid bodies, fluids, deformables, optics), it pairs a physically valid clip with matched implausible variations and asks whether the diffusion model assigns **higher likelihood** (lower denoising ELBO) to the valid clip. The primary metric is **mis-rank rate** — how often the model prefers the implausible variation. **Lower is better** everywhere.
+
+That is the opposite job from [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq) (continue a filmed scene) and from [PhyGenBench](/docs/evaluation/benchmark-hub/phygenbench) (judge a generated T2V clip).
+
+Paper: [LikePhys](https://arxiv.org/abs/2510.11512). Project: [yuanjianhao508.github.io/LikePhys](https://yuanjianhao508.github.io/LikePhys/). Code: [YuanJianhao508/LikePhys](https://github.com/YuanJianhao508/LikePhys). Clips: [JianhaoDYDY/LikePhys-Benchmark](https://huggingface.co/datasets/JianhaoDYDY/LikePhys-Benchmark) (920 clips).
+
+WorldFoundry **recomputes the official mis-rank formulas** in tree (`compute_misrank_normalized` + `read_exp_final.py` filters). Driving the upstream ELBO probe needs a caller-supplied LikePhys checkout (`WORLDFOUNDRY_LIKEPHYS_EVALUATOR_ROOT`), CUDA, and the probed checkpoints — WorldFoundry does not vendor the forked diffusers pipelines.
+
+<BenchmarkPageSections id="likephys" locale="en" />
+
+## How to run
+
+Import `results_<model>.json` files (or a directory of `<scenario>/results_<probe_model>.json`) and recompute mis-rank:
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id likephys \
+  --mode official-validation \
+  --official-results-path <likephys_results_root> \
+  --output-dir tmp/likephys/official-validation \
+  --json
+```
+
+Use `--probe-model` when a results root holds several backends. `--no-report-filter` keeps variations the paper's `filter_config` excludes.
+
+Run the upstream ELBO probe for one model on one scenario (CUDA + LikePhys checkout):
+
+```bash
+hf download JianhaoDYDY/LikePhys-Benchmark --repo-type dataset --local-dir "${WORLDFOUNDRY_LIKEPHYS_DATA_ROOT}"
+
+WORLDFOUNDRY_LIKEPHYS_EVALUATOR_ROOT=/path/to/LikePhys \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/likephys/run_likephys_official_runner.py \
+  --run-official \
+  --probe-model wan2.1-T2V-1.3b \
+  --scenario ball_drop \
+  --benchmark-data-root "${WORLDFOUNDRY_LIKEPHYS_DATA_ROOT}" \
+  --output-dir tmp/likephys/probe \
+  --json
+```
+
+`--dry-run` prepares the workspace and prints commands. Outputs include `scorecard.json` (primary `likephys_misrank_rate`) and `misrank_breakdown.json`.
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

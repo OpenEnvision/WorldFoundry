@@ -8,8 +8,13 @@ runtime:
   checkpoint_candidates:
   - $WORLDFOUNDRY_HFD_ROOT/LanguageBind--Open-Sora-Plan-v1.3.0
   - $WORLDFOUNDRY_CKPT_DIR/Open-Sora-Plan-v1.3.0
-  - $WORLDFOUNDRY_CKPT_DIR/Open-Sora-Plan-v1.5.0
-  - $WORLDFOUNDRY_HFD_ROOT/LanguageBind--Open-Sora-Plan-v1.5.0
+  - $WORLDFOUNDRY_CKPT_SIBLING_DIR/LanguageBind--Open-Sora-Plan-v1.3.0
+  - $WORLDFOUNDRY_CKPT_SIBLING_DIR/Open-Sora-Plan-v1.3.0
+  required_paths:
+  - any93x640x640/config.json
+  - any93x640x640/diffusion_pytorch_model-00001-of-00002.safetensors
+  - any93x640x640/diffusion_pytorch_model-00002-of-00002.safetensors
+  - vae/merged.ckpt
   preferred_artifact_patterns:
   - "*_0_gs*.mp4"
   - "*.mp4"
@@ -24,6 +29,9 @@ runtime:
     width: 640
     cache_dir: $WORLDFOUNDRY_CKPT_DIR/hf_cache
     text_encoder_name_1: $WORLDFOUNDRY_CKPT_DIR/mt5-xxl
+    text_encoder_name_1_candidates:
+    - $WORLDFOUNDRY_CKPT_DIR/mt5-xxl
+    - $WORLDFOUNDRY_CKPT_SIBLING_DIR/mt5-xxl
     ae: WFVAEModel_D8_4x8x8
     fps: 18
     guidance_scale: 7.5

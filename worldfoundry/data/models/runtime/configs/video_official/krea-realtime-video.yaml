@@ -7,9 +7,9 @@ runtime:
   - worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime
   checkpoint_candidates:
   - $WORLDFOUNDRY_CKPT_DIR/krea-realtime-video
+  - $WORLDFOUNDRY_CKPT_DIR/krea--krea-realtime-video
   - $WORLDFOUNDRY_HFD_ROOT/krea--krea-realtime-video
   defaults:
-    model_folder: $WORLDFOUNDRY_CKPT_DIR
     num_blocks: 2
     height: 480
     width: 832
@@ -24,7 +24,7 @@ runtime:
   - "--checkpoint-path"
   - "{checkpoint_path}/krea-realtime-video-14b.safetensors"
   - "--model-folder"
-  - "{model_folder}"
+  - "{checkpoint_parent}"
   - "--prompt"
   - "{prompt}"
   - "--output-path"

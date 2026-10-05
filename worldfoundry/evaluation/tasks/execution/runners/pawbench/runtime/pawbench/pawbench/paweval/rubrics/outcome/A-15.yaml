@@ -1,0 +1,50 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A-15
+track: calibration
+title_en: Triangle roll composition induction
+outcome_question: Which label in ['left', 'right'] is visible as the first decisive
+  post-action result?
+readout_policy: Read after the requested release has actually occurred. The readout
+  does not have to be the final video frame; use the first short readable window
+  where the ball has passed the triangular split, is clearly contained in the left
+  or right bottom tray, and is no longer crossing between trays. Later same-tray
+  bounce, brief airborne frames, occlusion, or video-end artifacts do not relabel
+  the outcome.
+canonical_labels:
+- left
+- right
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['left', 'right'] can be decisively identified within
+  the readout window.
+- The ball is occluded or goes off-screen before a decisive side / bin / path can
+  be identified. If a visible off-support exit is established, use out-of-schema
+  instead.
+out_of_schema_rules:
+- Ball visibly gets stuck at the split/apex or leaves the apparatus before committing
+  to either bottom tray; this is out-of-schema, not nearest-legal.
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'First-decisive-window rule: use the earliest post-release frame/window where the
+  ball has committed to a bottom tray; do not require the terminal frame and do not
+  re-label from later same-tray bounce, occlusion, or transient states.'
+- If the ball briefly touches or enters a tray but remains in continuous motion that
+  carries it to the opposite tray, read the later committed tray rather than the
+  transient tray.
+- Post-commit bounce within the same tray does not change the outcome label; impossible
+  crossing to the opposite tray belongs to trustworthiness.
+- Normal continuous bounce/cross-tray motion before commitment means keep waiting.
+notes:
+- 'Scene title: Triangle roll composition induction.'
+- 'Calibration support: canonical labels are the reference-probability-bearing support
+  of the intended experiment. Visibly stuck, exited, outside-region, or no-committed-region
+  terminal states are out-of-schema/invalid rather than extra outcome labels.'
+geometry_policy: Left and right are the two visible bottom trays of the triangular
+  split apparatus, in image/viewer coordinates. Side is decided at the first frame
+  where the ball has passed the split and committed to one bottom tray.

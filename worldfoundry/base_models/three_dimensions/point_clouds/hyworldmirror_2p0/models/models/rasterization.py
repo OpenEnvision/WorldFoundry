@@ -118,7 +118,9 @@ class Rasterizer:
             scales=scales,
             opacities=opacities,
             colors=colors,
-            viewmats=_as_homogeneous_matrix(viewmats),  # [C, 4, 4]
+            # WorldMirror poses are camera-to-world (also used to place the
+            # predicted splats). gsplat expects world-to-camera view matrices.
+            viewmats=torch.linalg.inv(_as_homogeneous_matrix(viewmats)),  # [C, 4, 4]
             Ks=Ks,  # [C, 3, 3]
             width=width,
             height=height,

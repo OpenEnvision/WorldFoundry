@@ -1,0 +1,54 @@
+---
+title: "ABot-M0"
+description: "ABot-M0（Amap CV Lab (Alibaba Group)）：视觉-语言-动作（VLA）、机器人策略；仅静态加载; 独立环境 `worldfoundry-vla-abot-m0`。"
+modelId: "abot-m0"
+pageSource: authored
+---
+
+高德 CV 实验室的 ABot-M0 是基于 Qwen3-VL 的双臂操作 VLA，搭配 AML flow 动作专家与可选的 VGGT 几何融合。三个已发布任务权重均已确认——ABot-M0-LIBERO、ABot-M0-Robocasa、ABot-M0-RoboTwin2——另有 ModelScope 预训练 checkpoint，全部 Apache-2.0 许可；本 catalog 中三个权重均已就位并通过 manifest 大小校验。
+
+<ModelPaperFigures modelId="abot-m0" locale="zh" />
+
+记录论文为[arXiv 2607.00678](https://arxiv.org/abs/2607.00678)。
+
+项目页：[amap-cvlab.github.io/ABot-Manipulation](https://amap-cvlab.github.io/ABot-Manipulation/)。代码：[amap-cvlab/ABot-Manipulation](https://github.com/amap-cvlab/ABot-Manipulation)。
+
+三条任务权重已确认，并在本 catalog 做过 **manifest 大小校验**：`acvlab/ABot-M0-LIBERO`（revision `bc204e79`）、`acvlab/ABot-M0-Robocasa`、`acvlab/ABot-M0-RoboTwin2`。ModelScope 预训练（`amap_cvlab/ABot-M0-Pretrain`）另记。**数值 / GPU checkpoint 一致性仍为 pending。**
+
+<ModelCommandBuilder modelId="abot-m0" locale="zh" />
+
+## 用来做什么
+
+需要 catalog 上的 VLA 策略时选 `abot-m0`：指令与观测进、动作轨迹出。用来滚动已记录策略，不是用来训练新策略。
+
+Qwen3-VL 提供视觉-语言骨干；AML flow 动作专家解码动作；可选 VGGT 融合注入 3D 几何。运行时直接接受发布的 config.yaml、dataset_statistics.json 与 steps_*_pytorch_model.pt 布局，保持严格的 state-dict 架构。该模型由高德地图 CV 实验室（阿里巴巴集团）发布。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、机器人策略、策略执行、bimanual_manipulation。别名包括 `abot_m0`。
+
+记录的评测入口包括[LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（有专门的 ABot-M0-LIBERO 任务权重）、[RoboCasa](/zh/docs/evaluation/benchmark-hub/robocasa)（有专门的 ABot-M0-Robocasa 任务权重）、[RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin)（有专门的 ABot-M0-RoboTwin2 任务权重）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`abot_m0_action_trace.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `ABotM0Pipeline`。
+
+系列状态：**仅静态加载**。
+
+按基准选择任务权重（LIBERO、RoboCasa 或 RoboTwin2）。 树内仅含推理组件；数据集、训练、部署服务与机器人 SDK 代码均被排除。
+
+Qwen3-VL, the AML flow action expert, optional VGGT fusion, released preprocessing, and action de-normalization are integrated in tree.
+
+必填 `image`、`prompt`；可选 `model_id`、`state`、`camera_keys`、`action_representation`；产物 `action_trace`、`abot_m0_action_trace.json`。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run abot-m0 --pipeline.task-profile default` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-vla-abot-m0`（Python 3.10，Cu128 Recommended，torch>=2.7,\<2.8）。
+
+记录的权重仓库包括 `acvlab/ABot-M0-LIBERO`、`acvlab/ABot-M0-Robocasa`、`acvlab/ABot-M0-RoboTwin2` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh abot-m0`；下载缺失的公开权重时加 `--download`。
+
+状态：**仅静态加载**。
+
+<ModelRelatedRecipes modelId="abot-m0" locale="zh" />

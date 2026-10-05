@@ -18,9 +18,9 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 from torch.nn.init import trunc_normal_
-from worldfoundry.core.nn.layers import Mlp, SwiGLUFFNFused
-from worldfoundry.core.nn.layers import PatchEmbed
-from worldfoundry.core.nn.module_utils import named_apply
+from worldfoundry.core.nn.blocks.layers import Mlp, SwiGLUFFNFused
+from worldfoundry.core.nn.blocks.layers import PatchEmbed
+from worldfoundry.core.nn.blocks.module_utils import named_apply
 from .attention import Attention as MemEffAttention
 
 # TODO: Check this

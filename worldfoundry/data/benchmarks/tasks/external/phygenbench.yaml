@@ -59,16 +59,12 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: phygenbench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phygenbench --mode contract
-    --output-dir tmp/benchmark_zoo/benchmark_contract/phygenbench --json
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phygenbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/phygenbench --json
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGenBenchContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py
   metric_evaluator_target: worldfoundry.evaluation.tasks.execution.runners.phygenbench.phygenbench_contract_evaluator:write_phygenbench_evaluation
   metric_protocol:
-    official_definition: PhyGenEval decomposes generated-video evaluation into semantic alignment and physical
-      commonsense alignment through key physical phenomena detection, physics order verification, and overall
-      naturalness evaluation; released leaderboard/category values are imported from official PhyGenEval result files
-      only.
+    official_definition: PhyGenEval decomposes generated-video evaluation into semantic alignment and physical commonsense alignment through key physical phenomena detection, physics order verification, and overall naturalness evaluation; released leaderboard/category values are imported from official PhyGenEval result files only.
     official_results_fields:
     - physical_commonsense
     - physical_law_adherence
@@ -98,7 +94,7 @@ metadata:
     root_env: WORLDFOUNDRY_PHYGENBENCH_ROOT
     root_env_required: false
   release_status: experimental
-  open_source_status: in_tree_result_importer_and_bounded_aggregator
+  open_source_status: normalizer_only
   maturity: contract_ready
   official_benchmark_verified: false
   integration_evidence: false
@@ -122,7 +118,7 @@ metadata:
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
-    surface: in_tree_result_normalizer
+    surface: in_tree_result_importer_and_bounded_overall_aggregator
     normalizer_verified: true
   official_result_entrypoint: worldfoundry-eval zoo benchmark-run
   local_evaluator:
@@ -217,6 +213,12 @@ tasks:
       runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGenBenchContract
       evaluator_target: worldfoundry.evaluation.tasks.execution.runners.phygenbench.phygenbench_contract_evaluator:write_phygenbench_evaluation
       runner_script: worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phygenbench --mode
-        official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos>
-        --output-dir <out> --json
+      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phygenbench --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
+    - name: external_official_runner
+      metric_ids:
+      - physical_commonsense
+      - physical_law_adherence
+      - semantic_adherence
+      - phygenbench_average
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyGenBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/phygenbench/run_phygenbench_official_runner.py

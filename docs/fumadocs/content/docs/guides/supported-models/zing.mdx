@@ -1,0 +1,44 @@
+---
+title: "Zing-0.5"
+description: "Zing-0.5 from seedleap: text-to-video and image-to-video; Runner parity pending; dedicated `zing`."
+modelId: "zing"
+pageSource: generated
+---
+
+Zing-0.5 generates video with frame-aligned keyboard control and prompt switching.
+
+<ModelPaperFigures modelId="zing" locale="en" />
+
+Code: [seedleap/zing-world-model](https://github.com/seedleap/zing-world-model).
+
+<ModelCommandBuilder modelId="zing" locale="en" />
+
+## What it is for
+
+Use `zing` for catalog world-model inference. Choose it when you need action-conditioned future frames rather than a standalone clip generator.
+
+Native Wan2.2 TI2V-5B layers, UMT5, VAE38 and attention are reused. Only the keyboard convolution and prompt-switching causal cache are model-specific. It is published by seedleap.
+
+Catalog tasks include text-to-video, image-to-video, and interactive-world-model. Catalog aliases include `zing-0.5` and `zing-world-model`. Documented modalities: text and image in, video out.
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `load.checkpoint_dir`, `num_frames`, and `height`; artifacts `generated_world` and `zing.mp4`.
+
+CLI task profiles: `interactive-world-model`. WorldFoundry binds `ZingPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `interactive-world-model` defaults: height=480, width=832, fps=24, seed=0.
+
+Use ZingPipeline.from_pretrained(checkpoint_dir). num_frames includes the optional reference and must be 1+4*N; height/width are multiples of 32. Keyboard controls contain N-1 rows of eight values for a total N-frame result.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run zing --pipeline.task-profile interactive-world-model` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+Recorded weight repositories include `seedleap/zing-0.5`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh zing`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="zing" locale="en" />

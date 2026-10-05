@@ -1,9 +1,9 @@
-![WorldFoundry teaser](docs/fumadocs/public/teaser.png)
+# WorldFoundry
 
 [![Python](https://img.shields.io/badge/python-3.10%20--%203.13-blue)](pyproject.toml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
-[![CLI](https://img.shields.io/badge/CLI-worldfoundry--eval-purple)](docs/fumadocs/content/docs/reference/cli.mdx)
-[![Docs](https://img.shields.io/badge/docs-Fumadocs-orange)](docs/fumadocs)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](THIRD-PARTY-NOTICES)
+[![CLI](https://img.shields.io/badge/CLI-worldfoundry--eval-purple)](https://openenvision.github.io/WorldFoundry/docs/reference/cli)
+[![Docs](https://img.shields.io/badge/docs-Fumadocs-orange)](https://openenvision.github.io/WorldFoundry/docs)
 
 WorldFoundry is an open-source infrastructure for world models: a shared stack for in-tree runners, local asset staging, inference (TUI / CLI / Studio), and benchmark evaluation across video generation, 3D/4D representation, embodied action, and interactive worlds.
 
@@ -17,7 +17,19 @@ Day-one workflow:
 
 ## 🤝 Community
 
-Join the **WorldFoundry Community** [Discord](https://discord.gg/ybUQMDA4x) or WeChat for discussions, announcements, technical support, and the latest project updates.
+Join the **WorldFoundry Community** on Slack, [Discord](https://discord.gg/ybUQMDA4x), or WeChat for discussions, announcements, technical support, and the latest project updates.
+
+<p align="center">
+
+<a href="https://join.slack.com/t/worldfoundrycommunity/shared_invite/zt-43nbi9fw4-okYiELzZHp0_1UPa3dh3bQ">
+  <img src="https://img.shields.io/badge/Slack-Join%20Workspace-4A154B?logo=slack&logoColor=white" alt="Join Slack">
+</a>
+
+<a href="https://github.com/OpenEnvision/WorldFoundry/issues">
+  <img src="https://img.shields.io/badge/GitHub-Issues-181717?logo=github" alt="GitHub Issues">
+</a>
+
+</p>
 
 <p align="center">
   <strong>WeChat Community</strong>
@@ -25,215 +37,29 @@ Join the **WorldFoundry Community** [Discord](https://discord.gg/ybUQMDA4x) or W
 
 <table align="center">
   <tr>
-    <td align="center">
-      <strong>Group 1 — Full</strong>
-    </td>
-    <td align="center">
-      <strong>Group 2 — Full</strong>
-    </td>
-    <td align="center">
-      <strong>Group 3 — Open</strong>
-    </td>
+    <td align="center"><strong>Group 1 — Full</strong></td>
+    <td align="center"><strong>Group 2 — Full</strong></td>
+    <td align="center"><strong>Group 3 — Open</strong></td>
   </tr>
   <tr>
-    <td align="center">
-      <img
-        src="docs/fumadocs/public/wechat_qr.png"
-        alt="WorldFoundry WeChat Group 1"
-        width="280"
-      >
-    </td>
-    <td align="center">
-      <img
-        src="docs/fumadocs/public/wechat_qr_2.png"
-        alt="WorldFoundry WeChat Group 2"
-        width="280"
-      >
-    </td>
-    <td align="center">
-      <img
-        src="docs/fumadocs/public/wechat_qr_3.png"
-        alt="WorldFoundry WeChat Group 3"
-        width="280"
-      >
-    </td>
+    <td align="center"><img src="docs/fumadocs/public/wechat_qr.png" alt="WorldFoundry WeChat Group 1" width="280"></td>
+    <td align="center"><img src="docs/fumadocs/public/wechat_qr_2.png" alt="WorldFoundry WeChat Group 2" width="280"></td>
+    <td align="center"><img src="docs/fumadocs/public/wechat_qr_3.png" alt="WorldFoundry WeChat Group 3" width="280"></td>
   </tr>
 </table>
 
 <p align="center">
-  <em>
-    WeChat Groups 1 and 2 are full. Please scan the Group 3 QR code to join the community.<br>
-    The QR codes will be updated if they expire.
-  </em>
+  <em>Groups 1 and 2 are full. Scan the Group 3 QR code to join.<br>
+  QR codes are updated periodically if they expire.</em>
 </p>
 
 ## 📰 News
 
-- **[2026-09-10]** ❤️ The official WorldFoundry update is ready for release. Next week, we will roll out comprehensive updates to WorldFoundry and another project, along with the accompanying technical reports and entirely new open-source documentation. Thank you for your patience throughout this process. Stay tuned!
-- **[2026-07-17]** 🔧 **WorldFoundry v0.2.0: Major Infrastructure Overhaul**
-  - **Core Inference Upgrades** – Refactored to inference‑only path with integrated Wan, HunyuanVideo, LTX2, Cosmos, perception & 3D foundation modules. Unified attention backend selection (FlashAttention 2/3, SageAttention, xFormers, SDPA fallback). Triton kernel registration, compilation & inference caching. NVFP4 quantization support. GPU selection driven by actual compute capability (A100, H100). Multi‑GPU Context/Sequence Parallel with advanced memory management.
-  - **World Model Integration** – Incorporated LingBot World 2, Lingbot Video, Helios, Bernini, AlayaWorld, Rolling Forcing, LiveWorld, MinWM, sana streaming, and more.
-  - **Action Policy Integration** – Integrated LingBot VLA/VLA2, Xiaomi Robotics, Hy‑Embodied VLA, Spatial Forcing, X‑VLA, X‑WAM, OpenPI, OpenVLA‑OFT, GROOT, Octo, and more.
-  - **Studio Enhancements** – Refined model discovery, Conda environment isolation, GPU allocation, torchrun distributed launch, Workspace Jobs, visualization, and result presentation.
-  - **Benchmark Expansion** – Added benchmark catalog and runtime profiling, including LaryBench, WorldReasonBench and WRBench.
 - **[2026-07-12]** 🔥 **WorldFoundry reached 100+ stars on its very first day!** Thanks to the community for the incredible support and encouragement. More exciting updates are coming!
 - **[2026-07-11]** 🎉 **WorldFoundry is officially open-sourced.** We welcome ⭐ stars, bug reports, feature requests, and pull requests from the community!
-- **[Coming Soon]** Documentation improvements and additional benchmark integrations.
 
 
-## Links
-
-- [Documentation](docs/fumadocs/content/docs/index.mdx)
-- [Project overview](docs/fumadocs/content/docs/overview/index.mdx)
-- [Design and architecture](docs/fumadocs/content/docs/overview/design.mdx)
-- [What is included](docs/fumadocs/content/docs/overview/capabilities.mdx)
-- [Why WorldFoundry](docs/fumadocs/content/docs/overview/why-worldfoundry.mdx)
-- [Quickstart](docs/fumadocs/content/docs/quickstart.mdx)
-- [Environment reference](docs/fumadocs/content/docs/reference/environments.mdx)
-- [Local asset preparation](docs/fumadocs/content/docs/guides/local-assets.mdx)
-- [TUI](docs/fumadocs/content/docs/guides/tui.mdx)
-- [Inference guide](docs/fumadocs/content/docs/guides/inference.mdx)
-- [Studio guide](docs/fumadocs/content/docs/guides/studio.mdx)
-- [CLI reference](docs/fumadocs/content/docs/reference/cli.mdx)
-- [Python API reference](docs/fumadocs/content/docs/api-reference/index.mdx)
-- [Supported models](docs/fumadocs/content/docs/guides/supported-models.mdx)
-- [Benchmark hub](docs/fumadocs/content/docs/evaluation/benchmark-hub/index.mdx)
-- [Contributing](CONTRIBUTING.md)
-
-## Demo Gallery
-
-These examples are checked into the documentation site so a new user can see the expected artifact shape before running GPU jobs. Full release claims still require the matching run manifest, runtime profile, and validation scorecard.
-
-<table>
-  <tr>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/ltx2-3-i2v-penguin.mp4"><img src="docs/fumadocs/public/readme-demos/ltx2-3-i2v-penguin.gif" width="100%" alt="ltx2-3-i2v-penguin demo"></a>
-      <br><strong>LTX-2.3</strong><br><sub>Image-to-video</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/wan2-1-vace-girl-snake.mp4"><img src="docs/fumadocs/public/readme-demos/wan2-1-vace-girl-snake.gif" width="100%" alt="wan2-1-vace-girl-snake demo"></a>
-      <br><strong>Wan2.1 VACE</strong><br><sub>Image/control-to-video</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/skyreels-v3-reference-to-video.mp4"><img src="docs/fumadocs/public/readme-demos/skyreels-v3-reference-to-video.gif" width="100%" alt="skyreels-v3-reference-to-video demo"></a>
-      <br><strong>SkyReels V3</strong><br><sub>Reference-to-video</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/unianimate-dit-human-animation.mp4"><img src="docs/fumadocs/public/readme-demos/unianimate-dit-human-animation.gif" width="100%" alt="unianimate-dit-human-animation demo"></a>
-      <br><strong>UniAnimate-DiT</strong><br><sub>Human animation</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/open-sora-plan-tokyo-street.mp4"><img src="docs/fumadocs/public/readme-demos/open-sora-plan-tokyo-street.gif" width="100%" alt="open-sora-plan-tokyo-street demo"></a>
-      <br><strong>Open-Sora-Plan</strong><br><sub>Text-to-video</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/hunyuanvideo-i2v-firework-official.mp4"><img src="docs/fumadocs/public/readme-demos/hunyuanvideo-i2v-firework-official.gif" width="100%" alt="hunyuanvideo-i2v-firework-official demo"></a>
-      <br><strong>HunyuanVideo I2V</strong><br><sub>Image-to-video</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/hunyuanvideo-t2v-cat-grass-official.mp4"><img src="docs/fumadocs/public/readme-demos/hunyuanvideo-t2v-cat-grass-official.gif" width="100%" alt="hunyuanvideo-t2v-cat-grass-official demo"></a>
-      <br><strong>HunyuanVideo T2V</strong><br><sub>Text-to-video</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/cogvideo_01.mp4"><img src="docs/fumadocs/public/readme-demos/cogvideo_01.gif" width="100%" alt="cogvideo_01 demo"></a>
-      <br><strong>CogVideoX</strong><br><sub>Text-to-video</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/ac3d_02.mp4"><img src="docs/fumadocs/public/readme-demos/ac3d_02.gif" width="100%" alt="ac3d_02 demo"></a>
-      <br><strong>AC3D</strong><br><sub>Camera/world scene</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/astra_02.mp4"><img src="docs/fumadocs/public/readme-demos/astra_02.gif" width="100%" alt="astra_02 demo"></a>
-      <br><strong>Astra</strong><br><sub>World navigation</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/warp_02.mp4"><img src="docs/fumadocs/public/readme-demos/warp_02.gif" width="100%" alt="warp_02 demo"></a>
-      <br><strong>Warp</strong><br><sub>World navigation</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/matrix-game-2-official-universal.mp4"><img src="docs/fumadocs/public/readme-demos/matrix-game-2-official-universal.gif" width="100%" alt="matrix-game-2-official-universal demo"></a>
-      <br><strong>Matrix-Game-2</strong><br><sub>Interactive world model</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/hy-worldplay-official-8gpu.mp4"><img src="docs/fumadocs/public/readme-demos/hy-worldplay-official-8gpu.gif" width="100%" alt="hy-worldplay-official-8gpu demo"></a>
-      <br><strong>HY-WorldPlay</strong><br><sub>8-GPU image-pose world video</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/hunyuan-game-craft-village.mp4"><img src="docs/fumadocs/public/readme-demos/hunyuan-game-craft-village.gif" width="100%" alt="hunyuan-game-craft-village demo"></a>
-      <br><strong>Hunyuan GameCraft</strong><br><sub>Interactive village world</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/matrix-game-3-cityscape.mp4"><img src="docs/fumadocs/public/readme-demos/matrix-game-3-cityscape.gif" width="100%" alt="matrix-game-3-cityscape demo"></a>
-      <br><strong>Matrix-Game-3</strong><br><sub>Cityscape world model</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/worldcam-industrial.mp4"><img src="docs/fumadocs/public/readme-demos/worldcam-industrial.gif" width="100%" alt="worldcam-industrial demo"></a>
-      <br><strong>WorldCam</strong><br><sub>Camera-path world video</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/yume-1p5-jungle-castle.mp4"><img src="docs/fumadocs/public/readme-demos/yume-1p5-jungle-castle.gif" width="100%" alt="yume-1p5-jungle-castle demo"></a>
-      <br><strong>YUME-1.5</strong><br><sub>First-person world navigation</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/neoverse-robot-tabletop.mp4"><img src="docs/fumadocs/public/readme-demos/neoverse-robot-tabletop.gif" width="100%" alt="neoverse-robot-tabletop demo"></a>
-      <br><strong>NeoVerse</strong><br><sub>Robot video-input world model</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/hunyuan-world-voyager-case1.mp4"><img src="docs/fumadocs/public/readme-demos/hunyuan-world-voyager-case1.gif" width="100%" alt="hunyuan-world-voyager-case1 demo"></a>
-      <br><strong>HunyuanWorld-Voyager</strong><br><sub>Conditioned world video</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/cosmos3.mp4"><img src="docs/fumadocs/public/readme-demos/cosmos3.gif" width="100%" alt="cosmos3 demo"></a>
-      <br><strong>Cosmos3</strong><br><sub>World video generation</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/flashworld.mp4"><img src="docs/fumadocs/public/readme-demos/flashworld.gif" width="100%" alt="flashworld demo"></a>
-      <br><strong>FlashWorld</strong><br><sub>World video generation</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/sana.mp4"><img src="docs/fumadocs/public/readme-demos/sana.gif" width="100%" alt="sana demo"></a>
-      <br><strong>Sana</strong><br><sub>Video generation</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/lingbot-world.mp4"><img src="docs/fumadocs/public/readme-demos/lingbot-world.gif" width="100%" alt="lingbot-world demo"></a>
-      <br><strong>LingBot World</strong><br><sub>World-action generation</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/wan2-2.mp4"><img src="docs/fumadocs/public/readme-demos/wan2-2.gif" width="100%" alt="wan2-2 demo"></a>
-      <br><strong>Wan2.2</strong><br><sub>Video generation</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/luciddreamer.mp4"><img src="docs/fumadocs/public/readme-demos/luciddreamer.gif" width="100%" alt="luciddreamer demo"></a>
-      <br><strong>LucidDreamer</strong><br><sub>World video generation</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/gen3c.mp4"><img src="docs/fumadocs/public/readme-demos/gen3c.gif" width="100%" alt="gen3c demo"></a>
-      <br><strong>GEN3C</strong><br><sub>3D-aware video generation</sub>
-    </td>
-    <td width="33%">
-      <a href="https://github.com/OpenEnvision/WorldFoundry/raw/main/docs/fumadocs/public/readme-demos/longcat.mp4"><img src="docs/fumadocs/public/readme-demos/longcat.gif" width="100%" alt="longcat demo"></a>
-      <br><strong>LongCat</strong><br><sub>World video generation</sub>
-    </td>
-  </tr>
-</table>
-
-More curated generated samples are embedded in the Studio docs.
+![WorldFoundry teaser](docs/fumadocs/public/teaser.png)
 
 ## What WorldFoundry Provides
 
@@ -242,21 +68,35 @@ More curated generated samples are embedded in the Studio docs.
 | Model zoo | Catalogs video, world, 3D/4D, VLA/VA/WAM, hosted API, and metadata-only model entries. | [`worldfoundry/data/models/catalog`](worldfoundry/data/models/catalog) |
 | In-tree runtimes | Keeps model architecture and inference adapters inside `worldfoundry`; checkpoints stay in local/Hugging Face caches. | [`worldfoundry/synthesis`](worldfoundry/synthesis), [`worldfoundry/pipelines`](worldfoundry/pipelines) |
 | TUI | Interactive model/benchmark picker that prints runnable CLI commands. | `worldfoundry-eval tui` / `worldfoundry-tui` |
-| Studio workspace | Browser UI for inference jobs, model-specific parameters, and artifact review. | [`worldfoundry.studio.workspace_app`](worldfoundry/studio/workspace_app.py) |
+| Studio workspace | Browser UI for inference jobs, model-specific parameters, and artifact review. | [`worldfoundry.studio.serving.workspace`](worldfoundry/studio/serving/workspace.py) |
 | Benchmark zoo | Catalogs benchmark manifests, required assets, official runner constraints, and readiness states. | [`worldfoundry/data/benchmarks/catalog`](worldfoundry/data/benchmarks/catalog) |
 | Evaluation runner | Runs model × benchmark cells, imports existing outputs, and writes normalized scorecards. | [`worldfoundry/evaluation`](worldfoundry/evaluation) |
+| Tests | Public CPU inference gate and extended module suites. | [`tests`](tests), [test guide](docs/fumadocs/content/docs/reference/validation.mdx) |
 | Docs | Bilingual Fumadocs site with setup, inference, evaluation, Studio, and maintainer guides. | [`docs/fumadocs`](docs/fumadocs) |
 
 ## From Clone To First Run
 
-WorldFoundry uses conda as the supported open-source runtime path. Start with the unified GPU environment; only use a dedicated environment when a model profile documents a real ABI or simulator conflict. The full day-one path lives in the [Quickstart](docs/fumadocs/content/docs/quickstart.mdx).
+Choose the install track that matches the work you are doing:
+
+| Track | Use it for | Install |
+| --- | --- | --- |
+| **Lightweight / CPU** | Catalog and CLI inspection, TUI use, docs work, and CPU release checks | An editable pip install with only the required extras, for example `python -m pip install -e ".[tui]"` |
+| **GPU runtime** | CUDA inference, Studio model execution, and GPU-backed benchmark runners | `bash scripts/setup/bootstrap_worldfoundry.sh` |
+
+Optional extras declare Python dependencies but do not select a CUDA-specific
+PyTorch wheel index. Do not treat a bare pip install of a GPU-coupled extra as
+the supported CUDA setup; use the bootstrap/conda track instead. Optional native
+kernels must be built inside the exact target PyTorch environment.
+
+For GPU work, start with the unified environment and use a dedicated
+environment only when a model profile documents an ABI or simulator conflict.
+The full day-one path lives in the
+[Quickstart](https://openenvision.github.io/WorldFoundry/docs/quickstart).
+
+Model demo videos are served from GitHub CDN; docs development does not need `git lfs pull`.
 
 ```bash
-
-# You can clone the repository with all demo videos
-git clone https://github.com/OpenEnvision/WorldFoundry.git
-
-# or clone the repository skipping large LFS media files for a much faster download
+# Recommended: skip LFS smudge for a much faster clone
 GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenEnvision/WorldFoundry.git
 
 cd WorldFoundry
@@ -266,8 +106,10 @@ source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 ```
 
+To download local demo video binaries later, install Git LFS and run `git lfs pull` inside the clone.
+
 Checkpoints, datasets, evaluator weights, API keys, and generated artifacts are **not** in git.
-See [Local asset preparation](docs/fumadocs/content/docs/guides/local-assets.mdx) for cache layout, Hugging Face downloads, non-HF aliases, and benchmark assets.
+See [Local asset preparation](https://openenvision.github.io/WorldFoundry/docs/guides/local-assets) for cache layout, Hugging Face downloads, non-HF aliases, and benchmark assets.
 
 On modern CUDA 12.8 hosts the installer resolves `worldfoundry-unified-cu128`. Pin a wheel tier only when the host requires it:
 
@@ -288,7 +130,7 @@ bash scripts/setup/bootstrap_worldfoundry.sh \
 
 Hugging Face models use native Hub loading (`from_pretrained`, `snapshot_download`, `HF_HOME` / `HF_HUB_CACHE`, and `HF_TOKEN` for gated assets). `WORLDFOUNDRY_CKPT_DIR` remains for non-HF checkpoints and compatibility aliases.
 
-Some VLA/action policies need a documented model-specific environment (for example OpenVLA-OFT / CogACT). Embodied simulator benchmarks follow the Docker VLA harness pattern — see the [environment reference](docs/fumadocs/content/docs/reference/environments.mdx).
+Some VLA/action policies need a documented model-specific environment (for example OpenVLA-OFT / CogACT). Embodied simulator benchmarks follow the Docker VLA harness pattern — see the [environment reference](https://openenvision.github.io/WorldFoundry/docs/reference/environments).
 
 After the environment is active:
 
@@ -323,7 +165,7 @@ Prepare assets, then launch a small demo. A common starter is `matrix-game-2` (p
 bash scripts/inference/prepare_model_infer.sh matrix-game-2 --download
 worldfoundry-eval zoo model-download --model-id matrix-game-2 --check-local --json
 
-bash scripts/inference/test_nav_video_gen.sh matrix-game-2 \
+bash scripts/inference/run_infer.sh --category navigation-video --model matrix-game-2 \
   --output-dir tmp/matrix_game2_first_run
 ```
 
@@ -342,10 +184,10 @@ bash scripts/setup/link_hf_checkpoints.sh \
 Prefer the TUI or the documented inference helpers once assets are staged:
 
 ```bash
-bash scripts/inference/test_nav_video_gen.sh matrix-game-2
+bash scripts/inference/run_infer.sh --category navigation-video --model matrix-game-2
 
 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" \
-  bash scripts/inference/test_nav_video_gen.sh matrix-game-2
+  bash scripts/inference/run_infer.sh --category navigation-video --model matrix-game-2
 
 bash scripts/inference/run_infer.sh --category video --model <model-id>
 bash scripts/inference/run_infer.sh --category three_d_four_d --model <model-id>
@@ -361,7 +203,69 @@ python -m worldfoundry.studio.workspace_job infer \
   --device cuda
 ```
 
-Each successful run should write media, logs, and manifest metadata under the output directory. Treat a file as demo evidence only after visual check and matching runtime-profile assumptions. Details: [Inference guide](docs/fumadocs/content/docs/guides/inference.mdx).
+Each successful run should write media, logs, and manifest metadata under the output directory. Treat a file as demo evidence only after visual check and matching runtime-profile assumptions. Details: [Inference guide](https://openenvision.github.io/WorldFoundry/docs/guides/inference).
+
+### Opt-in inference acceleration
+
+Acceleration is request-scoped. Pipelines record the requested backend, the effective backend, and any fallback. The exact path stays the default. The [inference optimization truth matrix](docs/fumadocs/content/docs/guides/inference-optimization.mdx) shows which options have a CPU contract or GPU certification, and which remain pending or rejected.
+
+The following example shows available controls, not a certified combination. Check model-specific compatibility and quality gates before enabling approximate options.
+
+```python
+from worldfoundry.pipelines.wan.pipeline_wan_2p2 import Wan2p2Pipeline
+
+pipe = Wan2p2Pipeline.from_pretrained(
+    model_path="/checkpoints/wan22",
+    device="cuda",
+    offload_mode="resident",           # aliases: fast/none; async-block when VRAM is tight
+    attention_backend="flash2",       # flash2/flash3/sage/sage3/xformers
+    quantization={"mode": "fp8"},     # runtime report proves kernel vs dense fallback
+    fuse_qkv=True,
+    fused_rope=True,
+    static_cross_kv=True,
+    torch_compile=True,
+    teacache=True,                      # lossy and explicit
+    vae_decode_autocast="bf16",
+    vae_spatial_tiling=True,
+    vae_temporal_chunk_size=4,
+)
+```
+
+**Acceleration options and checks**
+
+- FlashAttention and xFormers are intended as numerically equivalent providers; check the effective backend in the run report.
+- SageAttention, FP8/NVFP4, STA/VSA/VMoBA, pinned LightX2V sparse lanes, TeaCache, and token pruning are approximate. They must pass the target model's quality budget.
+- Missing packages, unsupported GPUs, or unsupported shapes either fall back to a reported exact path or fail closed.
+- Wan2.2 TI2V-5B uses the resident preset by default in Studio on the target H100 path. `block` / `async-block` overlaps the next layer's H2D copy with compute, and is effective only with async copies, no synchronous rescue copies, and at most two CUDA-resident layers.
+- Quantization plus block offload is rejected. Use resident quantization or dense async offload.
+
+**Check a run before citing a speedup**
+
+```bash
+# Sequence-parallel reference, then the multi-rank candidate.
+torchrun --nproc_per_node=1 -m benchmarks.inference.wan22_multigpu_e2e \
+  --checkpoint /checkpoints/Wan2.2-TI2V-5B \
+  --output-dir benchmarks/results/wan22-sp1 \
+  --fused-rope --rope-precision fp64 \
+  --save-reference-latents \
+  --warmup-runs 1 --measured-runs 3
+
+torchrun --nproc_per_node=4 -m benchmarks.inference.wan22_multigpu_e2e \
+  --checkpoint /checkpoints/Wan2.2-TI2V-5B \
+  --output-dir benchmarks/results/wan22-sp4 \
+  --sp-degree 4 \
+  --fused-rope --rope-precision fp64 \
+  --warmup-runs 1 --measured-runs 3 \
+  --reference-latents benchmarks/results/wan22-sp1/final-latents.pt \
+  --reference-video benchmarks/results/wan22-sp1/output.mp4 \
+  --fail-on-fallback --profile-collectives
+
+# Adapter overhead must stay within 3% of the direct provider.
+python -m benchmarks.operators.attention_adapter_parity \
+  --backend flash2 --strict --out benchmarks/results
+```
+
+The checked-in VMoBA profile is only valid for the default TI2V grid `(31, 22, 40)`. Other frame or spatial shapes need a retuned profile; bad geometry fails closed. Framework A/B numbers need schema v4 on one physical GPU in `Exclusive_Process` mode. Shared H100s in `Default` mode fail that gate, so current timings stay diagnostic. Gate details live in the truth matrix linked above.
 
 ## Launch Studio Workspace
 
@@ -385,9 +289,9 @@ source tmp/worldfoundry_unified_env.sh
 bash scripts/workspace/run_workspace.sh
 ```
 
-Configure jobs in **Create Job**; optional shared defaults can use `WORLDFOUNDRY_STUDIO_SETTINGS_FILE`. Expensive runtime checks and preview builders are opt-in via `WORLDFOUNDRY_STUDIO_*` — see the [Studio guide](docs/fumadocs/content/docs/guides/studio.mdx).
+Configure jobs in **Create Job**; optional shared defaults can use `WORLDFOUNDRY_STUDIO_SETTINGS_FILE`. Expensive runtime checks and preview builders are opt-in via `WORLDFOUNDRY_STUDIO_*` — see the [Studio guide](https://openenvision.github.io/WorldFoundry/docs/guides/studio).
 
-Use the **Visualizers** tab as the browser entrypoint for local preview services (World / Gradio, Spark, Viser, Rerun, Embodied bridge). On a remote machine, forward port `7870` plus any viewer ports you launch.
+Use the **Visualizers** tab as the browser entrypoint for local preview services (World realtime, Spark, Viser, Rerun, Embodied bridge). On a remote machine, forward port `7870` plus any viewer ports you launch.
 
 For a single-model Studio process:
 
@@ -428,42 +332,21 @@ worldfoundry-eval zoo benchmark-show --benchmark-id <benchmark-id> --include-spe
 For existing official-shaped benchmark outputs:
 
 ```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id vbench \
-  --mode official-validation \
-  --official-results-path <official_results.json> \
-  --generated-artifact-dir <generated_videos> \
-  --output-dir tmp/benchmark_zoo/official_validation/vbench \
-  --json
+worldfoundry-eval zoo benchmark-run --benchmark-id vbench --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir tmp/benchmark_zoo/official_validation/vbench --json
 ```
 
 For existing generated outputs:
 
 ```bash
-worldfoundry-eval evaluate \
-  --results-path tmp/results.jsonl \
-  --output-dir tmp/worldfoundry_evaluate \
-  --metric artifact_count \
-  --required-artifact video \
-  --json
+worldfoundry-eval evaluate --results-path tmp/results.jsonl --output-dir tmp/worldfoundry_evaluate --metric artifact_count --required-artifact video --json
 ```
 
 For the formal benchmark inventory, review the expanded plan first:
 
 ```bash
-worldfoundry-eval prepare \
-  --all-benchmarks \
-  --output-dir tmp/worldfoundry_all_benchmarks_plan \
-  --json
+worldfoundry-eval prepare --all-benchmarks --output-dir tmp/worldfoundry_all_benchmarks_plan --json
 
-worldfoundry-eval run \
-  --all-benchmarks \
-  --model <model-zoo-id> \
-  --prepare \
-  --data-root cache/worldfoundry/data/hfd_datasets \
-  --plan-only \
-  --output-dir tmp/worldfoundry_all_benchmarks_plan \
-  --json
+worldfoundry-eval run --all-benchmarks --model <model-zoo-id> --prepare --data-root cache/worldfoundry/data/hfd_datasets --plan-only --output-dir tmp/worldfoundry_all_benchmarks_plan --json
 ```
 
 Use the integrity commands before claiming benchmark support:
@@ -509,7 +392,9 @@ source tmp/worldfoundry_unified_env.sh
 conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
 
 PYTHONPATH=. python -m compileall -q worldfoundry scripts
-PYTHONPATH=. python -m pytest -m fast_eval_core test/eval_core
+make lint
+make packaging-check
+make docs-check
 bash scripts/docs/build.sh --skip-bootstrap
 
 worldfoundry-eval zoo model-download --model-id <model-id> --check-local --json
@@ -537,16 +422,15 @@ WorldFoundry
 │  ├─ workspace                          # Studio / Workspace launch helpers
 │  └─ docs                               # Documentation build wrapper
 ├─ worldfoundry
+│  ├─ base_models                        # Shared model components, perception, and 3D/4D runtimes
 │  ├─ core                               # Shared contracts and reusable runtime abstractions
 │  ├─ data                               # Model/benchmark catalogs, runtime profiles, fixtures
 │  ├─ evaluation                         # Runner, tasks, metrics, scorecards, reports
 │  ├─ operators                          # Input validation, preprocessing, interaction handling
 │  ├─ pipelines                          # User-facing pipeline wrappers
-│  ├─ representations                    # 3D/4D and spatial representation outputs
 │  ├─ runtime                            # Runtime paths, assets, jobs, and probes
 │  ├─ studio                             # Workspace and Studio frontends
 │  └─ synthesis                          # In-tree model synthesis/action-generation runtimes
-├─ test                                  # Test suites
 ├─ thirdparty                            # Reviewed vendored/native dependencies
 └─ tools                                 # Maintenance and asset utilities
 ```
@@ -554,6 +438,10 @@ WorldFoundry
 ## Citation
 
 If you use WorldFoundry or its benchmark/model integrations in research, cite this repository and the upstream methods, checkpoints, datasets, and benchmarks that your run depends on. A formal paper citation will be added when the technical report is released.
+
+## License
+
+WorldFoundry-authored code is licensed under the [Apache License 2.0](THIRD-PARTY-NOTICES), except where a file or component carries a different license notice. Vendored and adapted upstream components remain subject to their original licenses.
 
 ## Acknowledgment
 

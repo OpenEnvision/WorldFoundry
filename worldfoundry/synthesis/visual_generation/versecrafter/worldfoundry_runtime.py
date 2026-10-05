@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+import numpy as np
+
 from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path, resolve_data_path
 from worldfoundry.runtime.in_tree_cli import ensure_in_tree_runtime, execute_in_tree, require_path
 
@@ -17,6 +19,13 @@ class VerseCrafterRuntime:
     """Run VerseCrafter depth, 4D-control rendering, and diffusion stages."""
 
     SOURCE_REVISION = "008693b52aa74367afb34d183046fecf88100bdc"
+    GPU_MEMORY_MODES = (
+        "model_full_load",
+        "model_full_load_and_qfloat8",
+        "model_cpu_offload",
+        "model_cpu_offload_and_qfloat8",
+        "sequential_cpu_offload",
+    )
 
     def __init__(
         self,
@@ -26,6 +35,7 @@ class VerseCrafterRuntime:
         moge_model_path: Any = None,
         python_executable: Any = None,
         device: str = "cuda",
+        gpu_memory_mode: str = "model_cpu_offload",
         env: Mapping[str, Any] | None = None,
     ) -> None:
         self.repo_root = ensure_in_tree_runtime(self.bundled_repo_root(), package_file=__file__)
@@ -38,6 +48,13 @@ class VerseCrafterRuntime:
         self.moge_model_path = Path(moge_model_path or hfd / "Ruicheng--moge-2-vitl-normal").expanduser()
         self.python_executable = str(python_executable or sys.executable)
         self.device = device
+        normalized_memory_mode = str(gpu_memory_mode).strip().lower()
+        if normalized_memory_mode not in self.GPU_MEMORY_MODES:
+            raise ValueError(
+                "VerseCrafter gpu_memory_mode must be one of "
+                f"{', '.join(self.GPU_MEMORY_MODES)}; got {gpu_memory_mode!r}"
+            )
+        self.gpu_memory_mode = normalized_memory_mode
         self.env = dict(env or {})
 
     @staticmethod
@@ -48,6 +65,18 @@ class VerseCrafterRuntime:
     def from_pretrained(cls, pretrained_model_path: Any = None, **kwargs: Any) -> "VerseCrafterRuntime":
         return cls(checkpoint_path=pretrained_model_path, **kwargs)
 
+    @staticmethod
+    def _torchrun_prefix(python_executable: str) -> list[str]:
+        """Return a collision-free one-rank launcher for concurrent Studio jobs."""
+
+        return [
+            python_executable,
+            "-m",
+            "torch.distributed.run",
+            "--standalone",
+            "--nproc_per_node=1",
+        ]
+
     def plan(self, **kwargs: Any) -> dict[str, Any]:
         return {
             "model_id": "versecrafter",
@@ -56,6 +85,7 @@ class VerseCrafterRuntime:
             "checkpoint_path": str(self.checkpoint_path),
             "base_model_path": str(self.base_model_path),
             "moge_model_path": str(self.moge_model_path),
+            "gpu_memory_mode": self.gpu_memory_mode,
             "inputs": {key: str(value) for key, value in kwargs.items()},
         }
 
@@ -107,7 +137,7 @@ class VerseCrafterRuntime:
         *,
         prompt: str,
         image_path: Any,
-        trajectory_npz: Any,
+        trajectory_npz: Any = None,
         output_path: Any,
         width: int = 832,
         height: int = 480,
@@ -120,7 +150,14 @@ class VerseCrafterRuntime:
         **_: Any,
     ) -> Any:
         image = require_path(image_path, "VerseCrafter input image", kind="file")
-        trajectory = require_path(trajectory_npz, "VerseCrafter camera trajectory", kind="file")
+        output = Path(output_path).expanduser().resolve()
+        input_dir = output.parent / f".{output.stem}_versecrafter_inputs"
+        input_dir.mkdir(parents=True, exist_ok=True)
+        default_trajectory = trajectory_npz is None or not str(trajectory_npz).strip()
+        if default_trajectory:
+            trajectory = self._write_default_trajectory(input_dir / "camera_trajectory.npz", num_frames)
+        else:
+            trajectory = require_path(trajectory_npz, "VerseCrafter camera trajectory", kind="file")
         checkpoint = require_path(self.checkpoint_path, "VerseCrafter checkpoint", kind="dir")
         for relative in (
             "config.json",
@@ -141,8 +178,6 @@ class VerseCrafterRuntime:
             require_path(base / relative, f"Wan2.1-T2V-14B asset {relative}", kind="file")
         moge = require_path(self.moge_model_path, "MoGe-v2 checkpoint", kind="dir")
         require_path(moge / "model.pt", "MoGe-v2 weights", kind="file")
-        output = Path(output_path).expanduser().resolve()
-        input_dir = output.parent / f".{output.stem}_versecrafter_inputs"
         depth_dir = input_dir / "estimated_depth"
         render_dir = input_dir / "rendering_4D_maps"
         native_output = input_dir / "outputs"
@@ -218,12 +253,11 @@ class VerseCrafterRuntime:
             "merged_mask.mp4",
         ):
             require_path(render_dir / filename, f"VerseCrafter control map {filename}", kind="file")
+        if default_trajectory:
+            self._validate_default_control_maps(render_dir)
 
         command = [
-            self.python_executable,
-            "-m",
-            "torch.distributed.run",
-            "--nproc_per_node=1",
+            *self._torchrun_prefix(self.python_executable),
             "inference/versecrafter_inference.py",
             "--transformer_path",
             checkpoint,
@@ -255,6 +289,8 @@ class VerseCrafterRuntime:
             "1",
             "--ring_degree",
             "1",
+            "--gpu_memory_mode",
+            self.gpu_memory_mode,
             "--prompt",
             prompt,
         ]
@@ -268,6 +304,55 @@ class VerseCrafterRuntime:
             preferred_names=("generated_video_0.mp4",),
         )
         return result if return_dict else result.get("video")
+
+    @staticmethod
+    def _validate_default_control_maps(render_dir: Path) -> None:
+        """Reject the empty 4D map produced by a misoriented default camera."""
+
+        import cv2
+
+        captures = []
+        try:
+            frames = []
+            for filename in ("merged_mask.mp4", "background_depth.mp4"):
+                capture = cv2.VideoCapture(str(render_dir / filename))
+                captures.append(capture)
+                ok, frame = capture.read()
+                if not ok or frame is None:
+                    raise RuntimeError(f"VerseCrafter could not decode control map {filename}")
+                frames.append(frame)
+        finally:
+            for capture in captures:
+                capture.release()
+        valid_background = np.mean(frames[0][..., 0] < 128)
+        has_depth = np.any(frames[1][..., 0] > 2)
+        if valid_background < 0.01 or not has_depth:
+            raise RuntimeError(
+                "VerseCrafter default trajectory rendered an empty background control map"
+            )
+
+    @staticmethod
+    def _write_default_trajectory(path: Path, num_frames: int) -> Path:
+        """Write a deterministic, gentle camera translation for demo inference."""
+
+        frame_count = max(1, int(num_frames))
+        extrinsics = np.repeat(np.eye(4, dtype=np.float32)[None], frame_count, axis=0)
+        # The renderer unprojects depth in OpenCV camera coordinates, then
+        # transforms the point cloud into Blender world coordinates.  Its
+        # trajectory loader flips the camera's local Y/Z axes before taking
+        # the inverse.  An identity Blender pose therefore looks away from
+        # the point cloud and renders an empty (gray) background.  Set the
+        # Blender camera basis so frame zero maps back to the input view.
+        extrinsics[:, :3, :3] = np.array(
+            [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]],
+            dtype=np.float32,
+        )
+        if frame_count > 1:
+            extrinsics[:, 0, 3] = np.linspace(0.0, 0.12, frame_count, dtype=np.float32)
+            extrinsics[:, 2, 3] = np.linspace(0.0, -0.04, frame_count, dtype=np.float32)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(path, extrinsics=extrinsics)
+        return path
 
 
 __all__ = ["VerseCrafterRuntime"]

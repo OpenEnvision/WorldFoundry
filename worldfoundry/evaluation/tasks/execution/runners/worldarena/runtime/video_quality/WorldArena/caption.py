@@ -21,6 +21,9 @@ except ImportError:
     json_repair = None
 from pathlib import Path
 
+from worldfoundry.core.execution.device import get_current_torch_device, resolve_inference_dtype
+from worldfoundry.core.execution.inference_runtime import resolve_generation_max_new_tokens
+
 
 def _loads_jsonish(text):
     if json_repair is not None:
@@ -28,7 +31,7 @@ def _loads_jsonish(text):
     return json.loads(text)
 
 
-def inference(model, processor ,video_path, prompt, max_new_tokens=2048, total_pixels=20480 * 28 * 28, min_pixels=16 * 28 * 28):
+def inference(model, processor ,video_path, prompt, max_new_tokens=None, total_pixels=20480 * 28 * 28, min_pixels=16 * 28 * 28):
     from submodel.qwen_vl_utils import process_vision_info  # local import to avoid heavy deps when caption is unused
     messages = [
         {"role": "system", "content": "You are a helpful assistant in analyzing videos."},
@@ -45,6 +48,7 @@ def inference(model, processor ,video_path, prompt, max_new_tokens=2048, total_p
     # transformers processor expects a scalar fps; process_vision_info returns a list like [30]
     if isinstance(fps_inputs, (list, tuple)):
         fps_inputs = fps_inputs[0] if len(fps_inputs) > 0 else None
+    max_new_tokens = max_new_tokens or resolve_generation_max_new_tokens(512, scope="worldarena_caption")
     # print("video input:", video_inputs[0].shape)
     num_frames, _, resized_height, resized_width = video_inputs[0].shape
     start_time = time.time()
@@ -53,16 +57,17 @@ def inference(model, processor ,video_path, prompt, max_new_tokens=2048, total_p
         
 
         inputs = processor(text=[text], images=image_inputs, videos=video_inputs, fps=fps_inputs, padding=True, return_tensors="pt")
-        inputs = inputs.to('cuda')
+        inputs = inputs.to(model.device)
 
-        outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
+        with torch.inference_mode():
+            outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
 
         generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, outputs)]
         output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         
     except Exception as e:
         print(f"Error: {str(e)}")
-        output_text = "Error: " + str(e)
+        output_text = ["Error: " + str(e)]
     
     end_time = time.time()
     return output_text[0]
@@ -122,12 +127,14 @@ def caption_reference(
         qwen_cls = AutoModelForCausalLM
         qwen_kwargs = {"trust_remote_code": True}
 
+    device = get_current_torch_device()
     model = qwen_cls.from_pretrained(
         model_path,
-        torch_dtype=torch.bfloat16,
-        device_map="cuda:0",
+        torch_dtype=resolve_inference_dtype(device),
+        device_map=str(device),
         **qwen_kwargs,
     )
+    model.eval()
 
     processor = AutoProcessor.from_pretrained(model_path)
 

@@ -1,0 +1,41 @@
+schema_version: 2
+model_id: cosmos-predict2-14b-video2world
+display_name: Cosmos Predict2 14B Video2World
+task_family: world_model
+groups:
+- world
+- video
+source_repos:
+- url: https://github.com/nvidia-cosmos/cosmos-predict2
+checkpoints:
+- repo_id: nvidia/Cosmos-Predict2-14B-Video2World
+  revision: 03b03a377fede782647afac998f674d9f358e319
+  role: transformer_and_vae
+- repo_id: google-t5/t5-11b
+  revision: 90f37703b3334dfe9d2b009bfcbfbf1ac9d28ea3
+  role: text_conditioner
+input_schema:
+  prompt: true
+  image: true
+  video: true
+  actions: []
+artifact_kind: generated_world
+artifact_filename: cosmos-predict2-14b-video2world.mp4
+execution:
+  environment: _unified
+  backend_stage: native_diffusion
+  runtime_status: native_structure_validated_checkpoint_gpu_parity_pending
+  integration_status: integrated
+  pipeline_binding: cosmos-predict2-14b-video2world
+  default_parameters:
+    num_frames: 93
+    height: 704
+    width: 1280
+    fps: 16
+    num_inference_steps: 35
+    guidance_scale: 7.0
+integration:
+  status: integrated
+notes:
+- Uses the same framework-owned execution architecture as the 2B recipe.
+- The native 14B architecture contains 727 checkpoint-owned tensors; gated weight and GPU parity remain pending.

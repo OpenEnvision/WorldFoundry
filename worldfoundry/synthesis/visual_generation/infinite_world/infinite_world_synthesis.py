@@ -126,3 +126,7 @@ class InfiniteWorldSynthesis(BaseSynthesis):
             A dictionary containing the prediction results from the runtime.
         """
         return self.runtime.predict(*args, **kwargs)
+
+
+# ``DEFAULT_NEGATIVE_PROMPT`` is re-exported for the package __init__ to publish.
+__all__ = ["DEFAULT_NEGATIVE_PROMPT", "InfiniteWorldSynthesis"]

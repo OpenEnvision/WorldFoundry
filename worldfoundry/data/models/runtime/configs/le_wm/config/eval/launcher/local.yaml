@@ -1,2 +1,2 @@
-defaults:
-- override /hydra/launcher: basic
+# Local evaluation runs in-process; no Hydra launcher plugin is required.
+{}

@@ -14,44 +14,44 @@ metrics:
   visual_quality:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
   prompt_following:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
   impossible_video_score:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
   judgement_accuracy:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
   mcqa_accuracy:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
   open_qa_score:
     aggregation: mean
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
   ipv_bench_average:
     aggregation: mean
     primary: true
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
 metadata:
@@ -129,7 +129,7 @@ metadata:
     results_path_env: WORLDFOUNDRY_IPV_BENCH_RESULTS_PATH
     runtime_backend_env: WORLDFOUNDRY_IPV_BENCH_RUNTIME_BACKEND
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+    target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
     status: implemented
     protocol: local_manifest_metadata_and_official_result_normalization
     output_fields:
@@ -251,7 +251,7 @@ tasks:
       metric_ids:
       - local_metadata_coverage
       - local_prompt_video_pair_completeness
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+      evaluator_target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
       status: implemented
     - name: external_official_runner
       runner_target: worldfoundry.evaluation.tasks.contracts.external:IPVBenchContract

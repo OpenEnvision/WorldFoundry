@@ -6,11 +6,13 @@
 
 """Module for base_models -> perception_core -> segment -> sam_v1 -> automatic_mask_generator.py functionality."""
 
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
 import torch
 from torchvision.ops.boxes import batched_nms, box_area  # type: ignore
 
-from typing import Any, Dict, List, Optional, Tuple
+from worldfoundry.base_models.perception_core.segment.mask_data import MaskData
 
 from .modeling import Sam
 from .predictor import SamPredictor
@@ -31,7 +33,6 @@ from .utils.amg import (
     uncrop_masks,
     uncrop_points,
 )
-from worldfoundry.core.utils.mask_data import MaskData
 
 
 class SamAutomaticMaskGenerator:

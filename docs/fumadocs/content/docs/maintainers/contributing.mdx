@@ -1,6 +1,6 @@
 ---
 title: Contributing
-description: Maintainer checklist for scoped changes, tests, docs, and release evidence.
+description: Maintainer checklist for scoped changes, validation, docs, and release evidence.
 ---
 
 ## Before a PR
@@ -17,39 +17,198 @@ Before opening a PR, confirm the following:
 - **Python** — Keep imports lazy when a model or benchmark has heavy optional dependencies.
 - **Public entry points** — Put user-facing runtime classes under `worldfoundry/pipelines/` or evaluation runners under `worldfoundry/evaluation/`.
 - **Model runtimes** — Implement runtime integrations under `worldfoundry/synthesis/**` in-tree. Do not depend on machine-local external checkouts; record external repos/checkpoints only as provenance or acquisition metadata until ported or vendor-reviewed.
-- **Vendored code** — Treat reviewed `thirdparty/` code as isolated code. Preserve upstream license notes.
-- **Synthesis** — Keep `worldfoundry/synthesis/**` infer-only: runtime wrappers, model code needed at inference time, checkpoint/path helpers, and minimal runtime configs. Do not add training launchers, dataset builders, demo media, notebooks, or generated outputs. Use `worldfoundry/data/test_cases/` for demo assets.
+- **Vendored code** — Treat reviewed `thirdparty/` code as isolated code. Record its license name and upstream URL in the repository notice and provenance files linked from [Third-party notices](/docs/reference/vendored-licenses). Do not add colocated `LICENSE`, `COPYING`, `NOTICE`, `UPSTREAM.md`, or `README.md` files next to source. Prefer git submodules for large independently versioned upstreams; keep in-tree copies only when heavy patching is required. Do not duplicate code that already lives under `worldfoundry/base_models/` or `worldfoundry/synthesis/`. Current trees: FlashAttention is an external install (`scripts/setup/install_flash_attn.sh`); `diff-gaussian-rasterization/` is the canonical depth-capable Gaussian rasterizer; `simple-knn/` is the CUDA KNN extension; `fastvideo-kernel/` is the optional STA / VSA / VMoBA / TurboDiffusion kernel tree (build with `CUDA_HOME` + `./build.sh`; ThunderKittens only on Hopper `sm_90a` non-aarch64; FP4 attention only on Blackwell `sm_120a` with CUDA ≥ 12.8).
+- **Synthesis** — Keep `worldfoundry/synthesis/**` infer-only: runtime wrappers, model code needed at inference time, checkpoint/path helpers, and minimal runtime configs. Do not add training launchers, dataset builders, demo media, notebooks, or generated outputs. Keep local demo assets under the gitignored `testcase/` directory.
 - **Formatting** — Avoid large unrelated formatting changes. Do not rewrite generated or vendored files unless the task requires it.
 - **Naming** — Prefer canonical ids and direct runner paths; when a public name changes, document the migration instead of adding long-lived compatibility maps.
 
-## Test placement
+## Validation selection
 
-Match tests to the surface you changed:
+Match validation evidence to the surface you changed:
 
-- **Runner, scorecard, tasks, registry** — Focused tests in `test/eval_core`.
-- **Single pipeline run** — Existing scripts under `test/` or a focused validation script.
-- **Stateful or interactive pipeline** — `test_stream/` or a documented stream command.
+- **Runner, scorecard, tasks, registry** — Public CLI discovery, planning, and artifact validation commands.
+- **Single pipeline run** — The smallest documented validation script and its generated manifest.
+- **Stateful or interactive pipeline** — A documented stream command with bounded runtime evidence.
 - **Benchmark runner** — Runner execution plus `zoo benchmark-run --mode official-validation` with official-shaped result files when normalizer review is needed.
 - **Model runner** — Resolver/manifest validation plus a clear skipped path for missing checkpoint or credentials.
 
 ## Docs expectations
 
-Fumadocs is the only maintained documentation surface. Add or update paired English and Chinese pages under `docs/fumadocs/content/docs`.
+Fumadocs is the only maintained documentation surface. Add or update paired English and Chinese pages under `docs/fumadocs/content/docs`. The only `README.md` allowed in this repository is the root file. Do not add `README.md`, `readme.md`, or `README_*` next to source, vendor trees, fixtures, or model networks.
 
 When you change behavior, update the page that owns it:
 
-- **New model or runtime profile** — `guides/supported-models`, `reference/environments`, and the model guide if behavior changes.
+- **New model or runtime profile** — `guides/supported-models`, the per-model article at `guides/supported-models/<model-id>.mdx` (and `.zh.mdx`), `reference/environments`, and the model guide if behavior changes. Refresh checked-in homepage recipes and generated model pages with `npm --prefix docs/fumadocs run models:generate`, then verify them with `npm --prefix docs/fumadocs run models:check`. Set `pageSource: authored` on a model MDX file before hand-editing so later generates will not overwrite it. To refresh paper titles and teaser figures, run `npm --prefix docs/fumadocs run models:media` after generate.
 - **New benchmark** — `evaluation/benchmark-hub/<benchmark-id>`, the benchmark guide, and maintainer architecture pages when internals change.
 - **CLI or output schema** — `reference/cli` and architecture pages that own the changed behavior.
 - **Internal workflow** — `maintainers/architecture` (especially workflow and evaluation-core).
+
+Python-backed docs codegen and drift checks (`api:*`, `models:*`, `coverage:*`, and
+`cli:screenshots`) go through `docs/fumadocs/scripts/run-python.sh`. Override the interpreter
+with `WF_DOCS_PYTHON` (then `PYTHON`, then `python3` / `python`) when needed.
+
+## Fast site iteration
+
+Model demo videos are served from GitHub CDN; docs development does not need `git lfs pull`.
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenEnvision/WorldFoundry.git
+```
+
+WorldFoundry currently ships **one** maintained web site: the Fumadocs docs app at `docs/fumadocs/`. Homepage, benchmark hub, model catalog, and API reference are routes inside that app — not separate build targets. Studio (`worldfoundry/studio/`) is a Python FastAPI app, not a Next.js site.
+
+Every site must keep **fast iteration** npm scripts in-repo. Production CI is unchanged (`scripts/docs/build.sh` → `deploy-docs.yml`).
+
+<KvCatalog heading="Site" vars rows={[
+    { name: "Docs (Fumadocs)", reads: [{ label: "Path", value: <><code>docs/fumadocs/</code></> }, { label: "Env prefix", value: <><code>WF_DOCS_*</code></> }, { label: "dev:fast", value: <><code>npm run dev:fast</code></> }, { label: "dev:ssd", value: <><code>npm run dev:ssd</code></> }, { label: "dev:local", value: <><code>npm run dev:local</code></> }, { label: "build:fast", value: <><code>npm run build:fast</code></> }] }
+  ]} />
+
+From the repo root you can also use `make docs-dev-fast`, `make docs-dev-ssd`, `make docs-dev-local`, or `make docs-build-fast`.
+
+The docs app contains hundreds of bilingual model and benchmark pages and large generated JSON catalogs. On a shared filesystem, `npm run dev` can feel slow because each start may rerun MDX codegen and cold webpack caches.
+
+**Fastest dev on shared storage (recommended):**
+
+```bash
+cd docs/fumadocs
+npm run dev:ssd
+# or from repo root: make docs-dev-ssd
+```
+
+`dev:ssd` symlinks hot paths to local SSD (`~/.cache/worldfoundry-docs/<checkout-id>` by default): `tmp/` (Next.js + webpack), `.source/` (MDX codegen), and `node_modules/.cache`. Sources stay on the shared checkout — no full rsync on each start. First run migrates existing `.source/` output; Next.js and webpack caches are rebuilt on SSD.
+
+For day-to-day UI/CSS polish when already on fast local disk:
+
+```bash
+cd docs/fumadocs
+npm run dev:fast
+```
+
+`dev:fast` reuses existing `.source/` output without checking for content changes and reuses `generated/python-api.json` unless missing. Regenerate MDX after adding pages or changing navigation or frontmatter. Development caches use `tmp/` by default; on shared storage, prefer `dev:ssd` to place them on local SSD.
+
+If `node_modules` I/O is also slow, mirror the whole site to local SSD:
+
+```bash
+cd docs/fumadocs
+npm run dev:local
+```
+
+`dev:local` refreshes source files in a checkout-specific mirror under `/tmp/wf-docs-dev/<checkout-id>/WorldFoundry` and reuses its installed dependencies. Set `WF_DOCS_LOCAL_ROOT` to choose another mirror root.
+
+To smoke-test static export locally without CI drift checks:
+
+```bash
+cd docs/fumadocs
+npm run build:fast
+```
+
+Useful environment variables (`WF_DOCS_*`):
+
+<div className="pi-kv-catalog is-vars not-prose">
+  <section className="pi-kv-group">
+    <h3>Variable</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_SKIP_MDX=1</code>
+          </div>
+        </div>
+        <p>Reuse existing MDX output on dev start; missing output is generated once. Run <code>npm run mdx:generate</code> after adding pages or changing navigation or frontmatter. <code>WF_DOCS_REFRESH_MDX=1</code> forces regeneration.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_REFRESH_MDX=1</code>
+          </div>
+        </div>
+        <p>Force MDX regeneration on the next dev start.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_REFRESH_API=1</code>
+          </div>
+        </div>
+        <p>Regenerate <code>generated/python-api.json</code>.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_KEEP_DIST=1</code>
+          </div>
+        </div>
+        <p>Retained in fast-script invocations; cache placement is controlled by <code>next.config.mjs</code> and the cache variables below. Development uses <code>tmp/next</code>; production uses <code>.next</code>.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_CACHE_ROOT</code>
+          </div>
+        </div>
+        <p>Override the webpack cache root; use <code>WF_DOCS_SSD_ROOT</code> with <code>dev:ssd</code> to relocate all hot caches.</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_SSD_ROOT</code>
+          </div>
+        </div>
+        <p>Override SSD symlink root for <code>dev:ssd</code> (default: <code>{"~/.cache/worldfoundry-docs/<checkout-id>"}</code>).</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_UI_ONLY=1</code>
+          </div>
+        </div>
+        <p>Ignore model/benchmark MDX dirs in webpack watch (CSS/component edits only; model page HMR disabled).</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_WEBPACK_CACHE_DIR</code>
+          </div>
+        </div>
+        <p>Override webpack filesystem cache location.</p>
+      </li>
+    </ul>
+  </section>
+</div>
+
+SSD cache helpers: `npm run ssd:setup`, `npm run ssd:status`, `npm run ssd:clean` (add `-- --purge` to delete SSD data).
+
+After changing model manifests, run `npm run models:generate` once, then `WF_DOCS_REFRESH_MDX=1 npm run dev` (or `npm run mdx:generate` while the dev server is stopped). Editing an existing MDX page during dev hot-reloads without regenerating `.source/`; new pages or `meta.json` changes require `WF_DOCS_REFRESH_MDX=1`.
+
+`npm run dev:turbo` tries Turbopack instead of webpack. Treat it as experimental — production GitHub Pages still uses `npm run build` (webpack + static export).
+
+### Adding a new site
+
+When you add another Next.js or static site under `docs/<name>/`:
+
+1. Add `dev:fast`, `dev:local` (optional SSD mirror script), and `build:fast` npm scripts.
+2. Use env vars prefixed `WF_<SITE>_` (e.g. `WF_STUDIO_SKIP_MDX=1`) for skip/refresh toggles.
+3. Add a `predev.mjs` (or equivalent) that smart-skips codegen when outputs are current.
+4. Wire `make docs-<site>-dev-fast` targets if the site is commonly used from the repo root.
+5. Extend the site catalog in this section (English and Chinese pages).
+
+Production deploy speed is separate: CI runs full `types:check`, catalog drift checks, and static export for all pages. That path is unchanged.
 
 ## Local validation
 
 ```bash
 bash scripts/setup/conda_install.sh --preset slim --env-name worldfoundry
 make lint
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" python -m pytest test/eval_core -q
+make docs-check
 cd docs/fumadocs && npm run types:check && npm run build
+```
+
+Public CPU checks do not require model weights:
+
+```bash
+python -m pip install -e ".[dev,test]"
+make test-infer
+make cli-check cli-entrypoint-check packaging-check
 ```
 
 For model/profile audits:
@@ -95,3 +254,6 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-art
 <Callout title="Review rule">
   A PR can add planned or source-verified entries without runnable support. It must not claim demo parity, checkpoint parity, or benchmark readiness without matching fresh evidence.
 </Callout>
+
+
+Public test sources live under `tests/`; model weights, test media and generated replay evidence stay outside git. Inference changes must replay affected real-checkpoint cases and pass `make test-geometry` against an accepted reference. See [Validation](/docs/reference/validation) for numerical comparison and source-hash verification.

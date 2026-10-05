@@ -10,7 +10,7 @@ import torch
 from scipy.interpolate import interp1d
 from scipy.spatial.transform import Rotation, Slerp
 
-from worldfoundry.core.geometry import euler_angles_to_rotation_matrix_zyx
+from worldfoundry.core.geometry.transforms import euler_angles_to_rotation_matrix_zyx
 
 _ACTIONS = {
     "w": "forward",

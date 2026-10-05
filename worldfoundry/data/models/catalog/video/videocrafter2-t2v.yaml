@@ -12,6 +12,9 @@ source:
   status: open_source
   official_repo_url: https://github.com/VideoCrafter/VideoCrafter
   license: apache-2.0
+official_sources:
+  project_page: https://ailab-cvc.github.io/videocrafter2/
+  paper: https://arxiv.org/abs/2401.09047
 integration:
   status: integrated
   notes:
@@ -33,3 +36,28 @@ catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries
   expose WorldFoundry pipeline targets; metadata-only entries retain upstream provenance
   without runnable WorldFoundry backends.
+docs:
+  publisher: Tencent AI Lab
+  publisher_kind: company
+  publisher_zh: 腾讯 AI Lab
+  overview: VideoCrafter2 T2V is the improved text-to-video model of the VideoCrafter family, trained to overcome low-quality video data by combining it with high-quality image data. It is Apache-2.0 on its HF card, making it the license-cleanest member of the family. The in-tree infer-only runtime exposes local checkpoint, fps, frame count, and seed controls.
+  overview_zh: VideoCrafter2 T2V 是 VideoCrafter 系列中改进版的文生视频模型，通过将低质量视频数据与高质量图像数据结合训练来突破数据瓶颈。其 HF 卡片为 Apache-2.0，是系列中许可最干净的成员。树内仅推理运行时暴露本地 checkpoint、fps、帧数与 seed 控制。
+  architecture: A U-Net latent video diffusion model whose training decouples motion (from video) and appearance (from images), per the upstream publication. Checkpoint provenance is tracked on the family entry.
+  architecture_zh: U-Net 潜空间视频扩散模型，训练时将运动（来自视频）与外观（来自图像）解耦学习，见上游论文。checkpoint 溯源在系列条目跟踪。
+  usage_notes: 'Runner parity is pending. This is the recommended VideoCrafter variant: better quality than V1 and a clean Apache-2.0 license.'
+  usage_notes_zh: Runner parity 为 pending。这是推荐的 VideoCrafter variant：质量优于 V1，许可为干净的 Apache-2.0。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  - U-Net-era quality ceiling versus the DiT-based catalog entries.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  - 相比 catalog 中 DiT 系条目，仍受 U-Net 时代的质量上限约束。
+  recommended_benchmarks:
+  - id: evalcrafter
+    reason: Companion benchmark of the VideoCrafter effort.
+    reason_zh: VideoCrafter 项目的配套评测。
+  - id: vbench
+    reason: Standard T2V suite.
+    reason_zh: 标准文生视频评测。

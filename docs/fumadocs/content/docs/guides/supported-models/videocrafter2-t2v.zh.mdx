@@ -1,0 +1,52 @@
+---
+title: "VideoCrafter2 T2V"
+description: "VideoCrafter2 T2V（Tencent AI Lab）：文生视频、视频生成；Runner 一致性待确认。"
+modelId: "videocrafter2-t2v"
+pageSource: authored
+---
+
+VideoCrafter2 T2V 是 VideoCrafter 系列中改进版的文生视频模型，通过将低质量视频数据与高质量图像数据结合训练来突破数据瓶颈。其 HF 卡片为 Apache-2.0，是系列中许可最干净的成员。树内仅推理运行时暴露本地 checkpoint、fps、帧数与 seed 控制。
+
+<ModelPaperFigures modelId="videocrafter2-t2v" locale="zh" />
+
+记录论文为[arXiv 2401.09047](https://arxiv.org/abs/2401.09047)。
+
+项目页：[ailab-cvc.github.io/videocrafter2](https://ailab-cvc.github.io/videocrafter2/)。代码：[VideoCrafter/VideoCrafter](https://github.com/VideoCrafter/VideoCrafter)。
+
+<ModelCommandBuilder modelId="videocrafter2-t2v" locale="zh" />
+
+## 用来做什么
+
+`videocrafter2-t2v` 是记录的 prompt 到视频路由——不是图像编辑，也不是策略。只要任务是文生视频，从这里起步。
+
+U-Net 潜空间视频扩散模型，训练时将运动（来自视频）与外观（来自图像）解耦学习，见上游论文。checkpoint 溯源在系列条目跟踪。该模型由腾讯 AI Lab发布。
+
+catalog 记录的任务包括 文生视频、视频生成。别名包括 `videocrafter2_t2v`。模态上，它接受文本，输出视频。
+
+记录的评测入口包括[EvalCrafter](/zh/docs/evaluation/benchmark-hub/evalcrafter)（VideoCrafter 项目的配套评测）、[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（标准文生视频评测）。
+
+不是 [VideoCrafter](/zh/docs/guides/supported-models/videocrafter)、[VideoCrafter1 T2V](/zh/docs/guides/supported-models/videocrafter1-t2v)。 评测看 [EvalCrafter](/zh/docs/evaluation/benchmark-hub/evalcrafter)、[VBench](/zh/docs/evaluation/benchmark-hub/vbench)。
+
+## 运行时契约
+
+可选 `prompt`、`frames`、`fps`、`height`、`width`；产物 `generated_video`、`videocrafter2-t2v.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `VideoCrafter2T2VPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+这是推荐的 VideoCrafter variant：质量优于 V1，许可为干净的 Apache-2.0。
+
+Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run videocrafter2-t2v --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `VideoCrafter/VideoCrafter2`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh videocrafter2-t2v`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="videocrafter2-t2v" locale="zh" />

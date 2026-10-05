@@ -1,0 +1,52 @@
+---
+title: "Sana"
+description: "Sana from NVIDIA: text-to-image and text-to-video; Runner parity pending; 20 variants."
+modelId: "sana"
+pageSource: authored
+---
+
+Sana is NVIDIA's efficient generation family, and the largest variant surface in the video category: twenty recorded variants spanning text-to-image (600M–4.8B, up to 4K), ControlNet-conditioned image generation, Sana-Video 2B text-to-video at 480p/720p, LongSANA long video, and SANA-Streaming video-to-video (long and bidirectional). Checkpoint math is split across canonical role-based diffusion components in-tree.
+
+<ModelPaperFigures modelId="sana" locale="en" />
+
+The recorded paper is [SANA: Efficient High-Resolution Image Synthesis with Linear Diffusion Transformers](https://arxiv.org/abs/2410.10629) (2024).
+
+Project page: [nvlabs.github.io/Sana](https://nvlabs.github.io/Sana/). Code: [NVlabs/Sana](https://github.com/NVlabs/Sana).
+
+<ModelCommandBuilder modelId="sana" locale="en" />
+
+## What it is for
+
+Use `sana-600m-512px` when the job is a catalog still image rather than video.
+
+Sana's efficiency comes from a deep-compression autoencoder (32x) plus linear-attention DiT blocks and a small LLM text encoder, per the publication (arXiv 2410.10629).
+
+Catalog tasks include text-to-image, text-to-video, video-to-video, and image-conditioned-generation. Catalog aliases include `sana-video`, `longsana-video`, `sana-streaming`, and `sana-streaming-bidirectional`. Documented modalities: text and video in, image and video out. Also recorded: `sana-600m-1024px`, `sana-1600m-512px`, `sana-1600m-512px-multiling`.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Quality suite for the Sana-Video T2V routes), [SANA-WM 80-Scene Benchmark](/docs/evaluation/benchmark-hub/sana-wm-bench) (This repository's Sana-specific world-model benchmark).
+
+Not [SANA-WM](/docs/guides/supported-models/sana-wm). Score on [VBench](/docs/evaluation/benchmark-hub/vbench) and [SANA-WM 80-Scene Benchmark](/docs/evaluation/benchmark-hub/sana-wm-bench).
+
+## Runtime contract
+
+Optional `prompt`, `negative_prompt`, `input_path`, `interactions`, and `frames`; artifacts `sana.png`.
+
+CLI task profiles: `interactive-video` and `video-to-video`. WorldFoundry binds `SanaPipeline`.
+
+Start on `sana-600m-512px`. The family registers 20 catalog variants (cards above): `sana-600m-512px` (`text-to-image`) — Runner parity pending; `sana-600m-1024px` (`text-to-image`) — Runner parity pending; `sana-1600m-512px` (`text-to-image`) — Runner parity pending; `sana-1600m-512px-multiling` (`text-to-image`) — Runner parity pending; `sana-1600m-1024px` (`text-to-image`) — Runner parity pending among others. Family status: **Runner parity pending**.
+
+Integration is **Runner parity pending**, but note the recorded evidence: the long-streaming checkpoint completed a real A100 run with 81 decoded 1280x704 frames at 16 FPS (artifact SHA256 recorded in the profile). SANA-Streaming accepts a source video path or hf:// URI. Full 50-step / longer-frame official quality parity remains pending.
+
+Sana checkpoint math is split across the canonical denoiser, network, encoder, autoencoder, initializer, scheduler, and recipe roles under worldfoundry.base_models.diffusion_model.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run sana-600m-512px --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `Efficient-Large-Model/Sana_600M_512px`, `Efficient-Large-Model/Sana_600M_1024px`, and `Efficient-Large-Model/Sana_1600M_512px` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh sana-600m-512px`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="sana" locale="en" />

@@ -1,0 +1,13 @@
+schema_version: 2
+binding_id: astronex-world
+model_id: astronex-world
+aliases:
+- astronex
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.astronex_world.pipeline_astronex_world:AstronexWorldPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

@@ -23,7 +23,7 @@ def _transformers_no_init_weights() -> Any:
     except ImportError:
         from transformers.modeling_utils import no_init_weights
 
-        return no_init_weights(_enable=True)
+        return no_init_weights()
 
 
 def _as_rgb_pil(value: Any) -> Any:

@@ -17,9 +17,9 @@ from typing import Callable
 from torch import nn
 
 from .attention import Attention
-from worldfoundry.core.nn.layers import Mlp
-from worldfoundry.core.nn.stochastic_depth import drop_add_residual_stochastic_depth, get_branges_scales
-from worldfoundry.core.nn.vit_block import RopePreNormTransformerBlock
+from worldfoundry.core.nn.blocks.layers import Mlp
+from worldfoundry.core.nn.blocks.stochastic_depth import drop_add_residual_stochastic_depth, get_branges_scales
+from worldfoundry.core.nn.transformer.vit import RopePreNormTransformerBlock
 
 logger = logging.getLogger("dinov2")
 XFORMERS_AVAILABLE = True

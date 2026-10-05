@@ -9,12 +9,19 @@ from typing import Any, Dict, Optional, Union
 import numpy as np
 from PIL import Image
 
-from ...synthesis.visual_generation.memory.runtime import RuntimeMemory
-from ...operators.vggt_omega_operator import VGGTOmegaOperator
-from worldfoundry.representations.point_clouds_generation.vggt.vggt_omega_representation import (
+from worldfoundry.base_models.three_dimensions.point_clouds.vggt_omega.runtime import (
     VGGTOmegaRepresentation,
 )
+from worldfoundry.core.io import artifact_root_path
+
+from ...operators.vggt_omega_operator import VGGTOmegaOperator
+from ...synthesis.visual_generation.memory.runtime import RuntimeMemory
 from ..pipeline_utils import PipelineABC
+
+
+def _default_output_dir(name: str = "vggt_omega_output") -> str:
+    """Resolve a stable default output directory instead of writing to the CWD."""
+    return str(artifact_root_path() / name)
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -211,9 +218,9 @@ class VGGTOmegaPipeline(PipelineABC):
             "predict_depth": interaction_dict.get("predict_depth", True),
             "predict_points": interaction_dict.get("predict_points", True),
             "predict_tracks": False,
-            "preprocess_mode": kwargs.get("preprocess_mode", "balanced"),
-            "resolution": kwargs.get("resolution", 512),
-            "patch_size": kwargs.get("patch_size", 16),
+            "preprocess_mode": kwargs.get("preprocess_mode", getattr(self.representation_model, "preprocess_mode", "balanced")),
+            "resolution": kwargs.get("resolution", getattr(self.representation_model, "resolution", 512)),
+            "patch_size": kwargs.get("patch_size", getattr(self.representation_model, "patch_size", 16)),
         }
         results = self.representation_model.get_representation(data)
 
@@ -244,7 +251,7 @@ class VGGTOmegaPipeline(PipelineABC):
 
         images = []
         if kwargs.get("return_visualization", True) and "depth_map" in results:
-            from worldfoundry.core.io.artifacts import depths_to_pil_images
+            from worldfoundry.core.media.artifacts import depths_to_pil_images
 
             depth_maps = results["depth_map"]
             if depth_maps.ndim == 2:
@@ -279,7 +286,7 @@ class VGGTOmegaPipeline(PipelineABC):
     def run_official_scene_export(
         self,
         image_path: Union[str, list[str]],
-        output_dir: str = "./vggt_omega_output",
+        output_dir: Optional[str] = None,
         image_resolution: Optional[int] = None,
         preprocess_mode: str = "balanced",
         patch_size: Optional[int] = None,
@@ -299,12 +306,14 @@ class VGGTOmegaPipeline(PipelineABC):
         if output_name is not None and not output_name.lower().endswith(".glb"):
             output_name = f"{Path(output_name).stem}.glb"
 
-        from .official_runtime import run_official_scene_export as _run_official_scene_export
+        from .official_runtime import (
+            run_official_scene_export as _run_official_scene_export,
+        )
 
         return _run_official_scene_export(
             input_source=image_path,
             model=self.representation_model.model,
-            output_dir=output_dir,
+            output_dir=output_dir or _default_output_dir(),
             device=self.representation_model.device,
             image_resolution=image_resolution or getattr(self.representation_model, "resolution", 512),
             preprocess_mode=preprocess_mode,

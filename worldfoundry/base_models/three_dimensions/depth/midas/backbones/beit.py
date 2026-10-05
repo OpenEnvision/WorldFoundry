@@ -103,13 +103,20 @@ def block_forward(self, x, resolution, shared_rel_pos_bias: Optional[torch.Tenso
     """
     Modification of timm.models.beit.py: Block.forward to support arbitrary window sizes.
     """
+    drop_path1 = getattr(self, "drop_path1", None)
+    drop_path2 = getattr(self, "drop_path2", None)
+    if drop_path1 is None or drop_path2 is None:
+        legacy_drop_path = self.drop_path
+        drop_path1 = legacy_drop_path if drop_path1 is None else drop_path1
+        drop_path2 = legacy_drop_path if drop_path2 is None else drop_path2
+
     if self.gamma_1 is None:
-        x = x + self.drop_path(self.attn(self.norm1(x), resolution, shared_rel_pos_bias=shared_rel_pos_bias))
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
+        x = x + drop_path1(self.attn(self.norm1(x), resolution, shared_rel_pos_bias=shared_rel_pos_bias))
+        x = x + drop_path2(self.mlp(self.norm2(x)))
     else:
-        x = x + self.drop_path(self.gamma_1 * self.attn(self.norm1(x), resolution,
-                                                        shared_rel_pos_bias=shared_rel_pos_bias))
-        x = x + self.drop_path(self.gamma_2 * self.mlp(self.norm2(x)))
+        x = x + drop_path1(self.gamma_1 * self.attn(self.norm1(x), resolution,
+                                                    shared_rel_pos_bias=shared_rel_pos_bias))
+        x = x + drop_path2(self.gamma_2 * self.mlp(self.norm2(x)))
     return x
 
 

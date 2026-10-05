@@ -16,10 +16,9 @@ import numpy as np
 import torch
 from PIL import Image
 
-from worldfoundry.base_models.diffusion_model.video.wan.utils.misc import set_seed
-from worldfoundry.core.realtime import RealtimeSpec
+from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere as set_seed
 from worldfoundry.operators.matrix_game_2_operator import encode_actions
-
 
 _KEY_TO_ACTION = {
     "w": "forward",
@@ -64,6 +63,21 @@ class MatrixGame2RealtimeSession:
             int(os.getenv("WORLDFOUNDRY_MATRIX_REALTIME_CONDITION_BLOCKS", "5") or "5"),
             2,
         )
+        # The real encoder has a long causal receptive field: the old five
+        # blocks still contained the seed-image transient in the reused tail.
+        # Lightweight runtime fixtures without an encoder retain their own
+        # prefetch contract; only the real graph establishes stationarity.
+        vae = getattr(runtime.vae, "vae", None)
+        encoder = getattr(getattr(vae, "model", None), "encoder", None)
+        self.condition_first_stable_latent: int | None = None
+        if encoder is not None:
+            from .conditioning import first_stable_encoder_latent, minimum_condition_prefetch_blocks
+
+            self.condition_first_stable_latent = first_stable_encoder_latent(encoder)
+            self.condition_prefetch_blocks = max(
+                self.condition_prefetch_blocks,
+                minimum_condition_prefetch_blocks(encoder, self.latent_frames_per_block),
+            )
         self._visual_context: torch.Tensor | None = None
         self._condition_concat: torch.Tensor | None = None
         self._keyboard_history: torch.Tensor | None = None
@@ -187,7 +201,7 @@ class MatrixGame2RealtimeSession:
         }
 
     def _condition_block(self, start_frame: int) -> torch.Tensor:
-        """Return the exact prefetched block or the converged blank tail block."""
+        """Return a prefetched block or reuse the encoder's proven stationary tail."""
 
         assert self._condition_concat is not None
         block_end = start_frame + self.latent_frames_per_block

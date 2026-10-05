@@ -7,11 +7,12 @@
 """Module for base_models -> three_dimensions -> point_clouds -> cut3r -> utils -> image.py functionality."""
 
 import os
-import torch
+
 import numpy as np
 import PIL.Image
-from PIL.ImageOps import exif_transpose
+import torch
 import torchvision.transforms as tvf
+from PIL.ImageOps import exif_transpose
 
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 import cv2  # noqa
@@ -118,10 +119,8 @@ def load_images(folder_or_list, size, square_ok=False, verbose=True):
         img = exif_transpose(PIL.Image.open(os.path.join(root, path))).convert("RGB")
         W1, H1 = img.size
         if size == 224:
-
             img = _resize_pil_image(img, round(size * max(W1 / H1, H1 / W1)))
         else:
-
             img = _resize_pil_image(img, size)
         W, H = img.size
         cx, cy = W // 2, H // 2
@@ -152,9 +151,7 @@ def load_images(folder_or_list, size, square_ok=False, verbose=True):
     return imgs
 
 
-def load_images_for_eval(
-    folder_or_list, size, square_ok=False, verbose=True, crop=True
-):
+def load_images_for_eval(folder_or_list, size, square_ok=False, verbose=True, crop=True):
     """open and convert all images in a list or folder to proper input format for DUSt3R"""
     if isinstance(folder_or_list, str):
         if verbose:
@@ -248,10 +245,8 @@ def load_images_512(folder_or_list, size, square_ok=False, verbose=True):
         img = img.resize((512, 384))
         W1, H1 = img.size
         if size == 224:
-
             img = _resize_pil_image(img, round(size * max(W1 / H1, H1 / W1)))
         else:
-
             img = _resize_pil_image(img, size)
         W, H = img.size
         cx, cy = W // 2, H // 2

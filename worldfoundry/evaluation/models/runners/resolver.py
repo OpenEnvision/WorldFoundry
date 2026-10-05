@@ -187,8 +187,15 @@ def resolve_world_model_runner(
     runner_target = model_config.runner
     try:
         instance = default_model_runner_registry().create(model_config)
+    except ModelResolutionError:
+        raise
     except (KeyError, ValueError, ModuleNotFoundError, AttributeError) as exc:
-        raise ModelResolutionError(str(exc)) from exc
+        # Keep the exception type in the message: str(KeyError) is only the
+        # quoted key, which loses all context.
+        raise ModelResolutionError(
+            f"failed to resolve runner for model {model_config.model_id!r} "
+            f"(runner target {runner_target!r}): {type(exc).__name__}: {exc}"
+        ) from exc
     return ResolvedWorldModel(
         model_id=model_config.model_id,
         runner=instance,
@@ -231,10 +238,24 @@ def resolve_model_zoo_config(
     """
     from worldfoundry.evaluation.models.catalog.manifest import model_zoo_entry_to_world_model_manifest
     from worldfoundry.evaluation.models.catalog.schema import select_default_variant
-    from worldfoundry.evaluation.models.catalog.zoo_registry import load_model_zoo_registry
+    from worldfoundry.evaluation.models.catalog.zoo_registry import (
+        UnknownModelZooKeyError,
+        load_model_zoo_registry,
+    )
 
     # ── Load zoo entry and resolve variant ───────────────────────────────
-    entry = load_model_zoo_registry(manifest_dir).get(model_id)
+    registry = load_model_zoo_registry(manifest_dir)
+    try:
+        entry = registry.get(model_id)
+    except UnknownModelZooKeyError as exc:
+        # Convert to the documented ModelResolutionError (UnknownModelZooKeyError
+        # is a KeyError, which callers following the docstring cannot catch) and
+        # add did-you-mean candidates for the multi-hundred-entry catalog.
+        import difflib
+
+        candidates = difflib.get_close_matches(model_id, [item.model_id for item in registry.list()], n=3)
+        hint = f"; did you mean: {', '.join(candidates)}?" if candidates else ""
+        raise ModelResolutionError(f"unknown model-zoo entry {model_id!r}{hint}") from exc
     if not variant_id and model_id != entry.model_id and any(
         item.variant_id == model_id for item in entry.variants
     ):

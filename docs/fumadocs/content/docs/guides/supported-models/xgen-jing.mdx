@@ -1,0 +1,44 @@
+---
+title: XGEN-JING
+description: Camera-controlled, joint audio/video generation with the shared MiniMax-H3 base.
+pageSource: authored
+---
+
+`xgen-jing` runs the released **JING-Flash-v1 four-step bidirectional** model. Its transformer inherits WorldFoundry's MiniMax-H3 implementation: attention, projections, RoPE, AdaLN, MLPs and output heads remain shared. The extension adds camera FiLM, independent text refinement per slice and global-media/slice-local-text attention. Qwen3-VL conditioning, latent geometry, Euler updates and media export reuse existing components; the H3 video/audio codecs come from Diffusers.
+
+```python
+from worldfoundry.pipelines.xgen_jing import XGENJINGPipeline
+
+pipe = XGENJINGPipeline.from_pretrained(
+    model_path="/checkpoints/XGENlabs--XGEN-JING",
+    base_model_path="/checkpoints/MiniMax-H3",  # Diffusers component layout
+    device="cuda:0",
+    cpu_offload=True,
+)
+result = pipe(
+    reference_images=["character.jpg", "bakery.jpg"],
+    chunks=[
+        {"prompt": "First-person view, walk into the bakery in <Picture 2>.",
+         "repeat": 2, "control": ["w", "w,a"]},
+        {"prompt": "Stop and look at the person in <Picture 1>.",
+         "repeat": 1, "control": [""]},
+    ],
+    height=544,
+    width=960,
+    seed=42,
+    output_path="jing.mp4",
+    return_dict=True,
+)
+```
+
+The transformer directory must contain `jing_flash_v1/config.json`, the shard index and every published weight shard (or point directly to `jing_flash_v1`). The base directory supplies `text_encoder`, `tokenizer`, `processor`, `vae`, `audio_vae`, `scheduler` and `audio_scheduler`. Loading is local and strict; ordinary H3 transformer weights are not JING. Use Diffusers >=0.40.0 for the MiniMax-H3 codecs and Transformers with Qwen3-VL support (tested with 5.12.1). The runtime checks for both codecs before loading the large models.
+
+Use `w/s/a/d` for forward/backward/left/right translation and `i/k/j/l` for look up/down/left/right. Comma-separated simultaneous keys are accepted; opposites cancel. Each chunk's control list has exactly `repeat` entries. Empty controls still encode the learned zero camera command. Up to five references retain their supplied order as `<Picture 1>`, etc.; omit references for text-only generation. The first image is stretched to the canvas, later images are aspect-preserving cover-cropped.
+
+With `first_chunk_size=2` (default), `N` slices produce `17*N+5` pixel frames; `num_frames` is inferred from chunks or slices. Explicit counts align upward to the model's `17*n+5` boundary and must match the slice count. The alternative `first_chunk_size=0` uses `N-1` full slices plus the final short slice. Dimensions must be multiples of 32. The output has 24 FPS video and 32 kHz stereo audio. Sampling uses four fixed distilled noise levels, independent video/audio shifts, and no CFG or negative prompt.
+
+The runtime processes text, transformer and codecs sequentially. Default transformer CPU offload avoids the upstream six-GPU requirement, at a transfer-time cost; `cpu_offload=False` keeps the transformer on the selected GPU. This route does not implement distributed sequence parallelism. `save_latents=True` also saves generated video/audio rows alongside the MP4. Numerical checks run before output clipping.
+
+The released JING-Flash-v1 and MiniMax-H3 checkpoints passed single-GPU, text-only tests at 448×256 with `cpu_offload=False` and at the default 960×544 canvas with `cpu_offload=True`; both used 22 frames and four steps. The public pipeline produced fully decodable 24 FPS H.264 video with 32 kHz stereo AAC audio. Both outputs show a coherent golden retriever running across grass. These runs do not establish image-reference behavior, camera-control accuracy, longer-generation quality or general prompt quality. The causal model and streaming observation-history inference are not released and are not exposed here.
+
+Sources: [XGEN-JING](https://github.com/XGEN-Labs/XGEN-JING), revision `cbeec31630d63a981a8e40d6e79c71a188a7d8c9`; [weights](https://huggingface.co/XGENlabs/XGEN-JING), revision `8153db624fa4fa573d2e0c5335b515882efff30d`. Attribution and the MiniMax H3 Community License are recorded in root `THIRD-PARTY-NOTICES`.

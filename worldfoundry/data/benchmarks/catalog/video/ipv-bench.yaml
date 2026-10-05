@@ -1,5 +1,7 @@
 id: ipv-bench
 name: IPV-Bench
+publisher: National University of Singapore
+publisher_kind: university
 benchmark_kind:
 - text-to-video
 - counterfactual-video
@@ -87,6 +89,18 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  scoring:
+    engines: [video_quality]
+    hooks:
+      video_quality: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_ipv_bench_video_quality_contract_file
+  normalization:
+    artifact_official_run: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/ipv_bench/run_ipv_bench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.ipv_bench.run_ipv_bench_official_runner
+    generated_arg: null
+    limit_arg: --limit
+    supports_fixture: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:IPVBenchContract
   validation_command:
   - worldfoundry-eval
@@ -124,6 +138,7 @@ runner:
     generated videos.
 integration:
   status: integrated
+  tier: in_tree
   blocked_reasons:
   - Full official runtime (generation + human/judge scoring) has not been executed in-tree.
   - Leaderboard parity requires official judge/checkpoint/API assets beyond the normalizer fixture.

@@ -22,9 +22,9 @@ pip_packages:
 - torchmetrics
 - termcolor
 source_requirement_files:
-- worldfoundry/synthesis/visual_generation/world_model/mira_wm/requirements-torchcodec.txt
+- worldfoundry/synthesis/visual_generation/mira_wm/requirements-torchcodec.txt
 pythonpath_dirs:
-- worldfoundry/synthesis/visual_generation/world_model/mira_wm/src
+- worldfoundry/synthesis/visual_generation/mira_wm/src
 validation_imports:
 - torch>=2.8,<2.9
 - torchcodec==0.7.0

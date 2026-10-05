@@ -1,324 +1,153 @@
-"""Wan 2P2 visual generation pipeline module."""
+"""Public Wan2.2 adapter for the native diffusion infra."""
 
-from ..pipeline_utils import PipelineABC
-from typing import Any, Dict, Optional
-import random
-import sys
-import torch
+from __future__ import annotations
 
-from PIL import Image
+from typing import Any
 
-from ...operators.wan_2p2_operator import Wan2p2Operator
-from ...synthesis.visual_generation.wan.wan2p2_synthesis import (
-    Wan2p2Synthesis,
-    load_wan2p2_config_maps,
-)
-from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
-
-EXAMPLE_PROMPT = {
-    "ti2v-5B": {
-        "prompt":
-            "Two anthropomorphic cats in comfy boxing gear and bright gloves fight intensely on a spotlighted stage.",
-    }
-}
+from ..native_diffusion_video import NativeTextToVideoPipeline
+from .pipeline_wan_2p1_t2v import WAN21_NEGATIVE_PROMPT
 
 
-def _device_id(value: Any) -> int:
-    """Device id helper function."""
-    if isinstance(value, int):
-        return value
-    text = str(value or "0").strip().lower()
-    if text == "cuda":
-        return 0
-    if text.startswith("cuda:"):
-        return int(text.split(":", 1)[1] or 0)
-    return int(text)
+class Wan2p2Pipeline(NativeTextToVideoPipeline):
+    """Wan2.2 TI2V 5B with optional first-frame conditioning."""
 
-
-class Wan2p2Pipeline(PipelineABC):
-
-    """Pipeline implementation for Wan2p2 visual generation."""
-    def __init__(
-        self,
-        *,
-        operator: Wan2p2Operator,
-        synthesis_model: Wan2p2Synthesis,
-        memory_module: Optional[Any] = None,
-        mode: str = "ti2v-5B",
-        prompt: Optional[str] = None,
-        use_prompt_extend: bool = False,
-        prompt_extend_method: str = "local_qwen",
-        prompt_extend_model: Optional[str] = None,
-        prompt_extend_target_lang: str = "zh",
-        sample_solver: str = "unipc",
-        sample_steps: Optional[int] = None,
-        sample_shift: Optional[float] = None,
-        sample_guide_scale: Optional[float] = None,
-        base_seed: int = -1,
-    ) -> None:
-        """Initialize the pipeline and configure runtime components."""
-        self.operator = operator
-        self.synthesis_model = synthesis_model
-        self.memory_module = memory_module if memory_module else VisualFrameMemory(model_id="wan-2.2")
-        
-        # Store parameters
-        self.mode = mode
-        self.prompt = prompt
-        self.use_prompt_extend = use_prompt_extend
-        self.prompt_extend_method = prompt_extend_method
-        self.prompt_extend_model = prompt_extend_model
-        self.prompt_extend_target_lang = prompt_extend_target_lang
-        
-        # Set default sampling parameters from config
-        wan_configs, _ = load_wan2p2_config_maps()
-        cfg = wan_configs[mode]
-        self.sample_solver = sample_solver
-        self.sample_steps = sample_steps if sample_steps is not None else cfg.sample_steps
-        self.sample_shift = sample_shift if sample_shift is not None else cfg.sample_shift
-        self.sample_guide_scale = sample_guide_scale if sample_guide_scale is not None else cfg.sample_guide_scale
-        self.base_seed = base_seed if base_seed >= 0 else random.randint(0, sys.maxsize)
-
-
-    @classmethod
-    def from_pretrained(
-        cls,
-        model_path: str | Dict[str, Any] | None = None,
-        required_components: Optional[Dict[str, Any]] = None,
-        mode: str = "ti2v-5B",
-        ulysses_size: int = 1,
-        t5_fsdp: bool = False,
-        t5_cpu: bool = False,
-        dit_fsdp: bool = False,
-        convert_model_dtype: bool = False,
-        device: int = 0,
-        rank: int = 0,
-        **kwargs
-    ) -> "Wan2p2Pipeline":
-        """
-        Load a pretrained Wan2p2Pipeline.
-        
-        Args:
-            model_path: Path to the pretrained model
-            mode: Task type (e.g., "ti2v-5B")
-            device: GPU device ID
-            rank: Distributed training rank
-        """
-        component_options = dict(required_components or {})
-        if isinstance(model_path, dict):
-            component_options.update(model_path)
-            model_path = component_options.pop("model_path", None)
-        mode = component_options.pop("mode", mode)
-        ulysses_size = component_options.pop("ulysses_size", ulysses_size)
-        t5_fsdp = component_options.pop("t5_fsdp", t5_fsdp)
-        t5_cpu = component_options.pop("t5_cpu", t5_cpu)
-        dit_fsdp = component_options.pop("dit_fsdp", dit_fsdp)
-        convert_model_dtype = component_options.pop("convert_model_dtype", convert_model_dtype)
-        rank = component_options.pop("rank", rank)
-        device = _device_id(component_options.pop("device", device))
-        kwargs = cls._strip_framework_loading_options({**component_options, **kwargs})
-        model_path = model_path or kwargs.pop("ckpt_dir", None)
-        if model_path is None:
-            raise ValueError("Wan2p2Pipeline.from_pretrained requires model_path.")
-
-        # Validate task
-        wan_configs, _ = load_wan2p2_config_maps()
-        assert mode in wan_configs, f"Unsupport mode: {mode}"
-        assert mode in EXAMPLE_PROMPT, f"Unsupport mode: {mode}"
-
-        operator = Wan2p2Operator()
-        memory_module = VisualFrameMemory(model_id="wan-2.2")
-        synthesis_model = Wan2p2Synthesis.from_pretrained(
-            mode=mode,
-            ckpt_dir=model_path,
-            device=device,
-            rank=rank,
-            t5_fsdp=t5_fsdp,
-            dit_fsdp=dit_fsdp,
-            ulysses_size=ulysses_size,
-            t5_cpu=t5_cpu,
-            convert_model_dtype=convert_model_dtype
-        )
-
-        return cls(
-            operator=operator,
-            synthesis_model=synthesis_model,
-            memory_module=memory_module,
-            mode=mode,
-        )
-
-
-    def process(
-        self,
-        *,
-        prompt: str,
-        images: Optional[Image.Image] = None,
-        use_prompt_extend: Optional[bool] = None,
-        prompt_extend_method: Optional[str] = None,
-        prompt_extend_model: Optional[str] = None,
-        prompt_extend_target_lang: Optional[str] = None,
-        base_seed: Optional[int] = None,
-    ) -> Dict[str, Any]:
-
-        # 优先使用内存中的 images
-        """Process and normalize input arguments and conditions for inference."""
-        if images is not None:
-            input_for_perception = images
-        else:
-            input_for_perception = None
-        
-        perception = self.operator.process_perception(input_path=input_for_perception)
-        img = perception["input_image"]
-
-        self.operator.get_interaction(prompt)
-        interaction = self.operator.process_interaction(
-            mode=self.mode,
-            images=img,
-            use_prompt_extend=use_prompt_extend if use_prompt_extend is not None else self.use_prompt_extend,
-            prompt_extend_method=prompt_extend_method if prompt_extend_method is not None else self.prompt_extend_method,
-            prompt_extend_model=prompt_extend_model if prompt_extend_model is not None else self.prompt_extend_model,
-            prompt_extend_target_lang=prompt_extend_target_lang if prompt_extend_target_lang is not None else self.prompt_extend_target_lang,
-            base_seed=base_seed if base_seed is not None else self.base_seed,
-        )
-
-        return {
-            "prompt": interaction["processed_prompt"],
-            "image": img,
-            "meta": {
-                "mode": self.mode,
-            },
-        }
+    MODEL_ID = "wan2.2-ti2v-5b"
+    OWNER = "Wan2.2 TI2V 5B"
+    CHECKPOINT_ROLES = ("dit", "text-encoder", "tokenizer", "vae")
+    # Distilled/accelerated Wan releases are commonly distributed as PEFT
+    # LoRAs. Reuse the audited Wan merge path so 4-step adapters remain an
+    # opt-in checkpoint choice instead of requiring a separate pipeline.
+    PEFT_ADAPTER_COMPONENT = "denoiser:main"
+    GENERATION_TYPE = "ti2v"
+    ACCEPTS_IMAGES = True
+    REQUIRES_IMAGES = False
+    DEFAULT_HEIGHT = 704
+    DEFAULT_WIDTH = 1280
+    DEFAULT_NUM_FRAMES = 121
+    DEFAULT_NUM_INFERENCE_STEPS = 50
+    DEFAULT_GUIDANCE_SCALE = 5.0
+    DEFAULT_NEGATIVE_PROMPT = WAN21_NEGATIVE_PROMPT
+    DEFAULT_FPS = 24
+    OUTPUT_VALUE_RANGE = "-1,1"
+    DEFAULT_SCHEDULER_OPTIONS = {"shift": 5.0}
 
     def __call__(
         self,
+        prompt: str | list[str] = "",
+        images: Any = None,
         *,
-        prompt: str,
-        images: Optional[Image.Image] = None,
-        size: Optional[str] = None,
-        frame_num: Optional[int] = None,
-        sample_solver: Optional[str] = None,
-        sample_steps: Optional[int] = None,
-        sample_shift: Optional[float] = None,
-        sample_guide_scale: Optional[float] = None,
-        base_seed: Optional[int] = None,
-        offload_model: Optional[bool] = None,
-        use_prompt_extend: Optional[bool] = None,
-        prompt_extend_method: Optional[str] = None,
-        prompt_extend_model: Optional[str] = None,
-        prompt_extend_target_lang: Optional[str] = None,
+        size: str | None = None,
+        frame_num: int | None = None,
+        sample_solver: str = "unipc",
+        sample_steps: int | None = None,
+        sample_shift: float | None = None,
+        sample_guide_scale: float | None = None,
+        base_seed: int | None = None,
+        offload_model: bool | None = None,
+        height: int | None = None,
+        width: int | None = None,
+        **kwargs: Any,
     ) -> Any:
-        """
-        Generate video from prompt and optional image.
-        
-        Args:
-            prompt: Text prompt for video generation (required)
-            images: PIL Image object (optional)
-            size: Output video size (optional, defaults to config value, e.g., "1280*704")
-            frame_num: Number of frames (optional, defaults to config value)
-            sample_solver: Override sampling solver (optional, defaults to "unipc")
-            sample_steps: Override sampling steps (optional, defaults to config value)
-            sample_shift: Override sample shift (optional, defaults to config value)
-            sample_guide_scale: Override guidance scale (optional, defaults to config value)
-            base_seed: Override random seed (optional)
-            offload_model: Whether to offload model to CPU during generation (optional)
-            use_prompt_extend: Enable prompt extension (optional, defaults to False)
-            prompt_extend_method: Prompt extension method (optional, defaults to "local_qwen")
-            prompt_extend_model: Model for prompt extension (optional)
-            prompt_extend_target_lang: Target language for prompt extension (optional, defaults to "zh")
-        
-        Returns:
-            Generated video tensor
-        """
-        wan_configs, supported_sizes = load_wan2p2_config_maps()
-        cfg = wan_configs[self.mode]
-        
-        if size is None:
-            size = "1280*704"
-        
-        # Validate size
-        if 's2v' not in self.mode:
-            assert size in supported_sizes[self.mode], \
-                f"Unsupport size {size} for mode {self.mode}, supported sizes are: {', '.join(supported_sizes[self.mode])}"
-        
-        # Set default frame_num from config if not provided
-        if frame_num is None:
-            frame_num = cfg.frame_num
-        
-        # Use provided parameters or fall back to instance defaults (from config)
-        video_sample_solver = sample_solver if sample_solver is not None else self.sample_solver
-        video_sample_steps = sample_steps if sample_steps is not None else self.sample_steps
-        video_sample_shift = sample_shift if sample_shift is not None else self.sample_shift
-        video_sample_guide_scale = sample_guide_scale if sample_guide_scale is not None else self.sample_guide_scale
-        video_base_seed = base_seed if base_seed is not None else self.base_seed
-
-        processed = self.process(
+        del offload_model
+        if str(sample_solver).strip().lower() != "unipc":
+            raise ValueError("native Wan2.2 currently supports the shared UniPC scheduler")
+        standard_frames = kwargs.pop("num_frames", None)
+        standard_steps = kwargs.pop("num_inference_steps", None)
+        standard_guidance = kwargs.pop("guidance_scale", None)
+        standard_seed = kwargs.pop("seed", None)
+        standard_shift = kwargs.pop("shift", None)
+        if frame_num is not None and standard_frames is not None and int(frame_num) != int(standard_frames):
+            raise ValueError("Wan2.2 frame_num conflicts with num_frames")
+        if sample_steps is not None and standard_steps is not None and int(sample_steps) != int(standard_steps):
+            raise ValueError("Wan2.2 sample_steps conflicts with num_inference_steps")
+        if (
+            sample_guide_scale is not None
+            and standard_guidance is not None
+            and float(sample_guide_scale) != float(standard_guidance)
+        ):
+            raise ValueError("Wan2.2 sample_guide_scale conflicts with guidance_scale")
+        if base_seed is not None and standard_seed is not None and int(base_seed) != int(standard_seed):
+            raise ValueError("Wan2.2 base_seed conflicts with seed")
+        if sample_shift is not None and standard_shift is not None and float(sample_shift) != float(standard_shift):
+            raise ValueError("Wan2.2 sample_shift conflicts with shift")
+        if size is not None:
+            separator = "*" if "*" in size else "x"
+            try:
+                parsed_width, parsed_height = (int(value) for value in size.lower().split(separator, 1))
+            except (TypeError, ValueError) as error:
+                raise ValueError("Wan2.2 size must use WIDTH*HEIGHT, for example 1280*704") from error
+            if (width is not None and width != parsed_width) or (
+                height is not None and height != parsed_height
+            ):
+                raise ValueError("Wan2.2 size conflicts with explicit height/width")
+            width, height = parsed_width, parsed_height
+        return super().__call__(
             prompt=prompt,
             images=images,
-            use_prompt_extend=use_prompt_extend,
-            prompt_extend_method=prompt_extend_method,
-            prompt_extend_model=prompt_extend_model,
-            prompt_extend_target_lang=prompt_extend_target_lang,
-            base_seed=video_base_seed,
+            height=height,
+            width=width,
+            num_frames=frame_num if frame_num is not None else standard_frames,
+            num_inference_steps=sample_steps if sample_steps is not None else standard_steps,
+            guidance_scale=(
+                sample_guide_scale if sample_guide_scale is not None else standard_guidance
+            ),
+            seed=(
+                base_seed
+                if base_seed is not None
+                else (standard_seed if standard_seed is not None else 0)
+            ),
+            shift=sample_shift if sample_shift is not None else standard_shift,
+            **kwargs,
         )
 
-        # Create a dict with all the synthesis parameters
-        synthesis_params = {
-            "mode": self.mode,
-            "size": size,
-            "frame_num": frame_num,
-            "sample_solver": video_sample_solver,
-            "sample_steps": video_sample_steps,
-            "sample_shift": video_sample_shift,
-            "sample_guide_scale": video_sample_guide_scale,
-            "base_seed": video_base_seed,
-            "offload_model": offload_model,
-        }
 
-        video = self.synthesis_model.predict(
-            processed_inputs=processed,
-            **synthesis_params,
-        )
+class Wan2p2T2VA14BPipeline(NativeTextToVideoPipeline):
+    """Official Wan2.2 T2V A14B dual-expert generation."""
 
-        return video
+    MODEL_ID = "wan2.2-t2v-a14b"
+    OWNER = "Wan2.2 T2V A14B"
+    CHECKPOINT_ROLES = ("high-dit", "low-dit", "text-encoder", "tokenizer", "vae")
+    DEFAULT_HEIGHT = 480
+    DEFAULT_WIDTH = 832
+    DEFAULT_NUM_FRAMES = 81
+    DEFAULT_NUM_INFERENCE_STEPS = 40
+    DEFAULT_GUIDANCE_SCALE = 4.0
+    DEFAULT_NEGATIVE_PROMPT = WAN21_NEGATIVE_PROMPT
+    DEFAULT_FPS = 16
+    OUTPUT_VALUE_RANGE = "-1,1"
+    DEFAULT_SCHEDULER_OPTIONS = {"shift": 12.0}
+    REQUEST_INPUT_DEFAULTS = {
+        "low_noise_guidance_scale": 3.0,
+        "high_noise_guidance_scale": 4.0,
+    }
 
 
-    def stream(
-        self,
-        *,
-        prompt: Optional[str] = None,
-        images: Optional[Image.Image] = None,
-        use_prompt_extend: Optional[bool] = None,
-        prompt_extend_method: Optional[str] = None,
-        prompt_extend_model: Optional[str] = None,
-        prompt_extend_target_lang: Optional[str] = None,
-    ) -> Any:
-        """
-        - 每次调用都会复用 __call__ 完整生成一段视频；
-        - 始终将该段视频记录到 memory_module（拆帧追加到 all_frames）；
-        - 返回本轮生成的视频张量。
-        """
-        # Use provided prompt or fall back to instance default
-        if prompt is None:
-            if self.prompt is None:
-                raise ValueError("prompt must be provided either in initialization or stream().")
-            prompt = self.prompt
-        
-        video = self.__call__(
-            prompt=prompt,
-            images=images,
-            use_prompt_extend=use_prompt_extend,
-            prompt_extend_method=prompt_extend_method,
-            prompt_extend_model=prompt_extend_model,
-            prompt_extend_target_lang=prompt_extend_target_lang,
-        )
+class Wan2p2I2VA14BPipeline(NativeTextToVideoPipeline):
+    """Official Wan2.2 I2V A14B dual-expert generation."""
 
-        if not isinstance(video, torch.Tensor):
-            raise TypeError(
-                f"[Wan2p2Pipeline.stream] Expected torch.Tensor from predict, got {type(video)}"
-            )
-        self.memory_module.record(video)
-        print(
-            f"[Wan2p2Pipeline.stream] Recorded segment. "
-            f"Total frames in memory: {len(getattr(self.memory_module, 'all_frames', []))}"
-        )
+    MODEL_ID = "wan2.2-i2v-a14b"
+    OWNER = "Wan2.2 I2V A14B"
+    CHECKPOINT_ROLES = ("high-dit", "low-dit", "text-encoder", "tokenizer", "vae")
+    GENERATION_TYPE = "i2v"
+    ACCEPTS_IMAGES = True
+    REQUIRES_IMAGES = True
+    DEFAULT_HEIGHT = 480
+    DEFAULT_WIDTH = 832
+    DEFAULT_NUM_FRAMES = 81
+    DEFAULT_NUM_INFERENCE_STEPS = 40
+    DEFAULT_GUIDANCE_SCALE = 3.5
+    DEFAULT_NEGATIVE_PROMPT = WAN21_NEGATIVE_PROMPT
+    DEFAULT_FPS = 16
+    OUTPUT_VALUE_RANGE = "-1,1"
+    DEFAULT_SCHEDULER_OPTIONS = {"shift": 5.0}
+    REQUEST_INPUT_DEFAULTS = {
+        "low_noise_guidance_scale": 3.5,
+        "high_noise_guidance_scale": 3.5,
+    }
 
-        return video
+
+__all__ = [
+    "Wan2p2I2VA14BPipeline",
+    "Wan2p2Pipeline",
+    "Wan2p2T2VA14BPipeline",
+]

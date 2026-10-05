@@ -18,10 +18,7 @@ import torch
 from torch import nn, Tensor
 
 from .attention import Attention, MemEffAttention, CrossAttentionRope, MemEffCrossAttentionRope, FlashAttentionRope
-from worldfoundry.core.nn.layers import DropPath, LayerScale, Mlp
-from worldfoundry.base_models.three_dimensions.point_clouds.pi3.pi3.models.layers.block import (
-    Block, drop_add_residual_stochastic_depth, get_branges_scales, add_residual, get_attn_bias_and_cat, drop_add_residual_stochastic_depth_list, NestedTensorBlock, CrossBlockRope, PoseInjectBlock, CrossOnlyBlockRope
-)
+from worldfoundry.core.nn.blocks.layers import DropPath, LayerScale, Mlp
 
 XFORMERS_ENABLED = os.environ.get("XFORMERS_DISABLED") is None
 try:
@@ -192,22 +189,6 @@ class BlockRope(nn.Module):
             """
             return self.ls2(self.mlp(self.norm2(x)))
 
-        if self.training and self.sample_drop_ratio > 0.1:
-            # the overhead is compensated only for a drop path rate larger than 0.1
-            x = drop_add_residual_stochastic_depth(
-                x,
-                residual_func=attn_residual_func,
-                sample_drop_ratio=self.sample_drop_ratio,
-            )
-            x = drop_add_residual_stochastic_depth(
-                x,
-                residual_func=ffn_residual_func,
-                sample_drop_ratio=self.sample_drop_ratio,
-            )
-        elif self.training and self.sample_drop_ratio > 0.0:
-            x = x + self.drop_path1(attn_residual_func(x))
-            x = x + self.drop_path1(ffn_residual_func(x))  # FIXME: drop_path2
-        else:
-            x = x + attn_residual_func(x)
-            x = x + ffn_residual_func(x)
+        x = x + attn_residual_func(x)
+        x = x + ffn_residual_func(x)
         return x

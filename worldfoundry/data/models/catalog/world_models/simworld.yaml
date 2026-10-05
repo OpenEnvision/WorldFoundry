@@ -15,6 +15,8 @@ source:
   official_repo_url: https://github.com/SimWorld-AI/SimWorld
   notes:
   - Originally exposed by WorldFoundry-native-Simulator.
+official_sources:
+  paper: https://arxiv.org/abs/2512.01078
 integration:
   status: runtime_ported
   notes:
@@ -30,3 +32,19 @@ catalog_scope: World-model catalog entries. Integrated entries expose in-tree Wo
   runtimes; blocked entries retain upstream provenance without runnable backends.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: simworld
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'SimWorld is a simulator-control entry rather than a video generator: it drives multi-agent embodied simulation (policy rollouts, world state) through a simulator server. In this catalog the route is registered; the simulator server and assets stay runtime-gated, and the recorded artifact type is world_state.'
+  overview_zh: SimWorld 是模拟器控制条目而非视频生成器：通过模拟器服务器驱动多智能体具身仿真（策略滚动、世界状态）。本 catalog 中路径已注册；模拟器服务器与资产保持运行时限制，记录的产物类型为 world_state。
+  architecture: Architecture internals are not recorded in this repository — this entry catalogs a simulation platform surface, not a neural network.
+  architecture_zh: 架构内部细节仓库未记录——该条目登记的是仿真平台接口，不是神经网络。
+  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. A running simulator server is the key prerequisite.
+  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。关键前置条件是一个运行中的模拟器服务器。
+  limitations:
+  - Needs an external simulator server; no standalone generation.
+  - The publishing institution is not recorded in this repository.
+  limitations_zh:
+  - 需要外部模拟器服务器；无法独立生成。
+  - 发表机构在本仓库中未记录。

@@ -34,3 +34,19 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata,
   and runtime-profile planning records. Runner or pipeline targets are present only after a complete in-tree
   WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: Spirit AI
+  publisher_kind: company
+  publisher_zh: Spirit AI（千寻智能）
+  overview: Spirit-VLA v1.5 is Spirit AI's vision-language-action policy on a Qwen3-VL backbone, released as the confirmed Spirit-AI-robotics/Spirit-v1.5 base checkpoint. WorldFoundry includes the native inference architecture and preprocessing in-tree; the runtime loads the official checkpoint and Qwen3-VL backbone with remote Python disabled.
+  overview_zh: Spirit-VLA v1.5 是 Spirit AI（千寻智能）基于 Qwen3-VL 骨干的视觉-语言-动作策略，发布已确认的 Spirit-AI-robotics/Spirit-v1.5 base checkpoint。WorldFoundry 将原生推理架构与预处理内置树内；运行时加载官方 checkpoint 与 Qwen3-VL 骨干，禁用远程 Python。
+  architecture: A Qwen3-VL vision-language backbone with Spirit's action prediction head. Architecture internals beyond the official repository pointer are not recorded in this repository.
+  architecture_zh: Qwen3-VL 视觉-语言骨干配 Spirit 的动作预测头。官方仓库指针之外的架构内部细节仓库未记录。
+  usage_notes: Import and checkpoint gating are validated; numerical parity requires staging the 21.6 GB checkpoint locally.
+  usage_notes_zh: 导入与 checkpoint 门控已验证；数值 parity 需本地就位 21.6 GB checkpoint。
+  limitations:
+  - The 21.6 GB checkpoint is not staged; numerical parity is pending.
+  - No license is recorded in this repository.
+  limitations_zh:
+  - 21.6 GB checkpoint 未就位；数值 parity 待定。
+  - 仓库未记录许可证。

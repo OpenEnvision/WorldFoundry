@@ -8,6 +8,7 @@ availability: open_source_noncommercial
 provider: official_repo
 license: cc-by-nc-4.0
 official_sources:
+  paper: https://arxiv.org/abs/2505.03233
   github:
     url: https://github.com/jiangranlv/LDA-1B
     head_sha: 06e6a274a9086cc26635a9fe663866335eb30fc5
@@ -38,3 +39,23 @@ runner_parity:
   - Exact checkpoint-key and numerical rollout validation require the unstaged 14.4 GB artifact.
 catalog_category: vla_va_wam
 catalog_scope: In-tree inference runtime and checkpoint metadata for embodied policies.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: LDA-1B is a 1B-scale VLA policy combining Qwen3-VL language-vision assembly with a DINOv3-ViT compatibility model and an MMDiT action sampler, released for RoboCasa (Wayer2/LDA-robocasa, CC-BY-NC-4.0). WorldFoundry keeps the full inference path in-tree with static runtime verification complete.
+  overview_zh: LDA-1B 是 1B 规模的 VLA 策略，将 Qwen3-VL 视觉-语言组装、DINOv3-ViT 兼容模型与 MMDiT 动作采样器结合，面向 RoboCasa 发布（Wayer2/LDA-robocasa，CC-BY-NC-4.0）。WorldFoundry 将完整推理路径内置树内，静态运行时验证已完成。
+  architecture: Qwen3-VL provides multimodal encoding, DINOv3-ViT adds visual features, and an MMDiT (multimodal diffusion transformer) samples actions, with state packing and action unnormalization in-tree. Model and parameter names preserve the released checkpoint contract.
+  architecture_zh: Qwen3-VL 提供多模态编码，DINOv3-ViT 补充视觉特征，MMDiT（多模态扩散 transformer）采样动作，状态打包与动作反归一化内置树内。模型与参数名保持发布 checkpoint 契约。
+  usage_notes: The runtime loads only a locally staged tensor state dict with weights_only=true. Exact checkpoint-key and numerical rollout validation require the unstaged 14.4 GB artifact — stage it before real runs.
+  usage_notes_zh: 运行时仅以 weights_only=true 加载本地就位的张量 state dict。精确 checkpoint 键与数值 rollout 验证需要尚未就位的 14.4 GB 工件——真实运行前请先就位。
+  limitations:
+  - 'CC-BY-NC-4.0: non-commercial use only.'
+  - The 14.4 GB checkpoint is not staged; numerical validation is pending.
+  limitations_zh:
+  - CC-BY-NC-4.0：仅限非商用。
+  - 14.4 GB checkpoint 未就位；数值验证待定。
+  recommended_benchmarks:
+  - id: robocasa
+    reason: The released checkpoint targets RoboCasa.
+    reason_zh: 发布的 checkpoint 面向 RoboCasa。

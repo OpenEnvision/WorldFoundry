@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.evaluation.tasks.metrics._shared.torch_fidelity import calculate_metrics
+from worldfoundry.evaluation.tasks.metrics._shared.torch_fidelity import calculate_metrics, prepare_image_input
 
 
 def _parse_numeric_result(result: dict[str, Any]) -> dict[str, float]:
@@ -22,7 +22,7 @@ def compute_inception_score(
     **kwargs: Any,
 ) -> dict[str, float]:
     result = calculate_metrics()(
-        input1=str(images),
+        input1=prepare_image_input(images, **kwargs),
         batch_size=batch_size,
         cuda=cuda,
         isc=True,

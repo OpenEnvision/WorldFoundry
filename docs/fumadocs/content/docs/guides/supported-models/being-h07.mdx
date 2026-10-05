@@ -1,0 +1,26 @@
+---
+title: "Being-H0.7"
+description: "Being-H0.7 from BeingBeyond: vla and wam."
+modelId: "being-h07"
+pageSource: authored
+---
+
+Being-H0.7 is the successor line in BeingBeyond's Being-H family, recorded here as a latent world-action model (WAM) plus robot policy. WorldFoundry routes it through the in-tree official-policy action runtime from the Being-H07 subdirectory of the official repository; checkpoints are not yet recorded.
+
+<ModelPaperFigures modelId="being-h07" locale="en" />
+
+<ModelCommandBuilder modelId="being-h07" locale="en" />
+
+## What it is for
+
+Start on `being-h07`. Launch `worldfoundry-eval run being-h07 --pipeline.task-profile vla`. Need a GPU-validated BeingBeyond route? Use [Being-H0.5](/docs/guides/supported-models/being-h05) instead.
+
+## Runtime contract
+
+Required `image`, `prompt`, and `state`. Artifacts: `action_trace`, `being-h07_action_trace.json`.
+
+## Running in WorldFoundry
+
+Unified `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `BeingBeyond/Being-H07` when released — missing weights become a runtime plan, not a catalog blocker. No license is recorded. Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="being-h07" locale="en" />

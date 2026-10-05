@@ -6,11 +6,13 @@ conda_packages:
 - wheel
 cuda_profile: cu128
 driver_status: compatible
-env_name: worldfoundry-unified-cu128
+env_name: worldfoundry-longvie-cu128
 env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
 model_id: longvie-1
 notes:
-- Mirrors the official LongVie requirements and keeps the vendored DiffSynth runtime in-tree.
+- Mirrors the dependencies needed by LongVie on WorldFoundry's native Wan runtime.
+- Uses a dedicated overlay environment so the required Transformers 4.57 API cannot be replaced by the shared environment's Transformers 5.x upgrade.
+- Pins kernels 0.12.1 so the inherited optional kernels package remains compatible with the overlay's huggingface-hub <1 constraint.
 - execute=True uses local checkpoints from WORLDFOUNDRY_HFD_ROOT or the bench-local ckpt/hfd fallback; default WorldFoundry
   calls fail fast to avoid accidental 14B model loads in CPU tests.
 - The LongVie-1 WorldFoundry adapter uses the official control path without requiring the optional LongVie 2 DiT attention
@@ -35,7 +37,8 @@ pip_packages:
 - pillow
 - numpy
 - opencv-python
-- huggingface_hub
+- huggingface_hub>=0.34,<1
+- kernels==0.12.1
 python: '3.10'
 validation_imports:
 - torch
@@ -55,3 +58,4 @@ validation_imports:
 - PIL
 - numpy
 - cv2
+- kernels

@@ -16,6 +16,8 @@ modalities:
 - mesh-export
 name: HunyuanWorld 1.0
 official_sources:
+  project_page: https://3d.hunyuan.tencent.com/
+  paper: https://arxiv.org/abs/2507.21809
   github:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
@@ -47,3 +49,23 @@ runner_parity:
     emits a runtime plan until required checkpoints/assets are staged.
 output_artifacts:
 - generated_world
+docs:
+  publisher: Tencent (Hunyuan)
+  publisher_kind: company
+  publisher_zh: 腾讯（混元）
+  overview: HunyuanWorld 1.0 generates immersive, explorable 3D worlds from text or an image — the first generation of Tencent's open world-generation stack, exporting layered panoramas and mesh scenes. In this catalog the official source route is registered; checkpoints and third-party assets stay runtime-gated.
+  overview_zh: HunyuanWorld 1.0 从文本或一张图生成沉浸式、可探索的 3D 世界——腾讯开源世界生成栈的第一代，导出分层全景与网格场景。本 catalog 中官方源码路径已注册；checkpoint 与第三方资产保持运行时限制。
+  architecture: 'Per the upstream release, generation goes panorama-first: a panoramic proxy is generated, semantically layered, and lifted to a 3D world representation. Architecture internals beyond this are not recorded in this repository.'
+  architecture_zh: 按上游发布，生成以全景为先：先生成全景代理图，再做语义分层并提升为 3D 世界表示。除此之外的架构内部细节仓库未记录。
+  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. For the newer component-verified stack, see the hy-world-2.0 entry.
+  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。较新的组件已验证栈请见 hy-world-2.0 条目。
+  limitations:
+  - Real generation is checkpoint/asset gated.
+  - Superseded by HY-World 2.0 for most world-generation use.
+  limitations_zh:
+  - 真实生成受 checkpoint/资产限制。
+  - 多数世界生成用途已被 HY-World 2.0 取代。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Standard scoring for generated explorable worlds.
+    reason_zh: 生成可探索世界的标准评分。

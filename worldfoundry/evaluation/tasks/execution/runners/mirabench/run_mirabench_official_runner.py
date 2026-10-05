@@ -11,6 +11,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    SCORECARD_SCHEMA_VERSION,
+    build_import_metric_rows,
+    build_video_coverage,
+    resolve_env_path,
+)
 from worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_metrics import (
     METRIC_ORDER,
     METRIC_SPECS,
@@ -28,9 +34,6 @@ from worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_runtime
     scorer_config_from_env,
 )
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
-
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -58,61 +61,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
-
-
 def _metric_rows(
     *,
     computed: Mapping[str, Any],
     source_path: Path,
     official_runtime_executed: bool,
 ) -> list[dict[str, Any]]:
-    direct_metrics = computed.get("metrics") if isinstance(computed.get("metrics"), Mapping) else {}
-    components = computed.get("components") if isinstance(computed.get("components"), Mapping) else {}
-    rows: list[dict[str, Any]] = []
-    for metric_id in METRIC_ORDER:
-        spec = METRIC_SPECS[metric_id]
-        score = direct_metrics.get(metric_id)
-        rows.append(
-            {
-                "metric_id": metric_id,
-                "name": spec["name"],
-                "available": score is not None,
-                "raw_score": score,
-                "normalized_score": score,
-                "score": score,
-                "higher_is_better": spec["higher_is_better"],
-                "group": spec["group"],
-                "source": "mirabench_official_runtime" if official_runtime_executed else "mirabench_results_file",
-                "source_path": str(source_path),
-                "components": components,
-                "reason": None if score is not None else "score_not_available_in_mirabench_results",
-            }
-        )
-    return rows
-
-
-def _coverage(expected_ids: set[str], generated_dir: Path | None) -> dict[str, Any]:
-    actual_names: set[str] = set()
-    if generated_dir is not None and generated_dir.exists():
-        for path in generated_dir.iterdir():
-            if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES:
-                actual_names.add(path.stem)
-    missing = sorted(expected_ids - actual_names)
-    unexpected = sorted(actual_names - expected_ids)
-    matched = sorted(expected_ids & actual_names)
-    return {
-        "expected_count": len(expected_ids),
-        "actual_count": len(actual_names),
-        "matched_count": len(matched),
-        "missing_count": len(missing),
-        "unexpected_count": len(unexpected),
-        "complete": bool(expected_ids) and not missing,
-        "missing_ids": missing[:50],
-        "unexpected_ids": unexpected[:50],
-    }
+    return build_import_metric_rows(
+        metric_order=METRIC_ORDER,
+        metric_specs=METRIC_SPECS,
+        computed=computed,
+        source_path=source_path,
+        source_label="mirabench_official_runtime" if official_runtime_executed else "mirabench_results_file",
+        evidence_scope=(
+            "official_runtime_execution" if official_runtime_executed else "result_artifact_import_only"
+        ),
+        imported_flag_value=official_runtime_executed,
+        reason_template="score_not_available_in_mirabench_results",
+    )
 
 
 def _scorecard(
@@ -149,7 +115,7 @@ def _scorecard(
     # protocol completed.  Do not promote adapter success to official evidence.
     official_verified = False
     integration_evidence = False
-    normalizer_only = True
+    normalizer_only = not official_runtime_executed
     return {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "official_benchmark_verified": official_verified,
@@ -179,7 +145,7 @@ def _scorecard(
         },
         "evaluation": {
             "available": normalization_ok,
-            "kind": "mirabench_result_normalizer",
+            "kind": "mirabench_official_in_tree" if official_runtime_executed else "mirabench_result_normalizer",
             "blocked_count": len(METRIC_ORDER) - len(available_rows),
         },
         "artifacts": {
@@ -204,8 +170,8 @@ def normalize_mirabench_results(
 ) -> dict[str, Any]:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    generated_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
-    official_results_path = args.official_results_path or _env_path("WORLDFOUNDRY_MIRABENCH_RESULTS_PATH")
+    generated_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    official_results_path = args.official_results_path or resolve_env_path("WORLDFOUNDRY_MIRABENCH_RESULTS_PATH")
     if official_results_path is None:
         raise ValueError(
             "--official-results-path, WORLDFOUNDRY_MIRABENCH_RESULTS_PATH, or --run-official is required"
@@ -230,7 +196,7 @@ def normalize_mirabench_results(
         source_path=Path(official_results_path),
         official_runtime_executed=official_runtime_executed,
     )
-    video_coverage = _coverage({record["prompt_id"] for record in prompt_records}, generated_dir)
+    video_coverage = build_video_coverage({record["prompt_id"] for record in prompt_records}, generated_dir)
     scorecard = _scorecard(
         benchmark_id=args.benchmark_id,
         output_dir=output_dir,
@@ -283,7 +249,7 @@ def normalize_mirabench_results(
 def run_official_mirabench(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    generated_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
     if generated_dir is None:
         raise ValueError("--generated-artifact-dir or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required for --run-official")
     meta_csv_path = resolve_meta_csv_path(

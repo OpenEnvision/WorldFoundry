@@ -3,10 +3,6 @@ title: Registry & reference
 description: MetricRegistry discovery, registered-metric tables, CLI surface, checkpoints, and package layout.
 ---
 
-import { MetricQuickNav } from '@/components/metric-quick-nav';
-
-<MetricQuickNav locale="en" variant="hub" />
-
 ## MetricRegistry
 
 The default registry loads all built-in entries from `BUILTIN_METRIC_REGISTRY_ENTRIES` in `registry.py`.
@@ -25,10 +21,8 @@ worldfoundry-eval metric validate fid clip_score has_artifact:generated_artifact
 
 Registry keys are normalized case-insensitively with hyphens instead of underscores (`clip_score`, `clip-score`, and `clipscore` resolve to the same entry). Parameterized ids use a prefix:
 
-| Pattern | Example | Meaning |
-| --- | --- | --- |
-| `has_artifact:<name>` | `has_artifact:generated_artifact` | Returns 1 when the named artifact exists on a result. |
-| `numeric:<name>` | `numeric:reward` | Emits the numeric field `<name>` from result metadata/scores. |
+- `has_artifact:<name>` — Example: `has_artifact:generated_artifact`. Returns 1 when the named artifact exists on a result.
+- `numeric:<name>` — Example: `numeric:reward`. Emits the numeric field `<name>` from result metadata/scores.
 
 ### Python API
 
@@ -68,40 +62,40 @@ Direction: **↑** higher is better, **↓** lower is better.
 
 Set-level metrics comparing reference and generated image collections. Torch-fidelity metrics (`fid/`, `kid/`, `inception_score/`, …) share vendored code under `_shared/vendor/torch_fidelity/`; standalone helpers include Clean-FID, CMMD, IPR, Vendi, Rarity, and `fwd/vendor/pytorchfwd`.
 
-| Metric | Aliases | Direction | Primary API |
-| --- | --- | --- | --- |
-| inception_score | is, isc | ↑ | `compute_inception_score(images_dir)` |
-| fid | frechet-inception-distance, clip-fid, clip_fid, fid-vid, fid_vid, fvid, swav-fid, swav_fid, scene-fid, scene_fid, object-crop-fid | ↓ | `compute_fid(...)`; variants via `feature_extractor` or `compute_scene_fid` |
-| kid | kernel-inception-distance | ↓ | `compute_kid(...)` |
-| precision_recall | prc, precision-recall | ↑ | `compute_precision_recall(...)` |
-| fwd | frechet-wavelet-distance | ↓ | `compute_fwd(...)` |
-| cmmd | clip-mmd, clip_mmd | ↓ | `compute_cmmd(reference_dir, eval_dir)` |
-| ppl | perceptual-path-length, perceptual_path_length | ↓ | `compute_ppl(...)` |
-| mind | mid, monge-inception-distance, monge_inception_distance | ↓ | `compute_mind(...)` |
-| clean_fid | clean-fid, improved-fid | ↓ | `compute_clean_fid(reference, generated)` |
-| vendi_score | vendi-score, vendi | ↑ | `compute_vendi_score(...)` |
-| improved_precision_recall | ipr, alpha-precision, beta-recall, realism_score, ipr-realism, realism | ↑ | `compute_improved_precision_recall(...)`, `compute_realism_score(...)` |
-| rarity_score | rarity-score, rs | ↑ | `compute_mean_rarity_score(...)` |
-| facescore | face-score, face_score | ↑ | `compute_facescore(...)`, `FaceScoreModel(...)` |
-| facesim_cur | face-sim-cur, facesim-curricular | ↑ | `compute_facesim_cur(...)` (OpenS2V; InsightFace + CurricularFace weights) |
-| gme_score | gmescore, gme-score | ↑ | `compute_gme_score(...)` (OpenS2V; GME-Qwen2-VL) |
-| nexus_score | nexusscore, nexus-score | ↑ | `compute_nexus_score(...)` (OpenS2V; YOLO-World + GME) |
-| natural_score | naturalscore, natural-score | ↑ | `compute_natural_score(...)` (OpenS2V; GPT API) |
-| artscore | art-score, art_score | ↑ | `load_artscore_model(...)` |
-| trend | trend-jsd, trend_jsd | ↓ | `compute_trend(...)`, `compute_trend_jsd(...)` |
-| fld | feature-likelihood-divergence, fls | ↓ | `compute_fld(train, test, gen features)` |
-| multimodal_mid | mid-metric, mutual-information-divergence | ↑ | `compute_multimodal_mid(...)` |
-| fjd | frechet-joint-distance | ↓ | `compute_fjd_from_joint_embeddings(...)` |
-| crosslid | cross-lid, cross_lid | ↓ | `compute_crosslid(...)` |
-| cfid | conditional-fid, conditional_fid | ↓ | `compute_cfid(...)` |
-| ssd | semantic-similarity-distance | ↓ | `compute_ssd(...)` |
-| linear_separability | linear-separability, stylegan-ls | ↑ | `compute_linear_separability(confusion_matrix)` |
-| rke | renyi-kernel-entropy, rke-mc | ↑ | `compute_rke(features)`, `compute_rrke(ref, gen)` |
-| fdd | frechet-denoised-distance | ↓ | `compute_fdd(reference_dir, generated_dir)` |
-| cis | conditional-inception-score, bcis, wcis | ↑ | `compute_cis(class_probs)`, `compute_cis_from_predictions(...)` |
-| rnd | rnd-score, random-network-distillation | ↑ | `compute_rnd(features)`, `compute_rnd_from_images(...)` |
-| attribute_sad | sad, attribute-sad | ↓ | `compute_attribute_sad(hcs_real, hcs_gen, text_list)` |
-| attribute_pad | pad, attribute-pad | ↓ | `compute_attribute_pad(hcs_real, hcs_gen, text_list)` |
+<KvCatalog heading="Metric" vars rows={[
+    { name: "inception_score", hintLabel: "Direction", hint: "↑", description: <><code>compute_inception_score(images_dir)</code></>, reads: [{ label: "Aliases", value: "is, isc" }] },
+    { name: "fid", hintLabel: "Direction", hint: "↓", description: <><code>compute_fid(...)</code>{"; variants via "}<code>feature_extractor</code>{" or "}<code>compute_scene_fid</code></>, reads: [{ label: "Aliases", value: "frechet-inception-distance, clip-fid, clip_fid, fid-vid, fid_vid, fvid, swav-fid, swav_fid, scene-fid, scene_fid, object-crop-fid" }] },
+    { name: "kid", hintLabel: "Direction", hint: "↓", description: <><code>compute_kid(...)</code></>, reads: [{ label: "Aliases", value: "kernel-inception-distance" }] },
+    { name: "precision_recall", hintLabel: "Direction", hint: "↑", description: <><code>compute_precision_recall(...)</code></>, reads: [{ label: "Aliases", value: "prc, precision-recall" }] },
+    { name: "fwd", hintLabel: "Direction", hint: "↓", description: <><code>compute_fwd(...)</code></>, reads: [{ label: "Aliases", value: "frechet-wavelet-distance" }] },
+    { name: "cmmd", hintLabel: "Direction", hint: "↓", description: <><code>compute_cmmd(reference_dir, eval_dir)</code></>, reads: [{ label: "Aliases", value: "clip-mmd, clip_mmd" }] },
+    { name: "ppl", hintLabel: "Direction", hint: "↓", description: <><code>compute_ppl(...)</code></>, reads: [{ label: "Aliases", value: "perceptual-path-length, perceptual_path_length" }] },
+    { name: "mind", hintLabel: "Direction", hint: "↓", description: <><code>compute_mind(...)</code></>, reads: [{ label: "Aliases", value: "mid, monge-inception-distance, monge_inception_distance" }] },
+    { name: "clean_fid", hintLabel: "Direction", hint: "↓", description: <><code>compute_clean_fid(reference, generated)</code></>, reads: [{ label: "Aliases", value: "clean-fid, improved-fid" }] },
+    { name: "vendi_score", hintLabel: "Direction", hint: "↑", description: <><code>compute_vendi_score(...)</code></>, reads: [{ label: "Aliases", value: "vendi-score, vendi" }] },
+    { name: "improved_precision_recall", hintLabel: "Direction", hint: "↑", description: <><code>compute_improved_precision_recall(...)</code>{", "}<code>compute_realism_score(...)</code></>, reads: [{ label: "Aliases", value: "ipr, alpha-precision, beta-recall, realism_score, ipr-realism, realism" }] },
+    { name: "rarity_score", hintLabel: "Direction", hint: "↑", description: <><code>compute_mean_rarity_score(...)</code></>, reads: [{ label: "Aliases", value: "rarity-score, rs" }] },
+    { name: "facescore", hintLabel: "Direction", hint: "↑", description: <><code>compute_facescore(...)</code>{", "}<code>FaceScoreModel(...)</code></>, reads: [{ label: "Aliases", value: "face-score, face_score" }] },
+    { name: "facesim_cur", hintLabel: "Direction", hint: "↑", description: <><code>compute_facesim_cur(...)</code>{" (OpenS2V; InsightFace + CurricularFace weights)"}</>, reads: [{ label: "Aliases", value: "face-sim-cur, facesim-curricular" }] },
+    { name: "gme_score", hintLabel: "Direction", hint: "↑", description: <><code>compute_gme_score(...)</code>{" (OpenS2V; GME-Qwen2-VL)"}</>, reads: [{ label: "Aliases", value: "gmescore, gme-score" }] },
+    { name: "nexus_score", hintLabel: "Direction", hint: "↑", description: <><code>compute_nexus_score(...)</code>{" (OpenS2V; YOLO-World + GME)"}</>, reads: [{ label: "Aliases", value: "nexusscore, nexus-score" }] },
+    { name: "natural_score", hintLabel: "Direction", hint: "↑", description: <><code>compute_natural_score(...)</code>{" (OpenS2V; GPT API)"}</>, reads: [{ label: "Aliases", value: "naturalscore, natural-score" }] },
+    { name: "artscore", hintLabel: "Direction", hint: "↑", description: <><code>load_artscore_model(...)</code></>, reads: [{ label: "Aliases", value: "art-score, art_score" }] },
+    { name: "trend", hintLabel: "Direction", hint: "↓", description: <><code>compute_trend(...)</code>{", "}<code>compute_trend_jsd(...)</code></>, reads: [{ label: "Aliases", value: "trend-jsd, trend_jsd" }] },
+    { name: "fld", hintLabel: "Direction", hint: "↓", description: <><code>compute_fld(train, test, gen features)</code></>, reads: [{ label: "Aliases", value: "feature-likelihood-divergence, fls" }] },
+    { name: "multimodal_mid", hintLabel: "Direction", hint: "↑", description: <><code>compute_multimodal_mid(...)</code></>, reads: [{ label: "Aliases", value: "mid-metric, mutual-information-divergence" }] },
+    { name: "fjd", hintLabel: "Direction", hint: "↓", description: <><code>compute_fjd_from_joint_embeddings(...)</code></>, reads: [{ label: "Aliases", value: "frechet-joint-distance" }] },
+    { name: "crosslid", hintLabel: "Direction", hint: "↓", description: <><code>compute_crosslid(...)</code></>, reads: [{ label: "Aliases", value: "cross-lid, cross_lid" }] },
+    { name: "cfid", hintLabel: "Direction", hint: "↓", description: <><code>compute_cfid(...)</code></>, reads: [{ label: "Aliases", value: "conditional-fid, conditional_fid" }] },
+    { name: "ssd", hintLabel: "Direction", hint: "↓", description: <><code>compute_ssd(...)</code></>, reads: [{ label: "Aliases", value: "semantic-similarity-distance" }] },
+    { name: "linear_separability", hintLabel: "Direction", hint: "↑", description: <><code>compute_linear_separability(confusion_matrix)</code></>, reads: [{ label: "Aliases", value: "linear-separability, stylegan-ls" }] },
+    { name: "rke", hintLabel: "Direction", hint: "↑", description: <><code>compute_rke(features)</code>{", "}<code>compute_rrke(ref, gen)</code></>, reads: [{ label: "Aliases", value: "renyi-kernel-entropy, rke-mc" }] },
+    { name: "fdd", hintLabel: "Direction", hint: "↓", description: <><code>compute_fdd(reference_dir, generated_dir)</code></>, reads: [{ label: "Aliases", value: "frechet-denoised-distance" }] },
+    { name: "cis", hintLabel: "Direction", hint: "↑", description: <><code>compute_cis(class_probs)</code>{", "}<code>compute_cis_from_predictions(...)</code></>, reads: [{ label: "Aliases", value: "conditional-inception-score, bcis, wcis" }] },
+    { name: "rnd", hintLabel: "Direction", hint: "↑", description: <><code>compute_rnd(features)</code>{", "}<code>compute_rnd_from_images(...)</code></>, reads: [{ label: "Aliases", value: "rnd-score, random-network-distillation" }] },
+    { name: "attribute_sad", hintLabel: "Direction", hint: "↓", description: <><code>compute_attribute_sad(hcs_real, hcs_gen, text_list)</code></>, reads: [{ label: "Aliases", value: "sad, attribute-sad" }] },
+    { name: "attribute_pad", hintLabel: "Direction", hint: "↓", description: <><code>compute_attribute_pad(hcs_real, hcs_gen, text_list)</code></>, reads: [{ label: "Aliases", value: "pad, attribute-pad" }] }
+  ]} />
 
 ```python
 from worldfoundry.evaluation.tasks.metrics import (
@@ -136,13 +130,31 @@ ipr = compute_improved_precision_recall("/path/to/reference", "/path/to/generate
 vendi = compute_vendi_score(feature_matrix)
 ```
 
+FID, KID, Inception Score, precision/recall, MIND, and `compute_distribution_metrics(...)` accept image directories or explicit image-file lists. File lists preserve caller order and use the same RGB conversion and `samples_resize_and_crop` preprocessing as directories. SwAV FID also accepts file lists and applies its existing preprocessing and `max_size` limit.
+
+The bundled backend loads under `worldfoundry.evaluation.tasks.metrics._shared.vendor.torch_fidelity`, independently of an installed `torch_fidelity` package or TorchMetrics import order. Register custom extractors and noise sources on that bundled package. PPL also accepts generator wrappers from the installed package, preserving their latent and class metadata.
+
+`compute_realism_score(...)` accepts a generated image directory, an image file, an array, or a sequence of files and arrays. Directory batches produce one realism score per image; `mean_realism` is the mean of those scores and does not depend on batch size.
+
+Precision measures the fraction of generated samples covered by the reference manifold; recall measures the fraction of reference samples covered by the generated manifold. In `compute_precision_recall(...)` and `compute_distribution_metrics(...)`, backend `input1_*` options refer to generated inputs and `input2_*` options to reference inputs. The combined helper also computes Inception Score on the generated set.
+
+`compute_ppl(...)` returns the backend's mean and standard deviation. With `ppl_reduction="none"`, it also preserves the NumPy array `perceptual_path_length_raw` of per-sample distances after percentile filtering. `summarize_distribution_metrics(...)` renames this key to `ppl_raw` while preserving the array.
+
+PPL defaults to the 1st–99th percentile range. Set `ppl_discard_percentile_lower` or `ppl_discard_percentile_higher` to `None` to disable that bound independently. For generator instances and module wrappers, conditional sampling uses the model's `num_classes`; paired latent samples receive the same label.
+
+SceneFID manifest keys are image paths relative to the image root, or absolute paths. When `generated_bboxes_json` is omitted, reference keys are reused relative to the generated root, preserving subdirectories; absolute reference keys must be under the reference root. Missing images raise an error instead of falling back to another file with the same basename. Supply a separate generated manifest when filenames or boxes differ.
+
+SceneFID, LQS, and object-wise consistency share one bbox convention: four values mean `(x1, y1, x2, y2)` and five values mean `(x, y, width, height, extra)`. The fifth value does not affect geometry. Pixel and normalized coordinates use the same format; convert four-value `xywh` inputs before calling these metrics.
+
+LQS matches objects within each category by minimum total center distance, including when object counts differ. Recall is matched objects divided by ground-truth objects; precision is matched objects divided by predicted objects. Location and area consistency use the matched pairs. This follows the matching objective and object-count denominators in the [LQS definition](https://arxiv.org/html/2208.06162#S4.SS2.SSS2), using SciPy's rectangular assignment solver instead of enumerating permutations.
+
 ### Video distribution (`family=distribution`, video tags)
 
-| Metric | Aliases | Direction | Primary API |
-| --- | --- | --- | --- |
-| fvd | frechet-video-distance | ↓ | `compute_fvd_from_numpy(...)`, `compute_fvd_from_frame_dirs(...)` |
-| fvmd | frechet-video-motion-distance | ↓ | `compute_fvmd(reference_videos, generated_videos)` |
-| jedi | jedi-mmd, video-jedi | ↓ | `compute_jedi_from_features(...)`, `JEDiMetric(...)` |
+<KvCatalog heading="Metric" vars rows={[
+    { name: "fvd", hintLabel: "Direction", hint: "↓", description: <><code>compute_fvd_from_numpy(...)</code>{", "}<code>compute_fvd_from_frame_dirs(...)</code></>, reads: [{ label: "Aliases", value: "frechet-video-distance" }] },
+    { name: "fvmd", hintLabel: "Direction", hint: "↓", description: <><code>compute_fvmd(reference_videos, generated_videos)</code></>, reads: [{ label: "Aliases", value: "frechet-video-motion-distance" }] },
+    { name: "jedi", hintLabel: "Direction", hint: "↓", description: <><code>compute_jedi_from_features(...)</code>{", "}<code>JEDiMetric(...)</code></>, reads: [{ label: "Aliases", value: "jedi-mmd, video-jedi" }] }
+  ]} />
 
 ```python
 import numpy as np
@@ -168,23 +180,31 @@ fvmd = compute_fvmd("/path/to/reference_videos", "/path/to/generated_videos")
 jedi = compute_jedi_from_features(train_features, test_features)
 ```
 
+`JEDiMetric.load_features(num_samples=...)` applies the same per-side sample cap to cached arrays and newly extracted features. Reading a cache does not truncate the stored file. Feature extraction runs locally without creating or destroying a distributed process group, and releases its extractor after loading both sides.
+
+JEDi video batches use `(B, T, C, H, W)` with pixels in `[0, 1]`. The extractor converts them to channel-first clips before normalization. Encoder and probe checkpoints must match the model; missing or incompatible weights raise an error instead of retaining initialized weights.
+
+For precomputed features, `run_jedi_scorer(...)` reports the actual `reference_num_samples`, `generated_num_samples`, and `feature_dim`. The legacy `num_samples` field contains the common count when both sides have equal lengths, or `null` when they differ.
+
+The mock JEDi backend converts UTF-8 seed bytes directly into a NumPy seed. Identical seeds and dimensions reproduce the same features and score across fresh processes.
+
 ### Perceptual pairwise (`family=perceptual`)
 
 Pairwise similarity between reference and generated images (condition consistency, reconstruction quality).
 
-| Metric | Aliases | Direction | Primary API |
-| --- | --- | --- | --- |
-| lpips | — | ↓ | `compute_lpips(ref_image, gen_image)` |
-| ssim | — | ↑ | `compute_ssim(...)` |
-| ms_ssim | ms-ssim | ↑ | `compute_ms_ssim(...)` |
-| psnr | — | ↑ | `compute_psnr(...)` |
-| dino_similarity | dino-similarity, dino_sim | ↑ | `compute_dino_similarity(...)` |
-| dreamsim | dream-sim | ↓ | `compute_dreamsim(...)` |
-| cpbd | cpbd-sharpness | ↑ | `compute_cpbd(image)` |
-| fsim | feature-similarity-index, fsimc | ↑ | `compute_fsim(ref_image, gen_image)` |
-| mask_accuracy | mask-accuracy, mask_acc | ↑ | `compute_mask_accuracy(...)`, `compute_mask_iou(...)` |
-| object_detection | object-detection, detection-success-rate | ↑ | `compute_object_detection_success_rate(...)` |
-| lqs | layout-quality-score | ↑ | `compute_lqs(groundtruth_layout, predicted_layout)` |
+<KvCatalog heading="Metric" vars rows={[
+    { name: "lpips", hintLabel: "Direction", hint: "↓", description: <><code>compute_lpips(ref_image, gen_image)</code></> },
+    { name: "ssim", hintLabel: "Direction", hint: "↑", description: <><code>compute_ssim(...)</code></> },
+    { name: "ms_ssim", hintLabel: "Direction", hint: "↑", description: <><code>compute_ms_ssim(...)</code></>, reads: [{ label: "Aliases", value: "ms-ssim" }] },
+    { name: "psnr", hintLabel: "Direction", hint: "↑", description: <><code>compute_psnr(...)</code></> },
+    { name: "dino_similarity", hintLabel: "Direction", hint: "↑", description: <><code>compute_dino_similarity(...)</code></>, reads: [{ label: "Aliases", value: "dino-similarity, dino_sim" }] },
+    { name: "dreamsim", hintLabel: "Direction", hint: "↓", description: <><code>compute_dreamsim(...)</code></>, reads: [{ label: "Aliases", value: "dream-sim" }] },
+    { name: "cpbd", hintLabel: "Direction", hint: "↑", description: <><code>compute_cpbd(image)</code></>, reads: [{ label: "Aliases", value: "cpbd-sharpness" }] },
+    { name: "fsim", hintLabel: "Direction", hint: "↑", description: <><code>compute_fsim(ref_image, gen_image)</code></>, reads: [{ label: "Aliases", value: "feature-similarity-index, fsimc" }] },
+    { name: "mask_accuracy", hintLabel: "Direction", hint: "↑", description: <><code>compute_mask_accuracy(...)</code>{", "}<code>compute_mask_iou(...)</code></>, reads: [{ label: "Aliases", value: "mask-accuracy, mask_acc" }] },
+    { name: "object_detection", hintLabel: "Direction", hint: "↑", description: <><code>compute_object_detection_success_rate(...)</code></>, reads: [{ label: "Aliases", value: "object-detection, detection-success-rate" }] },
+    { name: "lqs", hintLabel: "Direction", hint: "↑", description: <><code>compute_lqs(groundtruth_layout, predicted_layout)</code></>, reads: [{ label: "Aliases", value: "layout-quality-score" }] }
+  ]} />
 
 ```python
 import numpy as np
@@ -206,15 +226,17 @@ dino_sim = compute_dino_similarity(ref, gen)
 dreamsim_dist = compute_dreamsim(ref, gen)
 ```
 
+PSNR, SSIM, MS-SSIM, and FSIM preserve the input pixel scale; both images must use the same units. `data_range` defaults to 255 if either input is uint8 or either maximum exceeds 1, otherwise 1. Pass an explicit range when float pixel values alone cannot identify the intended range; it is forwarded in the original units.
+
+LPIPS accepts uint8 pixels or normalized floats in `[0, 1]`, using TorchMetrics with `normalize=True`. For compatibility, float pairs with a maximum above 1 are also treated as `[0, 255]`. Both images always share one normalization scale.
+
 ## CLI surface
 
-| Command | Scope |
-| --- | --- |
-| `worldfoundry-eval metric list` | Print or JSON-export all registry entries. |
-| `worldfoundry-eval metric show <id>` | Show one entry, resolved aliases, parameterized prefix. |
-| `worldfoundry-eval metric validate <id>...` | Bulk-resolve ids; exit 1 on unknown ids. |
-| `worldfoundry-eval evaluate --metric ...` | **Built-in existing-results metrics only** (`artifact_count`, `required_artifacts_present`, `has_artifact:<name>`, `numeric`, `numeric:<name>`). |
-| `worldfoundry-eval plan create --metric ...` | Same built-in metric ids when constructing a run plan JSON. |
+- `worldfoundry-eval metric list` — Print or JSON-export all registry entries.
+- `worldfoundry-eval metric show <id>` — Show one entry, resolved aliases, parameterized prefix.
+- `worldfoundry-eval metric validate <id>...` — Bulk-resolve ids; exit 1 on unknown ids.
+- `worldfoundry-eval evaluate --metric ...` — **Built-in existing-results metrics only** (`artifact_count`, `required_artifacts_present`, `has_artifact:<name>`, `numeric`, `numeric:<name>`).
+- `worldfoundry-eval plan create --metric ...` — Same built-in metric IDs when constructing a run plan JSON.
 
 Distribution and perceptual metrics are invoked through Python today. Benchmark runners may call the same underlying implementations when computing official metric stacks (EvalCrafter IS/FID paths, MiraBench FVD, and similar). Multimodal scorers (CLIPScore, VQAScore, ITMScore) are exposed through `worldfoundry.evaluation.tasks.metrics.get_score_model(...)` and implemented in `execution/runners/_scorers/`.
 
@@ -230,26 +252,161 @@ Core dependencies in the `distribution_metrics` extra include `torch`, `torchvis
 
 Keep heavy imports lazy: importing `worldfoundry.evaluation.tasks.metrics` should not require every checkpoint to be present until a specific `compute_*` function is called.
 
+When changing a metric, compare representative inputs and scores with the upstream implementation, then record the backend version and results alongside the change. The private metric regression suite is not included in the public repository.
+
 ## Checkpoints and environment variables
 
-| Variable | Used by | Purpose |
-| --- | --- | --- |
-| `WORLDFOUNDRY_HFD_ROOT` | Hugging Face based metrics and scorers | Shared HF cache root or staged local model root. |
-| `WORLDFOUNDRY_T2V_METRICS_CACHE_DIR` | CLIPScore, ITMScore, VQAScore | Preferred cache for multimodal scorer models. Falls back to `WORLDFOUNDRY_HFD_ROOT`. |
-| `WORLDFOUNDRY_CKPT_DIR` | FVD, ArtScore, shared standalone files | Default root for staged `.pt`, `.pth`, `.bin`, and other non-HF files. |
-| `WORLDFOUNDRY_FVD_I3D_CKPT` | FVD | Path to `i3d_pretrained_400.pt` for Inception I3D features. |
-| `WORLDFOUNDRY_MIRABENCH_FVD_I3D_CKPT` | FVD (MiraBench fallback) | Alternate I3D checkpoint path. |
-| `WORLDFOUNDRY_JEDI_MODEL_DIR` / `WORLDFOUNDRY_JEDI_VJEPA_DIR` / `WORLDFOUNDRY_VJEPA_MODEL_DIR` | JEDi | V-JEPA model directory. |
-| `WORLDFOUNDRY_JEDI_CONFIG_PATH` | JEDi | YAML config; bundled asset at `worldfoundry/data/benchmarks/assets/jedi/vith16_ssv2_16x2x3.yaml`. |
-| `WORLDFOUNDRY_JEDI_FEATURE_PATH` | JEDi | Optional precomputed feature archive. |
-| `WORLDFOUNDRY_FDD_DAE_CKPT` | FDD | Pretrained DAE weights for Frechet Denoised Distance. |
-| `WORLDFOUNDRY_DINOV2_BASE_MODEL_DIR` | DINO similarity | Local `facebook/dinov2-base` model directory. |
-| `WORLDFOUNDRY_DINO_VITB16_MODEL_DIR` | DINO-family metrics | Local `facebook/dino-vitb16` model directory. |
-| `WORLDFOUNDRY_OPENS2V_WEIGHT_DIR` | FaceSim-Cur | OpenS2V InsightFace + CurricularFace bundle root. |
-| `WORLDFOUNDRY_GME_MODEL_PATH` | GmeScore, NexusScore | GME-Qwen2-VL model path. |
-| `WORLDFOUNDRY_YOLO_WORLD_CKPT` | NexusScore | YOLO-World image-prompt adapter checkpoint. |
-| `WORLDFOUNDRY_YOLO_CLIP_MODEL` | NexusScore | CLIP backbone for YOLO-World eval. |
-| `OPENAI_API_KEY` | NaturalScore | GPT API key for OpenS2V naturalness rating. |
+<div className="pi-kv-catalog is-vars not-prose">
+  <section className="pi-kv-group">
+    <h3>Variable</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_HFD_ROOT</code>
+          </div>
+        </div>
+        <p>Shared HF cache root or staged local model root.</p>
+        <p className="pi-kv-read"><span>Used by</span> Hugging Face based metrics and scorers</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_T2V_METRICS_CACHE_DIR</code>
+          </div>
+        </div>
+        <p>Preferred cache for multimodal scorer models. Falls back to <code>WORLDFOUNDRY_HFD_ROOT</code>.</p>
+        <p className="pi-kv-read"><span>Used by</span> CLIPScore, ITMScore, VQAScore</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_CKPT_DIR</code>
+          </div>
+        </div>
+        <p>Default root for staged <code>.pt</code>, <code>.pth</code>, <code>.bin</code>, and other non-HF files.</p>
+        <p className="pi-kv-read"><span>Used by</span> FVD, ArtScore, shared standalone files</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_FVD_I3D_CKPT</code>
+          </div>
+        </div>
+        <p>Path to <code>i3d_pretrained_400.pt</code> for Inception I3D features.</p>
+        <p className="pi-kv-read"><span>Used by</span> FVD</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_MIRABENCH_FVD_I3D_CKPT</code>
+          </div>
+        </div>
+        <p>Alternate I3D checkpoint path.</p>
+        <p className="pi-kv-read"><span>Used by</span> FVD (MiraBench fallback)</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_JEDI_MODEL_DIR</code> / <code>WORLDFOUNDRY_JEDI_VJEPA_DIR</code> / <code>WORLDFOUNDRY_VJEPA_MODEL_DIR</code>
+          </div>
+        </div>
+        <p>V-JEPA model directory.</p>
+        <p className="pi-kv-read"><span>Used by</span> JEDi</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_JEDI_CONFIG_PATH</code>
+          </div>
+        </div>
+        <p>YAML config; bundled asset at <code>worldfoundry/data/benchmarks/assets/jedi/vith16_ssv2_16x2x3.yaml</code>.</p>
+        <p className="pi-kv-read"><span>Used by</span> JEDi</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_JEDI_FEATURE_PATH</code>
+          </div>
+        </div>
+        <p>Optional precomputed feature archive.</p>
+        <p className="pi-kv-read"><span>Used by</span> JEDi</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_FDD_DAE_CKPT</code>
+          </div>
+        </div>
+        <p>Pretrained DAE weights for Frechet Denoised Distance.</p>
+        <p className="pi-kv-read"><span>Used by</span> FDD</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_DINOV2_BASE_MODEL_DIR</code>
+          </div>
+        </div>
+        <p>Local <code>facebook/dinov2-base</code> model directory.</p>
+        <p className="pi-kv-read"><span>Used by</span> DINO similarity</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_DINO_VITB16_MODEL_DIR</code>
+          </div>
+        </div>
+        <p>Local <code>facebook/dino-vitb16</code> model directory.</p>
+        <p className="pi-kv-read"><span>Used by</span> DINO-family metrics</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_OPENS2V_WEIGHT_DIR</code>
+          </div>
+        </div>
+        <p>OpenS2V InsightFace + CurricularFace bundle root.</p>
+        <p className="pi-kv-read"><span>Used by</span> FaceSim-Cur</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_GME_MODEL_PATH</code>
+          </div>
+        </div>
+        <p>GME-Qwen2-VL model path.</p>
+        <p className="pi-kv-read"><span>Used by</span> GmeScore, NexusScore</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_YOLO_WORLD_CKPT</code>
+          </div>
+        </div>
+        <p>YOLO-World image-prompt adapter checkpoint.</p>
+        <p className="pi-kv-read"><span>Used by</span> NexusScore</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WORLDFOUNDRY_YOLO_CLIP_MODEL</code>
+          </div>
+        </div>
+        <p>CLIP backbone for YOLO-World eval.</p>
+        <p className="pi-kv-read"><span>Used by</span> NexusScore</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>OPENAI_API_KEY</code>
+          </div>
+        </div>
+        <p>GPT API key for OpenS2V naturalness rating.</p>
+        <p className="pi-kv-read"><span>Used by</span> NaturalScore</p>
+      </li>
+    </ul>
+  </section>
+</div>
 
 FVD resolution order is documented in `fvd/fvd_core.py`: explicit `i3d_checkpoint` argument → `WORLDFOUNDRY_FVD_I3D_CKPT` → `WORLDFOUNDRY_MIRABENCH_FVD_I3D_CKPT` → paths under `WORLDFOUNDRY_CKPT_DIR`.
 
@@ -274,12 +431,10 @@ worldfoundry/evaluation/tasks/metrics/
 
 Each migrated metric folder exports a unified surface:
 
-| Export | Purpose |
-| --- | --- |
-| `METRIC_ID`, `ALIASES`, `HIGHER_IS_BETTER`, `FAMILY`, `TAGS` | Registry metadata |
-| `METRIC_MODULE` | :class:`MetricModuleSpec` for auto-discovery |
-| `compute(...)` / `compute_<name>(...)` | Stable compute API by metric family |
-| Paper / repo links | Listed inline under each metric in [metric recipe pages](/docs/evaluation/metrics) |
+- `METRIC_ID`, `ALIASES`, `HIGHER_IS_BETTER`, `FAMILY`, `TAGS` — Registry metadata
+- `METRIC_MODULE` — :class:`MetricModuleSpec` for auto-discovery
+- `compute(...)` / `compute_<name>(...)` — Stable compute API by metric family
+- Paper / repo links — Listed inline under each metric in [metric recipe pages](/docs/evaluation/metrics)
 
 Registry entries for migrated metrics are registered via `_discover.discover_metric_registry_entries()` instead of hard-coded duplicates in `registry.py`.
 

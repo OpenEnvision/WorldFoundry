@@ -1,0 +1,29 @@
+---
+title: "RDT-1B"
+description: "清华 1B 扩散 VLA：T5 + SigLIP，128 维统一动作，两帧三相机 DPM 推理。独立环境；只有预训练 checkpoint。"
+modelId: "rdt-1b"
+pageSource: authored
+---
+
+RDT-1B 是清华大学 thu-ml 的 **Robotics Diffusion Transformer**：1B 扩散策略，原生 **128 维统一动作空间**。论文是 [RDT-1B: a Diffusion Foundation Model for Bimanual Manipulation](https://arxiv.org/abs/2410.07864)（arXiv 2410.07864）。项目页 [rdt-robotics.github.io/rdt-robotics](https://rdt-robotics.github.io/rdt-robotics/)；代码 [thu-ml/RoboticsDiffusionTransformer](https://github.com/thu-ml/RoboticsDiffusionTransformer)。别名 `rdt`、`robotics-diffusion-transformer`、`robotics-diffusion-transformer/rdt-1b` 解析到本页。
+
+<ModelPaperFigures modelId="rdt-1b" locale="zh" />
+
+WorldFoundry 把统一动作模型、**两帧 / 三相机**预处理和 **DPM** 推理留在树内。必填输入是 `image`、`prompt`、`state`、`jpeg_standardization`。可选：两帧三视角 `image_history`（缺失历史用均值色帧填充）以及预计算的 T5 `text_embeddings`。源图像为 **640×480**。本卡片记录的部署动作布局是**双臂 14 维、未缩放**。语言走官方 **T5-XXL**；视觉走 **SigLIP so400m-patch14-384**。
+
+<ModelCommandBuilder modelId="rdt-1b" locale="zh" />
+
+## 用来做什么
+
+跑预训练策略：相机 + 指令 + 本体感觉进，经 `RDT1BPipeline` 写出 `action_trace` / `rdt-1b_action_trace.json`。任务 profile 为 `vla`（默认）、`vla.policy_rollout`、`robot_policy`。启动 `worldfoundry-eval run rdt-1b`。
+
+就位 `robotics-diffusion-transformer/rdt-1b`、`google/siglip-so400m-patch14-384`、`google/t5-v1_1-xxl`。发布权重是**预训练** checkpoint——按本体 / 任务微调之前，不要把它当成可部署专家。内存紧张时先编码一次 prompt，传入缓存的 T5 embedding，随后可释放 T5 编码器。
+
+## 运行时契约
+RDT、SigLIP 与 T5 目录记录为完整运行时子集（weights-only / safetensors 头检查）。自动精度在 Ampere / Ada / Hopper / Blackwell 上为 **bf16**，更旧的 CUDA 为 **fp16**。manifest 验证**不声称**数值 GPU 推理。集成为 Runner 一致性待确认；runner / demo 为 **未记录**。
+
+## 在 WorldFoundry 中运行
+
+使用独立环境 `worldfoundry-vla-rdt-1b`（Python 3.10，CUDA 12.1 或更新，`torch>=2.2`）。本卡片上不要期望已验证的 `get_action` 产物。
+
+<ModelRelatedRecipes modelId="rdt-1b" locale="zh" />

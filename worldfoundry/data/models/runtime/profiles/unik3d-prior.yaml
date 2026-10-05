@@ -1,6 +1,6 @@
 schema_version: 2
 model_id: unik3d-prior
-display_name: UniK3D Prior
+display_name: UniK3D
 task_family: three_dimension
 groups:
 - 3d

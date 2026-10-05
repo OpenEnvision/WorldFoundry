@@ -1,0 +1,13 @@
+# Review coverage for high-impact infrastructure and generated-data surfaces.
+# GitHub ignores owners that do not have write access to this repository.
+
+.github/workflows/ @dhsaikhgdius
+.github/dependabot.yml @dhsaikhgdius
+.github/CODEOWNERS @dhsaikhgdius
+
+docs/ @dhsaikhgdius
+scripts/docs/ @dhsaikhgdius
+worldfoundry/data/ @dhsaikhgdius
+pyproject.toml @dhsaikhgdius
+requirements/ @dhsaikhgdius
+docker/ @dhsaikhgdius

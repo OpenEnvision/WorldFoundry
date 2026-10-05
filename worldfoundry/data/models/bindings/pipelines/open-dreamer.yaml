@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: open-dreamer
+model_id: open-dreamer
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.world_model.pipeline_runtime_manifest:OpenDreamerPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

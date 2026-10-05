@@ -1,0 +1,50 @@
+---
+title: "WoW"
+description: "WoW from X-Humanoid (Beijing Humanoid Robot Innovation Center): world-model and image-to-video; Runner parity pending."
+modelId: "wow"
+pageSource: generated
+---
+
+WoW is X-Humanoid's embodied world model family for action-conditioned image-to-video: four checkpoint lines are recorded (Wan 1.3B-2M under MIT, Wan 14B-600k demo default, Wan 14B-2M official recommended, and a DiT 2B development line). WorldFoundry routes the Wan variants through the canonical Wan loader with shared conditioner, VAE, and scheduler; the released 1.3B transformer graph matches the native model exactly for all 825 tensors.
+
+<ModelPaperFigures modelId="wow" locale="en" />
+
+The recorded paper is [arXiv 2509.22642](https://arxiv.org/abs/2509.22642).
+
+Project page: [wow-world-model.github.io](https://wow-world-model.github.io/). Code: [wow-world-model/wow-world-model](https://github.com/wow-world-model/wow-world-model).
+
+<ModelCommandBuilder modelId="wow" locale="en" />
+
+## What it is for
+
+`wow` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+
+The Wan line uses VAE-only first-frame conditioning on Wan diffusion backbones. The DiT 2B line is a transformer override on the canonical Cosmos Predict2 recipe, selected via runtime_backend=dit2b — no private Cosmos runtime remains. Demo defaults are recorded: Wan uses steps=50, seed=42, tiled, 41 frames at 15 fps; DiT 2B uses 720p, 16 fps, guidance=7. It is published by X-Humanoid (Beijing Humanoid Robot Innovation Center).
+
+Catalog tasks include world-model, image-to-video, and action-conditioned-video. Catalog aliases include `wow-world-model` and `world-of-worlds`. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) (Embodied action-conditioned world-model quality), [WorldArena](/docs/evaluation/benchmark-hub/worldarena) (Listed among WorldArena open-source world models).
+
+## Runtime contract
+
+Optional `input_path`, `prompt`, `steps`, `num_frames`, and `seed`; artifacts `wow.mp4`.
+
+CLI task profiles: `official-image-to-world`. WorldFoundry binds `WoWPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `official-image-to-world` defaults: seed=42.
+
+Start with the structurally validated Wan 1.3B-2M (MIT) checkpoint; the official recommendation is Wan 14B-2M. Note the pinned DiT 2B Hub snapshot does not expose wow_dit_2b.pt, so that line's local graph validation is pending.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run wow --pipeline.task-profile official-image-to-world`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `X-Humanoid/WoW-1-Wan-1.3B-2M`, `X-Humanoid/WoW-1-Wan-14B-600k`, and `X-Humanoid/WoW-1-Wan-14B-2M` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh wow`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include mit; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="wow" locale="en" />

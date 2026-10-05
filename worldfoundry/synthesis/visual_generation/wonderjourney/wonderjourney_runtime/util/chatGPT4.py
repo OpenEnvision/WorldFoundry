@@ -5,13 +5,27 @@ from pathlib import Path
 import io
 import base64
 import requests
-import spacy
 import os
-# run 'python -m spacy download en_core_web_sm' to load english language model
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    nlp = spacy.blank("en")
+
+
+_nlp = None
+_nlp_load_attempted = False
+
+
+def _get_nlp():
+    global _nlp, _nlp_load_attempted
+    if _nlp_load_attempted:
+        return _nlp
+    _nlp_load_attempted = True
+    try:
+        import spacy
+    except ImportError:
+        return None
+    try:
+        _nlp = spacy.load("en_core_web_sm")
+    except OSError:
+        _nlp = spacy.blank("en")
+    return _nlp
 
 openai.api_key = os.environ.get("OPENAI_API_KEY", "")
 
@@ -147,6 +161,9 @@ class TextpromptGen(object):
         return output
 
     def generate_keywords(self, text):
+        nlp = _get_nlp()
+        if nlp is None:
+            return text
         doc = nlp(text)
 
         adj = False

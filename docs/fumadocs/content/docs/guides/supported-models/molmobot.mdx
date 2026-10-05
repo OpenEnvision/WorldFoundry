@@ -1,0 +1,28 @@
+---
+title: "MolmoBot"
+description: "MolmoBot DROID and Pi0-DROID policies have completed checkpoint-backed offline GPU action inference."
+modelId: "molmobot"
+pageSource: authored
+---
+
+MolmoBot is AI2's robot policy family. WorldFoundry exposes the OLMo-based action-chunk route and the separate Pi0-DROID joint-position route through in-tree inference-only pipelines.
+
+<ModelPaperFigures modelId="molmobot" locale="en" />
+
+See [arXiv 2603.16861](https://arxiv.org/abs/2603.16861), the [project page](https://allenai.github.io/MolmoBot), and the [official repository](https://github.com/allenai/MolmoBot).
+
+## Validated variants
+
+The released `MolmoBot-DROID` and `MolmoBot-Img-DROID` checkpoints completed offline GPU action inference on a real DROID observation with two cameras and robot state. The released `MolmoBot-Pi0-DROID` checkpoint completed the unmodified official `PiJointPosPolicy` forward pass and an independent public `MolmoBotPipeline` forward pass on the same observation. The Pi0 adapter's two camera tensors, 7D arm state, 2D gripper state, and prompt preparation matched the official policy; both routes returned finite 7D arm and 1D gripper actions. Stochastic sampling does not require identical action values.
+
+The OLMo-based DROID checkpoints are Apache-2.0. The Pi0-DROID checkpoint is [Gemma-licensed](https://huggingface.co/allenai/MolmoBot-Pi0-DROID). `MolmoBot-RBY1Multitask` is cataloged but has not been validated here.
+
+## Runtime contract
+
+Supply a task prompt, the `exo_camera_1` and `wrist_camera` images, and matching robot state. For Pi0-DROID, the verified state has seven arm joint positions plus a two-value gripper state; the output contains arm `(7,)` and gripper `(1,)` actions. Select the Pi0 route with `MolmoBotPipeline.from_pretrained(..., variant="pi0_droid")`, using the released `allenai/MolmoBot-Pi0-DROID` checkpoint. It requires the pinned isolated OpenPI dependencies and PaliGemma tokenizer. The in-tree public adapter does not load the MolmoSpaces simulator.
+
+## Validation boundary
+
+These are offline checks of checkpoint loading, observation preparation, and finite action inference. The real DROID observation is outside the simulation-trained Pi0 policy's training distribution. No closed-loop robot execution, task-success rate, or semantic action quality has been measured.
+
+<ModelRelatedRecipes modelId="molmobot" locale="en" />

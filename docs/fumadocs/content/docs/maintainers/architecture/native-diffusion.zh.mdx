@@ -1,0 +1,103 @@
+---
+title: 原生 Diffusion
+description: WorldFoundry 自有的 diffusion 内核、组件边界、依赖规则和研究扩展模型。
+---
+
+## 架构决定
+
+WorldFoundry 用原生基础设施实现本地 diffusion inference。DiffSynth、Diffusers、LightX2V 和模型官方仓库是重要的行为规格与迁移参考，但都不是 WorldFoundry 的 runtime backend。采样循环、typed component contracts、构造规则、生命周期和研究介入点都由框架自己持有。
+
+这个决定同时避免两类问题：把整套上游框架复制到每个模型目录，以及用 backend adapter 把同样的耦合藏起来。共享 inference algorithm 只能有一份 canonical implementation；network package 只保存与 checkpoint 对齐的 tensor math，family 特有的 state-dict conversion 与 contract adaptation 统一放在 role-first 的 denoiser 层，再由 recipe 与共享 component 组合。
+
+## 职责与数据流
+
+公开 model ID 始终独立：Echo Memory variants、Matrix Game variants 和普通生成模型分别拥有不可变 recipe 与 catalog identity。Recipe 可以复用 component implementation，但不能把一个模型降成另一个全局 pipeline 上的 option flag。
+
+<ArchDiagram id="native-diffusion" locale="zh" />
+
+## 目录职责
+
+`worldfoundry/base_models/diffusion_model` 是唯一 diffusion package，并按稳定 runtime role 组织，而不是按上游仓库组织：
+
+```text
+worldfoundry/base_models/diffusion_model/
+  contracts.py              typed request、output 与 component protocol
+  pipeline.py               轻量的原生公开执行边界
+  registry.py               显式、instance-local 的 recipe 构造
+  assembly.py               唯一的 component-to-runner 构造路径
+  components.py             component key、build context、execution spec
+  loaders/                  对 worldfoundry/core model loading 的薄适配
+  optimizations/            面向 diffusion 导出 core runtime policy
+  recipes/                  declarative model-ID composition；不含 runner code
+  runners/                  框架自有 sampling loop
+  schedulers/               可复用 numerical integration algorithm
+  models/networks/<family>/ 只含 checkpoint-compatible nn.Module 数学结构
+  models/denoisers/<family>.py state-dict mapping 与 Denoiser contract adapter
+  models/encoders/<family>/ text、image、audio、action 与 geometry encoder
+  models/autoencoders/<family>/ image、video 与 audio latent codec
+  models/initializers/<family>/ 模型特定 latent geometry，不包含 sampling loop
+  extensions/               memory、control、tracing 与 research hook
+```
+
+当前拓扑中不存在 `image/`、`video/`、`diffsynth/` 或兜底式 `common/` 层，旧目录已经删除。模态是 recipe 的 capability metadata，不是代码 ownership boundary。真正通用的 configuration、tensor distribution、distributed、loading、kernel 与 IO utility 进入 `worldfoundry/core`；diffusion 专属的可复用实现进入上面职责明确的目录。
+
+`models/networks` 是更严格的边界：其中不能出现 `inference`、`pipeline`、runtime `config`、`scheduler`、`guardrail`、`checkpointer`、`tokenizer`、`utils` 或 runtime package，也不能加载 checkpoint 或选择执行 backend。只有直接决定 module topology 或 checkpoint-visible tensor name 的不可变 architecture schema 可以保留。此前违反这一规则的 Predict1/Predict2、WoW 和 Genie 完整源码树已移出 canonical models。现在 GEN3C/Cosmos Predict1 与 Cosmos Predict2 已经成为原生 recipe：只保留 checkpoint-shaped network math，并与 Predict2.5、Cosmos3 一样通过同一个 assembler 装配。WoW 的两条产品路线现在都复用 canonical role：Wan checkpoint 使用共享 Wan staged runner，DiT 2B checkpoint 则作为 model override 绑定到共享 Cosmos Predict2 recipe；Genie 产品调用仍属于 compatibility 工作。
+
+这里不能放 training entrypoint、dataset、experiment config、CLI parser 或复制来的上游 pipeline。Checkpoint acquisition 属于 model data 与 core loading utility；benchmark scoring 属于 evaluation；媒体写盘和 `GenerationResult` 归一化留在公开 runtime boundary。
+
+## Core 复用
+
+Diffusion 不重复实现通用基础设施。Checkpoint file、safetensors index、meta initialization、state-dict assignment、disk map、分阶段 VRAM placement、layerwise CPU offload、distributed collective、kernel、configuration、storage 和 media IO 都来自 `worldfoundry/core`。Diffusion package 只定义 diffusion 领域 contract、schedule、execution strategy、recipe，以及把 core capability 绑定到 component 的薄适配。
+
+Attention 与可复用 transformer mechanics 也遵守同一规则。Capability probing、backend normalization、dense SDPA、任意 padding mask attention、packed variable-length attention、sparse 3D attention、multimodal sequence-parallel composition、n-D/complex/projective RoPE 与 backend callable 都统一位于 `worldfoundry/core/attention`。RMSNorm、共享 transformer MLP 与 conditioning projection、timestep projection、AdaLN/final-layer modulation、prefix gating、可插拔 transformer-op policy 和 gradient checkpoint execution 分别位于 `worldfoundry/core/nn`。HunyuanVideo、LTX、Matrix 衍生产品、Wan 和其他 model layer 只 import 这些 primitive，不再保留 family 私有的 backend probing、private-kernel dispatch、offload、checkpoint execution 或通用 transformer-op config。
+
+如果一项能力也能服务非 diffusion model，应先实现到 `worldfoundry/core`。任何 family package 都不能再自带 offload manager、checkpoint framework、distributed bootstrap、kernel registry 或通用 quantization system。`core` 拥有什么的完整地图见 [核心基础设施](/zh/docs/maintainers/architecture/core-infrastructure)。
+
+## 依赖规则
+
+Canonical files 可以依赖 PyTorch、可复用的 `diffusers` model/operator primitive，以及小而明确的 framework-core utility。`diffusers` 可以作为 library dependency，但它的 Pipeline 抽象不能成为第二套 runtime backend 或 ownership boundary。Canonical files 不能 import `diffsynth`、legacy `diffsynth/`、`image/`、`video/` 子目录、`worldfoundry.synthesis`、`worldfoundry.pipelines` 或 `worldfoundry.evaluation`。
+
+迁移只有一个方向：
+
+```text
+product compatibility boundary -> canonical diffusion_model root -> core / PyTorch / reusable third-party primitives
+```
+
+反向依赖被禁止。Legacy implementation 的所有调用方迁完后，应删除旧实现，而不是长期维护第二份副本。
+
+## 组件契约
+
+`DiffusionRequest` 统一 prompt batch、空间与时间尺寸、sampling settings、模型特定 input 和 reproducibility metadata。标准 runner 组合五项职责：`ConditionEncoder`、`LatentInitializer`、`DiffusionScheduler`、`Denoiser` 和 `LatentDecoder`。每次 run 都创建不可变 conditioning 与 schedule，以及隔离的 `DiffusionRunContext`（`extensions/base.py:24`），不依赖模型特定的 process global。
+
+`NativeDiffusionRegistry`（`recipes/registry.py:29`）刻意保持显式且 instance-local。注册时会检测 model ID 与 alias 冲突，服务请求前可冻结 registry。`NativeDiffusionRecipe`（`recipes/spec.py:14`）只能包含 component spec、checkpoint spec、capability metadata 和框架持有的 execution strategy ID。每个 component 用 `weights`、`tokenizer` 等名字声明 checkpoint 依赖，由 assembler 在构造前解析；component 不再猜 sibling path，也不自行扫描 model directory。API 中不存在 `runner_factory`，model code 不能自行构造或替换 pipeline/runner。`NativeDiffusionAssembler`（`assembly.py:31`）校验 component protocol，并且是唯一 recipe-to-runner 路径；它只委托给 instance-local 的 `ExecutionStrategyRegistry`。内置 registry 会冻结，当前包含 `standard`、可复用的 `frozen-context` suffix-relocking strategy，以及处理耦合模态和多阶段 refinement 的通用 `joint-multistage` strategy。未来共享的 chunked 或 autoregressive loop 也必须进入这里，不能出现按 model name 分支。Import 一个 network module 不能产生注册模型或加载权重的副作用。
+
+首批 scheduler 包括通用、无状态且时间步使用 FP32 的 `FlowMatchEulerScheduler`、Wan shifted Euler trajectory，以及共享的 flow-matching UniPC/DPM++ solver。Embedded guidance、multiple denoisers、causal chunk、autoregressive window 或 audio/video co-generation 如需新循环，必须在 `runners/` 下新增可复用 execution strategy，不能新增 family runner。Strategy 属于框架 infra，由 declarative binding 驱动，不能按 model name 分支。
+
+所有内置模型共用一个构造入口（`NativeDiffusionPipeline` 在 `pipeline.py:16`，`from_pretrained` 在 `:44`）：
+
+```python
+import torch
+
+from worldfoundry.base_models.diffusion_model import NativeDiffusionPipeline, RuntimePolicy
+
+pipeline = NativeDiffusionPipeline.from_pretrained(
+    "wan2.1-t2v-1.3b",
+    policy=RuntimePolicy(device="cuda", dtype=torch.bfloat16),
+)
+```
+
+Model ID 只改变 recipe，不改变 infra class；checkpoint 与 component override 也继续作为同一入口的显式参数。
+
+## Research 扩展
+
+`DiffusionExtension`（`extensions/base.py:35`）是 memory 与生成研究的正式介入面。它可以准备 conditioning、修改 denoiser input、观察或变换每个 branch prediction、在 step 后变换 latent，以及后处理 decoded sample。Hook 拿到每次 run 独立的 context，其中包含 extension-owned state。
+
+Extension 安装在 runner instance 上，并具有唯一 `extension_id`。它不 monkey-patch class，也不修改全局 registry，因此 baseline、memory、control、ablation 与 tracing variant 可以在同一进程共存。Echo 已发布 checkpoint 的架构属于 canonical network component，而不是 extension；只有与模型无关的 context relocking lifecycle 使用框架 extension surface。经过验证且可复用的研究能力最终应升级成 canonical component；实验特有状态继续留在 extension 中。
+
+## 新增或迁移模型
+
+只从官方仓库移植最小 inference slice：checkpoint-compatible network definition、必要 encoder 与 autoencoder、numerical schedule，以及会影响结果的 preprocessing/postprocessing。把这些部分映射到 native contracts，并为每个公开 model ID 创建独立 recipe。已有 canonical component 的 checkpoint semantics 一致时必须复用，不能复制到 family package。
+
+随后把 recipe 接入现有 public pipeline 和 catalog route，验证低分辨率 deterministic inference，并使用真实 checkpoint 对齐官方输出。所有 caller 都迁到 native path 之后，旧实现先变成单向 compatibility re-export，再被删除。只有 metadata recipe 或 toy test 不能证明真实模型已经迁移完成。
+
+各 family 的迁移状态——每个模型复用了哪些 role、删除了哪些上游代码、以及支撑当前 recipe 的本地结构/tensor 验证证据——记录在 [原生 Diffusion 整合](/zh/docs/maintainers/native-diffusion-consolidation)。该页是发版证据与溯源，不是架构；当你需要确认某个 family 是否已完成迁移、还欠哪些 CUDA artifact parity 时读它。

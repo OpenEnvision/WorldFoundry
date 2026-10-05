@@ -1,0 +1,44 @@
+{
+  "inputs": {
+    "continuous": {
+      "current": [[0.4, -0.2], [0.1, 0.7]],
+      "stopped": [[0.3, -0.1], [0.2, 0.5]],
+      "teacher": [[0.1, 0.2], [-0.2, 0.4]],
+      "directional_derivative": [[0.05, -0.03], [0.08, 0.02]],
+      "noisy": [[1.0, -0.5], [0.3, 0.8]],
+      "trig_time": [0.4, 0.9],
+      "rf_time": [0.2, 0.7],
+      "warmup_ratio": 0.25
+    },
+    "dmd": {
+      "generated": [[2.0, 4.0], [10.0, 14.0]],
+      "fake": [[2.0, 3.0], [5.0, 9.0]],
+      "teacher": [[1.0, 1.0], [2.0, 2.0]]
+    },
+    "cadence": {
+      "tangent_warmup_steps": 2,
+      "student_update_frequency": 3,
+      "iterations": [0, 1, 2, 3, 4, 5, 6, 7]
+    }
+  },
+  "expected": {
+    "continuous": {
+      "bidirectional_loss": 0.8132090329369195,
+      "bidirectional_norm": [0.4761529790961315, 0.40206624384624445],
+      "causal_loss": 0.7400980790826541,
+      "causal_norm": [0.3631920979316593, 0.4267414322514279]
+    },
+    "dmd": {
+      "normalizer": [2.0, 10.0],
+      "loss": 0.9149999999999997,
+      "generated_gradient": [[0.5, 1.0], [0.3, 0.7]]
+    },
+    "cadence": {
+      "phases": ["student", "student", "student", "fake-score", "fake-score", "student", "fake-score", "fake-score"],
+      "effective_student_iterations": [0, 1, 2, 2, 2, 3, 3, 3],
+      "effective_fake_iterations": [null, null, null, 0, 1, null, 2, 3]
+    }
+  },
+  "atol": 1e-7,
+  "rtol": 1e-7
+}

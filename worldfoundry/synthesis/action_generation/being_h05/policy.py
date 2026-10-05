@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import torch
-from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
 from PIL import Image
 from safetensors import safe_open
 from transformers import AutoConfig, AutoModel, AutoTokenizer
@@ -26,6 +25,7 @@ from worldfoundry.base_models.llm_mllm_core.mllm.qwen.beingh.qwen3_navit import 
     Qwen3Config,
     Qwen3ForCausalLM,
 )
+from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
 from .modeling.beingvla import BeingH, BeingHConfig
 from .modeling.internvit import InternVisionConfig, InternVisionModel
@@ -553,12 +553,21 @@ class BeingHPolicy(BasePolicy):
 
         else:
             # Legacy format - no variants
-            if "statistics" not in metadata_dict and isinstance(metadata_dict, dict):
-                print(f"Warning: Nested metadata detected, Keys: {list(metadata_dict.keys())}")
-                first_key = next(iter(metadata_dict))
-                print(f"Unalcking key: {first_key}")
-                metadata_dict = metadata_dict[first_key]
-                self.stats_source = f"legacy:{first_key}"
+            if isinstance(metadata_dict, dict) and "statistics" not in metadata_dict:
+                print(f"[Metadata] Nested variants available: {list(metadata_dict.keys())}")
+                if self.metadata_variant and self.metadata_variant != "merged":
+                    if self.metadata_variant not in metadata_dict:
+                        raise ValueError(
+                            f"Metadata variant {self.metadata_variant!r} not found for "
+                            f"dataset {self.dataset_name!r}; available: {list(metadata_dict)}"
+                        )
+                    selected_variant = self.metadata_variant
+                else:
+                    selected_variant = next(iter(metadata_dict))
+                print(f"[Metadata] Selecting nested variant: {selected_variant}")
+                metadata_dict = metadata_dict[selected_variant]
+                self.stats_level = metadata_dict.get('stats_level', 'unknown')
+                self.stats_source = f"legacy:{selected_variant}"
             else:
                 self.stats_source = "legacy:direct"
 

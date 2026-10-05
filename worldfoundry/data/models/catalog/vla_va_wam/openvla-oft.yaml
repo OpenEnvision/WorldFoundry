@@ -18,6 +18,8 @@ integration:
 license: mit
 name: OpenVLA-OFT
 official_sources:
+  paper: https://arxiv.org/abs/2502.19645
+  project_page: https://openvla-oft.github.io/#train-compute
   github:
     head_sha: e4287e94541f
     url: https://github.com/moojink/openvla-oft
@@ -94,3 +96,21 @@ runner_parity:
   - Training, RLDS data processing, LIBERO benchmark loop, and TensorFlow dataset stack are intentionally excluded from the minimal runtime profile.
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile planning records.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'OpenVLA-OFT applies optimized fine-tuning to OpenVLA — parallel decoding, continuous action heads, and chunking — and is fully GPU-validated in this catalog: an A100 restored all 7.54B parameters, produced deterministic finite 8x7 action chunks across multiple inputs at 14.47 GiB peak VRAM, and all five declared LIBERO checkpoints completed real inference (MIT license).'
+  overview_zh: OpenVLA-OFT 对 OpenVLA 施加优化微调——并行解码、连续动作头与动作分块——并在本 catalog 中完成 GPU 验证：A100 恢复全部 75.4 亿参数，对多组输入产出确定性的有限 8x7 动作块，峰值显存 14.47 GiB，五个声明的 LIBERO checkpoint 全部完成真实推理（MIT 许可）。
+  architecture: 'The OFT recipe replaces autoregressive token decoding with parallel decoding plus an L1 continuous action head and 8-step chunking over the 7B OpenVLA backbone, with proprio and noisy-action projectors in-tree. Attention is hardware-resolved: FlashAttention 2 on Ampere/Ada/Hopper, PyTorch SDPA fallback elsewhere including Blackwell.'
+  architecture_zh: OFT 配方在 7B OpenVLA 骨干上以并行解码替换自回归 token 解码，加 L1 连续动作头与 8 步分块，本体感知与噪声动作投影器内置树内。注意力按硬件解析：Ampere/Ada/Hopper 用 FlashAttention 2，其他架构（含 Blackwell）回退 PyTorch SDPA。
+  usage_notes: Pick the LIBERO suite checkpoint matching your split (spatial, object, goal, etc.); official LIBERO observation inputs are supported directly. Training, RLDS processing, TensorFlow tooling, and LIBERO benchmark loops are excluded.
+  usage_notes_zh: 按评测子集选择 LIBERO checkpoint（spatial、object、goal 等）；直接支持官方 LIBERO 观测输入。训练、RLDS 处理、TensorFlow 工具与 LIBERO 基准循环被排除。
+  limitations:
+  - Released checkpoints are LIBERO fine-tunes; other embodiments need your own fine-tuning.
+  limitations_zh:
+  - 发布的 checkpoint 为 LIBERO 微调版；其他本体需自行微调。
+  recommended_benchmarks:
+  - id: libero
+    reason: All five LIBERO checkpoints are GPU-validated.
+    reason_zh: 五个 LIBERO checkpoint 全部通过 GPU 验证。

@@ -61,6 +61,14 @@ class EchoInfinitySynthesis(RuntimeVideoSynthesis):
     def _prediction_runtime_overrides(self, kwargs: Mapping[str, Any], *, fps: Optional[int]):
         overrides = super()._prediction_runtime_overrides(kwargs, fps=None)
         overrides.pop("fps", None)
+        # The generic seed alias prefers ``base_seed`` for proxy runtimes with
+        # **kwargs, but EchoInfinity only accepts ``seed``. Preserve the model's
+        # own frame-count option as well; it is not a generic video alias.
+        overrides.pop("base_seed", None)
+        if kwargs.get("seed") is not None:
+            overrides["seed"] = int(kwargs["seed"])
+        if kwargs.get("num_output_frames") is not None:
+            overrides["num_output_frames"] = int(kwargs["num_output_frames"])
         return overrides
 
 

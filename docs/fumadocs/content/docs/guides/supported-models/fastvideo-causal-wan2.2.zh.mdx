@@ -1,0 +1,39 @@
+---
+title: "FastVideo CausalWan2.2"
+description: "英伟达 / FastVideo 的 8 步因果 Wan2.2 图生视频：832×480 面积预算、请求 81 帧、guidance 1、16 fps。"
+modelId: "fastvideo-causal-wan2.2"
+pageSource: authored
+---
+
+FastVideo CausalWan2.2 是 **8 步因果** Wan2.2 滚动：视频按**三潜帧**块出来，栈在高噪/低噪专家之间切换。WorldFoundry 让专家 KV / 交叉注意力缓存彼此独立，并在固定的 shifted flow 日程上执行 **self-forcing 再加噪**。原生角色覆盖两个 Wan2.2 专家、T5、VAE 和缓存遍历。Pipeline：`FastVideoCausalWanPipeline`。别名 `fastvideo-causal-wan` 解析到这里。相关 HF id：`FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers`。
+
+<ModelPaperFigures modelId="fastvideo-causal-wan2.2" locale="zh" />
+
+论文：[arXiv 2606.03159](https://arxiv.org/abs/2606.03159)。项目页：[nvidia.github.io/flashdreams](https://nvidia.github.io/flashdreams/main/index.html)。代码：[NVIDIA/FlashDreams](https://github.com/NVIDIA/FlashDreams)。预览权重：`FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers`（**Apache-2.0**）。CPU 契约测试和真实权重 GPU 推理均已通过。
+
+<ModelCommandBuilder modelId="fastvideo-causal-wan2.2" locale="zh" />
+
+## 用来做什么
+
+因果 Wan2.2 快视频。不是完整 Wan2.2 家族卡。
+
+提供输入图像，并运行 `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b`。
+
+## 运行时契约
+
+必填 `prompt` 和 `image`；产物 `fastvideo-causal-wan2.2-i2v-14b.mp4`。
+
+| 旋钮 | 默认 |
+| --- | --- |
+| 尺寸 | **832×480 面积预算**；实际画布按输入比例对齐到 16 像素（1280×704 → 848×464） |
+| 帧数 | WorldFoundry 输出 **81** 帧；FastVideo 当前官方入口对同一 81 帧请求实际输出 **73** 帧 |
+| 步数 | **8** |
+| Guidance | **1** |
+| FPS | **16** |
+| 块 | **3** 潜帧 |
+
+## 在 WorldFoundry 中运行
+
+状态：**已在 H100 上验证 848×464、81 帧真实权重推理**。提供图像运行 `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b`。同参数的 FastVideo 官方入口实际输出 73 帧，因为其去噪器舍弃最后两个潜帧。两者公共帧的构图和前进运动一致；随机数生成器和潜变量精度不同，逐像素数值一致性仍待验证。许可证：Apache-2.0。catalog 未记录 VRAM。
+
+<ModelRelatedRecipes modelId="fastvideo-causal-wan2.2" locale="zh" />

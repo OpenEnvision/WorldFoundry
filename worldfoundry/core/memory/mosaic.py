@@ -1,4 +1,24 @@
-"""MosaicMem-inspired spatial patch memory for 3D-aware retrieval."""
+"""MosaicMem-inspired spatial patch memory for 3D-aware retrieval.
+
+MosaicMem stores 3D patches on a latent canvas keyed by camera pose.
+A later viewpoint queries the store and gets the patches that project
+into its frustum, which a memory-conditioned DiT can attend to.
+
+This module owns the geometry and the in-process store — not a
+training loop:
+
+- :class:`CameraIntrinsics` / :class:`CameraPose` — pinhole project /
+  unproject and camera-to-world.
+- :class:`Patch3D` / :class:`LatentCanvas` / :class:`MosaicFrame` —
+  patch payload and the 2D canvas they land on.
+- :class:`MosaicMemoryStore` / :class:`MemoryRetriever` — insert
+  frames and retrieve patches for a query pose.
+- :class:`MosaicMemoryConfig` — capacity, patch size, and score
+  thresholds shared by adapters.
+
+Deterministic: no RNG in ranking. Torch is optional and only needed
+when callers pass tensors.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +28,10 @@ from typing import Any, Iterable, Mapping, Sequence
 
 Point2 = tuple[float, float]
 Point3 = tuple[float, float, float]
+
+# ──────────────────────────────────────────────────────────────────────────
+# Pinhole camera — project / unproject; z <= 0 or non-finite yields None
+# ──────────────────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +83,11 @@ class CameraIntrinsics:
         return 0.0 <= u < float(self.width) and 0.0 <= v < float(self.height)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# World ↔ camera — rotation is camera-from-world after +translation
+# ──────────────────────────────────────────────────────────────────────────
+
+
 @dataclass(frozen=True, slots=True)
 class CameraPose:
     """Represents the world-to-camera coordinate system transformations.
@@ -102,6 +131,11 @@ class CameraPose:
         )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Patch payload and retrieval row — latent tokens keyed by world center
+# ──────────────────────────────────────────────────────────────────────────
+
+
 @dataclass(slots=True)
 class Patch3D:
     """Represents a localized 3D latent patch capturing spatial-temporal features.
@@ -135,9 +169,11 @@ class Patch3D:
         return (channels, self.latent_height, self.latent_width)
 
     def channels(self) -> int:
+        """Channel count from ``latent_shape``, or inferred from latent length."""
         return self.resolved_latent_shape()[0]
 
     def token_count(self) -> int:
+        """Spatial token count ``H * W`` after shape resolution."""
         _, height, width = self.resolved_latent_shape()
         return height * width
 
@@ -151,6 +187,11 @@ class RetrievedPatch:
     projected_footprint: list[Point2]
     target_depth: float
     visibility_score: float
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Capacity / ranking knobs — shared by store and retriever; no RNG
+# ──────────────────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +208,11 @@ class MosaicMemoryConfig:
     diversity_radius: float = 0.0
     diversity_penalty: float = 0.5
     min_visibility: float = 0.01
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Dense canvas — THWC storage; stack requires matching H/W/C
+# ──────────────────────────────────────────────────────────────────────────
 
 
 @dataclass(slots=True)
@@ -186,6 +232,7 @@ class LatentCanvas:
 
     @classmethod
     def empty(cls, frames: int, height: int, width: int, channels: int) -> "LatentCanvas":
+        """Zero-filled canvas; negative extents clamp to zero so size cannot go negative."""
         size = max(frames, 0) * max(height, 0) * max(width, 0) * max(channels, 0)
         return cls(
             [0.0] * size, frames=max(frames, 0), height=max(height, 0), width=max(width, 0), channels=max(channels, 0)
@@ -193,6 +240,7 @@ class LatentCanvas:
 
     @classmethod
     def stack(cls, canvases: Sequence["LatentCanvas"]) -> "LatentCanvas":
+        """Concatenate along time; :exc:`ValueError` if H/W/C disagree."""
         if not canvases:
             return cls.empty(0, 0, 0, 0)
         first = canvases[0]
@@ -206,6 +254,7 @@ class LatentCanvas:
         return cls(data, frames=frames, height=first.height, width=first.width, channels=first.channels)
 
     def is_empty(self) -> bool:
+        """True when there are no frames or the flat buffer has no values."""
         return self.frames == 0 or not self.data
 
     def to_tokens(self) -> list[list[float]]:
@@ -230,6 +279,11 @@ class LatentCanvas:
         return latent
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Query result — retrieved patches plus a coarse occupancy grid
+# ──────────────────────────────────────────────────────────────────────────
+
+
 @dataclass(slots=True)
 class MosaicFrame:
     """A synthesized query result representing a virtual camera viewpoint.
@@ -245,9 +299,11 @@ class MosaicFrame:
     height: int
 
     def num_patches(self) -> int:
+        """Count of retrieved patches in this viewpoint (not token count)."""
         return len(self.patches)
 
     def has_coverage(self) -> bool:
+        """True when any coarse occupancy cell is marked covered."""
         return any(any(row) for row in self.coverage_mask)
 
     def coverage_ratio(self) -> float:
@@ -326,6 +382,11 @@ class MosaicFrame:
         return canvas
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# In-process store — insert / retrieve / evict oldest when over max_patches
+# ──────────────────────────────────────────────────────────────────────────
+
+
 class MosaicMemoryStore:
     """MosaicMem-inspired spatial patch store for long-horizon visual memory.
 
@@ -338,6 +399,7 @@ class MosaicMemoryStore:
     """
 
     def __init__(self, config: MosaicMemoryConfig | None = None) -> None:
+        """Start empty; ``_next_id`` is the next unused patch identifier."""
         self.config = config or MosaicMemoryConfig()
         self.patches: list[Patch3D] = []
         self._next_id = 0
@@ -458,9 +520,11 @@ class MosaicMemoryStore:
         self.patches = [patch for patch in self.patches if patch.id != patch_id]
 
     def num_patches(self) -> int:
+        """Current patch count after budget eviction."""
         return len(self.patches)
 
     def total_tokens(self) -> int:
+        """Sum of spatial tokens across every stored patch."""
         return sum(patch.token_count() for patch in self.patches)
 
     def query_nearest(self, position: Point3, k: int) -> list[Patch3D]:
@@ -480,10 +544,16 @@ class MosaicMemoryStore:
         del self.patches[self.config.max_patches :]
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Inverse projection ranker — frustum clip, visibility, optional spatial NMS
+# ──────────────────────────────────────────────────────────────────────────
+
+
 class MemoryRetriever:
     """Executes inverse projection and visibility ranking for Mosaic queries."""
 
     def __init__(self, config: MosaicMemoryConfig | None = None, *, depth_sort: bool = True) -> None:
+        """``depth_sort`` orders the final top-k far-to-near for painter-style blend."""
         self.config = config or MosaicMemoryConfig()
         self.depth_sort = depth_sort
 
@@ -590,6 +660,11 @@ class MemoryRetriever:
                 if _distance2_2d(candidate.target_position, chosen.target_position) < radius2:
                     scores[idx] *= self.config.diversity_penalty
         return selected
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Geometry helpers — footprint, occupancy grid, latent extract, bilinear splat
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def project_patch_footprint(patch: Patch3D, target_pose: CameraPose, intrinsics: CameraIntrinsics) -> list[Point2]:
@@ -717,7 +792,13 @@ def _splat_token(
             data[start + channel] += float(token[channel]) * cell_weight
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Tiny linear algebra and snapshot codecs — no torch; JSON-safe tuples
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _matvec(matrix: Sequence[Sequence[float]], vector: Point3) -> Point3:
+    """3×3 matrix-vector product used by pose transforms (no torch dependency)."""
     return (
         matrix[0][0] * vector[0] + matrix[0][1] * vector[1] + matrix[0][2] * vector[2],
         matrix[1][0] * vector[0] + matrix[1][1] * vector[1] + matrix[1][2] * vector[2],
@@ -728,6 +809,7 @@ def _matvec(matrix: Sequence[Sequence[float]], vector: Point3) -> Point3:
 def _transpose(
     matrix: Sequence[Sequence[float]],
 ) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    """Transpose a 3×3 rotation so camera-to-world can invert without a solver."""
     return (
         (matrix[0][0], matrix[1][0], matrix[2][0]),
         (matrix[0][1], matrix[1][1], matrix[2][1]),
@@ -736,18 +818,22 @@ def _transpose(
 
 
 def _average_point(points: Sequence[Point2]) -> Point2:
+    """Centroid of a footprint; caller must pass a non-empty sequence."""
     return (sum(point[0] for point in points) / len(points), sum(point[1] for point in points) / len(points))
 
 
 def _distance2(left: Point3, right: Point3) -> float:
+    """Squared Euclidean distance in world space (avoids ``sqrt`` in k-NN ranking)."""
     return (left[0] - right[0]) ** 2 + (left[1] - right[1]) ** 2 + (left[2] - right[2]) ** 2
 
 
 def _distance2_2d(left: Point2, right: Point2) -> float:
+    """Squared pixel distance for diversity NMS."""
     return (left[0] - right[0]) ** 2 + (left[1] - right[1]) ** 2
 
 
 def _patch_to_dict(patch: Patch3D) -> dict[str, Any]:
+    """``dataclasses.asdict`` snapshot; explicit ``None`` keeps missing intrinsics stable."""
     row = asdict(patch)
     if row["source_intrinsics"] is None:
         row["source_intrinsics"] = None
@@ -755,6 +841,7 @@ def _patch_to_dict(patch: Patch3D) -> dict[str, Any]:
 
 
 def _patch_from_dict(row: Mapping[str, Any]) -> Patch3D:
+    """Rebuild nested pose/intrinsics from mapping rows produced by :func:`_patch_to_dict`."""
     payload = dict(row)
     pose = payload.get("source_pose")
     if isinstance(pose, Mapping):

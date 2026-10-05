@@ -1,0 +1,50 @@
+{
+  "inputs": {
+    "schedule": {
+      "raw_timesteps": [1000.0, 750.0, 500.0, 250.0],
+      "num_train_timesteps": 1000,
+      "flow_shift": 5.0
+    },
+    "score_shift_and_clamp": {
+      "base_sigmas": [0.0, 0.02, 0.5, 0.999],
+      "flow_shift": 5.0,
+      "minimum": 0.02,
+      "maximum": 0.98
+    },
+    "per_sample_normalizer": {
+      "generated": [[2.0, 4.0], [10.0, 14.0]],
+      "fake_score": [[5.0, 7.0], [7.0, 9.0]],
+      "real_score": [[1.0, 1.0], [2.0, 2.0]]
+    },
+    "rollout_trace": {
+      "exit_indices": [2, 2]
+    }
+  },
+  "expected": {
+    "schedule": {
+      "effective_timesteps": [1000.0, 937.5, 833.3333333333334, 625.0],
+      "effective_sigmas": [1.0, 0.9375, 0.8333333333333334, 0.625]
+    },
+    "score_shift_and_clamp": {
+      "sigmas": [0.02, 0.09259259259259259, 0.8333333333333334, 0.98]
+    },
+    "per_sample_normalizer": {
+      "denominator": [[2.0], [10.0]],
+      "gradient": [[2.0, 3.0], [0.5, 0.7]]
+    },
+    "rollout_trace": {
+      "events": [
+        "predict:0:0:append:no-grad",
+        "predict:0:1:overwrite:no-grad",
+        "predict:0:2:overwrite:grad",
+        "commit:0:overwrite:clean-t0",
+        "predict:1:0:append:no-grad",
+        "predict:1:1:overwrite:no-grad",
+        "predict:1:2:overwrite:grad",
+        "commit:1:overwrite:clean-t0"
+      ]
+    }
+  },
+  "atol": 1e-7,
+  "rtol": 1e-6
+}

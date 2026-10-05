@@ -1,143 +1,175 @@
 ---
 title: CameraBench
-description: 相机运动理解 benchmark，WorldFoundry 提供仓内结果聚合入口。
+description: "CMU 镜头运动评测：二分类、VQA、检索与描述。WorldFoundry 聚合官方分数，不编造榜单。"
 ---
 
-## 简介
+CameraBench（卡内基梅隆）问的是视频模型会不会**理解镜头运动**——推、摇、移以及一套与摄影师共同设计、再经专家标注的分类法。四个指标族：
 
-CameraBench 评估视频模型是否真正理解相机运动，而不是只生成视觉上好看的片段。它关注 pan、tilt、roll、zoom、tracking、follow 等运动，并判断生成或检索到的视频是否匹配目标相机行为。
+- **二分类** — `camera_motion_average_precision` 与 `camera_motion_roc_auc`。
+- **VQA** — 关于镜头的是 / 否与问题准确率。
+- **检索** — 按文本、图像与组检索匹配的运动。
+- **描述** — caption 质量。GPT 评判为可选（`OPENAI_API_KEY`，`--no-gpt` 关闭）。
 
-该 benchmark 来自 CameraBench 项目与论文 "Towards Understanding Camera Motions in Any Video"。公开版本包含 Hugging Face 上的 test split，以及用于相机运动判断的 fine-tuned Qwen2.5-VL 模型。WorldFoundry 不要求用户获取外部源码树：结果导入和指标聚合代码已经在仓内，路径是 `worldfoundry/evaluation/tasks/execution/runners/camerabench/`。
+`camerabench_average` 是可用官方指标族的均值。在 WorldFoundry 里，同一套标签也可给镜头控制生成当种子；那是下游用法，不是隐藏榜单。
 
-当前 WorldFoundry 覆盖的是可复现的聚合阶段。你需要提供官方 CameraBench 结果 JSON，或者已经生成好的 CameraBench `score_dir`，WorldFoundry 会输出统一的 scorecard。从视频生成原始 CameraBench score JSON 仍需要准备 CameraBench scorer 资产和下面列出的 fine-tuned VLM checkpoint。
+论文：[CameraBench](https://arxiv.org/abs/2504.15376)。项目：[linzhiqiu.github.io/papers/camerabench](https://linzhiqiu.github.io/papers/camerabench/)。代码：[sy77777en/CameraBench](https://github.com/sy77777en/CameraBench)，打分栈 [linzhiqiu/t2v_metrics](https://github.com/linzhiqiu/t2v_metrics)。数据：[`syCen/CameraBench`](https://huggingface.co/datasets/syCen/CameraBench)（CC-BY-4.0）。
 
+WorldFoundry **聚合已准备的 `score_dir` 文件**或导入官方 JSON。VLM / SfM 打分仍在上游。共享几何栈：`camera_geometry_stack`（VGGT、MoGe、UniDepth、RAFT）。
 
-## 官方参考
+<BenchmarkPageSections id="camerabench" locale="zh" />
 
-| 资源 | 链接 |
-| --- | --- |
-| 项目页 | [linzhiqiu.github.io/papers/camerabench](https://linzhiqiu.github.io/papers/camerabench/) |
-| 论文 | [arXiv:2504.15376](https://arxiv.org/abs/2504.15376) |
-| GitHub | [github.com/sy77777en/CameraBench](https://github.com/sy77777en/CameraBench) |
-| HF 数据集 | [syCen/CameraBench](https://huggingface.co/datasets/syCen/CameraBench) |
-| 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/camerabench/run_camerabench_official_runner.py` |
+## 如何运行
 
-## 需要准备什么
-
-### 数据集
-
-从 Hugging Face 下载公开测试资产：
+导入官方 JSON（严格覆盖）：
 
 ```bash
-hf download syCen/CameraBench \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/CameraBench
+WORLDFOUNDRY_CAMERABENCH_STRICT=1 worldfoundry-eval zoo benchmark-run \
+  --benchmark-id camerabench \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --benchmark-data-root <camerabench_data_root> \
+  --output-dir tmp/camerabench/official-validation \
+  --json
 ```
 
-本地根目录应包含测试元数据和视频资产：
-
-```text
-/path/to/datasets/CameraBench/
-|-- test.jsonl
-`-- videos_gif/
-    |-- *.gif
-    `-- ...
-```
-
-运行时通过 `WORLDFOUNDRY_CAMERABENCH_DATA_ROOT` 或 `--benchmark-data-root` 指向这个目录。
-
-### Scorer Checkpoint
-
-CameraBench 报告使用 fine-tuned Qwen2.5-VL camera-motion 模型。把 checkpoint 下载到你的模型缓存或共享 checkpoint 目录：
+聚合已准备的分数目录：
 
 ```bash
-hf download chancharikm/qwen2.5-vl-7b-cam-motion  --local-dir /path/to/checkpoints/qwen2.5-vl-7b-cam-motion
-hf download chancharikm/qwen2.5-vl-32b-cam-motion --local-dir /path/to/checkpoints/qwen2.5-vl-32b-cam-motion
-hf download chancharikm/qwen2.5-vl-72b-cam-motion --local-dir /path/to/checkpoints/qwen2.5-vl-72b-cam-motion
-```
-
-WorldFoundry 的 `worldfoundry/base_models/` 中已经有可复用的 Qwen/VQAScore 基础设施。checkpoint 建议放在源码树外，除非你正在制作本地发布包。
-
-### Score Directory
-
-仓内 CameraBench runner 消费已经准备好的 JSON score 文件。文件名应符合：
-
-```text
-/path/to/camerabench/score_dir/
-|-- classification_scores_*.json
-|-- vqa_retrieval_scores_*.json
-`-- caption_results_*.json
-```
-
-每个文件需要包含顶层 `scores` list，可选 `metadata` 字段包括 `model_name`、`checkpoint`、`split_name`。这些文件对应官方 CameraBench 的三个指标族：二分类相机运动判断、VQA/retrieval、caption matching。
-
-## 运行评测
-
-### 聚合已经准备好的 Score Directory
-
-```bash
-export WORLDFOUNDRY_CAMERABENCH_DATA_ROOT=/path/to/datasets/CameraBench
-export WORLDFOUNDRY_CAMERABENCH_SCORE_DIR=/path/to/camerabench/score_dir
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/camerabench/run_camerabench_official_runner.py \
-  --score-dir "${WORLDFOUNDRY_CAMERABENCH_SCORE_DIR}" \
-  --benchmark-data-root "${WORLDFOUNDRY_CAMERABENCH_DATA_ROOT}" \
-  --task all \
-  --mode both \
+WORLDFOUNDRY_CAMERABENCH_STRICT=1 worldfoundry-eval zoo benchmark-run \
+  --benchmark-id camerabench \
+  --mode official-validation \
+  --score-dir <score_dir> \
+  --benchmark-data-root <camerabench_data_root> \
   --output-dir tmp/camerabench/score-dir \
   --json
 ```
 
-只跑部分指标时，把 `--task` 改成 `binary`、`vqa_retrieval` 或 `caption`。Caption matching 如果要用 API-backed judge，可以传 `--openai-api-key "$OPENAI_API_KEY"`；如果你的本地复现只覆盖 binary 和 VQA/retrieval，可以不跑 caption。
-
-### 使用公开 CLI
-
 ```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id camerabench \
-  --mode official-validation \
-  --score-dir "${WORLDFOUNDRY_CAMERABENCH_SCORE_DIR}" \
-  --benchmark-data-root "${WORLDFOUNDRY_CAMERABENCH_DATA_ROOT}" \
-  --output-dir tmp/camerabench/score-dir-cli \
-  --json
+hf download syCen/CameraBench --repo-type dataset \
+  --local-dir cache/worldfoundry/data/hfd_datasets/syCen/CameraBench
 ```
 
-### 导入已有官方结果
+`--task` 可限制到一个指标族。环境变量：`WORLDFOUNDRY_CAMERABENCH_DATA_ROOT`、`WORLDFOUNDRY_CAMERABENCH_RESULTS_PATH`、`WORLDFOUNDRY_CAMERABENCH_SCORE_DIR`。
 
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id camerabench \
-  --mode official-validation \
-  --official-results-path /path/to/camerabench_results.json \
-  --benchmark-data-root "${WORLDFOUNDRY_CAMERABENCH_DATA_ROOT}" \
-  --output-dir tmp/camerabench/imported \
-  --json
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/camerabench.yaml`。
+
+产物包括 `scorecard.json`（主键 `camerabench_average`）、存在时的 `camera_predictions.jsonl`、以及 `raw_metric_table.jsonl`。
+
+## 官方两阶段协议
+
+CameraBench 把**方法相关打分**和**方法无关指标**拆开。WorldFoundry 是第二阶段：聚合已准备的 `score_dir` 或导入官方 JSON。第一阶段（Qwen-2.5-VL、MegaSAM 或自研方法）仍在上游。只替换第一阶段，下面的 JSON 合同保持不变。
+
+官方脚本用的视频来自 [`syCen/Videos4CameraBnech`](https://huggingface.co/datasets/syCen/Videos4CameraBnech)（上游拼写如此）。典型数据根：
+
+```text
+<data_root>/
+  binary_classification/
+  vqa_and_retrieval/          # 每个 skill 一个目录
+  caption_data.json
+  videos/                     # 可选的本地视频副本
 ```
 
-当你已经有一次 CameraBench 评测输出的 JSON，只需要把它转换成 WorldFoundry 统一 scorecard 时，使用这个路径。
+第一阶段模型拉权重时可能需要 `HF_TOKEN`。
 
-## 指标
+### 二分类
 
-| Metric | 含义 |
-| --- | --- |
-| `camera_motion_average_precision` | 二分类相机运动判断的 mean average precision。 |
-| `camera_motion_roc_auc` | 二分类相机运动判断的 ROC-AUC。 |
-| `camera_vqa_accuracy` | CameraBench yes/no 与 question-level VQA accuracy 的平均。 |
-| `camera_retrieval_accuracy` | text、image、group retrieval accuracy 的平均。 |
-| `camera_caption_score` | 已准备 CameraBench caption 输出中的 caption agreement 分数。 |
-| `camerabench_average` | 可用 CameraBench 指标族的平均值。 |
+划分：
 
-## 输出
+- 平移：`Move_Up`、`Move_Down`、`Move_In`、`Move_Out`、`Move_Left`、`Move_Right`
+- 旋转：`Pan_Left`、`Pan_Right`、`Roll_Clockwise`、`Roll_Counterclockwise`、`Tilt_Down`、`Tilt_Up`
+- 变焦：`Zoom_In`、`Zoom_Out`
+- 静止：`Static`
 
-runner 会写出：
+自动发现 `vqa_scores_*.json`（自定义方法也可用 `classification_scores_*.json`）。记录格式：
 
-- `scorecard.json`
-- `camera_predictions.jsonl`
-- `raw_metric_table.jsonl`
-- `upstream_stdout.log`
-- `upstream_stderr.log`
+```json
+{
+  "metadata": {
+    "method_type": "Your_Method_Name",
+    "model_name": "your_model_name",
+    "checkpoint": "optional_checkpoint_path",
+    "split_name": "Move_Down",
+    "generation_timestamp": "2025-01-XX"
+  },
+  "scores": [
+    {
+      "sample_id": "0",
+      "video_path": "path/to/video.mp4",
+      "question": "Is the camera moving downward?",
+      "ground_truth_label": "yes",
+      "method": "your_method_identifier",
+      "score": 0.85,
+      "error": null
+    }
+  ]
+}
+```
 
-如果要做 leaderboard 级别复现，需要确认本地 dataset root 覆盖完整 test split，并且 score directory 包含你要报告的全部指标族。
+### VQA 与检索
 
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)
+技能：`complex_description`、`confusable_motion`、`has_motion`、`motion_and_steadiness`、`motion_direction`、`motion_speed`、`only_motion`、`scene_dynamics`、`tracking_shot`。
+
+自动发现 `vqa_retrieval_scores_*.json`。官方评测可 `--mode vqa`、`--mode retrieval` 或两者。记录格式：
+
+```json
+{
+  "metadata": {
+    "method_type": "Your_Method_Name",
+    "model_name": "your_model_name",
+    "skill_name": "confusable_motion",
+    "task_name": "backward_camera_only_vs_backward_ground_only",
+    "split_name": "confusable_motion"
+  },
+  "scores": [
+    {
+      "sample_id": "0",
+      "pos_video": "path/to/positive_video.mp4",
+      "neg_video": "path/to/negative_video.mp4",
+      "pos_question": "Is the camera moving backward?",
+      "neg_question": "Is the ground moving backward?",
+      "method": "your_method_identifier",
+      "yes_scores": {
+        "pos_text_pos_image": 0.85,
+        "pos_text_neg_image": 0.23,
+        "neg_text_pos_image": 0.31,
+        "neg_text_neg_image": 0.78
+      },
+      "no_scores": {
+        "pos_text_pos_image": 0.15,
+        "pos_text_neg_image": 0.77,
+        "neg_text_pos_image": 0.69,
+        "neg_text_neg_image": 0.22
+      },
+      "error": null
+    }
+  ]
+}
+```
+
+### 描述
+
+自动发现 `caption_results_*.json`。GPT-4o 评判需要 `OPENAI_API_KEY`；WorldFoundry `--no-gpt` 可跳过。记录格式：
+
+```json
+{
+  "metadata": {
+    "method_type": "Your_Method_Name",
+    "model_name": "your_model_name"
+  },
+  "captions": [
+    {
+      "sample_id": "0",
+      "video_path": "path/to/video.mp4",
+      "question": "Describe the camera motion in this video.",
+      "reference_answer": "The camera pans left while moving forward",
+      "method": "your_method_identifier",
+      "generated_caption": "The camera is panning to the left and moving forward smoothly",
+      "error": null
+    }
+  ]
+}
+```
+
+第一阶段失败应捕获并写成 `error` 字符串。样本计数（总数 / 成功 / 失败）由文件推导，不要手写。唯一 id 由 `model_name`、`checkpoint`、`split_name` 生成。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

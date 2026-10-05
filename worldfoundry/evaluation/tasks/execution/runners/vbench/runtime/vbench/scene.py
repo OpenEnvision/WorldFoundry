@@ -9,7 +9,7 @@ from worldfoundry.base_models.perception_core.captioning.tag2text.tag2text impor
 
 import logging
 
-from .distributed import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     all_gather,

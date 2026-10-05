@@ -1,0 +1,54 @@
+---
+title: "GigaWorld-Policy-0.5"
+description: "GigaWorld-Policy-0.5（GigaAI）：视觉-语言-动作（VLA）、VLA 动作预测；Runner 一致性待确认。"
+modelId: "giga-world-policy-0.5"
+pageSource: authored
+---
+
+GigaWorld-Policy-0.5 是极佳科技（GigaAI）的世界-动作策略：以动作为中心的 Mixture-of-Transformers，作为预训练初始化发布（Apache-2.0），VAE、文本编码器与 tokenizer 复用 Wan2.2-TI2V-5B 组件。WorldFoundry 在进程内执行精确的已发布 MoT 与官方仅动作扩散环路。
+
+分片 safetensors transformer（`open-gigaai/Giga-World-Policy-0.5`，revision `4b68e90c`）**不是**任务就绪策略。部署还需要本地 `norm_stats_delta.json`，以及适用时的任务微调 transformer 目录。本 catalog 里 transformer 分片与公布的 SHA-256 一致。这里**没有**记录 GPU rollout 验证。
+
+<ModelPaperFigures modelId="giga-world-policy-0.5" locale="zh" />
+
+记录论文为[arXiv 2607.13960](https://arxiv.org/abs/2607.13960)。
+
+项目页：[open-gigaai.github.io/giga-world-policy](https://open-gigaai.github.io/giga-world-policy/)。代码：[open-gigaai/giga-world-policy](https://github.com/open-gigaai/giga-world-policy)。
+
+论文：[arXiv 2607.13960](https://arxiv.org/abs/2607.13960)。项目页：[open-gigaai.github.io/giga-world-policy](https://open-gigaai.github.io/giga-world-policy/)。代码：[open-gigaai/giga-world-policy](https://github.com/open-gigaai/giga-world-policy)。Runner：**not_recorded**。状态：`checkpoint_staged_task_stats_required`。
+
+<ModelCommandBuilder modelId="giga-world-policy-0.5" locale="zh" />
+
+## 用来做什么
+
+用 `giga-world-policy-0.5` 做本卡的视觉-语言-动作推理。这条配方用来启动已记录的策略 profile。
+
+Wan2.2-TI2V-5B 基座上的动作中心 Mixture-of-Transformers：发布的分片 safetensors transformer 用于策略初始化，扩散只在动作流上进行。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测、vla.world_action_model。别名包括 `giga-world-policy`、`gigaworld-policy`、`gwp-0.5`。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`fps`、`timeout_seconds`；产物 `action_trace`、`giga_world_policy_0_5_action_trace.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `GigaWorldPolicyPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+发布的 transformer 是预训练初始化：任务部署还需本地后训练统计（任务专用 norm_stats_delta.json），以及适用时的任务微调 transformer 目录。 所有 Hub 资产需本地就位；运行时禁用网络访问。
+
+仅为预训练初始化——任务使用需自备后训练统计/微调。
+
+必填 `image`、`prompt`；可选 `model_id`、`state`、`preferred_cameras`、`image_size`、`configured_action_horizon`、`action_chunk_size`；产物 `action_trace`、`giga_world_policy_0_5_action_trace.json`。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run giga-world-policy-0.5 --pipeline.task-profile default` 执行策略。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8，torch>=2.7.1）。
+
+记录的权重仓库包括 `open-gigaai/Giga-World-Policy-0.5`、`Wan-AI/Wan2.2-TI2V-5B-Diffusers`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh giga-world-policy-0.5`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="giga-world-policy-0.5" locale="zh" />

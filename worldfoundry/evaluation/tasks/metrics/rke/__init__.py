@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-import numpy as np
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    import numpy as np
+
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .wrapper import compute_rke, compute_rrke
+compute_rke = lazy_export(f"{__name__}.wrapper", "compute_rke", owner=__name__)
+compute_rrke = lazy_export(f"{__name__}.wrapper", "compute_rrke", owner=__name__)
 
 METRIC_ID = "rke"
 ALIASES = ("renyi-kernel-entropy", "rke-mc", "rke_mc")

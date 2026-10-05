@@ -1,0 +1,48 @@
+---
+title: "Pi3"
+description: "Pi3: 3d-reconstruction and trajectory; Runner parity pending; $π^3$."
+modelId: "pi3"
+pageSource: generated
+---
+
+Pi3 (π³) is a feed-forward visual-geometry model that reconstructs 3D scenes, camera trajectories, and point clouds without relying on a fixed reference view — its permutation-equivariant design treats all input views symmetrically. In this catalog the in-tree point-cloud navigation pipeline is registered for reconstruction and trajectory rendering.
+
+<ModelPaperFigures modelId="pi3" locale="en" />
+
+The recorded paper is [$π^3$: Permutation-Equivariant Visual Geometry Learning](https://arxiv.org/abs/2507.13347) (2025).
+
+Project page: [yyfz.github.io/pi3](https://yyfz.github.io/pi3/). Code: [yyfz/Pi3](https://github.com/yyfz/Pi3).
+
+<ModelCommandBuilder modelId="pi3" locale="en" />
+
+## What it is for
+
+`pi3` is the recorded reconstruction line. Start here to emit geometry from the documented views.
+
+Per the paper (arXiv 2507.13347), Pi3 predicts affine-invariant camera poses and scale-invariant local pointmaps with a permutation-equivariant transformer, removing the need for a reference-view heuristic. Weights are apache-2.0; internals beyond the recorded tasks are not stored here.
+
+Catalog tasks include 3d-reconstruction, trajectory, and point-cloud.
+
+## Runtime contract
+
+Optional `input_path`, `interactions`, `task_type`, `camera_view`, and `visualize_ops`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `Pi3Pipeline`.
+
+Family status: **Runner parity pending**.
+
+Stage the upstream Pi3 weights before expecting real reconstruction output.
+
+In-tree Pi3 point-cloud navigation pipeline is registered for reconstruction and trajectory rendering.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run pi3 --pipeline.task-profile interactive-video` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+The environment profile is not recorded.
+
+Recorded weight repositories include `yyfz233/Pi3X`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh pi3`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="pi3" locale="en" />

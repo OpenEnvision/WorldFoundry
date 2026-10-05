@@ -20,9 +20,9 @@ artifact_filename: framepack.mp4
 execution:
   backend_stage: in_tree_official_runtime
   runtime_status: integrated
-  integration_status: verified
+  integration_status: integrated
   pipeline_binding: framepack
 integration:
-  status: verified
+  status: integrated
 notes:
 - WorldFoundry vendors the minimal infer-only FramePack runtime under worldfoundry/synthesis/visual_generation/framepack/framepack_runtime.

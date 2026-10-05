@@ -1,19 +1,4 @@
-from dataclasses import dataclass
-
-import torch
-from diffusers.utils import BaseOutput
-
-
-@dataclass
-class HeliosPipelineOutput(BaseOutput):
-    r"""
-    Output class for Helios pipelines.
-
-    Args:
-        frames (`torch.Tensor`, `np.ndarray`, or List[List[PIL.Image.Image]]):
-            List of video outputs - It can be a nested list of length `batch_size,` with each sub-list containing
-            denoised PIL image sequences of length `num_frames.` It can also be a NumPy array or Torch tensor of shape
-            `(batch_size, num_frames, channels, height, width)`.
-    """
-
-    frames: torch.Tensor
+"""Compatibility import; implementation is shared in base_models."""
+import importlib as _importlib
+import sys as _sys
+_sys.modules[__name__] = _importlib.import_module('worldfoundry.base_models.diffusion_model.runners.helios_output')

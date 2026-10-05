@@ -18,18 +18,18 @@ from torchvision.transforms import v2
 from transformers import PretrainedConfig
 from transformers.feature_extraction_utils import BatchFeature
 
-from worldfoundry.base_models.diffusion_model.video.wan.wan_dreamzero.modules.flow_match_scheduler import (
+from worldfoundry.core.nn.diffusion.schedulers import (
     FlowMatchScheduler,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.wan_dreamzero.modules.flow_unipc_multistep_scheduler import (
+from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import (
     FlowUniPCMultistepScheduler,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.wan_dreamzero.modules.wan_video_text_encoder import (
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import (
     T5LayerNorm,
     T5RelativeEmbedding,
 )
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
-from worldfoundry.core.model_loading.file import load_state_dict
+from worldfoundry.core.model_loading.checkpoints.file import load_state_dict
 from worldfoundry.core.vram import (
     AutoWrappedLinear,
     AutoWrappedModule,
@@ -519,7 +519,13 @@ class WANPolicyHead(ActionHead):
     def encode_video(self, input_video, tiled=True, tile_size=(34, 34), tile_stride=(18, 16)):
         self._ensure_vae_on_device(input_video)
         with torch.no_grad():
-            latents = self.vae.encode(input_video, tiled=tiled, tile_size=tile_size, tile_stride=tile_stride)
+            latents = self.vae.encode(
+                input_video,
+                device=input_video.device,
+                tiled=tiled,
+                tile_size=tile_size,
+                tile_stride=tile_stride,
+            )
         return latents
 
     def encode_image(self, image, num_frames, height, width):
@@ -532,7 +538,10 @@ class WANPolicyHead(ActionHead):
             )
             self._ensure_vae_on_device(image_input)
             with torch.no_grad():
-                y = self.vae.encode(torch.concat([image_input, image_zeros], dim=2))
+                y = self.vae.encode(
+                    torch.concat([image_input, image_zeros], dim=2),
+                    device=image_input.device,
+                )
             # Build mask to match VAE output shape (VAE may use different spatial downsampling, e.g. WanVideoVAE38 uses patch_size=2 -> height/16)
             # y shape is B * 16 * (1+(T-1)/4) * H_latent * W_latent
             num_t = y.shape[2]
@@ -852,6 +861,7 @@ class WANPolicyHead(ActionHead):
 
             image = self.vae.encode(
                 videos,
+                device=videos.device,
                 tiled=self.tiled,
                 tile_size=(self.tile_size_height, self.tile_size_width),
                 tile_stride=(self.tile_stride_height, self.tile_stride_width),
@@ -1063,7 +1073,6 @@ class WANPolicyHead(ActionHead):
                 model_output=flow_pred.transpose(1, 2),
                 timestep=video_timestep,
                 sample=noisy_input,
-                step_index=index,
                 return_dict=False,
             )[0]
 
@@ -1072,7 +1081,6 @@ class WANPolicyHead(ActionHead):
                 model_output=flow_pred_cond_action,
                 timestep=action_timestep,
                 sample=noisy_input_action,
-                step_index=index,
                 return_dict=False,
             )[0]
 
@@ -1139,7 +1147,7 @@ class WANPolicyHead(ActionHead):
         # Torch compile the modules. Skip _forward_blocks: Dynamo with fullgraph can fail on
         # shape variation (e.g. x [1,50,C] vs e [1,200,C]); the block aligns e to x at runtime.
         if not ENABLE_TENSORRT:
-            print("Torch compiling the TextEncoder, ImageEncoder, and VAE modules (Wan _forward_blocks not compiled).")
+            print("Torch compiling the TextEncoder and VAE modules (CLIP attention and Wan _forward_blocks remain eager).")
 
             self.text_encoder.forward = torch.compile(
                 mode="reduce-overhead",
@@ -1147,12 +1155,11 @@ class WANPolicyHead(ActionHead):
                 dynamic=False,
             )(self.text_encoder.forward)
 
-            self.image_encoder.model.visual.forward = torch.compile(
-                mode="reduce-overhead",
-                fullgraph=True,
-                dynamic=False,
-            )(self.image_encoder.model.visual.forward)
-
+            # The CLIP visual encoder calls varlen flash_attention, which
+            # selects valid tokens with a data-dependent boolean mask.
+            # TorchDynamo cannot capture its dynamic nonzero output under
+            # fullgraph=True. Keep this small encoder eager so the official
+            # checkpoint can run rather than failing on the first image.
             self.vae.model.encode = torch.compile(
                 mode="reduce-overhead",
                 fullgraph=True,

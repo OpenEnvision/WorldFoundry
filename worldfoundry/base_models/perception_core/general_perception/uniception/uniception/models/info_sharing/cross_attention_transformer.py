@@ -8,7 +8,7 @@ from typing import Callable, List, Optional, Tuple, Type, Union
 
 import torch
 
-from worldfoundry.core.checkpoint import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 import torch.nn as nn
 
 from uniception.models.info_sharing.base import (

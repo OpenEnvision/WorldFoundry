@@ -23,8 +23,40 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: physics-iq
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id physics-iq --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/physics-iq --json
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicsIQContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py
+  release_status: experimental
+  maturity: verified_runner
+  open_source_status: in_tree_runtime
+  official_benchmark_verified: false
+  integration_evidence: true
+  leaderboard_valid: false
+  requires:
+  - Official physics-IQ-benchmark media directory
+  - 198 generated five-second videos from the bundled prompt suite
+  blockers:
+  - Full-suite official media evaluation and leaderboard-valid scoring require the complete downloaded Physics-IQ dataset.
+  data_refs:
+    task_yaml: worldfoundry/data/benchmarks/tasks/external/physics-iq.yaml
+    bundled_assets: worldfoundry/data/benchmarks/assets/physics-iq
+  checkpoint_refs: []
+  validation_command: [worldfoundry-eval, zoo, benchmark-run, --benchmark-id, physics-iq, --mode, official-validation, --official-results-path, <raw_metrics.csv>, --output-dir, <out>, --json]
+  runner_availability:
+    available: true
+    runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicsIQContract
+    runner_script_available: true
+    task_yaml_available: true
+    runtime_verified: true
+    runtime_verification_scope: bounded_complete_three_view_scenario
+    full_suite_verified: false
+    normalizer_verified: true
+    surface: physics_iq_official_in_tree
+  artifact_layout:
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+    dataset_root_env: WORLDFOUNDRY_PHYSICS_IQ_ORIGINAL_ROOT
+    output_artifact: benchmark_scorecard
+    filename_template: scorecard.json
   source_provenance:
     official_repository:
       url: https://github.com/google-deepmind/physics-IQ-benchmark
@@ -40,6 +72,7 @@ metadata:
   runtime:
     kind: in_tree_official_runtime
     root: worldfoundry/evaluation/tasks/execution/runners/physics_iq
+    root_env: WORLDFOUNDRY_PHYSICS_IQ_ROOT
     dataset_root_env: WORLDFOUNDRY_PHYSICS_IQ_ORIGINAL_ROOT
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   run_command: >-
@@ -57,6 +90,17 @@ tasks:
     input_keys: [prompt, prompt_id, conditioning_image, generated_artifact_manifest]
     output_keys: [generated_video]
     metric_ids: [physics_iq_score, physics_iq_stable_score, physics_iq_spatiotemporal, physics_iq_spatial, physics_iq_weighted_spatial, physics_iq_mse_penalty]
+    metadata:
+      source_kind: benchmark_zoo
+      benchmark_id: physics-iq
+      official_benchmark_verified: false
+      integration_evidence: true
+      leaderboard_valid: false
     artifact_contract:
       required:
         generated_video: {kind: video}
+    evaluation_protocol:
+    - name: in_tree_official_runtime
+      metric_ids: [physics_iq_score, physics_iq_stable_score, physics_iq_spatiotemporal, physics_iq_spatial, physics_iq_weighted_spatial, physics_iq_mse_penalty]
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicsIQContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py

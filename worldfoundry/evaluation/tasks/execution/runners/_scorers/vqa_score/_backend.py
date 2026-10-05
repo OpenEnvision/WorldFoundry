@@ -17,8 +17,9 @@ def ensure_ffmpeg() -> None:
     try:
         if shutil.which("ffmpeg") is None:
             raise FileNotFoundError
-        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
-    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+        # Version probe should be instant; the timeout guards against a hung binary.
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True, timeout=60)
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError(
             "ffmpeg is a required system requirement but not found. Install with:\n"
             "conda install ffmpeg=6.1.2 -c conda-forge\n"

@@ -13,6 +13,7 @@ import importlib
 import logging
 import os
 from collections.abc import Callable, Mapping
+from functools import lru_cache
 from importlib import metadata
 from typing import Any
 
@@ -49,8 +50,14 @@ def discover_pipeline_bindings() -> dict[str, PipelineBinding]:
 # ── Private helpers ────────────────────────────────────────────────────
 
 
+@lru_cache(maxsize=1)
 def _pipeline_entry_points() -> tuple[metadata.EntryPoint, ...]:
-    """Select and return sorted EntryPoint list registered under the specific entry point group."""
+    """Select and return sorted EntryPoint list registered under the specific entry point group.
+
+    Cached: entry-points cannot change within a process, and the full
+    ``metadata.entry_points()`` scan costs ~200ms per call.  Use
+    ``_pipeline_entry_points.cache_clear()`` to force a re-scan (tests).
+    """
     entry_points = metadata.entry_points()
     if hasattr(entry_points, "select"):
         selected = entry_points.select(group=ENTRY_POINT_GROUP)

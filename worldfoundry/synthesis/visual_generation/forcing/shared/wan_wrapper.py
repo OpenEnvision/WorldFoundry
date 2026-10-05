@@ -4,22 +4,43 @@ from pathlib import Path
 from typing import List, Optional
 
 import torch
-from wan.modules.causal_model import CausalWanModel
-from wan.modules.model import WanModel
-from wan.modules.t5 import umt5_xxl
-from wan.modules.tokenizers import HuggingfaceTokenizer
-from wan.modules.vae import _video_vae
+
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.forcing.model import WanModel
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import umt5_xxl
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import HuggingfaceTokenizer
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import _video_vae
+from worldfoundry.base_models.diffusion_model.loaders.wan_variant import load_wan_transformer
 
 from worldfoundry.core.nn import FlowMatchScheduler, SchedulerInterface
+
+
+def _causal_model_class():
+    variant = os.environ.get("WORLDFOUNDRY_FORCING_VARIANT", "self-forcing")
+    if variant == "self-forcing":
+        from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.forcing.self_forcing import CausalWanModel
+    elif variant == "rolling-forcing":
+        from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.forcing.long_video import CausalWanModel
+    elif variant == "causal-forcing":
+        from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.forcing.causal_forcing import CausalWanModel
+    else:
+        raise ValueError(f"Unsupported forcing Wan variant: {variant}")
+    return CausalWanModel
 
 
 def _wan_model_root(model_name: str) -> Path:
     """Resolve a Wan model without relying on the process working directory."""
 
     root = Path(os.environ.get("WORLDFOUNDRY_WAN_MODELS_ROOT", "wan_models")).expanduser()
-    if root.name == model_name:
+    hfd_name = f"Wan-AI--{model_name}"
+    if root.name in {model_name, hfd_name}:
         return root
-    return root / model_name
+    canonical = root / model_name
+    if canonical.exists():
+        return canonical
+    hfd_flat = root / hfd_name
+    if hfd_flat.exists():
+        return hfd_flat
+    return canonical
 
 
 class WanTextEncoder(torch.nn.Module):
@@ -36,7 +57,7 @@ class WanTextEncoder(torch.nn.Module):
         self.text_encoder.load_state_dict(torch.load(
             model_root / "models_t5_umt5-xxl-enc-bf16.pth",
             map_location='cpu',
-            weights_only=False,
+            weights_only=True,
         ))
 
         self.tokenizer = HuggingfaceTokenizer(
@@ -139,10 +160,16 @@ class WanDiffusionWrapper(torch.nn.Module):
         model_root = _wan_model_root(model_name)
 
         if is_causal:
-            self.model = CausalWanModel.from_pretrained(
-                model_root, local_attn_size=local_attn_size, sink_size=sink_size)
+            self.model = load_wan_transformer(
+                _causal_model_class(),
+                model_root,
+                additional_kwargs={
+                    "local_attn_size": local_attn_size,
+                    "sink_size": sink_size,
+                },
+            )
         else:
-            self.model = WanModel.from_pretrained(model_root)
+            self.model = load_wan_transformer(WanModel, model_root)
         self.model.eval()
 
         # For non-causal diffusion, all frames share the same timestep

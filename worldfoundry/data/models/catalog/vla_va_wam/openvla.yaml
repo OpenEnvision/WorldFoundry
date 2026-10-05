@@ -20,6 +20,8 @@ output_artifacts:
 - action_trace
 - rollout_metrics
 official_sources:
+  paper: https://arxiv.org/abs/2406.09246
+  project_page: https://openvla.github.io/
   github:
     head_sha: c8f03f48af692657d3060c19588038c7220e9af9
     url: https://github.com/openvla/openvla
@@ -75,3 +77,24 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records. Runner or pipeline targets are present
   only after a complete in-tree WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'OpenVLA is the widely used open 7B vision-language-action model (MIT license): a Prismatic-based VLM fine-tuned on Open X-Embodiment robot demonstrations to predict discretized actions. Both openvla-7b and the LIBERO-10 fine-tune are confirmed with pinned revisions, and the in-tree WorldFoundry runner is verified on the base route with unnorm_key=bridge_orig.'
+  overview_zh: OpenVLA 是广泛使用的开放 7B 视觉-语言-动作模型（MIT 许可）：基于 Prismatic 的 VLM 在 Open X-Embodiment 机器人示范上微调，预测离散化动作。openvla-7b 与 LIBERO-10 微调版均已确认并锁定 revision，树内 WorldFoundry runner 在 base 路由上以 unnorm_key=bridge_orig 验证。
+  architecture: A 7B Prismatic VLM (fused SigLIP/DINOv2 vision, Llama-2 language) that emits action tokens de-tokenized into continuous 7-DoF actions using dataset-specific normalization keys.
+  architecture_zh: 7B Prismatic VLM（SigLIP/DINOv2 融合视觉，Llama-2 语言），输出动作 token 并按数据集专用归一化键反解为连续 7 自由度动作。
+  usage_notes: Set unnorm_key to match your data distribution (bridge_orig is the verified default). Use the LIBERO-10 fine-tune for LIBERO evaluation, and openvla-oft for the faster fine-tuned line.
+  usage_notes_zh: unnorm_key 需匹配数据分布（已验证默认为 bridge_orig）。LIBERO 评测用 LIBERO-10 微调版；更快的微调线请见 openvla-oft。
+  limitations:
+  - Discretized action tokens cap control precision compared to continuous heads.
+  limitations_zh:
+  - 离散化动作 token 的控制精度低于连续动作头。
+  recommended_benchmarks:
+  - id: bridgedata-v2
+    reason: Verified route uses bridge_orig normalization.
+    reason_zh: 已验证路由使用 bridge_orig 归一化。
+  - id: libero
+    reason: Dedicated LIBERO-10 fine-tuned checkpoint.
+    reason_zh: 有专门的 LIBERO-10 微调 checkpoint。

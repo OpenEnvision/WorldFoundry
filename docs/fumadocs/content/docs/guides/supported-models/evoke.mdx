@@ -1,0 +1,92 @@
+---
+title: "Evoke"
+description: "AlayaLab camera-controlled world / T2V-I2V-V2V. Official source bundled at revision 74d26851. Independent in-tree runtime; checkpoint-backed GPU parity pending."
+modelId: "evoke"
+pageSource: authored
+---
+
+Evoke is cataloged as a **camera-controlled world** that also lists text-to-video, image-to-video, and video-to-video. WorldFoundry bundles official source at revision `74d268516d95c8fceadd2378f91a73f9f187042b` and exposes an independent in-tree runtime as `EvokePipeline`. External source checkouts are rejected; checkpoints resolve from local WorldFoundry / Hugging Face storage with Hub clients offline.
+
+<ModelPaperFigures modelId="evoke" locale="en" />
+
+The released **post-distillation** checkpoint was trained with **v2v** conditioning. Catalog i2v and t2v modes are upstream-documented **zero-shot** capabilities, not a claim that those modes match the trained v2v path. A supplied camera trajectory turns on geometric state and **requires separately acquired ViGeo1.1** (`pkqbajng/ViGeo1.1`, CC-BY-NC-4.0). This is an inference compatibility port to the shared environment, not parity with Evoke's pinned training stack.
+
+Paper: [arXiv 2608.13546](https://arxiv.org/abs/2608.13546). Project: [evoke-world.github.io/Evoke](https://evoke-world.github.io/Evoke/). Code: [AlayaLab/Evoke](https://github.com/AlayaLab/Evoke). Weights: `AlayaLab/Evoke` (revision `7fa34ecef`). Source license: **Apache-2.0**. Status: **Runner parity pending**. The official three-step post-distillation command is wired; H200-class checkpoint execution has **not** been verified in this tree.
+
+<ModelCommandBuilder modelId="evoke" locale="en" />
+
+## What it is for
+
+Run the wired three-step post-distillation path. This is not AlayaWorld.
+
+Launch `worldfoundry-eval run evoke`.
+
+## Runtime contract
+
+Required: `prompt`, `image`, and `video`; `actions`: trajectory_npz, pose_path, camera_trajectory; artifacts: `evoke.mp4`.
+
+| Knob | Default |
+| --- | --- |
+| Mode | **auto** |
+| Size | **640×384** |
+| Chunks | **4** |
+| FPS | **24** |
+| Steps | **3** (post-distillation) |
+| Guidance | **1.0** |
+| Source | bundled revision `74d268516d95c8fceadd2378f91a73f9f187042b` (external checkouts rejected) |
+| Weights | `AlayaLab/Evoke` revision `7fa34ecef` — `evoke-base/{vae,scheduler,text_encoder,tokenizer}` plus `evoke/stage3_post_distillation/transformer` |
+| Camera geometry | separately acquired `pkqbajng/ViGeo1.1` (`vigeo.pt`, CC-BY-NC-4.0) |
+
+## Run in WorldFoundry
+
+Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `AlayaLab/Evoke` and `pkqbajng/ViGeo1.1` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run evoke`. License: CC-BY-NC-4.0. Catalog VRAM is unset.
+
+## Bundled runtime notes
+
+WorldFoundry's public entry is `EvokePipeline` / `worldfoundry-eval run evoke`. The bundled inference scripts live under `worldfoundry/synthesis/visual_generation/evoke/evoke_runtime/scripts/inference/`: `infer_single.py` executes inference and `postprocess_viz.py` prepares visual outputs. The shell launchers discussed by upstream belong to the official repository.
+
+The student is autoregressive over latent chunks (`latent_window_size = 9`). Each chunk is laid out on the RoPE frame index as `prefix | long(16) | mid(2) | warp(W) | prev_short(1) | noise(W)`:
+
+| Tier | Role |
+| --- | --- |
+| `prefix` | Frame-0 global anchor (i2v: input image; v2v: first latent of the reference video) |
+| `long` / `mid` | Multi-term parametric memory (`history_sizes = [16, 2, 1]`) with coarser patch kernels — long `(4,8,8)`, mid `(2,4,4)`, else `(1,2,2)` |
+| `warp` | World-state bank rendered into this view; RoPE overlaps the noise window |
+| `prev_short` | Last latent of the previous chunk |
+
+Every tier stays at the same latent resolution (`res/8`). The world-state bank **writes** a monocular depth estimate into a persistent point cloud, **reads** the current pose (up to eight co-visible sources, z-buffered scatter plus a visibility mask), and can **evict** on an optional retention window. Warp / attention knobs must match between training and inference; a mismatch degrades quality silently. Keep width a multiple of 64 so the long tier and the quarter-resolution pyramid divide evenly.
+
+Released directories are the **parent** of a `transformer/` folder (`from_pretrained(path, subfolder="transformer")`):
+
+```text
+models/
+  evoke-base/                 vae / text_encoder / tokenizer / scheduler
+  ViGeo1.1/vigeo.pt           required depth backend
+  DA3/                        optional; only if DEPTH_BACKEND=da3
+  evoke/stage1_camera_control/transformer/
+  evoke/stage2_few_step_training/transformer/
+  evoke/stage3_long_distillation/transformer/
+  evoke/stage3_post_distillation/transformer/   shipped catalog weights
+  evoke/evoke_teacher/{high,low}_noise/         training-only DMD experts
+```
+
+Both depth backends are **CC-BY-NC-4.0**, stricter than the Apache-2.0 Evoke source. Switching `DEPTH_BACKEND` is a recipe change, not a speed knob.
+
+One chunk is **36 frames = 1.5 s at 24 fps**. Use `NUM_CHUNKS` for length (`NUM_CHUNKS=20` is 30 s). `NUM_FRAMES` only picks a chunk count and does not trim: `chunks = ceil(NUM_FRAMES / 33)`, then persistent decode yields `36 * chunks - 3` (t2v drops frame 0 as well, so `-4`). `NUM_FRAMES=721` is 22 chunks / 789 frames, not 30 s. t2v drops frame 0 from the final `geo_pred.mp4` because chunk 0's first pixel is an I-frame color cast; that frame remains in `segments/segment_000_pred.mp4`.
+
+| Mode | Input | Camera |
+| --- | --- | --- |
+| `v2v` | reference video + pose track | yes; generation continues after `REF_VIDEO_SEC` (default 5 s) |
+| `i2v` | first frame + pose track | yes; `START_SECONDS` also shifts the pose track |
+| `t2v` | prompt only | no — the engine forbids warp + t2v |
+| `segment` | i2v plus a per-chunk prompt schedule | yes; prompt can change mid-rollout |
+
+Post-distill and long-distill weights were trained on **v2v only**, so catalog i2v / t2v on those checkpoints is zero-shot. `stage1_camera_control` is the multi-step (50 steps, CFG 5.0) model that has all three modes in distribution. Do not copy `validation_config.num_inference_steps=8` out of the stage-1 YAML. Distilled 3-step / CFG-off is a property of the weights; raising `NUM_INFERENCE_STEPS` does nothing.
+
+i2v-only scale knobs (v2v / t2v ignore them): `GEO_CHUNK0_TARGET_DISP_PX` (default 135 px) rescales chunk-0 depth so commanded parallax stays inside a pixel budget (`0` restores the old ~6× swing); `VIGEO_DEPTH_MEDIAN_TARGET` (default 5) sets median scene depth in pose units. Watch per-chunk `cov=` — below ~0.35 the model is filling holes from the prompt.
+
+Hour-scale runs refuse more than 7200 frames unless you opt in: `STREAM_LONG=1` decodes per chunk and stitches `geo_pred.mp4` from `segments/` (needs `VAE_DECODE_TYPE=persistent`); `GEO_HIST_MAX_FRAMES` slides the point cloud (a recipe change; must be much larger than `WARP_LAG * 36`). Custom cases copy `examples/{t2v,i2v,v2v,segment_prompts}/cases.jsonl`. Poses are vipe `.npz` (`cam_c2w [T,4,4]` + `intrinsics`); declare `pose_fps` and `pose_source_resolution` when they differ from the i2v defaults (24 / `[480, 832]`).
+
+Upstream launcher output conventions: `<OUT_ROOT>/<case>/geo_pred.mp4`, optional HUD / per-chunk segments / 4-panel v2v viz, plus `_logs/<case>.log` and `run_info.json`. Finished cases are skipped on re-run. `infer_evoke_teacher.sh` is an example, not a supported launcher: no camera, no sequence-parallel, ~56 GB bf16 unless `--offload`.
+
+<ModelRelatedRecipes modelId="evoke" locale="en" />

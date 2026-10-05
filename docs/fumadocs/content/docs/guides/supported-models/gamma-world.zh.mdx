@@ -1,0 +1,52 @@
+---
+title: "Gamma-World"
+description: "Gamma-World（NVIDIA）：动作条件视频、图生视频；Runner 一致性待确认; 3 个 variant。"
+modelId: "gamma-world"
+pageSource: authored
+---
+
+Gamma-World 是英伟达的多智能体世界模型：给定每个玩家的起始图像与各自的动作流，为每个玩家生成共享世界中的视角画面。本 catalog 中它是原生扩散配方——无外部检出、无模型自有运行时——含双向、因果与四步因果三个 variant；四步因果模型是默认的流式选择。
+
+三个 variant 共用同一绑定：**`gamma-world-causal-few-step`**（默认**四步**流式）、`gamma-world-causal`、`gamma-world-bidirectional`。别名 `gammaworld`、`gamma-world-causal` 解析到这里。
+
+<ModelPaperFigures modelId="gamma-world" locale="zh" />
+
+记录论文为[arXiv 2605.28816](https://arxiv.org/abs/2605.28816)。
+
+项目页：[research.nvidia.com/labs/sil/projects/gamma-world](https://research.nvidia.com/labs/sil/projects/gamma-world/)。代码：[nv-tlabs/Gamma-World](https://github.com/nv-tlabs/Gamma-World)。
+
+论文：[arXiv 2605.28816](https://arxiv.org/abs/2605.28816)。项目页：[research.nvidia.com/labs/sil/projects/gamma-world](https://research.nvidia.com/labs/sil/projects/gamma-world/)。代码：[nv-tlabs/Gamma-World](https://github.com/nv-tlabs/Gamma-World)。权重：`chijw/Gamma-World`（**Apache-2.0**，覆盖双向 / 因果 / 蒸馏网络）加文本编码器 `nvidia/Cosmos-Reason1-7B`。Runner：**`Runner 一致性待确认`**。
+
+<ModelCommandBuilder modelId="gamma-world" locale="zh" />
+
+## 用来做什么
+
+用 `gamma-world-causal-few-step` 做 catalog 世界模型推理。需要动作条件未来帧、而不是独立片段生成器时选它。
+
+Reason1 条件（文本编码器为 nvidia/Cosmos-Reason1-7B）、共享 Wan VAE、checkpoint 加载、调度、动作归一化与窗口执行全部复用 WorldFoundry 的基座/核心基础设施；记录权重（chijw/Gamma-World， apache-2.0）覆盖双向、因果与蒸馏网络。该模型由英伟达（NVIDIA）发布。
+
+catalog 记录的任务包括 multi-agent-world-model、动作条件视频、图生视频。别名包括 `gammaworld`、`gamma-world-causal`、`gamma-world-causal-few-step`。模态上，它接受图像，输出视频。同系列还有 `gamma-world-causal`、`gamma-world-bidirectional`。
+
+记录的评测入口包括[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（动作条件下世界滚动生成质量）。
+
+## 运行时契约
+
+必填 `prompt` 和起始图像。因果与四步因果推理还需要每个视角一份动作轨迹，可通过 `actions`/`action_paths` 或 `eval_dir` 中的动作 JSON 提供；这些 checkpoint 不能在缺少动作时运行。其他选项包括 `mode`、`n_players`、`num_frames`、`num_conditional_frames`、`guidance`、`num_steps` 和 `seed`；输出为生成视频。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `GammaWorldPipeline`。
+
+起步 variant 是 `gamma-world-causal-few-step`。catalog 登记了 3 个 variant（上方卡片）：`gamma-world-causal-few-step`（`action-conditioned-video`）：Runner 一致性待确认、`gamma-world-causal`（`action-conditioned-video`）：Runner 一致性待确认、`gamma-world-bidirectional`（`action-conditioned-video`）：Runner 一致性待确认。系列状态：**Runner 一致性待确认**。
+
+传入按玩家排列的图像序列与每位玩家一份动作 JSON/映射，或兼容的 eval_dir。所有已发布变体均要求每个视角 `num_frames=189`（官方 `state_t=48`）；更短的片段不在上游推理约定内。请先就位 Gamma-World 与 Reason1 权重。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run gamma-world-causal-few-step --pipeline.task-profile interactive-video` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-gamma-world-cu128`（Python 3.1，CUDA 12.8，torch==2.7.0）。
+
+记录的权重仓库包括 `chijw/Gamma-World`、`nvidia/Cosmos-Reason1-7B`、`nvidia/Cosmos-Reason1-7B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh gamma-world-causal-few-step`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="gamma-world" locale="zh" />

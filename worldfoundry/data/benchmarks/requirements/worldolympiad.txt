@@ -1,0 +1,6 @@
+openai>=1.0.0
+opencv-python>=4.5.0
+requests
+python-dotenv
+ultralytics
+numpy

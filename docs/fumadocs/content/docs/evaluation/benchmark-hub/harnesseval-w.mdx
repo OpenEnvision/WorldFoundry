@@ -1,0 +1,97 @@
+---
+title: HarnessEval-W
+description: Six-family world-state evaluation with official Python scoring and reusable base models.
+---
+
+[HarnessEval-W](https://github.com/MirroS-Lab/HarnessEval-W) evaluates exploratory,
+intentional and physical transitions, drift resistance, return/revisit consistency,
+and offscreen evolution. The [public dataset](https://huggingface.co/datasets/MirroS-Lab/HarnessEval-W)
+is reported as 100 cases. WorldFoundry pins evaluator revision
+`ed4ccc6486b8271723ee8baea60d89b32d0a7518`.
+
+Each published case score is 50% selected-core score and 50% observation quality.
+`overall_macro` averages the six family means equally, using exact common cases
+across all models in the input. Missing families leave the overall score unavailable.
+Use `--result-model-id` when importing a report containing multiple models; selection
+preserves the original comparison cohort.
+
+<BenchmarkPageSections id="harnesseval-w" locale="en" />
+
+## CPU validation and result import
+
+The synthetic fixture checks schemas and aggregation without data downloads or models:
+
+```bash
+python -m worldfoundry.evaluation.tasks.execution.runners.harnesseval_w.run_harnesseval_w \
+  --run-fixture --strict --output-dir tmp/harnesseval-fixture --json
+```
+
+Import an official `harnesseval.report` JSON, a case-score JSON/list, or an evaluation
+directory containing `rollout_scores/<model>/<family>/*.scores.json`:
+
+```bash
+worldfoundry-eval zoo benchmark-run --benchmark-id harnesseval-w \
+  --mode official-validation --official-results-path /path/to/evaluation \
+  --result-model-id my-model --output-dir tmp/harnesseval-import --json
+```
+
+Outputs include `scorecard.json`, `raw_metric_table.jsonl`, `per_case_metrics.jsonl`,
+`official_report.json` and `benchmark_contract.json`. A summary-only import has no
+per-case evidence. Fixtures and imported results never claim leaderboard validity.
+
+## Evaluate generated videos
+
+Keep generation in WorldFoundry. Supply the official case manifest, initial
+observations, unmodified case skill plans and generated artifacts:
+
+```text
+generation/manifest.json
+generation/outputs/<axis>/<family>/<model>/<case>/output.mp4
+generation/outputs/<axis>/<family>/<model>/<case>/metadata.json
+plans/<family>/<case>.skill_plan.json
+```
+
+`axis` is `transition_correctness` or `world_persistence`. Metadata declares
+`case_id`, `model_id`, `taxonomy` and `output_video` (relative to metadata or absolute).
+Initial-observation paths resolve against `--assets-root`. Backend JSON uses the
+[official configuration schema](https://github.com/MirroS-Lab/HarnessEval-W/blob/ed4ccc6486b8271723ee8baea60d89b32d0a7518/examples/backend_config.json).
+Use `api_key_env` for judge credentials. Configure `weights_root` outside the package
+source tree. HPSv3 uses registered WorldFoundry HPSv3 assets; AMT/RAFT/CLIP/aesthetic
+weights reuse staged base-model assets when absent from the configured directory.
+
+```bash
+python -m worldfoundry.evaluation.tasks.execution.runners.harnesseval_w.run_harnesseval_w \
+  --run-official --generated-artifact-dir /path/to/generation \
+  --manifest /path/to/manifest.json --plan-root /path/to/plans \
+  --assets-root /path/to/dataset --model-id my-model \
+  --backend-config /path/to/backend_config.json \
+  --output-dir tmp/harnesseval-run --strict --json
+```
+
+Add `--dry-run` to audit inputs and plan complete skill sets without inference.
+`--limit N` selects N cases after auditing the supplied manifest. For existing official
+metric bundles, use `--score-cached --metric-cache-root /path/to/metric_cache`;
+this checks cached evidence and executes official scoring without loading models.
+Each skill, including each staged drift component, runs in a bounded Python process.
+`--timeout` controls each worker; logs and audits are written under the output directory.
+
+Full inference needs CUDA, ffmpeg/ffprobe, model dependencies, compatible weights and
+a VLM judge. CLIP, RAFT, AMT, HPSv3, Depth Anything v1, DINOv2, MegaSAM and UniDepth reuse
+`worldfoundry/base_models`. UniDepth uses the existing geometry-prior loader and registered
+`WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR` (containing `config.json` and `model.safetensors`).
+MegaSAM tracking and UniDepth inference sources are included in their canonical base-model locations.
+UniDepth uses the upstream compatibility decoder matching the pinned HF snapshot; strict loading
+and GPU depth/points/intrinsics inference have been verified. Its Nyström attention requires
+`xformers.components.attention` (tested with `xformers==0.0.28.post3`).
+Build MegaSAM's two CUDA extensions from
+`worldfoundry/base_models/three_dimensions/slam/mega_sam_runtime/base` with
+`python -m pip install --no-build-isolation -e .` using a compiler compatible with PyTorch.
+Both WBench and HarnessEval-W call the same resident Python pipeline. No shell launchers or generator copies
+are included. The full 100-case GPU/API evaluation and model parity remain unverified.
+
+For the unified `official-run` entrypoint, supply the extra inputs through
+`WORLDFOUNDRY_HARNESSEVAL_MANIFEST`, `WORLDFOUNDRY_HARNESSEVAL_PLAN_ROOT`,
+`WORLDFOUNDRY_HARNESSEVAL_MODEL_ID` and `WORLDFOUNDRY_HARNESSEVAL_BACKEND_CONFIG`.
+Set `WORLDFOUNDRY_HARNESSEVAL_PYTHON` only when skill workers require a different
+prepared interpreter. Upstream declares Apache-2.0 in its README but includes no
+standalone LICENSE file at the pinned revision.

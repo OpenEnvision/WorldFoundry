@@ -6,9 +6,8 @@ from functools import partial
 import torch
 import torch.nn as nn
 
-from worldfoundry.base_models.diffusion_model.video.hunyuan_video.modulate_layers_i2v import modulate
-from worldfoundry.base_models.diffusion_model.video.hunyuan_video.utils.helpers import to_2tuple
-from .layernorm import FusedLayerNorm
+from worldfoundry.core.nn import modulate_sequence as modulate
+from worldfoundry.core.nn.blocks.layers import to_2tuple
 
 
 class MLP(nn.Module):

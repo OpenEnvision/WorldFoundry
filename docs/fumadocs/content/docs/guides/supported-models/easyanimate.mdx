@@ -1,0 +1,34 @@
+---
+title: "EasyAnimate"
+description: "Alibaba PAI DiT video family. WorldFoundry wraps the V5.1 I2V runtime; InP weights are image-conditioned, non-InP is text-to-video."
+modelId: "easyanimate"
+pageSource: authored
+---
+
+EasyAnimate is Alibaba PAI's Diffusion Transformer video stack — text-to-video, image-to-video, video-to-video, and (upstream) trajectory / camera control. The paper is [EasyAnimate: High-Performance Video Generation Framework with Hybrid Windows Attention and Reward Backpropagation](https://arxiv.org/abs/2405.18991). Code lives at [aigc-apps/EasyAnimate](https://github.com/aigc-apps/EasyAnimate). WorldFoundry's in-tree route is the **V5.1 image-to-video** wrapper; WRBench camera-control evaluation reuses that same independent runtime instead of checking out the GitHub tree.
+
+<ModelPaperFigures modelId="easyanimate" locale="en" />
+
+The card that WorldFoundry actually wraps is **V5.1**: **Qwen2-VL** as the text encoder (multilingual; Chinese and English strongest) and **Flow matching** instead of the older noise scheduler. Official V5.1 checkpoints predict about **1–49 frames at 8 fps**, at 512 / 768 / 1024. The WorldFoundry I2V default is **768×1344, 49 frames, 8 fps**, Flow sampler, guidance **6.0**, writing `easyanimate-i2v.mp4`. The usual misconfiguration is mixing families: `*-InP` weights (for example `EasyAnimateV5.1-7b-zh-InP`) are the image-conditioned demos; `EasyAnimateV5.1-7b-zh` without InP is text-to-video.
+
+<ModelCommandBuilder modelId="easyanimate" locale="en" />
+
+## What it is for
+
+Animate a still with the in-tree V5.1 I2V path: `prompt` + `image` in, `easyanimate-i2v.mp4` out through `EasyAnimateI2VPipeline`. Aliases `easyanimate_i2v` and `easyanimate-i2v` resolve here. Height / width map to `sample_size`. Use non-InP weights only when you deliberately want text-to-video.
+
+WRBench camera control rides this runtime, so [CameraBench](/docs/evaluation/benchmark-hub/camerabench) is the control suite; general clip quality is [VBench](/docs/evaluation/benchmark-hub/vbench). Neither is an ingested WorldFoundry leaderboard.
+
+## Runtime contract
+
+Required inputs: `prompt` and `image`. Optional: `video`. `actions` is seed. Catalog tasks include text-to-video, image-to-video, and video-to-video; the wired WorldFoundry demo is I2V on the InP family. Control-to-video and camera-trajectory weights exist upstream; this catalog card does not claim those pipelines are wired.
+
+## Running in WorldFoundry
+
+Integration is recorded; **runner and demo parity are pending**. A command that starts is not a checkpoint-backed GPU artifact in this workspace. Launch `worldfoundry-eval run easyanimate` with the I2V-oriented InP weights (`alibaba-pai/EasyAnimateV5.1-7b-zh-InP`, staged under `$WORLDFOUNDRY_CKPT_DIR/hfd/alibaba-pai--EasyAnimateV5.1-7b-zh-InP`) in `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Related cards include `EasyAnimateV5.1-12b-zh`. Missing checkpoints are reported at runtime, not downloaded.
+
+## Minimal eval
+
+The wired demo is V5.1 I2V (`*-InP`). Score that folder on [VBench](/docs/evaluation/benchmark-hub/vbench) `custom_input` / `aesthetic_quality` — `vbench_standard` names do not apply. Read `aesthetic_quality`. Runner parity is pending.
+
+<ModelRelatedRecipes modelId="easyanimate" locale="en" />

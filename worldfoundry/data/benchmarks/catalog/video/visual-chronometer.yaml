@@ -1,5 +1,7 @@
 id: visual-chronometer
 name: Visual Chronometer
+publisher: Texas A&M University
+publisher_kind: university
 benchmark_kind:
 - video-metric
 - temporal-consistency
@@ -56,6 +58,15 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  normalization:
+    artifact_official_run: true
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_visual_chronometer_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.run_visual_chronometer_official_runner
+    generated_arg: --generated-artifact-dir
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VisualChronometerContract
   official_runner_script: 
     worldfoundry/evaluation/tasks/execution/runners/phyfps_bench_gen/run_visual_chronometer_official_runner.py
@@ -105,6 +116,8 @@ runner:
   - WORLDFOUNDRY_VISUAL_CHRONOMETER_STRICT
 integration:
   status: integrated
+  tier: model_backed
+  judge_model_id: xiangbog/Visual_Chronometer
   evidence:
     normalizer_surface: visual_chronometer_official_in_tree
     framework_validation: worldfoundry-eval zoo benchmark-run --benchmark-id visual-chronometer --mode 
@@ -156,6 +169,9 @@ validation_command:
 checkpoint_refs: []
 blockers:
 - Full leaderboard parity requires the complete official assets, generated artifacts, and verified scorecard evidence.
+dataset:
+  not_applicable: true
+  reason: Visual Chronometer is a video metric applied to caller-provided arbitrary or generated videos; Hugging Face hosts only the model checkpoint, not a benchmark dataset.
 artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   output_artifact: benchmark_scorecard

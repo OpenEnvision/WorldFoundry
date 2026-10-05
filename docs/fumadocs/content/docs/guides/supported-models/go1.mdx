@@ -1,0 +1,42 @@
+---
+title: "GO-1"
+description: "AgiBot + OpenDriveLab generalist VLA. CC-BY-NC-SA-4.0. Static load only; foundation checkpoint staged. GPU numerical rollout pending."
+modelId: "go1"
+pageSource: authored
+---
+
+GO-1 is the flagship policy of **AgiBot World** (AgiBot with OpenDriveLab): a generalist robot policy released as `agibot-world/GO-1`. WorldFoundry keeps InternVision, InternLM2, the **latent planner**, action expert, diffusion sampler, tokenizer, and preprocessing **in-tree** as `GO1Pipeline`. Runtime executes only staged safetensors and never imports checkpoint-provided Python. Dataset, training, deployment server, evaluator, and robot-control code are excluded.
+
+The design is ViLLA-style: InternVision + InternLM2 form the VLM, a latent planner predicts intermediate latent actions, and a diffusion action expert decodes executable control. Parameter names preserve the official checkpoint contract. The released artifact is a **pretrained foundation**; upstream recommends downstream full fine-tuning. Any fine-tune must stay paired with the exact `dataset_stats.json` from that training run.
+
+<ModelPaperFigures modelId="go1" locale="en" />
+
+Paper: [arXiv 2503.06669](https://arxiv.org/abs/2503.06669). Code: [OpenDriveLab/AgiBot-World](https://github.com/OpenDriveLab/AgiBot-World). Weights: `agibot-world/GO-1` (revision `0bc37be9`). License: **CC-BY-NC-SA-4.0** (non-commercial). Aliases: `go-1`, `agibot-world/go-1`. Integration: Static load only. Runner: **Static load only**. The pinned foundation checkpoint and released statistics are staged; **numerical and GPU rollout remain pending**.
+
+<ModelCommandBuilder modelId="go1" locale="en" />
+
+## What it is for
+
+Launch `worldfoundry-eval run go1`. Required: `image`, `prompt`, `state`, `control_frequency`. Cameras: `cam_high`, `cam_right_wrist`, `cam_left_wrist`. Policy family: `latent_planner_conditioned_diffusion`. Action representation: `checkpoint_defined_action_chunk`. Artifact: `go1_action_trace.json`. This is **not** [Genie Envisioner](/docs/guides/supported-models/genie-envisioner) (world video) and **not** [Galaxea G0Plus](/docs/guides/supported-models/galaxea-vla).
+
+## Runtime contract
+
+Default `agibot_pretrain` contract: **3** cameras, `control_frequency` **30**, action chunk **30**, dims `checkpoint_defined`. Catalog example embodiments (not GPU-validated here):
+
+| Variant | Cameras | State / action | Freq | Chunk |
+| --- | --- | --- | --- | --- |
+| `agibot_pretrain` (default) | 3 | checkpoint-defined | 30 | 30 |
+| `agilex_example` | 3 | 14 / 14 | 30 | 30 |
+| `libero_example` | 2 | 8 / 7 | 10 | 10 |
+
+Dedicated env: `worldfoundry-vla-go1` (Python 3.10, CUDA 12.4 or newer, torch 2.6.x, Transformers 4.46.3). Flash Attention 2 is used only on compatible Ampere / Ada / Hopper when installed locally; Turing and Blackwell use the portable shared SDPA path. No kernel or checkpoint is downloaded at runtime. Catalog VRAM is unset.
+
+## Running in WorldFoundry
+
+Confirm the non-commercial license. Pair any fine-tune with its own statistics file.
+
+## Minimal eval
+
+Catalog records no `recommended_benchmarks`. GPU numerical rollout is pending (Static load only only). Generate `go1_action_trace.json`; WorldFoundry does not write a GO-1 bench `scorecard.json`. Do not pair this policy with EWMBench or LIBERO.
+
+<ModelRelatedRecipes modelId="go1" locale="en" />

@@ -1,0 +1,40 @@
+model_id: open-dreamer
+env_name: open-dreamer
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+driver_status: compatible
+channels:
+- conda-forge
+conda_packages:
+- python=3.11
+- pip
+- ffmpeg>=7,<8
+pip_packages:
+- numpy<2
+- jax[cuda12]>=0.4.38,<0.5
+- flax>=0.10.0,<0.11
+- orbax-checkpoint>=0.8.0,<0.12
+- optax>=0.2.4,<0.3
+- omegaconf>=2.3.0,<2.4
+- hydra-core>=1.3.2,<1.4
+- einops>=0.8.0,<0.9
+- imageio[ffmpeg]>=2.31
+- tqdm>=4.66
+validation_imports:
+- jax
+- flax
+- orbax.checkpoint
+- optax
+- omegaconf
+- einops
+- imageio
+- numpy
+notes:
+- Mirrors the dependency set of the official rollout harness (reactor-team/open-dreamer, Python 3.11).
+- JAX CUDA wheels conflict at the ABI level with the shared torch environment, so Open Dreamer keeps a
+  dedicated environment as the unified-environment policy prescribes.
+- This environment is optional. The adapter prefers the checkout's own .venv/bin/python created by
+  `uv sync`; use this profile when driving the rollout from a WorldFoundry-managed conda environment
+  instead, and set python_executable to its interpreter.
+- No Open Dreamer source is installed here; the staged official checkout stays on PYTHONPATH at runtime.

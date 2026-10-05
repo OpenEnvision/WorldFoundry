@@ -1,0 +1,47 @@
+schema_version: 2
+model_id: ltx-2.5
+env_name: ltx-2.5
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+driver_status: compatible
+conda_packages:
+- python=3.11
+- pip>=25
+- ffmpeg>=6
+pip_extra_index_url: https://download.pytorch.org/whl/cu128
+pip_packages:
+# Keep the local H100/driver tier on CUDA 12.x. With unconstrained versions,
+# pip prefers the newer PyPI CUDA 13 wheel over this manifest's cu128 extra
+# index, producing an environment that imports but cannot initialize CUDA.
+- torch==2.11.0+cu128
+- torchaudio==2.11.0+cu128
+- torchvision==0.26.0+cu128
+- transformers>=5.8.0,<5.15
+- accelerate>=1.10
+- safetensors>=0.6
+- einops>=0.8
+- numpy>=2.0
+- scipy>=1.14
+- av>=14
+- tqdm>=4.66
+- pillow>=10
+- openimageio>=3.0
+- cloudpickle>=3.1
+validation_imports:
+- torch
+- torchaudio
+- torchvision
+- transformers
+- accelerate
+- safetensors
+- einops
+- numpy
+- scipy
+- av
+- PIL
+notes:
+- The external checkout supplies ltx-core and ltx-pipelines through PYTHONPATH at runtime; prediction does not install or mutate it.
+- PyTorch is pinned to an explicit cu128 build so PyPI cannot silently replace the requested CUDA tier with a newer CUDA 13 wheel.
+- The recorded upstream revision currently uses its own uv CUDA 13.2 indexes; production environments should sync that checkout when CUDA 13.2 is available. This manifest retains the repository's broadly deployable CUDA 12.8 environment tier.
+- The optional diffusion VAE natten acceleration and Blackwell ltx-kernels build are deployment-specific and are not required for command-contract validation.

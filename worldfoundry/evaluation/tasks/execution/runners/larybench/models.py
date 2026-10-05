@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-from worldfoundry.core.device import resolve_inference_device
+from worldfoundry.core.execution.device import resolve_inference_device
 from worldfoundry.core.io import load_video_frames
 from worldfoundry.core.utils import freeze_params as freeze_backbone
 
@@ -93,9 +93,7 @@ class LaqBaseModel(LaryBaseModel):
     def get_latent_action(self, batch_data, batch_rel_indices=None, config=None):
         if batch_data.ndim == 6:
             batch_size, pair_count, channels, frames, height, width = batch_data.shape
-            flat = batch_data.view(batch_size * pair_count, channels, frames, height, width).to(
-                _inference_device()
-            )
+            flat = batch_data.view(batch_size * pair_count, channels, frames, height, width).to(_inference_device())
             tokens, indices = self._get_latent_action(flat)
             tokens = tokens.reshape(batch_size, pair_count, tokens.shape[-2], tokens.shape[-1])
             indices = indices.reshape(batch_size, pair_count, -1)
@@ -283,10 +281,12 @@ class VillaXLaryWrap(LaryBaseModel):
 @MODEL.register_module()
 class Flux2LaryWrap(LaryBaseModel):
     def __init__(self, *args, **kwargs):
-        from worldfoundry.base_models.diffusion_model.image.flux2 import load_autoencoder
+        from worldfoundry.base_models.diffusion_model.models.autoencoders.flux2 import (
+            load_flux2_autoencoder,
+        )
 
         self.name = kwargs.pop("name", "flux2")
-        self.model = load_autoencoder(device=str(_inference_device()))
+        self.model = load_flux2_autoencoder(device=str(_inference_device()))
         self.prepare_model_for_extraction()
 
     def prepare_model_for_extraction(self):
@@ -294,7 +294,7 @@ class Flux2LaryWrap(LaryBaseModel):
         self.model.to(_inference_device()).eval()
 
     def get_latent_action(self, batch_data, batch_rel_indices=None, config=None):
-        from worldfoundry.base_models.diffusion_model.image.flux2 import (
+        from worldfoundry.base_models.diffusion_model.models.autoencoders.flux2 import (
             encode_video_batch_refs,
         )
 
@@ -341,7 +341,7 @@ class Flux2LaryWrap(LaryBaseModel):
 @MODEL.register_module()
 class Wan2_2LaryWrap(LaryBaseModel):
     def __init__(self, *args, **kwargs):
-        from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.vae2_2 import (
+        from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_22 import (
             Wan2_2_VAE,
         )
 
@@ -412,9 +412,7 @@ class VjepaBaseModel(LaryBaseModel):
                     )
                 ]
             ]
-            clip_indices = torch.tensor([0, config.stride], device=_inference_device()).repeat(
-                len(batch_data), 1
-            )
+            clip_indices = torch.tensor([0, config.stride], device=_inference_device()).repeat(len(batch_data), 1)
         tokens = self.model(clips, clip_indices)[0].cpu().numpy()
         return tokens, [np.array([]) for _ in tokens]
 

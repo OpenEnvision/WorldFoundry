@@ -24,34 +24,40 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
 
+from worldfoundry.core.execution.process import run_logged_subprocess
+from worldfoundry.core.io.formats.serialization import write_json
 from worldfoundry.core.io.paths import resolve_worldfoundry_path
-from worldfoundry.core.io.serialization import write_json
-from worldfoundry.core.time import utc_now_iso
+from worldfoundry.core.observability.logging_setup import get_logger, log_context
+from worldfoundry.core.observability.time import utc_now_iso
 from worldfoundry.evaluation.reporting import inspect_scorecard_runtime_flags
+from worldfoundry.evaluation.tasks.catalog.dispatch import (
+    artifact_official_run_benchmarks,
+    embodied_result_normalizer_tracks,
+    pass_generated_artifact_dir_benchmarks,
+    specialized_result_normalizer_scripts,
+)
+from worldfoundry.evaluation.tasks.execution.framework.result_normalizer import OfficialResultsNormalizer
 from worldfoundry.runtime.env import benchmark_repo_cache_root
 
 from ....utils import BENCHMARK_ZOO_DIR
+from ...catalog.runner_kinds import IN_TREE_RUNTIME_KINDS
 from ...catalog.schema import BenchmarkZooEntry, load_entries
 from ...catalog.zoo_registry import BenchmarkZooRegistry, UnknownBenchmarkZooKeyError, load_benchmark_zoo_registry
 from ...contracts.external import get_external_benchmark_contract
-from ..runners._benchmark_metrics import evaluate_external_metric, list_external_metric_evaluators
-from ...execution.framework.benchmark_contract_registry import (
-    BENCHMARK_CONTRACT_EVALUATOR_KINDS,
+from ...execution.framework.scoring_registry import (
+    contract_evaluator_kind,
     has_benchmark_contract_evaluator,
     write_benchmark_contract_evaluation,
 )
-from worldfoundry.evaluation.tasks.execution.framework.result_normalizer import OfficialResultsNormalizer
-from ..framework.runner_registry import specialized_result_normalizer_scripts
+from ..runners._benchmark_metrics import evaluate_external_metric, list_external_metric_evaluators
+from .interfaces import (
+    BENCHMARK_RUN_OFFICIAL_MODES as _OFFICIAL_MODES,
+)
 from .interfaces import (
     BenchmarkSample,
     DatasetMaterializationPlan,
     OfficialRunResult,
     OfficialRunStage,
-)
-from .run_mode import (
-    BENCHMARK_RUN_OFFICIAL_MODES as _OFFICIAL_MODES,
-)
-from .run_mode import (
     normalize_benchmark_run_mode,
 )
 
@@ -63,74 +69,6 @@ JsonValue = Any
 REPO_ROOT = Path(__file__).resolve().parents[5]
 DEFAULT_MANIFEST_PATH = BENCHMARK_ZOO_DIR
 SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
-
-SPECIALIZED_RESULT_NORMALIZER_SCRIPTS: dict[str, tuple[str, str]] = specialized_result_normalizer_scripts()
-
-SPECIALIZED_ARTIFACT_OFFICIAL_RUN_BENCHMARKS: frozenset[str] = frozenset(
-    {
-        "aigcbench",
-        "evalcrafter",
-        "ipv-bench",
-        "memobench",
-        "phyfps-bench-gen",
-        "phyeduvideo",
-        "physics-iq",
-        "physics-iq-verified",
-        "phyground",
-        "visual-chronometer",
-        "world-in-world",
-        "wrbench",
-    }
-)
-
-IN_TREE_RUNTIME_KINDS: frozenset[str] = frozenset(
-    {
-        "in_tree_artifact_evaluator",
-        "in_tree_artifact_metric_importer",
-        "in_tree_judge_runtime",
-        "in_tree_metric_aggregator",
-        "in_tree_official_judge_runtime",
-        "in_tree_official_runner",
-        "in_tree_official_runtime",
-        "in_tree_official_source",
-        "in_tree_result_importer",
-        "native_closed_loop_simulator",
-    }
-)
-
-EMBODIED_RESULT_NORMALIZER_TRACKS: dict[str, str] = {
-    "behavior1k": "vla",
-    "bridgedata-v2": "vla",
-    "calvin": "vla",
-    "kinetix": "vla",
-    "libero": "vla",
-    "libero-mem": "vla",
-    "libero-para": "vla",
-    "libero-plus": "vla",
-    "libero-pro": "vla",
-    "maniskill": "vla",
-    "maniskill2": "vla",
-    "metaworld": "vla",
-    "mikasa": "vla",
-    "molmospaces": "vla",
-    "rlbench": "vla",
-    "robocasa": "vla",
-    "robocerebra": "vla",
-    "robomme": "vla",
-    "robotwin": "vla",
-    "simpler-env": "vla",
-    "vlabench": "vla",
-}
-
-GENERIC_RESULT_NORMALIZER_BENCHMARKS: frozenset[str] = frozenset(
-    {
-        "devil-dynamics",
-        "t2v-safety-bench",
-        "t2vworldbench",
-        "videoscience-bench",
-        "worldarena",
-    }
-)
 
 
 def _requires_external_runtime(*, default: bool, runtime_spec: Mapping[str, Any] | None) -> bool:
@@ -197,7 +135,7 @@ def _workspace_official_run_command(
     ``official-run`` also covers integrated benchmarks whose catalog entry does
     not duplicate a shell command.
     """
-    from ..runners.workspace_registry import (
+    from worldfoundry.evaluation.tasks.catalog.workspace_registry import (
         CLI_RUNNERS,
         benchmark_key,
         build_workspace_benchmark_command,
@@ -243,20 +181,17 @@ def _subprocess_command(command: str | tuple[str, ...]) -> str | list[str]:
 
 def _timeout_seconds(value: JsonValue) -> float | None:
     """Parse timeout kwargs into seconds."""
+    if value is None:
+        from worldfoundry.evaluation.tasks.execution.framework.official_runner import (
+            default_benchmark_timeout,
+        )
+
+        return default_benchmark_timeout()
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
         return float(value)
     return None
-
-
-def _subprocess_output(value: str | bytes | None) -> str:
-    """Decode captured subprocess stdout/stderr bytes."""
-    if value is None:
-        return ""
-    if isinstance(value, bytes):
-        return value.decode("utf-8", errors="replace")
-    return value
 
 
 def _env_mapping(value: JsonValue) -> dict[str, str]:
@@ -308,8 +243,6 @@ def _default_results_path_from_data_root(benchmark_id: str, data_root: Path | No
         data_root / "results.jsonl",
         data_root / "scores.json",
         data_root / "scores.jsonl",
-        data_root / "annotations.json",
-        data_root / "annotations.jsonl",
         data_root / normalized / "results.json",
         data_root / benchmark_id / "results.json",
     ]
@@ -567,7 +500,7 @@ def _run_specialized_result_normalizer(
     kwargs: Mapping[str, JsonValue] | None = None,
 ) -> dict[str, JsonValue] | None:
     """Spawn a per-benchmark specialized normalizer subprocess."""
-    spec = SPECIALIZED_RESULT_NORMALIZER_SCRIPTS.get(benchmark_id)
+    spec = specialized_result_normalizer_scripts().get(benchmark_id)
     if spec is None:
         return None
     script, result_flag = spec
@@ -590,29 +523,24 @@ def _run_specialized_result_normalizer(
         command.append("--run-official")
     if results_path is not None:
         command.extend([result_flag, str(results_path)])
+    from worldfoundry.evaluation.tasks.catalog.dispatch import official_runner_spec
+
+    runner_spec = official_runner_spec(benchmark_id)
+    result_model_id = kwargs.get("result_model_id")
+    if runner_spec is not None and runner_spec.model_arg and result_model_id:
+        command.extend([runner_spec.model_arg, str(result_model_id)])
     score_dir = kwargs.get("score_dir") if benchmark_id == "camerabench" else None
     if score_dir not in (None, ""):
         command.extend(["--score-dir", str(score_dir), "--task", "all", "--no-gpt"])
-    if benchmark_id in {
-        "aigcbench",
-        "phyfps-bench-gen",
-        "visual-chronometer",
-        "physics-iq",
-        "physics-iq-verified",
-        "physvidbench",
-        "phygenbench",
-        "videophy",
-        "videophy2",
-        "phyground",
-        "phyeduvideo",
-        "world-in-world",
-        "mirabench",
-        "memobench",
-        "ewmbench",
-        "evalcrafter",
-        "wrbench",
-    } and generated_artifact_dir is not None:
+    if benchmark_id in pass_generated_artifact_dir_benchmarks() and generated_artifact_dir is not None:
         command.extend(["--generated-artifact-dir", str(generated_artifact_dir)])
+    if benchmark_id == "pawbench":
+        dataset_root = kwargs.get("dataset_root") or kwargs.get("benchmark_data_root")
+        if dataset_root:
+            command.extend(["--dataset-root", str(dataset_root)])
+        model_name = kwargs.get("model_name") or kwargs.get("model_id")
+        if model_name:
+            command.extend(["--model-name", str(model_name)])
     if benchmark_id == "phyfps-bench-gen" and kwargs.get("prompt_manifest"):
         command.extend(["--prompt-manifest", str(kwargs["prompt_manifest"])])
     env = os.environ.copy()
@@ -632,21 +560,17 @@ def _run_specialized_result_normalizer(
     )
     _apply_benchmark_data_root_env(env, benchmark_id, kwargs)
     env.update(_env_mapping(kwargs.get("env_overrides", kwargs.get("env"))))
-    timeout = kwargs.get("timeout_seconds", kwargs.get("timeout"))
-    timeout_seconds = float(timeout) if isinstance(timeout, (int, float)) and not isinstance(timeout, bool) else None
+    timeout_seconds = _timeout_seconds(kwargs.get("timeout_seconds", kwargs.get("timeout")))
     start = time.monotonic()
-    completed = subprocess.run(
+    completed = run_logged_subprocess(
         command,
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
         cwd=REPO_ROOT,
         env=env,
-        text=True,
-        capture_output=True,
         timeout=timeout_seconds,
-        check=False,
     )
     duration_seconds = time.monotonic() - start
-    stdout_path.write_text(completed.stdout, encoding="utf-8")
-    stderr_path.write_text(completed.stderr, encoding="utf-8")
     scorecard_path = output_dir / "scorecard.json"
     if not scorecard_path.is_file():
         return {
@@ -673,7 +597,12 @@ def _run_specialized_result_normalizer(
         }
     normalization_ok = scorecard.get("normalization_ok") is True or _scorecard_normalization_available(scorecard)
     scorecard["normalization_ok"] = normalization_ok
-    scorecard.setdefault("normalizer_only", scorecard.get("integration_evidence") is not True)
+    validation = scorecard.get("validation")
+    validation_normalizer_only = validation.get("normalizer_only") if isinstance(validation, Mapping) else None
+    if isinstance(validation_normalizer_only, bool):
+        scorecard["normalizer_only"] = validation_normalizer_only
+    else:
+        scorecard.setdefault("normalizer_only", scorecard.get("integration_evidence") is not True)
     scorecard["runtime"] = dict(runtime_spec)
     run = scorecard.get("run")
     if isinstance(run, Mapping):
@@ -710,7 +639,7 @@ def _run_embodied_result_normalizer(
     kwargs: Mapping[str, JsonValue] | None = None,
 ) -> dict[str, JsonValue] | None:
     """Normalize embodied/VLA results in-process via ``embodied.normalizer``."""
-    track = EMBODIED_RESULT_NORMALIZER_TRACKS.get(benchmark_id)
+    track = embodied_result_normalizer_tracks().get(benchmark_id)
     if track is None:
         return None
     kwargs = kwargs or {}
@@ -898,9 +827,14 @@ class ManifestBenchmarkRunner:
 
     def materialization_plan(self) -> DatasetMaterializationPlan:
         """Build dataset download plan from manifest refs."""
-        notes = list(self.entry.notes)
+        notes = [
+            *self.entry.notes,
+            *(f"blocked: {blocker}" for blocker in self.entry.blockers),
+        ]
         if self.entry.dataset.not_applicable and self.entry.dataset.reason:
             notes.append(f"dataset not applicable: {self.entry.dataset.reason}")
+        elif not self.entry.hf_dataset_ids and self.entry.dataset.reason:
+            notes.append(f"dataset acquisition blocked: {self.entry.dataset.reason}")
         return DatasetMaterializationPlan(
             benchmark_id=self.benchmark_id,
             dataset_ids=self.entry.hf_dataset_ids,
@@ -1070,7 +1004,9 @@ class ManifestBenchmarkRunner:
             "runner_runtime_spec": runtime_spec,
         }
         results_path = runtime_spec.get("results_path")
-        if results_path and Path(str(results_path)).exists():
+        results_path_source = runtime_spec.get("results_path_source")
+        implicit_data_root_result = mode == "official-run" and results_path_source == "benchmark_data_root"
+        if results_path and Path(str(results_path)).exists() and not implicit_data_root_result:
             data.update(
                 {
                     "run_status": "official_results_import",
@@ -1100,6 +1036,17 @@ class ManifestBenchmarkRunner:
                 data=data,
                 metadata={**metadata, "run_status": "official_results_import"},
             )
+        if implicit_data_root_result and results_path:
+            # Dataset roots commonly contain annotations or stale results from
+            # earlier runs.  They are inputs, never authority to skip a fresh
+            # official-run subprocess or replace its newly written scorecard
+            # during normalization.
+            data["ignored_preexisting_results_path"] = str(results_path)
+            metadata["ignored_preexisting_results_path"] = str(results_path)
+            runtime_spec["ignored_preexisting_results_path"] = str(results_path)
+            runtime_spec["ignored_results_path_source"] = str(results_path_source)
+            runtime_spec["results_path"] = None
+            runtime_spec["results_path_source"] = None
         score_dir = kwargs.get("score_dir") or os.environ.get("WORLDFOUNDRY_CAMERABENCH_SCORE_DIR")
         if self.benchmark_id == "camerabench" and mode in {"official-validation", "normalizer"} and score_dir:
             score_dir_path = Path(str(score_dir))
@@ -1211,19 +1158,16 @@ class ManifestBenchmarkRunner:
         timeout_seconds = _timeout_seconds(kwargs.get("timeout_seconds", kwargs.get("timeout")))
         start = time.monotonic()
         try:
-            completed = subprocess.run(
+            completed = run_logged_subprocess(
                 _subprocess_command(resolved_command),
+                stdout_path=stdout_path,
+                stderr_path=stderr_path,
                 cwd=workdir,
                 env=env,
-                text=True,
-                capture_output=True,
                 timeout=timeout_seconds,
-                check=False,
                 shell=isinstance(resolved_command, str),
             )
             duration_seconds = time.monotonic() - start
-            stdout_path.write_text(completed.stdout, encoding="utf-8")
-            stderr_path.write_text(completed.stderr, encoding="utf-8")
             status = "succeeded" if completed.returncode == 0 else "failed"
             if completed.returncode == 0:
                 emitted_scorecard_path = prepared.output_dir / "scorecard.json"
@@ -1260,10 +1204,8 @@ class ManifestBenchmarkRunner:
                 data=data,
                 metadata={**metadata, "run_status": status, "returncode": completed.returncode},
             )
-        except subprocess.TimeoutExpired as exc:
+        except subprocess.TimeoutExpired:
             duration_seconds = time.monotonic() - start
-            stdout_path.write_text(_subprocess_output(exc.stdout), encoding="utf-8")
-            stderr_path.write_text(_subprocess_output(exc.stderr), encoding="utf-8")
             status = "timeout"
             error = f"official command timed out after {timeout_seconds} seconds"
         except OSError as exc:
@@ -1369,7 +1311,7 @@ class ManifestBenchmarkRunner:
                     "manifest_integration_status": self.entry.integration_status,
                     "manifest_verification_status": self.entry.verification_status,
                     "requires_upstream_runtime": contract.requires_upstream_runtime,
-                    "evaluator": BENCHMARK_CONTRACT_EVALUATOR_KINDS[self.benchmark_id],
+                    "evaluator": contract_evaluator_kind(self.benchmark_id),
                     **extra_metadata,
                 },
             )
@@ -1690,7 +1632,7 @@ class ManifestBenchmarkRunner:
                 run_official=(
                     mode == "official-run"
                     and generated_artifact_dir is not None
-                    and self.benchmark_id in SPECIALIZED_ARTIFACT_OFFICIAL_RUN_BENCHMARKS
+                    and self.benchmark_id in artifact_official_run_benchmarks()
                 ),
                 kwargs=extra_metadata,
             )
@@ -1820,18 +1762,6 @@ class ManifestBenchmarkRunner:
                         **extra_metadata,
                         "normalization_ok": embodied.get("ok") is True,
                     },
-                )
-            if self.benchmark_id in GENERIC_RESULT_NORMALIZER_BENCHMARKS:
-                return self._normalize_generic_official_results(
-                    root=root,
-                    contract=contract,
-                    data=data,
-                    mode=mode,
-                    results_path=Path(str(results_path)),
-                    runtime_spec=runtime_spec,
-                    runtime_report_path=runtime_report_path,
-                    generated_artifact_dir=generated_artifact_dir,
-                    generated_files=generated_files,
                 )
             if has_benchmark_contract_evaluator(self.benchmark_id):
                 evaluator_kwargs = dict(extra_metadata)
@@ -2111,11 +2041,39 @@ def run_benchmark_execution(
     **kwargs: JsonValue,
 ) -> OfficialRunResult:
     """Run full benchmark lifecycle for ``benchmark_id``."""
-    registry = build_benchmark_runner_registry(manifest_path)
-    runner = registry.get_runner(benchmark_id)
-    return runner.evaluate(
-        output_dir=output_dir,
-        mode=mode,
-        generated_artifact_dir=generated_artifact_dir,
-        **kwargs,
-    )
+    with log_context(benchmark_id=benchmark_id, phase="benchmark.execution"):
+        logger = get_logger(__name__)
+        logger.event(
+            "INFO",
+            "benchmark.execution.started",
+            "Benchmark execution started",
+            output_dir=str(output_dir),
+            mode=mode,
+        )
+        try:
+            registry = build_benchmark_runner_registry(manifest_path)
+            runner = registry.get_runner(benchmark_id)
+            result = runner.evaluate(
+                output_dir=output_dir,
+                mode=mode,
+                generated_artifact_dir=generated_artifact_dir,
+                **kwargs,
+            )
+        except Exception:
+            logger.event(
+                "ERROR",
+                "benchmark.execution.failed",
+                "Benchmark execution failed",
+                exc_info=True,
+                output_dir=str(output_dir),
+                mode=mode,
+            )
+            raise
+        logger.event(
+            "INFO" if result.ok else "ERROR",
+            "benchmark.execution.finished",
+            "Benchmark execution finished",
+            status="ok" if result.ok else "failed",
+            output_dir=str(result.output_dir),
+        )
+        return result

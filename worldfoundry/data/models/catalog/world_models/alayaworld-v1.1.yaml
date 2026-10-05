@@ -1,0 +1,81 @@
+schema_version: 2
+model_id: alayaworld-v1.1
+name: AlayaWorld v1.1
+family: LTX-2.3 World Models
+domain: world
+aliases:
+- alayaworld-v11
+- alaya-world-v1.1
+tasks:
+- image-to-video
+- camera-controlled-video
+- interactive-world-model
+output_artifacts:
+- generated_world
+capabilities:
+  task_family: world_model
+  modalities:
+  - image-to-video
+  - camera-controlled-video
+  - interactive-world-model
+availability:
+  source: open_source
+  license: ltx-2-community-license
+  requires_auth: true
+sources:
+  github:
+    url: https://github.com/AlayaLab/AlayaWorld
+    revision: ea03cfbb2e4c4e9102ed8ea8562e0b5370ca9b79
+  huggingface:
+  - repo_id: AlayaLab/AlayaWorld-v1.1-stage2b
+    revision: 17f2f8a4939d85920b8a6c5191ce88dec7f862d1
+    type: model
+  - repo_id: AlayaLab/AlayaWorld-v1.1-stage3
+    revision: 75fef054c5c0f86fd1450d50f70ef2f0a93fff2b
+    type: model
+checkpoints:
+  primary:
+    repo_id: AlayaLab/AlayaWorld-v1.1-stage2b
+    revision: 17f2f8a4939d85920b8a6c5191ce88dec7f862d1
+    type: model
+integration:
+  status: integrated
+  runtime_profile: alayaworld-v1.1
+  pipeline_binding: alayaworld-v1.1
+  runner: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: alayaworld-v1.1
+runtime_profile: runtime-profile:alayaworld-v1.1
+evidence:
+  notes:
+  - Uses extracted inference-only rollout methods and inference configuration sections; no trainer or optimizer is instantiated.
+  - CPU configuration and adapter contracts checked; checkpoint loading, VRAM usage and GPU artifact parity remain pending.
+  - Single-GPU inference bridge; full-window native VAE encoding may use more peak memory than the upstream streaming encoder.
+runner_parity:
+  status: pending
+  notes:
+  - GPU/checkpoint-backed artifact parity has not been run in this workspace.
+catalog_category: world_models
+docs:
+  publisher: AlayaLab
+  publisher_kind: lab
+  publisher_zh: AlayaLab
+  overview: Separate AR and four-step DMD inference for AlayaWorld v1.1 with ViGeo spatial memory.
+  overview_zh: AlayaWorld v1.1 独立提供带 ViGeo 空间记忆的 AR 和四步 DMD 推理。
+  architecture: The inference-only rollout methods and three small configuration adapters are extracted from the pinned upstream
+    and paired with WorldFoundry checkpoint/LoRA loaders, LTX VAE, Gemma encoding and the existing Alaya history encoder.
+    An inference-only entry skips trainer setup, optimizers, critics and training data.
+  architecture_zh: 从固定版本的上游提取纯推理 rollout 和少量配置适配代码，复用 WorldFoundry checkpoint/LoRA 加载器、LTX VAE、Gemma 及历史编码器；不实例化 trainer、训练配置或优化器。Alaya
+    Transformer 扩展和 ViGeo 几何仍使用外部源码。
+  usage_notes: Select variant=ar (30 steps) or dmd (4 steps). Stage2b transformer/history weights, the LTX-2.3 base, Gemma
+    and ViGeo1.1 are required; DMD additionally needs stage3 LoRA. This is separate from the original merged DA3 checkpoint
+    route.
+  usage_notes_zh: 选择 variant=ar（30 步）或 dmd（4 步）。需 stage2b Transformer/历史权重、LTX-2.3 基座、Gemma 和 ViGeo1.1；DMD 另需 stage3 LoRA。此路线独立于原版
+    DA3 合并 checkpoint。
+  limitations:
+  - Uses extracted inference-only rollout methods and inference configuration sections; no trainer or optimizer is instantiated.
+  - CPU configuration and adapter contracts checked; checkpoint loading, VRAM usage and GPU artifact parity remain pending.
+  - Single-GPU inference bridge; full-window native VAE encoding may use more peak memory than the upstream streaming encoder.
+  limitations_zh:
+  - 当前工作区仅完成 CPU 可执行的检查，GPU 推理和 checkpoint 产物仍待验证。
+  recommended_benchmarks: []

@@ -14,7 +14,7 @@ Options:
   --host HOST          Bind host. Default: WORLDFOUNDRY_WORKSPACE_HOST or 127.0.0.1.
   --port PORT          Bind port. Default: WORLDFOUNDRY_WORKSPACE_PORT or 7870.
   --max-jobs N         Concurrent job workers. Default: WORLDFOUNDRY_WORKSPACE_MAX_JOBS or 8.
-  --ckpt-dir PATH      Checkpoint/model root. Default order: explicit env, repo-sibling ckpt/, env-file, ~/.cache/worldfoundry/checkpoints.
+  --ckpt-dir PATH      Checkpoint/model root. Default order: explicit env, repo-sibling ckpts/ then ckpt/, env-file, ~/.cache/worldfoundry/checkpoints.
   --data-dir PATH      Benchmark/data root. Default order: explicit env, repo-sibling data/, env-file, ~/.cache/worldfoundry/data.
                       Most model weights are resolved by Hugging Face from repo ids; set HF_HOME or
                       HF_HUB_CACHE when you want a specific local HF cache.
@@ -111,11 +111,25 @@ choose_asset_dir() {
   fi
 }
 
-CKPT_DIR="$(choose_asset_dir "$CKPT_DIR_OVERRIDE" "$PRESET_CKPT_DIR" "${WORLDFOUNDRY_CKPT_DIR:-}" "${ROOT_PARENT}/ckpt" "${HOME}/.cache/worldfoundry/checkpoints")"
+CKPT_SIBLING="${ROOT_PARENT}/ckpts"
+if [[ ! -d "$CKPT_SIBLING" && -d "${ROOT_PARENT}/ckpt" ]]; then
+  CKPT_SIBLING="${ROOT_PARENT}/ckpt"
+fi
+CKPT_DIR="$(choose_asset_dir "$CKPT_DIR_OVERRIDE" "$PRESET_CKPT_DIR" "${WORLDFOUNDRY_CKPT_DIR:-}" "$CKPT_SIBLING" "${HOME}/.cache/worldfoundry/checkpoints")"
 DATA_DIR="$(choose_asset_dir "$DATA_DIR_OVERRIDE" "$PRESET_DATA_DIR" "${WORLDFOUNDRY_DATA_DIR:-}" "${ROOT_PARENT}/data" "${HOME}/.cache/worldfoundry/data")"
-HFD_ROOT="${PRESET_HFD_ROOT:-${CKPT_DIR}/hfd}"
+if [[ -n "$PRESET_HFD_ROOT" ]]; then
+  HFD_ROOT="$PRESET_HFD_ROOT"
+elif [[ -d "${CKPT_DIR}/hfd" ]]; then
+  HFD_ROOT="${CKPT_DIR}/hfd"
+elif compgen -G "${CKPT_DIR}/*--*" >/dev/null; then
+  # HFD's --tool aria2 layout stores owner--repo exports directly in
+  # the selected flat checkpoint directory.
+  HFD_ROOT="$CKPT_DIR"
+else
+  HFD_ROOT="${CKPT_DIR}/hfd"
+fi
 BENCHMARK_DATA_ROOT="${PRESET_BENCHMARK_DATA_ROOT:-${DATA_DIR}/datasets}"
-HFD_DATASET_ROOT="${PRESET_HFD_DATASET_ROOT:-${DATA_DIR}}"
+HFD_DATASET_ROOT="${PRESET_HFD_DATASET_ROOT:-${DATA_DIR}/datasets}"
 
 if [[ -z "$PYTHON_BIN" ]]; then
   if [[ -n "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX:-}" && -x "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}/bin/python" ]]; then
@@ -181,7 +195,7 @@ fi
 if ! "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
 import fastapi
 import uvicorn
-import worldfoundry.studio.workspace_app
+import worldfoundry.studio.serving.workspace
 PY
 then
   cat >&2 <<EOF
@@ -203,4 +217,4 @@ echo "WORLDFOUNDRY_CKPT_DIR=${WORLDFOUNDRY_CKPT_DIR}"
 echo "WORLDFOUNDRY_DATA_DIR=${WORLDFOUNDRY_DATA_DIR}"
 echo "HF_HOME=${HF_HOME:-<huggingface default>}"
 echo "HF_HUB_CACHE=${HF_HUB_CACHE:-<huggingface default>}"
-exec "$PYTHON_BIN" -m worldfoundry.studio.workspace_app --host "$HOST" --port "$PORT"
+exec "$PYTHON_BIN" -m worldfoundry.studio.serving.workspace --host "$HOST" --port "$PORT"

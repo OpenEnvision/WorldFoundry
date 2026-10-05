@@ -21,6 +21,7 @@ from typing import Any
 
 import yaml
 
+from worldfoundry.evaluation.reporting.run_manifest import is_sensitive_key
 from worldfoundry.evaluation.utils import write_json
 
 SCHEMA_VERSION = "worldfoundry-runtime-preflight-v1"
@@ -31,7 +32,7 @@ _ENV_PATTERN = re.compile(
     r"|\$\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)(?::-(?P<default>[^}]*))?\}"
 )
 _ENV_NAME_PATTERN = re.compile(r"\b[A-Z][A-Z0-9_]+\b")
-_SECRET_PARTS = ("API_KEY", "AUTH", "CREDENTIAL", "PASSWORD", "PRIVATE", "SECRET", "TOKEN")
+_MIN_REDACTABLE_SECRET_LENGTH = 8
 
 
 def _expand_env(value: str, environ: Mapping[str, str]) -> tuple[str, tuple[str, ...]]:
@@ -56,7 +57,10 @@ def _expand_env(value: str, environ: Mapping[str, str]) -> tuple[str, tuple[str,
 def _redact_text(value: str, environ: Mapping[str, str]) -> str:
     redacted = value
     for name, secret in environ.items():
-        if secret and any(part in name.upper() for part in _SECRET_PARTS):
+        if (
+            len(secret) >= _MIN_REDACTABLE_SECRET_LENGTH
+            and is_sensitive_key(name)
+        ):
             redacted = redacted.replace(secret, "<redacted>")
     return redacted
 

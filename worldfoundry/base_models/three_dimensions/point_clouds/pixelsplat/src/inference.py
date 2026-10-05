@@ -28,6 +28,8 @@ def _load_component_state(module: nn.Module, state: dict[str, torch.Tensor], pre
         if key.startswith(prefix)
     }
     if not component:
+        if not module.state_dict():
+            return
         raise RuntimeError(f"Checkpoint contains no parameters with prefix {prefix!r}.")
     module.load_state_dict(component, strict=True)
 

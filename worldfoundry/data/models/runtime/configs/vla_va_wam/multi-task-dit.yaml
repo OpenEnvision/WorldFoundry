@@ -1,8 +1,0 @@
-backend: lerobot_policy
-checkpoint_path: ${WORLDFOUNDRY_CKPT_DIR}/lerobot--multi_task_dit
-source_repo: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/lerobot
-source_subdir: src
-policy_target: lerobot.policies.multi_task_dit.modeling_multi_task_dit:MultiTaskDiTPolicy
-predict_method: predict_action_chunk
-action_contract: multi_task_dit_action_chunk
-runtime_backend: lerobot_multi_task_dit_policy

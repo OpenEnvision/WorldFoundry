@@ -12,7 +12,7 @@ checkpoints:
   revision: d098089683285a22f2fdf8448ad07c0066e75d18
   local_dir: ${WORLDFOUNDRY_CKPT_DIR}/lingbot-world-base-act-preview
   role: lingbot_world_base_act_checkpoint
-  status: checkpoint_manifest_validated
+  status: direct_pipeline_gpu_validated
   required_paths:
   - high_noise_model/config.json
   - high_noise_model/diffusion_pytorch_model.safetensors.index.json
@@ -27,10 +27,19 @@ artifact_filename: lingbot-world-act.mp4
 execution:
   environment: lingbot-world
   backend_stage: independent_in_tree_runtime
-  runtime_status: checkpoint_manifest_validated_runtime_pending
-  integration_status: integrated_checkpoint_manifest_validated
+  runtime_status: public_binding_17f8step_gpu_validated
+  integration_status: integrated_verified_configuration
   pipeline_binding: lingbot-world-act
-integration: {status: integrated_checkpoint_manifest_validated}
+integration: {status: integrated_verified_configuration}
 notes:
 - Uses the official Base-Act preview checkpoint; Base-Cam is not substituted.
 - The dedicated LingBot environment is retained because unified-env act2cam parity produced near-black output.
+- An H100 in the dedicated environment generated a 17-frame, 8-step video from
+  the official example image and a forward [F,4] WASD matrix; the official
+  full-length settings remain untested.
+- A previous dedicated-environment GPU run generated 49 frames at 40 steps from
+  a real room image with forward camera poses and a nonzero [F,4] action matrix.
+  The two controls were not separately ablated.
+- The public WorldFoundryPipelineRunner binding generated the 17-frame, 8-step
+  cat example; its MP4 decoded fully at 544x720 and 16 fps. The public runner
+  has not been exercised at the official 161-frame length.

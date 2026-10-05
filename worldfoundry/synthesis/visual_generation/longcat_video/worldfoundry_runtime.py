@@ -61,6 +61,7 @@ def _preferred_video_output(paths: Sequence[Path]) -> Path | None:
         "output_vc_refine.mp4",
         "output_refine.mp4",
         "output_t2v.mp4",
+        "output_t2v_distill.mp4",
         "output_i2v.mp4",
         "output_vc.mp4",
     ):
@@ -268,7 +269,7 @@ class LongCatVideoRuntime:
         return LongCatVideoRuntimePlan(
             command=tuple(command),
             env=env,
-            workdir=str(self.runtime_root),
+            workdir=str(target_output_dir if task_type == "t2v" else self.runtime_root),
             checkpoint_dir=str(self.checkpoint_dir),
             output_dir=str(target_output_dir),
             output_path=str(output_path_obj.with_suffix(".mp4") if output_path_obj.suffix.lower() not in {".json", ".mp4", ".mov", ".webm", ".gif"} else output_path_obj),

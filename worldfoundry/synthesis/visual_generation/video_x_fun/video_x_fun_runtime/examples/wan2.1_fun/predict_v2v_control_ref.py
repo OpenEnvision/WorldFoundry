@@ -7,7 +7,7 @@ from omegaconf import OmegaConf
 from PIL import Image
 from transformers import AutoTokenizer
 
-from worldfoundry.core.checkpoint import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 current_file_path = os.path.abspath(__file__)
 project_roots = [os.path.dirname(current_file_path), os.path.dirname(os.path.dirname(current_file_path)), os.path.dirname(os.path.dirname(os.path.dirname(current_file_path)))]
@@ -15,26 +15,24 @@ for project_root in project_roots:
     sys.path.insert(0, project_root) if project_root not in sys.path else None
 
 from videox_fun.data import process_pose_file
-from worldfoundry.base_models.diffusion_model.video.wan.variants.video_x_fun import (
-    AutoencoderKLWan,
-    AutoTokenizer,
-    CLIPModel,
-    WanT5EncoderModel,
-    WanTransformer3DModel,
-)
-from worldfoundry.base_models.diffusion_model.video.wan.variants.video_x_fun.cache import (
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.video_x_fun import AutoencoderKLWan
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.video_x_fun import CLIPModel
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.dreamx_world.text_encoder import WanT5EncoderModel
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.video_x_fun.transformer import WanTransformer3DModel
+from worldfoundry.base_models.diffusion_model.loaders.wan_variant import load_wan_transformer
+from worldfoundry.base_models.diffusion_model.optimizations.wan.teacache import (
     get_teacache_coefficients,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.components.xfuser import (
+from worldfoundry.core.distributed.sequence_parallel.runtime import (
     set_multi_gpus_devices,
 )
-from worldfoundry.core.distributed.block_fsdp import shard_model
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
 from videox_fun.pipeline import WanFunControlPipeline, WanPipeline
 from videox_fun.utils import (register_auto_device_hook,
                               safe_enable_group_offload)
 from videox_fun.utils.output import save_inference_sample
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers import FlowDPMSolverMultistepScheduler
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
+from worldfoundry.base_models.diffusion_model.schedulers.flow_dpm import FlowDPMSolverMultistepScheduler
+from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import FlowUniPCMultistepScheduler
 from worldfoundry.core.io.paths import resolve_data_path
 from videox_fun.utils.fp8_optimization import (convert_model_weight_to_float8,
                                                convert_weight_dtype_wrapper,
@@ -148,9 +146,10 @@ save_path               = "samples/wan-videos-fun-control"
 device = set_multi_gpus_devices(ulysses_degree, ring_degree)
 config = OmegaConf.load(config_path)
 
-transformer = WanTransformer3DModel.from_pretrained(
+transformer = load_wan_transformer(
+    WanTransformer3DModel,
     os.path.join(model_name, config['transformer_additional_kwargs'].get('transformer_subpath', 'transformer')),
-    transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs']),
+    additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs']),
     low_cpu_mem_usage=True,
     torch_dtype=weight_dtype,
 )

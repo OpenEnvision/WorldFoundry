@@ -1,5 +1,7 @@
 id: robocasa
 name: RoboCasa
+publisher: The University of Texas at Austin
+publisher_kind: university
 benchmark_kind:
 - vla
 - robot-manipulation
@@ -28,6 +30,9 @@ dataset:
   not_applicable: true
   reason: RoboCasa uses simulator assets and generated policy rollouts rather than a single public HF benchmark table.
 runner:
+  normalization:
+    dispatch: embodied
+    embodied_track: vla
   runner_target: worldfoundry.evaluation.tasks.contracts.external:RoboCasaContract
   verification_status: normalizer_only
   validation_command:

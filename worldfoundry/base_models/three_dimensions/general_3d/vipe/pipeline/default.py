@@ -37,6 +37,7 @@ from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.cameras imp
 from worldfoundry.studio.visualization.plugins.scene3d.projection import save_projection_video
 
 from . import AnnotationPipelineOutput, Pipeline
+from worldfoundry.base_models.three_dimensions.general_3d.vipe.adaptive_models import AdaptiveDepthModels
 from .processors import (
     AdaptiveDepthProcessor,
     GeoCalibIntrinsicsProcessor,
@@ -71,6 +72,12 @@ class DefaultAnnotationPipeline(Pipeline):
         self.camera_type = CameraType(self.init_cfg.camera_type)
         self._geocalib_model = None
         self._slam_pipeline = SLAMSystem(device=torch.device("cuda"), config=self.slam_cfg)
+        self._adaptive_depth_models: AdaptiveDepthModels | None = None
+
+    def set_output_path(self, path: str | Path) -> None:
+        """Point a reused pipeline at the next video's artifact directory."""
+        self.out_path = Path(path)
+        self.out_path.mkdir(exist_ok=True, parents=True)
 
     def _add_init_processors(self, video_stream: VideoStream) -> ProcessedVideoStream:
         """Helper function to add init processors.
@@ -132,7 +139,15 @@ class DefaultAnnotationPipeline(Pipeline):
             if depth_align_model.startswith("mvd_"):
                 post_processors.append(MultiviewDepthProcessor(slam_output, model=depth_align_model))
             else:
-                post_processors.append(AdaptiveDepthProcessor(slam_output, view_idx, depth_align_model))
+                processor = AdaptiveDepthProcessor(
+                    slam_output,
+                    view_idx,
+                    depth_align_model,
+                    shared_models=self._adaptive_depth_models,
+                    metric_depth=getattr(self._slam_pipeline, "metric_depth", None),
+                )
+                self._adaptive_depth_models = processor.shared_models()
+                post_processors.append(processor)
         return ProcessedVideoStream(video_stream, post_processors)
 
     def run(self, video_data: VideoStream | MultiviewVideoList) -> AnnotationPipelineOutput:

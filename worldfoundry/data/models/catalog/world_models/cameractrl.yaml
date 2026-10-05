@@ -18,6 +18,8 @@ modalities:
 - video-diffusion-plugin
 name: CameraCtrl
 official_sources:
+  paper: https://arxiv.org/abs/2404.02101
+  project_page: https://hehao13.github.io/projects-CameraCtrl/
   github:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
@@ -47,3 +49,23 @@ catalog_policy:
   open_source_rule: Only mark open_source when an official GitHub repository or official
     Hugging Face model page was confirmed. Do not infer checkpoint availability from
     papers, demos, or third-party mirrors.
+docs:
+  publisher: The Chinese University of Hong Kong / Shanghai AI Laboratory
+  publisher_kind: university
+  publisher_zh: 香港中文大学 / 上海人工智能实验室
+  overview: 'CameraCtrl pioneered plug-and-play camera control for text-to-video diffusion: it trains a camera encoder over Plücker embeddings so trajectories can steer generation without retraining the base model. In this catalog both integration and runner are verified — the in-tree synthesis backend follows the official trajectory text-to-video demo contract in the unified environment profile.'
+  overview_zh: CameraCtrl 开创了文生视频扩散的即插即用相机控制：基于 Plücker 嵌入训练相机编码器，让轨迹无需重训基座即可操控生成。本 catalog 中集成与 runner 均已验证——树内合成后端在统一环境档案中遵循官方轨迹文生视频 demo 契约。
+  architecture: Per the publication (arXiv 2404.02101), camera poses are encoded as Plücker embeddings and injected through a trainable camera encoder attached to a frozen video diffusion base (AnimateDiff in the official release). WorldFoundry vendors the runtime under synthesis/visual_generation/cameractrl/cameractrl_runtime; checkpoints stay in the normal hfd/ckpt cache.
+  architecture_zh: 按论文（arXiv 2404.02101），相机位姿编码为 Plücker 嵌入，通过可训练的相机编码器注入冻结的视频扩散基座（官方版基于 AnimateDiff）。WorldFoundry 将运行时内置于 synthesis/visual_generation/cameractrl/cameractrl_runtime；checkpoint 保存在常规 hfd/ckpt 缓存。
+  usage_notes: The runner follows the official demo trajectory contract — supply a camera trajectory file and a text prompt. Per-run artifact checks are tracked outside the catalog.
+  usage_notes_zh: runner 遵循官方 demo 轨迹契约——提供相机轨迹文件与文本提示词即可。每次运行的产物检查在 catalog 外跟踪。
+  limitations:
+  - 'Built over an AnimateDiff-era base: visual quality trails newer DiT video models.'
+  - Camera control fidelity depends on trajectories similar to the RealEstate10K training distribution.
+  limitations_zh:
+  - 基于 AnimateDiff 时代的基座：画质弱于较新的 DiT 视频模型。
+  - 相机控制保真度依赖与 RealEstate10K 训练分布相近的轨迹。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: The standard camera-trajectory adherence evaluation.
+    reason_zh: 相机轨迹贴合度的标准评测。

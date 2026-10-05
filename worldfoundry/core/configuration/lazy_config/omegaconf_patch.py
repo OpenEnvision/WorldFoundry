@@ -13,11 +13,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""LazyCall-aware OmegaConf ``to_object`` that leaves ``_target_`` nodes intact.
+
+OmegaConf's stock :func:`OmegaConf.to_object` converts every DictConfig
+into a native dict. That is wrong for WorldFoundry LazyCall trees: a
+node with ``_target_`` is a *deferred constructor*, not a finished
+mapping, and flattening it would prevent
+:func:`~worldfoundry.core.configuration.lazy_config.instantiate.instantiate`
+from finding the callable.
+
+:func:`to_object` therefore short-circuits on any DictConfig that
+contains ``_target_`` and otherwise delegates to OmegaConf with
+``SCMode.INSTANTIATE``. ``lazy_config/__init__`` can install this as a
+process-wide patch; :func:`instantiate` also calls it directly so
+structured-config conversion stays correct even without the monkey-patch.
+"""
+
 from typing import Any, Dict, List, Union
 
 from omegaconf import OmegaConf
 from omegaconf.base import DictKeyType, SCMode
 from omegaconf.dictconfig import DictConfig  # pragma: no cover
+
+# ──────────────────────────────────────────────────────────────────────────
+# LazyCall quarantine — a _target_ node must stay a DictConfig
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def to_object(cfg: Any) -> Union[Dict[DictKeyType, Any], List[Any], None, str, Any]:

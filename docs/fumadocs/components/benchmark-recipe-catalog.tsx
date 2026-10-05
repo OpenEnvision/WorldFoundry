@@ -8,6 +8,7 @@ import {
   benchmarkCatalogEntries,
   type BenchmarkCatalogItem,
 } from '@/lib/benchmark-catalog';
+import { getBenchmarkPageEntry } from '@/lib/benchmark-page-data';
 import { BenchmarkIdentityMark } from '@/components/benchmark-identity-mark';
 
 type Locale = 'en' | 'zh';
@@ -61,6 +62,10 @@ const copy = {
     pending: 'Pending',
     none: 'No benchmarks matched these filters.',
     more: 'Show more benchmarks',
+    axes: 'dimensions',
+    metricsCount: 'metrics',
+    noBoard: 'No official board',
+    boardIngested: 'Official results',
     categories: {
       'Embodied AI': 'Embodied AI',
       'Video Generation': 'Video Generation',
@@ -96,6 +101,10 @@ const copy = {
     pending: '待验证',
     none: '没有符合当前筛选条件的 benchmark。',
     more: '显示更多 benchmark',
+    axes: '个维度',
+    metricsCount: '项指标',
+    noBoard: '无官方榜',
+    boardIngested: '已收录成绩',
     categories: {
       'Embodied AI': '具身 AI',
       'Video Generation': '视频生成',
@@ -114,6 +123,7 @@ function statusGroup(entry: BenchmarkCatalogItem): StatusGroup {
 
 function includesQuery(entry: BenchmarkCatalogItem, query: string) {
   if (!query) return true;
+  const page = getBenchmarkPageEntry(entry.id);
   const haystack = [
     entry.id,
     entry.name,
@@ -127,6 +137,10 @@ function includesQuery(entry: BenchmarkCatalogItem, query: string) {
     ...entry.aliases,
     ...entry.domains,
     ...entry.metrics,
+    ...(page?.dimensions.flatMap((item) => [item.id, item.name, item.nameZh]) ?? []),
+    page?.data.summary,
+    page?.data.summaryZh,
+    page?.data.sizeLabel,
   ]
     .join(' ')
     .toLowerCase();
@@ -156,17 +170,8 @@ function runtimeLabel(entry: BenchmarkCatalogItem, locale: Locale) {
   return humanize(value);
 }
 
-function verificationLabel(entry: BenchmarkCatalogItem, locale: Locale) {
-  if (!entry.verificationStatus) return copy[locale].notRecorded;
-  if (entry.verificationStatus === 'pending') return copy[locale].pending;
-  if (entry.verificationStatus === 'normalizer_only') {
-    return locale === 'zh' ? '仅归一化' : 'Normalizer only';
-  }
-  return humanize(entry.verificationStatus);
-}
-
-function statusClass(group: StatusGroup) {
-  return group === 'normalizer' ? 'profile' : group;
+function rowFacts(entry: BenchmarkCatalogItem, locale: Locale, status: StatusGroup) {
+  return [runtimeLabel(entry, locale), copy[locale][status]].filter(Boolean).slice(0, 2);
 }
 
 export function BenchmarkRecipeCatalog({ locale = 'en' }: { locale?: Locale }) {
@@ -299,70 +304,46 @@ export function BenchmarkRecipeCatalog({ locale = 'en' }: { locale?: Locale }) {
         </div>
       </div>
 
-      <div className="wf-recipe-table wf-benchmark-table" role="table" aria-label="Benchmark recipes">
-        <div className="wf-recipe-table-head" role="row">
-          <span role="columnheader">{t.benchmark}</span>
-          <span role="columnheader">{t.metrics}</span>
-          <span role="columnheader">{t.status}</span>
-          <span role="columnheader">{t.runtime}</span>
-          <span role="columnheader">{t.verification}</span>
-          <span role="columnheader">{t.service}</span>
-          <span aria-hidden="true" />
-        </div>
-
+      <div className="wf-recipe-table wf-benchmark-table wf-recipe-list" role="list" aria-label="Benchmark recipes">
         {visibleResults.length > 0 ? (
-          <div role="rowgroup">
-            {visibleResults.map((entry, index) => {
-              const entryStatus = statusGroup(entry);
-              return (
-                <Link
-                  className="wf-recipe-row wf-benchmark-row"
-                  href={benchmarkHref(entry, locale)}
-                  role="row"
-                  key={entry.id}
-                  style={{ '--wf-row-index': Math.min(index, 12) } as CSSProperties}
-                >
-                  <span className="wf-recipe-row-model" role="cell">
-                    <BenchmarkIdentityMark
-                      id={entry.id}
-                      name={entry.name}
-                      category={entry.category}
-                      logoKey={entry.logoKey}
-                      size="medium"
-                    />
-                    <span className="wf-recipe-row-identity">
-                      <span>
-                        <strong>{entry.name}</strong>
-                        <em>{entry.id}</em>
+          visibleResults.map((entry, index) => {
+            const entryStatus = statusGroup(entry);
+            const facts = rowFacts(entry, locale, entryStatus);
+            return (
+              <Link
+                className="wf-recipe-row wf-benchmark-row"
+                href={benchmarkHref(entry, locale)}
+                role="listitem"
+                key={entry.id}
+                style={{ '--wf-row-index': Math.min(index, 12) } as CSSProperties}
+              >
+                <span className="wf-recipe-row-model">
+                  <BenchmarkIdentityMark
+                    id={entry.id}
+                    name={entry.name}
+                    category={entry.category}
+                    logoKey={entry.logoKey}
+                    size="medium"
+                  />
+                  <span className="wf-recipe-row-identity">
+                    <span>
+                      <strong>{entry.name}</strong>
+                      <em>{entry.id}</em>
+                    </span>
+                    <small>{locale === 'zh' ? entry.summaryZh : entry.summary}</small>
+                    {facts.length > 0 ? (
+                      <span className="wf-recipe-row-facts">
+                        {facts.map((fact) => (
+                          <span key={fact}>{fact}</span>
+                        ))}
                       </span>
-                      <small>{locale === 'zh' ? entry.summaryZh : entry.summary}</small>
-                    </span>
+                    ) : null}
                   </span>
-                  <span className="wf-recipe-row-tasks" role="cell">
-                    {entry.metrics.slice(0, 2).map((metric) => (
-                      <code key={metric}>{metric}</code>
-                    ))}
-                    {entry.metrics.length > 2 ? <small>+{entry.metrics.length - 2}</small> : null}
-                    {entry.metrics.length === 0 ? <code>—</code> : null}
-                  </span>
-                  <span className="wf-recipe-row-runtime" role="cell">
-                    <span className={`wf-recipe-status wf-recipe-status-${statusClass(entryStatus)}`}>
-                      {t[entryStatus]}
-                    </span>
-                    <small>{t.categories[entry.category as BenchmarkCategory]}</small>
-                  </span>
-                  <code role="cell" title={entry.runtimeKind || undefined}>
-                    {runtimeLabel(entry, locale)}
-                  </code>
-                  <code role="cell" title={entry.verificationStatus || undefined}>
-                    {verificationLabel(entry, locale)}
-                  </code>
-                  <code role="cell">{entry.requiresApi ? t.hosted : t.local}</code>
-                  <ArrowRight aria-hidden="true" role="cell" size={17} strokeWidth={1.5} />
-                </Link>
-              );
-            })}
-          </div>
+                </span>
+                <ArrowRight aria-hidden="true" size={17} strokeWidth={1.5} />
+              </Link>
+            );
+          })
         ) : (
           <p className="wf-recipe-empty">{t.none}</p>
         )}

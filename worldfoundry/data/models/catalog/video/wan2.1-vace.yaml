@@ -13,6 +13,8 @@ source:
   official_repo_url: https://github.com/Wan-Video/Wan2.1
   hf_repo_id: Wan-AI/Wan2.1-VACE-14B
 official_sources:
+  paper: https://arxiv.org/abs/2503.07598
+  project_page: https://pku-yuangroup.github.io/Helios-Page/
   github:
     url: https://github.com/Wan-Video/Wan2.1
   huggingface:
@@ -26,17 +28,35 @@ checkpoints:
 integration:
   status: integrated
   notes:
-  - Runtime no longer depends on external local Wan source checkouts.
-  - WorldFoundry route is complete; missing checkpoint/control assets are reported at runtime.
-  - The official demo reference images are resolved from worldfoundry/data/test_cases/wan instead of a missing vendored examples
-    directory.
+  - VACE is assembled from the canonical Wan network, UMT5 conditioner, VAE codec, scheduler, initializer, and native runner roles.
+  - Loading, placement, offload, sampling, media normalization, and artifact writing are owned by the shared WorldFoundry infra.
+  - Image references, source video/mask conditions, and precomputed VACE context tensors are supported without an official-runtime backend.
 runner_parity:
-  status: verified
+  status: integrated
   notes:
-  - 'The runner follows the official VACE-14B command shape: 8-rank torchrun, 1280x720, 81 frames, 50 sampling steps, DiT/T5
-    FSDP, Ulysses size 8, and in-tree girl/snake reference images.'
-  - Per-run visual QA and artifact checks are tracked outside the model catalog.
+  - The native defaults preserve the official VACE-14B 1280x720, 81-frame, 50-step, guidance-scale 5.0 inference shape.
+  - Full checkpoint visual parity remains a GPU artifact-validation task rather than a separate backend route.
 runtime_profile: runtime-profile:wan2.1-vace
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries expose WorldFoundry pipeline targets;
   metadata-only entries retain upstream provenance without runnable WorldFoundry backends.
+docs:
+  publisher: Alibaba (Tongyi Lab)
+  publisher_kind: company
+  publisher_zh: 阿里巴巴（通义实验室）
+  overview: 'Wan2.1 VACE is the all-in-one video creation and editing member of the Wan2.1 family: reference-image guidance, video-to-video editing, and mask/control-conditioned generation in one checkpoint. WorldFoundry assembles it from canonical Wan roles; image references, source video/mask conditions, and precomputed VACE context tensors are all supported without an official-runtime backend.'
+  overview_zh: Wan2.1 VACE 是 Wan2.1 系列中「创作与编辑一体」的成员：参考图引导、视频到视频编辑与掩码/控制条件生成集于一个 checkpoint。WorldFoundry 用规范化 Wan 角色装配它；图像参考、源视频/掩码条件与预计算的 VACE 上下文张量均受支持，无需官方运行时后端。
+  architecture: 'VACE adds a video-condition-and-editing context branch to the Wan2.1 DiT. Native defaults preserve the official VACE-14B inference shape: 1280x720, 81 frames, 50 steps, guidance scale 5.0. Both the 14B checkpoint and the 1.3B diffusers variant are recorded.'
+  architecture_zh: VACE 在 Wan2.1 DiT 上增加了视频条件与编辑上下文分支。原生默认保留官方 VACE-14B 推理形状：1280x720、81 帧、50 步、guidance scale 5.0。同时记录 14B checkpoint 与 1.3B diffusers variant。
+  usage_notes: 'Runner status is ''integrated'': loading, placement, offload, sampling, and artifact writing are owned by shared infra, and full checkpoint visual parity remains a GPU validation task. Prepare reference images or source video + mask pairs depending on the editing mode you want.'
+  usage_notes_zh: runner 状态为 integrated：加载、放置、offload、采样与产物写盘由共享基础设施承担，完整的 checkpoint 视觉一致性仍是一项 GPU 验证任务。按所需编辑模式准备参考图或「源视频 + 掩码」组合。
+  limitations:
+  - Full checkpoint visual parity is a pending GPU validation task.
+  - Editing quality depends on input preparation (masks, references) — garbage in, garbage out.
+  limitations_zh:
+  - 完整 checkpoint 视觉一致性是待完成的 GPU 验证任务。
+  - 编辑质量取决于输入准备（掩码、参考图）——输入差则输出差。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Baseline generation quality.
+    reason_zh: 基础生成质量。

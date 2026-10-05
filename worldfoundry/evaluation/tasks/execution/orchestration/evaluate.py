@@ -9,19 +9,44 @@ aggregates scores, compiles scorecard outputs, and integrates with registered me
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
+from uuid import uuid4
 
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, Metric
+from worldfoundry.evaluation.api import (
+    GenerationRequest,
+    GenerationResult,
+    Metric,
+)
+from worldfoundry.evaluation.tasks.catalog.benchmark_id import normalize_benchmark_id
 from worldfoundry.evaluation.tasks.execution.framework.in_tree_evaluator import BenchmarkZooInTreeEvaluator
-from worldfoundry.evaluation.tasks.execution.framework.in_tree_registry import target_benchmark_metrics
-from worldfoundry.evaluation.tasks.metrics.registry import BuiltinExistingResultsMetric, create_existing_results_metric
-from worldfoundry.evaluation.utils import build_version_context, read_json_or_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.scoring_registry import target_benchmark_metrics
+from worldfoundry.evaluation.tasks.metrics.registry import (
+    BuiltinExistingResultsMetric,
+    MetricRegistryError,
+    create_existing_results_metric,
+)
+from worldfoundry.evaluation.utils import (
+    build_version_context,
+    jsonable,
+    model_runner_fingerprint,
+    read_json_or_jsonl,
+    write_jsonl,
+)
 
 from .cache import cache_paths_from_stats, run_generation_with_cache
-from .contract import ContractRunRequest, execute_contract_run
-from .existing_results import ExistingResultsMetric, ExistingResultsRunRequest, execute_existing_results
+from .existing_results import ExistingResultsRunRequest, execute_existing_results
+from .run_session import (
+    coerce_generation_result,
+    prepare_generation,
+    prepare_run_output_dir,
+    resume_generation,
+    run_stage,
+    session_paths,
+    utcnow_iso,
+)
+from .scoring import metric_owners
 
 # Schema versions defining structure format of request/result payloads
 EVALUATE_RUN_REQUEST_SCHEMA_VERSION = "worldfoundry-evaluate-run-request"
@@ -60,11 +85,14 @@ class EvaluateRunRequest:
     model_parameters: Mapping[str, Any] | None = None
     model_runtime: Mapping[str, Any] | None = None
     model_config: Mapping[str, Any] | Any | None = None
+    runner_factory: Callable[[], Any] | None = None
     dataset_id: str | None = None
     run_id: str | None = None
     fail_on_sample_error: bool = False
     write_artifacts_index: bool = True
     cleanup_runner: bool = True
+    resume: bool = False
+    metric_batch_size: int = 32
     generation_cache_dir: str | Path | None = None
     generation_cache_mode: str = "off"
     generation_cache_namespace: str = "evaluate_model"
@@ -401,23 +429,17 @@ def _coerce_model_result(item: Any, request: GenerationRequest, model_id: str) -
     if isinstance(item, GenerationResult):
         if item.sample_id == request.sample_id:
             return item
-        # If result's sample_id doesn't match request's, prioritize request's but preserve result's metadata.
-        return GenerationResult(
-            sample_id=request.sample_id,
+        return replace(
+            coerce_generation_result(item, request.sample_id),
             request_id=item.request_id or request.request_id,
             model_id=item.model_id or model_id,
-            artifacts=item.artifacts,
-            status=item.status,
-            error=item.error,
-            timings=item.timings,
-            metadata={**dict(item.metadata), "source_sample_id": item.sample_id},
         )
     if isinstance(item, Mapping):
         row = dict(item)
         row.setdefault("sample_id", request.sample_id)
         row.setdefault("request_id", request.request_id)
         row.setdefault("model_id", model_id)
-        return GenerationResult.from_dict(row)
+        return coerce_generation_result(row, request.sample_id)
     return GenerationResult(
         sample_id=request.sample_id,
         request_id=request.request_id,
@@ -650,6 +672,100 @@ def _resolved_model_metadata(run_request: EvaluateRunRequest, resolved: Any) -> 
     return payload
 
 
+def _model_execution_identity(
+    run_request: EvaluateRunRequest,
+    *,
+    resolved_zoo_config: Any | None = None,
+) -> dict[str, Any]:
+    """Build the model-only identity used by deterministic generation caches.
+
+    Benchmark names, dataset labels, run IDs, and output directories deliberately
+    do not belong here: they do not change model output and would prevent reuse of
+    the same generation across benchmark scorers.  Conversely, variant, runner,
+    model parameters, and runtime settings must be present to avoid false hits.
+    """
+
+    if resolved_zoo_config is not None:
+        config = resolved_zoo_config.config
+        config_payload = config.to_dict() if callable(getattr(config, "to_dict", None)) else jsonable(config)
+        return {
+            "schema_version": "worldfoundry-model-execution-identity-v2",
+            "source": "model_zoo",
+            "model_id": str(resolved_zoo_config.model_id),
+            "runner_target": str(resolved_zoo_config.runner_target),
+            "variant_id": run_request.model_variant_id,
+            "config": jsonable(config_payload),
+        }
+
+    config_payload: Any
+    if run_request.model_config is not None:
+        to_dict = getattr(run_request.model_config, "to_dict", None)
+        config_payload = to_dict() if callable(to_dict) else run_request.model_config
+        config_payload = jsonable(config_payload)
+    else:
+        config_payload = {
+            "model_id": run_request.model_id,
+            "runner": run_request.model_runner,
+            "parameters": jsonable(run_request.model_parameters or {}),
+            "runtime": jsonable(run_request.model_runtime or {}),
+        }
+
+    runner_target = run_request.model_runner
+    if isinstance(config_payload, Mapping):
+        runner_target = str(config_payload.get("runner") or runner_target or "") or None
+    identity: dict[str, Any] = {
+        "schema_version": "worldfoundry-model-execution-identity-v2",
+        "source": "runner_target" if runner_target else "provided_runner",
+        "model_id": str(run_request.model_id or ""),
+        "runner_target": runner_target,
+        "variant_id": run_request.model_variant_id,
+        "config": config_payload,
+    }
+    if runner_target is None and run_request.runner is not None:
+        provided_runner = getattr(run_request.runner, "runner", run_request.runner)
+        identity["provided_runner"] = model_runner_fingerprint(provided_runner)
+    elif runner_target is None and run_request.runner_factory is not None:
+        # Callable references are stable module/qualname records; the closure is
+        # never invoked merely to compute a cache key.
+        identity["runner_factory"] = jsonable(run_request.runner_factory)
+    return identity
+
+
+def _declared_model_metadata(
+    run_request: EvaluateRunRequest,
+    identity: Mapping[str, Any],
+    *,
+    resolved_zoo_config: Any | None = None,
+) -> dict[str, Any]:
+    """Describe a lazily leased runner without instantiating or loading it."""
+
+    model_id = str(identity.get("model_id") or run_request.model_id or "configured-model")
+    payload = _mapping_or_default(
+        run_request.model,
+        {"model_type": "resolved", "model_name": model_id},
+    )
+    payload["model_id"] = model_id
+    payload.setdefault("model_name", model_id)
+    payload.setdefault("model_type", "resolved")
+    diagnostics = (
+        dict(resolved_zoo_config.diagnostics or {})
+        if resolved_zoo_config is not None
+        else {"lazy_runner_factory": True}
+    )
+    runner_target = identity.get("runner_target")
+    payload.setdefault(
+        "resolver",
+        {
+            "model_id": model_id,
+            "source": identity.get("source"),
+            "runner_target": runner_target,
+            "runner_class": runner_target,
+            "diagnostics": diagnostics,
+        },
+    )
+    return payload
+
+
 def _dataset_metadata(run_request: EvaluateRunRequest, sample_count: int) -> dict[str, Any]:
     """Constructs dataset context metadata (shards, splits, item counts) for execution records.
 
@@ -669,33 +785,6 @@ def _dataset_metadata(run_request: EvaluateRunRequest, sample_count: int) -> dic
         payload.setdefault("name", run_request.dataset_id)
     payload.setdefault("sample_count", sample_count)
     return payload
-
-
-class _MetricObjectsCallable:
-    """Wrapper encapsulating a suite of Metric objects into a single cohesive callable.
-
-    This class allows a list of individual `Metric` objects to be treated as a single
-    metric callable, suitable for contexts expecting a single metric computation function.
-    """
-    def __init__(self, metrics: Sequence[Metric]) -> None:
-        """Initializes the wrapper with a sequence of Metric objects.
-
-        Args:
-            metrics: A sequence of `Metric` objects to be wrapped.
-        """
-        self.metrics = tuple(metrics)
-
-    def __call__(self, request: GenerationRequest, result: GenerationResult) -> list[Any]:
-        """Computes sample results for all wrapped metrics.
-
-        Args:
-            request: The `GenerationRequest` for the sample.
-            result: The `GenerationResult` for the sample.
-
-        Returns:
-            A list of sample results, one for each wrapped metric.
-        """
-        return [metric.compute_sample(request, result) for metric in self.metrics]
 
 
 def _is_metric_object(value: Any) -> bool:
@@ -746,89 +835,34 @@ def _partition_metrics(metrics: Sequence[Any]) -> tuple[tuple[str, ...], tuple[M
     return tuple(metric_ids), tuple(metric_objects)
 
 
-def _ensure_single_metric_mode(
-    metrics: Sequence[Any],
-    required_artifacts: Sequence[str],
-) -> tuple[tuple[str, ...], tuple[Metric, ...]]:
-    """Enforces exclusive metric constraints, throwing if string IDs are mixed with raw Metric objects.
-
-    This ensures that a run uses either string-based metric IDs (which can implicitly resolve)
-    or explicitly provided `Metric` objects, but not both. Also, `required_artifacts` are
-    only supported with string-based metrics.
-
-    Args:
-        metrics: A sequence of metric identifiers or objects.
-        required_artifacts: A sequence of artifact names required by metrics.
-
-    Returns:
-        A tuple containing partitioned metric IDs and metric objects.
-
-    Raises:
-        TypeError: If metric IDs and objects are mixed, or if `required_artifacts` are
-                   used with explicit `Metric` objects.
-    """
-    metric_ids, metric_objects = _partition_metrics(metrics)
-    if metric_ids and metric_objects:
-        raise TypeError("evaluate metrics cannot mix built-in metric ids and Metric objects in one run")
-    if metric_objects and required_artifacts:
-        raise TypeError("required_artifacts are only supported with built-in metric ids")
-    return metric_ids, metric_objects
-
-
-def _metric_callable(
-    metrics: Sequence[Any],
-    required_artifacts: Sequence[str],
-    benchmark_id: str | None = None,
-) -> BuiltinExistingResultsMetric | ExistingResultsMetric | None:
-    """Resolves and returns the proper callable metric handler depending on config modes.
-
-    If explicit `Metric` objects are provided, it returns a `_MetricObjectsCallable`.
-    If string `metric_ids` are provided and match a known benchmark, it uses `BenchmarkZooInTreeEvaluator`.
-    Otherwise, it uses `create_existing_results_metric` for general built-in metrics.
-
-    Args:
-        metrics: A sequence of metric identifiers or objects.
-        required_artifacts: A sequence of artifact names required by metrics.
-        benchmark_id: An optional ID for the benchmark being evaluated.
-
-    Returns:
-        A callable metric handler (`BuiltinExistingResultsMetric`, `ExistingResultsMetric`,
-        or `_MetricObjectsCallable`), or None if no metrics are specified.
-    """
-    metric_ids, metric_objects = _ensure_single_metric_mode(metrics, required_artifacts)
-    if metric_objects:
-        return _MetricObjectsCallable(metric_objects)
-    if benchmark_id is not None and benchmark_id in target_benchmark_metrics():
-        target_metrics = target_benchmark_metrics()[benchmark_id]
-        if metric_ids and all(metric_id in target_metrics for metric_id in metric_ids):
-            # If benchmark ID is known and all requested metrics are in-tree for it, use the specialized evaluator.
-            return BenchmarkZooInTreeEvaluator(
-                benchmark_id,
-                metric_ids=metric_ids,
-                required_artifacts=required_artifacts or None,
-            )
-    # Default to generic existing results metric if no specific benchmark match or explicit objects.
-    return create_existing_results_metric(metrics=metric_ids, required_artifacts=required_artifacts)
-
-
-def _contract_metric_objects(metrics: Sequence[Any], required_artifacts: Sequence[str]) -> tuple[Metric, ...]:
-    """Ensures safe Metric object validation for Live model execution runs.
-
-    This function is specifically for 'model' mode when `ContractRunner` is used,
-    which requires explicit `Metric` objects rather than string IDs.
-
-    Args:
-        metrics: A sequence of metric identifiers or objects.
-        required_artifacts: A sequence of artifact names required by metrics.
-
-    Returns:
-        A tuple of `Metric` objects.
-
-    Raises:
-        TypeError: If any string metric IDs are present or `required_artifacts` are specified.
-    """
-    _, metric_objects = _ensure_single_metric_mode(metrics, required_artifacts)
-    return metric_objects
+def _resolve_metrics(
+    metrics: Sequence[Any], required_artifacts: Sequence[str], benchmark_id: str | None = None,
+) -> tuple[Any, ...]:
+    """Resolve ids once and retain metric objects with their aggregation methods."""
+    metric_ids, objects = _partition_metrics(metrics)
+    if not metric_ids and not required_artifacts:
+        return objects
+    lookup_id = normalize_benchmark_id(benchmark_id)
+    supported = target_benchmark_metrics().get(lookup_id, ())
+    in_tree_ids = tuple(key for key in metric_ids if key in supported)
+    offline_ids = tuple(key for key in metric_ids if key not in supported)
+    resolved = list(objects)
+    if in_tree_ids:
+        resolved.append(BenchmarkZooInTreeEvaluator(
+            lookup_id, metric_ids=in_tree_ids, required_artifacts=required_artifacts or None,
+        ))
+    if offline_ids or (required_artifacts and not in_tree_ids):
+        try:
+            evaluator = create_existing_results_metric(metrics=offline_ids, required_artifacts=required_artifacts)
+        except MetricRegistryError as exc:
+            if supported:
+                raise MetricRegistryError(
+                    f"{exc} Benchmark {benchmark_id!r} supports these in-tree metrics: {', '.join(supported)}"
+                ) from exc
+            raise
+        if evaluator is not None:
+            resolved.append(evaluator)
+    return tuple(resolved)
 
 
 def _benchmark_id_from_metadata(run_request: EvaluateRunRequest, benchmark: Mapping[str, Any]) -> str | None:
@@ -886,9 +920,7 @@ def _coerce_request(
     """
     if isinstance(request, EvaluateRunRequest):
         if kwargs:
-            payload = asdict(request)
-            payload.update(kwargs)
-            return EvaluateRunRequest(**payload)
+            return replace(request, **kwargs)
         return request
 
     payload = dict(kwargs)
@@ -959,6 +991,8 @@ def run_evaluate(
     if run_request.schema_version != EVALUATE_RUN_REQUEST_SCHEMA_VERSION:
         raise ValueError(f"unsupported EvaluateRunRequest schema_version: {run_request.schema_version}")
 
+    if run_request.metric_batch_size < 1:
+        raise ValueError("metric_batch_size must be positive")
     mode = _mode(run_request.mode)
     output_dir = Path(run_request.output_dir)
 
@@ -983,13 +1017,15 @@ def run_evaluate(
                 output_dir=output_dir,
                 requests=requests,
                 results=results_source,
-                metric=_metric_callable(run_request.metrics, run_request.required_artifacts, benchmark_id),
+                metrics=_resolve_metrics(run_request.metrics, run_request.required_artifacts, benchmark_id),
                 benchmark=benchmark,
                 model=_model_metadata(run_request),
                 dataset=_dataset_metadata(run_request, len(requests)),
                 run_id=run_request.run_id,
                 fail_on_sample_error=run_request.fail_on_sample_error,
                 write_artifacts_index=run_request.write_artifacts_index,
+                resume=run_request.resume,
+                metric_batch_size=run_request.metric_batch_size,
                 run_metadata=run_request.run_metadata,
             )
         )
@@ -997,108 +1033,151 @@ def run_evaluate(
 
     if mode == "model":
         # Handle 'model' mode: instantiate and run a model, then evaluate outputs.
-        from worldfoundry.evaluation.models import resolve_model_zoo_runner, resolve_world_model_runner
+        from worldfoundry.evaluation.models import resolve_model_zoo_config, resolve_world_model_runner
+        from worldfoundry.evaluation.models.runners.resolver import ResolvedWorldModel
 
+        output_dir = prepare_run_output_dir(output_dir)
         request_source = _load_optional_source(run_request.requests, run_request.requests_path)
         if request_source is None:
             raise TypeError("model mode requires requests, requests_path, or materialized task requests")
         requests = _coerce_generation_requests(request_source)
+        benchmark = _benchmark_metadata(run_request, mode)
+        metrics = _resolve_metrics(
+            run_request.metrics, run_request.required_artifacts, _benchmark_id_from_metadata(run_request, benchmark),
+        )
+        metric_owners(metrics)
         
-        # Resolve dynamic runner class dependencies based on configuration (explicit runner, model zoo, or global registry).
-        if run_request.runner is not None:
-            resolved = _resolved_from_runner(run_request.runner, run_request.model_id)
-        elif run_request.model_zoo_manifest_dir is not None:
+        resolved_zoo_config = None
+        if (
+            run_request.runner is None
+            and run_request.model_zoo_manifest_dir is not None
+        ):
             if not run_request.model_id:
                 raise TypeError("model-zoo model mode requires model_id")
-            resolved = resolve_model_zoo_runner(
+            # Catalog/config resolution is CPU-only and supplies the complete,
+            # stable cache identity. Runner construction remains lazy below.
+            resolved_zoo_config = resolve_model_zoo_config(
                 run_request.model_id,
                 manifest_dir=run_request.model_zoo_manifest_dir,
                 variant_id=run_request.model_variant_id,
                 parameters=run_request.model_parameters,
                 runtime=run_request.model_runtime,
             )
-        else:
-            resolved = resolve_world_model_runner(
-                run_request.model_id,
-                runner=run_request.model_runner,
-                parameters=run_request.model_parameters,
-                runtime=run_request.model_runtime,
-                config=run_request.model_config,
-            )
 
-        contract_metrics = _contract_metric_objects(run_request.metrics, run_request.required_artifacts)
-        benchmark = _benchmark_metadata(run_request, mode)
-        dataset = _dataset_metadata(run_request, len(requests))
-        model = _resolved_model_metadata(run_request, resolved)
-        
-        if contract_metrics:
-            # If explicit Metric objects are provided, use the ContractRunner for live metric computation.
-            delegate = execute_contract_run(
-                ContractRunRequest(
-                    output_dir=output_dir,
-                    requests=requests,
-                    runner=resolved.runner,
-                    metrics=contract_metrics,
-                    benchmark=benchmark,
-                    model=model,
-                    dataset=dataset,
-                    run_id=run_request.run_id,
-                    fail_on_sample_error=run_request.fail_on_sample_error,
-                    write_artifacts_index=run_request.write_artifacts_index,
-                    cleanup_runner=run_request.cleanup_runner,
-                    generation_cache_dir=run_request.generation_cache_dir,
-                    generation_cache_mode=run_request.generation_cache_mode,
-                    generation_cache_namespace=run_request.generation_cache_namespace,
+        resolved: Any | None = None
+
+        def coerce_resolved(value: Any) -> Any:
+            if isinstance(value, ResolvedWorldModel) or (
+                hasattr(value, "runner") and hasattr(value, "model_id")
+            ):
+                return value
+            return _resolved_from_runner(value, run_request.model_id)
+
+        def resolve_once() -> Any:
+            nonlocal resolved
+            if resolved is not None:
+                return resolved
+            if run_request.runner_factory is not None:
+                candidate = run_request.runner_factory()
+                if candidate is None:
+                    raise RuntimeError("runner_factory returned None")
+                resolved = coerce_resolved(candidate)
+            elif resolved_zoo_config is not None:
+                created = resolve_world_model_runner(config=resolved_zoo_config.config)
+                resolved = ResolvedWorldModel(
+                    model_id=created.model_id,
+                    runner=created.runner,
+                    source="model_zoo",
+                    runner_target=created.runner_target,
+                    diagnostics=resolved_zoo_config.diagnostics,
                 )
-            )
-            return _result_from_delegate(mode, "ResolvedWorldModelRunner+ContractRunner", delegate)
+            else:
+                resolved = resolve_world_model_runner(
+                    run_request.model_id,
+                    runner=run_request.model_runner,
+                    parameters=run_request.model_parameters,
+                    runtime=run_request.model_runtime,
+                    config=run_request.model_config,
+                )
+            return resolved
 
-        # If no explicit Metric objects, perform generation (with caching) and then evaluate offline.
+        # Configured runners are constructed only when generation is needed.
+        if run_request.runner is not None:
+            resolved = coerce_resolved(run_request.runner)
+
+        dataset = _dataset_metadata(run_request, len(requests))
+        execution_identity = _model_execution_identity(
+            run_request,
+            resolved_zoo_config=resolved_zoo_config,
+        )
+        model = (
+            _resolved_model_metadata(run_request, resolved)
+            if resolved is not None
+            else _declared_model_metadata(
+                run_request,
+                execution_identity,
+                resolved_zoo_config=resolved_zoo_config,
+            )
+        )
+        
         version_context = build_version_context(
             runner="evaluate_model_generation",
-            benchmark=benchmark,
-            model=model,
-            dataset=dataset,
-            model_runner=resolved.runner,
-            extra={"mode": "model"},
+            model=execution_identity,
+            # Request payloads already contain task/split/input/output details.
+            # Keeping benchmark and dataset labels out enables safe reuse of one
+            # generation by several independent benchmark scorers.
+            extra={"mode": "model", "cache_scope": "generation-v2"},
         )
-        try:
-            # Run generation using the resolved model runner, incorporating smart caching.
-            results, generation_cache_stats = run_generation_with_cache(
-                requests,
-                lambda rows: _generate_with_resolved_model(resolved, rows, cleanup=False),
-                cache_dir=run_request.generation_cache_dir,
-                cache_mode=run_request.generation_cache_mode,
-                namespace=run_request.generation_cache_namespace,
-                version_context=version_context,
-                artifact_base_dir=output_dir,
-                run_id=run_request.run_id,
-            )
-        finally:
-            # Ensure model runner cleanup happens even if generation fails.
-            if run_request.cleanup_runner:
-                cleanup_fn = getattr(resolved.runner, "cleanup", None)
-                if callable(cleanup_fn):
-                    cleanup_fn()
+        paths = session_paths(output_dir)
+        cached = resume_generation(paths, requests, execution_identity) if run_request.resume else {}
+        run_id = run_request.run_id or f"model-{uuid4().hex[:12]}"
+        generation_metadata = {
+            **dict(run_request.run_metadata or {}),
+            "generation_identity": execution_identity, "run_id": run_id, "started_at": utcnow_iso(),
+        }
+        with run_stage(paths, "generate", manifest={
+            **generation_metadata, "model": model, "benchmark": benchmark, "dataset": dataset,
+            "sample_count": len(requests),
+        }):
+            prepare_generation(paths, requests, cached)
+            try:
+                results, generation_cache_stats = run_generation_with_cache(
+                    [row for row in requests if row.sample_id not in cached],
+                    lambda rows: _generate_with_resolved_model(resolve_once(), rows, cleanup=False),
+                    cache_dir=run_request.generation_cache_dir,
+                    cache_mode=run_request.generation_cache_mode,
+                    namespace=run_request.generation_cache_namespace,
+                    version_context=version_context,
+                    artifact_base_dir=output_dir,
+                    run_id=run_id,
+                )
+            finally:
+                if run_request.cleanup_runner and resolved is not None:
+                    cleanup_fn = getattr(resolved.runner, "cleanup", None)
+                    if callable(cleanup_fn):
+                        cleanup_fn()
+            by_sample = {**cached, **{row.sample_id: row for row in results}}
+            results = [by_sample[row.sample_id] for row in requests]
+            write_jsonl(paths["results"], (row.to_dict() for row in results))
+        if resolved is not None:
+            model = _resolved_model_metadata(run_request, resolved)
         # After generation, delegate to the existing results runner for metric calculation and scorecard generation.
         delegate = execute_existing_results(
             ExistingResultsRunRequest(
                 output_dir=output_dir,
                 requests=requests,
                 results=results,
-                metric=_metric_callable(
-                    run_request.metrics,
-                    run_request.required_artifacts,
-                    _benchmark_id_from_metadata(run_request, benchmark),
-                ),
+                metrics=metrics,
                 benchmark=benchmark,
                 model=model,
                 dataset=dataset,
-                run_id=run_request.run_id,
+                run_id=run_id,
                 fail_on_sample_error=run_request.fail_on_sample_error,
                 write_artifacts_index=run_request.write_artifacts_index,
+                resume=run_request.resume,
+                metric_batch_size=run_request.metric_batch_size,
                 run_metadata={
-                    **dict(run_request.run_metadata or {}),
+                    **generation_metadata,
                     "generation_cache": generation_cache_stats.to_dict(),
                 },
                 cache_paths=cache_paths_from_stats(generation_cache_stats),

@@ -23,7 +23,7 @@ def load_videocrafter_components() -> VideoCrafterComponents:
         load_image_batch,
         load_model_checkpoint,
     )
-    from worldfoundry.base_models.diffusion_model.video.lvdm.utils import instantiate_from_config
+    from worldfoundry.core.model_loading.factory import instantiate_from_config
 
     return VideoCrafterComponents(
         batch_ddim_sampling=batch_ddim_sampling,

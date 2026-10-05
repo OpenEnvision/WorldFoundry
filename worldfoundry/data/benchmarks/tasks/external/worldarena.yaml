@@ -37,8 +37,7 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: worldarena
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldarena --mode contract 
-    --output-dir tmp/benchmark_zoo/benchmark_contract/worldarena --json
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldarena --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/worldarena --json
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldArenaContract
   official_runner_command: worldfoundry-eval zoo benchmark-run
   name: WorldArena
@@ -76,8 +75,7 @@ metadata:
   - generated_video
   evaluation_requirements:
   - Use WorldArena perceptual metrics across six sub-dimensions and three embodied task utility tracks.
-  - Compute video-quality metrics through the checked-in WorldArena runtime; embodied utility tracks require the
-    corresponding official task artifacts or normalized full-suite evidence.
+  - Compute video-quality metrics through the checked-in WorldArena runtime; embodied utility tracks require the corresponding official task artifacts or normalized full-suite evidence.
   requires:
   - In-tree WorldArena video-quality runtime under worldfoundry/evaluation/tasks/execution/runners/worldarena
   - WORLDFOUNDRY_WORLDARENA_ROOT optional override for caller-provided runtime assets
@@ -100,7 +98,7 @@ metadata:
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
-    surface: prepared_dataset_component_unverified_result_normalizer
+    surface: official_runner
     normalizer_verified: true
   artifact_layout:
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -167,9 +165,7 @@ metadata:
     - --json
     runtime:
       results_path_env: WORLDFOUNDRY_WORLDARENA_RESULTS_PATH
-    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldarena --mode 
-      official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> 
-      --output-dir <out> --json
+    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldarena --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
   validation_command:
   - python
   - worldfoundry/evaluation/tasks/execution/runners/worldarena/run_worldarena_official_runner.py
@@ -277,9 +273,7 @@ tasks:
       - action_planner_success
       - human_quality
       - ewm_score
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldarena --mode 
-        official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> 
-        --output-dir <out> --json
+      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldarena --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
       required_inputs:
       - official_results_path or official_results
       - generated_video artifacts for the official prompt/task suite

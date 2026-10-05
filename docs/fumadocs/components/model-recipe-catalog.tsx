@@ -6,6 +6,7 @@ import { type CSSProperties, useDeferredValue, useMemo, useState } from 'react';
 
 import { ModelIdentityMark } from '@/components/model-identity-mark';
 import { modelRecipeIndex } from '@/lib/model-recipe-index';
+import { formatCudaLabel } from '@/lib/runtime-labels';
 import type {
   ModelRecipeIndexEntry,
   ModelRecipeStatusGroup,
@@ -45,7 +46,6 @@ const copy = {
     tasks: 'Tasks',
     python: 'Python',
     cuda: 'CUDA',
-    checkpoint: 'Checkpoint',
     none: 'No recipes matched these filters.',
     more: 'Show more recipes',
   },
@@ -68,7 +68,6 @@ const copy = {
     tasks: '任务',
     python: 'Python',
     cuda: 'CUDA',
-    checkpoint: 'Checkpoint',
     none: '没有符合当前筛选条件的模型配方。',
     more: '显示更多模型配方',
   },
@@ -94,18 +93,20 @@ function recipeHref(recipe: ModelRecipeIndexEntry, locale: Locale) {
   return `${prefix}/docs/guides/supported-models/${recipe.id}`;
 }
 
-function runtimeLabel(recipe: ModelRecipeIndexEntry, locale: Locale) {
-  const t = copy[locale];
-  if (recipe.runtime.environmentKind === 'dedicated') return t.dedicated;
-  if (recipe.runtime.environmentKind === 'unified') return t.unified;
-  if (recipe.runtime.profileId) return locale === 'zh' ? '仅 Profile' : 'Profile only';
-  return t.unrecorded;
+function taskFactLabel(task: string) {
+  const spaced = task.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!spaced) return task;
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-function revisionLabel(recipe: ModelRecipeIndexEntry) {
-  if (!recipe.checkpoint) return '—';
-  if (recipe.checkpoint.revision) return recipe.checkpoint.revision.slice(0, 9);
-  return recipe.checkpoint.id;
+function recipeFacts(recipe: ModelRecipeIndexEntry, t: (typeof copy)[Locale]) {
+  const facts = [
+    recipe.tasks[0] ? taskFactLabel(recipe.tasks[0]) : '',
+    [recipe.runtime.python ? `${t.python} ${recipe.runtime.python}` : '', formatCudaLabel(recipe.runtime.cudaLabel)]
+      .filter(Boolean)
+      .join(' · '),
+  ].filter(Boolean);
+  return facts.slice(0, 2);
 }
 
 export function ModelRecipeCatalog({ locale = 'en' }: { locale?: Locale }) {
@@ -239,64 +240,45 @@ export function ModelRecipeCatalog({ locale = 'en' }: { locale?: Locale }) {
         </div>
       </div>
 
-      <div className="wf-recipe-table" role="table" aria-label="Model recipes">
-        <div className="wf-recipe-table-head" role="row">
-          <span role="columnheader">{t.model}</span>
-          <span role="columnheader">{t.tasks}</span>
-          <span role="columnheader">{t.runtime}</span>
-          <span role="columnheader">{t.python}</span>
-          <span role="columnheader">{t.cuda}</span>
-          <span role="columnheader">{t.checkpoint}</span>
-          <span aria-hidden="true" />
-        </div>
-
+      <div className="wf-recipe-table wf-model-table wf-recipe-list" role="list" aria-label="Model recipes">
         {visibleResults.length > 0 ? (
-          <div role="rowgroup">
-            {visibleResults.map((recipe, index) => (
-              <Link
-                className="wf-recipe-row"
-                href={recipeHref(recipe, locale)}
-                role="row"
-                key={recipe.id}
-                style={{ '--wf-row-index': Math.min(index, 12) } as CSSProperties}
-              >
-                <span className="wf-recipe-row-model" role="cell">
-                  <ModelIdentityMark
-                    id={recipe.id}
-                    name={recipe.name}
-                    provider={recipe.provider}
-                    category={recipe.category}
-                    size="medium"
-                  />
-                  <span className="wf-recipe-row-identity">
-                    <span>
-                      <strong>{recipe.name}</strong>
-                      <em>{recipe.provider}</em>
+          visibleResults.map((recipe, index) => {
+            const facts = recipeFacts(recipe, t);
+            return (
+            <Link
+              className="wf-recipe-row"
+              href={recipeHref(recipe, locale)}
+              role="listitem"
+              key={recipe.id}
+              style={{ '--wf-row-index': Math.min(index, 12) } as CSSProperties}
+            >
+              <span className="wf-recipe-row-model">
+                <ModelIdentityMark
+                  id={recipe.id}
+                  name={recipe.name}
+                  provider={recipe.provider}
+                  category={recipe.category}
+                  size="medium"
+                />
+                <span className="wf-recipe-row-identity">
+                  <span>
+                    <strong>{recipe.name}</strong>
+                    <em>{recipe.provider}</em>
+                  </span>
+                  <small>{recipe.summary}</small>
+                  {facts.length > 0 ? (
+                    <span className="wf-recipe-row-facts">
+                      {facts.map((fact) => (
+                        <span key={fact}>{fact}</span>
+                      ))}
                     </span>
-                    <small>{recipe.summary}</small>
-                  </span>
+                  ) : null}
                 </span>
-                <span className="wf-recipe-row-tasks" role="cell">
-                  {recipe.tasks.slice(0, 2).map((task) => (
-                    <code key={task}>{task}</code>
-                  ))}
-                  {recipe.tasks.length > 2 ? <small>+{recipe.tasks.length - 2}</small> : null}
-                </span>
-                <span className="wf-recipe-row-runtime" role="cell">
-                  <span className={`wf-recipe-status wf-recipe-status-${recipe.status.group}`}>
-                    {recipe.status.label}
-                  </span>
-                  <small>{runtimeLabel(recipe, locale)}</small>
-                </span>
-                <code role="cell">{recipe.runtime.python ?? '—'}</code>
-                <code role="cell">{recipe.runtime.cudaLabel?.replace('CUDA ', '') ?? '—'}</code>
-                <code className="wf-recipe-row-revision" role="cell" title={recipe.checkpoint?.id}>
-                  {revisionLabel(recipe)}
-                </code>
-                <ArrowRight aria-hidden="true" role="cell" size={17} strokeWidth={1.5} />
-              </Link>
-            ))}
-          </div>
+              </span>
+              <ArrowRight aria-hidden="true" size={17} strokeWidth={1.5} />
+            </Link>
+            );
+          })
         ) : (
           <p className="wf-recipe-empty">{t.none}</p>
         )}

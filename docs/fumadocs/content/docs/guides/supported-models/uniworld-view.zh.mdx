@@ -1,0 +1,46 @@
+---
+title: "UniWorld-View"
+description: "UniWorld-View 从单张图像或随手拍摄的单目视频生成相机可控的新视角视频。"
+modelId: "uniworld-view"
+pageSource: authored
+---
+
+**发表机构:** 北京大学元培研究组 · 高校
+image · video → video
+
+UniWorld-View 从单张图像或随手拍摄的单目视频生成相机可控的新视角视频。
+
+**目录状态:** 已集成
+
+## 上游来源
+
+- [项目主页](https://zhouhyocean.github.io/uniworld-view/)
+- [论文](https://arxiv.org/abs/2608.04701)
+- [GitHub](https://github.com/PKU-YuanGroup/UniWorld-View)
+- [Hugging Face](https://huggingface.co/Drexubery/UniView)
+- [源码](https://github.com/NIRVANALAN/STream3R)
+- [上游 README](https://github.com/PKU-YuanGroup/UniWorld-View#readme)
+- [上游 README](https://github.com/NIRVANALAN/STream3R#readme)
+
+<ModelCommandBuilder modelId="uniworld-view" locale="zh" />
+
+## 架构
+
+基于 Wan2.1-VACE-14B 的 UniView Transformer，结合几何估计和渲染后的相机控制。
+
+## 运行时契约
+
+使用固定版本的官方源码及 extern 下的 STream3R、独立的官方环境和本地权重。上游 CLI 使用 BLIP2 自动描述，不读取用户文本提示。
+
+将官方源码固定到 `660212c48bff7c91a2ea5c7d5f3785af581100e2`，初始化 `extern/STream3R`，并运行上游的 `checkpoints/download_hf.sh --stream3r`。此路线需要 **Diffusers 格式**的 Wan2.1-VACE-14B 基座，原生 `.pth` 版本不能替代。请使用上游 Python 3.10 / Torch 2.4.0 CUDA 12.4 环境及其依赖。如果源码或 Python 不在 WorldFoundry 默认缓存、conda 路径下，设置 `UNIWORLD_VIEW_REPO` 和 `UNIWORLD_VIEW_PYTHON`。
+
+Python 适配器为 `UniWorldViewPipeline.from_pretrained(device="cuda:0")`。单图路线传入 `images`；单目视频传入 `video` 和 `mode="dynamic_view"`。后者至少需要生成 13 帧，因为第二阶段会读取 10 帧参考画面。默认 `hybrid` 渲染器依赖 PyTorch3D；`render_method="warp"` 选择 BiSplat 路线。`plan_only=True` 可在不加载权重的情况下查看子进程命令。
+
+## 就绪状态与限制
+
+- 上游建议显存至少 60 GB。
+- 已对官方样例的指定配置完成真实权重推理，其他场景及相机角度精度尚未量化验证。
+- 默认保持输入宽高比时，实际输出尺寸可能不同于请求的高和宽。
+- 固定的上游版本未初始化动态视角路线的 STream3R，且单视角路线忽略请求的 FPS 和随机种子。WorldFoundry 入口在执行官方推理脚本前对这三处作了局部修复；相同种子的重复运行已逐帧核对。
+
+<ModelRelatedRecipes modelId="uniworld-view" locale="zh" />

@@ -6,6 +6,8 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -141,6 +143,108 @@ class PixelSplatRuntime:
                 return candidate.resolve()
         return DEFAULT_PIXELSPLAT_CKPT
 
+    @staticmethod
+    def _input_image_paths(images: Any, kwargs: Mapping[str, Any]) -> list[Path]:
+        value = images or kwargs.get("input_path") or kwargs.get("image_path")
+        if not value:
+            return []
+        values = [value] if isinstance(value, (str, Path)) else list(value)
+        suffixes = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+        paths: list[Path] = []
+        for item in values:
+            path = Path(str(item)).expanduser()
+            if path.is_dir():
+                paths.extend(
+                    candidate
+                    for candidate in sorted(path.iterdir())
+                    if candidate.is_file() and candidate.suffix.lower() in suffixes
+                )
+            elif path.is_file() and path.suffix.lower() in suffixes:
+                paths.append(path)
+        return paths
+
+    @staticmethod
+    def _stage_demo_re10k(image_paths: Sequence[Path]) -> tuple[Path, Path, list[str]]:
+        """Package sequential images as a minimal RE10K-style inference sample."""
+        if not image_paths:
+            raise ValueError("pixelSplat requires at least one input image")
+
+        import torch
+        from PIL import Image, ImageOps
+
+        selected = list(image_paths[:3])
+        while len(selected) < 3:
+            selected.append(selected[-1])
+
+        stage_root = Path(tempfile.mkdtemp(prefix="worldfoundry_pixelsplat_re10k_"))
+        test_root = stage_root / "test"
+        test_root.mkdir(parents=True)
+        scene = "worldfoundry-demo"
+
+        encoded_images = []
+        camera_rows = []
+        for index, path in enumerate(selected):
+            with Image.open(path) as image:
+                image = ImageOps.fit(
+                    image.convert("RGB"),
+                    (640, 360),
+                    method=Image.Resampling.LANCZOS,
+                )
+                buffer = BytesIO()
+                image.save(buffer, format="PNG")
+            encoded_images.append(
+                torch.frombuffer(buffer.getbuffer(), dtype=torch.uint8).clone()
+            )
+            # RE10K stores normalized intrinsics followed by a 3x4 world-to-camera
+            # matrix.  Sequential demo frames do not ship poses, so use a small,
+            # explicit linear baseline and record that fact in result metadata.
+            camera_rows.append(
+                [
+                    0.8,
+                    0.8 * 640.0 / 360.0,
+                    0.5,
+                    0.5,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    -0.05 * index,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                ]
+            )
+
+        chunk_name = "000000.torch"
+        torch.save(
+            [
+                {
+                    "key": scene,
+                    "cameras": torch.tensor(camera_rows, dtype=torch.float32),
+                    "images": encoded_images,
+                }
+            ],
+            test_root / chunk_name,
+        )
+        (test_root / "index.json").write_text(
+            json.dumps({scene: chunk_name}, indent=2) + "\n", encoding="utf-8"
+        )
+        evaluation_index = stage_root / "evaluation_index.json"
+        evaluation_index.write_text(
+            json.dumps(
+                {scene: {"context": [0, 1], "target": [2]}}, indent=2
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return stage_root, evaluation_index, [str(path) for path in selected]
+
     def _runtime_env(self) -> dict[str, str]:
         """Helper function to runtime env.
 
@@ -182,7 +286,7 @@ class PixelSplatRuntime:
         Returns:
             The return value.
         """
-        del prompt, images, fps
+        del prompt, fps
         if video is not None:
             raise ValueError("pixelSplat consumes posed image sequences, not input video.")
 
@@ -201,8 +305,21 @@ class PixelSplatRuntime:
         )
         metadata_path = metadata_path.expanduser().resolve()
 
-        index_path = Path(kwargs.get("index_path") or self.index_path).expanduser()
-        dataset_roots = kwargs.get("dataset_roots") or self.dataset_roots
+        input_images = self._input_image_paths(images, kwargs)
+        input_pose_mode = None
+        if input_images:
+            dataset_root, index_path, staged_images = self._stage_demo_re10k(input_images)
+            dataset_roots = [dataset_root]
+            input_pose_mode = "synthetic_linear_baseline"
+        else:
+            index_path = Path(kwargs.get("index_path") or self.index_path).expanduser()
+            dataset_roots = kwargs.get("dataset_roots") or self.dataset_roots
+            staged_images = []
+            if not index_path.is_file():
+                raise FileNotFoundError(
+                    "pixelSplat demo index is missing and no input images were provided: "
+                    f"{index_path}"
+                )
         overrides = [
             f"+experiment={kwargs.get('experiment') or self.experiment}",
             "dataset/view_sampler=evaluation",
@@ -238,6 +355,8 @@ class PixelSplatRuntime:
             "checkpoint_path": str(checkpoint_path),
             "index_path": str(index_path),
             "dataset_roots": [str(Path(root).expanduser()) for root in dataset_roots],
+            "input_images": staged_images,
+            "input_pose_mode": input_pose_mode,
             "command": command,
         }
         metadata_path.write_text(

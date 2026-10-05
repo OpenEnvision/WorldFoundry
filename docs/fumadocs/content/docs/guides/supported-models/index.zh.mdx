@@ -5,19 +5,60 @@ description: 选择模型，检查运行时，并复制与你的机器匹配的�
 
 <ModelRecipeCatalog locale="zh" />
 
-## 每个配方记录什么
+## 如何读懂就绪度
 
-详情页直接由仓库 manifest 生成，而不是人工维护一张宣传表。每个配方会把下面几类声明分开呈现：
+每个模型都有一个就绪度徽章。徽章由相互独立的 manifest 记录计算得出，缺失的证据永远不会被四舍五入成更强的声明。
 
-| 记录 | 可以确认什么 |
-| --- | --- |
-| Catalog | 稳定 model ID、任务、官方来源、别名和集成状态。 |
-| Runtime profile | 输入契约、artifact 契约、backend stage 和运行时就绪状态。 |
-| Environment | Python、CUDA tier、固定依赖、验证 import，以及独立/统一环境路由。 |
-| Pipeline binding | WorldFoundry 使用的 runner 与具体 pipeline target。 |
-| Evidence | 原生 demo 与 WorldFoundry runner 的 parity；只有 catalog 记录并不代表 GPU 已验证。 |
+- **Runner verified** — 至少一条路径已记录 WorldFoundry runner parity 产物。请选择证据对应的 variant 和配置。
+- **Integrated** — 已绑定可运行 Pipeline，但端到端 GPU parity 仍在验证。可以运行；在 parity 记录之前，输出应视为未验证。
+- **Runtime ported** — 运行时代码已在仓库中，路径还在接线。检查 manifest；运行可能需要手动步骤。
+- **Profile only** — 只记录了 runtime profile，没有绑定 Pipeline。页面可用于溯源与规划；不会显示运行命令。
+- **Planned** — 条目只记录了意向与上游来源。可以跟踪；目前没有可运行内容。
+- **Blocked** — 已记录的 blocker（许可、权重、上游）阻止了集成。阅读 manifest 备注了解具体 blocker。
 
-缺失值会明确显示为 **未记录**。没有 runtime 或 evidence 记录时，WorldFoundry 不会把 catalog 条目升级成更强的“已支持”声明。
+## 如何选择模型
+
+1. **按家族和任务过滤。** 使用分类标签（视频、世界模型、3D 与 4D、具身智能、托管 API）和搜索框——搜索会匹配模型名、别名、提供方和任务 id。
+2. **优先选择 verified 或 integrated 条目。** 这些条目已绑定 Pipeline；其余条目只是参考资料。
+3. **检查运行时信息。** 独立环境需要单独安装；统一环境的模型共享一个 conda 环境。Python 与 CUDA 可以在安装前告诉你驱动栈是否匹配。
+4. **打开模型页面。** 每个页面都会解释模型是什么、来自哪里、输入/输出契约、精确的环境、带固定 revision 的权重仓库，以及为所选 variant 生成可复制运行命令的命令构建器。
+
+## 每个模型页面包含什么
+
+模型页面由自动生成的运行时记录与模型专属文章组成。`docs/fumadocs/scripts/generate-model-recipes.py` 刷新 recipe 数据和标记为 `pageSource: generated` 的页面；手写文章单独维护。每个页面会把下面几类声明分开呈现：
+
+<RecipeRecords items={[
+  {
+    term: 'Catalog',
+    detail: '稳定 model ID、任务、官方来源（论文、项目、代码、权重）、别名和集成状态。',
+  },
+  {
+    term: '发表机构',
+    detail: '正式发表机构（企业优先，其次大学或实验室）及其类型。GitHub 账号永远不会被当作品牌展示；若仓库未记录正式机构，页面会明确说明。',
+  },
+  {
+    term: 'Runtime profile',
+    detail: '输入契约、artifact 契约、backend stage 和运行时就绪状态。',
+  },
+  {
+    term: 'Environment',
+    detail: 'Python、CUDA tier、固定依赖、验证 import，以及独立/统一环境路由。',
+  },
+  {
+    term: 'Pipeline binding',
+    detail: 'WorldFoundry 使用的 runner 与每个 variant 的具体 pipeline target。',
+  },
+  {
+    term: 'Benchmarks',
+    detail: 'Manifest 推荐或其证据记录中提到的评测，链接到 Benchmark Hub。',
+  },
+  {
+    term: 'Evidence',
+    detail: '原生 demo 与 WorldFoundry runner 的 parity；只有 catalog 记录并不代表 GPU 已验证。',
+  },
+]} />
+
+缺失值会明确显示为**未记录**。Catalog manifest 可以携带人工撰写的双语 `docs:` 块，记录概述、架构、发表机构与推荐评测；没有此块的条目使用已有 catalog 和 runtime 元数据。使用说明与 blocker 写在每个模型页的**运行时契约**中。Catalog tasks 描述模型能力；命令构建器使用 CLI 实际接受的 task-profile ID 和参数。验证记录只适用于所注明的路径与配置。
 
 ## 常用命令
 
@@ -36,6 +77,17 @@ worldfoundry-eval zoo model-download \
 
 # 为一个 runtime profile 解析并安装环境 manifest。
 bash scripts/setup/model_env_install.sh --model <model-id>
+
+# 为一个 runtime profile 下载声明的 checkpoint。
+bash scripts/inference/prepare_model_infer.sh <model-id> --download
+
+# 运行一个已记录的 task profile（每个模型页面会生成精确的参数）。
+worldfoundry-eval run <model-id> --pipeline.task-profile <task> --json
 ```
 
-完整的 request 文件与 artifact 流程见[运行推理](/zh/docs/guides/inference)；环境路由策略见[环境参考](/zh/docs/reference/environments)。
+## 在文档中的位置
+
+- [运行推理](/zh/docs/guides/inference)——选定模型后完整的 request 文件与 artifact 流程。
+- [环境参考](/zh/docs/reference/environments)——统一 vs. 独立环境路由的决策方式。
+- [评测](/zh/docs/evaluation)与 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)——为模型输出打分；模型页面会链接到其 manifest 推荐或提及的评测。
+- [添加模型](/zh/docs/guides/add-model)——如何编写新的 catalog manifest（及其可选 `docs:` 块）。

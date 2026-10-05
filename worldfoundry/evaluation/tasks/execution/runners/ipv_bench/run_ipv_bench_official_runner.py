@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path, SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
 from worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_metrics import (
     METRIC_ORDER,
     METRIC_SPECS,
@@ -31,8 +32,6 @@ from worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_runtime
 )
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
 
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -67,9 +66,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def _metric_rows(
@@ -214,8 +210,8 @@ def normalize_ipv_bench_results(
 ) -> dict[str, Any]:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    generated_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
-    official_results_path = args.official_results_path or _env_path("WORLDFOUNDRY_IPV_BENCH_RESULTS_PATH")
+    generated_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    official_results_path = args.official_results_path or resolve_env_path("WORLDFOUNDRY_IPV_BENCH_RESULTS_PATH")
     if official_results_path is None:
         repo_root = args.ipv_bench_root or resolve_ipv_bench_root()
         discovered = discover_official_results([output_dir, repo_root] if repo_root else [output_dir])
@@ -296,7 +292,7 @@ def normalize_ipv_bench_results(
 def run_official_ipv_bench(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    generated_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
     runtime_summary = run_ipv_bench_evaluator(
         generated_artifact_dir=Path(generated_dir) if generated_dir is not None else None,
         output_dir=output_dir,

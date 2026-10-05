@@ -4,10 +4,10 @@ catalog_scope: world-model/interactive starred models
 catalog_policy:
   checkpoint_rule: Use the official nvidia/Cosmos3-Nano and nvidia/Cosmos3-Super Diffusers repositories.
     Catalog loading never downloads weights.
-  integration_rule: Cosmos3 inference imports through worldfoundry.base_models and uses the pinned
-    in-tree Diffusers pipeline/model definitions.
-  open_source_rule: Model provenance comes from NVIDIA/cosmos; vendored inference-code provenance
-    is recorded in base_models/diffusion_model/video/cosmos3/UPSTREAM.txt.
+  integration_rule: Cosmos3 inference is assembled from the canonical native diffusion roles;
+    official safetensors are loaded directly without a framework backend.
+  open_source_rule: Model provenance comes from NVIDIA/cosmos and is recorded beside the native
+    checkpoint-shaped transformer implementation.
 checkpoints:
 - nvidia/Cosmos3-Nano
 - nvidia/Cosmos3-Super
@@ -15,24 +15,17 @@ family: NVIDIA Cosmos
 id: cosmos3
 integration:
   notes:
-  - The current official Cosmos3 Diffusers pipeline and transformer are vendored for local inference.
-    Transformers reasoner and vLLM/vLLM-Omni serving shims are intentionally not vendored.
-  - The official checkpoint repositories already contain Diffusers model_index/component layouts;
-    no checkpoint conversion is required.
-  - Real Workspace runs completed on the exact pinned Nano revision for T2I, T2V, I2V,
-    V2V, synchronized video/audio, and all three independent official-default action profiles.
-  - An exact-revision Cosmos3-Super checkpoint completed a real four-A100 Workspace T2I
-    smoke through the safe decoder-layer-only balanced device map.
-  - The dedicated Cosmos3 environment passed declared imports, system and bundled FFmpeg
-    checks, Workspace discovery, and real exact-revision Nano T2I, synchronized-sound,
-    policy, forward-dynamics, and inverse-dynamics runs.
+  - Cosmos3 uses the shared loader, joint-modality runner, core attention, native Karras
+    flow-UniPC scheduler, shared Wan VAE38, and an inference-only AVAE sound decoder.
+  - Nano structural checks match 814 transformer, 196 VAE, and 182 AVAE checkpoint tensors.
+    The 35-step schedule and solver trajectory match the official scheduler numerically.
+  - The previous backend runtime's Workspace evidence is retained as historical context only;
+    end-to-end GPU output parity must be rerun for this native path.
   - Current-revision evidence requires the exact variant SHA. The prepare script emits a structured
     checkpoint report and an explicit pinned snapshot model-ref so an older local directory is not
     silently described as current.
-  - The exact Guardrail and Qwen3Guard revisions passed offline GPU construction, text/video
-    checks, and a safety-enabled 20-step Nano Workspace T2I run. Full-resolution official-output
-    parity and Super sound/action coverage remain pending; unapproved accounts still receive the
-    runtime's early actionable authorization error.
+  - Guardrails and reasoner/serving stacks are orchestration extensions, not dependencies of
+    this infer-only model recipe.
   status: integrated
 license: other:openmdw-1.1
 modalities:
@@ -46,6 +39,8 @@ modalities:
 - world-generation
 name: Cosmos3
 official_sources:
+  paper: https://arxiv.org/abs/2606.02800
+  project_page: https://research.nvidia.com/labs/cosmos-lab/cosmos3/
   github:
     confirmed_by: official NVIDIA Cosmos repository
     confirmed_ref: aefdf852c16237039785d84ab3327167cb0ec07f
@@ -67,7 +62,7 @@ pipeline_binding: cosmos3
 runtime_profile: runtime-profile:cosmos3
 runner_parity:
   blocked_reasons:
-  - Current-revision Workspace artifacts exist, but official-output/full-resolution parity is not yet validated.
+  - Native end-to-end GPU output parity and full-resolution validation remain pending.
   status: pending
 starred: true
 tasks:
@@ -88,16 +83,15 @@ variants:
     requires_auth: false
     revision: 411f42a8fdfb8c5b2583cb8786e0938f49796eaa
   demo_parity:
-    status: workspace_smoke_passed
+    status: structural_validation_passed
   id: cosmos3-nano
   integration_status: integrated
   pipeline_binding: cosmos3-nano
   provider: official_repo
   runner_parity:
     blocked_reasons:
-    - Exact-revision low-resolution Workspace T2I/T2V/I2V/V2V, synchronized-audio, all three
-      independent official-default action-profile smokes, and a safety-enabled T2I smoke passed;
-      official-output/full-resolution parity is still required.
+    - Transformer/VAE/AVAE checkpoint structure and native UniPC numerics pass; native
+      end-to-end GPU output parity and full-resolution validation remain pending.
     status: pending
   runtime_profile: cosmos3-nano
   task: world-generation
@@ -109,16 +103,38 @@ variants:
     requires_auth: false
     revision: e0262be9d8f7586bc24c069a2aed2b665bdff266
   demo_parity:
-    status: workspace_smoke_passed
+    status: pending_native_gpu
   id: cosmos3-super
   integration_status: integrated
   pipeline_binding: cosmos3-super
   provider: official_repo
   runner_parity:
     blocked_reasons:
-    - Exact-revision low-resolution four-A100 Workspace T2I smoke passed, and the shared Guardrail
-      runtime passed an offline GPU and Nano Workspace safety smoke; official-output/full-resolution
-      parity plus Super sound/action coverage are still required.
+    - The native Super recipe is registered; multi-GPU visual, sound, action, and full-resolution
+      output parity remain pending.
     status: pending
   runtime_profile: cosmos3-super
   task: world-generation
+docs:
+  publisher: NVIDIA
+  publisher_kind: company
+  publisher_zh: 英伟达（NVIDIA）
+  overview: 'Cosmos3 is the newest, broadest Cosmos generation recorded here: one joint-modality model covering text-to-image/video, image/video-to-video, synchronized sound, and structured action inference (policy, forward and inverse dynamics), in Nano and Super variants. In this catalog it runs through the shared loader, joint-modality runner, native Karras flow-UniPC scheduler, shared Wan VAE38, and an inference-only AVAE sound decoder.'
+  overview_zh: Cosmos3 是此处记录的最新、覆盖面最广的 Cosmos 世代：单一联合模态模型覆盖文生图/视频、图/视频到视频、同步声音，以及结构化动作推断（策略、正向与逆向动力学），含 Nano 与 Super 两个 variant。本 catalog 中它经共享加载器、联合模态 runner、原生 Karras flow-UniPC 调度器、共享 Wan VAE38 与仅推理的 AVAE 声音解码器运行。
+  architecture: Nano structural checks match 814 transformer, 196 VAE, and 182 AVAE checkpoint tensors, and the 35-step schedule matches the official scheduler numerically. Guardrails and reasoner/serving stacks are orchestration extensions, intentionally outside this infer-only recipe.
+  architecture_zh: Nano 结构检查匹配 814 个 transformer、196 个 VAE 与 182 个 AVAE checkpoint 张量， 35 步调度与官方调度器数值一致。Guardrail 与 reasoner/serving 栈是编排扩展，有意置于本仅推理配方之外。
+  usage_notes: Base selection routes to Nano; pick the cosmos3-super variant for the Super checkpoint. Current-revision evidence requires the exact variant SHA — the prepare script emits a structured checkpoint report and pinned snapshot model-ref so an older local directory is not silently described as current. End-to-end GPU output parity must be rerun for this native path.
+  usage_notes_zh: 基础选择路由到 Nano；需要 Super checkpoint 请选 cosmos3-super variant。当前版本证据要求确切的 variant SHA——准备脚本输出结构化 checkpoint 报告与固定 snapshot model-ref，避免把旧的本地目录误当作当前版本。端到端 GPU 输出一致性需要在此原生路径上重跑。
+  limitations:
+  - End-to-end GPU output parity is pending for the native path; earlier backend evidence is historical only.
+  - Reasoner, training, and vLLM serving workflows are outside this infer-only integration.
+  limitations_zh:
+  - 原生路径的端到端 GPU 输出一致性待验证；早期后端证据仅具历史意义。
+  - Reasoner、训练与 vLLM serving 工作流不在本仅推理集成范围内。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: World-generation quality across conditions.
+    reason_zh: 各条件下世界生成质量评测。
+  - id: physics-iq
+    reason: Physical plausibility of generated world video.
+    reason_zh: 生成世界视频的物理合理性。

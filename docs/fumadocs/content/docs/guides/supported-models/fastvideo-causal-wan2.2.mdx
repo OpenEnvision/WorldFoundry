@@ -1,0 +1,39 @@
+---
+title: "FastVideo CausalWan2.2"
+description: "NVIDIA / FastVideo eight-step causal Wan2.2 image-to-video: 832×480 area budget, 81 requested frames, guidance 1, 16 fps."
+modelId: "fastvideo-causal-wan2.2"
+pageSource: authored
+---
+
+FastVideo CausalWan2.2 is an **eight-step causal** Wan2.2 rollout: video comes out in **three-latent-frame** blocks while the stack routes between high- and low-noise experts. WorldFoundry keeps expert KV / cross-attention caches independent and applies **self-forcing re-noise** on a fixed shifted flow schedule. Native roles cover both Wan2.2 experts, T5, VAE, and cache traversal. Pipeline: `FastVideoCausalWanPipeline`. Alias `fastvideo-causal-wan` resolves here. Related HF id: `FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers`.
+
+<ModelPaperFigures modelId="fastvideo-causal-wan2.2" locale="en" />
+
+Paper: [arXiv 2606.03159](https://arxiv.org/abs/2606.03159). Project: [nvidia.github.io/flashdreams](https://nvidia.github.io/flashdreams/main/index.html). Code: [NVIDIA/FlashDreams](https://github.com/NVIDIA/FlashDreams). Preview weights: `FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers` (**Apache-2.0**). CPU contract tests and checkpoint-backed GPU inference pass.
+
+<ModelCommandBuilder modelId="fastvideo-causal-wan2.2" locale="en" />
+
+## What it is for
+
+Causal Wan2.2 fast video. Not the full Wan2.2 family card.
+
+Launch `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b` and an input image.
+
+## Runtime contract
+
+Required: `prompt` and `image`; artifacts: `fastvideo-causal-wan2.2-i2v-14b.mp4`.
+
+| Knob | Default |
+| --- | --- |
+| Size | **832×480 area budget**; 16-pixel-aligned canvas follows the source aspect ratio (1280×704 → 848×464) |
+| Frames | **81** from WorldFoundry; FastVideo's current official runner emits **73** for the same 81-frame request |
+| Steps | **8** |
+| Guidance | **1** |
+| FPS | **16** |
+| Block | **3** latent frames |
+
+## Run in WorldFoundry
+
+Status: **checkpoint-backed 81-frame inference verified** at 848×464 on an H100. Run `worldfoundry-eval run fastvideo-causal-wan2.2-i2v-14b` with an image. The matching official FastVideo request produced 73 frames because its denoiser drops the final two latent frames. The shared frames have matching composition and forward motion; pixel-level parity remains open because the implementations use different random generators and latent precision. License: Apache-2.0. Catalog VRAM is unset.
+
+<ModelRelatedRecipes modelId="fastvideo-causal-wan2.2" locale="en" />

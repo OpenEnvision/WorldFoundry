@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ...synthesis.visual_generation.memory.video import VideoArtifactMemory
 from ..pipeline_utils import PipelineABC
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 from ...operators.runtime_video_operator import RuntimeVideoOperator
 from ...synthesis.visual_generation.ltx2.ltx2_3_i2v_synthesis import LTX23I2VSynthesis
@@ -14,6 +14,7 @@ class LTX23I2VPipeline(PipelineABC):
     """Independent WorldFoundry pipeline for LTX23I2V."""
 
     SYNTHESIS_CLS = LTX23I2VSynthesis
+    MODEL_ID = "ltx-2.3-i2v"
 
     def __init__(
         self,
@@ -24,10 +25,10 @@ class LTX23I2VPipeline(PipelineABC):
     ) -> None:
         """Initialize the pipeline and configure runtime components."""
         self.synthesis_model = synthesis_model
-        self.generation_type = getattr(synthesis_model, "generation_type", "i2v")
+        self.generation_type = getattr(synthesis_model, "generation_type", self.MODEL_ID.rsplit("-", 1)[-1])
         self.model_name = getattr(synthesis_model, "model_name", None)
         self.operator = operator or RuntimeVideoOperator(generation_type=self.generation_type)
-        self.memory_module = memory_module or VideoArtifactMemory(model_id='ltx2-3-i2v')
+        self.memory_module = memory_module or VideoArtifactMemory(model_id=self.MODEL_ID)
         self.device = device
 
     @classmethod
@@ -40,8 +41,17 @@ class LTX23I2VPipeline(PipelineABC):
         **kwargs,
     ) -> "LTX23I2VPipeline":
         """Load the pipeline from pretrained checkpoints and configurations."""
+        model_options: Dict[str, Any] = {}
+        if isinstance(model_path, Mapping):
+            model_options.update(model_path)
+            model_path = (
+                model_options.pop("model_path", None)
+                or model_options.pop("checkpoint_path", None)
+                or model_options.pop("pretrained_model_path", None)
+            )
         required_components = dict(required_components or {})
         generator_overrides = dict(required_components)
+        generator_overrides.update(model_options)
         generator_overrides.update(kwargs)
 
         synthesis_model = cls.SYNTHESIS_CLS.from_pretrained(
@@ -53,7 +63,7 @@ class LTX23I2VPipeline(PipelineABC):
         return cls(
             operator=RuntimeVideoOperator(generation_type=synthesis_model.generation_type),
             synthesis_model=synthesis_model,
-            memory_module=VideoArtifactMemory(model_id='ltx2-3-i2v'),
+            memory_module=VideoArtifactMemory(model_id=cls.MODEL_ID),
             device=device,
         )
 
@@ -65,10 +75,16 @@ class LTX23I2VPipeline(PipelineABC):
             interaction = self.operator.process_interaction()
         finally:
             self.operator.delete_last_interaction()
-        perception = self.operator.process_perception(images=images)
+        if self.generation_type == "t2v":
+            if images is not None:
+                raise ValueError("LTX text-to-video inference does not accept images")
+            processed_images = None
+        else:
+            perception = self.operator.process_perception(images=images)
+            processed_images = perception["images"]
         return {
             "prompt": interaction["processed_prompt"],
-            "images": perception["images"],
+            "images": processed_images,
         }
 
     def __call__(

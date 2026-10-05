@@ -1,0 +1,52 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: A18
+track: calibration
+title_en: Spinning Top Settling
+scene_grounding:
+- 'Initial state must match: A spinning top is positioned in a circular tray divided
+  into four equal colored sectors.'
+- Apparatus geometry in the opening frames must match the source image.
+- The circular tray sectors and color groups must match the source image; color counts
+  and sizes must not change mid-run.
+action_execution:
+- 'Required action: Spin the spinning top once.'
+- Action must happen exactly once in the expected direction / region.
+target_requirements:
+- The spinning top, tray, colored sectors, and sector boundaries must remain visible
+  enough to audit which sector contains the top's contact point/center.
+- A trusted sector outcome requires continuous top motion from the spin action to
+  the committed readable sector relation; a top appearing in a sector without visible
+  motion is a trajectory or continuity failure.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+apparatus_stability:
+- Static apparatus (tray, colored sectors, sector boundaries, rim, and table geometry)
+  must not drift, resize, or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-readout state/region change: subject moves between label-defining states or regions after committing to one sector.'
+- 'Post-result side change: label-defining sector relation changes after the first
+  committed readable post-action sector relation.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+- After the top's sector relation is first committed/readable, it must not move to
+  a different sector. If the top continues normal visible crossing between sectors,
+  the earlier frame was not yet a committed readout.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Spinning Top Settling.'

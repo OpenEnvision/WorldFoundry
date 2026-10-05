@@ -1,0 +1,56 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: A-12
+track: calibration
+title_en: Y-track with visual cue
+scene_grounding:
+- 'Initial state must match: A Y-shaped split apparatus is visible with a fixed visual
+  cue/sign on one side.'
+- Apparatus geometry in the opening frames must match the source image.
+action_execution:
+- 'Required action: Let one small ball enter the inlet and pass through the split
+  once.'
+- Action must happen exactly once in the expected direction / region.
+target_requirements:
+- Scene-defining target, subject, and readout evidence must remain visible throughout the action.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+- The ball / puck must not re-appear at an inconsistent location after exiting the
+  apparatus.
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+- Visual cue / sign must remain in the same position and orientation throughout.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-readout state/region change: subject moves between label-defining states or regions after the first decisive readout.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+- 'Backward branch jump: ball jumps from one branch to the other after committing
+  past the split.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+- Same-branch bounce, brief occlusion, or wall contact after branch commitment does
+  not erase the relaxed outcome label.
+- 'No post-result teleport: ball must not jump to the opposite branch after the first
+  decisive commit frame.'
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Y-track with visual cue.'
+- 'Geometry-sensitive scene: apparatus and region stability are fatal for strict trusted
+  metric.'
+- The visual cue may bias generation, but it is not outcome evidence; judge the visible
+  branch commitment only.

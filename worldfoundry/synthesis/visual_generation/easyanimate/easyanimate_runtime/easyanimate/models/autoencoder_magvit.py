@@ -24,7 +24,7 @@ from diffusers.models.modeling_utils import ModelMixin
 from diffusers.utils import logging
 from diffusers.utils.accelerate_utils import apply_forward_hook
 
-from worldfoundry.core.checkpoint import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 try:
     from diffusers.loaders import FromOriginalVAEMixin

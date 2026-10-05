@@ -21,8 +21,13 @@ from worldfoundry.evaluation.utils import (
 
 from .comparison_identity import build_comparison_identity, comparison_identity_from_summary
 
-
 RUN_SUMMARY_SCHEMA_VERSION = "worldfoundry-run-summary"
+
+MOCK_EVALUATION_BACKEND = "mock"
+MOCK_BACKEND_BLOCKING_REASON = (
+    "evaluation backend is mock (fixture output, not benchmark evidence)"
+)
+_BACKEND_CONTAINER_KEYS = ("evaluation", "run", "generation")
 
 # ── Aliases for shared utility functions ──────────────────────
 _mapping = mapping_or_empty
@@ -56,35 +61,62 @@ def _int_or_zero(*values: Any) -> int:
     return 0
 
 
-def _run_summary_path(path: str | Path) -> Path:
+def evaluation_backend_from_payload(payload: Mapping[str, Any]) -> str | None:
+    """Return the normalized backend recorded by a scorecard or summary."""
+
+    direct_candidates: list[Any] = [payload.get("backend")]
+    nested_candidates: list[Any] = []
+    for container_key in _BACKEND_CONTAINER_KEYS:
+        container = _mapping(payload.get(container_key))
+        direct_candidates.append(container.get("backend"))
+        for nested_key in sorted(container, key=str):
+            nested = container[nested_key]
+            if isinstance(nested, Mapping):
+                nested_candidates.append(nested.get("backend"))
+    for candidate in (*direct_candidates, *nested_candidates):
+        if candidate in (None, ""):
+            continue
+        normalized = str(candidate).strip().lower()
+        if normalized:
+            return normalized
+    return None
+
+
+def is_mock_backend(backend: Any) -> bool:
+    """Return whether *backend* identifies fixture/mock evaluation output."""
+
+    return str(backend or "").strip().lower() == MOCK_EVALUATION_BACKEND
+
+
+def resolve_run_summary_path(path: str | Path) -> Path:
     """Resolve *path* to an actual summary/scorecard file, checking directories for ``summary.json``."""
     source = Path(path)
     if source.is_dir():
-        for candidate in (source / "summary.json", source / "scorecard.json"):
-            if candidate.exists():
-                return candidate
-        raise FileNotFoundError(f"run directory does not contain summary.json or scorecard.json: {source}")
+        candidate = find_run_summary_candidate(source)
+        if candidate is not None:
+            return candidate
+        raise FileNotFoundError(f"run directory does not contain a summary, scorecard, or manifest: {source}")
     if not source.exists():
         raise FileNotFoundError(f"run summary path does not exist: {source}")
     return source
 
 
-def _run_summary_candidate(run_dir: Path) -> Path | None:
-    """Return the first existing summary/scorecard file in *run_dir*, or ``None``."""
-    for candidate in (run_dir / "summary.json", run_dir / "scorecard.json"):
+def find_run_summary_candidate(run_dir: Path) -> Path | None:
+    """Prefer completed reports, falling back to the current run manifest."""
+    for candidate in (run_dir / "summary.json", run_dir / "scorecard.json", run_dir / "run_manifest.json"):
         if candidate.is_file():
             return candidate
     return None
 
 
-def _normalise_roots(roots: str | Path | Sequence[str | Path]) -> list[Path]:
+def normalise_roots(roots: str | Path | Sequence[str | Path]) -> list[Path]:
     """Convert a single root or a sequence into a list of ``Path`` objects."""
     if isinstance(roots, (str, Path)):
         return [Path(roots)]
     return [Path(root) for root in roots]
 
 
-def _number_or_none(value: Any) -> float | int | None:
+def number_or_none(value: Any) -> float | int | None:
     """Return *value* as a number if it is numeric and not a bool; otherwise ``None``."""
     if isinstance(value, bool):
         return None
@@ -107,7 +139,7 @@ def _label_for_summary(summary: Mapping[str, Any], source_path: Path, explicit_l
     return source_path.stem
 
 
-def _dedupe_labels(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+def dedupe_labels(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Ensure every row has a unique label, appending ``#N`` suffixes for duplicates."""
     seen: dict[str, int] = {}
     deduped = []
@@ -121,7 +153,7 @@ def _dedupe_labels(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return deduped
 
 
-def _row_from_summary(
+def row_from_summary(
     *,
     index: int,
     summary: Mapping[str, Any],
@@ -153,6 +185,7 @@ def _row_from_summary(
         "model_name": model.get("model_name"),
         "dataset_id": _first_present(dataset, "dataset_id", "name", "id"),
         "evaluation_mode": evaluation.get("mode") or comparison_identity.get("evaluation_mode"),
+        "backend": evaluation.get("backend") or evaluation_backend_from_payload(summary),
         "protocol_id": comparison_identity.get("protocol_id"),
         "protocol_fidelity": comparison_identity.get("protocol_fidelity"),
         "data_fidelity": comparison_identity.get("data_fidelity"),
@@ -195,18 +228,28 @@ def build_run_summary(scorecard: Mapping[str, Any]) -> dict[str, Any]:
     )
 
     sample_count = _int_or_zero(
-        metrics_summary.get("sample_count")
-        or generation.get("num_requests")
-        or dataset.get("sample_count")
+        metrics_summary.get("sample_count"), generation.get("num_requests"), dataset.get("sample_count"),
     )
     successful_samples = _int_or_zero(
-        metrics_summary.get("successful_samples")
-        or generation.get("successful")
+        metrics_summary.get("successful_samples"), generation.get("successful"),
     )
     failed_samples = _int_or_zero(
-        metrics_summary.get("failed_samples")
-        or generation.get("failed")
+        metrics_summary.get("failed_samples"), generation.get("failed"),
     )
+
+    backend = evaluation_backend_from_payload(scorecard)
+    backend_is_mock = is_mock_backend(backend)
+    eligibility_reasons = [str(reason) for reason in eligibility.get("reasons") or ()]
+    blocking_reasons = [str(reason) for reason in eligibility.get("blocking_reasons") or ()]
+    leaderboard_valid = eligibility.get("leaderboard_valid")
+    leaderboard_eligible = eligibility.get("leaderboard_eligible")
+    if backend_is_mock:
+        leaderboard_valid = False
+        leaderboard_eligible = False
+        if MOCK_BACKEND_BLOCKING_REASON not in eligibility_reasons:
+            eligibility_reasons.append(MOCK_BACKEND_BLOCKING_REASON)
+        if MOCK_BACKEND_BLOCKING_REASON not in blocking_reasons:
+            blocking_reasons.append(MOCK_BACKEND_BLOCKING_REASON)
 
     return {
         "schema_version": RUN_SUMMARY_SCHEMA_VERSION,
@@ -252,6 +295,7 @@ def build_run_summary(scorecard: Mapping[str, Any]) -> dict[str, Any]:
         "evaluation": {
             "kind": evaluation.get("kind"),
             "mode": comparison_identity.get("evaluation_mode"),
+            "backend": backend,
         },
         "provenance": provenance,
         "comparison_identity": comparison_identity,
@@ -259,6 +303,7 @@ def build_run_summary(scorecard: Mapping[str, Any]) -> dict[str, Any]:
             "sample_count": sample_count,
             "successful_samples": successful_samples,
             "failed_samples": failed_samples,
+            "skipped_samples": _int_or_zero(metrics_summary.get("skipped_samples")),
             "failed_sample_ids": list(metrics_summary.get("failed_sample_ids") or ()),
         },
         "generation": generation,
@@ -270,10 +315,10 @@ def build_run_summary(scorecard: Mapping[str, Any]) -> dict[str, Any]:
         "leaderboard": dict(metrics.get("leaderboard") or {}),
         "eligibility": {
             "score_valid": eligibility.get("score_valid"),
-            "leaderboard_valid": eligibility.get("leaderboard_valid"),
-            "leaderboard_eligible": eligibility.get("leaderboard_eligible"),
-            "reasons": list(eligibility.get("reasons") or ()),
-            "blocking_reasons": list(eligibility.get("blocking_reasons") or ()),
+            "leaderboard_valid": leaderboard_valid,
+            "leaderboard_eligible": leaderboard_eligible,
+            "reasons": eligibility_reasons,
+            "blocking_reasons": blocking_reasons,
         },
         "artifacts": artifacts,
     }
@@ -282,13 +327,21 @@ def build_run_summary(scorecard: Mapping[str, Any]) -> dict[str, Any]:
 def load_run_summary(path: str | Path) -> dict[str, Any]:
     """Load a compact run summary from a run directory, summary.json, or scorecard.json."""
 
-    source_path = _run_summary_path(path)
+    source_path = resolve_run_summary_path(path)
     payload = read_json_object(source_path)
     schema_version = payload.get("schema_version")
     if schema_version == RUN_SUMMARY_SCHEMA_VERSION:
         return payload
     if schema_version == "worldfoundry-scorecard":
         return build_run_summary(payload)
+    if schema_version == "worldfoundry-run-manifest":
+        return build_run_summary({
+            "schema_version": schema_version,
+            "run": payload,
+            **{key: payload.get(key, {}) for key in ("benchmark", "model", "dataset", "artifacts")},
+            "generation": {"num_requests": payload.get("sample_count", 0)},
+            "eligibility": {"score_valid": False, "leaderboard_valid": False, "leaderboard_eligible": False},
+        })
     raise ValueError(f"unsupported run summary schema_version in {source_path}: {schema_version!r}")
 
 
@@ -304,6 +357,7 @@ def build_markdown_report(summary: Mapping[str, Any]) -> str:
     artifacts = _mapping(summary.get("artifacts"))
     evaluation = _mapping(summary.get("evaluation"))
     comparison_identity = comparison_identity_from_summary(summary)
+    backend = evaluation.get("backend") or evaluation_backend_from_payload(summary)
 
     lines = [
         "# WorldFoundry Run Report",
@@ -314,6 +368,7 @@ def build_markdown_report(summary: Mapping[str, Any]) -> str:
         f"- Model: {_format_value(model.get('model_id') or model.get('model_name'))}",
         f"- Dataset: {_format_value(dataset.get('dataset_id') or dataset.get('name'))}",
         f"- Evaluation mode: {_format_value(evaluation.get('mode') or comparison_identity.get('evaluation_mode'))}",
+        f"- Backend: {_format_value(backend)}",
         f"- Protocol: {_format_value(comparison_identity.get('protocol_id'))}",
         f"- Protocol fidelity: {_format_value(comparison_identity.get('protocol_fidelity'))}",
         f"- Data fidelity: {_format_value(comparison_identity.get('data_fidelity'))}",
@@ -326,10 +381,10 @@ def build_markdown_report(summary: Mapping[str, Any]) -> str:
         ),
         f"- Score valid: {_format_value(eligibility.get('score_valid'))}",
         f"- Leaderboard valid: {_format_value(eligibility.get('leaderboard_valid'))}",
-        "",
-        "## Leaderboard",
-        "",
     ]
+    if is_mock_backend(backend):
+        lines.append(f"- **WARNING**: {MOCK_BACKEND_BLOCKING_REASON}")
+    lines.extend(["", "## Leaderboard", ""])
 
     if leaderboard:
         lines.extend(["| Metric | Value |", "| --- | ---: |"])
@@ -391,9 +446,29 @@ def write_run_report_artifacts(
     }
 
 
+# Deprecated underscore aliases kept for pre-promotion importers; new code
+# should import the public names above (shared with run_index/run_comparison).
+_run_summary_path = resolve_run_summary_path
+_run_summary_candidate = find_run_summary_candidate
+_normalise_roots = normalise_roots
+_number_or_none = number_or_none
+_dedupe_labels = dedupe_labels
+_row_from_summary = row_from_summary
+
 __all__ = [
+    "MOCK_BACKEND_BLOCKING_REASON",
+    "MOCK_EVALUATION_BACKEND",
     "RUN_SUMMARY_SCHEMA_VERSION",
     "build_markdown_report",
     "build_run_summary",
+    "dedupe_labels",
+    "evaluation_backend_from_payload",
+    "find_run_summary_candidate",
+    "is_mock_backend",
+    "load_run_summary",
+    "normalise_roots",
+    "number_or_none",
+    "resolve_run_summary_path",
+    "row_from_summary",
     "write_run_report_artifacts",
 ]

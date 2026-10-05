@@ -1,0 +1,75 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BA-08
+track: coverage
+title_en: Bird Reaction to Offered Food
+scene_grounding:
+- 'Initial state must match: A bird stands on a cafe table while the feeding hand
+  is still outside the frame.'
+- Opening frames must show the bird on the cafe table and enough tabletop area to
+  distinguish staying near, moving away while still on the table, and leaving the
+  table once the hand enters.
+action_execution:
+- 'Required action: An off-screen hand enters the frame once and offers food to the
+  bird.'
+- Action must happen exactly once in the expected direction / region.
+- Action target must be identifiable in the same frame as the action onset (Track
+  B target acquisition).
+- The action must be visible as a single continuous event from the described initial
+  state; cuts, hidden starts, or repeated attempts are action-execution failures.
+- For reaction labels, the stimulus timing must be visible before the animal/person
+  reaction is scored.
+target_requirements:
+- Bird, entering hand, offered food, and cafe table context must be visible when the
+  response is judged.
+- The food may enter from off-screen only via the specified hand; reaction must be
+  attributable to that visible food offer, not another off-screen cause.
+- Food acquisition, pecking, and food displacement without acquisition must be visually
+  separable. If food contact is hidden or the food cannot be tracked from hand to
+  bird/table, mark readout ambiguity or object-continuity failure rather than guessing.
+- Tabletop extent and bird position must be visible enough to distinguish moving
+  away while still on the table from flying off/leaving the table.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+- 'Identity continuity is fatal: the judged subject, target, and key apparatus must
+  not swap appearance, duplicate, vanish, or re-enter as a different object/person/animal.'
+- Bird body position, entering hand identity, and food identity must remain trackable
+  across the food-offer reaction window.
+apparatus_stability:
+- Static apparatus (tabletop plane and cafe table context) must not drift, resize,
+  or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Food transfer contradiction: food appears in the bird beak/claw, on the table,
+  or away from the hand without a continuous visible contact/transfer/displacement.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+- 'Food-offer contradiction: bird takes/pecks food before the hand/food appears or
+  reacts to a different off-screen object.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+- After the first food-contact or away reaction, bird/food/hand identities must remain
+  continuous; food cannot disappear and reappear in the beak.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Bird Reaction to Offered Food.'
+- 'Fatal severity cue: target/stimulus acquisition failure, impossible trajectory,
+  identity discontinuity, or post-result contradiction excludes strict trusted metrics
+  even if the outcome is readable.'
+- 'BA reaction trust cue: animal/person/stimulus visibility, attribution to the requested
+  action, off-screen-cause rejection, and identity continuity are mandatory.'

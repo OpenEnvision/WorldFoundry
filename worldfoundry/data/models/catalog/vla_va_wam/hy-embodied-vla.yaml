@@ -19,6 +19,7 @@ integration_status: integrated
 license: Apache-2.0
 name: Hy-Embodied-0.5-VLA
 official_sources:
+  paper: https://arxiv.org/abs/2606.14409
   github:
     head_sha: 8ba4c8cbdf42a4bcf0a19be4bd2841405dfe15e9
     url: https://github.com/Tencent-Hunyuan/Hy-Embodied-0.5-VLA
@@ -69,3 +70,21 @@ runner_parity:
   status: robotwin_and_umi_checkpoints_gpu_validated
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile planning records.
+docs:
+  publisher: Tencent Hunyuan
+  publisher_kind: company
+  publisher_zh: 腾讯混元
+  overview: 'Hy-Embodied-0.5-VLA is Tencent Hunyuan''s bimanual manipulation VLA, GPU-validated in this catalog: the RoboTwin checkpoint restored strictly and produced finite 20x20 decoded actions from the official six-frame, three-camera input on an A100, and the UMI checkpoint produced a finite 50x20 relative-action chunk in BF16. Both Apache-2.0 checkpoints are pinned on Hugging Face and ModelScope.'
+  overview_zh: Hy-Embodied-0.5-VLA 是腾讯混元的双臂操作 VLA，本 catalog 中已 GPU 验证：RoboTwin checkpoint 严格恢复，并在 A100 上从官方六帧三相机输入产出有限的 20x20 解码动作；UMI checkpoint 以 BF16 产出有限的 50x20 相对动作块。两个 Apache-2.0 checkpoint 均在 Hugging Face 与 ModelScope 上锁定 revision。
+  architecture: An inference-only mixture-of-transformers (MoT) backbone with in-tree preprocessing and action decoding. The official input contract is six frames from three cameras; RoboTwin decodes absolute joint actions while UMI decodes relative actions.
+  architecture_zh: 推理专用的 mixture-of-transformers（MoT）骨干，预处理与动作解码内置树内。官方输入契约为三相机六帧；RoboTwin 解码绝对关节动作，UMI 解码相对动作。
+  usage_notes: Choose the RoboTwin checkpoint for simulator benchmark work and the UMI checkpoint for UMI-style relative-action deployments; both run through the same in-tree runtime.
+  usage_notes_zh: 模拟器基准工作选 RoboTwin checkpoint，UMI 式相对动作部署选 UMI checkpoint；两者共用同一树内运行时。
+  limitations:
+  - Validation covers action decoding on A100; full benchmark rollout parity is tracked separately.
+  limitations_zh:
+  - 验证覆盖 A100 上的动作解码；完整基准 rollout parity 单独跟踪。
+  recommended_benchmarks:
+  - id: robotwin
+    reason: GPU-validated RoboTwin policy checkpoint.
+    reason_zh: GPU 已验证的 RoboTwin 策略 checkpoint。

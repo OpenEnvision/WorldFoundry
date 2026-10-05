@@ -1,0 +1,76 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BS-02
+track: coverage
+title_en: Red-Marked Block Tower Removal
+scene_grounding:
+- 'Initial state must match: A hand is about to pull the block marked with a red dot from a structurally
+  consequential middle section of a standing block tower.'
+- The red-marked middle support block, surrounding tower/stack, hand, and table support must be visible
+  before action onset.
+action_execution:
+- 'Required action: Pull the red-marked block once from the tower.'
+- 'Target acquisition is mandatory: the hand/tool must visibly grip or contact the red-marked block before
+  it moves.'
+- Pull must act on the marked block, not an adjacent unmarked block, a whole-tower shove, or a hand motion
+  in empty space.
+- The block removal and tower response must remain in view through the first decisive collapse/stability
+  readout.
+target_requirements:
+- Target red-marked block must be continuously identifiable from initial frame through removal or failed
+  removal.
+- Tower/stack continuity must be visible enough to audit whether it remains standing unchanged, remains
+  standing but displaced, or collapses by top/side/full region after the marked-block pull.
+- 'The stability audit must check the visible load/support path after removal: every standing upper tower
+  section must have continuous contact support through remaining blocks down to the table/base.'
+- Transient sway alone is not a terminal outcome; read terminal standing/displaced/collapse state.
+- 'Empty-final/object disappearance artifact is fatal: if the red-marked block, tower, or major stack
+  sections vanish without continuous removal/collapse motion, mark the sample untrusted.'
+object_continuity:
+- The same red-marked block and same tower must persist across frames; no block duplication, tower repaint,
+  or object disappearance is allowed.
+- Removed blocks must follow continuous trajectories; collapsed tower sections must remain physically
+  traceable after falling.
+apparatus_stability:
+- Table/support plane and tower scale must remain stable; the tower cannot be re-rendered into a different
+  stack to match a desired outcome.
+- 'Unsupported/floating stack is fatal: if the removed middle support block leaves an air gap or missing
+  support path but upper tower sections remain rigidly suspended or stable above the gap, mark `physical_process.status=FAIL`,
+  `failure_type=UNSUPPORTED_FLOATING_TOWER`, and include `APPARATUS_INSTABILITY` in `failure_axes`.'
+- A stable-after-removal trust pass requires visible remaining contact/support between the upper stack,
+  lower stack, and table. Do not infer invisible support behind the visible tower face when the sampled
+  frames show a clear support gap.
+motion_hard_failures:
+- 'OBJECT_ACQUISITION_FAIL: the red-marked block is never visibly grasped/contacted before claimed removal.'
+- 'Wrong-object pull: an adjacent block or whole tower moves while the marked block stays put or disappears.'
+- 'Empty-final artifact: final frames show missing tower/block content without a continuous collapse/removal
+  path.'
+- 'Stack teleport: tower sections appear/disappear, fuse, or change order without continuous falling/swaying
+  motion.'
+- 'Unsupported/floating tower: after the middle support block is extracted, the upper stack remains apparently
+  suspended across a gap or keeps a rigid stable pose without visible load-bearing contact.'
+post_result_consistency:
+- After marked-block removal, the remaining tower/stack must stay consistent with the selected label;
+  collapsed sections cannot restore themselves.
+- A stable-after-removal label requires the red-marked block to be gone while the rest of the tower remains
+  visibly present; an empty final frame or object disappearance is fatal for strict trusted metrics.
+- A stable-after-removal trusted process also requires a plausible support chain; a visually readable
+  stable label can remain on the outcome axis while the trust axis marks `UNTRUSTED` for unsupported/floating
+  tower physics.
+- Transient sway may settle, but later collapse must follow visible continuous instability rather than
+  a cut or object jump.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Red-Marked Block Tower Removal.'
+- 'Track B family: stability_stack.'

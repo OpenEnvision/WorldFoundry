@@ -19,6 +19,8 @@ tasks:
 output_artifacts:
 - action_trace
 official_sources:
+  paper: https://arxiv.org/abs/2607.04988
+  project_page: https://internrobotics.github.io/internvla-a15.github.io
   github:
     url: https://github.com/InternRobotics/InternVLA-A-series
     head_sha: a3707592607575aac35355ecf010264f666a700b
@@ -37,3 +39,23 @@ integration:
   - Runtime is local-only and does not use remote checkpoint code or an adjacent source checkout.
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime integration records.
+docs:
+  publisher: Shanghai AI Laboratory (InternRobotics)
+  publisher_kind: lab
+  publisher_zh: 上海人工智能实验室（InternRobotics）
+  overview: 'InternVLA-A1-3B is the A1 generation of InternRobotics'' InternVLA series: a 3B policy pairing a Qwen3-VL-2B backbone with an action expert and an NVIDIA Cosmos tokenizer wrapper. Base and RoboTwin checkpoints are confirmed (InternVLA-A1-3B, InternVLA-A1-3B-RoboTwin) under CC-BY-NC-SA-4.0, and the full graph runs in-tree with static verification complete.'
+  overview_zh: InternVLA-A1-3B 是 InternRobotics InternVLA 系列的 A1 世代：3B 策略，Qwen3-VL-2B 骨干搭配动作专家与 NVIDIA Cosmos tokenizer 封装。base 与 RoboTwin 两个 checkpoint 已确认（InternVLA-A1-3B、InternVLA-A1-3B-RoboTwin），CC-BY-NC-SA-4.0 许可，完整计算图在树内运行，静态验证已完成。
+  architecture: The A1-3B graph couples Qwen3-VL-2B vision-language encoding with an expert action head, a Cosmos-Tokenizer-CI8x8 wrapper, flow sampling, and a normalization route — all in-tree, local-only, with no remote checkpoint code.
+  architecture_zh: A1-3B 计算图将 Qwen3-VL-2B 视觉-语言编码与专家动作头、Cosmos-Tokenizer-CI8x8 封装、flow 采样与归一化路由耦合——全部树内、仅本地，无远程 checkpoint 代码。
+  usage_notes: Stage the A1-3B (or RoboTwin) checkpoint plus Qwen3-VL-2B-Instruct and the Cosmos tokenizer locally. Note the non-commercial license.
+  usage_notes_zh: 在本地就位 A1-3B（或 RoboTwin）checkpoint、Qwen3-VL-2B-Instruct 与 Cosmos tokenizer。注意非商用许可。
+  limitations:
+  - 'CC-BY-NC-SA-4.0: non-commercial use only.'
+  - GPU rollout validation is not recorded in this repository (static verification only).
+  limitations_zh:
+  - CC-BY-NC-SA-4.0：仅限非商用。
+  - 仓库未记录 GPU rollout 验证（仅静态验证）。
+  recommended_benchmarks:
+  - id: robotwin
+    reason: Dedicated InternVLA-A1-3B-RoboTwin checkpoint.
+    reason_zh: 有专门的 InternVLA-A1-3B-RoboTwin checkpoint。

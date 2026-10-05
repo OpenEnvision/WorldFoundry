@@ -1,5 +1,7 @@
 id: wrbench
 name: WRBench
+publisher: University of Science and Technology of China
+publisher_kind: university
 aliases:
 - wr-bench
 benchmark_kind:
@@ -124,6 +126,17 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  normalization:
+    artifact_official_run: true
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.wrbench.run_wrbench_official_runner
+    generated_arg: --generated-artifact-dir
+    limit_arg: --limit
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    supports_fixture: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WRBenchContract
   validation_command:
   - worldfoundry-eval
@@ -167,6 +180,9 @@ runner:
   - Official-result normalization is lightweight; full D1-D6 execution requires configured scorer model assets.
 integration:
   status: integrated
+  tier: in_tree
+  hf_dataset_id: WRBench/wrbench-natural25
+  judge_model_id: VGGT-Omega+DINOv2+Qwen3.5+Qwen3-VL
   evidence:
     runtime_surface: wrbench_official_in_tree
     normalizer_verified: true
@@ -204,3 +220,24 @@ runner_availability:
 notes:
 - D1-CamPrec and D1-CamAlign are deliberately not merged.
 - D5 and D6 are conditional on the official re-observation applicability gate.
+validation_command:
+- worldfoundry-eval
+- zoo
+- benchmark-run
+- --benchmark-id
+- wrbench
+- --mode
+- official-validation
+- --official-results-path
+- <official_results.json_or_csv>
+- --generated-artifact-dir
+- <generated_videos>
+- --output-dir
+- <out>
+- --json
+checkpoint_refs: []
+artifact_layout:
+  generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  results_path_env: WORLDFOUNDRY_WRBENCH_RESULTS_PATH
+  output_artifact: benchmark_scorecard
+  filename_template: scorecard.json

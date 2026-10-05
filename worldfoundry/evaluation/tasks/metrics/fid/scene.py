@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
@@ -11,6 +10,7 @@ from typing import Any
 
 from PIL import Image
 
+from worldfoundry.evaluation.tasks.metrics._shared.bbox import bbox_xyxy
 from worldfoundry.evaluation.tasks.metrics.fid.compute import compute_fid
 
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
@@ -37,27 +37,15 @@ def _load_bboxes(path: Path) -> dict[str, list[list[float]]]:
 
 
 def _resolve_image_path(image_root: Path, key: str) -> Path:
-    candidate = Path(key)
+    candidate = image_root / key
     if candidate.is_file():
         return candidate
-    relative = image_root / key
-    if relative.is_file():
-        return relative
-    by_name = image_root / candidate.name
-    if by_name.is_file():
-        return by_name
     raise FileNotFoundError(f"could not resolve image for bbox key {key!r} under {image_root}")
 
 
 def _save_crop(image: Image.Image, box: Sequence[float], dest: Path, *, min_crop_size: int) -> bool:
     width, height = image.size
-    if len(box) == 4:
-        x1, y1, x2, y2 = box
-    elif len(box) == 5:
-        x1, y1, w, h = box
-        x2, y2 = x1 + w, y1 + h
-    else:
-        raise ValueError(f"expected bbox with 4 or 5 values, got {box!r}")
+    x1, y1, x2, y2 = bbox_xyxy(box)
     left = max(0, min(width, int(round(min(x1, x2)))))
     top = max(0, min(height, int(round(min(y1, y2)))))
     right = max(0, min(width, int(round(max(x1, x2)))))
@@ -76,14 +64,23 @@ def extract_object_crops(
     *,
     min_crop_size: int = 32,
 ) -> Path:
-    """Extract object crops from scene images using a bbox JSON manifest."""
-    root = Path(image_root)
-    output = Path(output_dir)
+    """Extract crops using ``(x1, y1, x2, y2)`` or ``(x, y, w, h, extra)`` boxes."""
+    return _extract_object_crops(
+        Path(image_root), _load_bboxes(Path(bboxes_json)), Path(output_dir), min_crop_size=min_crop_size
+    )
+
+
+def _extract_object_crops(
+    image_root: Path,
+    bboxes: dict[str, list[list[float]]],
+    output: Path,
+    *,
+    min_crop_size: int,
+) -> Path:
     output.mkdir(parents=True, exist_ok=True)
-    bboxes = _load_bboxes(Path(bboxes_json))
     crop_index = 0
     for key, boxes in bboxes.items():
-        image_path = _resolve_image_path(root, key)
+        image_path = _resolve_image_path(image_root, key)
         with Image.open(image_path) as image:
             rgb = image.convert("RGB")
             for box in boxes:
@@ -91,7 +88,7 @@ def extract_object_crops(
                 if _save_crop(rgb, box, dest, min_crop_size=min_crop_size):
                     crop_index += 1
     if crop_index == 0:
-        raise ValueError(f"no object crops extracted from {image_root} using {bboxes_json}")
+        raise ValueError(f"no object crops extracted from {image_root}")
     return output
 
 
@@ -102,6 +99,7 @@ def _resolve_crop_dir(
     bboxes_json: str | Path | None,
     scratch_root: Path,
     min_crop_size: int,
+    bbox_source_root: Path | None = None,
 ) -> Path:
     if crop_dir is not None:
         path = Path(crop_dir)
@@ -113,7 +111,13 @@ def _resolve_crop_dir(
             "SceneFID requires pre-extracted crop directories or a bboxes JSON manifest "
             "(object crop + FID protocol)."
         )
-    return extract_object_crops(image_root, bboxes_json, scratch_root, min_crop_size=min_crop_size)
+    bboxes = _load_bboxes(Path(bboxes_json))
+    if bbox_source_root is not None:
+        bboxes = {
+            str(Path(key).relative_to(bbox_source_root)) if Path(key).is_absolute() else key: boxes
+            for key, boxes in bboxes.items()
+        }
+    return _extract_object_crops(image_root, bboxes, scratch_root, min_crop_size=min_crop_size)
 
 
 def compute_scene_fid(
@@ -130,9 +134,9 @@ def compute_scene_fid(
     feature_extractor: str = "inception-v3-compat",
     **kwargs: Any,
 ) -> float:
-    """Compute FID on object crops extracted from scene images."""
-    ref_root = Path(reference)
-    gen_root = Path(generated)
+    """Compute crop FID, matching shared manifest keys relative to each image root."""
+    ref_root = Path(reference).absolute()
+    gen_root = Path(generated).absolute()
     temp_dir: tempfile.TemporaryDirectory[str] | None = None
     try:
         if reference_crops is None or generated_crops is None:
@@ -151,6 +155,7 @@ def compute_scene_fid(
                 bboxes_json=generated_bboxes_json or reference_bboxes_json,
                 scratch_root=scratch / "generated_crops",
                 min_crop_size=min_crop_size,
+                bbox_source_root=ref_root if generated_bboxes_json is None else None,
             )
         else:
             ref_crops = _resolve_crop_dir(
@@ -177,7 +182,7 @@ def compute_scene_fid(
         )
     finally:
         if temp_dir is not None:
-            shutil.rmtree(temp_dir.name, ignore_errors=True)
+            temp_dir.cleanup()
 
 
 __all__ = ["compute_scene_fid", "extract_object_crops"]

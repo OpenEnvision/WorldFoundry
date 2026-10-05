@@ -1,0 +1,48 @@
+---
+title: "Echo-WM"
+description: "Echo-WM from JD.com (JoyAI / Echo Team): image-to-world-video and camera-controlled-video; Runner parity pending; dedicated `joyai-echo-wm`."
+modelId: "joyai-echo-wm"
+pageSource: authored
+---
+
+Echo-WM is an omnimodal world model that jointly evolves video, environmental sound, music, and speech under continuous navigation. Base generates about ten seconds; Flash Preview uses four denoising steps and bounded sink-plus-FIFO caches for autoregressive rollout.
+
+<ModelPaperFigures modelId="joyai-echo-wm" locale="en" />
+
+Code: [jd-opensource/JoyAI-Echo](https://github.com/jd-opensource/JoyAI-Echo).
+
+<ModelCommandBuilder modelId="joyai-echo-wm" locale="en" />
+
+## What it is for
+
+`joyai-echo-wm` is the recorded camera-control route. Start here to follow a catalog camera path.
+
+Both public variants use an LTX-2.3 audio-visual backbone with UCPE camera conditioning. Base is bidirectional with separate video/audio CFG, while Flash distills guidance with DMD and maintains bounded video, audio, cross-modal, and camera-attention caches. It is published by JD.com (JoyAI / Echo Team).
+
+Catalog tasks include image-to-world-video, camera-controlled-video, interactive-world-model, and audio-video-generation. Catalog aliases include `echo-wm` and `joyai-echo-world-model`. Documented modalities: image in, world state and video out.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera and navigation action adherence), [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (General action-conditioned world-rollout quality), [WBench](/docs/evaluation/benchmark-hub/wbench) (The upstream Flash examples use WBench camera-control cases).
+
+JoyAI Echo world-model memory. Long-video is a sibling.
+
+## Runtime contract
+
+Required `input_path`; optional `prompt`, `load.checkpoint_dir`, `load.gemma_path`, `action_str`, and `num_frames`; artifacts `generated_world` and `joyai-echo-wm.mp4`.
+
+Recorded task profiles: `image-to-world-video`, `camera-controlled-video`, `interactive-world-model`, and `audio-video-generation`. WorldFoundry binds `JoyAIEchoWMPipeline`.
+
+Family status: **Runner parity pending**.
+
+Supply a first-frame image, prompt, and Action DSL such as w-60,a-60. Select variant=base or variant=flash at load time. The official source checkout, dedicated CUDA environment, Echo checkpoint, and gated unquantized Gemma encoder must be staged before execute=True.
+
+Base and Flash command construction, control mapping, and frame-count validation are CPU-tested.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run joyai-echo-wm`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+Recorded weight repositories include `Echo-Team/Echo-WM` and `google/gemma-3-12b-it-qat-q4_0-unquantized`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh joyai-echo-wm`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="joyai-echo-wm" locale="en" />

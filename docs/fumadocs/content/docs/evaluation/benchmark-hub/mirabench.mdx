@@ -1,108 +1,25 @@
 ---
 title: MiraBench
-description: Long-video generation evaluation from MiraData, with in-tree official runtime and runnable score/import commands.
+description: "Tencent ARC long-video bench from MiraData: 150 prompts, 17 official metrics. WorldFoundry vendors the scorer; it does not invent a board."
 ---
 
-## About
+MiraBench (Tencent ARC Lab) is the evaluation half of **MiraData**, a long-video dataset with structured captions. It scores long-video generation on six perspectives: temporal consistency, temporal motion strength, 3D consistency, visual quality, text-video alignment, and distribution consistency. The official scorer exposes **17 metrics** (DINO/CLIP temporal consistency, RAFT-style motion, 3D reconstruction error, aesthetic / imaging quality, ViCLIP alignment, FVD / FID / KID). The canonical suite is **150 prompts**. License: GPL-3.0.
 
-MiraBench is the evaluation component introduced with MiraData, a large-scale long-video dataset with structured captions. It evaluates long video generation from six perspectives: temporal consistency, temporal motion strength, 3D consistency, visual quality, text-video alignment, and distribution consistency. The official scorer exposes 17 metrics, including DINO/CLIP temporal consistency, RAFT-style motion strength, 3D reconstruction errors, aesthetic and imaging quality, ViCLIP alignment, FVD, FID, and KID.
+Paper: [MiraData](https://arxiv.org/abs/2407.06358). Project: [mira-space.github.io](https://mira-space.github.io/). Data: [`TencentARC/MiraData`](https://huggingface.co/datasets/TencentARC/MiraData). Code: [mira-space/MiraData](https://github.com/mira-space/MiraData).
 
-WorldFoundry integrates the MiraBench runtime in tree under `worldfoundry/evaluation/tasks/execution/runners/mirabench/runtime/mirabench`, with the public runner at `worldfoundry/evaluation/tasks/execution/runners/mirabench/run_mirabench_official_runner.py`.
+WorldFoundry **vendors the runtime** (`calculate_score.py`) and converts `average_score.csv` into a scorecard. `WORLDFOUNDRY_MIRABENCH_SCORER_BACKEND=mock` is wiring only.
 
-Official references:
+<BenchmarkPageSections id="mirabench" locale="en" />
 
-- Project page: [mira-space.github.io](https://mira-space.github.io/)
-- Paper: [arXiv:2407.06358](https://arxiv.org/abs/2407.06358)
-- Dataset: [TencentARC/MiraData](https://huggingface.co/datasets/TencentARC/MiraData)
-- Official source reference: [mira-space/MiraData](https://github.com/mira-space/MiraData)
-
-## Evaluation Protocol
-
-MiraBench uses metadata CSV files with structured captions. WorldFoundry bundles the official example files:
-
-```text
-worldfoundry/data/benchmarks/assets/mirabench/data/evaluation_example/meta_generated.csv
-worldfoundry/data/benchmarks/assets/mirabench/data/evaluation_example/meta_gt.csv
-```
-
-For a full run, prepare a `meta_generated.csv` with these columns:
-
-```text
-video_idx,video_path,short_caption,dense_caption,main_object_caption,background_caption,style_caption,camera_caption
-```
-
-The runner materializes the generated-video paths from `video_idx`, so stage generated videos as:
-
-```text
-/path/to/mirabench/generated_videos/
-  1.mp4
-  2.mp4
-  ...
-  150.mp4
-```
-
-The canonical benchmark prompt set contains 150 prompts. Use `--strict` when you want the run to fail on missing prompt videos.
-
-Primary metric: `mirabench_average`.
-
-| Metric | Meaning |
-| --- | --- |
-| `dynamic_degree`, `tracking_strength` | Motion intensity and long-range tracking strength. |
-| `dino_temporal_consistency`, `clip_temporal_consistency`, `temporal_motion_smoothness` | Temporal structure, semantic continuity, and motion smoothness. |
-| `mean_absolute_error`, `root_mean_square_error` | 3D consistency errors; lower is better. |
-| `aesthetic_quality`, `imaging_quality` | Visual quality metrics. |
-| `camera_alignment`, `main_object_alignment`, `background_alignment`, `style_alignment`, `overall_alignment` | Structured caption alignment metrics. |
-| `fvd`, `fid`, `kid` | Distribution metrics; lower is better. |
-| `mirabench_average` | Official aggregate when present, or mean over available metrics. |
-
-## Data And Checkpoint Preparation
-
-Start from the WorldFoundry repository root:
+## How to run
 
 ```bash
-cd /path/to/WorldFoundry
 export WORLDFOUNDRY_MIRABENCH_META_CSV=/path/to/mirabench/meta_generated.csv
 export WORLDFOUNDRY_MIRABENCH_GT_META_CSV=/path/to/mirabench/meta_gt.csv
 export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/mirabench/generated_videos
-```
-
-Download MiraData metadata from Hugging Face if you need the released metadata:
-
-```bash
-hf download TencentARC/MiraData \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/MiraData
-```
-
-Stage the scorer checkpoints used by `calculate_score.py`:
-
-```bash
 export WORLDFOUNDRY_MIRABENCH_CKPT_PATH=/path/to/mirabench/data/ckpt
-export WORLDFOUNDRY_MIRABENCH_SCORER_BACKEND=official
-export WORLDFOUNDRY_MIRABENCH_DEVICE=cuda
-```
 
-For quick local wiring runs, `WORLDFOUNDRY_MIRABENCH_SCORER_BACKEND=mock` writes deterministic placeholder metric values. Do not use that backend for reported benchmark numbers.
-
-## Generate Candidate Videos
-
-Use the `dense_caption` or `short_caption` fields from `meta_generated.csv` as generation prompts. For WorldFoundry-integrated models, run the model's synthesis workflow over those prompts, then export one video per `video_idx`:
-
-```text
-/path/to/mirabench/generated_videos/
-  1.mp4
-  2.mp4
-  ...
-```
-
-## Run Official Scoring
-
-Run the in-tree MiraBench official scorer:
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/mirabench/run_mirabench_official_runner.py \
   --run-official \
   --meta-csv "${WORLDFOUNDRY_MIRABENCH_META_CSV}" \
@@ -112,25 +29,7 @@ PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
   --json
 ```
 
-The official backend dispatches the in-tree `calculate_score.py`, materializes an updated generated meta CSV with absolute video paths, and converts the produced `average_score.csv` into a WorldFoundry scorecard.
-
-## Import Existing Results
-
-If you already have a MiraBench `average_score.csv` or equivalent JSON/CSV result export, import it directly:
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/mirabench/run_mirabench_official_runner.py \
-  --official-results-path /path/to/mirabench/average_score.csv \
-  --meta-csv "${WORLDFOUNDRY_MIRABENCH_META_CSV}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/mirabench/imported \
-  --json
-```
-
-The unified benchmark entry can import the same result:
+Import `average_score.csv`:
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
@@ -142,14 +41,10 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-## Outputs
+Name videos `1.mp4` … `150.mp4` (from `video_idx`). Example metas are bundled under `worldfoundry/data/benchmarks/assets/mirabench/data/evaluation_example/`. `--strict` fails on missing prompt videos. Full scoring needs AMT, ViCLIP, MUSIQ, FVD/FID/KID, and 3D-consistency assets.
 
-The run writes:
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/mirabench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/mirabench/runtime/mirabench`.
 
-- `scorecard.json`: WorldFoundry scorecard with available MiraBench metrics.
-- `mirabench_average_score.json`: normalized copy of the official average score output.
-- `raw_metric_table.jsonl`: metric rows used by the scorecard.
-- `per_sample_scores.jsonl`: per-video rows when the result file exposes sample-level values.
-- `upstream_scorer/`: materialized meta CSV, extracted frames, and official scorer outputs for `--run-official`.
+Outputs include `scorecard.json` (primary `mirabench_average`) and `mirabench_average_score.json`.
 
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

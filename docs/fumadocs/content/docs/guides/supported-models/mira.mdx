@@ -1,0 +1,50 @@
+---
+title: "MIRA"
+description: "MIRA: action-conditioned-world-model and multiplayer-game-world-model; Runner parity pending; dedicated `mira`."
+modelId: "mira"
+pageSource: authored
+---
+
+MIRA is a multiplayer interactive world model: several players act in one shared, action-conditioned generated world (paper arXiv 2607.05352). In this catalog the inference-only upstream source is vendored in-tree; execution needs a compatible local checkpoint and a local Rocket Science dataset split containing index.json.
+
+<ModelPaperFigures modelId="mira" locale="en" />
+
+Project page: [mira-wm.com](https://mira-wm.com). Code: [mira-wm/mira](https://github.com/mira-wm/mira).
+
+The paper is [Multiplayer Interactive World Models with Representation Autoencoders](https://arxiv.org/abs/2607.05352). Project page: [mira-wm.com](https://mira-wm.com). Code: [mira-wm/mira](https://github.com/mira-wm/mira).
+
+<ModelCommandBuilder modelId="mira" locale="en" />
+
+## What it is for
+
+Use `local-checkpoint` for catalog world-model inference. Choose it when you need action-conditioned future frames rather than a standalone clip generator.
+
+Architecture internals beyond the recorded tasks are not stored in this repository (apache-2.0). Workspace discovery, argument routing, and command generation are covered without loading model weights; a local-checkpoint variant records the Rocket Science rollout task.
+
+Catalog tasks include action-conditioned-world-model and multiplayer-game-world-model. Catalog aliases include `mira-wm` and `multiplayer-interactive-world-model`.
+
+Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Multiplayer world-rollout quality).
+
+## Runtime contract
+
+Optional `load.checkpoint_path`, `load.dataset_path`, `plan_only`, and `timeout_seconds`; artifacts `generated_video` and `mira.mp4`.
+
+CLI task profiles: `rocket-science-rollout`. WorldFoundry binds `MIRAPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `rocket-science-rollout` defaults: seed=42.
+
+The public Rocket Science dataset is about 29.24 TB — it is pinned but intentionally never downloaded automatically. Video decoding falls back to PyAV when TorchCodec is ABI-incompatible; output uses the shared WorldFoundry video backend. Training and metric entrypoints are intentionally omitted.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run local-checkpoint --pipeline.task-profile rocket-science-rollout`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the dedicated environment `mira` (Python 3.12, CUDA 12.8, torch==2.8.0+cu128).
+
+Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh local-checkpoint`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="mira" locale="en" />

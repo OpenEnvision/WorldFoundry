@@ -1,0 +1,52 @@
+---
+title: "Infinite-World"
+description: "Infinite-World from Meituan (MeiGen-AI): world and video; Verified."
+modelId: "infinite-world"
+pageSource: authored
+---
+
+Infinite-World is MeiGen-AI's long-horizon world video model: from one image it navigates and extends a world over long durations. In this catalog it is verified — real GPU inference produced a non-empty long-horizon world video artifact with preview metadata through the Studio workspace job path, using the official image-conditioned navigation demo settings.
+
+<ModelPaperFigures modelId="infinite-world" locale="en" />
+
+The recorded paper is [arXiv 2602.02393](https://arxiv.org/abs/2602.02393).
+
+Project page: [rq-wu.github.io/projects/infinite-world](https://rq-wu.github.io/projects/infinite-world). Code: [MeiGen-AI/Infinite-World](https://github.com/MeiGen-AI/Infinite-World). Code: [thuml/InfiniteWorld](https://github.com/thuml/InfiniteWorld).
+
+<ModelCommandBuilder modelId="infinite-world" locale="en" />
+
+## What it is for
+
+Use `infinite-world` for catalog world-model inference. Choose it when you need action-conditioned future frames rather than a standalone clip generator.
+
+The in-tree runtime resolves local or Hugging Face checkpoint layouts without relying on an external repository at inference time. Architecture internals beyond the recorded structure are not stored in this repository. It is published by Meituan (MeiGen-AI).
+
+Catalog tasks include world, video, and world model. Documented outputs include video.
+
+Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (Long-horizon world-rollout quality), [MemoBench](/docs/evaluation/benchmark-hub/memobench) (Long-horizon consistency evaluation).
+
+Infinite-World long rollout. VGGT sibling is infinite-vggt.
+
+## Runtime contract
+
+Optional `prompt`, `negative_prompt`, `input_path`, `interactions`, and `frames`; artifacts `generated_world` and `infinite-world.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `InfiniteWorldPipeline`.
+
+Family status: **Verified**.
+
+The profile matches the official local/Hugging Face checkpoint layout — start from the official image-conditioned demo settings that were verified.
+
+In-tree Infinite-World runtime resolves local or Hugging Face checkpoint layouts without relying on an external repository at inference time.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run infinite-world --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `thuml/InfiniteWorld`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh infinite-world`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="infinite-world" locale="en" />

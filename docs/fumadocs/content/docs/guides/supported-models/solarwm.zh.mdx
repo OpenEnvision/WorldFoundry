@@ -1,0 +1,50 @@
+---
+title: "SolarWM"
+description: "SolarWM（Junchao-cs）：相机可控视频、交互式世界模型；Runner 一致性待确认; 4 个 variant。"
+modelId: "solarwm"
+pageSource: generated
+---
+
+SolarWM 支持从数据索引读取相机轨迹，在 Wan 5B/14B、LTX-2.5 和 MiniMax-H3 路线上执行推理。
+
+<ModelPaperFigures modelId="solarwm" locale="zh" />
+
+记录论文为[arXiv 2609.02886](https://arxiv.org/abs/2609.02886)。
+
+项目页：[junchao-cs.github.io/SolarWM-Web](https://junchao-cs.github.io/SolarWM-Web/)。代码：[Junchao-cs/SolarWM](https://github.com/Junchao-cs/SolarWM)。
+
+<ModelCommandBuilder modelId="solarwm" locale="zh" />
+
+## 用来做什么
+
+用 `solarwm-wan2.2-5b` 做 catalog 世界模型推理。需要动作条件未来帧、而不是独立片段生成器时选它。
+
+WorldFoundry 统一选择官方 solarwm infer 路线，在对应独立环境中启动。不会复制上游骨干、训练代码或数据流水线。该模型由Junchao-cs发布。
+
+catalog 记录的任务包括 相机可控视频、交互式世界模型。别名包括 `solar-wm`、`solarwm-wan2.2-5b`、`solarwm-wan22-5b`、`solarwm-wan2.2-14b` 等。同系列还有 `solarwm-wan2.2-14b`、`solarwm-ltx-22b`、`solarwm-h3-33b`。
+
+记录的评测入口包括[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（长时程相机控制下的世界一致性）。
+
+## 运行时契约
+
+必填 `load.base_path`、`load.data_root`；可选 `load.checkpoint_dir`、`overrides`、`execute`、`timeout_seconds`；产物 `generated_world`、`solarwm.mp4`。
+
+CLI task profile：`indexed-inference`。绑定的 pipeline 类是 `SolarWMPipeline`。
+
+起步 variant 是 `solarwm-wan2.2-5b`。catalog 登记了 4 个 variant（上方卡片）：`solarwm-wan2.2-5b`（`camera-conditioned-video`）：Runner 一致性待确认、`solarwm-wan2.2-14b`（`camera-conditioned-video`）：Runner 一致性待确认、`solarwm-ltx-22b`（`camera-conditioned-video`）：Runner 一致性待确认、`solarwm-h3-33b`（`camera-conditioned-video`）：Runner 一致性待确认。系列状态：**Runner 一致性待确认**。
+
+默认 variant=wan-5b-dmd，需提供 source_root、checkpoint_dir、base_path 和 data_root。 提示词、图像和相机轨迹来自索引样本。 Wan、LTX、H3 使用独立解释器，进程数遵循官方推理配置。
+
+当前工作区仅完成 CPU 可执行的检查，GPU 推理和 checkpoint 产物仍待验证。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run solarwm-wan2.2-5b --pipeline.task-profile indexed-inference`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-solarwm-wan22-cu124`（Python 3.10，CUDA 12.4，torch==2.5.1+cu124）。
+
+记录的权重仓库包括 `junchaoh-cs/SolarWM`、`junchaoh-cs/SolarWM-H3-33B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh solarwm-wan2.2-5b`；下载缺失的公开权重时加 `--download`。
+
+gated `junchaoh-cs/SolarWM`，下载前需在上游接受条款；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="solarwm" locale="zh" />

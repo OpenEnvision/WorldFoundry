@@ -7,6 +7,7 @@ availability: open_source
 provider: official_repo
 license: apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2602.11075
   github:
     url: https://github.com/OpenDriveLab/RISE
     head_sha: 5fac1e6ab9d50d4cc1ba4daeadf14023c8415955
@@ -23,7 +24,7 @@ checkpoint:
   - quantile norm_stats.json
   - local PaliGemma SentencePiece tokenizer
 integration:
-  status: in_tree_checkpoint_gated_runtime
+  status: integrated
   notes:
   - The official deployment transform, three-camera mapping, Pi0.5 action architecture, normalization, and 50x14 output contract execute in process.
   - The public asset repository currently contains the dynamics model and sample data, not a trained action-policy checkpoint.
@@ -39,3 +40,19 @@ pipeline_binding: rise
 runtime_profile: runtime-profile:rise
 catalog_category: vla_va_wam
 schema_version: 2
+docs:
+  publisher: Shanghai AI Laboratory (OpenDriveLab)
+  publisher_kind: lab
+  publisher_zh: 上海人工智能实验室（OpenDriveLab）
+  overview: 'RISE from OpenDriveLab is a Pi0.5-architecture action policy line (Apache-2.0): the official deployment transform, three-camera mapping, Pi0.5 action architecture, normalization, and 50x14 output contract all execute in process in-tree. The public OpenDriveLab-org/RISE_Assets repository currently ships the dynamics model and sample data — not a trained action-policy checkpoint.'
+  overview_zh: OpenDriveLab 的 RISE 是 Pi0.5 架构的动作策略线（Apache-2.0）：官方部署变换、三相机映射、Pi0.5 动作架构、归一化与 50x14 输出契约全部在树内进程内执行。公开的 OpenDriveLab-org/RISE_Assets 仓库目前仅提供动力学模型与样例数据——不含训练好的动作策略 checkpoint。
+  architecture: RISE reuses the Pi0.5 action architecture with a three-camera observation mapping and a 50-step, 14-dimensional action output contract. Accepted local checkpoint formats are PyTorch safetensors and JAX Orbax params.
+  architecture_zh: RISE 复用 Pi0.5 动作架构，配三相机观测映射与 50 步、14 维动作输出契约。接受的本地 checkpoint 格式为 PyTorch safetensors 与 JAX Orbax 参数。
+  usage_notes: Runtime construction fails early until you stage trained Pi0.5 action-policy weights, quantile norm_stats.json, and a local PaliGemma SentencePiece tokenizer. No source checkout, remote code, or runtime network access is used.
+  usage_notes_zh: 在就位训练好的 Pi0.5 动作策略权重、分位数 norm_stats.json 与本地 PaliGemma SentencePiece tokenizer 前，运行时构建会尽早失败。不使用源码 checkout、远程代码或运行时网络访问。
+  limitations:
+  - No public trained action checkpoint exists; you must supply compatible weights.
+  - Released assets cover the dynamics model and samples only.
+  limitations_zh:
+  - 无公开训练好的动作 checkpoint；需自备兼容权重。
+  - 已发布资产仅含动力学模型与样例。

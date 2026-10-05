@@ -1,0 +1,50 @@
+---
+title: "WorldGrow"
+description: "WorldGrow: world-generation and interactive-world-model; Runner parity pending."
+modelId: "worldgrow"
+pageSource: generated
+---
+
+WorldGrow generates worlds by expansion: starting from a seed scene it progressively grows coherent 3D world blocks, targeting interactive world generation and scene extension. The UranusITS/WorldGrow checkpoint is confirmed on Hugging Face; WorldFoundry registers the official source route in-tree with checkpoints and TRELLIS assets runtime-gated.
+
+<ModelPaperFigures modelId="worldgrow" locale="en" />
+
+The recorded paper is [arXiv 2510.21682](https://arxiv.org/abs/2510.21682).
+
+Project page: [world-grow.github.io](https://world-grow.github.io/). Code: [world-grow/WorldGrow](https://github.com/world-grow/WorldGrow).
+
+<ModelCommandBuilder modelId="worldgrow" locale="en" />
+
+## What it is for
+
+Pick `worldgrow` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+
+The runtime dependency on TRELLIS assets indicates a structured-3D-latent generation backbone extended with block-wise scene growth. Architecture internals beyond the official repository pointer (world-grow/WorldGrow, pinned head 1f2ac49c) are not recorded in this repository.
+
+Catalog tasks include world-generation, interactive-world-model, and scene-expansion.
+
+Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Growable 3D world coherence and quality).
+
+## Runtime contract
+
+Artifacts `generated_world` and `worldgrow_runtime_plan.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `WorldGrowPipeline`.
+
+Family status: **Runner parity pending**.
+
+Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. Stage both the WorldGrow checkpoint and TRELLIS assets before real runs.
+
+WorldGrow official source route is registered; checkpoints/TRELLIS assets are runtime-gated.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run worldgrow --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `UranusITS/WorldGrow`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh worldgrow`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="worldgrow" locale="en" />

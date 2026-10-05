@@ -1,0 +1,5 @@
+# Install in an isolated N1 worker environment alongside NVIDIA Isaac-GR00T
+# n1-release (commit 755876a9afdb41ca6eb6383b36f4a0adb085c73f).
+# The official release also requires PyTorch 2.5.1 and its package dependencies.
+transformers==4.45.2
+tokenizers==0.20.3

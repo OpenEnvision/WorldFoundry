@@ -1,0 +1,52 @@
+---
+title: "VideoCrafter1 I2V"
+description: "VideoCrafter1 I2V from Tencent AI Lab: image-to-video and video-generation; Runner parity pending."
+modelId: "videocrafter1-i2v"
+pageSource: authored
+---
+
+VideoCrafter1 I2V is the image-to-video member of Tencent AI Lab's VideoCrafter1 release: it animates a still image while preserving its content, style, and structure. The in-tree infer-only runtime wraps the official path with local checkpoint, fps, frame count, and seed controls.
+
+<ModelPaperFigures modelId="videocrafter1-i2v" locale="en" />
+
+The recorded paper is [arXiv 2401.09047](https://arxiv.org/abs/2401.09047).
+
+Project page: [ailab-cvc.github.io/videocrafter2](https://ailab-cvc.github.io/videocrafter2/). Code: [VideoCrafter/VideoCrafter](https://github.com/VideoCrafter/VideoCrafter).
+
+<ModelCommandBuilder modelId="videocrafter1-i2v" locale="en" />
+
+## What it is for
+
+`videocrafter1-i2v` is the recorded text/image-to-video line. Use it when you want both prompt and still conditioning on the same catalog card.
+
+A U-Net latent video diffusion model conditioned on the input image embedding (per the upstream release). Checkpoint provenance lives on the family-level videocrafter entry; training and download scripts are intentionally not packaged.
+
+Catalog tasks include image-to-video and video-generation. Catalog aliases include `videocrafter1_i2v`. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [EvalCrafter](/docs/evaluation/benchmark-hub/evalcrafter) (Companion benchmark of the VideoCrafter effort).
+
+Not [VideoCrafter](/docs/guides/supported-models/videocrafter) and [VideoCrafter1 T2V](/docs/guides/supported-models/videocrafter1-t2v). Score on [EvalCrafter](/docs/evaluation/benchmark-hub/evalcrafter).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `frames`, `fps`, and `height`; artifacts `generated_video` and `videocrafter1-i2v.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `VideoCrafter1I2VPipeline`.
+
+Family status: **Runner parity pending**.
+
+Runner parity is pending. Expect 2023-era quality: short clips, modest motion. For higher fidelity image animation use DynamiCrafter or the DiT-based I2V entries.
+
+Checkpoint provenance is tracked on the top-level videocrafter catalog entry to avoid duplicate HF repo aliases.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run videocrafter1-i2v --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `VideoCrafter/Image2Video-512` and `laion/CLIP-ViT-H-14-laion2B-s32B-b79K`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh videocrafter1-i2v`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="videocrafter1-i2v" locale="en" />

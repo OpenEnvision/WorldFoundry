@@ -58,7 +58,7 @@ metrics:
     aggregation: mean
     description: AIGCBench MSE between the condition image and first generated frame; lower is better.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -71,7 +71,7 @@ metrics:
     aggregation: mean
     description: AIGCBench SSIM between the condition image and first generated frame.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -84,7 +84,7 @@ metrics:
     aggregation: mean
     description: AIGCBench CLIP similarity between condition image and generated video.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -97,7 +97,7 @@ metrics:
     aggregation: mean
     description: AIGCBench CLIP similarity between generated video and text prompt.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -110,7 +110,7 @@ metrics:
     aggregation: mean
     description: AIGCBench CLIP similarity between generated and reference video keyframes.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -123,7 +123,7 @@ metrics:
     aggregation: mean
     description: AIGCBench optical-flow square mean for generated video motion effects.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -136,7 +136,7 @@ metrics:
     aggregation: mean
     description: AIGCBench CLIP similarity for generated and reference corresponding frames.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -149,7 +149,7 @@ metrics:
     aggregation: mean
     description: AIGCBench adjacent-frame CLIP similarity for temporal consistency.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -162,7 +162,7 @@ metrics:
     aggregation: mean
     description: AIGCBench generated video frame count.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -175,7 +175,7 @@ metrics:
     aggregation: mean
     description: AIGCBench DOVER video quality score.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -188,7 +188,7 @@ metrics:
     aggregation: mean
     description: AIGCBench SSIM between generated and reference videos.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -202,7 +202,7 @@ metrics:
     primary: true
     description: AIGCBench official aggregate when supplied by the official scorer or normalized output.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -224,7 +224,7 @@ metadata:
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:AIGCBenchContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+    target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
     status: implemented
     protocol: local_manifest_metadata_and_official_result_normalization
     output_fields:
@@ -385,7 +385,7 @@ tasks:
       metric_ids:
       - local_metadata_coverage
       - local_prompt_video_pair_completeness
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+      evaluator_target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
       status: implemented
     - name: external_official_runner
       metric_ids:

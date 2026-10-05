@@ -1,0 +1,103 @@
+---
+title: Native diffusion
+description: The framework-owned diffusion kernel, component boundaries, dependency rules, and extension model.
+---
+
+## Decision
+
+WorldFoundry implements local diffusion inference as native infrastructure. DiffSynth, Diffusers, LightX2V, and official model repositories are useful specifications and migration references, but none of them is a WorldFoundry runtime backend. The framework owns the sampling loop, typed component contracts, construction rules, lifecycle, and research intervention points.
+
+This avoids two failure modes: copying complete upstream frameworks into each model directory, and hiding the same coupling behind a backend adapter. Shared inference algorithms have one canonical implementation. Network packages contain checkpoint-compatible tensor math only; family state-dict conversion and contract adaptation live in one role-first denoiser layer, while recipes compose those adapters with shared components.
+
+## Ownership and flow
+
+The public model ID remains independent: Echo Memory variants, Matrix Game variants, and ordinary generation models each receive their own immutable recipe and catalog identity. Recipes may reuse component implementations, but one model is never represented as an option flag on another model's global pipeline.
+
+<ArchDiagram id="native-diffusion" />
+
+## Package roles
+
+`worldfoundry/base_models/diffusion_model` is the single diffusion package and is organized by stable runtime roles rather than by upstream repository:
+
+```text
+worldfoundry/base_models/diffusion_model/
+  contracts.py              typed requests, outputs, and component protocols
+  pipeline.py               small public native execution boundary
+  registry.py               explicit, instance-local recipe construction
+  assembly.py               the only component-to-runner construction path
+  components.py             component keys, build contexts, execution specs
+  loaders/                  adapters over worldfoundry/core model loading
+  optimizations/            diffusion-facing core runtime policy exports
+  recipes/                  declarative model-ID composition; no runner code
+  runners/                  framework-owned sampling loops
+  schedulers/               reusable numerical integration algorithms
+  models/networks/<family>/ checkpoint-compatible nn.Module math only
+  models/denoisers/<family>.py state-dict mapping and Denoiser contract adapters
+  models/encoders/<family>/ text, image, audio, action, and geometry encoders
+  models/autoencoders/<family>/ image, video, and audio latent codecs
+  models/initializers/<family>/ model-specific latent geometry, no sampling loop
+  extensions/               memory, control, tracing, and research hooks
+```
+
+There is no `image/`, `video/`, `diffsynth/`, or catch-all `common/` layer. Those former directories have been removed. Modality is recipe capability metadata, not a code ownership boundary. Truly generic configuration, tensor distribution, distributed, loading, kernel, and IO utilities belong in `worldfoundry/core`; diffusion-specific reusable code belongs in the explicit role directories above.
+
+`models/networks` is an especially strict boundary: it cannot contain `inference`, `pipeline`, runtime `config`, `scheduler`, `guardrail`, `checkpointer`, `tokenizer`, `utils`, or runtime packages, and it cannot load checkpoints or choose execution backends. A small immutable architecture schema is allowed only when it directly determines module topology or checkpoint-visible tensor names. The complete Predict1/Predict2, WoW, and Genie source trees that previously violated this rule were removed from canonical models. GEN3C/Cosmos Predict1 and Cosmos Predict2 are now native recipes: only checkpoint-shaped network math remains, and both bind through the same assembler as Predict2.5 and Cosmos3. Both WoW product routes now reuse canonical roles: Wan checkpoints use the shared Wan staged runner, while the DiT 2B checkpoint is a model override on the shared Cosmos Predict2 recipe. Genie product callers remain compatibility work.
+
+Do not add training entrypoints, datasets, experiment configuration, CLI parsers, or copied upstream pipelines to this package. Checkpoint acquisition belongs to model data and core loading utilities; benchmark scoring belongs to evaluation; media writing and `GenerationResult` normalization remain at the public runtime boundary.
+
+## Core reuse
+
+Diffusion does not reimplement general infrastructure. Checkpoint files, safetensors indexes, meta initialization, state-dict assignment, disk maps, staged VRAM placement, layerwise CPU offload, distributed collectives, kernels, configuration, storage, and media IO come from `worldfoundry/core`. The diffusion package defines only diffusion-domain contracts, schedules, execution strategies, recipes, and thin adapters that bind those core capabilities to components.
+
+Attention and reusable transformer mechanics follow the same rule. Capability probing, backend normalization, dense SDPA, arbitrary-padding attention, packed variable-length attention, sparse 3D attention, multimodal sequence-parallel composition, n-D/complex/projective RoPE, and backend callables live under `worldfoundry/core/attention`. RMSNorm, shared transformer MLPs and conditioning projections, timestep projection, AdaLN/final-layer modulation, prefix gating, pluggable transformer-op policy, and gradient checkpoint execution live under `worldfoundry/core/nn`. HunyuanVideo, LTX, Matrix-derived products, Wan, and other model layers import those primitives; they do not carry family copies of backend probing, private-kernel dispatch, offload, checkpoint execution, or generic transformer-op configuration.
+
+If a capability can serve a non-diffusion model, implement it in `worldfoundry/core` first. A family package must never contain its own offload manager, checkpoint framework, distributed bootstrap, kernel registry, or generic quantization system. For the full map of what `core` owns, see [Core infrastructure](/docs/maintainers/architecture/core-infrastructure).
+
+## Dependency rule
+
+Canonical files may depend on PyTorch, reusable `diffusers` model/operator primitives, and narrow framework-core utilities. `diffusers` is an allowed library dependency, but its Pipeline abstraction must not become a second runtime backend or ownership boundary. Canonical files must not import `diffsynth`, the legacy `diffsynth/`, `image/`, or `video/` children, `worldfoundry.synthesis`, `worldfoundry.pipelines`, or `worldfoundry.evaluation`.
+
+Migration is one-way:
+
+```text
+product compatibility boundary -> canonical diffusion_model root -> core / PyTorch / reusable third-party primitives
+```
+
+The reverse edge is forbidden. Once every caller of a legacy implementation has moved, delete that implementation instead of maintaining a second copy.
+
+## Component contracts
+
+`DiffusionRequest` normalizes prompt batches, spatial and temporal shape, sampling settings, model-specific inputs, and reproducibility metadata. A standard runner composes five responsibilities: `ConditionEncoder`, `LatentInitializer`, `DiffusionScheduler`, `Denoiser`, and `LatentDecoder`. Each run constructs immutable conditioning and schedule values plus an isolated `DiffusionRunContext` (`extensions/base.py:24`); no model-specific process globals are required.
+
+`NativeDiffusionRegistry` (`recipes/registry.py:29`) is deliberately explicit and instance-local. Registration detects model ID and alias collisions, and a registry can be frozen before serving requests. `NativeDiffusionRecipe` (`recipes/spec.py:14`) contains component specs, checkpoint specs, capability metadata, and a framework-owned execution strategy ID. Each component declares named checkpoint dependencies such as `weights` and `tokenizer`; the assembler resolves them before construction, so components never infer sibling paths or search a model directory themselves. There is no `runner_factory`: model code cannot construct or substitute its own pipeline/runner. `NativeDiffusionAssembler` (`assembly.py:31`) validates component protocols and is the only recipe-to-runner path. It delegates only to an instance-local `ExecutionStrategyRegistry`; the built-in registry is frozen and contains `standard`, the reusable `frozen-context` suffix-relocking strategy, and the generic `joint-multistage` strategy for coupled modalities and refinement stages. Future shared chunked or autoregressive loops belong in the same framework-owned registry without model-name branches. Importing a network module must not register or load a model as a side effect.
+
+The initial schedulers are the generic stateless FP32 `FlowMatchEulerScheduler`, Wan's shifted Euler trajectory, and shared flow-matching UniPC/DPM++ solvers. If embedded guidance, multiple denoisers, causal chunks, autoregressive windows, or audio/video co-generation requires a new loop, add a reusable execution strategy under `runners/`; do not add a family runner. A strategy is framework infrastructure and must be driven by declarative bindings rather than model-name branches.
+
+Built-in models share one construction entrypoint (`NativeDiffusionPipeline` at `pipeline.py:16`, `from_pretrained` at `:44`):
+
+```python
+import torch
+
+from worldfoundry.base_models.diffusion_model import NativeDiffusionPipeline, RuntimePolicy
+
+pipeline = NativeDiffusionPipeline.from_pretrained(
+    "wan2.1-t2v-1.3b",
+    policy=RuntimePolicy(device="cuda", dtype=torch.bfloat16),
+)
+```
+
+The model ID changes the recipe, not the infrastructure class. Checkpoint and component overrides remain explicit arguments on this same entrypoint.
+
+## Research extensions
+
+`DiffusionExtension` (`extensions/base.py:35`) is the supported intervention surface for memory and generation research. It can prepare conditioning, modify a denoiser input, inspect or transform a branch prediction, transform latents after a step, and postprocess a decoded sample. Hooks receive a per-run context with extension-owned state.
+
+Extensions are installed on a runner instance and identified by a unique `extension_id`. They do not monkey-patch classes or mutate a global registry, so baseline, memory, control, ablation, and tracing variants can coexist in one process. Echo's released checkpoint architecture is a canonical network component rather than an extension; only its model-independent context-relocking lifecycle uses the framework extension surface. Stable reusable research code should eventually graduate from an extension into a canonical component; experiment-specific state remains in the extension.
+
+## Adding or migrating a model
+
+Port the smallest inference slice from the official repository: checkpoint-compatible network definitions, required encoders and autoencoder, numerical schedule, and preprocessing/postprocessing whose behavior affects results. Map those parts to native contracts and create one recipe per public model ID. Reuse an existing canonical component when its checkpoint semantics match; do not copy it into the family package.
+
+Then connect the recipe to the existing public pipeline and catalog route, validate deterministic low-resolution inference, and compare a real checkpoint output against the official implementation. Only after callers use the native path should the old implementation become a one-way compatibility re-export and then be removed. A metadata-only recipe or a toy test is not evidence that a real model has completed migration.
+
+The per-family migration status — which roles each model reuses, what upstream code was deleted, and the local structural/tensor validation that backs each recipe — is recorded in [Native diffusion consolidation](/docs/maintainers/native-diffusion-consolidation). That page is release-evidence provenance, not architecture; read it when you need to know whether a specific family has completed migration and what CUDA artifact parity it still owes.

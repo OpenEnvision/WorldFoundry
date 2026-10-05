@@ -25,24 +25,43 @@ integration:
   - Missing source checkout, checkpoints, or CUDA dependencies are reported at inference time.
 confirmation: Upstream project page links code/demo; no license file was confirmed in the repo, so this is not marked open_source.
 output_artifacts:
-- generated_3d_asset
+- generated_image
 runtime_profile: runtime-profile:mvdiffusion
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: mvdiffusion
 runner_parity:
-  status: pending
+  status: local_gpu_quality_concern
   notes:
-  - Pipeline target imports and plan-only inference are wired; full artifact parity needs runtime assets.
+  - The default image-outpainting route completed local GPU inference with eight 512x512 perspective images and a 4096x968 panorama PNG.
+  - The panorama contains conspicuous red wall patches and invented objects outside the input view; multi-view scene consistency remains a quality concern.
+  - The optional 720-frame spin video and full upstream artifact parity remain unverified.
 catalog_category: three_d_four_d
 catalog_scope: Official-source manifest for 3D, 4D, and camera-controlled world/model generation projects.
 catalog_policy:
   open_source_true_requires: An upstream GitHub or Hugging Face source with an explicit OSI-style software license or otherwise
     clearly open source/open weights metadata. Public code without a license is source-available, not open_source.
-  weights_policy: Weights were not downloaded. Entries record only upstream repository, Hugging Face, project page, paper,
-    and license metadata.
+  weights_policy: A local panorama-outpainting checkpoint was used for inference, but its upstream digest was not available from the public Space metadata; local hashing does not establish upstream provenance.
   status_values:
   - open_source
   - source_available
   - open_weights_restricted
   - api_or_closed
   - unknown
+docs:
+  publisher: Simon Fraser University
+  publisher_kind: university
+  publisher_zh: 西蒙菲莎大学（Simon Fraser University）
+  overview: MVDiffusion generates multi-view images and panoramas with correspondence-aware attention. The in-tree image-outpainting route produced eight views and a panorama locally, with visible consistency defects in generated regions.
+  overview_zh: MVDiffusion 利用对应感知注意力生成多视角图像和全景。树内图像扩展路线已在本地生成八张视角图及全景，但生成区域存在明显一致性问题。
+  architecture: Per the NeurIPS 2023 paper (arXiv 2307.01097), parallel diffusion-model branches generate all views simultaneously with correspondence-aware attention keeping them globally consistent. Missing source checkout, checkpoints, or CUDA dependencies are reported at inference time.
+  architecture_zh: 按 NeurIPS 2023 论文（arXiv 2307.01097），多个并行扩散分支借助「对应感知注意力」同时生成所有视图并保持全局一致。源码、checkpoint 或 CUDA 依赖缺失会在推理时报告。
+  usage_notes: Provide one image for the validated outpainting route. The default artifact is a panorama PNG; the optional spin video and full upstream parity have not been validated.
+  usage_notes_zh: 已验证的图像扩展路线需要一张输入图像，默认产物为全景 PNG；可选旋转视频和完整上游一致性尚未验证。
+  limitations:
+  - Generated wall regions and objects can diverge visibly from the input scene across views.
+  - The optional spin video and upstream checkpoint digest remain unverified.
+  - 'Panorama-oriented training: free-form camera trajectories are out of scope.'
+  limitations_zh:
+  - 各视角生成的墙面和物体可能明显偏离输入场景。
+  - 可选旋转视频与上游 checkpoint 摘要尚未验证。
+  - 训练面向全景场景：自由相机轨迹不在其范围内。

@@ -1,0 +1,8 @@
+defaults:
+  zing:
+    checkpoint_dir: ${WORLDFOUNDRY_HFD_ROOT}/seedleap--zing-0.5
+    num_frames: 81
+    height: 480
+    width: 832
+    fps: 24
+    seed: 0

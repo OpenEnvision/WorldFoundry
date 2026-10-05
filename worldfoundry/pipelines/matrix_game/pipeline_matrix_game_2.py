@@ -2,8 +2,6 @@
 
 from ..pipeline_utils import PipelineABC
 import torch
-import numpy as np
-import cv2
 import os
 import inspect
 from PIL import Image
@@ -18,12 +16,7 @@ from worldfoundry.runtime.env import resolve_ckpt_dir
 if TYPE_CHECKING:
     from ...synthesis.visual_generation.matrix_game.matrix_game_2_synthesis import MatrixGame2Synthesis
 
-
-def tensor_to_pil(tensor: torch.Tensor) -> Image.Image:
-    """Tensor to pil helper function."""
-    last_frame = (tensor * 255).astype(np.uint8)
-    pil_image = Image.fromarray(last_frame)
-    return pil_image
+logger = logging.getLogger(__name__)
 
 
 class MatrixGame2Pipeline(PipelineABC):
@@ -47,22 +40,36 @@ class MatrixGame2Pipeline(PipelineABC):
 
     @classmethod
     def from_pretrained(cls,
-                        model_path: Optional[str] = None,
-                        required_components: Optional[dict] = None,
+                        model_path: Any = None,
+                        required_components: Optional[Mapping[str, Any]] = None,
                         device: str = "cuda",
                         # Use bfloat16 precision to balance memory efficiency and numeric range
                         weight_dtype = torch.bfloat16,
                         mode = "universal",
                         **kwargs) -> "MatrixGame2Pipeline":
         """Load the pipeline from pretrained checkpoints and configurations."""
-        runtime_kwargs = {**(required_components or {}), **kwargs}
-        mode = runtime_kwargs.pop("mode", mode)
-        if model_path is not None:
-            synthesis_model_path = model_path
+        runtime_kwargs = dict(model_path) if isinstance(model_path, Mapping) else {}
+        if isinstance(model_path, Mapping):
+            synthesis_model_path = runtime_kwargs.pop("model_path", None) or runtime_kwargs.pop(
+                "pretrained_model_path", None
+            )
         else:
+            synthesis_model_path = model_path
+        nested_components = runtime_kwargs.pop("required_components", None)
+        if nested_components is not None:
+            if not isinstance(nested_components, Mapping):
+                raise TypeError("required_components must be a mapping")
+            runtime_kwargs.update(nested_components)
+        if required_components is not None:
+            if not isinstance(required_components, Mapping):
+                raise TypeError("required_components must be a mapping")
+            runtime_kwargs.update(required_components)
+        runtime_kwargs.update(kwargs)
+        mode = runtime_kwargs.pop("mode", mode)
+        if synthesis_model_path in {None, ""}:
             synthesis_model_path = str(resolve_ckpt_dir() / "Matrix-Game-2.0")
         
-        print(f"Loading MatrixGame2 synthesis model from {synthesis_model_path}...")
+        logger.info("Loading MatrixGame2 synthesis model from %s...", synthesis_model_path)
         from ...synthesis.visual_generation.matrix_game.matrix_game_2_synthesis import MatrixGame2Synthesis
 
         synthesis_model = MatrixGame2Synthesis.from_pretrained(
@@ -90,7 +97,8 @@ class MatrixGame2Pipeline(PipelineABC):
                 resize_H=352,
                 resize_W=640,
                 interaction_signal=None,
-                official_bench_actions: bool = False):
+                official_bench_actions: bool = False,
+                seed: Optional[int] = None):
         """
         the input_image is PIL image
         """
@@ -117,7 +125,7 @@ class MatrixGame2Pipeline(PipelineABC):
 
         num_frames = (num_output_frames - 1) * 4 + 1
         if official_bench_actions:
-            operator_condition = self.operators.process_official_bench_actions(num_frames=num_frames)
+            operator_condition = self.operators.process_official_bench_actions(num_frames=num_frames, seed=seed)
         else:
             # define the interaction
             self.operators.get_interaction(interaction_signal)
@@ -176,6 +184,7 @@ class MatrixGame2Pipeline(PipelineABC):
             resize_W=resize_W,
             interaction_signal=interactions,
             official_bench_actions=official_bench_actions,
+            seed=seed,
         )
         predict_kwargs = dict(kwds)
         runtime_predict = getattr(getattr(self.synthesis_model, "runtime", None), "predict", None)
@@ -234,7 +243,7 @@ class MatrixGame2Pipeline(PipelineABC):
         if not visualize_warning:
             logging.getLogger("torch._dynamo").setLevel(logging.ERROR)
         if images is not None:
-            print("--- Stream Started ---")
+            logger.info("--- Stream Started ---")
             self.memory_module.record(images)
         
         current_image = self.memory_module.select()

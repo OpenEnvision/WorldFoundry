@@ -5,12 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from worldfoundry.core.execution.process import read_text_tail, run_logged_subprocess
+from worldfoundry.core.io import materialize_file
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import VIDEO_SUFFIXES
 from worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_metrics import METRIC_ORDER, METRIC_SPECS
 from worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_prompts import (
     load_prompt_records,
@@ -62,7 +64,6 @@ def resolve_ckpt_path(*, repo_root: Path | None = None) -> Path:
         return Path("data/ckpt")
     return (root / "data" / "ckpt").resolve()
 
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
 
 @dataclass(frozen=True)
@@ -191,18 +192,26 @@ def _run_upstream_calculate_score(
     env["PYTHONPATH"] = os.pathsep.join(
         part for part in (str(repo_root.resolve()), env.get("PYTHONPATH")) if part
     )
-    completed = subprocess.run(
+    timeout_value = os.environ.get("WORLDFOUNDRY_MIRABENCH_TIMEOUT_SECONDS", "").strip()
+    timeout_seconds = float(timeout_value) if timeout_value else None
+    if timeout_seconds is not None and timeout_seconds <= 0:
+        raise ValueError("WORLDFOUNDRY_MIRABENCH_TIMEOUT_SECONDS must be positive")
+    stdout_path = runtime_dir / "upstream_stdout.log"
+    stderr_path = runtime_dir / "upstream_stderr.log"
+    completed = run_logged_subprocess(
         command,
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
         cwd=str(repo_root.resolve()),
-        text=True,
-        capture_output=True,
-        check=False,
         env=env,
+        timeout=timeout_seconds,
+        start_new_session=False,
     )
     if completed.returncode != 0:
+        detail = read_text_tail(stderr_path) or read_text_tail(stdout_path)
         raise RuntimeError(
             "MiraBench upstream calculate_score.py failed "
-            f"(exit={completed.returncode}): {completed.stderr.strip() or completed.stdout.strip()}"
+            f"(exit={completed.returncode}): {detail}"
         )
 
     average_score = results_dir / "average_score.csv"
@@ -259,7 +268,7 @@ def run_mirabench_scorer(
         config=config,
         meta_csv_path=meta_path,
     )
-    results_path.write_bytes(upstream_average.read_bytes())
+    materialize_file(upstream_average, results_path)
     return {
         "backend": "official",
         "results_path": str(results_path.resolve()),

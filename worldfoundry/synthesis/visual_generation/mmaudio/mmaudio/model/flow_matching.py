@@ -2,7 +2,11 @@ import logging
 from typing import Callable, Optional
 
 import torch
-from torchdiffeq import odeint
+
+try:
+    from torchdiffeq import odeint
+except ImportError:
+    odeint = None
 
 log = logging.getLogger()
 
@@ -58,6 +62,10 @@ class FlowMatching:
         # fn: a function that takes (t, x) and returns the direction x0->x1
 
         if self.inference_mode == 'adaptive':
+            if odeint is None:
+                raise RuntimeError(
+                    "MMAudio adaptive flow matching requires the optional torchdiffeq package."
+                )
             return odeint(fn, x0, torch.tensor([t0, t1], device=x0.device, dtype=x0.dtype))
         elif self.inference_mode == 'euler':
             x = x0

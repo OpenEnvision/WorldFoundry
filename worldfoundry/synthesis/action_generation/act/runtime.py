@@ -1,7 +1,6 @@
 # Inference-only ACT source retained in-tree.
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -9,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
 
 from .policy import build_policy_class, load_dataset_stats
@@ -34,7 +34,7 @@ def select_act_checkpoint(*, checkpoint_path: str | Path | None, checkpoint_dir:
     """Select an ACT checkpoint file from explicit options or profile metadata.
 
     Args:
-        checkpoint_path: Explicit policy checkpoint file.
+        checkpoint_path: Explicit policy checkpoint file or checkpoint directory.
         checkpoint_dir: Explicit directory containing policy_best.ckpt or policy_last.ckpt.
         checkpoints: Profile checkpoint records.
     """
@@ -46,7 +46,11 @@ def select_act_checkpoint(*, checkpoint_path: str | Path | None, checkpoint_dir:
 
     candidates: list[Path] = []
     if checkpoint_path:
-        candidates.append(expand(checkpoint_path))
+        path = expand(checkpoint_path)
+        if path.is_dir():
+            candidates.extend([path / "policy_best.ckpt", path / "policy_last.ckpt"])
+        else:
+            candidates.append(path)
     if checkpoint_dir:
         root = expand(checkpoint_dir)
         candidates.extend([root / "policy_best.ckpt", root / "policy_last.ckpt"])
@@ -124,7 +128,7 @@ class ACTRuntime:
         policy_cls = build_policy_class()
         self.policy = policy_cls(args).to(torch.device(self.config.device))
         self.policy.eval()
-        from worldfoundry.core.model_loading.file import load_torch_checkpoint
+        from worldfoundry.core.model_loading.checkpoints.file import load_torch_checkpoint
 
         payload = load_torch_checkpoint(
             checkpoint,
@@ -218,7 +222,7 @@ class ACTRuntime:
             "metadata": _jsonable(dict(extra_metadata or {})),
         }
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        artifact_sha256 = hashlib.sha256(target.read_bytes()).hexdigest()
+        artifact_sha256 = file_sha256(target)
         return {
             "status": "success",
             "model_id": "act",

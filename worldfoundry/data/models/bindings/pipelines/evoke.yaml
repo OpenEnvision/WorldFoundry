@@ -1,0 +1,8 @@
+schema_version: 2
+binding_id: evoke
+model_id: evoke
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.evoke.pipeline_evoke:EvokePipeline
+  loading: {method: from_pretrained, signature: unified}
+  invocation: {mode: native_or_standard_invocation}

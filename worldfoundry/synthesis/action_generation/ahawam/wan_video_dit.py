@@ -562,25 +562,27 @@ class WanVideoDiT(torch.nn.Module):
         )
 
         batch_size = x.shape[0]
+        patch_t = int(self.patch_size[0])
         patch_h = int(self.patch_size[1])
         patch_w = int(self.patch_size[2])
-        if x.shape[3] % patch_h != 0 or x.shape[4] % patch_w != 0:
+        if x.shape[2] % patch_t != 0 or x.shape[3] % patch_h != 0 or x.shape[4] % patch_w != 0:
             raise ValueError(
-                "Latent spatial shape must be divisible by DiT patch size, "
-                f"got HxW=({x.shape[3]}, {x.shape[4]}), patch=({patch_h}, {patch_w})"
+                "Latent shape must be divisible by DiT patch size, "
+                f"got TxHxW={tuple(x.shape[2:])}, patch={tuple(self.patch_size)}"
             )
-        tokens_per_frame = (x.shape[3] // patch_h) * (x.shape[4] // patch_w)
 
+        x = self.patchify(x, control_camera_latents_input=control_camera_latents_input)
+        num_frames, grid_h, grid_w = x.shape[2:]
         if self.seperated_timestep and fuse_vae_embedding_in_latents:
             if not hasattr(self, "patch_size") or len(self.patch_size) < 3:
                 raise ValueError(f"Invalid dit.patch_size: {getattr(self, 'patch_size', None)}")
 
             token_timesteps = torch.ones(
-                (batch_size, x.shape[2], tokens_per_frame),
+                (batch_size, num_frames, grid_h * grid_w),
                 dtype=timestep.dtype,
                 device=timestep.device,
             ) * timestep.view(batch_size, 1, 1)
-            clean_prefix_frames = max(0, min(int(clean_prefix_frames), int(x.shape[2])))
+            clean_prefix_frames = max(0, min(int(clean_prefix_frames), num_frames))
             if clean_prefix_frames > 0:
                 token_timesteps[:, :clean_prefix_frames, :] = 0
             token_timesteps = token_timesteps.reshape(batch_size, -1)
@@ -589,156 +591,46 @@ class WanVideoDiT(torch.nn.Module):
             t_mod = self.time_projection(t).unflatten(2, (6, self.hidden_dim))
         else:
             raise NotImplementedError("Only support seperated_timestep with fuse_vae_embedding_in_latents for now.")
-            t = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, timestep))
-            t_mod = self.time_projection(t).unflatten(1, (6, self.hidden_dim))
-        x = self.patchify(x, control_camera_latents_input=control_camera_latents_input)
-        f, h, w = x.shape[2:]
 
-        context = self.text_embedding(context)  # (B, L, dim)
-        context_len = context.shape[1]
-        if self.action_conditioned and action is not None:
-            action_len = action.shape[1]
-            action_emb = self.action_embedding(action)  # (B, action_len, dim)
-            action_pos_embed = sinusoidal_embedding_1d(
-                self.hidden_dim, torch.arange(action_len, device=action_emb.device)
-            )  # (action_len, dim)
-            action_emb = action_emb + action_pos_embed.unsqueeze(0)  # (B, action_len, dim)
-            context = torch.cat([context, action_emb], dim=1)  # (B, context_len + action_len, dim)
-
-            # new mask
-            num_temporal_groups = f - 1  # first latent frame do not attend to actions
-            if num_temporal_groups <= 0:
-                raise ValueError(
-                    "Action-conditioned context mask requires at least 2 latent frames when `action` is provided."
-                )
-            assert action_emb.shape[1] % num_temporal_groups == 0, (
-                f"Action embedding length {action_emb.shape[1]} must be divisible by number of temporal groups {num_temporal_groups}"
-            )
-            # Each latent frame (from the 2nd one) attends to the corresponding group of action tokens
-            action_group_mask = create_group_causal_attn_mask(
-                num_temporal_groups=num_temporal_groups,
-                num_query_per_group=tokens_per_frame,
-                num_key_per_group=action_len // num_temporal_groups,
-                mode=self.action_group_causal_mask_mode,
-            ).to(context.device)  # ((f-1)*tokens_per_frame, action_len)
-
-            seq_len = f * h * w  # query length
-            final_context_mask = torch.zeros(
-                (batch_size, seq_len, context.shape[1]), dtype=torch.bool, device=context.device
-            )  # (B, seq_len, L + action_len)
-            # all latent frames attend to text tokens
-            final_context_mask[:, :, :context_len] = context_mask.unsqueeze(1).expand(
-                -1, seq_len, -1
-            )  # (B, seq_len, L)
-            # latent frames from the 2nd one attend to action tokens
-            final_context_mask[:, tokens_per_frame:, context_len:] = action_group_mask.unsqueeze(0).expand(
-                batch_size, -1, -1
-            )  # (B, seq_len, action_len)
-            context_mask = final_context_mask
-        elif self.action_conditioned and action is None:
-            if f != 1:
-                raise ValueError(
-                    "Action-conditioned model requires `action` unless running single-frame text-only mode with num_latent_frames=1."
-                )
-            context_mask = context_mask.unsqueeze(1).expand(-1, f * h * w, -1)  # (B, seq_len, L)
+        if temporal_position_ids is None:
+            frame_positions = torch.arange(num_frames, device=x.device) + int(temporal_position_offset)
         else:
-            context_mask = context_mask.unsqueeze(1).expand(-1, f * h * w, -1)  # (B, seq_len, L)
-
-        x_tokens = rearrange(x, "b c f h w -> b (f h w) c").contiguous()
-
-        if temporal_position_ids is not None:
-            temporal_ids = temporal_position_ids.to(device=self.freqs[0].device, dtype=torch.long)
-            if temporal_ids.ndim == 1:
-                if int(temporal_ids.shape[0]) != f:
-                    raise ValueError(
-                        "`temporal_position_ids` must be 1D [F] or 2D [B,F], "
-                        f"got shape {tuple(temporal_ids.shape)} for F={f}."
-                    )
-            elif temporal_ids.ndim == 2:
-                if int(temporal_ids.shape[0]) != batch_size or int(temporal_ids.shape[1]) != f:
-                    raise ValueError(
-                        "`temporal_position_ids` must be 1D [F] or 2D [B,F], "
-                        f"got shape {tuple(temporal_ids.shape)} for B={batch_size}, F={f}."
-                    )
-            else:
+            frame_positions = torch.as_tensor(temporal_position_ids, device=x.device)
+            if frame_positions.ndim != 1 or frame_positions.numel() != num_frames:
                 raise ValueError(
-                    f"`temporal_position_ids` must be 1D [F] or 2D [B,F], got shape {tuple(temporal_ids.shape)}."
+                    f"`temporal_position_ids` must have one entry per latent frame ({num_frames}), "
+                    f"got shape {tuple(frame_positions.shape)}"
                 )
-            if bool((temporal_ids < 0).any().item()):
-                raise ValueError("`temporal_position_ids` must be non-negative.")
-            if bool((temporal_ids >= int(self.freqs[0].shape[0])).any().item()):
-                raise ValueError(
-                    "`temporal_position_ids` exceeds available temporal RoPE positions: "
-                    f"max_id={int(temporal_ids.max().item())}, available={int(self.freqs[0].shape[0])}."
-                )
-            temporal_freqs = self.freqs[0].index_select(0, temporal_ids.reshape(-1))
-            if temporal_ids.ndim == 2:
-                temporal_freqs = temporal_freqs.reshape(batch_size, f, -1)
-        else:
-            temporal_offset = int(temporal_position_offset)
-            if temporal_offset < 0:
-                raise ValueError(f"`temporal_position_offset` must be >= 0, got {temporal_offset}")
-            temporal_freqs = self.freqs[0][temporal_offset : temporal_offset + f]
+            if frame_positions.dtype not in (torch.int32, torch.int64):
+                raise ValueError("`temporal_position_ids` must contain integer frame indices")
+        if torch.any(frame_positions < 0) or torch.any(frame_positions >= self.rope_max_length):
+            raise ValueError(f"Temporal RoPE positions must be in [0, {self.rope_max_length})")
+        if grid_h > self.rope_max_length or grid_w > self.rope_max_length:
+            raise ValueError("Latent spatial grid exceeds the RoPE cache")
 
-        if temporal_freqs.ndim == 2:
-            if int(temporal_freqs.shape[0]) != f:
-                raise ValueError(
-                    "Not enough temporal RoPE positions for video pre_dit: "
-                    f"f={f}, available={int(self.freqs[0].shape[0])}."
-                )
-            freqs = (
-                torch.cat(
-                    [
-                        temporal_freqs.view(f, 1, 1, -1).expand(f, h, w, -1),
-                        self.freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
-                        self.freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1),
-                    ],
-                    dim=-1,
-                )
-                .reshape(f * h * w, 1, -1)
-                .to(x_tokens.device)
-            )
-        else:
-            if temporal_freqs.ndim != 3 or int(temporal_freqs.shape[1]) != f:
-                raise ValueError(
-                    "Invalid per-sample temporal RoPE positions: "
-                    f"got temporal_freqs shape {tuple(temporal_freqs.shape)} for F={f}."
-                )
-            spatial_freqs = torch.cat(
-                [
-                    self.freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
-                    self.freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1),
-                ],
-                dim=-1,
-            ).reshape(1, f * h * w, -1)
-            temporal_freqs = (
-                temporal_freqs.view(batch_size, f, 1, 1, -1)
-                .expand(batch_size, f, h, w, -1)
-                .reshape(batch_size, f * h * w, -1)
-            )
-            freqs = (
-                torch.cat(
-                    [
-                        temporal_freqs,
-                        spatial_freqs.expand(batch_size, -1, -1),
-                    ],
-                    dim=-1,
-                )
-                .unsqueeze(2)
-                .to(x_tokens.device)
-            )
-
+        f_freqs, h_freqs, w_freqs = self.freqs
+        f_rope = f_freqs[frame_positions.long()].view(num_frames, 1, 1, -1)
+        h_rope = h_freqs[:grid_h].view(1, grid_h, 1, -1)
+        w_rope = w_freqs[:grid_w].view(1, 1, grid_w, -1)
+        freqs = torch.cat(
+            (
+                f_rope.expand(-1, grid_h, grid_w, -1),
+                h_rope.expand(num_frames, -1, grid_w, -1),
+                w_rope.expand(num_frames, grid_h, -1, -1),
+            ),
+            dim=-1,
+        ).reshape(num_frames * grid_h * grid_w, 1, -1).to(x.device)
+        tokens = rearrange(x, "b c f h w -> b (f h w) c")
         return {
-            "tokens": x_tokens,
-            "freqs": freqs,
+            "tokens": tokens,
+            "context": self.text_embedding(context),
+            "context_mask": context_mask,
             "t": t,
             "t_mod": t_mod,
-            "context": context,
-            "context_mask": context_mask,
+            "freqs": freqs,
             "meta": {
-                "grid_size": (f, h, w),
-                "tokens_per_frame": tokens_per_frame,
-                "batch_size": batch_size,
+                "grid_size": (num_frames, grid_h, grid_w),
+                "tokens_per_frame": grid_h * grid_w,
             },
         }
 

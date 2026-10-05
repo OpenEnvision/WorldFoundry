@@ -1,6 +1,6 @@
 schema_version: 2
 model_id: unidepth-v2-prior
-display_name: UniDepth V2 Prior
+display_name: UniDepth V2
 task_family: three_dimension
 groups:
 - 3d
@@ -11,6 +11,7 @@ checkpoints:
 - repo_id: lpiccinelli/unidepth-v2-vitl14
   filename: model.safetensors
   role: unidepth_v2_vitl14_checkpoint
+  revision: 1d0d3c52f60b5164629d279bb9a7546458e6dcc4
 input_schema:
   prompt: false
   image: true

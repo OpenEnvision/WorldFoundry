@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
+from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import resolve_env_path, bundled_benchmark_asset
 from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_prompts import (
     resolve_physvidbench_root,
 )
@@ -15,9 +15,6 @@ DEFAULT_CAPTION_BASE_REL = Path("captions/cogvideo2b")
 CAPTION_SUFFIXES = ("_FP", "_OP", "_SR", "_TD", "_AU", "_MT", "_FM", "")
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def resolve_captions_dir(
@@ -30,7 +27,7 @@ def resolve_captions_dir(
         if not path.is_dir():
             raise FileNotFoundError(f"PhysVidBench captions directory not found: {path}")
         return path
-    env_dir = _env_path("WORLDFOUNDRY_PHYSVIDBENCH_CAPTIONS_DIR")
+    env_dir = resolve_env_path("WORLDFOUNDRY_PHYSVIDBENCH_CAPTIONS_DIR")
     if env_dir is not None:
         if not env_dir.is_dir():
             raise FileNotFoundError(f"PhysVidBench captions directory not found: {env_dir}")
@@ -58,7 +55,7 @@ def resolve_caption_base(
 ) -> Path:
     if explicit is not None:
         return explicit.expanduser().resolve()
-    env_base = _env_path("WORLDFOUNDRY_PHYSVIDBENCH_CAPTION_BASE")
+    env_base = resolve_env_path("WORLDFOUNDRY_PHYSVIDBENCH_CAPTION_BASE")
     if env_base is not None:
         return env_base
     root = repo_root or resolve_physvidbench_root()

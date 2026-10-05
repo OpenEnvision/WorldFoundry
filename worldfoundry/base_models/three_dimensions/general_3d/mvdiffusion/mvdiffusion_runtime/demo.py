@@ -1,5 +1,6 @@
 """Module for base_models -> three_dimensions -> general_3d -> mvdiffusion -> mvdiffusion_runtime -> demo.py functionality."""
 
+
 import argparse
 import os
 
@@ -7,16 +8,17 @@ import cv2
 import numpy as np
 import torch
 import yaml
+from src.checkpoint_utils import resolve_mvdiffusion_checkpoint
 from src.pano_generator import PanoGenerator
 from src.pano_outpaint_generator import PanoOutpaintGenerator
+
+from worldfoundry.core.io.paths import package_data_path
 
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 from datetime import datetime
 
 from generate_video_tool.pano_video_generation import generate_video
 from PIL import Image
-
-from worldfoundry.core.io.paths import checkpoint_root_path
 
 try:
     from exiftool import ExifToolHelper
@@ -27,8 +29,7 @@ torch.manual_seed(0)
 
 
 def _checkpoint_path(filename):
-    local_path = checkpoint_root_path("MVDiffusion", "weights", filename)
-    return str(local_path) if local_path.is_file() else str(os.path.join("weights", filename))
+    return str(resolve_mvdiffusion_checkpoint("MVDiffusion", "weights", filename))
 
 def load_mvdiffusion_state_dict(model, checkpoint_path):
     """Load mvdiffusion state dict.
@@ -37,7 +38,12 @@ def load_mvdiffusion_state_dict(model, checkpoint_path):
         model: The model.
         checkpoint_path: The checkpoint path.
     """
-    state_dict = torch.load(checkpoint_path, map_location='cpu')['state_dict']
+    state_dict = torch.load(
+        checkpoint_path,
+        map_location='cpu',
+        weights_only=True,
+        mmap=True,
+    )['state_dict']
     key_map = {
         '.query.': '.to_q.',
         '.key.': '.to_k.',
@@ -93,6 +99,9 @@ def parse_args():
                     action='store_true', help='generate video')
     parser.add_argument('--text_path',
                     type=str, help='text path allow to specify 8 texts')
+    parser.add_argument(
+        '--steps', type=int, default=None,
+        help='override the configured diffusion timestep count')
 
     return parser.parse_args()
 
@@ -123,8 +132,10 @@ def resize_and_center_crop(img, size):
 
 args = parse_args()
 if args.image_path is None:
-    config_file = 'configs/pano_generation.yaml'
+    config_file = package_data_path('models', 'runtime', 'configs', 'mvdiffusion', 'pano_generation.yaml')
     config = yaml.load(open(config_file, 'rb'), Loader=yaml.SafeLoader)
+    if args.steps is not None:
+        config['model']['diff_timestep'] = max(int(args.steps), 1)
     model = PanoGenerator(config)
     load_mvdiffusion_state_dict(model, _checkpoint_path('pano.ckpt'))
     #saved_ckpt = torch.load('weights/pano.ckpt', map_location='cpu')
@@ -133,8 +144,10 @@ if args.image_path is None:
     img=None
 else:
 
-    config_file = 'configs/pano_generation_outpaint.yaml'
+    config_file = package_data_path('models', 'runtime', 'configs', 'mvdiffusion', 'pano_generation_outpaint.yaml')
     config = yaml.load(open(config_file, 'rb'), Loader=yaml.SafeLoader)
+    if args.steps is not None:
+        config['model']['diff_timestep'] = max(int(args.steps), 1)
     model = PanoOutpaintGenerator(config)
     load_mvdiffusion_state_dict(model, _checkpoint_path('pano_outpaint.ckpt'))
     #saved_ckpt = torch.load('weights/pano_outpaint.ckpt', map_location='cpu')

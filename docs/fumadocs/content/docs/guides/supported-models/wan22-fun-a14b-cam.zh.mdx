@@ -1,0 +1,50 @@
+---
+title: "Wan2.2-Fun A14B Control Camera"
+description: "Wan2.2-Fun A14B Control Camera（Alibaba PAI (VideoX-Fun)）：相机可控视频、图生视频；Runner 一致性待确认。"
+modelId: "wan22-fun-a14b-cam"
+pageSource: authored
+---
+
+Wan2.2-Fun A14B Control Camera 是 VideoX-Fun 家族中 Wan2.2 世代最大的相机控制 checkpoint：A14B（专家混合式）扩散骨干，由显式相机位姿序列操控图生视频。WorldFoundry 将 VideoX-Fun 内置树内（revision 403f1f7b），并为 alibaba-pai/Wan2.2-Fun-A14B-Control-Camera 接通专用路由， Apache-2.0 许可。
+
+<ModelPaperFigures modelId="wan22-fun-a14b-cam" locale="zh" />
+
+代码：[aigc-apps/VideoX-Fun](https://github.com/aigc-apps/VideoX-Fun)。
+
+<ModelCommandBuilder modelId="wan22-fun-a14b-cam" locale="zh" />
+
+## 用来做什么
+
+需要相机可控视频时选 `wan22-fun-a14b-cam`：相机轨迹进、受控视频出。视角必须跟随路径时，用它而不是无约束 T2V。
+
+A14B 规模的 Wan2.2 扩散骨干，叠加 VideoX-Fun Control-Camera 条件通路。更多内部细节仓库未记录。该模型由阿里云 PAI（VideoX-Fun）发布。
+
+catalog 记录的任务包括 相机可控视频、图生视频。模态上，它接受图像，输出视频。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（受控图生视频的相机位姿跟随）。
+
+不是 [Wan2.2](/zh/docs/guides/supported-models/wan2.2)、[Wan2.2 Fun 5B Cam](/zh/docs/guides/supported-models/wan22-fun-5b-cam)。 评测看 [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`frames`、`fps`、`height`；产物 `wan22-fun-a14b-cam.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `Wan22FunA14BCameraPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+建议在 GPU 已验证的 1.3B 同门版本上跑通流程后，再用此变体追求最高质量的相机控制生成；A14B checkpoint 是家族中显存需求最大的。 runner parity 仍为 pending。
+
+VideoX-Fun 相机家族中显存占用最大。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run wan22-fun-a14b-cam --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `alibaba-pai/Wan2.2-Fun-A14B-Control-Camera`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh wan22-fun-a14b-cam`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="wan22-fun-a14b-cam" locale="zh" />

@@ -1,0 +1,50 @@
+---
+title: "MotionBricks"
+description: "MotionBricks from NVIDIA: human-action-generation and motion-generation; Runner parity pending."
+modelId: "motionbricks"
+pageSource: authored
+---
+
+MotionBricks is part of NVIDIA's GR00T-WholeBodyControl stack: it generates humanoid whole-body motion — the action side of embodied world modeling, emitting action traces rather than video (paper arXiv 2604.24833). In this catalog the official source route is registered; motion/robot assets stay runtime-gated.
+
+<ModelPaperFigures modelId="motionbricks" locale="en" />
+
+The recorded paper is [MotionBricks: Scalable Real-Time Motions with Modular Latent Generative Model and Smart Primitives](https://arxiv.org/abs/2604.24833) (SIGGRAPH 2026, 2026).
+
+Project page: [nvlabs.github.io/motionbricks](https://nvlabs.github.io/motionbricks/). Code: [NVlabs/GR00T-WholeBodyControl](https://github.com/NVlabs/GR00T-WholeBodyControl).
+
+The paper is [MotionBricks: Scalable Real-Time Motions with Modular Latent Generative Model and Smart Primitives](https://arxiv.org/pdf/2604.24833). Project page: [nvlabs.github.io/motionbricks](https://nvlabs.github.io/motionbricks). Code: [NVlabs/GR00T-WholeBodyControl](https://github.com/NVlabs/GR00T-WholeBodyControl).
+
+<ModelCommandBuilder modelId="motionbricks" locale="en" />
+
+## What it is for
+
+`motionbricks` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+
+Architecture internals beyond the recorded tasks are not stored in this repository (apache-2.0); the source is bound from the GR00T-WholeBodyControl repository at a pinned commit. The recorded artifact type is action_trace.
+
+Catalog tasks include human-action-generation, motion-generation, and world-model.
+
+## Runtime contract
+
+Artifacts `action_trace` and `motionbricks_runtime_plan.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `MotionBricksPipeline`.
+
+Family status: **Runner parity pending**.
+
+Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
+
+MotionBricks official source route is registered; motion/robot assets are runtime-gated.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run motionbricks --pipeline.task-profile default` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+No public checkpoint id is recorded on this card; follow the usage notes for staging. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh motionbricks`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="motionbricks" locale="en" />

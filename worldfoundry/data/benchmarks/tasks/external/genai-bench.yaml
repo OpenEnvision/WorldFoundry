@@ -58,7 +58,7 @@ metrics:
     aggregation: mean
     description: GenAI-Bench pairwise accuracy against human preference labels across available tasks.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_video_quality_contract:evaluate_genai_bench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_genai_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
       required_inputs:
@@ -70,7 +70,7 @@ metrics:
     aggregation: mean
     description: GenAI-Bench image-generation preference accuracy against human labels.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_video_quality_contract:evaluate_genai_bench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_genai_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
       required_inputs:
@@ -82,7 +82,7 @@ metrics:
     aggregation: mean
     description: GenAI-Bench image-editing preference accuracy against human labels.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_video_quality_contract:evaluate_genai_bench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_genai_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
       required_inputs:
@@ -94,7 +94,7 @@ metrics:
     aggregation: mean
     description: GenAI-Bench video-generation preference accuracy against human labels.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_video_quality_contract:evaluate_genai_bench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_genai_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
       required_inputs:
@@ -107,7 +107,7 @@ metrics:
     primary: true
     description: Mean of task preference accuracies when task-level labels and predictions are available.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_video_quality_contract:evaluate_genai_bench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_genai_bench_video_quality_contract_file
       status: blocked
       blocked_reason: judge_required
       required_inputs:
@@ -123,7 +123,7 @@ metadata:
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:GenAIBenchContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/genai_bench/run_genai_bench_official_runner.py
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_video_quality_contract:evaluate_genai_bench_video_quality_contract_file
+    target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_genai_bench_video_quality_contract_file
     status: implemented
     protocol: local_manifest_metadata_and_official_result_normalization
     output_fields:
@@ -288,7 +288,7 @@ tasks:
       metric_ids:
       - local_metadata_coverage
       - local_prompt_video_pair_completeness
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.genai_bench.genai_bench_video_quality_contract:evaluate_genai_bench_video_quality_contract_file
+      evaluator_target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_genai_bench_video_quality_contract_file
       status: implemented
     - name: in_tree_official_runtime
       metric_ids:

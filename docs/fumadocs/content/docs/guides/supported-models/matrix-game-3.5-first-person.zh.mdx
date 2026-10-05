@@ -1,0 +1,50 @@
+---
+title: "Matrix-Game 3.5"
+description: "Matrix-Game 3.5（Riemann Dynamics）：图生视频、相机可控视频；Runner 一致性待确认。"
+modelId: "matrix-game-3.5-first-person"
+pageSource: authored
+---
+
+Matrix-Game 3.5 First-Person Base 是 Matrix-Game 3.5 发布的第一人称档案：在 camera NPZ 控制下逐块（每块新增 84 帧）生成 1280x704 的长时程交互世界视频。该模型 id 永久绑定 first-person.safetensors。2026-07-20 的默认 25 步单块 A100 运行导出 85 帧非空输出；官方样例一致性仍待验证。
+
+<ModelPaperFigures modelId="matrix-game-3.5-first-person" locale="zh" />
+
+项目页：[matrix-game-v3-5.github.io](https://matrix-game-v3-5.github.io/)。代码：[Riemann-Dynamics/Matrix-Game-3.5](https://github.com/Riemann-Dynamics/Matrix-Game-3.5)。
+
+<ModelCommandBuilder modelId="matrix-game-3.5-first-person" locale="zh" />
+
+## 用来做什么
+
+需要相机可控视频时选 `matrix-game-3.5-first-person`：相机轨迹进、受控视频出。视角必须跟随路径时，用它而不是无约束 T2V。
+
+记录的栈基于 Wan2.2-TI2V-5B（apache-2.0），加 Matrix-Game-3.5-Base 权重与 DA3NESTED-GIANT-LARGE-1.1 深度依赖（CC-BY-NC-4.0——独立的非商用条款）。推理经规范 NativeDiffusionPipeline 集成、不再保留 DiffSynth pipeline；当前发布的 checkpoint 是 25 步双向 5B 基座，而非官宣的少步实时蒸馏模型。该模型由Riemann Dynamics（黎曼动力）发布。
+
+catalog 记录的任务包括 图生视频、相机可控视频、交互式世界模型、long-horizon-generation。别名包括 `matrix-game-3.5-fp`、`matrix-game-35-first-person`。模态上，它接受图像，输出视频。
+
+记录的评测入口包括[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（长时程交互世界滚动生成质量）、[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（camera NPZ 轨迹贴合度）。
+
+用图像加 camera npz 跑 Matrix-Game 3.5 第一人称。不是第三人称的 3 卡片。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`fps`、`steps`、`guidance_scale`；产物 `generated_world_video`、`matrix-game-3.5-first-person.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `MatrixGame35FirstPersonPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+每块消费 84 个相机位姿、生成 84 帧新画面（导出含锚帧）。 共享解析器优先使用本地就位 checkpoint，也可补齐缺失的 Hub 文件。 已记录的 A100 产物早于 NativeDiffusionPipeline 切换——声称原生一致性前请重新生成。
+
+Revision-pinned inference behavior is integrated through the canonical NativeDiffusionPipeline; no DiffSynth Matrix pipeline remains.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run matrix-game-3.5-first-person --pipeline.task-profile interactive-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `RiemannDynamics/Matrix-Game-3.5-Base`、`Wan-AI/Wan2.2-TI2V-5B`、`depth-anything/DA3NESTED-GIANT-LARGE-1.1` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh matrix-game-3.5-first-person`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0、cc-by-nc-4.0；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="matrix-game-3.5-first-person" locale="zh" />

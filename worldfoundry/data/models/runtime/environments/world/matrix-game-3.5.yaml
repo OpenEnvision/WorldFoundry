@@ -1,0 +1,55 @@
+schema_version: 2
+environment_id: matrix-game-3.5
+model_id: matrix-game-3.5
+env_name: matrix-game-3.5
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+driver_status: compatible
+conda_packages:
+- python=3.11
+- pip
+- ffmpeg
+pip_packages:
+- torch
+- torchvision
+- numpy
+- accelerate
+- transformers
+- sentencepiece
+- modelscope
+- huggingface-hub
+- safetensors
+- einops
+- omegaconf
+- PyYAML
+- tqdm
+- opencv-python
+- pillow
+- imageio
+- imageio-ffmpeg
+- decord
+- pycocotools
+- moviepy==1.0.3
+- pycolmap
+- trimesh
+validation_imports:
+- torch
+- torchvision
+- numpy
+- accelerate
+- transformers
+- safetensors
+- cv2
+- imageio
+- worldfoundry.base_models.diffusion_model.recipes.matrix_game
+- worldfoundry.base_models.diffusion_model.models.networks.matrix_game_3p5
+- worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.api
+- worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_3p5_runtime
+- worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_3p5_synthesis
+notes:
+- Both independent Matrix-Game 3.5 model IDs share this native Python 3.11 inference environment.
+- Matrix-specific networks and recipes use the canonical native diffusion infrastructure; Depth-Anything-3 is reused in-tree.
+- Matrix-Game 3.5, Wan2.2-TI2V-5B, and Depth-Anything-3 weights remain local external assets.
+- Official 704x1280 generation requires one CUDA GPU with roughly 40 GB VRAM and at least 64 GB system RAM.
+- Accelerated attention is auto-detected on CUDA and PyTorch SDPA remains the fallback.

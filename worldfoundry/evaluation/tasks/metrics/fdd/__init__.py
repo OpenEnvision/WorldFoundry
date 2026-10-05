@@ -6,9 +6,10 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .wrapper import compute_fdd
+compute_fdd = lazy_export(f"{__name__}.wrapper", "compute_fdd", owner=__name__)
 
 METRIC_ID = "fdd"
 ALIASES = ("frechet-denoised-distance", "frechet_denoised_distance")

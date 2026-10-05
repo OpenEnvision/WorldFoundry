@@ -1,0 +1,48 @@
+---
+title: "Mochi-1"
+description: "Mochi-1 from Genmo: text-to-video; Runner parity pending."
+modelId: "mochi-1"
+pageSource: generated
+---
+
+Mochi-1 is Genmo's open text-to-video model, released as a preview checkpoint and known for strong motion quality among open models at its release. The catalog records one runnable variant, mochi-1-preview-t2v; the WorldFoundry runner path is wired for the official preview checkpoint.
+
+<ModelPaperFigures modelId="mochi-1" locale="en" />
+
+Project page: [genmo.ai/blog](https://www.genmo.ai/blog). Code: [genmoai/models](https://github.com/genmoai/models).
+
+<ModelCommandBuilder modelId="mochi-1" locale="en" />
+
+## What it is for
+
+`mochi-1-preview-t2v` is the recorded prompt-to-video route — not image editing and not a policy. Start here when the job is a clip from text.
+
+Upstream describes Mochi-1 as a 10B-parameter Asymmetric Diffusion Transformer (AsymmDiT) with a dedicated video VAE. This repository records the runner wiring and the standard prompt/image/video/actions input schema; further internals are not recorded here.
+
+Catalog tasks include text-to-video. Documented modalities: text in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Standard T2V quality suite).
+
+## Runtime contract
+
+Optional `prompt`, `negative_prompt`, `frames`, `fps`, and `height`; artifacts `mochi-1-preview-t2v.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `Mochi1PreviewT2VPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `interactive-video` defaults: frames=84, fps=30, height=480, width=848, seed=12345.
+
+No public demo reproduction script is packaged. GitHub uses genmoai while Hugging Face uses genmo; stage the preview checkpoint before running.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run mochi-1-preview-t2v --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `genmo/mochi-1-preview`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh mochi-1-preview-t2v`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="mochi-1" locale="en" />

@@ -1,0 +1,302 @@
+benchmark: mind
+name: MIND
+description: MIND external benchmark manifest for memory consistency and action control evaluation in interactive world models.
+tags:
+- benchmark-zoo
+- external-official
+- mind
+- interactive-video-world-model
+- memory-consistency
+- action-control
+splits:
+- standard
+metrics:
+  lcm_psnr:
+    aggregation: mean
+  lcm_ssim:
+    aggregation: mean
+  lcm_lpips:
+    aggregation: mean
+  lcm_mse:
+    aggregation: mean
+  dino_mse:
+    aggregation: mean
+  imaging_quality:
+    aggregation: mean
+  aesthetic_quality:
+    aggregation: mean
+  action_rpe_trans_mean:
+    aggregation: mean
+  action_rpe_rot_mean_deg:
+    aggregation: mean
+  action_rpe_trans_median:
+    aggregation: mean
+  action_rpe_rot_median_deg:
+    aggregation: mean
+  action_translation_rpe_trans_mean:
+    aggregation: mean
+  action_rotation_rpe_rot_mean_deg:
+    aggregation: mean
+  gsc_psnr:
+    aggregation: mean
+  gsc_ssim:
+    aggregation: mean
+  gsc_lpips:
+    aggregation: mean
+  gsc_mse:
+    aggregation: mean
+  memory_consistency_score:
+    aggregation: mean
+  visual_quality_score:
+    aggregation: mean
+  action_control_score:
+    aggregation: mean
+  scene_consistency_score:
+    aggregation: mean
+  mind_average:
+    aggregation: mean
+    primary: true
+metadata:
+  source_kind: benchmark_zoo
+  benchmark_id: mind
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id mind --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/mind --json
+  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:MINDContract
+  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/mind/run_mind_official_runner.py
+  official_runner_command: worldfoundry-eval zoo benchmark-run
+  name: MIND
+  domain:
+  - world-model
+  - interactive-video
+  - memory
+  - action-control
+  task_type: interactive_video_world_model_evaluation
+  status: integrated
+  maturity: contract_ready
+  release_status: experimental
+  open_source_status: experimental
+  official_benchmark_verified: false
+  integration_evidence: false
+  leaderboard_valid: false
+  base_model_dependencies:
+  - video_world_perception_stack
+  source_provenance:
+    official_repo:
+      url: https://github.com/CSU-JPG/MIND
+      revision: 219f458bbfbc3204e848bb6dd1f45363d4e34730
+      license: MIT
+      provenance: official source; runtime code is vendored in tree under the WorldFoundry runner
+      role: provenance_only_not_runtime_dependency
+    paper:
+      url: https://arxiv.org/abs/2602.08025
+    project_page:
+      url: https://csu-jpg.github.io/MIND.github.io/
+    huggingface_dataset:
+      repo_id: CSU-JPG/MIND
+  input_contract:
+  - generated_video
+  - mind_gt_root
+  - action_json
+  - official_results_path
+  output_contract:
+  - scorecard
+  - raw_metric_table
+  - per_sample_scores
+  - mind_result_json
+  evaluation_requirements:
+  - Generated videos follow the official layout <model>/{1st_data,3rd_data}/{mem_test,action_space_test}/<gt name>/video.mp4 and <model>/{1st_data,3rd_data}/mirror_test/<name>/path-N.mp4.
+  - Execute the checked-in MIND metric runtime through the WorldFoundry benchmark runner, or normalize a MIND result JSON when the metric computation has already been completed.
+  - The lcm, visual, dino, and gsc metrics need CUDA plus LPIPS, torchmetrics, pyiqa, and CLIP assets; the action metric additionally needs the ViPE CLI and checkout.
+  requires:
+  - --run-official with --gt-root and --generated-artifact-dir, or --official-results-path <mind_result.json> for result normalization
+  - --dino-path <dinov3_vitb16> or <weights-dir>/dinov3_vitb16 when the dino metric is requested
+  - --vipe-repo <vipe_checkout> when the action metric is requested
+  blockers:
+  - Leaderboard-valid scores require the complete official split and a published MIND leaderboard.
+  data_refs:
+    task_yaml: worldfoundry/data/benchmarks/tasks/external/mind.yaml
+    hf_dataset_ids:
+    - CSU-JPG/MIND
+  checkpoint_refs:
+  - repo_id: facebook/dinov3-vitb16-pretrain-lvd1689m
+    repo_type: model
+    role: metric_weights
+    notes: Supplied through --dino-path or <weights-dir>/dinov3_vitb16; never vendored in tree.
+  validation_command:
+  - python
+  - worldfoundry/evaluation/tasks/execution/runners/mind/run_mind_official_runner.py
+  - --run-fixture
+  - --output-dir
+  - <out>
+  - --json
+  runner_availability:
+    available: true
+    runner_target: worldfoundry.evaluation.tasks.contracts.external:MINDContract
+    runner_script_available: true
+    task_yaml_available: true
+    runtime_verified: false
+    runtime_verification_scope: normalizer_only
+    full_suite_verified: false
+    surface: in_tree_runtime_with_result_normalizer
+    normalizer_verified: true
+  artifact_layout:
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+    output_artifact: benchmark_scorecard
+    filename_template: scorecard.json
+  runtime:
+    kind: in_tree_official_runtime
+    root: worldfoundry/evaluation/tasks/execution/runners/mind
+    runtime_root: worldfoundry/evaluation/tasks/execution/runners/mind/runtime/mind
+    root_env: WORLDFOUNDRY_MIND_ROOT
+    results_path_env: WORLDFOUNDRY_MIND_RESULTS_PATH
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  metric_protocol:
+    metric_ids:
+    - lcm_psnr
+    - lcm_ssim
+    - lcm_lpips
+    - lcm_mse
+    - dino_mse
+    - imaging_quality
+    - aesthetic_quality
+    - action_rpe_trans_mean
+    - action_rpe_rot_mean_deg
+    - action_rpe_trans_median
+    - action_rpe_rot_median_deg
+    - action_translation_rpe_trans_mean
+    - action_rotation_rpe_rot_mean_deg
+    - gsc_psnr
+    - gsc_ssim
+    - gsc_lpips
+    - gsc_mse
+    - memory_consistency_score
+    - visual_quality_score
+    - action_control_score
+    - scene_consistency_score
+    - mind_average
+    primary_metric: mind_average
+  local_evaluator:
+    target: worldfoundry/evaluation/tasks/execution/runners/mind/run_mind_official_runner.py
+    status: implemented
+    protocol: official_mind_in_tree_runtime
+    official_result_normalization:
+      status: implemented
+      input_keys:
+      - official_results_path
+      - WORLDFOUNDRY_MIND_RESULTS_PATH
+      formats:
+      - json
+      provenance: normalizes the MIND result JSON written by src/process.py when --run-official is not used
+  runner:
+    validation_command:
+    - worldfoundry-eval
+    - zoo
+    - benchmark-run
+    - --benchmark-id
+    - mind
+    - --mode
+    - official-validation
+    - --official-results-path
+    - <mind_result.json>
+    - --output-dir
+    - <out>
+    - --json
+    runtime:
+      results_path_env: WORLDFOUNDRY_MIND_RESULTS_PATH
+    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id mind --mode official-validation --official-results-path <mind_result.json> --output-dir <out> --json
+  integration_status: integrated
+tasks:
+  mind_standard:
+    benchmark_name: mind
+    protocol: external_official_benchmark
+    capability_track: interactive_video_world_model
+    schema_type: generated_artifact_set
+    input_keys:
+    - generated_video
+    - mind_gt_root
+    - action_json
+    output_keys:
+    - scorecard
+    - raw_metric_table
+    - per_sample_scores
+    - mind_result_json
+    metric_ids:
+    - lcm_psnr
+    - lcm_ssim
+    - lcm_lpips
+    - lcm_mse
+    - dino_mse
+    - imaging_quality
+    - aesthetic_quality
+    - action_rpe_trans_mean
+    - action_rpe_rot_mean_deg
+    - action_rpe_trans_median
+    - action_rpe_rot_median_deg
+    - action_translation_rpe_trans_mean
+    - action_rotation_rpe_rot_mean_deg
+    - gsc_psnr
+    - gsc_ssim
+    - gsc_lpips
+    - gsc_mse
+    - memory_consistency_score
+    - visual_quality_score
+    - action_control_score
+    - scene_consistency_score
+    - mind_average
+    metric_groups:
+    - mind_memory_consistency
+    - mind_visual_quality
+    - mind_action_control
+    - mind_scene_consistency
+    tags:
+    - benchmark-zoo
+    - external-official
+    - mind
+    - interactive-video-world-model
+    metadata:
+      source_kind: benchmark_zoo
+      benchmark_id: mind
+      official_benchmark_verified: false
+      integration_evidence: false
+      leaderboard_valid: false
+    dataset:
+      hf_dataset_id: CSU-JPG/MIND
+      split: standard
+    runtime_requirements:
+      generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+      results_path_env: WORLDFOUNDRY_MIND_RESULTS_PATH
+    artifact_contract:
+      required:
+        generated_video:
+          kind: video
+      optional:
+        action_json:
+          kind: json
+        mind_result_json:
+          kind: json
+    evaluation_protocol:
+    - name: in_tree_official_runtime
+      metric_ids:
+      - lcm_psnr
+      - lcm_ssim
+      - lcm_lpips
+      - lcm_mse
+      - dino_mse
+      - imaging_quality
+      - aesthetic_quality
+      - action_rpe_trans_mean
+      - action_rpe_rot_mean_deg
+      - action_rpe_trans_median
+      - action_rpe_rot_median_deg
+      - action_translation_rpe_trans_mean
+      - action_rotation_rpe_rot_mean_deg
+      - gsc_psnr
+      - gsc_ssim
+      - gsc_lpips
+      - gsc_mse
+      - memory_consistency_score
+      - visual_quality_score
+      - action_control_score
+      - scene_consistency_score
+      - mind_average
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:MINDContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/mind/run_mind_official_runner.py

@@ -12,6 +12,7 @@ source:
   status: open_source
   official_repo_url: https://github.com/WEIRDLabUW/unified-world-model
 official_sources:
+  paper: https://arxiv.org/abs/2504.02792
   project_page: https://weirdlabuw.github.io/uwm/
   github:
     url: https://github.com/WEIRDLabUW/unified-world-model
@@ -33,3 +34,24 @@ catalog_scope: World-model catalog entries. Integrated entries expose in-tree Wo
   runtimes; blocked entries retain upstream provenance without runnable backends.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: uwm
+docs:
+  publisher: University of Washington (WEIRD Lab)
+  publisher_kind: university
+  publisher_zh: 华盛顿大学（WEIRD 实验室）
+  overview: Unified World Models (UWM) from the University of Washington's WEIRD Lab couples video prediction and action diffusion in one robot world model, with recorded variants for LIBERO-90 (uwm-libero90) and DROID (uwm-droid). WorldFoundry registers the official evaluation route in-tree; checkpoints and datasets are runtime-gated.
+  overview_zh: 华盛顿大学 WEIRD 实验室的 Unified World Models（UWM）将视频预测与动作扩散耦合进同一个机器人世界模型，仓库记录了 LIBERO-90（uwm-libero90）与 DROID（uwm-droid）两个变体。WorldFoundry 树内注册了官方评测路由；checkpoint 与数据集为运行时门控。
+  architecture: 'UWM is a video-action diffusion design: one diffusion process jointly models future observations and robot actions, so the same network serves prediction and policy roles. Details beyond the official repository pointer are not recorded in this repository.'
+  architecture_zh: UWM 是视频-动作扩散设计：单个扩散过程联合建模未来观测与机器人动作，同一网络兼任预测与策略角色。官方仓库指针之外的细节仓库未记录。
+  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. Pick the LIBERO-90 or DROID variant to match your evaluation suite.
+  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。请按评测套件选择 LIBERO-90 或 DROID 变体。
+  limitations:
+  - Checkpoints/datasets are runtime-gated; no GPU validation is recorded in this repository.
+  limitations_zh:
+  - checkpoint/数据集为运行时门控；仓库未记录 GPU 验证。
+  recommended_benchmarks:
+  - id: libero
+    reason: The uwm-libero90 variant targets LIBERO tasks.
+    reason_zh: uwm-libero90 变体面向 LIBERO 任务。
+  - id: ewmbench
+    reason: Robot world-model rollout quality.
+    reason_zh: 机器人世界模型滚动生成质量。

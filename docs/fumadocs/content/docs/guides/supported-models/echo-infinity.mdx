@@ -1,0 +1,45 @@
+---
+title: "Echo-Infinity"
+description: "JD Joy Future Academy AR long T2V on Wan2.1. Infer-only runtime in-tree. GPU parity pending Echo-Infinity + Wan2.1 under WORLDFOUNDRY_CKPT_DIR. License unknown."
+modelId: "echo-infinity"
+pageSource: authored
+---
+
+Echo-Infinity is JD's **autoregressive long-video** generator: text in, arbitrarily long video out, **block by block**. WorldFoundry vendors the infer-only path as `EchoInfinityPipeline`. Training, prompt datasets, demos, and download helpers are **not** packaged. Same team as [Echo-Memory](/docs/guides/supported-models/echo-memory-context-k1). Aliases `EchoInfinity`, `echo_infinity` resolve here.
+
+<ModelPaperFigures modelId="echo-infinity" locale="en" />
+
+Paper: [arXiv 2606.04527](https://arxiv.org/abs/2606.04527). Project: [echo-team-joy-future-academy-jd.github.io/Echo-Infinity](https://echo-team-joy-future-academy-jd.github.io/Echo-Infinity/). Code: [Echo-Team-Joy-Future-Academy-JD/Echo-Infinity](https://github.com/Echo-Team-Joy-Future-Academy-JD/Echo-Infinity). Catalog license: **unknown**. Backbone is Wan2.1-based — research-preview quality.
+
+Full GPU parity waits on local Echo-Infinity **and** Wan2.1 weights under `$WORLDFOUNDRY_CKPT_DIR`. Runner: Runner parity pending.
+
+<ModelCommandBuilder modelId="echo-infinity" locale="en" />
+
+## What it is for
+
+Echo-Infinity long video on top of Wan2.1 weights.
+
+Launch `worldfoundry-eval run echo-infinity`.
+
+Score on [VBench](/docs/evaluation/benchmark-hub/vbench) — video quality evaluation for long text-to-video generation.
+
+## Runtime contract
+
+Required: `prompt`; optional: `image` and `video`; `actions`: seed; artifacts: `echo-infinity.mp4`.
+
+| Knob | Default |
+| --- | --- |
+| Backbone | `Wan-AI/Wan2.1-T2V-1.3B` |
+| Student | `$WORLDFOUNDRY_CKPT_DIR/Echo-Infinity/echo_infinity.pt` |
+| Latent frames | **21** (`num_output_frames`) |
+| Steps | **4** — `[1000, 750, 500, 250]`, `warp_denoising_step` |
+| Block | **3** frames (`num_frame_per_block`) |
+| Seed | **0** |
+| Local attn | **12** |
+| EMA | **off** |
+
+## Run in WorldFoundry
+
+Status: **Runner parity pending**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage weights locally — the runtime does not download them. Run `worldfoundry-eval run echo-infinity`. Catalog VRAM is unset.
+
+<ModelRelatedRecipes modelId="echo-infinity" locale="en" />

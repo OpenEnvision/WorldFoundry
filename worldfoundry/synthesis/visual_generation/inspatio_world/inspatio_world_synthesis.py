@@ -9,10 +9,8 @@ from typing import Any, Dict, Optional
 
 from worldfoundry.synthesis.visual_generation.inspatio_world.worldfoundry_runtime import (
     DEFAULT_CHECKPOINT_REPO,
-    DEFAULT_CONFIG_PATH,
     DEFAULT_DA3_MODEL_REPO,
     DEFAULT_FLORENCE_MODEL_REPO,
-    DEFAULT_TRAJECTORY_NAME,
     DEFAULT_WAN_MODEL_REPO,
     InspatioWorldRuntime,
 )

@@ -413,47 +413,6 @@ def get_rendered_images(rendered_images_all, i, anchor_frame_idx):
 
     return rendered_images
 
-    """Get batch of rendered images for the ith scene based on anchor frame indices.
-    For example, with anchor_frame_idx [0, 48, 96, 144]:
-    - i=0 returns frames [0:24]     (first quarter)
-    - i=1 returns frames [24:72]    (around second anchor)
-    - i=2 returns frames [72:120]   (around third anchor)
-    - i=3 returns frames [120:144]  (last quarter)
-
-    Args:
-        rendered_images_all (list[Image.Image]): All rendered images
-        i (int): Current scene index
-        anchor_frame_idx (list[int]): List of anchor frame indices
-    Returns:
-        rendered_images (list[Image.Image]): Batch of images for current scene
-    """
-    is_first = i == 0
-    is_last = i == len(anchor_frame_idx) - 1
-
-    if is_first:
-        # For first scene, take frames from start to midpoint between first two anchors
-        interval = anchor_frame_idx[1] - anchor_frame_idx[0]
-        mid_point = anchor_frame_idx[0] + interval // 2
-        rendered_images = rendered_images_all[:mid_point]
-    elif is_last:
-        # For last scene, take frames from midpoint of last two anchors to end
-        interval = anchor_frame_idx[-1] - anchor_frame_idx[-2]
-        mid_point = (
-            anchor_frame_idx[-2] + (interval + 1) // 2
-        )  # Ceiling division for odd intervals
-        rendered_images = rendered_images_all[mid_point:]
-    else:
-        # For middle scenes, take frames between midpoints
-        prev_interval = anchor_frame_idx[i] - anchor_frame_idx[i - 1]
-        next_interval = anchor_frame_idx[i + 1] - anchor_frame_idx[i]
-
-        #  Ceiling division for odd intervals
-        start_mid = anchor_frame_idx[i - 1] + (prev_interval + 1) // 2
-        end_mid = anchor_frame_idx[i] + next_interval // 2
-        rendered_images = rendered_images_all[start_mid:end_mid]
-
-    return rendered_images
-
 
 def check_evaluation_completeness(aspect_list, instance_result_dict):
     instance_aspect_list = list(instance_result_dict.keys())

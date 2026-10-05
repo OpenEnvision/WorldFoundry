@@ -1,5 +1,7 @@
 id: memobench
 name: MemoBench
+publisher: Harvard University
+publisher_kind: university
 benchmark_kind:
 - world-model
 - visual-memory
@@ -22,13 +24,9 @@ official_sources:
     role: vendored_runtime_source
   local_runtime:
     path: worldfoundry/evaluation/tasks/execution/runners/memobench/runtime/memobench
-  docs:
-    path: worldfoundry/evaluation/tasks/execution/runners/memobench/runtime/memobench/docs
 benchmark_assets:
   prompt_suite:
     status: official_dataset_required
-  bundled_runtime_docs:
-    status: vendored
 evaluation_surface:
   purpose: Visual-memory benchmark for world generation under the Visible / Disappeared / Reappear protocol.
   claimed_clips: 360
@@ -163,6 +161,15 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  normalization:
+    artifact_official_run: true
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/memobench/run_memobench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.memobench.run_memobench_official_runner
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    supports_fixture: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:MemoBenchContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/memobench/run_memobench_official_runner.py
   validation_command:
@@ -216,6 +223,7 @@ runner:
   - WORLDFOUNDRY_MEMOBENCH_LEADERBOARD_PATH
 integration:
   status: integrated
+  tier: in_tree
   evidence:
     framework_validation: worldfoundry-eval zoo benchmark-run --benchmark-id memobench --mode official-validation --official-results-path <official_results.csv> --generated-artifact-dir <generated_frames> --output-dir <out> --json
     runtime_surface: memobench_official_in_tree
@@ -235,6 +243,10 @@ requires:
 - Gemini or compatible VLM credentials for VQA
 blockers:
 - Leaderboard parity requires generated frames for the complete synthetic and real suites plus Step 1, ORS, VQA, and leaderboard evidence.
+dataset:
+  hf_dataset_id: tonyc54/MemoBench
+  revision: fcdb9d2138c4152c76a84b9a57b4106b47f89e7b
+  license: mit
 data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/memobench.yaml
   sample_results: worldfoundry/data/benchmarks/assets/memobench/sample_results.csv

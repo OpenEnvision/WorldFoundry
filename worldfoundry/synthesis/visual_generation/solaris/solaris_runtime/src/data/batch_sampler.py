@@ -6,6 +6,8 @@ import os
 import numpy as np
 import torch
 
+from worldfoundry.core.io.paths import resolve_data_path
+
 from .dataset import DatasetMultiplayer
 from .segment import SegmentId, SegmentIdMultiplayer
 
@@ -39,7 +41,6 @@ class EvalBatchSampler(torch.utils.data.Sampler):
         self._seed = seed
         self.reset_rng()
 
-        base_dir = os.path.dirname(os.path.abspath(__file__))
         # hardcoded full episodes for worldmem_demo
         if "worldmem_demo" in str(dataset.directory):
             self.ids = [
@@ -51,12 +52,15 @@ class EvalBatchSampler(torch.utils.data.Sampler):
                 [5, 0, 1024],
             ]
         else:
-            with open(
-                os.path.join(
-                    base_dir, "eval_ids", f"eval_ids_{dataset.dataset_name}.json"
-                ),
-                "r",
-            ) as f:
+            eval_ids_path = resolve_data_path(
+                "models",
+                "runtime",
+                "configs",
+                "solaris",
+                "eval_ids",
+                f"eval_ids_{dataset.dataset_name}.json",
+            )
+            with open(eval_ids_path, "r") as f:
                 self.ids = json.load(f)
 
         assert num_frames <= 1024, "num_frames must be at most 1024"

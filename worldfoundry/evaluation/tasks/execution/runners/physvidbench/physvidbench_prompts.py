@@ -3,38 +3,32 @@
 from __future__ import annotations
 
 import csv
-import os
-import shutil
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.core.io.filesystem.file_utils import materialize_file
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
-from worldfoundry.evaluation.utils import write_jsonl
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
+    first_existing_dir,
+    resolve_env_path,
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
 )
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import VIDEO_SUFFIXES
+from worldfoundry.evaluation.utils import write_jsonl
 
 BENCHMARK_ID = "physvidbench"
 PROMPT_MANIFEST_REL = Path("prompts_questions.csv")
 
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
-
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def resolve_physvidbench_root(explicit: Path | None = None) -> Path | None:
-    for candidate in (
+    return first_existing_dir(
         explicit,
-        _env_path("WORLDFOUNDRY_PHYSVIDBENCH_ROOT"),
+        resolve_env_path("WORLDFOUNDRY_PHYSVIDBENCH_ROOT"),
         bundled_benchmark_assets_root(BENCHMARK_ID),
-    ):
-        if candidate is not None and candidate.is_dir():
-            return candidate.expanduser().resolve()
-    return None
+    )
 
 
 def resolve_prompt_manifest_path(
@@ -47,7 +41,7 @@ def resolve_prompt_manifest_path(
         if not path.is_file():
             raise FileNotFoundError(f"PhysVidBench prompt manifest not found: {path}")
         return path
-    env_manifest = _env_path("WORLDFOUNDRY_PHYSVIDBENCH_PROMPT_MANIFEST")
+    env_manifest = resolve_env_path("WORLDFOUNDRY_PHYSVIDBENCH_PROMPT_MANIFEST")
     if env_manifest is not None:
         if not env_manifest.is_file():
             raise FileNotFoundError(f"PhysVidBench prompt manifest not found: {env_manifest}")
@@ -168,7 +162,7 @@ def copy_physvidbench_generated_videos(
         if not source_path.is_file():
             continue
         target_path = generated_artifact_dir / video_filename_for_prompt_id(sample_id)
-        shutil.copy2(source_path, target_path)
+        materialize_file(source_path, target_path, writable=False)
         materialized += 1
         manifest_rows.append({"sample_id": sample_id, "artifact": output_artifact, "path": str(target_path)})
     if materialized == 0:
@@ -177,7 +171,7 @@ def copy_physvidbench_generated_videos(
                 continue
             sample_id = path.stem
             target_path = generated_artifact_dir / video_filename_for_prompt_id(sample_id)
-            shutil.copy2(path, target_path)
+            materialize_file(path, target_path, writable=False)
             materialized += 1
             manifest_rows.append({"sample_id": sample_id, "artifact": output_artifact, "path": str(target_path)})
     if materialized == 0 and allow_placeholders:

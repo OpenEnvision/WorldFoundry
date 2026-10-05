@@ -8,28 +8,18 @@ import time
 from pathlib import Path
 
 import numpy as np
-import open3d as o3d
 import torch
 from PIL import Image
 
-from diffsynth import VideoData, load_state_dict, save_video
-from diffsynth.utils import ModelConfig
-from utils.frustum_culling import frustum_frontmost_mask_triton, find_mask_matches
-from wan.wan_video_new import (
-    WanVideoPipeline,
-    WanVideoUnit_ControlNetAsVACEEmbedder,
-    WanVideoUnit_HistVideoEmbedder,
-    WanVideoUnit_ImageEmbedderFused,
-    WanVideoUnit_NoiseInitializer,
-    WanVideoUnit_PromptEmbedder,
-    WanVideoUnit_RefImageEmbedderFused,
-    WanVideoUnit_ShapeChecker,
-    WanVideoUnit_VideoEmbedLoader,
-)
-from worldfoundry.base_models.diffusion_model.video.wan.variants.spatia import VaceWanModel
+from worldfoundry.core.io import VideoData, save_video
+from worldfoundry.synthesis.visual_generation.spatia.native_pipeline import load_spatia_pipeline
 from worldfoundry.synthesis.visual_generation.spatia.spatia_runtime.utils.camera_io import (
     read_intrinsics_from_txt,
     read_w2cs_from_txt,
+)
+from worldfoundry.synthesis.visual_generation.spatia.spatia_runtime.utils.frustum_culling import (
+    find_mask_matches,
+    frustum_frontmost_mask_triton,
 )
 
 
@@ -64,14 +54,20 @@ def run_command(command, cwd=None, quiet=False, env=None):
     print(f"[INFO] Running command: {' '.join(str(arg) for arg in command)}")
     run_kwargs = {
         "cwd": str(cwd) if cwd is not None else None,
-        "check": True,
     }
     if env is not None:
         run_kwargs["env"] = env
     if quiet:
-        run_kwargs["stdout"] = subprocess.DEVNULL
-        run_kwargs["stderr"] = subprocess.DEVNULL
-    subprocess.run(command, **run_kwargs)
+        completed = subprocess.run(command, capture_output=True, text=True, **run_kwargs)
+        if completed.returncode:
+            raise RuntimeError(
+                f"Spatia subprocess exited with code {completed.returncode}: "
+                f"{' '.join(str(arg) for arg in command)}\n"
+                f"stdout (tail):\n{completed.stdout[-4000:]}\n"
+                f"stderr (tail):\n{completed.stderr[-4000:]}"
+            )
+    else:
+        subprocess.run(command, check=True, **run_kwargs)
 def save_extrinsic_and_intrinsics(extrinsic=None, intrinsic=None, extrinsic_path=None, intrinsics_path=None):
     if extrinsic_path is not None:
         os.makedirs(os.path.dirname(extrinsic_path), exist_ok=True)
@@ -118,71 +114,22 @@ def get_prompt_list(args, total_rounds):
 
 
 def build_pipe(vace_path, lora_path, hist_frames, model_root=None):
+    del hist_frames
     model_root = resolve_path(model_root) if model_root else PROJECT_ROOT / "model_weights" / "Wan2.2-TI2V-5B"
-    pipe = WanVideoPipeline.from_pretrained(
+    pipe = load_spatia_pipeline(
+        model_root=model_root,
+        vace_path=vace_path,
+        lora_path=lora_path,
         torch_dtype=torch.bfloat16,
         device="cuda",
-        model_configs=[
-            ModelConfig(path=[str(model_root / "models_t5_umt5-xxl-enc-bf16.pth")], offload_device="cpu"),
-            ModelConfig(path=[str(model_root / "Wan2.2_VAE.pth")], offload_device="cpu"),
-            ModelConfig(
-                path=[
-                    str(model_root / "diffusion_pytorch_model-00001-of-00003.safetensors"),
-                    str(model_root / "diffusion_pytorch_model-00002-of-00003.safetensors"),
-                    str(model_root / "diffusion_pytorch_model-00003-of-00003.safetensors"),
-                ],
-                offload_device="cpu",
-            ),
-        ],
-        tokenizer_config=ModelConfig(path=str(model_root / "google" / "umt5-xxl")),
-        units=[],
     )
-    pipe.vace = VaceWanModel(
-        vace_layers=[0, 4, 8, 12, 16, 20, 24, 28],
-        vace_in_dim=96,
-        dim=pipe.dit.dim,
-        patch_size=pipe.dit.patch_size,
-        num_heads=pipe.dit.blocks[0].num_heads,
-        ffn_dim=pipe.dit.blocks[0].ffn_dim,
-        has_image_input=False,
-    ).to(pipe.device, dtype=pipe.torch_dtype)
-    vace_state_dict = load_state_dict(str(vace_path))
-    pipe.vace.load_state_dict(vace_state_dict)
-
-    if lora_path is not None:
-        raw_lora_state_dict = load_state_dict(str(lora_path))
-        lora_state_dict = {}
-        for key, value in raw_lora_state_dict.items():
-            if "pipe.dit." in key:
-                key = key.replace("pipe.dit.", "")
-                lora_state_dict[key] = value
-    else:
-        lora_state_dict = None
-    set_pipe_units(pipe, hist_frames=hist_frames, use_history=False)
     pipe.eval()
     pipe.enable_vram_management()
-    return pipe, lora_state_dict
+    return pipe, pipe.lora_state_dict
 
 
 def set_pipe_units(pipe, hist_frames, use_history):
-    if use_history:
-        pipe.units = [
-            WanVideoUnit_ShapeChecker(),
-            WanVideoUnit_NoiseInitializer(),
-            WanVideoUnit_HistVideoEmbedder(num_hist_frames=hist_frames),
-            WanVideoUnit_RefImageEmbedderFused(),
-            WanVideoUnit_PromptEmbedder(),
-            WanVideoUnit_ControlNetAsVACEEmbedder(),
-        ]
-    else:
-        pipe.units = [
-            WanVideoUnit_ShapeChecker(),
-            WanVideoUnit_NoiseInitializer(),
-            WanVideoUnit_VideoEmbedLoader(),
-            WanVideoUnit_ImageEmbedderFused(),
-            WanVideoUnit_PromptEmbedder(),
-            WanVideoUnit_ControlNetAsVACEEmbedder(),
-        ]
+    del pipe, hist_frames, use_history
 
 
 def compute_total_rounds(total_frames, first_round_frames, round_frames, hist_frames):
@@ -343,6 +290,8 @@ def select_reference_frames(
     args,
     save_dir=None,
 ):
+    import open3d as o3d
+
     if len(all_exist_cam_w2cs) == 0 or len(all_ref_frames) == 0:
         return []
 

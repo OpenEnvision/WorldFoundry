@@ -1,0 +1,214 @@
+id: stevo-bench
+name: STEVO-Bench
+benchmark_kind:
+- video-generation
+- world-model
+- state-evolution-probing
+domains:
+- unobserved-state-evolution
+- physical-dynamics
+- chemical-dynamics
+- agent-behavior
+modalities:
+- image
+- video
+- text
+status: confirmed_official_code
+official_sources:
+  github:
+    url: https://github.com/jhanliufu-personal/STEVO-Bench
+    revision: 680fb6ee2733894ebc8e5584c08146f4bf7e6415
+  paper_url: https://arxiv.org/abs/2603.13215
+  project_page: https://glab-caltech.github.io/STEVOBench/
+  huggingface_datasets:
+  - repo_id: JhanLiufu/StEvo-Bench
+    url: https://huggingface.co/datasets/JhanLiufu/StEvo-Bench
+    gated: false
+    private: false
+  license:
+    status: mit
+    notes: The upstream repository publishes an MIT LICENSE at the pinned revision; the vendored evaluator
+      retains the license file in-tree.
+benchmark_assets:
+  task_suite:
+    status: external_hf_dataset
+    declared_tasks: 225
+    categories: 6
+    task_root_env: WORLDFOUNDRY_STEVO_BENCH_TASK_ROOT
+    notes:
+    - Task YAMLs are a separate Hugging Face dataset (JhanLiufu/StEvo-Bench) and are never vendored;
+      download them with `hf download JhanLiufu/StEvo-Bench --repo-type dataset --local-dir <dir>`.
+  in_tree_fixture:
+    path: worldfoundry/data/benchmarks/assets/stevo-bench/sample_run
+    purpose: Synthetic normalizer validation only; contains no upstream benchmark tasks, videos, or judge outputs.
+evaluation_surface:
+  protocol: observation_controlled_state_evolution
+  criteria:
+  - control
+  - physics
+  - state
+  judge: Hosted VLM judge APIs (Gemini by default, OpenAI supported) queried by the vendored official evaluator;
+    verdicts are boolean per task and ensemble-aggregated (majority, ensemble size 3 in the paper configuration).
+  notes:
+  - The pinned eval/eval_cli.py does not define --artifact or --coherence, so those two criteria are not
+    executable and are not exposed here. Evaluation enters only through run_stevo_bench_official_runner.py.
+metrics:
+- id: task_success
+  name: Task Success
+  description: 'Primary metric: fraction of tasks with confirmed state evolution and no physical inaccuracy
+    (state_evol AND NOT physical_inaccuracy).'
+  higher_is_better: true
+  leaderboard_key: task_success
+  aggregator: mean
+  output_unit: rate
+  primary: true
+- id: state_evol_success
+  name: State Progress
+  description: Fraction of tasks where the state-evolution judge confirmed the hidden process kept progressing
+    while unobserved.
+  higher_is_better: true
+  leaderboard_key: state_evol_success
+  aggregator: mean
+  output_unit: rate
+- id: physical_inaccuracy
+  name: Physical Inaccuracy
+  description: Fraction of tasks flagged physically implausible by the physics judge; lower is better and the
+    normalized score is 1 - rate.
+  higher_is_better: false
+  leaderboard_key: physical_inaccuracy
+  aggregator: mean
+  output_unit: rate
+- id: occlusion_done
+  name: Observation Control
+  description: Fraction of tasks where the requested observation control (occlusion, camera lookaway, or
+    illumination dimming) was applied in the generated video.
+  higher_is_better: true
+  leaderboard_key: occlusion_done
+  aggregator: mean
+  output_unit: rate
+- id: trigger_applied
+  name: Action Control
+  description: Fraction of tasks where the requested trigger action was applied in the generated video.
+  higher_is_better: true
+  leaderboard_key: trigger_applied
+  aggregator: mean
+  output_unit: rate
+- id: control_success
+  name: Control Success
+  description: Fraction of tasks where the observation control and the trigger action were both applied.
+  higher_is_better: true
+  leaderboard_key: control_success
+  aggregator: mean
+  output_unit: rate
+runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.stevo_bench.run_stevo_bench_official_runner
+    generated_arg: --generated-artifact-dir
+    dataset_root_arg: --task-root
+    model_arg: --judge-model
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    supports_fixture: true
+    default_metrics: [task_success]
+    input_kind: stevo_bench_run_dir_or_official_results
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:StevoBenchContract
+  validation_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - stevo-bench
+  - --mode
+  - official-validation
+  - --official-results-path
+  - <stevo_bench_run_dir_or_summary_json>
+  - --output-dir
+  - <out>
+  - --json
+  run_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - stevo-bench
+  - --mode
+  - official-run
+  - --generated-artifact-dir
+  - <generated_video_dir_with_output_map>
+  - --task-root
+  - <stevo_bench_task_yaml_root>
+  - --output-dir
+  - <out>
+  - --json
+  expected_artifacts:
+  - scorecard.json
+  - raw_metric_table.jsonl
+  - per_sample_scores.jsonl
+  - benchmark_contract.json
+  runtime:
+    kind: in_tree_official_runtime_hosted_judges
+    root: worldfoundry/evaluation/tasks/execution/runners/stevo_bench
+    runtime_root: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench
+    root_env: WORLDFOUNDRY_STEVO_BENCH_ROOT
+    results_path_env: WORLDFOUNDRY_STEVO_BENCH_RESULTS_PATH
+    task_root_env: WORLDFOUNDRY_STEVO_BENCH_TASK_ROOT
+    weights_dir_env: WORLDFOUNDRY_STEVO_BENCH_WEIGHTS_DIR
+    vlm_provider_env: WORLDFOUNDRY_STEVO_BENCH_VLM_PROVIDER
+    judge_model_env: WORLDFOUNDRY_STEVO_BENCH_JUDGE_MODEL
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  verification_status: pending
+integration:
+  status: integrated
+  tier: model_backed
+  hf_dataset_id: JhanLiufu/StEvo-Bench
+  judge_model_id: gemini-3.1-pro-preview
+  implementation_scope: vendored_official_evaluator_with_hosted_vlm_judges
+  source_files_copied: true
+  full_dataset_verified: false
+  notes:
+  - The official evaluator (eval/eval_cli.py plus per-criterion judges) is vendored read-only under the runner;
+    --run-official executes it without an external checkout.
+  - The official judges are remote VLM APIs (Gemini default gemini-3.1-pro-preview; OpenAI supported).
+    --run-official therefore requires GOOGLE_API_KEY or OPENAI_API_KEY and network access; it is NOT a pure-local
+    GPU evaluation and no local judge weights exist.
+  - Result normalization (official-validation) of existing summary.json / per_task report trees is pure-local
+    and needs no API access.
+release_status: experimental
+maturity: verified_runner
+open_source_status: in_tree_runtime
+official_benchmark_verified: false
+integration_evidence: false
+leaderboard_valid: false
+requires:
+- STEVO-Bench task YAML root downloaded from the JhanLiufu/StEvo-Bench Hugging Face dataset for official runs.
+- Generated videos named <task_id>.mp4 plus exactly one output-map JSON, or an explicit --output-map.
+- GOOGLE_API_KEY (Gemini, default) or OPENAI_API_KEY for the hosted VLM judges during --run-official.
+blockers:
+- Full-suite official execution against the 225-task split and leaderboard parity have not been verified in this
+  workspace; scorecards from partial runs carry explicit comparability blockers.
+- Judge verdicts depend on hosted VLM API availability and model versions, so exact reproduction of paper numbers
+  is not guaranteed.
+data_refs:
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/stevo-bench.yaml
+  fixture: worldfoundry/data/benchmarks/assets/stevo-bench/sample_run
+  upstream_repository: https://github.com/jhanliufu-personal/STEVO-Bench
+  dataset_repo: JhanLiufu/StEvo-Bench
+runner_availability:
+  available: true
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:StevoBenchContract
+  runner_script_available: true
+  task_yaml_available: true
+  runtime_verified: false
+  normalizer_verified: true
+  surface: stevo_bench_official_in_tree
+checkpoint_refs: []
+base_model_dependencies: []
+optional_base_model_dependencies:
+- hosted_vlm_judge_api
+validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id stevo-bench --mode official-validation
+  --official-results-path <stevo_bench_run_dir_or_summary_json> --output-dir <out> --json
+artifact_layout:
+  generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  output_artifact: benchmark_scorecard
+  filename_template: scorecard.json

@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .wrapper import (
-    compute_manipulation_direction,
-    compute_manipulation_direction_batch,
-    compute_manipulation_direction_from_embeddings,
-    compute_manipulation_direction_from_pairs,
-)
+compute_manipulation_direction = lazy_export(f"{__name__}.wrapper", "compute_manipulation_direction", owner=__name__)
+compute_manipulation_direction_batch = lazy_export(f"{__name__}.wrapper", "compute_manipulation_direction_batch", owner=__name__)
+compute_manipulation_direction_from_embeddings = lazy_export(f"{__name__}.wrapper", "compute_manipulation_direction_from_embeddings", owner=__name__)
+compute_manipulation_direction_from_pairs = lazy_export(f"{__name__}.wrapper", "compute_manipulation_direction_from_pairs", owner=__name__)
 
 METRIC_ID = "manipulation_direction"
 ALIASES = ("manipulation-direction", "md", "md_score")

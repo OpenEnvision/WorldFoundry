@@ -1,132 +1,27 @@
 ---
 title: RLBench
-description: RLBench — 指标、依赖与运行命令。
+description: "CoppeliaSim / PyRep 上 100 个手工视觉引导任务。WorldFoundry 导入官方 rollout——不跑模拟器。"
 ---
 
-## 简介
+RLBench（IEEE RA-L / ICRA 2020）是帝国理工学院 Dyson 机器人实验室的评测：**100** 个独特手工操作任务，给 **CoppeliaSim**（经 **PyRep**）里的 **Franka Panda** 用。每个任务有程序化变体（物体位姿、目标）。运动规划器可以吐出**无限**演示，因此同一套件支持模仿学习、强化学习与**少样本**协议。观测是多相机视觉加状态 / 语言。
 
+论文：[RLBench: The Robot Learning Benchmark & Learning Environment](https://arxiv.org/abs/1909.12271)。项目：[sites.google.com/view/rlbench](https://sites.google.com/view/rlbench)。代码：[stepjam/RLBench](https://github.com/stepjam/RLBench)。本目录里 GitHub 许可证元数据是 `other:noassertion_github_api`——复用前先看上游条款。
 
+WorldFoundry **只导入官方结果**。你在上游跑 CoppeliaSim / PyRep / 官方任务资产，再经 `official-validation` 归一化 JSON/CSV。仓内无模拟器。导出须声明任务列表与协议（少样本 vs 模仿 vs RL）。
 
-RLBench external benchmark task manifest for CoppeliaSim/PyRep robot manipulation rollouts.
+<BenchmarkPageSections id="rlbench" locale="zh" />
 
-
-
-## 指标
-
-RLBench external benchmark task manifest for CoppeliaSim/PyRep robot manipulation rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/rlbench.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `episode_success` | episode / task 是否成功完成的比例或成功率。 |
-| `reward` | RLBench 桌面操作 episode 内累计的稀疏或 shaped reward。 |
-| `normalized_return` | RLBench return 相对示范或成功基准归一化到 [0, 1]。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `needs-rlbench-pyrep-coppeliasim-env`。
-- **单独配置：** 需要 benchmark 专用 conda 环境，不要与统一 runtime 混用。
-- RLBench 需要 CoppeliaSim/PyRep 组合环境；当前只记录 env vars 和 task manifest，不启动 simulator。
-
-### 测评数据
-
-- RLBench is simulator-backed; WorldFoundry normalizes policy rollout results while CoppeliaSim/PyRep execution remains explicit.
-- 待测模型输出目录：设置 `WORLDFOUNDRY_RLBENCH_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_RLBENCH_ROOT`
-- `COPPELIASIM_ROOT`
-- `WORLDFOUNDRY_RLBENCH_RESULTS_PATH`
-
-### 环境检查
-
-```bash
-PYTHONPATH=. ${WORLDFOUNDRY_CONDA_ROOT}/worldplay/bin/python -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile rlbench --manifest worldfoundry/data/benchmarks/runtime_profiles/official/rlbench.yaml --output-dir tmp/worldfoundry_preflight/rlbench --json
-```
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id rlbench \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/rlbench/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/rlbench/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id rlbench \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/rlbench/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id rlbench --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official RLBench repository checkout
-- CoppeliaSim and PyRep runtime
-- RLBench task assets
-- Benchmark-specific policy checkpoint
-
-### Environment
-
-- `WORLDFOUNDRY_RLBENCH_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-
-
+省略 `--official-results-path` 时，默认导入路径是 `WORLDFOUNDRY_RLBENCH_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/rlbench.yaml`。输出：`scorecard.json`（主键 `success_rate`）与 `raw_results.jsonl`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

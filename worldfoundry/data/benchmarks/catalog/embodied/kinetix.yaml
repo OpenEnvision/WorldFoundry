@@ -1,5 +1,7 @@
 id: kinetix
 name: Kinetix
+publisher: University of Oxford
+publisher_kind: university
 benchmark_kind:
 - vla
 - embodied-action
@@ -20,6 +22,9 @@ official_sources:
   paper_url: https://arxiv.org/abs/2410.23208
   license: upstream_terms
 runner:
+  normalization:
+    dispatch: embodied
+    embodied_track: vla
   runner_target: worldfoundry.evaluation.tasks.contracts.external:KinetixContract
   expected_artifacts:
   - scorecard.json

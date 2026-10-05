@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path, SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
 
 from worldfoundry.evaluation.tasks.execution.runners.wrbench.wrbench_metrics import (
@@ -31,8 +32,6 @@ from worldfoundry.evaluation.tasks.execution.runners.wrbench.wrbench_prompts imp
 from worldfoundry.evaluation.tasks.execution.runners.wrbench.wrbench_runtime import run_wrbench_evaluator
 
 
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"})
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -54,9 +53,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def _coverage(expected_ids: set[str], generated_dir: Path | None) -> dict[str, Any]:
@@ -119,11 +115,11 @@ def normalize_wrbench_results(
 ) -> dict[str, Any]:
     output_dir = args.output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    generated_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
     if generated_dir is not None:
         generated_dir = generated_dir.expanduser().resolve()
 
-    results_path = args.official_results_path or _env_path("WORLDFOUNDRY_WRBENCH_RESULTS_PATH")
+    results_path = args.official_results_path or resolve_env_path("WORLDFOUNDRY_WRBENCH_RESULTS_PATH")
     if results_path is None and args.run_fixture:
         results_path = benchmark_task_sample_path(args.benchmark_id)
     if results_path is None:
@@ -232,7 +228,7 @@ def normalize_wrbench_results(
 def run_official_wrbench(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = args.output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    generated_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
     summary = run_wrbench_evaluator(
         output_dir=output_dir,
         generated_artifact_dir=generated_dir,

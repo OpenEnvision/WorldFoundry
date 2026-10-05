@@ -1,9 +1,4 @@
-"""OpenEnvision brand rendering for the WorldFoundry TUI.
-
-Renders the official logo PNG as high-resolution Braille terminal art.
-Provides deep integration for dark-mode terminals by automatically inverting
-the black/dark-grey shades to white/light-grey while preserving the red accent.
-"""
+"""Render the official OpenEnvision PNG without changing its artwork or colors."""
 
 from __future__ import annotations
 
@@ -12,33 +7,30 @@ from importlib import resources
 from pathlib import Path
 
 try:
-    import numpy as np
-    from PIL import Image
+    from PIL import Image, ImageChops
 except ImportError:
     Image = None
-    np = None
 
-# ── Brand constants ───────────────────────────────────────────────
 BRAND_NAME = "OpenEnvision"
 PRODUCT_NAME = "WorldFoundry"
 PRODUCT_TAGLINE = "Model · Benchmark · Studio"
 LOGO_BACKGROUND = "#ffffff"
 
-# ── Braille dot encoding ──────────────────────────────────────────
-# Braille dot positions as (row, col, bit_index) triples for 2×4 dot rendering.
-_BRAILLE_DOTS: tuple[tuple[int, int, int], ...] = (
-    (0, 0, 0), (1, 0, 1), (2, 0, 2), (0, 1, 3),
-    (1, 1, 4), (2, 1, 5), (3, 0, 6), (3, 1, 7),
+# Use the long-established block elements supported by ordinary terminal fonts.
+# Each mask covers an 8 x 8 sample of one character cell.
+_BLOCK_MASKS = tuple(
+    (char, tuple(y * 8 + x for y in range(8) for x in range(8) if predicate(x, y)))
+    for char, predicate in (
+        *((char, lambda x, y, n=n: y >= 8 - n) for n, char in enumerate("▁▂▃▄▅▆▇", 1)),
+        *((char, lambda x, y, n=n: x < n) for n, char in enumerate("▏▎▍▌▋▊▉", 1)),
+        *((char, lambda x, y, bits=bits: bits & (1 << ((y // 4) * 2 + x // 4)))
+          for bits, char in enumerate(" ▘▝▀▖▌▞▛▗▚▐▜▄▙▟█") if bits not in (0, 15)),
+    )
 )
 
 
-# ── Asset discovery ────────────────────────────────────────────────
-
 def logo_asset_path() -> Path:
-    """Locate the OpenEnvision logo PNG asset from the package resources directory.
-
-    Falls back to a sibling ``assets/`` directory if package resources are unavailable.
-    """
+    """Locate the packaged official logo."""
     try:
         asset = resources.files("worldfoundry.cli.assets").joinpath("openenvision_logo.png")
         with resources.as_file(asset) as path:
@@ -47,148 +39,135 @@ def logo_asset_path() -> Path:
         return Path(__file__).with_name("assets") / "openenvision_logo.png"
 
 
-# ── Pixel helpers ──────────────────────────────────────────────────
-
 def _rgb_to_hex(red: int, green: int, blue: int) -> str:
-    """Convert RGB channel values to a ``#rrggbb`` hex colour string."""
     return f"#{red:02x}{green:02x}{blue:02x}"
 
 
 def _prepare_logo_image(image: Image.Image) -> Image.Image:
-    """Crop the logo image to its non-white bounding box with padding.
-
-    Converts to RGBA, finds non-white pixels, and returns a padded crop
-    region for efficient Braille rendering.
-    """
-    rgba = image.convert("RGBA")
-    pixels = np.array(rgba)
-    mask = (pixels[:, :, 0] < 250) | (pixels[:, :, 1] < 250) | (pixels[:, :, 2] < 250)
-    ys, xs = np.where(mask)
-    if ys.size == 0 or xs.size == 0:
-        return rgba
-
+    """Remove outer whitespace while retaining the complete swan and wordmark."""
+    rgba = Image.alpha_composite(Image.new("RGBA", image.size, "white"), image.convert("RGBA"))
+    rgb = rgba.convert("RGB")
+    red, green, blue = rgb.split()
+    darkest = ImageChops.darker(ImageChops.darker(red, green), blue)
+    bounds = darkest.point(lambda value: 255 if value < 240 else 0).getbbox()
+    if bounds is None:
+        return rgb
+    left, top, right, bottom = bounds
     padding = 6
-    left = max(int(xs.min()) - padding, 0)
-    top = max(int(ys.min()) - padding, 0)
-    right = min(int(xs.max()) + padding + 1, rgba.width)
-    bottom = min(int(ys.max()) + padding + 1, rgba.height)
-    return rgba.crop((left, top, right, bottom))
+    return rgb.crop((
+        max(0, left - padding), max(0, top - padding),
+        min(rgb.width, right + padding), min(rgb.height, bottom + padding),
+    ))
 
 
-# ── Braille rendering ──────────────────────────────────────────────
-
-def render_logo_braille(image: Image.Image, *, width_chars: int = 56) -> str:
-    """Render the logo using Braille characters for highest terminal resolution.
-
-    Each Braille character covers a 2×4 pixel block, yielding much finer
-    detail than half-block rendering. Dark-mode terminals benefit from
-    automatic colour inversion — black/dark-grey shades are flipped to
-    white/light-grey while the red accent is preserved.
-
-    Args:
-        image: Source logo image (typically RGBA PNG).
-        width_chars: Target width in terminal character columns.
-
-    Returns:
-        Rich-markup string with per-cell ``[color]`` annotations.
-
-    Raises:
-        RuntimeError: When Pillow is not installed.
-    """
-    if Image is None or np is None:
+@lru_cache(maxsize=1)
+def brand_logo_image() -> Image.Image:
+    """Load original logo pixels, including its original lettering."""
+    if Image is None:
         raise RuntimeError("Pillow is required to render the OpenEnvision logo.")
+    with Image.open(logo_asset_path()) as image:
+        return _prepare_logo_image(image)
 
-    # ── Prepare and resize ──
+
+def brand_logo_aspect_ratio() -> float:
+    image = brand_logo_image()
+    return image.width / image.height
+
+
+def _resize_for_cells(
+    image: Image.Image, width_chars: int, *, pixels_per_column: int,
+    pixels_per_row: int, cell_aspect_ratio: float,
+) -> Image.Image:
+    if Image is None:
+        raise RuntimeError("Pillow is required to render the OpenEnvision logo.")
+    if width_chars < 1 or cell_aspect_ratio <= 0:
+        raise ValueError("Logo width and cell aspect ratio must be positive.")
     prepared = _prepare_logo_image(image)
-    source_width, source_height = prepared.size
-    
-    # 1 Braille char = 2 pixels wide, 4 pixels high
-    pixel_width = width_chars * 2
-    pixel_height = int(source_height * (pixel_width / source_width))
-    remainder = pixel_height % 4
-    if remainder:
-        pixel_height += 4 - remainder
-
-    resized = prepared.resize((pixel_width, pixel_height), Image.Resampling.LANCZOS)
-    pixels = np.array(resized.convert("RGBA"))
-    
-    char_height = pixel_height // 4
-        
-    lines: list[str] = []
-
-    # ── Iterate character cells ──
-    for char_row in range(char_height):
-        row_y = char_row * 4
-        parts: list[str] = []
-        for char_col in range(width_chars):
-            col_x = char_col * 2
-            # NOTE: Guard against rounding errors near edges
-            if row_y >= pixels.shape[0] or col_x >= pixels.shape[1]:
-                parts.append(" ")
-                continue
-                
-            block = pixels[row_y : min(row_y + 4, pixels.shape[0]), 
-                           col_x : min(col_x + 2, pixels.shape[1])]
-
-            # ── Compute Braille bits and colour ──
-            bits = 0
-            colors: list[tuple[int, int, int]] = []
-            for py, px, bit in _BRAILLE_DOTS:
-                if py >= block.shape[0] or px >= block.shape[1]:
-                    continue
-                r, g, b, a = block[py, px]
-                # Skip transparent or near-white pixels
-                if a < 20 or (r > 240 and g > 240 and b > 240):
-                    continue
-                
-                bits |= 1 << bit
-                # NOTE: Dark-mode inversion — keep the red accent, invert everything else
-                if r > 150 and g < 100 and b < 100:
-                    colors.append((r, g, b))
-                else:
-                    colors.append((255 - r, 255 - g, 255 - b))
-
-            if bits == 0:
-                parts.append(" ")
-                continue
-
-            # ── Average colour and emit Rich-markup cell ──
-            avg_r = sum(c[0] for c in colors) // len(colors)
-            avg_g = sum(c[1] for c in colors) // len(colors)
-            avg_b = sum(c[2] for c in colors) // len(colors)
-            
-            hex_color = _rgb_to_hex(avg_r, avg_g, avg_b)
-            char = chr(0x2800 + bits)
-            parts.append(f"[{hex_color}]{char}[/]")
-
-        lines.append("".join(parts))
-    return "\n".join(lines)
+    width = width_chars * pixels_per_column
+    height = max(1, round(width_chars * pixels_per_row * cell_aspect_ratio / (prepared.width / prepared.height)))
+    resized = prepared.resize((width, height), Image.Resampling.LANCZOS)
+    padded_height = ((height + pixels_per_row - 1) // pixels_per_row) * pixels_per_row
+    canvas = Image.new("RGB", (width, padded_height), "white")
+    canvas.paste(resized, (0, 0))
+    return canvas
 
 
-# ── Brand rendering ────────────────────────────────────────────────
+def _fit_block(colors: list[tuple[int, int, int]]) -> str:
+    """Choose a glyph and two source-derived colors with the least RGB error."""
+    total = tuple(sum(color[channel] for color in colors) for channel in range(3))
+    if all(color == colors[0] for color in colors):
+        return f"[on {_rgb_to_hex(*colors[0])}] [/]"
 
-@lru_cache(maxsize=4)
-def render_brand_logo(*, width_chars: int = 56) -> str:
-    """Render the OpenEnvision logo as Braille-art with dark-mode inversion.
+    best_score = -1.0
+    best_glyph = " "
+    best_foreground = best_background = colors[0]
+    for glyph, mask in _BLOCK_MASKS:
+        count = len(mask)
+        foreground = tuple(sum(colors[index][channel] for index in mask) for channel in range(3))
+        background = tuple(total[channel] - foreground[channel] for channel in range(3))
+        # The omitted squared-pixel term is constant for every glyph in this cell.
+        score = sum(foreground[channel] ** 2 / count + background[channel] ** 2 / (64 - count)
+                    for channel in range(3))
+        if score > best_score:
+            best_score = score
+            best_glyph = glyph
+            best_foreground = tuple(round(value / count) for value in foreground)
+            best_background = tuple(round(value / (64 - count)) for value in background)
+    return f"[{_rgb_to_hex(*best_foreground)} on {_rgb_to_hex(*best_background)}]{best_glyph}[/]"
 
-    Caches up to 4 width variants. Reads the PNG asset via :func:`logo_asset_path`.
 
-    Raises:
-        FileNotFoundError: When the logo asset PNG is not found.
-        RuntimeError: When Pillow is not installed.
+def render_logo_blocks(
+    image: Image.Image, *, width_chars: int = 56, cell_aspect_ratio: float = 0.5,
+) -> str:
+    """Approximate the original bitmap with continuous blocks and sampled colors.
+
+    Fractional blocks retain fine edges; quadrants retain the wing separations
+    and lettering. Both foreground and background come from the source image.
     """
-    path = logo_asset_path()
-    if not path.is_file():
-        raise FileNotFoundError(f"OpenEnvision logo asset not found: {path}")
-    with Image.open(path) as image:
-        return render_logo_braille(image, width_chars=width_chars)
+    resized = _resize_for_cells(
+        image, width_chars, pixels_per_column=8, pixels_per_row=8, cell_aspect_ratio=cell_aspect_ratio,
+    )
+    pixels = resized.load()
+    return "\n".join(
+        "".join(
+            _fit_block([pixels[column + dx, row + dy] for dy in range(8) for dx in range(8)])
+            for column in range(0, resized.width, 8)
+        )
+        for row in range(0, resized.height, 8)
+    )
+
+
+def render_logo_halfblocks(
+    image: Image.Image, *, width_chars: int = 40, dark: bool = True,
+    background: str | None = None, cell_aspect_ratio: float = 0.5,
+) -> str:
+    """Render sampled source RGB pixels without palette substitution."""
+    resized = _resize_for_cells(
+        image, width_chars, pixels_per_column=1, pixels_per_row=2, cell_aspect_ratio=cell_aspect_ratio,
+    )
+    pixels = resized.load()
+    return "\n".join(
+        "".join(
+            f"[{_rgb_to_hex(*pixels[column, row])} on {_rgb_to_hex(*pixels[column, row + 1])}]▀[/]"
+            for column in range(width_chars)
+        )
+        for row in range(0, resized.height, 2)
+    )
+
+
+@lru_cache(maxsize=8)
+def render_brand_logo(
+    *, width_chars: int = 56, dark: bool = True, background: str | None = None,
+    cell_aspect_ratio: float = 0.5,
+) -> str:
+    """Render the complete official image for terminals with text-only output."""
+    return render_logo_blocks(
+        brand_logo_image(), width_chars=width_chars, cell_aspect_ratio=cell_aspect_ratio,
+    )
 
 
 def render_fallback_header(*, width_chars: int = 56) -> str:
-    """Return a plain-text header for the ``--fallback`` mode (no Textual dependency).
-
-    Falls back to simple text lines if Braille rendering fails.
-    """
+    """Return the brand header for the CLI's fallback mode."""
     try:
         logo = render_brand_logo(width_chars=width_chars)
         return f"\n{logo}\n\n        {PRODUCT_NAME} · {PRODUCT_TAGLINE}\n"

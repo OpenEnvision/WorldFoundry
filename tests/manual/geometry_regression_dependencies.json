@@ -1,0 +1,461 @@
+{
+  "schema_version": 1,
+  "shared_paths": [
+    "worldfoundry/core/**",
+    "worldfoundry/runtime/**",
+    "worldfoundry/pipelines/pipeline_utils.py",
+    "worldfoundry/operators/base_operator.py",
+    "worldfoundry/studio/inference/**",
+    "worldfoundry/studio/serving/**",
+    "worldfoundry/studio/cli.py",
+    "worldfoundry/studio/ui/launch_config.py",
+    "worldfoundry/studio/ui/launcher.py",
+    "worldfoundry/data/models/**",
+    "pyproject.toml",
+    "MANIFEST.in",
+    ".gitattributes",
+    "constraints/**",
+    "requirements*.txt",
+    "scripts/setup/**",
+    "tests/manual/geometry_regression_dependencies.json",
+    "tests/manual/geometry_regression.py",
+    "tests/manual/geometry_regression_impact.py",
+    "tests/manual/geometry_regression_suite.py",
+    "tests/manual/geometry_regression_schedule.py",
+    "worldfoundry/synthesis/base_synthesis.py"
+  ],
+  "ignored_paths": [
+    "docs/**",
+    "README*",
+    "LICENSE*",
+    "THIRD-PARTY-NOTICES",
+    ".github/**",
+    ".gitignore",
+    "Makefile",
+    "tests/**",
+    "worldfoundry/cli/**",
+    "worldfoundry/mcp/**",
+    "worldfoundry/evaluation/**",
+    "worldfoundry/data/benchmarks/**",
+    "worldfoundry/studio/visualization/**",
+    "worldfoundry/studio/frontend/**",
+    "worldfoundry/studio/ui/**",
+    "scripts/docs/**"
+  ],
+  "components": {
+    "depth-anything-v1": [
+      "worldfoundry/base_models/three_dimensions/depth/depth_anything/runtime_v1.py",
+      "worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v1/**",
+      "worldfoundry/pipelines/depth_anything/pipeline_depth_anything_v1.py"
+    ],
+    "depth-anything-v2": [
+      "worldfoundry/base_models/three_dimensions/depth/depth_anything/runtime_v2.py",
+      "worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v2/**",
+      "worldfoundry/pipelines/depth_anything/pipeline_depth_anything_v2.py"
+    ],
+    "depth-anything-v3": [
+      "worldfoundry/base_models/three_dimensions/depth/depth_anything/runtime_v3.py",
+      "worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v3/**",
+      "worldfoundry/pipelines/depth_anything/pipeline_depth_anything_v3.py"
+    ],
+    "cut3r": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/cut3r/**",
+      "worldfoundry/pipelines/cut3r/**",
+      "worldfoundry/operators/cut3r_operator.py"
+    ],
+    "infinite-vggt": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/infinite_vggt/**",
+      "worldfoundry/pipelines/infinite_vggt/**",
+      "worldfoundry/operators/infinite_vggt_operator.py"
+    ],
+    "lingbot-map": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/lingbot_map/**",
+      "worldfoundry/pipelines/lingbot_map/**",
+      "worldfoundry/operators/lingbot_map_operator.py"
+    ],
+    "vggt": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/vggt/**",
+      "worldfoundry/pipelines/vggt/**",
+      "worldfoundry/operators/vggt_operator.py"
+    ],
+    "vggt-omega": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/vggt_omega/**",
+      "worldfoundry/pipelines/vggt_omega/**",
+      "worldfoundry/operators/vggt_omega_operator.py"
+    ],
+    "flash-world": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/flash_world/**",
+      "worldfoundry/pipelines/flash_world/**",
+      "worldfoundry/operators/flash_world_operator.py"
+    ],
+    "worldfm": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/worldfm/**",
+      "worldfoundry/pipelines/worldfm/**",
+      "worldfoundry/operators/worldfm_operator.py"
+    ],
+    "pi3": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/pi3_inference/**",
+      "worldfoundry/pipelines/pi3/pipeline_pi3.py",
+      "worldfoundry/operators/pi3_operator.py"
+    ],
+    "loger": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/loger/**",
+      "worldfoundry/pipelines/pi3/pipeline_loger.py"
+    ],
+    "hunyuan-mirror": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/hunyuan_mirror/**",
+      "worldfoundry/pipelines/hunyuan_world/pipeline_hunyuan_mirror.py",
+      "worldfoundry/operators/hunyuan_mirror_operator.py"
+    ],
+    "hyworldmirror-2": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/hyworldmirror_2p0/**",
+      "worldfoundry/pipelines/hunyuan_world/pipeline_hy_world_2p0.py",
+      "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0_worldgen_runtime.py"
+    ],
+    "lyra-2": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/lyra/**",
+      "worldfoundry/pipelines/lyra/**",
+      "worldfoundry/synthesis/visual_generation/lyra_2/**",
+      "worldfoundry/operators/lyra_operator.py"
+    ],
+    "gaussian-rendering": [
+      "worldfoundry/base_models/three_dimensions/point_clouds/flash_world/render.py",
+      "worldfoundry/base_models/three_dimensions/point_clouds/ply_io.py"
+    ],
+    "wan-diffusion": [
+      "worldfoundry/base_models/diffusion_model/**",
+      "worldfoundry/synthesis/visual_generation/wan/**"
+    ],
+    "worldfm-diffusion": [
+      "worldfoundry/synthesis/visual_generation/worldfm/**"
+    ],
+    "wan-video": [
+      "worldfoundry/pipelines/wan/**",
+      "worldfoundry/pipelines/native_diffusion*.py",
+      "worldfoundry/base_models/diffusion_model/**",
+      "worldfoundry/operators/runtime_video_operator.py",
+      "worldfoundry/synthesis/visual_generation/memory/video.py"
+    ],
+    "ltx-video": [
+      "worldfoundry/pipelines/ltx_video/**",
+      "worldfoundry/synthesis/visual_generation/ltx_video/**",
+      "worldfoundry/base_models/diffusion_model/**",
+      "worldfoundry/synthesis/visual_generation/runtime_video*",
+      "worldfoundry/operators/runtime_video_operator.py"
+    ],
+    "cogvideox": [
+      "worldfoundry/pipelines/cogvideox/**",
+      "worldfoundry/synthesis/visual_generation/cogvideox/**",
+      "worldfoundry/synthesis/visual_generation/runtime_video*",
+      "worldfoundry/base_models/diffusion_model/**",
+      "worldfoundry/operators/runtime_video_operator.py"
+    ],
+    "cosmos25": [
+      "worldfoundry/pipelines/cosmos/pipeline_cosmos_predict2p5.py",
+      "worldfoundry/base_models/diffusion_model/**"
+    ],
+    "cosmos-transfer25": [
+      "worldfoundry/pipelines/cosmos/pipeline_cosmos_transfer2p5.py",
+      "worldfoundry/base_models/diffusion_model/**"
+    ],
+    "gamma-world": [
+      "worldfoundry/pipelines/gamma_world/**",
+      "worldfoundry/base_models/diffusion_model/**"
+    ],
+    "oasis-500m": [
+      "worldfoundry/synthesis/visual_generation/open_oasis/**",
+      "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py",
+      "worldfoundry/synthesis/visual_generation/runtime_manifest.py",
+      "worldfoundry/operators/world_model_runtime_operator.py"
+    ],
+    "matrix-game2": [
+      "worldfoundry/pipelines/matrix_game/pipeline_matrix_game_2.py",
+      "worldfoundry/synthesis/visual_generation/matrix_game/**",
+      "worldfoundry/operators/matrix_game_2_operator.py",
+      "tests/synthesis/test_matrix_game_2_checkpoint_conditioned_trajectory.py",
+      "tests/synthesis/mg2_historical_reference.py"
+    ],
+    "inspatio-world-1p5": [
+      "worldfoundry/pipelines/inspatio_world/pipeline_inspatio_world_v15.py",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_v15_synthesis.py",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/v15*.py",
+      "worldfoundry/base_models/diffusion_model/models/denoisers/wan_causal_world.py",
+      "worldfoundry/base_models/diffusion_model/runners/inspatio_world.py",
+      "worldfoundry/base_models/three_dimensions/point_clouds/depth_warper.py",
+      "tests/synthesis/test_inspatio_v15*.py",
+      "tests/manual/inspatio_v15_regression.py"
+    ],
+    "dreamx-world": [
+      "worldfoundry/pipelines/dreamx_world/**",
+      "worldfoundry/synthesis/visual_generation/dreamx_world/**",
+      "worldfoundry/base_models/diffusion_model/**"
+    ],
+    "inspatio-world": [
+      "worldfoundry/pipelines/inspatio_world/pipeline_inspatio_world.py",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_synthesis.py",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/worldfoundry_runtime.py",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/**",
+      "worldfoundry/base_models/diffusion_model/runners/inspatio_world.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/wan/variants/causal_camera_21.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/wan/variants/camera_21.py",
+      "worldfoundry/data/models/runtime/configs/inspatio_world/**"
+    ],
+    "lingbot-world": [
+      "worldfoundry/pipelines/lingbot_world/**",
+      "worldfoundry/synthesis/visual_generation/lingbot_world/**",
+      "worldfoundry/operators/lingbot_world_operator.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/wan/variants/lingbot/**",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/utils/taehv.py"
+    ],
+    "lingbot-world-v2": [
+      "worldfoundry/pipelines/lingbot_world_v2/**",
+      "worldfoundry/synthesis/visual_generation/lingbot_world_v2/**",
+      "worldfoundry/operators/lingbot_world_operator.py",
+      "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/utils/taehv.py"
+    ],
+    "ati-wan21": [
+      "worldfoundry/pipelines/ati/**",
+      "worldfoundry/synthesis/visual_generation/ati/**"
+    ],
+    "alayaworld": [
+      "worldfoundry/pipelines/alayaworld/**",
+      "worldfoundry/synthesis/visual_generation/alayaworld/**",
+      "worldfoundry/base_models/diffusion_model/models/networks/ltx/**",
+      "worldfoundry/base_models/diffusion_model/models/autoencoders/ltx/**",
+      "worldfoundry/base_models/diffusion_model/models/encoders/ltx/**",
+      "worldfoundry/base_models/diffusion_model/models/representations/ltx/**"
+    ],
+    "diamond": [
+      "worldfoundry/synthesis/visual_generation/diamond/**",
+      "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py"
+    ]
+  },
+  "cases": {
+    "inspatio-world-1p5-image-short": [
+      "inspatio-world-1p5"
+    ],
+    "inspatio-world-1p5-multiview-short": [
+      "inspatio-world-1p5"
+    ],
+    "inspatio-world-1p5-video-short": [
+      "inspatio-world-1p5"
+    ],
+    "cut3r": [
+      "cut3r"
+    ],
+    "da3-large-1.1": [
+      "depth-anything-v3"
+    ],
+    "da3metric-large": [
+      "depth-anything-v3"
+    ],
+    "da3nested-giant-large-1.1": [
+      "depth-anything-v3"
+    ],
+    "depth-anything-v1-base": [
+      "depth-anything-v1"
+    ],
+    "depth-anything-v1-large": [
+      "depth-anything-v1"
+    ],
+    "depth-anything-v1-small": [
+      "depth-anything-v1"
+    ],
+    "depth-anything-v2-large": [
+      "depth-anything-v2"
+    ],
+    "hunyuan-mirror": [
+      "hunyuan-mirror"
+    ],
+    "infinite-vggt": [
+      "infinite-vggt",
+      "vggt",
+      "gaussian-rendering"
+    ],
+    "lingbot-map-windowed": [
+      "lingbot-map"
+    ],
+    "loger": [
+      "loger",
+      "pi3"
+    ],
+    "pi3-original": [
+      "pi3"
+    ],
+    "pi3x": [
+      "pi3"
+    ],
+    "vggt-omega-alignment": [
+      "vggt-omega",
+      "vggt",
+      "gaussian-rendering"
+    ],
+    "vggt-omega": [
+      "vggt-omega",
+      "vggt",
+      "gaussian-rendering"
+    ],
+    "vggt": [
+      "vggt",
+      "gaussian-rendering"
+    ],
+    "hyworldmirror-2": [
+      "hyworldmirror-2"
+    ],
+    "flashworld": [
+      "flash-world",
+      "wan-diffusion",
+      "gaussian-rendering"
+    ],
+    "worldfm": [
+      "worldfm",
+      "worldfm-diffusion",
+      "gaussian-rendering"
+    ],
+    "lyra2-forward": [
+      "lyra-2",
+      "wan-diffusion",
+      "pi3",
+      "depth-anything-v3",
+      "gaussian-rendering"
+    ],
+    "wan21-t2v-1p3b-short": [
+      "wan-video"
+    ],
+    "wan22-ti2v-5b-short": [
+      "wan-video"
+    ],
+    "ltx-video-098-i2v-short": [
+      "ltx-video"
+    ],
+    "cogvideox-2b-t2v-short": [
+      "cogvideox"
+    ],
+    "cosmos-predict25-2b-short": [
+      "cosmos25"
+    ],
+    "cosmos-transfer25-2b-edge-short": [
+      "cosmos-transfer25"
+    ],
+    "gamma-world-causal-few-step-189f": [
+      "gamma-world"
+    ],
+    "oasis500m-video-short": [
+      "oasis-500m"
+    ],
+    "matrix-game2-controls-short": [
+      "matrix-game2"
+    ],
+    "dreamx-world5b-ar-short": [
+      "dreamx-world",
+      "wan-diffusion"
+    ],
+    "inspatio-world-video-short": [
+      "inspatio-world"
+    ],
+    "lingbot-world-controls-short": [
+      "lingbot-world"
+    ],
+    "lingbot-world-act-controls-short": [
+      "lingbot-world"
+    ],
+    "lingbot-world-v2-causal-short": [
+      "lingbot-world-v2"
+    ],
+    "ati-wan21-14b-tracks-short": [
+      "ati-wan21"
+    ],
+    "dreamx-world5b-cam-short": [
+      "dreamx-world",
+      "wan-diffusion"
+    ],
+    "alayaworld-spatial-two-chunks-short": [
+      "alayaworld",
+      "depth-anything-v3"
+    ],
+    "diamond-csgo-conditioned-short": [
+      "diamond"
+    ]
+  },
+  "coverage_scope": "Declared short 3D, video generation and world-model cases; variants and unlisted integrations are not implied covered.",
+  "cpu_only_components": [
+    {
+      "paths": [
+        "benchmarks/__init__.py",
+        "benchmarks/harness.py",
+        "benchmarks/inference/__init__.py",
+        "benchmarks/inference/correctness.py",
+        "benchmarks/inference/denoise_loop.py",
+        "benchmarks/inference/full_stack.py"
+      ],
+      "reason": "Benchmark measurement and numerical acceptance tooling; production inference operators retain their own replay selection.",
+      "required_cpu_contracts": [
+        "tests/runtime/test_inference_benchmark_correctness.py"
+      ]
+    }
+  ],
+  "relocation_contracts": [
+    {
+      "from_root": "worldfoundry/synthesis/visual_generation/world_model",
+      "to_root": "worldfoundry/synthesis/visual_generation",
+      "packages": [
+        "adaworld",
+        "diamond",
+        "dino_wm",
+        "egowm",
+        "hma",
+        "le_wm",
+        "mineworld",
+        "mira_wm",
+        "nwm",
+        "open_dreamer",
+        "open_oasis",
+        "shotstream",
+        "solarwm",
+        "starwm",
+        "vid2world",
+        "wilddet3d"
+      ],
+      "files": [
+        "runtime_manifest.py"
+      ],
+      "relative_import_rewrites": [
+        [
+          "from ...base_synthesis import BaseSynthesis",
+          "from ..base_synthesis import BaseSynthesis"
+        ],
+        [
+          "from ...synthesis.visual_generation.world_model.runtime_manifest import WorldModelRuntimeSynthesis",
+          "from ...synthesis.visual_generation.runtime_manifest import WorldModelRuntimeSynthesis"
+        ]
+      ],
+      "rewrite_only_paths": [
+        "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py"
+      ],
+      "deleted_metadata": [
+        {
+          "path": "worldfoundry/synthesis/visual_generation/world_model/__init__.py",
+          "sha256": "81fb0987be1532c271b346b645edbbf01215ebf39015637d5e0c4dab158c7858",
+          "reason": "Removed container initializer contains only a module docstring."
+        },
+        {
+          "path": "worldfoundry/synthesis/visual_generation/world_model/solarwm/__init__.py",
+          "sha256": "722e8484318dc18943cae22d0340121ab489dea77c6dfde937448012aad329a2",
+          "reason": "Removed initializer contains only a module docstring; the existing direct SolarWM package and both runtime routes remain."
+        },
+        {
+          "path": "worldfoundry/synthesis/visual_generation/world_model/open_oasis/.gitattributes",
+          "sha256": "c2f4b9ee5e21a23a3e90bad23435dac607bb7b58eac254d312eccccf2f530296",
+          "reason": "Removed metadata names an untracked video.mp4; the inference sources and bundled resources are relocated separately."
+        }
+      ],
+      "required_cpu_contracts": [
+        "tests/synthesis/test_visual_generation_layout.py",
+        "tests/runtime/test_geometry_regression_relocations.py",
+        "tests/synthesis/test_base_synthesis_lazy_grad.py",
+        "tests/synthesis/test_base_synthesis_lazy_import.py"
+      ],
+      "reason": "Direct-package relocation is accepted only after commit-blob comparison proves identical bytes or the declared import-namespace rewrite; CPU contracts verify runtime discovery, configuration targets and bundled resources. This does not certify these models numerically."
+    }
+  ]
+}

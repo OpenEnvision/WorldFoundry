@@ -13,6 +13,8 @@ import json
 import math
 import os
 import platform as stdlib_platform
+import random
+import statistics
 import subprocess
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -21,7 +23,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypeAlias, cast
 
+from worldfoundry.core.contracts import OptimizationSnapshot
+
 PERFORMANCE_MANIFEST_SCHEMA_VERSION = "worldfoundry-performance-v1"
+
+FINGERPRINT_COMPATIBILITY_FIELDS = (
+    "platform",
+    "vendor",
+    "arch",
+    "device",
+    "memory_bytes",
+    "driver_version",
+    "runtime_version",
+    "torch_version",
+    "python_version",
+)
 
 JsonScalar: TypeAlias = None | bool | int | float | str
 JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
@@ -142,6 +158,51 @@ class RuntimeFingerprint:
         }
         return _with_extensions(payload, self.extensions)
 
+    def compatibility_mismatches(
+        self,
+        other: "RuntimeFingerprint",
+        *,
+        fields: Sequence[str] = FINGERPRINT_COMPATIBILITY_FIELDS,
+    ) -> dict[str, tuple[JsonScalar, JsonScalar]]:
+        """Return hardware/software fields that make paired results incomparable.
+
+        Source revision is intentionally not part of the default set: a paired
+        experiment may compare two revisions.  Callers that require identical
+        source can include ``worldfoundry_commit`` explicitly.
+        """
+
+        mismatches: dict[str, tuple[JsonScalar, JsonScalar]] = {}
+        for name in fields:
+            if not hasattr(self, name) or not hasattr(other, name):
+                raise ValueError(f"unknown runtime fingerprint field: {name}")
+            baseline = cast(JsonScalar, getattr(self, name))
+            candidate = cast(JsonScalar, getattr(other, name))
+            if baseline != candidate:
+                mismatches[name] = (baseline, candidate)
+        return mismatches
+
+    def is_compatible_with(
+        self,
+        other: "RuntimeFingerprint",
+        *,
+        fields: Sequence[str] = FINGERPRINT_COMPATIBILITY_FIELDS,
+    ) -> bool:
+        return not self.compatibility_mismatches(other, fields=fields)
+
+    def assert_compatible_with(
+        self,
+        other: "RuntimeFingerprint",
+        *,
+        fields: Sequence[str] = FINGERPRINT_COMPATIBILITY_FIELDS,
+    ) -> None:
+        mismatches = self.compatibility_mismatches(other, fields=fields)
+        if mismatches:
+            details = ", ".join(
+                f"{name}={baseline!r}/{candidate!r}"
+                for name, (baseline, candidate) in mismatches.items()
+            )
+            raise ValueError(f"incompatible runtime fingerprints: {details}")
+
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "RuntimeFingerprint":
         known = frozenset(
@@ -179,54 +240,6 @@ class RuntimeFingerprint:
 
 
 @dataclass(frozen=True, slots=True)
-class OptimizationSnapshot:
-    """Requested and effective optimization state for one execution."""
-
-    requested: Mapping[str, JsonValue] = field(default_factory=dict)
-    effective: Mapping[str, JsonValue] = field(default_factory=dict)
-    fallbacks: tuple[JsonValue, ...] = ()
-    quality_tier: str = "exact"
-    extensions: Mapping[str, JsonValue] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "requested", _json_mapping(self.requested, path="requested"))
-        object.__setattr__(self, "effective", _json_mapping(self.effective, path="effective"))
-        object.__setattr__(
-            self,
-            "fallbacks",
-            tuple(_json_value(value, path=f"fallbacks[{index}]") for index, value in enumerate(self.fallbacks)),
-        )
-        object.__setattr__(self, "extensions", _json_mapping(self.extensions, path="extensions"))
-
-    def to_dict(self) -> dict[str, JsonValue]:
-        payload: dict[str, JsonValue] = {
-            "requested": _json_mapping(self.requested, path="requested"),
-            "effective": _json_mapping(self.effective, path="effective"),
-            "fallbacks": [_json_value(value, path="fallbacks") for value in self.fallbacks],
-            "quality_tier": self.quality_tier,
-        }
-        return _with_extensions(payload, self.extensions)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "OptimizationSnapshot":
-        known = frozenset({"requested", "effective", "fallbacks", "quality_tier", "extensions"})
-        requested = data.get("requested")
-        effective = data.get("effective")
-        fallbacks = data.get("fallbacks")
-        return cls(
-            requested=requested if isinstance(requested, Mapping) else {},
-            effective=effective if isinstance(effective, Mapping) else {},
-            fallbacks=(
-                tuple(fallbacks)
-                if isinstance(fallbacks, Sequence) and not isinstance(fallbacks, (str, bytes))
-                else ()
-            ),
-            quality_tier=str(data.get("quality_tier") or "exact"),
-            extensions=_extensions(data, known),
-        )
-
-
-@dataclass(frozen=True, slots=True)
 class PerformanceMetrics:
     """Common performance values plus open-ended counters.
 
@@ -243,6 +256,7 @@ class PerformanceMetrics:
     cache_counters: Mapping[str, JsonValue] = field(default_factory=dict)
     graph_counters: Mapping[str, JsonValue] = field(default_factory=dict)
     batch_counters: Mapping[str, JsonValue] = field(default_factory=dict)
+    raw_samples_ms: Mapping[str, JsonValue] = field(default_factory=dict)
     extensions: Mapping[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -253,6 +267,7 @@ class PerformanceMetrics:
             "cache_counters",
             "graph_counters",
             "batch_counters",
+            "raw_samples_ms",
             "extensions",
         ):
             object.__setattr__(self, name, _json_mapping(getattr(self, name), path=name))
@@ -271,6 +286,7 @@ class PerformanceMetrics:
             "cache_counters": _json_mapping(self.cache_counters, path="cache_counters"),
             "graph_counters": _json_mapping(self.graph_counters, path="graph_counters"),
             "batch_counters": _json_mapping(self.batch_counters, path="batch_counters"),
+            "raw_samples_ms": _json_mapping(self.raw_samples_ms, path="raw_samples_ms"),
         }
         return _with_extensions(payload, self.extensions)
 
@@ -285,6 +301,7 @@ class PerformanceMetrics:
                 "cache_counters",
                 "graph_counters",
                 "batch_counters",
+                "raw_samples_ms",
                 "extensions",
             }
         )
@@ -301,8 +318,144 @@ class PerformanceMetrics:
             cache_counters=mapping("cache_counters"),
             graph_counters=mapping("graph_counters"),
             batch_counters=mapping("batch_counters"),
+            raw_samples_ms=mapping("raw_samples_ms"),
             extensions=_extensions(data, known),
         )
+
+
+def _finite_samples(
+    values: Sequence[float],
+    *,
+    name: str,
+    require_positive: bool = False,
+) -> tuple[float, ...]:
+    samples = tuple(float(value) for value in values)
+    if not samples:
+        raise ValueError(f"{name} must contain at least one sample")
+    if any(not math.isfinite(value) for value in samples):
+        raise ValueError(f"{name} samples must be finite")
+    if require_positive and any(value <= 0 for value in samples):
+        raise ValueError(f"{name} samples must be finite and greater than zero")
+    return samples
+
+
+def _percentile(values: Sequence[float], fraction: float) -> float:
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = (len(ordered) - 1) * fraction
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return ordered[lower]
+    weight = position - lower
+    return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
+
+
+@dataclass(frozen=True, slots=True)
+class SampleDistribution:
+    """Robust descriptive statistics for one timing sample series."""
+
+    median: float
+    p10: float
+    p90: float
+    mad: float
+    mad_over_median: float | None
+
+    @classmethod
+    def from_samples(
+        cls,
+        values: Sequence[float],
+        *,
+        name: str = "samples",
+        require_positive: bool = False,
+    ) -> "SampleDistribution":
+        samples = _finite_samples(values, name=name, require_positive=require_positive)
+        median = statistics.median(samples)
+        mad = statistics.median(abs(value - median) for value in samples)
+        return cls(
+            median=median,
+            p10=_percentile(samples, 0.10),
+            p90=_percentile(samples, 0.90),
+            mad=mad,
+            mad_over_median=mad / abs(median) if median else None,
+        )
+
+    def to_dict(self) -> dict[str, float | None]:
+        return {
+            "median": self.median,
+            "p10": self.p10,
+            "p90": self.p90,
+            "mad": self.mad,
+            "mad_over_median": self.mad_over_median,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PairedPerformanceComparison:
+    """A deterministic paired A/B timing comparison with raw evidence."""
+
+    baseline_ms: tuple[float, ...]
+    candidate_ms: tuple[float, ...]
+    baseline: SampleDistribution
+    candidate: SampleDistribution
+    paired_speedup: SampleDistribution
+    paired_delta_ms: SampleDistribution
+    median_speedup_ci95: tuple[float, float]
+
+    @property
+    def sample_count(self) -> int:
+        return len(self.baseline_ms)
+
+    def to_dict(self) -> dict[str, JsonValue]:
+        return {
+            "sample_count": self.sample_count,
+            "baseline_ms": list(self.baseline_ms),
+            "candidate_ms": list(self.candidate_ms),
+            "baseline": self.baseline.to_dict(),
+            "candidate": self.candidate.to_dict(),
+            "paired_speedup": self.paired_speedup.to_dict(),
+            "paired_delta_ms": self.paired_delta_ms.to_dict(),
+            "median_speedup_ci95": list(self.median_speedup_ci95),
+        }
+
+
+def compare_paired_samples(
+    baseline_ms: Sequence[float],
+    candidate_ms: Sequence[float],
+    *,
+    minimum_pairs: int = 5,
+    bootstrap_resamples: int = 10_000,
+    bootstrap_seed: int = 0,
+) -> PairedPerformanceComparison:
+    """Compare interleaved A/B timings using paired ratios and bootstrap CI."""
+
+    baseline = _finite_samples(baseline_ms, name="baseline_ms", require_positive=True)
+    candidate = _finite_samples(candidate_ms, name="candidate_ms", require_positive=True)
+    if len(baseline) != len(candidate):
+        raise ValueError("baseline_ms and candidate_ms must contain the same number of paired samples")
+    if len(baseline) < minimum_pairs:
+        raise ValueError(f"paired comparison requires at least {minimum_pairs} valid pairs")
+    if bootstrap_resamples <= 0:
+        raise ValueError("bootstrap_resamples must be greater than zero")
+
+    speedups = tuple(before / after for before, after in zip(baseline, candidate, strict=True))
+    deltas = tuple(before - after for before, after in zip(baseline, candidate, strict=True))
+    generator = random.Random(bootstrap_seed)
+    medians = []
+    for _ in range(bootstrap_resamples):
+        resample = [speedups[generator.randrange(len(speedups))] for _ in speedups]
+        medians.append(statistics.median(resample))
+
+    return PairedPerformanceComparison(
+        baseline_ms=baseline,
+        candidate_ms=candidate,
+        baseline=SampleDistribution.from_samples(baseline, name="baseline_ms", require_positive=True),
+        candidate=SampleDistribution.from_samples(candidate, name="candidate_ms", require_positive=True),
+        paired_speedup=SampleDistribution.from_samples(speedups, name="paired_speedup", require_positive=True),
+        paired_delta_ms=SampleDistribution.from_samples(deltas, name="paired_delta_ms"),
+        median_speedup_ci95=(_percentile(medians, 0.025), _percentile(medians, 0.975)),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -538,10 +691,14 @@ def capture_runtime_fingerprint(
 
 
 __all__ = [
+    "FINGERPRINT_COMPATIBILITY_FIELDS",
     "PERFORMANCE_MANIFEST_SCHEMA_VERSION",
     "OptimizationSnapshot",
+    "PairedPerformanceComparison",
     "PerformanceManifest",
     "PerformanceMetrics",
     "RuntimeFingerprint",
+    "SampleDistribution",
     "capture_runtime_fingerprint",
+    "compare_paired_samples",
 ]

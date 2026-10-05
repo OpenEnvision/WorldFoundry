@@ -1,0 +1,30 @@
+---
+title: "DINO-WM"
+description: "DINO-WM plans in DINOv2 feature space; checkpoint-backed wall_single inference is verified."
+modelId: "dino-wm"
+pageSource: authored
+---
+
+DINO-WM predicts future DINOv2 visual features conditioned on actions and plans toward a goal in feature space. WorldFoundry includes the official planning route and its wall-task simulator code.
+
+<ModelPaperFigures modelId="dino-wm" locale="en" />
+
+Read [arXiv 2411.04983](https://arxiv.org/abs/2411.04983), the [project page](https://dino-wm.github.io/), and the [official repository](https://github.com/gaoyuezhou/dino_wm).
+
+## Verified route
+
+The public `wall_single` route loaded the released epoch-65 world-model checkpoint, the official wall trajectory dataset, and a DINOv2 ViT-S/14 encoder. Two GPU planning runs completed and each produced a fully decodable 26-frame MP4 with finite result metrics. The more distant goal started outside the task's success threshold and was not solved. These deliberately small search-budget runs verify execution, not general planning performance.
+
+The `pusht` and `point_maze` checkpoints exist, but their task datasets and dedicated simulator dependencies have not been validated through this integration.
+
+## Inputs and output
+
+For the verified wall route, provide a checkpoint root containing `outputs/wall_single/hydra.yaml` and `outputs/wall_single/checkpoints/model_latest.pth`, the DINOv2 encoder, and the complete official wall trajectories. Set `DATASET_DIR` to the parent directory containing `wall_single/`; the wall config reads trajectories from `${DATASET_DIR}/wall_single`. The public synthesis route accepts `ckpt_base_path`, `model_name="wall_single"`, and `config`; it writes `dino-wm.mp4` plus planning metrics. A text prompt or standalone image/video input is not the verified wall-planning contract.
+
+The MP4 visualizes the simulator and planning episode. DINO-WM predicts in feature space; it is not a pixel video generator. Check the resolved plan before inference, because a checkpoint alone does not provide the required trajectories.
+
+## Validation boundary
+
+The wall smoke test establishes checkpoint loading, the in-tree planner's GPU execution, and artifact decoding. It does not establish a task success rate, long-horizon planning quality, or parity for the other released tasks.
+
+<ModelRelatedRecipes modelId="dino-wm" locale="en" />

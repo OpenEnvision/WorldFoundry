@@ -1,5 +1,7 @@
 id: 4dworldbench
 name: 4DWorldBench
+publisher: University of Science and Technology of China
+publisher_kind: university
 benchmark_kind:
 - world-generation
 - three-d-four-d-generation
@@ -172,6 +174,14 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench/run_four_d_worldbench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.four_d_worldbench.run_four_d_worldbench_official_runner
+    dataset_manifest_arg: --dataset-json
+    dimension_arg: --dimension
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    default_metrics: [perceptual_clip_iqa_metrics]
   runner_target: worldfoundry.evaluation.tasks.contracts.external:FourDWorldBenchContract
   validation_command:
   - worldfoundry-eval
@@ -202,12 +212,14 @@ runner:
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
 integration:
   status: integrated
+  tier: model_backed
+  judge_model_id: Kwai-Keye/Keye-VL-1_5-8B
   evidence:
   - In-tree runner and metric entrypoints are available under worldfoundry/evaluation/tasks/execution/runners/four_d_worldbench.
   - Heavy official dependencies are resolved through WorldFoundry base_models or explicit environment variables.
 release_status: experimental
 maturity: contract_ready
-open_source_status: in_tree_official_runtime
+open_source_status: in_tree_runtime
 official_benchmark_verified: false
 integration_evidence: false
 leaderboard_valid: false
@@ -215,6 +227,11 @@ requires:
 - dataset_json prepared in the official 4DWorldBench JSON schema
 - generated videos referenced by dataset_json
 - Keye-VL, DROID-SLAM, VFIMamba, FastVQA, and OpenAI/API assets only for dimensions that use them
+dataset:
+  not_applicable: false
+  reason: Official dataset download is not published; the upstream Dataset links are placeholders and callers must prepare dataset_json.
+blockers:
+- Official dataset acquisition is blocked because the pinned upstream Dataset links do not expose a download.
 data_refs:
   task_yaml: worldfoundry/data/benchmarks/tasks/external/4dworldbench.yaml
 runner_availability:

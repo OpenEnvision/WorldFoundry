@@ -9,18 +9,21 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from ..blocks import (
+    ConditionModulationBlock,
+    Mlp,  # noqa
+)
+from ..utils.camera import PoseDecoder, pose_encoding_to_camera
+from ..utils.geometry import geotrf
 from .postprocess import (
     postprocess,
     postprocess_desc,
-    postprocess_rgb,
-    postprocess_pose_conf,
     postprocess_pose,
+    postprocess_pose_conf,
+    postprocess_rgb,
     reg_dense_conf,
 )
-from ..blocks import Mlp  # noqa
-from ..utils.geometry import geotrf
-from ..utils.camera import pose_encoding_to_camera, PoseDecoder
-from ..blocks import ConditionModulationBlock
 
 
 class LinearPts3d(nn.Module):
@@ -29,9 +32,7 @@ class LinearPts3d(nn.Module):
     Each token outputs: - 16x16 3D points (+ confidence)
     """
 
-    def __init__(
-        self, net, has_conf=False, has_depth=False, has_rgb=False, has_pose_conf=False
-    ):
+    def __init__(self, net, has_conf=False, has_depth=False, has_rgb=False, has_pose_conf=False):
         """Init.
 
         Args:
@@ -49,13 +50,9 @@ class LinearPts3d(nn.Module):
         self.has_rgb = has_rgb
         self.has_pose_conf = has_pose_conf
         self.has_depth = has_depth
-        self.proj = Mlp(
-            net.dec_embed_dim, out_features=(3 + has_conf) * self.patch_size**2
-        )
+        self.proj = Mlp(net.dec_embed_dim, out_features=(3 + has_conf) * self.patch_size**2)
         if has_depth:
-            self.self_proj = Mlp(
-                net.dec_embed_dim, out_features=(3 + has_conf) * self.patch_size**2
-            )
+            self.self_proj = Mlp(net.dec_embed_dim, out_features=(3 + has_conf) * self.patch_size**2)
         if has_rgb:
             self.rgb_proj = Mlp(net.dec_embed_dim, out_features=3 * self.patch_size**2)
 
@@ -79,9 +76,7 @@ class LinearPts3d(nn.Module):
         B, S, D = tokens.shape
 
         feat = self.proj(tokens)  # B,S,D
-        feat = feat.transpose(-1, -2).view(
-            B, -1, H // self.patch_size, W // self.patch_size
-        )
+        feat = feat.transpose(-1, -2).view(B, -1, H // self.patch_size, W // self.patch_size)
         feat = F.pixel_shuffle(feat, self.patch_size)  # B,3,H,W
 
         final_output = postprocess(feat, self.depth_mode, self.conf_mode)
@@ -89,9 +84,7 @@ class LinearPts3d(nn.Module):
 
         if self.has_depth:
             self_feat = self.self_proj(tokens)  # B,S,D
-            self_feat = self_feat.transpose(-1, -2).view(
-                B, -1, H // self.patch_size, W // self.patch_size
-            )
+            self_feat = self_feat.transpose(-1, -2).view(B, -1, H // self.patch_size, W // self.patch_size)
             self_feat = F.pixel_shuffle(self_feat, self.patch_size)  # B,3,H,W
             self_3d_output = postprocess(self_feat, self.depth_mode, self.conf_mode)
             self_3d_output["pts3d_in_self_view"] = self_3d_output.pop("pts3d")
@@ -100,18 +93,14 @@ class LinearPts3d(nn.Module):
 
         if self.has_rgb:
             rgb_feat = self.rgb_proj(tokens)
-            rgb_feat = rgb_feat.transpose(-1, -2).view(
-                B, -1, H // self.patch_size, W // self.patch_size
-            )
+            rgb_feat = rgb_feat.transpose(-1, -2).view(B, -1, H // self.patch_size, W // self.patch_size)
             rgb_feat = F.pixel_shuffle(rgb_feat, self.patch_size)  # B,3,H,W
             rgb_output = postprocess_rgb(rgb_feat)
             final_output.update(rgb_output)
 
         if self.has_pose_conf:
             pose_conf = self.pose_conf_proj(tokens)
-            pose_conf = pose_conf.transpose(-1, -2).view(
-                B, -1, H // self.patch_size, W // self.patch_size
-            )
+            pose_conf = pose_conf.transpose(-1, -2).view(B, -1, H // self.patch_size, W // self.patch_size)
             pose_conf = F.pixel_shuffle(pose_conf, self.patch_size)
             pose_conf_output = postprocess_pose_conf(pose_conf)
             final_output.update(pose_conf_output)
@@ -151,13 +140,9 @@ class LinearPts3d_Desc(nn.Module):
         self.local_feat_dim = local_feat_dim
 
         if not has_depth:
-            self.proj = nn.Linear(
-                net.dec_embed_dim, (3 + has_conf) * self.patch_size**2
-            )
+            self.proj = nn.Linear(net.dec_embed_dim, (3 + has_conf) * self.patch_size**2)
         else:
-            self.proj = nn.Linear(
-                net.dec_embed_dim, (3 + has_conf) * 2 * self.patch_size**2
-            )
+            self.proj = nn.Linear(net.dec_embed_dim, (3 + has_conf) * 2 * self.patch_size**2)
         idim = net.enc_embed_dim + net.dec_embed_dim
         self.head_local_features = Mlp(
             in_features=idim,
@@ -185,17 +170,13 @@ class LinearPts3d_Desc(nn.Module):
         B, S, D = tokens.shape
 
         feat = self.proj(tokens)  # B,S,D
-        feat = feat.transpose(-1, -2).view(
-            B, -1, H // self.patch_size, W // self.patch_size
-        )
+        feat = feat.transpose(-1, -2).view(B, -1, H // self.patch_size, W // self.patch_size)
         feat = F.pixel_shuffle(feat, self.patch_size)  # B,3,H,W
 
         enc_output, dec_output = decout[0], decout[-1]
         cat_output = torch.cat([enc_output, dec_output], dim=-1)
         local_features = self.head_local_features(cat_output)  # B,S,D
-        local_features = local_features.transpose(-1, -2).view(
-            B, -1, H // self.patch_size, W // self.patch_size
-        )
+        local_features = local_features.transpose(-1, -2).view(B, -1, H // self.patch_size, W // self.patch_size)
         local_features = F.pixel_shuffle(local_features, self.patch_size)  # B,d,H,W
         feat = torch.cat([feat, local_features], dim=1)
 
@@ -232,17 +213,13 @@ class LinearPts3dPoseDirect(nn.Module):
         self.has_rgb = has_rgb
         self.has_pose = has_pose
 
-        self.proj = Mlp(
-            net.dec_embed_dim, out_features=(3 + has_conf) * self.patch_size**2
-        )
+        self.proj = Mlp(net.dec_embed_dim, out_features=(3 + has_conf) * self.patch_size**2)
         if has_rgb:
             self.rgb_proj = Mlp(net.dec_embed_dim, out_features=3 * self.patch_size**2)
         if has_pose:
             self.pose_head = PoseDecoder(hidden_size=net.dec_embed_dim)
         if has_conf:
-            self.cross_conf_proj = Mlp(
-                net.dec_embed_dim, out_features=self.patch_size**2
-            )
+            self.cross_conf_proj = Mlp(net.dec_embed_dim, out_features=self.patch_size**2)
 
     def setup(self, croconet):
         """Setup.
@@ -267,9 +244,7 @@ class LinearPts3dPoseDirect(nn.Module):
         B, S, D = tokens.shape
 
         feat = self.proj(tokens)  # B,S,D
-        feat = feat.transpose(-1, -2).view(
-            B, -1, H // self.patch_size, W // self.patch_size
-        )
+        feat = feat.transpose(-1, -2).view(B, -1, H // self.patch_size, W // self.patch_size)
         feat = F.pixel_shuffle(feat, self.patch_size)  # B,3,H,W
         final_output = postprocess(feat, self.depth_mode, self.conf_mode)
         final_output["pts3d_in_self_view"] = final_output.pop("pts3d")
@@ -277,9 +252,7 @@ class LinearPts3dPoseDirect(nn.Module):
 
         if self.has_rgb:
             rgb_feat = self.rgb_proj(tokens)
-            rgb_feat = rgb_feat.transpose(-1, -2).view(
-                B, -1, H // self.patch_size, W // self.patch_size
-            )
+            rgb_feat = rgb_feat.transpose(-1, -2).view(B, -1, H // self.patch_size, W // self.patch_size)
             rgb_feat = F.pixel_shuffle(rgb_feat, self.patch_size)  # B,3,H,W
             rgb_output = postprocess_rgb(rgb_feat)
             final_output.update(rgb_output)
@@ -295,9 +268,7 @@ class LinearPts3dPoseDirect(nn.Module):
 
         if self.has_conf:
             cross_conf = self.cross_conf_proj(tokens)
-            cross_conf = cross_conf.transpose(-1, -2).view(
-                B, -1, H // self.patch_size, W // self.patch_size
-            )
+            cross_conf = cross_conf.transpose(-1, -2).view(B, -1, H // self.patch_size, W // self.patch_size)
             cross_conf = F.pixel_shuffle(cross_conf, self.patch_size)[:, 0]
             final_output["conf"] = reg_dense_conf(cross_conf, mode=self.conf_mode)
         return final_output
@@ -309,9 +280,7 @@ class LinearPts3dPose(nn.Module):
     Each token outputs: - 16x16 3D points (+ confidence)
     """
 
-    def __init__(
-        self, net, has_conf=False, has_rgb=False, has_pose=False, mlp_ratio=4.0
-    ):
+    def __init__(self, net, has_conf=False, has_rgb=False, has_pose=False, mlp_ratio=4.0):
         """Init.
 
         Args:
@@ -391,21 +360,15 @@ class LinearPts3dPose(nn.Module):
             B, S, D = tokens.shape
 
             feat = self.proj(tokens)  # B,S,D
-            feat = feat.transpose(-1, -2).view(
-                B, -1, H // self.patch_size, W // self.patch_size
-            )
+            feat = feat.transpose(-1, -2).view(B, -1, H // self.patch_size, W // self.patch_size)
             feat = F.pixel_shuffle(feat, self.patch_size)  # B,3,H,W
-            final_output = postprocess(
-                feat, self.depth_mode, self.conf_mode, pos_z=True
-            )
+            final_output = postprocess(feat, self.depth_mode, self.conf_mode, pos_z=True)
             final_output["pts3d_in_self_view"] = final_output.pop("pts3d")
             final_output["conf_self"] = final_output.pop("conf")
 
             if self.has_rgb:
                 rgb_feat = self.rgb_proj(tokens)
-                rgb_feat = rgb_feat.transpose(-1, -2).view(
-                    B, -1, H // self.patch_size, W // self.patch_size
-                )
+                rgb_feat = rgb_feat.transpose(-1, -2).view(B, -1, H // self.patch_size, W // self.patch_size)
                 rgb_feat = F.pixel_shuffle(rgb_feat, self.patch_size)  # B,3,H,W
                 rgb_output = postprocess_rgb(rgb_feat)
                 final_output.update(rgb_output)
@@ -415,9 +378,7 @@ class LinearPts3dPose(nn.Module):
                 final_output["camera_pose"] = pose  # B,7
 
                 cross_feat = self.cross_proj(cross_tokens)  # B,S,D
-                cross_feat = cross_feat.transpose(-1, -2).view(
-                    B, -1, H // self.patch_size, W // self.patch_size
-                )
+                cross_feat = cross_feat.transpose(-1, -2).view(B, -1, H // self.patch_size, W // self.patch_size)
                 cross_feat = F.pixel_shuffle(cross_feat, self.patch_size)  # B,3,H,W
                 tmp = postprocess(cross_feat, self.depth_mode, self.conf_mode)
                 final_output["pts3d_in_other_view"] = tmp.pop("pts3d")

@@ -1,0 +1,52 @@
+---
+title: "VideoCrafter1 T2V"
+description: "VideoCrafter1 T2V from Tencent AI Lab: text-to-video and video-generation; Runner parity pending."
+modelId: "videocrafter1-t2v"
+pageSource: authored
+---
+
+VideoCrafter1 T2V is the text-to-video member of the VideoCrafter1 release, generating clips up to 1024x576 from a prompt. The in-tree infer-only runtime wraps the official text-to-video 1024 path with local checkpoint, fps, frame count, and seed controls.
+
+<ModelPaperFigures modelId="videocrafter1-t2v" locale="en" />
+
+The recorded paper is [arXiv 2401.09047](https://arxiv.org/abs/2401.09047).
+
+Project page: [ailab-cvc.github.io/videocrafter2](https://ailab-cvc.github.io/videocrafter2/). Code: [VideoCrafter/VideoCrafter](https://github.com/VideoCrafter/VideoCrafter).
+
+<ModelCommandBuilder modelId="videocrafter1-t2v" locale="en" />
+
+## What it is for
+
+Pick `videocrafter1-t2v` when you want this family's text-to-video line in WorldFoundry: a prompt in, a generated clip out. Use it as the catalog T2V start rather than an editor or a world-model stepper.
+
+U-Net latent video diffusion at up to 1024x576 (per the upstream release). Checkpoint provenance is tracked on the family entry; training and download scripts are excluded. It is published by Tencent AI Lab.
+
+Catalog tasks include text-to-video and video-generation. Catalog aliases include `videocrafter1_t2v`. Documented modalities: text in, video out.
+
+Recorded evaluation entry points include [EvalCrafter](/docs/evaluation/benchmark-hub/evalcrafter) (Companion benchmark of the VideoCrafter effort).
+
+Not [VideoCrafter](/docs/guides/supported-models/videocrafter) and [VideoCrafter2 T2V](/docs/guides/supported-models/videocrafter2-t2v). Score on [EvalCrafter](/docs/evaluation/benchmark-hub/evalcrafter).
+
+## Runtime contract
+
+Optional `prompt`, `frames`, `fps`, `height`, and `width`; artifacts `generated_video` and `videocrafter1-t2v.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `VideoCrafter1T2VPipeline`.
+
+Family status: **Runner parity pending**.
+
+Runner parity is pending. Prefer VideoCrafter2 T2V for better visual quality from the same family, or the DiT entries for current-generation quality.
+
+Checkpoint provenance is tracked on the top-level videocrafter catalog entry to avoid duplicate HF repo aliases.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run videocrafter1-t2v --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `VideoCrafter/Text2Video-1024`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh videocrafter1-t2v`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="videocrafter1-t2v" locale="en" />

@@ -15,6 +15,7 @@ checkpoint:
   revision: fc04bbdcc53e498695cfad95d1199091396ef55b
   license: apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2602.12684
   github:
     url: https://github.com/XiaomiRobotics/Xiaomi-Robotics-0
     head_sha: fa170bc295a22e0f4e582ff9e5bb104b3c6900d6
@@ -125,3 +126,27 @@ runner_parity:
   - All six released checkpoints passed strict restoration and finite real Workspace inference on A100; pretrain used the explicit DROID camera/state contract.
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile planning records.
+docs:
+  publisher: Xiaomi Robotics
+  publisher_kind: company
+  publisher_zh: 小米机器人（Xiaomi Robotics）
+  overview: 'Xiaomi-Robotics-0 is Xiaomi''s open VLA policy line with an unusually complete Apache-2.0 benchmark zoo: confirmed checkpoints for LIBERO, CALVIN ABCD-D, CALVIN ABC-D, SimplerEnv Google Robot, and SimplerEnv WidowX, all revision-pinned. The LIBERO checkpoint is the catalog default.'
+  overview_zh: Xiaomi-Robotics-0 是小米的开放 VLA 策略线，Apache-2.0 基准阵容非常完整：LIBERO、 CALVIN ABCD-D、CALVIN ABC-D、SimplerEnv Google Robot 与 SimplerEnv WidowX 的 checkpoint 均已确认并锁定 revision。catalog 默认为 LIBERO checkpoint。
+  architecture: Architecture internals are not recorded in this repository beyond the official repository pointer (XiaomiRobotics/Xiaomi-Robotics-0); the released checkpoints share one policy design fine-tuned per benchmark.
+  architecture_zh: 除官方仓库指针（XiaomiRobotics/Xiaomi-Robotics-0）外，架构内部细节仓库未记录；发布的 checkpoint 共享同一策略设计，按基准分别微调。
+  usage_notes: 'Pick the checkpoint matching your benchmark: LIBERO, either CALVIN split, or the SimplerEnv embodiments. For the newer generation see xiaomi-robotics-1.'
+  usage_notes_zh: 按基准选择 checkpoint：LIBERO、任一 CALVIN 划分或 SimplerEnv 本体。更新一代请见 xiaomi-robotics-1。
+  limitations:
+  - GPU rollout validation is not recorded in this repository.
+  limitations_zh:
+  - 仓库未记录 GPU rollout 验证。
+  recommended_benchmarks:
+  - id: libero
+    reason: Dedicated LIBERO policy checkpoint.
+    reason_zh: 有专门的 LIBERO 策略 checkpoint。
+  - id: calvin
+    reason: Dedicated CALVIN ABCD-D and ABC-D checkpoints.
+    reason_zh: 有专门的 CALVIN ABCD-D 与 ABC-D checkpoint。
+  - id: simpler-env
+    reason: Dedicated Google Robot and WidowX checkpoints.
+    reason_zh: 有专门的 Google Robot 与 WidowX checkpoint。

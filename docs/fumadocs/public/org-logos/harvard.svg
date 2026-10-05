@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Harvard University">
+  <path fill="#a51c30" d="M20 18h88v92c0 8-12 16-44 16S20 118 20 110Z"/>
+  <path fill="#f3e6c5" d="M32 30h64v18H32z"/>
+  <path fill="#a51c30" d="M40 36h14v8H40zm17 0h14v8H57zm17 0h14v8H74z"/>
+  <rect x="54" y="58" width="20" height="42" fill="#f3e6c5"/>
+  <rect x="38" y="58" width="12" height="42" fill="#f3e6c5"/>
+  <rect x="78" y="58" width="12" height="42" fill="#f3e6c5"/>
+</svg>

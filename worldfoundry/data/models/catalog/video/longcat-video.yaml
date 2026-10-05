@@ -14,6 +14,7 @@ source:
   hf_repo_id: meituan-longcat/LongCat-Video
   license: mit
 official_sources:
+  paper: https://arxiv.org/abs/2510.22200
   project_page: https://meituan-longcat.github.io/LongCat-Video/
   github:
     url: https://github.com/meituan-longcat/LongCat-Video
@@ -42,3 +43,28 @@ catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries
   expose WorldFoundry pipeline targets; metadata-only entries retain upstream provenance
   without runnable WorldFoundry backends.
+docs:
+  publisher: Meituan (LongCat)
+  publisher_kind: company
+  publisher_zh: 美团（LongCat 团队）
+  overview: 'LongCat-Video is Meituan''s open video generation model focused on long-video generation: text-to-video, image-to-video, and native video continuation in one model. WorldFoundry registers a model-specific pipeline that runs the vendored in-tree demo scripts — with the deliberate safety that nothing executes unless you pass execute=True. Weights are MIT-licensed at meituan-longcat/LongCat-Video.'
+  overview_zh: LongCat-Video 是美团开源的视频生成模型，主打长视频：文生视频、图生视频与原生视频续写集于一个模型。WorldFoundry 注册了模型专属 pipeline，运行树内内置的 demo 脚本——并有一个刻意的安全设计：不显式传入 execute=True 就不会执行。权重为 MIT 许可，位于 meituan-longcat/LongCat-Video。
+  architecture: Upstream positions LongCat-Video as a unified DiT-based generator where continuation is a first-class task, enabling minutes-long videos. This repository records the unified-environment route with local checkpoints and the image/prompt/video input contract; layer-level details are not recorded here.
+  architecture_zh: 上游将 LongCat-Video 定位为统一的 DiT 系生成器，视频续写是一等任务，可生成分钟级视频。本仓库记录了使用本地 checkpoint 的统一环境路径与 image/prompt/video 输入契约；层级细节仓库未记录。
+  usage_notes: 'Runner parity is pending — full official 93-frame / 50-step quality parity has not been recorded. Remember the execute=True gate: default calls fail fast by design. Stage the LongCat checkpoints locally before running.'
+  usage_notes_zh: Runner parity 为 pending——官方 93 帧 / 50 步的完整质量一致性尚未记录。记住 execute=True 这道门：默认调用会按设计快速失败。运行前先在本地就位 LongCat checkpoint。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  - Nothing runs without explicit execute=True — this is by design, not a bug.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  - 不显式传 execute=True 就不会执行——这是设计而非缺陷。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Baseline T2V quality suite.
+    reason_zh: 基础文生视频质量评测。
+  - id: chronomagic-bench
+    reason: Long-horizon generation matches LongCat's continuation focus.
+    reason_zh: 长时程生成评测，契合其续写定位。

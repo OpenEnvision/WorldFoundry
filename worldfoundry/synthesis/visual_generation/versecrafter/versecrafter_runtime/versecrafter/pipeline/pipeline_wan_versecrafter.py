@@ -18,20 +18,23 @@ from einops import rearrange
 from PIL import Image
 from transformers import T5Tokenizer
 
-from worldfoundry.base_models.diffusion_model.video.wan.pipeline_helpers import (
+from worldfoundry.synthesis.visual_generation.shared.wan_diffusers import (
     WanDiffusersInferenceMixin,
     resize_mask,
     retrieve_timesteps,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.variants.video_x_fun import (
+from transformers import AutoTokenizer
+
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.video_x_fun import (
     AutoencoderKLWan,
-    AutoTokenizer,
+)
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.dreamx_world.text_encoder import (
     WanT5EncoderModel,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.variants.versecrafter import (
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.versecrafter import (
     VerseCrafterWanTransformer3DModel,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
+from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import FlowUniPCMultistepScheduler
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -202,6 +205,52 @@ class WanVerseCrafterPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
             latents = latents * self.scheduler.init_noise_sigma
         return latents
 
+    @staticmethod
+    def _apply_vae_forward_hook(vae):
+        """Onload an offloaded VAE before calling ``encode`` or ``decode``.
+
+        Accelerate installs component offload hooks on ``forward``.  The Wan
+        adapter exposes separate encode/decode entry points, so those calls do
+        not pass through the wrapped forward method.  Triggering the hook here
+        mirrors Diffusers' ``apply_forward_hook`` decorator and also offloads
+        the preceding transformer before the final decode.
+        """
+
+        hook = getattr(vae, "_hf_hook", None)
+        pre_forward = getattr(hook, "pre_forward", None)
+        if callable(pre_forward):
+            pre_forward(vae)
+
+    def _offload_vae_after_encode(self, vae):
+        """Release a model-onloaded VAE before transformer denoising.
+
+        ``enable_model_cpu_offload`` exposes one ``UserCpuOffloadHook`` per
+        component through ``_all_hooks``.  Sequential offload instead uses
+        leaf hooks and leaves this collection empty, so it must not be
+        manipulated here.
+        """
+
+        for user_hook in getattr(self, "_all_hooks", ()):
+            if getattr(user_hook, "model", None) is not vae:
+                continue
+            offload = getattr(user_hook, "offload", None)
+            if callable(offload):
+                offload()
+            return
+
+    @staticmethod
+    def _vae_encode_mode(vae, value):
+        """Return the posterior mode for tuple and dataclass VAE outputs."""
+
+        WanVerseCrafterPipeline._apply_vae_forward_hook(vae)
+        encoded = vae.encode(value)
+        posterior = getattr(encoded, "latent_dist", None)
+        if posterior is None:
+            if not isinstance(encoded, (tuple, list)) or not encoded:
+                raise TypeError(f"Unsupported VAE encode output: {type(encoded).__name__}")
+            posterior = encoded[0]
+        return posterior.mode()
+
     def geoada_encode_multi_frames(self, multi_frames, ref_images, vae=None):
         """
         Encode multiple control video frames to latent space for GeoAda (geometric adaptation).
@@ -225,7 +274,7 @@ class WanVerseCrafterPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
         # Encode each control video to latent space
         encoded_latents = []
         for frames in multi_frames:
-            latents = vae.encode(frames)[0].mode()
+            latents = self._vae_encode_mode(vae, frames)
             encoded_latents.append(latents)
 
         # Concatenate latents from different control videos along the batch dimension
@@ -237,12 +286,13 @@ class WanVerseCrafterPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
         cat_latents = []
         for latent, refs in zip(latents, ref_images):
             if refs is not None:
-                ref_latent = vae.encode(refs)[0].mode()
+                ref_latent = self._vae_encode_mode(vae, refs)
                 # Pad reference latent with zeros for non-reference control frames
                 ref_latent = [torch.cat([u] + [torch.zeros_like(u)] * (len(multi_frames)-1), dim=0) for u in ref_latent]
                 assert all([x.shape[1] == 1 for x in ref_latent])
                 latent = torch.cat([*ref_latent, latent], dim=1)
             cat_latents.append(latent)
+        self._offload_vae_after_encode(vae)
         return cat_latents
 
     def geoada_encode_masks(self, masks, ref_images=None, vae_stride=[4, 8, 8]):
@@ -331,9 +381,7 @@ class WanVerseCrafterPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
             for i in range(0, control.shape[0], bs):
                 control_bs = control[i : i + bs]
                 # Encode to latent space using VAE
-                control_bs = self.vae.encode(control_bs)[0]
-                # Use mode of the latent distribution
-                control_bs = control_bs.mode()
+                control_bs = self._vae_encode_mode(self.vae, control_bs)
                 new_control.append(control_bs)
             control = torch.cat(new_control, dim = 0)
 
@@ -345,17 +393,19 @@ class WanVerseCrafterPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
             for i in range(0, control_image.shape[0], bs):
                 control_pixel_values_bs = control_image[i : i + bs]
                 # Encode to latent space using VAE
-                control_pixel_values_bs = self.vae.encode(control_pixel_values_bs)[0]
-                # Use mode of the latent distribution
-                control_pixel_values_bs = control_pixel_values_bs.mode()
+                control_pixel_values_bs = self._vae_encode_mode(
+                    self.vae, control_pixel_values_bs
+                )
                 new_control_pixel_values.append(control_pixel_values_bs)
             control_image_latents = torch.cat(new_control_pixel_values, dim = 0)
         else:
             control_image_latents = None
 
+        self._offload_vae_after_encode(self.vae)
         return control, control_image_latents
 
     def decode_latents(self, latents: torch.Tensor) -> torch.Tensor:
+        self._apply_vae_forward_hook(self.vae)
         frames = self.vae.decode(latents.to(self.vae.dtype)).sample
         frames = (frames / 2 + 0.5).clamp(0, 1)
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloa16

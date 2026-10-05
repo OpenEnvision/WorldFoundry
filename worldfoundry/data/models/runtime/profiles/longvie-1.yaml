@@ -2,9 +2,6 @@ artifact_filename: longvie-1.mp4
 artifact_kind: generated_video
 backend_stage: in_tree_runtime
 checkpoints:
-- local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Vchitect--LongVie2
-  repo_id: Vchitect/LongVie2
-  role: compatible_control_checkpoint
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Wan-AI--Wan2.1-I2V-14B-480P
   repo_id: Wan-AI/Wan2.1-I2V-14B-480P
   role: wan2.1_i2v_14b_base_checkpoint
@@ -22,10 +19,12 @@ input_schema:
   video: true
 integration_status: integrated
 notes:
-- WorldFoundry vendors the official LongVie DiffSynth runtime under worldfoundry/synthesis/visual_generation/longvie/longvie_runtime.
+- LongVie runs on canonical Wan components and the shared staged diffusion runner;
+  its synthesis package is a thin product assembly boundary.
 - Default calls fail fast unless execute=True is supplied; staged checkpoints are
   required for the official-equivalent GPU path.
-- The LongVie-1 adapter uses the control-weight path without requiring the LongVie
-  2 DiT attention override.
-runtime_status: integrated
+- Upstream has not published a first-generation checkpoint. The adapter therefore
+  requires an explicitly staged LongVie-1 control weight and rejects LongVie2
+  directories instead of silently reusing their control and DiT weights.
+runtime_status: route_ready_assets_pending
 task_family: video_generation

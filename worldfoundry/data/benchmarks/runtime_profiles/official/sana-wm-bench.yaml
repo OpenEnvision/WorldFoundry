@@ -1,0 +1,39 @@
+benchmark_ids: [sana-wm-bench]
+environment_id: worldfoundry-unified-cu128
+id: sana-wm-bench
+name: SANA-WM 80-Scene Benchmark
+needs_new_env: false
+status: in_tree_runtime_ready_full_data_validation_pending
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+pythonpath_roots: [.]
+preflight_command: >-
+  PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+  worldfoundry/evaluation/tasks/execution/runners/sana_wm_bench/run_sana_wm_bench_official_runner.py
+  --run-fixture --output-dir tmp/worldfoundry_preflight/sana-wm-bench --json
+required_assets:
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/sana-wm-bench.yaml
+  dataset_root: Efficient-Large-Model/SANA-WM-Bench
+required_imports: [numpy]
+required_packages: [numpy, scipy, torch]
+optional_packages: [decord, imageio, lpips, accelerate]
+required_paths:
+- {id: official_runner_script, path: worldfoundry/evaluation/tasks/execution/runners/sana_wm_bench/run_sana_wm_bench_official_runner.py}
+- {id: task_yaml, path: worldfoundry/data/benchmarks/tasks/external/sana-wm-bench.yaml}
+required_env: []
+optional_env: [WORLDFOUNDRY_SANA_WM_BENCH_DATASET_ROOT, WORLDFOUNDRY_GENERATED_ARTIFACT_DIR, WORLDFOUNDRY_VBENCH_CACHE_DIR]
+requires_cuda_visibility: true
+base_model_dependencies: [vbench, pi3]
+notes:
+- The evaluator and benchmark request layout are in tree; dataset media remains an explicit public download.
+- Fresh Pi3 camera estimates are GPU/distributed work. Supply the resulting split eval_poses.json to score it in tree.
+validation_command:
+- python
+- worldfoundry/evaluation/tasks/execution/runners/sana_wm_bench/run_sana_wm_bench_official_runner.py
+- --run-official
+- --dataset-root
+- <SANA-WM-Bench>
+- --generated-video-dir
+- <method_dir>
+- --output-dir
+- <out>
+- --json

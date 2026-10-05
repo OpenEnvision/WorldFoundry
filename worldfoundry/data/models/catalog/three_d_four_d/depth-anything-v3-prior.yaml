@@ -1,5 +1,5 @@
 id: depth-anything-v3-prior
-name: Depth Anything 3 Prior
+name: Depth Anything 3 Metric Prior
 aliases:
 - dav3-prior
 - da3metric-large-prior
@@ -16,6 +16,9 @@ source:
 checkpoint_refs:
 - repo_id: depth-anything/DA3METRIC-LARGE
   filename: model.safetensors
+official_sources:
+  project_page: https://depth-anything-3.github.io/
+  paper: https://arxiv.org/abs/2511.10647
 integration:
   kind: pipeline_runner
   status: integrated
@@ -37,3 +40,19 @@ catalog_category: three_d_four_d
 catalog_scope: Independent geometric prior integrations used by 3D and world-model
   runtimes.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+docs:
+  publisher: ByteDance (Seed)
+  publisher_kind: company
+  publisher_zh: 字节跳动（Seed 团队）
+  overview: Depth Anything 3 Metric Prior is the metric-depth head of ByteDance Seed's Depth Anything 3, integrated as an independent geometry prior with verified runner status. The recorded checkpoint is depth-anything/DA3METRIC-LARGE, and it is the depth prior the Prior-Depth-Anything refiner was verified against in this repository.
+  overview_zh: Depth Anything 3 Metric Prior 是字节 Seed 团队 Depth Anything 3 的米制深度头，作为独立几何先验集成，runner 状态已验证。记录的 checkpoint 为 depth-anything/DA3METRIC-LARGE，本仓库中 Prior-Depth-Anything 细化器的验证正是以它的输出为条件。
+  architecture: DA3 scales the Depth Anything recipe and adds metric and geometry heads. This prior entry wires the metric-large checkpoint; runtime configs live under runtime/configs/depth_anything_v3, separate from VIPE configs.
+  architecture_zh: DA3 扩展了 Depth Anything 的训练配方并增加米制与几何头。本先验条目接入 metric-large checkpoint；运行时配置位于 runtime/configs/depth_anything_v3，与 VIPE 配置分离。
+  usage_notes: It is integrated as an independent geometry prior under worldfoundry/base_models and exposed through the shared geometry-prior pipeline/operator contract. Higher-level pipelines (e.g. ViPE) import it from this canonical owner instead of keeping private copies. Use the sibling depth-anything-v3 entry for the official SOH export route.
+  usage_notes_zh: 它作为独立几何先验集成在 worldfoundry/base_models 下，通过共享的 geometry-prior pipeline/operator 契约对外暴露。上层管线（如 ViPE）从这一规范位置导入它，而不是各自保留私有副本。官方 SOH 导出路径请使用兄弟条目 depth-anything-v3。
+  limitations:
+  - 'Prior-only surface: full DA3 reconstruction abilities live on the depth-anything-v3 entry.'
+  - Metric scale can drift in unusual focal-length imagery.
+  limitations_zh:
+  - 仅先验用途：完整的 DA3 重建能力在 depth-anything-v3 条目上。
+  - 非常规焦距图像下米制尺度可能漂移。

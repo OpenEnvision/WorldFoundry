@@ -1,12 +1,11 @@
-from pathlib import Path
-
 import torch
 import torch.nn as nn
+from mmaudio.ext.bigvgan.models import BigVGANVocoder
 from omegaconf import OmegaConf
 
-from mmaudio.ext.bigvgan.models import BigVGANVocoder
+from worldfoundry.core.io.paths import package_data_path
 
-_bigvgan_vocoder_path = Path(__file__).parent / 'bigvgan_vocoder.yml'
+_bigvgan_vocoder_path = package_data_path('models', 'runtime', 'configs', 'mmaudio', 'bigvgan/bigvgan_vocoder.yml')
 
 
 class BigVGAN(nn.Module):

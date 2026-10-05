@@ -1,126 +1,27 @@
 ---
 title: RoboCerebra
-description: RoboCerebra — 指标、依赖与运行命令。
+description: "NeurIPS 2025 长时程家务评测（1000 条轨迹、100 个变体）。WorldFoundry 导入官方 rollout；不跑 LIBERO。"
 ---
 
-## 简介
+RoboCerebra（北京航空航天大学 CoLa 实验室，NeurIPS 2025）考察长时程家务序列上的 **System-2** 规划，而不是反应式 System-1 控制。官方发布是 **100** 个任务变体上的 **1000** 条人工标注轨迹（平均 **9.1** 个原子步；时程约 **3000** 仿真步），建立在 **LIBERO** 栈上。发表评测为 **600** 次 rollout（**60** 任务 × **10** 次），并用锚点对齐规划器 / VLA 交接。六个官方条件：**Ideal**、**Memory Exploration**、**Memory Execution**、**Random Disturbance**、**Observation Mismatching**、**Mix**。
 
+论文：[RoboCerebra](https://arxiv.org/abs/2506.06677)。项目：[robocerebra.github.io](https://robocerebra.github.io/)。代码：[buaa-colalab/RoboCerebra](https://github.com/buaa-colalab/RoboCerebra)。
 
+WorldFoundry **导入**官方结果导出（`worldfoundry-eval zoo benchmark-run --mode official-validation`）。它**不跑**捆绑的 LIBERO 模拟器、不采集 rollout，也不托管分层 VLM 规划器 + VLA 控制器。若要数字可比较，请在导出上写明六条件划分。
 
-RoboCerebra external benchmark manifest for cognitive embodied manipulation tasks.
+<BenchmarkPageSections id="robocerebra" locale="zh" />
 
-
-
-## 指标
-
-RoboCerebra external benchmark manifest for cognitive embodied manipulation tasks.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/robocerebra.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `episode_success` | episode / task 是否成功完成的比例或成功率。 |
-| `reward` | RoboCerebra 长时推理与操作 rollout 的任务 reward。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `worldfoundry-unified-cu128`。
-- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
-- WorldFoundry provides contract and official result normalization for caller-provided RoboCerebra outputs.
-
-### 测评数据
-
-- 待测模型输出目录：设置 `WORLDFOUNDRY_ROBOCEREBRA_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/robocerebra`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/buaa-colalab--RoboCerebra`
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_ROBOCEREBRA_ROOT`
-- `WORLDFOUNDRY_ROBOCEREBRA_RESULTS_PATH`
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id robocerebra \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robocerebra/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/robocerebra/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id robocerebra \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robocerebra/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id robocerebra --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_ROBOCEREBRA_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+可选 `WORLDFOUNDRY_ROBOCEREBRA_ROOT` 指向本地评测 / runtime 根目录。默认导入路径：`WORLDFOUNDRY_ROBOCEREBRA_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/robocerebra.yaml`。产物：`scorecard.json`（主键 `success_rate`）、`raw_results.jsonl`、`evaluation/summary.json`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

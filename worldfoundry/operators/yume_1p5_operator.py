@@ -10,7 +10,7 @@ from torchvision import transforms
 import numpy as np
 
 from .base_operator import BaseOperator
-from ..base_models.diffusion_model.video.wan.wan_2p2.configs import SIZE_CONFIGS, SUPPORTED_SIZES
+from ..base_models.diffusion_model.recipes.wan_configs.wan22 import SIZE_CONFIGS, SUPPORTED_SIZES
 
 
 def _to_rgb_array(image: Any) -> np.ndarray:

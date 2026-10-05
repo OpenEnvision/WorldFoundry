@@ -7,6 +7,7 @@
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
 # Adapted from
 """Trainer distributed state.
+
 It takes over the control of the distributed environment from PyTorch.
 The typical workflow is:
 
@@ -21,6 +22,17 @@ The typical workflow is:
 
 If you only need to use the distributed environment without model parallelism,
  you can skip the model parallel initialization and destruction steps.
+
+Not Context Parallel and not a DeviceMesh factory. WORLD / TP / SP / DP
+are process-global :class:`GroupCoordinator` singletons — a second
+:func:`initialize_model_parallel` without destroy raises. Attention
+kernels should call :mod:`.communication_op`, not this module's internals.
+
+Public surface: :func:`init_distributed_environment`,
+:func:`initialize_model_parallel`,
+:func:`maybe_init_distributed_environment_and_model_parallel`,
+:func:`cleanup_dist_env_and_memory`, the ``get_*_group`` / ``get_*_rank``
+/ ``get_*_world_size`` accessors, and :class:`GroupCoordinator`.
 """
 
 import contextlib
@@ -39,7 +51,7 @@ import torch
 import torch.distributed
 from torch.distributed import Backend, ProcessGroup, ReduceOp
 
-from . import envs
+import worldfoundry.core.distributed.sequence_parallel.envs as envs
 from .device_communicators.base_device_communicator import DeviceCommunicatorBase
 from .logger import init_logger
 from .utils import StatelessProcessGroup
@@ -47,11 +59,23 @@ from .utils import StatelessProcessGroup
 logger = init_logger(__name__)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Capture / pickle helpers — metadata travels on gloo; payloads stay on NCCL
+# ──────────────────────────────────────────────────────────────────────────
+
+
 @dataclass
 class GraphCaptureContext:
+    """CUDA stream that outlives a ``graph_capture`` ``with`` block.
+
+    The stream is stored so a later capture can wait on the same object
+    instead of allocating a new stream and racing the previous one.
+    """
+
     stream: torch.cuda.Stream | None
 
 
+#: Device *type* (not index), dtype, and shape so a receiver can allocate.
 TensorMetadata = namedtuple("TensorMetadata", ["device", "dtype", "size"])
 
 
@@ -77,6 +101,11 @@ def _split_tensor_dict(tensor_dict: dict[str, torch.Tensor | Any]) -> tuple[list
     return metadata_list, tensor_list
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Unique group names — "tp:0", "tp:1", … so extra groups do not collide
+# ──────────────────────────────────────────────────────────────────────────
+
+
 _group_name_counter: dict[str, int] = {}
 
 
@@ -96,11 +125,22 @@ def _get_unique_name(name: str) -> str:
 _groups: dict[str, Callable[[], Optional["GroupCoordinator"]]] = {}
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Weakref group table — Dynamo custom ops can only pass a string name
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _register_group(group: "GroupCoordinator") -> None:
+    """Store a weakref so a destroyed coordinator cannot be dispatched by name."""
     _groups[group.unique_name] = weakref.ref(group)
 
 
 def all_reduce(tensor: torch.Tensor, group_name: str) -> torch.Tensor:
+    """Dispatch out-of-place all-reduce by registered name for Dynamo custom ops.
+
+    Raises ``AssertionError`` if ``group_name`` was never registered, and
+    :class:`ValueError` if the coordinator was already collected.
+    """
     assert group_name in _groups, f"Group {group_name} is not found."
     group = _groups[group_name]()
     if group is None:
@@ -109,7 +149,13 @@ def all_reduce(tensor: torch.Tensor, group_name: str) -> torch.Tensor:
 
 
 def all_reduce_fake(tensor: torch.Tensor, group_name: str) -> torch.Tensor:
+    """Shape-only stand-in for tracing; does not touch NCCL or ``group_name``."""
     return torch.empty_like(tensor)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# GroupCoordinator — one device group + one gloo group per partition
+# ──────────────────────────────────────────────────────────────────────────
 
 
 class GroupCoordinator:
@@ -150,6 +196,12 @@ class GroupCoordinator:
         use_message_queue_broadcaster: bool = False,
         group_name: str | None = None,
     ):
+        """Create a device+gloo pair for every rank list; bind the one that contains us.
+
+        ``new_group`` is called for *every* partition so all ranks participate
+        in the same collective constructors. After the loop this rank must
+        have both groups; otherwise the process is not in any partition.
+        """
         group_name = group_name or "anonymous"
         self.unique_name = _get_unique_name(group_name)
         _register_group(self)
@@ -232,6 +284,7 @@ class GroupCoordinator:
 
     @contextmanager
     def graph_capture(self, graph_capture_context: GraphCaptureContext | None = None):
+        """Run the body on a dedicated stream that waits for the current stream first."""
         if graph_capture_context is None:
             stream = torch.cuda.Stream()
             graph_capture_context = GraphCaptureContext(stream)
@@ -272,9 +325,11 @@ class GroupCoordinator:
     def _all_reduce_out_place(
         self, input_: torch.Tensor, op: torch.distributed.ReduceOp | None = ReduceOp.SUM
     ) -> torch.Tensor:
+        """Device-communicator all-reduce; assumes ``world_size > 1``."""
         return self.device_communicator.all_reduce(input_, op=op)
 
     def all_gather(self, input_: torch.Tensor, dim: int = -1) -> torch.Tensor:
+        """Concatenate shards along ``dim``; no-op when this group has one rank."""
         world_size = self.world_size
         # Bypass the function if we are using only 1 GPU.
         if world_size == 1:
@@ -296,6 +351,7 @@ class GroupCoordinator:
         return self.device_communicator.gather(input_, dst, dim)
 
     def all_to_all_4D(self, input_: torch.Tensor, scatter_dim: int = 2, gather_dim: int = 1) -> torch.Tensor:
+        """Ulysses 4D swap; no-op on a singleton group."""
         if self.world_size == 1:
             return input_
         return self.device_communicator.all_to_all_4D(input_, scatter_dim, gather_dim)
@@ -591,6 +647,7 @@ class GroupCoordinator:
         return self.device_communicator.recv(size, dtype, src)
 
     def destroy(self) -> None:
+        """Tear down device, CPU, and communicator handles; safe to call once."""
         if self.device_group is not None:
             torch.distributed.destroy_process_group(self.device_group)
             self.device_group = None
@@ -603,16 +660,23 @@ class GroupCoordinator:
             self.mq_broadcaster = None
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# WORLD singleton — created by init_distributed_environment, never by models
+# ──────────────────────────────────────────────────────────────────────────
+
+
 _WORLD: GroupCoordinator | None = None
 _NODE: GroupCoordinator | None = None
 
 
 def get_world_group() -> GroupCoordinator:
+    """Return the process-wide WORLD coordinator; assert if init was skipped."""
     assert _WORLD is not None, "world group is not initialized"
     return _WORLD
 
 
 def init_world_group(ranks: list[int], local_rank: int, backend: str) -> GroupCoordinator:
+    """Build the WORLD coordinator over ``ranks`` (usually ``range(world_size)``)."""
     return GroupCoordinator(
         group_ranks=[ranks],
         local_rank=local_rank,
@@ -629,6 +693,7 @@ def init_model_parallel_group(
     use_message_queue_broadcaster: bool = False,
     group_name: str | None = None,
 ) -> GroupCoordinator:
+    """Build a TP/SP/DP coordinator; always enables the device communicator."""
 
     return GroupCoordinator(
         group_ranks=group_ranks,
@@ -640,10 +705,16 @@ def init_model_parallel_group(
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# TP / SP / DP singletons — consecutive ranks for SP; strided ranks for DP
+# ──────────────────────────────────────────────────────────────────────────
+
+
 _TP: GroupCoordinator | None = None
 
 
 def get_tp_group() -> GroupCoordinator:
+    """Return the tensor-parallel coordinator; assert if model parallel is down."""
     assert _TP is not None, "tensor model parallel group is not initialized"
     return _TP
 
@@ -652,6 +723,7 @@ _ENABLE_CUSTOM_ALL_REDUCE = True
 
 
 def set_custom_all_reduce(enable: bool):
+    """Toggle the custom all-reduce flag (reserved; GroupCoordinator reads its own path)."""
     global _ENABLE_CUSTOM_ALL_REDUCE
     _ENABLE_CUSTOM_ALL_REDUCE = enable
 
@@ -664,6 +736,13 @@ def init_distributed_environment(
     backend: str = "nccl",
     device_id: torch.device | None = None,
 ):
+    """Initialize torch.distributed if needed and publish the WORLD coordinator.
+
+    ``local_rank == -1`` falls back to ``envs.LOCAL_RANK`` for ``env://``
+    and to ``rank`` otherwise — torch ProcessGroup does not store local
+    rank. Re-init with a different world size asserts. Already-initialized
+    torch.distributed is reused (launcher already called ``init_process_group``).
+    """
     logger.debug(
         "world_size=%d rank=%d local_rank=%d distributed_init_method=%s backend=%s",
         world_size,
@@ -705,6 +784,7 @@ _SP: GroupCoordinator | None = None
 
 
 def get_sp_group() -> GroupCoordinator:
+    """Return the sequence-parallel coordinator; assert if model parallel is down."""
     assert _SP is not None, "sequence model parallel group is not initialized"
     return _SP
 
@@ -713,8 +793,14 @@ _DP: GroupCoordinator | None = None
 
 
 def get_dp_group() -> GroupCoordinator:
+    """Return the data-parallel coordinator; assert if model parallel is down."""
     assert _DP is not None, "data parallel group is not initialized"
     return _DP
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Mesh layout — TP blocks, then consecutive SP ranks, then strided DP
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def initialize_model_parallel(
@@ -779,6 +865,11 @@ def initialize_model_parallel(
     _DP = init_model_parallel_group(group_ranks, get_world_group().local_rank, backend, group_name="dp")
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Rank / size queries — assert via get_*_group if the singleton is missing
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def get_sp_world_size() -> int:
     """Return world size for the sequence model parallel group."""
     return get_sp_group().world_size
@@ -814,9 +905,20 @@ def get_local_torch_device() -> torch.device:
     return torch.device(f"cuda:{envs.LOCAL_RANK}")
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Pipeline one-shot init — env:// ranks, then TP/SP/DP, then set_device
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def maybe_init_distributed_environment_and_model_parallel(
     tp_size: int, sp_size: int, distributed_init_method: str = "env://"
 ):
+    """Idempotent WORLD + TP/SP/DP setup from ``RANK`` / ``WORLD_SIZE`` / ``LOCAL_RANK``.
+
+    A second call with different ``tp_size`` or ``sp_size`` asserts rather
+    than silently rebuilding groups. Binds ``cuda:{LOCAL_RANK}`` after
+    init so subsequent NCCL ops land on the launcher-assigned GPU.
+    """
     if _WORLD is not None and model_parallel_is_initialized():
         # make sure the tp and sp sizes are correct
         assert get_tp_world_size() == tp_size, (
@@ -907,7 +1009,13 @@ def destroy_model_parallel() -> None:
     _DP = None
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Teardown — destroy subgroups before WORLD; extra destroy_process_group is ok
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def destroy_distributed_environment() -> None:
+    """Destroy WORLD and the default process group; no-op if never initialized."""
     global _WORLD
     if _WORLD:
         _WORLD.destroy()
@@ -917,6 +1025,7 @@ def destroy_distributed_environment() -> None:
 
 
 def cleanup_dist_env_and_memory(shutdown_ray: bool = False):
+    """Destroy MP + WORLD, swallow a second default-group destroy, optionally stop Ray."""
     destroy_model_parallel()
     destroy_distributed_environment()
     with contextlib.suppress(AssertionError):
@@ -925,6 +1034,11 @@ def cleanup_dist_env_and_memory(shutdown_ray: bool = False):
         import ray  # Lazy import Ray
 
         ray.shutdown()
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Same-node probe — shared-memory ping; never use an NCCL group here
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def is_the_same_node_as(pg: ProcessGroup | StatelessProcessGroup, source_rank: int = 0) -> list[int]:
@@ -1006,6 +1120,11 @@ def is_the_same_node_as(pg: ProcessGroup | StatelessProcessGroup, source_rank: i
             aggregated_data += rank_data
 
     return [x == 1 for x in aggregated_data.tolist()]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Extra TP/SP groups — for speculative-decode / multi-model patches
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def initialize_tensor_parallel_group(

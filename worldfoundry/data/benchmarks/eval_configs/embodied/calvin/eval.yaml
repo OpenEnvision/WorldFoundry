@@ -5,7 +5,6 @@ server:
   url: ws://localhost:8000
 benchmark_id: calvin
 benchmark_kwargs:
-  dataset_path: /data/calvin/dataset/validation
   num_sequences: 1000
   seed: 0
 episodes_per_task: 1

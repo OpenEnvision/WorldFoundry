@@ -1,21 +1,100 @@
-"""Small VRAM accounting and dynamic model swap helpers."""
+"""VRAM accounting and whole-model swap helpers.
+
+:class:`DynamicSwapInstaller` rewrites ``__getattr__`` so parameters/buffers
+move onto the computation device on first access and can live on CPU
+otherwise. That is cheaper than wrapping every submodule when a *whole*
+encoder or VAE is used once per request.
+
+``gpu`` is a lazy module attribute (not an import-time constant) so importing
+this file does not create a CUDA context on GPU 0 — the same CC-25 rule as
+attention backend probing.
+
+:func:`load_model_as_complete` / :func:`unload_complete_models` keep a
+strong-ref list on purpose: dropping the Python name without unload leaves
+the module on GPU until the next explicit unload.
+"""
 
 from __future__ import annotations
 
+import logging
+
 import torch
 
+logger = logging.getLogger(__name__)
+
+# ──────────────────────────────────────────────────────────────────────────
+# Process-wide CPU sentinel and complete-module registry (strong refs on purpose)
+# ──────────────────────────────────────────────────────────────────────────
+
 cpu = torch.device("cpu")
-gpu = torch.device(f"cuda:{torch.cuda.current_device()}") if torch.cuda.is_available() else cpu
+
+#: Modules loaded via :func:`load_model_as_complete`. Holds strong references
+#: on purpose so :func:`unload_complete_models` can move them back to CPU;
+#: callers that drop a model must call ``unload_complete_models`` themselves
+#: or the module stays resident until the next unload.
 gpu_complete_modules: list[torch.nn.Module] = []
 
 
+def _default_gpu_device() -> torch.device:
+    """Resolve the current CUDA device lazily.
+
+    CC-25: this used to be a module constant evaluated at import time, which
+    created a CUDA context on GPU 0 for every importer (including fork-based
+    dataloader workers) and froze the device chosen before any
+    ``torch.cuda.set_device`` call.
+    """
+
+    if torch.cuda.is_available():
+        return torch.device(f"cuda:{torch.cuda.current_device()}")
+    return cpu
+
+
+def __getattr__(name: str):
+    """Resolve ``gpu`` lazily so importing this module does not create a CUDA context.
+
+    Failure: :exc:`AttributeError` for any other name. ``from ... import gpu``
+    still works; the device is the *current* CUDA index, not a frozen
+    import-time ``cuda:0``.
+    """
+    # Lazy, never-frozen module attribute so ``from ... import gpu`` keeps
+    # working without initializing CUDA at import time of this module.
+    if name == "gpu":
+        return _default_gpu_device()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 class DynamicSwapInstaller:
+    """Rewrite ``__getattr__`` so parameters move to the compute device on access.
+
+    Cheaper than wrapping every submodule when a whole encoder/VAE is
+    used once per request. Re-install is a no-op so uninstall can still
+    restore the original class.
+    """
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Class rewrite — cheaper than wrapping every submodule for a whole encoder
+    # ──────────────────────────────────────────────────────────────────────
+
     @staticmethod
     def _install_module(module: torch.nn.Module, **kwargs) -> None:
+        """Rewrite ``module.__class__`` so parameter access copies onto the compute device.
+
+        Re-install is a no-op: backing up the already-hacked class would make
+        :meth:`_uninstall_module` unable to restore the real type.
+        """
+        if "forge_backup_original_class" in module.__dict__:
+            # Re-installing would back up the already-hacked class, making
+            # uninstall unable to ever restore the real class.
+            return
         original_class = module.__class__
         module.__dict__["forge_backup_original_class"] = original_class
 
         def hacked_get_attr(self, name: str):
+            """Return a device-copied Parameter/buffer; fall through to the original class.
+
+            A new ``nn.Parameter`` is constructed so ``requires_grad`` survives
+            ``.to()``. Storage in ``_parameters`` stays on the offload device.
+            """
             if "_parameters" in self.__dict__:
                 parameters = self.__dict__["_parameters"]
                 if name in parameters:
@@ -39,21 +118,36 @@ class DynamicSwapInstaller:
 
     @staticmethod
     def _uninstall_module(module: torch.nn.Module) -> None:
+        """Restore the class saved at install time; no-op if never installed."""
         if "forge_backup_original_class" in module.__dict__:
             module.__class__ = module.__dict__.pop("forge_backup_original_class")
 
     @staticmethod
     def install_model(model: torch.nn.Module, **kwargs) -> None:
+        """Install swap on every submodule, including the root."""
         for module in model.modules():
             DynamicSwapInstaller._install_module(module, **kwargs)
 
     @staticmethod
     def uninstall_model(model: torch.nn.Module) -> None:
+        """Undo :meth:`install_model` on every submodule that was rewritten."""
         for module in model.modules():
             DynamicSwapInstaller._uninstall_module(module)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Diffusers device probe and free-memory accounting
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def patched_diffusers_current_device(model: torch.nn.Module, target_device: torch.device) -> None:
+    """Move one representative tensor so Diffusers' device probe sees ``target_device``.
+
+    Diffusers infers ``.device`` from the first parameter it finds. A
+    swap-installed encoder can report CPU while compute is CUDA; moving
+    ``scale_shift_table`` or the first weighted child is enough for that
+    probe without migrating the whole tree.
+    """
     if hasattr(model, "scale_shift_table"):
         model.scale_shift_table.data = model.scale_shift_table.data.to(target_device)
         return
@@ -68,10 +162,15 @@ fake_diffusers_current_device = patched_diffusers_current_device
 
 
 def get_cuda_free_memory_gb(device=None) -> float:
+    """Return free + inactive-reserved CUDA memory in GiB, or ``0.0`` without CUDA.
+
+    Inactive reserved bytes are reusable by the allocator, so treating only
+    ``mem_get_info`` free as capacity under-counts and rejects valid moves.
+    """
     if not torch.cuda.is_available():
         return 0.0
     if device is None:
-        device = gpu
+        device = _default_gpu_device()
 
     memory_stats = torch.cuda.memory_stats(device)
     bytes_active = memory_stats["active_bytes.all.current"]
@@ -83,19 +182,29 @@ def get_cuda_free_memory_gb(device=None) -> float:
 
 
 def log_gpu_memory(stage: str, device=None, rank: int = 0) -> None:
+    """Log used / free / total GiB for *stage*; CUDA-unavailable is still logged."""
     if not torch.cuda.is_available():
-        print(f"[rank {rank}] [GPU Memory][{stage}] CUDA unavailable")
+        logger.info("[rank %s] [GPU Memory][%s] CUDA unavailable", rank, stage)
         return
     if device is None:
-        device = gpu
+        device = _default_gpu_device()
 
     free_gb = get_cuda_free_memory_gb(device)
     total_gb = torch.cuda.get_device_properties(device).total_memory / (1024**3)
     used_gb = total_gb - free_gb
-    print(
-        f"[rank {rank}] [GPU Memory][{stage}] "
-        f"Used: {used_gb:.2f} GB | Free: {free_gb:.2f} GB | Total: {total_gb:.2f} GB"
+    logger.info(
+        "[rank %s] [GPU Memory][%s] Used: %.2f GB | Free: %.2f GB | Total: %.2f GB",
+        rank,
+        stage,
+        used_gb,
+        free_gb,
+        total_gb,
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Atomic move with rollback — refuse mixed-device or meta modules
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def move_model_to_device_with_memory_preservation(
@@ -103,7 +212,15 @@ def move_model_to_device_with_memory_preservation(
     target_device,
     preserved_memory_gb: float = 0,
 ) -> None:
-    print(f"Moving {model.__class__.__name__} to {target_device} with preserved memory: {preserved_memory_gb} GB")
+    """Move *model* atomically if free CUDA memory stays above *preserved_memory_gb*.
+
+    Failure: :exc:`ValueError` for a negative preserve budget; :exc:`RuntimeError`
+    when the preflight would dip below the budget, the module spans devices,
+    or it is still on ``meta`` (use ``to_empty`` instead).
+    """
+    logger.info(
+        "Moving %s to %s with preserved memory: %s GB", model.__class__.__name__, target_device, preserved_memory_gb
+    )
     if preserved_memory_gb < 0:
         raise ValueError("preserved_memory_gb must be non-negative")
 
@@ -127,7 +244,18 @@ def offload_model_from_device_for_memory_preservation(
     target_device,
     preserved_memory_gb: float = 0,
 ) -> None:
-    print(f"Offloading {model.__class__.__name__} from {target_device} to preserve memory: {preserved_memory_gb} GB")
+    """Offload *model* to CPU only when free CUDA memory is below *preserved_memory_gb*.
+
+    No-op when headroom already meets the budget. Failure matches
+    :func:`move_model_to_device_with_memory_preservation` for mixed-device
+    or meta modules.
+    """
+    logger.info(
+        "Offloading %s from %s to preserve memory: %s GB",
+        model.__class__.__name__,
+        target_device,
+        preserved_memory_gb,
+    )
     if preserved_memory_gb < 0:
         raise ValueError("preserved_memory_gb must be non-negative")
     if get_cuda_free_memory_gb(target_device) >= preserved_memory_gb:
@@ -140,6 +268,7 @@ def offload_model_from_device_for_memory_preservation(
 
 
 def _normalize_device(device) -> torch.device:
+    """Bind bare ``cuda`` to the current device index so capacity queries match."""
     normalized = torch.device(device)
     if normalized.type == "cuda" and normalized.index is None and torch.cuda.is_available():
         return torch.device("cuda", torch.cuda.current_device())
@@ -147,6 +276,11 @@ def _normalize_device(device) -> torch.device:
 
 
 def _model_tensors(model: torch.nn.Module):
+    """Yield parameters, their ``.grad`` if present, and buffers.
+
+    ``Module.to`` migrates gradients with parameters; omitting them would
+    pass the capacity preflight and then OOM mid-move.
+    """
     for parameter in model.parameters():
         yield parameter
         # Module._apply (and therefore Module.to) migrates existing gradients
@@ -158,6 +292,11 @@ def _model_tensors(model: torch.nn.Module):
 
 
 def _uniform_model_device(model: torch.nn.Module) -> torch.device:
+    """Return the single device all tensors share, or refuse the move.
+
+    Failure: :exc:`RuntimeError` when tensors span devices (a device map or
+    partial offload) or when any tensor is still ``meta``.
+    """
     devices = {tensor.device for tensor in _model_tensors(model)}
     if not devices:
         return cpu
@@ -174,6 +313,7 @@ def _uniform_model_device(model: torch.nn.Module) -> torch.device:
 
 
 def _model_transfer_bytes(model: torch.nn.Module, target: torch.device) -> int:
+    """Bytes that would be allocated on *target* (already-resident tensors skip)."""
     return sum(
         tensor.numel() * tensor.element_size()
         for tensor in _model_tensors(model)
@@ -187,6 +327,11 @@ def _move_model_with_rollback(
     target: torch.device,
     original: torch.device,
 ) -> None:
+    """``model.to(target)`` with rollback to *original* if the move is partial or raises.
+
+    Failure: :exc:`RuntimeError` when rollback also fails (model may be
+    split across devices); the original move error is chained as cause.
+    """
     if target == original:
         return
     try:
@@ -208,10 +353,16 @@ def _move_model_with_rollback(
         raise
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Complete-module residency — registry holds strong refs until explicit unload
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def unload_complete_models(*models: torch.nn.Module) -> None:
+    """Move the registry and any extra *models* to CPU, then clear the registry."""
     for model in gpu_complete_modules + list(models):
         model.to(device=cpu)
-        print(f"Unloaded {model.__class__.__name__} as complete.")
+        logger.info("Unloaded %s as complete.", model.__class__.__name__)
 
     gpu_complete_modules.clear()
     if torch.cuda.is_available():
@@ -219,11 +370,16 @@ def unload_complete_models(*models: torch.nn.Module) -> None:
 
 
 def load_model_as_complete(model: torch.nn.Module, target_device, unload: bool = True) -> None:
+    """Move *model* to *target_device* and register it; optionally unload prior completes first.
+
+    The registry keeps a strong reference so dropping the Python name does
+    not free GPU memory until :func:`unload_complete_models` runs.
+    """
     if unload:
         unload_complete_models()
 
     model.to(device=target_device)
-    print(f"Loaded {model.__class__.__name__} to {target_device} as complete.")
+    logger.info("Loaded %s to %s as complete.", model.__class__.__name__, target_device)
 
     gpu_complete_modules.append(model)
 

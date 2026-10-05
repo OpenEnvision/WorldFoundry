@@ -12,9 +12,10 @@ from typing import Any, Mapping, Sequence
 
 import yaml
 
-from .utils import json_dump, parse_key_value_mapping
 from worldfoundry.evaluation.utils import REPO_ROOT
 
+from .presentation import print_table, terminal_enabled
+from .utils import json_dump, parse_key_value_mapping
 
 # ── Config constants ────────────────────────────────────────────
 
@@ -161,6 +162,17 @@ def _handle_config_list(args: argparse.Namespace) -> int:
                 "count": len(items),
                 "items": items,
             }
+        )
+        return 0
+
+    if terminal_enabled():
+        print_table(
+            "Workflow templates",
+            ("Config", "Name", "Requirements", "Run"),
+            [
+                (item["path"], item.get("name") or "-", _requirements_label(item["requirements"]), item["run_command"])
+                for item in items
+            ],
         )
         return 0
 

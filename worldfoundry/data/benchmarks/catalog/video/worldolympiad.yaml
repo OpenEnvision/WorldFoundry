@@ -1,0 +1,313 @@
+id: worldolympiad
+name: WorldOlympiad
+publisher: Alibaba DAMO Academy
+publisher_kind: company
+benchmark_kind:
+- interactive-video-world-model
+- long-video-generation
+- physical-plausibility
+- geometric-consistency
+domains:
+- world-model
+- gaming
+- embodied
+- general-video
+modalities:
+- text
+- image
+- video
+- action
+status: confirmed_official_code_in_github
+official_sources:
+  github:
+    url: https://github.com/alibaba-damo-academy/WorldOlympiad
+    revision: bb2e240918d15d822250a33b3504672be545d10d
+    provenance: official source; the evaluator is vendored unmodified under the WorldFoundry runner, with the pinned revision and exclusions recorded in the runtime provenance file
+    provenance_file: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/WORLDFOUNDRY_PROVENANCE.md
+  huggingface_datasets:
+  - repo_id: ziplab/WorldOlympiad
+    repo_type: dataset
+    url: https://huggingface.co/datasets/ziplab/WorldOlympiad
+  paper_url: https://arxiv.org/abs/2606.11129
+  project_page: https://alibaba-damo-academy.github.io/WorldOlympiad
+  license:
+    status: unlicensed_upstream
+    notes: The upstream repository publishes no LICENSE file at the pinned revision, so no redistribution terms are stated. Confirm terms with the upstream authors before redistributing the vendored runtime.
+benchmark_assets:
+  official_data:
+    status: external_asset
+    hf_dataset_id: ziplab/WorldOlympiad
+    expected_cases: 1000
+    domain_case_counts:
+      robotics: 400
+      gaming: 400
+      general: 200
+  in_tree_runtime:
+    status: vendored_official_source
+    path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad
+    revision: bb2e240918d15d822250a33b3504672be545d10d
+    excluded: [figure/]
+    modifications: none
+  in_tree_fixture:
+    path: worldfoundry/data/benchmarks/assets/worldolympiad
+    purpose: Synthetic judge-schema validation only; contains no upstream benchmark records, prompts, or scores.
+evaluation_surface:
+  purpose: Triathlon evaluation of long-video world models across physical faithfulness, geometric consistency, and long-horizon interaction fidelity.
+  tracks:
+  - physical
+  - geometry
+  - interaction
+  requires_external_services: true
+  external_services:
+  - qwenvl_openai_compatible_judge
+  - sam3_segmentation_server
+  - da3_reward_3d_server
+  metric_protocol:
+    metric_ids:
+    - combined_score
+    - physical_score
+    - physical_mechanics
+    - physical_thermotics
+    - physical_material
+    - physical_compliance_rate
+    - three_d_score
+    - three_d_raw
+    - gs_score
+    - meta_view_score
+    - camera_motion_score
+    - interaction_score
+    - interaction_raw
+    - chunk_instruction_following
+    - transition_smoothness
+    - global_consistency
+    - clip_semantic_adherence
+    primary_metric: combined_score
+metrics:
+- id: combined_score
+  name: Combined Triathlon Score
+  description: Mean of the physical, interaction, and geometry track scores on the unit interval.
+  higher_is_better: true
+  leaderboard_key: combined_score
+  aggregator: mean
+  output_unit: score
+  primary: true
+- id: physical_score
+  name: Physical Faithfulness
+  description: Confidence-weighted compliance over the physics questions the MLLM judge marked related.
+  higher_is_better: true
+  leaderboard_key: physical_score
+  aggregator: mean
+  output_unit: score
+- id: physical_mechanics
+  name: Physical Mechanics
+  description: Physical score restricted to mechanics questions.
+  higher_is_better: true
+  leaderboard_key: physical_mechanics
+  aggregator: mean
+  output_unit: score
+- id: physical_thermotics
+  name: Physical Thermodynamics
+  description: Physical score restricted to thermodynamics questions.
+  higher_is_better: true
+  leaderboard_key: physical_thermotics
+  aggregator: mean
+  output_unit: score
+- id: physical_material
+  name: Physical Material Properties
+  description: Physical score restricted to material-property questions.
+  higher_is_better: true
+  leaderboard_key: physical_material
+  aggregator: mean
+  output_unit: score
+- id: physical_compliance_rate
+  name: Physical Compliance Rate
+  description: Corpus-wide compliant questions divided by related questions.
+  higher_is_better: true
+  leaderboard_key: physical_compliance_rate
+  aggregator: ratio
+  output_unit: rate
+- id: three_d_score
+  name: Geometry Score
+  description: DA3 geometry score normalized from the native 0-3 range.
+  higher_is_better: true
+  leaderboard_key: three_d_score
+  aggregator: mean
+  output_unit: score
+- id: three_d_raw
+  name: Geometry Score (raw)
+  description: Sum of the Gaussian-splatting, meta-view, and camera-motion components on a 0-3 scale.
+  higher_is_better: true
+  leaderboard_key: three_d_raw
+  aggregator: mean
+  output_unit: score
+- id: gs_score
+  name: Gaussian Splatting Reconstruction
+  description: DA3 Gaussian-splatting reconstruction quality component.
+  higher_is_better: true
+  leaderboard_key: gs_score
+  aggregator: mean
+  output_unit: score
+- id: meta_view_score
+  name: Meta-View Consistency
+  description: Diagnostic meta-view consistency component of the geometry track.
+  higher_is_better: true
+  leaderboard_key: meta_view_score
+  aggregator: mean
+  output_unit: score
+- id: camera_motion_score
+  name: Camera Trajectory Alignment
+  description: Alignment between the recovered and reference DA3 camera trajectories.
+  higher_is_better: true
+  leaderboard_key: camera_motion_score
+  aggregator: mean
+  output_unit: score
+- id: interaction_score
+  name: Interaction Score
+  description: VLM interaction score normalized from the native 0-5 range.
+  higher_is_better: true
+  leaderboard_key: interaction_score
+  aggregator: mean
+  output_unit: score
+- id: interaction_raw
+  name: Interaction Score (raw)
+  description: Mean of the chunk, transition, and global interaction judgements on a 0-5 scale.
+  higher_is_better: true
+  leaderboard_key: interaction_raw
+  aggregator: mean
+  output_unit: score
+- id: chunk_instruction_following
+  name: Chunk Instruction Following
+  description: Per-chunk prompt adherence judged against the generated chunk timestamps.
+  higher_is_better: true
+  leaderboard_key: chunk_instruction_following
+  aggregator: mean
+  output_unit: score
+- id: transition_smoothness
+  name: Transition Smoothness
+  description: Smoothness across adjacent generated chunk boundaries.
+  higher_is_better: true
+  leaderboard_key: transition_smoothness
+  aggregator: mean
+  output_unit: score
+- id: global_consistency
+  name: Long-Range Consistency
+  description: Whole-video consistency and global text alignment.
+  higher_is_better: true
+  leaderboard_key: global_consistency
+  aggregator: mean
+  output_unit: score
+- id: clip_semantic_adherence
+  name: CLIP Semantic Adherence
+  description: CLIP similarity between sampled chunk frames and their captions.
+  higher_is_better: true
+  leaderboard_key: clip_semantic_adherence
+  aggregator: mean
+  output_unit: score
+runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.worldolympiad.run_worldolympiad_official_runner
+    generated_arg: --generated-artifact-dir
+    limit_arg: --limit
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    supports_fixture: true
+    input_kind: worldolympiad_case_root_or_official_results
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldOlympiadContract
+  validation_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - worldolympiad
+  - --mode
+  - official-validation
+  - --official-results-path
+  - <case_root_or_judge_json>
+  - --output-dir
+  - <out>
+  - --json
+  runtime:
+    kind: in_tree_official_runtime
+    root: worldfoundry/evaluation/tasks/execution/runners/worldolympiad
+    runtime_root: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad
+    runtime_entrypoint: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad/batch_test/evaluate_pipelines.py
+    root_env: WORLDFOUNDRY_WORLDOLYMPIAD_ROOT
+    results_path_env: WORLDFOUNDRY_WORLDOLYMPIAD_RESULTS_PATH
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+    weights_dir_env: WORLDFOUNDRY_WORLDOLYMPIAD_WEIGHTS_DIR
+    da3_src_env: WORLDFOUNDRY_WORLDOLYMPIAD_DA3_SRC
+  expected_artifacts:
+  - scorecard.json
+  - raw_metric_table.jsonl
+  - per_case_metrics.jsonl
+  - benchmark_contract.json
+  verification_status: in_tree_runtime_plan_verified
+  notes:
+  - The official batch evaluator is checked in, so --run-official needs no external checkout; WORLDFOUNDRY_WORLDOLYMPIAD_ROOT only overrides it with a different checkout.
+  - --run-official --dry-run executes the real manifest, scheduler, and summarizer plumbing with no GPU or weights, which is the verified scope today.
+  - --official-results-path normalizes existing judge outputs; accepted shapes are a case root, one judge JSON, a batch_scheduler summary.jsonl, and a summarize_scores aggregate JSON.
+  - Batch manifests, logs, and every other mutable artifact are written under --output-dir; the runner refuses an output or weights directory inside the checked-in runtime.
+  - Weights are passed explicitly from --weights-dir so upstream never resolves them into the source tree, and the Depth Anything 3 source tree is supplied through --da3-src.
+integration:
+  status: integrated
+  tier: model_backed
+  hf_dataset_id: ziplab/WorldOlympiad
+  judge_model_id: Qwen/Qwen3-VL-8B-Instruct+facebook/sam3+depth-anything/DA3NESTED-GIANT-LARGE-1.1
+  blocked_reasons:
+  - Scored execution requires DA3, SAM3, and QwenVL services with GPU capacity that this integration does not provision.
+  - The upstream repository publishes no license, so the vendored runtime carries no stated redistribution terms.
+release_status: experimental
+maturity: contract_ready
+open_source_status: in_tree_runtime
+official_benchmark_verified: false
+integration_evidence: false
+leaderboard_valid: false
+requires:
+- Running QwenVL, SAM3, and DA3 reward services for scored judge execution
+- DA3, SAM3, QwenVL, and CLIP weights plus the Depth Anything 3 source code, resolved from worldfoundry/base_models by default (--weights-dir and --da3-src remain optional overrides)
+- --generated-artifact-dir with the official case layout, or --official-results-path for result normalization
+blockers:
+- A scored run over the 1,000-video split has not been executed through this integration; only the batch plan is verified.
+data_refs:
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/worldolympiad.yaml
+  fixture: worldfoundry/data/benchmarks/assets/worldolympiad
+  runtime_root: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad
+  hf_dataset_ids:
+  - ziplab/WorldOlympiad
+runner_availability:
+  available: true
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldOlympiadContract
+  runner_script_available: true
+  task_yaml_available: true
+  runtime_verified: true
+  runtime_verification_scope: batch_plan_only
+  full_suite_verified: false
+  surface: worldolympiad_official_in_tree
+  normalizer_verified: true
+optional_base_model_dependencies:
+- depth_anything_3
+- sam3
+- qwenvl_openai_compatible_judge
+- clip
+validation_command:
+- python
+- worldfoundry/evaluation/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
+- --run-fixture
+- --output-dir
+- <out>
+- --json
+checkpoint_refs:
+- repo_id: depth-anything/DA3NESTED-GIANT-LARGE-1.1
+  repo_type: model
+  role: geometry_reconstruction
+- repo_id: facebook/sam3
+  repo_type: model
+  role: physical_segmentation
+- repo_id: Qwen/Qwen3-VL-8B-Instruct
+  repo_type: model
+  role: multimodal_judge
+artifact_layout:
+  generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  output_artifact: benchmark_scorecard
+  filename_template: scorecard.json

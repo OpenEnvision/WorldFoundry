@@ -78,6 +78,10 @@ class DynamiCrafter512I2VPipeline(PipelineABC):
         output_path: Optional[str] = None,
         fps: Optional[int] = None,
         return_dict: bool = False,
+        num_frames: Optional[int] = None,
+        num_inference_steps: Optional[int] = None,
+        guidance_scale: Optional[float] = None,
+        seed: Optional[int] = None,
         **kwargs,
     ):
         """Execute the complete pipeline generation flow."""
@@ -91,6 +95,10 @@ class DynamiCrafter512I2VPipeline(PipelineABC):
             output_path=output_path,
             fps=fps,
             return_dict=True,
+            num_frames=num_frames,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            seed=seed,
             **kwargs,
         )
         if return_dict:
@@ -104,6 +112,10 @@ class DynamiCrafter512I2VPipeline(PipelineABC):
         output_path: Optional[str] = None,
         fps: Optional[int] = None,
         return_dict: bool = False,
+        num_frames: Optional[int] = None,
+        num_inference_steps: Optional[int] = None,
+        guidance_scale: Optional[float] = None,
+        seed: Optional[int] = None,
         **kwargs,
     ):
         """Stream visual generation outputs chunk by chunk."""
@@ -124,6 +136,10 @@ class DynamiCrafter512I2VPipeline(PipelineABC):
             output_path=output_path,
             fps=fps,
             return_dict=True,
+            num_frames=num_frames,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            seed=seed,
             **kwargs,
         )
         self.memory_module.record(

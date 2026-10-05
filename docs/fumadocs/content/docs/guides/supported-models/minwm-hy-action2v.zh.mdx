@@ -1,0 +1,50 @@
+---
+title: "minWM"
+description: "minWM（Shengshu Technology）：交互式世界模型、动作条件视频；Runner 一致性待确认。"
+modelId: "minwm-hy-action2v"
+pageSource: generated
+---
+
+minWM HY Action2V 基于 HunyuanVideo-1.5，复用 WorldFoundry 共享模型组件，从提示词、图像和轨迹生成相机可控视频。
+
+<ModelPaperFigures modelId="minwm-hy-action2v" locale="zh" />
+
+记录论文为[arXiv 2605.30263](https://arxiv.org/abs/2605.30263)。
+
+代码：[shengshu-ai/minWM](https://github.com/shengshu-ai/minWM)。
+
+<ModelCommandBuilder modelId="minwm-hy-action2v" locale="zh" />
+
+## 用来做什么
+
+用 `minwm-hy-action2v` 做相机条件视频推理。配方绑定了已记录的相机控制 profile。
+
+仅推理的相机 Transformer 保留上游 PRoPE 和自回归缓存，复用基础层、VAE 与编码器，无需缺失的 WorldPlay 运行时。该模型由生数科技（Shengshu AI）发布。
+
+catalog 记录的任务包括 交互式世界模型、动作条件视频、相机可控视频。别名包括 `minwm`、`minwm-hy-action2v`。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（相机/运动轨迹贴合度）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`frames`、`fps`、`height`；产物 `minwm-hy-action2v.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `MinWMHYAction2VPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+`default` 记录默认值：frames=77, fps=16, height=480, width=832, seed=0。
+
+就位 HY15/Action2V/dmd 及 HunyuanVideo-1.5 的编码器、VAE。 公开入口使用相机条件四步自回归推理和 VAE 空间分块解码。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run minwm-hy-action2v --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `MIN-Lab/minWM`、`tencent/HunyuanVideo-1.5`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh minwm-hy-action2v`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="minwm-hy-action2v" locale="zh" />

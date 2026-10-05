@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.core.io.serialization import read_jsonl_objects, write_json, write_jsonl
+from worldfoundry.core.io.filesystem.file_utils import materialize_file
+from worldfoundry.core.io.formats.serialization import read_jsonl_objects, write_json, write_jsonl
 from worldfoundry.evaluation.api import (
     GenerationRequest,
     GenerationResult,
@@ -16,7 +16,6 @@ from worldfoundry.evaluation.api import (
 )
 
 from .wrbench_paths import natural25_root
-
 
 CANONICAL_FAMILY_COUNT = 25
 CANONICAL_SEMANTIC_VARIANT_COUNT = 100
@@ -241,7 +240,7 @@ def copy_wrbench_generated_videos(
             continue
 
         if source_path.resolve() != target_path.resolve():
-            shutil.copy2(source_path, target_path)
+            materialize_file(source_path, target_path, writable=False)
         artifact_row["status"] = "copied"
         artifact_rows.append(artifact_row)
 

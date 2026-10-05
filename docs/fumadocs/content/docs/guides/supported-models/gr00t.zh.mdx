@@ -1,0 +1,54 @@
+---
+title: "NVIDIA GR00T"
+description: "NVIDIA Isaac GR00T 人形/操作 VLA（N1–N1.7）；仅 N1.7 LIBERO predict 已在 CUDA 上验证。"
+modelId: "gr00t"
+pageSource: authored
+---
+
+英伟达 GR00T 是 Isaac GR00T 人形 / 操作策略：推理 VLM 加动作头，一次输出未来动作块。官方论文是 [GR00T N1: An Open Foundation Model for Generalist Humanoid Robots](https://arxiv.org/abs/2503.14734)（arXiv 2503.14734）。实验室说明见 [NVIDIA Research](https://research.nvidia.com/labs/lpr/publication/gr00tn1_2025/)。代码在 [NVIDIA/Isaac-GR00T](https://github.com/NVIDIA/Isaac-GR00T)。
+
+<ModelPaperFigures modelId="gr00t" locale="zh" />
+
+WorldFoundry 在 `worldfoundry/synthesis/action_generation/gr00t` 下保留推理专用运行时。checkpoint 携带的 Python 已禁用；模型、processor、变换与策略从扁平化树内包执行。catalog 登记了两个 variant：`gr00t-n1-2b` 与 `gr00t-n1.7-libero`。只有 N1.7 LIBERO 线有记录在案的 CUDA `predict`——本地 Cosmos-Reason2-2B 叠上 `nvidia/GR00T-N1.7-LIBERO/libero_10`，CUDA 11.8，SDPA。仿真器 rollout 与这条 predict 路径分开跟踪。
+
+<ModelCommandBuilder modelId="gr00t" locale="zh" />
+
+## 用来做什么
+
+要跑本仓库真正验证过的路径，从 `gr00t-n1.7-libero` 开始。必填输入是 RGB（`image`）、语言 `instruction` 和 `prompt`。runner 经 `GR00TPipeline` 写出 `gr00t_action_trace.json`。已就位的 N1.7 资产只有官方 `libero_10` 子集；推理不会下载权重。
+
+只有在刻意对比旧的 N1-2B 卡片时才用 `gr00t-n1-2b`。该 variant 已集成，但不是已记录的 CUDA predict。已验证线对应的评测页是 [LIBERO](/zh/docs/evaluation/benchmark-hub/libero)。
+
+## 运行时契约
+
+树内 processor 把图像缩到 **256×256**。模型配置默认 **动作视野 40**（填充上限 **50**）。记录路径是单帧 RGB 加语言——`video` 可选，已验证路由不用。`actions` 字段记录为 `robot_action`、`humanoid_state`、`action_space`。
+
+锁定且 gated 的 Hugging Face revision：
+
+- `nvidia/GR00T-N1.7-LIBERO` @ `2ea293aa20ba7cf5bbf3ba17a5fbcb1a01cbfe21` → `${WORLDFOUNDRY_HFD_ROOT}/nvidia--GR00T-N1.7-LIBERO`
+- `nvidia/Cosmos-Reason2-2B` @ `9ce19a195e423419c349abfc86fd07178b230561`（reasoner）→ `${WORLDFOUNDRY_HFD_ROOT}/nvidia--Cosmos-Reason2-2B`
+- N1-2B 卡片用 `nvidia/GR00T-N1-2B` @ `fc879581ca32f4f6d6e02cf0cc80452f6b0c3873`
+
+## 在 WorldFoundry 中运行
+
+独立环境 `worldfoundry-gr00t`（Python 3.10，CUDA 11.8 或更新）。先为门控 NVIDIA 仓库认证、就位锁定 revision，再启动：
+
+```
+worldfoundry-eval run gr00t-n1.7-libero
+```
+
+catalog 默认启动仍打印 `gr00t-n1-2b`，任务 profile 相同。要跑已记录的 CUDA predict，换 variant。权重必须本地就位——运行时不会拉取。
+
+记录卡片的许可是 **NVIDIA Open Model License**。商用前请审阅条款。
+
+## 原版 N1 与 GR1 checkpoint 路线
+
+原版 `nvidia/GR00T-N1-2B` checkpoint 使用 `model_type=gr00t_n1`、单个 `model.safetensors` 和 `experiment_cfg/metadata.json`。此路线需要固定在 N1 发布提交 `755876a9afdb41ca6eb6383b36f4a0adb085c73f` 的独立 Isaac-GR00T 源码，以及旧版 Python 环境（Transformers 4.45.2 / Tokenizers 0.20.3）。向 `GR00TPipeline.from_pretrained` 传入 `n1_source_dir`、`n1_python`，或设置 `WORLDFOUNDRY_GR00T_N1_SOURCE`、`WORLDFOUNDRY_GR00T_N1_PYTHON`。`plan_only` 可在不启动该环境时检查 checkpoint。
+
+GR1 variant 使用已就位的 checkpoint 时也选择这条 N1 路线。默认 `gr1_arms_only` 数据配置要求 `ego_view` RGB 图像、指令，以及 `gr00t_observation["state"]` 中的 `left_arm`、`right_arm`、`left_hand`、`right_hand` 数组。多相机配置必须提供其声明的每个相机画面。有限的本地 GPU 探针使用非目标领域图像和 metadata 均值状态，得到有限的离线动作；这不代表 GR1 任务成功或模拟器结果一致。
+
+## 最小评测
+
+`gr00t-n1.7-libero` 是已记录的 CUDA `predict`。用 `worldfoundry-eval zoo benchmark-run --benchmark-id libero --mode official-validation` 导入官方结果，读 `success_rate`。模拟器 rollout 另行跟踪；套件导入仅 normalizer。
+
+<ModelRelatedRecipes modelId="gr00t" locale="zh" />

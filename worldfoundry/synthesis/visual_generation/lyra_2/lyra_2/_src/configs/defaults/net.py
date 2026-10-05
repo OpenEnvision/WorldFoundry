@@ -1,9 +1,7 @@
 from hydra.core.config_store import ConfigStore
 from lyra_2._src.networks.wan2pt1_lyra2 import Lyra2WanModel
 
-from worldfoundry.base_models.diffusion_model.video.cosmos.cosmos2.runtime.cosmos_predict2.cosmos_predict2._src.predict2.networks.selective_activation_checkpoint import (
-    SACConfig,
-)
+from worldfoundry.core.nn.checkpointing.activation_checkpointing import SACConfig
 from worldfoundry.core.configuration.lazy_config import LazyCall as L
 from worldfoundry.core.configuration.lazy_config import LazyDict
 

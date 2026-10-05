@@ -200,3 +200,28 @@ export function metricDocsPath(locale: Locale, slug: string) {
 export function metricQuickNavGroupsForPage(page: MetricQuickNavPageId) {
   return metricQuickNavGroups.filter((group) => group.page === page);
 }
+
+export type MetricQuickNavResolution = {
+  variant: 'hub' | 'page';
+  page?: MetricQuickNavPageId;
+};
+
+export function resolveMetricQuickNavFromSlugs(
+  slugs: readonly string[],
+): MetricQuickNavResolution | null {
+  if (slugs[0] !== 'evaluation' || slugs[1] !== 'metrics') {
+    return null;
+  }
+  if (slugs.length === 2 || slugs[2] === 'reference') {
+    return { variant: 'hub' };
+  }
+  if (
+    slugs[2] === 'scorers'
+    || slugs[2] === 'distribution'
+    || slugs[2] === 'perceptual'
+    || slugs[2] === 'editing'
+  ) {
+    return { variant: 'page', page: slugs[2] };
+  }
+  return null;
+}

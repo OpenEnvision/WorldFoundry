@@ -6,8 +6,11 @@ lifecycle and video generation process.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Literal
+
+from worldfoundry.core.utils.python.import_guard import third_party_lazy_import_guard
 
 from .allegro_runtime import load_allegro_components
 
@@ -110,6 +113,11 @@ class Allegro:
         num_sampling_steps: int = 100,
         seed: int = 123,
         generation_type: Literal["i2v", "t2v"] = "i2v",
+        device: str = "cuda",
+        num_frames: int = 88,
+        height: int = 720,
+        width: int = 1280,
+        num_inference_steps: int | None = None,
     ):
         """
         Build an in-tree Allegro TI2V runtime.
@@ -127,6 +135,11 @@ class Allegro:
                                  lead to higher quality but take longer.
             seed: CUDA generator seed used during sampling for reproducibility.
             generation_type: Supported generation mode, expected to be "i2v" (Image-to-Video).
+            device: Explicit execution device assigned by the Workspace.
+            num_frames: Native checkpoint length, fixed at 88 frames.
+            height: Native checkpoint height, fixed at 720 pixels.
+            width: Native checkpoint width, fixed at 1280 pixels.
+            num_inference_steps: Standard alias overriding num_sampling_steps.
 
         Raises:
             ValueError: If `generation_type` is not "i2v".
@@ -137,52 +150,73 @@ class Allegro:
             raise ValueError("Allegro runtime currently supports only i2v generation.")
         self.model_path = str(Path(model_path))
         self.allegro_ti2v_pipeline = None
-        self.num_sampling_steps = num_sampling_steps
+        self.num_sampling_steps = int(num_sampling_steps if num_inference_steps is None else num_inference_steps)
+        self.num_frames = int(num_frames)
+        self.height, self.width = int(height), int(width)
+        if self.num_frames < 1 or self.num_sampling_steps < 1:
+            raise ValueError("Allegro frame and inference step counts must be positive.")
+        if (self.num_frames, self.height, self.width) != (88, 720, 1280):
+            raise ValueError("Allegro TI2V supports 88 frames at 720x1280; other generation shapes are unsupported.")
         self.guidance_scale = guidance_scale
         self.seed = seed
+        self.device_spec = str(device)
         self.components = None
 
-        # Load core Allegro components required for the pipeline.
-        components = load_allegro_components()
-        import torch
-        from diffusers.schedulers import EulerAncestralDiscreteScheduler
-        from transformers import T5EncoderModel, T5Tokenizer
+        # Diffusers imports ``AutoImageProcessor`` while constructing its
+        # single-file loader mixins.  Resolve all cold dependency exports under
+        # the same process-wide guard used by Studio pipeline imports.  The
+        # guard ends before any checkpoint I/O so model loading on independent
+        # GPUs remains parallel.
+        with third_party_lazy_import_guard():
+            import transformers
 
+            getattr(transformers, "AutoImageProcessor")
+            components = load_allegro_components()
+            import torch
+            from diffusers.schedulers import EulerAncestralDiscreteScheduler
+            from transformers import T5EncoderModel, T5Tokenizer
+
+        self.device = torch.device(self.device_spec)
+        if self.device.type == "cuda" and self.device.index is None:
+            self.device = torch.device(f"cuda:{torch.cuda.current_device()}")
+        device_context = (
+            torch.cuda.device(self.device)
+            if self.device.type == "cuda"
+            else nullcontext()
+        )
         model_path = Path(self.model_path)
-        # Initialize and load weights for the VAE component, then move to GPU and set to evaluation mode.
-        vae = components.autoencoder_cls.from_pretrained(
-            model_path / "vae",
-            torch_dtype=torch.float32,
-        ).cuda()
-        vae.eval()
+        # Keep the selected CUDA context active for upstream helpers that use
+        # generic ``cuda`` while moving every owned component explicitly.
+        with device_context:
+            vae = components.autoencoder_cls.from_pretrained(
+                model_path / "vae",
+                torch_dtype=torch.float32,
+            ).to(self.device)
+            vae.eval()
 
-        # Initialize and load weights for the T5 text encoder, move to GPU and set to evaluation mode.
-        text_encoder = T5EncoderModel.from_pretrained(
-            model_path / "text_encoder",
-            torch_dtype=torch.bfloat16,
-        ).cuda()
-        text_encoder.eval()
+            text_encoder = T5EncoderModel.from_pretrained(
+                model_path / "text_encoder",
+                torch_dtype=torch.bfloat16,
+            ).to(self.device)
+            text_encoder.eval()
 
-        # Initialize the T5 tokenizer.
-        tokenizer = T5Tokenizer.from_pretrained(model_path / "tokenizer")
-        # Initialize the Euler Ancestral Discrete Scheduler for the diffusion process.
-        scheduler = EulerAncestralDiscreteScheduler()
+            tokenizer = T5Tokenizer.from_pretrained(model_path / "tokenizer")
+            scheduler = EulerAncestralDiscreteScheduler.from_pretrained(model_path / "scheduler")
 
-        # Initialize and load weights for the transformer component, move to GPU and set to evaluation mode.
-        transformer = components.transformer_cls.from_pretrained(
-            model_path / "transformer",
-            torch_dtype=torch.bfloat16,
-        ).cuda()
-        transformer.eval()
+            transformer = components.transformer_cls.from_pretrained(
+                model_path / "transformer",
+                torch_dtype=torch.bfloat16,
+            ).to(self.device)
+            transformer.eval()
 
-        # Assemble the Allegro TI2V pipeline with all loaded components and move it to CUDA.
-        self.allegro_ti2v_pipeline = components.pipeline_cls(
-            vae=vae,
-            text_encoder=text_encoder,
-            tokenizer=tokenizer,
-            scheduler=scheduler,
-            transformer=transformer,
-        ).to("cuda")
+            self.allegro_ti2v_pipeline = components.pipeline_cls(
+                vae=vae,
+                text_encoder=text_encoder,
+                tokenizer=tokenizer,
+                scheduler=scheduler,
+                transformer=transformer,
+                device=self.device,
+            ).to(self.device)
 
         self.negative_prompt = (
             "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, "
@@ -217,38 +251,40 @@ class Allegro:
         """
         import torch
 
-        # Preprocess the conditioning image using the helper function.
-        pre_results = preprocess_images(
-            image_path,
-            "",  # Allegro TI2V currently uses only one conditioning image.
-            height=720,
-            width=1280,
-            device=torch.cuda.current_device(),
-            dtype=torch.bfloat16,
-            components=self.components,
+        device_context = (
+            torch.cuda.device(self.device)
+            if self.device.type == "cuda"
+            else nullcontext()
         )
+        with device_context:
+            pre_results = preprocess_images(
+                image_path,
+                "",  # Allegro TI2V currently uses only one conditioning image.
+                height=self.height,
+                width=self.width,
+                device=self.device,
+                dtype=torch.bfloat16,
+                components=self.components,
+            )
 
-        prompt = str(prompt or "").lower().strip()
-        if not prompt:
-            raise ValueError("Allegro TI2V requires a non-empty prompt.")
-        # Format the user's prompt into the predefined positive prompt structure.
-        prompt = self.positive_prompt.format(prompt)
+            prompt = str(prompt or "").lower().strip()
+            if not prompt:
+                raise ValueError("Allegro TI2V requires a non-empty prompt.")
+            prompt = self.positive_prompt.format(prompt)
 
-        # Call the Allegro pipeline to generate the video frames.
-        # It takes the formatted prompt, conditional images, and various generation parameters.
-        out_video = self.allegro_ti2v_pipeline(
-            prompt,
-            negative_prompt=self.negative_prompt,
-            conditional_images=pre_results["conditional_images"],
-            conditional_images_indices=pre_results["conditional_images_indices"],
-            num_frames=88,
-            height=720,
-            width=1280,
-            num_inference_steps=self.num_sampling_steps,
-            guidance_scale=self.guidance_scale,
-            max_sequence_length=512,
-            generator=torch.Generator(device="cuda:0").manual_seed(self.seed),
-        ).video[0]
+            out_video = self.allegro_ti2v_pipeline(
+                prompt,
+                negative_prompt=self.negative_prompt,
+                conditional_images=pre_results["conditional_images"],
+                conditional_images_indices=pre_results["conditional_images_indices"],
+                num_frames=self.num_frames,
+                height=self.height,
+                width=self.width,
+                num_inference_steps=self.num_sampling_steps,
+                guidance_scale=self.guidance_scale,
+                max_sequence_length=512,
+                generator=torch.Generator(device=self.device).manual_seed(self.seed),
+            ).video[0]
 
         # Normalize video pixel values from [0, 255] to [0, 1].
         out_video = out_video / 255.0

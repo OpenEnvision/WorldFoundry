@@ -8,18 +8,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.evaluation.tasks.execution.framework.official_runner import default_benchmark_timeout
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path
+
 from .wrbench_paths import resolve_wrbench_root
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def discover_video_manifest(generated_artifact_dir: Path | None, explicit: Path | None = None) -> Path:
     if explicit is not None and explicit.is_file():
         return explicit.expanduser().resolve()
-    env_manifest = _env_path("WORLDFOUNDRY_WRBENCH_VIDEO_MANIFEST") or _env_path("WORLDFOUNDRY_PROMPT_MANIFEST")
+    env_manifest = resolve_env_path("WORLDFOUNDRY_WRBENCH_VIDEO_MANIFEST") or resolve_env_path("WORLDFOUNDRY_PROMPT_MANIFEST")
     if env_manifest is not None and env_manifest.is_file():
         return env_manifest
     if generated_artifact_dir is not None:
@@ -45,7 +45,7 @@ def run_wrbench_evaluator(
 ) -> dict[str, Any]:
     root = resolve_wrbench_root(repo_root)
     manifest = discover_video_manifest(generated_artifact_dir, video_manifest)
-    runtime_config = runtime_config or _env_path("WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG")
+    runtime_config = runtime_config or resolve_env_path("WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG")
     if runtime_config is None or not runtime_config.is_file():
         raise FileNotFoundError(
             "WRBench scorer configuration is required; pass --runtime-config or set "
@@ -71,7 +71,15 @@ def run_wrbench_evaluator(
     ]
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(part for part in (str(root), env.get("PYTHONPATH")) if part)
-    completed = subprocess.run(command, cwd=str(root), env=env, text=True, capture_output=True, check=False)
+    completed = subprocess.run(
+        command,
+        cwd=str(root),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=default_benchmark_timeout(),
+    )
     stdout_path = output_dir / "wrbench_runtime_stdout.log"
     stderr_path = output_dir / "wrbench_runtime_stderr.log"
     stdout_path.write_text(completed.stdout, encoding="utf-8")

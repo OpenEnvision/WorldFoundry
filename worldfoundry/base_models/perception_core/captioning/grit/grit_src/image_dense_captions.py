@@ -1,23 +1,28 @@
 import os
-import torch
 from itertools import compress
 from pathlib import Path
+
+import torch
 from detectron2.config import get_cfg
 from detectron2.data.detection_utils import read_image
+
+from worldfoundry.core.io.paths import package_data_path
 
 # constants
 WINDOW_NAME = "GRiT"
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))
-from worldfoundry.core.io.disk import default_worldfoundry_cache_dir
-
 # sys.path.insert(0, f"{CUR_DIR}/../")
 # print(CUR_DIR)
 import sys
+
+from worldfoundry.core.io.filesystem.disk import default_worldfoundry_cache_dir
+
 sys.path.append(os.path.join(CUR_DIR, './centernet2/'))
 from centernet.config import add_centernet_config
 
 from .grit.config import add_grit_config
 from .grit.predictor import VisualizationDemo
+
 
 class ObjDescription:
     def __init__(self, object_descriptions):
@@ -93,7 +98,7 @@ def _default_model_weight():
 def get_parser(device, model_weight=None):
     if model_weight is None:
         model_weight = _default_model_weight()
-    arg_dict = {'config_file': f"{CUR_DIR}/configs/GRiT_B_DenseCap_ObjectDet.yaml", 'cpu': False, 'confidence_threshold': 0.5, 'test_task': 'DenseCap', 'opts': ["MODEL.WEIGHTS", model_weight]}
+    arg_dict = {'config_file': str(package_data_path('models', 'runtime', 'configs', 'grit', 'GRiT_B_DenseCap_ObjectDet.yaml')), 'cpu': False, 'confidence_threshold': 0.5, 'test_task': 'DenseCap', 'opts': ["MODEL.WEIGHTS", model_weight]}
     if device.type == "cpu":
         arg_dict["cpu"] = True
     return arg_dict

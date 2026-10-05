@@ -21,6 +21,7 @@ integration:
 license: apache-2.0
 name: MolmoAct2
 official_sources:
+  paper: https://arxiv.org/abs/2605.02881
   github:
     head_sha: c2282820f9b188b60e66ea1636b3efd81c45cbb4
     url: https://github.com/allenai/molmoact2
@@ -119,3 +120,21 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records. Runner or pipeline targets are present
   only after a complete in-tree WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: Allen Institute for AI (AI2)
+  publisher_kind: lab
+  publisher_zh: 艾伦人工智能研究所（AI2）
+  overview: 'MolmoAct2 is AI2''s second-generation action reasoning model with an unusually broad Apache-2.0 checkpoint zoo: base, Think (depth-reasoning), DROID (Franka), Bimanual YAM, SO100/101, and LIBERO variants are all confirmed. WorldFoundry ports the official DROID/YAM predict_action server contracts into an in-tree action_trace pipeline with no external checkout dependency.'
+  overview_zh: MolmoAct2 是 AI2 的第二代动作推理模型，Apache-2.0 checkpoint 阵容异常齐全：base、 Think（深度推理）、DROID（Franka）、双臂 YAM、SO100/101 与 LIBERO 变体均已确认。WorldFoundry 将官方 DROID/YAM predict_action 服务契约移植为树内 action_trace pipeline，无外部 checkout 依赖。
+  architecture: MolmoAct2 builds on the Molmo open VLM line with action-reasoning heads; the Think variant adds depth-based reasoning before acting. Configured DROID, YAM, SO100, LIBERO, and Think-LIBERO profiles expose checkpoint-backed action_trace routes.
+  architecture_zh: MolmoAct2 基于 Molmo 开放 VLM 线并加动作推理头；Think 变体在行动前增加基于深度的推理。已配置的 DROID、YAM、SO100、LIBERO 与 Think-LIBERO profile 暴露 checkpoint 驱动的 action_trace 路由。
+  usage_notes: 'Pick the checkpoint per embodiment: DROID for Franka arms, BimanualYAM for dual-arm YAM, SO100_101 for SO-ARM, LIBERO/Think-LIBERO for simulation. Integration is statically verified.'
+  usage_notes_zh: 按本体选择 checkpoint：Franka 机械臂用 DROID，双臂 YAM 用 BimanualYAM，SO-ARM 用 SO100_101，仿真用 LIBERO/Think-LIBERO。集成已通过静态验证。
+  limitations:
+  - GPU rollout validation is not recorded in this repository (static verification only).
+  limitations_zh:
+  - 仓库未记录 GPU rollout 验证（仅静态验证）。
+  recommended_benchmarks:
+  - id: libero
+    reason: Dedicated LIBERO and Think-LIBERO checkpoints.
+    reason_zh: 有专门的 LIBERO 与 Think-LIBERO checkpoint。

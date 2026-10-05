@@ -1,0 +1,50 @@
+---
+title: "X-WAM"
+description: "X-WAM：wam、world_action_model；已验证; 3 个 variant。"
+modelId: "x-wam"
+pageSource: generated
+---
+
+X-WAM 是 GPU 已验证的世界-动作模型：单个 Wan 2.2 联合 flow 过程同时预测未来 RGB/深度、本体感知与机器人动作。RoboCasa-SFT 通过权重实载的动作及未来 RGB 推理；RoboTwin-SFT 在一条配对的域内样本上还与固定版本官方 Runner 接近一致（Apache-2.0）。
+
+<ModelPaperFigures modelId="x-wam" locale="zh" />
+
+记录论文为[arXiv 2604.26694](https://arxiv.org/abs/2604.26694)。
+
+项目页：[sharinka0715.github.io/X-WAM](https://sharinka0715.github.io/X-WAM/)。代码：[sharinka0715/X-WAM](https://github.com/sharinka0715/X-WAM)。
+
+<ModelCommandBuilder modelId="x-wam" locale="zh" />
+
+## 用来做什么
+
+`x-wam-robocasa-sft` 是记录的世界-动作线。按世界状态预测动作时从这里起步。
+
+构建于 Wan2.2-TI2V-5B：对视觉未来与动作流的联合 flow 模型。官方部署策略在 10 个动作步后异步提前停止并返回 32 步动作块；可选的完整世界解码持续到 50 步。两个 Hub 仓库均锁定 revision。
+
+catalog 记录的任务包括 wam、world_action_model、wam.world_action_modeling、机器人策略。别名包括 `x_wam`、`xwam`、`X-WAM`。模态上，它接受图像，输出深度。同系列还有 `x-wam-robotwin-sft`、`x-wam-pretrained`。
+
+记录的评测入口包括[RoboCasa](/zh/docs/evaluation/benchmark-hub/robocasa)（RoboCasa-SFT 权重已通过 GPU 推理，尚未运行闭环评测）、[RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin)（RoboTwin-SFT 权重在一条配对样本上与固定版本官方 Runner 接近一致，尚未运行闭环评测）、[EWMBench](/zh/docs/evaluation/benchmark-hub/ewmbench)（联合世界-动作预测质量）。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`guidance_scale`、`rgb_views`、`state`；产物 `action_trace`、`predicted_video`、`x-wam_action_trace.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `XWAMPipeline`。
+
+起步 variant 是 `x-wam-robocasa-sft`。catalog 登记了 3 个 variant（上方卡片）：`x-wam-robocasa-sft`（`wam.world_action_modeling`）：已验证、`x-wam-robotwin-sft`（`wam.world_action_modeling`）：已验证、`x-wam-pretrained`（`wam.post_training_base`）：已验证。系列状态：**已验证**。
+
+需就位 X-WAM checkpoint 状态与 Wan2.2-TI2V-5B 基座。 运行时树内自足，绝不导入外部 X-WAM checkout；训练、模拟器、ZeroMQ 服务、Lightning 与 DeepSpeed 编排均被排除。
+
+可选的深度解码尚未验证。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run x-wam-robocasa-sft --pipeline.task-profile default` 跑世界-动作路由。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-x-wam-cu129`（Python 3.10，CUDA 12.9，torch==2.8.0）。
+
+记录的权重仓库包括 `sharinka0715/X-WAM-checkpoints`、`Wan-AI/Wan2.2-TI2V-5B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh x-wam-robocasa-sft`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**已验证**。
+
+<ModelRelatedRecipes modelId="x-wam" locale="zh" />

@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
 
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
@@ -63,6 +64,7 @@ def compute_fvd_from_frame_dirs(
     i3d_checkpoint: str | Path | None = None,
     max_frames: int = 16,
 ) -> float:
+    import numpy as np
     from PIL import Image
 
     def _load_video(frames_dir: str | Path, limit: int) -> np.ndarray:

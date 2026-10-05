@@ -1,9 +1,8 @@
-{
-  "scores": {
-    "visual_quality": 2.9,
-    "temporal_consistency": 2.85,
-    "dynamic_degree": 2.6,
-    "text_to_video_alignment": 2.7,
-    "factual_consistency": 2.75
+[
+  {
+    "id": "sample-0001",
+    "text": "A dog runs through a field.",
+    "ref": "[3, 3, 2, 3, 3]",
+    "ans": "[2.9, 2.85, 2.6, 2.7, 2.75]"
   }
-}
+]

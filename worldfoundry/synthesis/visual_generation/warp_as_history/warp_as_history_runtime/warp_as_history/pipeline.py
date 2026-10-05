@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import math
 import tempfile
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -54,6 +56,9 @@ from .defaults import (
 )
 
 
+_PEFT_TORCHAO_COMPAT_LOCK = threading.RLock()
+
+
 if XLA_AVAILABLE:
     import torch_xla.core.xla_model as xm
 
@@ -72,6 +77,52 @@ def _normalize_optional_lora_path(lora_path: str | Path | None) -> str | None:
     if lora_path_str.strip().lower() in LORA_DISABLED_VALUES:
         return None
     return lora_path_str
+
+
+def _diffusers_lora_source(lora_path: str | Path) -> tuple[str, str | None]:
+    """Return the directory and optional weight name expected by Diffusers.
+
+    Recent Diffusers releases reject a direct local file while offline unless
+    ``weight_name`` is explicit.  Warp-as-History accepts both released LoRA
+    files and adapter directories, so normalize the file case here.
+    """
+
+    path = Path(lora_path).expanduser().resolve()
+    if path.is_file():
+        return str(path.parent), path.name
+    return str(path), None
+
+
+@contextmanager
+def _ignore_incompatible_optional_torchao():
+    """Keep ordinary PEFT LoRA loading independent of an old optional torchao.
+
+    PEFT probes torchao for every target layer.  Versions below its supported
+    floor raise instead of returning ``False``, even when the base layer is not
+    torchao-quantized.  Scope the compatibility override to adapter loading and
+    restore PEFT immediately afterwards.
+    """
+
+    with _PEFT_TORCHAO_COMPAT_LOCK:
+        module = None
+        original = None
+        try:
+            try:
+                from peft.tuners.lora import torchao as peft_torchao
+            except (ImportError, ModuleNotFoundError):
+                yield
+                return
+
+            module = peft_torchao
+            original = module.is_torchao_available
+            try:
+                original()
+            except ImportError:
+                module.is_torchao_available = lambda: False
+            yield
+        finally:
+            if module is not None and original is not None:
+                module.is_torchao_available = original
 
 
 def _optional_to_dtype(tensor: torch.Tensor | None, dtype: torch.dtype) -> torch.Tensor | None:
@@ -821,7 +872,12 @@ class WarpAsHistoryPipeline(HeliosPipeline):
                         setattr(transformer_config, "image_dim", None)
                     except Exception:
                         pass
-            self.load_lora_weights(adapter_path, adapter_name=self._wah_adapter_name)
+            lora_source, weight_name = _diffusers_lora_source(adapter_path)
+            load_kwargs = {"adapter_name": self._wah_adapter_name}
+            if weight_name is not None:
+                load_kwargs["weight_name"] = weight_name
+            with _ignore_incompatible_optional_torchao():
+                self.load_lora_weights(lora_source, **load_kwargs)
             self._wah_loaded_lora_path = lora_path
 
         if hasattr(self, "set_adapters"):

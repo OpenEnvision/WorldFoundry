@@ -10,11 +10,11 @@ interface for model execution and artifact handling.
 
 from __future__ import annotations
 
-import hashlib
 import os
 from pathlib import Path
 from typing import Any, Mapping
 
+from worldfoundry.core.io import file_sha256
 from worldfoundry.synthesis.visual_generation.longvie.worldfoundry_runtime import (
     LONGVIE_NEGATIVE_PROMPT,
     TARGET_SIZE,
@@ -25,8 +25,8 @@ from worldfoundry.synthesis.visual_generation.longvie.worldfoundry_runtime impor
     to_rgb_image,
     video_to_frames,
 )
-from ...base_synthesis import BaseSynthesis
 
+from ...base_synthesis import BaseSynthesis
 
 # Keys that are typically handled by the WorldFoundry framework and should be removed
 # from model-specific options to prevent unexpected arguments.
@@ -435,9 +435,9 @@ class LongVieSynthesis(BaseSynthesis):
             "artifact_kind": "generated_video",
             "artifact_path": artifact_path,
             # Calculate SHA256 hash of the saved artifact if available.
-            "artifact_sha256": hashlib.sha256(Path(artifact_path).read_bytes()).hexdigest() if artifact_path else None,
-            "runtime": "worldfoundry.base_models.diffusion_model.diffsynth",  # Indicative runtime
-            "backend_quality": "official_vendored_runtime",
+            "artifact_sha256": file_sha256(artifact_path) if artifact_path else None,
+            "runtime": "worldfoundry.native_diffusion.wan.longvie",
+            "backend_quality": "native_inference",
             "metadata": {
                 "fps": effective_fps,
                 "frames": len(generated),

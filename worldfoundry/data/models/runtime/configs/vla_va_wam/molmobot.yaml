@@ -24,17 +24,27 @@ default_demo_input:
   - qpos.gripper
 variants:
   droid:
+    aliases:
+    - molmobot-droid
     checkpoint_path: ${WORLDFOUNDRY_HFD_ROOT}/allenai--MolmoBot-DROID
     repo_id: allenai/MolmoBot-DROID
   img_droid:
+    aliases:
+    - molmobot-img-droid
     checkpoint_path: ${WORLDFOUNDRY_HFD_ROOT}/allenai--MolmoBot-Img-DROID
     repo_id: allenai/MolmoBot-Img-DROID
   rby1_multitask:
+    aliases:
+    - molmobot-rby1-multitask
     checkpoint_path: ${WORLDFOUNDRY_HFD_ROOT}/allenai--MolmoBot-RBY1Multitask
     repo_id: allenai/MolmoBot-RBY1Multitask
   pi0_droid:
+    aliases:
+    - molmobot-pi0-droid
     checkpoint_path: ${WORLDFOUNDRY_HFD_ROOT}/allenai--MolmoBot-Pi0-DROID
     repo_id: allenai/MolmoBot-Pi0-DROID
+    train_config_sha256: d77578a6fdd4b0816694a812d148168ee9a5eb01cd026ee436f9b125aeef590c
+    paligemma_tokenizer_sha256: 8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6
     official_infer_entrypoint: molmobot_pi0.eval.policies.pi:PiJointPosPolicy.get_action
 excluded_dependencies:
 - molmo_spaces simulator

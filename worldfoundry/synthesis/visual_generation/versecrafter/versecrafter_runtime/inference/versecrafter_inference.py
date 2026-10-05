@@ -23,18 +23,22 @@ project_roots = [
 for project_root in project_roots:
     sys.path.insert(0, project_root) if project_root not in sys.path else None
 
-from worldfoundry.base_models.diffusion_model.video.wan.variants.video_x_fun import (
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.video_x_fun import (
     AutoencoderKLWan,
-    AutoTokenizer,
+)
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.dreamx_world.text_encoder import (
     WanT5EncoderModel,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.components.xfuser import (
+from worldfoundry.core.distributed.sequence_parallel.runtime import (
     set_multi_gpus_devices,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.variants.versecrafter import (
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.versecrafter import (
     VerseCrafterWanTransformer3DModel,
 )
-from worldfoundry.core.distributed.block_fsdp import shard_model
+from worldfoundry.base_models.diffusion_model.loaders.wan_variant import (
+    load_wan_transformer,
+)
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
 from videox_fun.utils.fp8_optimization import (convert_model_weight_to_float8,
                                                convert_weight_dtype_wrapper,
                                                replace_parameters_by_name)
@@ -42,8 +46,8 @@ from videox_fun.utils.lora_utils import merge_lora, unmerge_lora
 from videox_fun.utils.utils import (filter_kwargs, get_image_to_video_latent, get_image_latent,
                                     get_video_to_video_latent,
                                     save_videos_grid)
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers import FlowDPMSolverMultistepScheduler
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
+from worldfoundry.base_models.diffusion_model.schedulers.flow_dpm import FlowDPMSolverMultistepScheduler
+from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import FlowUniPCMultistepScheduler
 from worldfoundry.core.io.paths import resolve_data_path
 from versecrafter.pipeline import WanVerseCrafterPipeline
 
@@ -79,6 +83,18 @@ parser.add_argument('--config_path', type=str, default=None,
                     help='Local VerseCrafter YAML config path')
 parser.add_argument('--video_length', type=int, default=81,
                     help='Output frame count')
+parser.add_argument(
+    '--gpu_memory_mode',
+    choices=(
+        'model_full_load',
+        'model_full_load_and_qfloat8',
+        'model_cpu_offload',
+        'model_cpu_offload_and_qfloat8',
+        'sequential_cpu_offload',
+    ),
+    default='model_full_load',
+    help='Component placement policy used during diffusion inference',
+)
 args = parser.parse_args()
 
 # Parse sample_size from string to list
@@ -99,7 +115,7 @@ sample_size = [int(x) for x in args.sample_size.split(',')]
 #
 # sequential_cpu_offload means that each layer of the model will be moved to the CPU after use,
 # resulting in slower speeds but saving a large amount of GPU memory.
-GPU_memory_mode     = "model_full_load"
+GPU_memory_mode     = args.gpu_memory_mode
 # Multi GPUs config
 # Please ensure that the product of ulysses_degree and ring_degree equals the number of GPUs used.
 # For example, if you are using 8 GPUs, you can set ulysses_degree = 2 and ring_degree = 4.
@@ -205,17 +221,19 @@ if geoada_in_dim is not None:
 if transformer_path is not None and os.path.isdir(transformer_path):
     # If transformer_path is a directory, load directly from it
     print(f"Loading transformer from checkpoint directory: {transformer_path}")
-    transformer = VerseCrafterWanTransformer3DModel.from_pretrained(
+    transformer = load_wan_transformer(
+        VerseCrafterWanTransformer3DModel,
         transformer_path,
-        transformer_additional_kwargs=transformer_additional_kwargs,
+        additional_kwargs=transformer_additional_kwargs,
         low_cpu_mem_usage=True,
         torch_dtype=weight_dtype,
     )
 else:
     # Load from base model first
-    transformer = VerseCrafterWanTransformer3DModel.from_pretrained(
+    transformer = load_wan_transformer(
+        VerseCrafterWanTransformer3DModel,
         os.path.join(model_name, config['transformer_additional_kwargs'].get('transformer_subpath', 'transformer')),
-        transformer_additional_kwargs=transformer_additional_kwargs,
+        additional_kwargs=transformer_additional_kwargs,
         low_cpu_mem_usage=True,
         torch_dtype=weight_dtype,
     )
@@ -323,10 +341,14 @@ else:
 coefficients = [8.10705460e+03,  2.13393892e+03, -3.72934672e+02,  1.66203073e+01, -4.17769401e-02]
 
 if coefficients is not None:
-    print(f"Enable TeaCache with threshold {teacache_threshold} and skip the first {num_skip_start_steps} steps.")
+    effective_skip_start_steps = min(num_skip_start_steps, num_inference_steps)
+    print(
+        f"Enable TeaCache with threshold {teacache_threshold} and skip the first "
+        f"{effective_skip_start_steps} steps."
+    )
     pipeline.transformer.enable_teacache(
         coefficients, num_inference_steps, teacache_threshold,
-        num_skip_start_steps=num_skip_start_steps, offload=teacache_offload
+        num_skip_start_steps=effective_skip_start_steps, offload=teacache_offload
     )
 
 if cfg_skip_ratio is not None:

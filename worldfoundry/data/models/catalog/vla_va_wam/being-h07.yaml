@@ -8,6 +8,8 @@ aliases:
 availability: open_source
 provider: official_repo
 official_sources:
+  paper: https://arxiv.org/abs/2605.00078
+  project_page: https://research.beingbeyond.com/ptr
   github:
     url: https://github.com/BeingBeyond/Being-H
     subdir: Being-H07
@@ -28,3 +30,19 @@ runtime_profile: runtime-profile:being-h07
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records.
+docs:
+  publisher: BeingBeyond
+  publisher_kind: company
+  publisher_zh: BeingBeyond（北京智在无界）
+  overview: Being-H0.7 is the successor line in BeingBeyond's Being-H family, recorded here as a latent world-action model (WAM) plus robot policy. WorldFoundry routes it through the in-tree official-policy action runtime from the Being-H07 subdirectory of the official repository; checkpoints are not yet recorded.
+  overview_zh: Being-H0.7 是 BeingBeyond Being-H 家族的后继线，在本 catalog 中记录为隐式世界-动作模型（WAM）加机器人策略。WorldFoundry 经树内官方策略动作运行时路由，源码来自官方仓库的 Being-H07 子目录；尚未记录 checkpoint。
+  architecture: Task tags record a latent world-action-model design — the policy predicts in a learned latent world space rather than raw pixels. Architecture internals beyond the official repository subdirectory pointer are not recorded in this repository.
+  architecture_zh: 任务标签记录其为隐式世界-动作模型设计——策略在学习到的隐式世界空间而非原始像素中预测。官方仓库子目录指针之外的架构内部细节仓库未记录。
+  usage_notes: Checkpoint absence is reported by the runtime missing_assets plan and is not a catalog blocker; stage weights once BeingBeyond releases them, or use the GPU-validated being-h05 entry meanwhile.
+  usage_notes_zh: checkpoint 缺失由运行时 missing_assets 计划报告，不视为 catalog 阻塞；待 BeingBeyond 发布权重后就位即可，期间可先用 GPU 已验证的 being-h05 条目。
+  limitations:
+  - No checkpoints are recorded yet; runs emit a runtime plan only.
+  - No license is recorded in this repository.
+  limitations_zh:
+  - 尚未记录任何 checkpoint；运行仅输出运行时计划。
+  - 仓库未记录许可证。

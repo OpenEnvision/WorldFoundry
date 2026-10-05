@@ -9,7 +9,7 @@ groups:
 source_repos:
 - url: https://github.com/nv-tlabs/GEN3C
   revision: 04177ec83662d6809a06d8a6253650968e2366dc
-  in_tree_path: worldfoundry/base_models/diffusion_model/video/cosmos/cosmos1/cosmos_predict1_gen3c
+  in_tree_path: worldfoundry/base_models/diffusion_model/models/networks/cosmos1
 checkpoints:
 - repo_id: nvidia/GEN3C-Cosmos-7B
   revision: 9bcfdb4f3924f41376daeadf6200826c12a3bf8e
@@ -26,10 +26,10 @@ input_schema:
 artifact_kind: generated_video
 artifact_filename: gen3c.mp4
 execution:
-  environment: gen3c
-  backend_stage: in_tree_runtime
-  runtime_status: official_8gpu_workspace_verified
-  integration_status: verified_official_8gpu_workspace
+  environment: _unified
+  backend_stage: native_diffusion
+  runtime_status: native_checkpoint_structure_and_camera_geometry_validated_gpu_parity_pending
+  integration_status: integrated
   pipeline_binding: gen3c
   default_parameters:
     trajectory: left
@@ -42,11 +42,11 @@ execution:
     num_steps: 35
     guidance: 1.0
     seed: 1
-    num_gpus: 8
 integration:
-  status: verified_official_8gpu_workspace
+  status: integrated
 notes:
-- In-tree Cosmos Predict1 GEN3C runtime is used; inference does not require an
-  external GEN3C checkout.
-- Official single-image demo settings emit a 121-frame 1280x704 video at 24 fps
-  using the configured 8-GPU GEN3C profile.
+- The public pipeline invokes the shared NativeDiffusionPipeline; no copied Cosmos
+  Predict1 runtime or external GEN3C checkout is used.
+- MoGe depth, named camera trajectories, RGBD forward warping, latent encoding,
+  EDM sampling, and decoding are connected through native roles and core utilities.
+- Full-resolution native GPU output parity remains pending.

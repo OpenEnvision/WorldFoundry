@@ -9,7 +9,8 @@ from einops import rearrange
 from .rope_3d import RotaryPositionalEmbedding
 from .blocks import RMSNorm_FP32
 from ..block_sparse_attention.bsa_interface import flash_attn_bsa_3d
-from worldfoundry.core.attention.long_context_ulysses import ulysses_wrapper
+from worldfoundry.core.attention.parallel.long_context_ulysses import ulysses_wrapper
+from worldfoundry.core.utils.python.misc_utils import env_is_true
 
 
 class Attention(nn.Module):
@@ -22,7 +23,9 @@ class Attention(nn.Module):
         enable_xformers: bool = False,
         enable_bsa: bool = False,
         bsa_params: dict = None,
-        cp_split_hw: Optional[List[int]] = None
+        cp_split_hw: Optional[List[int]] = None,
+        *,
+        enable_kv_optimization: Optional[bool] = None,
     ) -> None:
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
@@ -36,6 +39,12 @@ class Attention(nn.Module):
         self.enable_bsa = enable_bsa
         self.bsa_params = bsa_params
         self.cp_split_hw = cp_split_hw
+        # Read once at construction so generation never changes paths mid-step.
+        self.enable_kv_optimization = (
+            env_is_true("WORLDFOUNDRY_LONGCAT_KV_OPTIMIZATION")
+            if enable_kv_optimization is None
+            else enable_kv_optimization
+        )
 
         self.qkv = nn.Linear(dim, dim * 3, bias=True)
         self.q_norm = RMSNorm_FP32(self.head_dim, eps=1e-6)
@@ -170,15 +179,25 @@ class Attention(nn.Module):
         k_cache, v_cache = kv_cache
         assert k_cache.shape[0] == v_cache.shape[0] and k_cache.shape[0] in [1, B]
         if k_cache.shape[0] == 1:
-            k_cache = k_cache.repeat(B, 1, 1, 1)
-            v_cache = v_cache.repeat(B, 1, 1, 1)
+            if self.enable_kv_optimization:
+                k_cache = k_cache.expand(B, -1, -1, -1)
+                v_cache = v_cache.expand(B, -1, -1, -1)
+            else:
+                k_cache = k_cache.repeat(B, 1, 1, 1)
+                v_cache = v_cache.repeat(B, 1, 1, 1)
         
         if num_cond_latents is not None and num_cond_latents > 0:
             k_full = torch.cat([k_cache, k], dim=2).contiguous()
             v_full = torch.cat([v_cache, v], dim=2).contiguous()
-            q_padding = torch.cat([torch.empty_like(k_cache), q], dim=2).contiguous()
-            q_padding, k_full = self.rope_3d(q_padding, k_full, (T + num_cond_latents, H, W))
-            q = q_padding[:, :, -N:].contiguous()
+            if self.enable_kv_optimization:
+                q, k_full = self.rope_3d(
+                    q, k_full, (T + num_cond_latents, H, W), query_start=k_cache.shape[2]
+                )
+                q = q.contiguous()
+            else:
+                q_padding = torch.cat([torch.empty_like(k_cache), q], dim=2).contiguous()
+                q_padding, k_full = self.rope_3d(q_padding, k_full, (T + num_cond_latents, H, W))
+                q = q_padding[:, :, -N:].contiguous()
             
         x = self._process_attn(q, k_full, v_full, shape)
         

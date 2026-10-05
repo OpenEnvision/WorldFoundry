@@ -1,0 +1,50 @@
+---
+title: "EgoWM"
+description: "基于 SVD 的第一人称导航世界模型，支持配对的 3-DoF 动作与 25-DoF 状态／动作推理。"
+modelId: "egowm"
+pageSource: authored
+---
+
+EgoWM 根据初始视角和导航动作预测移动智能体**第一人称**会看到的视频。3-DoF 与 25-DoF 权重都基于 **Stable Video Diffusion**（`anuragba/egowm`）；WorldFoundry 通过用户就位的官方源码检出运行，公共入口是 `EgoWMPipeline`。
+
+论文：[arXiv 2601.15284](https://arxiv.org/abs/2601.15284)。项目页：[egowm.github.io](https://egowm.github.io/)。代码：[miccooper9/egowm](https://github.com/miccooper9/egowm)。
+
+运行计划会在生成前报告缺失的源码、checkpoint 或输入条件。Runner：`implemented`。
+
+<ModelPaperFigures modelId="egowm" locale="zh" />
+
+<ModelCommandBuilder modelId="egowm" locale="zh" />
+
+## 用来做什么
+
+第一人称导航世界模型，包含动作条件 3-DoF 和状态加动作条件 25-DoF 变体。
+
+默认 25-DoF 路径要求同一轨迹的首帧图像和物理状态／动作条件。
+
+## 运行时契约
+
+必填 `image`、`prompt`；可选 `video`；`actions`：navigation_action, egocentric_action；产物 `generated_video`、`egowm.mp4`。
+
+| 旋钮 | 默认 |
+| --- | --- |
+| 尺寸 | **512×512** |
+| 帧数 | **8** |
+| 步数 | **25** |
+| FPS | **7** |
+| Seed | **42** |
+| `motion_bucket_id` | **180** |
+| 25-DoF 条件 | 配对的 `conditions_path` JSON，包含物理状态与动作 |
+| 3-DoF 动作 | 配对的 `actions_path` JSON，包含归一化动作 |
+| 学生 | `$WORLDFOUNDRY_CKPT_DIR/anuragba--egowm/svd_25dof_nav.pth` |
+| SVD 基座 | `stabilityai/stable-video-diffusion-img2vid` |
+| 源码 | `$WORLDFOUNDRY_MODEL_SOURCE_DIR/egowm` commit `4a24b6fb` |
+
+默认 `variant=25dof` 需要显式提供首帧图像和 JSON 文件：`physical_initial_state` 是 25 个数，`physical_actions` 每生成一帧对应一行 25 个数。动作是源视频中相隔 6 帧的机器人状态之差；运行器按官方导航统计分别归一化状态和动作。图像必须与这条轨迹配对，默认不提供图像。`smoke_synthetic=true` 只用于检查模型加载和生成；零状态与合成动作不能验证机器人运动语义。
+
+配对的 3-DoF 推理需设置 `variant=3dof`，选择 `svd_3dof_nav.pth`，并提供同一轨迹的首帧图像与 `actions_path` JSON：`{"normalized_actions": [[x, y, yaw], ...]}`，每生成一帧恰好一行。x/y 应按官方 3-DoF 公式预先归一化（SCAND 在局部坐标除以 0.38 米后，x 范围为 `[-2.5, 5]`、y 范围为 `[-4, 4]`）；yaw 是包装后的弧度差。`conditions_path` 只用于 25-DoF。另一个 `action_scale` 选项给每一帧施加相同的归一化 x 偏移，以零位移基线 `-1/3` 为起点；它是合成 smoke 控制，不是配对运动测试。
+
+## 在 WorldFoundry 中运行
+
+状态：**一条配对 25-DoF EVE1x 样例和一条配对 3-DoF SCAND 测试轨迹已在 GPU 验证**。两个公共入口都生成了输入帧加 8 个预测帧。SCAND 样例中，公共 3-DoF pipeline 与官方恒定 CFG pipeline 在相同图像、动作、权重和随机种子下逐像素一致；配对正向动作使走廊视角前进，合成静止与反向控制则基本静止。这只是一条轨迹的观察，不能证明位移标定或可靠的倒退运动。须在本地就位对应的 EgoWM 权重与 SVD 基座；运行计划会报告缺失文件。catalog 未记录 VRAM。
+
+<ModelRelatedRecipes modelId="egowm" locale="zh" />

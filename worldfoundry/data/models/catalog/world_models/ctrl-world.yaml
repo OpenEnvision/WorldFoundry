@@ -37,10 +37,34 @@ runtime_profile: runtime-profile:ctrl-world
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: ctrl-world
 runner_parity:
-  status: implemented_checkpoint_pending
+  status: verified_inference_only
   notes:
-  - The pipeline resolves the vendored rollout entrypoint and returns blocked runtime diagnostics until checkpoints and task
-    assets are staged.
+  - The compatibility launcher executed the released checkpoint with local SVD and CLIP components.
+  - A five-frame synthetic-three-view GPU run at the released sampler default of 25 steps
+    preserved scene detail in all three views. The former four-step smoke default
+    collapsed the third view and is not suitable for quality validation.
+  - The default consumes synchronized ALOHA high/left-wrist/right-wrist images without synthesizing camera views.
+  - Synchronized checkpoint-matched robot views and actions remain necessary for action-quality parity.
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes; blocked entries retain
   upstream provenance without runnable backends.
+docs:
+  publisher: Tsinghua University / Stanford University
+  publisher_kind: university
+  publisher_zh: 清华大学 / 斯坦福大学
+  overview: 'Ctrl-World is a controllable generative world model for robot manipulation: conditioned on robot actions, it predicts future observation video so policies can be evaluated or improved inside the model. The vendored source completed a local checkpoint-backed five-frame synthetic-three-view inference at the released 25-step sampler default; real synchronized robot views are still needed to assess action quality.'
+  overview_zh: Ctrl-World 是面向机器人操作的可控生成式世界模型：以机器人动作为条件预测未来观测视频，使策略可以在模型内被评估或改进。内置源码与本地权重已按官方默认 25 步完成合成三视角的五帧推理；评估动作质量仍需真实同步机器人视角。
+  architecture: 'The recorded checkpoints tell the design: a Stable Video Diffusion image-to-video backbone (stabilityai/stable-video-diffusion-img2vid) with CLIP conditioning (openai/clip-vit-base-patch32) and Ctrl-World''s own action-conditioning weights (yjguo/Ctrl-World). Internals beyond this are not recorded in this repository.'
+  architecture_zh: 记录的 checkpoint 揭示其设计：Stable Video Diffusion 图生视频基座（stabilityai/stable-video-diffusion-img2vid）、CLIP 条件（openai/clip-vit-base-patch32），加上 Ctrl-World 自有的动作条件权重（yjguo/Ctrl-World）。除此之外的内部细节仓库未记录。
+  usage_notes: The pipeline requires the Ctrl-World, SVD, and CLIP checkpoints and synchronized three-view inputs. A single-image synthetic-three-view mode is available only for smoke validation; use the released 25-step sampler default for normal inference.
+  usage_notes_zh: pipeline 需要 Ctrl-World、SVD、CLIP 权重及同步的三视角输入。单图合成三视角模式只适合冒烟验证；正常推理应使用官方默认的 25 步采样。
+  limitations:
+  - Action quality remains unmeasured without synchronized robot views and matching actions.
+  - 'SVD-era backbone: visual fidelity trails newer DiT-based world models.'
+  limitations_zh:
+  - 缺少同步机器人视角与匹配动作时，无法评估动作质量。
+  - SVD 时代基座：视觉保真度弱于较新的 DiT 世界模型。
+  recommended_benchmarks:
+  - id: worldarena
+    reason: The entry is listed on WorldArena for robot world-model evaluation.
+    reason_zh: 该条目已收录于 WorldArena 的机器人世界模型评测。

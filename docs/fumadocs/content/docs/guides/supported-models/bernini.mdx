@@ -1,0 +1,58 @@
+---
+title: "Bernini"
+description: "Bernini from ByteDance: text-to-image and image-to-image; Runner parity pending; dedicated `worldfoundry-bernini-cu124`."
+modelId: "bernini"
+pageSource: authored
+---
+
+Bernini is ByteDance's unified any-to-any visual generation model: one checkpoint covers text-to-image, image editing, text-to-video, video-to-video, and reference-guided video. This flagship entry serves the full ByteDance/Bernini-Diffusers checkpoint, which pairs a 7B semantic planner with a 14B renderer. WorldFoundry vendors the official inference source in-tree and loads the self-contained Diffusers checkpoint directly — no external Bernini checkout is used.
+
+<ModelPaperFigures modelId="bernini" locale="en" />
+
+The recorded paper is [Bernini: Latent Semantic Planning for Video Diffusion](https://arxiv.org/abs/2605.22344) (2026).
+
+Project page: [bernini-ai.github.io](https://bernini-ai.github.io/). Code: [bytedance/Bernini](https://github.com/bytedance/Bernini).
+
+This is **not** the renderer-only [Bernini-R 1.3B](/docs/guides/supported-models/bernini-r-1.3b) or [Bernini-R 14B](/docs/guides/supported-models/bernini-r-14b) cards.
+
+The official paper is [Bernini: Latent Semantic Planning for Video Diffusion](https://arxiv.org/abs/2605.22344) (arXiv 2605.22344). Project: [bernini-ai.github.io](https://bernini-ai.github.io/). Code: [bytedance/Bernini](https://github.com/bytedance/Bernini). Weights license: **apache-2.0**.
+
+Official single-request **8-GPU Ulysses** dispatch is implemented (`nproc_per_node=8`, `ulysses_size=8`). **Artifact parity is pending** staged weights and H100-class GPUs. Status: **Runner parity pending**.
+
+<ModelCommandBuilder modelId="bernini" locale="en" />
+
+## What it is for
+
+Use `bernini` for catalog text-to-video inference. The recipe exists so you can launch a recorded T2V profile without assembling an upstream demo.
+
+Two-stage design recorded in the manifest: a 7B semantic planner produces an intermediate plan and a 14B renderer synthesizes the final pixels. Official recipes run single-request inference with 8-way Ulysses sequence parallelism (nproc_per_node=8, ulysses_size=8). The task_type input selects among the six recorded task families at request time.
+
+Catalog tasks include text-to-image, image-to-image, text-to-video, and video-to-video. Catalog aliases include `bernini-diffusers` and `bernini-7b-14b`. Documented modalities: text, image, and video in, image and video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Covers the T2V half of Bernini's unified task space), [T2V-CompBench](/docs/evaluation/benchmark-hub/t2v-compbench) (Compositional prompts stress the semantic-planner stage).
+
+ByteDance Bernini latent semantic planning video. Distill siblings are R-1.3B / R-14B.
+
+## Runtime contract
+
+Optional `prompt`, `task_type`, `neg_prompt`, `num_frames`, and `height`; artifacts `generated_image`, `generated_video`, and `bernini.mp4`.
+
+CLI task profiles: `t2v`, `t2i`, `i2i`, `v2v`, `r2v`, and `rv2v`. WorldFoundry binds `BerniniWorldFoundryPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `t2i` defaults: num_frames=1, height=512, width=512, num_inference_steps=50, seed=42, fps=16 Recorded `i2i` defaults: num_frames=1, height=512, width=512, num_inference_steps=40, seed=42, fps=16.
+
+Integration is complete but runner parity is pending_gpu_validation: the official 8-GPU Ulysses dispatch is implemented, and artifact parity still requires staged weights plus H100-class GPUs. If you do not have an 8-GPU node, use the Bernini-R renderer-only entries instead — the 1.3B one runs on a single GPU.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run bernini --pipeline.task-profile t2v`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the dedicated environment `worldfoundry-bernini-cu124` (Python 3.11, CUDA 12.4, torch==2.5.1+cu124).
+
+Recorded weight repositories include `ByteDance/Bernini-Diffusers` and `ByteDance/Bernini-Diffusers`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh bernini`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="bernini" locale="en" />

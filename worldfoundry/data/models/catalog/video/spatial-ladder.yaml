@@ -28,3 +28,21 @@ runner_parity:
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries expose WorldFoundry pipeline targets;
   metadata-only entries retain upstream provenance without runnable WorldFoundry backends.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: SpatialLadder is a 3B multimodal model specialized in spatial reasoning — answering questions about spatial relations in images and videos. The catalog records it for multimodal/spatial reasoning and image/video QA with model_response artifacts; weights live at hongxingli/SpatialLadder-3B.
+  overview_zh: SpatialLadder 是专精空间推理的 3B 多模态模型——回答图像与视频中空间关系相关的问题。catalog 记录其多模态/空间推理与图像/视频问答任务，产物为 model_response；权重位于 hongxingli/SpatialLadder-3B。
+  architecture: A 3B-parameter vision-language model; the staged-training design implied by its name (progressive spatial reasoning) is described upstream, and the publishing institution and internals are not recorded in this repository.
+  architecture_zh: 3B 参数的视觉-语言模型；其名称所暗示的阶梯式（渐进空间推理）训练设计见上游说明，发表机构与内部细节仓库未记录。
+  usage_notes: Runner parity is pending. Use it as a lightweight spatial-QA judge for generated scenes; the 3B scale runs on modest GPUs.
+  usage_notes_zh: Runner parity 为 pending。可作为生成场景的轻量空间问答评审；3B 规模在一般 GPU 上即可运行。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  - The publishing institution is not recorded in this repository.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  - 发表机构在本仓库中未记录。

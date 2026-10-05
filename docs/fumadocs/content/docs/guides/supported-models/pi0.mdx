@@ -1,0 +1,30 @@
+---
+title: "π0"
+description: "Physical Intelligence flow-matching VLA: PaliGemma plus an action expert. WorldFoundry reuses the in-tree OpenPI runtime; weights are GCS-only."
+modelId: "pi0"
+pageSource: authored
+---
+
+π0 (pi0) is Physical Intelligence's flow-matching Vision-Language-Action model: a **PaliGemma** vision-language backbone plus a smaller **action expert** that emits continuous action chunks. The paper is [π0: A Vision-Language-Action Flow Model for General Robot Control](https://arxiv.org/abs/2410.24164). This catalog card is the concrete π0 algorithm route — not a LeRobot zoo policy — and it reuses the flattened in-tree OpenPI runtime under `worldfoundry/synthesis/action_generation/openpi`.
+
+<ModelPaperFigures modelId="pi0" locale="en" />
+
+The design is built for dexterous, high-rate control. Flow matching lets the action expert represent complex continuous distributions. At run time the paper describes **action chunking** at up to **50 Hz**, with a horizon on the order of **H = 50** steps. The VLM stays responsible for images and language; the expert sees proprioception and noisy actions. Checkpoints are **not on Hugging Face** for this entry: they live at `gs://openpi-assets` and must be staged with gsutil / gcloud.
+
+<ModelCommandBuilder modelId="pi0" locale="en" />
+
+## What it is for
+
+Roll out the π0 algorithm: `image`, `instruction`, and `prompt` in; `pi0_action_trace.json` out through `OpenPIPipeline`. Optional: `video`. The `actions` field is recorded as `robot_action`, `proprio`, `action_space`. Alias `openpi-pi0` resolves here. Default runtime config uses the in-tree `pi0_droid` policy config; declared Orbax checkpoints must already be local.
+
+LIBERO evidence in this repository sits on the **pi05_libero** path under the openpi family, not on a separate π0 LIBERO card. Do not treat this page as a LIBERO scorecard.
+
+## Runtime contract
+
+One checkpoint covers single-arm, bimanual, and mobile manipulators by decoding continuous controls through the action expert (PaliGemma typically tokenizes **224×224** images). This is not discrete FAST tokenization — that is the [pi0-FAST](/docs/guides/supported-models/pi0-fast) card.
+
+## Running in WorldFoundry
+
+The runtime is **ported**; a verified end-to-end GPU artifact is **not** recorded on this card. Numerical parity is gated only by those staged GCS assets. Launch `worldfoundry-eval run pi0` in the dedicated environment `worldfoundry-openpi-cu12` (Python 3.11, CUDA 12.4 or newer, JAX CUDA 12). Shared OpenPI infrastructure is validated under the `openpi` entry.
+
+<ModelRelatedRecipes modelId="pi0" locale="en" />

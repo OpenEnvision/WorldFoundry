@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Any
 
-from .tools import MCPToolContext, register_tools
+from .tools import MCPToolContext, register_tools, resolve_mcp_output_root, set_default_context
 
 # ── Constants & install hint ───────────────────────────────────
 
@@ -41,7 +39,12 @@ def create_mcp_server() -> Any:
     """Build a configured ``FastMCP`` server instance with all WorldFoundry tools registered."""
 
     fast_mcp = require_fastmcp()
-    context = MCPToolContext(output_root=Path(os.environ.get("WORLDFOUNDRY_MCP_RUN_ROOT", "runs/mcp")))
+    # The output root is resolved to an absolute path (WORLDFOUNDRY_MCP_RUN_ROOT
+    # override honoured at server start), never left CWD-relative (CM-29).
+    # Writing the server's context back as the module default means payload
+    # functions called without an explicit ``context`` share the same job
+    # store as the registered tools instead of a second, invisible one.
+    context = set_default_context(MCPToolContext(output_root=resolve_mcp_output_root()))
     server = fast_mcp("worldfoundry", instructions=_INSTRUCTIONS, json_response=True)
     register_tools(server, context)
     return server

@@ -1,6 +1,12 @@
 id: minwm-hy-action2v
-name: minWM HY Action2V
-tasks: [interactive-world-model, action-conditioned-video, camera-controlled-video]
+name: minWM
+aliases:
+- minwm
+- minwm-hy-action2v
+tasks:
+- interactive-world-model
+- action-conditioned-video
+- camera-controlled-video
 provider: ShengShu AI / MIN-Lab
 source:
   status: open_source
@@ -10,10 +16,38 @@ checkpoint: MIN-Lab/minWM
 runtime_profile: runtime-profile:minwm-hy-action2v
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: minwm-hy-action2v
+official_sources:
+  paper: https://arxiv.org/abs/2605.30263
 integration:
   status: integrated
-  notes: [Official source is vendored at revision df522a26cd4409d3e3e8f269cc98eac069b5df47.]
 runner_parity:
   status: pending
-  notes: [Dedicated HY15 Action2V DMD entrypoint and native action-token route are wired.]
+  notes:
+  - 'Single-H100 inference validated: 77 frames at 832x480, four DMD steps with a camera trajectory. Full upstream
+    end-to-end parity is not claimed.'
 catalog_category: world_models
+docs:
+  publisher: Shengshu Technology
+  publisher_kind: company
+  publisher_zh: 生数科技（Shengshu AI）
+  overview: minWM HY Action2V generates camera-controlled video from a prompt, image and trajectory on a HunyuanVideo-1.5
+    base, using shared WorldFoundry model components.
+  overview_zh: minWM HY Action2V 基于 HunyuanVideo-1.5，复用 WorldFoundry 共享模型组件，从提示词、图像和轨迹生成相机可控视频。
+  architecture: The inference-only camera transformer preserves upstream PRoPE and autoregressive caches. Shared
+    layers, VAE and encoders avoid a dependency on the removed WorldPlay runtime.
+  architecture_zh: 仅推理的相机 Transformer 保留上游 PRoPE 和自回归缓存，复用基础层、VAE 与编码器，无需缺失的 WorldPlay 运行时。
+  usage_notes: Stage HY15/Action2V/dmd plus the HunyuanVideo-1.5 encoders and VAE. The public pipeline uses camera-conditioned
+    four-step autoregressive inference and spatially tiled VAE decoding.
+  usage_notes_zh: 就位 HY15/Action2V/dmd 及 HunyuanVideo-1.5 的编码器、VAE。公开入口使用相机条件四步自回归推理和 VAE 空间分块解码。
+  limitations:
+  - GPU validated on one H100 with camera conditioning; non-camera modes are not supported by this public runtime.
+  - HY15-derived files retain Tencent Hunyuan license terms; see the included licenses and provenance.
+  - Stage only the required checkpoint subset.
+  limitations_zh:
+  - 已验证单张 H100 的相机条件推理；公开运行时不支持无相机条件模式。
+  - HY15 衍生文件保留腾讯混元许可条款，见附带许可与来源说明。
+  - 仅需就位必要权重子集。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera/motion-trajectory adherence.
+    reason_zh: 相机/运动轨迹贴合度。

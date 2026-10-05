@@ -2,7 +2,6 @@ schema_version: worldfoundry.runtime_defaults.v1
 defaults:
   t2v_turbo_t2v:
     model_name: t2v_turbo_t2v
-    config: inference_t2v_512_v2.0.yaml
     model_ckpt: hf://VideoCrafter/VideoCrafter2/model.ckpt
     lora_path: hf://jiachenli-ucsb/T2V-Turbo-VC2/unet_lora.pt
     num_frames: 16
@@ -10,8 +9,6 @@ defaults:
     seed: 0
     guidance_scale: 7.5
     num_inference_steps: 8
-    motion_gs: 0.05
-    use_motion_cond: false
-    percentage: 0.3
     lcm_origin_steps: 200
     generation_type: t2v
+    backend: worldfoundry-native-diffusion

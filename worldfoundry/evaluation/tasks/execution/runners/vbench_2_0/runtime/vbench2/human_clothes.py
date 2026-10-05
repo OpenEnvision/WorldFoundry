@@ -8,39 +8,26 @@ import copy
 import torch
 import sys
 import warnings
-from decord import VideoReader, cpu
-import numpy as np
 import json
 import os
 import argparse
 from vbench2.utils import load_dimension_info
 from tqdm import tqdm
+from worldfoundry.core.io import sample_video_frames
+from worldfoundry.core.execution.device import resolve_inference_dtype
+from worldfoundry.core.utils import extract_yes_no_answer, resolve_generation_max_new_tokens
 
 warnings.filterwarnings("ignore")
 
-def load_video(video_path, max_frames_num,fps=1,force_sample=False):
-    if max_frames_num == 0:
-        return np.zeros((1, 336, 336, 3))
-    vr = VideoReader(video_path, ctx=cpu(0),num_threads=1)
-    total_frame_num = len(vr)
-    video_time = total_frame_num / vr.get_avg_fps()
-    fps = round(vr.get_avg_fps()/fps)
-    frame_idx = [i for i in range(0, len(vr), fps)]
-    frame_time = [i/fps for i in frame_idx]
-    if len(frame_idx) > max_frames_num or force_sample:
-        sample_fps = max_frames_num
-        uniform_sampled_frames = np.linspace(0, total_frame_num - 1, sample_fps, dtype=int)
-        frame_idx = uniform_sampled_frames.tolist()
-        frame_time = [i/vr.get_avg_fps() for i in frame_idx]
-    frame_time = ",".join([f"{i:.2f}s" for i in frame_time])
-    spare_frames = vr.get_batch(frame_idx).asnumpy()
-    return spare_frames,frame_time,video_time
+load_video = sample_video_frames
 
 
 def LLaVA_Video(prompt_dict_ls, model, tokenizer, image_processor, device):
     final_score = 0
     valid_num = 0
     processed_json=[]
+    inference_dtype = resolve_inference_dtype(device)
+    max_new_tokens = resolve_generation_max_new_tokens(512, scope="vbench2")
     base_question=["Is there only one person in the video throughout?", "Is the person in the video the same throughout?", "Does the clothes of the person in the video (color, texture) remain consistent throughout?"]
     for prompt_dict in tqdm(prompt_dict_ls):
         question_num = len(base_question)
@@ -49,7 +36,9 @@ def LLaVA_Video(prompt_dict_ls, model, tokenizer, image_processor, device):
         
             max_frames_num = 64
             video,frame_time,video_time = load_video(video_path, max_frames_num, 1, force_sample=True)
-            video = image_processor.preprocess(video, return_tensors="pt")["pixel_values"].cuda().bfloat16()
+            video = image_processor.preprocess(video, return_tensors="pt")["pixel_values"].to(
+                device=device, dtype=inference_dtype, non_blocking=True
+            )
             conv_template = "qwen_1_5"  # Make sure you use correct chat template for different models
             video=[video]
             time_instruciton = f"The video lasts for {video_time:.2f} seconds, and {len(video[0])} frames are uniformly sampled from it. These frames are located at {frame_time}. Return yes or no only for the following question."
@@ -72,15 +61,15 @@ def LLaVA_Video(prompt_dict_ls, model, tokenizer, image_processor, device):
                         modalities= ["video"],
                         do_sample=False,
                         temperature=0,
-                        max_new_tokens=4096,
+                    max_new_tokens=max_new_tokens,
                     )
             
                 text_outputs = tokenizer.batch_decode(cont, skip_special_tokens=True)[0].strip()
                 
-                if i==0 and "yes" not in text_outputs.lower():
+                if i==0 and extract_yes_no_answer(text_outputs) != "yes":
                     valid=False
                     break
-                elif i!=0 and "yes" not in text_outputs.lower():
+                elif i!=0 and extract_yes_no_answer(text_outputs) != "yes":
                     flag=False
             if not valid:
                 new_item[f"video_results"]=-1
@@ -94,7 +83,7 @@ def LLaVA_Video(prompt_dict_ls, model, tokenizer, image_processor, device):
             valid_num+=1
 
             processed_json.append(new_item)
-    return final_score/valid_num, processed_json
+    return (final_score / valid_num if valid_num else 0.0), processed_json
         
         
 def compute_human_clothes(json_dir, device, submodules_dict, **kwargs):
@@ -103,10 +92,10 @@ def compute_human_clothes(json_dir, device, submodules_dict, **kwargs):
     device_map = "auto"
     try:
         pretrained = submodules_dict['llava']
-        llava_tokenizer, llava_model, image_processor, max_length = load_pretrained_model(pretrained, None, model_name, torch_dtype="bfloat16", device_map=device_map)  # Add any other thing you want to pass in llava_model_args
+        llava_tokenizer, llava_model, image_processor, max_length = load_pretrained_model(pretrained, None, model_name, torch_dtype=resolve_inference_dtype(device), device_map=device_map)  # Add any other thing you want to pass in llava_model_args
     except:
         pretrained = "lmms-lab/LLaVA-Video-7B-Qwen2"
-        llava_tokenizer, llava_model, image_processor, max_length = load_pretrained_model(pretrained, None, model_name, torch_dtype="bfloat16", device_map=device_map)  # Add any other thing you want to pass in llava_model_args
+        llava_tokenizer, llava_model, image_processor, max_length = load_pretrained_model(pretrained, None, model_name, torch_dtype=resolve_inference_dtype(device), device_map=device_map)  # Add any other thing you want to pass in llava_model_args
     llava_model.eval()
     
     all_results, video_results = LLaVA_Video(prompt_dict_ls, llava_model, llava_tokenizer, image_processor, device)
@@ -116,5 +105,5 @@ def compute_human_clothes(json_dir, device, submodules_dict, **kwargs):
         if d['video_results']!=-1:
             num+=1
             score+= d['video_results']
-    all_results = score/num
+    all_results = score / num if num else 0.0
     return all_results, video_results

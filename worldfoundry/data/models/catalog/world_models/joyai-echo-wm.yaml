@@ -1,0 +1,105 @@
+schema_version: 2
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+model_id: joyai-echo-wm
+name: Echo-WM
+family: JoyAI-Echo
+domain: world
+aliases:
+- echo-wm
+- joyai-echo-world-model
+tasks:
+- image-to-world-video
+- camera-controlled-video
+- interactive-world-model
+- audio-video-generation
+output_artifacts:
+- generated_world
+capabilities:
+  task_family: world_model
+  modalities:
+  - image-to-world-video
+  - audio-video-generation
+  - action-control
+  - camera-control
+  - autoregressive-world-model
+availability:
+  source: open_source
+  license: ltx-2-community-license
+  requires_auth: true
+sources:
+  paper: https://arxiv.org/abs/2608.23189
+  project_page: https://echo-team-joy-future-academy-jd.github.io/Echo-1.5-Page/wm/
+  github:
+    url: https://github.com/jd-opensource/JoyAI-Echo
+    revision: a08f1274573d7cd6ec66719f204951f4227a5173
+  huggingface:
+  - repo_id: Echo-Team/Echo-WM
+    type: model
+    status: confirmed
+  - repo_id: google/gemma-3-12b-it-qat-q4_0-unquantized
+    type: model
+    status: gated_dependency
+checkpoints:
+  primary:
+    repo_id: Echo-Team/Echo-WM
+    revision: 04efdf813648f698680c10024f22f351a0273163
+    gated: false
+    private: false
+    variants:
+    - echo-wm-base.safetensors
+    - echo-wm-flash.safetensors
+  text_encoder:
+    repo_id: google/gemma-3-12b-it-qat-q4_0-unquantized
+    revision: 68f7ee4fbd59087436ada77ed2d62f373fdd4482
+    gated: true
+integration:
+  status: integrated
+  runtime_profile: joyai-echo-wm
+  pipeline_binding: joyai-echo-wm
+  runner: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: joyai-echo-wm
+runtime_profile: runtime-profile:joyai-echo-wm
+evidence:
+  notes:
+  - The Base and Flash Preview entrypoints share one WorldFoundry pipeline and select variant-specific official CLIs.
+  - Action DSL, first-frame, audio toggles, guidance, cache-window, and action-overlay controls are mapped explicitly.
+  - Checkpoint-backed GPU artifact parity remains pending because this workspace has no CUDA device or weights.
+runner_parity:
+  status: pending
+  expected_artifacts:
+  - result.mp4
+  - result.json
+  notes:
+  - Base and Flash command construction, control mapping, and frame-count validation are CPU-tested.
+  - Checkpoint-backed audio-video quality parity requires CUDA and external assets.
+catalog_category: world_models
+docs:
+  publisher: JD.com (JoyAI / Echo Team)
+  publisher_kind: company
+  publisher_zh: 京东（JoyAI / Echo 团队）
+  overview: Echo-WM is an omnimodal world model that jointly evolves video, environmental sound, music, and speech under continuous navigation. Base generates about ten seconds; Flash Preview uses four denoising steps and bounded sink-plus-FIFO caches for autoregressive rollout.
+  overview_zh: Echo-WM 是在连续导航控制下联合演化视频、环境音、音乐与语音的全模态世界模型。Base 生成约十秒内容；Flash Preview 使用四步去噪与有界 sink-plus-FIFO 缓存进行自回归滚动。
+  architecture: Both public variants use an LTX-2.3 audio-visual backbone with UCPE camera conditioning. Base is bidirectional with separate video/audio CFG, while Flash distills guidance with DMD and maintains bounded video, audio, cross-modal, and camera-attention caches.
+  architecture_zh: 两个公开变体均使用带 UCPE 相机条件的 LTX-2.3 音视频骨干。Base 为双向模型并分别使用视频/音频 CFG；Flash 以 DMD 蒸馏 guidance，并维护有界的视频、音频、跨模态及相机注意力缓存。
+  usage_notes: Supply a first-frame image, prompt, and Action DSL such as w-60,a-60. Select variant=base or variant=flash at load time. The official source checkout, dedicated CUDA environment, Echo checkpoint, and gated unquantized Gemma encoder must be staged before execute=True.
+  usage_notes_zh: 需提供首帧图像、提示词与形如 w-60,a-60 的 Action DSL。加载时选择 variant=base 或 variant=flash。执行 execute=True 前必须准备官方源码检出、专用 CUDA 环境、Echo checkpoint 与受限访问的未量化 Gemma 编码器。
+  limitations:
+  - The upstream release is marked for academic research and non-commercial use and remains subject to the LTX-2 Community License.
+  - Echo-WM Base expects a six-field prompt; Flash accepts the released free-form example captions.
+  - Flash Preview is a short-horizon release; the upstream long-horizon checkpoint and online streaming demo are not yet released.
+  - GPU artifact and visual parity have not been validated in this CPU-only workspace.
+  limitations_zh:
+  - 上游版本标注为学术研究与非商业用途，并受 LTX-2 Community License 约束。
+  - Echo-WM Base 要求六字段提示词；Flash 可接受公开示例中的自由文本描述。
+  - Flash Preview 为短时程版本；上游长时程 checkpoint 与在线流式 demo 尚未发布。
+  - 当前纯 CPU workspace 尚未验证 GPU 产物与视觉一致性。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera and navigation action adherence.
+    reason_zh: 相机与导航动作遵循度。
+  - id: worldmodelbench
+    reason: General action-conditioned world-rollout quality.
+    reason_zh: 通用动作条件世界滚动生成质量。
+  - id: wbench
+    reason: The upstream Flash examples use WBench camera-control cases.
+    reason_zh: 上游 Flash 示例采用 WBench 相机控制案例。

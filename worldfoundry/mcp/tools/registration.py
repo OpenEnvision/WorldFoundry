@@ -3,13 +3,19 @@
 This module defines :func:`register_tools`, which creates thin MCP tool
 wrappers around the payload-building functions in :mod:`.discovery`,
 :mod:`.runs`, and :mod:`.studio`, then registers them on a ``FastMCP`` server instance.
+
+Every tool routes through :func:`.responses.invoke_tool` /
+:func:`.responses.invoke_tool_async`, so all 27 tools share one response
+contract: ``{"ok": true, ...payload}`` on success and
+``{"ok": false, "error": ..., "error_type": ...}`` on failure instead of a
+raw FastMCP exception (CM-25).
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from .context import DEFAULT_CONTEXT, MCPToolContext
+from .context import MCPToolContext, get_default_context, set_default_context
 from .discovery import (
     get_benchmark_info_payload,
     get_model_info_payload,
@@ -20,6 +26,7 @@ from .discovery import (
 )
 from .metrics import list_metrics_payload, show_metric_payload
 from .readiness import check_benchmark_datasets_payload
+from .responses import invoke_tool, invoke_tool_async
 from .runs import (
     cancel_run_payload,
     get_run_result_payload,
@@ -31,6 +38,7 @@ from .runs import (
 )
 from .server_info import server_info_payload
 from .studio import (
+    DEFAULT_STUDIO_WAIT_TIMEOUT_S,
     get_studio_job_logs_payload,
     get_studio_job_payload,
     get_studio_manifest_payload,
@@ -39,8 +47,8 @@ from .studio import (
     list_studio_jobs_payload,
     list_studio_models_payload,
     stop_studio_job_payload,
-    submit_studio_inference_payload,
-    wait_for_studio_job_payload,
+    submit_studio_inference_payload_async,
+    wait_for_studio_job_payload_async,
 )
 
 
@@ -52,12 +60,14 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         context: Shared execution context (defaults to :data:`DEFAULT_CONTEXT`).
     """
 
-    ctx = context or DEFAULT_CONTEXT
+    if context is not None:
+        set_default_context(context)
+    ctx = get_default_context()
 
     @mcp.tool()
     def server_info() -> dict:
         """Return WorldFoundry MCP server metadata and configured paths."""
-        return server_info_payload(context=ctx)
+        return invoke_tool(server_info_payload, context=ctx)
 
     # ── Discovery tools ──────────────────────────────────────────────────
 
@@ -73,7 +83,13 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Dictionary with ``models``, ``total``, and ``query`` keys.
         """
-        return list_models_payload(query=query, runnable_only=runnable_only, include_notes=include_notes, context=ctx)
+        return invoke_tool(
+            list_models_payload,
+            query=query,
+            runnable_only=runnable_only,
+            include_notes=include_notes,
+            context=ctx,
+        )
 
     @mcp.tool()
     def get_model_info(model_id: str) -> dict:
@@ -85,7 +101,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Model manifest dictionary.
         """
-        return get_model_info_payload(model_id, context=ctx)
+        return invoke_tool(get_model_info_payload, model_id, context=ctx)
 
     @mcp.tool()
     def list_benchmarks(query: str | None = None, integrated_only: bool = False, include_notes: bool = False) -> dict:
@@ -99,7 +115,8 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Dictionary with ``benchmarks``, ``total``, and ``query`` keys.
         """
-        return list_benchmarks_payload(
+        return invoke_tool(
+            list_benchmarks_payload,
             query=query,
             integrated_only=integrated_only,
             include_notes=include_notes,
@@ -116,7 +133,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Benchmark manifest dictionary.
         """
-        return get_benchmark_info_payload(benchmark_id, context=ctx)
+        return invoke_tool(get_benchmark_info_payload, benchmark_id, context=ctx)
 
     @mcp.tool()
     def list_tasks(
@@ -136,7 +153,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Dictionary with ``tasks``, ``total``, and ``query`` keys.
         """
-        return list_tasks_payload(query=query, suite=suite, backend=backend, source_kind=source_kind)
+        return invoke_tool(list_tasks_payload, query=query, suite=suite, backend=backend, source_kind=source_kind)
 
     @mcp.tool()
     def get_task_info(task: str, benchmark: str | None = None) -> dict:
@@ -149,7 +166,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Task payload dictionary.
         """
-        return get_task_info_payload(task, benchmark)
+        return invoke_tool(get_task_info_payload, task, benchmark)
 
     @mcp.tool()
     def list_metrics(
@@ -164,7 +181,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
             family: Exact metric-family filter.
             tag: Required metric tag.
         """
-        return list_metrics_payload(query=query, family=family, tag=tag)
+        return invoke_tool(list_metrics_payload, query=query, family=family, tag=tag)
 
     @mcp.tool()
     def show_metric(metric_id: str) -> dict:
@@ -173,7 +190,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Args:
             metric_id: Metric identifier or registered alias.
         """
-        return show_metric_payload(metric_id)
+        return invoke_tool(show_metric_payload, metric_id)
 
     @mcp.tool()
     def check_benchmark_datasets(benchmark_id: str, data_root: str | None = None) -> dict:
@@ -183,7 +200,8 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
             benchmark_id: Benchmark catalog identifier.
             data_root: Optional local dataset cache root.
         """
-        return check_benchmark_datasets_payload(
+        return invoke_tool(
+            check_benchmark_datasets_payload,
             benchmark_id=benchmark_id,
             data_root=data_root,
             context=ctx,
@@ -194,35 +212,53 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
     @mcp.tool()
     def preview_run(
         model: str,
-        benchmark: str,
+        benchmark: str | None = None,
+        tasks: list[str] | None = None,
+        benchmarks: list[str] | None = None,
         output_dir: str | None = None,
         plan_only: bool = False,
+        resume: bool = False,
         prepare: bool = False,
         execute_download: bool = False,
         data_root: str | None = None,
+        generation_cache_dir: str | None = None,
+        generation_cache_mode: str = "off",
     ) -> dict:
         """Preview the command and output directory for a planned evaluation run.
 
+        Accepts the same selection and execution arguments as :func:`evaluate`
+        so a previewed command matches what ``evaluate`` would actually submit.
+
         Args:
             model: Model identifier.
-            benchmark: Benchmark identifier.
+            benchmark: Single benchmark identifier (alternative to ``benchmarks``).
+            tasks: Task identifiers (alternative to ``benchmarks``).
+            benchmarks: Benchmark identifiers.
             output_dir: Custom output directory (optional).
             plan_only: Only produce the plan, do not execute.
+            resume: Resume a previously started run.
             prepare: Prepare run environment before execution.
             execute_download: Allow download steps to run.
             data_root: Local dataset cache root (optional).
+            generation_cache_dir: Cache directory for generated outputs.
+            generation_cache_mode: Cache mode — ``"off"``, ``"read"``, or ``"write"``.
 
         Returns:
             Dictionary with ``command``, ``output_dir``, and ``plan_only`` keys.
         """
-        return preview_run_payload(
+        return invoke_tool(
+            preview_run_payload,
             model=model,
             benchmark=benchmark,
+            benchmarks=benchmarks or tasks,
             output_dir=output_dir,
             plan_only=plan_only,
+            resume=resume,
             prepare=prepare,
             execute_download=execute_download,
             data_root=data_root,
+            generation_cache_dir=generation_cache_dir,
+            generation_cache_mode=generation_cache_mode,
             context=ctx,
         )
 
@@ -264,7 +300,8 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Run summary or result dictionary depending on ``wait`` strategy.
         """
-        return await run_evaluation_payload(
+        return await invoke_tool_async(
+            run_evaluation_payload,
             model=model,
             benchmark=benchmark,
             benchmarks=benchmarks,
@@ -292,7 +329,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
             limit: Maximum runs to return (1–500).
             status: Optional exact lifecycle-status filter.
         """
-        return list_runs_payload(limit=limit, status=status, context=ctx)
+        return invoke_tool(list_runs_payload, limit=limit, status=status, context=ctx)
 
     @mcp.tool()
     async def get_run_status(run_id: str) -> dict:
@@ -304,7 +341,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Run summary dictionary with a ``log_tail`` of recent log lines.
         """
-        return get_run_status_payload(run_id, context=ctx)
+        return invoke_tool(get_run_status_payload, run_id, context=ctx)
 
     @mcp.tool()
     async def get_run_result(run_id: str, include_logs: bool = False) -> dict:
@@ -317,7 +354,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Run result dictionary.
         """
-        return get_run_result_payload(run_id, include_logs=include_logs, context=ctx)
+        return invoke_tool(get_run_result_payload, run_id, include_logs=include_logs, context=ctx)
 
     @mcp.tool()
     async def get_run_samples(
@@ -337,7 +374,8 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Dictionary with ``samples``, ``total``, ``offset``, and ``limit`` keys.
         """
-        return get_run_samples_payload(
+        return invoke_tool(
+            get_run_samples_payload,
             run_id,
             task_name=task_name,
             offset=offset,
@@ -355,7 +393,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Dictionary with ``success``, ``run_id``, and ``message`` keys.
         """
-        return await cancel_run_payload(run_id, context=ctx)
+        return await invoke_tool_async(cancel_run_payload, run_id, context=ctx)
 
     # ── Studio workspace tools ───────────────────────────────────────────
 
@@ -377,7 +415,8 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Dictionary with ``models``, ``total``, and ``base_url`` keys.
         """
-        return list_studio_models_payload(
+        return invoke_tool(
+            list_studio_models_payload,
             query=query,
             workload_type=workload_type,
             supports_from_pretrained=supports_from_pretrained,
@@ -395,10 +434,10 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Studio model dictionary.
         """
-        return get_studio_model_info_payload(model_id, base_url=base_url)
+        return invoke_tool(get_studio_model_info_payload, model_id, base_url=base_url)
 
     @mcp.tool()
-    def submit_studio_inference(
+    async def submit_studio_inference(
         model_id: str,
         base_url: str | None = None,
         variant_id: str = "",
@@ -413,7 +452,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         load_kwargs: dict | None = None,
         env_overrides: dict | None = None,
         wait: bool = False,
-        wait_timeout_s: float = 0,
+        wait_timeout_s: float = DEFAULT_STUDIO_WAIT_TIMEOUT_S,
         poll_interval_s: float = 5,
     ) -> dict:
         """Submit an inference job to a Studio workspace.
@@ -433,13 +472,15 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
             load_kwargs: Keyword arguments passed to model loading.
             env_overrides: Environment variable overrides for the job.
             wait: Poll until the job reaches a terminal state.
-            wait_timeout_s: Maximum seconds to wait (0 = unlimited).
+            wait_timeout_s: Maximum seconds to wait (default 600; 0 or
+                negative = unlimited).
             poll_interval_s: Seconds between status polls.
 
         Returns:
             Submitted job dictionary, or the final job state when ``wait`` is true.
         """
-        return submit_studio_inference_payload(
+        return await invoke_tool_async(
+            submit_studio_inference_payload_async,
             model_id=model_id,
             base_url=base_url,
             variant_id=variant_id,
@@ -469,7 +510,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Dictionary with ``jobs``, ``total``, and ``base_url`` keys.
         """
-        return list_studio_jobs_payload(job_type=job_type, base_url=base_url)
+        return invoke_tool(list_studio_jobs_payload, job_type=job_type, base_url=base_url)
 
     @mcp.tool()
     def get_studio_job(job_id: str, base_url: str | None = None) -> dict:
@@ -482,13 +523,13 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Job dictionary from the Studio API.
         """
-        return get_studio_job_payload(job_id, base_url=base_url)
+        return invoke_tool(get_studio_job_payload, job_id, base_url=base_url)
 
     @mcp.tool()
-    def wait_for_studio_job(
+    async def wait_for_studio_job(
         job_id: str,
         base_url: str | None = None,
-        timeout_s: float = 0,
+        timeout_s: float = DEFAULT_STUDIO_WAIT_TIMEOUT_S,
         poll_interval_s: float = 5,
     ) -> dict:
         """Poll a Studio job until it completes, fails, is cancelled, or times out.
@@ -496,13 +537,15 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Args:
             job_id: Studio job identifier.
             base_url: Studio workspace base URL (optional).
-            timeout_s: Maximum seconds to wait (0 = unlimited).
+            timeout_s: Maximum seconds to wait (default 600; 0 or negative =
+                unlimited).
             poll_interval_s: Seconds between status polls.
 
         Returns:
             Final or latest polled job dictionary.
         """
-        return wait_for_studio_job_payload(
+        return await invoke_tool_async(
+            wait_for_studio_job_payload_async,
             job_id,
             base_url=base_url,
             timeout_s=timeout_s,
@@ -520,7 +563,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Stop response dictionary with ``ok``, ``message``, and ``job`` keys.
         """
-        return stop_studio_job_payload(job_id, base_url=base_url)
+        return invoke_tool(stop_studio_job_payload, job_id, base_url=base_url)
 
     @mcp.tool()
     def get_studio_job_logs(job_id: str, after: int = 0, base_url: str | None = None) -> dict:
@@ -534,7 +577,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Log payload dictionary with ``offset``, ``logs``, and ``text`` keys.
         """
-        return get_studio_job_logs_payload(job_id, after=after, base_url=base_url)
+        return invoke_tool(get_studio_job_logs_payload, job_id, after=after, base_url=base_url)
 
     @mcp.tool()
     def list_studio_artifacts(limit: int = 20, base_url: str | None = None) -> dict:
@@ -547,7 +590,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
         Returns:
             Dictionary with ``artifacts``, ``total``, and ``base_url`` keys.
         """
-        return list_studio_artifacts_payload(limit=limit, base_url=base_url)
+        return invoke_tool(list_studio_artifacts_payload, limit=limit, base_url=base_url)
 
     @mcp.tool()
     def get_studio_manifest(job_id: str, base_url: str | None = None) -> dict:
@@ -561,7 +604,7 @@ def register_tools(mcp: Any, context: MCPToolContext | None = None) -> None:
             Dictionary with ``job_id``, ``manifest_path``, ``output_dir``,
             ``artifacts``, and ``metadata`` keys.
         """
-        return get_studio_manifest_payload(job_id, base_url=base_url)
+        return invoke_tool(get_studio_manifest_payload, job_id, base_url=base_url)
 
 
 __all__ = ["register_tools"]

@@ -1,0 +1,14 @@
+{
+  "inputs": {
+    "alpha_cumprods": [1.0, 0.81, 0.36],
+    "timesteps": [1, 2],
+    "training_loss_weights": [1.0, 2.0, 4.0],
+    "reference_shape": [2, 1, 1, 1]
+  },
+  "expected": {
+    "exponential": [0.9, 0.6],
+    "sds": [2.064741604835056, 1.4999999999999998]
+  },
+  "atol": 1e-7,
+  "rtol": 1e-6
+}

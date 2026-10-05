@@ -4,10 +4,8 @@
 
 """Module for base_models -> three_dimensions -> point_clouds -> hyworldmirror_2p0 -> models -> layers -> attention.py functionality."""
 
-from torch import Tensor
-from torch import nn
-import torch.nn.functional as F
 import torch
+from torch import Tensor, nn
 
 try:
     from flash_attn_interface import flash_attn_func as flash_attn_func_v3
@@ -19,10 +17,10 @@ except ImportError:
     except ImportError:
         flash_attn_func_v2 = None
     _USE_FLASH_ATTN_V3 = False
-from ...comm.padding import minimal_pad_to_divisible, depad_by_length, pad_by_length
-import torch.distributed as dist
-from ...comm.communication import _All2All, _Allgather
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+
+from ...comm.communication import _All2All
+from ...comm.padding import depad_by_length, pad_by_length
 
 
 class Attention(nn.Module):
@@ -114,6 +112,14 @@ class Attention(nn.Module):
                 x = flash_attn_func_v3(q, k, v)
             else:
                 x = flash_attn_func_v2(q, k, v, dropout_p=self.attn_drop.p if self.training else 0.0)
+            # FlashAttention 3 may return ``(output, softmax_lse, ...)`` while
+            # FlashAttention 2 returns the output tensor directly.
+            if isinstance(x, tuple):
+                if not x:
+                    raise RuntimeError("FlashAttention returned an empty result tuple.")
+                x = x[0]
+            if not isinstance(x, Tensor):
+                raise TypeError(f"FlashAttention returned {type(x)!r}, expected a tensor.")
             if x.is_contiguous():
                 x = x.transpose(1, 2)
             else:

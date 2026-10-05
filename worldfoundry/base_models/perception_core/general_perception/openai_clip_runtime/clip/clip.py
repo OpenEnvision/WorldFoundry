@@ -1,7 +1,7 @@
-import hashlib
 import os
 import urllib
 import warnings
+from functools import lru_cache
 from packaging import version
 from typing import Union, List
 
@@ -9,6 +9,8 @@ import torch
 from PIL import Image
 from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 from tqdm import tqdm
+
+from worldfoundry.core.io.filesystem.file_utils import file_sha256
 
 from .model import build_model
 from .simple_tokenizer import SimpleTokenizer as _Tokenizer
@@ -24,7 +26,7 @@ if version.parse(torch.__version__) < version.parse("1.7.1"):
     warnings.warn("PyTorch version 1.7.1 or higher is recommended")
 
 
-__all__ = ["available_models", "load", "tokenize"]
+__all__ = ["available_models", "clear_checkpoint_cache", "load", "tokenize"]
 _tokenizer = _Tokenizer()
 
 _MODELS = {
@@ -51,7 +53,7 @@ def _download(url: str, root: str):
         raise RuntimeError(f"{download_target} exists and is not a regular file")
 
     if os.path.isfile(download_target):
-        if hashlib.sha256(open(download_target, "rb").read()).hexdigest() == expected_sha256:
+        if file_sha256(download_target) == expected_sha256:
             return download_target
         else:
             warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
@@ -66,7 +68,7 @@ def _download(url: str, root: str):
                 output.write(buffer)
                 loop.update(len(buffer))
 
-    if hashlib.sha256(open(download_target, "rb").read()).hexdigest() != expected_sha256:
+    if file_sha256(download_target) != expected_sha256:
         raise RuntimeError("Model has been downloaded but the SHA256 checksum does not not match")
 
     return download_target
@@ -89,6 +91,38 @@ def _transform(n_px):
 def available_models() -> List[str]:
     """Returns the names of available CLIP models"""
     return list(_MODELS.keys())
+
+
+def _load_checkpoint_state_dict(model_path: str):
+    try:
+        scripted_model = torch.jit.load(model_path, map_location="cpu").eval()
+    except RuntimeError:
+        state_dict = torch.load(model_path, map_location="cpu", weights_only=True)
+        if not isinstance(state_dict, dict):
+            raise TypeError(f"CLIP checkpoint must contain a state dict, got {type(state_dict)!r}")
+        return state_dict
+    return scripted_model.state_dict()
+
+
+@lru_cache(maxsize=2)
+def _cached_checkpoint_state_dict(model_path: str, size: int, mtime_ns: int):
+    del size, mtime_ns
+    return _load_checkpoint_state_dict(model_path)
+
+
+def _checkpoint_state_dict(model_path: str):
+    resolved_path = os.path.realpath(model_path)
+    use_cache = os.environ.get("WORLDFOUNDRY_CLIP_STATE_CACHE", "1").strip().lower()
+    if use_cache in {"0", "false", "no", "off"}:
+        return _load_checkpoint_state_dict(resolved_path)
+    stat = os.stat(resolved_path)
+    return _cached_checkpoint_state_dict(resolved_path, stat.st_size, stat.st_mtime_ns)
+
+
+def clear_checkpoint_cache() -> None:
+    """Release CPU-resident checkpoint tensors retained for repeated metric loads."""
+
+    _cached_checkpoint_state_dict.cache_clear()
 
 
 def load(name: str, device: Union[str, torch.device] = "cuda" if torch.cuda.is_available() else "cpu", jit: bool = False, download_root: str = None):
@@ -123,20 +157,19 @@ def load(name: str, device: Union[str, torch.device] = "cuda" if torch.cuda.is_a
     else:
         raise RuntimeError(f"Model {name} not found; available models = {available_models()}")
 
-    with open(model_path, 'rb') as opened_file:
-        try:
-            # loading JIT archive
-            model = torch.jit.load(opened_file, map_location=device if jit else "cpu").eval()
-            state_dict = None
-        except RuntimeError:
-            # loading saved state dict
-            if jit:
-                warnings.warn(f"File {model_path} is not a JIT archive. Loading as a state dict instead")
-                jit = False
-            state_dict = torch.load(opened_file, map_location="cpu")
-
     if not jit:
-        model = build_model(state_dict or model.state_dict()).to(device)
+        # ``build_model`` removes legacy metadata keys, so pass a shallow copy
+        # while reusing the large immutable tensor payload from the CPU cache.
+        model = build_model(dict(_checkpoint_state_dict(model_path))).to(device)
+        if str(device) == "cpu":
+            model.float()
+        return model, _transform(model.visual.input_resolution)
+
+    try:
+        model = torch.jit.load(model_path, map_location=device).eval()
+    except RuntimeError:
+        warnings.warn(f"File {model_path} is not a JIT archive. Loading as a state dict instead")
+        model = build_model(dict(_checkpoint_state_dict(model_path))).to(device)
         if str(device) == "cpu":
             model.float()
         return model, _transform(model.visual.input_resolution)

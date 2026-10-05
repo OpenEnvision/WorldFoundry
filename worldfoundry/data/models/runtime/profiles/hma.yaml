@@ -1,25 +1,43 @@
-artifact_filename: hma_runtime_plan.json
-artifact_kind: generated_video
-backend_stage: worldfoundry_runtime_plan
+schema_version: 2
+model_id: hma
 display_name: HMA
-id: hma
+task_family: video_generation
+groups:
+- world
+- action_conditioned
+source_repos:
+- url: https://github.com/liruiw/HMA
+  revision: e3c89088fa82f2c208af6796485b4ec65ab318c5
+  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/HMA
+  role: official_inference_checkout
+  required_paths:
+  - hma/model/st_mar.py
+checkpoints:
+- repo_id: liruiw/hma-base-cont
+  role: hma_continuous_checkpoint
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/liruiw--hma-base-cont
+- repo_id: stabilityai/stable-video-diffusion-img2vid
+  role: svd_temporal_vae
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/stabilityai--stable-video-diffusion-img2vid
 input_schema:
   actions:
   - robot_action
   image: true
-  prompt: true
-  video: true
-integration_status: runtime_ported
-notes:
-- HMA official generator route is registered; checkpoints/robot assets are runtime-gated.
-- Missing checkpoints/assets are reported by the runtime plan and are not catalog
-  blockers.
-- WorldFoundry tracks upstream source and checkpoint metadata only; no runnable pipeline
-  is registered.
-- Official source is bound from ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/HMA at e3c89088fa82f2c208af6796485b4ec65ab318c5.
-runtime_status: route_ready_assets_pending
-task_family: robot_world_model
+  prompt: false
+  video: false
+artifact_kind: generated_video
+artifact_filename: hma.mp4
 execution:
   pipeline_binding: hma
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending
+  backend_stage: in_tree_runtime_manifest
+  runtime_status: official_runtime_checkpoint_bound
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
+notes:
+- WorldFoundry launches the user-staged official source through a narrow compatibility wrapper; upstream source is not vendored.
+- The default smoke route follows the official interactive simulator contract with the base continuous model, LangTable prompt image, two-dimensional action, and local SVD temporal VAE.
+- The default repeats one image across prompt_horizon and a constant raw LangTable delta action; it is a smoke configuration, not paired trajectory validation.
+- For a real paired rollout, pass trajectory_path to a JSON object with action_format=raw_language_table_delta_yx, exactly prompt_horizon prompt_frames paths, and prompt_horizon-1+generated_frames finite 2D actions. The first two axes mean vertical then horizontal displacement; the checkpoint normalizes raw actions internally.
+- The discrete checkpoint can be selected with hma_checkpoint_dir and requires the official MAGVIT2 tokenizer at source/data/magvit2.ckpt or hma_magvit_checkpoint.
+- The launcher imports only the model and sampling modules, so dataset-encoding and hosted-Space dependencies are not required for inference.

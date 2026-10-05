@@ -1,0 +1,8 @@
+schema_version: 2
+binding_id: uniworld-view
+model_id: uniworld-view
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.uniworld_view.pipeline_uniworld_view:UniWorldViewPipeline
+  loading: {method: from_pretrained, signature: unified}
+  invocation: {mode: native_or_standard_invocation}

@@ -7,7 +7,6 @@ from typing import Any, Mapping
 
 from .json_contract import JsonContract, copy_mapping, tuple_of_str
 
-
 WORLD_MODEL_MANIFEST_SCHEMA_VERSION = "worldfoundry-world-model-manifest"
 
 

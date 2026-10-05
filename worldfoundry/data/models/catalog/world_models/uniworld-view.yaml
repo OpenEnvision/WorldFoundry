@@ -1,0 +1,60 @@
+id: uniworld-view
+name: UniWorld-View
+aliases: [uniworld_view, uniview]
+tasks: [novel-view-synthesis, camera-controlled-video, image-to-video, video-to-video]
+provider: PKU Yuan Group
+source:
+  status: open_source
+  official_repo_url: https://github.com/PKU-YuanGroup/UniWorld-View
+  license: Apache-2.0
+official_sources:
+  paper: https://arxiv.org/abs/2608.04701
+  project_page: https://zhouhyocean.github.io/uniworld-view/
+  github:
+    url: https://github.com/PKU-YuanGroup/UniWorld-View
+    revision: 660212c48bff7c91a2ea5c7d5f3785af581100e2
+  huggingface:
+  - repo_id: Drexubery/UniView
+    status: public_checkpoint
+checkpoint_refs:
+- repo_id: Drexubery/UniView
+- repo_id: Wan-AI/Wan2.1-VACE-14B-diffusers
+- repo_id: Salesforce/blip2-opt-2.7b
+- repo_id: Ruicheng/moge-2-vitl-normal
+- repo_id: facebook/sam2-hiera-large
+- repo_id: Carve/tracer_b7
+- repo_id: Kijai/WanVideo_comfy
+- repo_id: yslan/STream3R
+integration:
+  status: integrated
+  notes:
+  - WorldFoundry invokes the pinned official inference entry point in an isolated environment and validates all local assets before generation.
+  - The image and video routes preserve the official BLIP2 captioning and camera controls.
+runtime_profile: runtime-profile:uniworld-view
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: uniworld-view
+runner_parity:
+  status: verified_configuration
+  notes:
+  - Released-checkpoint H100 inference completed for the official single-image and monocular-video samples at 81 frames, 8 steps and 16 fps.
+  - Single-image and dynamic-video warp, hybrid and mesh each completed short checkpoint-backed runs.
+  - The adapter fixes pinned-upstream dynamic STream3R loading, final single-view fps and the ignored seed argument; a repeated seed produced identical decoded frames.
+catalog_category: world_models
+docs:
+  publisher: PKU Yuan Group
+  publisher_kind: university
+  publisher_zh: 北京大学元培研究组
+  overview: UniWorld-View generates camera-controlled novel views from a single image or a casually captured monocular video.
+  overview_zh: UniWorld-View 从单张图像或随手拍摄的单目视频生成相机可控的新视角视频。
+  architecture: Official UniView transformer on Wan2.1-VACE-14B with geometry estimation and rendered camera controls.
+  architecture_zh: 基于 Wan2.1-VACE-14B 的 UniView Transformer，结合几何估计和渲染后的相机控制。
+  usage_notes: Use a pinned official checkout with STream3R under extern, a separate upstream environment and the official local weights. The upstream CLI uses BLIP2 captions rather than a user text prompt.
+  usage_notes_zh: 使用固定版本的官方源码及 extern 下的 STream3R、独立的官方环境和本地权重。上游 CLI 使用 BLIP2 自动描述，不读取用户文本提示。
+  limitations:
+  - The upstream authors recommend at least 60 GB of GPU memory.
+  - Validation covers specific official samples and settings; quantitative camera-angle accuracy and other scenes remain unmeasured.
+  - With aspect-ratio preservation enabled, actual output dimensions can differ from the requested height and width.
+  limitations_zh:
+  - 上游建议显存至少 60 GB。
+  - 已对官方样例的指定配置完成真实权重推理，其他场景及相机角度精度尚未量化验证。
+  - 默认保持输入宽高比时，实际输出尺寸可能不同于请求的高和宽。

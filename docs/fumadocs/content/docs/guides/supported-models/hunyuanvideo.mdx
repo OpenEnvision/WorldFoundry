@@ -1,0 +1,77 @@
+---
+title: "HunyuanVideo"
+description: "Tencent open T2V/I2V DiT: prompt (and optional image) in, video out. Native WorldFoundry recipes at 720×1280, 129 frames; runner parity still pending."
+modelId: "hunyuanvideo"
+pageSource: authored
+---
+
+HunyuanVideo is Tencent's open video foundation model: text-to-video and image-to-video from one ~13B diffusion Transformer. At run time the generator takes Gaussian noise plus an MLLM text condition, denoises in a Causal 3D VAE latent, and decodes an image or a video.
+
+<ModelPaperFigures modelId="hunyuanvideo" locale="en" />
+
+The paper is [HunyuanVideo: A Systematic Framework For Large Video Generation Model](https://arxiv.org/abs/2412.03603) (arXiv, 2024). In the official professional human study — 1,533 prompts, one inference pass each, more than 60 evaluators — HunyuanVideo ranks above Runway Gen-3, Luma 1.6, and three top-performing Chinese video models on the overall metric, especially motion quality. That comparison uses the high-quality version, which the authors distinguish from the released fast version. Those are upstream numbers, not a WorldFoundry scorecard.
+
+The same stack also runs as HunyuanVideo-I2V. Image-to-video reconstructs the reference image with a token-replace method and concatenates MLLM semantic image tokens with video latents for full-attention multimodal generation.
+
+<ModelCommandBuilder modelId="hunyuanvideo" locale="en" />
+
+## Architecture
+
+HunyuanVideo denoises in a spatial-temporally compressed latent produced by a Causal 3D VAE. A large language model encodes the text prompt as the condition; the generator takes Gaussian noise plus that condition and outputs a latent, which the 3D VAE decoder turns into an image or a video.
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/hunyuanvideo/overall.png" alt="HunyuanVideo overall architecture — Causal 3D VAE, LLM text encoder, and latent diffusion" />
+  <figcaption>HunyuanVideo overall architecture — Causal 3D VAE, LLM text encoder, and latent diffusion</figcaption>
+</figure>
+
+The backbone is a Transformer with Full Attention and a Dual-stream to Single-stream layout: video and text tokens first pass through separate blocks so each modality can learn its own modulation, then they are concatenated and fused in later blocks.
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/hunyuanvideo/backbone.png" alt="Dual-stream to single-stream Transformer backbone for unified image and video generation" />
+  <figcaption>Dual-stream to single-stream Transformer backbone for unified image and video generation</figcaption>
+</figure>
+
+### Text encoder
+
+The text encoder is a pre-trained decoder-only multimodal LLM rather than CLIP or T5-XXL. It can attend to key phrases when a system instruction is prepended to the user prompt. Because the MLLM uses causal attention, an extra bidirectional token refiner is added to strengthen the text features.
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/hunyuanvideo/text_encoder.png" alt="MLLM text encoder with a bidirectional token refiner" />
+  <figcaption>MLLM text encoder with a bidirectional token refiner</figcaption>
+</figure>
+
+### Causal 3D VAE
+
+The CausalConv3D VAE compresses pixel-space video and images by 4× in time, 8× in space, and 16 channels, so the diffusion transformer can run at the source resolution and frame rate in latent space.
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/hunyuanvideo/3dvae.png" alt="CausalConv3D VAE — temporal 4×, spatial 8×, 16-channel latent" />
+  <figcaption>CausalConv3D VAE — temporal 4×, spatial 8×, 16-channel latent</figcaption>
+</figure>
+
+User prompts vary in style and length, so a Hunyuan-Large rewrite model maps them into a form the generator prefers. Normal mode follows the user's intent more closely; Master mode adds composition, lighting, and camera movement, which can improve visual quality but sometimes drops semantic details.
+
+### Image-to-video
+
+HunyuanVideo-I2V keeps this stack and inserts the reference image by token replace: the MLLM emits semantic image tokens that are concatenated with the video latents for full-attention computation across both modalities.
+
+<figure className="wf-recipe-media is-diagram">
+  <DocsImage src="/models/hunyuanvideo/i2v_backbone.png" alt="HunyuanVideo-I2V architecture — token replace of the reference image into the video generator" />
+  <figcaption>HunyuanVideo-I2V architecture — token replace of the reference image into the video generator</figcaption>
+</figure>
+
+## Inference
+
+Official inference covers text-to-video and image-to-video at 540p and 720p (recommended), 129 frames, and 9:16, 16:9, 4:3, 3:4, and 1:1. At batch size 1 the peak memory is 60GB for 720×1280×129 and 45GB for 544×960×129; I2V at 720p is also listed at 60GB. The authors tested on a single 80GB GPU and recommend 80GB for quality. For I2V, `--i2v-stability` with flow-shift 7.0 gives more stable motion; turning stability off and using flow-shift 17.0 gives more dynamic motion. FP8 T2V weights save about 10GB of GPU memory.
+
+WorldFoundry's native T2V recipe (`HunyuanVideoT2VPipeline`) defaults to **720×1280, 129 frames, 50 steps, 24 fps, guidance 6.0**. I2V (`HunyuanVideoI2VPipeline`) uses the same geometry unless you pass height / width / frames. Required input is `prompt`; I2V also needs the reference `image`; `actions` is seed. Artifacts: `hunyuanvideo-t2v.mp4` / `hunyuanvideo-i2v.mp4`.
+
+## In WorldFoundry
+
+Both T2V and I2V are declarative native-diffusion recipes assembled by the shared runner — not the upstream CLI. Launch `worldfoundry-eval run hunyuanvideo-t2v` or the `hunyuanvideo-i2v` sibling. Checkpoints are `tencent/HunyuanVideo` and `tencent/HunyuanVideo-I2V` (license `other` on the cards). Integration is recorded; runner and demo parity are still pending, so a successful command is not the same as a checkpoint-backed GPU artifact in this workspace. Use the unified environment (`worldfoundry-unified-cu128`) and stage weights locally. Official 720p / 129-frame jobs want an 80 GB class GPU; plan down from there only if you accept the paper's 540p / FP8 trade-offs.
+
+## Minimal eval
+
+T2V clips go to [VBench](/docs/evaluation/benchmark-hub/vbench) `custom_input` / `aesthetic_quality`. Read `aesthetic_quality`. Runner parity is pending; a started command is not a verified GPU artifact.
+
+<ModelRelatedRecipes modelId="hunyuanvideo" locale="en" />

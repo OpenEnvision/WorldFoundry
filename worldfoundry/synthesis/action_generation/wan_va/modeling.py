@@ -760,22 +760,3 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin):
                                              n=math.prod(self.patch_size))  #
 
         return latent_hidden_states
-
-
-if __name__ == '__main__':
-    model = WanTransformer3DModel(patch_size=[1, 2, 2],
-                                  num_attention_heads=24,
-                                  attention_head_dim=128,
-                                  in_channels=48,
-                                  out_channels=48,
-                                  action_dim=30,
-                                  text_dim=4096,
-                                  freq_dim=256,
-                                  ffn_dim=14336,
-                                  num_layers=30,
-                                  cross_attn_norm=True,
-                                  eps=1e-6,
-                                  rope_max_seq_len=1024,
-                                  pos_embed_seq_len=None,
-                                  attn_mode="torch")
-    print(model)

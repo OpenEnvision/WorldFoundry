@@ -89,6 +89,7 @@ def _component_pipeline_class(
     memory_target: str,
     synthesis_target: str,
     generation_type: str | None = None,
+    model_path_option: str = "repo_root",
 ) -> type[ComponentPipeline]:
     """Component pipeline class helper function."""
     attributes: dict[str, Any] = {
@@ -98,6 +99,7 @@ def _component_pipeline_class(
         "OPERATOR_TARGET": operator_target,
         "MEMORY_TARGET": memory_target,
         "SYNTHESIS_TARGET": synthesis_target,
+        "MODEL_PATH_OPTION": model_path_option,
     }
     if generation_type is not None:
         attributes["generation_type"] = generation_type
@@ -112,6 +114,7 @@ ACTPipeline = _component_pipeline_class(
     memory_target="worldfoundry.synthesis.action_generation.memory:ACTMemory",
     synthesis_target="worldfoundry.synthesis.action_generation.act.act_synthesis:ACTSynthesis",
     generation_type="action_chunking_policy",
+    model_path_option="checkpoint_path",
 )
 BeingH05Pipeline = _component_pipeline_class(
     "BeingH05Pipeline",
@@ -122,6 +125,7 @@ BeingH05Pipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.synthesis.action_generation.being_h05.being_h05_synthesis:BeingH05Synthesis",
     generation_type="vla_policy",
 )
+BeingH05Pipeline.MODEL_PATH_OPTION = "checkpoint_dir"
 DiffusionPolicyPipeline = _component_pipeline_class(
     "DiffusionPolicyPipeline",
     doc="WorldFoundry visuomotor policy pipeline for action-diffusion controllers.",
@@ -131,6 +135,7 @@ DiffusionPolicyPipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.synthesis.action_generation.diffusion_policy.diffusion_policy_synthesis:DiffusionPolicySynthesis",
     generation_type="visuomotor_policy",
 )
+DiffusionPolicyPipeline.MODEL_PATH_OPTION = "checkpoint_path"
 DreamZeroPipeline = _component_pipeline_class(
     "DreamZeroPipeline",
     doc="WorldFoundry WAM/embodied-action pipeline for NVIDIA DreamZero.",
@@ -140,6 +145,7 @@ DreamZeroPipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.synthesis.action_generation.dreamzero.dreamzero_synthesis:DreamZeroSynthesis",
     generation_type="world_action_model",
 )
+DreamZeroPipeline.MODEL_PATH_OPTION = "checkpoint_dir"
 GigaBrain0Pipeline = _component_pipeline_class(
     "GigaBrain0Pipeline",
     doc="WorldFoundry VLA policy pipeline for GigaBrain-0 action generation.",
@@ -149,6 +155,7 @@ GigaBrain0Pipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.synthesis.action_generation.giga_brain_0.giga_brain_0_synthesis:GigaBrain0Synthesis",
     generation_type="vla_policy",
 )
+GigaBrain0Pipeline.MODEL_PATH_OPTION = "model_path"
 GR00TPipeline = _component_pipeline_class(
     "GR00TPipeline",
     doc="WorldFoundry VLA policy pipeline for NVIDIA GR00T-style action generation.",
@@ -158,6 +165,7 @@ GR00TPipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.synthesis.action_generation.gr00t.gr00t_synthesis:GR00TSynthesis",
     generation_type="vla_policy",
 )
+GR00TPipeline.MODEL_PATH_OPTION = "checkpoint_dir"
 LAPAPipeline = _component_pipeline_class(
     "LAPAPipeline",
     doc="WorldFoundry VA/VAM pipeline for latent-action generation.",
@@ -167,6 +175,7 @@ LAPAPipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.synthesis.action_generation.lapa.lapa_synthesis:LAPASynthesis",
     generation_type="visual_action_model",
 )
+LAPAPipeline.MODEL_PATH_OPTION = "checkpoint_dir"
 LingBotVAPipeline = _component_pipeline_class(
     "LingBotVAPipeline",
     doc="WorldFoundry embodied-action pipeline for LingBot-VA video-action models.",
@@ -176,6 +185,7 @@ LingBotVAPipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.synthesis.action_generation.lingbot_va.lingbot_va_synthesis:LingBotVASynthesis",
     generation_type="embodied_action",
 )
+LingBotVAPipeline.MODEL_PATH_OPTION = "checkpoint_dir"
 MolmoAct2Pipeline = _component_pipeline_class(
     "MolmoAct2Pipeline",
     doc="WorldFoundry VLA policy pipeline for MolmoAct2 action generation.",
@@ -185,6 +195,7 @@ MolmoAct2Pipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.synthesis.action_generation.molmoact2.molmoact2_synthesis:MolmoAct2Synthesis",
     generation_type="vla_policy",
 )
+MolmoAct2Pipeline.MODEL_PATH_OPTION = "checkpoint_dir"
 OctoPipeline = _component_pipeline_class(
     "OctoPipeline",
     doc="WorldFoundry VLA/generalist policy pipeline for Octo action generation.",
@@ -194,6 +205,7 @@ OctoPipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.synthesis.action_generation.octo.octo_synthesis:OctoSynthesis",
     generation_type="vla_policy",
 )
+OctoPipeline.MODEL_PATH_OPTION = "checkpoint_dir"
 OpenPIPipeline = _component_pipeline_class(
     "OpenPIPipeline",
     doc="WorldFoundry VLA policy pipeline for OpenPI/pi0-style action generation.",
@@ -203,6 +215,7 @@ OpenPIPipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.synthesis.action_generation.openpi.openpi_synthesis:OpenPISynthesis",
     generation_type="vla_policy",
 )
+OpenPIPipeline.MODEL_PATH_OPTION = "checkpoint_dir"
 OpenVLAPipeline = _component_pipeline_class(
     "OpenVLAPipeline",
     doc="WorldFoundry VLA policy pipeline for OpenVLA-style action generation.",
@@ -212,6 +225,7 @@ OpenVLAPipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.synthesis.action_generation.openvla.openvla_synthesis:OpenVLASynthesis",
     generation_type="vla_policy",
 )
+OpenVLAPipeline.MODEL_PATH_OPTION = "checkpoint_dir"
 RoboFlamingoPipeline = _component_pipeline_class(
     "RoboFlamingoPipeline",
     doc="WorldFoundry VLA/VLM-policy pipeline for RoboFlamingo action generation.",
@@ -221,6 +235,7 @@ RoboFlamingoPipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.synthesis.action_generation.roboflamingo.roboflamingo_synthesis:RoboFlamingoSynthesis",
     generation_type="vla_policy",
 )
+RoboFlamingoPipeline.MODEL_PATH_OPTION = "policy_checkpoint_path"
 StarVLAPipeline = _component_pipeline_class(
     "StarVLAPipeline",
     doc="WorldFoundry embodied-action pipeline for StarVLA VLA and WAM variants.",
@@ -230,6 +245,7 @@ StarVLAPipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.synthesis.action_generation.starvla.starvla_synthesis:StarVLASynthesis",
     generation_type="embodied_action",
 )
+StarVLAPipeline.MODEL_PATH_OPTION = "checkpoint_dir"
 
 
 def _official_policy_pipeline(name: str, *, model_id: str, doc: str, generation_type: str = "vla_policy") -> type[ComponentPipeline]:
@@ -242,6 +258,7 @@ def _official_policy_pipeline(name: str, *, model_id: str, doc: str, generation_
         memory_target="worldfoundry.synthesis.action_generation.memory:ActionTraceMemory",
         synthesis_target="worldfoundry.synthesis.action_generation.official_policy:OfficialPolicySynthesis",
         generation_type=generation_type,
+        model_path_option="checkpoint_path",
     )
 
 
@@ -263,6 +280,7 @@ def _independent_action_pipeline(
         memory_target="worldfoundry.synthesis.action_generation.memory:ActionTraceMemory",
         synthesis_target=synthesis_target,
         generation_type=generation_type,
+        model_path_option="checkpoint_path",
     )
 
 
@@ -286,27 +304,11 @@ DBCogACTPipeline = _independent_action_pipeline(
     operator_target="worldfoundry.operators.vla_native_operator:DBCogACTOperator",
     synthesis_target="worldfoundry.synthesis.action_generation.db_cogact:DBCogACTSynthesis",
 )
-EO1Pipeline = _official_policy_pipeline(
-    "EO1Pipeline",
-    model_id="eo1",
-    doc="WorldFoundry VLA policy pipeline for EO-1.",
-)
 FastWAMPipeline = _official_policy_pipeline(
     "FastWAMPipeline",
     model_id="fastwam",
     doc="WorldFoundry WAM policy pipeline for FastWAM.",
     generation_type="world_action_model",
-)
-GaussianActorPipeline = _official_policy_pipeline(
-    "GaussianActorPipeline",
-    model_id="gaussian-actor",
-    doc="WorldFoundry action-policy pipeline for Gaussian Actor.",
-    generation_type="actor_policy",
-)
-HYEmbodiedPipeline = _official_policy_pipeline(
-    "HYEmbodiedPipeline",
-    model_id="hy-embodied",
-    doc="WorldFoundry VLA policy pipeline for HY-Embodied.",
 )
 LingBotVLAPipeline = _independent_action_pipeline(
     "LingBotVLAPipeline",
@@ -320,21 +322,15 @@ LingBotVLAV2Pipeline = _independent_action_pipeline(
     doc="WorldFoundry VLA policy pipeline for LingBot-VLA v2 batched action generation.",
     synthesis_target="worldfoundry.synthesis.action_generation.lingbot_vla_v2:LingBotVLAV2Synthesis",
 )
-LastR1Pipeline = _official_policy_pipeline(
+LastR1Pipeline = _component_pipeline_class(
     "LastR1Pipeline",
     model_id="last-r1",
-    doc="WorldFoundry policy-rollout pipeline for LaST-R1.",
-)
-LiberoParaPipeline = _official_policy_pipeline(
-    "LiberoParaPipeline",
-    model_id="libero-para",
-    doc="WorldFoundry action-evaluation adapter for LIBERO-Para policies.",
-)
-MultiTaskDiTPipeline = _official_policy_pipeline(
-    "MultiTaskDiTPipeline",
-    model_id="multi-task-dit",
-    doc="WorldFoundry action-policy pipeline for Multi-task DiT.",
-    generation_type="diffusion_transformer_policy",
+    doc="WorldFoundry offline action-inference pipeline for LaST-R1.",
+    operator_target="worldfoundry.operators.official_policy_operator:OfficialPolicyOperator",
+    memory_target="worldfoundry.synthesis.action_generation.memory:ActionTraceMemory",
+    synthesis_target="worldfoundry.synthesis.action_generation.last_r1:LastR1Synthesis",
+    generation_type="vla_policy",
+    model_path_option="checkpoint_path",
 )
 MMEVLAPipeline = _independent_action_pipeline(
     "MMEVLAPipeline",
@@ -350,11 +346,6 @@ MolmoBotPipeline = _independent_action_pipeline(
     operator_target="worldfoundry.operators.vla_native_operator:MolmoBotOperator",
     synthesis_target="worldfoundry.synthesis.action_generation.molmobot:MolmoBotSynthesis",
 )
-OpenPIE06Pipeline = _official_policy_pipeline(
-    "OpenPIE06Pipeline",
-    model_id="openpie-0.6",
-    doc="WorldFoundry VLA policy pipeline for OpenPIE 0.6.",
-)
 OpenVLAOFTPipeline = _independent_action_pipeline(
     "OpenVLAOFTPipeline",
     model_id="openvla-oft",
@@ -362,12 +353,7 @@ OpenVLAOFTPipeline = _independent_action_pipeline(
     operator_target="worldfoundry.operators.vla_native_operator:OpenVLAOFTOperator",
     synthesis_target="worldfoundry.synthesis.action_generation.openvla_oft:OpenVLAOFTSynthesis",
 )
-RealTimeChunkingPipeline = _official_policy_pipeline(
-    "RealTimeChunkingPipeline",
-    model_id="real-time-chunking",
-    doc="WorldFoundry action-chunking runtime pipeline for Real-Time Chunking.",
-    generation_type="action_chunking_policy",
-)
+OpenVLAOFTPipeline.MODEL_PATH_OPTION = "checkpoint_path"
 SmolVLAPipeline = _official_policy_pipeline(
     "SmolVLAPipeline",
     model_id="smolvla",
@@ -378,29 +364,12 @@ SpiritV15Pipeline = _official_policy_pipeline(
     model_id="spirit-v1.5",
     doc="WorldFoundry VLA policy pipeline for Spirit-VLA v1.5.",
 )
-TDMPCPipeline = _official_policy_pipeline(
-    "TDMPCPipeline",
-    model_id="tdmpc",
-    doc="WorldFoundry MPC policy pipeline for TD-MPC.",
-    generation_type="model_predictive_control",
-)
-VQBeTPipeline = _official_policy_pipeline(
-    "VQBeTPipeline",
-    model_id="vqbet",
-    doc="WorldFoundry behavior-transformer policy pipeline for VQ-BeT.",
-    generation_type="behavior_generation",
-)
 VLANeXtPipeline = _independent_action_pipeline(
     "VLANeXtPipeline",
     model_id="vlanext",
     doc="WorldFoundry VLA policy pipeline for VLANeXt action generation.",
     operator_target="worldfoundry.operators.vla_native_operator:VLANeXtOperator",
     synthesis_target="worldfoundry.synthesis.action_generation.vlanext:VLANeXtSynthesis",
-)
-WallOSSPipeline = _official_policy_pipeline(
-    "WallOSSPipeline",
-    model_id="wall-oss",
-    doc="WorldFoundry VLA policy pipeline for Wall-OSS.",
 )
 XVLAPipeline = _independent_action_pipeline(
     "XVLAPipeline",
@@ -450,7 +419,7 @@ DreamDojoPipeline = _component_pipeline_class(
     model_id="dreamdojo",
     operator_target="worldfoundry.operators.dreamdojo_operator:DreamDojoOperator",
     memory_target="worldfoundry.synthesis.visual_generation.memory.runtime:RuntimeMemory",
-    synthesis_target="worldfoundry.synthesis.visual_generation.dreamdojo:DreamDojoSynthesis",
+    synthesis_target="worldfoundry.synthesis.action_generation.dreamdojo:DreamDojoSynthesis",
 )
 DVLTPipeline = _component_pipeline_class(
     "DVLTPipeline",
@@ -458,8 +427,9 @@ DVLTPipeline = _component_pipeline_class(
     model_id="dvlt",
     operator_target="worldfoundry.operators.dvlt_operator:DVLTOperator",
     memory_target="worldfoundry.synthesis.visual_generation.memory.runtime:RuntimeMemory",
-    synthesis_target="worldfoundry.synthesis.visual_generation.dvlt:DVLTSynthesis",
+    synthesis_target="worldfoundry.base_models.three_dimensions.depth.dvlt:DVLTSynthesis",
 )
+DVLTPipeline.MODEL_PATH_OPTION = "checkpoint_path"
 IRASimPipeline = _component_pipeline_class(
     "IRASimPipeline",
     doc="WorldFoundry robotics world-model pipeline for IRASim.",
@@ -491,6 +461,7 @@ PixelSplatPipeline = _component_pipeline_class(
     operator_target="worldfoundry.operators.pixelsplat_operator:PixelSplatOperator",
     memory_target="worldfoundry.synthesis.visual_generation.memory.runtime:RuntimeMemory",
     synthesis_target="worldfoundry.synthesis.visual_generation.pixelsplat:PixelSplatSynthesis",
+    model_path_option="checkpoint_path",
 )
 ShowOPipeline = _component_pipeline_class(
     "ShowOPipeline",
@@ -506,16 +477,9 @@ Splatt3RPipeline = _component_pipeline_class(
     model_id="splatt3r",
     operator_target="worldfoundry.operators.splatt3r_operator:Splatt3ROperator",
     memory_target="worldfoundry.synthesis.visual_generation.memory.runtime:RuntimeMemory",
-    synthesis_target="worldfoundry.synthesis.visual_generation.splatt3r:Splatt3RSynthesis",
+    synthesis_target="worldfoundry.base_models.three_dimensions.general_3d.splatt3r:Splatt3RSynthesis",
 )
-StepVideoT2VPipeline = _component_pipeline_class(
-    "StepVideoT2VPipeline",
-    doc="WorldFoundry video-generation pipeline for Step-Video-T2V.",
-    model_id="step-video-t2v",
-    operator_target="worldfoundry.operators.step_video_t2v_operator:StepVideoT2VOperator",
-    memory_target="worldfoundry.synthesis.visual_generation.memory.runtime:RuntimeMemory",
-    synthesis_target="worldfoundry.synthesis.visual_generation.step_video:StepVideoT2VSynthesis",
-)
+Splatt3RPipeline.MODEL_PATH_OPTION = "checkpoint_path"
 ZeroScopePipeline = _component_pipeline_class(
     "ZeroScopePipeline",
     doc="WorldFoundry video-generation pipeline for ZeroScope.",
@@ -524,6 +488,7 @@ ZeroScopePipeline = _component_pipeline_class(
     memory_target="worldfoundry.synthesis.visual_generation.memory.runtime:RuntimeMemory",
     synthesis_target="worldfoundry.synthesis.visual_generation.zeroscope:ZeroScopeSynthesis",
 )
+ZeroScopePipeline.MODEL_PATH_OPTION = "model_path"
 
 __all__ = [
     "ACTPipeline",
@@ -539,16 +504,13 @@ __all__ = [
     "DreamDojoPipeline",
     "DreamZeroPipeline",
     "DualCamCtrlPipeline",
-    "EO1Pipeline",
     "FastWAMPipeline",
     "GaussianActorPipeline",
     "GigaBrain0Pipeline",
     "GR00TPipeline",
-    "HYEmbodiedPipeline",
     "IRASimPipeline",
     "LAPAPipeline",
     "LastR1Pipeline",
-    "LiberoParaPipeline",
     "LingBotVAPipeline",
     "LingBotVLAPipeline",
     "LingBotVLAV2Pipeline",
@@ -559,24 +521,20 @@ __all__ = [
     "MultiTaskDiTPipeline",
     "OctoPipeline",
     "OpenMAGVIT2Pipeline",
-    "OpenPIE06Pipeline",
     "OpenPIPipeline",
     "OpenVLAOFTPipeline",
     "OpenVLAPipeline",
     "PandoraPipeline",
     "PixelSplatPipeline",
-    "RealTimeChunkingPipeline",
     "RoboFlamingoPipeline",
     "ShowOPipeline",
     "SmolVLAPipeline",
     "Splatt3RPipeline",
     "SpiritV15Pipeline",
     "StarVLAPipeline",
-    "StepVideoT2VPipeline",
     "TDMPCPipeline",
     "VQBeTPipeline",
     "VLANeXtPipeline",
-    "WallOSSPipeline",
     "XVLAPipeline",
     "ZeroScopePipeline",
 ]

@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .wrapper import (
-    compute_object_wise_consistency,
-    compute_object_wise_consistency_batch,
-    compute_object_wise_iou,
-)
+compute_object_wise_consistency = lazy_export(f"{__name__}.wrapper", "compute_object_wise_consistency", owner=__name__)
+compute_object_wise_consistency_batch = lazy_export(f"{__name__}.wrapper", "compute_object_wise_consistency_batch", owner=__name__)
+compute_object_wise_iou = lazy_export(f"{__name__}.wrapper", "compute_object_wise_iou", owner=__name__)
 
 METRIC_ID = "object_wise_consistency"
 ALIASES = (

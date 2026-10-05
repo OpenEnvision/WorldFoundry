@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
+
+import yaml
 
 from worldfoundry.evaluation.utils import (
     BENCHMARK_RUNTIME_PROFILE_DIR,
@@ -12,6 +15,8 @@ from worldfoundry.evaluation.utils import (
     load_manifest,
     manifest_paths,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 DEFAULT_EMBODIED_CATALOG_DIR = BENCHMARK_ZOO_DIR / "embodied"
 DEFAULT_VIDEO_CATALOG_DIR = BENCHMARK_ZOO_DIR / "video"
@@ -85,6 +90,14 @@ def iter_benchmark_catalog_manifest_paths(root: str | Path | None = None) -> tup
     )
 
 
+def _entry_benchmark_id(entry: Mapping[str, Any]) -> str | None:
+    """Extract the benchmark id from a catalog entry, accepting both key spellings."""
+    benchmark_id = entry.get("benchmark_id") or entry.get("id")
+    if isinstance(benchmark_id, str) and benchmark_id.strip():
+        return benchmark_id.strip()
+    return None
+
+
 @lru_cache(maxsize=16)
 def _catalog_benchmark_path_index(directory: str) -> dict[str, Path]:
     """Map benchmark ids to concrete catalog manifest paths under *directory*."""
@@ -95,12 +108,16 @@ def _catalog_benchmark_path_index(directory: str) -> dict[str, Path]:
         try:
             payload = load_manifest(candidate)
             entries = iter_benchmark_zoo_payloads(payload)
-        except Exception:  # noqa: BLE001 - skip malformed shards so callers can fall back gracefully.
+        except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+            # Skip malformed shards so callers can fall back gracefully, but say
+            # so: a silently dropped shard surfaces much later as a confusing
+            # "benchmark not found" from downstream callers.
+            _LOGGER.warning("skipping malformed benchmark catalog shard %s: %s", candidate, exc)
             continue
         for entry in entries:
-            benchmark_id = entry.get("benchmark_id") or entry.get("id")
-            if isinstance(benchmark_id, str) and benchmark_id.strip():
-                index.setdefault(benchmark_id.strip(), candidate)
+            benchmark_id = _entry_benchmark_id(entry)
+            if benchmark_id:
+                index.setdefault(benchmark_id, candidate)
     return index
 
 
@@ -144,9 +161,11 @@ def benchmark_catalog_ids(root: str) -> tuple[str, ...]:
     for path in iter_benchmark_catalog_manifest_paths(root):
         payload = load_manifest(path)
         for entry in iter_benchmark_zoo_payloads(payload):
-            benchmark_id = entry.get("id")
+            # Same dual-key extraction as the path index: a shard declaring only
+            # benchmark_id: must not vanish from the id universe (ET-18).
+            benchmark_id = _entry_benchmark_id(entry)
             if benchmark_id:
-                ids.add(str(benchmark_id))
+                ids.add(benchmark_id)
     return tuple(sorted(ids))
 
 
@@ -168,9 +187,12 @@ def load_benchmark_catalog_entries(root: str | Path | None = None) -> tuple[Any,
 
 def clear_benchmark_catalog_cache() -> None:
     """Clear cached benchmark catalog path indexes and loaded entries."""
+    from .dispatch import clear_catalog_dispatch_cache
+
     _catalog_benchmark_path_index.cache_clear()
     benchmark_catalog_ids.cache_clear()
     _load_benchmark_catalog_entries_cached.cache_clear()
+    clear_catalog_dispatch_cache()
 
 
 def load_benchmark_catalog_shard_entries(shard: str, root: str | Path | None = None) -> tuple[Any, ...]:

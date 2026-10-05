@@ -36,6 +36,8 @@ _CALL_RUNTIME_ALIASES = {
     "sample_steps": "ddim_steps",
     "infer_steps": "ddim_steps",
     "sampling_steps": "ddim_steps",
+    "guidance_scale": "unconditional_guidance_scale",
+    "cfg_scale": "unconditional_guidance_scale",
 }
 
 
@@ -151,24 +153,54 @@ class VideoCrafterPipelineBase(PipelineABC):
             target_key = _CALL_RUNTIME_ALIASES.get(key, key)
             if target_key in _RUNTIME_KWARGS:
                 runtime_overrides[target_key] = kwargs.pop(key)
+
+        # Apply per-call overrides to the long-lived synthesis state, then restore
+        # them after predict so one call's num_frames/ddim_steps cannot leak into
+        # the next call on the same pipeline instance.
+        _missing = object()
+        saved_runtime_kwargs: dict[str, Any] | None = None
+        saved_generator_attrs: dict[str, Any] | None = None
+        generator = None
         if runtime_overrides:
             runtime_kwargs = getattr(self.synthesis_model, "runtime_kwargs", None)
             if isinstance(runtime_kwargs, dict):
+                saved_runtime_kwargs = {key: runtime_kwargs.get(key, _missing) for key in runtime_overrides}
                 runtime_kwargs.update(runtime_overrides)
             generator = getattr(self.synthesis_model, "generator", None)
             if generator is not None:
+                saved_generator_attrs = {key: getattr(generator, key, _missing) for key in runtime_overrides}
                 for key, value in runtime_overrides.items():
                     setattr(generator, key, value)
 
-        processed = self.process(prompt=prompt, images=images)
-        result = self.synthesis_model.predict(
-            prompt=processed["prompt"],
-            images=processed["images"],
-            output_path=output_path,
-            fps=fps,
-            return_dict=True,
-            **kwargs,
-        )
+        try:
+            processed = self.process(prompt=prompt, images=images)
+            result = self.synthesis_model.predict(
+                prompt=processed["prompt"],
+                images=processed["images"],
+                output_path=output_path,
+                fps=fps,
+                return_dict=True,
+                **kwargs,
+            )
+        finally:
+            if saved_generator_attrs and getattr(self.synthesis_model, "generator", None) is generator:
+                for key, value in saved_generator_attrs.items():
+                    if value is _missing:
+                        try:
+                            delattr(generator, key)
+                        except AttributeError:
+                            pass
+                    else:
+                        setattr(generator, key, value)
+            if saved_runtime_kwargs is not None:
+                runtime_kwargs = getattr(self.synthesis_model, "runtime_kwargs", None)
+                if isinstance(runtime_kwargs, dict):
+                    for key, value in saved_runtime_kwargs.items():
+                        if value is _missing:
+                            runtime_kwargs.pop(key, None)
+                        else:
+                            runtime_kwargs[key] = value
+
         if return_dict:
             return result
         return result["video"]

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+
+
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+
 import argparse
 import csv
 import hashlib
@@ -48,7 +52,6 @@ DEFAULT_T2V_COMPBENCH_ROOT = (
 DEFAULT_T2V_COMPBENCH_ASSETS = (
     REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "assets" / "t2v-compbench"
 )
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 HF_DATASET_ID = "Kaiyue/T2V-CompBench-Videos"
 HF_DATASET_CONFIG = "default"
 HF_DATASET_SPLIT = "train"

@@ -1,0 +1,52 @@
+---
+title: "Wan 2.6 API"
+description: "Wan 2.6 API（Alibaba (Tongyi Lab)）：图生视频、托管 API；Runner 一致性待确认。"
+modelId: "wan-2p6"
+pageSource: authored
+---
+
+Wan 2.6 API 是阿里 Wan 2.6 模型的 DashScope 托管图生视频接入点。你提供起始图，阿里云返回渲染好的视频；WorldFoundry 记录请求并按标准产物布局保存结果。catalog 中登记了 wan2.6、wan-2.6 两个别名。想在无本地 GPU 的情况下使用较新的托管 Wan 版本时选择本条目。
+
+<ModelPaperFigures modelId="wan-2p6" locale="zh" />
+
+项目页：[dashscope.aliyun.com](https://dashscope.aliyun.com/)。
+
+<ModelCommandBuilder modelId="wan-2p6" locale="zh" />
+
+## 用来做什么
+
+用 `wan-2p6` 打到 catalog 托管路由。本页记录的不是本地 GPU 产物。
+
+Wan 2.6 延续通义实验室 Wan 系列扩散 Transformer 视频模型的脉络；API 所服务修订版的确切架构与参数未公开，本仓库仅记录托管集成信息。该模型由阿里巴巴（通义实验室）发布。
+
+catalog 记录的任务包括 图生视频、托管 API。别名包括 `wan2.6`、`wan-2.6`。模态上，它接受图像，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（对比托管文/图生视频输出的标准多维质量评测）、[Physics-IQ Original](/zh/docs/evaluation/benchmark-hub/physics-iq)（检验服务方视频模型是否遵循基本物理合理性）。
+
+本卡的 Wan 2.6 是 DashScope **图生视频**，不是本地 Wan 权重，也不是 [Wan 2.5](/zh/docs/guides/supported-models/wan-2p5) 文生视频。
+
+启动 `worldfoundry-eval run wan-2p6`，任务 profile 为 `image-to-video`。起始图进，成片回。相邻：[Wan 2.7 API](/zh/docs/guides/supported-models/wan-2p7)。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`input_path`、`seed`、`reference_urls`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `Wan2p6Pipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+Catalog 将该条目标记为 integrated：托管 API 的 Studio pipeline 已可用，但你必须自备服务方的 API key 与账号。 本地不会下载任何权重、也不会创建 GPU 环境——生成在服务方完成，费用、配额与内容政策均以你的服务方账号为准。 API key 通过阿里云 DashScope（dashscope.aliyun.com）开通。
+
+需要付费的服务方账号与 API key；WorldFoundry 不提供任何凭据。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run wan-2p6 --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境未记录。
+
+准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh wan-2p6`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="wan-2p6" locale="zh" />

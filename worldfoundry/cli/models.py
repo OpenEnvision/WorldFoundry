@@ -10,10 +10,8 @@ from pathlib import Path
 
 from worldfoundry.evaluation.utils import write_json
 
+from .presentation import print_details, print_notice, print_table, terminal_enabled
 from .utils import json_dump
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SRC_ROOT = REPO_ROOT
 
 # ── Models list and runtime runners ─────────────────────────────
 
@@ -26,6 +24,14 @@ def _handle_models_list(args: argparse.Namespace) -> int:
     items = [item.to_dict() for item in registry.list(args.family)]
     if args.json:
         json_dump(items)
+        return 0
+
+    if terminal_enabled():
+        print_table(
+            "Model runners",
+            ("Model", "Family", "Loader", "Inference"),
+            [(item["model_type"], item["family"], item["has_loader"], item["has_infer"]) for item in items],
+        )
         return 0
 
     for item in items:
@@ -46,6 +52,16 @@ def _handle_models_runtime_runners(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(payload)
         return 0
+    if terminal_enabled():
+        print_table(
+            "Runtime runners",
+            ("Runner", "Target", "Source", "Aliases"),
+            [(item["name"], item["runner_target"], item["source"], item["aliases"]) for item in payload],
+        )
+        for issue in report.issues:
+            print_notice(f"{issue.code}: {issue.name or '-'}: {issue.message}", level="warning", stream=sys.stderr)
+        return 0
+
     for entry in payload:
         aliases = ", ".join(entry["aliases"]) if entry["aliases"] else "-"
         print(f"{entry['name']}: {entry['runner_target']} source={entry['source']} aliases={aliases}")
@@ -63,6 +79,14 @@ def _handle_models_visualizations(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(inventory)
         return 0
+    if terminal_enabled():
+        print_table(
+            "Model visualizations",
+            ("Model", "Family", "Renderers", "Backends"),
+            [(item["model_id"], item["family"], item["renderers"], item["backends"]) for item in inventory["models"]],
+        )
+        return 0
+
     print(f"model visualizations: {inventory['model_count']}")
     for item in inventory["models"]:
         print(
@@ -111,14 +135,28 @@ def _handle_models_assets(args: argparse.Namespace) -> int:
         if args.json:
             json_dump(inventory)
         else:
-            print(f"base-model capabilities: {inventory['capability_count']}")
-            for item in inventory["capabilities"]:
-                print(f"capability {item['id']} [{item['family']}]")
-            print(f"base-model stacks: {inventory['stack_count']}")
-            for item in inventory["stacks"]:
-                print(f"stack {item['id']} [{item['family']}] -> {', '.join(item['capability_ids'])}")
-            if args.report_path is not None:
-                print("report:", args.report_path)
+            if terminal_enabled():
+                print_table(
+                    "Base-model capabilities",
+                    ("Capability", "Family"),
+                    [(item["id"], item["family"]) for item in inventory["capabilities"]],
+                )
+                print_table(
+                    "Base-model stacks",
+                    ("Stack", "Family", "Capabilities"),
+                    [(item["id"], item["family"], item["capability_ids"]) for item in inventory["stacks"]],
+                )
+                if args.report_path is not None:
+                    print_details("Report saved", {"path": args.report_path})
+            else:
+                print(f"base-model capabilities: {inventory['capability_count']}")
+                for item in inventory["capabilities"]:
+                    print(f"capability {item['id']} [{item['family']}]")
+                print(f"base-model stacks: {inventory['stack_count']}")
+                for item in inventory["stacks"]:
+                    print(f"stack {item['id']} [{item['family']}] -> {', '.join(item['capability_ids'])}")
+                if args.report_path is not None:
+                    print("report:", args.report_path)
         return 0
 
     plan = base_model_materialization_plan(args.capability)
@@ -134,20 +172,39 @@ def _handle_models_assets(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(plan)
     else:
-        print("base-model assets:", "ok" if plan["ok"] else "missing")
-        if plan["stack_ids"]:
-            print("stacks:", ", ".join(plan["stack_ids"]))
-        print("capabilities:", ", ".join(plan["capability_ids"]))
-        if plan["pip_install_packages"]:
-            print("install:", "python -m pip install " + " ".join(plan["pip_install_packages"]))
-        for command in plan["download_commands"]:
-            print("download:", command)
-        for command in plan["export_commands"]:
-            print("env:", command)
-        for action in plan["manual_actions"]:
-            print("manual:", action)
-        if args.report_path is not None:
-            print("report:", args.report_path)
+        if terminal_enabled():
+            print_details(
+                "Base-model assets",
+                {
+                    "ok": plan["ok"],
+                    "stacks": plan["stack_ids"],
+                    "capabilities": plan["capability_ids"],
+                    "report": args.report_path,
+                },
+            )
+            steps = []
+            if plan["pip_install_packages"]:
+                steps.append(("Install", "python -m pip install " + " ".join(plan["pip_install_packages"])))
+            steps.extend(("Download", command) for command in plan["download_commands"])
+            steps.extend(("Environment", command) for command in plan["export_commands"])
+            steps.extend(("Manual", action) for action in plan["manual_actions"])
+            if steps:
+                print_table("Setup steps", ("Action", "Command / instructions"), steps)
+        else:
+            print("base-model assets:", "ok" if plan["ok"] else "missing")
+            if plan["stack_ids"]:
+                print("stacks:", ", ".join(plan["stack_ids"]))
+            print("capabilities:", ", ".join(plan["capability_ids"]))
+            if plan["pip_install_packages"]:
+                print("install:", "python -m pip install " + " ".join(plan["pip_install_packages"]))
+            for command in plan["download_commands"]:
+                print("download:", command)
+            for command in plan["export_commands"]:
+                print("env:", command)
+            for action in plan["manual_actions"]:
+                print("manual:", action)
+            if args.report_path is not None:
+                print("report:", args.report_path)
     if not args.execute_downloads:
         return 0
     execution_failed = any(int(item.get("returncode", 1)) != 0 for item in executed)
@@ -319,7 +376,7 @@ def _handle_models_visualize(args: argparse.Namespace) -> int:
 def register_model_subparsers(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     from worldfoundry.base_models.capabilities import BASE_MODEL_CAPABILITIES, BASE_MODEL_STACKS
 
-    models_parser = subparsers.add_parser("models", help="Inspect registered model runners")
+    models_parser = subparsers.add_parser("models", help="Inspect model runners, environments, and assets")
     models_subparsers = models_parser.add_subparsers(dest="models_command", required=True)
 
     models_list_parser = models_subparsers.add_parser("list", help="List available model types")

@@ -1,0 +1,38 @@
+model_id: giga-world-0
+env_name: worldfoundry-unified-cu121
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu121
+driver_status: compatible
+conda_packages:
+- python
+- pip
+- ffmpeg
+pip_packages:
+- torch==2.5.1
+- torchvision==0.20.1
+- diffusers>=0.39.0
+- transformers>=4.57.0,<5
+- accelerate
+- peft
+- safetensors
+- sentencepiece
+- einops
+- Pillow
+- giga-models @ git+https://github.com/open-gigaai/giga-models.git@b0e05c7353a2d5d06fa8a92d2103c0fdd52e2e4d
+validation_imports:
+- torch
+- diffusers
+- transformers
+- accelerate
+- peft
+- safetensors
+- sentencepiece
+- einops
+- PIL
+- worldfoundry.synthesis.visual_generation.giga_world_0.giga_models_compat
+notes:
+- The selective compatibility importer avoids giga-models top-level optional vision dependencies such as calflops.
+- Convert the legacy T5-11B pickle once with scripts/inference/convert_t5_11b_encoder_to_safetensors.py in an isolated Torch >=2.6 environment; normal inference only reads safetensors.
+- Torch SDPA is the unified-environment default for low-resolution checkpoint smoke; it is not official NATTEN quality parity.
+- The official NATTEN route requires a wheel exposing stride-aware neighborhood_attention_generic; NATTEN 0.17.5 for Torch 2.5 does not expose that API.

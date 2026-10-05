@@ -4,15 +4,17 @@ checkpoint_refs:
 - repo_id: chenhao01/LaST-R1
 id: last-r1
 integration:
-  status: runtime_ported
+  status: planned
   notes:
-  - WorldFoundry routes LaST-R1 through the in-tree official-policy runtime adapter.
-  - Checkpoint absence is reported by runtime missing_assets and is not a catalog blocker.
+  - The local libero_10 RL checkpoint is staged, but the public policy runner is not ready.
+  - Official inference uses a custom latent/action-token rollout; the generic Hugging Face action adapter cannot execute it.
 license: mit
 name: LaST-R1
 output_artifacts:
 - action_trace
 official_sources:
+  paper: https://arxiv.org/abs/2604.28192
+  project_page: https://siriyep.github.io/last-r1/
   github:
     head_sha: ba4e939632427e066f734bf9f7abfa11cc4911f6
     url: https://github.com/CHEN-H01/LaST-R1
@@ -22,7 +24,6 @@ official_sources:
     type: model
 provider: official_repo
 runtime_profile: runtime-profile:last-r1
-pipeline_binding: last-r1
 tasks:
 - vla
 - reinforcement_learning
@@ -31,3 +32,17 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records. Runner or pipeline targets are present
   only after a complete in-tree WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: LaST-R1 is an MIT-licensed VLA policy trained with reinforcement learning. The libero_10 RL checkpoint is staged locally, but WorldFoundry does not yet provide the model-specific rollout adapter needed for inference.
+  overview_zh: LaST-R1 是 MIT 许可、以强化学习训练的 VLA 策略。libero_10 RL 权重已在本地就位，但 WorldFoundry 尚缺少推理所需的模型专用 rollout 适配器。
+  architecture: Task tags record a VLA plus reinforcement-learning design. Architecture internals beyond the official repository pointer (CHEN-H01/LaST-R1, pinned head ba4e9396) are not recorded in this repository.
+  architecture_zh: 任务标签记录其为 VLA 加强化学习设计。官方仓库指针（CHEN-H01/LaST-R1，锁定 head ba4e9396）之外的架构内部细节仓库未记录。
+  usage_notes: The local libero_10 checkpoint has both weight shards; libero_goal is incomplete. Inference remains unavailable until the official latent/action-token rollout is adapted and validated.
+  usage_notes_zh: 本地 libero_10 checkpoint 两片权重齐全；libero_goal 尚未下载完整。官方 latent/action-token rollout 完成适配和验证前不可推理。
+  limitations:
+  - No LaST-R1 policy inference or GPU validation is recorded in this repository.
+  limitations_zh:
+  - 仓库未记录 LaST-R1 策略推理或 GPU 验证。

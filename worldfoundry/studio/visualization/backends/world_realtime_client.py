@@ -1,6 +1,8 @@
 """Code-native browser client for the realtime world WebRTC surface."""
 
 WORLD_REALTIME_CLIENT_JS = r"""
+const studioAuthToken = new URLSearchParams(window.location.search).get("token") || "";
+
 const state = {
   modelLoaded: false,
   mode: "image",
@@ -80,6 +82,20 @@ const keyAliases = new Map([
   ["arrowright", "l"],
 ]);
 const SOCKET_SETUP_TIMEOUT_MS = 120000;
+
+function authenticatedUrl(raw) {
+  const value = String(raw || "");
+  if (!studioAuthToken || !value) return value;
+  try {
+    const url = new URL(value, window.location.href);
+    if (url.origin === window.location.origin && ["http:", "https:"].includes(url.protocol)) {
+      url.searchParams.set("token", studioAuthToken);
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
 
 const el = {
   root: document.body,
@@ -662,8 +678,12 @@ async function toggleImmersive(force) {
 }
 
 async function api(path, options = {}) {
-  const headers = options.body instanceof FormData ? {} : { "Content-Type": "application/json" };
-  const response = await fetch(path, { headers, ...options });
+  const headers = new Headers(options.headers || {});
+  if (!(options.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (studioAuthToken) headers.set("Authorization", `Bearer ${studioAuthToken}`);
+  const response = await fetch(authenticatedUrl(path), { ...options, headers });
   if (!response.ok) {
     let message = await response.text();
     try {
@@ -707,7 +727,7 @@ function showImage(src) {
   el.video.load();
   el.video.classList.remove("is-visible");
   el.canvas.classList.remove("is-visible");
-  el.image.src = src || emptyFrame;
+  el.image.src = authenticatedUrl(src) || emptyFrame;
   el.image.classList.add("is-visible");
 }
 
@@ -835,7 +855,7 @@ function showLocalVideo(src) {
   el.image.classList.remove("is-visible");
   el.canvas.classList.remove("is-visible");
   el.video.srcObject = null;
-  el.video.src = src;
+  el.video.src = authenticatedUrl(src);
   el.video.loop = true;
   el.video.muted = true;
   el.video.classList.add("is-visible");
@@ -1273,8 +1293,9 @@ async function connectSocket(session) {
   state.transport = "WS";
   state.connecting = true;
   setStatus("CONNECTING VIA TUNNEL", true);
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(`${protocol}//${window.location.host}/api/realtime/ws`);
+  const socketUrl = new URL(authenticatedUrl("/api/realtime/ws"), window.location.href);
+  socketUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const socket = new WebSocket(socketUrl.toString());
   socket.binaryType = "blob";
   state.socket = socket;
   state.channel = socket;
@@ -1661,10 +1682,11 @@ async function resetSession() {
 function renderExamples(examples) {
   el.thumbTray.innerHTML = "";
   for (const item of examples) {
+    const itemUrl = authenticatedUrl(item.url);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "thumb-card";
-    button.innerHTML = `<img src="${item.url}" alt=""><span>${item.label}</span>`;
+    button.innerHTML = `<img src="${itemUrl}" alt=""><span>${item.label}</span>`;
     button.addEventListener("click", () => {
       if (state.connected || state.connecting) return;
       document.querySelectorAll(".thumb-card").forEach((node) => node.classList.remove("is-active"));
@@ -1672,9 +1694,9 @@ function renderExamples(examples) {
       state.seedPath = item.path;
       state.selectedFile = null;
       state.uploadedPath = "";
-      state.previewUrl = item.url;
+      state.previewUrl = itemUrl;
       setMode("image");
-      showImage(item.url);
+      showImage(itemUrl);
       setStatus("INPUT READY");
     });
     el.thumbTray.appendChild(button);

@@ -19,8 +19,8 @@ integration:
   notes:
   - Matrix-Game 2 already uses an in-tree runtime and no external repo_root dependency
     was found.
-  - The WorldFoundry runner uses the official inference_universal defaults and
-    in-tree Bench_actions_* condition generator.
+  - The WorldFoundry runner supports official benchmark actions via the in-tree
+    Bench_actions_* condition generator; GPU comparison covered 15 latent frames.
   status: integrated
 license: mit
 modalities:
@@ -31,6 +31,8 @@ modalities:
 name: Matrix-Game 2.0
 pipeline_binding: matrix-game-2
 official_sources:
+  paper: https://arxiv.org/abs/2508.13009
+  project_page: https://matrix-game-v2.github.io/
   github:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
@@ -43,9 +45,6 @@ official_sources:
 demo_parity:
   checkpoint_repo_id: Skywork/Matrix-Game-2.0
   checkpoint_snapshot: f1729d99a80e0f07993a77d7dad4a3190e23c2c8
-  demo_command:
-  - python
-  - scripts/model_zoo/run_matrix_game2_official_demo.py
   expected_artifacts:
   - min_size_bytes: 100000
     path: matrix_game2_official_universal_seed42_15f.mp4
@@ -57,9 +56,9 @@ demo_parity:
       min_width: 600
   - path: matrix_game2_official_universal_seed42_15f.json
   notes: >-
-    The official universal-mode command is wired through the formal model-zoo
-    helper. The Studio/API route uses the full official default, num_output_frames=150,
-    seed=42, and official Bench_actions_* trajectories.
+    A local short-run comparison used official universal mode with 15 latent
+    frames, seed=42, and Bench_actions_* trajectories. The Studio/API route uses
+    the official 150-frame default; full-length parity remains unverified.
   official_repo_dir: tmp/model_zoo/repos/github.com_SkyworkAI_Matrix-Game/Matrix-Game-2
   status: verified
 release_type: code_and_weights
@@ -67,9 +66,6 @@ runtime_profile: runtime-profile:matrix-game-2-universal-ref-image-seed42-15f
 starred: true
 variants:
 - runner_parity:
-    demo_command:
-    - python
-    - scripts/model_zoo/run_matrix_game2_worldfoundry_runner_demo.py
     expected_artifacts:
     - min_size_bytes: 100000
       path: matrix_game2_worldfoundry_universal_seed42_15f.mp4
@@ -91,9 +87,6 @@ variants:
     repo_id: Skywork/Matrix-Game-2.0
     revision: f1729d99a80e0f07993a77d7dad4a3190e23c2c8
   demo_parity:
-    demo_command:
-    - python
-    - scripts/model_zoo/run_matrix_game2_official_demo.py
     expected_artifacts:
     - min_size_bytes: 100000
       path: matrix_game2_official_universal_seed42_15f.mp4
@@ -110,18 +103,19 @@ variants:
   notes:
   - 'Generation contract: mode=universal, official_bench_actions=true, num_output_frames=15,
     fps=12, seed=42.'
-  - 'Output contract: official and WorldFoundry runner demos emit matrix_game2_*_universal_seed42_15f.mp4
-    plus sidecar JSON under the caller output directory.'
-  - 'WorldScore/VBench validation status: runner_contract_ready_gpu_parity_pending. VBench
-    can probe the 15-frame mp4; WorldScore still requires its official static/dynamic
+  - 'The local short-run comparison produced matrix_game2_*_universal_seed42_15f.mp4
+    files plus sidecar JSON.'
+  - 'The 15-frame parameter counts latent frames: both GPU entrypoints produced
+    57 decoded RGB frames at 640x352/12fps. The repaired action tensors match
+    official source exactly and decoded video mean RGB absolute difference is
+    4.762; this is near visual parity, not bitwise equality.'
+  - 'WorldScore/VBench validation status: short GPU parity verified, benchmark
+    scoring pending. VBench can probe the 57-frame mp4; WorldScore still requires its official static/dynamic
     tree with image_data.json, frames, videos/output.mp4, and static camera_data.json.'
   provider: official_repo
   runtime_profile: matrix-game-2-universal-ref-image-seed42-15f
   task: action-conditioned-video
 runner_parity:
-  demo_command:
-  - python
-  - scripts/model_zoo/run_matrix_game2_worldfoundry_runner_demo.py
   expected_artifacts:
   - min_size_bytes: 100000
     path: matrix_game2_worldfoundry_universal_seed42_15f.mp4
@@ -133,10 +127,11 @@ runner_parity:
       min_width: 600
   - path: matrix_game2_worldfoundry_universal_seed42_15f.json
   notes: >-
-    The current MatrixGame2Pipeline supports the official default settings:
-    num_frames=150, fps=12, seed=42, size=[352,640], official_bench_actions=true,
-    and the Matrix-Game-2.0 checkpoint. Per-run artifact checks are tracked outside
-    the catalog.
+    The MatrixGame2Pipeline supports official benchmark actions and the
+    Matrix-Game-2.0 checkpoint. GPU comparison used 15 latent frames, fps=12,
+    seed=42, size=[352,640], and official_bench_actions=true; full 150-latent-frame
+    rollout and benchmark scoring remain unverified. Per-run artifacts are tracked
+    outside the catalog.
   status: verified
 catalog_category: world_models
 catalog_scope: world-model/interactive starred models
@@ -148,3 +143,21 @@ catalog_policy:
   open_source_rule: Only mark open_source when an official GitHub repository or official
     Hugging Face model page was confirmed. Do not infer checkpoint availability from
     papers, demos, or third-party mirrors.
+docs:
+  publisher: Skywork AI (Kunlun Tech)
+  publisher_kind: company
+  publisher_zh: 昆仑万维（Skywork AI）
+  overview: 'Matrix-Game 2.0 is Skywork''s real-time-oriented interactive world model generation: an auto-regressive diffusion design that follows keyboard/mouse actions across game scenes. The in-tree runner was checked with a 15-latent-frame short run at 12 fps and 352x640 using official bench actions; full 150-frame parity remains unverified.'
+  overview_zh: Matrix-Game 2.0 是昆仑万维面向实时的交互式世界模型：自回归扩散设计，在游戏场景中跟随键鼠动作。树内 runner 已用官方 bench 动作在 12 fps、352x640 下完成 15 个 latent 帧的短流程验证；完整 150 帧一致性仍未验证。
+  architecture: The in-tree runtime has no external repo_root dependency and supports official benchmark actions through the in-tree Bench_actions_* condition generator. The official 150-latent-frame default is supported, but the recorded comparison used 15 latent frames. A universal-action-validation variant is recorded for benchmarking action fidelity.
+  architecture_zh: 树内运行时无外部 repo_root 依赖，并通过树内 Bench_actions_* 条件生成器支持官方 bench 动作。运行时支持官方默认的 150 个 latent 帧，但已记录的对照只运行了 15 个 latent 帧。另记录一个 universal-action-validation variant 用于动作保真度基准测试。
+  usage_notes: The official default is 150 latent frames at 12 fps, seed=42, 352x640, with bench actions. The recorded parity check used 15 latent frames; per-run artifacts are tracked outside the catalog.
+  usage_notes_zh: 官方默认设置为 150 个 latent 帧、12 fps、seed=42、352x640，并使用 bench 动作。已记录的一致性检查只运行了 15 个 latent 帧；每次运行的产物在 catalog 外跟踪。
+  limitations:
+  - 352x640 default resolution targets real-time interaction, not cinematic quality.
+  limitations_zh:
+  - 默认 352x640 分辨率面向实时交互，而非影视级画质。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Action-conditioned game-world rollout quality.
+    reason_zh: 动作条件游戏世界滚动生成质量。

@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from worldfoundry.core.geometry import (
+from worldfoundry.core.geometry.transforms import (
     quaternion_xyzw_to_rotation_matrix,
     rotation_matrix_to_quaternion_xyzw,
 )

@@ -16,44 +16,15 @@ from einops import rearrange
 from PIL import Image
 from transformers import AutoTokenizer
 
-from worldfoundry.base_models.diffusion_model.video.wan.pipeline_helpers import (
+from worldfoundry.synthesis.visual_generation.shared.wan_diffusers import (
     WanDiffusersInferenceMixin,
     resize_mask,
     retrieve_timesteps,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.variants.dreamx_world import (
-    AutoencoderKLWan3_8,
-    Wan2_2Transformer3DModel,
-    WanT5EncoderModel,
-)
-
-def _embedding_shape(value: Any) -> tuple[int, ...]:
-    shape = getattr(value, "shape", None)
-    if shape is None:
-        raise TypeError(f"Prompt embedding values must expose a shape, got {type(value)!r}.")
-    return tuple(int(dimension) for dimension in shape)
-
-
-def validate_prompt_embedding_pair(positive: Any, negative: Any) -> None:
-    positive_batch = isinstance(positive, (list, tuple))
-    negative_batch = isinstance(negative, (list, tuple))
-    if positive_batch != negative_batch:
-        raise ValueError("Positive and negative prompt embeddings must use the same container.")
-    if not positive_batch:
-        if _embedding_shape(positive) != _embedding_shape(negative):
-            raise ValueError("Tensor prompt embeddings must have equal shapes.")
-        return
-    if len(positive) != len(negative):
-        raise ValueError("Positive and negative prompt embedding batches must be equal.")
-    for positive_item, negative_item in zip(positive, negative):
-        positive_shape = _embedding_shape(positive_item)
-        negative_shape = _embedding_shape(negative_item)
-        if (
-            len(positive_shape) != len(negative_shape)
-            or not positive_shape
-            or positive_shape[-1] != negative_shape[-1]
-        ):
-            raise ValueError("Prompt embedding rank and hidden width must match.")
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.dreamx_world.vae import AutoencoderKLWan3_8
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.dreamx_world.text_encoder import WanT5EncoderModel
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.dreamx_world.transformer import Wan2_2Transformer3DModel
+from ..utils.prompt_embeddings import validate_prompt_embedding_pair
 
 
 EXAMPLE_DOC_STRING = """

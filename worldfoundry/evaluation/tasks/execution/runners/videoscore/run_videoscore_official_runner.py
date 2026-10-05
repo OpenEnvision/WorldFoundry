@@ -9,6 +9,10 @@ an overall average, along with detailed metadata about the run and artifacts.
 """
 from __future__ import annotations
 
+
+
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+
 import argparse
 import ast
 import importlib
@@ -19,21 +23,26 @@ import sys
 import time
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-
-from worldfoundry.evaluation.utils import REPO_ROOT
-
+from worldfoundry.core.execution.process import run_logged_subprocess
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_data import (
     build_generated_video_manifest,
     build_local_dataset_manifest,
     discover_metadata_records,
     expected_stems_from_records,
 )
-# Import utility functions from worldfoundry.
-from worldfoundry.evaluation.utils import worldfoundry_hfd_dataset_root
-from worldfoundry.evaluation.tasks.execution.framework.io import env_path, load_json, scalar_number, utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.io import (
+    env_path,
+    load_json,
+    scalar_number,
+    utc_now_iso,
+    write_json,
+    write_jsonl,
+)
 
+# Import utility functions from worldfoundry.
+from worldfoundry.evaluation.utils import REPO_ROOT, worldfoundry_hfd_dataset_root
 
 # Define various constant paths and IDs used throughout the script.
 IN_TREE_VIDEOSCORE_ROOT = (
@@ -49,7 +58,6 @@ IN_TREE_VIDEOSCORE_ROOT = (
 )
 DEFAULT_VIDEOSCORE_ROOT = env_path("WORLDFOUNDRY_VIDEOSCORE_ROOT", IN_TREE_VIDEOSCORE_ROOT)
 LOCAL_VIDEOSCORE_BENCH_ROOT = worldfoundry_hfd_dataset_root() / "TIGER-Lab__VideoScore-Bench"
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 HF_DATASET_ID = "TIGER-Lab/VideoFeedback"
 HF_DATASET_CONFIG = "real"
 HF_DATASET_SPLIT = "train"
@@ -450,13 +458,22 @@ def normalize_videoscore_results(
     # Determine various status flags for the scorecard.
     normalization_ok = returncode == 0 and available_count > 0
     normalizer_only = command is None
-    official_verified = command is not None and normalization_ok
+    # eval_videoscore.py produces per-video aspect scores. The official
+    # VideoScore-Bench SPCC/pairwise protocols are separate evaluation steps.
+    component_verified = command is not None and normalization_ok
 
     # Assemble the final scorecard dictionary.
+    run_status = (
+        "official_component_verified"
+        if component_verified
+        else "official_results_imported"
+        if normalizer_only and normalization_ok
+        else "failed"
+    )
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "run": {
-            "status": "official_verified" if returncode == 0 and available_count else "failed",
+            "status": run_status,
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_videoscore_official_runner",
             "command": command,
@@ -504,7 +521,7 @@ def normalize_videoscore_results(
         },
         "evaluation": {
             "available": normalization_ok,
-            "kind": "official_videoscore",
+            "kind": "official_videoscore_component" if component_verified else "videoscore_results_imported",
             "upstream_results": str(upstream_results_path),
             "dataset_root": None if dataset_root is None else str(dataset_root.resolve()),
             "frames_dir": None if frames_dir is None else str(frames_dir.resolve()),
@@ -525,10 +542,13 @@ def normalize_videoscore_results(
         "validation": {
             "normalizer_only": normalizer_only,
             "official_runtime_executed": command is not None,
+            "official_component_verified": component_verified,
+            "benchmark_protocol_executed": False,
             "official_results_imported": normalizer_only and normalization_ok,
         },
-        "official_benchmark_verified": official_verified,
-        "integration_evidence": official_verified,
+        "official_component_verified": component_verified,
+        "official_benchmark_verified": False,
+        "integration_evidence": component_verified,
         "normalization_ok": normalization_ok,
         "official_results_imported": normalizer_only and normalization_ok,
     }
@@ -793,30 +813,41 @@ def load_official_videoscore_module(videoscore_root: Path) -> Any:
     eval_path = benchmark_dir / "eval_videoscore.py"
     if not eval_path.is_file():
         raise FileNotFoundError(f"VideoScore eval_videoscore.py not found under: {videoscore_root}")
-    # Temporarily add benchmark_dir and videoscore_root to sys.path for import.
-    inserted = [str(benchmark_dir), str(videoscore_root)]
+    # Prepend benchmark_dir and videoscore_root only for the duration of the
+    # import so the vendored top-level module names cannot shadow imports made
+    # later in this process (workspace/in-tree callers share the interpreter).
+    inserted = [item for item in (str(benchmark_dir), str(videoscore_root)) if item not in sys.path]
     for item in reversed(inserted):
-        if item not in sys.path:
-            sys.path.insert(0, item)
-    # Import the module.
-    return importlib.import_module("eval_videoscore")
+        sys.path.insert(0, item)
+    try:
+        return importlib.import_module("eval_videoscore")
+    finally:
+        for item in inserted:
+            try:
+                sys.path.remove(item)
+            except ValueError:
+                pass
 
 
-def patch_transformers_dynamic_cache_api() -> None:
+def patch_transformers_dynamic_cache_api() -> Callable[[], None] | None:
     """
     Patches `transformers.cache_utils.DynamicCache` for compatibility.
 
     This addresses a potential API change in the Hugging Face Transformers library
     where `get_usable_length` might be missing but `get_seq_length` exists.
+
+    Returns an undo callable when a patch was applied (so in-process callers can
+    restore the class after the bounded run instead of leaking the monkeypatch
+    to unrelated runners sharing the interpreter), or None when nothing changed.
     """
     try:
         from transformers.cache_utils import DynamicCache
     except ImportError:  # pragma: no cover - runtime dependency
-        return
+        return None
 
     # Check if the patch is needed (if get_usable_length is missing but get_seq_length exists).
     if hasattr(DynamicCache, "get_usable_length") or not hasattr(DynamicCache, "get_seq_length"):
-        return
+        return None
 
     # Define the compatibility method.
     def get_usable_length(self: Any, _new_seq_length: int | None = None, layer_idx: int = 0) -> int:
@@ -824,6 +855,12 @@ def patch_transformers_dynamic_cache_api() -> None:
 
     # Apply the patch.
     DynamicCache.get_usable_length = get_usable_length  # type: ignore[attr-defined]
+
+    def undo_patch() -> None:
+        if getattr(DynamicCache, "get_usable_length", None) is get_usable_length:
+            del DynamicCache.get_usable_length  # type: ignore[attr-defined]
+
+    return undo_patch
 
 
 def run_bounded_videoscore(args: argparse.Namespace, result_file: Path) -> tuple[list[dict[str, Any]], Path]:
@@ -854,42 +891,48 @@ def run_bounded_videoscore(args: argparse.Namespace, result_file: Path) -> tuple
     # Load bounded data rows and prepare frames root.
     split_root, rows = load_bounded_rows(args.bench_data_root, args.bench_name, args.bounded_sample_count)
     frames_root = args.output_dir / "bounded_frames"
-    patch_transformers_dynamic_cache_api() # Apply compatibility patch for transformers library.
-    official = load_official_videoscore_module(args.videoscore_root)
+    # Apply compatibility patch for transformers library; undone after the run
+    # so the class-level monkeypatch does not leak to other in-process runners.
+    undo_transformers_patch = patch_transformers_dynamic_cache_api()
+    try:
+        official = load_official_videoscore_module(args.videoscore_root)
 
-    # Initialize model and processor.
-    processor = official.AutoProcessor.from_pretrained(args.model_repo_name, torch_dtype=official.torch.bfloat16)
-    model = official.Idefics2ForSequenceClassification.from_pretrained(
-        args.model_repo_name,
-        torch_dtype=official.torch.bfloat16,
-    ).eval()
-    device = official.torch.device("cuda" if official.torch.cuda.is_available() else "cpu")
-    model.to(device)
+        # Initialize model and processor.
+        processor = official.AutoProcessor.from_pretrained(args.model_repo_name, torch_dtype=official.torch.bfloat16)
+        model = official.Idefics2ForSequenceClassification.from_pretrained(
+            args.model_repo_name,
+            torch_dtype=official.torch.bfloat16,
+        ).eval()
+        device = official.torch.device("cuda" if official.torch.cuda.is_available() else "cpu")
+        model.to(device)
 
-    result_rows: list[dict[str, Any]] = []
-    # Process each row, materialize frames, run model inference, and store results.
-    for row in rows:
-        sample_id = str(row["id"])
-        frame_paths = materialize_bounded_frames(
-            split_root=split_root,
-            bench_name=args.bench_name,
-            row=row,
-            frames_root=frames_root,
-        )
-        prompt = video_prompt_from_row(row)
-        # Call the official model output function directly.
-        scores = official._model_output(model, processor, prompt, frame_paths)
-        result_rows.append(
-            {
-                "id": sample_id,
-                "text": prompt,
-                "ref": str(reference_scores_from_row(row, args.bench_name)),
-                "ans": str(scores),
-            }
-        )
+        result_rows: list[dict[str, Any]] = []
+        # Process each row, materialize frames, run model inference, and store results.
+        for row in rows:
+            sample_id = str(row["id"])
+            frame_paths = materialize_bounded_frames(
+                split_root=split_root,
+                bench_name=args.bench_name,
+                row=row,
+                frames_root=frames_root,
+            )
+            prompt = video_prompt_from_row(row)
+            # Call the official model output function directly.
+            scores = official._model_output(model, processor, prompt, frame_paths)
+            result_rows.append(
+                {
+                    "id": sample_id,
+                    "text": prompt,
+                    "ref": str(reference_scores_from_row(row, args.bench_name)),
+                    "ans": str(scores),
+                }
+            )
 
-    write_json(result_file, result_rows)
-    return result_rows, frames_root / f"frames_{args.bench_name}"
+        write_json(result_file, result_rows)
+        return result_rows, frames_root / f"frames_{args.bench_name}"
+    finally:
+        if undo_transformers_patch is not None:
+            undo_transformers_patch()
 
 
 def run_official_videoscore(args: argparse.Namespace) -> dict[str, Any]:
@@ -984,18 +1027,16 @@ def run_official_videoscore(args: argparse.Namespace) -> dict[str, Any]:
     # Modify PYTHONPATH to include VideoScore's benchmark and root directories.
     env["PYTHONPATH"] = f"{args.videoscore_root / 'benchmark'}{os.pathsep}{args.videoscore_root}{os.pathsep}{env.get('PYTHONPATH', '')}".rstrip(os.pathsep)
     start = time.monotonic()
-    completed = subprocess.run(
+    completed = run_logged_subprocess(
         command,
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
         cwd=args.videoscore_root / "benchmark", # Run from the benchmark directory as expected by VideoScore.
         env=env,
-        capture_output=True,
-        text=True,
         timeout=args.timeout,
-        check=False, # Do not raise exception for non-zero exit codes immediately.
+        start_new_session=False,
     )
     duration_seconds = time.monotonic() - start
-    stdout_path.write_text(completed.stdout, encoding="utf-8")
-    stderr_path.write_text(completed.stderr, encoding="utf-8")
 
     # Load raw results from the file generated by the subprocess, or create an error result if file is missing.
     if result_file.is_file():
@@ -1078,7 +1119,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Extract key results from the generated scorecard for summary output.
     result = {
-        "ok": scorecard["official_benchmark_verified"] and scorecard["integration_evidence"],
+        "ok": scorecard["normalization_ok"],
         "benchmark_id": args.benchmark_id,
         "output_dir": str(args.output_dir),
         "scorecard": scorecard["artifacts"]["scorecard"],

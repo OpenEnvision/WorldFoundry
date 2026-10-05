@@ -1,4 +1,3 @@
-import json
 import os
 
 import numpy as np
@@ -31,88 +30,6 @@ from opensora.models.layers.blocks import (
 )
 from opensora.registry import MODELS
 from opensora.utils.ckpt_utils import load_checkpoint
-
-
-def _is_hf_snapshot_dir(path):
-    if not path or not os.path.isdir(path):
-        return False
-    if not os.path.isfile(os.path.join(path, "config.json")):
-        return False
-    weight_names = (
-        "model.safetensors",
-        "model.safetensors.index.json",
-        "pytorch_model.bin",
-        "pytorch_model.bin.index.json",
-    )
-    return any(os.path.isfile(os.path.join(path, name)) for name in weight_names)
-
-
-def _load_local_safetensors_snapshot(model, snapshot_dir):
-    """Load an Open-Sora snapshot without Transformers loader side effects.
-
-    The published STDiT-v3 snapshot was produced with Transformers 4.36.  The
-    Transformers 5 ``from_pretrained`` lifecycle is not compatible with this
-    custom ``PreTrainedModel`` and can mutate parameters after they have been
-    streamed from the checkpoint.  A local snapshot already contains the exact
-    architecture config and state dict, so loading it directly is both stricter
-    and independent of the installed Transformers release.
-    """
-
-    from safetensors.torch import load_model as load_safetensors_model
-
-    weight_path = os.path.join(snapshot_dir, "model.safetensors")
-    if not os.path.isfile(weight_path):
-        raise FileNotFoundError(f"Open-Sora STDiT safetensors checkpoint not found: {weight_path}")
-    missing, unexpected = load_safetensors_model(model, weight_path, strict=False, device="cpu")
-    if missing or unexpected:
-        raise RuntimeError(
-            "Open-Sora STDiT checkpoint does not exactly match the in-tree model: "
-            f"missing={missing}, unexpected={unexpected}"
-        )
-    return model
-
-
-def _load_local_stdit3_snapshot(snapshot_dir, **overrides):
-    config_path = os.path.join(snapshot_dir, "config.json")
-    with open(config_path, encoding="utf-8") as handle:
-        config_values = json.load(handle)
-    config_values.update(overrides)
-    # The upstream Transformers 4.36 loader constructs checkpoint-backed
-    # models under a no-init context.  Our direct loader must likewise avoid
-    # advancing the process RNG while allocating a model whose every tensor is
-    # immediately replaced by the snapshot.  Otherwise the same user seed
-    # produces a different diffusion noise tensor depending on the installed
-    # Transformers version and loading path.
-    with torch.random.fork_rng(devices=[]):
-        model = STDiT3(STDiT3Config(**config_values))
-    return _load_local_safetensors_snapshot(model, snapshot_dir)
-
-
-def _restore_position_embedding_inv_freq(model):
-    """Restore the non-persistent 2D position-embedding frequency buffer.
-
-    Transformers 5 replaces every non-persistent buffer with ``empty_like``
-    while finalizing ``from_pretrained``.  ``PositionEmbedding2D`` is not a
-    Transformers-native rotary module, so the generic initializer does not
-    rebuild its buffer afterwards.  Keep the buffer non-persistent for
-    compatibility with the published checkpoint and explicitly reconstruct
-    it after the Transformers loading lifecycle instead.
-    """
-
-    position_embedding = model.pos_embed
-    half_dim = position_embedding.dim // 2
-    inv_freq = 1.0 / (10000 ** (torch.arange(0, half_dim, 2).float() / half_dim))
-
-    current = position_embedding.inv_freq
-    device = current.device
-    if device.type == "meta":
-        device = next(model.parameters()).device
-    if device.type == "meta":
-        device = torch.device("cpu")
-
-    position_embedding.register_buffer("inv_freq", inv_freq.to(device=device), persistent=False)
-    position_embedding._get_cached_emb.cache_clear()
-    return model
 
 
 class STDiT3Block(nn.Module):
@@ -332,16 +249,8 @@ class STDiT3(PreTrainedModel):
             token_num=config.model_max_length,
         )
 
-        # Spatial/temporal stochastic-depth rates are configuration values, not
-        # model tensors.  Build them in Python so Transformers' low-memory
-        # ``from_pretrained`` path can instantiate this module under a meta
-        # device context (where Tensor.item() is intentionally unavailable).
-        if config.depth <= 1:
-            drop_path = [float(self.drop_path)] * config.depth
-        else:
-            drop_path = [float(self.drop_path) * i / (config.depth - 1) for i in range(config.depth)]
-
         # spatial blocks
+        drop_path = [x.item() for x in torch.linspace(0, self.drop_path, config.depth)]
         self.spatial_blocks = nn.ModuleList(
             [
                 STDiT3Block(
@@ -359,6 +268,7 @@ class STDiT3(PreTrainedModel):
         )
 
         # temporal blocks
+        drop_path = [x.item() for x in torch.linspace(0, self.drop_path, config.depth)]
         self.temporal_blocks = nn.ModuleList(
             [
                 STDiT3Block(
@@ -381,12 +291,7 @@ class STDiT3(PreTrainedModel):
         # final layer
         self.final_layer = T2IFinalLayer(config.hidden_size, np.prod(self.patch_size), self.out_channels)
 
-        # Keep Open-Sora's fresh-model initialization separate from
-        # ``PreTrainedModel.initialize_weights``.  Transformers 5 calls the
-        # latter after loading a checkpoint to initialize only missing keys;
-        # overriding it here reinitialized every loaded STDiT tensor and
-        # produced mosaic/noise videos despite a clean 973-key load.
-        self._initialize_opensora_weights()
+        self.initialize_weights()
         if config.only_train_temporal:
             for param in self.parameters():
                 param.requires_grad = False
@@ -398,14 +303,7 @@ class STDiT3(PreTrainedModel):
             for param in self.y_embedder.parameters():
                 param.requires_grad = False
 
-        # This model uses its own Open-Sora initializer instead of
-        # PreTrainedModel.post_init().  Transformers 5.x still requires the
-        # expanded tied-weight mapping during checkpoint finalization; create
-        # that metadata without invoking the generic initializer a second time.
-        if not hasattr(self, "all_tied_weights_keys"):
-            self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(all_submodels=False)
-
-    def _initialize_opensora_weights(self):
+    def initialize_weights(self):
         # Initialize transformer layers:
         def _basic_init(module):
             if isinstance(module, nn.Linear):
@@ -549,11 +447,8 @@ class STDiT3(PreTrainedModel):
 
 @MODELS.register_module("STDiT3-XL/2")
 def STDiT3_XL_2(from_pretrained=None, **kwargs):
-    if from_pretrained is not None and _is_hf_snapshot_dir(from_pretrained):
-        model = _load_local_stdit3_snapshot(from_pretrained, **kwargs)
-    elif from_pretrained is not None and not os.path.isdir(from_pretrained):
+    if from_pretrained is not None and not os.path.isdir(from_pretrained):
         model = STDiT3.from_pretrained(from_pretrained, **kwargs)
-        model = _restore_position_embedding_inv_freq(model)
     else:
         config = STDiT3Config(depth=28, hidden_size=1152, patch_size=(1, 2, 2), num_heads=16, **kwargs)
         model = STDiT3(config)
@@ -565,11 +460,8 @@ def STDiT3_XL_2(from_pretrained=None, **kwargs):
 @MODELS.register_module("STDiT3-3B/2")
 def STDiT3_3B_2(from_pretrained=None, **kwargs):
     # check if from_pretrained is a path
-    if from_pretrained is not None and _is_hf_snapshot_dir(from_pretrained):
-        model = _load_local_stdit3_snapshot(from_pretrained, **kwargs)
-    elif from_pretrained is not None and not os.path.isdir(from_pretrained):
+    if from_pretrained is not None and not os.path.isdir(from_pretrained):
         model = STDiT3.from_pretrained(from_pretrained, **kwargs)
-        model = _restore_position_embedding_inv_freq(model)
     else:
         config = STDiT3Config(depth=28, hidden_size=1872, patch_size=(1, 2, 2), num_heads=26, **kwargs)
         model = STDiT3(config)

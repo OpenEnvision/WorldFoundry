@@ -4,13 +4,13 @@ from typing import List, Optional
 import torch
 from torch import nn
 from worldfoundry.synthesis.visual_generation.echo_infinity.echo_infinity_runtime.utils.scheduler import SchedulerInterface, FlowMatchScheduler
-from worldfoundry.base_models.diffusion_model.video.wan.variants.echo_infinity.wan.modules.tokenizers import HuggingfaceTokenizer
-from worldfoundry.base_models.diffusion_model.video.wan.variants.echo_infinity.wan.modules.model import WanModel, RegisterTokens, GanAttentionBlock
-from worldfoundry.base_models.diffusion_model.video.wan.variants.echo_infinity.wan.modules.vae import _video_vae
-from worldfoundry.base_models.diffusion_model.video.wan.variants.echo_infinity.wan.modules.t5 import umt5_xxl
-from worldfoundry.base_models.diffusion_model.video.wan.variants.echo_infinity.wan.modules.causal_model import CausalWanModel
-from worldfoundry.base_models.diffusion_model.video.wan.variants.echo_infinity.wan.modules.causal_model_infinity import CausalWanModel as CausalWanModelInfinity
-from worldfoundry.base_models.diffusion_model.video.wan.variants.echo_infinity.wan.modules.causal_model_infinity_memory import CausalWanModelInfinityMemory
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import HuggingfaceTokenizer
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import umt5_xxl
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import _video_vae
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.echo_infinity.model import WanModel, RegisterTokens, GanAttentionBlock
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.echo_infinity.causal import CausalWanModel
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.echo_infinity.infinity import CausalWanModel as CausalWanModelInfinity
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.echo_infinity.memory import CausalWanModelInfinityMemory
 
 class WanTextEncoder(torch.nn.Module):
 

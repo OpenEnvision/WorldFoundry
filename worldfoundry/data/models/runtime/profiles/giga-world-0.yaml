@@ -8,27 +8,40 @@ groups:
 source_repos:
 - url: https://github.com/open-gigaai/giga-world-0
   revision: f3fbdab0d6853a125cd0b898137e30a63aadbe7d
+- url: https://github.com/open-gigaai/giga-models
+  revision: b0e05c7353a2d5d06fa8a92d2103c0fdd52e2e4d
 checkpoints:
 - repo_id: open-gigaai/GigaWorld-0-Video-Pretrain-2b
   role: giga_world_0_pretrain_checkpoint
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/open-gigaai--GigaWorld-0-Video-Pretrain-2b
 - repo_id: open-gigaai/GigaWorld-0-Video-GR1-2b
   role: giga_world_0_gr1_checkpoint
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/open-gigaai--GigaWorld-0-Video-GR1-2b/transformer
+- repo_id: google-t5/t5-11b
+  role: t5_11b_encoder_safetensors
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/google-t5--t5-11b-encoder
+- repo_id: Wan-AI/Wan2.1-T2V-1.3B-Diffusers
+  role: wan_diffusers_vae
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Wan-AI--Wan2.1-T2V-1.3B-Diffusers/vae
 input_schema:
   prompt: true
   image: true
   video: false
-  actions:
-  - robot_action
-  - world_action
-artifact_kind: generated_world
+  actions: []
+artifact_kind: generated_video
 artifact_filename: giga-world-0.mp4
 execution:
   backend_stage: in_tree_runtime_manifest
-  runtime_status: in_tree_runtime_manifest_checkpoint_env_pending
+  runtime_status: in_tree_runtime_manifest_checkpoint_required
   integration_status: runtime_ported
   pipeline_binding: giga-world-0
 integration:
   status: runtime_ported
 notes:
 - GigaWorld-0 source is vendored in-tree under synthesis/visual_generation/giga_world_0/giga_world_0_runtime.
-- The pipeline resolves the vendored inference entrypoint; execution remains checkpoint and task-asset gated.
+- The compatibility launcher selectively imports the GigaWorld-0 diffusion subset of giga-models so unrelated vision and VLA extras are not required.
+- The legacy official T5-11B PyTorch checkpoint must be converted locally with weights-only loading to the encoder-only safetensors directory above.
+- Single-image low-step generation validates checkpoint execution only; use official GR1 observations and full sampling settings for evaluation-quality parity.
+- The text encoder accepts up to 512 tokens by default, matching the official GigaWorld-0 encoder; smaller max_text_length values are an explicit runtime choice.
+- This GR1 video inference route conditions on the initial image and text prompt;
+  it does not consume a structured robot-action sequence.

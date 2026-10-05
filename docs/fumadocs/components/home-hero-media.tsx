@@ -1,25 +1,53 @@
 'use client';
 
-import { Pause, Play } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { withBasePath } from '@/lib/site-path';
+import { homeHeroSlides, type HomeHeroSlide } from '@/lib/home-hero-slides';
 
 type ConnectionLike = EventTarget & {
   effectiveType?: string;
   saveData?: boolean;
 };
 
-const motionPreferenceKey = 'worldfoundry-home-motion-paused';
+function slideAt(index: number, offset: number) {
+  const length = homeHeroSlides.length;
+  return homeHeroSlides[(index + offset + length) % length];
+}
 
-export function HomeHeroMedia() {
+export function HomeHeroMedia({ children }: { children?: ReactNode }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [motionAllowed, setMotionAllowed] = useState(false);
   const [videoAllowed, setVideoAllowed] = useState(false);
-  const [videoVisible, setVideoVisible] = useState(true);
   const [pageVisible, setPageVisible] = useState(true);
+  const [carouselVisible, setCarouselVisible] = useState(true);
   const [videoReady, setVideoReady] = useState(false);
-  const [paused, setPaused] = useState(false);
+  const mountedRef = useRef(false);
+
+  const isCarousel = homeHeroSlides.length > 1;
+  const visibleSlides = useMemo(() => {
+    if (!isCarousel) {
+      const slide = homeHeroSlides[0];
+      return [{ offset: 0 as const, slide, key: slide.id }];
+    }
+
+    return ([-1, 0, 1] as const).map((offset) => ({
+      offset,
+      slide: slideAt(activeIndex, offset),
+      key: `${slideAt(activeIndex, offset).id}-${offset}`,
+    }));
+  }, [activeIndex, isCarousel]);
+
+  const activeSlide = homeHeroSlides[activeIndex];
+  const showVideo = activeSlide.kind === 'video' && videoAllowed && motionAllowed;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -27,14 +55,8 @@ export function HomeHeroMedia() {
     const connection = (navigator as Navigator & { connection?: ConnectionLike }).connection;
     let videoTimer = 0;
 
-    try {
-      setPaused(window.localStorage.getItem(motionPreferenceKey) === 'true');
-    } catch {
-      // Storage can be unavailable in hardened browser contexts.
-    }
-
     const mountVideoAfterLoad = () => {
-      videoTimer = window.setTimeout(() => setVideoAllowed(true), 1200);
+      videoTimer = window.setTimeout(() => setVideoAllowed(true), 900);
     };
 
     const updatePreference = () => {
@@ -80,90 +102,148 @@ export function HomeHeroMedia() {
 
   useEffect(() => {
     const root = document.querySelector('.wf-home-shell');
-    root?.classList.toggle('wf-home-motion-paused', paused);
+    root?.classList.toggle('wf-home-motion-paused', !motionAllowed);
     return () => root?.classList.remove('wf-home-motion-paused');
-  }, [paused]);
+  }, [motionAllowed]);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || typeof IntersectionObserver === 'undefined') return;
+    const root = document.querySelector('.wf-home-hero-carousel-shell');
+    if (!root || typeof IntersectionObserver === 'undefined') return;
 
     const observer = new IntersectionObserver(
-      ([entry]) => setVideoVisible(entry?.isIntersecting ?? true),
-      { threshold: 0.08 },
+      ([entry]) => setCarouselVisible(entry?.isIntersecting ?? true),
+      { threshold: 0.12 },
     );
-    observer.observe(video);
+    observer.observe(root);
     return () => observer.disconnect();
-  }, [videoAllowed]);
+  }, []);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    if (paused || !motionAllowed || !pageVisible || !videoVisible) {
+    if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      setVideoReady(true);
+    }
+
+    if (!motionAllowed || !pageVisible || !carouselVisible || !showVideo) {
       video.pause();
       return;
     }
 
     void video.play().catch(() => {
-      // The poster remains visible if a browser blocks background autoplay.
+      // Poster remains visible if autoplay is blocked.
     });
-  }, [motionAllowed, pageVisible, paused, videoAllowed, videoVisible]);
+  }, [carouselVisible, motionAllowed, pageVisible, showVideo, activeIndex]);
 
-  function toggleMotion() {
-    setPaused((current) => {
-      const next = !current;
-      try {
-        window.localStorage.setItem(motionPreferenceKey, String(next));
-      } catch {
-        // The control still works for the current page when storage is unavailable.
-      }
-      return next;
-    });
-  }
+  const goPrev = useCallback(() => {
+    setActiveIndex((current) => (current - 1 + homeHeroSlides.length) % homeHeroSlides.length);
+    setVideoReady(false);
+  }, []);
 
-  const poster = withBasePath('/cover_4x4_hero-poster.webp');
+  const goNext = useCallback(() => {
+    setActiveIndex((current) => (current + 1) % homeHeroSlides.length);
+    setVideoReady(false);
+  }, []);
 
-  return (
-    <>
+  function renderSlideMedia(slide: HomeHeroSlide, isActive: boolean) {
+    if (slide.kind === 'video') {
+      return (
+        <>
+          <img className="wf-home-hero-card-poster" src={slide.poster} alt="" aria-hidden="true" />
+          {isActive && showVideo ? (
+            <video
+              ref={videoRef}
+              className={`wf-home-hero-card-video${videoReady ? ' is-ready' : ''}`}
+              src={slide.src}
+              poster={slide.poster}
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="auto"
+              aria-hidden="true"
+              tabIndex={-1}
+              onCanPlay={() => {
+                if (mountedRef.current) setVideoReady(true);
+              }}
+            />
+          ) : null}
+        </>
+      );
+    }
+
+    return (
       <img
-        className="wf-home-hero-poster"
-        src={poster}
+        className="wf-home-hero-card-image"
+        src={slide.src}
         alt=""
         aria-hidden="true"
+        loading={isActive ? 'eager' : 'lazy'}
       />
-      {videoAllowed ? (
-        <video
-          ref={videoRef}
-          className={`wf-home-hero-video${videoReady ? ' is-ready' : ''}`}
-          src={withBasePath('/cover_4x4_hero.mp4')}
-          poster={poster}
-          autoPlay={!paused}
-          loop
-          muted
-          playsInline
-          preload={paused ? 'none' : 'metadata'}
-          aria-hidden="true"
-          tabIndex={-1}
-          onCanPlay={() => setVideoReady(true)}
-        />
-      ) : null}
-      {motionAllowed ? (
-        <button
-          className="wf-home-motion-toggle"
-          type="button"
-          aria-label={paused ? 'Play homepage motion' : 'Pause homepage motion'}
-          aria-pressed={paused}
-          title={paused ? 'Play homepage motion' : 'Pause homepage motion'}
-          onClick={toggleMotion}
-        >
-          {paused ? (
-            <Play aria-hidden="true" size={14} strokeWidth={1.8} />
-          ) : (
-            <Pause aria-hidden="true" size={14} strokeWidth={1.8} />
-          )}
-        </button>
-      ) : null}
-    </>
+    );
+  }
+
+  return (
+    <div className="wf-home-hero-carousel-shell" aria-label="World model showcase">
+      <div className="wf-home-hero-carousel">
+        <div className="wf-home-hero-carousel-viewport">
+          <div className="wf-home-hero-carousel-track">
+            {visibleSlides.map(({ slide, offset, key }) => {
+              const isActive = offset === 0;
+              const showOverlay = isActive && children && slide.id === homeHeroSlides[0].id;
+              return (
+                <article
+                  key={key}
+                  className={`wf-home-hero-card${isActive ? ' is-active' : ''}${offset === -1 ? ' is-prev' : ''}${offset === 1 ? ' is-next' : ''}`}
+                  aria-hidden={!isActive}
+                >
+                  <div className="wf-home-hero-card-frame">
+                    <div className="wf-home-hero-card-media">
+                      {renderSlideMedia(slide, isActive)}
+                    </div>
+                    {showOverlay ? (
+                      <div className="wf-home-hero-card-overlay">{children}</div>
+                    ) : null}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="wf-home-hero-carousel-caption" aria-live="polite">
+          <strong>{activeSlide.label}</strong>
+          <span>{activeSlide.caption}</span>
+        </div>
+
+        {isCarousel ? (
+          <div className="wf-home-hero-carousel-controls">
+            <button type="button" className="wf-home-hero-carousel-nav" aria-label="Previous demo" onClick={goPrev}>
+              <ChevronLeft aria-hidden="true" size={18} strokeWidth={1.8} />
+            </button>
+            <div className="wf-home-hero-carousel-dots" role="tablist" aria-label="Demo selection">
+              {homeHeroSlides.map((slide, index) => (
+                <button
+                  key={slide.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={index === activeIndex}
+                  aria-label={slide.label}
+                  className={index === activeIndex ? 'is-active' : undefined}
+                  onClick={() => {
+                    setActiveIndex(index);
+                    setVideoReady(false);
+                  }}
+                />
+              ))}
+            </div>
+            <button type="button" className="wf-home-hero-carousel-nav" aria-label="Next demo" onClick={goNext}>
+              <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} />
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }

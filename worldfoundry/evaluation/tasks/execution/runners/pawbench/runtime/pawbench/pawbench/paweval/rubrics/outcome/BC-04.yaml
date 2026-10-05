@@ -1,0 +1,56 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BC-04
+track: coverage
+title_en: Soccer Shot on Guarded Goal
+outcome_question: Which soccer-shot outcome in ['clean_goal', 'keeper_deflected_goal', 'frame_deflected_goal',
+  'goalkeeper_prevents_goal', 'post_out', 'crossbar_out', 'miss_left', 'miss_right', 'miss_high', 'shot_stops_short']
+  is visible as the first decisive result?
+readout_policy: Read the first decisive ball/goal result after the single kick. Qualifying frames must
+  show the ball trajectory, goal frame, goalkeeper/defender interaction, and miss geometry clearly enough
+  to distinguish scoring path, save/block, frame-out, directional miss, or shot stopping short.
+canonical_labels:
+- clean_goal
+- keeper_deflected_goal
+- frame_deflected_goal
+- goalkeeper_prevents_goal
+- post_out
+- crossbar_out
+- miss_left
+- miss_right
+- miss_high
+- shot_stops_short
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- The ball/goal/goalkeeper relation is hidden at the decisive score, save, frame contact, or miss moment.
+- None of the canonical labels ['clean_goal', 'keeper_deflected_goal', 'frame_deflected_goal', 'goalkeeper_prevents_goal',
+  'post_out', 'crossbar_out', 'miss_left', 'miss_right', 'miss_high', 'shot_stops_short'] can be decisively
+  identified within the readout window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's reference protocol;
+  record it as out-of-schema.
+priority_rules:
+- 'First decisive readout is the ball/goal result after the single kick: clean goal, deflected goal, goalkeeper-prevented
+  goal, frame-out, directional miss, or shot short.'
+- clean_goal requires the ball to visibly cross the goal plane without goalkeeper/defender or frame deflection.
+- keeper_deflected_goal requires goalkeeper/defender contact before the ball still crosses the goal plane;
+  frame_deflected_goal requires post/crossbar/frame contact before the ball still scores.
+- goalkeeper_prevents_goal means the goalkeeper/defender visibly saves, blocks, catches, or deflects the
+  ball away so it does not score.
+- post_out and crossbar_out require visible frame contact followed by no goal.
+- miss_left, miss_right, and miss_high require a no-contact miss on that visible side/height; shot_stops_short
+  means the ball fails to reach the goal mouth.
+- 'Priority: any goal overrides non-goal labels; goalkeeper/frame-deflected goals use the visible deflection
+  source; save/block overrides frame-out and miss when goalkeeper contact prevents the goal; frame-out
+  overrides no-contact miss; directional miss overrides shot short only when the ball reaches the goal
+  region.'
+notes:
+- Outcome set separates deflection source and miss geometry because they are distinct terminal soccer-shot
+  futures.
+- 'Contact/trajectory scene: outcome label uses first decisive visible target interaction or miss geometry.'
+- 'Scene title: Soccer Shot on Guarded Goal.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules are authored from
+  STAGBench metadata/action protocol.'

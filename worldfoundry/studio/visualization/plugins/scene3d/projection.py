@@ -13,8 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import cv2
 import imageio
@@ -22,14 +24,14 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
-from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext.lietorch import SE3
-from worldfoundry.base_models.three_dimensions.general_3d.vipe.slam.interface import SLAMOutput
-from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base import CachedVideoStream, VideoFrame, VideoStream
-from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.cameras import CameraType
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.logging import pbar
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.misc import unpack_optional
 
-from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.geometry import project_points_to_panorama
+if TYPE_CHECKING:
+    from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext.lietorch import SE3
+    from worldfoundry.base_models.three_dimensions.general_3d.vipe.slam.interface import SLAMOutput
+    from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base import VideoStream
+    from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.cameras import CameraType
 
 rng = np.random.RandomState(200)
 _palette = ((rng.random((3 * 255)) * 0.7 + 0.3) * 255).astype(np.uint8).tolist()
@@ -191,6 +193,8 @@ def project_points_panorama(
     frame_size: tuple[int, int],
     color: np.ndarray | None = None,
 ) -> np.ndarray:
+    from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.geometry import project_points_to_panorama
+
     assert pose.shape == (), "Only single pose is supported"
 
     canvas = np.ones((frame_size[0], frame_size[1], 3), dtype=np.uint8) * 255
@@ -299,6 +303,8 @@ def save_projection_video(
     # inference paths reuse the lightweight drawing/video helpers without
     # turning an optional visualization package into a SLAM dependency.
     from pycg import image
+
+    from worldfoundry.base_models.three_dimensions.general_3d.vipe.streams.base import CachedVideoStream, VideoFrame
 
     assert isinstance(video_stream, CachedVideoStream)
 

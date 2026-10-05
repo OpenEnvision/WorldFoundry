@@ -174,13 +174,27 @@ class MoVerseSynthesis(BaseSynthesis):
             package_root
             / "base_models"
             / "diffusion_model"
-            / "video"
-            / "wan"
-            / "runtime_components.py",
+            / "schedulers"
+            / "__init__.py",
             package_root
             / "base_models"
             / "diffusion_model"
-            / "video"
+            / "models"
+            / "autoencoders"
+            / "wan"
+            / "resident.py",
+            package_root
+            / "base_models"
+            / "diffusion_model"
+            / "models"
+            / "encoders"
+            / "wan"
+            / "resident.py",
+            package_root
+            / "base_models"
+            / "diffusion_model"
+            / "models"
+            / "networks"
             / "wan"
             / "variants"
             / "moverse"
@@ -188,9 +202,15 @@ class MoVerseSynthesis(BaseSynthesis):
             package_root
             / "base_models"
             / "diffusion_model"
-            / "video"
+            / "loaders"
+            / "wan_variant.py",
+            package_root
+            / "base_models"
+            / "diffusion_model"
+            / "models"
+            / "autoencoders"
             / "wan"
-            / "utils"
+            / "variants"
             / "taehv.py",
         )
         runtime_errors = [

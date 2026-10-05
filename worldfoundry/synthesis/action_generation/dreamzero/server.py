@@ -315,6 +315,7 @@ class ARDroidRoboarenaPolicy:
                 video_across_time_cat = torch.cat(self.video_across_time, dim=2)
                 frames = self._policy.trained_model.action_head.vae.decode(
                     video_across_time_cat,
+                    device=video_across_time_cat.device,
                     tiled=self._policy.trained_model.action_head.tiled,
                     tile_size=(self._policy.trained_model.action_head.tile_size_height, self._policy.trained_model.action_head.tile_size_width),
                     tile_stride=(self._policy.trained_model.action_head.tile_stride_height, self._policy.trained_model.action_head.tile_stride_width),
@@ -585,6 +586,7 @@ class WebsocketPolicyServer:
                         video_across_time_cat = torch.cat(self.video_across_time, dim=2)
                         frames = self._policy.trained_model.action_head.vae.decode(
                             video_across_time_cat,
+                            device=video_across_time_cat.device,
                             tiled=self._policy.trained_model.action_head.tiled,
                             tile_size=(self._policy.trained_model.action_head.tile_size_height, self._policy.trained_model.action_head.tile_size_width),
                             tile_stride=(self._policy.trained_model.action_head.tile_stride_height, self._policy.trained_model.action_head.tile_stride_width),
@@ -618,6 +620,7 @@ class WebsocketPolicyServer:
                         video_across_time_cat = torch.cat(self.video_across_time[:-1], dim=2)
                         frames = self._policy.trained_model.action_head.vae.decode(
                             video_across_time_cat,
+                            device=video_across_time_cat.device,
                             tiled=self._policy.trained_model.action_head.tiled,
                             tile_size=(self._policy.trained_model.action_head.tile_size_height, self._policy.trained_model.action_head.tile_size_width),
                             tile_stride=(self._policy.trained_model.action_head.tile_stride_height, self._policy.trained_model.action_head.tile_stride_width),
@@ -660,6 +663,7 @@ class WebsocketPolicyServer:
                         video_across_time_cat = torch.cat(self.video_across_time, dim=2)
                         frames = self._policy.trained_model.action_head.vae.decode(
                             video_across_time_cat,
+                            device=video_across_time_cat.device,
                             tiled=self._policy.trained_model.action_head.tiled,
                             tile_size=(self._policy.trained_model.action_head.tile_size_height, self._policy.trained_model.action_head.tile_size_width),
                             tile_stride=(self._policy.trained_model.action_head.tile_stride_height, self._policy.trained_model.action_head.tile_stride_width),

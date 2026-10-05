@@ -1,0 +1,56 @@
+---
+title: "GigaWorld-0"
+description: "GigaWorld-0 from GigaAI: robotics-world-model and video-generation; Runner parity pending."
+modelId: "giga-world-0"
+pageSource: authored
+---
+
+GigaWorld-0 is GigaAI's open robotics world-model series: video-generation models trained for action-conditioned robot data generation, with pretrain and GR1-specialized 2B checkpoints recorded. In this catalog the official WorldArena-listed source is vendored in-tree; execution waits on staged checkpoints and task assets.
+
+Also recorded: `google-t5/t5-11b` and `Wan-AI/Wan2.1-T2V-1.3B-Diffusers`. The legacy T5-11B PyTorch pickle must be converted **once** with weights-only loading to an encoder-only safetensors directory (`scripts/inference/convert_t5_11b_encoder_to_safetensors.py` in an isolated Torch 2.6+ env). Normal inference only reads safetensors.
+
+<ModelPaperFigures modelId="giga-world-0" locale="en" />
+
+The recorded paper is [arXiv 2511.19861](https://arxiv.org/abs/2511.19861).
+
+Project page: [giga-world-0.github.io](https://giga-world-0.github.io/). Code: [open-gigaai/giga-world-0](https://github.com/open-gigaai/giga-world-0). Code: [open-gigaai/giga-models](https://github.com/open-gigaai/giga-models).
+
+Paper: [arXiv 2511.19861](https://arxiv.org/abs/2511.19861). Project: [giga-world-0.github.io](https://giga-world-0.github.io/). Code: [open-gigaai/giga-world-0](https://github.com/open-gigaai/giga-world-0). Runner: **`Runner parity pending`**. Until checkpoints and task assets are staged, the pipeline returns **blocked** diagnostics. Single-image low-step smoke validates checkpoint execution only — it is **not** official GR1 dataset or full-quality sampling parity. Torch SDPA is the unified-env default for that smoke; official NATTEN quality needs a wheel exposing `neighborhood_attention_generic` (NATTEN 0.17.5 for Torch 2.5 does **not**).
+
+<ModelCommandBuilder modelId="giga-world-0" locale="en" />
+
+## What it is for
+
+Pick `giga-world-0` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+
+Two 2B video checkpoints are recorded — GigaWorld-0-Video-Pretrain-2b and GigaWorld-0-Video-GR1-2b under open-gigaai. Architecture internals beyond the recorded tasks are not stored in this repository.
+
+Catalog tasks include robotics-world-model, video-generation, action-conditioned-generation, and robot-image-to-video. Catalog aliases include `giga_world_0`, `gigaworld-0`, and `gigaworld0`. Documented outputs include video.
+
+Recorded evaluation entry points include [WorldArena](/docs/evaluation/benchmark-hub/worldarena) (The entry is listed on WorldArena for robot world-model evaluation), [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) (Embodied world-model video prediction quality).
+
+GigaWorld-0 world generation. Policy sibling is giga-world-policy-0.5.
+
+## Runtime contract
+
+Required `prompt` and `image`; optional `video` and `actions` (robot_action, world_action); artifacts `giga-world-0.mp4`.
+
+Recorded task profiles: `robotics-world-model`, `video-generation`, `action-conditioned-generation`, and `robot-image-to-video`. WorldFoundry binds `GigaWorld0Pipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `robot-image-to-video` defaults: height=480, width=640, num_frames=61, num_inference_steps=30, guidance_scale=1.0, fps=16.
+
+The pipeline resolves the vendored inference entrypoint and returns blocked runtime diagnostics until checkpoints and task assets are staged.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run giga-world-0 --pipeline.task-profile robot-image-to-video` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu121` (Python 3.11, CUDA 12.1, torch==2.5.1).
+
+Recorded weight repositories include `open-gigaai/GigaWorld-0-Video-Pretrain-2b`, `open-gigaai/GigaWorld-0-Video-GR1-2b`, and `google-t5/t5-11b` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh giga-world-0`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="giga-world-0" locale="en" />

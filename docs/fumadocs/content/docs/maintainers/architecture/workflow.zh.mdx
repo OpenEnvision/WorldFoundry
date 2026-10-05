@@ -5,25 +5,27 @@ description: 从 CLI 输入到 artifacts、metrics、scorecard 和 report 的端
 
 ## 简介
 
-本文追踪一次 evaluation run 从 CLI 到磁盘 artifact 的完整路径。当你需要知道某个 flag 落在哪段代码、哪个 runner 负责写文件、或 model mode 为何会分叉到 `ContractRunner` 与 `ExistingResultsRunner` 时读这里。面向用户的命令示例见 [评测指南](/zh/docs/evaluation)；本文聚焦执行 plumbing。
+本文追踪一次 evaluation run 从 CLI 到磁盘 artifact 的完整路径。当你需要知道某个 flag 落在哪段代码、哪个 runner 负责写文件、或 model mode 为何会分叉到 `ContractRunner` 与 `ExistingResultsRunner` 时读这里。面向用户的命令示例见 [评测指南](/zh/docs/evaluation)；CLI/TUI/MCP 如何把意图编译成本文起点的 request，见 [使用界面与编排](/zh/docs/maintainers/architecture/surfaces-orchestration)。本文聚焦执行 plumbing。
 
 ## 入口
 
-每条用户可见命令最终都会到达 `evaluation/tasks/execution/evaluate.py` 中的 `run_evaluate()`。控制台入口是 `worldfoundry/cli/main.py`，子命令会分发到以下四种形态之一：
+控制台入口是 `worldfoundry/cli/main.py:1888` `main()`。多数 evaluate 与仅模型运行接着进入 `evaluation/tasks/execution/orchestration/evaluate.py` 的 `run_evaluate()`（`:1071`）。**model-plus-benchmark 不走这个 facade**：编排调用 `execute_prepared_evaluation()` → `model_benchmark.py` 里的 `run_model_benchmark()`。CLI 会分发到以下四种形态之一：
 
 - **evaluate** — 归一化输入、选择 run mode，返回一个 `EvaluateRunResult`。
 - **existing outputs** — 通过 `existing_results.py` 评分磁盘上已有 artifact，不加载模型。
 - **model run** — 经 `resolver.py` 解析 model runner，调用 `generate()`，再评分归一化结果。
 - **model plus benchmark** — 经 `model_benchmark.py` 先生成，再端到端调用 benchmark-zoo runner。
 
-第一个实质分支始终是 mode 选择：本次 run 是否需要在 GPU 上加载权重，还是只消费已有文件。
+对 evaluate 与仅模型运行，第一个实质分支是 mode 选择：本次 run 是否需要在 GPU 上加载权重，还是只消费已有文件。model-plus-benchmark 不进入这个分叉。
 
 ## Evaluate 主流程
 
 主流程如下：一个 `EvaluateRunRequest` 进入 facade，选定 mode，从 task registry 加载或物化输入，再由 delegate runner 写出标准 artifact bundle。若输出目录缺文件，沿此流程查应由哪个 runner 阶段产出。
 
+<CallChainDiagram locale="zh" />
+
 ```python
-# worldfoundry/cli/main.py → evaluation/tasks/execution/evaluate.py
+# worldfoundry/cli/main.py → evaluation/tasks/execution/orchestration/evaluate.py
 result = run_evaluate(EvaluateRunRequest(...))
 
 mode = _mode(request)
@@ -47,71 +49,149 @@ Facade 本身很小。`run_evaluate()` 只做请求校验、模式选择和 runn
 
 ## 模式行为
 
-Mode 选择是第一个影响成本与前置条件的分支。`existing-results` 不加载权重，只评分磁盘上已有内容，因此 hosted API 批处理与离线 demo 常用它。`model` 会先解析 runner 并调用 `generate()`；传入的 metrics 类型决定 scoring 留在进程内（`ContractRunner`）还是复用 existing-results 路径（`ExistingResultsRunner`）。
-
-| Mode | 必需输入 | 是否加载模型 | 指标路径 | 什么时候用 |
-| --- | --- | --- | --- | --- |
-| `existing-results` | `results` 或 `results_path`；requests 可选 | 否 | Built-in metric ids 或 artifact checks | Demo、hosted job 或离线脚本已经产出 artifacts。 |
-| `model` | Requests 加 runner config 或 model-zoo id | 是 | 传 Metric objects 时走 `ContractRunner`；传 metric ids/artifact checks 时走 `ExistingResultsRunner` | 希望由框架执行模型。 |
+`existing-results` 评分调用方提供的结果，不加载生成模型。`model` 先解析 runner 并生成结果。两种模式均将指标 ID 和对象解析到同一条评分路径。
 
 ## Model Mode 细节
 
-`runner.generate()` 返回后，`_align_model_results()` 保证每个 request 都有对应 result 行（含显式失败）。下面分叉容易被忽略：传入 `Metric` 对象则整次 run 留在 `ContractRunner`；传入 string metric ids 则 scoring 走与 `existing-results` 相同的代码路径。
+模型 runner 输出 `GenerationResult`。按样本对齐后，`ExistingResultsRunner` 通过 `scoring.py` 统一计算指标、聚合并输出报告。
 
 ```python
-runner = resolve_model_zoo_runner(request.model_id)
 results = runner.generate(requests)
 results = _align_model_results(requests, results)
-
-if isinstance(request.metrics[0], Metric):
-    return ContractRunner(...).score(results)          # Metric objects → 进程内
-else:
-    return ExistingResultsRunner(...).score(results)  # metric ids → existing-results 路径
+return ExistingResultsRunner().run(
+    output_dir=output_dir, requests=requests, results=results, metrics=resolved_metrics,
+)
 ```
 
-关键点：模型执行和 benchmark scoring 是分开的。Model runner 只输出 `GenerationResult`；结果归一化后才评分。
 
 ## Contract Runner 细节
 
-`run_contract()` 是最严格的 in-process path，也是 artifact 布局的参考实现。每个阶段都会写出或更新下游 validation、docs export 与 leaderboard 工具期望找到的文件。调试不完整 run 时按阶段顺序排查：缺少 `metrics/per_sample.jsonl` 通常是 generation 未完成对齐，而非 reporting 失败。
+`run_contract()` 负责生成，评分和报告文件统一交给 `ExistingResultsRunner`。直接 contract run、model mode 和离线评分使用相同的结果文件布局。指标进度按批次落盘；中断后保留 `metrics/checkpoint.jsonl`，通过 `resume=True` 继续。公共阶段处理记录生成、评分、聚合和报告阶段的失败。新一轮执行清除旧的完成报告；新报告生成前，运行索引读取当前 manifest。指标汇总区分已执行、有分数、成功、失败和跳过的样本；指标值缺失记为跳过，不自动视为执行错误，聚合仍遵循指标自身规则。
+
+Workspace 的 CLI 委托使用同一套阶段处理。子进程失败时保留本次产出的部分分数，并记录真实退出码；归一化成功不会覆盖执行失败。缺少本次 scorecard 时，旧报告不能代替新结果。
 
 ```python
-# evaluation/tasks/execution/contract.py → run_contract()
-requests = _normalize_requests(request)
-write_execution_plan(requests)                # execution_plan.json
-write_run_manifest(status="running")          # run_manifest.json
+# contract.py: generation
+results, cache_stats = run_generation_with_cache(requests, runner.generate, ...)
+return run_existing_results(
+    output_dir=output_dir, requests=requests, results=results, metrics=metrics,
+)
 
-results = run_generation_with_cache(runner, requests)
-write_artifacts_jsonl(_artifact_rows(results)) # artifacts.jsonl
-write_per_sample_metrics(...)                 # metrics/per_sample.jsonl
-summary = _build_summary(...)                 # metrics/summary.json
-write_scorecard(summary)                      # scorecard.json
-write_run_report_artifacts(summary)           # summary.json + report.md
-write_run_manifest(status="finished")         # 最终 run_manifest.json
+# existing_results.py: shared scoring and reporting
+for batch in score_samples(...):
+    write_sample_progress(batch)
+summary = build_metrics_summary(requests, results, per_sample_rows, metrics)
+write_scorecard(..., metrics_summary=summary)
+write_run_report_artifacts(...)
 ```
 
 Generation 是最耗时的阶段：runner 异常会变成 failed samples，确定性输出可复用 SQLite generation cache。Reporting 阶段只在每个样本都有对齐 result 行之后才运行。
 
 ## Artifact 契约
 
-这些文件构成 [评测指南](/zh/docs/evaluation#main-outputs) 中的 audit trail。各 run mode 下形态稳定：`existing-results` 仍会写 `sample_ledger.jsonl` 和 `scorecard.json`，便于与同一 benchmark 上的完整 model run 对比。路径均相对 `run_manifest.json` 中记录的 run 输出目录。
+这些文件构成[评测指南](/zh/docs/evaluation#输出)中的 audit trail。各 run mode 下形态稳定：`existing-results` 仍会写 `sample_ledger.jsonl` 和 `scorecard.json`，便于与同一 benchmark 上的完整 model run 对比。路径均相对 `run_manifest.json` 中记录的 run 输出目录。
 
-| 文件 | 生产者 | 含义 |
-| --- | --- | --- |
-| `run_manifest.json` | Runner | Run identity、status、model、benchmark、dataset、context metadata、output paths。 |
-| `execution_plan.json` | Runner 或 `RunPlan` | Planned stages、sample ids、materialization details、output files。 |
-| `requests.jsonl` | Runner | 每个样本一个归一化 `GenerationRequest`。 |
-| `results.jsonl` | Model runner through evaluation runner | 每个样本一个归一化 `GenerationResult`。 |
-| `sample_ledger.jsonl` | Runner | 样本级 pass/fail 状态和 stage-level errors。 |
-| `artifacts.jsonl` | Runner | 相对 output directory enrich 后的 flattened artifact refs。 |
-| `metrics/per_sample.jsonl` | Metrics layer | 样本级 metric output 或 skipped state。 |
-| `metrics/summary.json` | Metrics layer | Aggregates、failed ids、skipped ids、leaderboard fields。 |
-| `scorecard.json` | Reporting layer | Release/review surface，供 validation 和 docs 消费。 |
-| `report.md` | Reporting layer | 从 scorecard 派生的人类可读摘要。 |
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>文件</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>run_manifest.json</code>
+          </div>
+        </div>
+        <p>Run identity、status、model、benchmark、dataset、context metadata、output paths。</p>
+        <p className="pi-kv-read"><span>生产者</span> Runner</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>execution_plan.json</code>
+          </div>
+        </div>
+        <p>Planned stages、sample IDs、materialization details、output files。</p>
+        <p className="pi-kv-read"><span>生产者</span> Runner 或 <code>RunPlan</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>requests.jsonl</code>
+          </div>
+        </div>
+        <p>每个样本一个归一化 <code>GenerationRequest</code>。</p>
+        <p className="pi-kv-read"><span>生产者</span> Runner</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>results.jsonl</code>
+          </div>
+        </div>
+        <p>每个样本一个归一化 <code>GenerationResult</code>。</p>
+        <p className="pi-kv-read"><span>生产者</span> Model runner through evaluation runner</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>sample_ledger.jsonl</code>
+          </div>
+        </div>
+        <p>样本级 pass/fail 状态和 stage-level errors。</p>
+        <p className="pi-kv-read"><span>生产者</span> Runner</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>artifacts.jsonl</code>
+          </div>
+        </div>
+        <p>相对 output directory enrich 后的 flattened artifact refs。</p>
+        <p className="pi-kv-read"><span>生产者</span> Runner</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>metrics/per_sample.jsonl</code>
+          </div>
+        </div>
+        <p>样本级 metric output 或 skipped state。</p>
+        <p className="pi-kv-read"><span>生产者</span> Metrics layer</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>metrics/summary.json</code>
+          </div>
+        </div>
+        <p>Aggregates、failed ids、skipped ids、leaderboard fields。</p>
+        <p className="pi-kv-read"><span>生产者</span> Metrics layer</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>scorecard.json</code>
+          </div>
+        </div>
+        <p>Release/review surface，供 validation 和 docs 消费。</p>
+        <p className="pi-kv-read"><span>生产者</span> Reporting layer</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>report.md</code>
+          </div>
+        </div>
+        <p>从 scorecard 派生的人类可读摘要。</p>
+        <p className="pi-kv-read"><span>生产者</span> Reporting layer</p>
+      </li>
+    </ul>
+  </section>
+</div>
 
-## Task Materialization
+## Task materialization
 
-Task-driven run 在任意模型代码运行*之前*固定 sample id、split 与 input keys，使 rerun 与 cache 复现可预期：相同 task YAML 与 dataset manifest 应在每台机器上产出相同的 `requests.jsonl` 行。下方代码把 catalog task YAML 接到 `run_evaluate()` 已理解的 `EvaluateRunRequest`；YAML 文件位置见 [基准和数据](/zh/docs/maintainers/architecture/benchmarks-data)。
+Task-driven run 在任意模型代码运行*之前*固定 sample ID、split 与 input keys，使 rerun 与 cache 复现可预期：相同 task YAML 与 dataset manifest 应在每台机器上产出相同的 `requests.jsonl` 行。下方代码把 catalog task YAML 接到 `run_evaluate()` 已理解的 `EvaluateRunRequest`；YAML 文件位置见 [基准和数据](/zh/docs/maintainers/architecture/benchmarks-data)。
 
 ```python
 registry = load_task_registry_from_paths(task_yaml_paths)
@@ -121,4 +201,4 @@ requests = materialize_generation_requests(requests)
 return EvaluateRunRequest(requests=requests, ...)
 ```
 
-当 sample id、split、input keys、output keys 和 cache policy 需要在 generation 前可复现时，用这条路径。
+当 sample ID、split、input keys、output keys 和 cache policy 需要在 generation 前可复现时，用这条路径。

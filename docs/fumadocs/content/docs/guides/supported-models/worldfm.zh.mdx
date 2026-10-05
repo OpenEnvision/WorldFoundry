@@ -1,0 +1,50 @@
+---
+title: "InSpatio-WorldFM"
+description: "InSpatio-WorldFM（InSpatio）：世界模型、video；已验证。"
+modelId: "worldfm"
+pageSource: generated
+---
+
+InSpatio-WorldFM 是面向空间智能与帧生成的 3D 世界基础模型，代码与权重均已确认发布（Hugging Face 上的 inspatio/WorldFM，Apache-2.0）。本 catalog 中集成状态为 verified：WorldFoundry runner 支持统一环境 profile 下官方 meta.json demo 与本地 WorldFM 资产，并输出官方的视频与全景图产物结构。
+
+<ModelPaperFigures modelId="worldfm" locale="zh" />
+
+记录论文为[arXiv 2603.11911](https://arxiv.org/abs/2603.11911)。
+
+项目页：[inspatio.github.io/worldfm](https://inspatio.github.io/worldfm)。代码：[inspatio/worldfm](https://github.com/inspatio/worldfm)。代码：[world-fm/worldfm](https://github.com/world-fm/worldfm)。
+
+<ModelCommandBuilder modelId="worldfm" locale="zh" />
+
+## 用来做什么
+
+`worldfm` 是记录的交互世界线。要用动作推进世界时从这里起步。
+
+输出同时覆盖视频与全景图产物，体现其超越单一固定视口的世界生成设计。官方仓库与 checkpoint 指针之外的架构内部细节仓库未记录。
+
+catalog 记录的任务包括 世界模型、video。输出模态为视频。
+
+记录的评测入口包括[WorldScore](/zh/docs/evaluation/benchmark-hub/worldscore)（3D 世界输出的统一世界生成质量）。
+
+## 运行时契约
+
+可选 `input_path`、`prompt`、`interactions`、`fps`、`meta_path`；产物 `generated_world`、`worldfm.mp4`。
+
+CLI task profile：`official-meta-demo`。绑定的 pipeline 类是 `WorldFMPipeline`。
+
+系列状态：**已验证**。
+
+`official-meta-demo` 记录默认值：fps=30。
+
+通过官方 meta.json demo 格式驱动运行，并就位本地 WorldFM 资产。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run worldfm --pipeline.task-profile official-meta-demo`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `inspatio/WorldFM`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh worldfm`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="worldfm" locale="zh" />

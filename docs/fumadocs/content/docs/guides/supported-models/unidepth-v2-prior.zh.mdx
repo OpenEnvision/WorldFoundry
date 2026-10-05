@@ -1,0 +1,48 @@
+---
+title: "UniDepth V2"
+description: "UniDepth V2（ETH Zurich）：单目深度估计、米制深度估计；已验证。"
+modelId: "unidepth-v2-prior"
+pageSource: generated
+---
+
+UniDepth V2 是通用单目米制深度模型：对任意相机的单张图像直接预测米制 3D 点云，无需外部内参。本 catalog 中它是 checkpoint 已验证的几何先验——真实 checkpoint 推理与官方点云导出已通过共享 geometry-prior 契约与 Workspace 路径验证。
+
+<ModelPaperFigures modelId="unidepth-v2-prior" locale="zh" />
+
+记录论文为[arXiv 2502.20110](https://arxiv.org/abs/2502.20110)。
+
+项目页：[lpiccinelli-eth.github.io/pub/unidepth](https://lpiccinelli-eth.github.io/pub/unidepth/)。代码：[lpiccinelli-eth/UniDepth](https://github.com/lpiccinelli-eth/UniDepth)。
+
+<ModelCommandBuilder modelId="unidepth-v2-prior" locale="zh" />
+
+## 用来做什么
+
+用 `unidepth-v2-prior` 做 catalog 几何推理。产物是重建而不是生成视频时选它。
+
+按上游论文，相机自提示模块预测稠密相机表示并条件化深度解码，实现跨相机泛化。默认 checkpoint 从 lpiccinelli/unidepth-v2-vitl14 解析（或用本地 model_path 覆盖）；注册于 base_models/three_dimensions/depth/unidepth。该模型由苏黎世联邦理工学院（ETH Zurich）发布。
+
+catalog 记录的任务包括 单目深度估计、米制深度估计、几何先验。别名包括 `unidepth-v2`、`unidepth-v2-vitl14`、`unidepth_v2_vitl14`。模态上，它接受图像，输出深度。
+
+## 运行时契约
+
+可选 `input_path`、`type`、`focal_length`、`execute`、`max_points`；产物 `unidepth-v2-prior.npz`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `UniDepthV2PriorPipeline`。
+
+系列状态：**已验证**。
+
+它作为独立几何先验集成在 worldfoundry/base_models 下，通过共享的 geometry-prior pipeline/operator 契约对外暴露。 上层管线（如 ViPE）从这一规范位置导入它，而不是各自保留私有副本。 注意许可：上游发布为 CC-BY-NC-4.0，启用该先验时需遵守非商用条款。
+
+CC-BY-NC-4.0：下游适用非商用许可条款。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run unidepth-v2-prior --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `lpiccinelli/unidepth-v2-vitl14`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh unidepth-v2-prior`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 cc-by-nc-4.0；状态：**已验证**。
+
+<ModelRelatedRecipes modelId="unidepth-v2-prior" locale="zh" />

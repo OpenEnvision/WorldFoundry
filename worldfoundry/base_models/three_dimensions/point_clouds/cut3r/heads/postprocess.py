@@ -93,21 +93,13 @@ def postprocess_desc(out, depth_mode, conf_mode, desc_dim, double_channel=False)
 
     if double_channel:
         res["pts3d_self"] = reg_dense_depth(
-            fmap[
-                :, :, :, 3 + int(conf_mode is not None) : 6 + int(conf_mode is not None)
-            ],
+            fmap[:, :, :, 3 + int(conf_mode is not None) : 6 + int(conf_mode is not None)],
             mode=depth_mode,
         )
         if conf_mode is not None:
-            res["conf_self"] = reg_dense_conf(
-                fmap[:, :, :, 6 + int(conf_mode is not None)], mode=conf_mode
-            )
+            res["conf_self"] = reg_dense_conf(fmap[:, :, :, 6 + int(conf_mode is not None)], mode=conf_mode)
 
-    start = (
-        3
-        + int(conf_mode is not None)
-        + int(double_channel) * (3 + int(conf_mode is not None))
-    )
+    start = 3 + int(conf_mode is not None) + int(double_channel) * (3 + int(conf_mode is not None))
     res["desc"] = reg_desc(fmap[:, :, :, start : start + desc_dim], mode="norm")
     res["desc_conf"] = reg_dense_conf(fmap[:, :, :, start + desc_dim], mode=conf_mode)
     assert start + desc_dim + 1 == fmap.shape[-1]

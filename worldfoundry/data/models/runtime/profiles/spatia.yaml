@@ -22,7 +22,7 @@ checkpoints:
   role: camera_control
 - repo_id: Wan-AI/Wan2.2-TI2V-5B
   revision: 921dbaf3f1674a56f47e83fb80a34bac8a8f203e
-  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Wan2.2-TI2V-5B
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Wan-AI--Wan2.2-TI2V-5B
   role: base_model
 - repo_id: facebook/map-anything
   revision: a1d87e9086706fb9974f3be5a3e3a0ca5401c5aa
@@ -38,8 +38,20 @@ artifact_filename: spatia.mp4
 execution:
   environment: _unified
   backend_stage: independent_in_tree_runtime
-  runtime_status: checkpoint_assets_pending_not_runnable_until_staged
-  integration_status: runtime_ported
+  runtime_status: checkpoint_backed_gpu_inference_verified
+  integration_status: integrated
   pipeline_binding: spatia
-integration: {status: runtime_ported}
-notes: [Bundled source is mandatory; external source checkouts are rejected., The default MapAnything checkpoint is research-only under CC-BY-NC-4.0.]
+integration: {status: integrated}
+notes:
+- Bundled source is mandatory; external source checkouts are rejected.
+- The default MapAnything checkpoint is research-only under CC-BY-NC-4.0.
+- The public SpatiaPipeline loaded local Spatia, Wan2.2 TI2V 5B and MapAnything
+  checkpoints on one GPU and generated 17/17 decodable 832x480 frames at 40 steps
+  from an image and synthetic dense W2C camera trajectory on 2026-09-24.
+- The installed PyTorch3D extension could not load against torch 2.5.1, so this
+  run used a Torch nearest-depth point splat fallback. Renderer parity, camera
+  adherence and benchmark quality remain unverified.
+- Optional mask_path forwards one foreground mask image or a one-frame [1,H,W]
+  mask array to official reconstruction. Its H/W must match the original source
+  frame, before generation resizing. Use force_rebuild_intermediate when
+  changing cached inputs for an existing output path.

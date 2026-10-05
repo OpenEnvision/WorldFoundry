@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_game_craft.runtime import (
+from worldfoundry.synthesis.visual_generation.hunyuan_world.gamecraft_inference.runtime import (
     ACTION_DICT,
     ActionToPoseFromID,
     Camera,

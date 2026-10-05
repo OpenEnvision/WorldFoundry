@@ -1,0 +1,52 @@
+---
+title: "ABot-M0"
+description: "ABot-M0 from Amap CV Lab (Alibaba Group): vla and robot policy; Static load only; dedicated `worldfoundry-vla-abot-m0`."
+modelId: "abot-m0"
+pageSource: authored
+---
+
+ABot-M0 from Amap's CV Lab is a bimanual manipulation VLA built on Qwen3-VL with an AML flow action expert and optional VGGT geometric fusion. Three released task weights are confirmed — ABot-M0-LIBERO, ABot-M0-Robocasa, and ABot-M0-RoboTwin2 — plus a ModelScope pretraining checkpoint, all under Apache-2.0, and all three are staged and manifest-size verified in this catalog.
+
+<ModelPaperFigures modelId="abot-m0" locale="en" />
+
+The recorded paper is [arXiv 2607.00678](https://arxiv.org/abs/2607.00678).
+
+Project page: [amap-cvlab.github.io/ABot-Manipulation](https://amap-cvlab.github.io/ABot-Manipulation/). Code: [amap-cvlab/ABot-Manipulation](https://github.com/amap-cvlab/ABot-Manipulation).
+
+Three task weights are confirmed and **manifest-size verified** in this catalog: `acvlab/ABot-M0-LIBERO` (revision `bc204e79`), `acvlab/ABot-M0-Robocasa`, and `acvlab/ABot-M0-RoboTwin2`. A ModelScope pretrain (`amap_cvlab/ABot-M0-Pretrain`) is recorded separately. **Numerical / GPU checkpoint parity is pending.**
+
+<ModelCommandBuilder modelId="abot-m0" locale="en" />
+
+## What it is for
+
+Pick `abot-m0` when you want the catalog VLA policy: instruction and observation in, an action trace out. Use it to roll the recorded policy, not to train a new one.
+
+Qwen3-VL provides the vision-language backbone; the AML flow action expert decodes actions; optional VGGT fusion injects 3D geometry. The runtime accepts the released config.yaml, dataset_statistics.json, and steps_*_pytorch_model.pt layout directly, preserving the strict state-dict architecture. It is published by Amap CV Lab (Alibaba Group).
+
+Catalog tasks include vla, robot policy, policy rollout, and bimanual manipulation. Catalog aliases include `abot_m0`.
+
+Recorded evaluation entry points include [LIBERO](/docs/evaluation/benchmark-hub/libero) (Dedicated ABot-M0-LIBERO task weight), [RoboCasa](/docs/evaluation/benchmark-hub/robocasa) (Dedicated ABot-M0-Robocasa task weight), [RoboTwin 2.0](/docs/evaluation/benchmark-hub/robotwin) (Dedicated ABot-M0-RoboTwin2 task weight).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `abot_m0_action_trace.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `ABotM0Pipeline`.
+
+Family status: **Static load only**.
+
+Pick the task weight matching your benchmark (LIBERO, RoboCasa, or RoboTwin2). Only inference components are in-tree; datasets, training, deployment services, and robot SDK code are excluded.
+
+Qwen3-VL, the AML flow action expert, optional VGGT fusion, released preprocessing, and action de-normalization are integrated in tree.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run abot-m0 --pipeline.task-profile default` to execute the policy. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the dedicated environment `worldfoundry-vla-abot-m0` (Python 3.10, Cu128 Recommended, torch>=2.7,\<2.8).
+
+Recorded weight repositories include `acvlab/ABot-M0-LIBERO`, `acvlab/ABot-M0-Robocasa`, and `acvlab/ABot-M0-RoboTwin2` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh abot-m0`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Static load only**.
+
+<ModelRelatedRecipes modelId="abot-m0" locale="en" />

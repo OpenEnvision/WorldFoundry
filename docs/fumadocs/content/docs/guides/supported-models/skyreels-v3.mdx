@@ -1,0 +1,52 @@
+---
+title: "SkyReels V3"
+description: "SkyReels V3 from Skywork AI (Kunlun): reference-to-video and audio-guided-video; Runner parity pending."
+modelId: "skyreels-v3"
+pageSource: authored
+---
+
+SkyReels V3 is Skywork's newer generation, recorded for reference-to-video, audio-guided video, and video-to-video. The catalog route loads the SkyReels-V3-R2V-14B checkpoint into the shared native Wan graph with reference-image latent concatenation and dual text/image guidance — implemented as reusable initializer and execution-strategy capabilities rather than a bespoke runtime.
+
+<ModelPaperFigures modelId="skyreels-v3" locale="en" />
+
+The recorded paper is [arXiv 2601.17323](https://arxiv.org/abs/2601.17323).
+
+Code: [SkyworkAI/SkyReels-V3](https://github.com/SkyworkAI/SkyReels-V3).
+
+<ModelCommandBuilder modelId="skyreels-v3" locale="en" />
+
+## What it is for
+
+`skyreels-v3` is the recorded prompt-to-video route — not image editing and not a policy. Start here when the job is a clip from text.
+
+Transformer, UMT5 text encoder, and VAE checkpoint schemas map exactly onto the native Wan graphs (recorded as verified). Reference conditioning concatenates reference-image latents; guidance runs dual text/image channels through the UniPC scheduler and dual-condition runner. It is published by Skywork AI (Kunlun).
+
+Catalog tasks include reference-to-video, audio-guided-video, video-to-video, and video-generation. Documented modalities: image and video in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Baseline quality suite).
+
+Not [SkyReels V2](/docs/guides/supported-models/skyreels-v2). Score on [VBench](/docs/evaluation/benchmark-hub/vbench).
+
+## Runtime contract
+
+Optional `prompt`, `negative_prompt`, `input_path`, `frames`, and `fps`; artifacts `skyreels-v3.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `SkyReelsV3Pipeline`.
+
+Family status: **Runner parity pending**.
+
+Runner status is partial: checkpoint schema mapping is exact, and a prior official-runtime visual artifact is documented, but native visual parity still needs a GPU inference run. No Diffusers or model-owned subprocess runtime is involved.
+
+WorldFoundry loads the SkyReels V3 checkpoint into the shared native Wan graph and framework-owned diffusion runner.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run skyreels-v3 --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `Skywork/SkyReels-V3-R2V-14B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh skyreels-v3`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="skyreels-v3" locale="en" />

@@ -36,7 +36,7 @@ artifact_filename: uni3c.mp4
 execution:
   environment: uni3c
   backend_stage: official_in_tree_stage2_runtime
-  runtime_status: in_tree_runtime_assets_pending
+  runtime_status: camera_checkpoint_gpu_validated_unified_pending
   integration_status: runtime_ported
   pipeline_binding: uni3c
 integration:
@@ -44,3 +44,4 @@ integration:
 notes:
 - Camera mode requires render.mp4, render_mask.mp4, and cam_info.json; unified mode additionally requires smpl_render.mp4 and hand_render.mp4.
 - The adapter resolves every model asset locally and enables Hugging Face offline mode before subprocess execution.
+- The camera route completed an 81-frame local H100 inference with verified controller and Wan base assets; calibrated camera-angle adherence and the unified route remain unverified.

@@ -28,7 +28,7 @@ def _make_divisible(v, divisor, min_value=None):
 from timm.models.layers import SqueezeExcite
 
 import torch
-from worldfoundry.core.nn.layers import LayerNorm2d
+from worldfoundry.core.nn.blocks.layers import LayerNorm2d
 
 class Conv2d_BN(torch.nn.Sequential):
     """Conv d bn implementation."""

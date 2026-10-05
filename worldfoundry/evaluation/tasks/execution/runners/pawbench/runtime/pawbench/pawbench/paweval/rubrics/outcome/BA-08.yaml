@@ -1,0 +1,82 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BA-08
+track: coverage
+title_en: Bird Reaction to Offered Food
+outcome_question: Which label in ['bird_takes_food_from_hand', 'bird_flies_off_or_leaves_table',
+  'bird_moves_away_but_stays_on_table', 'bird_displaces_food_without_taking',
+  'bird_pecks_food_without_taking', 'bird_stays_near_without_food_contact'] is visible
+  as the first decisive result after the hand offers food?
+readout_policy: Read the first decisive bird/hand/food relation after the off-screen
+  hand enters and offers food. Qualifying frames must keep the bird, hand, and food
+  visible enough to decide acquisition, leaving the table, moving away while staying
+  on the table, food displacement without acquisition, pecking without acquisition,
+  or staying near without food contact. Terminal stability is not required unless
+  the protocol names it.
+canonical_labels:
+- bird_takes_food_from_hand
+- bird_flies_off_or_leaves_table
+- bird_moves_away_but_stays_on_table
+- bird_displaces_food_without_taking
+- bird_pecks_food_without_taking
+- bird_stays_near_without_food_contact
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- The bird, hand, or food is off-screen during the decisive food-contact, away, or
+  leaving-table response.
+- The bird contacts the food but the frames do not show whether the food is acquired,
+  merely pecked, or displaced without acquisition.
+- None of the canonical labels ['bird_takes_food_from_hand', 'bird_flies_off_or_leaves_table',
+  'bird_moves_away_but_stays_on_table', 'bird_displaces_food_without_taking',
+  'bird_pecks_food_without_taking', 'bird_stays_near_without_food_contact'] can be
+  decisively identified within the readout window.
+out_of_schema_rules:
+- The animal, person/hand, or stimulus disappears, duplicates, swaps identity, or
+  reacts to a newly introduced off-screen cause; do not force into a legal reaction
+  label.
+- If the hand/food/stimulus timing is hidden so the response cannot be attributed,
+  return `unreadable` rather than inferring intent.
+- If a visible second hand, second bird, unrelated stimulus, or wrong action defines
+  the response, record out-of-schema rather than forcing a legal label.
+- Food appears, disappears, moves, or transfers without a continuous visible relation
+  to the entering hand and bird; do not coerce teleporting food into a legal outcome.
+- A second hand, second bird, or unrelated off-screen stimulus defines the response
+  instead of the specified single food offer.
+priority_rules:
+- First decisive readout is the bird response to the food offered by the hand entering
+  from off-screen.
+- bird_takes_food_from_hand means the food visibly leaves the hand and is held, carried,
+  or controlled by the bird. If the bird takes the food and then moves away or leaves
+  the table, score acquisition rather than the later movement.
+- bird_flies_off_or_leaves_table means the bird leaves the tabletop/interaction surface
+  without first visibly acquiring the food.
+- bird_moves_away_but_stays_on_table means the bird increases distance from the offered
+  food/hand but remains on the table, without first visibly acquiring the food.
+- bird_displaces_food_without_taking means the bird knocks, drops, or moves the food
+  from the hand or offer position without visibly holding/carrying it.
+- bird_pecks_food_without_taking means the bird visibly pecks or touches the food
+  with its beak but the food remains in the hand/offer position and is not acquired
+  or displaced.
+- bird_stays_near_without_food_contact means the bird remains near the offered food
+  without visible food contact or stronger away/acquisition/displacement outcome.
+- 'Priority: taking food from hand overrides leaving the table; leaving the table
+  overrides moving away while staying on table; moving away overrides food displacement
+  without taking; food displacement overrides pecking without taking; pecking overrides
+  staying near without food contact.'
+- The food item may be introduced by the off-screen hand action, but the hand/food
+  must become visible before the reaction is attributed.
+- If multiple effects occur in the first food-offer window, use the strongest visible
+  outcome by the priority order above. If the bird, hand, or food is off-screen during
+  the decisive response, return `unreadable` instead of guessing food contact.
+notes:
+- 'Reaction scene: outcome label requires visible post-stimulus animal/person response,
+  not intent inference.'
+- 'Outcome set intentionally separates moving away while still on the table from
+  flying off/leaving the table, and separates food displacement without acquisition
+  from taking the food.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules
+  are authored from STAGBench metadata/action protocol.'
+- 'Scene title: Bird Reaction to Offered Food.'

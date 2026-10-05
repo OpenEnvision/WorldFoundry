@@ -1,0 +1,224 @@
+id: apple-pi
+name: Apple-PI
+publisher: Nanyang Technological University
+publisher_kind: university
+benchmark_kind:
+- physics
+- physical-intelligence
+- video-generation
+- chain-of-frames
+domains:
+- law-grounded-physical-reasoning
+- perception
+- formulation
+- deduction
+modalities:
+- image
+- video
+- text
+status: confirmed_official_code
+official_sources:
+  github:
+    url: https://github.com/21yrm/Apple-PI
+    revision: main
+  paper_url: https://arxiv.org/abs/2607.16401
+  project_page: https://21yrm.github.io/Apple-PI-homepage/
+  huggingface_datasets:
+  - repo_id: yaorunmao/Apple-PI-GT
+    gated: false
+    private: false
+    status: documented_not_yet_public
+  license:
+    status: apache-2.0
+    notes: Apple-PI source repository is Apache-2.0; GT data availability follows the upstream release.
+
+benchmark_assets:
+  orchard:
+    status: documented_not_yet_public
+    declared_videos: 400
+    canonical_tasks: 10
+    single_law_tasks: 9
+    rollout_count: 3
+    subtracks: [perception_text, perception_graphic, formulation_text, formulation_graphic, deduction]
+    notes:
+    - The upstream repository documents the fixed GT path and schemas, but the GT dataset is not public yet.
+
+evaluation_surface:
+  protocol: perception_formulation_deduction
+  tracks:
+  - perception_text
+  - perception_graphic
+  - formulation_text
+  - formulation_graphic
+  - deduction
+  judge: Gemini 3 Flash through WorldFoundry's in-tree multimodal judge adapter
+  objective_metrics: [sam3_segmentation, moge_depth, mask_metrics, trajectory_overlap, velocity_error]
+
+metrics:
+- id: perception_text
+  name: Perception-Text
+  description: Final-frame text annotation artifact score.
+  higher_is_better: true
+  leaderboard_key: perception_text
+  aggregator: mean
+  output_unit: score
+- id: perception_graphic
+  name: Perception-Graphic
+  description: Final-frame object-only grounding artifact score.
+  higher_is_better: true
+  leaderboard_key: perception_graphic
+  aggregator: mean
+  output_unit: score
+- id: formulation_text
+  name: Formulation-Text
+  description: Governing-law and formula answer score.
+  higher_is_better: true
+  leaderboard_key: formulation_text
+  aggregator: mean
+  output_unit: score
+- id: formulation_graphic
+  name: Formulation-Graphic
+  description: Target-time state, velocity-arrow, and label score.
+  higher_is_better: true
+  leaderboard_key: formulation_graphic
+  aggregator: mean
+  output_unit: score
+- id: deduction
+  name: Deduction
+  description: Full-dynamics trajectory score combining upstream subjective and objective evaluation.
+  higher_is_better: true
+  leaderboard_key: deduction
+  aggregator: mean
+  output_unit: score
+  primary: true
+- id: apple_pi_average
+  name: Apple-PI Average
+  description: Arithmetic mean of the available Apple-PI subtrack means.
+  higher_is_better: true
+  leaderboard_key: apple_pi_average
+  aggregator: mean
+  output_unit: score
+
+runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/apple_pi/run_apple_pi_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.apple_pi.run_apple_pi_official_runner
+    generated_arg: --pred-dir
+    dataset_root_arg: --gt-dir
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    input_kind: apple_pi_prediction_dir_or_official_results
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:ApplePIContract
+  validation_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - apple-pi
+  - --mode
+  - official-validation
+  - --official-results-path
+  - <apple_pi_results.json>
+  - --output-dir
+  - <out>
+  - --json
+  run_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - apple-pi
+  - --mode
+  - official-run
+  - --gt-dir
+  - <apple_pi_gt_dir>
+  - --generated-artifact-dir
+  - <apple_pi_prediction_dir>
+  - --output-dir
+  - <out>
+  - --json
+  expected_artifacts:
+  - scorecard.json
+  - raw_metric_table.jsonl
+  - per_sample_scores.jsonl
+  - benchmark_contract.json
+  runtime:
+    kind: in_tree_model_backed
+    evaluator: worldfoundry.evaluation.tasks.execution.runners.apple_pi.apple_pi_runtime:evaluate_native_apple_pi
+    results_path_env: WORLDFOUNDRY_APPLE_PI_RESULTS_PATH
+    gt_dir_env: WORLDFOUNDRY_APPLE_PI_GT_DIR
+    prediction_dir_env: WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR
+    judge_backend_env: WORLDFOUNDRY_APPLE_PI_JUDGE_BACKEND
+    sam3_checkpoint_env: WORLDFOUNDRY_APPLE_PI_SAM3_CHECKPOINT
+    moge_checkpoint_env: WORLDFOUNDRY_APPLE_PI_MOGE_CHECKPOINT
+  verification_status: pending
+
+integration:
+  status: integrated
+  tier: model_backed
+  hf_dataset_id: yaorunmao/Apple-PI-GT
+  judge_model_id: gemini-3-flash-preview
+  implementation_scope: in_tree_protocol_evaluator_with_shared_foundation_models
+  source_files_copied: false
+  full_dataset_verified: false
+  notes:
+  - WorldFoundry does not vendor Apple-PI GT data or Gemini credentials.
+  - SAM3 and MoGe-2 are reused from the existing WorldFoundry base-model stack.
+  - Gemini is accessed through the existing lazy google.genai integration; mock is wiring-only.
+
+release_status: experimental
+maturity: verified_runner
+open_source_status: in_tree_runtime
+official_benchmark_verified: false
+integration_evidence: false
+leaderboard_valid: false
+requires:
+- Apple-PI GT directory following the upstream dataset contract.
+- Three independent prediction rollouts per case and subtrack in the upstream layout.
+- Gemini API key and the Apple-PI GT directory are required for full evaluation; SAM3/MoGe checkpoints use existing WorldFoundry capability paths.
+blockers:
+- The upstream GT dataset is documented but not public at the time of integration.
+- Full-suite official execution and leaderboard parity have not been verified in this workspace.
+- SAM3 and MoGe-2 objective metrics require their existing WorldFoundry checkpoints and compatible environment.
+data_refs:
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/apple-pi.yaml
+  prediction_format: https://github.com/21yrm/Apple-PI/blob/main/docs/PREDICTION_FORMAT.md
+  gt_format: https://github.com/21yrm/Apple-PI/blob/main/docs/GT_FORMAT.md
+  upstream_repository: https://github.com/21yrm/Apple-PI
+runner_availability:
+  available: true
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:ApplePIContract
+  runner_script_available: true
+  task_yaml_available: true
+  runtime_verified: false
+  normalizer_verified: false
+  surface: in_tree_model_backed_evaluator
+checkpoint_refs:
+- id: sam3
+  hf_repo_id: facebook/sam3
+  local_env: WORLDFOUNDRY_APPLE_PI_SAM3_CHECKPOINT
+- id: moge_v2_vitl_normal
+  hf_repo_id: Ruicheng/moge-2-vitl-normal
+  local_env: WORLDFOUNDRY_APPLE_PI_MOGE_CHECKPOINT
+base_model_dependencies:
+- sam3
+- moge_v2_vitl_normal
+optional_base_model_dependencies: []
+artifact_layout:
+  generated_artifact_dir_env: WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR
+  output_artifact: benchmark_scorecard
+  filename_template: scorecard.json
+validation_command:
+- ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+- -m
+- worldfoundry.evaluation.tasks.execution.runners.apple_pi.run_apple_pi_official_runner
+- --run-official
+- --gt-dir
+- ${WORLDFOUNDRY_APPLE_PI_GT_DIR}
+- --pred-dir
+- ${WORLDFOUNDRY_APPLE_PI_PREDICTION_DIR}
+- --judge-backend
+- mock
+- --output-dir
+- <out>
+- --json

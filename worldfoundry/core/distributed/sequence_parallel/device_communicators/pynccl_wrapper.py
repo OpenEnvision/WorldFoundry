@@ -1,5 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # Adapted from https://github.com/vllm-project/vllm/blob/v0.7.3/vllm/distributed/device_communicators/pynccl_wrapper.py
+"""Pure-Python NCCL wrapper so SP collectives can run inside a CUDA Graph.
+
+ctypes bindings avoid a custom extension. Capture-safe because the
+wrapper does not insert CPU decisions between NCCL launches.
+
+Not a ProcessGroup and not a substitute for ``torch.distributed``.
+Load failures (missing ``libnccl`` / ``librccl``) propagate from
+:class:`NCCLLibrary` so callers can disable PyNCCL. Switch NCCL
+versions with ``TRAINER_NCCL_SO_PATH`` — no recompile.
+
+Public surface: :class:`NCCLLibrary`, :class:`ncclDataTypeEnum`,
+:class:`ncclRedOpTypeEnum`, :class:`ncclUniqueId`, ``ncclComm_t``,
+``cudaStream_t``, ``buffer_type``.
+"""
 
 # This file is a pure Python wrapper for the NCCL library.
 # The main purpose is to use NCCL combined with CUDA graph.
@@ -37,6 +51,10 @@ from ..logger import init_logger
 
 logger = init_logger(__name__)
 
+# ──────────────────────────────────────────────────────────────────────────
+# ctypes mirrors of nccl.h — keep layouts in lockstep with the loaded .so
+# ──────────────────────────────────────────────────────────────────────────
+
 # === export types and functions from nccl to Python ===
 # for the original nccl definition, please check
 # https://github.com/NVIDIA/nccl/blob/master/src/nccl.h.in
@@ -46,6 +64,8 @@ ncclComm_t = ctypes.c_void_p
 
 
 class ncclUniqueId(ctypes.Structure):
+    """128-byte bootstrap id; rank 0 creates it, others receive the bytes."""
+
     _fields_ = [("internal", ctypes.c_byte * 128)]
 
 
@@ -56,6 +76,8 @@ ncclDataType_t = ctypes.c_int
 
 
 class ncclDataTypeEnum:
+    """NCCL dtype integers; :meth:`from_torch` rejects unsupported torch dtypes."""
+
     ncclInt8 = 0
     ncclChar = 0
     ncclUint8 = 1
@@ -75,6 +97,7 @@ class ncclDataTypeEnum:
 
     @classmethod
     def from_torch(cls, dtype: torch.dtype) -> int:
+        """Map a torch dtype to the NCCL integer; raise :class:`ValueError` otherwise."""
         if dtype == torch.int8:
             return cls.ncclInt8
         if dtype == torch.uint8:
@@ -98,6 +121,8 @@ ncclRedOp_t = ctypes.c_int
 
 
 class ncclRedOpTypeEnum:
+    """NCCL reduction-op integers; :meth:`from_torch` covers SUM/PROD/MAX/MIN/AVG."""
+
     ncclSum = 0
     ncclProd = 1
     ncclMax = 2
@@ -107,6 +132,7 @@ class ncclRedOpTypeEnum:
 
     @classmethod
     def from_torch(cls, op: ReduceOp) -> int:
+        """Map a torch :class:`ReduceOp`; PREMUL_SUM and others are unsupported."""
         if op == ReduceOp.SUM:
             return cls.ncclSum
         if op == ReduceOp.PRODUCT:
@@ -122,12 +148,27 @@ class ncclRedOpTypeEnum:
 
 @dataclass
 class Function:
+    """One NCCL C symbol: name, ctypes restype, and argument types."""
+
     name: str
     restype: Any
     argtypes: list[Any]
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Loaded .so cache — one CDLL per path; signatures bound once
+# ──────────────────────────────────────────────────────────────────────────
+
+
 class NCCLLibrary:
+    """ctypes loader for the NCCL / RCCL shared library used by PyNCCL.
+
+    Instances share :attr:`path_to_library_cache` so two communicators
+    do not ``dlopen`` the same ``.so`` twice. Construction raises the
+    original ``OSError`` after logging if the library is missing or the
+    platform is unsupported.
+    """
+
     exported_functions = [
         # const char* ncclGetErrorString(ncclResult_t result)
         Function("ncclGetErrorString", ctypes.c_char_p, [ncclResult_t]),
@@ -217,6 +258,7 @@ class NCCLLibrary:
     path_to_dict_mapping: dict[str, dict[str, Any]] = {}
 
     def __init__(self, so_file: str | None = None):
+        """Load ``so_file`` or :func:`~..cuda_utils.find_nccl_library` and bind symbols."""
 
         so_file = so_file or find_nccl_library()
 
@@ -250,14 +292,17 @@ class NCCLLibrary:
         self._funcs = NCCLLibrary.path_to_dict_mapping[so_file]
 
     def ncclGetErrorString(self, result: ncclResult_t) -> str:
+        """Decode the NCCL status integer into a UTF-8 diagnostic string."""
         return str(self._funcs["ncclGetErrorString"](result).decode("utf-8"))
 
     def NCCL_CHECK(self, result: ncclResult_t) -> None:
+        """Raise :class:`RuntimeError` on any non-zero NCCL status."""
         if result != 0:
             error_str = self.ncclGetErrorString(result)
             raise RuntimeError(f"NCCL error: {error_str}")
 
     def ncclGetVersion(self) -> str:
+        """Return ``major.minor.patch`` from the packed NCCL version integer (e.g. 21903)."""
         version = ctypes.c_int()
         self.NCCL_CHECK(self._funcs["ncclGetVersion"](ctypes.byref(version)))
         version_str = str(version.value)
@@ -268,11 +313,13 @@ class NCCLLibrary:
         return f"{major}.{minor}.{patch}"
 
     def ncclGetUniqueId(self) -> ncclUniqueId:
+        """Allocate a bootstrap id; only rank 0 should call this before broadcast."""
         unique_id = ncclUniqueId()
         self.NCCL_CHECK(self._funcs["ncclGetUniqueId"](ctypes.byref(unique_id)))
         return unique_id
 
     def ncclCommInitRank(self, world_size: int, unique_id: ncclUniqueId, rank: int) -> ncclComm_t:
+        """Create a communicator for ``rank``; all ranks must pass the same unique id."""
         comm = ncclComm_t()
         self.NCCL_CHECK(self._funcs["ncclCommInitRank"](ctypes.byref(comm), world_size, unique_id, rank))
         return comm
@@ -287,6 +334,7 @@ class NCCLLibrary:
         comm: ncclComm_t,
         stream: cudaStream_t,
     ) -> None:
+        """Launch ``ncclAllReduce`` on ``stream``; ints coerce to the ctypes aliases."""
         # `datatype` actually should be `ncclDataType_t`
         # and `op` should be `ncclRedOp_t`
         # both are aliases of `ctypes.c_int`
@@ -304,6 +352,7 @@ class NCCLLibrary:
         comm: ncclComm_t,
         stream: cudaStream_t,
     ) -> None:
+        """Launch ``ncclReduceScatter``; ``count`` is the per-rank receive length."""
         # `datatype` actually should be `ncclDataType_t`
         # and `op` should be `ncclRedOp_t`
         # both are aliases of `ctypes.c_int`
@@ -320,6 +369,7 @@ class NCCLLibrary:
         comm: ncclComm_t,
         stream: cudaStream_t,
     ) -> None:
+        """Launch ``ncclAllGather``; ``count`` is the send-buffer element count."""
         # `datatype` actually should be `ncclDataType_t`
         # which is an aliases of `ctypes.c_int`
         # when we pass int to a function, it will be converted to `ctypes.c_int`
@@ -329,11 +379,13 @@ class NCCLLibrary:
     def ncclSend(
         self, sendbuff: buffer_type, count: int, datatype: int, dest: int, comm: ncclComm_t, stream: cudaStream_t
     ) -> None:
+        """Launch ``ncclSend`` to communicator-local ``dest``."""
         self.NCCL_CHECK(self._funcs["ncclSend"](sendbuff, count, datatype, dest, comm, stream))
 
     def ncclRecv(
         self, recvbuff: buffer_type, count: int, datatype: int, src: int, comm: ncclComm_t, stream: cudaStream_t
     ) -> None:
+        """Launch ``ncclRecv`` from communicator-local ``src``."""
         self.NCCL_CHECK(self._funcs["ncclRecv"](recvbuff, count, datatype, src, comm, stream))
 
     def ncclBroadcast(
@@ -346,9 +398,11 @@ class NCCLLibrary:
         comm: ncclComm_t,
         stream: cudaStream_t,
     ) -> None:
+        """Launch ``ncclBroadcast`` from communicator-local ``root``."""
         self.NCCL_CHECK(self._funcs["ncclBroadcast"](sendbuff, recvbuff, count, datatype, root, comm, stream))
 
     def ncclCommDestroy(self, comm: ncclComm_t) -> None:
+        """Destroy ``comm``. Collective and unsafe during Python teardown — avoid in ``__del__``."""
         self.NCCL_CHECK(self._funcs["ncclCommDestroy"](comm))
 
 

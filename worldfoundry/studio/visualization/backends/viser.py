@@ -30,7 +30,7 @@ VISER_ALIGNMENT_PRESETS = frozenset({"auto", "none", "first-camera", "first-came
 
 @dataclass(frozen=True)
 class ViserPresentation:
-    """Iframe markup plus a short human caption for Gradio."""
+    """Iframe markup plus a short human caption for embedded viewers."""
 
     html: str
     caption: str

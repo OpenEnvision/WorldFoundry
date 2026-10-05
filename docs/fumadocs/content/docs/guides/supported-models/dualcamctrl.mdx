@@ -1,0 +1,39 @@
+---
+title: "DualCamCtrl"
+description: "HKUST-GZ EnVision: RGB + depth + camera .torch. Official demo verified: 320×480, 61 frames, 50 steps. License unknown. Expected seaside.mp4."
+modelId: "dualcamctrl"
+pageSource: authored
+---
+
+DualCamCtrl steers video with a **camera trajectory plus a depth image**: RGB and depth together pin geometry so the camera move stays grounded. WorldFoundry vendors infer under `worldfoundry/synthesis/visual_generation/dualcamctrl` as `DualCamCtrlPipeline`. Runner **and** demo are **verified** against the official RGB / depth / camera contract.
+
+<ModelPaperFigures modelId="dualcamctrl" locale="en" />
+
+Paper: [arXiv 2511.23127](https://arxiv.org/abs/2511.23127). Project: [soyouthinkyoucantell.github.io/dualcamctrl-page](https://soyouthinkyoucantell.github.io/dualcamctrl-page/). Code: [EnVision-Research/DualCamCtrl](https://github.com/EnVision-Research/DualCamCtrl). Publisher: HKUST (Guangzhou) EnVision Lab. Catalog license: **unknown**.
+
+<ModelCommandBuilder modelId="dualcamctrl" locale="en" />
+
+## What it is for
+
+Dual-camera control for a stereo-style pair.
+
+Launch `worldfoundry-eval run dualcamctrl`.
+
+Score on [CameraBench](/docs/evaluation/benchmark-hub/camerabench) — camera-trajectory adherence of controlled generation.
+
+## Runtime contract
+
+Required: `prompt` and `image`; optional: `video`; `actions`: camera_trajectory, depth_image; artifacts: `dualcamctrl.mp4` and `seaside.mp4`.
+
+| Knob | Official demo |
+| --- | --- |
+| Size | **320×480** |
+| Frames | **61** |
+| Steps | **50** |
+| Trajectory | `.torch` camera file |
+
+## Run in WorldFoundry
+
+Status: **Verified**. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `FayeHongfeiZhang/DualCamCtrl`, `alibaba-pai/Wan2.1-Fun-V1.1-1.3B-Control-Camera`, and `Wan-AI/Wan2.1-T2V-1.3B` among others locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run dualcamctrl`. Catalog VRAM is unset.
+
+<ModelRelatedRecipes modelId="dualcamctrl" locale="en" />

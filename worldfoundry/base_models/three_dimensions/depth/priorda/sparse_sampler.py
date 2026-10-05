@@ -1,6 +1,6 @@
 # This file includes code originally from the PriorDA repository:
 # https://github.com/SpatialVision/Prior-Depth-Anything
-# Licensed under the Apache-2.0 License. See THIRD_PARTY_LICENSES.md for details.
+# Licensed under the Apache-2.0 License. See repository-root THIRD-PARTY-NOTICES for details.
 
 """Module for base_models -> three_dimensions -> depth -> priorda -> sparse_sampler.py functionality."""
 

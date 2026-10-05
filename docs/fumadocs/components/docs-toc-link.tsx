@@ -11,6 +11,7 @@ type DocsTocLinkProps = {
   style?: CSSProperties;
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
   branchActive?: boolean;
+  label?: string;
 };
 
 export function DocsTocLink({
@@ -19,6 +20,7 @@ export function DocsTocLink({
   style,
   scrollContainerRef,
   branchActive = false,
+  label,
 }: DocsTocLinkProps) {
   const active = useDocsTocActiveId(href);
   const ref = useRef<HTMLAnchorElement>(null);
@@ -39,6 +41,7 @@ export function DocsTocLink({
       data-active={active ? 'true' : 'false'}
       data-branch-active={branchActive ? 'true' : 'false'}
       style={style}
+      title={label || undefined}
     >
       {children}
     </a>

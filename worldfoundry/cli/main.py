@@ -5,7 +5,10 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import sys
+import time
+import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType
@@ -19,9 +22,24 @@ from worldfoundry.evaluation.utils import (
 )
 
 from .help import WorldFoundryArgumentParser
-from .utils import json_dump, load_json_mapping, parse_key_value_mapping
+from .presentation import (
+    BOLD,
+    MUTED,
+    Panel,
+    Row,
+    paint,
+    print_details,
+    print_hint,
+    print_notice,
+    print_table,
+    render_panels,
+    terminal_enabled,
+    terminal_width,
+)
+from .utils import CliUsageError, cli_prog_name, json_dump, load_json_mapping, parse_key_value_mapping
 
 _BENCHMARK_RUN_MODE_CHOICES = ("normalizer", "official-run", "official-validation", "contract")
+_EMBODIED_ACCEPTED_LICENSES_ENV = "WORLDFOUNDRY_ACCEPTED_LICENSES"
 
 # ── CLI banners and public command surface ──────────────────────
 
@@ -29,16 +47,16 @@ _FIRST_RUN_BANNER = """\
 WorldFoundry evaluation CLI
 
 Start with GPU-ready discovery and validation commands:
-  worldfoundry-eval zoo benchmarks --json
-  worldfoundry-eval zoo models
-  worldfoundry-eval tasks list
+  {prog} zoo benchmarks --json
+  {prog} zoo models
+  {prog} tasks list
 
 Then run a selected model x benchmark cell:
-  worldfoundry-eval run --benchmark <id> --model <model-id> --output-dir tmp/worldfoundry_run --json
+  {prog} run --benchmark <id> --model <model-id> --output-dir tmp/worldfoundry_run --json
 
 Interactive and help:
-  worldfoundry-eval tui
-  worldfoundry-eval <command> --help
+  {prog} tui
+  {prog} <command> --help
 """
 
 _PUBLIC_ROOT_COMMANDS = (
@@ -69,7 +87,36 @@ _PUBLIC_ROOT_COMMANDS = (
 
 def _print_first_run_banner() -> None:
     """Print the first-run discovery banner when no subcommand is selected."""
-    print(_FIRST_RUN_BANNER.rstrip())
+    if terminal_enabled():
+        prog = cli_prog_name()
+        print(paint("WorldFoundry", BOLD))
+        print(paint("World models · Inference · Evaluation", MUTED))
+        print()
+        panels = (
+            Panel(
+                "Explore",
+                (
+                    Row(f"{prog} zoo models", "Browse models and their requirements."),
+                    Row(f"{prog} zoo benchmarks", "Find benchmarks and evaluation surfaces."),
+                    Row(f"{prog} tui", "Open the interactive terminal workspace."),
+                ),
+            ),
+            Panel(
+                "Run and evaluate",
+                (
+                    Row(f"{prog} run <model> --help", "Inspect typed inputs, pipeline settings and defaults."),
+                    Row(
+                        f"{prog} run <model> --prompt 'A quiet coastal town'",
+                        "Generate with a configured model and its checkpoints.",
+                    ),
+                    Row(f"{prog} score --help", "Score generated artifacts or existing results."),
+                ),
+            ),
+        )
+        print(render_panels(panels, terminal_width(), min_column_width=48))
+        print_hint(f"Workflow templates: {prog} config list\nAll commands: {prog} --help")
+        return
+    print(_FIRST_RUN_BANNER.format(prog=cli_prog_name()).rstrip())
 
 
 # ── Module and data loading helpers ─────────────────────────────
@@ -79,6 +126,25 @@ def _curate_root_subparser_help(subparsers: argparse._SubParsersAction[argparse.
     """Keep the root help focused on the supported public command surface."""
 
     subparsers.metavar = "{" + ",".join(_PUBLIC_ROOT_COMMANDS) + "}"
+    subparsers.help_groups = {
+        "Start here": ("run", "tui", "zoo", "models"),
+        "Evaluate": ("evaluate", "score", "generate-score", "reproduce", "embodied"),
+        "Catalogs and workflows": ("tasks", "suites", "task", "dataset", "config", "plan", "metric"),
+        "Results and validation": ("compare-runs", "index-runs", "validate-artifact", "validate", "preflight"),
+        "Services": ("mcp",),
+    }
+
+    def describe_children(action: argparse._SubParsersAction) -> None:
+        for command in action._get_subactions():
+            child = action.choices[command.dest]
+            if not child.description and command.help != argparse.SUPPRESS:
+                child.description = command.help
+        for child in set(action.choices.values()):
+            for nested in child._actions:
+                if isinstance(nested, argparse._SubParsersAction):
+                    describe_children(nested)
+
+    describe_children(subparsers)
 
 
 def _load_repo_script(relative_path: str) -> ModuleType:
@@ -329,14 +395,34 @@ def _handle_tui(args: argparse.Namespace) -> int:
         argv.append("--catalog-json")
     if args.print_command:
         argv.append("--print-command")
+    if getattr(args, "write_suite_plan", False):
+        argv.append("--write-suite-plan")
     return tui_main(argv)
 
 
 # ── Evaluate command ─────────────────────────────────────────────
 
 
+def _validate_evaluate_usage(args: argparse.Namespace) -> None:
+    """Raise :class:`CliUsageError` for mutually exclusive evaluate flags (CM-08)."""
+
+    task_args = (args.task_type, args.benchmark_name, args.data_path)
+    if args.embodied_spec is not None and any(item is not None for item in task_args):
+        raise CliUsageError(
+            "--embodied-spec cannot be combined with --task-type/--benchmark-name/--data-path"
+        )
+    if args.samples_path is not None and args.embodied_spec is None:
+        raise CliUsageError("--samples-path requires --embodied-spec")
+    if args.embodied_spec is not None and args.samples_path is not None and args.requests_path is not None:
+        raise CliUsageError("use either --samples-path or --requests-path with --embodied-spec, not both")
+    if any(item is not None for item in task_args) and not all(item is not None for item in task_args):
+        raise CliUsageError("--task-type, --benchmark-name, and --data-path must be provided together")
+
+
 def _handle_evaluate(args: argparse.Namespace) -> int:
     """Route evaluate workloads to either cached run-plan replay or runtime eval."""
+    if args.plan is None:
+        _validate_evaluate_usage(args)
     from worldfoundry.evaluation.runner import EvaluateRunRequest, execute_evaluate_run
 
     if args.plan is not None:
@@ -345,31 +431,17 @@ def _handle_evaluate(args: argparse.Namespace) -> int:
         if args.json:
             json_dump(payload)
         else:
-            print(
-                f"Evaluate {result.status}: mode={result.mode}, "
-                f"samples={result.sample_count}, scorecard={result.scorecard_path}"
+            print_details(
+                "Evaluation result",
+                {
+                    "status": result.status,
+                    "mode": result.mode,
+                    "samples": result.sample_count,
+                    "scorecard": result.scorecard_path,
+                },
+                plain=f"Evaluate {result.status}: mode={result.mode}, samples={result.sample_count}, scorecard={result.scorecard_path}",
             )
         return result.exit_code
-
-    task_args = (args.task_type, args.benchmark_name, args.data_path)
-    if args.embodied_spec is not None and any(item is not None for item in task_args):
-        print(
-            "error: --embodied-spec cannot be combined with --task-type/--benchmark-name/--data-path",
-            file=sys.stderr,
-        )
-        return 2
-    if args.samples_path is not None and args.embodied_spec is None:
-        print("error: --samples-path requires --embodied-spec", file=sys.stderr)
-        return 2
-    if args.embodied_spec is not None and args.samples_path is not None and args.requests_path is not None:
-        print("error: use either --samples-path or --requests-path with --embodied-spec, not both", file=sys.stderr)
-        return 2
-    if any(item is not None for item in task_args) and not all(item is not None for item in task_args):
-        print(
-            "error: --task-type, --benchmark-name, and --data-path must be provided together",
-            file=sys.stderr,
-        )
-        return 2
 
     requests = None
     benchmark_metadata = None
@@ -386,7 +458,7 @@ def _handle_evaluate(args: argparse.Namespace) -> int:
 
         spec_payload = _load_json_mapping_or_inline(args.embodied_spec, field_name="--embodied-spec")
         if spec_payload is None:
-            raise ValueError("--embodied-spec is required")
+            raise CliUsageError("--embodied-spec is required")
         embodied_spec = EmbodiedGenerationSpec.from_dict(spec_payload)
         if args.requests_path is None:
             samples = _load_samples_or_episodes(args.samples_path, field_name="--samples-path")
@@ -484,15 +556,39 @@ def _handle_evaluate(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(payload)
     else:
-        print(
-            f"Evaluate {result.status}: mode={result.mode}, "
-            f"samples={result.sample_count}, scorecard={result.scorecard_path}"
+        print_details(
+            "Evaluation result",
+            {
+                "status": result.status,
+                "mode": result.mode,
+                "samples": result.sample_count,
+                "scorecard": result.scorecard_path,
+            },
+            plain=f"Evaluate {result.status}: mode={result.mode}, samples={result.sample_count}, scorecard={result.scorecard_path}",
         )
     return result.exit_code
 
 
+def _accept_embodied_licenses(license_ids: list[str] | None) -> None:
+    """Merge explicit CLI acknowledgements into the embodied license environment."""
+
+    accepted = [
+        item.strip()
+        for item in os.environ.get(_EMBODIED_ACCEPTED_LICENSES_ENV, "").split(",")
+        if item.strip()
+    ]
+    for value in license_ids or ():
+        for item in str(value).split(","):
+            normalized = item.strip()
+            if normalized and normalized not in accepted:
+                accepted.append(normalized)
+    if accepted:
+        os.environ[_EMBODIED_ACCEPTED_LICENSES_ENV] = ",".join(accepted)
+
+
 def _handle_embodied_run(args: argparse.Namespace) -> int:
     """Run an embodied closed-loop evaluation config."""
+    _accept_embodied_licenses(getattr(args, "accept_license", None))
     from worldfoundry.evaluation.tasks.embodied.orchestrator import run_embodied_eval_config
 
     result = run_embodied_eval_config(
@@ -509,10 +605,14 @@ def _handle_embodied_run(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(result.to_dict())
     else:
-        print(
-            f"Embodied eval {result.evaluate_result.status}: "
-            f"samples={result.evaluate_result.sample_count}, "
-            f"scorecard={result.evaluate_result.scorecard_path}"
+        print_details(
+            "Embodied evaluation",
+            {
+                "status": result.evaluate_result.status,
+                "samples": result.evaluate_result.sample_count,
+                "scorecard": result.evaluate_result.scorecard_path,
+            },
+            plain=f"Embodied eval {result.evaluate_result.status}: samples={result.evaluate_result.sample_count}, scorecard={result.evaluate_result.scorecard_path}",
         )
     return result.evaluate_result.exit_code
 
@@ -541,7 +641,11 @@ def _handle_embodied_merge(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(result.to_dict())
     else:
-        print(f"Embodied merge {result.status}: samples={result.sample_count}, scorecard={result.scorecard_path}")
+        print_details(
+            "Embodied merge",
+            {"status": result.status, "samples": result.sample_count, "scorecard": result.scorecard_path},
+            plain=f"Embodied merge {result.status}: samples={result.sample_count}, scorecard={result.scorecard_path}",
+        )
     return result.exit_code
 
 
@@ -576,9 +680,17 @@ def _handle_embodied_plan(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(payload)
     else:
-        print(f"Embodied plan: requests={total}, output_dir={config.get('output_dir')}")
-        for item in benchmarks:
-            print(f"  {item['benchmark_id']}: {item['request_count']} request(s)")
+        if terminal_enabled():
+            print_details("Embodied plan", {"requests": total, "output": config.get("output_dir")})
+            print_table(
+                "Benchmarks",
+                ("Benchmark", "Requests"),
+                [(item["benchmark_id"], item["request_count"]) for item in benchmarks],
+            )
+        else:
+            print(f"Embodied plan: requests={total}, output_dir={config.get('output_dir')}")
+            for item in benchmarks:
+                print(f"  {item['benchmark_id']}: {item['request_count']} request(s)")
     return 0
 
 
@@ -597,9 +709,16 @@ def _handle_validate(args: argparse.Namespace) -> int:
         json_dump(payload)
         return 0
 
-    print(
-        f"Validated {payload['task_type']}/{payload['benchmark_name']}: "
-        f"protocol={payload['evaluation_protocol']}"
+    print_details(
+        "Task validation",
+        {
+            "task": payload["task_type"],
+            "benchmark": payload["benchmark_name"],
+            "protocol": payload["evaluation_protocol"],
+        },
+        plain=(
+            f"Validated {payload['task_type']}/{payload['benchmark_name']}: protocol={payload['evaluation_protocol']}"
+        ),
     )
     return 0
 
@@ -725,6 +844,8 @@ def _worldfoundry_run_request_from_args(args: argparse.Namespace):
         engine=args.engine,
         benchmark_mode=getattr(args, "benchmark_mode", "official-run"),
         execute=not args.plan_only,
+        model_workers=getattr(args, "model_workers", 1),
+        worker_cuda_devices=tuple(getattr(args, "model_worker_device", None) or ()),
         resume=args.resume,
         skip_incompatible=args.skip_incompatible,
         fail_on_skipped=args.fail_on_skipped,
@@ -768,13 +889,30 @@ def _handle_worldfoundry_run(args: argparse.Namespace) -> int:
     """Run the unified worldfoundry facade and return the framework exit code."""
     from worldfoundry.evaluation.framework import run_worldfoundry
 
+    performance_profile = getattr(args, "performance_profile", "balanced")
+    if performance_profile == "throughput":
+        os.environ.setdefault("WORLDFOUNDRY_EVAL_TORCH_COMPILE", "1")
+        os.environ.setdefault("WORLDFOUNDRY_KERNEL_AUTOTUNE", "1")
+        os.environ.setdefault("WORLDFOUNDRY_KERNEL_AUTOTUNE_CACHE", "1")
+        os.environ.setdefault("WORLDFOUNDRY_TORCH_COMPILE_MODE", "reduce-overhead")
+        os.environ.setdefault("WORLDFOUNDRY_MATMUL_PRECISION", "high")
+        os.environ.setdefault("WORLDFOUNDRY_ENABLE_TF32", "1")
+    elif performance_profile == "latency":
+        os.environ.setdefault("WORLDFOUNDRY_EVAL_TORCH_COMPILE", "0")
+        os.environ.setdefault("WORLDFOUNDRY_KERNEL_AUTOTUNE", "0")
+
     result = run_worldfoundry(_worldfoundry_run_request_from_args(args))
     payload = result.to_dict()
     payload["engine"] = args.engine
+    payload["performance_profile"] = performance_profile
     if args.json:
         json_dump(payload)
     else:
-        print(f"Run {result.status}: kind={result.kind}, output_dir={result.output_dir}")
+        print_details(
+            "Run result",
+            {"status": result.status, "kind": result.kind, "output": result.output_dir},
+            plain=f"Run {result.status}: kind={result.kind}, output_dir={result.output_dir}",
+        )
     return result.exit_code
 
 
@@ -784,7 +922,7 @@ def _model_run_plan(args: argparse.Namespace) -> dict[str, Any]:
 
     schema = getattr(args, "model_run_schema", None)
     if schema is None:
-        raise ValueError("model-specific configuration requires `run <model-id>`")
+        raise CliUsageError("model-specific configuration requires `run <model-id>`")
     resolution = _resolved_model_run_options(args)
     parameters = _run_model_parameters(args)
     generation_defaults = parameters.pop(GENERATION_DEFAULTS_PARAMETER, {})
@@ -832,17 +970,12 @@ def _uses_direct_model_run(args: argparse.Namespace) -> bool:
 
 def _handle_direct_model_run(args: argparse.Namespace) -> int:
     """Execute one model directly from its typed inference contract."""
-    from worldfoundry.evaluation.api import GenerationRequest
-    from worldfoundry.evaluation.runner import EvaluateRunRequest, execute_evaluate_run
-
     schema = args.model_run_schema
     if not schema.runnable:
-        print(
-            f"error: model {schema.model_id!r} is not runnable: {schema.blocked_reason}. "
-            f"Use `worldfoundry-eval run {schema.requested_model_id} --model-status` for its contract.",
-            file=sys.stderr,
+        raise CliUsageError(
+            f"model {schema.model_id!r} is not runnable: {schema.blocked_reason}. "
+            f"Use `{cli_prog_name()} run {schema.requested_model_id} --model-status` for its contract.",
         )
-        return 2
     resolution = _resolved_model_run_options(args)
     missing = [
         field.option
@@ -851,9 +984,18 @@ def _handle_direct_model_run(args: argparse.Namespace) -> int:
         and field.required
         and not resolution.inputs.get(field.input_key or field.key_path[-1])
     ]
+    missing.extend(
+        field.option
+        for field in schema.fields
+        if field.scope == "call"
+        and field.required
+        and getattr(args, field.dest, None) in (None, "")
+    )
     if missing and args.requests_path is None:
-        print(f"error: direct {schema.model_id} inference requires {', '.join(missing)}", file=sys.stderr)
-        return 2
+        raise CliUsageError(f"direct {schema.model_id} inference requires {', '.join(missing)}")
+
+    from worldfoundry.evaluation.api import GenerationRequest
+    from worldfoundry.evaluation.runner import EvaluateRunRequest, execute_evaluate_run
 
     requests = None
     if args.requests_path is None:
@@ -891,7 +1033,7 @@ def _handle_direct_model_run(args: argparse.Namespace) -> int:
             model_config=load_json_mapping(args.model_config),
             dataset_id=args.dataset_id or f"{schema.model_id}:direct",
             run_id=args.run_id,
-            fail_on_sample_error=args.fail_on_sample_error,
+            fail_on_sample_error=bool(args.fail_on_sample_error or args.fail_on_generation_error),
             write_artifacts_index=not args.no_artifacts_index,
             generation_cache_dir=args.generation_cache_dir,
             generation_cache_mode=args.generation_cache_mode,
@@ -908,9 +1050,15 @@ def _handle_direct_model_run(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(payload)
     else:
-        print(
-            f"Run {result.status}: model={schema.model_id}, "
-            f"samples={result.sample_count}, scorecard={result.scorecard_path}"
+        print_details(
+            "Model run",
+            {
+                "status": result.status,
+                "model": schema.model_id,
+                "samples": result.sample_count,
+                "scorecard": result.scorecard_path,
+            },
+            plain=f"Run {result.status}: model={schema.model_id}, samples={result.sample_count}, scorecard={result.scorecard_path}",
         )
     return result.exit_code
 
@@ -918,19 +1066,13 @@ def _handle_direct_model_run(args: argparse.Namespace) -> int:
 def _handle_run(args: argparse.Namespace) -> int:
     """Route run into either plan replay or unified/in-process execution."""
     if getattr(args, "model_run_schema", None) is not None and len(_run_model_ids(args)) > 1:
-        print(
-            "error: positional model syntax accepts one model; remove conflicting --model/--model-id values",
-            file=sys.stderr,
-        )
-        return 2
+        raise CliUsageError("positional model syntax accepts one model; remove conflicting --model/--model-id values")
     schema = getattr(args, "model_run_schema", None)
     if schema is not None and not schema.runnable and not args.print_config and not args.plan_only:
-        print(
-            f"error: model {schema.model_id!r} is not runnable: {schema.blocked_reason}. "
-            f"Use `worldfoundry-eval run {schema.requested_model_id} --model-status` for its contract.",
-            file=sys.stderr,
+        raise CliUsageError(
+            f"model {schema.model_id!r} is not runnable: {schema.blocked_reason}. "
+            f"Use `{cli_prog_name()} run {schema.requested_model_id} --model-status` for its contract.",
         )
-        return 2
     if args.plan is not None:
         result = _execute_run_plan_file(args)
         payload = result.to_dict()
@@ -938,9 +1080,15 @@ def _handle_run(args: argparse.Namespace) -> int:
         if args.json:
             json_dump(payload)
         else:
-            print(
-                f"Run {result.status}: engine=plan, "
-                f"samples={result.sample_count}, scorecard={result.scorecard_path}"
+            print_details(
+                "Run result",
+                {
+                    "status": result.status,
+                    "engine": "plan",
+                    "samples": result.sample_count,
+                    "scorecard": result.scorecard_path,
+                },
+                plain=f"Run {result.status}: engine=plan, samples={result.sample_count}, scorecard={result.scorecard_path}",
             )
         return result.exit_code
 
@@ -949,8 +1097,7 @@ def _handle_run(args: argparse.Namespace) -> int:
 
     if _uses_direct_model_run(args):
         if args.engine != "in-process":
-            print("error: direct model execution requires --engine in-process", file=sys.stderr)
-            return 2
+            raise CliUsageError("direct model execution requires --engine in-process")
         if args.plan_only:
             return _print_model_run_plan(args)
         return _handle_direct_model_run(args)
@@ -962,19 +1109,15 @@ def _handle_run(args: argparse.Namespace) -> int:
             and not _suite_presets_declare_models(args)
             and not args.contract_fixture
         ):
-            print(
-                "error: model-benchmark runs require --model for real evaluation",
-                file=sys.stderr,
-            )
-            return 2
+            raise CliUsageError("model-benchmark runs require --model for real evaluation")
         return _handle_worldfoundry_run(args)
 
     if not _has_complete_task_args(args):
-        print(
-            "error: --task-type, --benchmark-name, and --data-path are required unless --plan is provided",
-            file=sys.stderr,
+        raise CliUsageError(
+            "select a run target: `run --benchmark <id> --model <id>` for a benchmark-zoo cell, "
+            "`run <model-id>` for direct model inference, or `run --plan <plan.json>` for replay. "
+            "(The legacy --task-type/--benchmark-name/--data-path flow is retired.)"
         )
-        return 2
 
     return _handle_run_in_process(args)
 
@@ -1002,8 +1145,7 @@ def _handle_run_in_process(args: argparse.Namespace) -> int:
     else:
         mode = "model"
     if mode == "existing-results" and args.results_path is None:
-        print("error: run --engine existing-results requires --results-path", file=sys.stderr)
-        return 2
+        raise CliUsageError("run --engine existing-results requires --results-path")
 
     benchmark_metadata = {
         "suite": benchmark.suite,
@@ -1050,9 +1192,15 @@ def _handle_run_in_process(args: argparse.Namespace) -> int:
     if args.json:
         json_dump(payload)
     else:
-        print(
-            f"Run {result.status}: engine={args.engine}, "
-            f"samples={result.sample_count}, scorecard={result.scorecard_path}"
+        print_details(
+            "Run result",
+            {
+                "status": result.status,
+                "engine": args.engine,
+                "samples": result.sample_count,
+                "scorecard": result.scorecard_path,
+            },
+            plain=f"Run {result.status}: engine={args.engine}, samples={result.sample_count}, scorecard={result.scorecard_path}",
         )
     return result.exit_code
 
@@ -1060,8 +1208,8 @@ def _handle_run_in_process(args: argparse.Namespace) -> int:
 def _build_parser(model_run_schema: Any | None = None) -> argparse.ArgumentParser:
     """Build all CLI commands, keeping parser wiring near handler selection."""
     parser = WorldFoundryArgumentParser(
-        prog="worldfoundry-eval",
-        description="WorldFoundry benchmark evaluation subsystem for the WorldFoundry repository.",
+        prog=cli_prog_name(),
+        description="Discover world models, run inference, and evaluate results.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Command areas:\n"
@@ -1072,11 +1220,43 @@ def _build_parser(model_run_schema: Any | None = None) -> argparse.ArgumentParse
             "  Maintain:    task validate, preflight, dataset, plan, metric\n"
         ),
     )
+    # Global logging flags. They are pre-scanned and stripped from ``argv`` in
+    # ``main`` (so they may appear before *or* after the subcommand) and applied
+    # via ``configure_logging`` before the handler runs. Registered here so
+    # ``--help`` documents them; argparse never enforces them.
+    parser.add_argument(
+        "--log-level",
+        dest="log_level",
+        default=None,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Logging verbosity (env: WORLDFOUNDRY_LOG_LEVEL). Default INFO.",
+    )
+    parser.add_argument(
+        "--log-file",
+        dest="log_file",
+        default=None,
+        help="Write a rotating log to this path (env: WORLDFOUNDRY_LOG_FILE).",
+    )
+    parser.add_argument(
+        "--log-json",
+        dest="log_json",
+        action="store_true",
+        default=False,
+        help="Emit the file sink as JSON Lines (env: WORLDFOUNDRY_LOG_JSON).",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        dest="verbose",
+        action="store_true",
+        default=False,
+        help="Show the full traceback when a command fails.",
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     tui_parser = subparsers.add_parser(
         "tui",
-        help="Launch the WorldFoundry terminal UI for catalog browsing and model-benchmark runs",
+        help="Browse models and launch runs in the terminal UI",
     )
     tui_parser.add_argument("--model-manifest-dir", type=Path)
     tui_parser.add_argument("--benchmark-manifest-dir", type=Path)
@@ -1135,6 +1315,7 @@ def _build_parser(model_run_schema: Any | None = None) -> argparse.ArgumentParse
     tui_parser.add_argument("--fallback", action="store_true")
     tui_parser.add_argument("--catalog-json", action="store_true")
     tui_parser.add_argument("--print-command", action="store_true")
+    tui_parser.add_argument("--write-suite-plan", action="store_true")
     tui_parser.set_defaults(func=_handle_tui)
 
     from .tasks import register_task_subparsers
@@ -1194,6 +1375,13 @@ def _build_parser(model_run_schema: Any | None = None) -> argparse.ArgumentParse
     embodied_run_parser.add_argument("--no-docker", action="store_true")
     embodied_run_parser.add_argument("--pull-docker", action="store_true")
     embodied_run_parser.add_argument("--no-save", action="store_true")
+    embodied_run_parser.add_argument(
+        "--accept-license",
+        action="append",
+        default=None,
+        metavar="LICENSE_ID",
+        help="Acknowledge an embodied simulator/data license; repeat for multiple licenses",
+    )
     embodied_run_parser.add_argument("--json", action="store_true")
     embodied_run_parser.set_defaults(func=_handle_embodied_run)
 
@@ -1275,16 +1463,19 @@ def _build_parser(model_run_schema: Any | None = None) -> argparse.ArgumentParse
     )
     evaluate_parser.add_argument(
         "--task-type",
-        help="Optional benchmark task type to materialize into GenerationRequest rows.",
+        help=(
+            "Retired legacy materialization flow; kept for compatibility and always fails with "
+            "guidance. Use `run --benchmark <id> --model <id>` or `task materialize` instead."
+        ),
     )
     evaluate_parser.add_argument(
         "--benchmark-name",
-        help="Optional benchmark name paired with --task-type.",
+        help="Retired; see --task-type.",
     )
     evaluate_parser.add_argument(
         "--data-path",
         type=Path,
-        help="Dataset root used with --task-type and --benchmark-name.",
+        help="Retired; see --task-type.",
     )
     evaluate_parser.add_argument(
         "--num-samples",
@@ -1380,7 +1571,7 @@ def _build_parser(model_run_schema: Any | None = None) -> argparse.ArgumentParse
 
     run_parser = subparsers.add_parser(
         "run",
-        help="Execute or score a WorldFoundry benchmark through the unified facade",
+        help="Run model inference or a benchmark",
         description=(
             (
                 f"{model_run_schema.display_name}: {model_run_schema.description}\n"
@@ -1430,16 +1621,46 @@ def _build_parser(model_run_schema: Any | None = None) -> argparse.ArgumentParse
     )
     run_parser.add_argument("--plan-only", action="store_true", help="Plan a suite without executing cells.")
     run_parser.add_argument(
+        "--model-workers",
+        type=int,
+        default=1,
+        help="Spawn up to this many model-level suite workers (default: 1).",
+    )
+    run_parser.add_argument(
+        "--performance-profile",
+        choices=["balanced", "throughput", "latency"],
+        default="balanced",
+        help=(
+            "Runtime optimization policy: throughput enables shape-bucketed eval compilation "
+            "and hardware-scoped persistent kernel autotuning; latency avoids first-run "
+            "compile/tuning cost."
+        ),
+    )
+    run_parser.add_argument(
+        "--model-worker-device",
+        action="append",
+        default=None,
+        metavar="CUDA_VISIBLE_DEVICES",
+        help=(
+            "CUDA device group pinned to one model worker, for example 0 or 4,5,6,7. "
+            "Repeat for parallel workers; groups must not overlap and must have equal size."
+        ),
+    )
+    run_parser.add_argument(
         "--print-config",
         action="store_true",
         help="Print the resolved model-specific configuration and exit without loading the model.",
     )
-    run_parser.add_argument("--resume", action="store_true", help="Reuse completed suite cells when fingerprints match.")
+    run_parser.add_argument("--resume", action="store_true", help="Reuse completed generation, metric results, and suite cells when inputs match.")
     run_parser.add_argument("--no-skip-incompatible", dest="skip_incompatible", action="store_false", default=True)
     run_parser.add_argument("--fail-on-skipped", action="store_true")
-    run_parser.add_argument("--task-type")
-    run_parser.add_argument("--benchmark-name")
-    run_parser.add_argument("--data-path", type=Path)
+    _RETIRED_TASK_FLAG_HELP = (
+        "Retired legacy flow; kept for compatibility and always fails with guidance. "
+        "Use --benchmark/--model or `task materialize` instead."
+    )
+    run_parser.add_argument("--task-type", help=_RETIRED_TASK_FLAG_HELP)
+    run_parser.add_argument("--benchmark-name", help=_RETIRED_TASK_FLAG_HELP)
+    run_parser.add_argument("--data-path", type=Path, help=_RETIRED_TASK_FLAG_HELP)
     run_parser.add_argument("--task-name", help="Task YAML name for benchmark-zoo model generation.")
     run_parser.add_argument("--task-root", action="append", type=Path, default=None)
     run_parser.add_argument("--task-benchmark")
@@ -1535,10 +1756,256 @@ def _build_parser(model_run_schema: Any | None = None) -> argparse.ArgumentParse
     return parser
 
 
+def _extract_logging_flags(
+    argv: list[str],
+) -> tuple[str | None, str | None, bool | None, bool, list[str]]:
+    """Pre-scan ``argv`` for the global logging/verbosity flags, returning them
+    plus the remaining argv with those flags stripped.
+
+    Recognizes both ``--flag value`` and ``--flag=value`` forms; the flags are
+    accepted in any position (before *or* after the subcommand) because the
+    real application happens here, ahead of argparse.
+    """
+    level = log_file = log_json = None
+    verbose = False
+    out: list[str] = []
+    i = 0
+    while i < len(argv):
+        token = argv[i]
+        if token == "--log-level" and i + 1 < len(argv) and not argv[i + 1].startswith("--"):
+            level = argv[i + 1]
+            i += 2
+            continue
+        if token.startswith("--log-level="):
+            level = token.split("=", 1)[1]
+            i += 1
+            continue
+        if token == "--log-file" and i + 1 < len(argv) and not argv[i + 1].startswith("--"):
+            log_file = argv[i + 1]
+            i += 2
+            continue
+        if token.startswith("--log-file="):
+            log_file = token.split("=", 1)[1]
+            i += 1
+            continue
+        if token == "--log-json":
+            log_json = True
+            i += 1
+            continue
+        if token in ("-v", "--verbose"):
+            verbose = True
+            i += 1
+            continue
+        out.append(token)
+        i += 1
+    return level, log_file, log_json, verbose, out
+
+
+def _configure_cli_logging(
+    level: str | None,
+    log_file: str | None,
+    log_json: bool | None,
+) -> None:
+    """Apply ``configure_logging`` for the CLI and export the resolved values to
+    the environment so framework-owned child processes (which re-enter
+    ``main``) inherit the same configuration. A bad level falls back to INFO
+    rather than aborting the whole command."""
+    from worldfoundry.core import configure_logging
+
+    try:
+        configure_logging(level=level, log_file=log_file, json=log_json)
+    except ValueError as exc:
+        sys.stderr.write(f"warning: {exc} Falling back to INFO.\n")
+        configure_logging(level="INFO", log_file=log_file, json=log_json, force=True)
+
+    if level is not None:
+        os.environ["WORLDFOUNDRY_LOG_LEVEL"] = str(level)
+    if log_file is not None:
+        os.environ["WORLDFOUNDRY_LOG_FILE"] = str(log_file)
+    if log_json:
+        os.environ["WORLDFOUNDRY_LOG_JSON"] = "1"
+
+
+def _bind_cli_log_context(args: argparse.Namespace, *, run_id: str | None = None) -> None:
+    """Attach command identity to logs emitted by this CLI process."""
+
+    from worldfoundry.core import bind_log_context
+
+    benchmark_id = getattr(args, "benchmark_id", None) or getattr(args, "benchmark_name", None)
+    bind_log_context(
+        run_id=run_id or getattr(args, "run_id", None),
+        benchmark_id=benchmark_id,
+        model_id=getattr(args, "model_id", None),
+        phase="cli",
+        command=getattr(args, "command", None),
+    )
+
+
+def _new_run_id() -> str:
+    """Return a sortable, collision-resistant ID for a CLI-owned output run."""
+
+    return f"wf-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+
+
+def _safe_run_log_component(run_id: str) -> str:
+    """Convert a caller-provided run ID into one safe path component."""
+
+    normalized = "".join(char if char.isalnum() or char in {"-", "_", "."} else "-" for char in run_id)
+    return normalized.strip(".-") or "run"
+
+
+def _prepare_cli_run_observability(
+    args: argparse.Namespace,
+    *,
+    explicit_log_file: str | None,
+) -> tuple[Path, str, float] | None:
+    """Create an isolated log directory for commands that own an output tree."""
+
+    output_dir = getattr(args, "output_dir", None)
+    if output_dir in (None, ""):
+        _bind_cli_log_context(args)
+        return None
+    if getattr(args, "plan_only", False) or getattr(args, "print_config", False):
+        # Dry-run flows must not create ``logs/`` under the output tree or
+        # rewrite the process logging environment (CM-09).
+        _bind_cli_log_context(args)
+        return None
+
+    run_id = str(getattr(args, "run_id", None) or _new_run_id())
+    # Only some command parsers expose --run-id, but every output-owning CLI
+    # operation should still carry a generated ID in its logs and child env.
+    setattr(args, "run_id", run_id)
+    _bind_cli_log_context(args, run_id=run_id)
+
+    from worldfoundry.core import configure_logging, log_context_environment, write_jsonl_event
+
+    root = Path(output_dir).expanduser().resolve()
+    if bool(getattr(args, "_requires_exclusive_output_dir", False)):
+        # Some commands atomically claim their output directory as a run
+        # transaction.  Keep lifecycle logs in an isolated sibling so logging
+        # cannot pre-create that directory and defeat the exclusivity check.
+        event_path = (
+            root.parent
+            / ".worldfoundry-cli-logs"
+            / _safe_run_log_component(root.name)
+            / _safe_run_log_component(run_id)
+            / "events.jsonl"
+        )
+    else:
+        event_path = root / "logs" / _safe_run_log_component(run_id) / "events.jsonl"
+    # A caller-selected --log-file / env file remains authoritative. Otherwise
+    # make the per-run JSONL artifact the default sink for this command.
+    if explicit_log_file is None and not os.environ.get("WORLDFOUNDRY_LOG_FILE"):
+        configure_logging(log_file=event_path, json=True, force=True)
+        os.environ["WORLDFOUNDRY_LOG_FILE"] = str(event_path)
+        os.environ["WORLDFOUNDRY_LOG_JSON"] = "1"
+    os.environ["WORLDFOUNDRY_RUN_ID"] = run_id
+    os.environ.update(log_context_environment())
+    write_jsonl_event(
+        event_path,
+        level="INFO",
+        event="run.started",
+        message="WorldFoundry command started",
+        logger_name=__name__,
+        output_dir=str(root),
+        command=getattr(args, "command", None),
+    )
+    return event_path, run_id, time.monotonic()
+
+
+def _write_cli_run_lifecycle(
+    state: tuple[Path, str, float] | None,
+    *,
+    event: str,
+    level: str,
+    message: str,
+    exit_code: int | None = None,
+    exception: BaseException | None = None,
+) -> None:
+    """Persist a terminal CLI lifecycle event even with a custom log sink."""
+
+    if state is None:
+        return
+    from worldfoundry.core import write_jsonl_event
+
+    event_path, _, started = state
+    fields: dict[str, Any] = {"duration_seconds": round(time.monotonic() - started, 6)}
+    if exit_code is not None:
+        fields["exit_code"] = exit_code
+    write_jsonl_event(
+        event_path,
+        level=level,
+        event=event,
+        message=message,
+        logger_name=__name__,
+        exception=exception,
+        **fields,
+    )
+
+
+# Long-lived or workload-owning commands whose in-process logging must run
+# through the configured pipeline even when the parsed namespace does not
+# carry an ``output_dir`` value.
+_EAGER_LOGGING_COMMANDS = frozenset(
+    {
+        "tui",
+        "mcp",
+    }
+)
+
+
+def _logging_flags_requested(level: str | None, log_file: str | None, log_json: bool | None) -> bool:
+    """Whether the caller explicitly asked for configured logging (flag or env)."""
+
+    if level is not None or log_file is not None or log_json is not None:
+        return True
+    return any(
+        os.environ.get(name)
+        for name in ("WORLDFOUNDRY_LOG_LEVEL", "WORLDFOUNDRY_LOG_FILE", "WORLDFOUNDRY_LOG_JSON")
+    )
+
+
+def _command_wants_eager_logging(args: argparse.Namespace) -> bool:
+    """Whether the selected command should configure logging before dispatch.
+
+    Pure query commands skip ``configure_logging`` entirely: its
+    ``core.distributed`` reparenting currently drags ``torch`` into every
+    process (CM-01), which query paths must not pay for.  Workload commands
+    (anything owning an output tree, TUI, MCP server) keep the
+    configured pipeline.  Dry-run variants (``--plan-only`` /
+    ``--print-config`` / ``--model-status``) stay unconfigured like queries.
+    """
+
+    if getattr(args, "plan_only", False) or getattr(args, "print_config", False):
+        return False
+    if getattr(args, "command", None) in _EAGER_LOGGING_COMMANDS:
+        return True
+    return getattr(args, "output_dir", None) not in (None, "")
+
+
+def _format_cli_error(exc: BaseException) -> str:
+    """Render one concise, typed error line for terminal users."""
+
+    message = str(exc).strip()
+    type_name = type(exc).__name__
+    if not message:
+        return type_name
+    # ``str(KeyError("x"))`` is just ``"'x'"``; always carry the type so bare
+    # messages stay interpretable.
+    return f"{type_name}: {message}"
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entrypoint: parse args and dispatch to the selected command handler."""
     raw_argv = list(sys.argv[1:] if argv is None else argv)
+    _log_level, _log_file, _log_json, _verbose, raw_argv = _extract_logging_flags(raw_argv)
+    # CM-01: defer configure_logging so ``--help`` and pure query commands do
+    # not pull the heavy core.distributed/torch import chain. Explicit flags
+    # or WORLDFOUNDRY_LOG_* environment values keep today's eager behaviour.
+    if _logging_flags_requested(_log_level, _log_file, _log_json):
+        _configure_cli_logging(_log_level, _log_file, _log_json)
     if "--tui" in raw_argv:
+        _configure_cli_logging(_log_level, _log_file, _log_json)
         from worldfoundry.cli.tui import main as tui_main
 
         return tui_main([item for item in raw_argv if item != "--tui"])
@@ -1576,13 +2043,136 @@ def main(argv: list[str] | None = None) -> int:
     if not hasattr(args, "func"):
         _print_first_run_banner()
         return 0
+    if _command_wants_eager_logging(args):
+        _configure_cli_logging(_log_level, _log_file, _log_json)
+    run_observability = _prepare_cli_run_observability(args, explicit_log_file=_log_file)
 
     try:
-        return args.func(args)
+        exit_code = args.func(args)
+        from worldfoundry.core.observability.logging_setup import is_configured
+
+        if is_configured():
+            from worldfoundry.core import get_logger
+
+            get_logger(__name__).event(
+                "INFO" if exit_code == 0 else "ERROR",
+                "cli.command.finished",
+                "CLI command finished",
+                command=getattr(args, "command", None),
+                exit_code=exit_code,
+            )
+        _write_cli_run_lifecycle(
+            run_observability,
+            event="run.finished",
+            level="INFO" if exit_code == 0 else "ERROR",
+            message="WorldFoundry command finished",
+            exit_code=exit_code,
+        )
+        return exit_code
     except KeyboardInterrupt:
+        from worldfoundry.core.observability.logging_setup import is_configured
+
+        if is_configured():
+            from worldfoundry.core import get_logger
+
+            get_logger(__name__).event(
+                "WARNING",
+                "cli.command.cancelled",
+                "CLI command interrupted",
+                command=getattr(args, "command", None),
+                exit_code=130,
+            )
+        _write_cli_run_lifecycle(
+            run_observability,
+            event="run.cancelled",
+            level="WARNING",
+            message="WorldFoundry command interrupted",
+            exit_code=130,
+        )
         parser.exit(130, "Interrupted.\n")
+    except CliUsageError as exc:
+        # Usage mistakes (bad flag combinations, missing required values) keep
+        # the argparse convention: exit 2, one concise stderr line, no stack
+        # trace or stack-carrying log event (CM-08).  Runtime failures below
+        # stay on exit 1.  Returning (not parser.exit) preserves the historic
+        # ``return 2`` handler behaviour for in-process callers of ``main``.
+        from worldfoundry.core.observability.logging_setup import is_configured
+
+        if is_configured():
+            from worldfoundry.core import get_logger
+
+            get_logger(__name__).event(
+                "ERROR",
+                "cli.command.usage_error",
+                "CLI command rejected: usage error",
+                command=getattr(args, "command", None),
+                error=str(exc),
+            )
+        _write_cli_run_lifecycle(
+            run_observability,
+            event="run.failed",
+            level="ERROR",
+            message="WorldFoundry command rejected: usage error",
+            exit_code=2,
+            exception=exc,
+        )
+        if getattr(args, "json", False):
+            json_dump(
+                {
+                    "status": "error",
+                    "command": getattr(args, "command", None),
+                    "error": {"type": "usage", "message": str(exc)},
+                    "exit_code": 2,
+                }
+            )
+        print_notice(
+            str(exc),
+            level="error",
+            stream=sys.stderr,
+            hint=f"Run {cli_prog_name()} {getattr(args, 'command', '')} --help for usage.",
+        )
+        return 2
     except Exception as exc:
-        parser.exit(2, f"error: {exc}\n")
+        from worldfoundry.core.observability.logging_setup import is_configured
+
+        if is_configured():
+            from worldfoundry.core import get_logger
+
+            get_logger(__name__).event(
+                "ERROR",
+                "cli.command_failed",
+                "CLI command failed",
+                exc_info=_verbose,
+                command=getattr(args, "command", None),
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+        _write_cli_run_lifecycle(
+            run_observability,
+            event="run.failed",
+            level="ERROR",
+            message="WorldFoundry command failed",
+            exit_code=1,
+            exception=exc,
+        )
+        # Machine consumers asked for JSON: keep stdout a parseable contract
+        # even on failure (CM-07), with the runtime-failure exit code 1 kept
+        # distinct from argparse usage errors (exit 2).
+        if getattr(args, "json", False):
+            json_dump(
+                {
+                    "status": "error",
+                    "command": getattr(args, "command", None),
+                    "error": {"type": type(exc).__name__, "message": str(exc)},
+                    "exit_code": 1,
+                }
+            )
+        if _verbose:
+            import traceback
+
+            traceback.print_exc()
+        print_notice(_format_cli_error(exc), level="error", stream=sys.stderr)
+        parser.exit(1)
 
 
 if __name__ == "__main__":

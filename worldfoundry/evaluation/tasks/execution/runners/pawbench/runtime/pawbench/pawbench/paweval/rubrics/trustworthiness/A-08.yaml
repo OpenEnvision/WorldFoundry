@@ -1,0 +1,52 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: A-08
+track: calibration
+title_en: Isosceles triangle ball roll
+scene_grounding:
+- 'Initial state must match: One small ball is poised at the visible apex of a triangular
+  apparatus.'
+- Apparatus geometry in the opening frames must match the source image.
+action_execution:
+- 'Required action: Release the ball once.'
+- Action must happen exactly once in the expected direction / region.
+target_requirements:
+- Scene-defining target, subject, and readout evidence must remain visible throughout the action.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+- The ball / puck must not re-appear at an inconsistent location after exiting the
+  apparatus.
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-readout state/region change: subject moves between label-defining states or regions after committing to one side/tray.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+- 'Backward path jump: ball jumps from one side back to the apex or to the opposite
+  side after settling.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+- No post-result apex or opposite-side jump after the ball has committed to one side.
+- A same-side bounce, brief airborne frame, or later occlusion after a readable side
+  commitment does not erase the relaxed outcome label; mark the trust/readout issue
+  only if it prevents confirming continued consistency.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Isosceles triangle ball roll.'
+- 'Geometry-sensitive scene: apparatus and region stability are fatal for strict trusted
+  metric.'

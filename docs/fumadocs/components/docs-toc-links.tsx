@@ -12,6 +12,30 @@ type DocsTocLinksProps = {
   className?: string;
 };
 
+function tocItemLabel(item: TOCItemType): string {
+  const labeled = item as TOCItemType & { label?: string };
+  if (typeof labeled.label === 'string' && labeled.label) return labeled.label;
+  return titleText(item.title);
+}
+
+function titleText(title: TOCItemType['title']): string {
+  if (typeof title === 'string' || typeof title === 'number') return String(title);
+  if (Array.isArray(title)) {
+    return title
+      .map((part) => titleText(part as TOCItemType['title']))
+      .filter(Boolean)
+      .join(' ');
+  }
+  if (title && typeof title === 'object' && 'props' in title) {
+    const props = (title as { props?: { title?: string; children?: unknown } }).props;
+    if (typeof props?.title === 'string' && props.title) return props.title;
+    if (props?.children !== undefined) {
+      return titleText(props.children as TOCItemType['title']);
+    }
+  }
+  return '';
+}
+
 export function DocsTocLinks({ items, linksRef, className = 'pi-doc-toc-links' }: DocsTocLinksProps) {
   const { visible, branchActive } = useDocsTocVisibility(items);
 
@@ -24,6 +48,7 @@ export function DocsTocLinks({ items, linksRef, className = 'pi-doc-toc-links' }
           <DocsTocLink
             href={item.url}
             key={`${item.url}-${index}`}
+            label={tocItemLabel(item) || undefined}
             scrollContainerRef={linksRef}
             branchActive={branchActive.has(index)}
             style={

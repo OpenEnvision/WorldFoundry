@@ -12,6 +12,7 @@ source:
   official_repo_url: https://github.com/OmniForcing/OmniForcing
   license: manual_review:missing_root_license
 official_sources:
+  paper: https://arxiv.org/abs/2603.11647
   github:
     url: https://github.com/OmniForcing/OmniForcing
     head_sha: cd6791433e3de4cbe156c125730d45a45d52fcae
@@ -31,3 +32,21 @@ catalog_scope: World-model catalog entries. Integrated entries expose in-tree Wo
   runtimes; blocked entries retain upstream provenance without runnable backends.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: omniforcing
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'OmniForcing is a real-time audio-visual world model built with distillation: it targets joint audio-video generation at interactive speed. In this catalog the official source route is registered with the source bound at a pinned commit; checkpoints and runtime assets stay runtime-gated.'
+  overview_zh: OmniForcing 是以蒸馏构建的实时音视频世界模型：目标是交互速度下的音视频联合生成。本 catalog 中官方源码路径已注册、源码绑定在固定 commit；checkpoint 与运行时资产保持运行时限制。
+  architecture: Architecture internals beyond the recorded tasks (audio-visual world model, real-time generation, distillation) are not stored in this repository. The upstream repository lacks a root license and is flagged for manual review.
+  architecture_zh: 除已记录任务（音视频世界模型、实时生成、蒸馏）外的架构内部细节仓库未存。上游仓库缺少根许可文件，已标记需人工审查。
+  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
+  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。
+  limitations:
+  - 'Missing root license upstream: legal review required.'
+  - Real generation is checkpoint/asset gated.
+  - The publishing institution is not recorded in this repository.
+  limitations_zh:
+  - 上游缺少根许可：需要法律审查。
+  - 真实生成受 checkpoint/资产限制。
+  - 发表机构在本仓库中未记录。

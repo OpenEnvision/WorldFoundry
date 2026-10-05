@@ -16,7 +16,7 @@ from torchvision.transforms import functional as F
 from tqdm import tqdm
 
 from giga_models import GigaWorld0Pipeline
-from worldfoundry.core.distributed.sequence_parallel_runtime import get_sequence_parallel_group, initialize_sequence_parallel_group
+from worldfoundry.core.distributed.sequence_parallel.runtime import get_sequence_parallel_group, initialize_sequence_parallel_group
 from giga_models.utils import find_free_port
 
 

@@ -8,12 +8,16 @@ from typing import Any, Mapping
 
 import yaml
 
-from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path
+from worldfoundry.core.io.paths import checkpoint_root_candidates, hfd_root_path
 from worldfoundry.evaluation.utils import worldfoundry_data_path
 from worldfoundry.runtime.in_tree_cli import ensure_in_tree_runtime, execute_in_tree, require_path
 
-
 _CONFIG_ROOT = worldfoundry_data_path("models", "runtime", "configs", "liveworld")
+
+
+def _first_local_path(*candidates: Path) -> Path:
+    """Prefer an existing local export while preserving the configured default."""
+    return next((path for path in candidates if path.exists()), candidates[0])
 
 
 def _first_frame(video_path: Path, output: Path) -> Path:
@@ -44,17 +48,47 @@ class LiveWorldRuntime:
     ) -> None:
         self.repo_root = ensure_in_tree_runtime(self.bundled_repo_root(), package_file=__file__)
         hfd = hfd_root_path()
-        checkpoints = checkpoint_root_path()
-        self.checkpoint_path = Path(checkpoint_path or hfd / "ZichengD--LiveWorld").expanduser()
-        self.base_model_path = Path(base_model_path or checkpoints / "Wan2.1-T2V-14B").expanduser()
-        self.qwen_model_path = Path(
-            qwen_model_path or checkpoints / "modelscope" / "Qwen--Qwen3-VL-8B-Instruct"
+        self.checkpoint_path = Path(
+            checkpoint_path
+            or _first_local_path(
+                hfd / "ZichengD--LiveWorld",
+                *checkpoint_root_candidates("ZichengD--LiveWorld"),
+            )
         ).expanduser()
-        self.sam3_model_path = Path(sam3_model_path or checkpoints / "sam3").expanduser()
-        self.stream3r_model_path = Path(stream3r_model_path or hfd / "yslan--STream3R").expanduser()
+        self.base_model_path = Path(
+            base_model_path
+            or _first_local_path(
+                *checkpoint_root_candidates("Wan2.1-T2V-14B"),
+                *checkpoint_root_candidates("Wan-AI--Wan2.1-T2V-14B"),
+            )
+        ).expanduser()
+        self.qwen_model_path = Path(
+            qwen_model_path
+            or _first_local_path(
+                *checkpoint_root_candidates("modelscope/Qwen--Qwen3-VL-8B-Instruct"),
+                *checkpoint_root_candidates("Qwen--Qwen3-VL-8B-Instruct"),
+            )
+        ).expanduser()
+        self.sam3_model_path = Path(
+            sam3_model_path
+            or _first_local_path(
+                *checkpoint_root_candidates("sam3"),
+                *checkpoint_root_candidates("facebook--sam3"),
+            )
+        ).expanduser()
+        self.stream3r_model_path = Path(
+            stream3r_model_path
+            or _first_local_path(
+                hfd / "yslan--STream3R",
+                *checkpoint_root_candidates("yslan--STream3R"),
+            )
+        ).expanduser()
         self.dinov3_model_path = Path(
             dinov3_model_path
-            or checkpoints / "modelscope" / "facebook--dinov3-vith16plus-pretrain-lvd1689m"
+            or _first_local_path(
+                *checkpoint_root_candidates("modelscope/facebook--dinov3-vith16plus-pretrain-lvd1689m"),
+                *checkpoint_root_candidates("facebook--dinov3-vith16plus-pretrain-lvd1689m"),
+            )
         ).expanduser()
         self.python_executable = str(python_executable or sys.executable)
         self.device = device

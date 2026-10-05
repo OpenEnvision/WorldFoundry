@@ -1,6 +1,6 @@
 ---
 title: 贡献规则
-description: 面向维护者的范围、测试、文档和发布证据 checklist。
+description: 面向维护者的范围、验证、文档和发布证据 checklist。
 ---
 
 ## PR 前检查
@@ -17,39 +17,198 @@ description: 面向维护者的范围、测试、文档和发布证据 checklist
 - **Python** — 模型或 benchmark 有重依赖时保持 lazy import。
 - **公开入口** — 用户可见 runtime class 放在 `worldfoundry/pipelines/`；评测适配器放在 `worldfoundry/evaluation/`。
 - **Model runtimes** — `worldfoundry/synthesis/**` 下的 runtime integration 必须仓内实现。不要依赖机器本地的外部 checkout；外部仓库/checkpoint 在移植或 vendor review 前只能记录为 provenance 或 acquisition metadata。
-- **Vendored code** — 已 review 的 `thirdparty/` 代码按隔离代码处理，保留 upstream license note。
-- **Synthesis** — 保持 `worldfoundry/synthesis/**` 仅用于推理：runtime wrapper、推理所需模型代码、checkpoint/path helper 和最小 runtime config。不要添加 training launcher、dataset builder、demo 媒体、notebook 或生成输出。demo 资产用 `worldfoundry/data/test_cases/`。
+- **Vendored code** — 已 review 的 `thirdparty/` 代码按隔离代码处理。许可名称和上游 URL 记录在[第三方许可与来源](/zh/docs/reference/vendored-licenses)所链接的仓库声明与来源文件中，不要在源码旁再放 `LICENSE`、`COPYING`、`NOTICE`、`UPSTREAM.md` 或 `README.md`。大型、独立版本的上游优先用 git submodule；只有需要重度打补丁时才仓内拷贝。不要再复制已经在 `worldfoundry/base_models/` 或 `worldfoundry/synthesis/` 里的代码。当前树：FlashAttention 是外部安装（`scripts/setup/install_flash_attn.sh`）；`diff-gaussian-rasterization/` 是带深度的规范高斯光栅器；`simple-knn/` 是 CUDA KNN 扩展；`fastvideo-kernel/` 是可选的 STA / VSA / VMoBA / TurboDiffusion kernel 树（`CUDA_HOME` + `./build.sh`；ThunderKittens 只在非 aarch64 的 Hopper `sm_90a`；FP4 attention 只在 Blackwell `sm_120a` 且 CUDA ≥ 12.8）。
+- **Synthesis** — 保持 `worldfoundry/synthesis/**` 仅用于推理：runtime wrapper、推理所需模型代码、checkpoint/path helper 和最小 runtime config。不要添加 training launcher、dataset builder、demo 媒体、notebook 或生成输出。本地 demo 资产放在已被 Git 忽略的 `testcase/` 目录。
 - **Formatting** — 避免无关大规模格式化；除非任务需要，不重写生成文件或 vendored 文件。
 - **Naming** — 优先使用 canonical id 和直接 runner path；公开名称变化时，写 migration 说明，而不是长期保留 compatibility map。
 
-## 测试位置
+## 验证方式
 
-按变更类型选择测试：
+按变更类型选择验证证据：
 
-- **Runner、scorecard、tasks、registry** — `test/eval_core` 中的聚焦测试。
-- **单 pipeline run** — `test/` 下现有脚本，或聚焦 validation script。
-- **Stateful / interactive pipeline** — `test_stream/` 或文档化的 stream 命令。
+- **Runner、scorecard、tasks、registry** — 使用公开 CLI 的 discovery、plan 和 artifact validation 命令。
+- **单 pipeline run** — 使用最小的文档化验证脚本及其生成 manifest。
+- **Stateful / interactive pipeline** — 使用文档化 stream 命令，并提供有界 runtime 证据。
 - **Benchmark runner** — Runner execution；需要 normalizer review 时，用 official-shaped result files 跑 `zoo benchmark-run --mode official-validation`。
 - **Model runner** — Resolver/manifest validation，并为缺 checkpoint/credentials 提供 skipped path。
 
 ## 文档要求
 
-Fumadocs 是唯一维护的文档面。新增或修改页面时，在 `docs/fumadocs/content/docs` 下维护英文和中文成对页面。
+Fumadocs 是唯一维护的文档面。新增或修改页面时，在 `docs/fumadocs/content/docs` 下维护英文和中文成对页面。本仓库只允许根目录那一份 `README.md`。不要在源码、vendor 树、fixture 或模型网络旁再加 `README.md`、`readme.md` 或 `README_*`。
 
 行为变更时，更新对应 owning page：
 
-- **新模型或 runtime profile** — `guides/supported-models`、`reference/environments`，行为变化时更新模型指南。
+- **新模型或 runtime profile** — `guides/supported-models`、对应的 `guides/supported-models/<model-id>.mdx`（及 `.zh.mdx`）、`reference/environments`，行为变化时更新模型指南。先用 `npm --prefix docs/fumadocs run models:generate` 刷新已检入的 homepage recipes 和生成的模型页，再用 `npm --prefix docs/fumadocs run models:check` 验证。手写模型文请先把 frontmatter 的 `pageSource` 设为 `authored`，以免再次 generate 时被覆盖。论文标题与配图用 `npm --prefix docs/fumadocs run models:media` 在 generate 之后刷新。
 - **新 benchmark** — `evaluation/benchmark-hub/<benchmark-id>`、benchmark 指南；内部实现变化时同步维护者架构页。
 - **CLI 或输出 schema** — `reference/cli`，以及拥有相关行为的 architecture 页面。
 - **内部 workflow** — `maintainers/architecture`（尤其是 workflow 与 evaluation-core）。
+
+基于 Python 的文档 codegen 与漂移检查（`api:*`、`models:*`、`coverage:*` 和
+`cli:screenshots`）统一经 `docs/fumadocs/scripts/run-python.sh` 调用解释器。需要覆盖时，
+解析顺序为 `WF_DOCS_PYTHON`、`PYTHON`、`python3`、`python`。
+
+## 快速站点迭代
+
+模型演示视频由 GitHub CDN 提供，文档开发不需要执行 `git lfs pull`。
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenEnvision/WorldFoundry.git
+```
+
+WorldFoundry 目前只维护 **一个** Web 站点：`docs/fumadocs/` 下的 Fumadocs 文档应用。Homepage、benchmark hub、模型目录和 API 参考都是该应用内的路由，不是独立构建目标。Studio（`worldfoundry/studio/`）是 Python FastAPI 应用，不属于 Next.js 站点。
+
+每个站点都应在仓库内保留 **快速迭代** 的 npm 脚本。生产 CI 路径不变（`scripts/docs/build.sh` → `deploy-docs.yml`）。
+
+<KvCatalog heading="站点" vars rows={[
+    { name: "文档（Fumadocs）", reads: [{ label: "路径", value: <><code>docs/fumadocs/</code></> }, { label: "环境变量前缀", value: <><code>WF_DOCS_*</code></> }, { label: "dev:fast", value: <><code>npm run dev:fast</code></> }, { label: "dev:ssd", value: <><code>npm run dev:ssd</code></> }, { label: "dev:local", value: <><code>npm run dev:local</code></> }, { label: "build:fast", value: <><code>npm run build:fast</code></> }] }
+  ]} />
+
+在仓库根目录也可使用 `make docs-dev-fast`、`make docs-dev-ssd`、`make docs-dev-local` 或 `make docs-build-fast`。
+
+文档站点包含数百个中英双语模型与 benchmark 页面，以及体积较大的生成 JSON 目录。在共享文件系统上，每次 `npm run dev` 都可能重跑 MDX codegen 并冷启动 webpack 缓存，体感较慢。
+
+**共享存储上最快的 dev（推荐）：**
+
+```bash
+cd docs/fumadocs
+npm run dev:ssd
+# 或从仓库根目录：make docs-dev-ssd
+```
+
+`dev:ssd` 将热点路径符号链接到本地 SSD（默认 `~/.cache/worldfoundry-docs/<checkout-id>`）：`tmp/`（Next.js + webpack）、`.source/`（MDX codegen）、`node_modules/.cache`。源码仍留在共享 checkout，每次启动不做全量 rsync。首次运行会迁移已有 `.source/` 产物；Next.js 与 webpack 缓存会在 SSD 上重建。
+
+日常 UI/CSS 打磨（已在本地快盘时）：
+
+```bash
+cd docs/fumadocs
+npm run dev:fast
+```
+
+`dev:fast` 直接复用已有 `.source/`，不检查内容是否更新，并在 `generated/python-api.json` 存在时复用它。新增页面或修改导航、frontmatter 后需要重新生成 MDX。开发缓存默认放在 `tmp/`；共享存储上优先用 `dev:ssd` 将缓存放到本地 SSD。
+
+若 `node_modules` 读写也慢，可将整个站点镜像到本地 SSD：
+
+```bash
+cd docs/fumadocs
+npm run dev:local
+```
+
+`dev:local` 会刷新 `/tmp/wf-docs-dev/<checkout-id>/WorldFoundry` 下当前 checkout 专用镜像的源码，并复用已安装依赖。可通过 `WF_DOCS_LOCAL_ROOT` 指定其他镜像根目录。
+
+本地快速验证静态导出（不跑 CI 漂移检查）：
+
+```bash
+cd docs/fumadocs
+npm run build:fast
+```
+
+常用环境变量（`WF_DOCS_*`）：
+
+<div className="pi-kv-catalog is-vars not-prose">
+  <section className="pi-kv-group">
+    <h3>变量</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_SKIP_MDX=1</code>
+          </div>
+        </div>
+        <p>启动 dev 时复用已有 MDX 产物；产物缺失时会生成一次。新增页面或修改导航、frontmatter 后运行 <code>npm run mdx:generate</code>；<code>WF_DOCS_REFRESH_MDX=1</code> 可强制重新生成。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_REFRESH_MDX=1</code>
+          </div>
+        </div>
+        <p>下次启动 dev 时强制重新生成 MDX。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_REFRESH_API=1</code>
+          </div>
+        </div>
+        <p>重新生成 <code>generated/python-api.json</code>。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_KEEP_DIST=1</code>
+          </div>
+        </div>
+        <p>快速脚本仍传入此变量；缓存位置由 <code>next.config.mjs</code> 和下列缓存变量决定。开发使用 <code>tmp/next</code>，生产构建使用 <code>.next</code>。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_CACHE_ROOT</code>
+          </div>
+        </div>
+        <p>覆盖 webpack 缓存根目录；通过 <code>dev:ssd</code> 配合 <code>WF_DOCS_SSD_ROOT</code> 可迁移全部热点缓存。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_SSD_ROOT</code>
+          </div>
+        </div>
+        <p>覆盖 <code>dev:ssd</code> 的 SSD 符号链接根目录（默认 <code>{"~/.cache/worldfoundry-docs/<checkout-id>"}</code>）。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_UI_ONLY=1</code>
+          </div>
+        </div>
+        <p>webpack 忽略模型/benchmark MDX 目录的 watch（仅改 CSS/组件；模型页 HMR 不可用）。</p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>WF_DOCS_WEBPACK_CACHE_DIR</code>
+          </div>
+        </div>
+        <p>覆盖 webpack 文件系统缓存路径。</p>
+      </li>
+    </ul>
+  </section>
+</div>
+
+SSD 缓存辅助命令：`npm run ssd:setup`、`npm run ssd:status`、`npm run ssd:clean`（加 `-- --purge` 可删除 SSD 上的缓存数据）。
+
+修改模型 manifest 后，先运行一次 `npm run models:generate`，再执行 `WF_DOCS_REFRESH_MDX=1 npm run dev`（或在停掉 dev server 后运行 `npm run mdx:generate`）。开发中编辑已有 MDX 页面可直接热更新，无需重新生成 `.source/`；新增页面或修改 `meta.json` 时需设置 `WF_DOCS_REFRESH_MDX=1`。
+
+`npm run dev:turbo` 尝试使用 Turbopack 替代 webpack，目前视为实验性；生产 GitHub Pages 仍走 `npm run build`（webpack + 静态导出）。
+
+### 新增站点
+
+在 `docs/<name>/` 下新增 Next.js 或静态站点时：
+
+1. 添加 `dev:fast`、`dev:local`（可选 SSD 镜像脚本）和 `build:fast` npm 脚本。
+2. 跳过/刷新类环境变量使用 `WF_<SITE>_` 前缀（例如 `WF_STUDIO_SKIP_MDX=1`）。
+3. 提供 `predev.mjs`（或等价逻辑），在输出已是最新时智能跳过 codegen。
+4. 若需从仓库根目录常用，添加对应的 `make docs-<site>-dev-fast` 目标。
+5. 在本节站点目录（中英文页面）中补充一条。
+
+生产部署速度是另一回事：CI 仍会跑完整的 `types:check`、目录漂移检查和全页静态导出，该路径未改动。
 
 ## 本地验证
 
 ```bash
 bash scripts/setup/conda_install.sh --preset slim --env-name worldfoundry
 make lint
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" python -m pytest test/eval_core -q
+make docs-check
 cd docs/fumadocs && npm run types:check && npm run build
+```
+
+公开版本的 CPU 检查无需模型权重：
+
+```bash
+python -m pip install -e ".[dev,test]"
+make test-infer
+make cli-check cli-entrypoint-check packaging-check
 ```
 
 模型/profile audit：
@@ -95,3 +254,6 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-art
 <Callout title="Review 规则">
   PR 可以新增 planned 或 source-verified 条目而不提供 runnable 支持。但不能在没有匹配新鲜证据时声称 demo parity、checkpoint parity 或 benchmark readiness。
 </Callout>
+
+
+测试源码统一放在公开的 `tests/`；模型权重、测试媒体和生成的回放记录留在 git 之外。推理变更需回放受影响的真实权重案例，并针对已接受的基准通过 `make test-geometry`。数值比较及源码哈希检查见[验证指南](/zh/docs/reference/validation)。

@@ -1,61 +1,59 @@
 ---
-title: 添加基准
-description: Benchmark manifests、runners、datasets、official runs 和 leaderboard evidence 的清单。
+title: 添加 Benchmark
+description: 如何把一个 benchmark 接到 WorldFoundry：catalog、task 契约、runner，以及把「已接入」和「可上榜」分开的证据。
 ---
 
-## 介绍
+把 benchmark 加进 WorldFoundry，不是「把论文名字写进 YAML 再标 integrated」。Catalog 记录身份、出处，以及协议到底测什么；external task manifest 声明样本如何变成 `GenerationRequest`；runner 或 normalizer 写出系统其余部分能审查的 scorecard；readiness report 才是 support matrix 会哈希的对象。这几层互相替代不了，单独任何一层也不等于 leaderboard 声明。
 
-WorldFoundry 当前公开支持的 benchmark surface 是 Benchmark Zoo。新增 benchmark 支持时，通过 catalog manifest、external task manifest、runner contract 和 readiness evidence 完成。
+当前公开 surface 是 Benchmark Zoo：catalog 在 `worldfoundry/data/benchmarks/catalog/`，task 在 `worldfoundry/data/benchmarks/tasks/external/`，执行代码在 `worldfoundry/evaluation/tasks`。追踪带有官方源码、数据集或 prompt suite、runner 和 runtime stages 的外部/社区 benchmark，走这条路。每个 benchmark 的页面在 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)；与协议无关的可复用 scorer 在 [指标](/zh/docs/evaluation/metrics)；具身 simulator 的资产和 Docker 步骤在 [Embodied 官方运行准备](/zh/docs/evaluation/embodied-official-runtime)。同一条 artifact 边界的模型侧见 [添加模型](/zh/docs/guides/add-model)。
 
-多数 benchmark 工作遵循同一条路径：在 catalog 里记录 official provenance，声明 task contract，证明 runner 能写出 scorecard shape，再在真实资产和 official scorer 证据齐全后提升状态。
+## 第一份 PR 要窄
 
-## 支持的 surface
+第一份 pull request 只需要证明一个 support surface 能端到端成立：一个 benchmark id、一份 catalog YAML、一份 external task 契约、一个可调用的 runner 或 official-result normalizer，以及一份 reviewer 不用猜机器也能打开的 report。这样就足以说明 catalog → task → runner → scorecard artifacts 对用户提供的资产是通的。
 
-当前公开集成路径是 Benchmark Zoo：
+不必等所有官方维度、所有 judge 权重、所有 leaderboard split 都绿了再合入。一次诚实写出 scorecard 的 bounded official-validation，比一份还宣称 `leaderboard_valid: true` 的大而全元数据更适合当第一份 PR。同一次改动里不要重写公共 metric API，也不要再发明一套 catalog parser。
 
-- **Benchmark zoo** — `worldfoundry/data/benchmarks/catalog/*.yaml`、`scripts/benchmark_zoo` 和 `worldfoundry/evaluation/tasks`。用于追踪带有 official source、dataset、runner 和 runtime stages 的外部/社区 benchmark。
+## 一次集成会改到哪里
 
-## Discovery 检查
+WorldFoundry 里的 benchmark 是一叠契约，不是一个脚本。身份在 `worldfoundry/data/benchmarks/catalog/<family>/<benchmark-id>.yaml`：`id`、alias、family、modalities，以及 zoo 会检索的 normalized tasks。出处写在旁边——官方仓库、论文、项目页、license、clone target，以及后续 runner 需要的 access note。GitHub URL 没核实过就写没核实。Support matrix 不会把猜测升级成证据。
 
-先确认 benchmark 已出现在 catalog 和 task metadata 中：
+Dataset 一段讲的是访问条件，不是把视频拷进 git。记录 dataset id、有没有 Hugging Face 镜像、cache 期望、过滤条件，以及不安全或 gated 标记。有些视频 benchmark，例如 VBench，根本不需要公开数据集：它们消费 prompt suite，再加上 `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` 里的生成视频。具身 benchmark 通常需要 data root、simulator checkout，有时还要 Docker 镜像。把真实条件写清楚，官方形状就是「不适用」时用 `not_applicable`。
+
+Runner 一段点名可调用的 surface：runner target、official validation mode、若包装了官方命令就写上命令，以及一次成功运行必须留下的产物。Catalog 上的 metrics 是协议自己的分数——id、方向、聚合、数值范围、leaderboard key——不是树内 metric registry 的第二份拷贝。某个维度只是官方脚本的近似，就在 Benchmark Hub 页和 catalog notes 里写明。不要因为官方 judge 太重，就静默换成 CLIPScore。
+
+Task 契约在 `worldfoundry/data/benchmarks/tasks/external/<benchmark-id>.yaml`。prompt 列表或 simulator episode 变成 `GenerationRequest`，靠的是这份文件。协议相关的映射留在这里，或留在读它的 runner 里。不要让模型 pipeline 去懂 VBench 的维度表，也不要让 metric 去启动 Cosmos。
+
+Evidence 字段——check notes、report 路径、blockers、执行过的命令——是 catalog 里唯一被 support matrix 当成「指向证据」的句子。证据本身是 `tmp/` 下的文件，不是 YAML 里的一句话。
+
+## 接入不是上榜
+
+WorldFoundry 刻意把框架接入和 leaderboard 资格分开。Runner 能导入官方形态的结果并写出 `scorecard.json`，这是 integration evidence。一个可以和论文表格比较的数字，需要官方 scorer 或 judge、声明过的资产覆盖，以及一份仍然写明资格的 scorecard。
+
+所以 catalog 可以是 `integrated`，同时带着 `leaderboard_valid: false`、`official_benchmark_verified: false`；若你只做了归一化，还要保留 `verification_status: normalizer_only` 和 `normalizer_only: true`。VBench 是常见例子：某一维上的 bounded official GPU 检查是真实的接入证据；完整 prompt suite 和其余重依赖仍未完成，leaderboard 标志就必须为假。照这个诚实程度写。不要因为一条视频出了分就把标志抬上去。
+
+如果手里只有 normalizer，只要 CLI 命令、artifact / 数据要求和 normalization report 都在，仍然可以把 surface 标成 `integrated`。那三个限制上榜的字段，在官方 scorer 或 judge 真正跑过之前不要动。
+
+## 先写 manifest，再问 zoo 同不同意
+
+Catalog YAML 按职责起草，不要堆成一张无序大表。Identity、source、dataset、runner、metrics、evidence 应能当成几段分开的故事来读。同一份 PR 里补上对应的 external task，避免 `tasks show` 和 `benchmark-show` 对同一个 id 说法不一致。
+
+然后问 zoo 解析出来的是不是你想要的。在 unified 环境里：
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmarks --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmark-show \
-  --benchmark-id <benchmark-id> \
-  --include-spec \
-  --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval tasks show \
-  --task-type <benchmark-id> \
-  --json
+worldfoundry-eval zoo benchmarks --json
+worldfoundry-eval zoo benchmark-show --benchmark-id <benchmark-id> --include-spec --json
+worldfoundry-eval zoo benchmark-specs --benchmark-id <benchmark-id> --json
+worldfoundry-eval tasks show --task-type <benchmark-id> --json
 ```
 
-## Benchmark-zoo manifest
+`benchmark-show` 最快能看到 alias、必需环境变量、blockers 和解析后的 spec。`benchmark-specs` 是 runner 会消费的压缩视图。`tasks show` 确认 external task 契约挂在同一个 id 下。这三处对不上，先改 YAML，再动 GPU。
 
-Catalog entry 是公开 contract。按职责分组填写字段，而不是堆成一张大表：
+## 证明 runner 能写出 scorecard
 
-- **Identity** — `benchmark_id`、aliases、family、modalities、normalized tasks。
-- **Source** — 官方仓库、论文、项目页、license、clone target。
-- **Dataset** — Dataset ids、access state、cache expectation、filters、unsafe flags。
-- **Runner** — Runner target、official validation、official benchmark command、expected artifacts。
-- **Metrics** — Metric ids、direction、aggregation、score ranges、leaderboard keys。
-- **Evidence** — Check notes、report paths、blockers、executed commands。
-
-检查和导出 specs：
+第一个可执行里程碑是 official validation，不是完整 leaderboard 扫表。导入官方形态的结果——或协议接受的一小份生成资产目录——写出可审查的 scorecard：
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmarks --json
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmark-specs \
-  --benchmark-id <benchmark-id> \
-  --json
-```
-
-## Runnable Evaluator
-
-Official validation 用于导入 official-shaped results 并写出可审查的 scorecard，之后才能声明 full benchmark parity：
-
-```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmark-run \
+worldfoundry-eval zoo benchmark-run \
   --benchmark-id <benchmark-id> \
   --output-dir tmp/benchmark_zoo/official_validation/<benchmark-id> \
   --mode official-validation \
@@ -64,41 +62,30 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval zoo benchmar
   --json
 ```
 
-Benchmark runner 会分开 framework integration 和 leaderboard eligibility。Official-validation import 通过只是有用的开发证据；leaderboard 声明仍需要 official scorer 或 judge、声明清楚的资产和完整 scorecard evidence。
+Import 通过，只是开发证据。它说明 normalizer、artifact 种类和 scorecard 写出是对齐的。它不说明你的视频覆盖了官方 prompt 列表、judge 权重是论文用的那份，或这个数字可以和论文比。那些声明要等官方命令、声明过的资产，以及一份仍然记下缺口的 scorecard。
 
-## Readiness checks
-
-Metadata 看起来正确后，再跑 declared runtime profile：
+Metadata 看起来对了之后，跑声明的 runtime profile，让缺数据集、license、conda prefix 死在 report 里，而不是死在口头同步里：
 
 ```bash
-conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval preflight runtime \
+worldfoundry-eval preflight runtime \
   --profile <benchmark-id> \
   --manifest worldfoundry/data/benchmarks/runtime_profiles/official/<benchmark-id>.yaml \
   --output-dir tmp/preflight/runtime/<benchmark-id> \
   --json
 ```
 
-只有机器具备 permission、network access、credentials、datasets 和 runtime capacity 时，才添加执行 flags。
+只有机器被允许拉数据、并且有 runtime 容量时，才加网络、凭证或 execute 类 flags。先读 JSON report 看 blockers、stage 状态和下一步；stage 失败再翻 log。`tmp/benchmark_zoo/validation/<benchmark-id>/report.json` 也是同一纪律：readiness 哈希的是这份文件。YAML 动了、report 没动，`integrated` 就会变 stale。
 
-检查输出会写到 `tmp/preflight/runtime/<benchmark-id>`。优先使用 JSON report 查看 blockers、stage status 和 next actions；只有 stage 失败时才需要检查 logs。
+具身 benchmark 在 import 之后通常还要多一跳。在官方 simulator 或 Docker evaluator 里 rollout，写出那些项目已经在用的 result 文件，再用 `official-validation` 导入。不要在 WorldFoundry 里另造一套分数格式还称之为 official。具身准备页列了环境变量和资产根目录，本页不重复。
 
-## 状态规则
+## 状态必须和 runner 能证明的一致
 
-Promotion 表述必须和 runner 实际能证明的内容一致：
+`planned` 表示元数据在，但声明的 runner、importer、normalizer 或 artifact 契约还不能带着证据被调用。还在接线的 catalog 行用它。`blocked` 表示有具体的官方条件缺失：代码、数据、judge 权重、license 或你落不了盘的 runtime 依赖。把原因写进 `blockers`，免得下一个人再踩一次。`integrated` 表示声明的 WorldFoundry surface 可调用且有证据——仓内 runner、官方命令包装、隔离 importer，或 official-result normalizer，能针对用户提供的资产写出预期的 scorecard。
 
-- **`planned`** — Metadata 已存在，但声明的 runner、importer、normalizer 或 artifact contract 尚不能被调用并留下证据。
-- **`blocked`** — Official code、data、judge weights、license access 或 runtime dependencies 不可用。
-- **`integrated`** — 声明的 WorldFoundry support surface 已可调用并有证据：仓内 runner、official command、隔离 importer 或 official-result normalizer 能针对用户提供的 assets 写出预期 scorecard artifacts。
+Promotion 用语也是契约的一部分。PR 写 `integrated` 却打不开 scorecard，状态就错了。PR 说数字可上榜、YAML 里 `leaderboard_valid` 仍是 false，正文就错了。两处一起改，而且只在 report 哈希对得上当前 manifest 之后改。
 
-Normalizer-only integration 可以是 `integrated`，前提是 CLI 命令、artifact/data requirements 和 normalization evidence 都已记录。除非完整 official scorer 或 judge 已运行且 scorecard 证明 leaderboard eligibility，否则必须保持 `verification_status: normalizer_only`、`normalizer_only: true` 和 `leaderboard_valid: false`。
+## PR 里 reviewer 需要看到什么
 
-## PR 证据
+Reviewer 应能从 catalog 里的一句话走到一条命令和一份产物，而不必问你用了哪台机器。附上 catalog 与 task 的 diff——`worldfoundry/data/benchmarks/catalog/**/<benchmark-id>.yaml`、`worldfoundry/data/benchmarks/tasks/external/<benchmark-id>.yaml`，以及 runner / normalizer 文件——再加上 `benchmark-show` / `benchmark-specs` / `tasks show` 的元数据检查输出。附上 `tmp/benchmark_zoo/validation/<benchmark-id>/report.json`、数据集 cache 路径和访问条件（不要数据本身）、生成的 scorecard、raw log 和预期产物路径。若某 stage 跳过了，把 license、API、数据集或硬件原因写进 report，不要只写在 PR 正文。
 
-Reviewer 应能把 catalog 声明追到命令和产物：
-
-- **Manifest diff** — `worldfoundry/data/benchmarks/catalog/*.yaml`、`worldfoundry/data/benchmarks/tasks/external/*.yaml` 或 benchmark runner/normalizer 文件。
-- **Metadata checks** — `tasks show`、`benchmark-specs` 或 `benchmark-show` output。
-- **Readiness report** — `tmp/benchmark_zoo/validation/<benchmark-id>/report.json`。
-- **Dataset state** — Cache path 和 access condition，不提交数据。
-- **Runtime run** — Generated scorecard、raw logs 和 expected artifact paths。
-- **Skipped stages** — License、API、dataset 或 hardware reason。
+不要提交数据集、生成视频、judge checkpoint、API key 或私有 simulator 镜像。这些在 report 里用路径和哈希表示。提升状态时刷新 preflight 输出，让 support matrix 和 PR 说同一件事。

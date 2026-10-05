@@ -7,7 +7,9 @@ runtime:
   - ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/synthesis/visual_generation/magi/magi_runtime
   checkpoint_candidates:
   - $WORLDFOUNDRY_CKPT_DIR/MAGI-1
+  - $WORLDFOUNDRY_CKPT_DIR/sand-ai--MAGI-1
   - $WORLDFOUNDRY_HFD_ROOT/sand-ai--MAGI-1
+  - ${WORLDFOUNDRY_REPO_ROOT}/../ckpts/sand-ai--MAGI-1
   defaults:
     variant: 4.5b-distill
     mode: i2v

@@ -1,0 +1,52 @@
+---
+title: "RollingForcing"
+description: "RollingForcing from Tencent (ARC Lab) / Nanyang Technological University: text-to-video and long-video-generation; Verified; Rolling Forcing."
+modelId: "rolling-forcing"
+pageSource: authored
+---
+
+RollingForcing streams minutes-long video autoregressively: rolling-window denoising with an attention sink lets it generate long text-to-video without the drift that kills naive streaming (paper arXiv 2509.25161). In this catalog the runner reached full_demo_verified — a full Workspace inference with the exact released checkpoint decoded 126 latent frames to 501 H.264 frames at 832x480, 16 fps, 31.31 seconds on A100.
+
+<ModelPaperFigures modelId="rolling-forcing" locale="en" />
+
+The recorded paper is [Rolling Forcing: Autoregressive Long Video Diffusion in Real Time](https://arxiv.org/abs/2509.25161) (2025).
+
+Project page: [kunhao-liu.github.io/Rolling_Forcing_Webpage](https://kunhao-liu.github.io/Rolling_Forcing_Webpage/). Code: [TencentARC/RollingForcing](https://github.com/TencentARC/RollingForcing).
+
+The paper is [Rolling Forcing: Autoregressive Long Video Diffusion in Real Time](https://arxiv.org/abs/2509.25161). Project page: [kunhao-liu.github.io/Rolling_Forcing_Webpage](https://kunhao-liu.github.io/Rolling_Forcing_Webpage). Code: [TencentARC/RollingForcing](https://github.com/TencentARC/RollingForcing).
+
+<ModelCommandBuilder modelId="rolling-forcing" locale="en" />
+
+## What it is for
+
+Pick `rolling-forcing` when you want this family's text-to-video line in WorldFoundry: a prompt in, a generated clip out. Use it as the catalog T2V start rather than an editor or a world-model stepper.
+
+The in-tree inference-only runner reuses the existing forcing pipeline, causal Wan variant, attention sink/KV cache, core scheduler, attention dispatch, distributed helpers, and video I/O; execution never imports an external RollingForcing repository. The static integration follows the official five-step, three-latent-frame block configuration. It is published by Tencent (ARC Lab) / Nanyang Technological University.
+
+Catalog tasks include text-to-video, long-video-generation, and autoregressive-video-generation. Catalog aliases include `RollingForcing`, `rolling_forcing`, and `rollingforcing`. Documented modalities: text in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (Video quality for long text-to-video output), [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) (Long-horizon temporal coherence).
+
+## Runtime contract
+
+Optional `prompt`, `frames`, `seed`, `num_samples`, and `use_ema`; artifacts `generated_video` and `rolling-forcing.mp4`.
+
+CLI task profiles: `text-to-long-video`. WorldFoundry binds `RollingForcingPipeline`.
+
+Family status: **Verified**.
+
+Recorded `text-to-long-video` defaults: frames=126, seed=0.
+
+The released route is text-to-video only — unverified I2V behavior is not advertised. BF16 and memory capacity are hardware requirements; the official 126 latent frames decode to a long 16 fps video, and smaller multiples of three are valid smoke runs. Upstream terms allow academic use only.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run rolling-forcing --pipeline.task-profile text-to-long-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch>=2.4).
+
+Recorded weight repositories include `TencentARC/RollingForcing`, `TencentARC/RollingForcing`, and `Wan-AI/Wan2.1-T2V-1.3B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh rolling-forcing`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include rollingforcing-academic-only; status: **Verified**.
+
+<ModelRelatedRecipes modelId="rolling-forcing" locale="en" />

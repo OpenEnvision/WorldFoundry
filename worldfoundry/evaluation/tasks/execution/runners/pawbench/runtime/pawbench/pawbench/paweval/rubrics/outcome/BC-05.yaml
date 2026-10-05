@@ -1,0 +1,45 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BC-05
+track: coverage
+title_en: Ring Toss Toward Peg
+outcome_question: Which ring-toss outcome in ['settles_around_peg', 'rests_on_peg_not_scored', 'contacts_peg_but_off',
+  'near_miss_no_peg_contact', 'clear_miss'] is visible as the first decisive result?
+readout_policy: 'Read the first decisive ring/peg relation after the single toss and
+  short normal response window: encircling score, resting on peg without encircling,
+  peg contact off, near no-contact miss, or clear miss. First contact alone is not
+  decisive while the ring is still visibly bouncing or settling.'
+canonical_labels:
+- settles_around_peg
+- rests_on_peg_not_scored
+- contacts_peg_but_off
+- near_miss_no_peg_contact
+- clear_miss
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['settles_around_peg', 'rests_on_peg_not_scored', 'contacts_peg_but_off',
+  'near_miss_no_peg_contact', 'clear_miss'] can be decisively identified within the readout window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's reference protocol;
+  record it as out-of-schema.
+priority_rules:
+- 'First decisive readout is the ring/peg relation after the one toss: around peg, resting on peg without
+  score, peg contact off, near no-contact miss, or clear miss.'
+- Wait through the short normal post-contact response before choosing contact-off,
+  rest-on-peg, or settles-around-peg; normal rebound/settling before commitment is
+  not a separate earlier outcome.
+- settles_around_peg requires the ring visibly encircling and resting around the peg.
+- rests_on_peg_not_scored means the ring is visibly supported by, hanging on, or leaning against the peg
+  but does not encircle/settle around it as a score.
+- contacts_peg_but_off means the ring contacts the peg but ends off the peg and not supported by it.
+- Peg-contact/support labels beat no-contact miss labels; use near_miss_no_peg_contact only when the ring
+  passes close to the peg without touching it.
+notes:
+- Label rename collapses hang/lean surface variants into one non-scoring rest-on-peg terminal future.
+- 'Contact/trajectory scene: outcome label uses first decisive visible target interaction or miss geometry.'
+- 'Scene title: Ring Toss Toward Peg.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules are authored from
+  STAGBench metadata/action protocol.'

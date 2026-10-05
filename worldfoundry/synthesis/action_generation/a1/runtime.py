@@ -93,7 +93,7 @@ def checkpoint_shapes(root: str | Path) -> dict[str, tuple[int, ...]]:
             raise FileNotFoundError(
                 f"A1 checkpoint requires model.pt or model.safetensors under {directory}"
             )
-    from worldfoundry.core.model_loading.file import load_torch_checkpoint
+    from worldfoundry.core.model_loading.checkpoints.file import load_torch_checkpoint
 
     try:
         payload = load_torch_checkpoint(model_file, map_location="cpu", weights_only=True, mmap=True)
@@ -126,7 +126,7 @@ def _load_checkpoint(model: torch.nn.Module, root: Path, *, strict: bool) -> Non
             if len(candidates) != 1:
                 raise FileNotFoundError(f"No unambiguous A1 PyTorch checkpoint under {root}")
             model_file = candidates[0]
-        from worldfoundry.core.model_loading.file import load_torch_checkpoint
+        from worldfoundry.core.model_loading.checkpoints.file import load_torch_checkpoint
 
         try:
             payload = load_torch_checkpoint(
@@ -290,7 +290,7 @@ class A1Runtime:
                 "A1 requires an hfd-staged local checkpoint directory: "
                 f"{self.checkpoint_root}"
             )
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         self.device = torch.device(resolve_inference_device(config.device))
         self.dtype = resolve_inference_dtype(self.device, config.torch_dtype)
@@ -304,6 +304,12 @@ class A1Runtime:
         self.statistics, self.state_stats, self.action_stats = self._load_statistics()
 
         from .modeling import AffordVLA
+
+        if self.model_config.action_head == "flow_matching":
+            # Transformers lazily imports Qwen2 (and torchao) on first access.
+            # Import it before the meta-device context: torchao constructs CPU
+            # lookup tables during import and cannot materialize meta tensors.
+            from transformers import Qwen2ForCausalLM  # noqa: F401
 
         with torch.device("meta"):
             self.model = AffordVLA(self.model_config, device="meta")
@@ -445,7 +451,7 @@ _RUNTIME_CACHE: dict[tuple[str, str], A1Runtime] = {}
 
 
 def clear_runtime_cache() -> None:
-    from worldfoundry.core.runtime_cache import clear_inference_runtime_cache
+    from worldfoundry.core.execution.runtime_cache import clear_inference_runtime_cache
 
     clear_inference_runtime_cache(_RUNTIME_CACHE)
 

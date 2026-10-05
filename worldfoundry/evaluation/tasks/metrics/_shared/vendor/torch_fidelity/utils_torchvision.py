@@ -4,7 +4,7 @@ from contextlib import redirect_stdout
 
 import torchvision
 
-from torch_fidelity.helpers import get_kwarg
+from .helpers import get_kwarg
 
 
 def torchvision_load_pretrained_vgg16(**kwargs):

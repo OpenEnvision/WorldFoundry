@@ -1,5 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Adapted from https://github.com/vllm-project/vllm/blob/v0.7.3/vllm/distributed/device_communicators/cuda_communicator.py
+"""CUDA NCCL communicator for sequence-parallel tensor collectives.
+
+:class:`CudaCommunicator` is the GPU :class:`DeviceCommunicatorBase`
+implementation. For ``world_size > 1`` it owns a
+:class:`PyNcclCommunicator` and routes ``all_reduce`` / ``all_gather`` /
+``all_to_all`` through it so Ulysses attention can be CUDA-Graph
+captured. Rank-0 metadata still uses the CPU process group.
+
+Prefer this over calling ``torch.distributed`` directly from an SP
+attention kernel.
+"""
 
 import torch
 from torch.distributed import ProcessGroup
@@ -7,7 +18,14 @@ from torch.distributed import ProcessGroup
 from .base_device_communicator import DeviceCommunicatorBase
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# CUDA path — PyNCCL for Graph-safe all-reduce / P2P; torch as test fallback
+# ──────────────────────────────────────────────────────────────────────────
+
+
 class CudaCommunicator(DeviceCommunicatorBase):
+    """GPU communicator that prefers in-tree PyNCCL for Graph-safe collectives."""
+
     def __init__(
         self,
         cpu_group: ProcessGroup,
@@ -15,6 +33,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         device_group: ProcessGroup | None = None,
         unique_name: str = "",
     ):
+        """Attach PyNCCL to the *CPU* group so unique-id broadcast stays off NCCL."""
         super().__init__(cpu_group, device, device_group, unique_name)
 
         from .pynccl import PyNcclCommunicator
@@ -27,6 +46,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
             )
 
     def all_reduce(self, input_, op: torch.distributed.ReduceOp | None = None):
+        """PyNCCL out-of-place reduce; torch clone+reduce if the wrapper is disabled."""
         pynccl_comm = self.pynccl_comm
         assert pynccl_comm is not None
         out = pynccl_comm.all_reduce(input_, op=op)
@@ -66,5 +86,6 @@ class CudaCommunicator(DeviceCommunicatorBase):
         return tensor
 
     def destroy(self) -> None:
+        """Drop the PyNCCL handle; ``ncclCommDestroy`` is intentionally not called."""
         if self.pynccl_comm is not None:
             self.pynccl_comm = None

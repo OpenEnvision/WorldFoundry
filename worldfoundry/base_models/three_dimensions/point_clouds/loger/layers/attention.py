@@ -19,8 +19,16 @@ import torch
 
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
-from worldfoundry.base_models.three_dimensions.point_clouds.pi3.pi3.models.layers.attention import (
-    Attention, MemEffAttention, FlashAttention, CrossAttentionRope, MemEffCrossAttentionRope, AttentionRope, get_attn_score, PRopeFlashAttention, FlashCrossAttentionRope
+from worldfoundry.base_models.three_dimensions.point_clouds.pi3_inference.models.layers.attention import (
+    Attention as Attention,
+    MemEffAttention as MemEffAttention,
+    FlashAttention as FlashAttention,
+    CrossAttentionRope as CrossAttentionRope,
+    MemEffCrossAttentionRope as MemEffCrossAttentionRope,
+    AttentionRope as AttentionRope,
+    get_attn_score as get_attn_score,
+    PRopeFlashAttention as PRopeFlashAttention,
+    FlashCrossAttentionRope as FlashCrossAttentionRope,
 )
 
 try:

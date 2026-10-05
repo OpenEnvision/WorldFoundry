@@ -1,9 +1,25 @@
-"""Bounded in-process memory records, queries, and deterministic retrieval scoring."""
+"""Bounded in-process memory records, queries, and deterministic retrieval.
+
+Every WorldFoundry memory implementation (artifact, action, mosaic)
+stores the same row shape: ``content``, ``type``, ``timestamp``,
+``metadata``, optional ``score``. :class:`MemoryStore` is the list plus
+capacity eviction; :class:`MemoryQuery` / :meth:`MemoryStore.select`
+delegate ranking to :mod:`worldfoundry.core.memory.retrieval` so scoring
+stays deterministic and testable without a vector DB.
+
+:class:`MemoryRecord` is the typed view; the store keeps plain dicts so
+subclasses can persist or JSON-dump without a custom encoder.
+``capacity`` evicts from the *front* (oldest) after each append.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
+
+# ──────────────────────────────────────────────────────────────────────────
+# Record / query / selection — typed view; store persists plain dicts
+# ──────────────────────────────────────────────────────────────────────────
 
 
 @dataclass(slots=True)
@@ -18,6 +34,7 @@ class MemoryRecord:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "MemoryRecord":
+        """Build a record from a dict; ``kind`` and ``type`` are aliases."""
         kind = value.get("kind", value.get("type", "other"))
         return cls(
             content=value.get("content"),
@@ -28,6 +45,7 @@ class MemoryRecord:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize using the persisted ``type`` key (not ``kind``)."""
         row = {
             "content": self.content,
             "type": self.kind,
@@ -59,25 +77,35 @@ class MemorySelection:
 
     @property
     def content(self) -> Any:
+        """First selected record's content, or ``None`` when empty."""
         return self.records[0].content if self.records else None
 
     def to_dicts(self) -> list[dict[str, Any]]:
+        """Serialize every selected record."""
         return [record.to_dict() for record in self.records]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Bounded list — evict from the front (oldest) after each append
+# ──────────────────────────────────────────────────────────────────────────
 
 
 class MemoryStore:
     """Bounded in-process memory store used by all concrete WorldFoundry memories."""
 
     def __init__(self, capacity: int | None = None, records: Iterable[Mapping[str, Any] | MemoryRecord] = ()) -> None:
+        """Seed the store; seed rows go through :meth:`append_record` so capacity applies."""
         self.capacity = capacity
         self.records: list[dict[str, Any]] = []
         for record in records:
             self.append_record(record)
 
     def __len__(self) -> int:
+        """Number of persisted record dicts currently held."""
         return len(self.records)
 
     def __iter__(self):
+        """Iterate persisted dicts in append order (oldest first)."""
         return iter(self.records)
 
     def append(
@@ -89,6 +117,7 @@ class MemoryStore:
         metadata: Mapping[str, Any] | None = None,
         score: float | None = None,
     ) -> dict[str, Any]:
+        """Append a new record; *timestamp* defaults to the current length."""
         record = MemoryRecord(
             content=content,
             kind=str(kind),
@@ -101,6 +130,7 @@ class MemoryStore:
         return record
 
     def append_record(self, record: Mapping[str, Any] | MemoryRecord) -> dict[str, Any]:
+        """Normalize *record* to a dict, append it, and evict if over capacity."""
         row = record.to_dict() if isinstance(record, MemoryRecord) else MemoryRecord.from_dict(record).to_dict()
         self.records.append(row)
         self.evict()
@@ -109,6 +139,7 @@ class MemoryStore:
     def latest(
         self, prefer_type: str | None = None, metadata: Mapping[str, Any] | None = None
     ) -> dict[str, Any] | None:
+        """Return the newest record matching optional type and metadata filters."""
         for record in reversed(self.records):
             if prefer_type is not None and record.get("type") != prefer_type:
                 continue
@@ -137,19 +168,23 @@ class MemoryStore:
         return MemorySelection(select_records(self.records, query))
 
     def evict(self) -> None:
+        """Drop oldest records until ``len(self) <= capacity`` (no-op if unbounded)."""
         if self.capacity is not None and self.capacity >= 0 and len(self.records) > self.capacity:
             del self.records[: len(self.records) - self.capacity]
 
     def reset(self) -> None:
+        """Remove every stored record."""
         self.records.clear()
 
     def replace(self, records: Iterable[Mapping[str, Any] | MemoryRecord]) -> None:
+        """Clear the store and append *records* in order."""
         self.records = []
         for record in records:
             self.append_record(record)
 
 
 def _metadata_matches(record_metadata: Mapping[str, Any], query_metadata: Mapping[str, Any]) -> bool:
+    """Require every query key to equal the record value; extra record keys are ignored."""
     for key, value in query_metadata.items():
         if record_metadata.get(key) != value:
             return False

@@ -12,7 +12,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_scatter import scatter_mean
+from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext.scatter import scatter_mean
 
 
 def cvx_upsample(data, mask):

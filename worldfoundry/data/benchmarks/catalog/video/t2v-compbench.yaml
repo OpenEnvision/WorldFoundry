@@ -1,5 +1,7 @@
 id: t2v-compbench
 name: T2V-CompBench
+publisher: The University of Hong Kong
+publisher_kind: university
 benchmark_kind:
 - text-to-video
 - compositionality
@@ -137,6 +139,16 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.t2v_compbench.run_t2v_compbench_official_runner
+    dataset_root_arg: --dataset-root
+    metric_arg: --category
+    model_arg: --model-name
+    supports_run_official: false
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    input_kind: generated_video_root_or_official_results
   runner_target: worldfoundry.evaluation.tasks.contracts.external:T2VCompBenchContract
   validation_command:
   - worldfoundry-eval
@@ -190,6 +202,7 @@ runner:
     results_path_env: WORLDFOUNDRY_T2V_COMPBENCH_RESULTS_PATH
 integration:
   status: integrated
+  tier: in_tree
   blocked_reasons:
   - Full-suite execution requires separate compatible MLLM, detection/depth, and tracking metric assets.
   - The bounded generative_numeracy execution does not establish full-suite or leaderboard parity.

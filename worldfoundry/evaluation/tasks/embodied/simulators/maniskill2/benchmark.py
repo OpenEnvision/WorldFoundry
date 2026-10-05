@@ -19,14 +19,7 @@ from typing import Any
 import numpy as np
 
 from worldfoundry.evaluation.tasks.embodied.simulators.base import BaseSimulator, StepResult
-from worldfoundry.evaluation.tasks.embodied.simulators.specs import (
-    GRIPPER_CLOSE_NEG,
-    IMAGE_RGB,
-    LANGUAGE,
-    POSITION_DELTA,
-    ROTATION_EULER,
-    DimSpec,
-)
+from worldfoundry.evaluation.tasks.embodied.simulators.specs import GRIPPER_CLOSE_NEG, IMAGE_RGB, LANGUAGE, POSITION_DELTA, ROTATION_EULER, DimSpec
 
 # Prevent display issues in headless environments
 os.environ.setdefault("DISPLAY", "")

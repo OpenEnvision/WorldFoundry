@@ -44,6 +44,7 @@ def generate_scene(args: argparse.Namespace):
         resolution=args.resolution,
         device=device,
         low_vram=args.low_vram,
+        initialize_pano_generator=args.pano_image is None,
     )
 
     if args.pano_image is not None:
@@ -59,10 +60,23 @@ def save_scene(scene, output_dir: str | os.PathLike[str], *, return_mesh: bool) 
     output_root = Path(output_dir)
     output_root.mkdir(parents=True, exist_ok=True)
     if return_mesh:
-        import open3d as o3d
+        import numpy as np
+        import trimesh
 
         output_path = output_root / "worldgen.glb"
-        o3d.io.write_triangle_mesh(str(output_path), scene)
+        vertices = np.asarray(scene.vertices)
+        triangles = np.asarray(scene.triangles)
+        vertex_colors = np.asarray(scene.vertex_colors)
+        if len(vertex_colors) != len(vertices):
+            vertex_colors = None
+        else:
+            vertex_colors = np.rint(np.clip(vertex_colors, 0.0, 1.0) * 255.0).astype(np.uint8)
+        trimesh.Trimesh(
+            vertices=vertices,
+            faces=triangles,
+            vertex_colors=vertex_colors,
+            process=False,
+        ).export(output_path, file_type="glb")
     else:
         output_path = output_root / "worldgen.ply"
         scene.save(str(output_path))

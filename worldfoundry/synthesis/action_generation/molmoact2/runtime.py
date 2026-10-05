@@ -8,7 +8,6 @@ and helper functions for processing inputs and outputs for inference.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import threading
 import time
@@ -17,6 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import (
     project_root,
     resolve_local_hf_model_path,
@@ -387,10 +387,21 @@ def _load_in_tree_processor(local_dir: Path) -> Any:
     video_processor = MolmoAct2VideoProcessor(
         **component_options("video_processor", "video_processor_type")
     )
+    tokenizer_options: dict[str, Any] = {}
+    tokenizer_config = json.loads((local_dir / "tokenizer_config.json").read_text(encoding="utf-8"))
+    extra_tokens = tokenizer_config.get("extra_special_tokens")
+    if isinstance(extra_tokens, list):
+        # Transformers 4 expects named extra tokens; the checkpoint uses the
+        # Transformers 5 list form. Preserve token IDs and special-token status.
+        tokenizer_options["extra_special_tokens"] = {}
+        tokenizer_options["additional_special_tokens"] = list(dict.fromkeys(
+            [*tokenizer_config.get("additional_special_tokens", []), *extra_tokens]
+        ))
     tokenizer = AutoTokenizer.from_pretrained(
         str(local_dir),
         trust_remote_code=False,
         local_files_only=True,
+        **tokenizer_options,
     )
     chat_template_path = local_dir / "chat_template.jinja"
     chat_template = (
@@ -476,7 +487,8 @@ class MolmoAct2Runtime:
             return  # Model already loaded
 
         import torch
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         from .configuration_molmoact2 import MolmoAct2Config
         from .modeling_molmoact2 import MolmoAct2ForConditionalGeneration
@@ -671,7 +683,7 @@ class MolmoAct2Runtime:
             "model_id": "molmoact2",
             "artifact_kind": "action_trace",
             "artifact_path": str(target),
-            "artifact_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "artifact_sha256": file_sha256(target),
             "backend": payload["backend"],
             "backend_quality": payload["backend_quality"],
             "duration_seconds": payload["duration_seconds"],

@@ -1,3 +1,3 @@
-from worldfoundry.core.io.python_config import EasyDict
+from worldfoundry.core.configuration.python import EasyDict
 
 __all__ = ["EasyDict"]

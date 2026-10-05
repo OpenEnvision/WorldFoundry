@@ -103,7 +103,8 @@ def export_ply(
         means.detach().cpu().numpy(),
         torch.zeros_like(means).detach().cpu().numpy(),
         harmonics_view_invariant.detach().cpu().contiguous().numpy(),
-        opacities[..., None].detach().cpu().numpy(),
+        # Standard 3DGS PLY stores opacity logits, alongside logarithmic scales.
+        torch.logit(opacities.clamp(1e-6, 1 - 1e-6))[..., None].detach().cpu().numpy(),
         scales.log().detach().cpu().numpy(),
         rotations,
     )

@@ -29,12 +29,15 @@ artifact_filename: warp-as-history.mp4
 execution:
   backend_stage: in_tree_official_cli
   runtime_status: official_demo_contract
-  integration_status: verified
+  integration_status: integrated
   pipeline_binding: warp-as-history
   conda_env: warp-as-history
 integration:
-  status: verified
+  status: integrated
 notes:
 - WorldFoundry vendors the official Warp-as-History runtime under worldfoundry/synthesis/visual_generation/warp_as_history/warp_as_history_runtime.
 - This model intentionally uses the dedicated warp-as-history conda profile because
   its official stack pins Python 3.10 and torch 2.5.0+cu121.
+- Camera-pose inference additionally needs an external Pi3 source checkout; set
+  WORLDFOUNDRY_PI3_SOURCE_ROOT to the directory containing pi3/models/pi3x.py.
+  Precomputed warp-video inference does not require Pi3 source.

@@ -18,7 +18,7 @@ from pipeline import (
     CausalInferencePipeline,
 )
 from eval_inputs import TextDataset, TextImagePairDataset
-from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 
 from worldfoundry.synthesis.visual_generation.forcing.self_forcing_runtime.runtime_utils.memory import (
     DynamicSwapInstaller,
@@ -74,7 +74,7 @@ else:
     pipeline = CausalDiffusionInferencePipeline(config, device=device)
 
 if args.checkpoint_path:
-    state_dict = torch.load(args.checkpoint_path, map_location="cpu")
+    state_dict = torch.load(args.checkpoint_path, map_location="cpu", weights_only=True)
     key = 'generator_ema' if args.use_ema else 'generator'
     gen_sd = state_dict[key]
 

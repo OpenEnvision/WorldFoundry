@@ -8,7 +8,7 @@ def get_resnet(args):
     # Get a ResNet model based on the provided arguments.
     try:
         dropout = float(args.dropout)
-    except:
+    except Exception:
         dropout = 0.0
 
     if args.backbone_config == 'resnet101':
@@ -42,7 +42,7 @@ def get_loss_function(name):
     elif name == 'listMLE':
         try:
             from allrank.models.losses import listMLE
-        except:
+        except Exception:
             print('listMLE not found; please clone from https://github.com/allegro/allRank/tree/master/allrank')
         loss_f = listMLE
     else:
@@ -141,7 +141,7 @@ class GramLoss(torch.nn.Module):
                 cur_loss = torch.sum(F.mse_loss(gram_x, gram_y, reduction='none'), dim=[1, 2])/(x.shape[0])/(x.shape[0])
                 try:
                     gram_loss += cur_loss
-                except:
+                except Exception:
                     gram_loss = cur_loss
         return gram_loss
 
@@ -199,7 +199,7 @@ class ContentLoss(torch.nn.Module):
                 cur_loss = torch.sum(F.mse_loss(x, y, reduction='none'), dim=[1, 2, 3])/norm
                 try:
                     content_loss += cur_loss
-                except:
+                except Exception:
                     content_loss = cur_loss
 
         return content_loss

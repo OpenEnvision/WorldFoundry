@@ -1,190 +1,41 @@
 ---
 title: WBench
-description: 使用 WorldFoundry 仓内多轮视频世界模型 evaluator 运行 WBench。
+description: "美团 LongCat 多轮视频世界模型评测：28 个指标、五个轴。WorldFoundry 内置指标 runtime；单视频闪烁运行不是 289 例协议。"
 ---
 
-## 简介
+WBench（美团 LongCat）评的是 **多轮交互视频世界模型**，五个轴汇总为 `wbench_average`：
 
-WBench 是多轮交互式视频 world-model benchmark。它评估模型在连续交互中是否能保持 rendering quality、scene setting、user control、temporal consistency 和 physical plausibility。公开 benchmark 包含 289 个 cases、1,058 个 interaction turns，覆盖 navigation、subject action、event editing、perspective switching 四类交互。
+- **质量** — 美学、成像、闪烁、动态、平滑、HPSv3
+- **设定** — 场景 / 主体遵守
+- **交互** — 导航轨迹、事件编辑、主体动作、视角切换
+- **一致性** — 背景、片段连续、视角、主体、几何 / 光度重建、空间（含 gated）
+- **物理** — 视觉合理性、因果忠实
 
-WBench 支持多种控制接口。text-conditioned 模型运行全部 289 个 cases；camera-conditioned 和 action-conditioned 模型运行 158 个 navigation cases。WBench 会把文本、6-DoF camera pose、离散动作统一到可比较的 navigation protocol。
+论文：[WBench](https://arxiv.org/abs/2605.25874)。项目：[meituan-longcat.github.io/WBench](https://meituan-longcat.github.io/WBench/)。代码：[meituan-longcat/WBench](https://github.com/meituan-longcat/WBench)。数据：[`meituan-longcat/WBench`](https://huggingface.co/datasets/meituan-longcat/WBench)。权重：[`meituan-longcat/WBench-weights`](https://huggingface.co/meituan-longcat/WBench-weights)。
 
-WorldFoundry 已经把 WBench runtime 集成在仓内。官方 GitHub repo、paper、project page、Hugging Face data 和 weights 只作为协议和资产来源引用；WorldFoundry 工作流不需要外部 benchmark 源码 checkout。
+WorldFoundry **检入指标 runtime**（HPSv3、TransNetV2、PAVRM、DreamSim、MegaSAM 位姿预计算）。**真实单视频 `temporal_flickering` 组件已验证**；**289 例多轮协议未验证**。`--official-results-path` 导入 `report.json` 或分指标目录。
 
-## 评测什么
+<BenchmarkPageSections id="wbench" locale="zh" />
 
-WBench 是**多轮交互式**视频 world-model benchmark。它评估模型在连续交互中是否能保持 rendering quality、scene setting、user control、temporal consistency 和 physical plausibility——289 个 cases、1,058 个 turns、22 个经人工验证的指标。
-
-## 来源
-
-- Paper: [WBench: A Comprehensive Multi-turn Benchmark for Interactive Video World Model Evaluation](https://arxiv.org/abs/2605.25874)
-- Project page and leaderboard: [meituan-longcat.github.io/WBench](https://meituan-longcat.github.io/WBench/)
-- Official source reference: [github.com/meituan-longcat/WBench](https://github.com/meituan-longcat/WBench)
-- Dataset: [meituan-longcat/WBench](https://huggingface.co/datasets/meituan-longcat/WBench)
-- Example submissions: [meituan-longcat/WBench-examples](https://huggingface.co/datasets/meituan-longcat/WBench-examples)
-- Metric weights: [meituan-longcat/WBench-weights](https://huggingface.co/meituan-longcat/WBench-weights)
-
-## 测评协议
-
-生成视频使用官方 WBench work directory layout：
-
-```text
-work_dirs/<model_name>/
-  videos/
-    case_<id>_combined.mp4
-  evaluation/
-    <metric>/
-      case_<id>.json
-    report.json
-```
-
-`<id>` 是 case JSON 里的 id，不是 case 文件名。一个完整多轮视频保存为一个 `case_<id>_combined.mp4`。如果模型每个 turn 的帧数不一致，leaderboard 提交时需要准备 `turns.json`，这样 per-turn metrics 才能正确切分 combined video。
-
-| Dimension | Metrics |
-| --- | --- |
-| Quality | `aesthetic_quality`, `imaging_quality`, `temporal_flickering`, `dynamic_degree`, `motion_smoothness`, `hpsv3_quality` |
-| Setting | `scene_adherence`, `subject_adherence` |
-| Interaction | `navigation_trajectory`, `event_edit_adherence`, `subject_action_adherence`, `perspective_switch_adherence` |
-| Consistency | `background_consistency`, `segment_continuity`, `perspective_consistency`, `subject_consistency`, `geometric_consistency`, `photometric_consistency`, `spatial_consistency`, `gated_spatial_consistency` |
-| Physical | `visual_plausibility`, `causal_fidelity` |
-| Primary | `wbench_average`，优先由五个 dimension score 聚合 |
-
-## WorldFoundry 集成
-
-WorldFoundry 的仓内 runtime 位于：
-
-```text
-worldfoundry/evaluation/tasks/execution/runners/wbench/runtime/wbench
-```
-
-runner 入口是：
-
-```text
-worldfoundry/evaluation/tasks/execution/runners/wbench/run_wbench_official_runner.py
-```
-
-direct runner 可以用 `--run-official` 执行仓内 WBench runtime，也可以读取已有 `report.json` 或 per-metric `evaluation/` 目录并写出 WorldFoundry `scorecard.json`。runtime 会尽量复用 WorldFoundry base-model assets 中的通用 perception 组件，WBench-specific weights 通过 `WBENCH_WEIGHTS_DIR` 提供。
-
-WBench 同时有本地 metric 依赖和 API-backed VLM metrics。完整重算需要生成视频、WBench data cases 和 masks、metric weights、CUDA packages，以及官方 VLM metrics 所需的 VLM credentials。
-
-## 准备数据和资产
-
-从 WorldFoundry 仓库根目录开始：
+## 如何运行
 
 ```bash
-cd /path/to/WorldFoundry
-export WORLDFOUNDRY_REPO_ROOT="$PWD"
-export PYTHONPATH="$WORLDFOUNDRY_REPO_ROOT:${PYTHONPATH:-}"
-```
-
-准备 WBench runtime、data、work directory 和 metric weights：
-
-```bash
-export WORLDFOUNDRY_WBENCH_ROOT="$WORLDFOUNDRY_REPO_ROOT/worldfoundry/evaluation/tasks/execution/runners/wbench/runtime/wbench"
-export WORLDFOUNDRY_WBENCH_WORK_DIR=/path/to/wbench/work_dirs
-export WORLDFOUNDRY_WBENCH_MODEL_NAME=my_model
-export WBENCH_WEIGHTS_DIR=/path/to/wbench/weights
-
-hf download meituan-longcat/WBench \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_WBENCH_ROOT}/data" \
-  --exclude "splits/*"
-
-hf download meituan-longcat/WBench-weights \
-  --local-dir "${WBENCH_WEIGHTS_DIR}"
-```
-
-生成视频放在：
-
-```text
-${WORLDFOUNDRY_WBENCH_WORK_DIR}/${WORLDFOUNDRY_WBENCH_MODEL_NAME}/videos/
-```
-
-text-conditioned 模型需要覆盖全部 289 个 cases；camera-conditioned 或 action-conditioned 模型需要覆盖 158 个 navigation cases。把 `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` 指向同一个视频目录，方便 WorldFoundry 记录 coverage metadata：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR="${WORLDFOUNDRY_WBENCH_WORK_DIR}/${WORLDFOUNDRY_WBENCH_MODEL_NAME}/videos"
-```
-
-VLM metrics 需要：
-
-```bash
-export VLM_API_KEY=<your-vlm-api-key>
-export VLM_API_URL=${VLM_API_URL:-https://ark.cn-beijing.volces.com/api/v3}
-export VLM_MODEL_NAME=${VLM_MODEL_NAME:-doubao-seed-2-0-lite-260215}
-```
-
-local visual plausibility scoring 需要提供 PAVRM 模型路径：
-
-```bash
-export WORLDFOUNDRY_WBENCH_PAVRM_MODEL_DIR=/path/to/pavrm_model
-```
-
-## 运行测评
-
-运行完整仓内 WBench metric pipeline：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/wbench/run_wbench_official_runner.py \
   --run-official \
-  --wbench-root "${WORLDFOUNDRY_WBENCH_ROOT}" \
-  --work-dir "${WORLDFOUNDRY_WBENCH_WORK_DIR}" \
-  --weights-dir "${WBENCH_WEIGHTS_DIR}" \
-  --model-name "${WORLDFOUNDRY_WBENCH_MODEL_NAME}" \
-  --phase all \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/wbench/official-run \
+  --model-name <model_name> \
+  --phase gpu \
+  --metrics temporal_flickering \
+  --dataset-root <WBench_dataset> \
+  --generated-artifact-dir <one_officially_named_generated_video> \
+  --output-dir tmp/wbench/flicker \
   --json
 ```
 
-如果已经完成 precompute / gpu / vlm 阶段，可以只聚合 report：
+只有视频真正遵循该官方多轮接口时才传 `--submission-protocol text_multi_turn|camera_conditioned|action_conditioned`。环境变量：`WORLDFOUNDRY_WBENCH_RESULTS_PATH`、`WORLDFOUNDRY_WBENCH_ROOT`。共享栈：`video_world_perception_stack`。
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/wbench/run_wbench_official_runner.py \
-  --run-official \
-  --wbench-root "${WORLDFOUNDRY_WBENCH_ROOT}" \
-  --work-dir "${WORLDFOUNDRY_WBENCH_WORK_DIR}" \
-  --model-name "${WORLDFOUNDRY_WBENCH_MODEL_NAME}" \
-  --phase report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/wbench/report-only \
-  --json
-```
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/wbench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/wbench`。
 
-如果你已经有 `report.json` 或官方 `evaluation/` 目录，可以通过公开 benchmark 入口导入：
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id wbench \
-  --mode official-validation \
-  --official-results-path "${WORLDFOUNDRY_WBENCH_WORK_DIR}/${WORLDFOUNDRY_WBENCH_MODEL_NAME}/evaluation/report.json" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/wbench/official-validation \
-  --json
-```
-
-## 输出
-
-WorldFoundry 会写出：
-
-- `scorecard.json`
-- `raw_metric_table.jsonl`
-- official runtime 产出或导入的 `report.json`
-- 所选 `--output-dir` 下的 WBench runtime logs
-
-leaderboard 提交的官方 package 是：
-
-```text
-<model_name>/
-  meta.json
-  report.json
-  turns.json
-  videos/
-    case_<id>_combined.mp4
-```
-
-官方 WBench 流程接受自评 scores 加 videos，也接受只提交 videos 由 WBench 团队评测。WorldFoundry 不负责托管或运行你的模型；它只基于你准备好的资产生成本地 scorecard 和 artifacts。
+产物包括 `scorecard.json`（主键 `wbench_average`）。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

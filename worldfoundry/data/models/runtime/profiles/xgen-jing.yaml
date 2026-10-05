@@ -1,0 +1,42 @@
+schema_version: 2
+model_id: xgen-jing
+display_name: XGEN-JING Flash v1
+task_family: world_model
+groups: [world, video, camera_control, text_to_video, image_to_video, audio_video]
+source_repos:
+- url: https://github.com/XGEN-Labs/XGEN-JING
+  revision: cbeec31630d63a981a8e40d6e79c71a188a7d8c9
+  in_tree_path: worldfoundry/base_models/diffusion_model/models/networks/minimax_h3/variants/jing
+checkpoints:
+- repo_id: XGENlabs/XGEN-JING
+  revision: 8153db624fa4fa573d2e0c5335b515882efff30d
+  subfolder: jing_flash_v1
+  role: controlled_transformer
+- repo_id: MiniMaxAI/MiniMax-H3
+  revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+  role: diffusers_text_encoder_tokenizer_processor_video_audio_vae_schedulers
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions: [control, chunks, slices]
+artifact_kind: generated_world
+artifact_filename: xgen-jing.mp4
+execution:
+  backend_stage: shared_base_model_runtime
+  runtime_status: checkpoint_gpu_validated
+  integration_status: integrated
+  pipeline_binding: xgen-jing
+  default_parameters:
+    height: 544
+    width: 960
+    seed: 42
+    first_chunk_size: 2
+license: minimax-h3-community
+notes:
+- checkpoint_path points to XGEN-JING or its jing_flash_v1 subdirectory; base_model_path uses Diffusers H3 components.
+- Requires Diffusers >=0.40.0 for MiniMax-H3 codecs and Transformers Qwen3-VL support.
+- CPU offload and sequential text/DiT/codec stages permit one GPU; upstream six-GPU distributed execution is not exposed.
+- Four fixed distilled steps, 24 FPS and stereo 32 kHz audio; no CFG or negative prompt.
+- Control lists have one WASD/IJKL string per repeated slice; default layout yields 17 * slice_count + 5 pixel frames.
+- Local checkpoint-backed 22-frame text-only cases at 448x256 with cpu_offload=false and the default 960x544 canvas with cpu_offload=true passed strict loading and audio/video artifact checks on one GPU; image references, camera-control quality, and longer runs have not been validated.

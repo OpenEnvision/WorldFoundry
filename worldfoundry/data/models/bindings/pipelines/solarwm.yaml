@@ -1,0 +1,18 @@
+schema_version: 2
+binding_id: solarwm
+model_id: solarwm
+aliases:
+- solar-wm
+- solarwm-wan2.2-5b
+- solarwm-wan22-5b
+- solarwm-wan2.2-14b
+- solarwm-ltx-22b
+- solarwm-h3-33b
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.solarwm.pipeline_solarwm:SolarWMPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

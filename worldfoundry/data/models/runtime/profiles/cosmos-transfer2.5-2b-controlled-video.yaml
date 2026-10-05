@@ -10,8 +10,8 @@ source_repos:
 - url: https://github.com/nvidia-cosmos/cosmos-transfer2.5
 checkpoints:
 - repo_id: nvidia/Cosmos-Transfer2.5-2B
-  revision: bbaeedb2b57cc8b14a44653099e2551adb69dcc7
-  role: transfer_checkpoint
+  revision: bd963eabcfc2d61dc4ea365cacf41d45ac480aa5
+  role: general_edge_transfer_checkpoint
 input_schema:
   prompt: true
   image: true
@@ -21,11 +21,18 @@ input_schema:
 artifact_kind: generated_world
 artifact_filename: cosmos-transfer2.5-2b-controlled-video.mp4
 execution:
-  backend_stage: in_tree_runtime_plan
-  runtime_status: profile_resolves_catalog_variant_checkpoint_gpu_readiness_pending
-  integration_status: planned
+  backend_stage: native_diffusion_inference
+  checkpoint_revision_policy: exact_sha_for_verified_runs
+  runtime_status: native_control_model_and_forward_validated_checkpoint_asset_pending
+  integration_status: integrated
   pipeline_binding: cosmos-transfer2.5-2b-controlled-video
 integration:
-  status: planned
+  status: integrated
 notes:
-- Data profile for the catalog variant; real Transfer inference remains asset gated.
+- The native VACE model contains the official 28-layer base branch, four control blocks
+  at layers 0/7/14/21, 8-modality control embedder, and positive-guidance flow-UniPC
+  inference path.
+- Control and conditional video encoding reuse the same framework-owned Wan VAE instance;
+  no Diffusers pipeline, ControlNet backend, or model-specific runner is retained.
+- The general/edge checkpoint could not be materialized in this workspace, so exact
+  checkpoint-key and end-to-end GPU parity remain pending.

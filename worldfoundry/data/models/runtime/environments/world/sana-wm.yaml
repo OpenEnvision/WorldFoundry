@@ -25,6 +25,8 @@ pip_packages:
 - pyrallis
 - loguru
 - mmcv-lite
+- mmengine
+- flash-linear-attention
 - huggingface-hub
 - pillow
 - aiohttp
@@ -41,6 +43,8 @@ validation_imports:
 - einops
 - pyrallis
 - loguru
+- mmengine
+- fla
 - aiohttp
 - aiortc
 - worldfoundry.pipelines.sana_wm

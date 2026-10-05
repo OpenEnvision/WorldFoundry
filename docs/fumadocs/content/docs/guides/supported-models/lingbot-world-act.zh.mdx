@@ -1,0 +1,50 @@
+---
+title: "LingBot-World Base Act"
+description: "Robbyant 的动作条件世界视频模型；真实权重推理已验证。"
+modelId: "lingbot-world-act"
+pageSource: authored
+---
+
+LingBot-World Base Act 是 LingBot-World 的动作条件同门：它消费动作矩阵而非相机位姿，是该家族的交互控制档案。它独立记录，并解析官方 Base-Act 预览 checkpoint——绝不以 Base-Cam 顶替。
+
+<ModelPaperFigures modelId="lingbot-world-act" locale="zh" />
+
+记录论文为[arXiv 2601.20540](https://arxiv.org/abs/2601.20540)。
+
+项目页：[technology.robbyant.com/lingbot-world](https://technology.robbyant.com/lingbot-world)。代码：[robbyant/lingbot-world](https://github.com/robbyant/lingbot-world)。
+
+<ModelCommandBuilder modelId="lingbot-world-act" locale="zh" />
+
+## 用来做什么
+
+`lingbot-world-act` 是记录的交互世界线。要用动作推进世界时从这里起步。
+
+推理路径复用树内 LingBot 运行时与中央 Wan 基座模块（apache-2.0）。输入为提示词、图像、位姿与 action_matrix。该模型由蚂蚁灵波科技（Robbyant，蚂蚁集团）发布。
+
+catalog 记录的任务包括 交互式世界模型、动作条件视频。
+
+记录的评测入口包括[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（动作条件世界滚动生成质量）。
+
+## 运行时契约
+
+可选 `prompt`、`image`、`pose`、`action_matrix`、`seed`；产物 `lingbot-world-act.mp4`。
+
+CLI task profile：`interactive-world-model`、`action-conditioned-video`、`world_model`。绑定的 pipeline 类是 `LingBotPipeline`。
+
+系列状态：**公开 runner 已验证 17 帧、8 步配置**。
+
+本地 Base-Act 预览权重使用真实房间图、前进相机路径和非零动作矩阵，生成了 49 帧、40 步视频。公开 WorldFoundry runner 还在专属 LingBot 环境中，使用官方猫图和前进 WASD 动作生成了 17 帧、8 步片段；其 544 × 720、16 fps 视频可完整解码，画面清晰且持续变化。这些结果证明动作负载可被接收并生成视频，但尚未单独测量动作信号的影响或动作贴合度。
+
+官方完整长度的品质与动作贴合度仍待评测。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run lingbot-world-act --pipeline.task-profile interactive-world-model`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+使用专属 `lingbot-world` 环境（Python 3.10、CUDA 12.1）；统一环境下的 act2cam 曾产生近黑输出。
+
+记录的权重仓库包括 `robbyant/lingbot-world-base-act-preview`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lingbot-world-act`；下载缺失的公开权重时加 `--download`。
+
+状态：**公开 runner 已验证 17 帧、8 步配置**。官方 161 帧配方尚未验证。
+
+<ModelRelatedRecipes modelId="lingbot-world-act" locale="zh" />

@@ -1,5 +1,7 @@
 id: wbench
 name: WBench
+publisher: Meituan
+publisher_kind: company
 benchmark_kind:
 - interactive-video-world-model
 - video-generation-quality
@@ -266,6 +268,15 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/wbench/run_wbench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.wbench.run_wbench_official_runner
+    dataset_root_arg: --dataset-root
+    metric_arg: --metrics
+    phase_arg: --phase
+    model_arg: --model-name
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WBenchContract
   validation_command:
   - worldfoundry-eval
@@ -305,6 +316,9 @@ runner:
     multi-turn submission protocol and full official coverage.
 integration:
   status: integrated
+  tier: in_tree
+  hf_dataset_id: meituan-longcat/WBench
+  judge_model_id: meituan-longcat/WBench-weights
   blocked_reasons:
   - Leaderboard parity requires a complete official WBench report for the full split.
   - Recomputing all metrics requires the WBench base-model assets, generated videos, and judge credentials for VLM-based metrics.

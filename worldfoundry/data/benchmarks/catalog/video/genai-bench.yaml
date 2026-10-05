@@ -1,5 +1,7 @@
 id: genai-bench
 name: GenAI-Bench
+publisher: University of Waterloo
+publisher_kind: university
 benchmark_kind:
 - human-preference
 - generative-model
@@ -71,6 +73,17 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  scoring:
+    engines: [video_quality]
+    hooks:
+      video_quality: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_genai_bench_video_quality_contract_file
+  official_script: worldfoundry/evaluation/tasks/execution/runners/genai_bench/run_genai_bench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.genai_bench.run_genai_bench_official_runner
+    generated_arg: null
+    limit_arg: --limit
+    supports_fixture: true
+    default_metrics: [genai_bench_average]
   runner_target: worldfoundry.evaluation.tasks.contracts.external:GenAIBenchContract
   validation_command:
   - worldfoundry-eval
@@ -102,6 +115,7 @@ runner:
     generated artifacts.
 integration:
   status: integrated
+  tier: in_tree
   surface: genai_bench_official_in_tree
   normalizer_available: true
   full_leaderboard_ready: false

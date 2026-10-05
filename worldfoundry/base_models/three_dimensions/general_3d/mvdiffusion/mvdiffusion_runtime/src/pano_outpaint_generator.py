@@ -8,9 +8,39 @@ from diffusers import AutoencoderKL, DDIMScheduler, UNet2DConditionModel
 from einops import rearrange
 from transformers import CLIPTextModel, CLIPTokenizer
 
-from worldfoundry.core.io.paths import checkpoint_root_path
+from worldfoundry.core.io.paths import resolve_local_hf_model_path
 
 from .models.pano.MVGenModel import MultiViewBaseModel
+
+
+def _resolve_model_id(configured_model_id):
+    """Prefer a complete local HF export while preserving the remote-id fallback."""
+    try:
+        local_path = resolve_local_hf_model_path(
+            configured_model_id,
+            required_files=("model_index.json",),
+        )
+    except FileNotFoundError:
+        return configured_model_id
+    return str(local_path.resolve())
+
+
+def _local_fp16_variant_kwargs(model_id, *, subfolder, weight_stem):
+    """Select Diffusers' fp16 variant when that is the only local export.
+
+    Hugging Face mirrors often materialize only files such as
+    ``model.fp16.safetensors``.  ``from_pretrained(..., use_safetensors=True)``
+    does not discover those files unless ``variant=\"fp16\"`` is explicit.
+    Keep remote IDs and full-precision local exports on their existing path.
+    """
+
+    model_path = Path(model_id).expanduser()
+    component = model_path / subfolder
+    standard = component / f"{weight_stem}.safetensors"
+    fp16 = component / f"{weight_stem}.fp16.safetensors"
+    if model_path.is_dir() and fp16.is_file() and not standard.is_file():
+        return {"variant": "fp16"}
+    return {}
 
 
 class PanoOutpaintGenerator(nn.Module):
@@ -26,13 +56,26 @@ class PanoOutpaintGenerator(nn.Module):
         self.diff_timestep = config['model']['diff_timestep']
         self.guidance_scale = config['model']['guidance_scale']
         configured_model_id = config['model']['model_id']
-        local_model_path = checkpoint_root_path(Path(configured_model_id).name)
-        model_id = str(local_model_path) if local_model_path.is_dir() else configured_model_id
+        model_id = _resolve_model_id(configured_model_id)
 
         self.tokenizer = CLIPTokenizer.from_pretrained(
-            model_id, subfolder="tokenizer", torch_dtype=torch.float16)
+            model_id,
+            subfolder="tokenizer",
+            torch_dtype=torch.float16,
+            local_files_only=True,
+        )
         self.text_encoder = CLIPTextModel.from_pretrained(
-            model_id, subfolder="text_encoder", torch_dtype=torch.float16)
+            model_id,
+            subfolder="text_encoder",
+            torch_dtype=torch.float16,
+            local_files_only=True,
+            use_safetensors=True,
+            **_local_fp16_variant_kwargs(
+                model_id,
+                subfolder="text_encoder",
+                weight_stem="model",
+            ),
+        )
 
         self.vae, self.scheduler, unet = self.load_model(model_id)
         self.mv_base_model = MultiViewBaseModel(
@@ -45,12 +88,33 @@ class PanoOutpaintGenerator(nn.Module):
             model_id: The model id.
         """
         vae = AutoencoderKL.from_pretrained(
-            model_id, subfolder="vae")
+            model_id,
+            subfolder="vae",
+            local_files_only=True,
+            use_safetensors=True,
+            **_local_fp16_variant_kwargs(
+                model_id,
+                subfolder="vae",
+                weight_stem="diffusion_pytorch_model",
+            ),
+        )
         vae.eval()
         scheduler = DDIMScheduler.from_pretrained(
-            model_id, subfolder="scheduler")
+            model_id,
+            subfolder="scheduler",
+            local_files_only=True,
+        )
         unet = UNet2DConditionModel.from_pretrained(
-            model_id, subfolder="unet")
+            model_id,
+            subfolder="unet",
+            local_files_only=True,
+            use_safetensors=True,
+            **_local_fp16_variant_kwargs(
+                model_id,
+                subfolder="unet",
+                weight_stem="diffusion_pytorch_model",
+            ),
+        )
         return vae, scheduler, unet
 
     @torch.no_grad()

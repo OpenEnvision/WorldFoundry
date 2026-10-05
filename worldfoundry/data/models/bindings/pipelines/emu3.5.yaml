@@ -3,7 +3,7 @@ binding_id: emu3.5
 model_id: emu3.5
 runner: worldfoundry.pipeline
 pipeline:
-  target: worldfoundry.pipelines.video_official.pipeline_official_video:Emu35Pipeline
+  target: worldfoundry.pipelines.emu35.pipeline_emu35:Emu35Pipeline
   loading:
     method: from_pretrained
     signature: unified

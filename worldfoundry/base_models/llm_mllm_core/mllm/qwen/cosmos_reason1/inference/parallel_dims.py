@@ -18,7 +18,7 @@ from functools import cached_property
 
 from torch.distributed.device_mesh import init_device_mesh
 
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.runtime.logging import log
 
 
 @dataclass

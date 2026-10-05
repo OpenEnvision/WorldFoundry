@@ -10,6 +10,9 @@ checkpoint: LuckyLiGY/MagicWorld
 runtime_profile: runtime-profile:magicworld
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: magicworld
+official_sources:
+  project_page: https://vivocameraresearch.github.io/magicworld/
+  paper: https://arxiv.org/abs/2511.18886
 integration:
   status: integrated
   notes:
@@ -19,3 +22,23 @@ runner_parity:
   status: pending
   notes: [Dedicated MagicWorld-Fast camera path is wired.]
 catalog_category: world_models
+docs:
+  publisher: vivo (Camera Research)
+  publisher_kind: company
+  publisher_zh: vivo（影像研究团队）
+  overview: 'MagicWorld is vivo''s interactive world model: from an image it generates camera-controlled world video, with a MagicWorld-Fast camera path wired in this catalog. The official source is vendored at a pinned revision; runner parity waits on checkpoints.'
+  overview_zh: MagicWorld 是 vivo 的交互式世界模型：从一张图生成相机可控的世界视频，本 catalog 已接通 MagicWorld-Fast 相机路径。官方源码以固定 revision 内置；runner parity 待 checkpoint 就位。
+  architecture: 'Architecture internals beyond the recorded tasks are not stored in this repository. Note the split licensing: code is apache-2.0, while the upstream README applies CC BY-NC-SA 4.0 terms to released model materials.'
+  architecture_zh: 除已记录任务外的架构内部细节仓库未存。注意分离的许可：代码为 apache-2.0，而上游 README 对发布的模型材料适用 CC BY-NC-SA 4.0 条款。
+  usage_notes: Inputs are prompt, image, and native_rows camera control. Model materials retain upstream non-commercial share-alike terms — review before commercial use.
+  usage_notes_zh: 输入为提示词、图像与 native_rows 相机控制。模型材料保留上游非商用相同方式共享条款——商用前请先审查。
+  limitations:
+  - Model materials are CC BY-NC-SA 4.0 (non-commercial).
+  - Runner parity is pending checkpoints.
+  limitations_zh:
+  - 模型材料为 CC BY-NC-SA 4.0（非商用）。
+  - runner parity 待 checkpoint 就位。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-control adherence of interactive rollouts.
+    reason_zh: 交互滚动生成的相机控制贴合度。

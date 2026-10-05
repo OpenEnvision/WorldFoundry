@@ -1,9 +1,27 @@
-"""Multimodal memory ABC: ingestion, retrieval, compression, and lifecycle hooks."""
+"""Multimodal memory ABC: ingestion, retrieval, compression, and lifecycle hooks.
+
+Concrete memories (artifact stores, action histories, mosaic patch
+grids) implement five stages so a generate loop can treat them uniformly:
+
+- ``record`` — ingest raw interaction data.
+- ``select`` — retrieve snippets for the current context.
+- ``compress`` — distill selected items (token or feature budget).
+- ``process`` — adapt the result into a model-ready format (KV, tokens).
+- ``manage`` — eviction, merge, STM→LTM.
+
+Storage is always a :class:`~worldfoundry.core.memory.store.MemoryStore`.
+This module does not import torch so control-plane code can construct
+memories without an accelerator runtime.
+"""
 
 from abc import ABC
 from typing import Any, Iterable, Mapping
 
 from .store import MemoryStore
+
+# ──────────────────────────────────────────────────────────────────────────
+# Five-stage ABC — command methods mutate; query methods read
+# ──────────────────────────────────────────────────────────────────────────
 
 
 class BaseMemory(ABC):
@@ -30,12 +48,18 @@ class BaseMemory(ABC):
         self.capacity = capacity
         self._store = MemoryStore(capacity=capacity)
 
+    # ──────────────────────────────────────────────────────────────────────
+    # Store facade — same record dicts the bounded MemoryStore holds
+    # ──────────────────────────────────────────────────────────────────────
+
     @property
     def storage(self) -> list[dict[str, Any]]:
+        """Live list of persisted record dicts (same object the store holds)."""
         return self._store.records
 
     @storage.setter
     def storage(self, records: Iterable[Mapping[str, Any]]) -> None:
+        """Replace the backing store, preserving ``capacity``."""
         self._store = MemoryStore(capacity=self.capacity, records=records)
 
     def check_template(self, **kwargs):
@@ -50,15 +74,22 @@ class BaseMemory(ABC):
         timestamp: int | float | None = None,
         metadata: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Append one typed record through the bounded store."""
         return self._store.append(content, kind=kind, timestamp=timestamp, metadata=metadata)
 
     def latest_record(
         self, prefer_type: str | None = None, metadata: Mapping[str, Any] | None = None
     ) -> dict[str, Any] | None:
+        """Return the newest matching record, or ``None``."""
         return self._store.latest(prefer_type=prefer_type, metadata=metadata)
 
     def reset_records(self) -> None:
+        """Clear every stored record."""
         self._store.reset()
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Pipeline hooks — subclasses must implement; NotImplementedError if not
+    # ──────────────────────────────────────────────────────────────────────
 
     def record(self, data, metadata=None, **kwargs):
         """Ingest raw interaction data and assign metadata tags."""

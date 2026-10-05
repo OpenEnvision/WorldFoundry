@@ -1,0 +1,76 @@
+id: open-dreamer
+name: Open Dreamer
+aliases:
+- open_dreamer
+- opendreamer
+- dreamer-4
+- dreamer4
+tasks:
+- interactive-world-model
+- minecraft-world-model
+- action-conditioned-video
+- diffusion-world-model
+output_artifacts:
+- generated_world
+- generated_video
+provider: official_repo
+source:
+  status: open_weights_restricted
+  official_repo_url: https://github.com/next-state/open-dreamer
+  license: all_rights_reserved
+official_sources:
+  project_page: https://next-state.github.io/open-dreamer/
+  paper: https://arxiv.org/abs/2509.24527
+  github:
+    url: https://github.com/next-state/open-dreamer
+    revision: 5a4127fcbbd37b3cd9237904d645fb11348bab28
+  inference_github:
+    url: https://github.com/reactor-team/open-dreamer
+    revision: 829263d2089744afb311677eb4d7900dd14ebfbc
+integration:
+  status: runtime_ported
+  blocked_reasons:
+  - Upstream publishes an all-rights-reserved notice with no redistribution grant, so the JAX source is
+    never vendored into this Apache-2.0 repository.
+  - Execution requires a user-staged official checkout, its CUDA-12 JAX environment, and a trained Orbax
+    checkpoint; upstream has not published downloadable weights.
+  notes:
+  - WorldFoundry registers a source-bound runtime manifest that drives the official rollout entrypoint
+    (reactor-team/open-dreamer inference.py) as a subprocess.
+  - The adapter under synthesis/visual_generation/open_dreamer is WorldFoundry-authored glue
+    only; it resolves the staged checkout, gates on staging requirements, and builds the official command.
+  - WorldFoundry interaction tokens are rendered into Minecraft/VPT action JSONL so the shared world-model
+    call surface (interactions=[...]) drives the Dreamer 4 action space.
+runner_parity:
+  status: implemented_checkpoint_pending
+  notes:
+  - The pipeline resolves the official inference entrypoint and returns blocked runtime diagnostics until
+    the checkout, JAX environment, checkpoint, and a 368x640 Minecraft/VPT context clip are staged.
+runtime_profile: runtime-profile:open-dreamer
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: open-dreamer
+catalog_category: world_models
+catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes; blocked
+  entries retain upstream provenance without runnable backends.
+docs:
+  publisher: Open-source community reimplementation (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源社区复现项目（仓库未记录正式机构）
+  overview: 'Open Dreamer is an open reimplementation of the Dreamer 4 interactive world model (paper arXiv 2509.24527): a diffusion world model that plays Minecraft-style scenes forward from a context clip and VPT-format actions. In this catalog the JAX source is never vendored — upstream publishes an all-rights-reserved notice — so WorldFoundry drives a user-staged checkout as a subprocess.'
+  overview_zh: Open Dreamer 是 Dreamer 4 交互世界模型的开源复现（论文 arXiv 2509.24527）：扩散世界模型，从上下文片段与 VPT 格式动作向前推演 Minecraft 风格场景。本 catalog 中绝不内置其 JAX 源码——上游声明「保留所有权利」——因此 WorldFoundry 以子进程驱动用户自备的检出。
+  architecture: 'The WorldFoundry adapter is authored glue only: it resolves the staged checkout, gates on staging requirements, and builds the official inference.py command. WorldFoundry interaction tokens are rendered into Minecraft/VPT action JSONL so the shared world-model call surface drives the Dreamer 4 action space.'
+  architecture_zh: WorldFoundry 适配器只是自研的胶水层：解析就位的检出、检查就位条件并构造官方 inference.py 命令。WorldFoundry 交互 token 被渲染为 Minecraft/VPT 动作 JSONL，使共享的世界模型调用面驱动 Dreamer 4 的动作空间。
+  usage_notes: Stage the official checkout (at WORLDFOUNDRY_MODEL_SOURCE_DIR/open-dreamer-inference or $WORLDFOUNDRY_OPEN_DREAMER_SOURCE) with its own CUDA-12 JAX environment. Upstream has not released weights — train the Orbax checkpoint yourself or pass checkpoint_path. Context clips must be RGB 368x640 (or 360x640, zero-padded).
+  usage_notes_zh: 请就位官方检出（位于 WORLDFOUNDRY_MODEL_SOURCE_DIR/open-dreamer-inference 或 $WORLDFOUNDRY_OPEN_DREAMER_SOURCE），并带其自身的 CUDA-12 JAX 环境。上游未发布权重——需自行训练 Orbax checkpoint 或传入 checkpoint_path。上下文片段须为 RGB 368x640（或 360x640，自动零填充）。
+  limitations:
+  - 'All-rights-reserved upstream: source is never vendored, redistribution is not granted.'
+  - No published weights — you must train or supply a checkpoint.
+  - Requires a separate CUDA-12 JAX environment.
+  limitations_zh:
+  - 上游保留所有权利：源码绝不内置，亦无再分发授权。
+  - 无公开权重——需自行训练或提供 checkpoint。
+  - 需要独立的 CUDA-12 JAX 环境。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Action-conditioned world-rollout quality.
+    reason_zh: 动作条件世界滚动生成质量。

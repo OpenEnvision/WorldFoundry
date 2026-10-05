@@ -1,0 +1,53 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BM-04
+track: coverage
+title_en: Tape Peel from Cardboard
+scene_grounding:
+- 'Initial state must match: A strip of tape is partly attached to cardboard and held
+  by a hand.'
+- The tape strip, peel edge, cardboard surface, and hand grip must be visible before
+  peeling begins.
+action_execution:
+- 'Required action: Peel the tape from the cardboard once.'
+- The hand must pull the tape edge away from the cardboard with continuous contact;
+  a cut, sudden disappearance, or off-screen removal is not a valid peel.
+- The peel must occur once and reveal the adhesive/cardboard response.
+target_requirements:
+- Material threshold cues must distinguish clean full peel, partial attachment,
+  tape tear, cardboard surface tear, and curl/reattach without full removal.
+- Pre-existing lifted tape, torn tape, or damaged cardboard before the pull must
+  not be counted as action-caused peeling damage.
+object_continuity:
+- The same tape strip and cardboard patch must remain traceable; the tape cannot
+  jump to a new location, duplicate, or vanish while still counted as peeled.
+- Cardboard fibers/surface damage must originate under the tape path.
+apparatus_stability:
+- Cardboard plane, tape path, and camera framing must remain stable enough to judge
+  attachment, tearing, curling, and reattachment.
+motion_hard_failures:
+- 'Peel discontinuity: tape changes from attached to removed without visible peel
+  motion from the held edge.'
+- 'Material teleport: tape or cardboard tears appear/disappear without continuous
+  pulling stress.'
+- 'Target substitution: a different strip/surface replaces the original tape or
+  cardboard during the action.'
+post_result_consistency:
+- After full peel, the tape should remain separated unless continuous motion shows
+  curling/reattachment; a clean peel cannot silently become attached again.
+- Tape/cardboard tears must persist in later frames and cannot heal or relocate.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Tape Peel from Cardboard.'
+- 'Track B family: material_response.'

@@ -1,126 +1,27 @@
 ---
 title: MiKASA-Robo
-description: MiKASA-Robo — 指标、依赖与运行命令。
+description: "ICLR 2026 桌面记忆套件：32 个 RL 任务，后续 90 个语言条件 VLA 任务。WorldFoundry 导入官方结果；不跑 ManiSkill。"
 ---
 
-## 简介
+MiKASA-Robo 是 **MIKASA**（面向智能体的记忆密集技能评估套件）的桌面部分，来自 AIRI、MIPT 与 HSE。ICLR 2026 论文是 **32** 个 ManiSkill RL 任务、**12** 组、四类记忆：**物体**、**空间**、**顺序**、**容量**（遮挡回忆、先前布局、长动作顺序）。后续 **MIKASA-Robo-VLA** 扩展为 **90** 个语言条件任务（**10** 类记忆）、短 / 中 / 长时程（25–2160 步），以及 **22500** 条 oracle 轨迹。这两次发布**不可互换**。
 
+论文：[Memory, Benchmark & Robots](https://arxiv.org/abs/2502.10550)（[OpenReview](https://openreview.net/forum?id=9cLPurIZMj)）。VLA 文档：[mikasarobo.github.io](https://mikasarobo.github.io/)。代码：[CognitiveAISystems/MIKASA-Robo](https://github.com/CognitiveAISystems/MIKASA-Robo)。
 
+WorldFoundry **导入**官方结果导出。它**不跑** ManiSkill、不采集 PPO/oracle 轨迹，也不替你选定 RL 还是 VLA——请在导出上声明。
 
-MiKASA-Robo external benchmark manifest for manipulation policy evaluation.
+<BenchmarkPageSections id="mikasa" locale="zh" />
 
-
-
-## 指标
-
-MiKASA-Robo external benchmark manifest for manipulation policy evaluation.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/mikasa.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `episode_success` | episode / task 是否成功完成的比例或成功率。 |
-| `reward` | Mikasa 记忆增强具身任务在官方仿真器 rollout 中的累计 reward。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `worldfoundry-unified-cu128`。
-- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
-- WorldFoundry provides contract and official result normalization for caller-provided MiKASA-Robo outputs.
-
-### 测评数据
-
-- 待测模型输出目录：设置 `WORLDFOUNDRY_MIKASA_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/mikasa`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/CognitiveAISystems--MIKASA-Robo`
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_MIKASA_ROOT`
-- `WORLDFOUNDRY_MIKASA_RESULTS_PATH`
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id mikasa \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/mikasa/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/mikasa/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id mikasa \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/mikasa/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id mikasa --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_MIKASA_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+可选 `WORLDFOUNDRY_MIKASA_ROOT` 指向本地 runtime / 仓库。默认导入路径：`WORLDFOUNDRY_MIKASA_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/mikasa.yaml`。产物：`scorecard.json`（主键 `success_rate`）、`raw_results.jsonl`、`evaluation/summary.json`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

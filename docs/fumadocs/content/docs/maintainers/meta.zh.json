@@ -4,6 +4,7 @@
   "pages": [
     "contributing",
     "plan",
-    "architecture"
+    "architecture",
+    "native-diffusion-consolidation"
   ]
 }

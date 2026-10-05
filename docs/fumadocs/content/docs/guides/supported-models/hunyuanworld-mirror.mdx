@@ -1,0 +1,50 @@
+---
+title: "HunyuanWorld-Mirror"
+description: "HunyuanWorld-Mirror from Tencent (Hunyuan): three dimension; Verified."
+modelId: "hunyuanworld-mirror"
+pageSource: authored
+---
+
+HunyuanWorld-Mirror is Tencent's universal 3D reconstruction model: feed it images and it returns point clouds, Gaussian splats, depth, normals, and camera parameters in one pass. In this catalog it is verified — GPU inference with local tencent/HunyuanWorld-Mirror assets produced point-cloud PLY, Gaussian-splat PLY, depth maps, normal maps, and a scene.rrd.
+
+<ModelPaperFigures modelId="hunyuanworld-mirror" locale="en" />
+
+The recorded paper is [arXiv 2510.10726](https://arxiv.org/abs/2510.10726).
+
+Project page: [3d-models.hunyuan.tencent.com/world](https://3d-models.hunyuan.tencent.com/world/). Code: [Tencent-Hunyuan/HunyuanWorld-Mirror](https://github.com/Tencent-Hunyuan/HunyuanWorld-Mirror).
+
+<ModelCommandBuilder modelId="hunyuanworld-mirror" locale="en" />
+
+## What it is for
+
+Pick `hunyuanworld-mirror` when you need an action-conditioned world stepper: recorded actions and a frame in, a rollout out. Use it for interactive world inference, not a text-to-video prompt dump.
+
+WorldFoundry routes inference through the in-tree HunyuanMirrorPipeline and vendored inference-only WorldMirror model code; the official repository serves as provenance for parity checks, not a runtime dependency. Third-party packages (onnxruntime, pycolmap, open3d, gsplat) are environment dependencies, not catalog blockers. It is published by Tencent (Hunyuan).
+
+Catalog tasks include three dimension. Catalog aliases include `hunyuan-mirror` and `hy-world-mirror`.
+
+## Runtime contract
+
+Optional `input_path`, `confidence_percentile`, `edge_normal_threshold`, `edge_depth_threshold`, and `apply_confidence_mask`; artifacts `hunyuan_mirror_outputs.zip`.
+
+CLI task profiles: `default`. WorldFoundry binds `HunyuanMirrorPipeline`.
+
+Family status: **Verified**.
+
+HunyuanMirrorPipeline accepts image, input, images, or image_path payloads from the standard pipeline runner and writes reconstruction artifacts to the sample output directory. Real inference needs the configured Python environment, local checkpoints, and GPU-compatible torch/gsplat.
+
+WorldFoundry exposes framework inference through the in-tree HunyuanMirrorPipeline and vendored inference-only WorldMirror model code.
+
+Dependencies mirror the official HunyuanWorld-Mirror requirements. gsplat may need a CUDA/PyTorch-specific wheel matching the local torch build.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run hunyuanworld-mirror --pipeline.task-profile default` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `tencent/HunyuanWorld-Mirror`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh hunyuanworld-mirror`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="hunyuanworld-mirror" locale="en" />

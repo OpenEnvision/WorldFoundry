@@ -1,131 +1,25 @@
 ---
 title: ManiSkill
-description: ManiSkill — 指标、依赖与运行命令。
+description: "UCSD Hao Su 实验室基于 SAPIEN 的 GPU 并行操作评测。WorldFoundry 导入官方 rollout——不跑模拟器。"
 ---
 
-## 简介
+ManiSkill 是加州大学圣迭戈分校 Hao Su 实验室在 **SAPIEN** 上的 **GPU 并行**操作评测：数十个技能族、多种机器人本体、演示数据集，以及面向 RL 与模仿学习的大规模并行 rollout。论文是 [ManiSkill: Generalizable Manipulation Skill Benchmark with Large-Scale Demonstrations](https://arxiv.org/abs/2302.04659)。项目：[maniskill.ai](https://maniskill.ai/)。代码：[haosulab/ManiSkill](https://github.com/haosulab/ManiSkill)（Apache-2.0）。后来的 ManiSkill2 / ManiSkill3 仍是同一实验室和引擎；本卡片是 ManiSkill 导入器，不是那些页面的静默改名。
 
+WorldFoundry 的路径是**只收官方结果**。你在上游工具里跑完，再用 `official-validation` 把 JSON/CSV rollout 摘要归一进统一 scorecard。模拟器执行、策略加载和数据采集保持显式、留在上游。仓库镜像：`cache/vla_va_wam/repos/haosulab--ManiSkill`。
 
+<BenchmarkPageSections id="maniskill" locale="zh" />
 
-ManiSkill external benchmark task manifest for simulator-backed manipulation and planning rollouts.
-
-
-
-## 指标
-
-ManiSkill external benchmark task manifest for simulator-backed manipulation and planning rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/maniskill.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `reward` | 官方 ManiSkill SAPIEN 操作 rollout 中累计的未折扣任务 reward。 |
-| `normalized_return` | ManiSkill episode return 相对专家或随机策略上界归一化，便于跨任务对比。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `maniskill`。
-- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
-- ManiSkill/SAPIEN 可见；完整官方状态仍需要任务套件、assets 和 policy rollout，不在本轮运行。
-
-### 测评数据
-
-- ManiSkill is simulator-backed; WorldFoundry normalizes rollout results and keeps simulator execution explicit.
-- 待测模型输出目录：设置 `WORLDFOUNDRY_MANISKILL_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/haosulab--ManiSkill`
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_MANISKILL_ROOT`
-- `WORLDFOUNDRY_MANISKILL_RESULTS_PATH`
-
-### 环境检查
-
-```bash
-PYTHONPATH=${WORLDFOUNDRY_CACHE_DIR}/repos/haosulab--ManiSkill:src python -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile maniskill --manifest worldfoundry/data/benchmarks/runtime_profiles/official/maniskill.yaml --output-dir tmp/worldfoundry_preflight/maniskill --json
-```
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id maniskill \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/maniskill/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/maniskill/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id maniskill \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/maniskill/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id maniskill --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official ManiSkill repository checkout
-- SAPIEN/ManiSkill simulator assets
-- Benchmark-specific policy checkpoint or controller
-- Official task suite selection
-
-### Environment
-
-- `WORLDFOUNDRY_MANISKILL_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-
-
+省略 `--official-results-path` 时，默认导入路径是 `WORLDFOUNDRY_MANISKILL_RESULTS_PATH`。任务清单：`worldfoundry/data/benchmarks/tasks/external/maniskill.yaml`。产物：`scorecard.json`（主键 `success_rate`）与 `raw_results.jsonl`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

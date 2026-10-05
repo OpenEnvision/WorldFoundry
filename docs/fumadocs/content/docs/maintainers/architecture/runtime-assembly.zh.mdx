@@ -1,0 +1,97 @@
+---
+title: Runtime 组装
+description: pipeline、operator、synthesis、representation、base_models 的基类契约与目录职责 —— 模型调用在到达 GenerationResult 之前如何被组装。
+---
+
+## 本页用途
+
+本页是模型执行侧的目录级与基类级地图，回答输入整形、推理、几何、状态分别归哪个文件，以及各自实现什么契约。如何编写或迁移一个模型的叙事见 [模型运行时](/zh/docs/maintainers/architecture/model-runtime)；这些实现所复用的共享原语见 [核心基础设施](/zh/docs/maintainers/architecture/core-infrastructure)。
+
+要记住的一条链：
+
+<ArchDiagram id="runtime-assembly" locale="zh" />
+
+每个可运行方法都需要一个 pipeline 和一个 operator。operator 可以很薄，但必须存在。
+
+## 基类契约
+
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>基类</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>PipelineABC</code>
+          </div>
+        </div>
+        <p>最小公共入口：<code>from_pretrained()</code> <code>:118</code>、<code>process()</code> <code>:173</code>，支持增量输出时还有 <code>stream()</code>。拥有模型构造、checkpoint 加载、设备放置、归一化执行与 <code>GenerationResult</code> artifact 语义。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>pipelines/pipeline_utils.py:11</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>BaseOperator</code>
+          </div>
+        </div>
+        <p>仅输入与 interaction 整形：<code>interaction_template_init</code>、<code>get_interaction</code>、<code>check_interaction</code>、<code>process_interaction</code>、<code>process_perception</code>。不得承载生成或打分。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>operators/base_operator.py:4</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>BaseSynthesis</code>
+          </div>
+        </div>
+        <p>把公共 artifact 处理连接到本地 native runtime 或 hosted API：<code>from_pretrained</code> <code>:57</code>、<code>api_init</code> <code>:76</code>、<code>predict</code> <code>:93</code>。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>synthesis/base_synthesis.py:38</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>ActionModelSynthesis</code>
+          </div>
+        </div>
+        <p>具身动作 synthesis 面（继承 <code>RuntimeProfileSynthesis</code>）；用于 VLA 类动作策略。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>synthesis/action_generation/base_action_synthesis.py:14</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>BaseMemory</code>
+          </div>
+        </div>
+        <p>为流式、长上下文或交互式流程存储与变换前序多模态状态。在 <code>core</code> 定义，由各 family 在 <code>{"synthesis/*/memory"}</code> 实现。</p>
+        <p className="pi-kv-read"><span>首读</span> <code>core/memory/base.py:9</code></p>
+      </li>
+    </ul>
+  </section>
+</div>
+
+## 目录职责
+
+### `worldfoundry/pipelines/`
+每个 model family 一个薄 public wrapper（`pipelines/<family>/pipeline_*.py`）。`from_pretrained()` staging checkpoint 或初始化 API client；`process()`/`__call__()` 把用户输入变成 artifact；`stream()` 仅在 Studio 实时控制或增量输出需要时实现。共 88 个 family 目录。Hosted provider wrapper（Wan hosted、Kling、Runway、Luma、Hailuo、Sora/Veo、World Labs）与本地 checkpoint runtime 分开存放。
+
+### `worldfoundry/operators/`
+各 family 的 `*_operator.py`，负责校验、图像/视频加载、camera/action 解析、interaction 整形、perception 预处理。输入在模型执行前就出错时先看这里。共享媒体助手在 `operators/_media.py`。
+
+### `worldfoundry/synthesis/`
+仅树内 runtime 实现。外部 repo 或 checkpoint 在移植前只是 metadata。
+- `synthesis/visual_generation/**` —— 视觉/世界生成 checkpoint 调用、hosted API、子进程桥、runtime env 助手，以及各 family 的 `synthesis.py`（如 `cameractrl/synthesis.py`、`motionctrl/synthesis.py`、`echo_memory/`、`openvla/`）。
+- `synthesis/action_generation/**` —— 具身动作面，含 OpenVLA runtime、`_native_policy_runtime.py`、`_official_action_trace.py`、`base_action_synthesis.py`。
+
+CameraCtrl 与 MotionCtrl 不共享同一个 synthesis 包；它们各有 `synthesis.py`，共享的 camera-control YAML 在 `data/models/runtime/configs/camera_control`。
+
+### `worldfoundry/base_models/`
+四个仅推理的包；不含训练、数据集、dataloader、callback、loss、仅增强模块或实验脚本。
+- `diffusion_model` —— 唯一的 canonical 扩散内核与唯一的扩散包边界。见 [原生扩散](/zh/docs/maintainers/architecture/native-diffusion)。
+- `llm_mllm_core` —— 语言/多模态语言推理。
+- `perception_core` —— 感知推理。
+- `three_dimensions` —— 3D 模型、checkpoint 加载、深度/点云推理与几何后处理。每个模型目录同时拥有模型实现与 runtime（`depth/depth_anything/runtime_v*.py`、`point_clouds/<family>/runtime.py`）。Pipeline 直接导入对应模块，不再有独立的 representation 层或空基类。
+
+## 如何判断改动属于哪里
+
+问出错发生在哪。输入在模型执行前就错 → `operators/`。原生推理、checkpoint 调用、hosted API、子进程桥 → `synthesis/`。3D/4D 推理与几何 artifact → `base_models/three_dimensions/` 对应模型目录；artifact 展示 → `studio/visualization/`。流式或多轮状态 → `core/memory` 加对应 `synthesis/*/memory`。公共加载路径、输入签名或输出 artifact 契约 → `pipelines/`。能服务多个 family 的可复用原语 → `core`，绝不放进 family 包。
+
+全包目录地图见 [代码地图](/zh/docs/maintainers/architecture/file-index)。本组装之后的完整 run 流程见 [工作流](/zh/docs/maintainers/architecture/workflow)。

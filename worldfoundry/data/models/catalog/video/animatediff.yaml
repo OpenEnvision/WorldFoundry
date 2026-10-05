@@ -19,6 +19,9 @@ checkpoint_refs:
 - repo_id: openai/clip-vit-large-patch14
   notes:
   - Resolved from the existing hfd HunyuanGameCraft local copy via HF cache symlinks.
+official_sources:
+  project_page: https://animatediff.github.io/
+  paper: https://arxiv.org/abs/2307.04725
 integration:
   status: integrated
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
@@ -36,3 +39,23 @@ catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries
   expose WorldFoundry pipeline targets; metadata-only entries retain upstream provenance
   without runnable WorldFoundry backends.
+docs:
+  publisher: Shanghai AI Laboratory / CUHK MMLab
+  publisher_kind: lab
+  publisher_zh: 上海人工智能实验室 / 香港中文大学 MMLab
+  overview: 'AnimateDiff is the classic motion-module approach to text-to-video: it animates existing Stable Diffusion image models by inserting a trained temporal module, rather than training a video model from scratch. In this catalog it is a fully verified route — WorldFoundry''s output matched the official RealisticVision scripts.animate demo exactly, down to file SHA256 and decoded pixel SHA256. The entry also answers to the aliases animate-diff and animate_diff.'
+  overview_zh: AnimateDiff 是经典的「运动模块」式文生视频方法：通过在现成的 Stable Diffusion 图像模型中插入训练好的时序模块来让静态模型动起来，而不是从头训练视频模型。在本 catalog 中它是完整验证过的路径—— WorldFoundry 的输出与官方 RealisticVision scripts.animate demo 完全一致，文件 SHA256 与逐帧解码像素 SHA256 均精确匹配。条目同时响应别名 animate-diff、animate_diff。
+  architecture: A legacy U-Net latent diffusion backbone (Stable Diffusion v1.5) plus AnimateDiff's temporal motion module; the recorded checkpoints are guoyww/animatediff, the T2I backup repo, stable-diffusion-v1-5, and the CLIP ViT-L/14 text encoder. The catalog task list labels it explicitly as legacy-unet-diffusion to distinguish it from the newer DiT-based families.
+  architecture_zh: 基座为旧式 U-Net 潜空间扩散模型（Stable Diffusion v1.5），叠加 AnimateDiff 的时序运动模块；记录的 checkpoint 包括 guoyww/animatediff、T2I 备份仓库、stable-diffusion-v1-5 与 CLIP ViT-L/14 文本编码器。 catalog 任务标签中特意标注 legacy-unet-diffusion，与较新的 DiT 系列相区分。
+  usage_notes: Runner parity is verified, so this is one of the safest video routes to start with. The Studio/API route runs in the unified environment after the recorded diffusers/transformers checkpoint-key compatibility fixes; per-run validation evidence is tracked outside the model catalog.
+  usage_notes_zh: Runner parity 已验证，是入门视频生成最稳妥的路径之一。Studio/API 路径在统一环境中运行（已包含记录在案的 diffusers/transformers checkpoint 键兼容性修复）；每次运行的验证证据在 catalog 之外单独跟踪。
+  limitations:
+  - Quality is bounded by the SD1.5-era U-Net backbone — expect lower fidelity and resolution than DiT-based models in this catalog.
+  - Motion is driven by a general-purpose module; there is no camera or action control on this route.
+  limitations_zh:
+  - 画质受 SD1.5 时代 U-Net 基座限制——保真度与分辨率低于 catalog 中基于 DiT 的模型。
+  - 运动由通用运动模块驱动；该路径不提供相机或动作控制。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard suite for checking frame quality and temporal consistency of T2V outputs.
+    reason_zh: 检验文生视频画质与时序一致性的标准评测。

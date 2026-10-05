@@ -19,6 +19,8 @@ availability:
   license: mit
   requires_auth: false
 sources:
+  paper: https://arxiv.org/abs/2506.18701
+  project_page: https://matrix-game-homepage.github.io/
   github:
     url: https://github.com/SkyworkAI/Matrix-Game
     confirmed_ref: refs/heads/main
@@ -53,3 +55,23 @@ evidence:
 catalog_category: world_models
 catalog_scope: world-model/interactive starred models
 starred: true
+docs:
+  publisher: Skywork AI (Kunlun Tech)
+  publisher_kind: company
+  publisher_zh: 昆仑万维（Skywork AI）
+  overview: 'Matrix-Game 1.0 is the first generation of Skywork''s interactive game world model: from an image and keyboard/mouse-style actions it generates playable game-world video. In this catalog it is registered as its own model id and never routes through Matrix-Game-2; the minimal official Python runtime closure is vendored in-tree.'
+  overview_zh: Matrix-Game 1.0 是昆仑万维交互式游戏世界模型的第一代：从一张图与键鼠式动作生成可交互的游戏世界视频。本 catalog 中它注册为独立模型 id，绝不经由 Matrix-Game-2 路由；官方 Python 运行时的最小闭包已内置树内。
+  architecture: 'The local cache layout records the checkpoint scale: seven DiT shards, four text_encoder_i2v shards, a VAE weight, configs, and assets under Skywork--Matrix-Game. Architecture internals beyond this are not recorded in this repository.'
+  architecture_zh: 本地缓存布局记录了 checkpoint 规模：Skywork--Matrix-Game 下的七个 DiT 分片、四个 text_encoder_i2v 分片、一个 VAE 权重、配置与资产。除此之外的架构内部细节仓库未记录。
+  usage_notes: Matrix-Game-1 uses torch 2.5.1+cu124; prefer the worldfoundry-unified-cu128 environment on modern NVIDIA hosts. For newer quality and verified runners see matrix-game-2 and matrix-game-3.
+  usage_notes_zh: Matrix-Game-1 使用 torch 2.5.1+cu124；现代 NVIDIA 主机上建议用 worldfoundry-unified-cu128 环境。追求更新质量与已验证 runner 请见 matrix-game-2 与 matrix-game-3。
+  limitations:
+  - 'First-generation model: quality and control trail Matrix-Game 2.0/3.0.'
+  - Large multi-shard checkpoint set must be staged locally.
+  limitations_zh:
+  - 第一代模型：质量与控制弱于 Matrix-Game 2.0/3.0。
+  - 需本地就位多分片的大型 checkpoint 组合。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Action-conditioned game-world rollout quality.
+    reason_zh: 动作条件游戏世界滚动生成质量。

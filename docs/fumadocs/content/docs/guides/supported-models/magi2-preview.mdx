@@ -1,0 +1,48 @@
+---
+title: "MAGI-2 Preview"
+description: "MAGI-2 Preview from sand-ai: text-to-video and image-to-video; Planned."
+modelId: "magi2-preview"
+pageSource: authored
+---
+
+MAGI-2 Preview is a video generation model from sand-ai. The catalog records it for text-to-video and image-to-video. It is also cataloged under the aliases magi2, magi2_preview, and magi-2-preview.
+
+<ModelPaperFigures modelId="magi2-preview" locale="en" />
+
+Code: [SandAI-org/MAGI-2-preview](https://github.com/SandAI-org/MAGI-2-preview).
+
+<ModelCommandBuilder modelId="magi2-preview" locale="en" />
+
+## What it is for
+
+`magi2-preview` is the recorded text/image-to-video line. Use it when you want both prompt and still conditioning on the same catalog card.
+
+Catalog tasks include text-to-video and image-to-video. Catalog aliases include `magi2`, `magi2_preview`, and `magi-2-preview`. Documented modalities: text and image in, video out.
+
+MAGI-2 preview T2V/I2V. Not MAGI-1.
+
+## Runtime contract
+
+Required `prompt` and `image`; optional `video`, `audio`, and `actions` (seed, task); artifacts `magi2-preview.mp4`.
+
+Recorded task profiles: `text-to-video` and `image-to-video`. WorldFoundry binds `NativeMagi2Pipeline`.
+
+Family status: **Planned**.
+
+114B-parameter MoE (256 experts, top-6), ~6B active per token; joint audio+video, 32/44.1kHz muxed.
+
+Ported faithfully from SandAI MAGI-2-preview (Apache-2.0), single-GPU PyTorch (cp/ep/dp collapsed).
+
+Upstream targets 8xHopper; this port collapses cp/ep/dp to single-GPU (sequential residency for the 114B MoE).
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run magi2-preview --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `sand-ai/MAGI-2-preview` and `sand-ai/MAGI-2-preview`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh magi2-preview`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; catalog VRAM 80 GB; status: **Planned**.
+
+<ModelRelatedRecipes modelId="magi2-preview" locale="en" />

@@ -1,0 +1,54 @@
+---
+title: "Causal-rCM"
+description: "Causal-rCM（NVIDIA）：交互式世界模型、文生视频；Runner 一致性待确认; 独立环境 `causal-rcm`。"
+modelId: "causal-rcm"
+pageSource: authored
+---
+
+Causal-rCM 把英伟达的 rCM 一致性蒸馏应用于因果视频生成：以潜帧 chunk 为单位自回归流式生成，配合蒸馏的少步采样，是低延迟交互式世界模型的候选。本 catalog 中官方 Apache-2.0 因果推理栈已内置树内；执行待公开 DiT、Wan2.1 VAE 与 umT5 checkpoint 本地就位。
+
+<ModelPaperFigures modelId="causal-rcm" locale="zh" />
+
+记录论文为[Large Scale Diffusion Distillation via Score-Regularized Continuous-Time Consistency](https://arxiv.org/abs/2510.08431)（ICLR 2026, 2025）。
+
+项目页：[research.nvidia.com/labs/dir/rcm](https://research.nvidia.com/labs/dir/rcm)。代码：[NVlabs/rcm](https://github.com/NVlabs/rcm)。
+
+rCM 论文是 [Large Scale Diffusion Distillation via Score-Regularized Continuous-Time Consistency](https://arxiv.org/abs/2510.08431)（ICLR 2026）。因果后续：[arXiv 2606.25473](https://arxiv.org/abs/2606.25473)。项目页：[research.nvidia.com/labs/dir/rcm](https://research.nvidia.com/labs/dir/rcm)。代码：[NVlabs/rcm](https://github.com/NVlabs/rcm)。社区 DiT：`worstcoder/rcm-Wan`（复现）。VAE / umT5：`worstcoder/Wan`。教师引用：`Wan-AI/Wan2.1-T2V-1.3B` 与 `14B`。
+
+在公开 DiT、Wan2.1 VAE 和 umT5 就位之前，执行是 **blocked**。pipeline 返回阻塞诊断，不会假装写出 MP4。Runner：`implemented_public_checkpoint_not_staged`。
+
+<ModelCommandBuilder modelId="causal-rcm" locale="zh" />
+
+## 用来做什么
+
+`causal-rcm` 是记录的交互世界线。要用动作推进世界时从这里起步。
+
+按论文（arXiv 2510.08431），rCM 结合分数正则化的一致性蒸馏实现少步采样。内置栈去掉了上游 imaginaire 框架——由 WorldFoundry 自有的 lazy_config、easy_io 与日志支撑——块因果掩码谓词提取到 worldfoundry/core/attention/sparse/block_pattern.py，并在 702 种掩码与 162 种 chunk 调度配置下对照上游验证。该模型由英伟达（NVIDIA）发布。
+
+catalog 记录的任务包括 autoregressive-video-generation、streaming-video-generation、交互式世界模型、文生视频。别名包括 `rcm`、`causal_rcm`、`rcm-causal`、`causal-rcm-wan2.1`。模态上，它接受文本、图像，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（流式文/图生视频的质量评测）。
+
+Causal RCM——不是 Causal Forcing。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`input_path`、`frames`、`fps`；产物 `generated_world`、`generated_video`、`causal-rcm.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `CausalRCMPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+first_chunk_t 与 chunk_t 选择调度：c1-1 逐帧模式流式延迟最低，c3-3 吞吐更高。 默认使用蒸馏的 4 步采样；distilled=False 则以 CFG 采样多步教师。 context_from_last_step=True 每 chunk 省一次干净前向，但要求 checkpoint 针对带噪上下文训练。 发布的入口为提示词/图像条件，无离散动作空间。
+
+WorldFoundry vendors the official Apache-2.0 causal inference stack under synthesis/visual_generation/rcm/rcm_runtime; the adapter owns checkpoint gating, command construction, and pipeline/catalog exposure.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run causal-rcm --pipeline.task-profile default` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+记录的权重仓库包括 `worstcoder/rcm-Wan`、`worstcoder/Wan`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh causal-rcm`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="causal-rcm" locale="zh" />

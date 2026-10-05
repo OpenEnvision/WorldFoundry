@@ -1,0 +1,41 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BS-01-I1
+track: coverage
+title_en: Bottle Flip with Marked Landing Cue
+outcome_question: Which label in ['upright_on_base', 'balanced_on_cap', 'side_laying',
+  'leaning_against_visible_support'] is visible as the first decisive post-action
+  result?
+readout_policy: Read the first decisive post-action result window after the requested
+  action completes. Qualifying frames are those where the relevant evidence is in
+  view and no longer in transition. Use the scene protocol's first-decisive-window
+  rule; terminal stability is not required unless the protocol names it.
+canonical_labels:
+- upright_on_base
+- balanced_on_cap
+- side_laying
+- leaning_against_visible_support
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['upright_on_base', 'balanced_on_cap', 'side_laying',
+  'leaning_against_visible_support'] can be decisively identified within the readout
+  window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's
+  reference protocol; record it as out-of-schema.
+priority_rules:
+- 'First decisive readout: use the first stable bottle rest state after the flip,
+  with the marked landing cue kept in view for support/context.'
+- 'Use the same outcome labels as `BS-01`: base-upright, cap-balanced, side-laying,
+  or leaning against visible support.'
+- 'The marked landing cue does not create a separate label; it only helps verify
+  support contact and final pose readability.'
+- 'Tie-break: if the bottle is partially occluded by the cue/hand or support contact
+  is ambiguous, return `unreadable` rather than forcing a BS-01 label.'
+notes:
+- 'Track B: use metadata-derived priority rules, not a family template.'
+- 'Scene title: Bottle Flip with Marked Landing Cue.'

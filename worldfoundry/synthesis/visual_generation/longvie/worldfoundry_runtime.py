@@ -148,26 +148,45 @@ class LongVieOfficialRuntime:
             return torch.float32
         return torch.bfloat16
 
-    def _model_configs(self):
-        from worldfoundry.base_models.diffusion_model.diffsynth.pipelines.wan_video_new_longvie import (
-            ModelConfig,
-        )
+    def _resolve_variant_weights(self) -> tuple[Path, Path | None]:
+        """Resolve weights without silently crossing LongVie generations."""
 
-        base_dir = resolve_wan21_i2v_dir(self.wan_base_dir)
-        diffusion_paths = sorted(str(path) for path in base_dir.glob("diffusion_pytorch_model*.safetensors"))
-        return [
-            ModelConfig(path=diffusion_paths, offload_device="cpu"),
-            ModelConfig(path=str(base_dir / "models_t5_umt5-xxl-enc-bf16.pth"), offload_device="cpu"),
-            ModelConfig(path=str(base_dir / "Wan2.1_VAE.pth"), offload_device="cpu"),
-            ModelConfig(
-                path=str(base_dir / "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"),
-                offload_device="cpu",
-            ),
-        ]
+        if self.variant == "longvie-1" and not self.control_weight_path and not self.weight_dir:
+            raise FileNotFoundError(
+                "LongVie-1 has no published default checkpoint. Provide an explicitly staged "
+                "first-generation control_weight_path or weight_dir, or use longvie-2 for the "
+                "public Vchitect/LongVie2 weights."
+            )
+
+        control_path = resolve_control_weight_path(
+            self.control_weight_path,
+            weight_dir=self.weight_dir,
+        )
+        if self.variant == "longvie-1":
+            if self.dit_weight_path:
+                raise ValueError(
+                    "LongVie-1 does not accept a DiT override; dit.safetensors belongs to LongVie2."
+                )
+            if (control_path.parent / "dit.safetensors").is_file():
+                raise ValueError(
+                    "LongVie-1 cannot use a checkpoint directory containing LongVie2's "
+                    "dit.safetensors. Use model_id='longvie-2' or provide an explicit "
+                    "first-generation control-only checkpoint."
+                )
+            return control_path, None
+
+        dit_path = resolve_dit_weight_path(
+            self.dit_weight_path,
+            weight_dir=self.weight_dir,
+            required=self.variant == "longvie-2",
+        )
+        return control_path, dit_path
 
     def load(self) -> Any:
         if self.pipe is not None:
             return self.pipe
+        import torch
+
         try:
             from packaging.version import Version
 
@@ -199,9 +218,22 @@ class LongVieOfficialRuntime:
                 )
         ensure_longvie_runtime()
         try:
-            from worldfoundry.base_models.diffusion_model.diffsynth.pipelines.wan_video_new_longvie import (
+            from worldfoundry.base_models.diffusion_model.models.autoencoders.wan import (
+                WanVideoVAE,
+                WanVideoVAEStateDictConverter,
+            )
+            from worldfoundry.base_models.diffusion_model.models.denoisers.wan import (
+                WAN21_I2V_14B_CONFIG,
+            )
+            from worldfoundry.base_models.diffusion_model.models.encoders.wan import (
+                WanImageEncoder,
+                WanImageEncoderStateDictConverter,
+                WanTextEncoder,
+            )
+            from worldfoundry.base_models.diffusion_model.models.networks.wan import WanModel
+            from worldfoundry.core.model_loading import load_model
+            from worldfoundry.synthesis.visual_generation.longvie.longvie_runtime.native_pipeline import (
                 LongViePipeline,
-                ModelConfig,
             )
         except ModuleNotFoundError as exc:
             missing = exc.name or str(exc)
@@ -212,28 +244,59 @@ class LongVieOfficialRuntime:
             ) from exc
 
         dtype = self._torch_dtype()
+        base_dir = resolve_wan21_i2v_dir(self.wan_base_dir)
         tokenizer_path = resolve_wan21_tokenizer_dir(self.tokenizer_dir)
-        control_path = resolve_control_weight_path(self.control_weight_path, weight_dir=self.weight_dir)
-        dit_path = resolve_dit_weight_path(
-            self.dit_weight_path,
-            weight_dir=self.weight_dir,
-            required=self.variant == "longvie-2",
+        control_path, dit_path = self._resolve_variant_weights()
+        dit_files = sorted(base_dir.glob("diffusion_pytorch_model*.safetensors"))
+        if not dit_files:
+            raise FileNotFoundError(f"LongVie Wan DiT shards not found in {base_dir}")
+        image_encoder = load_model(
+            WanImageEncoder,
+            str(base_dir / "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"),
+            torch_dtype=torch.float32,
+            device="cpu",
+            state_dict_converter=WanImageEncoderStateDictConverter().from_civitai,
         )
-        self.pipe = LongViePipeline.from_pretrained(
+        dit = load_model(
+            WanModel,
+            [str(path) for path in dit_files],
+            config=WAN21_I2V_14B_CONFIG,
+            torch_dtype=dtype,
+            device="cpu",
+        )
+        text_encoder = load_model(
+            WanTextEncoder,
+            str(base_dir / "models_t5_umt5-xxl-enc-bf16.pth"),
+            torch_dtype=dtype,
+            device="cpu",
+        )
+        vae = load_model(
+            WanVideoVAE,
+            str(base_dir / "Wan2.1_VAE.pth"),
+            torch_dtype=dtype,
+            device="cpu",
+            state_dict_converter=WanVideoVAEStateDictConverter().from_civitai,
+        )
+        self.pipe = LongViePipeline.from_components(
+            text_encoder=text_encoder,
+            image_encoder=image_encoder,
+            dit=dit,
+            vae=vae,
+            tokenizer_path=str(tokenizer_path),
             torch_dtype=dtype,
             device=self.device,
             use_usp=self.use_usp,
-            model_configs=self._model_configs(),
-            tokenizer_config=ModelConfig(path=str(tokenizer_path)),
-            redirect_common_files=False,
             control_weight_path=str(control_path),
-            dit_weight_path=str(dit_path or ""),
+            dit_weight_path=str(dit_path) if dit_path else None,
             ring_degree=self.ring_degree,
             ulysses_degree=self.ulysses_degree,
             control_layers=self.control_layers,
         )
         if self.enable_vram_management:
             self.pipe.enable_vram_management()
+        else:
+            self.pipe.to(self.device)
+        self.pipe.eval()
         return self.pipe
 
     def generate_segment(self, **kwargs: Any) -> tuple[Any, Any]:

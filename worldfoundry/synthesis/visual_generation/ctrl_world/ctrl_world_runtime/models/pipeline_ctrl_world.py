@@ -9,7 +9,11 @@ from diffusers import TextToVideoSDPipeline
 from models.pipeline_stable_video_diffusion import StableVideoDiffusionPipeline
 
 
-from diffusers.pipelines.text_to_video_synthesis.pipeline_text_to_video_synth import TextToVideoSDPipelineOutput
+try:
+    from diffusers.pipelines.text_to_video_synthesis.pipeline_text_to_video_synth import TextToVideoSDPipelineOutput
+except ModuleNotFoundError:
+    # diffusers>=0.35 moved the legacy text-to-video pipeline under deprecated/.
+    from diffusers.pipelines.deprecated.text_to_video_synthesis.pipeline_output import TextToVideoSDPipelineOutput
 from diffusers.pipelines.stable_video_diffusion.pipeline_stable_video_diffusion import StableVideoDiffusionPipelineOutput
 from diffusers.loaders import LoraLoaderMixin, TextualInversionLoaderMixin
 from diffusers.utils.torch_utils import randn_tensor

@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.core.io import materialize_file
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import VIDEO_SUFFIXES
+from worldfoundry.evaluation.tasks.execution.runners.world_in_world.world_in_world_official_runtime import (
+    run_official_world_in_world_runtime,
+)
 from worldfoundry.evaluation.tasks.execution.runners.world_in_world.world_in_world_prompts import (
     DEFAULT_TASK,
     METRICS_JSON_NAME,
     load_prompt_records,
     resolve_world_in_world_root,
     unique_prompt_records,
-)
-from worldfoundry.evaluation.tasks.execution.runners.world_in_world.world_in_world_official_runtime import (
-    run_official_world_in_world_runtime,
 )
 
 
@@ -36,7 +37,6 @@ def discover_metrics_json(search_roots: list[Path]) -> Path | None:
             return matches[-1]
     return None
 
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
 
 @dataclass(frozen=True)
@@ -117,7 +117,7 @@ def _artifact_metrics_path(*, generated_artifact_dir: Path | None, output_dir: P
 
 def _copy_artifact_results(*, source_path: Path, output_path: Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_bytes(source_path.read_bytes())
+    materialize_file(source_path, output_path)
     return output_path
 
 

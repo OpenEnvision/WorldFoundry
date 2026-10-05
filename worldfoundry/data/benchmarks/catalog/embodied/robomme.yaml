@@ -1,5 +1,7 @@
 id: robomme
 name: RoboMME
+publisher: University of Michigan
+publisher_kind: university
 benchmark_kind:
 - vla
 - embodied-action
@@ -23,6 +25,9 @@ official_sources:
   paper_url: https://arxiv.org/abs/2603.04639
   license: upstream_terms
 runner:
+  normalization:
+    dispatch: embodied
+    embodied_track: vla
   runner_target: worldfoundry.evaluation.tasks.contracts.external:RoboMMEContract
   expected_artifacts:
   - scorecard.json

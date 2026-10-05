@@ -1,0 +1,50 @@
+---
+title: "Vchitect-2.0 T2V"
+description: "Vchitect-2.0 T2V（Shanghai AI Laboratory (Vchitect)）：文生视频、视频生成；仅静态加载。"
+modelId: "vchitect-2-t2v"
+pageSource: generated
+---
+
+Vchitect-2.0 是上海人工智能实验室的开源文生视频扩散 Transformer；本条目以完全原生的装配提供其 2B checkpoint。它有一项少见的强结构保证：原生 DiT 与 checkpoint 的 1019 个张量全部匹配，原生 SD3 解码器与 138 个解码器张量全部匹配。别名包括 vchitect、vchitect-2、vchitect2-t2v。
+
+<ModelPaperFigures modelId="vchitect-2-t2v" locale="zh" />
+
+记录论文为[arXiv 2501.08453](https://arxiv.org/abs/2501.08453)。
+
+代码：[Vchitect/Vchitect-2.0](https://github.com/Vchitect/Vchitect-2.0)。
+
+<ModelCommandBuilder modelId="vchitect-2-t2v" locale="zh" />
+
+## 用来做什么
+
+`vchitect-2-t2v` 是记录的 prompt 到视频路由——不是图像编辑，也不是策略。只要任务是文生视频，从这里起步。
+
+并行扩散 Transformer 配 SD3 系 VAE 解码器，由角色化的 DiT、条件器、调度器、初始化器与解码器组件装配。profile 记录了固定的官方源码 revision（Vchitect-2.0 @ be56767f）。该模型由上海人工智能实验室（Vchitect 团队）发布。
+
+catalog 记录的任务包括 文生视频、视频生成。别名包括 `vchitect`、`vchitect-2`、`vchitect2-t2v`、`vchitect_2_t2v`。模态上，它接受文本，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（标准文生视频质量评测）。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`frames`、`fps`、`height`；产物 `generated_video`、`vchitect_2_t2v_public_runner.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `Vchitect2T2VPipeline`。
+
+系列状态：**仅静态加载**。
+
+runner 状态为 仅静态加载：默认路径加载共享原生 pipeline，不会产生 blocked 计划产物。 权重为 apache-2.0，位于 Vchitect/Vchitect-2.0-2B。 请使用 id vchitect-2-t2v。
+
+张量级验证属于结构层——与上游 demo 的完整视觉一致性是另一个尚未记录的步骤。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run vchitect-2-t2v --pipeline.task-profile interactive-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `Vchitect/Vchitect-2.0-2B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh vchitect-2-t2v`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**仅静态加载**。
+
+<ModelRelatedRecipes modelId="vchitect-2-t2v" locale="zh" />

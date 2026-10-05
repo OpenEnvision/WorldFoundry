@@ -1,0 +1,34 @@
+---
+title: "OpenVLA-OFT"
+description: "OpenVLA-OFT：`image`、`prompt`、`state` 进，`action_trace`、`openvla-oft_action_trace.json` 出；5 个 variant、独立环境 `worldfoundry-vla-openvla-compat-cu121`。"
+modelId: "openvla-oft"
+pageSource: authored
+---
+
+OpenVLA-OFT 对 OpenVLA 施加优化微调——并行解码、连续动作头与动作分块——并在本 catalog 中完成 GPU 验证：A100 恢复全部 75.4 亿参数，对多组输入产出确定性的有限 8x7 动作块，峰值显存 14.47 GiB，五个声明的 LIBERO checkpoint 全部完成真实推理（MIT 许可）。
+
+<ModelPaperFigures modelId="openvla-oft" locale="zh" />
+
+论文是 [arXiv 2502.19645](https://arxiv.org/abs/2502.19645)。项目页：[openvla-oft.github.io](https://openvla-oft.github.io)。代码：[moojink/openvla-oft](https://github.com/moojink/openvla-oft)。
+
+别名包括 `openvla_oft`、`openvla-oft-libero`。
+
+<ModelCommandBuilder modelId="openvla-oft" locale="zh" />
+
+## 用来做什么
+
+要在 OpenVLA 7B 骨干上做并行解码的 8×7 动作块时，用 OFT 的 LIBERO 专家卡——不是基座 [OpenVLA](/zh/docs/guides/supported-models/openvla)。
+
+启动 `worldfoundry-eval run openvla-oft-libero-spatial`，任务 profile 为 `vla.policy_rollout`。必填：`image`、`prompt`、`state`。产物：`action_trace`、`openvla-oft_action_trace.json`。其他 split 换成 `openvla-oft-libero-object`、`-goal`、`-10` 或组合 spatial-object-goal-10。
+
+相关套件：[LIBERO](/zh/docs/evaluation/benchmark-hub/libero)。
+
+## 运行时契约
+
+必填：`image`、`prompt`、`state`。相机：`full_image`、`wrist_image`。本体感觉 8 维；动作块 **8×7**。官方 demo 观测：`experiments/robot/libero/sample_libero_spatial_observation.pkl`。状态：**Verified**——五个已声明 LIBERO checkpoint 都在 A100 上跑通。上游 LIBERO 显存提示约 **16 GB**。
+
+## 在 WorldFoundry 中运行
+
+独立环境 `worldfoundry-vla-openvla-compat-cu121`（Python 3.10，CUDA 12.1）。就位对应的 `moojink/openvla-7b-oft-finetuned-libero-*`——运行时不代下权重。启动 `worldfoundry-eval run openvla-oft-libero-spatial`，任务 profile 为 `vla.policy_rollout`。许可：MIT。
+
+<ModelRelatedRecipes modelId="openvla-oft" locale="zh" />

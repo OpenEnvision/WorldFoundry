@@ -1,0 +1,41 @@
+---
+title: "GO-1"
+description: "智元联合 OpenDriveLab 的通用 VLA。CC-BY-NC-SA-4.0。静态运行时已验证；基础 checkpoint 已就位。GPU 数值 rollout 待验证。"
+modelId: "go1"
+pageSource: authored
+---
+
+GO-1 是 **AgiBot World**（智元联合 OpenDriveLab）的旗舰策略：通用机器人策略，发布为 `agibot-world/GO-1`。WorldFoundry 把 InternVision、InternLM2、**隐式规划器**、动作专家、扩散采样器、tokenizer 和预处理都放在**树内**，对外是 `GO1Pipeline`。运行时只执行已就位的 safetensors，从不导入 checkpoint 自带的 Python。数据集、训练、部署服务、评测器和机器人控制代码均被排除。
+
+设计是 ViLLA 式：InternVision + InternLM2 组成 VLM，隐式规划器预测中间隐式动作，扩散动作专家解码可执行控制。参数名保持官方 checkpoint 契约。发布物是**预训练基础**；上游建议下游完整微调。任何微调必须与那次训练产出的精确 `dataset_stats.json` 配对。
+
+<ModelPaperFigures modelId="go1" locale="zh" />
+
+论文：[arXiv 2503.06669](https://arxiv.org/abs/2503.06669)。代码：[OpenDriveLab/AgiBot-World](https://github.com/OpenDriveLab/AgiBot-World)。权重：`agibot-world/GO-1`（revision `0bc37be9`）。许可：**CC-BY-NC-SA-4.0**（非商用）。别名：`go-1`、`agibot-world/go-1`。集成：仅静态加载。Runner：**仅静态加载**。锁定的基础 checkpoint 与发布统计已就位；**数值和 GPU rollout 仍 pending**。
+
+<ModelCommandBuilder modelId="go1" locale="zh" />
+
+## 用来做什么
+
+启动 `worldfoundry-eval run go1`。必填：`image`、`prompt`、`state`、`control_frequency`。相机：`cam_high`、`cam_right_wrist`、`cam_left_wrist`。策略族：`latent_planner_conditioned_diffusion`。动作表示：`checkpoint_defined_action_chunk`。产物：`go1_action_trace.json`。这**不是** [Genie Envisioner](/zh/docs/guides/supported-models/genie-envisioner)（世界视频），也**不是** [Galaxea G0Plus](/zh/docs/guides/supported-models/galaxea-vla)。
+
+## 运行时契约
+默认 `agibot_pretrain` 契约：**3** 路相机、`control_frequency` **30**、动作块 **30**，维度 `checkpoint_defined`。catalog 示例本体（这里没有 GPU 验证）：
+
+| 变体 | 相机 | 状态 / 动作 | 频率 | 块 |
+| --- | --- | --- | --- | --- |
+| `agibot_pretrain`（默认） | 3 | checkpoint 定义 | 30 | 30 |
+| `agilex_example` | 3 | 14 / 14 | 30 | 30 |
+| `libero_example` | 2 | 8 / 7 | 10 | 10 |
+
+独立环境：`worldfoundry-vla-go1`（Python 3.10，CUDA 12.4 或更新，torch 2.6.x，Transformers 4.46.3）。Flash Attention 2 只在本地已安装且硬件是兼容 Ampere / Ada / Hopper 时启用；Turing 和 Blackwell 走可移植的共享 SDPA。运行时不下载 kernel 或 checkpoint。catalog 未记录 VRAM。
+
+## 在 WorldFoundry 中运行
+
+确认非商用许可。微调必须配对它自己的统计文件。
+
+## 最小评测
+
+catalog 没有 `recommended_benchmarks`。GPU 数值 rollout 仍为 pending（仅 仅静态加载）。生成 `go1_action_trace.json`；WorldFoundry 不会写出 GO-1 的 bench `scorecard.json`。不要把这条策略配到 EWMBench 或 LIBERO。
+
+<ModelRelatedRecipes modelId="go1" locale="zh" />

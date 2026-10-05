@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from .models.wan_video_dit import WanModel
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_text_encoder import WanTextEncoder
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_image_encoder import WanImageEncoder
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_vae import WanVideoVAE
+from worldfoundry.base_models.diffusion_model.models.encoders.wan import WanImageEncoder, WanTextEncoder
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan import WanVideoVAE
 from worldfoundry.core.model_loading import load_model_loader_registry
 
 

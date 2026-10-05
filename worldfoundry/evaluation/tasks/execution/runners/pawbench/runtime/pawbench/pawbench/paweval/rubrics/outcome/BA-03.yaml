@@ -1,0 +1,70 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BA-03
+track: coverage
+title_en: Dog Route Choice Toward Toy
+outcome_question: Which route/attempt label in ['goes_around_left', 'goes_around_right',
+  'jumps_over_middle', 'crawls_or_ducks_under_middle', 'does_not_attempt'] is visible
+  as the first decisive result after the dog has a visible opportunity to reach the
+  toy?
+readout_policy: Read the first decisive route commitment after the dog is given a
+  visible opportunity to reach the toy. If no toy-directed route commitment is visible
+  within the readout window, use `does_not_attempt`. Qualifying frames must keep the
+  dog, toy, low obstacle, and left/right/middle route space visible enough to decide
+  the label. Terminal stability at the toy is not required; route commitment is the
+  readout target.
+canonical_labels:
+- goes_around_left
+- goes_around_right
+- jumps_over_middle
+- crawls_or_ducks_under_middle
+- does_not_attempt
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- The dog, toy, obstacle, or side/middle route space is hidden at the moment when
+  the route would need to be read.
+- The dog starts moving toward the toy but the visible frames do not show whether
+  it goes around left, goes around right, jumps over, ducks under, or stops without
+  a route commitment.
+- None of the canonical labels ['goes_around_left', 'goes_around_right', 'jumps_over_middle',
+  'crawls_or_ducks_under_middle', 'does_not_attempt'] can be decisively identified
+  within the readout window.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- A post-action event occurs that is neither in canonical_labels nor in the scene's
+  reference protocol; record it as out-of-schema.
+- The toy reaches the dog, the dog reaches the toy, or the obstacle changes position
+  through teleportation, identity swap, or an off-screen/third-party cause rather
+  than continuous dog motion in the scene.
+- The low obstacle disappears, opens, or is displaced before route commitment so
+  that left/right/over/under route choice relative to the initial obstacle is no
+  longer defined.
+priority_rules:
+- Score the dog's path relative to the initial low obstacle and camera view.
+- goes_around_left means the dog commits to passing around the camera-left end
+  of the obstacle toward the toy.
+- goes_around_right means the dog commits to passing around the camera-right end
+  of the obstacle toward the toy.
+- jumps_over_middle means the dog crosses the middle obstacle span from above,
+  with the body/legs visibly clearing the bar or obstacle height.
+- crawls_or_ducks_under_middle means the dog crosses the middle span from below,
+  with the body visibly passing under the bar rather than around either side.
+- does_not_attempt means the dog has a visible opportunity but does not make a
+  decisive toy-directed route commitment; this includes staying in place, looking
+  away, minor non-toy movement, or stopping before committing to left/right/over/under.
+- Touching, biting, carrying, or retrieving the toy is secondary and must not override
+  the visible route label.
+- If the dog first feints one route but clearly commits to another before crossing
+  or passing the obstacle, use the committed route. If the commitment is hidden by
+  obstacle/crop, return `unreadable`.
+- If the dog physically nudges the obstacle or toy after a route is already readable,
+  keep the route label unless the motion violates continuity/trust rules.
+notes:
+- 'Outcome set intentionally tracks route/attempt futures, not a cross product of
+  route and toy-acquisition success.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules
+  are authored from STAGBench metadata/action protocol.'
+- 'Scene title: Dog Route Choice Toward Toy.'

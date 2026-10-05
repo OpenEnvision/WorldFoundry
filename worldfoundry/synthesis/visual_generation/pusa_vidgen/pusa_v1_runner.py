@@ -3,8 +3,6 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import json
-import os
-import sys
 import time
 from pathlib import Path
 from typing import Iterable
@@ -12,11 +10,7 @@ from typing import Iterable
 import torch
 from PIL import Image
 
-from worldfoundry.core.io.paths import package_module_root as package_root
-
-
 RUNTIME_ROOT = Path(__file__).resolve().parent / "pusav1_runtime"
-DIFFSYNTH_PARENT = package_root("worldfoundry.base_models.diffusion_model.diffsynth").parent
 LIGHTX2V_DEFAULT_SUBDIR = "Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V1.1"
 DEFAULT_NEGATIVE_PROMPT = (
     "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, "
@@ -38,61 +32,10 @@ def _parse_csv_floats(value: str, fallback: Iterable[float]) -> list[float]:
     return [float(item.strip()) for item in value.split(",") if item.strip()]
 
 
-def _safetensors_in(directory: Path) -> list[str]:
-    if not directory.is_dir():
-        raise FileNotFoundError(f"Pusa V1 model directory not found: {directory}")
-    paths = sorted(str(path) for path in directory.iterdir() if path.suffix == ".safetensors")
-    if not paths:
-        raise FileNotFoundError(f"No safetensors files found in {directory}")
-    return paths
-
-
 def _required_file(path: Path) -> str:
     if not path.is_file():
         raise FileNotFoundError(f"Required Pusa V1 file not found: {path}")
     return str(path)
-
-
-def _ensure_canonical_diffsynth() -> None:
-    canonical_parent = str(DIFFSYNTH_PARENT)
-    if canonical_parent not in sys.path:
-        sys.path.insert(0, canonical_parent)
-
-
-def _load_lightx2v_loras(model_manager, lightx2v_root: Path) -> None:
-    root = lightx2v_root / LIGHTX2V_DEFAULT_SUBDIR
-    model_manager.load_loras_wan22_lightx2v(str(root / "high_noise_model.safetensors"), model_type="high")
-    model_manager.load_loras_wan22_lightx2v(str(root / "low_noise_model.safetensors"), model_type="low")
-
-
-def _load_model_manager(args: argparse.Namespace):
-    _ensure_canonical_diffsynth()
-    from diffsynth import ModelManagerWan22
-
-    base_dir = Path(args.base_model_root).expanduser().resolve()
-    high_model_dir = Path(args.high_model_dir or base_dir / "high_noise_model").expanduser().resolve()
-    low_model_dir = Path(args.low_model_dir or base_dir / "low_noise_model").expanduser().resolve()
-    model_manager = ModelManagerWan22(device="cpu")
-    model_manager.load_models(
-        [
-            _safetensors_in(high_model_dir),
-            _safetensors_in(low_model_dir),
-        ],
-        model_names=["wan_video_pusa"],
-        torch_dtype=torch.bfloat16,
-    )
-    model_manager.load_models(
-        [
-            _required_file(base_dir / "models_t5_umt5-xxl-enc-bf16.pth"),
-            _required_file(base_dir / "Wan2.1_VAE.pth"),
-        ],
-        torch_dtype=torch.bfloat16,
-    )
-    if args.lightx2v:
-        _load_lightx2v_loras(model_manager, Path(args.lightx2v_root).expanduser().resolve())
-    model_manager.load_loras_wan22(args.high_lora_path, lora_alpha=args.high_lora_alpha, model_type="high")
-    model_manager.load_loras_wan22(args.low_lora_path, lora_alpha=args.low_lora_alpha, model_type="low")
-    return model_manager
 
 
 def _prepare_images(image_paths: list[str], width: int, height: int) -> list[Image.Image]:
@@ -147,7 +90,6 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     started = time.monotonic()
-    _ensure_canonical_diffsynth()
     args = parse_args()
     if args.cfg_scale is None:
         args.cfg_scale = 1.0 if args.lightx2v else 3.0
@@ -161,14 +103,36 @@ def main() -> int:
     args.high_lora_path = str(high_lora)
     args.low_lora_path = str(low_lora)
 
-    from diffsynth import Wan22VideoPusaMultiFramesPipeline, Wan22VideoPusaPipeline
     from worldfoundry.core.io import save_video
+    from worldfoundry.synthesis.visual_generation.pusa_vidgen.native_pipeline import load_pusa_pipeline
 
-    model_manager = _load_model_manager(args)
+    base_dir = Path(args.base_model_root).expanduser().resolve()
+    high_model_dir = Path(args.high_model_dir or base_dir / "high_noise_model").expanduser().resolve()
+    low_model_dir = Path(args.low_model_dir or base_dir / "low_noise_model").expanduser().resolve()
+    lightx2v_high_path = None
+    lightx2v_low_path = None
+    if args.lightx2v:
+        if not args.lightx2v_root:
+            raise ValueError("--lightx2v requires --lightx2v-root")
+        lightx2v_dir = Path(args.lightx2v_root).expanduser().resolve() / LIGHTX2V_DEFAULT_SUBDIR
+        lightx2v_high_path = _required_file(lightx2v_dir / "high_noise_model.safetensors")
+        lightx2v_low_path = _required_file(lightx2v_dir / "low_noise_model.safetensors")
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    pipe = load_pusa_pipeline(
+        base_model_root=base_dir,
+        high_model_dir=high_model_dir,
+        low_model_dir=low_model_dir,
+        high_lora_path=args.high_lora_path,
+        low_lora_path=args.low_lora_path,
+        high_lora_alpha=args.high_lora_alpha,
+        low_lora_alpha=args.low_lora_alpha,
+        lightx2v_high_path=lightx2v_high_path,
+        lightx2v_low_path=lightx2v_low_path,
+        device=device,
+        torch_dtype=torch.bfloat16,
+    )
+    pipe.enable_vram_management(num_persistent_param_in_dit=int(args.num_persistent_param_in_dit))
     if args.mode == "t2v":
-        pipe = Wan22VideoPusaPipeline.from_model_manager(model_manager, torch_dtype=torch.bfloat16, device=device)
-        pipe.enable_vram_management(num_persistent_param_in_dit=int(args.num_persistent_param_in_dit))
         video = pipe(
             prompt=args.prompt,
             negative_prompt=args.negative_prompt,
@@ -193,12 +157,6 @@ def main() -> int:
             frame_idx: (image, noise)
             for frame_idx, image, noise in zip(cond_positions, images, noise_multipliers)
         }
-        pipe = Wan22VideoPusaMultiFramesPipeline.from_model_manager(
-            model_manager,
-            torch_dtype=torch.bfloat16,
-            device=device,
-        )
-        pipe.enable_vram_management(num_persistent_param_in_dit=int(args.num_persistent_param_in_dit))
         video = pipe(
             prompt=args.prompt,
             negative_prompt=args.negative_prompt,

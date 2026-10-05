@@ -5,43 +5,47 @@ from __future__ import annotations
 import argparse
 import json
 import shlex
-import sys
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Mapping
 
 from worldfoundry.core.io.paths import (
     hfd_root_path,
     resolve_worldfoundry_path,
 )
-from worldfoundry.evaluation.tasks.execution.orchestration.run_mode import BENCHMARK_RUN_PUBLIC_MODES
+from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import BENCHMARK_RUN_PUBLIC_MODES
 from worldfoundry.evaluation.utils import (
     BENCHMARK_ZOO_DIR,
     MODEL_ZOO_DIR,
     REPO_ROOT,
-    TMP_ROOT,
     manifest_paths,
-    worldfoundry_hfd_dataset_root,
 )
 
-from .utils import canonical_benchmark_zoo_id, canonical_model_zoo_id, json_dump, parse_key_value_mapping
+from .presentation import print_details, print_table, terminal_enabled
+from .utils import (
+    append_optional_arg,
+    canonical_benchmark_zoo_id,
+    canonical_model_zoo_id,
+    cli_prog_name,
+    json_dump,
+    parse_key_value_mapping,
+)
 
 DEFAULT_MODEL_ZOO_DIR = MODEL_ZOO_DIR
 DEFAULT_BENCHMARK_ZOO_DIR = BENCHMARK_ZOO_DIR
 _DEFAULT_HFD_ROOT = hfd_root_path()
 _BENCHMARK_RUN_MODE_CHOICES = tuple(sorted(BENCHMARK_RUN_PUBLIC_MODES))
 
+# These catalog entries route through WorldModelRuntimeSynthesis, whose plan is
+# the authority for local source, checkpoint, and dataset readiness.
+_WORLD_MODEL_RUNTIME_READINESS_IDS = frozenset(
+    {"mira", "simworld", "uwm", "vggt-world", "vid2world"}
+)
+
 # ── Script path constants ───────────────────────────────────────
 
 _SCRIPT_MODEL_ZOO_DOWNLOAD_CHECKPOINTS = "scripts/model_zoo/download_checkpoints.py"
 _SCRIPT_SETUP_DOWNLOAD_EMBODIED_ACTION_ASSETS = "scripts/setup/download_embodied_action_official_assets.py"
-
-# ── Default path helpers ────────────────────────────────────────
-
-
-def _default_hfd_dataset_root() -> Path:
-    """Return the default HFD dataset root path."""
-    return worldfoundry_hfd_dataset_root()
-
 
 # ── Formatting and display helpers ───────────────────────────────
 
@@ -93,6 +97,9 @@ def _compact_list(values: object, *, limit: int = 2) -> str:
 
 def _print_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
     """Print a left-aligned text table with header underline."""
+    if terminal_enabled():
+        print_table("Catalog", headers, rows)
+        return
     widths = [
         max(len(header), *(len(row[index]) for row in rows)) if rows else len(header)
         for index, header in enumerate(headers)
@@ -146,6 +153,23 @@ def _model_needs(entry) -> tuple[str, ...]:
     if entry.runner_entry_kind != "runnable_runner":
         needs.append("runner")
     return tuple(dict.fromkeys(needs))
+
+
+def _world_model_runtime_plan(entry) -> dict[str, Any] | None:
+    """Probe local readiness for the runtime-manifest routes with known asset gates."""
+    if entry.model_id not in _WORLD_MODEL_RUNTIME_READINESS_IDS:
+        return None
+    from worldfoundry.synthesis.visual_generation.runtime_manifest import WorldModelRuntimeSynthesis
+
+    try:
+        return WorldModelRuntimeSynthesis.from_pretrained(model_id=entry.model_id, device="cpu").plan()
+    except Exception as exc:  # A failed readiness probe must never advertise a runnable model.
+        reason = f"runtime readiness probe failed: {type(exc).__name__}: {exc}"
+        return {
+            "status": "blocked",
+            "missing_assets": [{"kind": "runtime", "path": entry.model_id, "reason": reason}],
+            "blocked_reason": reason,
+        }
 
 
 def _declared_dataset_path_exists(raw_path: str) -> bool:
@@ -298,16 +322,67 @@ def _model_command_readiness(entry) -> dict[str, bool]:
     }
 
 
+def _model_discovery(entry) -> dict[str, Any]:
+    """Combine declared runner support with local runtime-manifest readiness."""
+    runnable = entry.is_runnable_runner_entry
+    needs = list(_model_needs(entry))
+    commands = _model_user_commands(entry)
+    flags = _model_command_readiness(entry)
+    next_action = _model_next_action(entry)
+    discovery: dict[str, Any] = {
+        "runnable": runnable,
+        "needs": needs,
+        "next_action": next_action,
+        "commands": commands,
+        **flags,
+    }
+    plan = _world_model_runtime_plan(entry)
+    if plan is None:
+        return discovery
+
+    blocked = plan.get("status") != "ready"
+    for requirement in plan.get("missing_assets", ()):
+        if not isinstance(requirement, Mapping):
+            continue
+        kind = str(requirement.get("kind") or "runtime")
+        needs.append({"source_repo": "source-repo", "runtime_requirement": "runtime"}.get(kind, kind))
+    if blocked and plan.get("blocked_reason"):
+        needs.append("runtime")
+    if blocked and not needs:
+        needs.append("runtime")
+    discovery["needs"] = list(dict.fromkeys(needs))
+    discovery["runnable"] = runnable and not blocked
+    discovery["runner_ready"] = runnable and not blocked
+    discovery["one_command_ready"] = runnable and not blocked
+    discovery["runtime_readiness"] = {
+        "status": plan.get("status"),
+        "missing_assets": plan.get("missing_assets", []),
+        "blocked_reason": plan.get("blocked_reason", ""),
+    }
+    if blocked:
+        commands.pop("run", None)
+        if _model_has_runner_target(entry):
+            model_id = entry.model_id
+            commands["plan"] = (
+                f"worldfoundry-eval run --model {model_id} --benchmark <benchmark-id> "
+                f"--mode official-run --plan-only --output-dir tmp/model_benchmark/{model_id}/<benchmark-id> --json"
+            )
+        missing = plan.get("missing_assets") or []
+        first_reason = next(
+            (str(item.get("reason")) for item in missing if isinstance(item, Mapping) and item.get("reason")),
+            "",
+        )
+        reason = str(plan.get("blocked_reason") or first_reason or "runtime requirements are not met")
+        discovery["next_action"] = f"resolve runtime blocker: {reason}"
+    return discovery
+
+
 def _model_list_payload(entry) -> dict[str, Any]:
     """Build the full model list payload with discovery and readiness metadata."""
     payload = entry.to_dict()
     payload["verification_status"] = entry.verification_status
     payload["runner_entry_kind"] = entry.runner_entry_kind
-    payload["runnable"] = entry.is_runnable_runner_entry
-    payload.update(_model_command_readiness(entry))
-    payload["commands"] = _model_user_commands(entry)
-    payload["needs"] = list(_model_needs(entry))
-    payload["next_action"] = _model_next_action(entry)
+    payload.update(_model_discovery(entry))
     return payload
 
 
@@ -533,16 +608,10 @@ def _load_repo_script(relative_path: str) -> ModuleType:
     return cli_module._load_repo_script(relative_path)
 
 
-def _add_path_arg(argv: list[str], flag: str, value: Path | None) -> None:
-    """Append a flag+value pair to *argv* when *value* is not ``None``."""
-    if value is not None:
-        argv.extend([flag, str(value)])
-
-
-def _add_value_arg(argv: list[str], flag: str, value) -> None:
-    """Append a flag+value pair to *argv* when *value* is not ``None``."""
-    if value is not None:
-        argv.extend([flag, str(value)])
+# Both legacy names bind to the shared helper; call sites keep reading
+# naturally (path-valued vs scalar-valued flags).
+_add_path_arg = append_optional_arg
+_add_value_arg = append_optional_arg
 
 
 def _add_repeated_args(argv: list[str], flag: str, values: list[str] | None) -> None:
@@ -569,16 +638,28 @@ def _handle_zoo_models_list(args: argparse.Namespace) -> int:
         json_dump(payload)
         return 0
 
+    if terminal_enabled():
+        print_table(
+            "Model catalog",
+            ("Model", "Integration", "Runnable", "Needs"),
+            [
+                (entry.model_id, entry.integration_status, item["runnable"], item["needs"])
+                for entry, item in zip(entries, payload)
+            ],
+            hint=f"Inspect a model: {cli_prog_name()} zoo model-show --model-id <id>",
+        )
+        return 0
+
     manifest_paths = _model_manifest_paths(args.manifest_dir)
     rows = []
-    for entry in entries:
+    for entry, item in zip(entries, payload):
         rows.append(
             (
                 entry.model_id,
                 entry.integration_status,
                 entry.source.status,
-                "yes" if entry.is_runnable_runner_entry else "no",
-                _compact_list(_model_needs(entry), limit=3),
+                "yes" if item["runnable"] else "no",
+                _compact_list(item["needs"], limit=3),
                 entry.runner_entry_kind,
                 _compact_list(registry.aliases_for(entry.model_id), limit=2),
                 _dash(manifest_paths.get(entry.model_id)),
@@ -640,21 +721,42 @@ def _handle_zoo_model_show(args: argparse.Namespace) -> int:
     payload = entry.to_dict()
     payload["registry_aliases"] = list(registry.aliases_for(args.model_id))
     payload["discovery"] = {
-        "runnable": entry.is_runnable_runner_entry,
-        "needs": list(_model_needs(entry)),
+        **_model_discovery(entry),
         "runner": entry.runner_entry_kind,
         "manifest_path": _model_manifest_paths(args.manifest_dir).get(entry.model_id),
-        "next_action": _model_next_action(entry),
-        "commands": _model_user_commands(entry),
-        **_model_command_readiness(entry),
     }
     if args.include_manifest:
         manifest = registry.to_world_model_manifests()
-        payload["world_model_manifest"] = next(
-            item.to_dict() for item in manifest if item.model_id == entry.model_id
-        )
+        payload["world_model_manifest"] = next(item.to_dict() for item in manifest if item.model_id == entry.model_id)
     if args.json:
         json_dump(payload)
+        return 0
+
+    if terminal_enabled():
+        print_details(
+            entry.name or entry.model_id,
+            {
+                "model_id": entry.model_id,
+                "source": entry.source_status,
+                "integration": entry.integration_status,
+                "runnable": payload["discovery"]["runnable"],
+                "needs": payload["discovery"]["needs"],
+                "tasks": entry.tasks,
+                "aliases": payload["registry_aliases"],
+                "Hugging Face": entry.hf_repo_ids,
+                "runner": payload["discovery"]["runner"],
+                "manifest": payload["discovery"]["manifest_path"],
+                "next_action": payload["discovery"]["next_action"],
+            },
+            hint=f"Pipeline options: {cli_prog_name()} run {entry.model_id} --help",
+        )
+        if entry.variants:
+            print()
+            print_table(
+                "Variants",
+                ("Variant", "Integration"),
+                [(variant.variant_id, variant.integration_status) for variant in entry.variants],
+            )
         return 0
 
     print(f"model_id: {entry.model_id}")
@@ -669,7 +771,9 @@ def _handle_zoo_model_show(args: argparse.Namespace) -> int:
     print(f"tasks: {', '.join(entry.tasks) if entry.tasks else '-'}")
     print(f"aliases: {', '.join(payload['registry_aliases']) if payload['registry_aliases'] else '-'}")
     print(f"hf_repo_ids: {', '.join(entry.hf_repo_ids) if entry.hf_repo_ids else '-'}")
-    integrated_variants = [variant.variant_id for variant in entry.variants if variant.integration_status == "integrated"]
+    integrated_variants = [
+        variant.variant_id for variant in entry.variants if variant.integration_status == "integrated"
+    ]
     if entry.variants:
         print(f"variants: {len(entry.variants)}")
         print(f"integrated_variants: {', '.join(integrated_variants) if integrated_variants else '-'}")
@@ -750,6 +854,23 @@ def _handle_zoo_benchmarks_list(args: argparse.Namespace) -> int:
     payload = [_benchmark_list_payload(entry) for entry in entries]
     if args.json:
         json_dump(payload)
+        return 0
+
+    if terminal_enabled() and not getattr(args, "show_manifest", False):
+        print_table(
+            "Benchmark catalog",
+            ("Benchmark", "Integration", "Ready surface", "Needs"),
+            [
+                (
+                    entry.benchmark_id,
+                    _benchmark_public_integration_status(entry),
+                    _benchmark_ready_surface(entry),
+                    _benchmark_need_tags(entry),
+                )
+                for entry in entries
+            ],
+            hint=f"Inspect a benchmark: {cli_prog_name()} zoo benchmark-show --benchmark-id <id>",
+        )
         return 0
 
     manifest_paths = _benchmark_manifest_paths(args.manifest_dir)
@@ -871,6 +992,37 @@ def _handle_zoo_benchmark_show(args: argparse.Namespace) -> int:
         json_dump(payload)
         return 0
 
+    if terminal_enabled():
+        print_details(
+            entry.name or entry.benchmark_id,
+            {
+                "benchmark_id": entry.benchmark_id,
+                "source": entry.source_status,
+                "open_source": entry.open_source_status,
+                "integration": entry.integration_status,
+                "surface": discovery["surface"],
+                "runnable": discovery["runnable"],
+                "needs": discovery["needs"],
+                "official_runner_ready": discovery["official_runner_ready"],
+                "one_command_ready": discovery["one_command_ready"],
+                "bounded_component_ready": discovery["bounded_official_component_ready"],
+                "official_verified": entry.official_benchmark_verified,
+                "integration_evidence": entry.integration_evidence,
+                "leaderboard_valid": entry.leaderboard_valid,
+                "runner": entry.runner.verification_status,
+                "aliases": payload["registry_aliases"],
+                "domains": entry.domains,
+                "modalities": entry.modalities,
+                "Hugging Face": entry.hf_dataset_ids,
+                "requires": entry.requires,
+                "blockers": entry.blockers,
+                "metric_count": len(entry.metrics),
+                "manifest": discovery["manifest_path"],
+                "next_action": discovery["next_action"],
+            },
+        )
+        return 0
+
     print(f"benchmark_id: {entry.benchmark_id}")
     print(f"name: {entry.name or entry.benchmark_id}")
     print(f"source_status: {entry.source_status}")
@@ -881,10 +1033,7 @@ def _handle_zoo_benchmark_show(args: argparse.Namespace) -> int:
     print(f"needs: {', '.join(payload['discovery']['needs']) if payload['discovery']['needs'] else '-'}")
     print(f"manifest_path: {payload['discovery']['manifest_path'] or '-'}")
     print(f"next_action: {payload['discovery']['next_action']}")
-    print(
-        "bounded_official_component_ready: "
-        f"{payload['discovery']['bounded_official_component_ready']}"
-    )
+    print(f"bounded_official_component_ready: {payload['discovery']['bounded_official_component_ready']}")
     print(f"official_runner_ready: {payload['discovery']['official_runner_ready']}")
     print(f"one_command_ready: {payload['discovery']['one_command_ready']}")
     print(f"official_benchmark_verified: {entry.official_benchmark_verified}")
@@ -965,25 +1114,13 @@ def _handle_zoo_benchmark_run(args: argparse.Namespace) -> int:
 # ── Parser registration ─────────────────────────────────────────
 
 
-def _dispatch_zoo_handler(name: str):
-    """Build a lazy bridge to the zoo handler kept on the public CLI module.
-
-    Args:
-        name: Handler function name in this module.
-    """
-    def _dispatch(args: argparse.Namespace) -> int:
-        return globals()[name](args)
-
-    return _dispatch
-
-
 def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register model-zoo and benchmark-zoo CLI commands.
 
     Args:
         subparsers: Root argparse subparser collection.
     """
-    zoo_parser = subparsers.add_parser("zoo", help="Inspect model-zoo and benchmark-zoo manifests")
+    zoo_parser = subparsers.add_parser("zoo", help="Browse model and benchmark catalogs")
     zoo_subparsers = zoo_parser.add_subparsers(dest="zoo_command", required=True)
 
     zoo_models_parser = zoo_subparsers.add_parser("models", help="List model-zoo entries")
@@ -991,7 +1128,7 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
     zoo_models_parser.add_argument("--integration-status", choices=["integrated", "planned", "blocked"])
     zoo_models_parser.add_argument("--source-status", choices=["open_source", "api", "closed", "unknown"])
     zoo_models_parser.add_argument("--json", action="store_true")
-    zoo_models_parser.set_defaults(func=_dispatch_zoo_handler("_handle_zoo_models_list"))
+    zoo_models_parser.set_defaults(func=_handle_zoo_models_list)
 
     zoo_model_specs_parser = zoo_subparsers.add_parser(
         "model-specs",
@@ -1003,7 +1140,7 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
     zoo_model_specs_parser.add_argument("--source-status", choices=["open_source", "api", "closed", "unknown"])
     zoo_model_specs_parser.add_argument("--output-json", type=Path)
     zoo_model_specs_parser.add_argument("--json", action="store_true")
-    zoo_model_specs_parser.set_defaults(func=_dispatch_zoo_handler("_handle_zoo_model_specs"))
+    zoo_model_specs_parser.set_defaults(func=_handle_zoo_model_specs)
 
     zoo_model_show_parser = zoo_subparsers.add_parser(
         "model-show",
@@ -1013,7 +1150,7 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
     zoo_model_show_parser.add_argument("--model-id", required=True)
     zoo_model_show_parser.add_argument("--include-manifest", action="store_true")
     zoo_model_show_parser.add_argument("--json", action="store_true")
-    zoo_model_show_parser.set_defaults(func=_dispatch_zoo_handler("_handle_zoo_model_show"))
+    zoo_model_show_parser.set_defaults(func=_handle_zoo_model_show)
 
     zoo_model_download_parser = zoo_subparsers.add_parser(
         "model-download",
@@ -1033,7 +1170,7 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
     zoo_model_download_parser.add_argument("--allow-all-execute", action="store_true")
     zoo_model_download_parser.add_argument("--report-path", type=Path)
     zoo_model_download_parser.add_argument("--json", action="store_true")
-    zoo_model_download_parser.set_defaults(func=_dispatch_zoo_handler("_handle_zoo_model_download"))
+    zoo_model_download_parser.set_defaults(func=_handle_zoo_model_download)
 
     zoo_embodied_assets_parser = zoo_subparsers.add_parser(
         "embodied-assets",
@@ -1053,7 +1190,7 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
     zoo_embodied_assets_parser.add_argument("--skip-existing", action=argparse.BooleanOptionalAction, default=True)
     zoo_embodied_assets_parser.add_argument("--plan-only", action="store_true")
     zoo_embodied_assets_parser.add_argument("--list", action="store_true")
-    zoo_embodied_assets_parser.set_defaults(func=_dispatch_zoo_handler("_handle_zoo_embodied_assets"))
+    zoo_embodied_assets_parser.set_defaults(func=_handle_zoo_embodied_assets)
 
     zoo_benchmarks_parser = zoo_subparsers.add_parser("benchmarks", help="List benchmark-zoo entries")
     zoo_benchmarks_parser.add_argument("--manifest-dir", type=Path, default=DEFAULT_BENCHMARK_ZOO_DIR)
@@ -1080,7 +1217,7 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
         help="Include manifest file paths in the human table.",
     )
     zoo_benchmarks_parser.add_argument("--json", action="store_true")
-    zoo_benchmarks_parser.set_defaults(func=_dispatch_zoo_handler("_handle_zoo_benchmarks_list"))
+    zoo_benchmarks_parser.set_defaults(func=_handle_zoo_benchmarks_list)
 
     zoo_benchmark_specs_parser = zoo_subparsers.add_parser(
         "benchmark-specs",
@@ -1092,7 +1229,7 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
     zoo_benchmark_specs_parser.add_argument("--source-status", choices=["open_source", "api", "closed", "unknown"])
     zoo_benchmark_specs_parser.add_argument("--output-json", type=Path)
     zoo_benchmark_specs_parser.add_argument("--json", action="store_true")
-    zoo_benchmark_specs_parser.set_defaults(func=_dispatch_zoo_handler("_handle_zoo_benchmark_specs"))
+    zoo_benchmark_specs_parser.set_defaults(func=_handle_zoo_benchmark_specs)
 
     zoo_benchmark_show_parser = zoo_subparsers.add_parser(
         "benchmark-show",
@@ -1102,7 +1239,7 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
     zoo_benchmark_show_parser.add_argument("--benchmark-id", required=True)
     zoo_benchmark_show_parser.add_argument("--include-spec", action="store_true")
     zoo_benchmark_show_parser.add_argument("--json", action="store_true")
-    zoo_benchmark_show_parser.set_defaults(func=_dispatch_zoo_handler("_handle_zoo_benchmark_show"))
+    zoo_benchmark_show_parser.set_defaults(func=_handle_zoo_benchmark_show)
 
     zoo_benchmark_run_parser = zoo_subparsers.add_parser(
         "benchmark-run",
@@ -1114,7 +1251,7 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
         "--mode",
         choices=_BENCHMARK_RUN_MODE_CHOICES,
         default="official-run",
-        help="Benchmark runner mode. Use official-run for integrated evaluators, official-validation for result import, or normalizer for scorecard normalization.",
+        help="Benchmark runner mode. Contract emits a non-official contract scorecard; official-run executes integrated evaluators, official-validation imports results, and normalizer writes a scorecard.",
     )
     zoo_benchmark_run_parser.add_argument("--output-dir", type=Path, required=True)
     zoo_benchmark_run_parser.add_argument("--generated-artifact-dir", type=Path)
@@ -1162,4 +1299,4 @@ def register_zoo_subparser(subparsers: argparse._SubParsersAction[argparse.Argum
         help="Environment override for official runtime modes. Repeatable.",
     )
     zoo_benchmark_run_parser.add_argument("--json", action="store_true")
-    zoo_benchmark_run_parser.set_defaults(func=_dispatch_zoo_handler("_handle_zoo_benchmark_run"))
+    zoo_benchmark_run_parser.set_defaults(func=_handle_zoo_benchmark_run)

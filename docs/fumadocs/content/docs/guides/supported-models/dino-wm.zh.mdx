@@ -1,0 +1,30 @@
+---
+title: "DINO-WM"
+description: "DINO-WM 在 DINOv2 特征空间中规划；wall_single 权重驱动的推理已验证。"
+modelId: "dino-wm"
+pageSource: authored
+---
+
+DINO-WM 在动作条件下预测未来的 DINOv2 视觉特征，并在特征空间中规划到达目标。WorldFoundry 包含官方规划路径及 wall 任务仿真器代码。
+
+<ModelPaperFigures modelId="dino-wm" locale="zh" />
+
+参见[论文 arXiv 2411.04983](https://arxiv.org/abs/2411.04983)、[项目主页](https://dino-wm.github.io/)和[官方仓库](https://github.com/gaoyuezhou/dino_wm)。
+
+## 已验证路径
+
+公开 `wall_single` 路径加载了发布的 epoch-65 世界模型权重、官方 wall 轨迹数据集和 DINOv2 ViT-S/14 编码器。两次 GPU 规划运行均完成，分别生成了可完整解码的 26 帧 MP4 和有限的结果指标。较远的目标起点在任务成功阈值之外，最终没有完成任务。这两次运行有意使用很小的搜索预算，只验证执行链路，不代表一般规划性能。
+
+`pusht` 和 `point_maze` 的权重已存在，但它们的任务数据集与专用仿真依赖尚未通过此集成验证。
+
+## 输入与输出
+
+已验证的 wall 路径需要包含 `outputs/wall_single/hydra.yaml` 与 `outputs/wall_single/checkpoints/model_latest.pth` 的权重目录、DINOv2 编码器及完整官方 wall 轨迹。将 `DATASET_DIR` 指向含有 `wall_single/` 的父目录；wall 配置从 `${DATASET_DIR}/wall_single` 读取轨迹。公开 synthesis 路径接收 `ckpt_base_path`、`model_name="wall_single"` 和 `config`，输出 `dino-wm.mp4` 与规划指标。文本 prompt 或独立的图像/视频输入不是已验证 wall 规划的运行契约。
+
+MP4 展示仿真与规划过程。DINO-WM 在特征空间中预测，不是像素视频生成器。运行前应先检查解析后的计划：仅有模型权重还不足以提供所需轨迹。
+
+## 验证边界
+
+wall 简短测试证实了权重加载、仓内规划器的 GPU 执行和产物解码；它不能证明任务成功率、长时规划质量，也不代表其他发布任务已经达到一致性。
+
+<ModelRelatedRecipes modelId="dino-wm" locale="zh" />

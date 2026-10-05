@@ -18,6 +18,8 @@ name: InSpatio-WorldFM
 output_artifacts:
 - generated_world
 official_sources:
+  paper: https://arxiv.org/abs/2603.11911
+  project_page: https://inspatio.github.io/worldfm
   github:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
@@ -47,3 +49,21 @@ catalog_policy:
   open_source_rule: Only mark open_source when an official GitHub repository or official
     Hugging Face model page was confirmed. Do not infer checkpoint availability from
     papers, demos, or third-party mirrors.
+docs:
+  publisher: InSpatio
+  publisher_kind: company
+  publisher_zh: InSpatio
+  overview: 'InSpatio-WorldFM is a 3D world foundation model for spatial intelligence and frame generation, released with confirmed code and weights (inspatio/WorldFM on Hugging Face, Apache-2.0). In this catalog the integration is verified: the WorldFoundry runner supports the official meta.json demo in the unified environment profile with local WorldFM assets, and emits the official video and panorama artifact structure.'
+  overview_zh: InSpatio-WorldFM 是面向空间智能与帧生成的 3D 世界基础模型，代码与权重均已确认发布（Hugging Face 上的 inspatio/WorldFM，Apache-2.0）。本 catalog 中集成状态为 verified：WorldFoundry runner 支持统一环境 profile 下官方 meta.json demo 与本地 WorldFM 资产，并输出官方的视频与全景图产物结构。
+  architecture: Outputs cover both video and panorama artifacts, reflecting a world-generation design that renders beyond a single fixed viewport. Architecture internals beyond the official repository and checkpoint pointers are not recorded in this repository.
+  architecture_zh: 输出同时覆盖视频与全景图产物，体现其超越单一固定视口的世界生成设计。官方仓库与 checkpoint 指针之外的架构内部细节仓库未记录。
+  usage_notes: Drive runs through the official meta.json demo format with local WorldFM assets staged. Per-run artifact checks are tracked outside the model catalog.
+  usage_notes_zh: 通过官方 meta.json demo 格式驱动运行，并就位本地 WorldFM 资产。每次运行的产物检查在模型 catalog 外跟踪。
+  limitations:
+  - Per-run visual QA is tracked outside the catalog; verified status covers the runner path, not output quality.
+  limitations_zh:
+  - 每次运行的视觉 QA 在 catalog 外跟踪；verified 状态覆盖 runner 路径，不代表输出质量评级。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Unified world-generation quality for 3D world output.
+    reason_zh: 3D 世界输出的统一世界生成质量。

@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .gme import compute_gme_score, compute_gme_score_from_results
-from .natural import compute_natural_score, compute_natural_score_from_results
-from .nexus import compute_nexus_score, compute_nexus_score_from_results
+compute_gme_score = lazy_export(f"{__name__}.gme", "compute_gme_score", owner=__name__)
+compute_gme_score_from_results = lazy_export(f"{__name__}.gme", "compute_gme_score_from_results", owner=__name__)
+compute_natural_score = lazy_export(f"{__name__}.natural", "compute_natural_score", owner=__name__)
+compute_natural_score_from_results = lazy_export(f"{__name__}.natural", "compute_natural_score_from_results", owner=__name__)
+compute_nexus_score = lazy_export(f"{__name__}.nexus", "compute_nexus_score", owner=__name__)
+compute_nexus_score_from_results = lazy_export(f"{__name__}.nexus", "compute_nexus_score_from_results", owner=__name__)
 
 METRIC_MODULES = (
     metric_module_from_globals(

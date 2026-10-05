@@ -1,44 +1,49 @@
-import io
-import os
-import cv2
-import json
-import numpy as np
-from PIL import Image
-from tqdm import tqdm
+"""Batched CLIP temporal-consistency metric used by MiraBench."""
+
+from __future__ import annotations
+
+from pathlib import Path
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torchvision.transforms as transforms
-from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize, ToPILImage
+from PIL import Image
+
+from worldfoundry.core.media.codecs.video import list_numbered_frame_paths
+from worldfoundry.core.execution.inference_runtime import (
+    adaptive_batched_inference,
+    resolve_inference_batch_size,
+)
+from worldfoundry.core.utils.tensors.torch import temporal_feature_consistency
 
 
-def EvaluateTemporalClipConsistency(clip_model, preprocess, store_image_folder, device):
-    cnt = 0
-    video_sim = 0.0
+def _load_frame(path: Path, preprocess):
+    with Image.open(path) as image:
+        return preprocess(image.convert("RGB"))
 
-    tmp_paths = [os.path.join(store_image_folder, "frames_" + str(f) + ".png") for f in range(1,1+len(os.listdir(store_image_folder)))]
-    images = []
 
-    for tmp_path in tmp_paths:
-        images.append(preprocess(Image.open(tmp_path)))
-    images = torch.stack(images)
-    
-    with torch.no_grad():
-        images = images.to(device)
-        image_features = clip_model.encode_image(images)
-        image_features = F.normalize(image_features, dim=-1, p=2)
-        for i in range(len(image_features)):
-            image_feature = image_features[i].unsqueeze(0)
-            if i == 0:
-                first_image_feature = image_feature
-            else:
-                sim_pre = max(0.0, F.cosine_similarity(former_image_feature, image_feature).item())
-                sim_fir = max(0.0, F.cosine_similarity(first_image_feature, image_feature).item())
-                cur_sim = (sim_pre + sim_fir) / 2
-                video_sim += cur_sim
-                cnt += 1
-            former_image_feature = image_feature
-        sim_per_image = video_sim / cnt
-        
-    return sim_per_image
+def EvaluateTemporalClipConsistency(clip_model, preprocess, store_image_folder, device, batch_size=32):
+    """Evaluate CLIP frame consistency in bounded batches without per-frame syncs."""
+
+    if int(batch_size) < 1:
+        raise ValueError("batch_size must be positive")
+    frame_paths = list_numbered_frame_paths(store_image_folder)
+    if len(frame_paths) < 2:
+        raise ValueError("temporal CLIP consistency requires at least two frames")
+    images = torch.stack([_load_frame(path, preprocess) for path in frame_paths])
+    if torch.device(device).type == "cuda":
+        images = images.pin_memory()
+
+    resolved_batch_size = resolve_inference_batch_size(
+        int(batch_size),
+        device=device,
+        scope="mirabench_clip",
+    )
+    features = adaptive_batched_inference(
+        images,
+        clip_model.encode_image,
+        batch_size=resolved_batch_size,
+        device=device,
+        pad_to_batch_size=True,
+        scope="mirabench_clip",
+    )
+    features = torch.nn.functional.normalize(features, dim=-1, p=2)
+    return float(temporal_feature_consistency(features).item())

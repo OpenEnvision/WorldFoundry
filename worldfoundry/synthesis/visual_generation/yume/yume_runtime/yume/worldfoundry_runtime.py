@@ -9,7 +9,7 @@ import torch
 from diffusers.video_processor import VideoProcessor
 from PIL import Image
 
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.configs import WAN_CONFIGS
+from worldfoundry.base_models.diffusion_model.recipes.wan_configs.wan21 import WAN_CONFIGS
 from worldfoundry.synthesis.visual_generation.yume.yume_runtime.yume import (
     YUME_MAX_AREA_CONFIGS,
     YUME_SIZE_CONFIGS,
@@ -36,10 +36,12 @@ class YumeRuntime:
         model,
         device,
         weight_dtype,
+        owns_process_group=False,
     ) -> None:
         self.model = model
         self.weight_dtype = weight_dtype
         self.device = device
+        self.owns_process_group = owns_process_group
 
     def _call_dit(self, latent_model_input, *, timestep, rand_num_img, **kwargs):
         call_kwargs = dict(t=timestep, **kwargs)
@@ -98,6 +100,7 @@ class YumeRuntime:
         device,
         weight_dtype,
         fsdp,
+        t5_cpu: bool = False,
     ) -> "YumeRuntime":
         torch.backends.cuda.matmul.allow_tf32 = True
 
@@ -116,7 +119,8 @@ class YumeRuntime:
         if torch.cuda.is_available():
             torch.cuda.set_device(rank)
             device = torch.device(rank)
-        if not dist.is_initialized():
+        owns_process_group = not dist.is_initialized()
+        if owns_process_group:
             if int(os.environ.get("WORLD_SIZE", "1")) == 1:
                 os.environ.setdefault("RANK", "0")
                 os.environ.setdefault("WORLD_SIZE", "1")
@@ -126,29 +130,43 @@ class YumeRuntime:
             backend = "nccl" if torch.cuda.is_available() else "gloo"
             dist.init_process_group(backend=backend)
 
-        cfg = WAN_CONFIGS["i2v-14B"]
-        model = YumeI2V(
-            config=cfg,
-            checkpoint_dir=model_root,
-            device_id=rank,
-            dit_fsdp=fsdp,
-        )
-        model.init_model(
-            config=cfg,
-            checkpoint_dir=model_root,
-            device_id=rank,
-            t5_cpu=False,
-        )
+        try:
+            cfg = WAN_CONFIGS["i2v-14B"]
+            model = YumeI2V(
+                config=cfg,
+                checkpoint_dir=model_root,
+                device_id=rank,
+                dit_fsdp=fsdp,
+            )
+            model.init_model(
+                config=cfg,
+                checkpoint_dir=model_root,
+                device_id=rank,
+                t5_cpu=t5_cpu,
+            )
 
-        model.model.eval().requires_grad_(False).to(weight_dtype)
-        if not fsdp:
-            model.model.to(device)
+            model.model.eval().requires_grad_(False).to(weight_dtype)
+            if not fsdp:
+                model.model.to(device)
+        except BaseException:
+            if owns_process_group and dist.is_available() and dist.is_initialized():
+                dist.destroy_process_group()
+            raise
 
         return cls(
             model=model,
             device=device,
             weight_dtype=weight_dtype,
+            owns_process_group=owns_process_group,
         )
+
+    def cleanup(self):
+        """Destroy the single-rank process group created by this runtime."""
+        import torch.distributed as dist
+
+        if self.owns_process_group and dist.is_available() and dist.is_initialized():
+            dist.destroy_process_group()
+            self.owns_process_group = False
 
     @staticmethod
     def _tensor_to_pil(tensor: torch.Tensor) -> Image.Image:

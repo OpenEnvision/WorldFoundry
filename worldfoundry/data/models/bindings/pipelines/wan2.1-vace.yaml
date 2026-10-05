@@ -3,7 +3,7 @@ binding_id: wan2.1-vace
 model_id: wan2.1-vace
 runner: worldfoundry.pipeline
 pipeline:
-  target: worldfoundry.pipelines.video_official.pipeline_official_video:Wan21VACEPipeline
+  target: worldfoundry.pipelines.wan.pipeline_wan_vace:Wan2p1VACEPipeline
   loading:
     method: from_pretrained
     signature: unified

@@ -7,10 +7,22 @@ runtime:
   checkpoint_candidates:
   - $WORLDFOUNDRY_CKPT_DIR/mochi-1-preview
   - $WORLDFOUNDRY_HFD_ROOT/genmo--mochi-1-preview
-  torch_dtype: float16
+  # Official high-quality Diffusers recipe: keep full-precision weights on CPU
+  # and run CUDA kernels under BF16 autocast. Forced FP16 is numerically unsafe
+  # for this checkpoint and produced abstract/degenerate videos in validation.
+  torch_dtype: float32
+  autocast_dtype: bfloat16
+  autocast_cache_enabled: false
+  enable_model_cpu_offload: true
+  enable_vae_tiling: true
+  temporal_frame_multiple: 6
   fps: 30
   call_kwargs:
-    num_frames: 31
+    height: 480
+    width: 848
+    num_frames: 84
     num_inference_steps: 64
+    guidance_scale: 4.5
+    seed: 12345
 notes:
 - Uses the official Genmo open-weight checkpoint through the maintained diffusers runtime path.

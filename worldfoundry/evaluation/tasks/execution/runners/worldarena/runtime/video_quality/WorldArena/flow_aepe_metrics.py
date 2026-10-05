@@ -15,9 +15,10 @@ from worldfoundry.base_models.perception_core.optical_flow.sea_raft import (
     load_ckpt,
     parse_args,
 )
+from worldfoundry.core.execution.device import get_current_torch_device
 
 from .utils import load_dimension_info, read_video_frames_cv2
-from .distributed import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     distribute_list_to_rank,
@@ -88,7 +89,7 @@ class OpticalFlowAverageEndPointErrorMetric:
     """
     
     def __init__(self, cfg_path=None, checkpoint_path=None, device=None) -> None:
-        self._device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self._device = device or get_current_torch_device()
 
         cfg_resolved = Path(cfg_path) if cfg_path else sea_raft_config_path("spring-M.json")
         ckpt_resolved = Path(checkpoint_path) if checkpoint_path else sea_raft_checkpoint_path()
@@ -117,7 +118,7 @@ class OpticalFlowAverageEndPointErrorMetric:
         return image
     
     def forward_flow(self, image1, image2):
-        with torch.amp.autocast(device_type="cuda"):
+        with torch.amp.autocast(device_type=self._device.type, enabled=self._device.type == "cuda"):
             output = self._model(image1, image2, iters=self._args.iters, test_mode=True)
         flow_final = output['flow'][-1]
         info_final = output['info'][-1]
@@ -192,7 +193,7 @@ class OpticalFlowAverageEndPointErrorMetric:
         empirical_min = 0
         # score = np.clip(score, empirical_min, empirical_max)
         # score = 1 - (score - empirical_min) / (empirical_max - empirical_min)
-        score = 1/score
+        score = 1.0 / max(float(score), 1e-6)
         thres = self._dynamic_thres(image1)
         dynamic_soft = [
             self._soft_motion_score(s, thres) for s in dynamic_raw_scores
@@ -202,7 +203,7 @@ class OpticalFlowAverageEndPointErrorMetric:
         if dynamic_degree <= 0.1213:
             score = score * dynamic_degree
 
-        return score.item()
+        return float(score)
 
     def compute_video(self, frames: List[np.ndarray]) -> float:
         if len(frames) < 2:
@@ -211,9 +212,9 @@ class OpticalFlowAverageEndPointErrorMetric:
 
 
 def compute_photometric_smoothness(json_dir, submodules_list, **kwargs):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    cfg_path = submodules_list.get("config") or DEFAULT_CFG
-    model_path = submodules_list.get("model") or DEFAULT_CKPT
+    device = get_current_torch_device()
+    cfg_path = submodules_list.get("config")
+    model_path = submodules_list.get("model")
 
     metric = OpticalFlowAverageEndPointErrorMetric(cfg_path, model_path, device=device)
 

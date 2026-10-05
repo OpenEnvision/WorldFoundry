@@ -1,0 +1,45 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: A-02
+track: calibration
+title_en: Die face toss
+scene_grounding:
+- 'Initial state must match: One die is held in the hand above the tabletop.'
+- Apparatus geometry in the opening frames must match the source image.
+- Exactly one die must be visible in hand above the tabletop at the start.
+action_execution:
+- 'Required action: Throw the die once onto the table.'
+- Action must happen exactly once in the expected direction / region.
+- No pre-action peeking or flipping that leaks the outcome before the flick/throw.
+target_requirements:
+- Scene-defining target, subject, and readout evidence must remain visible throughout the action.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-readout state/region change: subject moves between label-defining states or regions after the first decisive readout.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Die face toss.'
+- Rubric readout is face_1..face_6 from the visible top-face label; side faces
+  should not be judged as outcomes.

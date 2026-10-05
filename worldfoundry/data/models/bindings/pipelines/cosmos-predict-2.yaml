@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: cosmos-predict-2
+model_id: cosmos-predict-2
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.cosmos.pipeline_cosmos_predict2:CosmosPredict2Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

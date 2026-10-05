@@ -1,0 +1,50 @@
+---
+title: "Wan2.1-Fun V1.1 1.3B Control Camera"
+description: "Wan2.1-Fun V1.1 1.3B Control Camera（Alibaba PAI (VideoX-Fun)）：相机可控视频、图生视频；已验证。"
+modelId: "wan21-fun-1p3b-cam"
+pageSource: authored
+---
+
+Wan2.1-Fun V1.1 1.3B Control Camera 是本 catalog 中 VideoX-Fun 家族已通过 GPU 验证的相机控制条目：完整的 1.3B 相机 checkpoint 与拆分的 Wan 组件在 WorldFoundry 工作区通过了真实 A100 推理。官方位姿条件路由在四步去噪后输出了 672x384 的九帧连贯 H.264 视频，989 个 transformer 张量全部精确匹配、无回退。
+
+<ModelPaperFigures modelId="wan21-fun-1p3b-cam" locale="zh" />
+
+代码：[aigc-apps/VideoX-Fun](https://github.com/aigc-apps/VideoX-Fun)。
+
+<ModelCommandBuilder modelId="wan21-fun-1p3b-cam" locale="zh" />
+
+## 用来做什么
+
+`wan21-fun-1p3b-cam` 是记录的相机控制路由。按 catalog 相机路径推进时从这里起步。
+
+1.3B 参数的 Wan2.1 扩散 Transformer，叠加 VideoX-Fun Control+i2v 相机条件通路。 checkpoint 与树内 989 个 transformer 张量全部匹配、无回退、无跳过的相机权重，确认转换精确。该模型由阿里云 PAI（VideoX-Fun）发布。
+
+catalog 记录的任务包括 相机可控视频、图生视频。模态上，它接受图像，输出视频。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（受控图生视频的相机位姿跟随）。
+
+不是 [Wan2.1](/zh/docs/guides/supported-models/wan2.1)、[Wan2.1 Fun 14B Cam](/zh/docs/guides/supported-models/wan21-fun-14b-cam)。 评测看 [CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`frames`、`fps`、`height`；产物 `wan21-fun-1p3b-cam.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `Wan21Fun1P3BCameraPipeline`。
+
+系列状态：**已验证**。
+
+这是 VideoX-Fun 相机控制的推荐起点：占用最小，且是唯一记录了真实 GPU 验证的变体。 需显式提供相机位姿序列；流程跑通后再升级到 14B/Wan2.2 变体。
+
+VideoX-Fun source is vendored at revision 403f1f7b78dcafccc4f6606dda4ec28e16e667dc.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run wan21-fun-1p3b-cam --pipeline.task-profile default` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `alibaba-pai/Wan2.1-Fun-V1.1-1.3B-Control-Camera`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh wan21-fun-1p3b-cam`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="wan21-fun-1p3b-cam" locale="zh" />

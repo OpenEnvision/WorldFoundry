@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, MetricResult
 from worldfoundry.evaluation.tasks.embodied.metrics import metric_suite
 from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import (
     EVALUATE_RUN_RESULT_SCHEMA_VERSION,
@@ -24,25 +23,33 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 def _load_shard_rows(output_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     requests: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
-    candidates = sorted(output_dir.glob("shard*of*/results.jsonl"))
-    if not candidates and (output_dir / "results.jsonl").exists():
+    shard_dirs = sorted(path for path in output_dir.glob("shard*of*") if path.is_dir())
+    candidates = []
+    if shard_dirs:
+        totals = {int(path.name.rsplit("of", 1)[1]) for path in shard_dirs}
+        if len(totals) != 1:
+            raise ValueError("embodied shards declare different shard counts")
+        total = totals.pop()
+        missing = {f"shard{index}of{total}" for index in range(total)} - {path.name for path in shard_dirs}
+        if missing:
+            raise ValueError(f"incomplete embodied shards: missing {', '.join(sorted(missing))}")
+        candidates = [path / "results.jsonl" for path in shard_dirs]
+    elif (output_dir / "results.jsonl").exists():
         candidates = [output_dir / "results.jsonl"]
     for result_path in candidates:
         shard_dir = result_path.parent
-        requests.extend(_read_jsonl(shard_dir / "requests.jsonl"))
-        results.extend(_read_jsonl(result_path))
+        if not result_path.is_file():
+            raise ValueError(f"incomplete embodied shard {shard_dir.name}: results.jsonl is missing")
+        shard_requests = _read_jsonl(shard_dir / "requests.jsonl")
+        shard_results = _read_jsonl(result_path)
+        pending = {row["sample_id"] for row in shard_requests} - {row["sample_id"] for row in shard_results}
+        if pending:
+            raise ValueError(f"incomplete embodied shard {shard_dir.name}: {len(pending)} rollout(s) pending")
+        requests.extend(shard_requests)
+        results.extend(shard_results)
     if not results:
         raise FileNotFoundError(f"no embodied shard results found under {output_dir}")
     return requests, results
-
-
-def _metric_callable(metric_ids: Sequence[str]):
-    metrics = metric_suite(metric_ids, track="vla")
-
-    def compute(request: GenerationRequest, result: GenerationResult) -> list[MetricResult]:
-        return [metric.compute_sample(request, result) for metric in metrics]
-
-    return compute
 
 
 def merge_embodied_results(
@@ -75,7 +82,7 @@ def merge_embodied_results(
         output_dir=root,
         requests=requests,
         results=results,
-        metric=_metric_callable(tuple(metric_ids)),
+        metrics=metric_suite(metric_ids, track="vla"),
         benchmark={
             "suite": "vla_va_wam",
             "benchmark_name": str((config or {}).get("id") or "embodied_merged"),

@@ -3,7 +3,7 @@ from einops import rearrange
 import torch
 import torch.nn as nn
 
-from wan.modules.vae import AttentionBlock, CausalConv3d, RMS_norm, ResidualBlock, Upsample
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21 import AttentionBlock, CausalConv3d, RMS_norm, ResidualBlock, Upsample
 
 class Resample(nn.Module):
 

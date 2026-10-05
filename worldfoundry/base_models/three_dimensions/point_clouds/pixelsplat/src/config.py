@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Type, TypeVar
 
-from dacite import Config, from_dict
+try:
+    from dacite import Config, from_dict
+except ImportError:
+    from .dacite_compat import Config, from_dict
 from omegaconf import DictConfig, OmegaConf
 
 from .dataset import DatasetCfg

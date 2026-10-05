@@ -2,30 +2,28 @@ conda_packages:
 - python
 - pip
 - ffmpeg
-cuda_profile: prepare_only
-driver_status: blocked_official_requires_torch25_cuda124_or_newer_driver
+cuda_profile: cu128
+driver_status: compatible_unified_default
 env_name: worldfoundry-unified-cu128
 env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
 model_id: step-video-t2v
 notes:
-- Step-Video-T2V now has an in-tree WorldFoundry runtime plan wrapper. Full generation still requires multi-GPU execution,
-  caption/VAE services, and staged checkpoints.
+- Step-Video-T2V uses WorldFoundry's shared native diffusion runtime. Prompt encoding,
+  denoising, and VAE decoding are in-process and do not require xFuser or HTTP services.
 pip_packages:
-- accelerate
+- torch
 - transformers
-- diffusers
 - sentencepiece
+- safetensors
 - imageio
+- imageio-ffmpeg
 - numpy
 - einops
-- aiohttp
-- flask
-- flask_restful
 - ffmpeg-python
-- requests
-- xfuser
-python: '3.10'
+- packaging
+python: '3.11'
 validation_imports:
+- torch
 - transformers
-- diffusers
-- flask
+- safetensors
+- sentencepiece

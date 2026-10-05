@@ -5,7 +5,7 @@
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "categoryZh": "世界模型",
     "domains": [
       "world-model",
       "3d-generation",
@@ -14,7 +14,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "yeppp27",
+    "logoKey": "ustc",
     "metrics": [
       "four_d_worldbench_average"
     ],
@@ -22,7 +22,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_runtime",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": ""
   },
   "ai2thor": {
@@ -34,7 +34,7 @@
       "integrated"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "embodied-action",
@@ -43,7 +43,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "allenai",
+    "logoKey": "ai2",
     "metrics": [
       "success_rate"
     ],
@@ -51,7 +51,7 @@
     "requiresApi": false,
     "runtimeKind": "native_closed_loop_simulator",
     "summary": "Closed-loop simulator rollouts, or normalization of official rollout results",
-    "summaryZh": "\u95ed\u73af\u4eff\u771f rollout\uff0c\u6216\u5f52\u4e00\u5316\u5b98\u65b9 rollout \u7ed3\u679c",
+    "summaryZh": "闭环仿真 rollout，或归一化官方 rollout 结果",
     "verificationStatus": "integration_ready"
   },
   "aigcbench": {
@@ -60,7 +60,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "image-to-video",
       "motion-quality",
@@ -77,8 +77,34 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_artifact_metric_importer",
     "summary": "Imports precomputed metrics and normalizes them into a scorecard",
-    "summaryZh": "\u5bfc\u5165\u9884\u8ba1\u7b97 metric \u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入预计算 metric 并归一化为 scorecard",
     "verificationStatus": "in_tree_artifact_import_ready"
+  },
+  "apple-pi": {
+    "aliases": [],
+    "badges": [
+      "integrated"
+    ],
+    "category": "World Models",
+    "categoryZh": "世界模型",
+    "domains": [
+      "law-grounded-physical-reasoning",
+      "perception",
+      "formulation",
+      "deduction"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "ntu",
+    "metrics": [
+      "deduction"
+    ],
+    "name": "Apple-PI",
+    "requiresApi": true,
+    "runtimeKind": "in_tree_model_backed",
+    "summary": "In-tree evaluator scores artifact bundles per the task protocol; some dimensions may call a hosted API",
+    "summaryZh": "仓内 evaluator 按 task protocol 评估 artifact bundle；部分维度可能调用 hosted API",
+    "verificationStatus": "pending"
   },
   "behavior1k": {
     "aliases": [
@@ -90,7 +116,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "embodied-action",
@@ -98,7 +124,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "stanfordvl",
+    "logoKey": "stanford",
     "metrics": [
       "success_rate"
     ],
@@ -106,7 +132,7 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "bridgedata-v2": {
@@ -119,7 +145,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "embodied-action",
@@ -129,7 +155,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "rail-berkeley",
+    "logoKey": "berkeley",
     "metrics": [
       "success_rate"
     ],
@@ -137,7 +163,7 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "calvin": {
@@ -146,7 +172,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "robot-manipulation",
@@ -154,7 +180,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "mees",
+    "logoKey": "freiburg",
     "metrics": [
       "success_rate"
     ],
@@ -162,7 +188,7 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "camerabench": {
@@ -171,7 +197,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "camera-motion",
       "camera-control",
@@ -179,7 +205,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "",
+    "logoKey": "cmu",
     "metrics": [
       "camerabench_average"
     ],
@@ -187,7 +213,7 @@
     "requiresApi": true,
     "runtimeKind": "",
     "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分；部分维度可能调用 hosted API",
     "verificationStatus": "pending"
   },
   "chronomagic-bench": {
@@ -196,7 +222,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "time-lapse",
       "temporal-reasoning",
@@ -204,7 +230,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "pku-yuangroup",
+    "logoKey": "pku",
     "metrics": [
       "chronomagic_score"
     ],
@@ -212,7 +238,7 @@
     "requiresApi": true,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分；部分维度可能调用 hosted API",
     "verificationStatus": "verified"
   },
   "devil-dynamics": {
@@ -221,7 +247,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "dynamics",
       "motion-quality",
@@ -229,7 +255,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "mingxiangl",
+    "logoKey": "cas",
     "metrics": [
       "devil_dynamics_average"
     ],
@@ -237,7 +263,7 @@
     "requiresApi": true,
     "runtimeKind": "in_tree_official_runtime",
     "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分；部分维度可能调用 hosted API",
     "verificationStatus": "pending"
   },
   "evalcrafter": {
@@ -246,7 +272,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "video-generation-quality",
       "text-video-alignment",
@@ -255,7 +281,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "evalcrafter",
+    "logoKey": "tencent",
     "metrics": [
       "evalcrafter_total"
     ],
@@ -263,7 +289,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_runtime_bounded_clip_metrics",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "verified"
   },
   "ewmbench": {
@@ -272,7 +298,7 @@
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "categoryZh": "世界模型",
     "domains": [
       "embodied-world-model",
       "scene-consistency",
@@ -281,7 +307,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "agibottech",
+    "logoKey": "agibot",
     "metrics": [
       "ewmbench_average"
     ],
@@ -289,7 +315,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "pending"
   },
   "fetv": {
@@ -298,7 +324,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "fine-grained-alignment",
       "text-video-generation",
@@ -306,7 +332,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "",
+    "logoKey": "pku",
     "metrics": [
       "fetv_average"
     ],
@@ -314,7 +340,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_runtime",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "bounded_official_clipscore_verified"
   },
   "genai-bench": {
@@ -323,7 +349,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "human-preference",
       "judge-alignment",
@@ -331,7 +357,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "tiger-ai-lab",
+    "logoKey": "waterloo",
     "metrics": [
       "genai_bench_average"
     ],
@@ -339,8 +365,41 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_runtime",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "pending"
+  },
+  "harnesseval-w": {
+    "aliases": [],
+    "badges": [
+      "integrated"
+    ],
+    "category": "World Models",
+    "categoryZh": "世界模型",
+    "domains": [
+      "world-model",
+      "video-generation"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "metrics": [
+      "overall_macro",
+      "overall_core_macro",
+      "overall_observation_macro",
+      "observation_quality_macro",
+      "observation_physical_plausibility_macro",
+      "exploratory_transition",
+      "intentional_transition",
+      "physical_transition",
+      "drift_resistance",
+      "return_revisit_consistency",
+      "offscreen_evolution"
+    ],
+    "name": "HarnessEval-W",
+    "requiresApi": true,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "Official Python scoring for six world-transition and persistence families, with a VLM judge",
+    "summaryZh": "官方 Python 评分覆盖六类世界状态转移与持久性任务，使用 VLM 裁判",
+    "verificationStatus": "full_suite_pending"
   },
   "ipv-bench": {
     "aliases": [],
@@ -348,7 +407,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "impossible-videos",
       "counterfactual-physics",
@@ -356,7 +415,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "showlab",
+    "logoKey": "nus",
     "metrics": [
       "ipv_bench_average"
     ],
@@ -364,7 +423,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_runner",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "pending"
   },
   "iworld-bench": {
@@ -373,11 +432,11 @@
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "categoryZh": "世界模型",
     "domains": [],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "embodiedcity",
+    "logoKey": "tsinghua",
     "metrics": [
       "iworldbench_average"
     ],
@@ -385,7 +444,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_runner",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "official_runtime_ready_real_data_validation_pending"
   },
   "kinetix": {
@@ -394,7 +453,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "embodied-action",
@@ -402,7 +461,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "flairox",
+    "logoKey": "oxford",
     "metrics": [
       "success_rate"
     ],
@@ -410,8 +469,39 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
+  },
+  "larybench": {
+    "aliases": [
+      "LARY",
+      "latent-action-representation-yielding-benchmark"
+    ],
+    "badges": [
+      "integrated"
+    ],
+    "category": "Embodied AI",
+    "categoryZh": "具身 AI",
+    "domains": [
+      "vla",
+      "embodied-action",
+      "robot-manipulation",
+      "action-recognition"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "meituan",
+    "metrics": [
+      "extraction_coverage",
+      "top1_accuracy",
+      "val_seen_mse"
+    ],
+    "name": "LARYBench",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "In-tree official runtime extracts latent actions and probes them with classification and regression",
+    "summaryZh": "仓内 official runtime 抽取 latent action 并以分类与回归探针评测",
+    "verificationStatus": "pending_checkpoint_and_dataset_run"
   },
   "libero": {
     "aliases": [
@@ -425,7 +515,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "robot-manipulation",
@@ -433,7 +523,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "lifelong-robot-learning",
+    "logoKey": "utaustin",
     "metrics": [
       "success_rate"
     ],
@@ -441,7 +531,7 @@
     "requiresApi": false,
     "runtimeKind": "native_closed_loop_simulator",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "libero-mem": {
@@ -452,7 +542,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "robot-manipulation",
@@ -460,7 +550,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "lifelong-robot-learning",
+    "logoKey": "utaustin",
     "metrics": [
       "success_rate"
     ],
@@ -468,37 +558,7 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
-    "verificationStatus": "normalizer_only"
-  },
-  "libero-para": {
-    "aliases": [
-      "LIBERO-Para",
-      "libero_para",
-      "libero-paraphrase"
-    ],
-    "badges": [
-      "normalizer"
-    ],
-    "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
-    "domains": [
-      "vla",
-      "robot-manipulation",
-      "language-generalization",
-      "paraphrase-generalization"
-    ],
-    "integrationStatus": "integrated",
-    "leaderboardValid": false,
-    "logoKey": "cau-hai-lab",
-    "metrics": [
-      "success_rate"
-    ],
-    "name": "LIBERO-Para",
-    "requiresApi": false,
-    "runtimeKind": "external_official_results_runner",
-    "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "libero-plus": {
@@ -509,14 +569,14 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "robot-manipulation"
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "lifelong-robot-learning",
+    "logoKey": "utaustin",
     "metrics": [
       "success_rate"
     ],
@@ -524,7 +584,7 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "libero-pro": {
@@ -535,14 +595,14 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "robot-manipulation"
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "lifelong-robot-learning",
+    "logoKey": "utaustin",
     "metrics": [
       "success_rate"
     ],
@@ -550,8 +610,36 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
+  },
+  "likephys": {
+    "aliases": [],
+    "badges": [
+      "integrated"
+    ],
+    "category": "Video Generation",
+    "categoryZh": "视频生成",
+    "domains": [
+      "physics",
+      "intuitive-physics",
+      "rigid-body",
+      "fluid-dynamics",
+      "deformable",
+      "optics"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "oxford",
+    "metrics": [
+      "likephys_misrank_rate"
+    ],
+    "name": "LikePhys",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runner",
+    "summary": "Probes a video diffusion model's likelihood preference on paired valid/impossible clips",
+    "summaryZh": "在成对的有效 / 不可能片段上探测视频扩散模型的似然偏好",
+    "verificationStatus": "result_normalizer_ready_probe_requires_upstream_checkout"
   },
   "maniskill": {
     "aliases": [],
@@ -559,7 +647,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "robot-manipulation",
@@ -567,7 +655,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "haosulab",
+    "logoKey": "ucsd",
     "metrics": [
       "success_rate"
     ],
@@ -575,7 +663,7 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "maniskill2": {
@@ -587,7 +675,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "robot-manipulation",
@@ -595,7 +683,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "haosulab",
+    "logoKey": "ucsd",
     "metrics": [
       "success_rate"
     ],
@@ -603,7 +691,7 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "memobench": {
@@ -612,7 +700,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "visual-memory",
       "object-permanence",
@@ -621,7 +709,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "memobench-team",
+    "logoKey": "harvard",
     "metrics": [
       "memobench_average"
     ],
@@ -629,7 +717,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "pending"
   },
   "metaworld": {
@@ -641,7 +729,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "embodied-action",
       "robot-manipulation",
@@ -651,7 +739,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "farama-foundation",
+    "logoKey": "farama",
     "metrics": [
       "success_rate"
     ],
@@ -659,7 +747,7 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "mikasa": {
@@ -671,14 +759,14 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "robot-manipulation"
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "cognitiveaisystems",
+    "logoKey": "airi",
     "metrics": [
       "success_rate"
     ],
@@ -686,7 +774,35 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
+    "verificationStatus": "normalizer_only"
+  },
+  "mind": {
+    "aliases": [
+      "MIND"
+    ],
+    "badges": [
+      "integrated"
+    ],
+    "category": "Video Generation",
+    "categoryZh": "视频生成",
+    "domains": [
+      "world-model",
+      "interactive-video",
+      "memory",
+      "action-control"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "csu",
+    "metrics": [
+      "mind_average"
+    ],
+    "name": "MIND",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "Scores interactive world-model memory consistency and action control",
+    "summaryZh": "评估交互式世界模型的记忆一致性与动作控制",
     "verificationStatus": "normalizer_only"
   },
   "mirabench": {
@@ -695,7 +811,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "long-video",
       "motion-strength",
@@ -704,7 +820,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "mira-space",
+    "logoKey": "tencent",
     "metrics": [
       "mirabench_average"
     ],
@@ -712,7 +828,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "pending"
   },
   "molmospaces": {
@@ -724,7 +840,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "embodied-action",
@@ -732,7 +848,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "allenai",
+    "logoKey": "ai2",
     "metrics": [
       "success_rate"
     ],
@@ -740,8 +856,37 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
+  },
+  "pawbench": {
+    "aliases": [
+      "PAW-Calibration",
+      "PAW-Coverage"
+    ],
+    "badges": [
+      "integrated"
+    ],
+    "category": "World Models",
+    "categoryZh": "世界模型",
+    "domains": [
+      "stochastic-physical-dynamics",
+      "distribution-calibration",
+      "outcome-coverage"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "sjtu",
+    "metrics": [
+      "calibration_tvd_percent",
+      "coverage_percent"
+    ],
+    "name": "PAWBench",
+    "requiresApi": true,
+    "runtimeKind": "in_tree_official_runtime_hosted_judges",
+    "summary": "Evaluates probability calibration and outcome coverage across repeated video-world-model rollouts",
+    "summaryZh": "评估视频世界模型重复 rollout 的概率校准与结果覆盖率",
+    "verificationStatus": "in_tree_runtime_cpu_contract_verified"
   },
   "phyeduvideo": {
     "aliases": [],
@@ -749,7 +894,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "physics",
       "education",
@@ -758,7 +903,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "meghamariamkm",
+    "logoKey": "adobe",
     "metrics": [
       "phyeduvideo_average"
     ],
@@ -766,7 +911,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_result_importer",
     "summary": "Imports precomputed metrics and normalizes them into a scorecard",
-    "summaryZh": "\u5bfc\u5165\u9884\u8ba1\u7b97 metric \u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入预计算 metric 并归一化为 scorecard",
     "verificationStatus": "result_importer_ready"
   },
   "phyfps-bench-gen": {
@@ -775,7 +920,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "temporal-consistency",
       "motion-quality",
@@ -783,7 +928,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "taco-group",
+    "logoKey": "tamu",
     "metrics": [
       "phyfps_bench_gen_average"
     ],
@@ -791,7 +936,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "official_runtime_ready"
   },
   "phygenbench": {
@@ -800,7 +945,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "physics",
       "physical-commonsense",
@@ -808,7 +953,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "opengvlab",
+    "logoKey": "shanghai-ai-lab",
     "metrics": [
       "phygenbench_average"
     ],
@@ -816,7 +961,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_result_importer_and_bounded_overall_aggregator",
     "summary": "Imports precomputed metrics and normalizes them into a scorecard",
-    "summaryZh": "\u5bfc\u5165\u9884\u8ba1\u7b97 metric \u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入预计算 metric 并归一化为 scorecard",
     "verificationStatus": "bounded_component_ready"
   },
   "phyground": {
@@ -825,7 +970,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "physics",
       "physical-reasoning",
@@ -835,7 +980,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "nu-world-model-embodied-ai",
+    "logoKey": "nu-lab",
     "metrics": [
       "phyground_overall"
     ],
@@ -843,8 +988,32 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_result_importer",
     "summary": "Imports precomputed metrics and normalizes them into a scorecard",
-    "summaryZh": "\u5bfc\u5165\u9884\u8ba1\u7b97 metric \u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入预计算 metric 并归一化为 scorecard",
     "verificationStatus": "result_importer_ready"
+  },
+  "physical-ai-bench": {
+    "aliases": [],
+    "badges": [
+      "integrated"
+    ],
+    "category": "World Models",
+    "categoryZh": "世界模型",
+    "domains": [],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "gatech",
+    "metrics": [
+      "aesthetic_quality",
+      "vqa_accuracy",
+      "dover_tech_score",
+      "canny_f1_score"
+    ],
+    "name": "Physical AI Bench (PAI-Bench)",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_multi_track_evaluator",
+    "summary": "In-tree multi-track evaluator scores generation and conditional-generation videos",
+    "summaryZh": "仓内多赛道 evaluator 评估 generation 与 conditional-generation 生成视频",
+    "verificationStatus": "verified"
   },
   "physics-iq": {
     "aliases": [],
@@ -852,7 +1021,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "physics",
       "solid-mechanics",
@@ -871,7 +1040,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_runtime",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "in_tree_raw_video_evaluator"
   },
   "physics-iq-verified": {
@@ -880,7 +1049,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "physics",
       "solid-mechanics",
@@ -899,7 +1068,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_runtime",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "in_tree_raw_video_evaluator"
   },
   "physvidbench": {
@@ -908,7 +1077,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "physics",
       "physical-commonsense",
@@ -916,7 +1085,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "ensanli",
+    "logoKey": "koc",
     "metrics": [
       "physvidbench_average"
     ],
@@ -924,8 +1093,37 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_result_importer_and_bounded_caption_qa",
     "summary": "Imports precomputed metrics and normalizes them into a scorecard",
-    "summaryZh": "\u5bfc\u5165\u9884\u8ba1\u7b97 metric \u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入预计算 metric 并归一化为 scorecard",
     "verificationStatus": "bounded_caption_qa_ready"
+  },
+  "rbench": {
+    "aliases": [
+      "ReVidgen"
+    ],
+    "badges": [
+      "integrated"
+    ],
+    "category": "Video Generation",
+    "categoryZh": "视频生成",
+    "domains": [
+      "robotics",
+      "embodied-ai",
+      "physical-reasoning",
+      "manipulation",
+      "motion-quality"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "pku",
+    "metrics": [
+      "rbench_overall"
+    ],
+    "name": "RBench",
+    "requiresApi": true,
+    "runtimeKind": "in_tree_official_source",
+    "summary": "Reproduces the official robotics I2V aggregation over VLM judge and motion operator outputs",
+    "summaryZh": "在 VLM judge 与运动算子输出之上复现官方机器人图生视频聚合",
+    "verificationStatus": "in_tree_official_aggregation_ready_judge_external"
   },
   "rlbench": {
     "aliases": [
@@ -936,7 +1134,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "embodied-action",
       "robot-manipulation",
@@ -946,7 +1144,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "stepjam",
+    "logoKey": "imperial",
     "metrics": [
       "success_rate"
     ],
@@ -954,7 +1152,7 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "robocasa": {
@@ -963,7 +1161,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "robot-manipulation",
@@ -971,7 +1169,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "robocasa",
+    "logoKey": "nvidia",
     "metrics": [
       "success_rate"
     ],
@@ -979,7 +1177,7 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "robocerebra": {
@@ -988,14 +1186,14 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "robot-manipulation"
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "buaa-colalab",
+    "logoKey": "buaa",
     "metrics": [
       "success_rate"
     ],
@@ -1003,7 +1201,7 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "robomme": {
@@ -1014,7 +1212,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "embodied-action",
@@ -1022,7 +1220,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "robomme",
+    "logoKey": "umich",
     "metrics": [
       "success_rate"
     ],
@@ -1030,7 +1228,7 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "robotwin": {
@@ -1047,7 +1245,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "embodied-action",
@@ -1059,7 +1257,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "robotwin-platform",
+    "logoKey": "hku",
     "metrics": [
       "success_rate"
     ],
@@ -1067,8 +1265,40 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
+  },
+  "sana-wm-bench": {
+    "aliases": [
+      "sana-wm-benchmark",
+      "sana-wm-80scene"
+    ],
+    "badges": [
+      "integrated"
+    ],
+    "category": "World Models",
+    "categoryZh": "世界模型",
+    "domains": [
+      "world-model",
+      "camera-control",
+      "video-generation",
+      "long-horizon"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "nvidia",
+    "metrics": [
+      "vbench_overall",
+      "revisit_psnr",
+      "rot_err_deg",
+      "delta_iq"
+    ],
+    "name": "SANA-WM 80-Scene Benchmark",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_composite_evaluator",
+    "summary": "In-tree 80-scene evaluator for minute-scale camera-controlled world-model video",
+    "summaryZh": "仓内 80 场景评测器，评估分钟级相机可控世界模型视频",
+    "verificationStatus": "fixture_verified"
   },
   "simpler-env": {
     "aliases": [
@@ -1079,7 +1309,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "robot-manipulation",
@@ -1087,7 +1317,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "simpler-env",
+    "logoKey": "google-deepmind",
     "metrics": [
       "success_rate"
     ],
@@ -1095,8 +1325,34 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
+  },
+  "stevo-bench": {
+    "aliases": [],
+    "badges": [
+      "integrated"
+    ],
+    "category": "World Models",
+    "categoryZh": "世界模型",
+    "domains": [
+      "unobserved-state-evolution",
+      "physical-dynamics",
+      "chemical-dynamics",
+      "agent-behavior"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "caltech",
+    "metrics": [
+      "task_success"
+    ],
+    "name": "STEVO-Bench",
+    "requiresApi": true,
+    "runtimeKind": "in_tree_official_runtime_hosted_judges",
+    "summary": "In-tree official runtime scores generated videos with hosted VLM judges",
+    "summaryZh": "仓内 official runtime 通过 hosted VLM judges 对生成视频评分",
+    "verificationStatus": "pending"
   },
   "t2v-compbench": {
     "aliases": [],
@@ -1104,11 +1360,11 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "kaiyuesun98",
+    "logoKey": "hku",
     "metrics": [
       "t2v_compbench_average"
     ],
@@ -1116,7 +1372,7 @@
     "requiresApi": true,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分；部分维度可能调用 hosted API",
     "verificationStatus": "bounded_official_generative_numeracy_verified"
   },
   "t2v-safety-bench": {
@@ -1125,7 +1381,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "safety",
       "harmful-content",
@@ -1134,7 +1390,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "yibo-miao",
+    "logoKey": "cas",
     "metrics": [
       "nsfw_average"
     ],
@@ -1142,7 +1398,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "pending"
   },
   "t2vworldbench": {
@@ -1151,7 +1407,7 @@
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "categoryZh": "世界模型",
     "domains": [
       "world-knowledge",
       "commonsense",
@@ -1159,15 +1415,15 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "magiclinux",
+    "logoKey": "sjsu",
     "metrics": [
-      "world_knowledge_average"
+      "final"
     ],
     "name": "T2VWorldBench",
     "requiresApi": false,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "pending"
   },
   "vbench": {
@@ -1176,7 +1432,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "video-generation-quality",
       "prompt-alignment",
@@ -1184,7 +1440,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "vchitect",
+    "logoKey": "shanghai-ai-lab",
     "metrics": [
       "overall_quality"
     ],
@@ -1192,7 +1448,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "verified"
   },
   "vbench-2.0": {
@@ -1201,11 +1457,11 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "vchitect",
+    "logoKey": "shanghai-ai-lab",
     "metrics": [
       "vbench2_total"
     ],
@@ -1213,7 +1469,7 @@
     "requiresApi": true,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分；部分维度可能调用 hosted API",
     "verificationStatus": "verified"
   },
   "vbench-plus-plus": {
@@ -1222,11 +1478,11 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "vchitect",
+    "logoKey": "shanghai-ai-lab",
     "metrics": [
       "vbench_plus_plus_average"
     ],
@@ -1234,7 +1490,7 @@
     "requiresApi": true,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分；部分维度可能调用 hosted API",
     "verificationStatus": "verified"
   },
   "video-bench": {
@@ -1243,11 +1499,11 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "video-bench",
+    "logoKey": "sjtu",
     "metrics": [
       "videobench_average"
     ],
@@ -1255,7 +1511,7 @@
     "requiresApi": true,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分；部分维度可能调用 hosted API",
     "verificationStatus": "verified"
   },
   "videophy": {
@@ -1264,7 +1520,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "physics",
       "physical-commonsense",
@@ -1272,7 +1528,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "hritikbansal",
+    "logoKey": "google",
     "metrics": [
       "videophy_average"
     ],
@@ -1280,7 +1536,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_judge_runtime",
     "summary": "In-tree judge/VLM scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 judge / VLM \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 judge / VLM 对生成视频逐 prompt 评分",
     "verificationStatus": "in_tree_official_runtime_ready"
   },
   "videophy2": {
@@ -1289,7 +1545,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "physics",
       "physical-commonsense",
@@ -1298,7 +1554,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "hritikbansal",
+    "logoKey": "google",
     "metrics": [
       "joint_score"
     ],
@@ -1306,7 +1562,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_judge_runtime",
     "summary": "In-tree judge/VLM scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 judge / VLM \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 judge / VLM 对生成视频逐 prompt 评分",
     "verificationStatus": "in_tree_official_runtime_ready"
   },
   "videoscience-bench": {
@@ -1315,7 +1571,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "science",
       "physics",
@@ -1324,7 +1580,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "hao-ai-lab",
+    "logoKey": "ucsd",
     "metrics": [
       "videoscience_average"
     ],
@@ -1332,7 +1588,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "pending"
   },
   "videoscore": {
@@ -1341,11 +1597,11 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "tiger-ai-lab",
+    "logoKey": "waterloo",
     "metrics": [
       "videoscore_average"
     ],
@@ -1353,7 +1609,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "verified"
   },
   "videoverse": {
@@ -1362,7 +1618,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "world-model",
       "temporal-causality",
@@ -1370,7 +1626,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "zeqing-wang",
+    "logoKey": "oppo",
     "metrics": [
       "videoverse_average"
     ],
@@ -1378,7 +1634,7 @@
     "requiresApi": true,
     "runtimeKind": "in_tree_judge_runtime",
     "summary": "In-tree judge/VLM scores generated videos per prompt; some dimensions may call a hosted API",
-    "summaryZh": "\u4ed3\u5185 judge / VLM \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206\uff1b\u90e8\u5206\u7ef4\u5ea6\u53ef\u80fd\u8c03\u7528 hosted API",
+    "summaryZh": "仓内 judge / VLM 对生成视频逐 prompt 评分；部分维度可能调用 hosted API",
     "verificationStatus": "official_runtime_ready"
   },
   "visual-chronometer": {
@@ -1387,7 +1643,7 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [
       "temporal-consistency",
       "motion-quality",
@@ -1395,7 +1651,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "taco-group",
+    "logoKey": "tamu",
     "metrics": [
       "visual_chronometer_average"
     ],
@@ -1403,7 +1659,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_runtime",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "official_runtime_ready"
   },
   "vlabench": {
@@ -1415,7 +1671,7 @@
       "normalizer"
     ],
     "category": "Embodied AI",
-    "categoryZh": "\u5177\u8eab AI",
+    "categoryZh": "具身 AI",
     "domains": [
       "vla",
       "robot-manipulation",
@@ -1423,7 +1679,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "openmoss",
+    "logoKey": "fudan",
     "metrics": [
       "success_rate"
     ],
@@ -1431,7 +1687,7 @@
     "requiresApi": false,
     "runtimeKind": "external_official_results_runner",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "vmbench": {
@@ -1440,11 +1696,11 @@
       "integrated"
     ],
     "category": "Video Generation",
-    "categoryZh": "\u89c6\u9891\u751f\u6210",
+    "categoryZh": "视频生成",
     "domains": [],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "amap-ml",
+    "logoKey": "amap",
     "metrics": [
       "vmbench_average"
     ],
@@ -1452,7 +1708,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_runtime",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "pending"
   },
   "wbench": {
@@ -1461,7 +1717,7 @@
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "categoryZh": "世界模型",
     "domains": [
       "world-model",
       "interactive-video",
@@ -1470,7 +1726,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "meituan-longcat",
+    "logoKey": "meituan",
     "metrics": [
       "wbench_average"
     ],
@@ -1478,7 +1734,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_runtime",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "in_tree_runtime"
   },
   "world-in-world": {
@@ -1487,7 +1743,7 @@
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "categoryZh": "世界模型",
     "domains": [
       "closed-loop",
       "planning",
@@ -1496,7 +1752,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "world-in-world",
+    "logoKey": "jhu",
     "metrics": [
       "world_in_world_average"
     ],
@@ -1504,7 +1760,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_result_importer",
     "summary": "Imports precomputed metrics and normalizes them into a scorecard",
-    "summaryZh": "\u5bfc\u5165\u9884\u8ba1\u7b97 metric \u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入预计算 metric 并归一化为 scorecard",
     "verificationStatus": "result_importer_ready"
   },
   "worldarena": {
@@ -1513,7 +1769,7 @@
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "categoryZh": "世界模型",
     "domains": [
       "embodied-world-model",
       "manipulation",
@@ -1522,7 +1778,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "tsinghua-fib-lab",
+    "logoKey": "tsinghua",
     "metrics": [
       "ewm_score"
     ],
@@ -1530,7 +1786,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_runtime",
     "summary": "Closed-loop simulator rollouts, or normalization of official rollout results",
-    "summaryZh": "\u95ed\u73af\u4eff\u771f rollout\uff0c\u6216\u5f52\u4e00\u5316\u5b98\u65b9 rollout \u7ed3\u679c",
+    "summaryZh": "闭环仿真 rollout，或归一化官方 rollout 结果",
     "verificationStatus": "in_tree_video_quality_runtime"
   },
   "worldbench": {
@@ -1539,11 +1795,11 @@
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "categoryZh": "世界模型",
     "domains": [],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "worldbenchmark",
+    "logoKey": "ucla",
     "metrics": [
       "foreground_miou"
     ],
@@ -1551,7 +1807,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_model_backed_evaluator",
     "summary": "In-tree evaluator scores artifact bundles per the task protocol",
-    "summaryZh": "\u4ed3\u5185 evaluator \u6309 task protocol \u8bc4\u4f30 artifact bundle",
+    "summaryZh": "仓内 evaluator 按 task protocol 评估 artifact bundle",
     "verificationStatus": "bounded_fixture_verified"
   },
   "worldmodelbench": {
@@ -1560,7 +1816,7 @@
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "categoryZh": "世界模型",
     "domains": [
       "world-model",
       "physical-adherence",
@@ -1569,7 +1825,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "worldmodelbench-team",
+    "logoKey": "nvidia",
     "metrics": [
       "world_model_average"
     ],
@@ -1577,8 +1833,34 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "verified"
+  },
+  "worldolympiad": {
+    "aliases": [],
+    "badges": [
+      "integrated"
+    ],
+    "category": "World Models",
+    "categoryZh": "世界模型",
+    "domains": [
+      "world-model",
+      "gaming",
+      "embodied",
+      "general-video"
+    ],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "logoKey": "alibaba",
+    "metrics": [
+      "combined_score"
+    ],
+    "name": "WorldOlympiad",
+    "requiresApi": false,
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "In-tree official triathlon evaluator scores long-video world models",
+    "summaryZh": "仓内 official 三项评测器对长视频世界模型打分",
+    "verificationStatus": "in_tree_runtime_plan_verified"
   },
   "worldreasonbench": {
     "aliases": [],
@@ -1586,7 +1868,7 @@
       "normalizer"
     ],
     "category": "World Models",
-    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "categoryZh": "世界模型",
     "domains": [
       "world-knowledge",
       "human-centric",
@@ -1595,7 +1877,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "unix-ai-lab",
+    "logoKey": "tsinghua",
     "metrics": [
       "score_pr"
     ],
@@ -1603,7 +1885,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_protocol_runtime_external_assets",
     "summary": "Imports official or upstream results into a normalized scorecard",
-    "summaryZh": "\u5bfc\u5165\u5b98\u65b9 / \u4e0a\u6e38\u7ed3\u679c\u5e76\u5f52\u4e00\u5316\u4e3a scorecard",
+    "summaryZh": "导入官方 / 上游结果并归一化为 scorecard",
     "verificationStatus": "normalizer_only"
   },
   "worldscore": {
@@ -1612,7 +1894,7 @@
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "categoryZh": "世界模型",
     "domains": [
       "world-generation",
       "camera-control",
@@ -1621,7 +1903,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "haoyi-duan",
+    "logoKey": "stanford",
     "metrics": [
       "worldscore_average"
     ],
@@ -1629,7 +1911,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_runtime",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "verified"
   },
   "wrbench": {
@@ -1640,7 +1922,7 @@
       "integrated"
     ],
     "category": "World Models",
-    "categoryZh": "\u4e16\u754c\u6a21\u578b",
+    "categoryZh": "世界模型",
     "domains": [
       "video-generation",
       "world-model",
@@ -1649,7 +1931,7 @@
     ],
     "integrationStatus": "integrated",
     "leaderboardValid": false,
-    "logoKey": "jinplu",
+    "logoKey": "ustc",
     "metrics": [
       "wrbench_average"
     ],
@@ -1657,7 +1939,7 @@
     "requiresApi": false,
     "runtimeKind": "in_tree_official_source",
     "summary": "In-tree official runtime scores generated videos per prompt",
-    "summaryZh": "\u4ed3\u5185 official runtime \u5bf9\u751f\u6210\u89c6\u9891\u9010 prompt \u8bc4\u5206",
+    "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
     "verificationStatus": "pending"
   }
 }

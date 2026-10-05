@@ -9,6 +9,7 @@ generation request into invocation → execution → result-mapping.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Protocol
@@ -17,7 +18,6 @@ from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
 
 from .invocation import PipelineInvocation, build_pipeline_invocation, invoke_pipeline, request_output_dir
 from .results import PipelineResultContext, generation_result_from_pipeline
-
 
 # ── Protocol interfaces ────────────────────────────────────────────────
 
@@ -125,12 +125,19 @@ class WorldFoundryPipelineLifecycle:
         """Invoke the loaded pipeline on a given PipelineInvocation."""
         return invoke_pipeline(self.pipeline, invocation)
 
-    def normalize(self, invocation: PipelineInvocation, result: Mapping[str, Any]) -> GenerationResult:
+    def normalize(
+        self,
+        invocation: PipelineInvocation,
+        result: Mapping[str, Any],
+        *,
+        timings: Mapping[str, Any] | None = None,
+    ) -> GenerationResult:
         """Convert raw pipeline output mapping into a structured GenerationResult."""
         return generation_result_from_pipeline(
             invocation=invocation,
             result=result,
             context=self.context.result_context,
+            timings=timings,
         )
 
     def generate(self, request: GenerationRequest) -> GenerationResult:
@@ -138,8 +145,15 @@ class WorldFoundryPipelineLifecycle:
         from worldfoundry.core import worldfoundry_inference_context
 
         with worldfoundry_inference_context():
-            invocation = self.build_invocation(request)
-            return self.normalize(invocation, self.invoke(invocation))
+            return self.generate_in_context(request)
+
+    def generate_in_context(self, request: GenerationRequest) -> GenerationResult:
+        """Generate one request when the caller already owns the inference context."""
+        invocation = self.build_invocation(request)
+        started = time.perf_counter()
+        result = self.invoke(invocation)
+        elapsed = time.perf_counter() - started
+        return self.normalize(invocation, result, timings={"generate_seconds": round(elapsed, 6)})
 
 
 __all__ = [

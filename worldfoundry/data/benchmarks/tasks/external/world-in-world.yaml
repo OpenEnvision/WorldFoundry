@@ -31,8 +31,7 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: world-in-world
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id world-in-world --mode contract 
-    --output-dir tmp/benchmark_zoo/benchmark_contract/world-in-world --json
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id world-in-world --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/world-in-world --json
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldInWorldContract
   official_runner_command: worldfoundry-eval zoo benchmark-run
   name: World-in-World
@@ -45,7 +44,7 @@ metadata:
   status: integrated
   maturity: contract_ready
   release_status: experimental
-  open_source_status: in_tree_result_importer
+  open_source_status: normalizer_only
   official_benchmark_verified: false
   integration_evidence: false
   leaderboard_valid: false
@@ -82,15 +81,14 @@ metadata:
     task_yaml: worldfoundry/data/benchmarks/tasks/external/world-in-world.yaml
     bundled_assets: worldfoundry/data/benchmarks/assets/world-in-world
     result_importer: worldfoundry/evaluation/tasks/execution/runners/world_in_world
-  official_runner_script: 
-    worldfoundry/evaluation/tasks/execution/runners/world_in_world/run_world_in_world_official_runner.py
+  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/world_in_world/run_world_in_world_official_runner.py
   runner_availability:
     available: true
     runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldInWorldContract
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
-    surface: in_tree_result_normalizer
+    surface: in_tree_result_importer
     normalizer_verified: true
   artifact_layout:
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
@@ -104,6 +102,7 @@ metadata:
     prompt_manifest_env: WORLDFOUNDRY_WORLD_IN_WORLD_PROMPT_MANIFEST
     results_path_env: WORLDFOUNDRY_WORLD_IN_WORLD_RESULTS_PATH
     generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+    root_env: WORLDFOUNDRY_WORLD_IN_WORLD_ROOT
   metric_protocol:
     metric_ids:
     - active_recognition_success_rate
@@ -149,9 +148,7 @@ metadata:
     - --json
     runtime:
       results_path_env: WORLDFOUNDRY_WORLD_IN_WORLD_RESULTS_PATH
-    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id world-in-world --mode 
-      official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> 
-      --output-dir <out> --json
+    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id world-in-world --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
   validation_command:
   - worldfoundry-eval
   - zoo
@@ -244,8 +241,7 @@ tasks:
     evaluation_protocol:
     - name: result_importer
       runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldInWorldContract
-      runner_script: 
-        worldfoundry/evaluation/tasks/execution/runners/world_in_world/run_world_in_world_official_runner.py
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/world_in_world/run_world_in_world_official_runner.py
       metric_ids:
       - active_recognition_success_rate
       - image_goal_navigation_success_rate
@@ -255,13 +251,23 @@ tasks:
       - robotic_manipulation_success_rate
       - interaction_trace_consistency
       - world_in_world_average
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id world-in-world --mode 
-        official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> 
-        --output-dir <out> --json
+      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id world-in-world --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
       required_inputs:
       - official_results_path or official_results
       - generated artifacts only when coverage checks are requested
       official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+    - name: external_official_runner
+      metric_ids:
+      - active_recognition_success_rate
+      - image_goal_navigation_success_rate
+      - image_goal_navigation_spl
+      - active_embodied_qa_score
+      - active_embodied_qa_spl
+      - robotic_manipulation_success_rate
+      - interaction_trace_consistency
+      - world_in_world_average
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldInWorldContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/world_in_world/run_world_in_world_official_runner.py
     runtime_requirements:
       bundled_prompt_assets: worldfoundry/data/benchmarks/assets/world-in-world
       generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR

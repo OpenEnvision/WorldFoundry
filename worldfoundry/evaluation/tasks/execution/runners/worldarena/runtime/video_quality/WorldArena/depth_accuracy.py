@@ -5,12 +5,13 @@ import numpy as np
 from tqdm import tqdm
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 from .utils import load_video, load_dimension_info
-from .distributed import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_rank,
     distribute_list_to_rank,
     gather_list_of_dict,
     get_world_size
 )
+from worldfoundry.core.execution.device import get_current_torch_device
 
 class DepthEstimator:
     def __init__(self, model_path, device):
@@ -125,7 +126,7 @@ def depth_accuracy(depth_model, video_list, gt_root, device):
     return all_results, video_results
 
 def compute_depth_accuracy(json_dir, submodules_list, **kwargs):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = get_current_torch_device()
     gt_path = kwargs.get('gt_path', None)
     if not gt_path:
         raise ValueError("depth_accuracy 需要 gt_path 参数")

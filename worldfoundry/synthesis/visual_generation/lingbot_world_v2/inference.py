@@ -26,28 +26,28 @@ import torchvision.transforms.functional as TF
 from einops import rearrange
 from tqdm import tqdm
 
-from worldfoundry.base_models.diffusion_model.video.wan.configs.lingbot_world_v2 import (
-    LINGBOT_WORLD_V2_CONFIG,
-)
-from worldfoundry.base_models.diffusion_model.video.wan.models.lingbot_world_v2 import (
-    LingBotWorldV2Model,
-)
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.t5 import (
-    T5EncoderModel,
-)
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers_unipc import (
-    FlowUniPCMultistepScheduler,
-)
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.vae2_1 import (
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.reference_21_streaming import (
     Wan2_1_VAE,
 )
-from worldfoundry.core.attention.causal_rope_sequence_parallel import (
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.reference import (
+    T5EncoderModel,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.lingbot_world_v2 import (
+    LingBotWorldV2Model,
+)
+from worldfoundry.base_models.diffusion_model.recipes.wan_configs.lingbot_world_v2 import (
+    LINGBOT_WORLD_V2_CONFIG,
+)
+from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import (
+    FlowUniPCMultistepScheduler,
+)
+from worldfoundry.core.attention.parallel.causal_rope_sequence_parallel import (
     sp_attn_forward_causal_chunked,
     sp_dit_forward_causal_chunked,
 )
-from worldfoundry.core.distributed.block_fsdp import shard_model
-from worldfoundry.core.distributed.sequence_ops import get_world_size
-from worldfoundry.core.geometry import ray_condition
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
+from worldfoundry.core.distributed.sequence_parallel.ops import get_world_size
+from worldfoundry.core.geometry.transforms import ray_condition
 from worldfoundry.operators.lingbot_world_operator import (
     compute_relative_poses,
     get_Ks_transformed,
@@ -253,10 +253,11 @@ class LingBotWorldV2Inference:
             raise ValueError(f"Expected intrinsics.npy shape [F,4], got {tuple(intrinsics.shape)}.")
         if len(intrinsics) < 1:
             raise ValueError("intrinsics.npy must contain at least one camera calibration row.")
-        usable_frames = min(((len(poses) - 1) // 4) * 4 + 1, ((frame_num - 1) // 4) * 4 + 1)
-        if usable_frames < 5:
-            raise ValueError("LingBot-World-V2 requires at least five camera poses.")
-        return poses[:usable_frames], intrinsics, usable_frames
+        if frame_num < 5 or (frame_num - 1) % 4:
+            raise ValueError("frame_num must be at least 5 and follow the 4n+1 layout.")
+        if len(poses) < frame_num:
+            raise ValueError(f"Requested {frame_num} frames but only {len(poses)} camera poses were supplied.")
+        return poses[:frame_num], intrinsics, frame_num
 
     def _camera_condition(
         self,
@@ -335,6 +336,7 @@ class LingBotWorldV2Inference:
         if chunk_size < 1:
             raise ValueError("chunk_size must be positive.")
         poses, intrinsics, frame_num = self._load_actions(action_path, frame_num)
+        requested_frame_num = frame_num
         image = TF.to_tensor(image).sub_(0.5).div_(0.5).to(self.device)
 
         image_height, image_width = image.shape[1:]
@@ -354,10 +356,15 @@ class LingBotWorldV2Inference:
         height = latent_height * self.config.vae_stride[1]
         width = latent_width * self.config.vae_stride[2]
         latent_frames = (frame_num - 1) // self.config.vae_stride[0] + 1
-        latent_frames -= latent_frames % chunk_size
+        # The causal model requires complete chunks. Extend the final chunk
+        # with a stationary camera and trim decoded frames, rather than
+        # silently dropping requested frames (49 previously became 45).
+        latent_frames = math.ceil(latent_frames / chunk_size) * chunk_size
         if latent_frames < chunk_size:
             raise ValueError(f"frame_num={frame_num} is too short for chunk_size={chunk_size}.")
         frame_num = (latent_frames - 1) * self.config.vae_stride[0] + 1
+        if frame_num > len(poses):
+            poses = np.concatenate((poses, np.repeat(poses[-1:], frame_num - len(poses), axis=0)))
         frame_seq_len = latent_height * latent_width // (self.config.patch_size[1] * self.config.patch_size[2])
         max_seq_len = math.ceil(chunk_size * frame_seq_len / self.sp_size) * self.sp_size
         self._cross_attention_initialized = False
@@ -482,7 +489,7 @@ class LingBotWorldV2Inference:
         videos = self.vae.decode([predicted]) if self.rank == 0 else None
         if dist.is_initialized():
             dist.barrier()
-        return videos[0] if videos is not None else None
+        return videos[0][:, :requested_frame_num] if videos is not None else None
 
 
 __all__ = ["LingBotWorldV2Inference"]

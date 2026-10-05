@@ -7,7 +7,7 @@ description: Where to look up sources, where to download, and which commands to 
 
 Use this page when a command says that a checkpoint, dataset, metric weight, generated output, or official result file is missing. WorldFoundry keeps these large or licensed files outside git; the repository holds code and manifests, while your machine or shared storage holds the assets those manifests reference.
 
-Typical path: inspect the model or benchmark id with `worldfoundry-eval zoo ... --json`, generate a per-benchmark asset plan when evaluating, then stage only what the next run needs. You do not need every benchmark asset before using the framework. For the unified conda env, see [Environments](/docs/reference/environments).
+Typical path: inspect the model or benchmark ID with `worldfoundry-eval zoo ... --json`, generate a per-benchmark asset plan when evaluating, then stage only what the next run needs. You do not need every benchmark asset before using the framework. For the unified conda env, see [Environments](/docs/reference/environments).
 
 Install the Hugging Face Hub package. The optional CLI (`hf` / `huggingface-cli`) is used when available; download scripts fall back to `huggingface_hub.snapshot_download` otherwise:
 
@@ -26,16 +26,22 @@ If `huggingface.co` is slow from your region, use the [HF-Mirror](https://hf-mir
 ```bash
 wget https://hf-mirror.com/hfd/hfd.sh
 chmod a+x hfd.sh
-export HF_ENDPOINT=https://hf-mirror.com
+export WORLDFOUNDRY_HF_ENDPOINT=https://hf-mirror.com
+export HF_ENDPOINT="${WORLDFOUNDRY_HF_ENDPOINT}"
 
 ./hfd.sh Skywork/Matrix-Game-2.0 \
   --local-dir "${WORLDFOUNDRY_HFD_ROOT:-${HOME}/.cache/worldfoundry/models/checkpoints/hfd}/Skywork--Matrix-Game-2.0"
 
 ./hfd.sh BestWishYsh/ChronoMagic-Pro --dataset \
-  --local-dir "${WORLDFOUNDRY_HFD_DATASET_ROOT:-${HOME}/.cache/worldfoundry/cache/data/datasets}/BestWishYsh__ChronoMagic-Pro"
+  --local-dir "${WORLDFOUNDRY_HFD_DATASET_ROOT:-${WORLDFOUNDRY_DATA_DIR:-${HOME}/.cache/worldfoundry/data}/datasets}/BestWishYsh__ChronoMagic-Pro"
 ```
 
-You can also keep using `hf download` after setting `HF_ENDPOINT=https://hf-mirror.com`. For gated repos, accept the license on huggingface.co first, then pass `--hf_token "${HF_TOKEN}"`.
+Studio does not select a third-party mirror by default. Set `WORLDFOUNDRY_HF_ENDPOINT`
+to opt in for Studio child processes; direct Hugging Face tools read `HF_ENDPOINT`,
+as shown above. For gated repos, accept the license on huggingface.co first, then
+pass `--hf_token "${HF_TOKEN}"`.
+
+Mirrors are always opt-in. Studio-dispatched child processes inherit any `HF_ENDPOINT` exported by your shell and are not redirected to a third-party mirror by default. To override the endpoint only for WorldFoundry-managed children, export `WORLDFOUNDRY_HF_ENDPOINT`; it takes precedence over inherited `HF_ENDPOINT`.
 
 ## 1. Initialize directories and env vars
 
@@ -88,11 +94,9 @@ bash scripts/workspace/run_workspace.sh \
 
 ### Path naming
 
-| Source | Local directory rule | Example |
-| --- | --- | --- |
-| HF model `org/name` | `org--name` | `Skywork/Matrix-Game-2.0` → `Skywork--Matrix-Game-2.0` |
-| HF dataset `org/name` | `org__name` | `lerobot/libero` → `lerobot__libero` |
-| GitHub `owner/repo` | often `owner--repo` | `Lifelong-Robot-Learning/LIBERO` → `Lifelong-Robot-Learning--LIBERO` |
+- **HF model `org/name`** — local directory `org--name`. Example: `Skywork/Matrix-Game-2.0` → `Skywork--Matrix-Game-2.0`.
+- **HF dataset `org/name`** — local directory `org__name`. Example: `lerobot/libero` → `lerobot__libero`.
+- **GitHub `owner/repo`** — often `owner--repo`. Example: `Lifelong-Robot-Learning/LIBERO` → `Lifelong-Robot-Learning--LIBERO`.
 
 **Follow the `path` field in catalog YAML or `local_assets.example.yaml`.** Some embodied benchmarks still use legacy paths such as `cache/vla_va_wam/hf_datasets/org--name`; mirror that layout or override the path in your manifest.
 
@@ -186,14 +190,91 @@ Planner fields to read: `assets.data`, `assets.checkpoints`, `env.api_or_secret`
 
 These in-tree runtimes keep checkpoint locations in the shared base-model asset registry. Source code does not assume a checkout-specific absolute path.
 
-| Capability | Official source | Expected file | Default location | Override |
-| --- | --- | --- | --- | --- |
-| `sam2` | HF [`facebook/sam2.1-hiera-base-plus`](https://huggingface.co/facebook/sam2.1-hiera-base-plus) | `sam2.1_hiera_base_plus.pt` | `${WORLDFOUNDRY_HFD_ROOT}/facebook--sam2.1-hiera-base-plus/` | `WORLDFOUNDRY_SAM2_CKPT` |
-| `mobile_sam` | GitHub [`ChaoningZhang/MobileSAM`, `weights/`](https://github.com/ChaoningZhang/MobileSAM/tree/master/weights) | `mobile_sam.pt` | `${WORLDFOUNDRY_CKPT_DIR}/MobileSAM/` | `WORLDFOUNDRY_MOBILE_SAM_CKPT` |
-| `repvit_sam` | GitHub [`THU-MIG/RepViT`, release `v1.0`](https://github.com/THU-MIG/RepViT/releases/tag/v1.0) | `repvit_sam.pt` | `${WORLDFOUNDRY_CKPT_DIR}/RepViT/` | `WORLDFOUNDRY_REPVIT_SAM_CKPT` |
-| `midas_v21_small_256` | GitHub [`isl-org/MiDaS`, release `v2_1`](https://github.com/isl-org/MiDaS/releases/tag/v2_1) | `midas_v21_small_256.pt` | `${WORLDFOUNDRY_CKPT_DIR}/` | `WORLDFOUNDRY_MIDAS_V21_SMALL_CKPT` |
-| `unidepth_v2_vitl14` | HF [`lpiccinelli/unidepth-v2-vitl14`](https://huggingface.co/lpiccinelli/unidepth-v2-vitl14) | `config.json`, `model.safetensors` | `${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unidepth-v2-vitl14/` | `WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR` |
-| `unik3d_vitl` | HF [`lpiccinelli/unik3d-vitl`](https://huggingface.co/lpiccinelli/unik3d-vitl) | `config.json`, `model.safetensors` | `${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unik3d-vitl/` | `WORLDFOUNDRY_UNIK3D_VITL_MODEL_DIR` |
+<div className="pi-kv-catalog is-vars not-prose">
+  <section className="pi-kv-group">
+    <h3>Capability</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>sam2</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>Override</span>
+            <code>WORLDFOUNDRY_SAM2_CKPT</code>
+          </span>
+        </div>
+        <p>Official source: HF <a href="https://huggingface.co/facebook/sam2.1-hiera-base-plus">facebook/sam2.1-hiera-base-plus</a>. Expected file: <code>sam2.1_hiera_base_plus.pt</code></p>
+        <p className="pi-kv-read"><span>Default location</span> <code>{'${WORLDFOUNDRY_HFD_ROOT}/facebook--sam2.1-hiera-base-plus/'}</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>mobile_sam</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>Override</span>
+            <code>WORLDFOUNDRY_MOBILE_SAM_CKPT</code>
+          </span>
+        </div>
+        <p>Official source: GitHub <a href="https://github.com/ChaoningZhang/MobileSAM/tree/master/weights">ChaoningZhang/MobileSAM</a> <code>weights/</code>. Expected file: <code>mobile_sam.pt</code></p>
+        <p className="pi-kv-read"><span>Default location</span> <code>{'${WORLDFOUNDRY_CKPT_DIR}/MobileSAM/'}</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>repvit_sam</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>Override</span>
+            <code>WORLDFOUNDRY_REPVIT_SAM_CKPT</code>
+          </span>
+        </div>
+        <p>Official source: GitHub <a href="https://github.com/THU-MIG/RepViT/releases/tag/v1.0">THU-MIG/RepViT</a> release <code>v1.0</code>. Expected file: <code>repvit_sam.pt</code></p>
+        <p className="pi-kv-read"><span>Default location</span> <code>{'${WORLDFOUNDRY_CKPT_DIR}/RepViT/'}</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>midas_v21_small_256</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>Override</span>
+            <code>WORLDFOUNDRY_MIDAS_V21_SMALL_CKPT</code>
+          </span>
+        </div>
+        <p>Official source: GitHub <a href="https://github.com/isl-org/MiDaS/releases/tag/v2_1">isl-org/MiDaS</a> release <code>v2_1</code>. Expected file: <code>midas_v21_small_256.pt</code></p>
+        <p className="pi-kv-read"><span>Default location</span> <code>{'${WORLDFOUNDRY_CKPT_DIR}/'}</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>unidepth_v2_vitl14</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>Override</span>
+            <code>WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR</code>
+          </span>
+        </div>
+        <p>Official source: HF <a href="https://huggingface.co/lpiccinelli/unidepth-v2-vitl14">lpiccinelli/unidepth-v2-vitl14</a>. Expected files: <code>config.json</code>, <code>model.safetensors</code></p>
+        <p className="pi-kv-read"><span>Default location</span> <code>{'${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unidepth-v2-vitl14/'}</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>unik3d_vitl</code>
+          </div>
+          <span className="pi-kv-default">
+            <span>Override</span>
+            <code>WORLDFOUNDRY_UNIK3D_VITL_MODEL_DIR</code>
+          </span>
+        </div>
+        <p>Official source: HF <a href="https://huggingface.co/lpiccinelli/unik3d-vitl">lpiccinelli/unik3d-vitl</a>. Expected files: <code>config.json</code>, <code>model.safetensors</code></p>
+        <p className="pi-kv-read"><span>Default location</span> <code>{'${WORLDFOUNDRY_HFD_ROOT}/lpiccinelli--unik3d-vitl/'}</code></p>
+      </li>
+    </ul>
+  </section>
+</div>
 
 UniDepth V2 and UniK3D are released under CC-BY-NC-4.0. Review the upstream non-commercial terms before downloading or redistributing their weights.
 
@@ -250,9 +331,166 @@ bash scripts/inference/prepare_model_infer.sh matrix-game-2 --download
 hf download Skywork/Matrix-Game-2.0 \
   --revision f1729d99a80e0f07993a77d7dad4a3190e23c2c8 \
   --local-dir "${WORLDFOUNDRY_HFD_ROOT}/Skywork--Matrix-Game-2.0"
-
-bash scripts/download_hfd_models.sh matrix-game-2
 ```
+
+### Worked example: Echo-Memory
+
+Echo recipes share the Wan2.1 T2V 1.3B backbone but require different files
+under `Echo-Team/Echo-Memory`. As of 2026-07-20, only
+`context_k1/epoch-0.safetensors` remains on the official HF `main` branch.
+Other Echo model IDs stay in the catalog with exact expected filenames, but
+their upstream state is `unreleased_by_upstream` or
+`retracted_misaligned_by_upstream`; do not substitute K=1 weights for them.
+
+Stage the currently public recipe and its pinned backbone into the runtime
+layout, then create the normal HFD aliases without copying tensors:
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+
+hf download Echo-Team/Echo-Memory \
+  context_k1/epoch-0.safetensors \
+  --revision 7645f33efbfd02c58dc471570d0c7bd6a50eec83 \
+  --local-dir "${WORLDFOUNDRY_CKPT_DIR}/Echo-Memory"
+
+hf download Wan-AI/Wan2.1-T2V-1.3B \
+  --revision 37ec512624d61f7aa208f7ea8140a131f93afc9a \
+  --local-dir "${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-1.3B"
+
+bash scripts/setup/link_hf_checkpoints.sh \
+  --repo Echo-Team/Echo-Memory=Echo-Memory \
+  --repo Wan-AI/Wan2.1-T2V-1.3B=Wan2.1-T2V-1.3B
+```
+
+The standard checker validates the recipe-specific filename as well as the
+repository, so a cache containing only K=1 cannot make a K=20 or SSM model look
+ready:
+
+```bash
+worldfoundry-eval zoo model-download \
+  --model-id echo-memory-context-k1 \
+  --check-local \
+  --json
+```
+
+Researchers with an unpublished checkpoint can place it at the exact
+`checkpoint_path` shown by that model's runtime profile and create the same HFD
+alias. Keep the catalog entry blocked until strict checkpoint loading and CUDA
+artifact validation pass.
+
+### Worked example: Matrix-Game 3.5
+
+The first- and third-person model IDs share Wan2.2, UMT5, and DA3 assets but
+bind different files from `RiemannDynamics/Matrix-Game-3.5-Base`. Download both
+files once so either immutable recipe can resolve through the standard HFD
+alias. Set `HF_ENDPOINT=https://hf-mirror.com` first when using HF-Mirror. The
+DA3 checkpoint has its own CC-BY-NC-4.0 license even though the Matrix-Game and
+Wan checkpoints are Apache-2.0; follow each dependency's upstream terms.
+
+```bash
+hf download RiemannDynamics/Matrix-Game-3.5-Base \
+  --revision 40c172355efa32d4e2a44076569e310807788f8a \
+  --include first-person.safetensors \
+  --include third-person.safetensors \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/RiemannDynamics--Matrix-Game-3.5-Base"
+
+hf download Wan-AI/Wan2.2-TI2V-5B \
+  --revision 921dbaf3f1674a56f47e83fb80a34bac8a8f203e \
+  --include 'diffusion_pytorch_model*.safetensors' \
+  --include models_t5_umt5-xxl-enc-bf16.pth \
+  --include Wan2.2_VAE.pth \
+  --include 'google/umt5-xxl/*' \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/Wan-AI--Wan2.2-TI2V-5B"
+
+hf download depth-anything/DA3NESTED-GIANT-LARGE-1.1 \
+  --revision b2359bdf726fb44ef62acca04d629dcf158053e7 \
+  --include config.json \
+  --include model.safetensors \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/depth-anything--DA3NESTED-GIANT-LARGE-1.1"
+```
+
+Verify both recipes without loading model tensors:
+
+```bash
+worldfoundry-eval zoo model-download \
+  --model-id matrix-game-3.5-first-person \
+  --check-local \
+  --json
+
+worldfoundry-eval zoo model-download \
+  --model-id matrix-game-3.5-third-person \
+  --check-local \
+  --json
+```
+
+### Worked example: Cosmos 1 and 2
+
+GEN3C uses four explicit assets: the 7B transformer, Tokenize1 codec, T5-11B,
+and MoGe depth model. Cosmos Predict2 uses its selected Video2World transformer
+and `tokenizer/tokenizer.pth`, plus the same T5-11B encoder. Predict2 repositories
+are gated, so authenticate before using the mirror.
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+
+hf download nvidia/GEN3C-Cosmos-7B \
+  --revision 9bcfdb4f3924f41376daeadf6200826c12a3bf8e \
+  --include model.pt \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/nvidia--GEN3C-Cosmos-7B"
+
+hf download nvidia/Cosmos-Predict2-2B-Video2World \
+  --revision f50c09f5d8ab133a90cac3f4886a6471e9ba3f18 \
+  --include model-720p-16fps.pt \
+  --include tokenizer/tokenizer.pth \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/nvidia--Cosmos-Predict2-2B-Video2World"
+
+hf download google-t5/t5-11b \
+  --revision 90f37703b3334dfe9d2b009bfcbfbf1ac9d28ea3 \
+  --include pytorch_model.bin --include config.json \
+  --include spiece.model --include tokenizer.json \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/google-t5--t5-11b"
+```
+
+Download `nvidia/Cosmos-Tokenize1-CV8x8x8-720p` and `Ruicheng/moge-vitl`
+for GEN3C as declared in its runtime profile. For Predict2 14B, switch to
+`nvidia/Cosmos-Predict2-14B-Video2World` revision
+`03b03a377fede782647afac998f674d9f358e319`.
+
+### Worked example: Cosmos 2.5
+
+Cosmos Predict and Transfer share the Predict 2B `tokenizer.pth` Wan codec and
+the Reason1 language model. Download only the selected transformer plus those
+shared assets. Transfer currently uses the exact official `general/edge`
+checkpoint revision; directory presence without that file is not readiness.
+Set `HF_ENDPOINT=https://hf-mirror.com` when the mirror is required.
+
+```bash
+hf download nvidia/Cosmos-Predict2.5-2B \
+  --revision f176dc95b4a70f53ce01c4b302851595e7322b00 \
+  --include tokenizer.pth \
+  --include 'base/post-trained/81edfebe-bd6a-4039-8c1d-737df1a790bf_ema_bf16.pt' \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/nvidia--Cosmos-Predict2.5-2B"
+
+hf download nvidia/Cosmos-Reason1-7B \
+  --revision 375e24000b24baed78f4618d3dd779e47cd96323 \
+  --include 'model*.safetensors' \
+  --include model.safetensors.index.json \
+  --include tokenizer.json \
+  --include tokenizer_config.json \
+  --include chat_template.json \
+  --include config.json \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/nvidia--Cosmos-Reason1-7B"
+
+hf download nvidia/Cosmos-Transfer2.5-2B \
+  --revision bd963eabcfc2d61dc4ea365cacf41d45ac480aa5 \
+  --include 'general/edge/ecd0ba00-d598-4f94-aa09-e8627899c431_ema_bf16.pt' \
+  --local-dir "${WORLDFOUNDRY_HFD_ROOT}/nvidia--Cosmos-Transfer2.5-2B"
+```
+
+For 14B Predict, replace the transformer download with revision
+`71ebf3e8af30ecfe440bf0481115975fcc052b46` and file
+`base/post-trained/e21d2a49-4747-44c8-ba44-9f6f9243715f_ema_bf16.pt` from
+`nvidia/Cosmos-Predict2.5-14B`; keep the same Reason1 and VAE assets.
 
 For other models, use the `repo_id` / `revision` from that model's catalog entry the same way. On a shared machine with pre-staged snapshots, set `WORLDFOUNDRY_MODEL_DIR` and symlink HF cache names instead of copying weights:
 
@@ -305,12 +543,10 @@ cp worldfoundry/data/benchmarks/local_assets.example.yaml \
 export WORLDFOUNDRY_LOCAL_ASSET_MANIFEST="${WORLDFOUNDRY_HOME}/local_assets.yaml"
 ```
 
-| `kind` | You stage | Typical command |
-| --- | --- | --- |
-| `repo` | Existing source/runtime root | Set `WORLDFOUNDRY_<BENCHMARK>_ROOT=<path>` |
-| `dataset` | HF dataset snapshot | `hf download <id> --repo-type dataset --local-dir <path>` |
-| `checkpoint` | Model weights | `hf download <id> --local-dir <path>` |
-| `simulator_asset` | Simulator files | Manual install per benchmark docs |
-| `result_dump` | Upstream official results | Copy after running upstream evaluator |
+- **`repo`** — Existing source/runtime root. Typical command: set `WORLDFOUNDRY_<BENCHMARK>_ROOT=<path>`.
+- **`dataset`** — HF dataset snapshot. Typical command: `hf download <id> --repo-type dataset --local-dir <path>`.
+- **`checkpoint`** — Model weights. Typical command: `hf download <id> --local-dir <path>`.
+- **`simulator_asset`** — Simulator files. Typical command: manual install per benchmark docs.
+- **`result_dump`** — Upstream official results. Typical command: copy after running the upstream evaluator.
 
 Embodied simulator roots and helper scripts are covered in [Embodied official runtime](/docs/evaluation/embodied-official-runtime).

@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from torch import nn, Tensor
 
 from worldfoundry.base_models.perception_core.segment.sam2.modeling.position_encoding import apply_rotary_enc, compute_axial_cis
-from worldfoundry.core.nn.layers import SamHeadMLP
+from worldfoundry.core.nn.blocks.layers import SamHeadMLP
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
 

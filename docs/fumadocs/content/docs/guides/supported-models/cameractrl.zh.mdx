@@ -1,0 +1,52 @@
+---
+title: "CameraCtrl"
+description: "CameraCtrl（The Chinese University of Hong Kong / Shanghai AI Laboratory）：世界模型、video；已验证。"
+modelId: "cameractrl"
+pageSource: authored
+---
+
+CameraCtrl 开创了文生视频扩散的即插即用相机控制：基于 Plücker 嵌入训练相机编码器，让轨迹无需重训基座即可操控生成。本 catalog 中集成与 runner 均已验证——树内合成后端在统一环境档案中遵循官方轨迹文生视频 demo 契约。
+
+<ModelPaperFigures modelId="cameractrl" locale="zh" />
+
+记录论文为[arXiv 2404.02101](https://arxiv.org/abs/2404.02101)。
+
+项目页：[hehao13.github.io/projects-CameraCtrl](https://hehao13.github.io/projects-CameraCtrl/)。代码：[hehao13/CameraCtrl](https://github.com/hehao13/CameraCtrl)。
+
+这不是 [AC3D](/zh/docs/guides/supported-models/ac3d)（CogVideoX ControlNet），也不是 [ATI](/zh/docs/guides/supported-models/ati-wan21-14b)（Wan2.1 点轨迹）。
+
+<ModelCommandBuilder modelId="cameractrl" locale="zh" />
+
+## 用来做什么
+
+`cameractrl` 是记录的相机控制路由。按 catalog 相机路径推进时从这里起步。
+
+按论文（arXiv 2404.02101），相机位姿编码为 Plücker 嵌入，通过可训练的相机编码器注入冻结的视频扩散基座（官方版基于 AnimateDiff）。WorldFoundry 将运行时内置于 synthesis/visual_generation/cameractrl/cameractrl_runtime；checkpoint 保存在常规 hfd/ckpt 缓存。该模型由香港中文大学 / 上海人工智能实验室发布。
+
+catalog 记录的任务包括 世界模型、video、相机控制。输出模态为视频。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（相机轨迹贴合度的标准评测）。
+
+## 运行时契约
+
+可选 `prompt`、`trajectory_file`、`frames`、`fps`、`height`；产物 `cameractrl.mp4`。
+
+CLI task profile：`trajectory-video`。绑定的 pipeline 类是 `CameraCtrlPipeline`。
+
+系列状态：**已验证**。
+
+`trajectory-video` 记录默认值：frames=16, fps=8, height=256, width=384, guidance_scale=14.0, seed=42。
+
+runner 遵循官方 demo 轨迹契约——提供相机轨迹文件与文本提示词即可。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run cameractrl --pipeline.task-profile trajectory-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 11.3）。
+
+记录的权重仓库包括 `hehao13/CameraCtrl`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh cameractrl`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="cameractrl" locale="zh" />

@@ -1,0 +1,74 @@
+schema_version: 2
+model_id: astronex-world
+name: Astronex-World
+family: Wan2.2
+domain: world
+aliases:
+- astronex
+tasks:
+- text-to-video
+- image-to-video
+- camera-controlled-video
+- interactive-world-model
+output_artifacts:
+- generated_world
+capabilities:
+  task_family: world_model
+  modalities:
+  - text-to-video
+  - image-to-video
+  - camera-controlled-video
+  - interactive-world-model
+availability:
+  source: open_source
+  license: apache-2.0
+  requires_auth: false
+sources:
+  github:
+    url: https://github.com/Astronex-Robotics/Astronex-World
+    revision: 27584bf1a89da01ef35a03b48d83bc818d2adf2b
+  huggingface:
+  - repo_id: Astronex-Lab/Astronex-World
+    revision: f06ea330f2ce5cabef5fbf175287fe323ec1218c
+    type: model
+checkpoints:
+  primary:
+    repo_id: Astronex-Lab/Astronex-World
+    revision: f06ea330f2ce5cabef5fbf175287fe323ec1218c
+    type: model
+integration:
+  status: integrated
+  runtime_profile: astronex-world
+  pipeline_binding: astronex-world
+  runner: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: astronex-world
+runtime_profile: runtime-profile:astronex-world
+evidence:
+  notes:
+  - Official inference command construction is CPU-validated; checkpoint-backed generation remains pending.
+  - The released action prediction head is zero initialized; action prediction is not advertised.
+runner_parity:
+  status: pending
+  notes:
+  - GPU/checkpoint-backed artifact parity has not been run in this workspace.
+catalog_category: world_models
+docs:
+  publisher: Astronex-Robotics
+  publisher_kind: lab
+  publisher_zh: Astronex-Robotics
+  overview: Astronex-World exposes causal and bidirectional camera/action-conditioned video inference.
+  overview_zh: Astronex-World 支持相机和动作条件下的因果及双向视频推理。
+  architecture: Wan2.2 TI2V-5B with PRoPE camera conditioning, 64-dimensional actions and embodiment conditioning. The official
+    sampler remains external; no Wan backbone is copied into this integration.
+  architecture_zh: 基于 Wan2.2 TI2V-5B，加入 PRoPE 相机条件、64 维动作和 embodiment 条件。调用外部官方采样器，本次集成不复制 Wan 骨干。
+  usage_notes: Select mode=causal or bidirectional; supply source_root and checkpoint_dir. execute=True runs inference. latent_frames
+    counts generated latent frames, not video frames; causal blocks require (latent_frames + reference_count) % 8 == 0.
+  usage_notes_zh: 选择 mode=causal 或 bidirectional，并提供 source_root 和 checkpoint_dir。execute=True 执行推理。latent_frames 为生成潜帧数；因果模式要求
+    (latent_frames + reference_count) 能被 8 整除。
+  limitations:
+  - Official inference command construction is CPU-validated; checkpoint-backed generation remains pending.
+  - The released action prediction head is zero initialized; action prediction is not advertised.
+  limitations_zh:
+  - 当前工作区仅完成 CPU 可执行的检查，GPU 推理和 checkpoint 产物仍待验证。
+  recommended_benchmarks: []

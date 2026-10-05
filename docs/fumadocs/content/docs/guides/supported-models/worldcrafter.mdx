@@ -1,0 +1,36 @@
+---
+title: WorldCrafter
+description: Camera-controlled scene exploration with queryable 3D memory.
+pageSource: authored
+---
+
+WorldCrafter Base and Fast support image-to-video and text-to-video at **640 × 384**, with **33 frames per chunk**. Multi-chunk generation uses RepEncoder to query the previously generated scene from the requested camera views.
+
+```python
+from worldfoundry.pipelines.worldcrafter import WorldCrafterPipeline
+
+pipe = WorldCrafterPipeline.from_pretrained(
+    model_id="worldcrafter-fast",
+    model_path="/checkpoints/TencentARC--WorldCrafter-Fast",
+    device="cuda:0",
+)
+result = pipe(
+    prompt="A bright living room with a wooden table.",
+    images="room.png",
+    actions="forward1 backward1",
+    output_path="worldcrafter.mp4",
+    return_dict=True,
+)
+```
+
+Omit `images` for text-to-video. Supply exactly one of `actions`, `actions_file`, or `camera_path`. Camera files contain finite global **camera-to-world** matrices of shape `[T, 3, 4]` or `[T, 4, 4]`, with metric translation, a right/down/forward coordinate system, and a frame count divisible by 33. `num_chunks` can limit an existing trajectory.
+
+Use `model_id="worldcrafter-base"` for Base. Base additionally needs the shared RepEncoder, tokenizer, UMT5 and Wan VAE from the Fast checkpoint; use `shared_model_path` if it is stored outside the standard local checkpoint roots. Both models reuse the project's Helios base transformer, scheduler and latent preparation, and the existing VGGT layers. WorldCrafter supplies camera residuals, memory selection/rendering and its distilled branch routing.
+
+Base defaults to 50 steps and CFG 5. Fast uses the released three-stage 2/2/2 contract with CFG 1. Its first T2V chunk uses 12 steps; subsequent chunks use 6. Fast rejects arbitrary step counts and resume/state export. Base supports `chunk_output_dir`, `state_output_dir`, `resume_from`, and `stop_after_chunk` using a matching prompt, image and trajectory.
+
+Base trims ordinary output to `33 × num_chunks - 1` frames, following upstream behavior. Fast preserves `33 × num_chunks` frames. Base resume concatenates complete chunks and also preserves `33 × num_chunks` frames.
+
+The runtime requires CUDA, PyTorch 2.10, a Diffusers version with Helios support, Transformers 5.3, Accelerate, PEFT, Einops and safetensors. Compilation is optional and disabled by default. Local H100 checks cover released-weight I2V/T2V for two chunks in both Base and Fast, including strict loading, finite pre-clamp decoder outputs, complete video decoding and visual review. Base resume reproduces continuous pre-clamp outputs exactly. These short runs do not establish long-horizon memory or camera-control quality.
+
+[Official source](https://github.com/TencentARC/WorldCrafter) is pinned to `7e57e4d0448e8661eb6ae078f53e19638bd07102`. The official license permits **academic use only**; its complete terms and third-party notices are retained in the repository root `THIRD-PARTY-NOTICES`.

@@ -17,6 +17,8 @@ integration:
 license: apache-2.0
 name: NVIDIA DreamZero
 official_sources:
+  project_page: https://dreamzero0.github.io/
+  paper: https://arxiv.org/abs/2602.15922
   github:
     head_sha: ab790c198fbce33503358efbbd4187ce9a89adf3
     url: https://github.com/dreamzero0/dreamzero
@@ -59,3 +61,23 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records. Runner or pipeline targets are present
   only after a complete in-tree WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: NVIDIA (GEAR Lab)
+  publisher_kind: company
+  publisher_zh: 英伟达（GEAR 实验室）
+  overview: 'NVIDIA DreamZero is a world-action model (WAM) that couples video prediction with robot control: DROID and AgiBot checkpoints are released under Apache-2.0 (GEAR-Dreams org). WorldFoundry keeps the inference-only model, preprocessing, distributed server, WebSocket client, and a pickle-free NumPy msgpack protocol in-tree; both checkpoints passed GPU probes on a CUDA 12.9 runtime.'
+  overview_zh: 英伟达 DreamZero 是将视频预测与机器人控制耦合的世界-动作模型（WAM）：DROID 与 AgiBot checkpoint 以 Apache-2.0 发布（GEAR-Dreams 组织）。WorldFoundry 将推理专用模型、预处理、分布式服务、 WebSocket 客户端与无 pickle 的 NumPy msgpack 协议内置树内；两个 checkpoint 均在 CUDA 12.9 运行时通过 GPU 探针。
+  architecture: The default 14B server uses two CUDA ranks while the Wan2.2 5B entrypoint can run on one. Checkpoint-controlled Hydra targets are rewritten to and allowlisted within in-tree inference modules, so checkpoint Python is never executed.
+  architecture_zh: 默认 14B 服务使用两个 CUDA rank，Wan2.2 5B 入口可单 rank 运行。checkpoint 控制的 Hydra target 被重写并限定在树内推理模块白名单内，绝不执行 checkpoint Python。
+  usage_notes: Stage DreamZero-DROID or DreamZero-AgiBot under WORLDFOUNDRY_HFD_ROOT; a CUDA 12.9 runtime is required. Choose DROID for real-robot arm data distribution and AgiBot for the AgiBot embodiment.
+  usage_notes_zh: 将 DreamZero-DROID 或 DreamZero-AgiBot 就位于 WORLDFOUNDRY_HFD_ROOT；需要 CUDA 12.9 运行时。DROID 面向真实机械臂数据分布，AgiBot 面向 AgiBot 本体。
+  limitations:
+  - Requires CUDA 12.9; the 14B default needs two GPU ranks.
+  - GPU probes are verified, but full rollout parity is not recorded in this repository.
+  limitations_zh:
+  - 需要 CUDA 12.9；14B 默认配置需两个 GPU rank。
+  - GPU 探针已验证，但完整 rollout parity 仓库未记录。
+  recommended_benchmarks:
+  - id: ewmbench
+    reason: World-action modeling quality for embodied control.
+    reason_zh: 具身控制的世界-动作建模质量。

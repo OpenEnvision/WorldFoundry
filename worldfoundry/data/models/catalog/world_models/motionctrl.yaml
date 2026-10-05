@@ -19,6 +19,8 @@ modalities:
 - image-to-video
 name: MotionCtrl
 official_sources:
+  paper: https://arxiv.org/abs/2312.03641
+  project_page: https://wanquanf.github.io/MotionCtrl/
   github:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
@@ -55,3 +57,23 @@ catalog_policy:
   open_source_rule: Only mark open_source when an official GitHub repository or official
     Hugging Face model page was confirmed. Do not infer checkpoint availability from
     papers, demos, or third-party mirrors.
+docs:
+  publisher: Tencent (ARC Lab)
+  publisher_kind: company
+  publisher_zh: 腾讯（ARC Lab）
+  overview: 'MotionCtrl is a unified, flexible motion controller for video generation: it controls camera motion and object motion independently in one model (SIGGRAPH 2024). In this catalog the runner is verified — the camera-motion demo runs through the Workspace infer path with the staged MotionCtrl checkpoint and in-tree camera-pose fixture.'
+  overview_zh: MotionCtrl 是统一、灵活的视频生成运动控制器：在单一模型中独立控制相机运动与物体运动（SIGGRAPH 2024）。本 catalog 中 runner 已验证——相机运动 demo 经 Workspace 推理路径运行，使用就位的 MotionCtrl checkpoint 与树内相机位姿 fixture。
+  architecture: Per the publication, a Camera Motion Control Module conditions on camera pose sequences and an Object Motion Control Module on trajectories, attached to an LVDM-family video base. WorldFoundry vendors the LVDM stack, control modules, sampler, default config, and motion fixtures under synthesis/visual_generation/motionctrl/motionctrl_runtime and loads them in-process.
+  architecture_zh: 按论文，相机运动控制模块以相机位姿序列为条件、物体运动控制模块以轨迹为条件，挂接在 LVDM 系视频基座上。WorldFoundry 将 LVDM 栈、控制模块、采样器、默认配置与运动 fixture 内置于 synthesis/visual_generation/motionctrl/motionctrl_runtime 并在进程内加载。
+  usage_notes: The default camera/object motion fixture parameters are recorded in the runtime profile — start there. The upstream CLI is provenance only; benchmark scoring remains separate.
+  usage_notes_zh: 默认的相机/物体运动 fixture 参数记录在运行时档案中——请从这里开始。上游 CLI 仅作溯源； benchmark 打分是独立工作。
+  limitations:
+  - 'LVDM-era base: visual quality trails newer DiT video models.'
+  - Benchmark scoring is not yet recorded.
+  limitations_zh:
+  - LVDM 时代基座：画质弱于较新的 DiT 视频模型。
+  - benchmark 打分尚未记录。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-motion control adherence.
+    reason_zh: 相机运动控制贴合度。

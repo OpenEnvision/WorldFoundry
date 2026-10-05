@@ -1,0 +1,844 @@
+{
+  "schema_version": 1,
+  "scope": "real checkpoint block; synthetic inputs; no semantic or end-to-end certification",
+  "publication_certified": false,
+  "checkpoint": "checkpoint/Efficient-Large-Model--SANA-Video_2B_480p/checkpoints/SANA_Video_2B_480p.pth",
+  "block": 0,
+  "dtype": "bfloat16",
+  "candidate": "auto",
+  "thresholds": {
+    "finite": true,
+    "relative_l2_max": 0.005
+  },
+  "runtime": {
+    "platform": "cuda",
+    "vendor": "nvidia",
+    "arch": "sm_90",
+    "device": "NVIDIA H100 80GB HBM3",
+    "device_index": 0,
+    "memory_bytes": 85017624576,
+    "driver_version": null,
+    "runtime_version": "12.1",
+    "torch_version": "2.5.1+cu121",
+    "python_version": "3.11.15",
+    "worldfoundry_version": "0.1.dev217+g20069cbf7.d20261003",
+    "worldfoundry_commit": "f4569b57b3ea5b5e2bb97e37cb8a4633d78a0cfc",
+    "system": "Linux",
+    "system_release": "5.10.0-218.0.0.mt20250120.565.mt2203sp4.x86_64"
+  },
+  "parameters": {
+    "checkpoint": "checkpoint/Efficient-Large-Model--SANA-Video_2B_480p/checkpoints/SANA_Video_2B_480p.pth",
+    "out": "<fresh-output-directory>",
+    "grid": null,
+    "block": 0,
+    "seeds": [
+      42,
+      43,
+      44
+    ],
+    "candidate": "auto",
+    "fuse_layer_norm": false,
+    "warmup": 3,
+    "iters": 3,
+    "rounds": 8
+  },
+  "cases": [
+    {
+      "grid": [
+        3,
+        8,
+        8
+      ],
+      "seed": 42,
+      "tokens": 192,
+      "quality": {
+        "finite": true,
+        "bitwise_equal": true,
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "cosine": 0.9999999403953552,
+        "passed": true
+      },
+      "execution": {},
+      "block_timing": {
+        "name": "sana_block_192_seed42",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 1.234885334968567,
+          "p10_ms": 1.2217258930206298,
+          "p90_ms": 1.2836725552876789,
+          "mad_over_median": 0.00647834741082824,
+          "raw_ms": [
+            1.3811200459798176,
+            1.2363946437835693,
+            1.241909344991048,
+            1.2333760261535645,
+            1.2369919617970784,
+            1.2259093125661213,
+            1.2222506999969482,
+            1.2205013434092205
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 1.2432799736658733,
+          "p10_ms": 1.2331519683202108,
+          "p90_ms": 1.3000832398732503,
+          "mad_over_median": 0.006172941110480592,
+          "raw_ms": [
+            1.2697280248006184,
+            1.250869353612264,
+            1.22762664159139,
+            1.2406613032023113,
+            1.3709120750427246,
+            1.2355199654897053,
+            1.2458986441294353,
+            1.2381973266601562
+          ]
+        },
+        "speedup_median": 0.9932479900946571,
+        "speedup_ci95": [
+          0.9761544434594097,
+          1.0029396764107845
+        ]
+      },
+      "glue_timing": {
+        "name": "sana_glue_192_seed42",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 0.050944000482559204,
+          "p10_ms": 0.04895253330469131,
+          "p90_ms": 0.07255253295103709,
+          "mad_over_median": 0.04239950306063096,
+          "raw_ms": [
+            0.05388799806435903,
+            0.05147733290990194,
+            0.05041066805521647,
+            0.04920533299446106,
+            0.04923733572165171,
+            0.07246933380762736,
+            0.07274666428565979,
+            0.04836266736189524
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 0.051471998294194535,
+          "p10_ms": 0.04984639783700308,
+          "p90_ms": 0.06829013228416442,
+          "mad_over_median": 0.032535496119633765,
+          "raw_ms": [
+            0.05201066533724467,
+            0.05093333125114441,
+            0.04991999765237173,
+            0.04967466493447622,
+            0.06562133133411407,
+            0.07451733450094859,
+            0.05942399799823761,
+            0.050069332122802734
+          ]
+        },
+        "speedup_median": 0.989742037823799,
+        "speedup_ci95": [
+          0.8054252739330168,
+          1.1339140630916462
+        ]
+      }
+    },
+    {
+      "grid": [
+        3,
+        8,
+        8
+      ],
+      "seed": 43,
+      "tokens": 192,
+      "quality": {
+        "finite": true,
+        "bitwise_equal": true,
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "cosine": 1.0,
+        "passed": true
+      },
+      "execution": {},
+      "block_timing": {
+        "name": "sana_block_192_seed43",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 1.2223946650822959,
+          "p10_ms": 1.2095776319503784,
+          "p90_ms": 1.2278175910313922,
+          "mad_over_median": 0.0058551676877179664,
+          "raw_ms": [
+            1.221343994140625,
+            1.2103040218353271,
+            1.2089280287424724,
+            1.224181334177653,
+            1.2098560333251953,
+            1.225215991338094,
+            1.2338879903157551,
+            1.2234453360239665
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 1.2360639969507854,
+          "p10_ms": 1.2166080156962078,
+          "p90_ms": 1.3822261810302734,
+          "mad_over_median": 0.012322991969959845,
+          "raw_ms": [
+            1.404245376586914,
+            1.236576000849406,
+            1.2177600065867107,
+            1.213920036951701,
+            1.2424000104268391,
+            1.3727893829345703,
+            1.223903973897298,
+            1.2355519930521648
+          ]
+        },
+        "speedup_median": 0.9889412426037729,
+        "speedup_ci95": [
+          0.8925010686774011,
+          1.002743492931394
+        ]
+      },
+      "glue_timing": {
+        "name": "sana_glue_192_seed43",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 0.04867200056711833,
+          "p10_ms": 0.048263468345006305,
+          "p90_ms": 0.05115520060062409,
+          "mad_over_median": 0.008437419124136385,
+          "raw_ms": [
+            0.050741334756215416,
+            0.050944000482559204,
+            0.04869333406289419,
+            0.04865066707134247,
+            0.04825599988301595,
+            0.04853333532810211,
+            0.04826666911443075,
+            0.0516480008761088
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 0.049530667563279465,
+          "p10_ms": 0.0491701344648997,
+          "p90_ms": 0.052493867774804435,
+          "mad_over_median": 0.007322068579015031,
+          "raw_ms": [
+            0.053247998158137,
+            0.05217066903909048,
+            0.04946133494377136,
+            0.049173335234324135,
+            0.04991999765237173,
+            0.049600000182787575,
+            0.04924799998601278,
+            0.04916266600290934
+          ]
+        },
+        "speedup_median": 0.9826639325007256,
+        "speedup_ci95": [
+          0.9707265699477514,
+          1.028704020972898
+        ]
+      }
+    },
+    {
+      "grid": [
+        3,
+        8,
+        8
+      ],
+      "seed": 44,
+      "tokens": 192,
+      "quality": {
+        "finite": true,
+        "bitwise_equal": true,
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "cosine": 0.9999998807907104,
+        "passed": true
+      },
+      "execution": {},
+      "block_timing": {
+        "name": "sana_block_192_seed44",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 1.2135146458943684,
+          "p10_ms": 1.2044586817423504,
+          "p90_ms": 1.2213343699773151,
+          "mad_over_median": 0.003520339960292119,
+          "raw_ms": [
+            1.196991999944051,
+            1.2199359734853108,
+            1.2245972951253254,
+            1.2108266353607178,
+            1.2144532998402913,
+            1.2132266362508137,
+            1.2076586882273357,
+            1.213802655537923
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 1.225536028544108,
+          "p10_ms": 1.2156586647033691,
+          "p90_ms": 1.3711338837941487,
+          "mad_over_median": 0.009173706287321167,
+          "raw_ms": [
+            1.3663466771443684,
+            1.255669355392456,
+            1.218773365020752,
+            1.210879961649577,
+            1.2322986920674641,
+            1.382304032643636,
+            1.2178133328755696,
+            1.2177066802978516
+          ]
+        },
+        "speedup_median": 0.9901909186105117,
+        "speedup_ci95": [
+          0.8879347068684121,
+          0.9987046579755835
+        ]
+      },
+      "glue_timing": {
+        "name": "sana_glue_192_seed44",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 0.04833599925041199,
+          "p10_ms": 0.04800533453623453,
+          "p90_ms": 0.04936746557553609,
+          "mad_over_median": 0.0037514944012745645,
+          "raw_ms": [
+            0.05096533397833506,
+            0.048298666874567665,
+            0.04868266483147939,
+            0.04811733464399973,
+            0.048394665122032166,
+            0.04819199939568838,
+            0.04837333162625631,
+            0.047744000951449074
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 0.049055998524030045,
+          "p10_ms": 0.04890026897192001,
+          "p90_ms": 0.05123093277215958,
+          "mad_over_median": 0.003261502284717089,
+          "raw_ms": [
+            0.05162666738033295,
+            0.050186668833096824,
+            0.05106133222579956,
+            0.04897066454092661,
+            0.048885335524876915,
+            0.04890666902065277,
+            0.049141332507133484,
+            0.04894933104515076
+          ]
+        },
+        "speedup_median": 0.985322910647403,
+        "speedup_ci95": [
+          0.9578592238046517,
+          0.988666049912435
+        ]
+      }
+    },
+    {
+      "grid": [
+        21,
+        30,
+        52
+      ],
+      "seed": 42,
+      "tokens": 32760,
+      "quality": {
+        "finite": true,
+        "bitwise_equal": true,
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "cosine": 0.9999999403953552,
+        "passed": true
+      },
+      "execution": {
+        "dispatches": [
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": false,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "triton_residual_gate_add",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": false,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "triton_residual_gate_add",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          }
+        ]
+      },
+      "block_timing": {
+        "name": "sana_block_32760_seed42",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 23.01858139038086,
+          "p10_ms": 23.00594685872396,
+          "p90_ms": 23.044115702311196,
+          "mad_over_median": 0.00047938000333549335,
+          "raw_ms": [
+            23.008939107259113,
+            22.99896494547526,
+            23.011627197265625,
+            23.020553588867188,
+            23.071317036946613,
+            23.03100840250651,
+            23.01660919189453,
+            23.03245798746745
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 22.10533905029297,
+          "p10_ms": 22.070023600260416,
+          "p90_ms": 22.136507670084637,
+          "mad_over_median": 0.0009940552264663318,
+          "raw_ms": [
+            22.08379618326823,
+            22.037887573242188,
+            22.12774403889974,
+            22.13928476969401,
+            22.13531748453776,
+            22.088971455891926,
+            22.09881591796875,
+            22.111862182617188
+          ]
+        },
+        "speedup_median": 1.0413132021187337,
+        "speedup_ci95": [
+          1.0399682986627248,
+          1.0426473884714678
+        ]
+      },
+      "glue_timing": {
+        "name": "sana_glue_32760_seed42",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 0.8581333160400391,
+          "p10_ms": 0.8579242944717407,
+          "p90_ms": 0.8606314500172934,
+          "mad_over_median": 0.0003479870373786699,
+          "raw_ms": [
+            0.8616320292154948,
+            0.8580693403879801,
+            0.8576107025146484,
+            0.8580906391143799,
+            0.8602026303609213,
+            0.8580586910247803,
+            0.8581759929656982,
+            0.859274705251058
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 0.3943733175595601,
+          "p10_ms": 0.3930400013923645,
+          "p90_ms": 0.3960885326067607,
+          "mad_over_median": 0.0025694906848594714,
+          "raw_ms": [
+            0.39367465178171795,
+            0.39450665314992267,
+            0.3927786747614543,
+            0.39315199851989746,
+            0.3963199853897095,
+            0.3942399819691976,
+            0.3951786756515503,
+            0.3959893385569255
+          ]
+        },
+        "speedup_median": 2.1759416213812175,
+        "speedup_ci95": [
+          2.170778731411406,
+          2.18344517567177
+        ]
+      }
+    },
+    {
+      "grid": [
+        21,
+        30,
+        52
+      ],
+      "seed": 43,
+      "tokens": 32760,
+      "quality": {
+        "finite": true,
+        "bitwise_equal": true,
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "cosine": 1.0,
+        "passed": true
+      },
+      "execution": {
+        "dispatches": [
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "triton_residual_gate_add",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "triton_residual_gate_add",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          }
+        ]
+      },
+      "block_timing": {
+        "name": "sana_block_32760_seed43",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 23.018310546875,
+          "p10_ms": 22.999959818522136,
+          "p90_ms": 23.05945510864258,
+          "mad_over_median": 0.0008305005497632499,
+          "raw_ms": [
+            23.001108805338543,
+            23.007222493489582,
+            22.997278849283855,
+            23.05621337890625,
+            23.051488240559895,
+            23.00451151529948,
+            23.029398600260418,
+            23.06701914469401
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 22.141173044840496,
+          "p10_ms": 22.094837443033853,
+          "p90_ms": 22.272823333740234,
+          "mad_over_median": 0.0016808588437508237,
+          "raw_ms": [
+            22.10070292154948,
+            22.081151326497395,
+            22.166910807291668,
+            22.136255900065105,
+            22.241065979003906,
+            22.107210795084637,
+            22.146090189615887,
+            22.346923828125
+          ]
+        },
+        "speedup_median": 1.0396156743934983,
+        "speedup_ci95": [
+          1.036438103385919,
+          1.041452127849013
+        ]
+      },
+      "glue_timing": {
+        "name": "sana_glue_32760_seed43",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 0.8588639895121257,
+          "p10_ms": 0.8565973361333212,
+          "p90_ms": 0.8693013429641724,
+          "mad_over_median": 0.0023845170865946976,
+          "raw_ms": [
+            0.8748266696929932,
+            0.8607892990112305,
+            0.8669333457946777,
+            0.8566933472951254,
+            0.8563733100891113,
+            0.8591893513997396,
+            0.8572906653086344,
+            0.8585386276245117
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 0.3941653370857239,
+          "p10_ms": 0.39378239711125695,
+          "p90_ms": 0.41806719700495404,
+          "mad_over_median": 0.000987751846855518,
+          "raw_ms": [
+            0.4569386641184489,
+            0.40140799681345624,
+            0.39419734477996826,
+            0.3937600056330363,
+            0.39496533075968426,
+            0.3940800031026204,
+            0.39379199345906574,
+            0.3941333293914795
+          ]
+        },
+        "speedup_median": 2.1789434755023582,
+        "speedup_ci95": [
+          2.1444248890020483,
+          2.1914437878447437
+        ]
+      }
+    },
+    {
+      "grid": [
+        21,
+        30,
+        52
+      ],
+      "seed": 44,
+      "tokens": 32760,
+      "quality": {
+        "finite": true,
+        "bitwise_equal": true,
+        "max_abs": 0.0,
+        "relative_l2": 0.0,
+        "cosine": 1.0,
+        "passed": true
+      },
+      "execution": {
+        "dispatches": [
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "triton_residual_gate_add",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "scale_shift",
+            "implementation": "triton_scale_shift",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          },
+          {
+            "op": "residual_gate_add",
+            "implementation": "triton_residual_gate_add",
+            "backend": "triton",
+            "accelerated": true,
+            "fallback": false,
+            "cache_hit": true,
+            "failures": [],
+            "quarantined": [],
+            "reason": null
+          }
+        ]
+      },
+      "block_timing": {
+        "name": "sana_block_32760_seed44",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 23.105253855387367,
+          "p10_ms": 23.025603485107425,
+          "p90_ms": 23.154189300537112,
+          "mad_over_median": 0.0019572156532564706,
+          "raw_ms": [
+            23.0625483194987,
+            23.013193766276043,
+            23.030921936035156,
+            23.105878194173176,
+            23.131520589192707,
+            23.156982421875,
+            23.104629516601562,
+            23.152992248535156
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 22.14677937825521,
+          "p10_ms": 22.10612614949544,
+          "p90_ms": 22.254893239339193,
+          "mad_over_median": 0.002008906733078814,
+          "raw_ms": [
+            22.120457967122395,
+            22.092694600423176,
+            22.129974365234375,
+            22.11188252766927,
+            22.163584391276043,
+            22.20386250813802,
+            22.23907216389974,
+            22.29180908203125
+          ]
+        },
+        "speedup_median": 1.0432782781081584,
+        "speedup_ci95": [
+          1.0397436482131475,
+          1.044722191813838
+        ]
+      },
+      "glue_timing": {
+        "name": "sana_glue_32760_seed44",
+        "label_a": "baseline",
+        "label_b": "candidate",
+        "workload": {},
+        "baseline": {
+          "count": 8,
+          "median_ms": 0.8621279795964558,
+          "p10_ms": 0.8601098616917928,
+          "p90_ms": 0.8652511994043985,
+          "mad_over_median": 0.0020105400213429035,
+          "raw_ms": [
+            0.8681706587473551,
+            0.8637973467508951,
+            0.8628799915313721,
+            0.861034631729126,
+            0.8595946629842123,
+            0.8603306611378988,
+            0.8640000025431315,
+            0.8613759676615397
+          ]
+        },
+        "candidate": {
+          "count": 8,
+          "median_ms": 0.39586132764816284,
+          "p10_ms": 0.39514879782994583,
+          "p90_ms": 0.39670933882395426,
+          "mad_over_median": 0.0006062932131347468,
+          "raw_ms": [
+            0.397866686185201,
+            0.3952639897664388,
+            0.3962133328119914,
+            0.3959146738052368,
+            0.39580798149108887,
+            0.3948800166447957,
+            0.3959893385569255,
+            0.3957546552022298
+          ]
+        },
+        "speedup_median": 2.1778535042016167,
+        "speedup_ci95": [
+          2.1742023944265596,
+          2.1828528938792067
+        ]
+      }
+    }
+  ],
+  "status": "completed_diagnostic",
+  "block_weights_sha256": "ea23e1119181497534381a4de9b6f03cf0c52370164349e444fb6225045174b7",
+  "evidence_origin": "benchmarks/results/sana_block_h100_pointwise_20261003/results.json",
+  "source_state": "Acceleration implementation was uncommitted at measurement time; runtime.worldfoundry_commit records the then-current HEAD.",
+  "post_measurement_review": {
+    "implementation_commit": "9bfe87097af3f8fb26ae27fc9d376afb728b4d3e",
+    "note": "Implementation commit identified after measurement for code review and reproduction. This metadata does not replace or reinterpret the recorded runtime fingerprint."
+  }
+}

@@ -1,0 +1,14 @@
+schema_version: 2
+binding_id: alayaworld-v1.1
+model_id: alayaworld-v1.1
+aliases:
+- alayaworld-v11
+- alaya-world-v1.1
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.alayaworld_v11.pipeline_alayaworld_v11:AlayaWorldV11Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

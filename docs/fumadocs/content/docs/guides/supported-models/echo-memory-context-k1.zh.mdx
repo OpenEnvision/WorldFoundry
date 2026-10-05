@@ -1,0 +1,53 @@
+---
+title: "Echo-Memory"
+description: "京东 Echo-Memory 身份，永久钉在 context_k1（K=1）。Wan2.1-1.3B。CC-BY-4.0。2026-07-20 的 A100 片段只是历史——原生 CUDA 产物待验证。"
+modelId: "echo-memory-context-k1"
+pageSource: authored
+---
+
+Echo-Memory Context K=1 是京东 Echo-Memory 家族里的**一个身份**：Wan2.1-T2V-1.3B 交互世界，和兄弟卡的差别**只有**记忆。这张卡永久绑在 `context_k1/epoch-0.safetensors`——每个新块只条件于 **K=1** 帧上下文。运行时**不能**另选记忆方法。Pipeline：`EchoMemoryContextK1Pipeline`。别名 `echo-context-k1`、`echo-memory` 解析到这里。
+
+<ModelPaperFigures modelId="echo-memory-context-k1" locale="zh" />
+
+论文：[arXiv 2606.09803](https://arxiv.org/abs/2606.09803)。项目页：[echo-team-joy-future-academy-jd.github.io/Echo-Memory](https://echo-team-joy-future-academy-jd.github.io/Echo-Memory/)。代码：[Echo-Team-Joy-Future-Academy-JD/Echo-Memory](https://github.com/Echo-Team-Joy-Future-Academy-JD/Echo-Memory)。权重：`Echo-Team/Echo-Memory`（**cc-by-4.0**）加 `Wan-AI/Wan2.1-T2V-1.3B`（**apache-2.0**）。
+
+**2026-07-20** 的 A100 产物**早于** NativeDiffusionPipeline 切换，只当**历史**。新的 CUDA 产物、官方样本一致性和评测打分都**待做**。画质是研究预览（1.3B）。
+
+<ModelCommandBuilder modelId="echo-memory-context-k1" locale="zh" />
+
+## 用来做什么
+
+Echo memory-context K1 槽位，不是 Infinity 长视频卡。
+
+启动 `worldfoundry-eval run echo-memory-context-k1`。
+
+评测入口：[MemoBench](/zh/docs/evaluation/benchmark-hub/memobench)（专为评估交互式世界模型的长时程记忆而设）。
+
+## 运行时契约
+
+必填 `prompt`、`image`；可选 `video`；`actions`：camera_trajectory；产物 `generated_world_video`、`echo-memory-context-k1.mp4`。
+
+| 旋钮 | 默认 |
+| --- | --- |
+| 尺寸 | **640×352** |
+| 帧数 | **81** |
+| FPS | **15** |
+| Chunk 数 | **2** |
+| 上下文帧 | **1** |
+| 采样步数 | **50** |
+| Sample shift | **5.0** |
+| 相机轨迹 | `z*80`（静止） |
+| 相机每帧平移步长 | **0.00125**（`w*80` 每块沿 +Y 移动 0.1） |
+| 相机每帧旋转步长 | **0.5625°**（`left*80` 每块转动 45°） |
+| 微调 | `Echo-Team/Echo-Memory`（`cc-by-4.0`） |
+| 主干 | `Wan-AI/Wan2.1-T2V-1.3B`（`apache-2.0`） |
+
+要请求官方示例尺度的前进动作，请传入 `camera_trajectory="w*80"`；要转动 45°，请传入 `"left*80"`。仅在提示词中描述相机运动不会替换默认的静止动作。可用 `camera_translation_step` 和 `camera_rotation_step_degrees` 覆盖每帧幅度。
+
+## 在 WorldFoundry 中运行
+
+状态：**Runner 一致性待验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `Echo-Team/Echo-Memory`、`Wan-AI/Wan2.1-T2V-1.3B`、`Echo-Team/Echo-Memory` 等就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run echo-memory-context-k1`。许可证：CC-BY-4.0、apache-2.0。catalog 未记录 VRAM。
+
+`worldfoundry/base_models/diffusion_model/models/networks/echo_memory` 只放 checkpoint 特有的网络块，不是命令行入口。记忆生命周期、模型装配和运行时契约在共享扩散基础设施里。如何加一条不可变 recipe 见[推理指南](/zh/docs/guides/inference#echo-memory-context-k1)。权重就位见[本地资产](/zh/docs/guides/local-assets)。
+
+<ModelRelatedRecipes modelId="echo-memory-context-k1" locale="zh" />

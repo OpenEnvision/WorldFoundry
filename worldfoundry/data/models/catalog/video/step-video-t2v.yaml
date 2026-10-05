@@ -19,20 +19,56 @@ checkpoint_refs:
   revision: 7a2b639ca2685350e87a4df7e4026285309f7fb6
   license: mit
   estimated_size_gb: 183
+official_sources:
+  paper: https://arxiv.org/abs/2502.10248
 integration:
-  status: planned
+  status: integrated
   notes:
-  - Runtime source is vendored in-tree; full execution remains multi-GPU/service/checkpoint
-    gated.
+  - The public pipeline is assembled from native role-based components and the shared
+    WorldFoundry diffusion runner.
 runtime_profile: runtime-profile:step-video-t2v
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: step-video-t2v
 runner_parity:
-  status: implemented_multigpu_services_pending
+  status: verified
   notes:
-  - StepVideoT2VSynthesis provides an in-tree execution plan wrapper around the vendored
-    runtime.
+  - DiT, Step-LLM, CLIP, scheduler, latent initialization, and VAE decoding execute
+    in-process; the former xFuser and caption/VAE service runtime is not a backend.
+  - A 2026-09-26 checkpoint-backed single-H100 run produced 204/204 decodable
+    frames at 992x544 using 50 denoising steps, CFG 9, and time shift 13.
+    Visual review found a coherent surfing-cat scene with sustained board and
+    water motion for this prompt; official pixel parity is not claimed.
+notes:
+- Use id step-video-t2v. The public pipeline uses the canonical native diffusion assembler.
+native_diffusion:
+  recipe_id: step-video-t2v
+  architecture: step-video-t2v
+  backend: worldfoundry-native-diffusion
+  shared_components:
+  - native checkpoint resolver and module loader
+  - framework-owned CFG sampling loop
+  - core scaled-dot-product attention and block offload
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries
   expose WorldFoundry pipeline targets; metadata-only entries retain upstream provenance
   without runnable WorldFoundry backends.
+docs:
+  publisher: StepFun
+  publisher_kind: company
+  publisher_zh: 阶跃星辰（StepFun）
+  overview: Step-Video-T2V is StepFun's large open text-to-video model (30B parameters upstream, MIT weights at stepfun-ai/stepvideo-t2v). In WorldFoundry the public pipeline is assembled from native role-based components with the shared diffusion runner — DiT, Step-LLM text encoder, CLIP, scheduler, latent initialization, and VAE decoding all execute in-process.
+  overview_zh: Step-Video-T2V 是阶跃星辰的大规模开源文生视频模型（上游 300 亿参数，MIT 权重位于 stepfun-ai/stepvideo-t2v）。在 WorldFoundry 中，公开 pipeline 由原生角色化组件与共享扩散 runner 装配—— DiT、Step-LLM 文本编码器、CLIP、调度器、潜变量初始化与 VAE 解码全部进程内执行。
+  architecture: 'Upstream: a 30B DiT with a deeply compressed Video-VAE (16x16 spatial, 8x temporal) and bilingual text encoders. This repository re-assembles the native pipeline in-process; the former xFuser and caption/VAE HTTP-service runtime is not a backend. A checkpoint-backed 204-frame GPU artifact is verified for one prompt.'
+  architecture_zh: 上游：30B DiT，配深压缩 Video-VAE（空间 16x16、时间 8x）与双语文本编码器。本仓库在进程内重装配原生 pipeline；原 xFuser 与 caption/VAE HTTP 服务运行时不再是后端。已验证使用真实权重的 204 帧 GPU 产物（一个受控提示词）。
+  usage_notes: A checkpoint-backed 204-frame GPU artifact at 992x544 and 50 steps is verified for one prompt. Use id step-video-t2v. At 30B scale plan for serious VRAM or multi-GPU setups.
+  usage_notes_zh: 已验证使用真实权重在 GPU 上以 992x544、50 步生成的 204 帧视频（一个受控提示词）。请使用 id step-video-t2v。30B 规模需要充足显存或多卡配置。
+  limitations:
+  - The 204-frame result covers one prompt; benchmark scores and official pixel parity are not yet measured.
+  - 30B scale demands datacenter GPUs; single consumer cards are not viable.
+  limitations_zh:
+  - 204 帧结果仅覆盖一个提示词；尚未测量基准分数或官方逐像素一致性。
+  - 30B 规模需要数据中心级 GPU；单张消费级显卡不可行。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Standard open T2V quality suite.
+    reason_zh: 标准开源文生视频质量评测。

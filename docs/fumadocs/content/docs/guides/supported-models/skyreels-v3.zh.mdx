@@ -1,0 +1,52 @@
+---
+title: "SkyReels V3"
+description: "SkyReels V3（Skywork AI (Kunlun)）：参考图生成视频、音频引导视频；Runner 一致性待确认。"
+modelId: "skyreels-v3"
+pageSource: authored
+---
+
+SkyReels V3 是 Skywork 的更新一代，记录任务为参考图生视频、音频引导视频与视频到视频。 catalog 路径把 SkyReels-V3-R2V-14B checkpoint 加载进共享原生 Wan 图，参考图潜变量拼接与文本/图像双引导被实现为可复用的初始化器与执行策略能力，而非专属运行时。
+
+<ModelPaperFigures modelId="skyreels-v3" locale="zh" />
+
+记录论文为[arXiv 2601.17323](https://arxiv.org/abs/2601.17323)。
+
+代码：[SkyworkAI/SkyReels-V3](https://github.com/SkyworkAI/SkyReels-V3)。
+
+<ModelCommandBuilder modelId="skyreels-v3" locale="zh" />
+
+## 用来做什么
+
+`skyreels-v3` 是记录的 prompt 到视频路由——不是图像编辑，也不是策略。只要任务是文生视频，从这里起步。
+
+Transformer、UMT5 文本编码器与 VAE 的 checkpoint schema 与原生 Wan 图精确对应（已记录验证）。参考条件通过拼接参考图潜变量实现；引导以文本/图像双通道经 UniPC 调度器与双条件 runner 执行。该模型由昆仑万维（Skywork AI）发布。
+
+catalog 记录的任务包括 参考图生成视频、音频引导视频、视频到视频、视频生成。模态上，它接受图像、视频，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（基础质量评测）。
+
+不是 [SkyReels V2](/zh/docs/guides/supported-models/skyreels-v2)。 评测看 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`input_path`、`frames`、`fps`；产物 `skyreels-v3.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `SkyReelsV3Pipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+runner 状态为 partial：checkpoint schema 映射精确、此前官方运行时的视觉产物有存档，但原生视觉一致性仍需一次 GPU 推理运行。 不涉及 Diffusers 或模型自有的子进程运行时。
+
+WorldFoundry loads the SkyReels V3 checkpoint into the shared native Wan graph and framework-owned diffusion runner.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run skyreels-v3 --pipeline.task-profile interactive-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `Skywork/SkyReels-V3-R2V-14B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh skyreels-v3`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="skyreels-v3" locale="zh" />

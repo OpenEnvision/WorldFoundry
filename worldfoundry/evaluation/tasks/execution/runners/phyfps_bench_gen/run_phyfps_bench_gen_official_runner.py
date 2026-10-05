@@ -11,10 +11,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
+    resolve_env_path,
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
 )
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl  # noqa: E402
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
 from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.phyfps_metrics import (
     METRIC_ORDER,
     METRIC_SPECS,
@@ -37,9 +39,7 @@ from worldfoundry.evaluation.tasks.execution.runners.phyfps_bench_gen.visual_chr
 )
 from worldfoundry.evaluation.utils import REPO_ROOT
 
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 BENCHMARK_ID = "phyfps-bench-gen"
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -66,9 +66,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def _env_float(name: str) -> float | None:
@@ -85,7 +82,7 @@ def _env_float(name: str) -> float | None:
 def _resolve_phyfps_bench_gen_root(explicit: Path | None = None) -> Path | None:
     for candidate in (
         explicit,
-        _env_path("WORLDFOUNDRY_PHYFPS_BENCH_GEN_ROOT"),
+        resolve_env_path("WORLDFOUNDRY_PHYFPS_BENCH_GEN_ROOT"),
         bundled_benchmark_assets_root(BENCHMARK_ID),
     ):
         if candidate is not None and candidate.is_dir():
@@ -94,7 +91,7 @@ def _resolve_phyfps_bench_gen_root(explicit: Path | None = None) -> Path | None:
 
 
 def _default_prompt_manifest() -> Path | None:
-    env_manifest = _env_path("WORLDFOUNDRY_PHYFPS_BENCH_GEN_PROMPT_MANIFEST")
+    env_manifest = resolve_env_path("WORLDFOUNDRY_PHYFPS_BENCH_GEN_PROMPT_MANIFEST")
     if env_manifest is not None and env_manifest.is_file():
         return env_manifest
     bundled = bundled_benchmark_asset(BENCHMARK_ID, PROMPT_MANIFEST_REL)
@@ -326,16 +323,16 @@ def normalize_phyfps_results(
 ) -> dict[str, Any]:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    official_results_path = args.official_results_path or _env_path("WORLDFOUNDRY_PHYFPS_BENCH_GEN_RESULTS_PATH")
+    official_results_path = args.official_results_path or resolve_env_path("WORLDFOUNDRY_PHYFPS_BENCH_GEN_RESULTS_PATH")
     if official_results_path is None:
         official_results_path = output_dir / "results.csv"
     prompt_manifest_path = (
         args.prompt_manifest
         or _prompt_manifest_from_root(args.phyfps_bench_gen_root)
-        or _env_path("WORLDFOUNDRY_PHYFPS_BENCH_GEN_PROMPT_MANIFEST")
+        or resolve_env_path("WORLDFOUNDRY_PHYFPS_BENCH_GEN_PROMPT_MANIFEST")
         or _default_prompt_manifest()
     )
-    generated_artifact_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_artifact_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
 
     prompt_count = 0
     expected_names: set[str] = set()
@@ -373,7 +370,7 @@ def normalize_phyfps_results(
 
     records = parse_results_csv(Path(official_results_path))
     meta_fps_map = load_meta_fps_map(
-        explicit_manifest=args.meta_fps_manifest or _env_path("WORLDFOUNDRY_PHYFPS_META_FPS_MANIFEST"),
+        explicit_manifest=args.meta_fps_manifest or resolve_env_path("WORLDFOUNDRY_PHYFPS_META_FPS_MANIFEST"),
         default_meta_fps=args.meta_fps or _env_float("WORLDFOUNDRY_PHYFPS_META_FPS"),
         video_names=[record.video for record in records],
     )
@@ -434,7 +431,7 @@ def normalize_phyfps_results(
 def run_official_phyfps_bench_gen(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    generated_artifact_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_artifact_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
     if generated_artifact_dir is None:
         raise ValueError("--generated-artifact-dir or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required for --run-official")
 

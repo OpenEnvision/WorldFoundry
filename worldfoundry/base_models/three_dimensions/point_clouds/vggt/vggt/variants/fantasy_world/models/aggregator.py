@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from typing import Tuple, List
 
-from worldfoundry.base_models.diffusion_model.video.wan.models.geometry_wan import (
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.geometry import (
     rope_params,
 )
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.variants.fantasy_world.layers.block import (

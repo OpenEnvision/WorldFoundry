@@ -7,7 +7,7 @@ import os
 import sys
 from typing import Any
 
-from .context import DEFAULT_CONTEXT, DEFAULT_MCP_OUTPUT_ROOT, MCPToolContext
+from .context import DEFAULT_MCP_OUTPUT_ROOT, MCPToolContext, get_default_context
 from .studio import DEFAULT_STUDIO_WORKSPACE_URL
 
 MCP_TOOL_NAMES: tuple[str, ...] = (
@@ -44,7 +44,7 @@ MCP_TOOL_NAMES: tuple[str, ...] = (
 def server_info_payload(*, context: MCPToolContext | None = None) -> dict[str, Any]:
     """Summarize server configuration, tools, and documentation hints."""
 
-    ctx = context or DEFAULT_CONTEXT
+    ctx = context or get_default_context()
     version = _package_version()
     env_keys = sorted(name for name in os.environ if name.startswith("WORLDFOUNDRY_"))
     return {
@@ -66,12 +66,12 @@ def server_info_payload(*, context: MCPToolContext | None = None) -> dict[str, A
             "configured_keys": env_keys,
         },
         "docs": {
-            "mcp": "/docs/reference/mcp",
+            "mcp": "/docs/maintainers/architecture/surfaces-orchestration",
             "cli": "/docs/reference/cli",
-            "evaluation_quickstart": "/docs/evaluation/quickstart",
+            "evaluation_quickstart": "/docs/evaluation",
             "metrics": "/docs/evaluation/metrics",
-            "agent_setup": "/docs/guides/agent-setup",
-            "docker": "/docs/guides/docker",
+            "agent_setup": "/docs/reference/environments",
+            "docker": "/docs/evaluation/embodied-official-runtime",
         },
         "workflow": [
             "Call server_info to confirm paths and available tools.",

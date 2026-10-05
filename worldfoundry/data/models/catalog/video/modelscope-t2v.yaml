@@ -28,6 +28,9 @@ checkpoint:
   notes: The similarly named model-scope/text-to-video-synthesis repo is reachable
     but not used here because ali-vilab/modelscope-damo-text-to-video-synthesis is
     the confirmed open-weight checkpoint selected for this manifest.
+official_sources:
+  paper: https://arxiv.org/abs/2308.06571
+  project_page: https://modelscope.cn/
 integration:
   status: integrated
   notes:
@@ -52,3 +55,25 @@ catalog_policy:
     id, sha, private, gated, license, and selected task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit
     parity run and expected artifact are recorded.
+docs:
+  publisher: Alibaba (DAMO Academy / ModelScope)
+  publisher_kind: company
+  publisher_zh: 阿里巴巴（达摩院 / ModelScope）
+  overview: ModelScopeT2V is Alibaba DAMO Academy's original open text-to-video diffusion model — the 1.7B model that kicked off much of the open T2V ecosystem (ZeroScope in this catalog is a fine-tune of it). The WorldFoundry route is complete and reports missing checkpoints at runtime. It is kept mainly as a historical baseline.
+  overview_zh: ModelScopeT2V 是阿里达摩院最早开源的文生视频扩散模型——那个带动了开源 T2V 生态的 1.7B 模型（本 catalog 中的 ZeroScope 就是它的微调版）。WorldFoundry 路径已完备，checkpoint 缺失会在运行时报告。它主要作为历史基线保留。
+  architecture: A U-Net latent video diffusion model with temporal attention layers inserted into a text-to-image backbone (per the upstream publication). This repository records the prompt-only input contract and generated_video artifact.
+  architecture_zh: U-Net 潜空间视频扩散模型，在文生图基座中插入时序注意力层（见上游论文）。本仓库记录仅 prompt 的输入契约与 generated_video 产物。
+  usage_notes: The recorded license is non-commercial per HF cardData — the manifest says explicitly not to treat it as unrestricted open source. Use it for research comparisons only; for production-quality T2V use the DiT-based entries.
+  usage_notes_zh: HF cardData 记录其许可为非商用——manifest 明确要求不要当作无限制开源使用。仅建议用于研究对比；生产级文生视频请用基于 DiT 的条目。
+  limitations:
+  - Non-commercial checkpoint license (recorded in the manifest).
+  - 'Early-generation quality: low resolution and weak temporal consistency by current standards.'
+  - No runner-parity evidence is recorded.
+  limitations_zh:
+  - checkpoint 为非商用许可（manifest 有记录）。
+  - 早期模型质量：按当前标准分辨率低、时序一致性弱。
+  - 没有 runner parity 证据记录。
+  recommended_benchmarks:
+  - id: fetv
+    reason: Fine-grained T2V evaluation suited to legacy baselines.
+    reason_zh: 细粒度文生视频评测，适合老基线。

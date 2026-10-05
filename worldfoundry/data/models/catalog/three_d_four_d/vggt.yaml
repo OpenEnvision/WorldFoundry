@@ -10,6 +10,7 @@ source:
   official_repo_url: https://github.com/facebookresearch/vggt
   license: apache-2.0
 official_sources:
+  project_page: https://vgg-t.github.io/
   paper: https://openaccess.thecvf.com/content/CVPR2025/papers/Wang_VGGT_Visual_Geometry_Grounded_Transformer_CVPR_2025_paper.pdf
   github:
     url: https://github.com/facebookresearch/vggt
@@ -29,3 +30,19 @@ runner_parity:
   - Per-run validation evidence is tracked outside the model catalog.
 catalog_category: three_d_four_d
 catalog_scope: Official-source manifest for 3D, 4D, and camera-controlled world/model generation projects.
+docs:
+  publisher: Meta AI (FAIR) / University of Oxford (VGG)
+  publisher_kind: company
+  publisher_zh: Meta AI（FAIR）/ 牛津大学 VGG 组
+  overview: VGGT (Visual Geometry Grounded Transformer, CVPR 2025) is a feed-forward network that infers cameras, depth maps, point maps, and 3D point tracks from one to hundreds of views in a single pass — no per-scene optimization. In this catalog the in-tree two-stage 3DGS pipeline is registered, distinct from the vggt-omega and vggt-world entries.
+  overview_zh: VGGT（Visual Geometry Grounded Transformer，CVPR 2025）是前馈网络：单次前向即可从一到数百个视图推断相机、深度图、点图与 3D 点轨迹——无需逐场景优化。本 catalog 中已注册树内两段式 3DGS pipeline，与 vggt-omega、vggt-world 条目相互独立。
+  architecture: Per the CVPR 2025 paper, a large transformer alternates frame-wise and global attention over image tokens, with task-specific heads for cameras, depth, pointmaps, and tracking. Weights are apache-2.0 (facebookresearch/vggt); the recorded route builds 3DGS from VGGT geometry in two stages.
+  architecture_zh: 按 CVPR 2025 论文，大型 Transformer 在图像 token 上交替执行帧内与全局注意力，任务头分别输出相机、深度、点图与跟踪。权重为 apache-2.0（facebookresearch/vggt）；记录路径分两段从 VGGT 几何构建 3DGS。
+  usage_notes: Integration is runtime_ported with runner parity pending. For the verified scene-export route use vggt-omega; use this entry when you want the two-stage 3DGS pipeline over base VGGT geometry.
+  usage_notes_zh: 集成为 runtime_ported，runner parity 待验证。需要已验证的场景导出路径请用 vggt-omega；需要基于基础 VGGT 几何的两段式 3DGS pipeline 时用本条目。
+  limitations:
+  - Runner parity is pending in this workspace.
+  - Feed-forward inference on hundreds of views needs substantial GPU memory.
+  limitations_zh:
+  - 本工作区中 runner parity 待验证。
+  - 数百视图的前馈推理需要可观的 GPU 显存。

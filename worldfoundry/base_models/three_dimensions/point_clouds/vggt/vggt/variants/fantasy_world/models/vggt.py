@@ -11,7 +11,7 @@ from ..models.aggregator import Aggregator
 from ..heads.camera_head import CameraHead
 from ..heads.dpt_head import DPTHead_3D_Causal
 from worldfoundry.base_models.three_dimensions.point_clouds.vggt.vggt.heads.track_head import TrackHead
-from worldfoundry.base_models.diffusion_model.video.wan.models.geometry_wan import (
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.geometry import (
     sinusoidal_embedding_1d,
 )
 class VGGT(nn.Module, PyTorchModelHubMixin):

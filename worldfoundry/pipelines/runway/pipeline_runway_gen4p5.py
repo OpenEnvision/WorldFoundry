@@ -1,5 +1,6 @@
 """Runway Gen4P5 visual generation pipeline module."""
 
+import logging
 import os
 import time
 from typing import Optional, Dict, Any, Union
@@ -13,6 +14,8 @@ from ...synthesis.visual_generation.runway.runway_gen4p5_synthesis import Runway
 
 _DEFAULT_ENDPOINT = "https://api.dev.runwayml.com/v1"
 _PLACEHOLDER_KEYS = {"your_api_key", "your api key"}
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_api_key(api_key: Optional[str]) -> str:
@@ -189,7 +192,7 @@ class RunwayGen4p5Pipeline(PipelineABC):
             task_status = self._extract_task_status(task_info).upper()
 
             if task_status and task_status != last_status:
-                print(f"Runway task {task_id}: {task_status}")
+                logger.info("Runway task %s: %s", task_id, task_status)
                 last_status = task_status
 
             if task_status in completed_statuses:

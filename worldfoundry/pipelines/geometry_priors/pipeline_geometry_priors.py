@@ -12,6 +12,7 @@ class GeometryPriorPipeline(PipelineABC):
     """Pipeline surface for standalone in-tree geometry-prior integrations."""
 
     MODEL_ID = "geometry-prior"
+    MODEL_PATH_OPTION = "model_path"
     OPERATOR_CLS = GeometryPriorOperator
     MEMORY_CLS = RuntimeMemory
     SYNTHESIS_CLS = GeometryPriorSynthesis

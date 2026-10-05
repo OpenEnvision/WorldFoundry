@@ -1,0 +1,30 @@
+---
+title: "Cosmos Transfer 2.5"
+description: "NVIDIA 的 sim-to-real 分支：控制视频入，照片级世界视频出。在 Predict 2.5 原生 runner 上加 VACE；记录的是 2B 边缘路径。"
+modelId: "cosmos-transfer-2.5"
+pageSource: authored
+---
+
+Cosmos Transfer 2.5 是 Cosmos 2.5 世代的 **sim-to-real / 世界到世界** 分支。**控制视频**（原始 RGB、边缘图或仿真渲染）加上 prompt 进，生成**跟随该控制**的写实世界视频。本卡片**不是** [Predict 2](/zh/docs/guides/supported-models/cosmos-predict-2)，**不是** [Predict 2.5](/zh/docs/guides/supported-models/cosmos-predict-2.5)，也**不是** [Cosmos 3](/zh/docs/guides/supported-models/cosmos3)。Predict 卡片从文本 / 图像 / 视频合成未来世界视频；Transfer 是把已经结构化的控制信号**转译**出去。
+
+<ModelPaperFigures modelId="cosmos-transfer-2.5" locale="zh" />
+
+它复用 Predict 2.5 的**原生**栈——Reason1 条件器、flow-UniPC、共享 Wan VAE、同一加载器——只多了按 checkpoint 形状实现的 **VACE** 控制分支（基座第 0/7/14/21 层四块，外加 28 层基座上的 8 模态控制嵌入器）。**不走 Diffusers**，没有 ControlNet 后端，也不调用英伟达运行时包。论文：[World Simulation with Video Foundation Models for Physical AI](https://arxiv.org/abs/2511.00062)（与 Predict 2.5 同一篇 2.5 文）。代码：[nvidia-cosmos/cosmos-transfer2.5](https://github.com/nvidia-cosmos/cosmos-transfer2.5)。
+
+WorldFoundry 记录的 variant **只有 `cosmos-transfer-2.5-2b`**。catalog 记过一次带 checkpoint 的 2B **边缘**运行：**1280×704、93 帧、35 步**。Hugging Face 上还有 14B 卡片（`nvidia/Cosmos-Transfer2.5-14B`），但访问受限，**不是**本仓库已验证路径。权重走 gated 的 `nvidia-open-model-license`。
+
+<ModelCommandBuilder modelId="cosmos-transfer-2.5" locale="zh" />
+
+## 用来做什么
+
+把结构化控制译成照片级世界视频。启动 `worldfoundry-eval run cosmos-transfer-2.5-2b`，任务 profile 为 `controlled-video`。必填输入：`prompt`、`image`、`video`。`actions` 字段是 **`control_video`**。产物：`cosmos-transfer2.5-2b-controlled-video.mp4`。
+
+给原生路径一段**原始 RGB** 控制片段，它会自己抽 **Canny** 边缘。只有在片段已经是边缘图时才设 `control_is_preprocessed`。这不是文生世界（Predict 2.5），也不是 T5 条件的 video2world（Predict 2）。
+
+受控世界视频的评测入口是 [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench) 与 [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq)。那是 catalog 入口，不是已摄入的 WorldFoundry 分数。
+
+## 在 WorldFoundry 中运行
+
+`CosmosTransfer2p5Pipeline` 跑在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。就位官方 2B **边缘** checkpoint `nvidia/Cosmos-Transfer2.5-2B`，以及 Predict 2.5 的 VAE 与 Reason1 文本编码器。若这些 gated 文件缺失，即使 catalog 记录了上面的 2B 边缘几何，运行时 profile 仍会把精确 checkpoint 键 / GPU 一致性标成 pending。
+
+<ModelRelatedRecipes modelId="cosmos-transfer-2.5" locale="zh" />

@@ -1,7 +1,22 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Video I/O shared by content-safety filters and postprocessors."""
+"""Video I/O shared by content-safety filters and postprocessors.
+
+Safety classifiers and face-blur postprocessors need a tiny, imageio-
+backed read/write path that does not pull Studio or the full
+:mod:`worldfoundry.core.media.codecs.video` stack. This module:
+
+- :func:`get_video_filepaths` — recursive ``mp4`` / ``avi`` / ``mov``
+  discovery.
+- :func:`read_video` — decode every frame into a
+  :class:`VideoData` (``frames``, ``fps``, ``duration``).
+- :func:`save_video` — write an ``[T,H,W,C]`` array with
+  ``macro_block_size=1`` so odd resolutions are not silently padded.
+
+Errors are raised as :class:`ValueError` with the path in the message
+so a guardrail runner can attribute a failure to a specific file.
+"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,17 +24,30 @@ from pathlib import Path
 import imageio
 import numpy as np
 
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.runtime.logging import log
+
+# ──────────────────────────────────────────────────────────────────────────
+# Decode / encode — imageio ffmpeg only; odd resolutions stay unpadded
+# ──────────────────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
 class VideoData:
+    """Decoded video payload used by safety classifiers.
+
+    Attributes:
+        frames: ``[T, H, W, C]`` uint8 (or float) array from imageio.
+        fps: Container frame rate; ``0.0`` when metadata is missing.
+        duration: Container duration in seconds.
+    """
+
     frames: np.ndarray
     fps: float
     duration: float
 
 
 def get_video_filepaths(input_dir: str | Path) -> list[str]:
+    """Return sorted ``.mp4`` / ``.avi`` / ``.mov`` paths under *input_dir*."""
     root = Path(input_dir)
     paths = sorted(str(path) for suffix in ("*.mp4", "*.avi", "*.mov") for path in root.rglob(suffix))
     log.debug("Found {} videos", len(paths))
@@ -27,6 +55,11 @@ def get_video_filepaths(input_dir: str | Path) -> list[str]:
 
 
 def read_video(filepath: str | Path) -> VideoData:
+    """Decode *filepath* with the imageio ffmpeg plugin into :class:`VideoData`.
+
+    Raises:
+        ValueError: The file cannot be opened or contains no frames.
+    """
     path = str(filepath)
     try:
         reader = imageio.get_reader(path, "ffmpeg")
@@ -54,6 +87,11 @@ def read_video(filepath: str | Path) -> VideoData:
 
 
 def save_video(filepath: str | Path, frames: np.ndarray, fps: float) -> None:
+    """Write *frames* (``[T,H,W,C]``) to *filepath* at *fps*.
+
+    Raises:
+        ValueError: imageio failed to create or write the file.
+    """
     path = str(filepath)
     writer = None
     try:

@@ -1,0 +1,89 @@
+# Shared Matrix-Game 3.5 inference defaults stored as package data.
+
+model_id: matrix-game-3.5-first-person
+model_paths: null
+model_id_with_origin_paths: null
+tokenizer_path: null
+trained_dit: null
+
+height: 704
+width: 1280
+latent_window_size: 21
+seed: 3407
+output_path: ./outputs
+log_dir_name: null
+num_inference_batches: 1
+num_inference_blocks: 1
+
+dataset_index_path: null
+dataset_type: da3_video
+dataset_cache_dir: null
+no_dataset_cache: false
+dataset_compact_mode: false
+max_data_items: null
+max_scan_items: null
+max_frames_per_scene: null
+min_frame_count: null
+filter_yaml: null
+include_yaml: null
+dataset_path_shuffle_seed: 42
+inference_manifest_path: null
+min_anchor_frame_idx: 0
+
+allow_no_prompt: false
+loose_prompt_match: false
+vipe_prompt_type: 2
+vipe_prompt_segment_format: false
+align_generating_to_prompt_segments: false
+
+enable_mosaic: true
+only_prope: false
+use_prope: true
+prope_attention_interval: 1
+prope_camera_layout: full
+prope_disable_native_rope: false
+prope_disable_t_rope: false
+trans_scale: 50.0
+mosaic_fuse_mode: fill_stop_zbuffer
+mosaic_fuse_block_size: 2
+mosaic_drop_holes: true
+mosaic_interval: 1
+mosaic_query_reference_frame: 4
+mosaic_return_source_frame_ids: false
+mosaic_use_revgrid_rope: false
+mosaic_view_change_prope: false
+mosaic_selection_mode: pose_nearest
+mosaic_candidate_nms_mode: pose
+mosaic_candidate_nms_min_temporal_gap: 0
+mosaic_candidate_nms_pool_multiplier: 2.0
+mosaic_candidate_nms_pose_distance_threshold: 0.1
+mosaic_candidate_nms_projection_iou_threshold: 0.7
+mosaic_coverage_grid_downsample: 4
+mosaic_coverage_pool_stride: 2
+candidates_per_query_group: 5
+
+memory_latent_cache_dir: null
+memory_latent_cache_version: wan2.2_ti2v_5b_vae_704p
+memory_vae_encode_input_frames: 1
+
+subject_ref_memory: false
+subject_ref_time_gap: 1
+subject_ref_prope_mode: identity
+subject_num_refs_max: 2
+subject_ref_canvas_slot_ratio: 0.5
+subject_ref_dir_name: protagonist_refs
+subject_ref_background: imagenet_mean
+subject_dissimilar_top_k: 8
+subject_max_similarity: 0.94
+
+vae_decode_tiled: false
+inference_seed: 3407
+num_inference_steps: 25
+guidance_scale: 5.0
+negative_prompt: 色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走
+negative_no_context: false
+negative_no_prope: false
+inference_sample_offset: 0
+mosaic_intrinsics_mode: first_frame
+force_using_input_extrinics: true
+force_override_extrinsic: null

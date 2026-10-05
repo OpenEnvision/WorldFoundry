@@ -9,11 +9,41 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping
 
-from worldfoundry.core.io.paths import resolve_data_path
+from worldfoundry.core.io.paths import checkpoint_root_candidates, resolve_data_path
 from worldfoundry.runtime.in_tree_cli import ensure_in_tree_runtime, execute_in_tree, require_path
 
-
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
+
+
+def _resolve_local_checkpoint_alias(value: Any) -> Path:
+    """Resolve hfd/<repo> and flat <repo> checkpoint mirror layouts."""
+
+    path = Path(value).expanduser()
+    if path.exists():
+        return path.resolve()
+    for root in checkpoint_root_candidates():
+        for candidate in (root / path.name, root / "hfd" / path.name):
+            if candidate.exists():
+                return candidate.resolve()
+    return path
+
+
+def _resolve_depth_pro_checkpoint() -> Path:
+    configured = os.environ.get("DEPTH_PRO_CHECKPOINT", "").strip()
+    if configured:
+        return require_path(configured, "DepthPro checkpoint", kind="file")
+    for root in checkpoint_root_candidates():
+        for relative in (
+            Path("apple--DepthPro") / "depth_pro.pt",
+            Path("DepthPro") / "depth_pro.pt",
+        ):
+            candidate = root / relative
+            if candidate.is_file():
+                return candidate.resolve()
+    raise FileNotFoundError(
+        "MagicWorld requires a local DepthPro checkpoint at "
+        "$WORLDFOUNDRY_CKPT_DIR/apple--DepthPro/depth_pro.pt"
+    )
 
 
 def _resolve_magic_checkpoint(root: Path) -> Path:
@@ -78,6 +108,22 @@ def _coerce_native_rows(value: Any) -> list[list[float]]:
     return rows
 
 
+def _magicworld_latent_frames(num_frames: int) -> int:
+    """Validate the public frame count against MagicWorld-Fast's three-frame blocks."""
+
+    requested = int(num_frames)
+    if requested <= 0:
+        raise ValueError("MagicWorld num_frames must be positive")
+    latent_frames = max(1, (requested - 1) // 4 + 1)
+    if (requested - 1) % 4 != 0 or latent_frames % 3 != 0:
+        raise ValueError(
+            f"MagicWorld num_frames={requested} maps to {latent_frames} latent frames; "
+            "MagicWorld-Fast requires a multiple of 3 latent frames "
+            "(valid output counts include 9, 21, 33, 45, 57, 69, and 81)."
+        )
+    return latent_frames
+
+
 class MagicWorldRuntime:
     """Run the bundled MagicWorld-Fast camera-control path."""
 
@@ -94,10 +140,12 @@ class MagicWorldRuntime:
     ) -> None:
         self.repo_root = ensure_in_tree_runtime(self.bundled_repo_root(), package_file=__file__)
         hfd = Path(os.environ.get("WORLDFOUNDRY_HFD_ROOT", "cache/hfd"))
-        self.checkpoint_path = Path(checkpoint_path or hfd / "LuckyLiGY--MagicWorld").expanduser()
-        self.base_model_path = Path(
+        self.checkpoint_path = _resolve_local_checkpoint_alias(
+            checkpoint_path or hfd / "LuckyLiGY--MagicWorld"
+        )
+        self.base_model_path = _resolve_local_checkpoint_alias(
             base_model_path or hfd / "alibaba-pai--Wan2.1-Fun-V1.1-1.3B-InP"
-        ).expanduser()
+        )
         self.python_executable = str(python_executable or sys.executable)
         self.device = device
         self.env = dict(env or {})
@@ -173,7 +221,7 @@ class MagicWorldRuntime:
             + "\n",
             encoding="utf-8",
         )
-        latent_frames = max(1, (int(num_frames) - 1) // 4 + 1)
+        latent_frames = _magicworld_latent_frames(num_frames)
         required_camera_rows = (latent_frames - 1) * 4 + 1
         if len(camera_rows) < required_camera_rows:
             raise ValueError(
@@ -182,6 +230,7 @@ class MagicWorldRuntime:
             )
         env = {
             **self.env,
+            "DEPTH_PRO_CHECKPOINT": str(_resolve_depth_pro_checkpoint()),
             "WORLDFOUNDRY_MAGICWORLD_WAN_ROOT": str(wan_root),
             "WORLDFOUNDRY_MAGICWORLD_BASE_ROOT": str(magic_base),
             "WORLDFOUNDRY_MAGICWORLD_CONFIG": str(

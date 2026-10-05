@@ -1,0 +1,60 @@
+schema_version: 2
+model_id: alayaworld-v1.1
+display_name: AlayaWorld v1.1
+task_family: world_model
+groups:
+- world
+- video
+source_repos:
+- url: https://github.com/AlayaLab/AlayaWorld
+  revision: ea03cfbb2e4c4e9102ed8ea8562e0b5370ca9b79
+  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/AlayaLab--AlayaWorld
+checkpoints:
+- repo_id: AlayaLab/AlayaWorld-v1.1-stage2b
+  revision: 17f2f8a4939d85920b8a6c5191ce88dec7f862d1
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/AlayaLab--AlayaWorld-v1.1-stage2b
+  role: primary
+- repo_id: AlayaLab/AlayaWorld-v1.1-stage3
+  revision: 75fef054c5c0f86fd1450d50f70ef2f0a93fff2b
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/AlayaLab--AlayaWorld-v1.1-stage3
+  role: dmd_lora
+- repo_id: Lightricks/LTX-2.3
+  revision: 5948be4ced3a4493d1f836df64378ff136ddb770
+  role: base_model
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Lightricks--LTX-2.3
+  filename: ltx-2.3-22b-dev.safetensors
+- repo_id: pkqbajng/ViGeo1.1
+  revision: 49103e6eeab888bae974251d3578b496bec711d7
+  role: spatial_geometry
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/pkqbajng--ViGeo1.1
+- repo_id: google/gemma-3-12b-it-qat-q4_0-unquantized
+  revision: 68f7ee4fbd59087436ada77ed2d62f373fdd4482
+  role: text_encoder
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/google--gemma-3-12b-it-qat-q4_0-unquantized
+  gated: true
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions:
+  - camera_path
+artifact_kind: generated_world
+artifact_filename: alayaworld-v1.1.mp4
+execution:
+  environment: alayaworld-v1.1
+  backend_stage: official_external_runtime
+  runtime_status: cpu_contract_validated_checkpoint_gpu_pending
+  integration_status: integrated
+  pipeline_binding: alayaworld-v1.1
+  defaults: {}
+integration:
+  status: integrated
+license: ltx-2-community-license
+notes:
+- Uses extracted inference-only rollout methods and inference configuration sections; no trainer or optimizer is instantiated.
+- CPU configuration and adapter contracts checked; checkpoint loading, VRAM usage and GPU artifact parity remain pending.
+- Single-GPU inference bridge; full-window native VAE encoding may use more peak memory than the upstream streaming encoder.
+usage_restrictions:
+- academic-and-research-use
+- non-commercial-use
+- gemma-license-acceptance-required

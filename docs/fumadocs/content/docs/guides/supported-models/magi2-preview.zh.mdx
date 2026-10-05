@@ -1,0 +1,42 @@
+---
+title: "MAGI-2 Preview"
+description: "MAGI-2 Preview（sand-ai）：文生视频、图生视频；计划中。"
+modelId: "magi2-preview"
+pageSource: authored
+---
+
+MAGI-2 Preview 是来自 sand-ai 的视频生成模型。Catalog 将它记录为文生视频、图生视频任务。它还有别名 magi2、magi2_preview、magi-2-preview。
+
+<ModelPaperFigures modelId="magi2-preview" locale="zh" />
+
+代码：[SandAI-org/MAGI-2-preview](https://github.com/SandAI-org/MAGI-2-preview)。
+
+<ModelCommandBuilder modelId="magi2-preview" locale="zh" />
+
+## 用来做什么
+
+`magi2-preview` 是记录的文本/图像到视频线。需要同一张卡片上同时有 prompt 与静帧条件时用它。
+
+catalog 记录的任务包括 文生视频、图生视频。别名包括 `magi2`、`magi2_preview`、`magi-2-preview`。模态上，它接受文本、图像，输出视频。
+
+MAGI-2 预览文生/图生视频。不是 MAGI-1。
+
+## 运行时契约
+
+必填 `prompt`、`image`；可选 `video`、`audio`、`actions` (seed, task)；产物 `magi2-preview.mp4`。
+
+记录的任务 profile：`text-to-video`、`image-to-video`。绑定的 pipeline 类是 `NativeMagi2Pipeline`。
+
+系列状态：**计划中**。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run magi2-preview --pipeline.task-profile default`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `sand-ai/MAGI-2-preview`、`sand-ai/MAGI-2-preview`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh magi2-preview`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；catalog 显存 80 GB；状态：**计划中**。
+
+<ModelRelatedRecipes modelId="magi2-preview" locale="zh" />

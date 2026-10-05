@@ -1,187 +1,147 @@
+"""Google Gemini API client for Veo 3.1 video generation."""
+
 from __future__ import annotations
 
-from typing import Dict, Any, List
-import logging
+import io
+import time
+from pathlib import Path
+from typing import Any, Dict
+
+from PIL import Image
+
+from ..api_video_client import CredentialedSynthesis
 
 
-class Veo3Synthesis(object):
-    """
-    Veo3 生成合成类，提供统一的接口用于音视频生成
-    
-    负责API调用和模型推理相关的工作
-    """
-    
+class Veo3Synthesis(CredentialedSynthesis):
+    """Submit, poll, and optionally download a Veo video through google-genai."""
+
+    MODEL = "veo-3.1-generate-preview"
+    DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com"
+
     def __init__(
         self,
-        endpoint: str,
-        api_key: str,
+        endpoint: str | None = None,
+        api_key: str = "your_api_key",
         logger=None,
-    ):
-        """
-        初始化 Veo3Synthesis
-        
-        Args:
-            endpoint: API基础URL
-            api_key: API密钥
-            logger: 日志记录器
-        """
-        self.endpoint = endpoint
-        self.api_key = api_key
-        self.logger = logger
-        
-        # 设置API基础URL
-        self.client = self._openai_client(api_key=self.api_key, base_url=self.endpoint)
-        
-        # 设置日志记录器
-        if logger is not None:
-            self.logger = logger
-        else:
-            self.logger = logging.getLogger(__name__)
-
-    def _openai_client(self, api_key: str, base_url: str):
-        """Create the OpenAI-compatible client only when this adapter is initialized.
-
-        Args:
-            api_key: API key for the compatible provider.
-            base_url: Compatible API base URL.
-        """
-        from openai import OpenAI
-
-        return OpenAI(api_key=api_key, base_url=base_url)
-    
-    @classmethod
-    def api_init(
-        cls,
-        endpoint: str,
-        api_key: str,
-        logger=None,
-        **kwargs
-    ):
-        """
-        从配置加载完整的 Veo3Synthesis
-        
-        Args:
-            endpoint: API基础URL
-            api_key: API密钥
-            logger: 日志记录器
-            **kwargs: 其他参数
-            
-        Returns:
-            Veo3Synthesis 实例
-        """
-        return cls(
-            endpoint=endpoint,
-            api_key=api_key,
-            logger=logger,
+        model: str | None = None,
+    ) -> None:
+        super().__init__(endpoint=endpoint, api_key=api_key, logger=logger)
+        if self.endpoint.rstrip("/").endswith("/openai"):
+            raise ValueError("Veo requires the native Gemini API base URL, not its OpenAI compatibility endpoint")
+        self.model = model or self.MODEL
+        try:
+            from google import genai
+            from google.genai import types
+        except ImportError as exc:
+            raise RuntimeError("Veo requires google-genai; install worldfoundry[api]") from exc
+        self._types = types
+        self.client = genai.Client(
+            api_key=self.api_key,
+            http_options=types.HttpOptions(base_url=self.endpoint.rstrip("/"), api_version="v1beta"),
         )
-    
-    def _invoke_chat_completion(
+
+    def _as_google_image(self, image: Image.Image):
+        if not isinstance(image, Image.Image):
+            raise TypeError(f"Veo image must be PIL.Image, got {type(image)}")
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return self._types.Image(image_bytes=buffer.getvalue(), mime_type="image/png")
+
+    def _generate(
         self,
+        processed_data: Dict[str, Any],
         *,
-        messages: List[Dict[str, Any]],
+        output_path: str | Path | None = None,
+        wait: bool = True,
+        poll_interval: float = 10,
+        timeout: float = 600,
     ) -> Dict[str, Any]:
-        """
-        调用 Chat Completions API
-        
-        Args:
-            messages: 消息列表
-            
-        Returns:
-            Dict 包含响应信息：
-                - response: API响应对象
-                - assistant_message: 助手消息
-                - parsed: 解析后的视频负载
-        """
-        response = self.client.chat.completions.create(
-            model="veo3.1",
-            messages=messages,
-        )
+        if poll_interval <= 0 or timeout <= 0:
+            raise ValueError("poll_interval and timeout must be positive")
 
-        return response
-    
-    def generate_t2av(
-        self,
-        processed_data: Dict[str, Any],
-        **kwargs
-    ) -> Dict[str, Any]:
-        """
-        文本到视频生成（T2V）
-        
-        Args:
-            processed_data: 处理后的数据（来自operator），包含已构建好的 user_content
-            **kwargs: 其他参数（保留以兼容接口）
-            
-        Returns:
-            Dict 包含生成结果
-        """
-        user_content = processed_data.get("user_content", [])
-        messages: List[Dict[str, Any]] = []
-        messages.append({"role": "user", "content": user_content})
-        return self._invoke_chat_completion(messages=messages)
-    
-    def generate_i2av(
-        self,
-        processed_data: Dict[str, Any],
-        **kwargs
-    ) -> Dict[str, Any]:
-        """
-        图像到视频生成（I2V）
-        
-        Args:
-            processed_data: 处理后的数据（来自operator），包含已构建好的 user_content
-            **kwargs: 其他参数（保留以兼容接口）
-            
-        Returns:
-            Dict 包含生成结果
-        """
-        user_content = processed_data.get("user_content", [])
-        messages: List[Dict[str, Any]] = []
-        messages.append({"role": "user", "content": user_content})
-        return self._invoke_chat_completion(messages=messages)
-    
+        image = processed_data.get("images")
+        last_frame = processed_data.get("last_frame")
+        reference_images = processed_data.get("reference_images") or []
+        if last_frame is not None and image is None:
+            raise ValueError("last_frame requires a starting image")
+        if reference_images and (image is not None or last_frame is not None):
+            raise ValueError("Veo reference_images cannot be combined with first or last frames")
+        if len(reference_images) > 3:
+            raise ValueError("Veo accepts at most three reference images")
+
+        config_values = {
+            key: value
+            for key, value in (processed_data.get("veo_config") or {}).items()
+            if value is not None
+        }
+        if last_frame is not None:
+            config_values["last_frame"] = self._as_google_image(last_frame)
+        if reference_images:
+            config_values["reference_images"] = [
+                self._types.VideoGenerationReferenceImage(
+                    image=self._as_google_image(item), reference_type="asset"
+                )
+                for item in reference_images
+            ]
+        operation = self.client.models.generate_videos(
+            model=self.model,
+            prompt=processed_data["prompt"],
+            image=self._as_google_image(image) if image is not None else None,
+            config=self._types.GenerateVideosConfig(**config_values),
+        )
+        result: Dict[str, Any] = {"operation_name": operation.name, "done": bool(operation.done)}
+        if not wait:
+            return result
+
+        deadline = time.monotonic() + timeout
+        while not operation.done:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(f"Veo generation timed out; operation: {operation.name}")
+            time.sleep(min(poll_interval, remaining))
+            operation = self.client.operations.get(operation)
+        if operation.error:
+            raise RuntimeError(f"Veo generation failed: {operation.error}")
+        videos = getattr(operation.response, "generated_videos", None) if operation.response else None
+        if not videos:
+            raise RuntimeError(f"Veo operation completed without a video: {operation.name}")
+
+        video = videos[0].video
+        result.update(done=True, video_url=getattr(video, "uri", None))
+        if output_path is not None:
+            path = Path(output_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            # google-genai 1.60 returns bytes; newer versions also accept a destination.
+            path.write_bytes(self.client.files.download(file=video))
+            result["output_path"] = str(path)
+        return result
+
+    def generate_t2av(self, processed_data: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+        return self._generate(processed_data, **kwargs)
+
+    def generate_i2av(self, processed_data: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+        return self._generate(processed_data, **kwargs)
+
     def predict(
         self,
         processed_data: Dict[str, Any],
         task_type: str = "auto",
-        **kwargs
+        **kwargs,
     ) -> Dict[str, Any]:
-        """
-        预测方法，统一接口
-        
-        Args:
-            processed_data: 处理后的数据（来自operator）
-            task_type: 任务类型，"auto" 自动判断，"t2av" 文本到视频，"i2av" 图像到视频
-            **kwargs: 其他参数
-            
-        Returns:
-            Dict 包含生成结果：
-                - task_type: 任务类型
-                - result: 生成结果
-        """
-        images = processed_data.get("images", None)
-        
+        images = processed_data.get("images")
         if task_type == "auto":
-            if images is not None:
-                task_type = "i2av"
-            else:
-                task_type = "t2av"
-        
+            task_type = "i2av" if images is not None else "t2av"
         if task_type == "i2av":
             if images is None:
-                raise ValueError("i2av 任务需要提供 images 参数")
-            result = self.generate_i2av(
-                processed_data=processed_data,
-                **kwargs
-            )
+                raise ValueError("i2av requires images")
+            result = self.generate_i2av(processed_data, **kwargs)
         elif task_type == "t2av":
-            result = self.generate_t2av(
-                processed_data=processed_data,
-                **kwargs
-            )
+            if images is not None:
+                raise ValueError("t2av cannot include images")
+            result = self.generate_t2av(processed_data, **kwargs)
         else:
-            raise ValueError(f"不支持的任务类型: {task_type}")
-        
-        return {
-            "task_type": task_type,
-            "result": result,
-        }
+            raise ValueError(f"Unsupported Veo task type: {task_type}")
+        return {"task_type": task_type, "result": result}
+
+
+__all__ = ["Veo3Synthesis"]

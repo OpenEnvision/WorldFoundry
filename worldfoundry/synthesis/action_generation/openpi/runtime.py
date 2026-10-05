@@ -9,15 +9,14 @@ handles necessary environment setups like installing OpenPI aliases.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
-
 
 _PARTIAL_CHECKPOINT_SUFFIXES = (".aria2", ".incomplete", ".gstmp")
 
@@ -630,7 +629,7 @@ class OpenPIRuntime:
                 f"OpenPI config {self.config.config_name!r} uses data family "
                 f"{runtime_config.data_family!r}, not {self.config.data_family!r}."
             )
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         device = resolve_inference_device(
             self.config.pytorch_device or "cuda",
@@ -719,7 +718,7 @@ class OpenPIRuntime:
         # Write the JSON payload to the target file.
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         # Calculate SHA256 hash of the created artifact.
-        artifact_sha256 = hashlib.sha256(target.read_bytes()).hexdigest()
+        artifact_sha256 = file_sha256(target)
         # Return a summary dictionary of the created artifact.
         return {
             "status": "success",

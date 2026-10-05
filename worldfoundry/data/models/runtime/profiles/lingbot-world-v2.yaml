@@ -35,7 +35,7 @@ artifact_kind: generated_world
 artifact_filename: lingbot-world-v2.mp4
 execution:
   backend_stage: in_tree_runtime
-  runtime_status: causal_fast_checkpoint_manifest_validated_runtime_pending
+  runtime_status: causal_fast_short_single_gpu_inference_verified_official_8gpu_pending
   integration_status: implemented_checkpoint_manifest_validated
   pipeline_binding: lingbot-world-v2
   defaults:
@@ -54,3 +54,4 @@ notes:
 - Eight GPUs are the official causal-fast recipe; Workspace also exposes a four-GPU compact topology with WORLD_SIZE-aligned Ulysses and FSDP.
 - When Workspace already owns the torchrun process group, inference runs directly in that group and never launches nested torchrun workers.
 - The integrated code is governed by CC BY-NC-SA 4.0 and is not licensed for commercial use.
+- The staged causal-fast checkpoint produced a decodable 9-frame 848x464 video at 16 FPS on one 80 GB CUDA GPU; official eight-GPU parity and camera-control scoring remain pending.

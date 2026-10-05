@@ -1,6 +1,7 @@
 """Kling Api visual generation pipeline module."""
 
 from ..pipeline_utils import PipelineABC
+import logging
 import time
 from typing import Optional, Dict, Any, Union
 
@@ -8,10 +9,12 @@ from PIL import Image
 
 from ...operators.kling_api_operator import KlingApiOperator
 from ...synthesis.visual_generation.kling.kling_api_synthesis import KlingApiSynthesis
-from ..api_runtime import resolve_api_key
+from ..api_runtime import load_api_pipeline_from_pretrained, resolve_api_key
 
 
 _API_KEY_ENV = ("KLING_API_KEY", "KLING_ACCESS_TOKEN")
+
+logger = logging.getLogger(__name__)
 
 
 class KlingApiPipeline(PipelineABC):
@@ -32,6 +35,27 @@ class KlingApiPipeline(PipelineABC):
         self.api_key = api_key
         self.operator = operator
         self.synthesis_model = synthesis_model
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        model_path: Any = None,
+        required_components: Optional[Dict[str, Any]] = None,
+        device: str = "cuda",
+        model_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> "KlingApiPipeline":
+        """Build the API-only pipeline through the unified loader contract."""
+        return load_api_pipeline_from_pretrained(
+            cls,
+            model_path=model_path,
+            required_components=required_components,
+            device=device,
+            model_id=model_id,
+            default_endpoint="https://api.klingapi.com",
+            service_name="Kling API",
+            **kwargs,
+        )
 
     @classmethod
     def api_init(
@@ -156,7 +180,7 @@ class KlingApiPipeline(PipelineABC):
             video_url = self._extract_video_url(task_info)
 
             if status and status != last_status:
-                print(f"Kling task {task_id}: {status}")
+                logger.info("Kling task %s: %s", task_id, status)
                 last_status = status
 
             if video_url and not any(marker in status for marker in failed_markers):

@@ -1,0 +1,42 @@
+---
+title: SANA-WM 80-Scene Benchmark
+description: "NVIDIA 的 80 场景世界模型评测：VBench 质量、回访一致性、相机位姿、长程漂移。WorldFoundry 自研评测器，不编造榜单。"
+---
+
+SANA-WM 80-Scene Benchmark 随 NVIDIA SANA 世界模型工作发布。两个划分（`simple_60s`、`hard_60s`）各 **80 个场景**：一张条件图加 **961 帧、16 FPS** 相机轨迹。世界模型必须按轨迹滚出 **一分钟** 视频。四个分面：
+
+- **VBench 风格质量** — 视觉 / 时间维度；主键 `vbench_overall`。
+- **回访一致性** — 轨迹回到先前视点时的帧对 PSNR / SSIM / LPIPS。
+- **相机位姿** — 相对目标轨迹的旋转误差（度）、相对平移误差、相对运动一致性。
+- **`delta_iq`** — 时间窗口上的成像质量下降（长程漂移；越低越好）。
+
+代码：[NVlabs/Sana](https://github.com/NVlabs/Sana)。数据：[`Efficient-Large-Model/SANA-WM-Bench`](https://huggingface.co/datasets/Efficient-Large-Model/SANA-WM-Bench)（Apache-2.0）。
+
+WorldFoundry **在仓内实现评测器**。打分时复用已有 VBench 与 Pi3，不执行 NVlabs/Sana checkout。位姿推断是单独可调度的 GPU 阶段；只消费 `eval_poses.json`。
+
+<BenchmarkPageSections id="sana-wm-bench" locale="zh" />
+
+## 如何运行
+
+```bash
+hf download Efficient-Large-Model/SANA-WM-Bench --repo-type dataset \
+  --local-dir "${WORLDFOUNDRY_SANA_WM_BENCH_DATASET_ROOT}"
+
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/sana_wm_bench/run_sana_wm_bench_official_runner.py \
+  --run-official \
+  --dataset-root "${WORLDFOUNDRY_SANA_WM_BENCH_DATASET_ROOT}" \
+  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --split simple_60s \
+  --metrics vbench,revisit,temporal \
+  --output-dir tmp/sana_wm_bench/official \
+  --json
+```
+
+视频命名 `<scene_id>_generated.mp4`。`--metrics` 选择 `vbench,revisit,temporal,camera`。`--max-pairs` 限制回访对数；`--revisit-lpips` 加 LPIPS。相机指标需要 `--pose-results-path` / `eval_poses.json`（导入时把弧度转成度）。数据布局：`images/<scene_id>.png`、`<split>/sanawm_export_v2/<scene_id>.npz`、`run_manifest.jsonl`。
+
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/sana-wm-bench.yaml`。
+
+产物包括 `scorecard.json`（主键 `vbench_overall`）与 `raw_metric_table.jsonl`。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

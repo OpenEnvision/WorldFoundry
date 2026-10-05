@@ -1,19 +1,17 @@
-"""WoW synthesis adapters for the official in-tree inference demos."""
+"""WoW synthesis adapters on the canonical Wan and Cosmos2 runtimes."""
 
 from __future__ import annotations
 
-import importlib.util
 import os
-import sys
-import tempfile
-from argparse import Namespace
 from pathlib import Path
 from typing import Any, Mapping
 
 import torch
 from PIL import Image
 
+from worldfoundry.core.media.types import VIDEO_EXTENSIONS
 from worldfoundry.core.io.paths import resolve_local_hf_model_path
+from worldfoundry.core.media.resolutions import VIDEO_RES_SIZE_INFO
 
 from ...base_synthesis import BaseSynthesis
 
@@ -49,58 +47,11 @@ def _as_local_dir(path: str | os.PathLike[str], label: str) -> Path:
     )
 
 
-def _find_wan_dit_paths(model_root: Path) -> list[str]:
-    sharded = [model_root / f"diffusion_pytorch_model-0000{i}-of-00007.safetensors" for i in range(1, 8)]
-    if all(path.is_file() for path in sharded):
-        return [str(path) for path in sharded]
-
-    single = model_root / "diffusion_pytorch_model.safetensors"
-    if single.is_file():
-        return [str(single)]
-
-    discovered = sorted(model_root.glob("diffusion_pytorch_model*.safetensors"))
-    if discovered:
-        return [str(path) for path in discovered]
-
-    raise FileNotFoundError(
-        f"WoW Wan checkpoint directory is missing diffusion_pytorch_model*.safetensors files: {model_root}"
-    )
-
-
 def _custom_checkpoint_path(model_root: Path, custom_checkpoint_name: str | os.PathLike[str] | None) -> Path | None:
     if not custom_checkpoint_name:
         return None
     candidate = Path(custom_checkpoint_name).expanduser()
     return candidate if candidate.is_absolute() else model_root / candidate
-
-
-def _wow_dit_runtime_dir() -> Path:
-    return Path(__file__).resolve().parent / "wow_runtime" / "dit_models" / "wow-dit-2b"
-
-
-def _load_wow_dit_video2world_module() -> Any:
-    runtime_dir = _wow_dit_runtime_dir()
-    module_path = runtime_dir / "video2world.py"
-    if not module_path.is_file():
-        raise FileNotFoundError(f"WoW DiT video2world runtime not found: {module_path}")
-
-    # The official script still imports its model-specific sibling modules by top-level name.
-    runtime_dir_text = str(runtime_dir)
-    if runtime_dir_text not in sys.path:
-        sys.path.insert(0, runtime_dir_text)
-
-    module_name = "worldfoundry_wow_dit2b_video2world"
-    existing = sys.modules.get(module_name)
-    if existing is not None:
-        return existing
-
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Could not load WoW DiT video2world module from {module_path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 def _resolve_dit_path(
@@ -118,40 +69,34 @@ def _resolve_dit_path(
         return str(candidate)
 
     if pretrained_model_path:
-        candidate = Path(pretrained_model_path).expanduser()
+        path_text = str(pretrained_model_path)
+        candidate = Path(path_text).expanduser()
+        if not candidate.exists():
+            is_hf_repo_id = "/" in path_text and not path_text.startswith(("/", ".", "~")) and "://" not in path_text
+            if is_hf_repo_id:
+                try:
+                    candidate = resolve_local_hf_model_path(path_text)
+                except FileNotFoundError:
+                    pass
         if candidate.is_file():
             return str(candidate)
         if candidate.is_dir():
-            names = (
-                "wow_dit_2b.pt",
-                f"model-{resolution}p-{fps}fps.pt",
-                "model.pt",
+            relative_names = (
+                Path("wow_dit_2b.pt"),
+                Path(f"model-{resolution}p-{fps}fps.pt"),
+                Path("model.pt"),
+                Path("dit_models/wow-dit-2b/checkpoints/wow_dit_2b.pt"),
             )
-            for name in names:
-                nested = candidate / name
+            for relative_name in relative_names:
+                nested = candidate / relative_name
                 if nested.is_file():
                     return str(nested)
 
-    default_path = _wow_dit_runtime_dir() / "checkpoints" / "wow_dit_2b.pt"
-    if default_path.is_file():
-        return str(default_path)
-
     raise FileNotFoundError(
-        "WoW DiT backend requires a local DiT checkpoint file. Pass dit_path or model_path; "
-        f"looked for {default_path} for model_size={model_size}, resolution={resolution}, fps={fps}."
+        "WoW DiT backend requires a local wow_dit_2b.pt checkpoint file. "
+        "Pass dit_path or a model_path directory containing that file; "
+        f"model_size={model_size}, resolution={resolution}, fps={fps}."
     )
-
-
-def _materialize_image_input(input_image: Image.Image, output_path: str | os.PathLike[str] | None) -> str:
-    if output_path:
-        target = Path(output_path).expanduser().with_suffix(".input.png")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        input_image.save(target)
-        return str(target)
-    handle = tempfile.NamedTemporaryFile(prefix="worldfoundry_wow_input_", suffix=".png", delete=False)
-    handle.close()
-    input_image.save(handle.name)
-    return handle.name
 
 
 def _option(options: Mapping[str, Any], args: Any, name: str, default: Any) -> Any:
@@ -174,13 +119,11 @@ class WoWSynthesis(BaseSynthesis):
         *,
         backend: str,
         device: str = "cuda",
-        runtime_module: Any | None = None,
     ) -> None:
         super().__init__()
         self.pipeline = pipeline
         self.backend = backend
         self.device = device
-        self.runtime_module = runtime_module
 
     @classmethod
     def from_pretrained(
@@ -190,11 +133,13 @@ class WoWSynthesis(BaseSynthesis):
         device: str = "cuda",
         **kwargs: Any,
     ) -> "WoWSynthesis":
-        """Load the official WoW Wan demo backend by default.
+        """Load the native WoW Wan checkpoint route by default.
 
-        The official repository marks the Wan demo as recommended. The DiT 2B
-        backend remains available by passing ``runtime_backend="dit2b"`` and a
-        local ``dit_path`` or checkpoint file as ``model_path``.
+        The official repository marks the Wan demo as recommended; its checkpoint
+        is assembled on the shared Wan runtime. The DiT 2B checkpoint uses the
+        canonical Cosmos Predict2 Video2World recipe and
+        remains available through ``runtime_backend="dit2b"`` plus a local
+        ``dit_path`` or checkpoint file as ``model_path``.
         """
 
         options: dict[str, Any] = dict(kwargs)
@@ -241,42 +186,21 @@ class WoWSynthesis(BaseSynthesis):
             kwargs.pop("custom_checkpoint_name", getattr(synthesis_args, "custom_checkpoint", "WoW_video_dit.pt")),
         )
 
-        clip_model_path = model_root / "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"
-        t5_model_path = model_root / "models_t5_umt5-xxl-enc-bf16.pth"
-        vae_model_path = model_root / "Wan2.1_VAE.pth"
-        for label, path in (
-            ("CLIP image encoder", clip_model_path),
-            ("T5 text encoder", t5_model_path),
-            ("Wan VAE", vae_model_path),
-        ):
-            if not path.is_file():
-                raise FileNotFoundError(f"WoW Wan {label} checkpoint not found: {path}")
+        custom_checkpoint = _custom_checkpoint_path(model_root, custom_checkpoint_name)
+        if custom_checkpoint is None or not custom_checkpoint.is_file():
+            raise FileNotFoundError(
+                "WoW Wan inference requires its trained transformer checkpoint; "
+                f"expected {custom_checkpoint or model_root / 'WoW_video_dit.pt'}"
+            )
 
-        from ....base_models.diffusion_model.diffsynth import ModelManager, Wan22VideoPusaPipeline
+        from .native_wan_pipeline import load_wow_wan_pipeline
 
-        mm = ModelManager(device="cpu")
-        mm.load_models([str(clip_model_path)], torch_dtype=torch.float32)
-        mm.load_models(
-            [_find_wan_dit_paths(model_root), str(t5_model_path), str(vae_model_path)],
+        pipeline = load_wow_wan_pipeline(
+            model_root=model_root,
+            transformer_checkpoint=custom_checkpoint,
+            device=device,
             torch_dtype=torch.bfloat16,
         )
-
-        custom_checkpoint = _custom_checkpoint_path(model_root, custom_checkpoint_name)
-        if custom_checkpoint is not None:
-            if custom_checkpoint.is_file():
-                state_dict = torch.load(
-                    str(custom_checkpoint),
-                    map_location="cpu",
-                    weights_only=True,
-                )
-                dit_model = mm.fetch_model("wan_video_dit")
-                if dit_model is not None:
-                    dit_model.load_state_dict(state_dict, strict=False)
-                    print(f"[WoWSynthesis] Loaded custom DiT checkpoint: {custom_checkpoint}")
-            else:
-                print(f"[WoWSynthesis] Custom checkpoint not found, using base DiT: {custom_checkpoint}")
-
-        pipeline = Wan22VideoPusaPipeline.from_model_manager(mm, torch_dtype=torch.bfloat16, device=device)
 
         enable_vram = getattr(synthesis_args, "enable_vram_management", True) and not getattr(
             synthesis_args, "no_vram_management", False
@@ -284,6 +208,10 @@ class WoWSynthesis(BaseSynthesis):
         if enable_vram:
             persistent_param_gb = getattr(synthesis_args, "persistent_param_gb", 70)
             pipeline.enable_vram_management(num_persistent_param_in_dit=int(persistent_param_gb * 10**9))
+        else:
+            # The native loader builds components on CPU. Without VRAM management,
+            # the staged runner does not move them before prompt encoding.
+            pipeline.to(device)
 
         return cls(pipeline=pipeline, backend="wan", device=device)
 
@@ -296,30 +224,58 @@ class WoWSynthesis(BaseSynthesis):
         device: str,
         **kwargs: Any,
     ) -> "WoWSynthesis":
-        module = _load_wow_dit_video2world_module()
-        model_size = str(_option(kwargs, synthesis_args, "model_size", "2B"))
+        model_size = str(_option(kwargs, synthesis_args, "model_size", "2B")).upper()
+        if model_size != "2B":
+            raise ValueError("WoW DiT exposes only the released 2B Cosmos Predict2 checkpoint")
         resolution = str(_option(kwargs, synthesis_args, "resolution", "720"))
         fps = int(_option(kwargs, synthesis_args, "fps", 16))
-        setup_args = Namespace(
+        if resolution not in {"480", "720"}:
+            raise ValueError("WoW DiT resolution must be '480' or '720'")
+        if fps not in {10, 16}:
+            raise ValueError("WoW DiT fps must be 10 or 16")
+        num_gpus = int(_option(kwargs, synthesis_args, "num_gpus", 1))
+        if num_gpus != 1:
+            raise NotImplementedError(
+                "WoW DiT context parallelism is not yet implemented by the canonical Cosmos2 runner"
+            )
+        if not bool(_option(kwargs, synthesis_args, "disable_guardrail", True)):
+            raise NotImplementedError("WoW DiT native inference does not yet bind a guardrail component")
+        if not bool(_option(kwargs, synthesis_args, "disable_prompt_refiner", True)):
+            raise NotImplementedError("WoW DiT native inference does not yet bind a prompt-refiner component")
+
+        dit_path = _resolve_dit_path(
+            pretrained_model_path,
             model_size=model_size,
             resolution=resolution,
             fps=fps,
-            dit_path=_resolve_dit_path(
-                pretrained_model_path,
-                model_size=model_size,
-                resolution=resolution,
-                fps=fps,
-                explicit_dit_path=_option(kwargs, synthesis_args, "dit_path", None),
-            ),
-            seed=int(_option(kwargs, synthesis_args, "seed", 42)),
-            num_gpus=int(_option(kwargs, synthesis_args, "num_gpus", 1)),
-            disable_guardrail=bool(_option(kwargs, synthesis_args, "disable_guardrail", True)),
-            offload_guardrail=bool(_option(kwargs, synthesis_args, "offload_guardrail", False)),
-            disable_prompt_refiner=bool(_option(kwargs, synthesis_args, "disable_prompt_refiner", True)),
-            offload_prompt_refiner=bool(_option(kwargs, synthesis_args, "offload_prompt_refiner", False)),
+            explicit_dit_path=_option(kwargs, synthesis_args, "dit_path", None),
         )
-        pipeline = module.setup_pipeline(setup_args)
-        return cls(pipeline=pipeline, backend="dit2b", device=device, runtime_module=module)
+        component_paths: dict[str, Any] = {"transformer_model_path": dit_path}
+        for name in (
+            "vae_model_path",
+            "tokenizer_model_path",
+            "text_encoder_model_path",
+            "text_tokenizer_path",
+            "offload_mode",
+            "torch_dtype",
+            "weight_dtype",
+            "dtype",
+            "vae_tiling",
+            "vae_tile_size",
+            "vae_tile_stride",
+        ):
+            value = kwargs.get(name)
+            if value is not None:
+                component_paths[name] = value
+
+        from worldfoundry.pipelines.cosmos.pipeline_cosmos_predict2 import CosmosPredict2Pipeline
+
+        pipeline = CosmosPredict2Pipeline.from_pretrained(
+            model_path=component_paths,
+            device=device,
+            model_id="cosmos-predict2-2b-video2world",
+        )
+        return cls(pipeline=pipeline, backend="dit2b", device=device)
 
     @torch.no_grad()
     def predict(
@@ -389,7 +345,7 @@ class WoWSynthesis(BaseSynthesis):
 
         artifact_path = ""
         if output_path is not None:
-            from worldfoundry.core.io.video import write_video
+            from worldfoundry.core.media.codecs.video import write_video
 
             artifact_path = str(output_path)
             write_video(output_video, artifact_path, fps=output_fps, quality=5)
@@ -397,8 +353,8 @@ class WoWSynthesis(BaseSynthesis):
         if return_dict:
             return {
                 "status": "ok",
-                "runtime": "wow-wan-official-demo",
-                "backend_quality": "official_in_tree_runtime",
+                "runtime": "wow-wan-native",
+                "backend_quality": "native_recipe",
                 "artifact_kind": "generated_video",
                 "artifact_path": artifact_path,
                 "video": output_video,
@@ -424,49 +380,69 @@ class WoWSynthesis(BaseSynthesis):
         return_dict: bool,
         **kwargs: Any,
     ) -> Any:
-        if input_path is None:
-            if input_image is None:
-                raise ValueError("WoW DiT backend requires input_path or input_image.")
-            input_path = _materialize_image_input(input_image, output_path)
+        if input_path is None and input_image is None:
+            raise ValueError("WoW DiT backend requires input_path or input_image.")
 
         negative_prompt = str(_option(kwargs, synthesis_args, "negative_prompt", DIT_DEFAULT_NEGATIVE_PROMPT))
         num_conditional_frames = int(_option(kwargs, synthesis_args, "num_conditional_frames", 1))
+        if num_conditional_frames not in {1, 5}:
+            raise ValueError("WoW DiT num_conditional_frames must be 1 or 5")
         guidance = float(_option(kwargs, synthesis_args, "guidance", 7.0))
         seed = int(_option(kwargs, synthesis_args, "seed", 42))
         num_sampling_step = int(_option(kwargs, synthesis_args, "num_sampling_step", 35))
+        resolution = str(_option(kwargs, synthesis_args, "resolution", "720"))
+        fps = int(_option(kwargs, synthesis_args, "fps", 16))
+        if fps not in {10, 16}:
+            raise ValueError("WoW DiT fps must be 10 or 16")
+        try:
+            height, width = VIDEO_RES_SIZE_INFO[resolution]["9,16"]
+        except KeyError as exc:
+            raise ValueError(f"unsupported WoW DiT resolution: {resolution!r}") from exc
+        if num_conditional_frames == 5 and (
+            input_path is None or Path(input_path).suffix.lower() not in VIDEO_EXTENSIONS
+        ):
+            raise ValueError("WoW DiT 5-frame conditioning requires a video input path")
+        num_frames = 61 if fps == 10 else 93
+        media_options = {"input_path": str(input_path)} if input_path is not None else {"image": input_image}
 
-        output_video = self.pipeline(
+        native_result = self.pipeline(
             prompt=text_prompt,
             negative_prompt=negative_prompt,
-            input_path=str(input_path),
-            num_conditional_frames=num_conditional_frames,
-            guidance=guidance,
+            output_path=output_path,
+            guidance_scale=guidance,
+            num_inference_steps=num_sampling_step,
+            fps=fps,
+            num_frames=num_frames,
+            height=height,
+            width=width,
             seed=seed,
-            num_sampling_step=num_sampling_step,
+            num_latent_conditional_frames=(num_conditional_frames - 1) // 4 + 1,
+            return_dict=True,
+            **media_options,
         )
-
-        artifact_path = ""
-        save_fps = 10 if getattr(getattr(self.pipeline, "config", None), "state_t", None) == 16 else 16
-        if output_path is not None and output_video is not None:
-            artifact_path = str(output_path)
-            self.runtime_module.save_image_or_video(output_video, artifact_path, fps=save_fps)
+        output_video = native_result["video"]
+        artifact_path = str(native_result.get("artifact_path") or "")
 
         if return_dict:
             return {
-                "status": "ok" if output_video is not None else "blocked",
-                "runtime": "wow-dit2b-official-demo",
-                "backend_quality": "official_in_tree_runtime",
+                "status": "ok",
+                "runtime": "wow-dit2b-native-cosmos2",
+                "backend_quality": "native_recipe",
                 "artifact_kind": "generated_video",
                 "artifact_path": artifact_path,
                 "video": output_video,
                 "metadata": {
-                    "input_path": str(input_path),
+                    "input_path": str(input_path) if input_path is not None else None,
                     "num_conditional_frames": num_conditional_frames,
                     "guidance": guidance,
                     "seed": seed,
                     "num_sampling_step": num_sampling_step,
-                    "fps": save_fps,
+                    "num_frames": num_frames,
+                    "height": height,
+                    "width": width,
+                    "fps": fps,
                     "negative_prompt": negative_prompt,
+                    "native_model_id": "cosmos-predict2-2b-video2world",
                 },
             }
         return output_video

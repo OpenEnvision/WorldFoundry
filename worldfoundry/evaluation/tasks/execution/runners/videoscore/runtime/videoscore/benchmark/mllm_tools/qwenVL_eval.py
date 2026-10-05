@@ -5,13 +5,13 @@ from PIL import Image
 from typing import List
 class QwenVL():
     support_multi_image = False
-    merged_image_files = []
     def __init__(self, model_id:str="Qwen/Qwen-VL-Chat") -> None:
         """
         Args:
             model_id (str): Qwen model name, e.g. "Qwen/Qwen-VL-Chat"
         """
         self.model_id = model_id
+        self.merged_image_files = []
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
         self.model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", trust_remote_code=True, bf16=True).eval()
     
@@ -39,8 +39,11 @@ class QwenVL():
             raise NotImplementedError
         else:
             text_prompt = "\n".join([x["content"] for x in inputs if x["type"] == "text"])
-            inputs = self.prepare_prompt(image_links, text_prompt)
-            return self.get_parsed_output(inputs)
+            try:
+                inputs = self.prepare_prompt(image_links, text_prompt)
+                return self.get_parsed_output(inputs)
+            finally:
+                self.close()
     
     def prepare_prompt(self, image_links: List = [], text_prompt: str = ""):
         if type(image_links) == str:
@@ -70,9 +73,17 @@ class QwenVL():
         response, history = self.model.chat(self.tokenizer, query=query, history=None)
         return response
 
+    def close(self):
+        """Remove all materialized PIL-image inputs, including failure paths."""
+        while self.merged_image_files:
+            image_file = self.merged_image_files.pop()
+            try:
+                os.remove(image_file)
+            except FileNotFoundError:
+                pass
+
     def __del__(self):
-        for image_file in self.merged_image_files:
-            os.remove(image_file)
+        self.close()
     
 if __name__ == "__main__":
     model = QwenVL()

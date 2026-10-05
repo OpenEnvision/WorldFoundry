@@ -1,0 +1,52 @@
+---
+title: "CogACT"
+description: "CogACT from Microsoft: vla and vla action prediction; Runner parity pending."
+modelId: "cogact"
+pageSource: authored
+---
+
+CogACT from Microsoft is a componentized VLA: a Prismatic-style Llama-2 VLM handles cognition while a dedicated DiT action module handles control, released in Small/Base/Large variants under MIT. WorldFoundry has an independent in-tree synthesis entrypoint with a strict local checkpoint mapper; checkpoint-backed workspace inference passes without an external checkout.
+
+<ModelPaperFigures modelId="cogact" locale="en" />
+
+The recorded paper is [arXiv 2411.19650](https://arxiv.org/abs/2411.19650).
+
+Project page: [cogact.github.io/CogACT_paper.pdf](https://cogact.github.io/CogACT_paper.pdf). Code: [microsoft/CogACT](https://github.com/microsoft/CogACT).
+
+The official paper is on [arXiv 2411.19650](https://arxiv.org/abs/2411.19650). Project PDF: [cogact.github.io/CogACT_paper.pdf](https://cogact.github.io/CogACT_paper.pdf). Code: [microsoft/CogACT](https://github.com/microsoft/CogACT). Weights: `CogACT/CogACT-Small`, `CogACT-Base`, `CogACT-Large`.
+
+<ModelCommandBuilder modelId="cogact" locale="en" />
+
+## What it is for
+
+`cogact-base` is the recorded instruction-to-action line. Start here when you need a WorldFoundry VLA rollout rather than a video generator.
+
+Cognition and action are separated: the VLM encodes image+instruction, then a DiT (diffusion transformer) action model predicts a 16x7 action chunk. The official demo contract is load_vla(...).predict_action(image, prompt, unnorm_key, cfg_scale, use_ddim, num_ddim_steps).
+
+Catalog tasks include vla, vla action prediction, and vla policy rollout. Catalog aliases include `cogact-base`, `cogact-small`, and `cogact-large`.
+
+Recorded evaluation entry points include [SimplerEnv](/docs/evaluation/benchmark-hub/simpler-env) (Official normalization targets SimplerEnv setups).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; artifacts `action_trace` and `cogact_action_trace.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `CogACTPipeline`.
+
+Family status: **Runner parity pending**.
+
+Default SimplerEnv setups use bridge_orig or fractal20220817_data normalization keys. The inference-only loader reuses an installed OpenVLA Llama tokenizer when a gated Llama 2 mirror is unavailable. FSDP training, RLDS loaders, deployment server, and SimplerEnv adapters are excluded.
+
+WorldFoundry has an independent CogACT synthesis entrypoint, strict local checkpoint mapper, and inference-only DiT action model under worldfoundry/synthesis/action_generation/cogact.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run cogact-base --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8, torch>=2.7.0).
+
+Recorded weight repositories include `CogACT/CogACT-Base`, `meta-llama/Llama-2-7b-hf`, and `CogACT/CogACT-Small` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh cogact-base`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include mit; gated `meta-llama/Llama-2-7b-hf` — accept upstream terms before download; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="cogact" locale="en" />

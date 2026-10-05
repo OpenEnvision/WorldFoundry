@@ -30,8 +30,6 @@ class FusedAntiAliasActivation(torch.autograd.Function):
     def backward(ctx, output_grads):
         raise NotImplementedError
         return output_grads, None, None
-
-
 class Activation1d(nn.Module):
     def __init__(
         self,

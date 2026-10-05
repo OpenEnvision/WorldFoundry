@@ -1,0 +1,97 @@
+---
+title: Runtime assembly
+description: The base-class contracts and directory roles for pipelines, operators, synthesis, and base_models — how a model call is assembled before it reaches a GenerationResult.
+---
+
+## What this page is for
+
+This is the directory-level and base-class map of the model-execution side. It answers *which file owns* input shaping, inference, geometry, and state, and *what contract* each implements. The narrative of how to author or migrate a model lives in [Model runtime](/docs/maintainers/architecture/model-runtime); the shared primitives those implementations reuse live in [Core infrastructure](/docs/maintainers/architecture/core-infrastructure).
+
+The one chain to remember:
+
+<ArchDiagram id="runtime-assembly" />
+
+Every runnable method needs both a pipeline and an operator. Operators may be thin, but they must exist.
+
+## Base-class contracts
+
+<div className="pi-kv-catalog not-prose">
+  <section className="pi-kv-group">
+    <h3>Base class</h3>
+    <ul>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>PipelineABC</code>
+          </div>
+        </div>
+        <p>The minimal public entrypoint: <code>from_pretrained()</code> <code>:118</code>, <code>process()</code> <code>:173</code>, and <code>stream()</code> when incremental output is supported. Owns model construction, checkpoint loading, device placement, normalized execution, and <code>GenerationResult</code> artifact semantics.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>pipelines/pipeline_utils.py:11</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>BaseOperator</code>
+          </div>
+        </div>
+        <p>Input and interaction shaping only: <code>interaction_template_init</code>, <code>get_interaction</code>, <code>check_interaction</code>, <code>process_interaction</code>, <code>process_perception</code>. Must not own generation or scoring.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>operators/base_operator.py:4</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>BaseSynthesis</code>
+          </div>
+        </div>
+        <p>Connects public artifact handling to either a local native runtime or a hosted API: <code>from_pretrained</code> <code>:57</code>, <code>api_init</code> <code>:76</code>, <code>predict</code> <code>:93</code>.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>synthesis/base_synthesis.py:38</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>ActionModelSynthesis</code>
+          </div>
+        </div>
+        <p>Embodied-action synthesis surface (extends <code>RuntimeProfileSynthesis</code>); used by VLA-style action policies.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>synthesis/action_generation/base_action_synthesis.py:14</code></p>
+      </li>
+      <li className="pi-kv-row">
+        <div className="pi-kv-head">
+          <div className="pi-kv-names">
+            <code>BaseMemory</code>
+          </div>
+        </div>
+        <p>Stores and transforms prior multimodal state for streaming, long-context, or interactive flows. Defined in <code>core</code>, implemented per-family in <code>{"synthesis/*/memory"}</code>.</p>
+        <p className="pi-kv-read"><span>First file</span> <code>core/memory/base.py:9</code></p>
+      </li>
+    </ul>
+  </section>
+</div>
+
+## Directory roles
+
+### `worldfoundry/pipelines/`
+One thin public wrapper per model family (`pipelines/<family>/pipeline_*.py`). `from_pretrained()` stages checkpoints or initializes API clients; `process()` / `__call__()` turns user input into artifacts; `stream()` is implemented only when Studio live controls or incremental output require it. 88 family directories. Hosted-provider wrappers (Wan hosted, Kling, Runway, Luma, Hailuo, Sora/Veo, World Labs) live separately from local checkpoint runtimes.
+
+### `worldfoundry/operators/`
+Per-family `*_operator.py` files that own validation, image/video loading, camera/action parsing, interaction shaping, and perception preprocessing. Inspect here first when inputs fail before model execution. Shared media helpers live in `operators/_media.py`.
+
+### `worldfoundry/synthesis/`
+In-tree runtime implementation only. External repos or checkpoints remain metadata until ported.
+- `synthesis/visual_generation/**` — visual and world-generation checkpoint calls, hosted APIs, subprocess bridges, runtime env helpers, and per-family `synthesis.py` (for example `cameractrl/synthesis.py`, `motionctrl/synthesis.py`, `echo_memory/`, `openvla/`).
+- `synthesis/action_generation/**` — embodied-action surfaces, including the OpenVLA runtime, `_native_policy_runtime.py`, `_official_action_trace.py`, and `base_action_synthesis.py`.
+
+CameraCtrl and MotionCtrl do not share one synthesis package; they live in their own `synthesis.py` files, while shared camera-control YAML lives under `data/models/runtime/configs/camera_control`.
+
+### `worldfoundry/base_models/`
+Four inference-only packages; no training, datasets, dataloaders, callbacks, losses, augmentation-only modules, or experiment scripts.
+- `diffusion_model` — the single canonical diffusion kernel and the only diffusion package boundary. See [Native diffusion](/docs/maintainers/architecture/native-diffusion).
+- `llm_mllm_core` — language/multimodal-language inference.
+- `perception_core` — perception inference.
+- `three_dimensions` — 3D model code, checkpoint loading, depth/point-cloud inference, and geometry postprocessing. Each family owns its runtime beside its model implementation (`depth/depth_anything/runtime_v*.py`, `point_clouds/<family>/runtime.py`). Pipelines import these modules directly; there is no separate representation layer or marker base class.
+
+## How to decide where a change belongs
+
+Ask where the failure happens. Inputs malformed before model execution → `operators/`. Native inference, checkpoint calls, hosted APIs, subprocess bridges → `synthesis/`. 3D/4D inference and geometric artifacts → the matching family in `base_models/three_dimensions/`; artifact display → `studio/visualization/`. Streaming or multi-turn state → `core/memory` plus the relevant `synthesis/*/memory`. Public load path, input signature, or output artifact contract → `pipelines/`. A reusable primitive that helps more than one family → `core`, never the family package.
+
+For the directory map of every package, see [Codebase map](/docs/maintainers/architecture/file-index). For the full run flow past this assembly, see [Workflow](/docs/maintainers/architecture/workflow).

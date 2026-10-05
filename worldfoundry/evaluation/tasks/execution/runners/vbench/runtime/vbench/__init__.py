@@ -8,7 +8,7 @@ import importlib
 from itertools import chain
 from pathlib import Path
 
-from .distributed import get_rank, print0  
+from worldfoundry.core.distributed.collectives.evaluation import get_rank, print0
 
 
 class VBench(object):

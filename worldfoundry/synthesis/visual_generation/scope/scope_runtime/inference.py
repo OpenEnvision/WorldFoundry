@@ -44,18 +44,19 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
-from safetensors.torch import load_file
-
-from worldfoundry.base_models.diffusion_model.diffsynth.models.scope_dit import (
-    WanModel as SCOPEDiT,
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan import (
+    WanVideoVAE38,
+    WanVideoVAEStateDictConverter,
 )
-from worldfoundry.base_models.diffusion_model.diffsynth.pipelines.scope_pipeline import (
-    ModelConfig,
-    WanVideoPipeline,
-)
+from worldfoundry.base_models.diffusion_model.models.encoders.wan import WanTextEncoder
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants import ScopeActionWanModel
+from worldfoundry.core.model_loading import load_model
 from worldfoundry.core.io import (
     crop_and_resize,
     save_video,
+)
+from worldfoundry.synthesis.visual_generation.scope.scope_runtime.native_pipeline import (
+    ScopeVideoPipeline,
 )
 
 logger = logging.getLogger(__name__)
@@ -259,7 +260,7 @@ def find_model_files(model_dir: str) -> dict[str, any]:
     }
 
 
-def init_pipeline(model_dir: str) -> WanVideoPipeline:
+def init_pipeline(model_dir: str) -> ScopeVideoPipeline:
     """Initializes the SCOPE video generation pipeline.
 
     Loads the text encoder, VAE, and SCOPE DiT into a unified pipeline
@@ -277,44 +278,40 @@ def init_pipeline(model_dir: str) -> WanVideoPipeline:
 
     files = find_model_files(model_dir)
 
-    # Build model configs for pipeline (text encoder + optional base DiT + VAE).
-    model_configs = [
-        ModelConfig(files["t5_path"]),
-        ModelConfig(files["vae_path"]),
-    ]
-    if files["base_dit_shards"]:
-        model_configs.insert(1, ModelConfig(files["base_dit_shards"]))
-
-    pipe = WanVideoPipeline.from_pretrained(
-        torch_dtype=torch.bfloat16,
-        device="cuda",
-        model_configs=model_configs,
-        tokenizer_config=ModelConfig(files["tokenizer_path"]),
-        redirect_common_files=False,
-    )
-
-    # Load SCOPE DiT (replaces base DiT in the pipeline).
     logger.info(
         "Loading SCOPE DiT (%d shard(s))...", len(files["scope_shards"])
     )
-    dit = SCOPEDiT(**DIT_CONFIG).to(torch.bfloat16)
-
-    state_dict = {}
-    for shard in files["scope_shards"]:
-        logger.info("  %s", os.path.basename(shard))
-        state_dict.update(load_file(shard))
-
-    missing, unexpected = dit.load_state_dict(state_dict, strict=False)
-    logger.info(
-        "  Loaded %d keys | Missing: %d | Unexpected: %d",
-        len(state_dict),
-        len(missing),
-        len(unexpected),
+    device = os.getenv("SCOPE_DEVICE", "cuda")
+    dit = load_model(
+        ScopeActionWanModel,
+        files["scope_shards"],
+        config=DIT_CONFIG,
+        torch_dtype=torch.bfloat16,
+        device="cpu",
     )
-
-    pipe.dit = dit.to(pipe.device)
-    del dit, state_dict
-    torch.cuda.empty_cache()
+    text_encoder = load_model(
+        WanTextEncoder,
+        files["t5_path"],
+        torch_dtype=torch.bfloat16,
+        device="cpu",
+    )
+    vae = load_model(
+        WanVideoVAE38,
+        files["vae_path"],
+        torch_dtype=torch.bfloat16,
+        device="cpu",
+        state_dict_converter=WanVideoVAEStateDictConverter().from_civitai,
+    )
+    pipe = ScopeVideoPipeline(
+        dit=dit,
+        text_encoder=text_encoder,
+        vae=vae,
+        tokenizer_path=files["tokenizer_path"],
+        device=device,
+        torch_dtype=torch.bfloat16,
+    )
+    if device != "cpu":
+        pipe.enable_cpu_offload()
 
     logger.info("Pipeline ready.\n")
     return pipe
@@ -326,7 +323,7 @@ def init_pipeline(model_dir: str) -> WanVideoPipeline:
 
 
 def generate_video(
-    pipe: WanVideoPipeline,
+    pipe: ScopeVideoPipeline,
     image_path: str,
     action_path: str,
     args: argparse.Namespace,
@@ -457,7 +454,11 @@ def main() -> None:
             out = generate_video(pipe, img_path, args.action_path, args)
             logger.info("  -> %s", out)
         except RuntimeError as e:
-            logger.error("  FAILED: %s", e)
+            # Do not turn a failed sample into a successful process with no
+            # output.  The adapter needs the original traceback to diagnose
+            # integration errors and must fail loudly when generation fails.
+            logger.exception("  FAILED: %s", e)
+            raise
         finally:
             torch.cuda.empty_cache()
 

@@ -7,16 +7,28 @@ from tqdm import tqdm
 
 from EWMBench.utils import dino_transform, load_dimension_info, load_video
 from worldfoundry.base_models.perception_core.general_perception.dinov2.models import build_model_from_cfg
-
-from .distributed import distribute_list_to_rank, gather_list_of_dict, get_rank, get_world_size
+from worldfoundry.core.distributed.collectives.evaluation import (
+    distribute_list_to_rank,
+    gather_list_of_dict,
+    get_rank,
+    get_world_size,
+)
+from worldfoundry.core.execution.device import get_current_torch_device
+from worldfoundry.core.execution.inference_runtime import adaptive_batched_inference, resolve_inference_batch_size
 
 
 def scene_consistency(model, video_list, device):
+    model.eval()
+    batch_size = resolve_inference_batch_size(32, device=device, scope="ewmbench_dino")
     sim = 0.0
     cnt = 0
     video_results = []
 
     image_transform = dino_transform(518)
+
+    def encode(batch):
+        return model.forward_features(batch)["x_norm_patchtokens"]
+
     for video_path in tqdm(video_list, disable=get_rank() > 0):
         video_sim = 0.0
 
@@ -29,41 +41,48 @@ def scene_consistency(model, video_list, device):
         pad_right = max_side - width - pad_left
         padded_images = F.pad(images, (pad_left, pad_right, pad_top, pad_bottom))
         images = image_transform(padded_images)
-        for i in range(len(images)):
-            with torch.no_grad():
-                image = images[i].unsqueeze(0)
-                image = image.to(device)
+        if len(images) < 2:
+            video_results.append({
+                "video_path": video_path,
+                "video_results": 0.0,
+                "video_sim": 0.0,
+                "cnt_per_video": 0,
+                "error": "insufficient_frames",
+            })
+            continue
+        if torch.device(device).type == "cuda":
+            images = images.pin_memory()
 
-                image_features = model.forward_features(image)
-                image_features = image_features["x_norm_patchtokens"]
-
-                image_features = F.normalize(image_features, dim=-1, p=2)
-
-                if i == 0:
-                    first_image_features = image_features
-                else:
-                    sim_pre = max(
-                        0.0,
-                        F.cosine_similarity(former_image_features, image_features, dim=1).mean(dim=-1).item(),
-                    )
-                    sim_fir = max(
-                        0.0,
-                        F.cosine_similarity(first_image_features, image_features, dim=1).mean(dim=-1).item(),
-                    )
-                    cur_sim = (sim_pre + sim_fir) / 2
-                    video_sim += cur_sim
-                    cnt += 1
-            former_image_features = image_features
-        sim_per_images = video_sim / (len(images) - 1)
+        image_features = adaptive_batched_inference(
+            images,
+            encode,
+            batch_size=batch_size,
+            device=device,
+            pad_to_batch_size=True,
+            scope="ewmbench_dino",
+            persistent_forward=True,
+        )
+        image_features = F.normalize(image_features, dim=-1, p=2)
+        adjacent = F.cosine_similarity(image_features[:-1], image_features[1:], dim=1).mean(dim=-1).clamp_min_(0)
+        first = F.cosine_similarity(image_features[0:1], image_features[1:], dim=1).mean(dim=-1).clamp_min_(0)
+        sim_per_images = float(((adjacent + first) * 0.5).mean().item())
+        transition_count = len(image_features) - 1
+        video_sim = sim_per_images * transition_count
+        cnt += transition_count
 
         sim += video_sim
-        video_results.append({"video_path": video_path, "video_results": sim_per_images})
-    sim_per_frame = sim / cnt
+        video_results.append({
+            "video_path": video_path,
+            "video_results": sim_per_images,
+            "video_sim": video_sim,
+            "cnt_per_video": transition_count,
+        })
+    sim_per_frame = sim / cnt if cnt else 0.0
     return sim_per_frame, video_results
 
 
 def compute_scene_consistency(json_dir, submodules_list, **kwargs):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = get_current_torch_device()
 
     config_path = submodules_list.get("config") or Path(__file__).resolve().parents[1] / "dino_config.yaml"
     checkpoint_path = submodules_list["model"]
@@ -94,5 +113,7 @@ def compute_scene_consistency(json_dir, submodules_list, **kwargs):
     all_results, video_results = scene_consistency(dino_model, video_list, device)
     if get_world_size() > 1:
         video_results = gather_list_of_dict(video_results)
-        all_results = sum([d["video_results"] for d in video_results]) / len(video_results)
+        sim = sum(d.get("video_sim", 0.0) for d in video_results)
+        cnt = sum(d.get("cnt_per_video", 0) for d in video_results)
+        all_results = sim / cnt if cnt else 0.0
     return all_results, video_results

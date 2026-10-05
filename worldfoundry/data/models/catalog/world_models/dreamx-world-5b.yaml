@@ -3,18 +3,23 @@ checkpoints:
 - GD-ML/DreamX-World-5B
 family: GD-ML DreamX-World
 id: dreamx-world-5b
+aliases:
+- dreamx-world-5b-ar
 integration:
   status: integrated
   notes:
   - In-tree resident causal AR runtime with latent, attention, cross-attention and VAE caches.
+  - The Workspace default includes a staged fixture and non-empty prompt; a 2026-07-28
+    single-A100 run generated a finite, decodable native nine-frame 1280x704 block.
 license: apache-2.0
 modalities:
 - interactive-world-model
 - image-to-video
 - camera-action-control
 - world-generation
-name: DreamX-World 5B AR
+name: DreamX-World 5B
 official_sources:
+  paper: https://arxiv.org/abs/2606.16993
   github:
     confirmed_by: local_checkout
     confirmed_ref: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/DreamX-World
@@ -38,3 +43,26 @@ catalog_category: world_models
 catalog_scope: world-model/interactive starred models
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: dreamx-world-5b
+docs:
+  publisher: Alibaba (Amap, AMAP-ML)
+  publisher_kind: company
+  publisher_zh: 阿里巴巴（高德地图 AMAP-ML）
+  overview: 'DreamX-World 5B AR is the causal autoregressive profile of Amap''s DreamX-World: a resident runtime with latent, attention, cross-attention, and VAE caches that rolls world video forward block by block under action control. A 2026-07-28 single-A100 run generated a finite, decodable native nine-frame 1280x704 block from the official example image.'
+  overview_zh: DreamX-World 5B AR 是高德 DreamX-World 的因果自回归档案：常驻运行时带潜变量、注意力、交叉注意力与 VAE 缓存，在动作控制下逐块向前滚动世界视频。2026-07-28 的单 A100 运行从官方示例图生成有限、可解码的原生九帧 1280x704 块。
+  architecture: 'Causal three-latent blocks use the released causal checkpoint with a distilled four-step AR-Forcing schedule and no RGB feedback: attention KV, cross-attention, latent, and causal VAE state stay resident across controls, and decoded RGB is output-only — never reused as conditioning.'
+  architecture_zh: 因果三潜块使用发布的 causal checkpoint 与蒸馏的四步 AR-Forcing 调度，且无 RGB 回灌：注意力 KV、交叉注意力、潜变量与因果 VAE 状态跨控制常驻，解码的 RGB 仅作输出——绝不回用为条件。
+  usage_notes: The Workspace default includes a staged fixture and non-empty prompt. The validated two-control rollout confirms the resident AR path — it is not a long-horizon quality-parity claim, so evaluate long rollouts yourself before relying on them.
+  usage_notes_zh: Workspace 默认包含就位的 fixture 与非空提示词。已验证的两次控制滚动确认了常驻 AR 路径——这不是长时程质量一致性声明，依赖长滚动前请自行评估。
+  limitations:
+  - Validated scope is a short two-control rollout; long-horizon quality is unverified.
+  - Requires the released causal checkpoint plus support assets staged locally.
+  limitations_zh:
+  - 已验证范围是两次控制的短滚动；长时程质量未验证。
+  - 需要发布的 causal checkpoint 与支持资产本地就位。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: General world-rollout quality.
+    reason_zh: 世界滚动生成的总体质量。
+  - id: memobench
+    reason: Long-horizon consistency of autoregressive rollouts.
+    reason_zh: 自回归滚动生成的长时程一致性。

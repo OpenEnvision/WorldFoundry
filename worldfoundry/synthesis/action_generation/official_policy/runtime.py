@@ -11,6 +11,22 @@ from typing import Any, Mapping, Sequence
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
 
 
+def _call_policy_method(method: Any, payload: Mapping[str, Any], *, unpack: bool = False) -> Any:
+    """Select the supported payload signature before executing a stateful policy."""
+    args, kwargs = ((), dict(payload)) if unpack else ((payload,), {})
+    try:
+        signature = inspect.signature(method)
+    except (TypeError, ValueError):
+        # Opaque callables use the backend's normal calling convention.
+        return method(*args, **kwargs)
+    try:
+        signature.bind(*args, **kwargs)
+    except TypeError:
+        args, kwargs = ((payload,), {}) if unpack else ((), dict(payload))
+        signature.bind(*args, **kwargs)
+    return method(*args, **kwargs)
+
+
 def _jsonable(value: Any) -> Any:
     """
     Converts various Python types into a JSON-serializable format.
@@ -202,53 +218,6 @@ def _load_image(value: Any) -> Any:
         # Open the image and convert to RGB format for consistency.
         return Image.open(path).convert("RGB")
     return value
-
-
-def real_time_chunking_action(
-    *,
-    instruction: str,
-    image: Any,
-    observation: Mapping[str, Any],
-    action_context: Sequence[Any],
-    checkpoint_path: str,
-    device: str,
-) -> dict[str, Any]:
-    """
-    Applies Real-Time Chunking (RTC) routing to an existing action chunk.
-
-    This function is used when no policy checkpoint is provided, and the actions are
-    derived directly from the `action_context`. It effectively passes through the
-    provided action context as the determined actions, signaling that a policy
-    denoiser might be required for new chunks.
-
-    Args:
-        instruction: The natural language instruction for the task.
-        image: The current visual observation (ignored in this passthrough mode).
-        observation: The current observation data.
-        action_context: A sequence of actions representing the action chunk to be passed through.
-        checkpoint_path: The path to the policy checkpoint (ignored in this passthrough mode).
-        device: The device to run the policy on (ignored in this passthrough mode).
-
-    Returns:
-        A dictionary representing the RTC output, including the instruction, actions,
-        observation keys, and RTC specific metadata.
-
-    Raises:
-        ValueError: If `action_context` is empty, as RTC requires existing actions in this mode.
-    """
-    # The image, checkpoint_path, and device parameters are not used in this specific RTC mode.
-    del image, checkpoint_path, device
-    if not action_context:
-        raise ValueError("real-time-chunking requires an action_context/action_chunk input when no policy checkpoint is provided.")
-    return {
-        "instruction": instruction,
-        "actions": list(action_context),
-        "observation_keys": sorted(str(key) for key in observation),
-        "rtc": {
-            "mode": "chunk_context_passthrough",
-            "requires_policy_denoiser_for_new_chunks": True,
-        },
-    }
 
 
 @dataclass(frozen=True)
@@ -450,20 +419,25 @@ class OfficialPolicyRuntime:
 
         # Check for checkpoint requirements
         if self.config.require_checkpoint and self.config.checkpoint_location is None:
-            missing.append({"kind": "checkpoint", "path": "", "reason": "no checkpoint_path/checkpoint_dir/checkpoint_ref configured"})
-        elif (
-            self.config.require_checkpoint
-            and self.config.checkpoint_path is not None
-            and not self.config.checkpoint_path.exists()
-            and not self.config.checkpoint_ref
-        ):
-            missing.append(
-                {
-                    "kind": "checkpoint",
-                    "path": str(self.config.checkpoint_path),
-                    "reason": "checkpoint path does not exist",
-                }
-            )
+            if self.config.checkpoint_path is not None:
+                reason = "configured checkpoint path does not exist"
+                if self.config.checkpoint_ref:
+                    reason += " and checkpoint repository is not cached locally"
+                missing.append(
+                    {"kind": "checkpoint", "path": str(self.config.checkpoint_path), "reason": reason}
+                )
+            elif self.config.checkpoint_ref:
+                missing.append(
+                    {
+                        "kind": "checkpoint",
+                        "path": self.config.checkpoint_ref,
+                        "reason": "configured checkpoint repository is not cached locally",
+                    }
+                )
+            else:
+                missing.append(
+                    {"kind": "checkpoint", "path": "", "reason": "no checkpoint_path/checkpoint_dir/checkpoint_ref configured"}
+                )
 
         # Check for other required assets
         for item in self.config.required_assets:
@@ -720,11 +694,7 @@ class OfficialPolicyRuntime:
                 return getattr(output, "action", output)
             method = getattr(model, self.config.predict_method, None)
             if callable(method):
-                # Fallback to model's predict method, trying both dict and kwargs.
-                try:
-                    return method(batch)
-                except TypeError:
-                    return method(**batch)
+                return _call_policy_method(method, batch)
             raise RuntimeError(
                 f"{self.config.model_id} custom policy loaded, but no processor.select_action "
                 f"or {self.config.predict_method} method is available."
@@ -741,10 +711,7 @@ class OfficialPolicyRuntime:
             # Try configured predict method or 'get_action'.
             method = getattr(model, self.config.predict_method, None) or getattr(model, "get_action", None)
             if callable(method):
-                try:
-                    return method(**inputs)
-                except TypeError:
-                    return method(inputs)
+                return _call_policy_method(method, inputs, unpack=True)
             raise RuntimeError(
                 f"{self.config.model_id} HF model loaded, but exposes neither "
                 f"{self.config.predict_method} nor get_action."
@@ -790,10 +757,7 @@ class OfficialPolicyRuntime:
             "task": instruction,
             "action_context": list(action_context),
         }
-        try:
-            return method(payload)
-        except TypeError:
-            return method(**payload)
+        return _call_policy_method(method, payload)
 
     def predict_action(
         self,

@@ -1,0 +1,46 @@
+---
+title: "OmniVinci"
+description: "OmniVinci（NVIDIA）：多模态推理、音频推理；Runner 一致性待确认。"
+modelId: "omnivinci"
+pageSource: generated
+---
+
+OmniVinci 是英伟达的全模态理解大模型：单一模型同时对图像、视频与音频进行推理。在本 catalog 中它是理解/推理类条目，而非生成器——任务为多模态推理、音频推理与图像/视频问答，产物是 model_response。
+
+<ModelPaperFigures modelId="omnivinci" locale="zh" />
+
+代码：[nvidia/omnivinci](https://huggingface.co/nvidia/omnivinci)。
+
+<ModelCommandBuilder modelId="omnivinci" locale="zh" />
+
+## 用来做什么
+
+走记录的多模态推理路由时选 `omnivinci`：记录输入进、推理产物出。本卡是推理器而不是生成器时用它。
+
+英伟达将 OmniVinci 描述为具备视觉-音频联合对齐的全模态 LLM（公开发布于 nvidia/omnivinci）。本仓库记录 prompt/image/video 输入契约；参数规模与内部细节仓库未记录。该模型由英伟达（NVIDIA）发布。
+
+catalog 记录的任务包括 多模态推理、音频推理、图像问答、视频问答。别名包括 `nvidia/omnivinci`。
+
+## 运行时契约
+
+可选 `prompt`、`image`、`video`、`seed`、`frames`；产物 `omnivinci.json`。
+
+CLI task profile：`multimodal-reasoning`、`audio-reasoning`、`image-question-answering`、`video-question-answering`、`video_generation`。绑定的 pipeline 类是 `OmniVinciPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+适合用来审视生成条目产出的视频——例如就物理合理性或事件顺序提问——而不是用来生成内容。
+
+Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run omnivinci --pipeline.task-profile multimodal-reasoning` 跑推理路由。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `nvidia/omnivinci`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh omnivinci`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="omnivinci" locale="zh" />

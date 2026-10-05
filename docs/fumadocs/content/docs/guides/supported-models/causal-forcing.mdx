@@ -1,0 +1,66 @@
+---
+title: "Causal-Forcing"
+description: "Tsinghua thu-ml causal video student distilled from Wan2.1. Studio default is chunk-wise T2V at 832×480, 81 frames, 4 steps. I2V is frame-wise only. Official infer runtime in-tree; runner parity pending."
+modelId: "causal-forcing"
+pageSource: authored
+---
+
+Causal-Forcing distills a bidirectional Wan2.1 teacher into a **causal autoregressive** student so video can stream **chunk by chunk** or **frame by frame** instead of in one bidirectional pass. Causal-Forcing++ is the few-step line on the same card (aliases `Causal Forcing++` and `causal-forcing-plus-plus`). WorldFoundry vendors the official infer-only tree under `worldfoundry/synthesis/visual_generation/forcing/causal_forcing_runtime` and exposes it as `CausalForcingPipeline`. This is **not** [Self-Forcing](/docs/guides/supported-models/self-forcing) and **not** [Rolling-Forcing](/docs/guides/supported-models/rolling-forcing).
+
+<ModelPaperFigures modelId="causal-forcing" locale="en" />
+
+The official paper is [Causal Forcing: Autoregressive Diffusion Distillation Done Right for High-Quality Real-Time Interactive Video Generation](https://arxiv.org/abs/2602.02214) (ICML 2026, arXiv 2602.02214). The ++ write-up is [arXiv 2605.15141](https://arxiv.org/abs/2605.15141). Project: [thu-ml.github.io/CausalForcing.github.io](https://thu-ml.github.io/CausalForcing.github.io). Code: [thu-ml/Causal-Forcing](https://github.com/thu-ml/Causal-Forcing). Publisher: Tsinghua University (thu-ml). Weights: `zhuhz22/Causal-Forcing`.
+
+Studio defaults mirror the official chunk-wise CLI: `config_path: causal_forcing_dmd_chunkwise.yaml` and `checkpoint_path:` `$WORLDFOUNDRY_CKPT_DIR/Causal-Forcing/chunkwise/causal_forcing.pt` (also resolved from `zhuhz22--Causal-Forcing`). Frame-wise and the two ++ files (`causal-forcing++/framewise-2step.pt`, `framewise-1step.pt`) are selected by overriding those two keys. Status: **Runner parity pending** — the adapter runs vendored `inference.py`, but this catalog does not record a checkpoint-backed GPU artifact.
+
+<ModelCommandBuilder modelId="causal-forcing" locale="en" />
+
+## What it is for
+
+Start on the **chunk-wise** student for **text-to-video**. Launch `worldfoundry-eval run causal-forcing`. Catalog schema marks `prompt` and `image`; the official path is T2V unless you pass `images` or set `i2v: true`. Artifact: `causal-forcing.mp4`. `actions` is recorded as `seed`.
+
+**Image-to-video is frame-wise only.** Official `inference.py` asserts `num_frame_per_block: 1` and does not run I2V on the chunk-wise default. Switch `config_path:` / `checkpoint_path:` to the frame-wise student (or a ++ frame-wise file) before passing a still. I2V resizes that still to **480×832**, encodes it as the first latent, and samples `num_output_frames: 21` minus one. Distributed I2V is not supported.
+
+Use ++ only when you deliberately want **1- or 2-step** sampling. Those YAMLs still spend **4 steps on the first frame** (`denoising_step_list_first_chunk:` `[1000, 750, 500, 250]` — the ASD first-frame trick). Do not treat the `long_video/` tree under this runtime as [Rolling-Forcing](/docs/guides/supported-models/rolling-forcing).
+
+Score clip quality on [VBench](/docs/evaluation/benchmark-hub/vbench). That is a listed suite, not an ingested WorldFoundry rank. Supply a prompt through `--pipeline.prompt`. For external batch prompt lists, set `$WORLDFOUNDRY_FORCING_PROMPTS_ROOT` to their local directory.
+
+## Runtime contract
+
+WorldFoundry `CausalForcingPipeline` defaults (shared forcing runtime, `use_ema: false` unlike Self-Forcing / Rolling-Forcing):
+
+| Knob | Default | Notes |
+| --- | --- | --- |
+| Size | **832×480** | `width: 832`, `height: 480` in `default_config.yaml`; I2V `Resize((480, 832))` |
+| Pixel frames | **81** | Wan temporal compression from `num_output_frames: 21` |
+| Latent shape | **21×16×60×104** | `image_or_video_shape: [1, 21, 16, 60, 104]`; I2V noise is 20 latents |
+| FPS | **16** | `write_video(..., fps=16)` |
+| `guidance_scale:` | **3.0** | chunk-wise / frame-wise / ++ DMD configs |
+| `timestep_shift:` | **5.0** | same DMD YAMLs |
+| Steps (chunk-wise / frame-wise) | **4** | `denoising_step_list: [1000, 750, 500, 250]`, `denoising_loss_type: flow`, `warp_denoising_step: true` |
+| Steps (++) | **1 or 2** | 1-step `[1000]`; 2-step `[1000, 500]`; plus the 4-step first frame |
+| `num_frame_per_block:` | **3** | frame-wise and ++ use **1** |
+| `seed:` | **0** | |
+| Dtype | **bfloat16** | official infer path; text encoder swaps to GPU if free VRAM is under **40 GB** |
+| `real_name:` | **Wan2.1-T2V-14B** | teacher name in the DMD YAMLs |
+
+Switch variants with a matching pair — do not mix a chunk-wise checkpoint with a frame-wise YAML:
+
+| Line | `config_path:` | `checkpoint_path:` |
+| --- | --- | --- |
+| Chunk-wise (Studio default, T2V) | `causal_forcing_dmd_chunkwise.yaml` | `chunkwise/causal_forcing.pt` |
+| Frame-wise (required for I2V) | `causal_forcing_dmd_framewise.yaml` | `framewise/causal_forcing.pt` |
+| ++ 2-step | `causal_forcing_dmd_framewise_2step.yaml` | `causal-forcing++/framewise-2step.pt` |
+| ++ 1-step | `causal_forcing_dmd_framewise_1step.yaml` | `causal-forcing++/framewise-1step.pt` |
+
+Configs live under `worldfoundry/data/models/runtime/configs/causal_forcing/`. Infer-time VAE and umT5 load from **`Wan2.1-T2V-1.3B`** (`Wan2.1_VAE.pth`, `models_t5_umt5-xxl-enc-bf16.pth`). The runner also symlinks `Wan2.1-T2V-14B` when that tree is present. Full parity needs **both** the selected Causal-Forcing pair **and** a local Wan2.1 layout the wrapper can resolve (`$WORLDFOUNDRY_WAN_MODELS_ROOT`, or `$WORLDFOUNDRY_CKPT_DIR`).
+
+## Running in WorldFoundry
+
+`worldfoundry-eval run causal-forcing` in `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Same environment family as Self-Forcing. Optional roots: `$WORLDFOUNDRY_CAUSAL_FORCING_CKPT_ROOT`, `$WORLDFOUNDRY_CAUSAL_FORCING_REPO_ROOT`. Catalog license is **unknown** — confirm the GitHub / Hugging Face cards before any production use. Catalog VRAM is unset. Missing Wan or student weights are reported at runtime, not downloaded.
+
+## Minimal eval
+
+Chunk-wise T2V, then [VBench](/docs/evaluation/benchmark-hub/vbench) `custom_input` / `aesthetic_quality`. Stage batch prompt lists separately and select their directory with `$WORLDFOUNDRY_FORCING_PROMPTS_ROOT`. Demo parity is pending; the bounded VBench key is still `aesthetic_quality`.
+
+<ModelRelatedRecipes modelId="causal-forcing" locale="en" />

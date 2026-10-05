@@ -154,10 +154,12 @@ class EchoInfinity:
         if image_path is not None:
             raise ValueError("Echo-Infinity is a text-to-video runtime; image conditioning is not supported.")
         prompts = [prompt] * self.num_samples
+        noise_generator = torch.Generator(device=self.device).manual_seed(self.seed)
         noise = torch.randn(
             [self.num_samples, self.num_output_frames, 16, 60, 104],
             device=self.device,
             dtype=self.dtype,
+            generator=noise_generator,
         )
         video = self.pipeline.inference(
             noise=noise,

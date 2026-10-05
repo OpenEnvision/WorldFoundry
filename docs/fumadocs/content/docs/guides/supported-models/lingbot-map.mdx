@@ -1,0 +1,50 @@
+---
+title: "LingBot-Map"
+description: "LingBot-Map from Robbyant (Ant Group): 3d-reconstruction and streaming-3d-reconstruction; Runner parity pending; Geometric Context Transformer for Streaming 3D Reconstruction."
+modelId: "lingbot-map"
+pageSource: authored
+---
+
+LingBot-Map is Robbyant's streaming 3D reconstruction model: it consumes image streams and produces camera poses, depth, and point clouds through the GCTStream runtime, supporting both streaming and windowed reconstruction via LingBotMapPipeline. The official runtime is vendored in-tree; checkpoints stay external cache assets.
+
+<ModelPaperFigures modelId="lingbot-map" locale="en" />
+
+The recorded paper is [Geometric Context Transformer for Streaming 3D Reconstruction](https://arxiv.org/abs/2604.14141) (2026).
+
+Project page: [technology.robbyant.com/lingbot-map](https://technology.robbyant.com/lingbot-map). Code: [Robbyant/lingbot-map](https://github.com/Robbyant/lingbot-map).
+
+<ModelCommandBuilder modelId="lingbot-map" locale="en" />
+
+## What it is for
+
+`lingbot-map` is the recorded reconstruction line. Start here to emit geometry from the documented views.
+
+The vendored GCTStream runtime implements the streaming transformer described in the upstream release (paper arXiv 2604.14141); the wrapper defaults to SDPA attention so FlashInfer is not required for baseline execution (pass use_sdpa=false when FlashInfer is available). It is published by Robbyant (Ant Group).
+
+Catalog tasks include 3d-reconstruction, streaming-3d-reconstruction, camera-pose-estimation, and depth-estimation. Catalog aliases include `lingbot_map` and `robbyant/lingbot-map`.
+
+## Runtime contract
+
+Optional `input_path` and `interactions`; artifacts `lingbot_map_predictions.npz`.
+
+CLI task profiles: `default`. WorldFoundry binds `LingBotMapPipeline`.
+
+Family status: **Runner parity pending**.
+
+Runner status is Runner parity pending: import and dispatch are in-tree, and full GPU parity needs staged robbyant/lingbot-map checkpoints (apache-2.0). The pipeline accepts a checkpoint file or a local HF snapshot directory.
+
+Runtime source is vendored in-tree under worldfoundry/base_models/three_dimensions/point_clouds/lingbot_map; checkpoints remain external cache assets.
+
+WorldFoundry vendors the official LingBot-Map GCTStream runtime under worldfoundry/base_models/three_dimensions/point_clouds/lingbot_map.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run lingbot-map --pipeline.task-profile default` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `robbyant/lingbot-map`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh lingbot-map`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="lingbot-map" locale="en" />

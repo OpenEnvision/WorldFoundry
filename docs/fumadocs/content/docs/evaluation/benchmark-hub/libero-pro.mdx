@@ -1,126 +1,37 @@
 ---
 title: LIBERO-Pro
-description: LIBERO-Pro — metrics, requirements, and run commands.
+description: "Plug-and-play LIBERO overlay that probes memorization: object, pose, instruction, task, and environment shifts. WorldFoundry imports official rollouts."
 ---
 
-## About
+LIBERO-PRO (Huazhong University of Science and Technology, with Harvard, MIT, WUT, and Lehigh) is **not** a new lifelong suite and **not** [LIBERO-Plus](/docs/evaluation/benchmark-hub/libero-plus)'s 10,030-instance factor grid. It is a **plug-and-play** overlay on the original LIBERO tasks. The claim is that stock LIBERO train/eval are almost the same scene, so 90%+ scores can be rote replay. PRO applies **reasonable** perturbations and asks whether the policy still grounds the instruction.
 
+Five official types (Figure 6 in the paper):
 
+- **Object attributes** — color, texture, scale; same semantic target.
+- **Initial configuration** — placements that stay physically valid. Small position shifts are where many VLAs go to zero.
+- **Instruction** — paraphrases of the same goal.
+- **Task redesign** — new object sets or composed goals. These do **not** mix with the other four.
+- **Environment** — background, lighting, texture; feasibility unchanged.
 
-LIBERO-Pro external benchmark manifest for professional-grade language-conditioned manipulation tasks.
+The other four types can be combined. Official eval matches stock LIBERO: **50 episodes per task**. The paper reports models above **90%** on clean LIBERO collapsing to **0%** under generalized PRO settings — an upstream finding, not a hub row.
 
+Paper: [LIBERO-PRO](https://arxiv.org/abs/2510.03827). Project: [LIBERO-PRO webpage](https://zxy-mllab.github.io/LIBERO-PRO-Webpage/). Code: [Zxy-MLlab/LIBERO-PRO](https://github.com/Zxy-MLlab/LIBERO-PRO) (MIT). Dataset: `zhouxueyang/LIBERO-Pro`.
 
+WorldFoundry is **official-results only**. You run the upstream overlay, then `official-validation` normalizes the export. No in-tree robosuite. [Base LIBERO](/docs/evaluation/benchmark-hub/libero) can wire closed-loop execution; this card cannot.
 
-## Metrics
+<BenchmarkPageSections id="libero-pro" locale="en" />
 
-LIBERO-Pro external benchmark manifest for professional-grade language-conditioned manipulation tasks.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/libero-pro.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `episode_success` | Share of episodes or tasks that complete successfully. |
-| `action_accuracy` | Correctness of predicted actions, states, or outcomes against the benchmark success criterion. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `worldfoundry-unified-cu128`.
-- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
-- WorldFoundry provides contract and official result normalization for caller-provided LIBERO-Pro outputs.
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_LIBERO_PRO_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/libero-pro`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/Lifelong-Robot-Learning--LIBERO`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_LIBERO_PRO_ROOT`
-- `WORLDFOUNDRY_LIBERO_PRO_RESULTS_PATH`
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id libero-pro \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero-pro/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/libero-pro/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id libero-pro \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero-pro/official-run \
-  --json
-```
-
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id libero-pro --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_LIBERO_PRO_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+Optional `WORLDFOUNDRY_LIBERO_PRO_ROOT` points at the `Zxy-MLlab/LIBERO-PRO` checkout. Default import path: `WORLDFOUNDRY_LIBERO_PRO_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/libero-pro.yaml`. Outputs: `scorecard.json` (primary `success_rate`), `raw_results.jsonl`, and `evaluation/summary.json`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

@@ -1,0 +1,78 @@
+---
+title: 原生 Diffusion 整合
+description: native-diffusion 各 family 的迁移与整合状态——复用的 role、删除的代码与本地结构/tensor 验证证据。发版证据而非架构设计。
+---
+
+本页记录 native-diffusion 各 family 的**迁移与整合状态**：每个模型复用了哪些 canonical role、删除了哪些上游代码、以及支撑当前 recipe 的本地结构/checkpoint 验证证据。它是**发版证据与溯源，不是架构设计**。采样内核、组件边界、依赖规则与迁移*过程*见 [原生扩散](/zh/docs/maintainers/architecture/native-diffusion)；这些 family 依赖的共享原语见 [核心基础设施](/zh/docs/maintainers/architecture/core-infrastructure)。
+
+<Callout type="info">
+  下文反复出现一个区分：**结构/checkpoint 验证**（与已发布 checkpoint 的逐 key/tensor 精确覆盖）不等于 **CUDA artifact parity**（真实 GPU 运行产出一致输出）。多个 family 都注明 CUDA parity 仍是独立 release gate，不能由结构验证替代。
+</Callout>
+
+## Scheduler 与组件整合
+
+当前原生内核已经建立上述契约。Wan shifted trajectory 已 canonical 化，原先重复的 flow UniPC/DPM++ 现在只在 `schedulers/` 下保留一份实现。Wan 与 Cosmos compatibility path 都解析到同一个 native UniPC class；Wan 的六份 DPM++ 和六份 UniPC copy 已变为单向 export。迁移时的一次性验证覆盖 schedule construction、noise interpolation、flow conversion 与完整 multistep trajectory；临时 validation code 使用后已经删除。FLUX.2 是第一个从模态目录完整迁出的真实 component：latent autoencoder 已进入 `models/autoencoders/flux2`，加载复用 core-backed module loader，benchmark caller 也已改用 canonical path；旧 `image/flux2` package 已删除。
+
+## Sana
+
+Sana image、video、streaming、ControlNet 与 SANA-WM variant 现在和其他 diffusion family 共用同一套 role-based package。Checkpoint-shaped network math 位于 `models/networks/sana`，DC-AE 位于 `models/autoencoders/sana`，conditioning 位于 `models/encoders/sana`，构造逻辑属于 recipe 与 scheduler。迁移后的 Wan VAE variant 使用框架无关 adapter，不再继承 Diffusers mixin。重复的 shape、volume、configuration filtering、state-dict prefix 与 Triton autotune helper 已进入 `worldfoundry/core`；未被 inference 使用的 training/random helper 和旧 Sana `utils` 层均已删除。
+
+## Wan family
+
+`wan2.1-t2v-1.3b` 是第一个完整的内置 native recipe。UMT5 conditioner、tokenizer resource、DiT、latent initializer、shifted Euler scheduler 和 VAE decoder 全部由 standard strategy 装配。Checkpoint resolver 会先请求 `worldfoundry/core` 解析本地 staged Hub snapshot，找不到时才执行 filtered Hub materialization；revision 与 required files 始终保持 declarative。本地 checkpoint 结构验证确认 DiT（825）、text encoder（242）和 VAE（194）全部逐键匹配。这个新 recipe 的 CUDA artifact parity 仍是独立 release gate，不能由结构验证替代。
+
+所有 Wan 衍生产品也复用同一组 role，不再携带私有 Wan framework。PUSA、SAMA、Spatia、MultiWorld、FantasyWorld 与 WoW 组合 canonical Wan transformer、conditioning、codec、checkpoint loading、LoRA/control helper 和 staged runner，只保留 checkpoint-visible 的差异。本地精确图检查覆盖 MultiWorld（984/984 tensors）、FantasyWorld 的 Wan2.1 overlay（3,132/3,132）和 Wan2.2 high/low 两个分支（分别为 2,658/2,658），以及 WoW 1.3B（825/825）。WoW 的网络图直接由发布的 transformer checkpoint 推导，并正确选择仅 VAE 的首帧 conditioning。WoW DiT 2B 不再携带复制的 Cosmos source tree、scheduler、tokenizer 与 pipeline，而是把 post-trained transformer checkpoint 交给 canonical Cosmos Predict2 route。由于 pinned Hub snapshot 中不存在预期的 `wow_dit_2b.pt`，其 checkpoint graph 与 CUDA artifact parity 仍待验证。这些结构检查不代表 native 切换后的 CUDA artifact parity。
+
+## Matrix Game 3.5
+
+Matrix Game 3.5 是第二个 checkpoint-backed native 集成。`matrix-game-3.5-first-person` 与 `matrix-game-3.5-third-person` 是默认 registry 中两个独立冻结的 recipe，分别直接绑定发布的完整 829-key DiT checkpoint。逐 key/shape 的 header-to-model 验证固定了第一人称 checkpoint 的 subject-reference embedding 容量为 2、第三人称为 4；产品 profile 仍把单次第三人称请求限制为最多两个 reference。它们复用 canonical Wan UMT5 conditioner、48-channel Wan2.2 VAE、latent initializer、scheduler、core attention、loader 与 standard runner；结构验证同时逐一匹配 242 个 text-encoder key 与 converter 处理后的 196 个 Wan2.2 VAE key。Mosaic、PRoPE 和 subject-memory tensor computation 位于 Matrix denoiser component；旧 DiffSynth Matrix pipeline 已删除，synthesis route 现在把 `DiffusionRequest` 直接交给 `NativeDiffusionPipeline`。复制进来的 validation runner、GT/candidate panel、临时 section video、latent snapshot、在线 YOLO filter 与 VGGT 备选 registration 路径均在集成后删除，runtime config 只暴露 inference 语义。native 切换后的 CUDA artifact parity 仍需重新执行，不能由 checkpoint 结构验证替代。
+
+## Echo Memory
+
+Echo Memory 是第三个 native family，在同一个默认 registry 中注册 11 个不可变 model recipe。每个公开 model ID 都固定自己的 checkpoint file 与 memory architecture，不再作为共享可变 Echo pipeline 的 option。Denoiser 在 canonical Wan blocks 上安装 checkpoint-compatible Echo module；conditioner、VAE、core loading、UniPC scheduler、runner 与 runtime policy 均复用共享 infra。框架自有的 `frozen-context` strategy 负责将 target noise 与 clean context suffix 组合、每个 solver step 后重新锁定 context，并只 decode target latent。已发布 K=1 checkpoint 的 1,185 个 tensor 均与 native model 精确覆盖；此前 A100 artifact 早于本次切换，因此在声明 parity 前仍需重新生成 native CUDA artifact。
+
+## LTX
+
+LTX family 是下一组原生集成。`ltx-2-i2v`、`ltx-2.3-i2v` 与 `ltx-video-i2v` 是三个独立 recipe，但共用同一个 `NativeDiffusionPipeline`、复用 core 的 loader、runtime policy 和框架自有 `joint-multistage` runner。LTX-2.x 在低分辨率生成与空间 refinement 两个阶段联合处理视频和音频；LTX-Video 0.9.8 则以单视频模态在同一 runner 中执行两个阶段，并在阶段之间应用 spatial upsampler。Transformers 只提供 checkpoint-compatible Gemma/T5 architecture，不作为 inference backend。真实本地 checkpoint 已逐角色精确覆盖：LTX-2 transformer 3,510、connector 59、video encoder/decoder 94/92、audio decoder 58、vocoder 194、upsampler 73、statistics 2、Gemma 1,066；LTX-2.3 transformer 4,186、connector 262、video encoder/decoder 86/86、audio decoder 58、vocoder 1,227、upsampler 72、statistics 2、Gemma 1,066；LTX-Video transformer 1,215、video encoder/decoder 94/134、T5 220。所有 caller 迁移后，复制的上游 pipeline 和 legacy `video/ltx2` loader stack 均已删除；CUDA artifact parity 仍是独立 release gate。
+
+## Cosmos Predict 2.5 / Transfer 2.5
+
+Cosmos Predict 2.5 与 Transfer 2.5 遵循同一规则。Predict 2B、Predict 14B 和 Transfer 2B controlled-video 三个 recipe 共用一套 native runner、Reason1 conditioner、Wan codec 实例、Karras flow-UniPC scheduler、core loader 与 offload policy。Transfer 只增加 checkpoint-shaped VACE 网络分支——位于 base DiT 第 0/7/14/21 层的 4 个 control block，以及支持 8 modality 的 control embedder——不增加 ControlNet backend 或 family runner。已发布的 Predict 与 Transfer 配置都关闭 temporal FPS RoPE modulation。本地精确结构验证覆盖 Predict 2B（569 个 transformer tensor）、Predict 14B（729）、Reason1 language weights（338）与 Wan codec（194）；native Transfer control path 也通过有限值 tiny forward。Legacy `video/cosmos2p5` Diffusers copy 已删除。由于本机没有精确 general/edge asset，Transfer checkpoint 结构与完整 native CUDA artifact parity 仍待验证。
+
+## Cosmos Predict1 / Predict2 (GEN3C)
+
+Cosmos Predict1 与 Predict2 复用上述架构，而没有恢复各自的上游 runtime。`gen3c-cosmos1-7b` 绑定 570-tensor 原生 DiT、共享 T5-11B conditioner、Cosmos Tokenize1 codec、Karras x0 AB2 与标准 initializer；MoGe depth、命名 camera path 和 RGBD forward warp 是复用 `worldfoundry/core` geometry 的模型预处理，不是 GEN3C runner。`cosmos-predict2-2b-video2world` 与 `cosmos-predict2-14b-video2world` 共用 Predict2/2.5 backbone module 和 Wan codec，recipe 配置只选择 567/727-tensor topology、T5-11B、sigma-max initialization 与 Rectified Flow AB2。两代模型都通过框架提供的 terminal clean-prediction lifecycle 完成末次去噪，不持有 family runner。Registry、tiny-forward、mask、geometry 与 scheduler validation 已在本地通过；Predict2 权重受 gated access 限制，两代模型的完整 native GPU artifact parity 仍待完成。
+
+## HunyuanVideo
+
+HunyuanVideo 同样遵守这一组合边界。`hunyuanvideo-t2v`、`hunyuanvideo-i2v`、`hunyuanvideo-1.5-t2v` 与 `hunyuanvideo-1.5-i2v` 是默认 registry 中四个不可变 recipe，全部使用 standard framework runner。原版与 1.5 只拥有 checkpoint-compatible denoiser、prompt conditioning 和 latent codec；scheduler、loader、offload、execution、media IO 与公开 pipeline 行为继续复用共享 infra。此前重复的 MLP、text/timestep projection、AdaLN/final layer、prefix modulation、attention 与 RoPE helper 现在统一解析到同一组 core primitive，同时保持 checkpoint 可见的 submodule name 不变。本地精确 checkpoint 检查覆盖转换后的原版 T2V DiT（856 个源 key 转为 976 个原生 key）、原版 I2V DiT（856 keys）、原版 causal VAE（248 keys）、1.5 DiT（1,793 keys）、1.5 VAE（218 keys）与仅 I2V 使用的 SigLIP vision encoder（448 keys），missing、unexpected 与 shape mismatch 全部为 0。受限访问的 FLUX.1-Redux-dev vision asset 是显式 I2V component dependency，不再通过 sibling directory 猜测。原版 causal 3D VAE 是 encode/decode 共用的单一原生 PyTorch module。旧 `video/hunyuan_video` package、上游 CLI config 与一次性 validation/demo script 已删除。此前 official-runtime artifact 只保留为历史 source evidence；四个 recipe 在 native 切换后都仍需重新完成 checkpoint-backed CUDA artifact parity。Hunyuan GameCraft 与 HunyuanWorld-Voyager 当前仍使用 synthesis 层的过渡兼容层，不能据此视为这两个衍生产品已经完成迁移。
+
+## LVDM
+
+LVDM 不再拥有第二套 runtime tree，其 checkpoint-shaped 实现按 role 拆分：
+
+- `models/networks/lvdm`：latent-diffusion 编排、3D UNet 与 checkpoint-visible attention block；
+- `models/autoencoders/lvdm`：latent codec；
+- `models/encoders/lvdm`：text、image、adapter 与 resampler conditioning；
+- `schedulers/lvdm`：DDIM variant、diffusion schedule 与 Vid2World KV cache；
+- `core/model_loading/factory.py` 与 `core/nn`：通用 config 构造、distributions、EMA、checkpoint 与经典卷积 helper。
+
+Vid2World dataset adapter 属于其 synthesis 包 `synthesis/visual_generation/vid2world/eval_inputs`。Runtime config 必须使用这些 role-based 全限定路径；旧 `base_models/diffusion_model/video/lvdm` package 已删除。
+
+### LVDM fork 状态
+
+- **T2V-Turbo** — 共享 role-based component。其 VideoCrafter2 base 解析公共 network、codec、encoder 与 scheduler role，只保留自己的 LoRA 与 consistency-sampling 行为。
+- **VideoCrafter** — 共享 role-based component。所有打包 config 直接指向 canonical role package，不再复制 framework tree。
+- **Dynamicrafter、MotionCtrl、Pandora** — 共享 role-based component。现有 synthesis adapter 保留各自产品行为，同时 import 同一组 LVDM component。
+- **Vid2World** — 共享 component + 显式扩展。其改造的 latent diffusion network、UNet、attention、DDIM sampler 与 KV cache 作为命名 role component；dataset 仍归 synthesis。
+
+### Guard rails
+
+对每个 LVDM 衍生集成：
+
+1. checkpoint-visible 结构一致时必须复用 canonical role component。
+2. 仅当 checkpoint 或 inference 行为不同时，才新增一个窄命名的 role component。
+3. 编排放在 native recipe/pipeline，data adapter 放在 synthesis。
+4. 在有资产时执行 `compileall`、target 解析、checkpoint key/shape 检查，并跑相关 integration test 子集。
+
+不要再引入 model-local 的 `models/modules/pipeline/scheduler` framework 层级。

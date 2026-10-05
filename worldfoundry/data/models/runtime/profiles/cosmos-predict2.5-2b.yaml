@@ -20,12 +20,16 @@ input_schema:
 artifact_kind: generated_world
 artifact_filename: cosmos-predict2.5-2b.mp4
 execution:
-  backend_stage: in_tree_runtime_plan
-  runtime_status: profile_resolves_catalog_variant_checkpoint_gpu_readiness_pending
-  integration_status: planned
+  backend_stage: native_diffusion_inference
+  checkpoint_revision_policy: exact_sha_for_verified_runs
+  runtime_status: native_checkpoint_structure_and_scheduler_parity_validated_gpu_parity_pending
+  integration_status: integrated
   pipeline_binding: cosmos-predict2.5-2b
 integration:
-  status: planned
+  status: integrated
 notes:
-- Data profile for the catalog variant; does not promote the listed-only catalog entry
-  to a runner.
+- The framework-owned transformer matches all 569 tensors in the official 2B EMA checkpoint;
+  Reason1 language weights match 338/338 tensors and the shared Wan VAE matches 194/194 tensors.
+- Prompt conditioning, positive guidance, flow-UniPC scheduling, image/video latent conditioning,
+  and decoding all run through the shared native diffusion roles.
+- End-to-end GPU output parity remains pending and is not inferred from structural validation.

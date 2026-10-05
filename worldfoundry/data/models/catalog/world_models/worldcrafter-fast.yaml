@@ -1,0 +1,32 @@
+schema_version: 2
+id: worldcrafter-fast
+name: WorldCrafter Fast
+tasks: [text-to-video, image-to-video, camera-controlled-video, world-model]
+provider: TencentARC
+source:
+  status: open_source
+  official_repo_url: https://github.com/TencentARC/WorldCrafter
+  license: worldcrafter-academic-only
+checkpoint: TencentARC/WorldCrafter-Fast
+runtime_profile: runtime-profile:worldcrafter-fast
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: worldcrafter-fast
+official_sources:
+  project_page: https://drexubery.github.io/WorldCrafter/
+  paper: https://arxiv.org/abs/2609.24984
+integration:
+  status: integrated
+  notes:
+  - Reuses shared Helios transformer, scheduler, latent preparation and VGGT layers.
+  - Model-specific UCPE camera residuals, RepEncoder memory and Fast routing remain explicit.
+runner_parity:
+  status: verified
+  notes:
+  - Local H100 validation passed released-weight I2V/T2V at 640x384 for two chunks, strict loading, pre-clamp finite outputs, full decode and visual review.
+  - Shared-transformer upstream numerical checks passed; Base resume matched continuous pre-clamp outputs exactly. Long-horizon quality is not established.
+docs:
+  limitations_zh:
+  - 原生 Demo 证据未记录。
+  - 已在本地 H100 上使用发布权重验证 640×384 的双片段图生视频和文生视频推理，包含严格权重加载、裁剪前输出有限性检查、完整解码与画面检查。
+  - 共享 Transformer 的上游数值检查已通过；Base 从中断点恢复的裁剪前输出与连续运行完全一致。长时程画面质量尚未确立。
+catalog_category: world_models

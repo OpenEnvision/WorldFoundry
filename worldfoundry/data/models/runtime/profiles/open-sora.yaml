@@ -5,19 +5,30 @@ task_family: video_generation
 groups: [video, text_to_video]
 source_repos:
 - url: https://github.com/hpcaitech/Open-Sora
+  revision: 17cce908b22283acc3c946816c81f46dd442a453
+  in_tree_path: worldfoundry/synthesis/visual_generation/open_sora/open_sora_runtime
 checkpoints:
 - repo_id: hpcai-tech/OpenSora-STDiT-v3
   role: t2v_checkpoint
 - repo_id: hpcai-tech/OpenSora-VAE-v1.2
   role: vae_checkpoint
+- repo_id: DeepFloyd/t5-v1_1-xxl
+  role: text_encoder_checkpoint
 input_schema:
   prompt: true
 artifact_kind: generated_video
 artifact_filename: open-sora.mp4
 execution:
+  environment: open-sora
   backend_stage: official_runtime_bridge
   runtime_status: integrated_checkpoint_required
   integration_status: integrated
   pipeline_binding: open-sora
 integration:
   status: integrated
+notes:
+- Transformers 4.57+ requires torch 2.6 or newer to load the released T5 PyTorch .bin shards directly.
+  The pinned torch 2.5.1 runtime instead requires a separate derived safetensors directory.
+  Run worldfoundry/synthesis/visual_generation/open_sora/open_sora_runtime/tools/convert_t5_to_safetensors.py
+  with --source ../ckpts/DeepFloyd--t5-v1_1-xxl and
+  --output ../ckpts/DeepFloyd--t5-v1_1-xxl-safetensors before inference.

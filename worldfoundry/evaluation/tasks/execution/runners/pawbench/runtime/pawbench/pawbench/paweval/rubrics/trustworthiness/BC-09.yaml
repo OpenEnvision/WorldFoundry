@@ -1,0 +1,76 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BC-09
+track: coverage
+title_en: Pinball Board Ball Release
+scene_grounding:
+- 'Initial state must match: A metal ball is positioned at the release area of a wooden
+  pinball-style obstacle board with bottom bins.'
+- Apparatus geometry in the opening frames must match the source image.
+action_execution:
+- 'Required action: Release the ball once into the board.'
+- Action must happen exactly once in the expected direction / region.
+- Action target must be identifiable in the same frame as the action onset (Track
+  B target acquisition).
+- The action must be visible as a single continuous event from the described initial
+  state; cuts, hidden starts, or repeated attempts are action-execution failures.
+- For contact labels, the object trajectory from release/kick/throw/roll to target
+  or miss must be continuous enough to audit contact.
+target_requirements:
+- Release area, ball, board pegs/walls, and all three bottom bins must be visible
+  enough to audit left_bin/middle_bin/right_bin/stuck_on_board geometry.
+- The ball must follow a continuous trajectory through the board; exiting off-screen,
+  reappearing in a bin, or crossing between settled bins is OBJECT_CONTINUITY_FAIL/TRAJECTORY_INVALID.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout
+  window.
+- Color / identity of the subject must remain consistent across frames.
+- The ball / puck must not re-appear at an inconsistent location after exiting the
+  apparatus.
+- 'Identity continuity is fatal: the judged subject, target, and key apparatus must
+  not swap appearance, duplicate, vanish, or re-enter as a different object/person/animal.'
+- Fast-moving object continuity must be judged from a continuous visible trajectory,
+  not from a before/after object appearing at the target.
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+- Pinball board walls, pegs, and bottom bin boundaries must stay fixed; left/middle/right
+  geometry cannot slide.
+- Board material, walls, pegs, and bin dividers must not appear, disappear, bend,
+  or repaint during the run; such apparatus changes are strict-excluding even if
+  the ball's final bin is readable.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-readout state/region change: subject moves between label-defining states or regions after the first decisive readout.'
+- 'Post-result side change: label-defining region changes after the first decisive
+  post-action frame.'
+- Outcome label changes (e.g., from miss to score) via a non-physical motion after
+  the first decisive contact frame.
+- 'Board geometry contradiction: ball skips pegs/walls without contact, teleports
+  to a bottom bin, or moves from left_bin/middle_bin/right_bin after settling.'
+- 'Board-change contradiction: a physically impossible board or plank change maps
+  to APPARATUS_INSTABILITY/POST_RESULT_INCONSISTENCY and cannot remain TRUSTED.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after
+  the readout window.
+- After the first settled bin/stuck result, the ball must remain in that bin/board
+  location unless continuous visible motion resumes before settling.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Pinball Board Ball Release.'
+- 'Fatal severity cue: target/stimulus acquisition failure, impossible trajectory,
+  identity discontinuity, or post-result contradiction excludes strict trusted metrics
+  even if the outcome is readable.'
+- 'BC contact trust cue: target contact/hit/miss geometry, continuous trajectory,
+  collision consistency, and apparatus stability are mandatory.'

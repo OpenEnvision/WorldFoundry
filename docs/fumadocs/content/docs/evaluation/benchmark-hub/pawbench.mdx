@@ -1,0 +1,74 @@
+---
+title: PAWBench
+description: "Distributional physics bench: 50 scenes × 50 rollouts. Calibration TVD and coverage stay separate. WorldFoundry vendors PAWEval; it does not invent a combined board."
+---
+
+PAWBench (SJTU, Shanghai AI Lab, Krea AI, Hugging Face, Shanghai Innovation Institute, Tongyi Lab, HKU) asks whether repeated generations recover the **distribution** of physically valid futures — not whether one clip looks plausible. Official size: **50 scenes** (25 calibration with reference outcome probabilities, 25 coverage). A complete run generates **50 independent rollouts per scene = 2,500 videos**.
+
+The two tracks stay separate. Upstream defines **no combined scalar**.
+
+- **Calibration** — `calibration_tvd_percent` (lower is better): total-variation distance to the reference outcome distribution.
+- **Coverage** — `coverage_percent`: share of the official physical-outcome support seen across rollouts.
+
+Paper: [PAWBench](https://arxiv.org/abs/2608.27345). Project: [pawbench.github.io](https://pawbench.github.io/). Code: [Andrew0613/PAWBench](https://github.com/Andrew0613/PAWBench) (Apache-2.0). Data: [`Andrew613/PAWBench`](https://huggingface.co/datasets/Andrew613/PAWBench).
+
+WorldFoundry **vendors the official PAWEval judge**. Fresh judging defaults to Gemini 3.5 Flash through OpenRouter; other OpenAI-compatible judges are analysis-only. Existing `metrics.json` or run directories import without network.
+
+<BenchmarkPageSections id="pawbench" locale="en" />
+
+## How to run
+
+```bash
+hf download Andrew613/PAWBench --repo-type dataset --local-dir /data/pawbench
+export OPENROUTER_API_KEY=<your-key>
+
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id pawbench \
+  --mode official-run \
+  --benchmark-data-root /data/pawbench \
+  --generated-artifact-dir /data/my-model-rollouts \
+  --output-dir tmp/pawbench/official-run \
+  --json
+```
+
+Import a prepared run:
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id pawbench \
+  --mode official-validation \
+  --official-results-path /path/to/pawbench/run \
+  --output-dir tmp/pawbench/imported \
+  --json
+```
+
+Outputs include `scorecard.json`, `raw_metric_table.jsonl`, `per_sample_scores.jsonl`, and `benchmark_contract.json`. The checked-in sample is a normalizer fixture only.
+
+## Rollouts, judge, and `metrics.json`
+
+Workflow: benchmark package → your video generator → rollout directory → PAWEval → `metrics.json`. The generator and the judge are different models. The official runner never loads the video model; it scores videos already on disk. Extra pip pins: `worldfoundry/data/benchmarks/requirements/pawbench.txt`.
+
+The HF download is the scene table, source images, generation prompts, and scoring policy (100 reviewable rubrics: one outcome + one trustworthiness rubric per scene). Write the complete 50 × 50 grid as:
+
+```text
+my-model-rollouts/
+  <scene-id>/
+    r000.mp4
+    …
+    r049.mp4
+```
+
+Official PAWEval uses **Gemini 3.5 Flash** through OpenRouter (`OPENROUTER_API_KEY`). `OPENAI_API_KEY` is not part of that path. Other OpenAI-compatible judges (`--vlm-base-url`, `--vlm-model`, `--vlm-api-key-env`) are analysis-only and are not comparable to the official table.
+
+`--model-name` is the label written into result files; it does not load a checkpoint. Re-running the same benchmark, model name, videos, and judge resumes finished rollout judgments.
+
+PAWEval writes `run.json`, `checkpoint.jsonl`, `rows.jsonl`, and `metrics.json` under the run output. A complete run has `status: "ok"` and no blockers. Track averages stay separate:
+
+- Calibration TVD: `tracks.calibration.models.<model>.track_average` (lower is better).
+- Coverage: `tracks.coverage.models.<model>.track_average` (higher is better).
+
+If `status` is `"blocked"`, fix the listed missing-video / judge / infrastructure errors before reporting. Trustworthiness rubrics record action, continuity, and process failures without changing the terminal outcome label.
+
+One rollout is a readout, not a model score. Across 50 coin-flip rollouts, Head/Tail frequencies are compared to the scene reference with TVD.
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

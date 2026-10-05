@@ -184,7 +184,7 @@ class EventVLAPolicy(nn.Module):
     def _resize(self, images: Sequence[Any]) -> list[Any]:
         from PIL import Image
 
-        from worldfoundry.core.utils.image_utils import load_pil_image
+        from worldfoundry.core.media.processing.image_utils import load_pil_image
 
         resized = []
         for image in images:

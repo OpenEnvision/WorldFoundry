@@ -11,6 +11,8 @@ from worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight imp
     run_preflight,
 )
 
+from .presentation import print_details
+
 
 def register_preflight_subparser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser(
@@ -45,5 +47,9 @@ def _runtime_preflight(args: argparse.Namespace) -> int:
         print(json.dumps(report, ensure_ascii=False, sort_keys=True))
     else:
         state = "ready" if report["ok"] else "not ready"
-        print(f"runtime preflight: {state}; report: {report['report_path']}")
+        print_details(
+            "Runtime preflight",
+            {"status": state, "report": report["report_path"]},
+            plain=f"runtime preflight: {state}; report: {report['report_path']}",
+        )
     return 0 if report["ok"] else 2

@@ -1,6 +1,8 @@
-import { ExternalLink, FileCode2, Pencil } from 'lucide-react';
+import { DocsCopyMarkdownButton } from '@/components/docs-page-action-buttons';
 
 type DocsPageActionsProps = {
+  copyMarkdownCopiedLabel: string;
+  copyMarkdownLabel: string;
   editLabel: string;
   githubUrl: string;
   lastUpdated?: {
@@ -10,9 +12,12 @@ type DocsPageActionsProps = {
   lastUpdatedLabel: string;
   markdownLabel: string;
   markdownUrl: string;
+  pageTitle: string;
 };
 
 export function DocsPageActions({
+  copyMarkdownCopiedLabel,
+  copyMarkdownLabel,
   editLabel,
   githubUrl,
   lastUpdated,
@@ -25,17 +30,19 @@ export function DocsPageActions({
   return (
     <div className="pi-doc-actions" aria-label="Document actions">
       <div className="pi-doc-actions-links">
-        <a className="pi-doc-action-chip" href={editUrl} rel="noreferrer" target="_blank">
-          <Pencil aria-hidden="true" size={14} strokeWidth={2} />
-          <span>{editLabel}</span>
+        <DocsCopyMarkdownButton
+          copiedLabel={copyMarkdownCopiedLabel}
+          label={copyMarkdownLabel}
+          markdownUrl={markdownUrl}
+        />
+        <a className="pi-doc-action-link" href={editUrl} rel="noreferrer" target="_blank">
+          {editLabel}
         </a>
-        <a className="pi-doc-action-chip" href={githubUrl} rel="noreferrer" target="_blank">
-          <ExternalLink aria-hidden="true" size={14} strokeWidth={2} />
-          <span>GitHub</span>
+        <a className="pi-doc-action-link" href={githubUrl} rel="noreferrer" target="_blank">
+          GitHub
         </a>
-        <a className="pi-doc-action-chip" href={markdownUrl}>
-          <FileCode2 aria-hidden="true" size={14} strokeWidth={2} />
-          <span>{markdownLabel}</span>
+        <a className="pi-doc-action-link" href={markdownUrl} rel="noreferrer" target="_blank">
+          {markdownLabel}
         </a>
       </div>
       {lastUpdated ? (

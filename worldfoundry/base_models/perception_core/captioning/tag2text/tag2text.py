@@ -2,30 +2,37 @@
  * Tag2Text
  * Written by Xinyu Huang
 '''
+
 import logging
 import warnings
+
+from worldfoundry.core.io.paths import package_data_path
 
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore")
 
-from .vit import VisionTransformer, interpolate_pos_embed
-from .swin_transformer import SwinTransformer, interpolate_relative_pos_embed
-from .med import BertConfig, BertModel, BertLMHeadModel
-from transformers import BertTokenizer
+import os
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
+from transformers import BertTokenizer
 
-import os
+from .med import BertConfig, BertLMHeadModel, BertModel
+from .swin_transformer import SwinTransformer, interpolate_relative_pos_embed
+from .vit import VisionTransformer, interpolate_pos_embed
+
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))
 _BERT_BASE_UNCASED = os.environ.get("VBENCH_BERT_BASE_UNCASED", "bert-base-uncased")
-from urllib.parse import urlparse
-from timm.models.hub import download_cached_file
-from .tag_class import tra_array
 import json
 import math
+from urllib.parse import urlparse
+
 import numpy as np
+from timm.models.hub import download_cached_file
+
+from .tag_class import tra_array
+
 
 def read_json(rpath):
     with open(rpath, 'r') as f:
@@ -35,7 +42,7 @@ delete_tag_index = [127, 3351, 3265, 3338, 3355, 3359]
         
 class Tag2Text_Caption(nn.Module):
     def __init__(self,                 
-                 med_config = f'{CUR_DIR}/med_config.json',  
+                 med_config = str(package_data_path('models', 'runtime', 'configs', 'tag2text', 'med_config.json')),
                  image_size = 384,
                  vit = 'base',
                  vit_grad_ckpt = False,
@@ -55,7 +62,7 @@ class Tag2Text_Caption(nn.Module):
             if image_size == 224:
                 vision_config_path = 'configs/swin/config_swinB_224.json'
             elif image_size == 384:
-                vision_config_path = f'{CUR_DIR}/config_swinB_384.json'
+                vision_config_path = str(package_data_path('models', 'runtime', 'configs', 'tag2text', 'config_swinB_384.json'))
             vision_config = read_json(vision_config_path)
             assert image_size == vision_config['image_res']
 
@@ -99,7 +106,7 @@ class Tag2Text_Caption(nn.Module):
         num_features = 768
         self.num_class = 3429
 
-        q2l_config = BertConfig.from_json_file(f'{CUR_DIR}/q2l_config.json')
+        q2l_config = BertConfig.from_json_file(str(package_data_path('models', 'runtime', 'configs', 'tag2text', 'q2l_config.json')))
         q2l_config.encoder_width = vision_width
         self.vision_multi = BertModel.from_pretrained(_BERT_BASE_UNCASED,config=q2l_config, add_pooling_layer=False)
         self.vision_multi.resize_token_embeddings(len(self.tokenizer)) 
@@ -227,6 +234,8 @@ def tag2text_caption(pretrained='',**kwargs):
 
 
 from typing import List
+
+
 def tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str, skip_key:str):
     uninitialized_encoder_weights: List[str] = []
     if decoder.__class__ != encoder.__class__:
@@ -388,7 +397,7 @@ def load_checkpoint_swinbase(model,url_or_filename,kwargs):
     if kwargs['image_size'] == 224:
         vision_config_path = 'configs/swin/config_swinB_224.json'
     elif kwargs['image_size'] == 384:
-        vision_config_path = f'{CUR_DIR}/config_swinB_384.json'
+        vision_config_path = str(package_data_path('models', 'runtime', 'configs', 'tag2text', 'config_swinB_384.json'))
     elif kwargs['image_size'] == 480:
         vision_config_path = 'configs/swin/config_swinB_480.json'
     elif kwargs['image_size'] == 576:

@@ -1,126 +1,29 @@
 ---
 title: ManiSkill2
-description: ManiSkill2 — metrics, requirements, and run commands.
+description: "ICLR 2023 SAPIEN suite: 20 task families, 2,000+ objects, 4M+ demo frames. WorldFoundry imports official rollouts — it does not run SAPIEN."
 ---
 
-## About
+ManiSkill2 (ICLR 2023, UC San Diego Hao Su Lab with Tsinghua) is the **unified Gym** generation of the ManiSkill line: **20** task families, **2,000+** object models, and **4M+** demonstration frames on **SAPIEN**. Families cover stationary and mobile bases, single and dual arms, and rigid plus soft bodies. The same interface exposes point-cloud, RGB-D, and privileged-state observations and several controllers. Official eval reports seen vs unseen assets and configurations. The 2022 challenge used a cloud scorer; that board is not ingested here.
 
+This card is **not** a rename of [ManiSkill](/docs/evaluation/benchmark-hub/maniskill). That hub page tracks the later GPU-parallel `maniskill.ai` importer. Use this page when the export is the ICLR 2023 / ManiSkill2 protocol.
 
+Paper: [ManiSkill2: A Unified Benchmark for Generalizable Manipulation Skills](https://arxiv.org/abs/2302.04659). Project: [maniskill2.github.io](https://maniskill2.github.io/). Code: [haosulab/ManiSkill2](https://github.com/haosulab/ManiSkill2) (Apache-2.0). Later trees live on [haosulab/ManiSkill](https://github.com/haosulab/ManiSkill).
 
-ManiSkill2 external benchmark manifest for simulator-backed manipulation policy rollouts.
+WorldFoundry is **official-results only**. You run SAPIEN / ManiSkill2 upstream, then `official-validation` normalizes JSON/CSV rollout summaries. No in-tree simulator, no official policy.
 
+<BenchmarkPageSections id="maniskill2" locale="en" />
 
-
-## Metrics
-
-ManiSkill2 external benchmark manifest for simulator-backed manipulation policy rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/maniskill2.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `episode_success` | Share of episodes or tasks that complete successfully. |
-| `reward` | Cumulative reward on ManiSkill2 dexterous and mobile-manipulation task rollouts. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `worldfoundry-unified-cu128`.
-- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
-- The older maniskill profile remains available; maniskill2 aligns with the external VLA evaluation benchmark id.
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_MANISKILL2_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/maniskill2`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/haosulab--ManiSkill`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_MANISKILL2_ROOT`
-- `WORLDFOUNDRY_MANISKILL2_RESULTS_PATH`
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id maniskill2 \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/maniskill2/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/maniskill2/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id maniskill2 \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/maniskill2/official-run \
-  --json
-```
-
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id maniskill2 --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_MANISKILL2_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+Optional `WORLDFOUNDRY_MANISKILL2_ROOT` points at a local ManiSkill2 / SAPIEN root. Default import path: `WORLDFOUNDRY_MANISKILL2_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/maniskill2.yaml`. Outputs: `scorecard.json` (primary `success_rate`), `raw_results.jsonl`, and `evaluation/summary.json`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

@@ -1,0 +1,50 @@
+---
+title: "Pusa VidGen"
+description: "Pusa VidGen from City University of Hong Kong: image-to-video and text-to-video; Runner parity pending."
+modelId: "pusa-vidgen"
+pageSource: generated
+---
+
+Pusa VidGen (Pusa V1) demonstrates vectorized timestep adaptation: instead of one shared diffusion timestep for the whole video, each frame gets its own, which unlocks image-to-video, text-to-video, and video extension from one cheap LoRA training run on Wan2.2. WorldFoundry assembles it entirely from canonical Wan2.2 components — no external runtime checkout is needed at inference time.
+
+<ModelPaperFigures modelId="pusa-vidgen" locale="en" />
+
+The recorded paper is [arXiv 2410.03160](https://arxiv.org/abs/2410.03160).
+
+Project page: [pusav1.org](https://pusav1.org/). Code: [Yaofang-Liu/Pusa-VidGen](https://github.com/Yaofang-Liu/Pusa-VidGen).
+
+<ModelCommandBuilder modelId="pusa-vidgen" locale="en" />
+
+## What it is for
+
+`pusa-vidgen` is the recorded text/image-to-video line. Use it when you want both prompt and still conditioning on the same catalog card.
+
+Pusa V1 = Wan2.2 base (canonical denoisers, conditioner, VAE, loaders, shared staged runner) + the official Pusa V1 LoRA checkpoint (RaphaelLiu/Pusa-Wan2.2-V1). The vectorized-timestep behavior comes from the LoRA; no alternate diffusion backend is involved. It is published by City University of Hong Kong.
+
+Catalog tasks include image-to-video, text-to-video, and video-extension. Catalog aliases include `pusa-v1` and `pusa-wan2.2-v1`. Documented modalities: image and text in, video out.
+
+Recorded evaluation entry points include [VBench](/docs/evaluation/benchmark-hub/vbench) (General T2V/I2V quality suite).
+
+## Runtime contract
+
+Optional `prompt`, `negative_prompt`, `interactions`, `frames`, and `fps`; artifacts `generated_video` and `pusa_vidgen_public_runner.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `PusaVidGenPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `default` defaults: frames=81, height=720, width=1280, seed=0.
+
+Runner status is Runner parity pending: the model-specific pipeline exposes generated_video through execute=True and no longer emits request-plan artifacts on default calls. Stage the Wan2.2 base weights plus the Pusa LoRA before running.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run pusa-vidgen --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `RaphaelLiu/Pusa-Wan2.2-V1`, `Wan-AI/Wan2.2-T2V-A14B`, and `lightx2v/Wan2.2-Lightning`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh pusa-vidgen`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="pusa-vidgen" locale="en" />

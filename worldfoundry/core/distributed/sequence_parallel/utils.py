@@ -5,6 +5,18 @@
 # Adapted from
 # https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/tensor_parallel/utils.py
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+"""SP tensor helpers: split sizes, padding, and rank-local views.
+
+Used by 4D all-to-all to compute even/uneven shard lengths. Keep this
+math out of attention kernels so Ulysses and RoPE share one pad rule.
+
+Not a torch.distributed replacement. :class:`StatelessProcessGroup` is a
+TCPStore metadata plane — activations still need NCCL.
+
+Public surface: :func:`ensure_divisibility`, :func:`divide`,
+:func:`split_tensor_along_last_dim`, :class:`StatelessProcessGroup`.
+"""
+
 import dataclasses
 import pickle
 import time
@@ -15,11 +27,16 @@ from typing import Any
 import torch
 from torch.distributed import TCPStore
 
-from worldfoundry.core.utils.misc_utils import divide
+from worldfoundry.core.utils.python.misc_utils import divide
 
 from .logger import init_logger
 
 logger = init_logger(__name__)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Shard arithmetic — fail before an all-to-all with a ragged last dim
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def ensure_divisibility(numerator, denominator) -> None:
@@ -55,6 +72,11 @@ def split_tensor_along_last_dim(
     return tuple(tensor_list)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# TCPStore metadata plane — pickle objects without touching WORLD NCCL
+# ──────────────────────────────────────────────────────────────────────────
+
+
 @dataclasses.dataclass
 class StatelessProcessGroup:
     """A dataclass to hold a metadata store, and the rank, world_size of the
@@ -78,6 +100,7 @@ class StatelessProcessGroup:
     entries: deque[tuple[str, float]] = dataclasses.field(default_factory=deque)
 
     def __post_init__(self):
+        """Zero per-peer counters; ``rank`` must be strictly less than ``world_size``."""
         assert self.rank < self.world_size
         self.send_dst_counter = {i: 0 for i in range(self.world_size)}
         self.recv_src_counter = {i: 0 for i in range(self.world_size)}

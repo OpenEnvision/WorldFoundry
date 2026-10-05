@@ -16,6 +16,9 @@ source:
 checkpoint_refs:
 - repo_id: Insta360-Research/DAP-weights
   filename: model.pth
+official_sources:
+  project_page: https://insta360-research-team.github.io/DAP_website/
+  paper: https://arxiv.org/abs/2512.16913
 integration:
   kind: pipeline_runner
   status: integrated
@@ -37,3 +40,19 @@ catalog_category: three_d_four_d
 catalog_scope: Independent geometric prior integrations used by 3D and world-model
   runtimes.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+docs:
+  publisher: Insta360 (Research Team)
+  publisher_kind: company
+  publisher_zh: 影石 Insta360（研究团队）
+  overview: 'Depth Any Panoramas (DAP) is Insta360''s metric depth estimator for panoramic images — full 360° depth from a single equirectangular input. In this catalog it is a verified geometry prior: runner parity passed through the shared geometry-prior contract, with weights at Insta360-Research/DAP-weights.'
+  overview_zh: Depth Any Panoramas（DAP）是影石 Insta360 面向全景图像的米制深度估计器——从单张等距柱状投影图得到完整 360° 深度。本 catalog 中它是已验证的几何先验：runner parity 已通过共享 geometry-prior 契约验证，权重位于 Insta360-Research/DAP-weights。
+  architecture: A Depth-Anything-family backbone adapted to panoramic inputs and metric output. It lives under base_models/three_dimensions/depth as an independent prior; ViPE imports it from this canonical owner. Details beyond the recorded structure are not stored here.
+  architecture_zh: 基于 Depth-Anything 系主干，适配全景输入与米制输出。它位于 base_models/three_dimensions/depth 下作为独立先验；ViPE 从该规范位置导入。除已记录结构外的细节仓库未存。
+  usage_notes: It is integrated as an independent geometry prior under worldfoundry/base_models and exposed through the shared geometry-prior pipeline/operator contract. Higher-level pipelines (e.g. ViPE) import it from this canonical owner instead of keeping private copies. Runner parity is verified; per-run validation evidence is tracked outside the catalog.
+  usage_notes_zh: 它作为独立几何先验集成在 worldfoundry/base_models 下，通过共享的 geometry-prior pipeline/operator 契约对外暴露。上层管线（如 ViPE）从这一规范位置导入它，而不是各自保留私有副本。runner parity 已验证；每次运行的验证证据在 catalog 外跟踪。
+  limitations:
+  - 'Panoramic-specific: for ordinary pinhole images use the Depth Anything V2/V3 priors instead.'
+  - Metric accuracy depends on scene scale cues; extreme scenes can drift.
+  limitations_zh:
+  - 专为全景设计：普通针孔图像请改用 Depth Anything V2/V3 先验。
+  - 米制精度依赖场景尺度线索；极端场景可能漂移。

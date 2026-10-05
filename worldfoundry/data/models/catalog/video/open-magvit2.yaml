@@ -16,6 +16,8 @@ checkpoint_refs:
 - repo_id: TencentARC/Open-MAGVIT2
   revision: 607230591be9efcb4ec5ec9b6417b9e863f2dd2c
   license: apache-2.0
+official_sources:
+  paper: https://arxiv.org/abs/2409.04410
 integration:
   status: integrated
   notes:
@@ -34,3 +36,19 @@ catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries
   expose WorldFoundry pipeline targets; metadata-only entries retain upstream provenance
   without runnable WorldFoundry backends.
+docs:
+  publisher: Tencent (ARC Lab)
+  publisher_kind: company
+  publisher_zh: 腾讯（ARC Lab）
+  overview: Open-MAGVIT2 is Tencent ARC's open reproduction of the MAGVIT-v2 lookup-free visual tokenizer, plus autoregressive generation on top of it. In this catalog the runnable route is class-conditional ImageNet image generation — full 256-token generation passed checkpoint-backed GPU and semantic visual QA (verified at 256x256, ImageNet class 207). The artifact is a generated PNG image, not video.
+  overview_zh: Open-MAGVIT2 是腾讯 ARC 对 MAGVIT-v2 免查表（lookup-free）视觉分词器的开源复现，并在其上构建自回归生成。本 catalog 中可运行的路径是 ImageNet 类条件图像生成——完整 256 token 生成已通过 checkpoint 加载的 GPU 与语义视觉 QA 验证（256x256、ImageNet 类别 207）。产物是 PNG 图像而非视频。
+  architecture: 'Two parts recorded in-tree: the lookup-free quantization (LFQ) tokenizer with a very large codebook, and an autoregressive transformer that predicts visual tokens for a requested ImageNet class. The class_id input selects the category; generation runs the vendored CUDA wrapper.'
+  architecture_zh: 树内记录两部分：带超大码本的免查表量化（LFQ）分词器，以及为指定 ImageNet 类别预测视觉 token 的自回归 Transformer。class_id 输入选择类别；生成通过内置 CUDA 封装执行。
+  usage_notes: 'Runner status is checkpoint_backed_verified — this route actually ran on GPU with the TencentARC/Open-MAGVIT2 weights (apache-2.0). Keep expectations scoped: it is class-conditional image generation, not prompt-to-video; video tokenization is what the tokenizer supports upstream.'
+  usage_notes_zh: runner 状态为 checkpoint_backed_verified——该路径确实用 TencentARC/Open-MAGVIT2 权重（apache-2.0）在 GPU 上跑通过。预期要放对位置：这是类条件图像生成，不是提示词生成视频；视频分词是其分词器在上游支持的能力。
+  limitations:
+  - The runnable route generates class-conditional images only — no free-form prompts, no video output.
+  - ImageNet-class conditioning limits subject diversity to the 1000 classes.
+  limitations_zh:
+  - 可运行路径仅支持类条件图像生成——没有自由提示词，也没有视频输出。
+  - ImageNet 类条件把主体多样性限制在 1000 个类别内。

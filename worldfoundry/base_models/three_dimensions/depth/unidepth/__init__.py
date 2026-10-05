@@ -15,6 +15,8 @@
 
 """Module for base_models -> three_dimensions -> depth -> unidepth -> __init__.py functionality."""
 
+import os
+from pathlib import Path
 from typing import Literal
 
 import torch
@@ -23,12 +25,71 @@ from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.cameras imp
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.misc import unpack_optional
 
 from ..base import DepthEstimationInput, DepthEstimationModel, DepthEstimationResult, DepthType
-from .models.unidepthv2.unidepthv2 import Pinhole, UniDepthV2
+from .models.unidepthv2.unidepthv2 import UniDepthV2
+
+UNIDEPTH_REVISION = "1d0d3c52f60b5164629d279bb9a7546458e6dcc4"
+
+
+def _offline() -> bool:
+    return os.environ.get("HF_HUB_OFFLINE") == "1" or os.environ.get("TRANSFORMERS_OFFLINE") == "1"
+
+
+def resolve_unidepth_source(type: Literal["s", "b", "l"] = "l", model_path: str | None = None) -> str:
+    """Resolve the shared model asset, then a local HF snapshot or Hub model."""
+    if type not in {"s", "b", "l"}:
+        raise ValueError(f"Unsupported UniDepth encoder: {type}")
+    explicit = model_path or os.environ.get("WORLDFOUNDRY_UNIDEPTH_MODEL")
+    if type == "l" and not explicit:
+        explicit = os.environ.get("WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR")
+    if explicit:
+        path = Path(explicit).expanduser()
+        if path.is_dir():
+            return str(path)
+        if _offline() or path.is_absolute():
+            raise FileNotFoundError(f"UniDepth model directory missing: {path}")
+        return explicit
+    if type == "l":
+        from worldfoundry.base_models.capabilities import BASE_MODEL_CAPABILITIES
+
+        status = BASE_MODEL_CAPABILITIES["unidepth_v2_vitl14"].assets[0].check()
+        if status["ready"]:
+            return status["matched_path"]
+    from huggingface_hub import snapshot_download
+
+    return snapshot_download(
+        f"lpiccinelli/unidepth-v2-vit{type}14",
+        local_files_only=_offline(),
+        allow_patterns=["config.json", "model.safetensors"],
+        revision=os.environ.get("WORLDFOUNDRY_UNIDEPTH_REVISION", UNIDEPTH_REVISION) if type == "l" else None,
+    )
+
+
+def load_local_unidepth_v2(source: str | Path) -> UniDepthV2:
+    """Load the pinned HF V2 snapshot with its matching upstream decoder."""
+    import json
+
+    from safetensors.torch import load_file
+
+    root = Path(source)
+    config = json.loads((root / "config.json").read_text())
+    if "shape_constraints" not in config.get("data", {}):
+        raise ValueError(
+            f"UniDepth checkpoint configuration at {root} is incompatible with the "
+            "bundled V2 runtime. Load config.json and model.safetensors from "
+            f"lpiccinelli/unidepth-v2-vitl14 revision {UNIDEPTH_REVISION}."
+        )
+    config.setdefault("training", {})
+    model = UniDepthV2(config)
+    state = load_file(str(root / "model.safetensors"), device="cpu")
+    model.load_state_dict(state, strict=True)
+    model.resolution_level = 9
+    return model
 
 
 class UniDepth2Model(DepthEstimationModel):
     """Uni depth model implementation."""
-    def __init__(self, type: Literal["s", "b", "l"] = "l", model_path: str | None = None) -> None:
+
+    def __init__(self, type: Literal["s", "b", "l"] = "l", model_path: str | None = None, device: str = "cuda") -> None:
         """Init.
 
         Args:
@@ -39,9 +100,16 @@ class UniDepth2Model(DepthEstimationModel):
             The return value.
         """
         super().__init__()
-        self.model = UniDepthV2.from_pretrained(model_path or f"lpiccinelli/unidepth-v2-vit{type}14")
+        source = resolve_unidepth_source(type, model_path)
+        if not Path(source).is_dir():
+            from huggingface_hub import snapshot_download
+
+            source = snapshot_download(
+                source, local_files_only=_offline(), allow_patterns=["config.json", "model.safetensors"]
+            )
+        self.model = load_local_unidepth_v2(source)
         self.model.interpolation_mode = "bilinear"
-        self.model = self.model.cuda().eval()
+        self.model = self.model.to(device).eval()
 
     @property
     def depth_type(self) -> DepthType:
@@ -81,7 +149,7 @@ class UniDepth2Model(DepthEstimationModel):
             ],
             device=rgb.device,
         ).float()
-        camera = Pinhole(K=K[None].repeat(rgb.shape[0], 1, 1))
+        camera = K[None].repeat(rgb.shape[0], 1, 1)
 
         predictions = self.model.infer(rgb, camera)
         pred_depth = predictions["depth"].squeeze(1)

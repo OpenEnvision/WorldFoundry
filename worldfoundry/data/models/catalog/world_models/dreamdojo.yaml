@@ -17,6 +17,7 @@ modalities:
 - long-horizon
 name: DreamDojo
 official_sources:
+  paper: https://arxiv.org/abs/2602.06949
   github:
     confirmed_by: local git rev-parse HEAD
     confirmed_ref: 02f119b759d5c7f84a399fdeea3c6e82e7ed6cff
@@ -84,7 +85,7 @@ variants:
   task: interactive-robot-world-generation
 runner_parity:
   notes:
-  - WorldFoundry now provides an in-tree DreamDojo runtime wrapper under worldfoundry/synthesis/visual_generation/dreamdojo/dreamdojo_runtime.
+  - WorldFoundry now provides an in-tree DreamDojo runtime wrapper under worldfoundry/synthesis/action_generation/dreamdojo/dreamdojo_runtime.
     Full GPU parity still requires converted checkpoint artifacts and the official
     GR-1 evaluation dataset.
   status: implemented_pending_gpu_parity
@@ -98,3 +99,23 @@ catalog_policy:
   open_source_rule: Only mark open_source when an official GitHub repository or official
     Hugging Face model page was confirmed. Do not infer checkpoint availability from
     papers, demos, or third-party mirrors.
+docs:
+  publisher: NVIDIA
+  publisher_kind: company
+  publisher_zh: 英伟达（NVIDIA）
+  overview: 'DreamDojo is NVIDIA''s action-conditioned robot world model: given robot actions in a unified 384-dimensional action space (spanning GR-1, G1, YAM, AgiBot, MANO hand, and latent actions), it dreams the resulting robot-view video. In this catalog the runtime wrapper is in-tree with 2B GR-1 action-conditioned and distilled realtime variants recorded; GPU parity is pending converted checkpoints and the GR-1 evaluation dataset.'
+  overview_zh: DreamDojo 是英伟达的动作条件机器人世界模型：给定统一 384 维动作空间中的机器人动作（覆盖 GR-1、G1、YAM、AgiBot、MANO 手部与潜在动作），它「梦出」相应的机器人视角视频。本 catalog 中运行时封装已在树内，记录 2B GR-1 动作条件与蒸馏实时两个 variant；GPU 一致性待转换后的 checkpoint 与 GR-1 评估数据集就位。
+  architecture: DreamDojo builds on an action-conditioned Cosmos Predict runtime with the Groot Dreams dataloader and LAM modules, vendored under synthesis/action_generation/dreamdojo/dreamdojo_runtime. The recorded action contract maps GR-1 [0,58), G1 [58,101), YAM [101,147), AgiBot [147,169), MANO [220,352), latent actions [352,384).
+  architecture_zh: DreamDojo 基于动作条件的 Cosmos Predict 运行时，配 Groot Dreams 数据加载器与 LAM 模块，内置于 synthesis/action_generation/dreamdojo/dreamdojo_runtime。记录的动作契约映射为 GR-1 [0,58)、G1 [58,101)、YAM [101,147)、AgiBot [147,169)、MANO [220,352)、潜在动作 [352,384)。
+  usage_notes: nvidia/DreamDojo checkpoints are staged locally including the 2B_GR1_post-train directory, but full parity still requires the converted model_ema_bf16.pt, the official GR-1 evaluation dataset, and a CUDA 12.8-class host. It is intentionally not classified as a VLA policy or plain video generation.
+  usage_notes_zh: nvidia/DreamDojo checkpoint 已本地就位（含 2B_GR1_post-train 目录），但完整一致性仍需转换后的 model_ema_bf16.pt、官方 GR-1 评估数据集与 CUDA 12.8 级主机。它有意不被归类为 VLA 策略或普通视频生成模型。
+  limitations:
+  - GPU parity is pending converted checkpoint artifacts and the GR-1 evaluation dataset.
+  - Requires a CUDA 12.8-class host.
+  limitations_zh:
+  - GPU 一致性待转换后的 checkpoint 产物与 GR-1 评估数据集。
+  - 需要 CUDA 12.8 级主机。
+  recommended_benchmarks:
+  - id: ewmbench
+    reason: Embodied world-model evaluation for robot video prediction.
+    reason_zh: 机器人视频预测的具身世界模型评测。

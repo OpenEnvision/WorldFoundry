@@ -1,0 +1,52 @@
+---
+title: "LingBot-World-V2"
+description: "LingBot-World-V2（Robbyant (Ant Group)）：image-to-world-video、相机可控视频；计划中; 独立环境 `lingbot-world-v2`。"
+modelId: "lingbot-world-v2"
+pageSource: authored
+---
+
+LingBot-World-V2（别名 lingbot-world-infinity）是蚂蚁灵波世界模型的第二代：14B 的 causal-fast 模型，做带相机控制的图到世界视频。本 catalog 中仅集成已发布的 causal-fast 推理路径；官方 8 卡产物一致性待 14B checkpoint 就位与 CUDA 运行。
+
+<ModelPaperFigures modelId="lingbot-world-v2" locale="zh" />
+
+记录论文为[arXiv 2607.07534](https://arxiv.org/abs/2607.07534)。
+
+项目页：[technology.robbyant.com/lingbot-world-v2](https://technology.robbyant.com/lingbot-world-v2)。代码：[Robbyant/lingbot-world-v2](https://github.com/Robbyant/lingbot-world-v2)。
+
+<ModelCommandBuilder modelId="lingbot-world-v2" locale="zh" />
+
+## 用来做什么
+
+`lingbot-world-v2` 是记录的相机控制路由。按 catalog 相机路径推进时从这里起步。
+
+通用的 Wan、T5、VAE、调度器、FSDP、集合通信、几何与媒体代码从 WorldFoundry 复用；训练、示例资产与未发布的 causal-pretrain/双向路径被排除。记录的 checkpoint 为 robbyant/lingbot-world-v2-14b-causal-fast。该模型由蚂蚁灵波科技（Robbyant，蚂蚁集团）发布。
+
+catalog 记录的任务包括 image-to-world-video、相机可控视频、交互式世界模型。别名包括 `lingbot-world-infinity`、`lingbot-v2`。模态上，它接受图像，输出世界状态、视频。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（世界滚动生成的相机控制贴合度）、[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（世界滚动生成的总体质量）。
+
+LingBot World v2。不是 v1 世界卡，也不是 world-act。
+
+## 运行时契约
+
+可选 `image`、`prompt`、`action_path`、`size`、`frame_num`；产物 `generated_world_video`、`lingbot-world-v2.mp4`。
+
+CLI task profile：`image-camera-video`。绑定的 pipeline 类是 `LingBotWorldV2Pipeline`。
+
+系列状态：**计划中**。
+
+`image-camera-video` 记录默认值：size=480*832, seed=42。
+
+执行为离线优先、无运行时下载。 官方 causal-fast 配方为八卡；Workspace 亦提供四卡紧凑拓扑。 当 Workspace 已持有 torchrun 进程组时，推理直接在该组内运行、不再嵌套启动 torchrun。 注意许可：集成代码为 CC BY-NC-SA 4.0——不可商用。
+
+必填 `prompt`、`image`；可选 `video`；`actions`：camera_path, navigation_action；产物 `generated_world_video`、`lingbot-world-v2.mp4`。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run lingbot-world-v2 --pipeline.task-profile image-camera-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+记录的权重仓库包括 `robbyant/lingbot-world-v2-14b-causal-fast`、`robbyant/lingbot-world-v2-14b-causal-fast`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lingbot-world-v2`；下载缺失的公开权重时加 `--download`。
+
+状态：**计划中**。
+
+<ModelRelatedRecipes modelId="lingbot-world-v2" locale="zh" />

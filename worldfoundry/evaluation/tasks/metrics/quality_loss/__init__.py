@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .wrapper import (
-    compute_quality_loss,
-    compute_quality_loss_for_pair,
-    compute_quality_loss_from_batch,
-    compute_text_presence_probability,
-)
+compute_quality_loss = lazy_export(f"{__name__}.wrapper", "compute_quality_loss", owner=__name__)
+compute_quality_loss_for_pair = lazy_export(f"{__name__}.wrapper", "compute_quality_loss_for_pair", owner=__name__)
+compute_quality_loss_from_batch = lazy_export(f"{__name__}.wrapper", "compute_quality_loss_from_batch", owner=__name__)
+compute_text_presence_probability = lazy_export(f"{__name__}.wrapper", "compute_text_presence_probability", owner=__name__)
 
 METRIC_ID = "quality_loss"
 ALIASES = ("quality-loss", "ql")

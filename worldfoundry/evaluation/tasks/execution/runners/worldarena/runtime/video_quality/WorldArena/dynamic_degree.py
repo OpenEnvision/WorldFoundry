@@ -11,9 +11,10 @@ from .utils import load_dimension_info
 
 from worldfoundry.base_models.perception_core.optical_flow.raft import RAFT
 from worldfoundry.base_models.perception_core.optical_flow.raft.utils.utils import InputPadder
+from worldfoundry.core.execution.device import get_current_torch_device
 
 
-from .distributed import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     all_gather,
@@ -166,7 +167,7 @@ def dynamic_degree(dynamic, video_list):
 
 
 def compute_dynamic_degree(json_dir, submodules_list, **kwargs):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = get_current_torch_device()
     model_path = submodules_list["model"]
     if model_path is None:
         raise ValueError("dynamic_degree requires raft checkpoint from config")

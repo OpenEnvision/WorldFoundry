@@ -1,5 +1,5 @@
 import os
-import clip
+from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
 import pdb
 import json
 import math

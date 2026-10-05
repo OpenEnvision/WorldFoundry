@@ -31,3 +31,23 @@ catalog_scope: World-model catalog entries. Integrated entries expose in-tree Wo
   runtimes; blocked entries retain upstream provenance without runnable backends.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: vggt-world
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'VGGT-World builds a world model on top of VGGT-style 3D scene understanding: it couples geometry-grounded scene perception with video generation so rollouts stay consistent with the underlying 3D structure. WorldFoundry registers the official source route in-tree (paper: arXiv 2603.12655); checkpoints and assets are runtime-gated.'
+  overview_zh: VGGT-World 在 VGGT 式 3D 场景理解之上构建世界模型：将几何锚定的场景感知与视频生成耦合，使滚动生成与底层 3D 结构保持一致。WorldFoundry 树内注册了官方源码路由（论文：arXiv 2603.12655）； checkpoint 与资产为运行时门控。
+  architecture: Beyond the recorded official repository (SimonSun0810/VGGT-World, pinned head c90f5ee2) and the arXiv paper pointer, architecture internals are not recorded in this repository.
+  architecture_zh: 除记录的官方仓库（SimonSun0810/VGGT-World，锁定 head c90f5ee2）与 arXiv 论文指针外，架构内部细节仓库未记录。
+  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers.
+  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。
+  limitations:
+  - Root license is under manual review (missing root license upstream).
+  - Checkpoints/assets are runtime-gated; no GPU validation is recorded in this repository.
+  limitations_zh:
+  - 根许可证处于人工审查状态（上游缺失根 LICENSE）。
+  - checkpoint/资产为运行时门控；仓库未记录 GPU 验证。
+  recommended_benchmarks:
+  - id: worldscore
+    reason: Unified world-generation quality across 3D-grounded rollouts.
+    reason_zh: 3D 锚定滚动生成的统一世界生成质量。

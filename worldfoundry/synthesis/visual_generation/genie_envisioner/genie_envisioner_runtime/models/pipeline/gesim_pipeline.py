@@ -29,13 +29,13 @@ from diffusers.utils import is_torch_xla_available, logging, replace_example_doc
 from diffusers.utils.torch_utils import randn_tensor
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 
-from worldfoundry.base_models.diffusion_model.video.cosmos.cosmos2.runtime.cosmos_pipeline_utils_genie.gesim_cosmos2_pipeline_utils.pipeline_output import (
+from worldfoundry.synthesis.visual_generation.genie_envisioner.genie_envisioner_runtime.models.pipeline.cosmos2_utils.pipeline_output import (
     CosmosPipelineOutput,
 )
     
 from models.pipeline.custom_pipeline import retrieve_timesteps, retrieve_latents
 
-from worldfoundry.base_models.diffusion_model.video.cosmos.cosmos2.runtime.cosmos_pipeline_utils_genie.gesim_cosmos2_pipeline_utils.video_processor import (
+from worldfoundry.synthesis.visual_generation.genie_envisioner.genie_envisioner_runtime.models.pipeline.cosmos2_utils.video_processor import (
     VideoProcessor,
 )
 

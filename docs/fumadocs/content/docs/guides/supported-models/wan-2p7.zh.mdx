@@ -1,0 +1,32 @@
+---
+title: "Wan 2.7 API"
+description: "Wan 2.7 API（Alibaba (Tongyi Lab)）：托管 API，本地不跑权重，请求打到供应商端点。"
+modelId: "wan-2p7"
+pageSource: authored
+---
+
+Wan 2.7 API 是本 catalog 中最新的 DashScope 托管 Wan 接入点，记录图生视频任务。集成方式与 Wan 2.5/2.6 条目一致——WorldFoundry 把起始图提交给阿里云并归档返回的视频——并带有 wan2.7、wan-2.7 两个别名。注意实际服务的模型修订版由阿里控制，而非本仓库。
+
+<ModelPaperFigures modelId="wan-2p7" locale="zh" />
+
+项目页：[dashscope.aliyun.com](https://dashscope.aliyun.com)。
+
+<ModelCommandBuilder modelId="wan-2p7" locale="zh" />
+
+## 用来做什么
+
+本卡的 Wan 2.7 是 DashScope **图生视频**——起始图进，成片归档。它不是本地 [Wan2.2](/zh/docs/guides/supported-models/wan2.2)，也不是 [Wan 2.6 API](/zh/docs/guides/supported-models/wan-2p6)。
+
+启动 `worldfoundry-eval run wan-2p7`，任务 profile 为 `image-to-video`。别名 `wan2.7`、`wan-2.7` 解析到这里。托管文生视频走 [Wan 2.5](/zh/docs/guides/supported-models/wan-2p5)。
+
+相关套件：[VBench](/zh/docs/evaluation/benchmark-hub/vbench)、[Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq)。
+
+## 运行时契约
+
+仅托管图生视频。没有本地分辨率、帧数或步数表——这些旋钮在 DashScope 请求里。状态：**Runner parity pending**（托管路径，本地 runner 不适用）。自备服务方密钥。服务修订版由阿里控制。
+
+## 在 WorldFoundry 中运行
+
+不创建本地 GPU 环境。在 dashscope.aliyun.com 开通 DashScope key，然后启动 `worldfoundry-eval run wan-2p7`，任务 profile 为 `image-to-video`。费用、配额与内容政策以阿里云账号为准。
+
+<ModelRelatedRecipes modelId="wan-2p7" locale="zh" />

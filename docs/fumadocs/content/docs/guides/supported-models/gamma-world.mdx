@@ -1,0 +1,54 @@
+---
+title: "Gamma-World"
+description: "Gamma-World from NVIDIA: multi-agent-world-model and action-conditioned-video; Runner parity pending; 3 variants."
+modelId: "gamma-world"
+pageSource: authored
+---
+
+Gamma-World is NVIDIA's multi-agent world model: given per-player start images and one action stream per player, it generates each player's view of a shared world. In this catalog it is a native diffusion recipe — no external checkout or model-owned runtime — with bidirectional, causal, and four-step causal variants; the four-step causal model is the default streaming choice.
+
+Three variants share the same binding: **`gamma-world-causal-few-step`** (default **four-step** streaming), `gamma-world-causal`, and `gamma-world-bidirectional`. Aliases `gammaworld` and `gamma-world-causal` resolve here.
+
+<ModelPaperFigures modelId="gamma-world" locale="en" />
+
+The recorded paper is [arXiv 2605.28816](https://arxiv.org/abs/2605.28816).
+
+Project page: [research.nvidia.com/labs/sil/projects/gamma-world](https://research.nvidia.com/labs/sil/projects/gamma-world/). Code: [nv-tlabs/Gamma-World](https://github.com/nv-tlabs/Gamma-World).
+
+Paper: [arXiv 2605.28816](https://arxiv.org/abs/2605.28816). Project: [research.nvidia.com/labs/sil/projects/gamma-world](https://research.nvidia.com/labs/sil/projects/gamma-world/). Code: [nv-tlabs/Gamma-World](https://github.com/nv-tlabs/Gamma-World). Weights: `chijw/Gamma-World` (**Apache-2.0**, bidirectional / causal / distilled networks) plus `nvidia/Cosmos-Reason1-7B` as the text encoder. Runner: **`Runner parity pending`**.
+
+<ModelCommandBuilder modelId="gamma-world" locale="en" />
+
+## What it is for
+
+Use `gamma-world-causal-few-step` for catalog world-model inference. Choose it when you need action-conditioned future frames rather than a standalone clip generator.
+
+Reason1 conditioning (nvidia/Cosmos-Reason1-7B as text encoder), the shared Wan VAE, checkpoint loading, scheduling, action normalization, and window execution all reuse WorldFoundry's base-model/core infrastructure; the recorded weights (chijw/Gamma-World, apache-2.0) cover bidirectional, causal, and distilled networks.
+
+Catalog tasks include multi-agent-world-model, action-conditioned-video, and image-to-video. Catalog aliases include `gammaworld`, `gamma-world-causal`, and `gamma-world-causal-few-step`. Documented modalities: image in, video out. Also recorded: `gamma-world-causal`, `gamma-world-bidirectional`.
+
+Recorded evaluation entry points include [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) (World-rollout quality under action conditioning).
+
+## Runtime contract
+
+Required `prompt` and start images. Causal and four-step causal inference also require one action track per view, supplied through `actions`/`action_paths` or action JSONs in `eval_dir`; these checkpoints cannot run without actions. Other options include `mode`, `n_players`, `num_frames`, `num_conditional_frames`, `guidance`, `num_steps`, and `seed`. The output is a generated video.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `GammaWorldPipeline`.
+
+Start on `gamma-world-causal-few-step`. The family registers 3 catalog variants (cards above): `gamma-world-causal-few-step` (`action-conditioned-video`) — Runner parity pending; `gamma-world-causal` (`action-conditioned-video`) — Runner parity pending; `gamma-world-bidirectional` (`action-conditioned-video`) — Runner parity pending. Family status: **Runner parity pending**.
+
+Pass a sequence of per-player images plus one action JSON/mapping per player, or a compatible eval_dir. All released variants require `num_frames=189` per view (official `state_t=48`); shorter clips are outside the upstream inference contract. Runner status is Runner parity pending — stage the Gamma-World and Reason1 weights first.
+
+Gamma-World is a native diffusion recipe and does not require an external source checkout or model-owned runtime.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run gamma-world-causal-few-step --pipeline.task-profile interactive-video` to step the world. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the dedicated environment `worldfoundry-gamma-world-cu128` (Python 3.1, CUDA 12.8, torch==2.7.0).
+
+Recorded weight repositories include `chijw/Gamma-World`, `nvidia/Cosmos-Reason1-7B`, and `nvidia/Cosmos-Reason1-7B`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh gamma-world-causal-few-step`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="gamma-world" locale="en" />

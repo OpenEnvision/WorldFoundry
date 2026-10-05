@@ -26,8 +26,15 @@ import cv2
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import imageio.v2 as imageio
 from tqdm import tqdm
 from kornia.geometry.depth import depth_to_3d_v2
+
+from worldfoundry.base_models.three_dimensions.three_d_four_d.pytorch3d_compat import (
+    configure_pytorch3d_extension,
+)
+
+configure_pytorch3d_extension()
 
 from pytorch3d.structures import Pointclouds, Meshes, join_meshes_as_batch
 from pytorch3d.renderer import (
@@ -44,7 +51,6 @@ from pytorch3d.renderer import (
     PointLights,
 )
 from pytorch3d.utils import ico_sphere
-from torchvision.io import write_video, read_video
 import torchvision.transforms.functional as TF
 
 logger = logging.getLogger(__name__)
@@ -163,7 +169,8 @@ def render_meshes_pytorch3d_batch(
         Ts: Camera extrinsic matrices (B, 4, 4)
         image_size: (height, width) of output images
         background_color: RGB background color (0-1 range)
-        use_fp16: Use float16 for faster computation on compatible GPUs
+        use_fp16: Retained for CLI compatibility. PyTorch3D rasterization uses
+            float32 because its CUDA kernels do not accept float16 geometry.
 
     Returns:
         Tuple of (rgb_batch, depth_batch, mask_batch)
@@ -186,7 +193,10 @@ def render_meshes_pytorch3d_batch(
     valid_Ks = Ks[valid_indices]
     valid_Ts = Ts[valid_indices]
 
-    compute_dtype = torch.float16 if use_fp16 else torch.float32
+    # PyTorch3D 0.7.x CUDA rasterizers require float32 vertices and cameras.
+    # Autocasting this block produces ``expected scalar type Float but found
+    # Half`` inside ``rasterize_meshes``.
+    compute_dtype = torch.float32
 
     cameras = _build_cam_from_extrinsics(
         valid_Ks.to(compute_dtype), valid_Ts.to(compute_dtype), image_size
@@ -210,11 +220,7 @@ def render_meshes_pytorch3d_batch(
     renderer = MeshRenderer(rasterizer=rasterizer, shader=shader)
 
     with torch.no_grad():
-        if use_fp16 and torch.cuda.is_available():
-            with torch.cuda.amp.autocast():
-                rendered = renderer(merged_meshes)  # (B_valid, H, W, 4)
-        else:
-            rendered = renderer(merged_meshes)  # (B_valid, H, W, 4)
+        rendered = renderer(merged_meshes)  # (B_valid, H, W, 4)
 
         rgb_valid = (torch.clamp(rendered[..., :3].float(), 0, 1) * 255).to(torch.uint8)
 
@@ -260,7 +266,8 @@ def render_point_cloud_pytorch3d_batch(
         image_size: (height, width) of output images
         point_size: Radius of each rendered point
         background_color: RGB background color (0-1 range)
-        use_fp16: Use float16 for faster computation
+        use_fp16: Retained for CLI compatibility. PyTorch3D rasterization uses
+            float32 because its CUDA kernels do not accept float16 geometry.
 
     Returns:
         Tuple of (rgb_batch, depth_batch, mask_batch)
@@ -291,7 +298,11 @@ def render_point_cloud_pytorch3d_batch(
                 torch.zeros((B, H, W), dtype=torch.bool, device=device)
             )
 
-    compute_dtype = torch.float16 if use_fp16 else torch.float32
+    # Keep geometry, camera parameters, and point features on the dtype
+    # supported by PyTorch3D's CUDA rasterizer.  The control-map renderer is
+    # small compared with the diffusion stage, so this has negligible impact
+    # on peak end-to-end memory.
+    compute_dtype = torch.float32
 
     cameras = _build_cam_from_extrinsics(
         Ks.to(compute_dtype), Ts.to(compute_dtype), image_size
@@ -320,11 +331,7 @@ def render_point_cloud_pytorch3d_batch(
     renderer = PointsRenderer(rasterizer=rasterizer, compositor=compositor)
 
     with torch.no_grad():
-        if use_fp16 and torch.cuda.is_available():
-            with torch.cuda.amp.autocast():
-                rendered_images = renderer(point_cloud)  # (B, H, W, 4)
-        else:
-            rendered_images = renderer(point_cloud)  # (B, H, W, 4)
+        rendered_images = renderer(point_cloud)  # (B, H, W, 4)
 
         rendered_rgb = rendered_images[..., :3].float() * 255
         rendered_rgb = torch.clamp(rendered_rgb, 0, 255).to(torch.uint8)
@@ -473,15 +480,23 @@ def save_video_from_frames(
     if first_frame.ndim == 2:
         frames = [f.unsqueeze(-1).repeat(1, 1, 3) for f in frames]
 
-    frames_tensor = torch.stack(frames)
+    frames_tensor = torch.stack(frames).detach().cpu()
+    if frames_tensor.dtype != torch.uint8:
+        frames_tensor = frames_tensor.clamp(0, 255).round().to(torch.uint8)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    write_video(
+    # TorchVision 0.20's ``write_video`` passes the string ``"NONE"`` to
+    # ``VideoFrame.pict_type`` and is incompatible with PyAV 17, which expects
+    # an integer enum.  ImageIO's FFmpeg backend is already a project
+    # dependency and keeps video writing independent of that private API.
+    imageio.mimwrite(
         str(output_path),
-        frames_tensor.cpu(),
+        frames_tensor.numpy(),
         fps=fps,
-        video_codec='h264',
-        options={"crf": "18"}  # Quality setting (lower = better, but larger file)
+        codec="libx264",
+        pixelformat="yuv420p",
+        ffmpeg_params=["-crf", "18"],
+        macro_block_size=1,
     )
 
 def visualize_depth_as_grayscale(
@@ -987,7 +1002,13 @@ def build_background(
     combined_mask = torch.from_numpy(combined_mask_dilated > 127).to(device)
     logger.info(f"Mask dilated (kernel_size={dilate_kernel_size})")
 
-    pts3d_cam = depth_to_3d_v2(depth, intrinsic, normalize_points=False).reshape(-1, 3)
+    # Kornia's recent ``depth_to_3d_v2`` implementation indexes the leading
+    # camera dimension even for a single image.  Keep an explicit batch axis
+    # here so both depth and intrinsics follow its documented ``(*, ...)``
+    # contract instead of being interpreted as three separate cameras.
+    pts3d_cam = depth_to_3d_v2(
+        depth.unsqueeze(0), intrinsic.unsqueeze(0), normalize_points=False
+    ).reshape(-1, 3)
     c2w = torch.linalg.inv(extrinsic)
     pts3d_hom = torch.cat([pts3d_cam, torch.ones(len(pts3d_cam), 1, device=pts3d_cam.device)], dim=1)
     pts3d_world_opencv = (c2w @ pts3d_hom.T).T[:, :3]

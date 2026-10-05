@@ -1,0 +1,36 @@
+# Bundled single-clip sample, so every training recipe runs out of the box with no external dataset.
+#
+# The clip is `examples/data/walking_tour_60s.*` -- 60 s, 1800 frames @30 fps, 1280x720, with a
+# per-frame vipe pose track (cam_c2w + intrinsics, 1800 frames) and a k25 caption file. Resampled to
+# the 24 fps target that gives 1439 latent-source frames, which clears the longest `num_frames` any
+# config here asks for (753 in stage3_long_distillation.yaml).
+#
+# This is enough to check that a recipe trains -- it is one clip, so it will overfit immediately and
+# tells you nothing about quality. For a real run, copy this file and point `datasets` at your own
+# sources: each needs a jsonl of clips plus the video / caption / pose directories, and `ratio` sets
+# how often a source is drawn (>=1 repeats it, <1 takes a random subset).
+#
+# caption_key: overall.description -- the whole-clip prompt. Use sample_segprompts.yaml for the
+# segmented-prompt variant that stage3_long_distillation.yaml needs.
+
+defaults:
+  # short clips that cannot supply num_frames are skipped and resampled; with a single-clip source
+  # there is nothing to fall back to, so a too-short clip surfaces as a loud retry loop rather than
+  # silently training on a truncated window.
+  require_full_length: true
+
+datasets:
+  sample:
+    jsonl: examples/data/cases.jsonl
+    video_dir: examples/data
+    caption_dir: examples/data
+    pose_dir: examples/data
+    source_fps: null              # taken from the jsonl's video_fps (30.0)
+    source_resolution: [720, 1280]
+    caption_key: overall.description
+
+select: [sample]
+# One epoch has to cover a full update step on every rank: 8 GPUs x train_batch_size x
+# gradient_accumulation_steps is 16 at the largest of the four recipes. A single copy of the clip
+# leaves every rank but the first with an empty dataloader, so the clip is repeated instead.
+ratio:  [32.0000]

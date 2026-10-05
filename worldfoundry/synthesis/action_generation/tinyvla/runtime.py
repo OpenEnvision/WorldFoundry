@@ -215,7 +215,7 @@ class TinyVLARuntime:
 
         import torch
 
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         from .loader import load_local_policy
 

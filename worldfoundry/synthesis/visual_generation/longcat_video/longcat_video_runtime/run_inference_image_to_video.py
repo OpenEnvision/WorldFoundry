@@ -9,19 +9,22 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
-from transformers import AutoTokenizer, UMT5EncoderModel
+from transformers import UMT5EncoderModel
+from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.tokenizer_loading import (
+    load_longcat_tokenizer,
+)
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.video_io import write_video
 from diffusers.utils import load_image
 
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.pipeline_longcat_video import LongCatVideoPipeline
-from worldfoundry.base_models.diffusion_model.video.cosmos.shared.scheduling_flow_match_euler_discrete import FlowMatchEulerDiscreteScheduler
+from worldfoundry.base_models.diffusion_model.schedulers.cosmos.flow_match_euler import FlowMatchEulerDiscreteScheduler
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.autoencoder_kl_wan import AutoencoderKLWan
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.longcat_video_dit import LongCatVideoTransformer3DModel
-from worldfoundry.core.distributed import context_parallel_util
-from worldfoundry.core.distributed.context_parallel_util import init_context_parallel
+from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
+from worldfoundry.core.distributed.model_parallel.context_state import init_context_parallel
 
 
-TEST_CASE_ROOT = Path(__file__).resolve().parents[5] / "data" / "test_cases" / "longcat_video"
+TEST_CASE_ROOT = Path(__file__).resolve().parents[5] / "data" / "test_cases"
 
 
 def torch_gc():
@@ -31,9 +34,9 @@ def torch_gc():
 
 def generate(args):
     # case setup
-    image_path = str(TEST_CASE_ROOT / "girl.png")
+    image_path = str(TEST_CASE_ROOT / "dualcamctrl" / "demo_pic" / "route66.jpg")
     image = load_image(image_path)
-    prompt = "A woman sits at a wooden table by the window in a cozy café. She reaches out with her right hand, picks up the white coffee cup from the saucer, and gently brings it to her lips to take a sip. After drinking, she places the cup back on the table and looks out the window, enjoying the peaceful atmosphere."
+    prompt = "A cinematic forward drive along an empty Route 66 desert highway, with red rock mesas and scrubland moving naturally past the camera under a clear blue sky."
     negative_prompt = "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
     spatial_refine_only = False
 
@@ -56,7 +59,7 @@ def generate(args):
     cp_size = context_parallel_util.get_cp_size()
     cp_split_hw = context_parallel_util.get_optimal_split(cp_size)
 
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir, subfolder="tokenizer", torch_dtype=torch.bfloat16)
+    tokenizer = load_longcat_tokenizer(checkpoint_dir)
     text_encoder = UMT5EncoderModel.from_pretrained(checkpoint_dir, subfolder="text_encoder", torch_dtype=torch.bfloat16)
     vae = AutoencoderKLWan.from_pretrained(checkpoint_dir, subfolder="vae", torch_dtype=torch.bfloat16)
     scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(checkpoint_dir, subfolder="scheduler", torch_dtype=torch.bfloat16)

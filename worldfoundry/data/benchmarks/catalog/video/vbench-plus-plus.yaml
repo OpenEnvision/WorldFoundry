@@ -1,5 +1,7 @@
 id: vbench-plus-plus
 name: VBench++
+publisher: Nanyang Technological University
+publisher_kind: university
 benchmark_kind:
 - image-to-video
 - long-video
@@ -71,6 +73,9 @@ metrics:
   unit: score
   primary: true
 runner:
+  workspace:
+    dispatch: vbench_series
+  official_script: worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VBenchPlusPlusContract
   run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
     worldfoundry/evaluation/tasks/execution/runners/vbench_plus_plus/run_vbench_plus_plus_official_runner.py --benchmark-id 
@@ -135,6 +140,7 @@ runner:
         tmp/worldfoundry_audit/remaining_benchmarks/vbenchpp_long_temporal_flickering_unified_20260621_002/scorecard.json
 integration:
   status: integrated
+  tier: in_tree
   limitations:
   - Bounded VBench++ long-video official GPU validation passed; full I2V, long-video, and trustworthiness suite coverage
     is still pending.

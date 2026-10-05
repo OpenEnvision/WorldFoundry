@@ -54,6 +54,7 @@ model:
               target: vwm.modules.encoders.modules.FrozenOpenCLIPImageEmbedder
               params:
                 freeze: true
+                version: null
         - input_key: cond_frames
           is_trainable: false
           target: vwm.modules.encoders.modules.VideoPredictionEmbedderWithEncoder
@@ -71,6 +72,7 @@ model:
                   in_channels: 3
                   out_channels: 3
                   ch: 128
+                  attn_resolutions: []
                   ch_mult:
                   - 1
                   - 2
@@ -83,7 +85,7 @@ model:
           target: vwm.modules.encoders.modules.VideoPredictionEmbedderWithLAMEncoder
           params:
             lam_config:
-              target: worldfoundry.synthesis.visual_generation.world_model.adaworld.lam.model.LAM
+              target: worldfoundry.synthesis.visual_generation.adaworld.lam.model.LAM
               params:
                 image_channels: 3
                 lam_model_dim: 1024
@@ -91,7 +93,7 @@ model:
                 lam_patch_size: 16
                 lam_enc_blocks: 16
                 lam_num_heads: 16
-                ckpt_path: path_to/lam/epoch=99.ckpt
+                ckpt_path: null
         - input_key: context_len
           is_trainable: false
           target: vwm.modules.encoders.modules.ConcatTimestepEmbedderND
@@ -116,6 +118,7 @@ model:
             in_channels: 3
             out_channels: 3
             ch: 128
+            attn_resolutions: []
             ch_mult:
             - 1
             - 2
@@ -132,6 +135,7 @@ model:
             in_channels: 3
             out_channels: 3
             ch: 128
+            attn_resolutions: []
             ch_mult:
             - 1
             - 2

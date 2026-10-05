@@ -1,0 +1,33 @@
+---
+title: "YUME"
+description: "从图像（1.5 还支持文本）生成可探索的第一人称世界视频，由键盘式运动驱动。树内两条 variant 的 runner 均已验证。"
+modelId: "yume"
+pageSource: authored
+---
+
+YUME 生成**可探索的第一人称世界视频**。图像进（YUME-1.5 还可加文本和可选视频），输出**跟随键盘式运动**的片段。它不是只靠 prompt 的电影级文生视频，不是 3D splat 生成器，也不是 Cosmos 世界基础模型卡片。
+
+<ModelPaperFigures modelId="yume" locale="zh" />
+
+WorldFoundry 保留两条 Apache-2.0 的**树内内置**适配器。两条 runner 路径均为 **verified**：
+
+- `yume` — 官方 `stdstu123/Yume-I2V-540P`。以图像为主。尺寸 **544×960** 或 **960×544**。产物 `yume.mp4`。
+- `yume-1p5` — 官方 `stdstu123/Yume-5B-720P`。prompt + 图像 + 视频。默认尺寸 **704×1280**（也可 **1280×704**）。产物 `yume-1p5.mp4`。
+
+论文 / 项目文是 [Yume1.5](https://arxiv.org/abs/2512.22096)（[项目页](https://stdstu12.github.io/YUME-Project/)，[github.com/stdstu12/YUME](https://github.com/stdstu12/YUME)）。论文封面只放在标题旁。
+
+<ModelCommandBuilder modelId="yume" locale="zh" />
+
+## 用来做什么
+
+把静态场景走起来。记录输入：`prompt`、`image`、`video`，以及 `navigation_actions` 与 `camera_actions`。pipeline **至少需要一次交互**——WASD 式移动或方向键相机动作。没有交互列表会在采样前失败。
+
+要较轻的 540P 图像条件路径用 `yume`。需要文本引导和 720P 用 `yume-1p5`。不要只丢一句 prompt 指望通用文生视频（那是 ZeroScope / DiT 卡片）。也不要指望 `.ply` 世界（那是 WorldGen）。
+
+交互式第一人称滚动的评测入口是 [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)。每次运行的视觉 QA 仍在 catalog 外跟踪。
+
+## 在 WorldFoundry 中运行
+
+两个 variant 都解析到 `WORLDFOUNDRY_CKPT_DIR`（HFD 别名或原生 Hugging Face 快照），跑在 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。权重必须是**完整本地目录**——I2V 线需要 DiT 分片、UMT5、CLIP 与 Wan2.1 VAE；1.5 需要 5B safetensors、UMT5 与 Wan2.2 VAE。运行时不会下载它们。
+
+<ModelRelatedRecipes modelId="yume" locale="zh" />

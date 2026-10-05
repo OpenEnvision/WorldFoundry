@@ -1,0 +1,32 @@
+---
+title: "Cosmos 3"
+description: "Newest NVIDIA omnimodal WFM: image/video/sound plus policy and dynamics heads. Native Nano/Super; OpenMDW-1.1, not gated. Dedicated env; GPU parity pending."
+modelId: "cosmos3"
+pageSource: authored
+---
+
+Cosmos 3 is the **newest** Cosmos generation recorded here: one **omnimodal** world model that jointly handles text-to-image, text-to-video, image/video-to-video, **synchronized sound**, and structured action inference (**policy**, **forward dynamics**, **inverse dynamics**). Variants are `cosmos3-nano` and `cosmos3-super`. This card is **not** [Predict 2](/docs/guides/supported-models/cosmos-predict-2), **not** [Predict 2.5](/docs/guides/supported-models/cosmos-predict-2.5), and **not** [Transfer 2.5](/docs/guides/supported-models/cosmos-transfer-2.5).
+
+<ModelPaperFigures modelId="cosmos3" locale="en" />
+
+WorldFoundry runs it **natively** — shared loader, joint-modality runner, Karras **flow-UniPC**, Wan **VAE38**, inference-only **AVAE** sound decoder. **Diffusers is not imported.** Weights come from the official Hugging Face repos (`nvidia/Cosmos3-Nano`, `nvidia/Cosmos3-Super`) under **OpenMDW-1.1** and are **not gated**. Paper: [Cosmos 3: Omnimodal World Models for Physical AI](https://arxiv.org/abs/2606.02800). Project: [research.nvidia.com/labs/cosmos-lab/cosmos3](https://research.nvidia.com/labs/cosmos-lab/cosmos3/).
+
+What this repository actually checked on **Nano**: transformer **814/814**, VAE38 **196/196**, AVAE **182/182**, and a 35-step UniPC schedule that matches the official solver numerically. **End-to-end GPU output parity is pending.** Earlier Diffusers-backend smoke is historical only and is not attributed to this native path. Super is registered; multi-GPU visual / sound / action / full-resolution parity is also pending.
+
+<ModelCommandBuilder modelId="cosmos3" locale="en" />
+
+## What it is for
+
+Use Cosmos 3 when one stack must cover image, video, optional sound, and structured action heads. Default launch is `worldfoundry-eval run cosmos3-nano` with `--pipeline.task-profile t2i`. Required inputs: `prompt`, `image`, `video`. The `actions` field records `policy`, `forward_dynamics`, `inverse_dynamics`. Artifact: `cosmos3-nano.mp4` (family default `cosmos3.mp4`).
+
+Pick `cosmos3-super` only when you intend the Super checkpoint. This infer-only recipe **excludes** Reasoner, training, guardrails, and vLLM / vLLM-Omni serving. For gated T5 video2world use Predict 2. For verified text-to-world at 1280×704 / 93 frames use Predict 2.5. For edge-controlled sim-to-real use Transfer 2.5.
+
+Score world-generation quality on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) and [Physics-IQ](/docs/evaluation/benchmark-hub/physics-iq). Those are catalog entry points, not ingested WorldFoundry scores.
+
+## Running in WorldFoundry
+
+`Cosmos3Pipeline` needs the **dedicated** environment `worldfoundry-cosmos3-cu128` (Python 3.11, CUDA 12.8, **torch==2.10.0**). It does **not** ride the unified cu128 profile that Predict / Transfer use. Base selection routes to Nano. Verified-revision evidence requires the exact SHA — Nano `411f42a8fdfb8c5b2583cb8786e0938f49796eaa`, Super `e0262be9d8f7586bc24c069a2aed2b665bdff266`. `prepare_model_infer.sh` emits a structured checkpoint report and a pinned snapshot model-ref so an older local directory is not silently treated as current.
+
+The native transformer matches the official `nvidia/Cosmos3-Nano` and `nvidia/Cosmos3-Super` parameter layout. It is derived from NVIDIA's Cosmos3 Diffusers contribution at `aefdf852c16237039785d84ab3327167cb0ec07f`. WorldFoundry owns loading, attention dispatch, scheduling, modality packing, and execution; Diffusers is not a runtime backend.
+
+<ModelRelatedRecipes modelId="cosmos3" locale="en" />

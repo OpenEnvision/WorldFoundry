@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from worldfoundry.base_models.capabilities import vbench_asset_path
-from worldfoundry.core.io.serialization import read_jsonl_objects, write_jsonl
+from worldfoundry.core.io.formats.serialization import read_jsonl_objects, write_jsonl
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
 from worldfoundry.evaluation.tasks.execution.runners.fetv.fetv_prompts import (
     FETV_FRAME_COUNT,
@@ -66,8 +66,8 @@ BASE_MODEL_STYLEGAN_V_FILES = (
     "src/metrics/metric_utils.py",
     "src/metrics/frechet_video_distance.py",
     "src/dnnlib/util.py",
-    "src/training/dataset.py",
-    "src/training/layers.py",
+    "src/dataset_support/dataset.py",
+    "src/dataset_support/layers.py",
     "src/torch_utils/misc.py",
     "src/torch_utils/training_stats.py",
     "src/torch_utils/custom_ops.py",

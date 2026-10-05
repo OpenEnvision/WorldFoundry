@@ -1,0 +1,34 @@
+schema_version: 2
+model_id: fastvideo-causal-wan2.2-i2v-14b
+display_name: FastVideo CausalWan2.2 I2V A14B
+task_family: video_generation
+groups:
+- image_to_video
+- causal_video
+- few_step
+source_repos:
+- url: https://github.com/NVIDIA/FlashDreams
+  revision: 289da6f1d232de5abaa30d686c977b9c0040fe76
+checkpoints:
+- repo_id: FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers
+  revision: 0977572ccf137da5e577d62e3231ca840151af38
+  role: dual_expert_transformers_text_encoder_vae
+input_schema:
+  prompt: true
+  image: true
+  video: false
+artifact_kind: generated_video
+artifact_filename: fastvideo-causal-wan2.2-i2v-14b.mp4
+execution:
+  environment: _unified
+  backend_stage: native_diffusion
+  runtime_status: checkpoint_integrity_blocked
+  integration_status: integrated
+  pipeline_binding: fastvideo-causal-wan2.2-i2v-14b
+integration:
+  status: integrated
+notes:
+- The framework owns the eight-step self-forcing schedule, three-latent-frame traversal,
+  clean image first-frame seed, and independent high/low expert caches.
+- The local text encoder shards 1 and 2 fail the pinned LFS SHA-256 check and retain
+  aria2 sidecars. Real checkpoint-backed GPU inference is blocked until repaired.

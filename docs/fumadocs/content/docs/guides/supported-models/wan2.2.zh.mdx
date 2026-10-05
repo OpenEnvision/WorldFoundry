@@ -1,0 +1,42 @@
+---
+title: "Wan2.2"
+description: "阿里通义实验室的 Wan2.2：已验证的 TI2V 5B（1280×704 / 121 帧 / 24 fps），以及尚待验证的 A14B 文生视频与图生视频 MoE 路线。"
+modelId: "wan2.2"
+pageSource: authored
+---
+
+Wan2.2 是阿里巴巴通义实验室的下一代 Wan，因上游代码与 checkpoint 独立版本化而与 [Wan2.1](/zh/docs/guides/supported-models/wan2.1) 分开跟踪。本卡片绑定三条 Apache-2.0 的 Hugging Face 线：**T2V A14B**（MoE 文生视频）、**I2V A14B**（MoE 图生视频）、**TI2V 5B**（稠密图文生视频）。本仓库只为 5B 路径记录了 demo 与 runner 产物。
+
+<ModelPaperFigures modelId="wan2.2" locale="zh" />
+
+官方论文仍是 [Wan: Open and Advanced Large-Scale Video Generative Models](https://arxiv.org/abs/2503.20314)。代码与权重在 [Wan-Video/Wan2.2](https://github.com/Wan-Video/Wan2.2) 和 [Wan-AI](https://huggingface.co/Wan-AI)。项目站是 [wan.video](https://wan.video)。catalog 的 project 字段仍指向 HuMo 页面——那是 Wan 衍生的相邻条目，不是本家族。别名 `wan-2p2`、`wan2p2` 解析到这里。
+
+<ModelCommandBuilder modelId="wan2.2" locale="zh" />
+
+## 它用来做什么
+
+需要带 checkpoint 证据的片段时，从 `wan2.2-ti2v-5b` 入手。记录契约是 **1280×704**（或 **704×1280**）、**121 帧**、**24 fps**、**50 步 UniPC**、guidance **5.0**、flow-shift **5.0**，写出 `wan2.2-ti2v-5b-1280x704-121f.mp4`。必填 prompt；加上 image 时，同一套 5B 权重从文生视频切到图生视频。该 variant 的 catalog 最低显存是 **24 GB**。
+
+要跑双专家文生视频用 `wan2.2-t2v-a14b`，以静帧为条件用 `wan2.2-i2v-a14b`。两条 A14B 线都已接入树内 pipeline，但状态仍是 **Runner 一致性待确认**——启动成功不等于已验证的 14B 产物。
+
+本卡片**没有 V2V**。上游的 Speech-to-Video（`Wan2.2-S2V-14B`）和 Animate（`Wan2.2-Animate-14B`）在 GitHub / Hugging Face 上存在，这里没有绑定。通用片段质量可对照 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)——那是列出的评测套件，不是本仓库已摄入的排行。
+
+## 推理
+
+原生采样目前只支持 **UniPC**。三条 WorldFoundry 默认配置：
+
+| Variant | 任务 | 分辨率 / 帧数 / fps | 步数 · guidance · shift | 显存（catalog） | 一致性 |
+| --- | --- | --- | --- | --- | --- |
+| `wan2.2-ti2v-5b` | 同一 5B 卡上文生或图生 | 1280×704，121 帧，24 fps | 50 · 5.0 · 5.0 | 24 GB | demo + runner **已验证** |
+| `wan2.2-t2v-a14b` | T2V MoE | 832×480，81 帧，16 fps | 40 · 高噪 4.0 / 低噪 3.0 · 12.0 | 80 GB | **待验证** |
+| `wan2.2-i2v-a14b` | I2V MoE | 832×480，81 帧，16 fps | 40 · 3.5 / 3.5 · 5.0 | 80 GB | **待验证** |
+
+A14B 推理在时间步上切换高噪专家与低噪专家（catalog 边界：T2V **0.875**，I2V **0.900**）。官方 A14B 脚本还宣传 480p / 720p（`1280×720`），单卡需 ≥80 GB 并配合 `--offload_model`；那些尺寸是上游选项，不是本仓库已验证的 profile。TI2V 5B 使用高压缩 Wan2.2-VAE（**16×16×4**）。seed 记在 `actions` 字段（命令构建器里 `base_seed` 默认 42）。prompt extension 默认关闭。
+
+## 在 WorldFoundry 中运行
+
+用 `bash scripts/setup/unified_install.sh` 安装统一环境（Python 3.11，CUDA 12.8），并在本地就位权重——运行时不会下载。记录的启动命令是 `worldfoundry-eval run wan2.2-ti2v-5b`。该 variant 使用已记录的 5B 契约，不是 14B 运行。Pipeline 分别为 `Wan2p2Pipeline`（5B）、`Wan2p2T2VA14BPipeline`、`Wan2p2I2VA14BPipeline`。
+
+Checkpoint：`Wan-AI/Wan2.2-TI2V-5B`、`Wan-AI/Wan2.2-T2V-A14B`、`Wan-AI/Wan2.2-I2V-A14B`（均为 `apache-2.0`，公开、非 gated）。家族级硬件仍写 **80 GB**，因为那是 A14B 下限；已验证的 5B 路径是 24 GB 那条。
+
+<ModelRelatedRecipes modelId="wan2.2" locale="zh" />

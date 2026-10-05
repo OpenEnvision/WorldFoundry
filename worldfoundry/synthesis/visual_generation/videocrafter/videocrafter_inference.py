@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-from worldfoundry.base_models.diffusion_model.video.lvdm.models.samplers.ddim import (
+from worldfoundry.base_models.diffusion_model.schedulers.lvdm.ddim import (
     DDIMSampler,
 )
 
@@ -109,7 +109,9 @@ def load_model_checkpoint(model, ckpt: str):
         model: The model.
         ckpt: The ckpt.
     """
-    state_dict = _normalized_checkpoint_state_dict(torch.load(ckpt, map_location="cpu"))
+    state_dict = _normalized_checkpoint_state_dict(
+        torch.load(ckpt, map_location="cpu", weights_only=True)
+    )
     expected = model.state_dict()
     for key in ("scale_arr_prev",):
         if key in expected and key not in state_dict:

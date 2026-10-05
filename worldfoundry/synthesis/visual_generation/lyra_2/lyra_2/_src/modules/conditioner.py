@@ -1,4 +1,4 @@
-from worldfoundry.base_models.diffusion_model.video.cosmos.cosmos2.runtime.cosmos_predict2.cosmos_predict2._src.predict2.conditioner import (
+from worldfoundry.base_models.diffusion_model.models.encoders.structured_conditioning import (
     AbstractEmbModel,
     BaseCondition,
     DataType,

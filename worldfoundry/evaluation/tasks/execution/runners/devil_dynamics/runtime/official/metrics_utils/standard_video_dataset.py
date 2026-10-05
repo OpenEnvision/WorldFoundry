@@ -175,9 +175,12 @@ def standard_collate_fn(batch):
 
 
 if __name__ == '__main__':
-    # 使用你的数据集
-    # video_annotations = '/Volumes/My-Passport/VideoGeneration/MSRVTT/msrvtt_merged_data.json'
-    video_folder = '/home/LiaoMingxiang/Workspace2/DinaBench/candidate_videos'
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Inspect videos with StandardVidoDataset")
+    parser.add_argument("video_folder", help="Directory containing input videos")
+    args = parser.parse_args()
+    video_folder = args.video_folder
     transform = Compose([
         Resize((224, 224)),  # 根据需要调整大小
     ])

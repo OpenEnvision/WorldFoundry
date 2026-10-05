@@ -15,6 +15,7 @@ source:
   hf_repo_id: facebook/nwm
   license: cc-by-nc-4.0
 official_sources:
+  paper: https://arxiv.org/abs/2412.03572
   project_page: https://www.amirbar.net/nwm/
   github:
     url: https://github.com/facebookresearch/nwm
@@ -55,3 +56,23 @@ pipeline_binding: nwm
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes; blocked entries retain
   upstream provenance without runnable backends.
+docs:
+  publisher: Meta AI (FAIR)
+  publisher_kind: company
+  publisher_zh: Meta AI（FAIR）
+  overview: 'Navigation World Models (NWM) is Meta''s navigation world model (CVPR 2025 highlight): a conditional diffusion transformer that predicts egocentric future video from past frames and navigation actions, and can plan trajectories by imagining them. Recorded variants cover RECON and SCAND dataset checkpoints. In this catalog the source is vendored in-tree; execution stays checkpoint/dataset gated.'
+  overview_zh: Navigation World Models（NWM）是 Meta 的导航世界模型（CVPR 2025 highlight）：条件扩散 Transformer，从历史帧与导航动作预测第一视角未来视频，并能通过「想象」来规划轨迹。记录的 variant 覆盖 RECON 与 SCAND 数据集 checkpoint。本 catalog 中源码已内置树内；执行保持 checkpoint/数据集限制。
+  architecture: Per the upstream release, a Conditional Diffusion Transformer (CDiT) scales to 1B parameters and conditions on action and time embeddings for egocentric prediction (checkpoints at facebook/nwm, CC-BY-NC-4.0).
+  architecture_zh: 按上游发布，条件扩散 Transformer（CDiT）参数量达 1B，以动作与时间嵌入为条件做第一视角预测（checkpoint 位于 facebook/nwm，CC-BY-NC-4.0）。
+  usage_notes: The pipeline resolves the official NWM inference entrypoint and returns blocked diagnostics until checkpoints and evaluation datasets are staged. It is the recorded candidate for non-driving navigation video evaluation.
+  usage_notes_zh: pipeline 解析官方 NWM 推理入口，在 checkpoint 与评估数据集就位前返回 blocked 诊断。它是「非驾驶类导航视频评估」的记录候选。
+  limitations:
+  - 'CC-BY-NC-4.0: non-commercial license.'
+  - Execution is checkpoint/environment/dataset gated.
+  limitations_zh:
+  - CC-BY-NC-4.0：非商用许可。
+  - 执行受 checkpoint/环境/数据集限制。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Navigation world-rollout quality.
+    reason_zh: 导航世界滚动生成质量。

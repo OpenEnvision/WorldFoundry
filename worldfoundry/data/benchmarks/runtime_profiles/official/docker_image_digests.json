@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "note": "Source digests resolved from GHCR Docker-Content-Digest via anonymous pull token on 2026-08-26. Do not invent digests.",
+  "resolved_at": "2026-08-26T12:45:00Z",
+  "images": {
+    "ghcr.io/allenai/vla-evaluation-harness/calvin:latest": {
+      "digest": "sha256:c607214d02e212fe8e0a4227d9c973921ec0232083e6862bb5387c3f58369984",
+      "platform": "linux/amd64",
+      "profiles": ["calvin"]
+    },
+    "ghcr.io/allenai/vla-evaluation-harness/kinetix:latest": {
+      "digest": "sha256:79f06dcef9e0197b54078d47817208f02538bdfbd45338907300a6613b1f4e84",
+      "platform": "linux/amd64",
+      "profiles": ["kinetix"]
+    },
+    "ghcr.io/allenai/vla-evaluation-harness/libero-mem:latest": {
+      "digest": "sha256:3ffb85ecf8c98077020cbdc88fca1b52061b605ee57d20d54fd5140104ae55c7",
+      "platform": "linux/amd64",
+      "profiles": ["libero-mem"]
+    },
+    "ghcr.io/allenai/vla-evaluation-harness/libero-pro:latest": {
+      "digest": "sha256:b93d44f5d8e60e8233526ca594c895244c9939ba1867c31f92cd02e216c450fb",
+      "platform": "linux/amd64",
+      "profiles": ["libero-pro"]
+    },
+    "ghcr.io/allenai/vla-evaluation-harness/libero:latest": {
+      "digest": "sha256:d0c45bc5a3720d569180e6b8dd92510da895f16c3cc509ccc76e4b4ffbb9e0f0",
+      "pinned_as": "ghcr.io/allenai/vla-evaluation-harness/libero@sha256:d0c45bc5a3720d569180e6b8dd92510da895f16c3cc509ccc76e4b4ffbb9e0f0",
+      "platform": "linux/amd64",
+      "profiles": ["libero"]
+    },
+    "ghcr.io/allenai/vla-evaluation-harness/maniskill2:latest": {
+      "digest": "sha256:710ebca79942e8c580af36cc71f7dacc340ba535f2be4efb17141d526ef4794a",
+      "platform": "linux/amd64",
+      "profiles": ["maniskill2"]
+    },
+    "ghcr.io/allenai/vla-evaluation-harness/mikasa-robo:latest": {
+      "digest": "sha256:3f63627e79d06e9de97a218a09293f73c9ab5892b591585f04dde0af894a6e18",
+      "platform": "linux/amd64",
+      "profiles": ["mikasa"]
+    },
+    "ghcr.io/allenai/vla-evaluation-harness/rlbench:latest": {
+      "digest": "sha256:87e57e8061cd7b11aec4d2de51e09709742fbc406d535f8a0a948abecb5cf1b6",
+      "platform": "linux/amd64",
+      "profiles": ["rlbench"]
+    },
+    "ghcr.io/allenai/vla-evaluation-harness/robocasa:latest": {
+      "digest": "sha256:6d3e53b53c2482fe00a35d762774529bbe61cf9245fd131d6ae8df37cc4497f4",
+      "platform": "linux/amd64",
+      "profiles": ["robocasa"]
+    },
+    "ghcr.io/allenai/vla-evaluation-harness/robocerebra:latest": {
+      "digest": "sha256:30d924e2927b0b614d23bc718e44adeab958dff45cf6d62ab28cc5606edf0f76",
+      "platform": "linux/amd64",
+      "profiles": ["robocerebra"]
+    },
+    "ghcr.io/allenai/vla-evaluation-harness/robotwin:latest": {
+      "digest": "sha256:8b6216418255ab563104c052388eed12af2dcf3a8984a8b69fb14bbe2f29d691",
+      "platform": "linux/amd64",
+      "profiles": ["robotwin"]
+    },
+    "ghcr.io/allenai/vla-evaluation-harness/simpler:latest": {
+      "digest": "sha256:edde57a160f2e055c71e2c7bdb6addf16bcf3ac26ffe7f6429d1172bb5c7569e",
+      "platform": "linux/amd64",
+      "profiles": ["simpler-env"]
+    },
+    "ghcr.io/allenai/vla-evaluation-harness/vlabench:latest": {
+      "digest": "sha256:024e6df076ea8231f2ffd1d8f5394390905212177bc5f45e5269b1f259a6eac0",
+      "platform": "linux/amd64",
+      "profiles": ["vlabench"]
+    }
+  }
+}

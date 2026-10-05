@@ -1,0 +1,55 @@
+schema_version: 2
+model_id: uniworld-view
+display_name: UniWorld-View
+task_family: video_generation
+groups: [world, camera_control, image_to_video, video_to_video]
+source_repos:
+- url: https://github.com/PKU-YuanGroup/UniWorld-View
+  revision: 660212c48bff7c91a2ea5c7d5f3785af581100e2
+- url: https://github.com/NIRVANALAN/STream3R
+  revision: 7bdca8cf7ec206ff8b08c0941ad8286d72087d4f
+checkpoints:
+- repo_id: Drexubery/UniView
+  role: uniview_transformer
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Drexubery--UniView
+- repo_id: Wan-AI/Wan2.1-VACE-14B-diffusers
+  role: wan_vace_diffusers_base
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Wan-AI--Wan2.1-VACE-14B-diffusers
+- repo_id: Salesforce/blip2-opt-2.7b
+  role: captioner
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Salesforce--blip2-opt-2.7b
+- repo_id: Ruicheng/moge-2-vitl-normal
+  role: depth_model
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Ruicheng--moge-2-vitl-normal/model.pt
+- repo_id: facebook/sam2-hiera-large
+  role: segmenter
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/facebook--sam2-hiera-large/sam2_hiera_large.pt
+- repo_id: Carve/tracer_b7
+  role: foreground_tracer
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Carve--tracer_b7/tracer_b7.pth
+- repo_id: Kijai/WanVideo_comfy
+  role: causvid_lora_v2
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Kijai--WanVideo_comfy/Wan21_CausVid_14B_T2V_lora_rank32_v2.safetensors
+- repo_id: yslan/STream3R
+  role: dynamic_geometry
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/yslan--STream3R
+input_schema: {prompt: false, image_or_video: true, camera_trajectory: true}
+artifact_kind: generated_video
+artifact_filename: uniworld-view.mp4
+execution:
+  environment: _unified
+  backend_stage: official_external_runtime
+  runtime_status: source_and_checkpoints_required
+  integration_status: integrated
+  pipeline_binding: uniworld-view
+integration: {status: integrated}
+notes:
+- The adapter invokes the official inference.py from a separate pinned checkout and Python environment.
+- WorldFoundry dispatch stays in the unified environment; UNIWORLD_VIEW_PYTHON selects the separate upstream process.
+- Official inference uses BLIP2 captioning; its --prompt flag is ignored by the current upstream inference path.
+- The upstream default hybrid renderer requires PyTorch3D and at least 60 GB GPU memory is recommended.
+- Dynamic view also requires STream3R source and weights; MoSca is an optional precomputed geometry alternative.
+- The official default keeps the source aspect ratio at an approximate height/width token budget; set keep_aspect_ratio=false to request exact output dimensions.
+- The pinned upstream setup_stream3r method is empty; the WorldFoundry entry restores its intended load call for dynamic_view.
+- The pinned upstream single_view final-video save omits fps; the WorldFoundry entry applies the requested rate to that artifact.
+- The pinned upstream diffusion call hard-codes seed 42; the WorldFoundry entry applies the requested seed at the pipeline call.

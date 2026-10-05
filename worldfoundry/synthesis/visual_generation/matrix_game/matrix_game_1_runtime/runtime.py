@@ -40,7 +40,6 @@ EXPECTED_VAE_FILES = ("vae/pytorch_model.pt",)
 EXPECTED_CHECKPOINT_FILES = EXPECTED_DIT_FILES + EXPECTED_TEXT_ENCODER_FILES + EXPECTED_VAE_FILES
 REQUIRED_RUNTIME_CONFIG_FILES = ("environment.yml",)
 REQUIRED_RUNTIME_FILES = (
-    "run_inference.sh",
     "inference_bench.py",
     "teacache_forward.py",
     "condtions.py",
@@ -334,6 +333,7 @@ class MatrixGame1Runtime:
         video_length: int | None = None,
         num_pre_frames: int | None = None,
         i2v_type: str | None = None,
+        interactions: Sequence[str] = (),
         gpu_id: str | None = None,
         extra_env: Mapping[str, str] | None = None,
     ) -> MatrixGame1RuntimePlan:
@@ -351,13 +351,14 @@ class MatrixGame1Runtime:
             video_length: Optional number of generated video frames.
             num_pre_frames: Optional number of repeated pre-frames.
             i2v_type: Optional official I2V conditioning type.
+            interactions: Ordered keyboard/camera command segments.
             extra_env: Additional environment variables.
         """
         python_executable = self.python_executable or Path("python")
         resolved_image_path = _expand_runtime_path(image_path) or Path(image_path).expanduser()
         if not resolved_image_path.is_absolute():
             resolved_image_path = resolved_image_path.resolve()
-        runner_image_path = resolved_image_path.parent if resolved_image_path.is_file() else resolved_image_path
+        runner_image_path = resolved_image_path
         resolved_output_dir = Path(output_dir).expanduser()
         if not resolved_output_dir.is_absolute():
             resolved_output_dir = resolved_output_dir.resolve()
@@ -398,6 +399,11 @@ class MatrixGame1Runtime:
             command.extend(["--num_pre_frames", str(num_pre_frames)])
         if i2v_type is not None:
             command.extend(["--i2v_type", str(i2v_type)])
+        if interactions:
+            from .condtions import interaction_condition
+
+            interaction_condition(interactions, video_length or 65)
+            command.extend(["--interactions", *interactions])
         extra_env_dict = dict(extra_env or {})
         existing_pythonpath = extra_env_dict.pop("PYTHONPATH", None) or os.environ.get("PYTHONPATH", "")
         pythonpath_entries = [str(REPO_ROOT), str(self.runtime_root)]
@@ -509,6 +515,7 @@ class MatrixGame1Runtime:
                 video_length=kwargs.get("video_length"),
                 num_pre_frames=kwargs.get("num_pre_frames"),
                 i2v_type=kwargs.get("i2v_type"),
+                interactions=interactions,
                 gpu_id=str(kwargs.get("gpu_id") or _gpu_id_from_device(self.device) or ""),
             )
         if kwargs.get("execute") is True and runtime_plan is not None and preflight["status"] == "ready":

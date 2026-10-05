@@ -45,6 +45,8 @@ from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.logging imp
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.misc import unpack_optional
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.utils.morph import erode
 
+from worldfoundry.base_models.three_dimensions.general_3d.vipe.adaptive_models import AdaptiveDepthModels
+
 logger = logging.getLogger(__name__)
 
 
@@ -242,6 +244,8 @@ class AdaptiveDepthProcessor(StreamProcessor):
         view_idx: int = 0,
         model: str = "adaptive_unidepth-l_svda",
         share_depth_model: bool = False,
+        shared_models: AdaptiveDepthModels | None = None,
+        metric_depth: Any | None = None,
     ):
         """Init.
 
@@ -250,6 +254,8 @@ class AdaptiveDepthProcessor(StreamProcessor):
             view_idx: The view idx.
             model: The model.
             share_depth_model: The share depth model.
+            shared_models: Resident networks from a previous video.
+            metric_depth: Optional already-loaded keyframe depth network.
         """
         super().__init__()
         self.slam_output = slam_output
@@ -258,6 +264,13 @@ class AdaptiveDepthProcessor(StreamProcessor):
         assert not share_depth_model, "Adaptive depth processor does not support shared depth model"
         self.require_cache = True
         self.model = model
+        self.update_momentum = 0.99
+
+        if shared_models is not None:
+            self.video_depth_model = shared_models.video_depth_model
+            self.depth_model = shared_models.depth_model
+            self.prompt_model = shared_models.prompt_model
+            return
 
         try:
             prefix, metric_model, video_model = model.split("_")
@@ -273,9 +286,19 @@ class AdaptiveDepthProcessor(StreamProcessor):
 
         assert prefix == "adaptive", "Model name should start with 'adaptive_'"
 
-        self.depth_model = make_depth_model(metric_model)
+        if metric_depth is not None and metric_model.startswith("unidepth"):
+            self.depth_model = metric_depth
+        else:
+            self.depth_model = make_depth_model(metric_model)
         self.prompt_model = PriorDAModel()
-        self.update_momentum = 0.99
+
+    def shared_models(self) -> AdaptiveDepthModels:
+        """Return the resident networks so the next video can skip reloading."""
+        return AdaptiveDepthModels(
+            video_depth_model=self.video_depth_model,
+            depth_model=self.depth_model,
+            prompt_model=self.prompt_model,
+        )
 
     def __call__(self, frame_idx: int, frame: VideoFrame) -> VideoFrame:
         """Call.

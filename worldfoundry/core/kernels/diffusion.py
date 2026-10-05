@@ -1,4 +1,27 @@
-"""Public diffusion operators with accelerator selection and PyTorch fallback."""
+"""Public diffusion operators with accelerator selection and PyTorch fallback.
+
+This is the only module model code should import for fused GroupNorm+SiLU,
+QK RMSNorm+RoPE, residual gates, and scale-shift. Implementations come
+from :mod:`worldfoundry.core.kernels.registry` (Triton / native) and
+always keep a PyTorch path. :func:`kernel_dispatch_report` and
+:func:`clear_kernel_dispatch_cache` are the operator-facing cache controls.
+
+Do not import ``triton_*`` files from DiT blocks — those skip capability
+gates and quarantine.
+
+Not this module:
+    Concrete Triton bodies live in :mod:`.triton_diffusion` and
+    :mod:`.triton_group_norm_silu`. MoE lives in :mod:`.moe`. Device
+    profiles live in :mod:`.capabilities`.
+
+Public surface:
+
+- :func:`silu_mul` / :func:`silu_and_mul` / :func:`group_norm_silu`
+- :func:`residual_gate_add` / :func:`scale_shift`
+- :func:`layer_norm_scale_shift` / :func:`rms_norm_scale_shift`
+- :func:`qk_rmsnorm_rope` / :func:`hidden_qk_rmsnorm_rope_3d`
+- :func:`kernel_dispatch_report` / :func:`clear_kernel_dispatch_cache`
+"""
 
 from __future__ import annotations
 
@@ -9,6 +32,7 @@ import torch
 import torch.nn.functional as F
 
 from worldfoundry.core.kernels.capabilities import (
+    QUALIFIED_TRITON_CAPABILITIES,
     default_kernel_thresholds,
     detected_kernel_device_profiles,
     kernel_device_profile,
@@ -16,7 +40,9 @@ from worldfoundry.core.kernels.capabilities import (
 )
 from worldfoundry.core.kernels.registry import (
     KERNEL_REGISTRY,
+    _publish_dispatch_receipt,
     clear_kernel_dispatch_cache,
+    kernel_autotune_enabled,
 )
 from worldfoundry.core.kernels.registry import (
     kernel_dispatch_report as _registry_dispatch_report,
@@ -32,7 +58,14 @@ _FLOAT_DTYPES = {torch.float16, torch.bfloat16, torch.float32}
 _HIDDEN_ROPE_FALLBACK_CHUNK_ELEMENTS = 16 * 1024 * 1024
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Env / backend — invalid integers keep the architecture default, not zero
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _positive_env_int(name: str, default: int) -> int:
+    """Read a non-negative int env override; parse failures keep *default*."""
+
     try:
         return max(int(os.getenv(name, str(default)) or default), 0)
     except ValueError:
@@ -40,20 +73,24 @@ def _positive_env_int(name: str, default: int) -> int:
 
 
 def _positive_override(value: str | None, default: int) -> int:
+    """Coerce a cached env string to a non-negative int; ``None`` uses *default*."""
+
     try:
         return max(int(value if value is not None else default), 0)
     except ValueError:
         return default
 
 
-# Below these sizes eager PyTorch's highly tuned pointwise kernels are faster
-# than paying the custom-dispatch/launch cost on A100. The conservative
-# defaults avoid regressions on short causal chunks; deployments can tune them
-# independently for T4/A10/L4/consumer Ada or Hopper/Blackwell.
+# Below the device-profile thresholds, eager PyTorch's vendor/pointwise path is
+# usually faster than paying custom dispatch and launch costs. The thresholds
+# are architecture-specific conservative defaults; throughput mode measures
+# exact device/dtype/shape signatures and retains the faster implementation.
 _TORCH_BACKENDS = {"torch", "pytorch", "native", "off", "disabled"}
 
 
 def _requested_kernel_backend() -> str:
+    """Return the process-wide backend pin; empty values become ``auto``."""
+
     return os.getenv("WORLDFOUNDRY_KERNEL_BACKEND", "auto").strip().casefold() or "auto"
 
 
@@ -71,7 +108,18 @@ def kernel_dispatch_report() -> dict[str, object]:
     return report
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Size floors — eager path is LRU-cached; compiled graphs re-read env live
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _kernel_threshold(tensor: torch.Tensor, op: str, *related: torch.Tensor) -> int:
+    """Element-count floor below which ``auto`` keeps vendor/pointwise PyTorch.
+
+    Unknown *op* raises :class:`KeyError`. Compiled graphs cannot use the
+    LRU cache (guards would bake one device's threshold into another).
+    """
+
     compiling = torch.compiler.is_compiling()
     if not compiling:
         override_name = {
@@ -119,7 +167,7 @@ def _kernel_threshold(tensor: torch.Tensor, op: str, *related: torch.Tensor) -> 
             activation_default = 4 * mib
         elif capability is not None and capability[0] == 8:
             activation_default = 8 * mib
-        elif capability is not None and capability[0] in {10, 12}:
+        elif capability is not None and capability[0] in {10, 11, 12}:
             activation_default = 32 * mib
         else:
             activation_default = 16 * mib
@@ -128,7 +176,7 @@ def _kernel_threshold(tensor: torch.Tensor, op: str, *related: torch.Tensor) -> 
         mib = 1024 * 1024
         if capability is not None and capability[0] == 8:
             group_norm_default = mib
-        elif capability is not None and capability[0] in {10, 12}:
+        elif capability is not None and capability[0] in {10, 11, 12}:
             group_norm_default = 4 * mib
         else:
             group_norm_default = 2 * mib
@@ -144,6 +192,8 @@ def _eager_kernel_threshold_cached(
     related_dtypes: tuple[torch.dtype, ...],
     override: str | None,
 ) -> int:
+    """Eager-only threshold for one ``(device, dtype, op, related_dtypes, override)``."""
+
     profile = kernel_device_profile(device)
     capability = profile.compute_capability
     if op == "residual_gate_add":
@@ -168,7 +218,7 @@ def _eager_kernel_threshold_cached(
             default = 4 * mib
         elif capability is not None and capability[0] == 8:
             default = 8 * mib
-        elif capability is not None and capability[0] in {10, 12}:
+        elif capability is not None and capability[0] in {10, 11, 12}:
             default = 32 * mib
         else:
             default = 16 * mib
@@ -177,7 +227,7 @@ def _eager_kernel_threshold_cached(
         mib = 1024 * 1024
         if capability is not None and capability[0] == 8:
             default = mib
-        elif capability is not None and capability[0] in {10, 12}:
+        elif capability is not None and capability[0] in {10, 11, 12}:
             default = 4 * mib
         else:
             default = 2 * mib
@@ -186,6 +236,12 @@ def _eager_kernel_threshold_cached(
 
 
 def _triton_device_supported(tensor: torch.Tensor) -> bool:
+    """Return whether *tensor* may attempt an in-tree Triton launch.
+
+    Compiled graphs cannot call :func:`triton_tensor_eligible` (it is not
+    dynamo-friendly), so SM + dtype are re-checked from capability tuples.
+    """
+
     if not torch.compiler.is_compiling():
         eligible = triton_tensor_eligible(tensor)
         if eligible:
@@ -194,26 +250,13 @@ def _triton_device_supported(tensor: torch.Tensor) -> bool:
     if not tensor.is_cuda or bool(getattr(torch.version, "hip", None)):
         return False
     capability = torch.cuda.get_device_capability(tensor.device)
-    known_capabilities = {
-        (7, 0),
-        (7, 5),
-        (8, 0),
-        (8, 6),
-        (8, 7),
-        (8, 9),
-        (9, 0),
-        (10, 0),
-        (10, 3),
-        (12, 0),
-        (12, 1),
-    }
     allow_untested = os.getenv("WORLDFOUNDRY_ALLOW_UNTESTED_GPU_KERNELS", "").strip().casefold() in {
         "1",
         "true",
         "yes",
         "on",
     }
-    if capability not in known_capabilities and not allow_untested:
+    if capability not in QUALIFIED_TRITON_CAPABILITIES and not allow_untested:
         return False
     return tensor.dtype != torch.bfloat16 or capability >= (8, 0)
 
@@ -223,7 +266,7 @@ def _configure_triton_cache_once() -> None:
     """Configure the persistent cache before the first eager Triton import."""
 
     try:
-        from worldfoundry.runtime.compile_cache import configure_persistent_compile_cache
+        from worldfoundry.core.execution.compile_cache import configure_persistent_compile_cache
 
         configure_persistent_compile_cache(namespace="in-tree-kernels")
     except (ImportError, OSError):
@@ -231,15 +274,26 @@ def _configure_triton_cache_once() -> None:
         return
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Predicates — inference-only, same CUDA device, last-dim stride 1
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _inference_only(*tensors: torch.Tensor) -> bool:
+    """Refuse Triton when autograd would need a backward the kernels do not implement."""
+
     return not (torch.is_grad_enabled() and any(tensor.requires_grad for tensor in tensors))
 
 
 def _same_cuda_device(*tensors: torch.Tensor) -> bool:
+    """Require a non-empty set of CUDA tensors that share one device."""
+
     return len(tensors) > 0 and all(tensor.is_cuda and tensor.device == tensors[0].device for tensor in tensors)
 
 
 def _broadcastable_to(value: torch.Tensor, target: torch.Tensor) -> bool:
+    """Return whether *value* expands exactly onto *target* (not merely jointly)."""
+
     try:
         return torch.broadcast_shapes(value.shape, target.shape) == target.shape
     except RuntimeError:
@@ -247,10 +301,28 @@ def _broadcastable_to(value: torch.Tensor, target: torch.Tensor) -> bool:
 
 
 def _regular_contiguous(tensor: torch.Tensor) -> bool:
+    """Require dense last-dim storage; channels-last activations skip Triton."""
+
     return tensor.is_contiguous() and tensor.stride(-1) == 1
 
 
+def _storage_overlaps(first: torch.Tensor, second: torch.Tensor) -> bool:
+    """Conservatively detect aliasing before an opaque mutating launch."""
+
+    try:
+        return bool(torch._C._overlaps(first, second))
+    except (AttributeError, RuntimeError, TypeError):
+        # An unknown overlap relation is unsafe for a fail-closed mutation.
+        return True
+
+
 def _workload_signature(*tensors: torch.Tensor, extra: tuple[object, ...] = ()) -> tuple[object, ...]:
+    """Build the registry cache key: device, SM, grad mode, shapes, strides, extras.
+
+    SM is part of the key so a mixed A100/H100 process cannot reuse a winner
+    measured on the other architecture.
+    """
+
     first = tensors[0]
     capability: tuple[int, int] | str = "cpu"
     if first.is_cuda:
@@ -277,11 +349,20 @@ def _workload_signature(*tensors: torch.Tensor, extra: tuple[object, ...] = ()) 
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# silu_mul — two same-shape tensors; threshold shares the gated-activation env
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _silu_mul_torch(gate: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
+    """Exact ``F.silu(gate) * value`` used as the semantic fallback."""
+
     return F.silu(gate) * value
 
 
 def _eligible_silu_mul(gate: torch.Tensor, value: torch.Tensor) -> bool:
+    """Same CUDA device, matching float dtype/shape, contiguous, inference-only."""
+
     return (
         _inference_only(gate, value)
         and _same_cuda_device(gate, value)
@@ -296,6 +377,8 @@ def _eligible_silu_mul(gate: torch.Tensor, value: torch.Tensor) -> bool:
 
 
 def _silu_mul_triton(gate: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
+    """Lazy-import the pointwise Triton launch after the predicate has passed."""
+
     from worldfoundry.core.kernels.triton_diffusion import silu_mul as implementation
 
     return implementation(gate, value)
@@ -305,9 +388,12 @@ def silu_mul(gate: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
     """Return ``silu(gate) * value`` with an eager inference fast path."""
 
     requested = _requested_kernel_backend()
-    if torch.compiler.is_compiling() or requested in _TORCH_BACKENDS or (
-        requested == "auto"
-        and gate.numel() < _kernel_threshold(gate, "silu_mul")
+    if (
+        torch.compiler.is_compiling()
+        or requested in _TORCH_BACKENDS
+        or (
+            requested == "auto" and not kernel_autotune_enabled() and gate.numel() < _kernel_threshold(gate, "silu_mul")
+        )
     ):
         return _silu_mul_torch(gate, value)
     return KERNEL_REGISTRY.dispatch(
@@ -319,12 +405,21 @@ def silu_mul(gate: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# silu_and_mul — last dim even; element floor uses half the packed numel
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _silu_and_mul_torch(input: torch.Tensor) -> torch.Tensor:
+    """Split the last dimension and apply the same SiLU×value contract."""
+
     gate, value = input.chunk(2, dim=-1)
     return F.silu(gate) * value
 
 
 def _eligible_silu_and_mul(input: torch.Tensor) -> bool:
+    """Require an even last dim so the packed kernel's half-feature index is exact."""
+
     return (
         _inference_only(input)
         and _triton_device_supported(input)
@@ -338,6 +433,8 @@ def _eligible_silu_and_mul(input: torch.Tensor) -> bool:
 
 
 def _silu_and_mul_triton(input: torch.Tensor) -> torch.Tensor:
+    """Lazy-import the packed SiLU×mul Triton launch."""
+
     from worldfoundry.core.kernels.triton_diffusion import silu_and_mul as implementation
 
     return implementation(input)
@@ -348,8 +445,14 @@ def silu_and_mul(input: torch.Tensor) -> torch.Tensor:
 
     requested = _requested_kernel_backend()
     output_elements = input.numel() // 2
-    if torch.compiler.is_compiling() or requested in _TORCH_BACKENDS or (
-        requested == "auto" and output_elements < _kernel_threshold(input, "silu_mul")
+    if (
+        torch.compiler.is_compiling()
+        or requested in _TORCH_BACKENDS
+        or (
+            requested == "auto"
+            and not kernel_autotune_enabled()
+            and output_elements < _kernel_threshold(input, "silu_mul")
+        )
     ):
         return _silu_and_mul_torch(input)
     return KERNEL_REGISTRY.dispatch(
@@ -360,6 +463,11 @@ def silu_and_mul(input: torch.Tensor) -> torch.Tensor:
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# group_norm_silu — NCHW/NCDHW contiguous; channels divisible by num_groups
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _group_norm_silu_torch(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -367,6 +475,8 @@ def _group_norm_silu_torch(
     num_groups: int,
     eps: float,
 ) -> torch.Tensor:
+    """Vendor GroupNorm then SiLU; the semantic source of truth."""
+
     return F.silu(F.group_norm(input, int(num_groups), weight=weight, bias=bias, eps=float(eps)))
 
 
@@ -377,6 +487,8 @@ def _eligible_group_norm_silu(
     num_groups: int,
     eps: float,
 ) -> bool:
+    """Contiguous NCHW-family tensors with matching affine vectors of length C."""
+
     del eps
     return (
         _inference_only(input, weight, bias)
@@ -403,6 +515,8 @@ def _group_norm_silu_triton(
     num_groups: int,
     eps: float,
 ) -> torch.Tensor:
+    """Lazy-import the in-tree GroupNorm+SiLU Triton kernel."""
+
     from worldfoundry.core.kernels.triton_group_norm_silu import group_norm_silu as implementation
 
     return implementation(input, weight, bias, int(num_groups), float(eps))
@@ -418,14 +532,20 @@ def group_norm_silu(
 ) -> torch.Tensor:
     """Fuse affine GroupNorm and SiLU for contiguous NCHW/NCDHW tensors.
 
-    The eager accelerator is adapted from SGLang's Apache-2.0 Triton kernel;
-    training, CPU, unsupported layouts, and compiled graphs use exact PyTorch.
+    The eager accelerator uses the in-tree Triton kernel; training, CPU,
+    unsupported layouts, and compiled graphs use exact PyTorch.
     """
 
     args = (input, weight, bias, int(num_groups), float(eps))
     requested = _requested_kernel_backend()
-    if torch.compiler.is_compiling() or requested in _TORCH_BACKENDS or (
-        requested == "auto" and input.numel() < _kernel_threshold(input, "group_norm_silu")
+    if (
+        torch.compiler.is_compiling()
+        or requested in _TORCH_BACKENDS
+        or (
+            requested == "auto"
+            and not kernel_autotune_enabled()
+            and input.numel() < _kernel_threshold(input, "group_norm_silu")
+        )
     ):
         return _group_norm_silu_torch(*args)
     return KERNEL_REGISTRY.dispatch(
@@ -436,11 +556,20 @@ def group_norm_silu(
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# residual_gate_add — last dim ≤ 8192 so one program can hold the feature tile
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _residual_gate_torch(residual: torch.Tensor, update: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+    """Exact ``residual + update * gate`` including broadcast *gate*."""
+
     return residual + update * gate
 
 
 def _eligible_residual_gate(residual: torch.Tensor, update: torch.Tensor, gate: torch.Tensor) -> bool:
+    """Matching residual/update shape; *gate* must broadcast onto residual."""
+
     return (
         _inference_only(residual, update, gate)
         and _same_cuda_device(residual, update, gate)
@@ -458,24 +587,58 @@ def _eligible_residual_gate(residual: torch.Tensor, update: torch.Tensor, gate: 
     )
 
 
+def _eligible_residual_gate_inplace(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    gate: torch.Tensor,
+) -> bool:
+    """Require the functional contract plus non-overlapping read operands."""
+
+    return (
+        _eligible_residual_gate(residual, update, gate)
+        # The production Wan path is BF16. Limiting the mutating provider to
+        # this homogeneous contract lets its kernel reproduce the eager
+        # BF16 product materialization bit-for-bit; mixed/FP16/FP32 calls use
+        # the portable expression instead of silently changing FMA rounding.
+        and residual.dtype == update.dtype == gate.dtype == torch.bfloat16
+        and not _storage_overlaps(residual, update)
+        and not _storage_overlaps(residual, gate)
+    )
+
+
 def _residual_gate_triton(residual: torch.Tensor, update: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+    """Lazy-import fused residual gating."""
+
     from worldfoundry.core.kernels.triton_diffusion import residual_gate as implementation
 
     return implementation(residual, update, gate)
 
 
-def residual_gate_add(residual: torch.Tensor, update: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+def _residual_gate_inplace_torch(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    gate: torch.Tensor,
+) -> torch.Tensor:
+    """Portable in-place fallback preserving PyTorch expression semantics."""
+
+    return residual.add_(update * gate)
+
+
+def residual_gate_add(residual: torch.Tensor, update: torch.Tensor, gate: torch.Tensor, *, backend: str | None = None) -> torch.Tensor:
     """Return ``residual + update * gate`` with broadcast-aware fusion."""
 
     # Inductor already emits one pointwise kernel for this expression and can
     # fuse it with adjacent compiled work. Keep the explicit Triton kernel for
     # eager execution, where PyTorch otherwise launches multiply and add
     # separately. An explicit backend override remains available for profiling.
-    requested = _requested_kernel_backend()
-    if torch.compiler.is_compiling() or requested in _TORCH_BACKENDS or (
-        requested == "auto"
-        and (
-            residual.numel() < _kernel_threshold(residual, "residual_gate_add", update, gate)
+    requested = _requested_kernel_backend() if backend is None else backend
+    if (
+        torch.compiler.is_compiling()
+        or requested in _TORCH_BACKENDS
+        or (
+            requested == "auto"
+            and not kernel_autotune_enabled()
+            and (residual.numel() < _kernel_threshold(residual, "residual_gate_add", update, gate))
         )
     ):
         return _residual_gate_torch(residual, update, gate)
@@ -486,7 +649,170 @@ def residual_gate_add(residual: torch.Tensor, update: torch.Tensor, gate: torch.
         update,
         gate,
         signature=_workload_signature(residual, update, gate),
+        backend=backend,
     )
+
+
+def residual_gate_add_(
+    residual: torch.Tensor,
+    update: torch.Tensor,
+    gate: torch.Tensor,
+) -> torch.Tensor:
+    """Update ``residual`` with ``update * gate`` using one eligible kernel.
+
+    This inference-only alias-output variant avoids both an activation-sized
+    allocation and the two pointwise launches produced by ``add_(update *
+    gate)``.  Unsupported devices and autograd-sensitive calls retain the
+    exact portable in-place expression.
+    """
+
+    requested = _requested_kernel_backend()
+    if (
+        torch.compiler.is_compiling()
+        or requested in _TORCH_BACKENDS
+        or (
+            requested == "auto"
+            and not kernel_autotune_enabled()
+            and residual.numel()
+            < _kernel_threshold(residual, "residual_gate_add", update, gate)
+        )
+    ):
+        return _residual_gate_inplace_torch(residual, update, gate)
+    # A mutating candidate must never enter the generic recover-and-retry
+    # registry: if a launch writes part of ``residual`` and then fails, running
+    # the fallback would apply the update twice to that prefix.  Eligibility
+    # and import failures happen before launch and may safely use PyTorch;
+    # every exception from the custom op itself propagates to the caller.
+    if not _eligible_residual_gate_inplace(residual, update, gate):
+        result = _residual_gate_inplace_torch(residual, update, gate)
+        _publish_dispatch_receipt(
+            op="residual_gate_add_",
+            implementation="torch",
+            backend="torch",
+            accelerated=False,
+            fallback=True,
+            cache_hit=False,
+            failures=[],
+            quarantined=[],
+            reason="mutating Triton contract was not eligible",
+        )
+        return result
+    if requested not in {
+        "auto",
+        "triton",
+        "triton_residual_gate_add_inplace",
+    }:
+        result = _residual_gate_inplace_torch(residual, update, gate)
+        _publish_dispatch_receipt(
+            op="residual_gate_add_",
+            implementation="torch",
+            backend="torch",
+            accelerated=False,
+            fallback=True,
+            cache_hit=False,
+            failures=[],
+            quarantined=[],
+            reason=f"requested backend {requested!r} does not provide this mutation",
+        )
+        return result
+    try:
+        from worldfoundry.core.kernels.triton_diffusion import (
+            residual_gate_inplace as implementation,
+        )
+    except (ImportError, OSError) as error:
+        result = _residual_gate_inplace_torch(residual, update, gate)
+        _publish_dispatch_receipt(
+            op="residual_gate_add_",
+            implementation="torch",
+            backend="torch",
+            accelerated=False,
+            fallback=True,
+            cache_hit=False,
+            failures=[f"triton import: {type(error).__name__}: {error}"],
+            quarantined=[],
+            reason="Triton implementation could not be imported before launch",
+        )
+        return result
+    with torch.cuda.device(residual.device):
+        result = implementation(residual, update, gate)
+    _publish_dispatch_receipt(
+        op="residual_gate_add_",
+        implementation="triton_residual_gate_add_inplace",
+        backend="triton",
+        accelerated=True,
+        fallback=False,
+        cache_hit=False,
+        failures=[],
+        quarantined=[],
+    )
+    return result
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# scale_shift — AdaLN without the preceding norm; shares the AdaLN size floor
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def _scale_shift_torch(x: torch.Tensor, scale: torch.Tensor, shift: torch.Tensor) -> torch.Tensor:
+    """Exact ``x * (1 + scale) + shift`` including eager dtype promotions."""
+
+    return x * (1 + scale) + shift
+
+
+def _eligible_scale_shift(x: torch.Tensor, scale: torch.Tensor, shift: torch.Tensor) -> bool:
+    """Broadcast scale/shift onto a contiguous 2D–5D activation."""
+
+    return (
+        _inference_only(x, scale, shift)
+        and _same_cuda_device(x, scale, shift)
+        and all(_triton_device_supported(tensor) for tensor in (x, scale, shift))
+        and x.dtype in _FLOAT_DTYPES
+        and scale.dtype in _FLOAT_DTYPES
+        and shift.dtype in _FLOAT_DTYPES
+        and 2 <= x.ndim <= 5
+        and x.numel() > 0
+        and _regular_contiguous(x)
+        and _broadcastable_to(scale, x)
+        and _broadcastable_to(shift, x)
+    )
+
+
+def _scale_shift_triton(x: torch.Tensor, scale: torch.Tensor, shift: torch.Tensor) -> torch.Tensor:
+    """Lazy-import fused scale/shift with eager BF16 rounding parity."""
+
+    from worldfoundry.core.kernels.triton_diffusion import scale_shift as implementation
+
+    return implementation(x, scale, shift)
+
+
+def scale_shift(x: torch.Tensor, scale: torch.Tensor, shift: torch.Tensor, *, backend: str | None = None) -> torch.Tensor:
+    """Return ``x * (1 + scale) + shift`` with eager BF16 rounding parity."""
+
+    requested = _requested_kernel_backend() if backend is None else backend
+    if (
+        torch.compiler.is_compiling()
+        or requested in _TORCH_BACKENDS
+        or (
+            requested == "auto"
+            and not kernel_autotune_enabled()
+            and x.numel() < _kernel_threshold(x, "layer_norm_scale_shift")
+        )
+    ):
+        return _scale_shift_torch(x, scale, shift)
+    return KERNEL_REGISTRY.dispatch(
+        "scale_shift",
+        _scale_shift_torch,
+        x,
+        scale,
+        shift,
+        signature=_workload_signature(x, scale, shift),
+        backend=backend,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# layer_norm_scale_shift — last dim ≤ 8192; *upcast* is torch-only (Triton drops it)
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def _layer_norm_scale_shift_torch(
@@ -496,6 +822,8 @@ def _layer_norm_scale_shift_torch(
     eps: float,
     upcast: bool,
 ) -> torch.Tensor:
+    """Affine-free LayerNorm then AdaLN; *upcast* matches Wan's fp32 norm path."""
+
     normalized_input = x.float() if upcast else x
     normalized = F.layer_norm(normalized_input, (x.shape[-1],), weight=None, bias=None, eps=eps)
     if upcast:
@@ -510,6 +838,8 @@ def _eligible_layer_norm_scale_shift(
     eps: float,
     upcast: bool,
 ) -> bool:
+    """Contiguous last-dim LayerNorm tile; *upcast* does not change eligibility."""
+
     del eps, upcast
     return (
         _inference_only(x, scale, shift)
@@ -534,10 +864,11 @@ def _layer_norm_scale_shift_triton(
     eps: float,
     upcast: bool,
 ) -> torch.Tensor:
-    del upcast
+    """Keep vendor LayerNorm reduction and fuse the following AdaLN arithmetic."""
+
     from worldfoundry.core.kernels.triton_diffusion import layer_norm_scale_shift as implementation
 
-    return implementation(x, scale, shift, eps)
+    return implementation(x, scale, shift, eps, upcast=upcast)
 
 
 def layer_norm_scale_shift(
@@ -547,12 +878,19 @@ def layer_norm_scale_shift(
     eps: float = 1e-6,
     *,
     upcast: bool = False,
+    backend: str | None = None,
 ) -> torch.Tensor:
     """Fuse affine-free LayerNorm with AdaLN scale and shift."""
 
-    requested = _requested_kernel_backend()
-    if torch.compiler.is_compiling() or requested in _TORCH_BACKENDS or (
-        requested == "auto" and x.numel() < _kernel_threshold(x, "layer_norm_scale_shift")
+    requested = _requested_kernel_backend() if backend is None else backend
+    if (
+        torch.compiler.is_compiling()
+        or requested in _TORCH_BACKENDS
+        or (
+            requested == "auto"
+            and not kernel_autotune_enabled()
+            and x.numel() < _kernel_threshold(x, "layer_norm_scale_shift")
+        )
     ):
         return _layer_norm_scale_shift_torch(x, scale, shift, eps, upcast)
     return KERNEL_REGISTRY.dispatch(
@@ -564,7 +902,13 @@ def layer_norm_scale_shift(
         eps,
         upcast,
         signature=_workload_signature(x, scale, shift, extra=(float(eps), bool(upcast))),
+        backend=backend,
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# rms_norm_scale_shift — optional learned weight; same AdaLN size floor
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def _rms_norm_scale_shift_torch(
@@ -574,6 +918,8 @@ def _rms_norm_scale_shift_torch(
     shift: torch.Tensor,
     eps: float,
 ) -> torch.Tensor:
+    """Vendor RMSNorm then AdaLN; weight may be ``None``."""
+
     return F.rms_norm(x, (x.shape[-1],), weight=weight, eps=eps) * (1 + scale) + shift
 
 
@@ -584,6 +930,8 @@ def _eligible_rms_norm_scale_shift(
     shift: torch.Tensor,
     eps: float,
 ) -> bool:
+    """Weight, if present, must be a 1-D vector of the last dimension."""
+
     del eps
     tensors = (x, scale, shift) if weight is None else (x, weight, scale, shift)
     return (
@@ -609,6 +957,8 @@ def _rms_norm_scale_shift_triton(
     shift: torch.Tensor,
     eps: float,
 ) -> torch.Tensor:
+    """Lazy-import fused RMSNorm+AdaLN."""
+
     from worldfoundry.core.kernels.triton_diffusion import rms_norm_scale_shift as implementation
 
     return implementation(x, weight, scale, shift, eps)
@@ -625,8 +975,14 @@ def rms_norm_scale_shift(
     """Fuse RMSNorm with broadcast scale/shift modulation."""
 
     requested = _requested_kernel_backend()
-    if torch.compiler.is_compiling() or requested in _TORCH_BACKENDS or (
-        requested == "auto" and x.numel() < _kernel_threshold(x, "layer_norm_scale_shift")
+    if (
+        torch.compiler.is_compiling()
+        or requested in _TORCH_BACKENDS
+        or (
+            requested == "auto"
+            and not kernel_autotune_enabled()
+            and x.numel() < _kernel_threshold(x, "layer_norm_scale_shift")
+        )
     ):
         return _rms_norm_scale_shift_torch(x, weight, scale, shift, eps)
     tensors = (x, scale, shift) if weight is None else (x, weight, scale, shift)
@@ -642,6 +998,11 @@ def rms_norm_scale_shift(
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# qk_rmsnorm_rope — [B, S, H, D] with a fixed set of even head dims
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _qk_rmsnorm_rope_torch(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -651,11 +1012,15 @@ def _qk_rmsnorm_rope_torch(
     eps: float,
     rope_fp32: bool,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    """Wan/Gamma RMSNorm+RoPE reference; ``F.rms_norm`` is not used (mixed-weight promotion)."""
+
     # Match the Wan/Gamma RMSNorm contract exactly: accumulate in fp32,
     # round the normalized activation back to its projection dtype, then
     # apply the learned weight. ``F.rms_norm`` has device-dependent mixed-
     # weight promotion behavior and is therefore not the semantic reference.
     def normalize(value: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+        """fp32 reduce, round to projection dtype, then multiply the learned weight."""
+
         normed = value.float() * torch.rsqrt(value.float().square().mean(dim=-1, keepdim=True) + eps)
         return normed.to(value.dtype) * weight
 
@@ -681,6 +1046,11 @@ def _qk_rmsnorm_rope_torch(
     return q.to(output_dtype), k.to(output_dtype)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# hidden_qk_rmsnorm_rope_3d — packed [B, S, H*D]; chunked fp64 rotate in fallback
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _hidden_qk_rmsnorm_rope_3d_torch(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -696,6 +1066,14 @@ def _hidden_qk_rmsnorm_rope_3d_torch(
     head_start: int,
     head_end: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    """Full-hidden RMSNorm + interleaved 3D RoPE at the table precision.
+
+    A real ``[..., 2]`` table stores precomputed cosine/sine pairs.  Complex64
+    and float32 tables therefore rotate in fp32, while complex128 and float64
+    tables retain the historical fp64 reference.  The latter is chunked to
+    bound its activation slabs.
+    """
+
     hidden_size = q.shape[-1]
     if freqs.is_complex():
         cosine_table = freqs.real
@@ -710,6 +1088,8 @@ def _hidden_qk_rmsnorm_rope_3d_torch(
     head_dim = hidden_size // num_heads
 
     def normalize(value: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+        """WanRMSNorm: fp32 rsqrt, round, then learned weight in the projection dtype."""
+
         value_float = value.float()
         normed = value_float * torch.rsqrt(value_float.square().mean(dim=-1, keepdim=True) + eps)
         return normed.to(value.dtype) * weight
@@ -742,10 +1122,17 @@ def _hidden_qk_rmsnorm_rope_3d_torch(
     valid = positions < int(valid_tokens)
     selected_cosine = torch.where(valid[:, None], selected_cosine, torch.ones_like(selected_cosine))
     selected_sine = torch.where(valid[:, None], selected_sine, torch.zeros_like(selected_sine))
-    selected_cosine = selected_cosine[None, :, None, :].double()
-    selected_sine = selected_sine[None, :, None, :].double()
+    rope_compute_dtype = (
+        torch.float64
+        if freqs.dtype in {torch.float64, torch.complex128}
+        else torch.float32
+    )
+    selected_cosine = selected_cosine[None, :, None, :].to(rope_compute_dtype)
+    selected_sine = selected_sine[None, :, None, :].to(rope_compute_dtype)
 
     def rotate(value: torch.Tensor) -> torch.Tensor:
+        """Apply packed T/H/W RoPE with bounded compute-precision chunks."""
+
         output = value.clone()
         batch, sequence = value.shape[:2]
         selected_heads = int(head_end) - int(head_start)
@@ -773,16 +1160,16 @@ def _hidden_qk_rmsnorm_rope_3d_torch(
             )
             for sequence_start in range(0, sequence, sequence_per_chunk):
                 sequence_end = min(sequence_start + sequence_per_chunk, sequence)
-                selected = value_heads[
-                    :, sequence_start:sequence_end, chunk_head_start:chunk_head_end, :
-                ].view(batch, sequence_end - sequence_start, chunk_heads, pairs, 2)
-                destination = output_heads[
-                    :, sequence_start:sequence_end, chunk_head_start:chunk_head_end, :
-                ].view(batch, sequence_end - sequence_start, chunk_heads, pairs, 2)
+                selected = value_heads[:, sequence_start:sequence_end, chunk_head_start:chunk_head_end, :].view(
+                    batch, sequence_end - sequence_start, chunk_heads, pairs, 2
+                )
+                destination = output_heads[:, sequence_start:sequence_end, chunk_head_start:chunk_head_end, :].view(
+                    batch, sequence_end - sequence_start, chunk_heads, pairs, 2
+                )
                 cosine = selected_cosine[:, sequence_start:sequence_end]
                 sine = selected_sine[:, sequence_start:sequence_end]
-                even = selected[..., 0].double()
-                odd = selected[..., 1].double()
+                even = selected[..., 0].to(rope_compute_dtype)
+                odd = selected[..., 1].to(rope_compute_dtype)
                 destination[..., 0].copy_(even * cosine - odd * sine)
                 destination[..., 1].copy_(odd * cosine + even * sine)
         return output
@@ -809,6 +1196,8 @@ def _eligible_hidden_qk_rmsnorm_rope_3d(
     head_start: int,
     head_end: int,
 ) -> bool:
+    """Packed ``[B, S, hidden]`` with even head_dim ≥ 6 and a valid freq table."""
+
     del eps
     hidden_size = q.shape[-1] if q.ndim == 3 else 0
     head_dim = hidden_size // int(num_heads) if num_heads else 0
@@ -816,7 +1205,10 @@ def _eligible_hidden_qk_rmsnorm_rope_3d(
     return (
         _inference_only(q, k, q_weight, k_weight, freqs)
         and _same_cuda_device(q, k, q_weight, k_weight, freqs)
-        and all(_triton_device_supported(tensor) for tensor in (q, k, q_weight, k_weight, freqs))
+        and all(
+            _triton_device_supported(tensor)
+            for tensor in (q, k, q_weight, k_weight, freqs)
+        )
         and q.dtype in _FLOAT_DTYPES
         and k.dtype == q.dtype
         and q_weight.dtype == q.dtype
@@ -831,7 +1223,13 @@ def _eligible_hidden_qk_rmsnorm_rope_3d(
         and head_dim >= 6
         and head_dim % 2 == 0
         and q_weight.shape == k_weight.shape == (hidden_size,)
-        and ((freqs.ndim == 2 and freqs.is_complex()) or (freqs.ndim == 3 and freqs.shape[-1] == 2))
+        # Triton consumes an explicit float32 cosine/sine table.  Complex
+        # tensors are deliberately excluded because the shared capability
+        # gate does not support complex dtypes; fp64 remains on the exact
+        # portable path instead of being silently truncated in the kernel.
+        and freqs.dtype == torch.float32
+        and freqs.ndim == 3
+        and freqs.shape[-1] == 2
         and freqs.shape[1] == head_dim // 2
         and frames > 0
         and height > 0
@@ -859,6 +1257,8 @@ def _hidden_qk_rmsnorm_rope_3d_triton(
     head_start: int,
     head_end: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    """Lazy-import packed 3D RoPE; keyword args match the public operator."""
+
     from worldfoundry.core.kernels.triton_diffusion import hidden_qk_rmsnorm_rope_3d as implementation
 
     return implementation(
@@ -937,6 +1337,11 @@ def hidden_qk_rmsnorm_rope_3d(
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# qk eligibility / launch — fixed even head dims; complex freqs stay on torch
+# ──────────────────────────────────────────────────────────────────────────
+
+
 def _eligible_qk_rmsnorm_rope(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -946,6 +1351,8 @@ def _eligible_qk_rmsnorm_rope(
     eps: float,
     rope_fp32: bool,
 ) -> bool:
+    """``[B, S, H, D]`` with D in the supported even set and freqs aligned to S."""
+
     del eps, rope_fp32
     return (
         _inference_only(q, k, q_weight, k_weight, freqs)
@@ -982,6 +1389,8 @@ def _qk_rmsnorm_rope_triton(
     eps: float,
     rope_fp32: bool,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    """Lazy-import per-head RMSNorm+RoPE."""
+
     from worldfoundry.core.kernels.triton_diffusion import qk_rmsnorm_rope as implementation
 
     return implementation(q, k, q_weight, k_weight, freqs, eps, rope_fp32)
@@ -1020,13 +1429,21 @@ def qk_rmsnorm_rope(
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Registration — once per process; AdaLN/SiLU autotune, RoPE is predicate-only
+# ──────────────────────────────────────────────────────────────────────────
+
+
 @lru_cache(maxsize=1)
 def _register_kernels() -> None:
+    """Bind Triton candidates; RoPE ops skip numerical autotune (timing is too noisy)."""
+
     KERNEL_REGISTRY.register(
         "group_norm_silu",
         backend="triton",
         name="triton_group_norm_silu",
         priority=100,
+        autotune=True,
         implementation=_group_norm_silu_triton,
         predicate=_eligible_group_norm_silu,
     )
@@ -1035,6 +1452,7 @@ def _register_kernels() -> None:
         backend="triton",
         name="triton_silu_and_mul",
         priority=100,
+        autotune=True,
         implementation=_silu_and_mul_triton,
         predicate=_eligible_silu_and_mul,
     )
@@ -1043,6 +1461,7 @@ def _register_kernels() -> None:
         backend="triton",
         name="triton_silu_mul",
         priority=100,
+        autotune=True,
         implementation=_silu_mul_triton,
         predicate=_eligible_silu_mul,
     )
@@ -1051,14 +1470,25 @@ def _register_kernels() -> None:
         backend="triton",
         name="triton_residual_gate_add",
         priority=100,
+        autotune=True,
         implementation=_residual_gate_triton,
         predicate=_eligible_residual_gate,
+    )
+    KERNEL_REGISTRY.register(
+        "scale_shift",
+        backend="triton",
+        name="triton_scale_shift",
+        priority=100,
+        autotune=True,
+        implementation=_scale_shift_triton,
+        predicate=_eligible_scale_shift,
     )
     KERNEL_REGISTRY.register(
         "layer_norm_scale_shift",
         backend="triton",
         name="triton_layer_norm_scale_shift",
         priority=100,
+        autotune=True,
         implementation=_layer_norm_scale_shift_triton,
         predicate=_eligible_layer_norm_scale_shift,
     )
@@ -1067,6 +1497,7 @@ def _register_kernels() -> None:
         backend="triton",
         name="triton_rms_norm_scale_shift",
         priority=100,
+        autotune=True,
         implementation=_rms_norm_scale_shift_triton,
         predicate=_eligible_rms_norm_scale_shift,
     )
@@ -1099,6 +1530,7 @@ __all__ = [
     "qk_rmsnorm_rope",
     "rms_norm_scale_shift",
     "residual_gate_add",
+    "residual_gate_add_",
     "silu_and_mul",
     "silu_mul",
 ]

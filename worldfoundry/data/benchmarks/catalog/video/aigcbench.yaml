@@ -1,5 +1,7 @@
 id: aigcbench
 name: AIGCBench
+publisher: Chinese Academy of Sciences
+publisher_kind: institute
 benchmark_kind:
 - image-to-video
 - video-generation-quality
@@ -130,6 +132,18 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  scoring:
+    engines: [video_quality]
+    hooks:
+      video_quality: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_aigcbench_video_quality_contract_file
+  normalization:
+    artifact_official_run: true
+    pass_generated_artifact_dir: true
+  official_script: worldfoundry/evaluation/tasks/execution/runners/aigcbench/run_aigcbench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.aigcbench.run_aigcbench_official_runner
+    generated_arg: null
+    limit_arg: --limit
   runner_target: worldfoundry.evaluation.tasks.contracts.external:AIGCBenchContract
   validation_command:
   - worldfoundry-eval
@@ -162,6 +176,8 @@ runner:
   - Full leaderboard validation still requires generated videos, reference assets, and CLIP/DOVER/flow metric outputs.
 integration:
   status: integrated
+  tier: in_tree
+  hf_dataset_id: stevenfan/AIGCBench_v1.0
   blocked_reasons:
   - Official repository/source metadata and official-result normalizer are integrated.
   - Full validation requires generated videos or rollouts for the official prompt/task suite.

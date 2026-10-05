@@ -51,52 +51,7 @@ def canonicalize(text, keep_punctuation_exact_string=None):
     return text.strip()
 
 
-class HuggingfaceTokenizer:
-
-    def __init__(self, name, seq_len=None, clean=None, **kwargs):
-        assert clean in (None, 'whitespace', 'lower', 'canonicalize')
-        self.name = name
-        self.seq_len = seq_len
-        self.clean = clean
-
-        # init tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(name, **kwargs)
-        self.vocab_size = self.tokenizer.vocab_size
-
-    def __call__(self, sequence, **kwargs):
-        return_mask = kwargs.pop('return_mask', False)
-
-        # arguments
-        _kwargs = {'return_tensors': 'pt'}
-        if self.seq_len is not None:
-            _kwargs.update({
-                'padding': 'max_length',
-                'truncation': True,
-                'max_length': self.seq_len
-            })
-        _kwargs.update(**kwargs)
-
-        # tokenization
-        if isinstance(sequence, str):
-            sequence = [sequence]
-        if self.clean:
-            sequence = [self._clean(u) for u in sequence]
-        ids = self.tokenizer(sequence, **_kwargs)
-
-        # output
-        if return_mask:
-            return ids.input_ids, ids.attention_mask
-        else:
-            return ids.input_ids
-
-    def _clean(self, text):
-        if self.clean == 'whitespace':
-            text = whitespace_clean(basic_clean(text))
-        elif self.clean == 'lower':
-            text = whitespace_clean(basic_clean(text)).lower()
-        elif self.clean == 'canonicalize':
-            text = canonicalize(basic_clean(text))
-        return text
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import HuggingfaceTokenizer
 
 def fp16_clamp(x):
     if x.dtype == torch.float16 and torch.isinf(x).any():
@@ -147,58 +102,7 @@ class T5LayerNorm(nn.Module):
         return self.weight * x
 
 
-class T5Attention(nn.Module):
-
-    def __init__(self, dim, dim_attn, num_heads, dropout=0.1):
-        assert dim_attn % num_heads == 0
-        super(T5Attention, self).__init__()
-        self.dim = dim
-        self.dim_attn = dim_attn
-        self.num_heads = num_heads
-        self.head_dim = dim_attn // num_heads
-
-        # layers
-        self.q = nn.Linear(dim, dim_attn, bias=False)
-        self.k = nn.Linear(dim, dim_attn, bias=False)
-        self.v = nn.Linear(dim, dim_attn, bias=False)
-        self.o = nn.Linear(dim_attn, dim, bias=False)
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x, context=None, mask=None, pos_bias=None):
-        """
-        x:          [B, L1, C].
-        context:    [B, L2, C] or None.
-        mask:       [B, L2] or [B, L1, L2] or None.
-        """
-        # check inputs
-        context = x if context is None else context
-        b, n, c = x.size(0), self.num_heads, self.head_dim
-
-        # compute query, key, value
-        q = self.q(x).view(b, -1, n, c)
-        k = self.k(context).view(b, -1, n, c)
-        v = self.v(context).view(b, -1, n, c)
-
-        # attention bias
-        attn_bias = x.new_zeros(b, n, q.size(1), k.size(1))
-        if pos_bias is not None:
-            attn_bias += pos_bias
-        if mask is not None:
-            assert mask.ndim in [2, 3]
-            mask = mask.view(b, 1, 1,
-                             -1) if mask.ndim == 2 else mask.unsqueeze(1)
-            attn_bias.masked_fill_(mask == 0, torch.finfo(x.dtype).min)
-
-        # compute attention (T5 does not use scaling)
-        attn = torch.einsum('binc,bjnc->bnij', q, k) + attn_bias
-        attn = F.softmax(attn.float(), dim=-1).type_as(attn)
-        x = torch.einsum('bnij,bjnc->binc', attn, v)
-
-        # output
-        x = x.reshape(b, -1, n * c)
-        x = self.o(x)
-        x = self.dropout(x)
-        return x
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import T5Attention
 
 
 class T5FeedForward(nn.Module):
@@ -222,38 +126,7 @@ class T5FeedForward(nn.Module):
         return x
 
 
-class T5SelfAttention(nn.Module):
-
-    def __init__(self,
-                 dim,
-                 dim_attn,
-                 dim_ffn,
-                 num_heads,
-                 num_buckets,
-                 shared_pos=True,
-                 dropout=0.1):
-        super(T5SelfAttention, self).__init__()
-        self.dim = dim
-        self.dim_attn = dim_attn
-        self.dim_ffn = dim_ffn
-        self.num_heads = num_heads
-        self.num_buckets = num_buckets
-        self.shared_pos = shared_pos
-
-        # layers
-        self.norm1 = T5LayerNorm(dim)
-        self.attn = T5Attention(dim, dim_attn, num_heads, dropout)
-        self.norm2 = T5LayerNorm(dim)
-        self.ffn = T5FeedForward(dim, dim_ffn, dropout)
-        self.pos_embedding = None if shared_pos else T5RelativeEmbedding(
-            num_buckets, num_heads, bidirectional=True)
-
-    def forward(self, x, mask=None, pos_bias=None):
-        e = pos_bias if self.shared_pos else self.pos_embedding(
-            x.size(1), x.size(1))
-        x = fp16_clamp(x + self.attn(self.norm1(x), mask=mask, pos_bias=e))
-        x = fp16_clamp(x + self.ffn(self.norm2(x)))
-        return x
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import T5SelfAttention
 
 
 class T5CrossAttention(nn.Module):
@@ -299,50 +172,7 @@ class T5CrossAttention(nn.Module):
         return x
 
 
-class T5RelativeEmbedding(nn.Module):
-
-    def __init__(self, num_buckets, num_heads, bidirectional, max_dist=128):
-        super(T5RelativeEmbedding, self).__init__()
-        self.num_buckets = num_buckets
-        self.num_heads = num_heads
-        self.bidirectional = bidirectional
-        self.max_dist = max_dist
-
-        # layers
-        self.embedding = nn.Embedding(num_buckets, num_heads)
-
-    def forward(self, lq, lk):
-        device = self.embedding.weight.device
-        # rel_pos = torch.arange(lk).unsqueeze(0).to(device) - \
-        #     torch.arange(lq).unsqueeze(1).to(device)
-        rel_pos = torch.arange(lk, device=device).unsqueeze(0) - \
-            torch.arange(lq, device=device).unsqueeze(1)
-        rel_pos = self._relative_position_bucket(rel_pos)
-        rel_pos_embeds = self.embedding(rel_pos)
-        rel_pos_embeds = rel_pos_embeds.permute(2, 0, 1).unsqueeze(
-            0)  # [1, N, Lq, Lk]
-        return rel_pos_embeds.contiguous()
-
-    def _relative_position_bucket(self, rel_pos):
-        # preprocess
-        if self.bidirectional:
-            num_buckets = self.num_buckets // 2
-            rel_buckets = (rel_pos > 0).long() * num_buckets
-            rel_pos = torch.abs(rel_pos)
-        else:
-            num_buckets = self.num_buckets
-            rel_buckets = 0
-            rel_pos = -torch.min(rel_pos, torch.zeros_like(rel_pos))
-
-        # embeddings for small and large positions
-        max_exact = num_buckets // 2
-        rel_pos_large = max_exact + (torch.log(rel_pos.float() / max_exact) /
-                                     math.log(self.max_dist / max_exact) *
-                                     (num_buckets - max_exact)).long()
-        rel_pos_large = torch.min(
-            rel_pos_large, torch.full_like(rel_pos_large, num_buckets - 1))
-        rel_buckets += torch.where(rel_pos < max_exact, rel_pos, rel_pos_large)
-        return rel_buckets
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.model import T5RelativeEmbedding
 
 
 class T5Encoder(nn.Module):

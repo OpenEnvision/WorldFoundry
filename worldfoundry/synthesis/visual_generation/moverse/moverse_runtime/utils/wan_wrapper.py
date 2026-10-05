@@ -3,16 +3,28 @@ from typing import List, Optional
 
 import torch
 
-from worldfoundry.base_models.diffusion_model.video.wan.inference_scheduler import (
+from worldfoundry.base_models.diffusion_model.schedulers import (
     InferenceFlowMatchScheduler,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.runtime_components import (
-    WanTextEncoder as _WanTextEncoder,
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.resident import (
     WanVAEWrapper as _WanVAEWrapper,
 )
-from worldfoundry.base_models.diffusion_model.video.wan.variants.moverse import (
-    CausalMMDiTModel,
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.resident import (
+    WanTextEncoder as _WanTextEncoder,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.moverse.causal import (
     CausalWanModel,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.moverse.mmdit import (
+    CausalMMDiTModel,
+)
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.moverse.causal import (
+    causal_rope_apply_shared_height,
+    parse_memrope_cfg,
+)
+from worldfoundry.base_models.diffusion_model.loaders.wan_variant import (
+    load_wan_config,
+    load_wan_transformer,
 )
 
 
@@ -110,7 +122,7 @@ class WanDiffusionWrapper(torch.nn.Module):
                     local_attn_size=local_attn_size, sink_size=sink_size,
                     double_stream_layers=_double, cross_attn_norm=cross_attn_norm)
             else:
-                cfg = CausalWanModel.load_config(model_path)
+                cfg = load_wan_config(model_path)
                 self.model = CausalWanModel.from_config(
                     cfg, local_attn_size=local_attn_size, sink_size=sink_size)
             print(f"Initialised {model_name} architecture only (skip_pretrained=True).")
@@ -123,8 +135,14 @@ class WanDiffusionWrapper(torch.nn.Module):
                     double_stream_layers=_double, cross_attn_norm=cross_attn_norm)
                 print(f"CausalMMDiTModel initialised (weights must be loaded separately via load_causal_mmdit_weights).")
             else:
-                self.model = CausalWanModel.from_pretrained(
-                    model_path, local_attn_size=local_attn_size, sink_size=sink_size)
+                self.model = load_wan_transformer(
+                    CausalWanModel,
+                    model_path,
+                    additional_kwargs={
+                        "local_attn_size": local_attn_size,
+                        "sink_size": sink_size,
+                    },
+                )
         self.model.eval()
 
         self.fixed_timestep = fixed_timestep
@@ -144,9 +162,6 @@ class WanDiffusionWrapper(torch.nn.Module):
         # that different model instances remain isolated (no module-level patching).
         # recam_concat uses standard RoPE over the doubled frame sequence — no injection needed.
         if token_concat_and_share_rope and not recam_concat:
-            from worldfoundry.base_models.diffusion_model.video.wan.variants.moverse.causal_model import (
-                causal_rope_apply_shared_height,
-            )
             self.model.set_rope_fn(causal_rope_fn=causal_rope_apply_shared_height)
             print(f"Applied shared-height RoPE variant via set_rope_fn().")
         elif recam_concat:
@@ -168,9 +183,6 @@ class WanDiffusionWrapper(torch.nn.Module):
         # MemRoPE Phase 2 — dual-EMA Memory Tokens with per-half (gen/cond) three-tier cache.
         # Requires height-concat conditioning (token_concat_and_share_rope). Supersedes the
         # online_rope_indexing path. See SUMMARY_MEMROPE.md.
-        from worldfoundry.base_models.diffusion_model.video.wan.variants.moverse.causal_model import (
-            parse_memrope_cfg,
-        )
         self.memrope_cfg = parse_memrope_cfg(memrope)
         if self.memrope_cfg is not None:
             if not (not self.is_mmdit and token_concat_and_share_rope

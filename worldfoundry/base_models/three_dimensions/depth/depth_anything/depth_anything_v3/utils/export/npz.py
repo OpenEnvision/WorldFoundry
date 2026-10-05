@@ -18,7 +18,7 @@ import os
 import numpy as np
 
 from worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.specs import Prediction
-from worldfoundry.core.utils.parallel_execution import async_call
+from worldfoundry.core.execution.parallel_execution import async_call
 
 
 @async_call

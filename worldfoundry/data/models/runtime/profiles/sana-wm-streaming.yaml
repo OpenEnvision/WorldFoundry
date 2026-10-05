@@ -1,0 +1,50 @@
+schema_version: 2
+model_id: sana-wm-streaming
+display_name: SANA-WM Streaming
+task_family: world_model
+groups:
+- world
+- camera_control
+- causal_video
+source_repos:
+- url: https://github.com/NVlabs/Sana
+  revision: 00cb59836c297bd5fad401000ee65f9042f29d02
+- url: https://github.com/NVIDIA/FlashDreams
+  revision: 289da6f1d232de5abaa30d686c977b9c0040fe76
+checkpoints:
+- repo_id: Efficient-Large-Model/SANA-WM_streaming
+  revision: c7694938c854b1fcc29468e9514f1ea2d0c4ba8e
+  role: stage1_causal_vae_refiner_gemma3
+  required_paths:
+  - sana_dit/model.pt
+  - ltx2_causal_vae/config.json
+  - ltx2_causal_vae/diffusion_pytorch_model.safetensors
+  - refiner_diffusers/connectors/config.json
+  - refiner_diffusers/transformer/config.json
+  - gemma3_12b/model.safetensors.index.json
+- repo_id: Efficient-Large-Model/gemma-2-2b-it
+  revision: 569d9809d0c8b6722d4d31b5a77a2ec7a400650a
+  role: stage1_text_encoder
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions:
+  - camera_action
+  - world_action
+  - interaction
+artifact_kind: generated_world
+artifact_filename: sana-wm-streaming.mp4
+execution:
+  environment: _unified
+  backend_stage: native_diffusion
+  runtime_status: checkpoint_gpu_required
+  integration_status: integrated
+  pipeline_binding: sana-wm-streaming
+integration:
+  status: integrated
+notes:
+- The 241-pixel-frame default maps to 31 latent frames and ten active chunks.
+- Prefix recomputation keeps one anchor plus six Stage-1 history frames; the LTX-2
+  refiner sees at most eleven total context-plus-active latent frames.
+- Full Stage-1, Gemma-3, refiner, and causal-VAE inference requires a CUDA GPU.

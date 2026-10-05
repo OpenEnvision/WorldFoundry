@@ -11,7 +11,7 @@ from typing import Optional, Tuple, Type
 import torch
 from torch import nn
 
-from worldfoundry.core.nn.layers import LayerNorm2d, PositionEmbeddingRandom
+from worldfoundry.core.nn.blocks.layers import LayerNorm2d, PositionEmbeddingRandom
 
 
 class PromptEncoder(nn.Module):

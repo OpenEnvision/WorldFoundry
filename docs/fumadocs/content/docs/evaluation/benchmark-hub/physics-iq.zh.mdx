@@ -1,120 +1,44 @@
 ---
-title: Physics-IQ
-description: Physics-IQ 在 WorldFoundry 中的资产、runner、指标与限制。
+title: Physics-IQ Original
+description: "DeepMind 物理理解评测：把真实拍摄场景续写 5 秒。WorldFoundry 内置打分器，不编造榜单。"
 ---
 
+Physics-IQ（Google DeepMind）问的是视频模型会不会**续写真实物理**，不是像素好不好看。每个测试项给出一段实拍场景，模型必须生成接下来的 **5 秒**。发表协议是 **66 个场景 × 2 视角**（396 项）。WorldFoundry 的 contract 跟踪 **198 视频单次**划分。打分把续写与真实未来对比：基于运动 mask 的 **spatial / spatiotemporal** 一致度，再加 **MSE** 惩罚，聚合为 `physics_iq_score`（官方 `final_score_orig`）。当前官方代码还会输出分量截断的 `physics_iq_stable_score`。
 
-## 官方参考
+论文：[Physics-IQ](https://arxiv.org/abs/2501.09038)。项目：[physics-iq.github.io](https://physics-iq.github.io/)。代码：[google-deepmind/physics-IQ-benchmark](https://github.com/google-deepmind/physics-IQ-benchmark)。
 
-| 资源 | 链接 |
-| --- | --- |
-| 项目页 | [physics-iq.github.io](https://physics-iq.github.io/) |
-| 论文 | [arXiv:2501.09038](https://arxiv.org/abs/2501.09038) |
-| GitHub | [github.com/google-deepmind/physics-IQ-benchmark](https://github.com/google-deepmind/physics-IQ-benchmark) |
-| 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py` |
+和本 Hub 上那些操作导入器不同，WorldFoundry **仓内内置打分 runtime**（`run_physics_iq_official_runner.py`，经 `--protocol` 与 `physics-iq-verified` 共享），并把 prompt/场景元数据放在 `worldfoundry/data/benchmarks/assets/physics-iq`。官方**媒体**（真实视频、mask、条件帧）仍要从 DeepMind 下载——不在仓库里。[Physics-IQ Verified](/zh/docs/evaluation/benchmark-hub/physics-iq-verified) 用另一套数据；两者**不可互换**。
 
-## 简介
+<BenchmarkPageSections id="physics-iq" locale="zh" />
 
-Physics-IQ 评估生成视频是否符合真实物理行为，覆盖固体力学、流体、光学、热学与磁学。源 README 描述了真实拍摄视频、三个视角和每个场景两次 take。WorldFoundry 使用仓内打包的 take-1 prompt 描述，生成或检查仓内 runner 使用的 198 个候选视频。
+## 如何运行
 
-WorldFoundry 使用的 benchmark 代码已经在本仓库的 `worldfoundry/evaluation/tasks/execution/runners/physics_iq` 中。运行 WorldFoundry 评测时不要克隆上游代码仓库；上游项目文件只作为数据来源说明或完整数据资产来源。需要完整 leaderboard 风格评测资产时，可以从项目数据存储下载 benchmark 数据。
-
-## 准备资产
-
-- Prompt 描述：仓内路径为 `worldfoundry/data/benchmarks/assets/physics-iq/descriptions/descriptions.csv`；可用 `WORLDFOUNDRY_PHYSICS_IQ_DESCRIPTIONS` 或 `--descriptions-file` 覆盖。
-- 候选视频：将 `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` 指向 `.mp4` 文件目录。
-- 完整 Physics-IQ 评分资产：项目数据集需要 testing videos、switch frames、真实/生成 mask，以及 5 秒生成片段。WorldFoundry 不随包提供这些媒体资产。
-- 当前 WorldFoundry 评分需要的结果文件：提供 CSV 或 JSON，内容可以是 summary metric rows，也可以是 per-scenario rows。可设置 `WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH`，传入 `--official-results-path`，或把匹配 `physics_iq_results*.csv/json` 或 `results_summary.csv` 的文件放到生成产物目录下。
-- Checkpoint：WorldFoundry 的结果导入路径不需要 checkpoint。完整 Physics-IQ parity 所需的分割或 mask 生成栈需要单独准备。
-
-## 生成产物布局
-
-生成视频目录是扁平目录。文件 stem 会与描述文件中的 `generated_video_name` 匹配：
-
-```text
-generated_videos/
-  0001_perspective-left_trimmed-ball-and-block-fall.mp4
-  0002_perspective-center_trimmed-ball-and-block-fall.mp4
-  ...
-  results_summary.csv
-```
-
-runner 会按 198 个 take-1 stem 检查覆盖率。Physics-IQ 视频应只包含 switch frame 之后模型生成的 5 秒；把 conditioning 时间包含进去会改变分数含义。
-
-## 用 WorldFoundry 运行
-
-通过公开 CLI 导入已有 Physics-IQ 结果文件：
+导入已有的 `raw_metrics.csv`：
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id physics-iq \
   --mode official-validation \
-  --official-results-path /path/to/results_summary.csv \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/physics-iq/validation \
+  --official-results-path <raw_metrics.csv> \
+  --output-dir tmp/physics-iq/official-validation \
   --json
 ```
 
-通过公开 CLI 运行仓内评分包装器。该路径仍需要通过 `WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH` 提供结果 CSV/JSON，或把结果文件放到生成产物目录下：
+从按官方 scenario id 命名的 198 段续写重算：
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-export WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH=/path/to/results_summary.csv
-
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id physics-iq \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/physics-iq/run \
-  --json
-```
-
-直接调用仓内 runner 的同一评分路径：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated_videos
-export WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR=tmp/physics-iq/direct
-export WORLDFOUNDRY_PHYSICS_IQ_RESULTS_PATH=/path/to/results_summary.csv
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/physics-iq/generated_videos
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py \
+  --protocol physics-iq \
   --run-official \
+  --dataset-root /path/to/physics-iq-benchmark \
   --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" \
+  --output-dir tmp/physics-iq/official-run \
+  --strict \
   --json
 ```
 
-不执行评分包装器，只直接导入结果文件：
+缺场景视频时 `--strict` 会失败。`--generated-mask-dir` 可提供预计算 mask；否则 mask 来自真实视频。产物包括 `scorecard.json`（主键 `physics_iq_score`）、`raw_metrics.csv`、`official_metrics.json`，以及来源提供时的逐样本行。
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/physics_iq/run_physics_iq_official_runner.py \
-  --official-results-path /path/to/results_summary.csv \
-  --generated-artifact-dir /path/to/generated_videos \
-  --output-dir tmp/physics-iq/direct-validation \
-  --json
-```
-
-## 指标
-
-| Metric ID | 含义 |
-| --- | --- |
-| `physics_iq_score` | 总体归一化 Physics-IQ 分数。导入 per-scenario 结果时，WorldFoundry 会从可用类别均值推导。 |
-| `solid_mechanics` | 固体力学场景均值，例如碰撞、刚体运动与稳定性。 |
-| `fluid_dynamics` | 流动与液体交互场景均值。 |
-| `optics` | 光照、反射、阴影等光学场景均值。 |
-| `thermodynamics` | 热、相变与热过程场景均值。 |
-| `magnetism` | 磁吸、排斥与磁场交互场景均值。 |
-| `physics_iq_average` | WorldFoundry 主指标。有 `physics_iq_score` 时直接使用，否则取可用类别分数均值。 |
-
-所有声明指标都是越高越好；结果行使用百分制时会归一化到 `0..1`。
-
-## 输出
-
-输出目录包含：
-
-- `scorecard.json`：WorldFoundry scorecard，包含运行状态、指标、覆盖率与 leaderboard 有效性标记。
-- `raw_metric_table.jsonl`：每个声明指标一行。
-- `per_sample_scores.jsonl`：输入文件包含 scenario 级字段时写出的逐场景结果。
-- `physics_iq_results.csv` 或 `physics_iq_results.json`：评分包装器导入结果时复制出的结果文件。
-- 通过 `worldfoundry-eval zoo benchmark-run` 调用时，还会写出 `specialized_normalizer_stdout.log` 与 `specialized_normalizer_stderr.log`。
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

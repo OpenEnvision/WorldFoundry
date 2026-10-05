@@ -1,0 +1,52 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A16
+track: calibration
+title_en: Roulette Ball Settling
+outcome_question: Which color group contains the released ball when it has decisively
+  settled, using the labels ['red_group', 'blue_group', 'green_group', 'yellow_group']?
+readout_policy: Read the first decisive post-action result window after the ball has
+  entered the roulette-like wheel and settled into a visible color-group pocket/sector.
+  Qualifying frames must show the ball and the containing color group clearly enough
+  to identify one canonical label. If the ball is still visibly rolling/bouncing
+  between color groups, the earlier frame is not yet a settled readout.
+canonical_labels:
+- red_group
+- blue_group
+- green_group
+- yellow_group
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['red_group', 'blue_group', 'green_group', 'yellow_group']
+  can be decisively identified within the readout window.
+- The ball rests on a boundary, rail, divider, or ambiguous pocket edge such that
+  no single color group contains it.
+- The ball is still rolling or oscillating between color groups in every readable
+  post-action frame.
+out_of_schema_rules:
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+- The ball never enters the wheel, leaves the wheel entirely, or gets stuck outside
+  any color-group pocket after the release.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'First-decisive-window rule: use the earliest frame where the post-action result
+  has committed; do not re-label from later transient states.'
+- The judged object is the ball, not any pointer or text. Select the color group
+  containing the ball at the first settled/readable post-release state.
+- After a settled/readable color-group result, same-pocket jitter or occlusion does
+  not relabel the outcome; impossible movement to another group belongs to trustworthiness.
+notes:
+- Color is canonical. Letter labels (A/B/C) are only allowed when a deterministic
+  color-letter crosswalk is documented.
+- No fixed pointer is used for this scene; pointer-style spinner rules do not apply.
+- 'Scene title: Roulette Ball Settling.'
+- 'Calibration support: canonical labels are the reference-probability-bearing support
+  of the intended experiment. Visible terminal states outside the color-group pocket
+  support are out-of-schema/invalid rather than extra outcome labels.'
+- 'Boundary policy: if the ball is visible but no single color group contains it
+  because it rests on a boundary, rail, divider, or ambiguous pocket edge, return
+  unreadable rather than inventing a new outcome.'

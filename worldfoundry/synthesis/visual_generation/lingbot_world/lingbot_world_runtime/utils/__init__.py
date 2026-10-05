@@ -17,23 +17,23 @@ __all__ = [
 
 _EXPORTS = {
     "FlowDPMSolverMultistepScheduler": (
-        "worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers",
+        "worldfoundry.base_models.diffusion_model.schedulers.flow_dpm",
         "FlowDPMSolverMultistepScheduler",
     ),
     "get_sampling_sigmas": (
-        "worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers",
+        "worldfoundry.base_models.diffusion_model.schedulers.flow_dpm",
         "get_sampling_sigmas",
     ),
     "retrieve_timesteps": (
-        "worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers",
+        "worldfoundry.base_models.diffusion_model.schedulers.flow_dpm",
         "retrieve_timesteps",
     ),
     "FlowUniPCMultistepScheduler": (
-        "worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.utils.fm_solvers_unipc",
+        "worldfoundry.base_models.diffusion_model.schedulers.flow_unipc",
         "FlowUniPCMultistepScheduler",
     ),
     "HuggingfaceTokenizer": (
-        "worldfoundry.base_models.diffusion_model.video.wan.wan_2p1.modules.tokenizers",
+        "worldfoundry.base_models.diffusion_model.models.encoders.wan.model",
         "HuggingfaceTokenizer",
     ),
     "compute_relative_poses": (__name__ + ".cam_utils", "compute_relative_poses"),

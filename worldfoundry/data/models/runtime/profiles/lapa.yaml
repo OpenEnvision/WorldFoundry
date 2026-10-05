@@ -2,7 +2,7 @@ artifact_filename: lapa_action_tokens.json
 artifact_kind: action_tokens
 backend_stage: in_tree_runtime
 checkpoints:
-- local_dir: ${WORLDFOUNDRY_CKPT_DIR}/LAPA-7B-openx
+- local_dir: ${WORLDFOUNDRY_CKPT_DIR}/latent-action-pretraining--LAPA-7B-openx
   repo_id: latent-action-pretraining/LAPA-7B-openx
   role: openx_latent_action_checkpoint
 id: lapa

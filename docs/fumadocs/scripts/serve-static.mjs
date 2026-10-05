@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, resolve, sep } from 'node:path';
+import { docsMovedRedirects } from '../lib/docs-moved-redirects.mjs';
 
 const root = resolve(process.cwd(), 'out');
 const args = process.argv.slice(2);
@@ -50,9 +51,24 @@ function candidates(pathname, preferRsc = false) {
 
   const cleanPath = pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
   if (preferRsc) {
-    return [`${cleanPath}.txt`, `${cleanPath}.html`, `${cleanPath}/index.txt`, `${cleanPath}/index.html`];
+    return [
+      `${cleanPath}.txt`,
+      cleanPath,
+      `${cleanPath}.html`,
+      `${cleanPath}/index.txt`,
+      `${cleanPath}/index.html`,
+    ];
   }
-  return [`${cleanPath}.html`, `${cleanPath}/index.html`];
+  return [cleanPath, `${cleanPath}.html`, `${cleanPath}/index.html`];
+}
+
+function contentType(pathname) {
+  const type = mimeTypes[extname(pathname).toLowerCase()];
+  if (type) return type;
+  if (pathname === '/api/search' || pathname.endsWith('/api/search')) {
+    return 'application/json; charset=utf-8';
+  }
+  return 'application/octet-stream';
 }
 
 function safePath(pathname) {
@@ -83,7 +99,7 @@ function sendFile(request, response, file, statusCode = 200) {
     'Cache-Control': pathname.startsWith('/_next/static/')
       ? 'public, max-age=31536000, immutable'
       : 'public, max-age=0, must-revalidate',
-    'Content-Type': mimeTypes[extname(pathname).toLowerCase()] ?? 'application/octet-stream',
+    'Content-Type': contentType(pathname),
     'Last-Modified': details.mtime.toUTCString(),
   };
 
@@ -116,6 +132,8 @@ function sendFile(request, response, file, statusCode = 200) {
   else createReadStream(absolute).pipe(response);
 }
 
+const staticRedirects = new Map(docsMovedRedirects);
+
 const server = createServer(async (request, response) => {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     response.writeHead(405, { Allow: 'GET, HEAD' });
@@ -132,6 +150,13 @@ const server = createServer(async (request, response) => {
   } catch {
     response.writeHead(400);
     response.end('Bad Request');
+    return;
+  }
+
+  const redirectTo = staticRedirects.get(pathname.replace(/\/$/, '') || '/');
+  if (redirectTo) {
+    response.writeHead(308, { Location: redirectTo });
+    response.end();
     return;
   }
 

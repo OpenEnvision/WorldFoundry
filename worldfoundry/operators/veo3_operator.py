@@ -3,23 +3,16 @@
 from __future__ import annotations
 
 import json
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image
-from .base_operator import BaseOperator
+
 from ._media import pil_to_png_data_url
+from .base_operator import BaseOperator
 
 
 def _image_to_data_url(image_input: Image.Image) -> Tuple[str, str]:
-    """
-    将图像转为 data URL 与 MIME 类型，方便在 Chat Completion 消息中以 base64 形式携带。
-    
-    Args:
-        image_input: PIL.Image 对象
-        
-    Returns:
-        Tuple[str, str]: (data_url, mime_type)
-    """
+    """Compatibility helper for explicit callers; Veo generation uses PIL images."""
     mime_type = "image/png"
     return pil_to_png_data_url(image_input), mime_type
 
@@ -28,7 +21,7 @@ class Veo3Operator(BaseOperator):
     """
     Veo3 数据处理 Operator
     
-    负责图像编码、数据预处理等数据预处理工作
+    负责输入类型检查并把 PIL 图像直接交给 Gemini SDK
     不涉及模型推理和API调用
     """
     
@@ -51,15 +44,7 @@ class Veo3Operator(BaseOperator):
         self.interaction_template_init()
     
     def process_image(self, image_input: Image.Image) -> Tuple[str, str]:
-        """
-        处理图像，返回 data URL 和 mime 类型
-        
-        Args:
-            image_input: PIL.Image 对象
-            
-        Returns:
-            Tuple[str, str]: (data_url, mime_type)
-        """
+        """Return a data URL for legacy explicit callers; inference skips this."""
         return _image_to_data_url(image_input)
 
     def build_user_content(
@@ -79,11 +64,10 @@ class Veo3Operator(BaseOperator):
         generate_audio: Optional[bool] = None,
         fps: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
+        """Retain the historical payload for explicit callers of this helper.
 
-        # 自动判断模式
-        """Build and format user content for model payload."""
-        is_i2v = image is not None
-
+        Normal Veo inference uses native SDK fields and never invokes this method.
+        """
         metadata = {
             "aspect_ratio": aspect_ratio,
             "resolution": resolution,
@@ -95,32 +79,21 @@ class Veo3Operator(BaseOperator):
             "generate_audio": generate_audio,
             "fps": fps,
         }
+        content: List[Dict[str, Any]] = [{
+            "type": "text",
+            "text": json.dumps({"instruction": prompt, "metadata": metadata}, ensure_ascii=False),
+        }]
 
-
-        content: List[Dict[str, Any]] = [
-            {
-                "type": "text",
-                "text": json.dumps({
-                    "instruction": prompt,
-                    "metadata": metadata
-                }, ensure_ascii=False),
-            }
-        ]
-
-        def to_data_url(img):
-            url, _ = _image_to_data_url(img)
+        def to_data_url(value: Image.Image) -> Dict[str, Any]:
+            url, _ = _image_to_data_url(value)
             return {"type": "image_url", "image_url": {"url": url}}
 
-        if is_i2v:
+        if image is not None:
             content.append(to_data_url(image))
-
             if reference_images:
-                for img in reference_images:
-                    content.append(to_data_url(img))
-
+                content.extend(to_data_url(item) for item in reference_images)
             if last_frame is not None:
                 content.append(to_data_url(last_frame))
-
         return content
 
     def get_interaction(self, prompt: str):
@@ -182,7 +155,6 @@ class Veo3Operator(BaseOperator):
         Returns:
             Dict 包含处理后的输入数据：
                 - prompt: 文本提示词
-                - user_content: 构建好的用户内容列表
                 - images: 主图像（如果有）
                 - reference_images: 参考图像列表（如果有）
         """
@@ -196,26 +168,19 @@ class Veo3Operator(BaseOperator):
                 if not isinstance(img, Image.Image):
                     raise TypeError(f"reference_images must be List[PIL.Image], got {type(img)}")
         
-        user_content = self.build_user_content(
-            prompt=prompt,
-            aspect_ratio=aspect_ratio,
-            resolution=resolution,
-            duration_seconds=duration_seconds,
-            negative_prompt=negative_prompt,
-            seed=seed,
-            person_generation=person_generation,
-            reference_images=reference_images,
-            image=images,  # 将 images 映射到 build_user_content 的 image 参数
-            last_frame=last_frame,
-            enhance_prompt=enhance_prompt,
-            generate_audio=generate_audio,
-            fps=fps,
-        )
-        
-        result: Dict[str, Any] = {
-            "user_content": user_content,
+        return {
             "images": images,
             "reference_images": reference_images,
+            "last_frame": last_frame,
+            "veo_config": {
+                "aspect_ratio": aspect_ratio,
+                "resolution": resolution,
+                "duration_seconds": duration_seconds,
+                "negative_prompt": negative_prompt,
+                "seed": seed,
+                "person_generation": person_generation,
+                "enhance_prompt": enhance_prompt,
+                "generate_audio": generate_audio,
+                "fps": fps,
+            },
         }
-        
-        return result

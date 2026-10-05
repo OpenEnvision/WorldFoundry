@@ -1,0 +1,24 @@
+model:
+  checkpoint: checkpoints/echo-wm-flash.safetensors
+  gemma_path: checkpoints/gemma-3
+
+video:
+  width: 1280
+  height: 704
+  num_frames: 241
+  fps: 24
+  seed: 42
+
+causal:
+  timesteps: [1000, 750, 500, 250]
+  video_local_attn_size: 19
+  video_sink_size: 7
+  video_chunk_size: 3
+
+action:
+  enabled: true
+  ucpe: true
+  translation_speed: 0.05
+  rotation_speed_deg: 0.4
+  pitch_limit_deg: 40.0
+  fov_deg: 70.0

@@ -2,7 +2,7 @@ from typing import Union, List
 import torch
 import torch.nn.functional as F
 
-import clip
+from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
 from PIL import Image
 
 from worldfoundry.evaluation.tasks.execution.runners.worldscore.runtime.worldscore.worldscore.benchmark.metrics.base_metrics import BaseMetric

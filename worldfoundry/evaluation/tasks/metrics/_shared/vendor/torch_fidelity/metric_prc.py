@@ -1,7 +1,7 @@
 import torch
 
-from torch_fidelity.helpers import get_kwarg, vprint
-from torch_fidelity.utils import (
+from .helpers import get_kwarg, vprint
+from .utils import (
     create_feature_extractor,
     extract_featuresdict_from_input_id_cached,
     resolve_feature_extractor,

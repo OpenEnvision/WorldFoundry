@@ -1,0 +1,32 @@
+---
+title: "SmolVLA"
+description: "Hugging Face compact VLA: SmolVLM2-500M plus a flow-matching action expert. LIBERO checkpoint is the rollout default; dedicated env."
+modelId: "smolvla"
+pageSource: authored
+---
+
+SmolVLA is Hugging Face / LeRobot's compact community VLA: a **SmolVLM2-500M** vision-language backbone plus a flow-matching action expert, sized for consumer hardware. The paper recorded on this card is [LeRobot: An Open-Source Library for End-to-End Robot Learning](https://arxiv.org/abs/2602.22818) (arXiv 2602.22818) — a library paper, not a SmolVLA-only monograph. Code lives in [huggingface/lerobot](https://github.com/huggingface/lerobot). Aliases `smolvla-libero`, `HuggingFaceVLA/smolvla_libero`, `smolvla-base`, and `lerobot/smolvla_base` resolve here.
+
+<ModelPaperFigures modelId="smolvla" locale="en" />
+
+Two variants are recorded. **`smolvla-libero`** (`HuggingFaceVLA/smolvla_libero`) is the rollout default: manifest and normalization schema validated, with matching **8-D state** and **7-D action** statistics. **`smolvla-base`** (`lerobot/smolvla_base`) is a multi-robot foundation asset without a complete state-normalization contract — fine-tuning only, not a rollout path. This catalog does not record a license.
+
+<ModelCommandBuilder modelId="smolvla" locale="en" />
+
+## What it is for
+
+Roll out the LIBERO specialist: required `image`, `prompt`, and `state` in; `action_trace` / `smolvla_action_trace.json` out through `SmolVLAPipeline`. Two official cameras (`observation.images.image`, `observation.images.image2`). The action contract is a continuous chunk of shape **50×7**. Default launch is `worldfoundry-eval run smolvla-libero`.
+
+Score the LIBERO specialist on [LIBERO](/docs/evaluation/benchmark-hub/libero). That is the matching suite, not an ingested WorldFoundry rank. Do not send `smolvla-base` through the same rollout.
+
+A recorded workspace GPU run on the LIBERO checkpoint used a flat 8-D state and both camera keys, finished **10** denoising steps, and returned a finite **1×50×7** chunk. That note validates that checkpoint only. Catalog runner status remains **not recorded**.
+
+## Runtime contract
+
+Loading is local-only with no external source checkout. The pinned backbone is `HuggingFaceTB/SmolVLM2-500M-Video-Instruct` (the checkpoint's `SmolVLM2-500M-Instruct` id resolves to that published repo). Auto dtype is **bf16** on Ampere / Ada / Hopper / Blackwell and **fp16** on older CUDA. Masked attention goes through the shared SDPA selector. CPU BF16 strict restore of the LIBERO files loaded all **788** tensors with no missing or unexpected keys.
+
+## Running in WorldFoundry
+
+Use the dedicated environment `worldfoundry-vla-smolvla` (Python 3.11, CUDA 12.8, `torch>=2.8`). Integration is Runner parity pending. Stage `HuggingFaceVLA/smolvla_libero` before you expect a `get_action` artifact.
+
+<ModelRelatedRecipes modelId="smolvla" locale="en" />

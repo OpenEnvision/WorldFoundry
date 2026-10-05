@@ -8,12 +8,12 @@ from omegaconf import OmegaConf
 
 from vbench.utils import load_dimension_info
 
-from vbench.third_party.amt.utils.utils import (
+from worldfoundry.base_models.perception_core.frame_interpolation.amt.utils.utils import (
     img2tensor, tensor2img,
     check_dim_and_resize
     )
-from vbench.third_party.amt.utils.build_utils import build_from_cfg
-from vbench.third_party.amt.utils.utils import InputPadder
+from worldfoundry.base_models.perception_core.frame_interpolation.amt.utils.build_utils import build_from_cfg
+from worldfoundry.base_models.perception_core.frame_interpolation.amt.utils.utils import InputPadder
 
 
 class FrameProcess:

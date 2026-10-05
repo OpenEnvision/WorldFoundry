@@ -17,10 +17,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-
 # ── Constants ────────────────────────────────────────────────────────────────
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+# This file lives at <repo>/worldfoundry/runtime/probes.py, so the repository
+# root is two levels above the containing package (parents[2]).
+REPO_ROOT = Path(__file__).resolve().parents[2]
 STRICT_IMPORT_MODULES = frozenset({"pkg_resources", "droid_backends", "groundingdino._C", "sam2._C"})
 TORCH_FIRST_STRICT_IMPORT_MODULES = frozenset({"droid_backends", "groundingdino._C", "sam2._C"})
 

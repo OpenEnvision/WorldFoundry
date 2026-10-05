@@ -12,6 +12,8 @@ import os
 from PIL import Image
 from .utils import load_dimension_info
 from ..paths import keye_model_path
+from worldfoundry.core.attention import resolve_transformers_attention_implementation
+from worldfoundry.core.utils import extract_yes_no_answer, resolve_generation_max_new_tokens
 from tqdm import tqdm
 
 # 导入兼容性工具
@@ -22,45 +24,6 @@ except ImportError:
     COMPATIBILITY_AVAILABLE = False
     
 warnings.filterwarnings("ignore")
-import re
-
-
-def extract_yes_no_answer(text):
-    if isinstance(text, list):
-        if len(text) > 0:
-            text = text[0]
-        else:
-            return "no"  
-    
-    # 确保text是字符串
-    if not isinstance(text, str):
-        text = str(text)
-    
-    # 查找"Answer:"后面的内容（不区分大小写）
-    answer_pattern = r'answer\s*:\s*([^\n\r\.]*)'
-    match = re.search(answer_pattern, text, re.IGNORECASE)
-    
-    if match:
-        answer_text = match.group(1).strip().lower()
-        if 'yes' in answer_text:
-            return "yes"
-        elif 'no' in answer_text:
-            return "no"
-    
-    text_lower = text.lower()
-
-    
-    last_yes_pos = text_lower.rfind('yes')
-    last_no_pos = text_lower.rfind('no')
-    
-    if last_yes_pos > last_no_pos and last_yes_pos != -1:
-        return "yes"
-    elif last_no_pos > last_yes_pos and last_no_pos != -1:
-        return "no"
-    
-    return "no"
-        
-
 
 
 def Keye2_5VL_Video(prompt_dict_ls,model,processor,fps,device):
@@ -68,6 +31,7 @@ def Keye2_5VL_Video(prompt_dict_ls,model,processor,fps,device):
     valid_num = 0
     video_num = 0
     processed_json = []
+    max_new_tokens = resolve_generation_max_new_tokens(512, scope="4d_worldbench")
 
     for prompt_dict in tqdm(prompt_dict_ls):
         base_question = prompt_dict['auxiliary_info']
@@ -84,11 +48,10 @@ def Keye2_5VL_Video(prompt_dict_ls,model,processor,fps,device):
                 "question_details": []
             }
             score = 0
+            vision_inputs = None
             for i in range(len(base_question)):
                 print(f"\n--- Processing question {i+1}/{len(base_question)} ---")
                 print(f"Question: {base_question[i]}")
-
-                torch.cuda.empty_cache()
 
                 #初始化当前问题的详细情况
                 question_detail = {
@@ -132,7 +95,9 @@ Answer: [Yes/No]"""
                     messages, tokenize=False, add_generation_prompt=True
                 )
 
-                image_inputs,video_inputs,mm_processor_kwargs = process_vision_info(messages)
+                if vision_inputs is None:
+                    vision_inputs = process_vision_info(messages)
+                image_inputs, video_inputs, mm_processor_kwargs = vision_inputs
 
                 inputs = processor(
                     text=[text],
@@ -148,7 +113,7 @@ Answer: [Yes/No]"""
 
                 generated_ids = model.generate(
                     **inputs,
-                    max_new_tokens=4096
+                    max_new_tokens=max_new_tokens
                 )
 
 # 提取生成的token（排除输入token）
@@ -170,7 +135,7 @@ Answer: [Yes/No]"""
                     score += 1
                 video_detail["question_details"].append(question_detail)
 
-            video_score = score / question_num
+            video_score = score / question_num if question_num else 0.0
             final_score += video_score
             
             video_detail["video_results"] = video_score
@@ -189,7 +154,7 @@ def compute_dynamic_attribute(json_dir, device, submodules_dict, **kwargs):
     keye_model_path(),
         torch_dtype="auto",
         device_map=device,
-        attn_implementation="flash_attention_2",
+        attn_implementation=resolve_transformers_attention_implementation(device=device),
         trust_remote_code=True,
     )
     min_pixels = 256*28*28
@@ -225,5 +190,3 @@ def compute_dynamic_attribute(json_dir, device, submodules_dict, **kwargs):
         json.dump(detailed_output, f, indent=2, ensure_ascii=False)
     print(f"\nDetailed results saved to: {output_file}")
     return average_results, video_details    
-
-

@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from diffusers.video_processor import VideoProcessor
 
-from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.configs import (
+from worldfoundry.base_models.diffusion_model.recipes.wan_configs.wan22 import (
     WAN_CONFIGS,
     SIZE_CONFIGS,
     MAX_AREA_CONFIGS
@@ -31,11 +31,13 @@ class Yume1p5Runtime:
         self,
         model,
         device,
-        weight_dtype
+        weight_dtype,
+        owns_process_group=False,
     ) -> None:
         self.model = model
         self.weight_dtype = weight_dtype
         self.device = device
+        self.owns_process_group = owns_process_group
 
 
     @classmethod
@@ -65,7 +67,8 @@ class Yume1p5Runtime:
         if torch.cuda.is_available():
             torch.cuda.set_device(rank)
             device = torch.device(rank)
-        if not dist.is_initialized():
+        owns_process_group = not dist.is_initialized()
+        if owns_process_group:
             if int(os.environ.get("WORLD_SIZE", "1")) == 1:
                 os.environ.setdefault("RANK", "0")
                 os.environ.setdefault("WORLD_SIZE", "1")
@@ -75,23 +78,37 @@ class Yume1p5Runtime:
             backend = "nccl" if torch.cuda.is_available() else "gloo"
             dist.init_process_group(backend=backend)
 
-        cfg = WAN_CONFIGS["ti2v-5B"]
-        model = Yume1p5TI2V(
-            config=cfg, 
-            checkpoint_dir=model_root,
-            device_id=rank,
-            dit_fsdp=fsdp
-        )
+        try:
+            cfg = WAN_CONFIGS["ti2v-5B"]
+            model = Yume1p5TI2V(
+                config=cfg,
+                checkpoint_dir=model_root,
+                device_id=rank,
+                dit_fsdp=fsdp,
+            )
 
-        model.model.eval().requires_grad_(False).to(weight_dtype)
-        if not fsdp:
-            model.model.to(device)
+            model.model.eval().requires_grad_(False).to(weight_dtype)
+            if not fsdp:
+                model.model.to(device)
+        except BaseException:
+            if owns_process_group and dist.is_available() and dist.is_initialized():
+                dist.destroy_process_group()
+            raise
 
         return cls(
             model=model,
             device=device,
-            weight_dtype=weight_dtype
+            weight_dtype=weight_dtype,
+            owns_process_group=owns_process_group,
         )
+
+    def cleanup(self):
+        """Destroy the single-rank process group created by this runtime."""
+        import torch.distributed as dist
+
+        if self.owns_process_group and dist.is_available() and dist.is_initialized():
+            dist.destroy_process_group()
+            self.owns_process_group = False
     
     @torch.no_grad()
     def predict_per_interaction(
@@ -181,6 +198,7 @@ class Yume1p5Runtime:
             arg_c, arg_null, noise = self.model.generate(
                 caption,
                 frame_num=history_current_frame_num,
+                size=(size[1], size[0]),
                 max_area=max_area,
                 current_latent_num=current_latent_num,
                 seed=seed

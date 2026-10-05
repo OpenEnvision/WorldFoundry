@@ -9,33 +9,51 @@ from __future__ import annotations
 
 import base64
 import json
-import shutil
+import os
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
+from worldfoundry.core.io.filesystem.file_utils import materialize_file
+from worldfoundry.core.io.formats.serialization import read_jsonl_objects
+from worldfoundry.core.observability.time import utc_now_iso
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
 from worldfoundry.evaluation.api.artifacts import local_path_for_uri
 from worldfoundry.evaluation.reporting import (
+    REPRODUCIBILITY_PACKAGES,
     RUN_SUMMARY_SCHEMA_VERSION,
     build_comparison_identity,
+    build_environment,
+    redact_secrets,
     write_run_manifest_artifacts,
 )
 from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import resolve_benchmark_manifest_path
-from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import run_benchmark_execution
-from worldfoundry.evaluation.tasks.execution.orchestration.run_mode import normalize_benchmark_run_mode
-from worldfoundry.evaluation.utils import BENCHMARK_TASK_ROOT, stable_hash, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import (
+    SCORECARD_SCHEMA_VERSION,
+    run_benchmark_execution,
+)
+from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import normalize_benchmark_run_mode
+from worldfoundry.evaluation.utils import (
+    BENCHMARK_TASK_ROOT,
+    build_run_fingerprint,
+    build_version_context,
+    stable_hash,
+    write_json,
+    write_jsonl,
+)
 
 from .benchmark_generation import get_benchmark_generation_adapter
 from .evaluate import EvaluateRunRequest, EvaluateRunResult, execute_evaluate_run
 from .fidelity import model_benchmark_fidelity
 from .plan import build_run_plan_from_task_registry, evaluate_request_from_run_plan, write_run_plan
+from .runtime_preflight import DEFAULT_PROFILE_DIR, run_preflight
 
 MODEL_BENCHMARK_RUN_SCHEMA_VERSION = "worldfoundry-model-benchmark-run"
 MODEL_BENCHMARK_RESULT_SCHEMA_VERSION = "worldfoundry-model-benchmark-result"
 DEFAULT_BENCHMARK_TASK_ROOT = BENCHMARK_TASK_ROOT
 CONTRACT_VALIDATION_ID = "contract-validation"
 RESERVED_BENCHMARK_PARAMETERS = frozenset({"output_dir", "manifest_path", "mode", "generated_artifact_dir"})
+OFFICIAL_RUNTIME_PROFILE_DIR = DEFAULT_PROFILE_DIR
 
 # Static MP4 video binary encoded in base64 utilized to fill placeholders during contract runs
 _CONTRACT_FIXTURE_MP4_B64 = "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"
@@ -178,7 +196,7 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     """Safely decodes and parses list records from a JSONL file."""
     if not path.is_file():
         return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return read_jsonl_objects(path)
 
 
 def _default_task_roots(benchmark_manifest_path: str | Path) -> tuple[Path, ...]:
@@ -221,6 +239,124 @@ def _artifact_suffix(name: str, uri: str) -> str:
     return ".bin"
 
 
+def _official_runtime_profile_path(benchmark_id: str) -> Path | None:
+    """Return the benchmark's official runtime profile when one is installed."""
+
+    for suffix in (".yaml", ".yml"):
+        candidate = Path(OFFICIAL_RUNTIME_PROFILE_DIR) / f"{benchmark_id}{suffix}"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _run_official_runtime_preflight(
+    request: ModelBenchmarkRunRequest,
+    *,
+    mode: str,
+    output_dir: Path,
+) -> dict[str, Any] | None:
+    """Run the installed official profile before generation or benchmark execution."""
+
+    if mode != "official-run":
+        return None
+    environ = dict(os.environ)
+    environ.update(
+        {
+            str(name): str(value)
+            for name, value in dict(request.benchmark_env or {}).items()
+            if value is not None
+        }
+    )
+    if environ.get("WORLDFOUNDRY_SKIP_PREFLIGHT") == "1":
+        return None
+    profile_path = _official_runtime_profile_path(request.benchmark_id)
+    if profile_path is None:
+        return None
+    return run_preflight(
+        profile=request.benchmark_id,
+        manifest=profile_path,
+        output_dir=output_dir,
+        environ=environ,
+    )
+
+
+def _write_runtime_preflight_failure_scorecard(
+    request: ModelBenchmarkRunRequest,
+    *,
+    mode: str,
+    output_dir: Path,
+    report: Mapping[str, Any],
+) -> Path:
+    """Persist a readable benchmark failure before aborting an unready run."""
+
+    benchmark_output_dir = output_dir / "benchmark"
+    benchmark_output_dir.mkdir(parents=True, exist_ok=True)
+    scorecard_path = benchmark_output_dir / "scorecard.json"
+    report_path = str(report["report_path"])
+    error = f"official runtime preflight failed; inspect {report_path}"
+    write_json(
+        scorecard_path,
+        {
+            "schema_version": SCORECARD_SCHEMA_VERSION,
+            "official_benchmark_verified": False,
+            "integration_evidence": False,
+            "run": {
+                "status": "runtime_preflight_failed",
+                "runner": "model_benchmark_runner",
+                "mode": mode,
+                "failure_phase": "runtime_preflight",
+                "error": error,
+            },
+            "benchmark": {
+                "benchmark_id": request.benchmark_id,
+                "contract_only": False,
+            },
+            "dataset": {
+                "generated_artifact_dir": None,
+                "generated_file_count": 0,
+            },
+            "metrics": {
+                "per_metric": {},
+                "summary": {
+                    "sample_count": 0,
+                    "successful_samples": 0,
+                    "failed_samples": 0,
+                },
+            },
+            "evaluation": {
+                "available": False,
+                "kind": mode,
+                "skip_count": 0,
+            },
+            "artifacts": {
+                "scorecard": str(scorecard_path.resolve()),
+                "preflight_report": report_path,
+            },
+        },
+    )
+    return scorecard_path
+
+
+def _attach_runtime_preflight_artifact(
+    benchmark_payload: dict[str, Any],
+    report: Mapping[str, Any],
+) -> None:
+    """Expose a successful preflight report through result and scorecard artifacts."""
+
+    report_path = str(report["report_path"])
+    artifacts = dict(benchmark_payload.get("artifacts") or {})
+    artifacts["preflight_report"] = report_path
+    benchmark_payload["artifacts"] = artifacts
+    scorecard_path = Path(str(benchmark_payload["scorecard_path"]))
+    if not scorecard_path.is_file():
+        return
+    scorecard = json.loads(scorecard_path.read_text(encoding="utf-8"))
+    scorecard_artifacts = dict(scorecard.get("artifacts") or {})
+    scorecard_artifacts["preflight_report"] = report_path
+    scorecard["artifacts"] = scorecard_artifacts
+    write_json(scorecard_path, scorecard)
+
+
 def _write_placeholder_artifact(destination: Path, metadata: Mapping[str, Any]) -> None:
     """Writes a mock placeholder file to act as model generation output during contract runs."""
     if destination.suffix.lower() in _CONTRACT_FIXTURE_VIDEO_SUFFIXES:
@@ -244,7 +380,14 @@ def _task_plan_path(root: Path) -> Path:
     return root / "task_run_plan.json"
 
 
-def _run_generation_from_task_registry(request: ModelBenchmarkRunRequest, root: Path) -> EvaluateRunResult:
+def _run_generation_from_task_registry(
+    request: ModelBenchmarkRunRequest,
+    root: Path,
+    *,
+    resolved_runner: Any | None = None,
+    runner_factory: Callable[[], Any] | None = None,
+    cleanup_runner: bool = True,
+) -> EvaluateRunResult:
     """Materializes requests and runs model generations utilising the local task catalog registry."""
     if not request.task_name:
         raise ValueError("task_name is required for task-registry materialization")
@@ -290,7 +433,15 @@ def _run_generation_from_task_registry(request: ModelBenchmarkRunRequest, root: 
             "split, and num_samples"
         )
     write_run_plan(plan, _task_plan_path(root))
-    return execute_evaluate_run(evaluate_request_from_run_plan(plan))
+    evaluate_request = evaluate_request_from_run_plan(plan)
+    if resolved_runner is not None or runner_factory is not None or not cleanup_runner:
+        evaluate_request = replace(
+            evaluate_request,
+            runner=resolved_runner,
+            runner_factory=runner_factory,
+            cleanup_runner=cleanup_runner,
+        )
+    return execute_evaluate_run(evaluate_request)
 
 
 def _materialize_generated_artifacts(
@@ -335,7 +486,9 @@ def _materialize_generated_artifacts(
             }
             if source_path is not None and source_path.is_file():
                 if source_path.resolve() != destination.resolve():
-                    shutil.copy2(source_path, destination)
+                    row["materialization"] = materialize_file(source_path, destination, writable=False)
+                else:
+                    row["materialization"] = "existing"
                 row["status"] = "copied"
             elif allow_placeholders:
                 _write_placeholder_artifact(
@@ -395,7 +548,14 @@ def _materialize_contract_validation_artifacts(
     return 1, 1
 
 
-def _run_generation(request: ModelBenchmarkRunRequest, root: Path) -> EvaluateRunResult | None:
+def _run_generation(
+    request: ModelBenchmarkRunRequest,
+    root: Path,
+    *,
+    resolved_runner: Any | None = None,
+    runner_factory: Callable[[], Any] | None = None,
+    cleanup_runner: bool = True,
+) -> EvaluateRunResult | None:
     """Materialize benchmark requests and run the selected in-tree model."""
     if request.generated_artifact_dir is not None:
         return None
@@ -403,7 +563,13 @@ def _run_generation(request: ModelBenchmarkRunRequest, root: Path) -> EvaluateRu
     requests = request.requests
     if requests is None and request.requests_path is None:
         if request.task_name:
-            return _run_generation_from_task_registry(request, root)
+            return _run_generation_from_task_registry(
+                request,
+                root,
+                resolved_runner=resolved_runner,
+                runner_factory=runner_factory,
+                cleanup_runner=cleanup_runner,
+            )
         if request.contract_fixture:
             return None
         if request.benchmark_mode == "contract":
@@ -450,6 +616,9 @@ def _run_generation(request: ModelBenchmarkRunRequest, root: Path) -> EvaluateRu
             model_parameters=request.model_parameters,
             model_runtime=request.model_runtime,
             model_config=request.model_config,
+            runner=resolved_runner,
+            runner_factory=runner_factory,
+            cleanup_runner=cleanup_runner,
             generation_cache_dir=request.generation_cache_dir,
             generation_cache_mode=request.generation_cache_mode,
             generation_cache_namespace=request.generation_cache_namespace,
@@ -471,15 +640,23 @@ def _model_benchmark_run_summary(
     generation_result: EvaluateRunResult | None,
     benchmark_payload: Mapping[str, Any],
     artifacts: Mapping[str, Any],
+    started_at: str | None = None,
+    finished_at: str | None = None,
+    version_context: Mapping[str, Any] | None = None,
+    run_fingerprint: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compiles the primary run summary record, detailing generation and benchmark execution metrics."""
+    version_context = dict(version_context or {})
+    run_fingerprint = dict(run_fingerprint or {})
     sample_count = generation_result.sample_count if generation_result is not None else materialized_count
     successful_samples = (
         generation_result.successful_sample_count if generation_result is not None else materialized_count
     )
     failed_samples = generation_result.failed_sample_count if generation_result is not None else 0
     generation_success_rate = successful_samples / sample_count if sample_count else 0.0
-    benchmark_ok = 1.0 if benchmark_payload.get("ok") is True else 0.0
+    # Contract execution can succeed operationally without producing a real
+    # benchmark score; do not publish that operation status as a leaderboard metric.
+    benchmark_ok = 1.0 if benchmark_payload.get("ok") is True and mode != "contract" else 0.0
     provenance = dict(request.evaluation_provenance or {})
     provenance_claim = provenance.get("claim")
     provenance_claim = provenance_claim if isinstance(provenance_claim, Mapping) else {}
@@ -572,10 +749,11 @@ def _model_benchmark_run_summary(
         "run": {
             "run_id": request.run_id,
             "status": status,
-            "started_at": None,
-            "finished_at": None,
-            "worldfoundry_version": None,
-            "run_fingerprint": None,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "worldfoundry_version": version_context.get("worldfoundry_version"),
+            "version_context": version_context,
+            "run_fingerprint": run_fingerprint or None,
         },
         "benchmark": benchmark_summary,
         "model": {
@@ -629,13 +807,12 @@ def _model_benchmark_leaderboard_blockers(status: str, benchmark_payload: Mappin
     """Compiles blocking eligibility reasons if a run cannot be published to official leaderboards."""
     if status != "succeeded":
         return [status]
-    if benchmark_payload.get("ok") is True:
-        return []
-
     metadata = benchmark_payload.get("metadata")
     metadata = dict(metadata) if isinstance(metadata, Mapping) else {}
     if metadata.get("contract_only") is True:
         return ["benchmark runner ran in contract-only mode"]
+    if benchmark_payload.get("ok") is True:
+        return []
     if metadata.get("normalizer_only") is True:
         return ["benchmark runner produced normalizer-only evidence"]
     if benchmark_payload.get("official_benchmark_verified") is not True:
@@ -646,7 +823,12 @@ def _model_benchmark_leaderboard_blockers(status: str, benchmark_payload: Mappin
 
 
 def run_model_benchmark(
-    request: ModelBenchmarkRunRequest | Mapping[str, Any] | None = None, **kwargs: Any
+    request: ModelBenchmarkRunRequest | Mapping[str, Any] | None = None,
+    *,
+    resolved_runner: Any | None = None,
+    runner_factory: Callable[[], Any] | None = None,
+    cleanup_runner: bool = True,
+    **kwargs: Any,
 ) -> ModelBenchmarkRunResult:
     """Executes a complete 1:1 model generation and benchmark scoring sequence.
 
@@ -655,6 +837,12 @@ def run_model_benchmark(
 
     Args:
         request: Configured ModelBenchmarkRunRequest payload.
+        resolved_runner: Optional already-resolved runner lease. This is used
+            by suite execution to keep one model resident across benchmarks.
+        runner_factory: Optional lazy lease acquisition callback. Suite runs
+            use this so model resolution happens only after request
+            materialization has succeeded.
+        cleanup_runner: Whether this call owns and cleans up the runner.
         **kwargs: Inline overrides merged directly into request properties.
 
     Returns:
@@ -662,9 +850,7 @@ def run_model_benchmark(
     """
     if isinstance(request, ModelBenchmarkRunRequest):
         if kwargs:
-            payload = asdict(request)
-            payload.update(kwargs)
-            request = ModelBenchmarkRunRequest(**payload)
+            request = replace(request, **kwargs)
     else:
         payload = dict(kwargs)
         if isinstance(request, Mapping):
@@ -702,6 +888,7 @@ def run_model_benchmark(
         raise ValueError("model-benchmark runs require model_id unless contract_fixture=True is set.")
     root = Path(request.output_dir).resolve()
     root.mkdir(parents=True, exist_ok=True)
+    started_at = utc_now_iso()
     manifest_path = root / "model_benchmark_run.json"
     run_manifest_path = root / "run_manifest.json"
     environment_path = root / "environment.json"
@@ -709,7 +896,26 @@ def run_model_benchmark(
     summary_path = root / "summary.json"
     artifact_manifest_path = root / "generated_artifacts.jsonl"
 
-    generation_result = _run_generation(request, root)
+    preflight_report = _run_official_runtime_preflight(request, mode=mode, output_dir=root)
+    if preflight_report is not None and preflight_report.get("ok") is not True:
+        scorecard_path = _write_runtime_preflight_failure_scorecard(
+            request,
+            mode=mode,
+            output_dir=root,
+            report=preflight_report,
+        )
+        raise RuntimeError(
+            "official runtime preflight failed before model generation; "
+            f"inspect {preflight_report['report_path']} and {scorecard_path}"
+        )
+
+    generation_result = _run_generation(
+        request,
+        root,
+        resolved_runner=resolved_runner,
+        runner_factory=runner_factory,
+        cleanup_runner=cleanup_runner,
+    )
     if generation_result is not None and generation_result.successful_sample_count == 0:
         raise RuntimeError(
             "model generation produced no successful samples; benchmark evaluation was not started. "
@@ -794,6 +1000,8 @@ def run_model_benchmark(
         **benchmark_parameters,
     )
     benchmark_payload = benchmark_result.to_dict()
+    if preflight_report is not None:
+        _attach_runtime_preflight_artifact(benchmark_payload, preflight_report)
     generation_exit_code = 0 if generation_result is None else generation_result.exit_code
     artifact_exit_code = (
         1
@@ -809,6 +1017,44 @@ def run_model_benchmark(
         generation_result.successful_sample_count if generation_result is not None else materialized_count
     )
     failed_samples = generation_result.failed_sample_count if generation_result is not None else 0
+    finished_at = utc_now_iso()
+    cache_paths = {
+        "generated_artifact_dir": generated_artifact_dir,
+        "benchmark_output_dir": root / "benchmark",
+        "generation_output_dir": root / "generation",
+    }
+    environment = build_environment(
+        cache_paths=cache_paths,
+        package_names=REPRODUCIBILITY_PACKAGES,
+    )
+    version_context = build_version_context(
+        runner="model_benchmark_runner",
+        benchmark={
+            "benchmark_id": request.benchmark_id,
+            "mode": mode,
+            "parameters": redact_secrets(benchmark_parameters),
+        },
+        model={
+            "model_id": request.model_id or CONTRACT_VALIDATION_ID,
+            "variant_id": request.model_variant_id,
+            "runner_target": request.model_runner,
+            "parameters": redact_secrets(request.model_parameters or {}),
+            "runtime": redact_secrets(request.model_runtime or {}),
+        },
+        dataset={
+            "dataset_id": request.dataset_id or f"{request.benchmark_id}:generated",
+            "split": request.split,
+            "sample_count": sample_count,
+        },
+        extra={
+            "evaluation_kind": request.evaluation_kind,
+            "contract_fixture": request.contract_fixture,
+            "required_artifacts": tuple(request.required_artifacts),
+            "metrics": tuple(request.metrics),
+        },
+        git_context=environment.get("git"),
+    )
+    run_fingerprint = build_run_fingerprint(version_context=version_context)
     artifacts = {
         "run_manifest": str(manifest_path),
         "standard_run_manifest": str(run_manifest_path),
@@ -819,6 +1065,8 @@ def run_model_benchmark(
         "generated_artifact_manifest": str(artifact_manifest_path),
         "benchmark_scorecard": benchmark_payload.get("scorecard_path"),
     }
+    if preflight_report is not None:
+        artifacts["preflight_report"] = str(preflight_report["report_path"])
     if generation_result is not None:
         artifacts["generation_scorecard"] = str(generation_result.scorecard_path)
     task_run_plan_path = _task_plan_path(root)
@@ -829,6 +1077,10 @@ def run_model_benchmark(
         "schema_version": MODEL_BENCHMARK_RUN_SCHEMA_VERSION,
         "run_id": request.run_id,
         "status": status,
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "version_context": version_context,
+        "run_fingerprint": run_fingerprint,
         "benchmark_id": request.benchmark_id,
         "benchmark_mode": mode,
         "evaluation_kind": request.evaluation_kind,
@@ -853,7 +1105,7 @@ def run_model_benchmark(
         "benchmark": benchmark_payload,
         "artifacts": dict(artifacts),
     }
-    write_json(manifest_path, manifest, atomic=False)
+    write_json(manifest_path, manifest)
     write_run_manifest_artifacts(
         output_dir=root,
         base_manifest={
@@ -861,6 +1113,10 @@ def run_model_benchmark(
             "run_id": request.run_id,
             "runner": "model_benchmark_runner",
             "status": status,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "version_context": version_context,
+            "run_fingerprint": run_fingerprint,
             "exit_code": exit_code,
             "output_dir": str(root),
             "benchmark": {
@@ -903,12 +1159,9 @@ def run_model_benchmark(
             request.benchmark_manifest_path,
             *((request.generated_artifact_dir,) if request.generated_artifact_dir is not None else ()),
         ),
-        cache_paths={
-            "generated_artifact_dir": generated_artifact_dir,
-            "benchmark_output_dir": root / "benchmark",
-            "generation_output_dir": root / "generation",
-        },
-        package_names=("worldfoundry", "numpy", "pandas"),
+        cache_paths=cache_paths,
+        package_names=REPRODUCIBILITY_PACKAGES,
+        environment=environment,
         manifest_path=run_manifest_path,
         environment_path=environment_path,
         env_requirements_path=env_requirements_path,
@@ -925,8 +1178,11 @@ def run_model_benchmark(
             generation_result=generation_result,
             benchmark_payload=benchmark_payload,
             artifacts=artifacts,
+            started_at=started_at,
+            finished_at=finished_at,
+            version_context=version_context,
+            run_fingerprint=run_fingerprint,
         ),
-        atomic=False,
     )
 
     return ModelBenchmarkRunResult(

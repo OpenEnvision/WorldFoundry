@@ -7,6 +7,8 @@ aliases:
 availability: open_source
 provider: official_repo
 official_sources:
+  paper: https://arxiv.org/abs/2410.24164
+  project_page: https://www.physicalintelligence.company/blog/pi0
   github:
     head_sha: c23745b5ad24e98f66967ea795a07b2588ed6c79
     url: https://github.com/Physical-Intelligence/openpi
@@ -29,3 +31,19 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records. Runner or pipeline targets are present
   only after a complete in-tree WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: Physical Intelligence
+  publisher_kind: company
+  publisher_zh: Physical Intelligence（PI）
+  overview: 'pi0-FAST is the autoregressive variant of pi0: instead of flow matching it uses the FAST action tokenizer to decode actions as discrete tokens, trading some smoothness for faster, simpler decoding. WorldFoundry reuses the in-tree OpenPI runtime with the pi0_fast_droid configuration and pi0-FAST checkpoint resolution.'
+  overview_zh: pi0-FAST 是 pi0 的自回归变体：不用 flow matching，而以 FAST 动作 tokenizer 将动作解码为离散 token，以少量平滑性换取更快更简单的解码。WorldFoundry 复用树内 OpenPI 运行时，采用 pi0_fast_droid 配置与 pi0-FAST checkpoint 解析。
+  architecture: The same PaliGemma backbone as pi0 but with FAST (frequency-space action sequence tokenization) discrete action decoding. FAST decoding is integrated as algorithm-specific runtime behavior, not as a LeRobot policy-zoo variant.
+  architecture_zh: 与 pi0 相同的 PaliGemma 骨干，但采用 FAST（频域动作序列 token 化）离散动作解码。 FAST 解码作为算法专属运行时行为集成，而非 LeRobot 策略库变体。
+  usage_notes: The default configuration targets DROID (pi0_fast_droid). Stage GCS checkpoints with gsutil/gcloud; runs emit a runtime plan until assets are staged.
+  usage_notes_zh: 默认配置面向 DROID（pi0_fast_droid）。用 gsutil/gcloud 就位 GCS checkpoint；资产就位前运行输出运行时计划。
+  limitations:
+  - Discrete FAST tokens can be less smooth than pi0's flow-matching actions.
+  - No license is recorded on this entry (see the openpi entry, Apache-2.0).
+  limitations_zh:
+  - 离散 FAST token 的动作可能不如 pi0 flow-matching 平滑。
+  - 本条目未记录许可证（参见 openpi 条目，Apache-2.0）。

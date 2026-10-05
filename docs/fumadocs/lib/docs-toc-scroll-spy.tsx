@@ -56,7 +56,8 @@ export function resolveActiveHeading(ids: string[]) {
 function subscribeToHeadingUpdates(onStoreChange: () => void) {
   const schedule = () => window.requestAnimationFrame(onStoreChange);
 
-  schedule();
+  // Do not notify from subscribe() itself. React 19 treats that as a
+  // render-phase update on a fiber that has not finished mounting.
   const timers = [120, 320, 640, 1200].map((delay) => window.setTimeout(schedule, delay));
 
   const main = getScrollRoot();

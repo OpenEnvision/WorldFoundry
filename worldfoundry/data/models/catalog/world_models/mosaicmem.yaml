@@ -12,6 +12,7 @@ source:
   official_repo_url: https://github.com/AbdelStark/mosaicmem
   license: mit
 official_sources:
+  paper: https://arxiv.org/abs/2603.17117
   github:
     url: https://github.com/AbdelStark/mosaicmem
     head_sha: 3178e01e3639d7e2e7a487d5d589fd5f53719904
@@ -33,3 +34,23 @@ catalog_scope: World-model catalog entries. Integrated entries expose in-tree Wo
   generated artifacts.
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: mosaicmem
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'MosaicMem is a memory-augmented world-model component: it ingests keyframe patches, retrieves target views, summarizes coverage, and composes latent canvases — producing a memory index rather than video. In this catalog the source route is registered for memory-plan artifacts and is exposed through worldfoundry.core.memory; generator assets stay runtime-gated.'
+  overview_zh: MosaicMem 是记忆增强的世界模型组件：摄取关键帧 patch、检索目标视图、汇总覆盖度并组合潜空间画布——产物是记忆索引而非视频。本 catalog 中其源码路径按记忆计划产物注册，并通过 worldfoundry.core.memory 暴露；生成器资产保持运行时限制。
+  architecture: Architecture internals are not recorded in this repository (MIT license); the source is bound at a pinned commit. The recorded artifact type is memory_index.
+  architecture_zh: 架构内部细节仓库未记录（MIT 许可）；源码绑定在固定 commit。记录的产物类型为 memory_index。
+  usage_notes: Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. Use it as the memory side of a world-model stack, not as a standalone generator.
+  usage_notes_zh: 配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。缺失资产由计划报告，不视为 catalog 阻塞。请把它当作世界模型栈的记忆侧组件使用，而非独立生成器。
+  limitations:
+  - Produces memory indexes, not video artifacts.
+  - The publishing institution is not recorded in this repository.
+  limitations_zh:
+  - 产物是记忆索引，不是视频。
+  - 发表机构在本仓库中未记录。
+  recommended_benchmarks:
+  - id: memobench
+    reason: Long-horizon memory consistency evaluation.
+    reason_zh: 长时程记忆一致性评测。

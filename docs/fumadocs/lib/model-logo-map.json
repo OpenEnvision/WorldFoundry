@@ -1,1476 +1,1436 @@
 {
   "benchmarkLogos": {
-    "4dworldbench": "yeppp27",
-    "ai2thor": "allenai",
+    "4dworldbench": "ustc",
+    "ai2thor": "ai2",
     "aigcbench": "benchcouncil",
-    "behavior1k": "stanfordvl",
-    "bridgedata-v2": "rail-berkeley",
-    "calvin": "mees",
-    "chronomagic-bench": "pku-yuangroup",
-    "devil-dynamics": "mingxiangl",
-    "evalcrafter": "evalcrafter",
-    "ewmbench": "agibottech",
-    "genai-bench": "tiger-ai-lab",
-    "ipv-bench": "showlab",
-    "iworld-bench": "embodiedcity",
-    "kinetix": "flairox",
-    "larybench": "meituan-longcat",
-    "libero": "lifelong-robot-learning",
-    "libero-mem": "lifelong-robot-learning",
-    "libero-para": "cau-hai-lab",
-    "libero-plus": "lifelong-robot-learning",
-    "libero-pro": "lifelong-robot-learning",
-    "maniskill": "haosulab",
-    "maniskill2": "haosulab",
-    "memobench": "memobench-team",
-    "metaworld": "farama-foundation",
-    "mikasa": "cognitiveaisystems",
-    "mirabench": "mira-space",
-    "molmospaces": "allenai",
-    "phyeduvideo": "meghamariamkm",
-    "phyfps-bench-gen": "taco-group",
-    "phygenbench": "opengvlab",
-    "phyground": "nu-world-model-embodied-ai",
-    "physical-ai-bench": "shi-labs",
+    "apple-pi": "ntu",
+    "behavior1k": "stanford",
+    "bridgedata-v2": "berkeley",
+    "calvin": "freiburg",
+    "camerabench": "cmu",
+    "chronomagic-bench": "pku",
+    "devil-dynamics": "cas",
+    "evalcrafter": "tencent",
+    "ewmbench": "agibot",
+    "fetv": "pku",
+    "genai-bench": "waterloo",
+    "ipv-bench": "nus",
+    "iworld-bench": "tsinghua",
+    "kinetix": "oxford",
+    "larybench": "meituan",
+    "libero": "utaustin",
+    "libero-mem": "utaustin",
+    "libero-plus": "utaustin",
+    "libero-pro": "utaustin",
+    "likephys": "oxford",
+    "maniskill": "ucsd",
+    "maniskill2": "ucsd",
+    "memobench": "harvard",
+    "metaworld": "farama",
+    "mikasa": "airi",
+    "mind": "csu",
+    "mirabench": "tencent",
+    "molmospaces": "ai2",
+    "pawbench": "sjtu",
+    "phyeduvideo": "adobe",
+    "phyfps-bench-gen": "tamu",
+    "phygenbench": "shanghai-ai-lab",
+    "phyground": "nu-lab",
+    "physical-ai-bench": "gatech",
     "physics-iq": "google-deepmind",
     "physics-iq-verified": "google-deepmind",
-    "physvidbench": "ensanli",
-    "rlbench": "stepjam",
-    "robocasa": "robocasa",
-    "robocerebra": "buaa-colalab",
-    "robomme": "robomme",
-    "robotwin": "robotwin-platform",
-    "simpler-env": "simpler-env",
-    "t2v-compbench": "kaiyuesun98",
-    "t2v-safety-bench": "yibo-miao",
-    "t2vworldbench": "magiclinux",
-    "vbench": "vchitect",
-    "vbench-2.0": "vchitect",
-    "vbench-plus-plus": "vchitect",
-    "video-bench": "video-bench",
-    "videophy": "hritikbansal",
-    "videophy2": "hritikbansal",
-    "videoscience-bench": "hao-ai-lab",
-    "videoscore": "tiger-ai-lab",
-    "videoverse": "zeqing-wang",
-    "visual-chronometer": "taco-group",
-    "vlabench": "openmoss",
-    "vmbench": "amap-ml",
-    "wbench": "meituan-longcat",
-    "world-in-world": "world-in-world",
-    "worldarena": "tsinghua-fib-lab",
-    "worldbench": "worldbenchmark",
-    "worldmodelbench": "worldmodelbench-team",
-    "worldreasonbench": "unix-ai-lab",
-    "worldscore": "haoyi-duan",
-    "wrbench": "jinplu"
+    "physvidbench": "koc",
+    "rbench": "pku",
+    "rlbench": "imperial",
+    "robocasa": "nvidia",
+    "robocerebra": "buaa",
+    "robomme": "umich",
+    "robotwin": "hku",
+    "sana-wm-bench": "nvidia",
+    "simpler-env": "google-deepmind",
+    "stevo-bench": "caltech",
+    "t2v-compbench": "hku",
+    "t2v-safety-bench": "cas",
+    "t2vworldbench": "sjsu",
+    "vbench": "shanghai-ai-lab",
+    "vbench-2.0": "shanghai-ai-lab",
+    "vbench-plus-plus": "shanghai-ai-lab",
+    "video-bench": "sjtu",
+    "videophy": "google",
+    "videophy2": "google",
+    "videoscience-bench": "ucsd",
+    "videoscore": "waterloo",
+    "videoverse": "oppo",
+    "visual-chronometer": "tamu",
+    "vlabench": "fudan",
+    "vmbench": "amap",
+    "wbench": "meituan",
+    "world-in-world": "jhu",
+    "worldarena": "tsinghua",
+    "worldbench": "ucla",
+    "worldmodelbench": "nvidia",
+    "worldolympiad": "alibaba",
+    "worldreasonbench": "tsinghua",
+    "worldscore": "stanford",
+    "wrbench": "ustc"
   },
-  "failed": [],
-  "generatedBy": "committed catalog snapshot",
-  "logos": {
-    "2toinf": {
-      "key": "2toinf",
-      "label": "2toinf",
-      "sourceOrg": "2toinf",
-      "src": "/model-logos/2toinf.jpg"
-    },
-    "abdelstark": {
-      "key": "abdelstark",
-      "label": "AbdelStark",
-      "sourceOrg": "AbdelStark",
-      "src": "/model-logos/abdelstark.jpg"
-    },
-    "agibottech": {
-      "key": "agibottech",
-      "label": "AgibotTech",
-      "sourceOrg": "AgibotTech",
-      "src": "/model-logos/agibottech.jpg"
-    },
-    "aigc-apps": {
-      "key": "aigc-apps",
-      "label": "aigc apps",
-      "sourceOrg": "aigc-apps",
-      "src": "/model-logos/aigc-apps.png"
-    },
-    "albertpumarola": {
-      "key": "albertpumarola",
-      "label": "albertpumarola",
-      "sourceOrg": "albertpumarola",
-      "src": "/model-logos/albertpumarola.png"
-    },
-    "ali-vilab": {
-      "key": "ali-vilab",
-      "label": "ali vilab",
-      "sourceOrg": "ali-vilab",
-      "src": "/model-logos/ali-vilab.png"
-    },
-    "alibaba-damo-academy": {
-      "key": "alibaba-damo-academy",
-      "label": "alibaba damo academy",
-      "sourceOrg": "alibaba-damo-academy",
-      "src": "/model-logos/alibaba-damo-academy.jpg"
-    },
-    "allenai": {
-      "key": "allenai",
-      "label": "allenai",
-      "sourceOrg": "allenai",
-      "src": "/model-logos/allenai.png"
-    },
-    "amap-cvlab": {
-      "key": "amap-cvlab",
-      "label": "amap cvlab",
-      "sourceOrg": "amap-cvlab",
-      "src": "/model-logos/amap-cvlab.png"
-    },
-    "amap-ml": {
-      "key": "amap-ml",
-      "label": "AMAP ML",
-      "sourceOrg": "AMAP-ML",
-      "src": "/model-logos/amap-ml.png"
-    },
-    "api": {
-      "key": "api",
-      "label": "Api",
-      "sourceOrg": "Api",
-      "src": "/model-logos/api.png"
-    },
-    "beingbeyond": {
-      "key": "beingbeyond",
-      "label": "BeingBeyond",
-      "sourceOrg": "BeingBeyond",
-      "src": "/model-logos/beingbeyond.png"
-    },
-    "benchcouncil": {
-      "key": "benchcouncil",
-      "label": "BenchCouncil",
-      "sourceOrg": "BenchCouncil",
-      "src": "/model-logos/benchcouncil.jpg"
-    },
-    "btsmart": {
-      "key": "btsmart",
-      "label": "btsmart",
-      "sourceOrg": "btsmart",
-      "src": "/model-logos/btsmart.png"
-    },
-    "buaa-colalab": {
-      "key": "buaa-colalab",
-      "label": "buaa colalab",
-      "sourceOrg": "buaa-colalab",
-      "src": "/model-logos/buaa-colalab.png"
-    },
-    "bytedance": {
-      "key": "bytedance",
-      "label": "ByteDance Seed",
-      "sourceOrg": "ByteDance-Seed",
-      "src": "/model-logos/bytedance.png"
-    },
-    "caoang327": {
-      "key": "caoang327",
-      "label": "Caoang327",
-      "sourceOrg": "Caoang327",
-      "src": "/model-logos/caoang327.jpg"
-    },
-    "cau-hai-lab": {
-      "key": "cau-hai-lab",
-      "label": "cau hai lab",
-      "sourceOrg": "cau-hai-lab",
-      "src": "/model-logos/cau-hai-lab.png"
-    },
-    "cerspense": {
-      "key": "cerspense",
-      "label": "cerspense",
-      "sourceOrg": "cerspense",
-      "src": "/model-logos/cerspense.jpg"
-    },
-    "chen-h01": {
-      "key": "chen-h01",
-      "label": "CHEN H01",
-      "sourceOrg": "CHEN-H01",
-      "src": "/model-logos/chen-h01.jpg"
-    },
-    "cintellifusion": {
-      "key": "cintellifusion",
-      "label": "CIntellifusion",
-      "sourceOrg": "CIntellifusion",
-      "src": "/model-logos/cintellifusion.jpg"
-    },
-    "cognitiveaisystems": {
-      "key": "cognitiveaisystems",
-      "label": "CognitiveAISystems",
-      "sourceOrg": "CognitiveAISystems",
-      "src": "/model-logos/cognitiveaisystems.png"
-    },
-    "cut3r": {
-      "key": "cut3r",
-      "label": "CUT3R",
-      "sourceOrg": "CUT3R",
-      "src": "/model-logos/cut3r.png"
-    },
-    "cvg": {
-      "key": "cvg",
-      "label": "cvg",
-      "sourceOrg": "cvg",
-      "src": "/model-logos/cvg.png"
-    },
-    "cvlab-kaist": {
-      "key": "cvlab-kaist",
-      "label": "cvlab kaist",
-      "sourceOrg": "cvlab-kaist",
-      "src": "/model-logos/cvlab-kaist.png"
-    },
-    "cvmi-lab": {
-      "key": "cvmi-lab",
-      "label": "CVMI Lab",
-      "sourceOrg": "CVMI-Lab",
-      "src": "/model-logos/cvmi-lab.png"
-    },
-    "cynthiazxy123": {
-      "key": "cynthiazxy123",
-      "label": "Cynthiazxy123",
-      "sourceOrg": "Cynthiazxy123",
-      "src": "/model-logos/cynthiazxy123.jpg"
-    },
-    "dcharatan": {
-      "key": "dcharatan",
-      "label": "dcharatan",
-      "sourceOrg": "dcharatan",
-      "src": "/model-logos/dcharatan.png"
-    },
-    "depth-anything": {
-      "key": "depth-anything",
-      "label": "DepthAnything",
-      "sourceOrg": "DepthAnything",
-      "src": "/model-logos/depth-anything.png"
-    },
-    "dexmal": {
-      "key": "dexmal",
-      "label": "Dexmal",
-      "sourceOrg": "Dexmal",
-      "src": "/model-logos/dexmal.jpg"
-    },
-    "doubiiu": {
-      "key": "doubiiu",
-      "label": "Doubiiu",
-      "sourceOrg": "Doubiiu",
-      "src": "/model-logos/doubiiu.png"
-    },
-    "dravenalg": {
-      "key": "dravenalg",
-      "label": "DravenALG",
-      "sourceOrg": "DravenALG",
-      "src": "/model-logos/dravenalg.jpg"
-    },
-    "dreamzero0": {
-      "key": "dreamzero0",
-      "label": "dreamzero0",
-      "sourceOrg": "dreamzero0",
-      "src": "/model-logos/dreamzero0.png"
-    },
-    "drexubery": {
-      "key": "drexubery",
-      "label": "Drexubery",
-      "sourceOrg": "Drexubery",
-      "src": "/model-logos/drexubery.jpg"
-    },
-    "echo-team-joy-future-academy-jd": {
-      "key": "echo-team-joy-future-academy-jd",
-      "label": "Echo Team Joy Future Academy JD",
-      "sourceOrg": "Echo-Team-Joy-Future-Academy-JD",
-      "src": "/model-logos/echo-team-joy-future-academy-jd.jpg"
-    },
-    "eloialonso": {
-      "key": "eloialonso",
-      "label": "eloialonso",
-      "sourceOrg": "eloialonso",
-      "src": "/model-logos/eloialonso.png"
-    },
-    "embodiedcity": {
-      "key": "embodiedcity",
-      "label": "EmbodiedCity",
-      "sourceOrg": "EmbodiedCity",
-      "src": "/model-logos/embodiedcity.png"
-    },
-    "ensanli": {
-      "key": "ensanli",
-      "label": "ensanli",
-      "sourceOrg": "ensanli",
-      "src": "/model-logos/ensanli.jpg"
-    },
-    "envision-research": {
-      "key": "envision-research",
-      "label": "EnVision Research",
-      "sourceOrg": "EnVision-Research",
-      "src": "/model-logos/envision-research.png"
-    },
-    "eo-robotics": {
-      "key": "eo-robotics",
-      "label": "EO Robotics",
-      "sourceOrg": "EO-Robotics",
-      "src": "/model-logos/eo-robotics.png"
-    },
-    "etched-ai": {
-      "key": "etched-ai",
-      "label": "etched ai",
-      "sourceOrg": "etched-ai",
-      "src": "/model-logos/etched-ai.png"
-    },
-    "eternalevan": {
-      "key": "eternalevan",
-      "label": "EternalEvan",
-      "sourceOrg": "EternalEvan",
-      "src": "/model-logos/eternalevan.jpg"
-    },
-    "evalcrafter": {
-      "key": "evalcrafter",
-      "label": "evalcrafter",
-      "sourceOrg": "evalcrafter",
-      "src": "/model-logos/evalcrafter.png"
-    },
-    "exla-ai": {
-      "key": "exla-ai",
-      "label": "exla ai",
-      "sourceOrg": "exla-ai",
-      "src": "/model-logos/exla-ai.png"
-    },
-    "fantasy-amap": {
-      "key": "fantasy-amap",
-      "label": "Fantasy AMAP",
-      "sourceOrg": "Fantasy-AMAP",
-      "src": "/model-logos/fantasy-amap.png"
-    },
-    "farama-foundation": {
-      "key": "farama-foundation",
-      "label": "Farama Foundation",
-      "sourceOrg": "Farama-Foundation",
-      "src": "/model-logos/farama-foundation.png"
-    },
-    "flairox": {
-      "key": "flairox",
-      "label": "FLAIROx",
-      "sourceOrg": "FLAIROx",
-      "src": "/model-logos/flairox.png"
-    },
-    "gaoyuezhou": {
-      "key": "gaoyuezhou",
-      "label": "gaoyuezhou",
-      "sourceOrg": "gaoyuezhou",
-      "src": "/model-logos/gaoyuezhou.png"
-    },
-    "gaussianobject": {
-      "key": "gaussianobject",
-      "label": "GaussianObject",
-      "sourceOrg": "GaussianObject",
-      "src": "/model-logos/gaussianobject.png"
-    },
-    "genmoai": {
-      "key": "genmoai",
-      "label": "genmoai",
-      "sourceOrg": "genmoai",
-      "src": "/model-logos/genmoai.png"
-    },
-    "google-deepmind": {
-      "key": "google-deepmind",
-      "label": "google deepmind",
-      "sourceOrg": "google-deepmind",
-      "src": "/model-logos/google-deepmind.png"
-    },
-    "google-research": {
-      "key": "google-research",
-      "label": "google research",
-      "sourceOrg": "google-research",
-      "src": "/model-logos/google-research.png"
-    },
-    "guandeh17": {
-      "key": "guandeh17",
-      "label": "guandeh17",
-      "sourceOrg": "guandeh17",
-      "src": "/model-logos/guandeh17.jpg"
-    },
-    "guoyww": {
-      "key": "guoyww",
-      "label": "guoyww",
-      "sourceOrg": "guoyww",
-      "src": "/model-logos/guoyww.jpg"
-    },
-    "h-embodvis": {
-      "key": "h-embodvis",
-      "label": "H EmbodVis",
-      "sourceOrg": "H-EmbodVis",
-      "src": "/model-logos/h-embodvis.png"
-    },
-    "hao-ai-lab": {
-      "key": "hao-ai-lab",
-      "label": "hao ai lab",
-      "sourceOrg": "hao-ai-lab",
-      "src": "/model-logos/hao-ai-lab.png"
-    },
-    "haosulab": {
-      "key": "haosulab",
-      "label": "haosulab",
-      "sourceOrg": "haosulab",
-      "src": "/model-logos/haosulab.png"
-    },
-    "haoyi-duan": {
-      "key": "haoyi-duan",
-      "label": "haoyi duan",
-      "sourceOrg": "haoyi-duan",
-      "src": "/model-logos/haoyi-duan.jpg"
-    },
-    "hehao13": {
-      "key": "hehao13",
-      "label": "hehao13",
-      "sourceOrg": "hehao13",
-      "src": "/model-logos/hehao13.jpg"
-    },
-    "hkchengrex": {
-      "key": "hkchengrex",
-      "label": "hkchengrex",
-      "sourceOrg": "hkchengrex",
-      "src": "/model-logos/hkchengrex.jpg"
-    },
-    "hpcaitech": {
-      "key": "hpcaitech",
-      "label": "hpcaitech",
-      "sourceOrg": "hpcaitech",
-      "src": "/model-logos/hpcaitech.jpg"
-    },
-    "hritikbansal": {
-      "key": "hritikbansal",
-      "label": "Hritikbansal",
-      "sourceOrg": "Hritikbansal",
-      "src": "/model-logos/hritikbansal.jpg"
-    },
-    "huggingface": {
-      "key": "huggingface",
-      "label": "huggingface",
-      "sourceOrg": "huggingface",
-      "src": "/model-logos/huggingface.png"
-    },
-    "hustvl": {
-      "key": "hustvl",
-      "label": "hustvl",
-      "sourceOrg": "hustvl",
-      "src": "/model-logos/hustvl.png"
-    },
-    "iamcreateai": {
-      "key": "iamcreateai",
-      "label": "IamCreateAI",
-      "sourceOrg": "IamCreateAI",
-      "src": "/model-logos/iamcreateai.png"
-    },
-    "imlixinyang": {
-      "key": "imlixinyang",
-      "label": "imlixinyang",
-      "sourceOrg": "imlixinyang",
-      "src": "/model-logos/imlixinyang.png"
-    },
-    "inspatio": {
-      "key": "inspatio",
-      "label": "inspatio",
-      "sourceOrg": "inspatio",
-      "src": "/model-logos/inspatio.jpg"
-    },
-    "insta360-research-team": {
-      "key": "insta360-research-team",
-      "label": "Insta360 Research Team",
-      "sourceOrg": "Insta360-Research-Team",
-      "src": "/model-logos/insta360-research-team.png"
-    },
-    "jaylee0301": {
-      "key": "jaylee0301",
-      "label": "jayLEE0301",
-      "sourceOrg": "jayLEE0301",
-      "src": "/model-logos/jaylee0301.jpg"
-    },
-    "ji4chenli": {
-      "key": "ji4chenli",
-      "label": "Ji4chenLi",
-      "sourceOrg": "Ji4chenLi",
-      "src": "/model-logos/ji4chenli.png"
-    },
-    "jinplu": {
-      "key": "jinplu",
-      "label": "JinPLu",
-      "sourceOrg": "JinPLu",
-      "src": "/model-logos/jinplu.png"
-    },
-    "junyi42": {
-      "key": "junyi42",
-      "label": "Junyi42",
-      "sourceOrg": "Junyi42",
-      "src": "/model-logos/junyi42.jpg"
-    },
-    "kairos-agi": {
-      "key": "kairos-agi",
-      "label": "kairos agi",
-      "sourceOrg": "kairos-agi",
-      "src": "/model-logos/kairos-agi.png"
-    },
-    "kaiyuesun98": {
-      "key": "kaiyuesun98",
-      "label": "KaiyueSun98",
-      "sourceOrg": "KaiyueSun98",
-      "src": "/model-logos/kaiyuesun98.png"
-    },
-    "klingairesearch": {
-      "key": "klingairesearch",
-      "label": "KlingAIResearch",
-      "sourceOrg": "KlingAIResearch",
-      "src": "/model-logos/klingairesearch.jpg"
-    },
-    "kovenyu": {
-      "key": "kovenyu",
-      "label": "KovenYu",
-      "sourceOrg": "KovenYu",
-      "src": "/model-logos/kovenyu.jpg"
-    },
-    "krea-ai": {
-      "key": "krea-ai",
-      "label": "krea ai",
-      "sourceOrg": "krea-ai",
-      "src": "/model-logos/krea-ai.png"
-    },
-    "kwaivgi": {
-      "key": "kwaivgi",
-      "label": "KwaiVGI",
-      "sourceOrg": "KwaiVGI",
-      "src": "/model-logos/kwaivgi.png"
-    },
-    "latentactionpretraining": {
-      "key": "latentactionpretraining",
-      "label": "LatentActionPretraining",
-      "sourceOrg": "LatentActionPretraining",
-      "src": "/model-logos/latentactionpretraining.png"
-    },
-    "lifelong-robot-learning": {
-      "key": "lifelong-robot-learning",
-      "label": "Lifelong Robot Learning",
-      "sourceOrg": "Lifelong-Robot-Learning",
-      "src": "/model-logos/lifelong-robot-learning.png"
-    },
-    "lightricks": {
-      "key": "lightricks",
-      "label": "Lightricks",
-      "sourceOrg": "Lightricks",
-      "src": "/model-logos/lightricks.jpg"
-    },
-    "liheyoung": {
-      "key": "liheyoung",
-      "label": "LiheYoung",
-      "sourceOrg": "LiheYoung",
-      "src": "/model-logos/liheyoung.jpg"
-    },
-    "lingbot": {
-      "key": "lingbot",
-      "label": "robbyant",
-      "sourceOrg": "robbyant",
-      "src": "/model-logos/lingbot.png"
-    },
-    "liruiw": {
-      "key": "liruiw",
-      "label": "liruiw",
-      "sourceOrg": "liruiw",
-      "src": "/model-logos/liruiw.jpg"
-    },
-    "little-podi": {
-      "key": "little-podi",
-      "label": "Little Podi",
-      "sourceOrg": "Little-Podi",
-      "src": "/model-logos/little-podi.jpg"
-    },
-    "lllyasviel": {
-      "key": "lllyasviel",
-      "label": "lllyasviel",
-      "sourceOrg": "lllyasviel",
-      "src": "/model-logos/lllyasviel.jpg"
-    },
-    "lpiccinelli-eth": {
-      "key": "lpiccinelli-eth",
-      "label": "lpiccinelli eth",
-      "sourceOrg": "lpiccinelli-eth",
-      "src": "/model-logos/lpiccinelli-eth.jpg"
-    },
-    "lucas-maes": {
-      "key": "lucas-maes",
-      "label": "lucas maes",
-      "sourceOrg": "lucas-maes",
-      "src": "/model-logos/lucas-maes.png"
-    },
-    "lumalabs-ai": {
-      "key": "lumalabs-ai",
-      "label": "lumalabs ai",
-      "sourceOrg": "lumalabs-ai",
-      "src": "/model-logos/lumalabs-ai.png"
-    },
-    "magiclinux": {
-      "key": "magiclinux",
-      "label": "magiclinux",
-      "sourceOrg": "magiclinux",
-      "src": "/model-logos/magiclinux.png"
-    },
-    "maitrix-org": {
-      "key": "maitrix-org",
-      "label": "maitrix org",
-      "sourceOrg": "maitrix-org",
-      "src": "/model-logos/maitrix-org.png"
-    },
-    "mees": {
-      "key": "mees",
-      "label": "mees",
-      "sourceOrg": "mees",
-      "src": "/model-logos/mees.jpg"
-    },
-    "meghamariamkm": {
-      "key": "meghamariamkm",
-      "label": "meghamariamkm",
-      "sourceOrg": "meghamariamkm",
-      "src": "/model-logos/meghamariamkm.png"
-    },
-    "meigen-ai": {
-      "key": "meigen-ai",
-      "label": "MeiGen AI",
-      "sourceOrg": "MeiGen-AI",
-      "src": "/model-logos/meigen-ai.jpg"
-    },
-    "meituan-longcat": {
-      "key": "meituan-longcat",
-      "label": "meituan longcat",
-      "sourceOrg": "meituan-longcat",
-      "src": "/model-logos/meituan-longcat.png"
-    },
-    "memobench-team": {
-      "key": "memobench-team",
-      "label": "MemoBench Team",
-      "sourceOrg": "MemoBench-Team",
-      "src": "/model-logos/memobench-team.png"
-    },
-    "meta": {
-      "key": "meta",
-      "label": "facebook",
-      "sourceOrg": "facebook",
-      "src": "/model-logos/meta.png"
-    },
-    "miccooper9": {
-      "key": "miccooper9",
-      "label": "miccooper9",
-      "sourceOrg": "miccooper9",
-      "src": "/model-logos/miccooper9.png"
-    },
-    "microsoft": {
-      "key": "microsoft",
-      "label": "microsoft",
-      "sourceOrg": "microsoft",
-      "src": "/model-logos/microsoft.png"
-    },
-    "mingxiangl": {
-      "key": "mingxiangl",
-      "label": "MingXiangL",
-      "sourceOrg": "MingXiangL",
-      "src": "/model-logos/mingxiangl.png"
-    },
-    "minimax-ai": {
-      "key": "minimax-ai",
-      "label": "MiniMax AI",
-      "sourceOrg": "MiniMax-AI",
-      "src": "/model-logos/minimax-ai.jpg"
-    },
-    "mira-space": {
-      "key": "mira-space",
-      "label": "mira space",
-      "sourceOrg": "mira-space",
-      "src": "/model-logos/mira-space.jpg"
-    },
-    "mira-wm": {
-      "key": "mira-wm",
-      "label": "mira wm",
-      "sourceOrg": "mira-wm",
-      "src": "/model-logos/mira-wm.png"
-    },
-    "modelscope": {
-      "key": "modelscope",
-      "label": "modelscope",
-      "sourceOrg": "modelscope",
-      "src": "/model-logos/modelscope.png"
-    },
-    "moojink": {
-      "key": "moojink",
-      "label": "moojink",
-      "sourceOrg": "moojink",
-      "src": "/model-logos/moojink.jpg"
-    },
-    "moyangli00": {
-      "key": "moyangli00",
-      "label": "MoyangLi00",
-      "sourceOrg": "MoyangLi00",
-      "src": "/model-logos/moyangli00.jpg"
-    },
-    "naver": {
-      "key": "naver",
-      "label": "naver",
-      "sourceOrg": "naver",
-      "src": "/model-logos/naver.png"
-    },
-    "nicklashansen": {
-      "key": "nicklashansen",
-      "label": "nicklashansen",
-      "sourceOrg": "nicklashansen",
-      "src": "/model-logos/nicklashansen.png"
-    },
-    "nu-world-model-embodied-ai": {
-      "key": "nu-world-model-embodied-ai",
-      "label": "NU World Model Embodied AI",
-      "sourceOrg": "NU-World-Model-Embodied-AI",
-      "src": "/model-logos/nu-world-model-embodied-ai.png"
-    },
-    "nvidia": {
-      "key": "nvidia",
-      "label": "nv tlabs",
-      "sourceOrg": "nv-tlabs",
-      "src": "/model-logos/nvidia.png"
-    },
-    "octo-models": {
-      "key": "octo-models",
-      "label": "octo models",
-      "sourceOrg": "octo-models",
-      "src": "/model-logos/octo-models.png"
-    },
-    "omniforcing": {
-      "key": "omniforcing",
-      "label": "OmniForcing",
-      "sourceOrg": "OmniForcing",
-      "src": "/model-logos/omniforcing.png"
-    },
-    "open-gigaai": {
-      "key": "open-gigaai",
-      "label": "open gigaai",
-      "sourceOrg": "open-gigaai",
-      "src": "/model-logos/open-gigaai.png"
-    },
-    "openai": {
-      "key": "openai",
-      "label": "openai",
-      "sourceOrg": "openai",
-      "src": "/model-logos/openai.png"
-    },
-    "openenvision": {
-      "key": "openenvision",
-      "label": "OpenEnvision",
-      "sourceOrg": "OpenEnvision",
-      "src": "/model-logos/openenvision.png"
-    },
-    "opengvlab": {
-      "key": "opengvlab",
-      "label": "OpenGVLab",
-      "sourceOrg": "OpenGVLab",
-      "src": "/model-logos/opengvlab.jpg"
-    },
-    "openmoss": {
-      "key": "openmoss",
-      "label": "OpenMOSS",
-      "sourceOrg": "OpenMOSS",
-      "src": "/model-logos/openmoss.png"
-    },
-    "openvla": {
-      "key": "openvla",
-      "label": "openvla",
-      "sourceOrg": "openvla",
-      "src": "/model-logos/openvla.png"
-    },
-    "orange-3dv-team": {
-      "key": "orange-3dv-team",
-      "label": "Orange 3DV Team",
-      "sourceOrg": "Orange-3DV-Team",
-      "src": "/model-logos/orange-3dv-team.png"
-    },
-    "physical-intelligence": {
-      "key": "physical-intelligence",
-      "label": "Physical Intelligence",
-      "sourceOrg": "Physical-Intelligence",
-      "src": "/model-logos/physical-intelligence.png"
-    },
-    "pku-yuangroup": {
-      "key": "pku-yuangroup",
-      "label": "PKU YuanGroup",
-      "sourceOrg": "PKU-YuanGroup",
-      "src": "/model-logos/pku-yuangroup.jpg"
-    },
-    "rail-berkeley": {
-      "key": "rail-berkeley",
-      "label": "rail berkeley",
-      "sourceOrg": "rail-berkeley",
-      "src": "/model-logos/rail-berkeley.jpg"
-    },
-    "real-stanford": {
-      "key": "real-stanford",
-      "label": "real stanford",
-      "sourceOrg": "real-stanford",
-      "src": "/model-logos/real-stanford.png"
-    },
-    "rhymes-ai": {
-      "key": "rhymes-ai",
-      "label": "rhymes ai",
-      "sourceOrg": "rhymes-ai",
-      "src": "/model-logos/rhymes-ai.png"
-    },
-    "robert-gyj": {
-      "key": "robert-gyj",
-      "label": "Robert gyj",
-      "sourceOrg": "Robert-gyj",
-      "src": "/model-logos/robert-gyj.jpg"
-    },
-    "robocasa": {
-      "key": "robocasa",
-      "label": "robocasa",
-      "sourceOrg": "robocasa",
-      "src": "/model-logos/robocasa.png"
-    },
-    "roboflamingo": {
-      "key": "roboflamingo",
-      "label": "RoboFlamingo",
-      "sourceOrg": "RoboFlamingo",
-      "src": "/model-logos/roboflamingo.jpg"
-    },
-    "robomme": {
-      "key": "robomme",
-      "label": "RoboMME",
-      "sourceOrg": "RoboMME",
-      "src": "/model-logos/robomme.png"
-    },
-    "robotwin-platform": {
-      "key": "robotwin-platform",
-      "label": "RoboTwin Platform",
-      "sourceOrg": "RoboTwin-Platform",
-      "src": "/model-logos/robotwin-platform.png"
-    },
-    "runjiali-rl": {
-      "key": "runjiali-rl",
-      "label": "runjiali rl",
-      "sourceOrg": "runjiali-rl",
-      "src": "/model-logos/runjiali-rl.jpg"
-    },
-    "runwayml": {
-      "key": "runwayml",
-      "label": "runwayml",
-      "sourceOrg": "runwayml",
-      "src": "/model-logos/runwayml.png"
-    },
-    "sandai-org": {
-      "key": "sandai-org",
-      "label": "SandAI org",
-      "sourceOrg": "SandAI-org",
-      "src": "/model-logos/sandai-org.jpg"
-    },
-    "sarafridov": {
-      "key": "sarafridov",
-      "label": "sarafridov",
-      "sourceOrg": "sarafridov",
-      "src": "/model-logos/sarafridov.jpg"
-    },
-    "shandaai": {
-      "key": "shandaai",
-      "label": "ShandaAI",
-      "sourceOrg": "ShandaAI",
-      "src": "/model-logos/shandaai.png"
-    },
-    "shengshu-ai": {
-      "key": "shengshu-ai",
-      "label": "shengshu ai",
-      "sourceOrg": "shengshu-ai",
-      "src": "/model-logos/shengshu-ai.jpg"
-    },
-    "shi-labs": {
-      "key": "shi-labs",
-      "label": "SHI Labs",
-      "sourceOrg": "SHI-Labs",
-      "src": "/model-logos/shi-labs.jpg"
-    },
-    "showlab": {
-      "key": "showlab",
-      "label": "showlab",
-      "sourceOrg": "showlab",
-      "src": "/model-logos/showlab.png"
-    },
-    "simonsun0810": {
-      "key": "simonsun0810",
-      "label": "SimonSun0810",
-      "sourceOrg": "SimonSun0810",
-      "src": "/model-logos/simonsun0810.png"
-    },
-    "simpler-env": {
-      "key": "simpler-env",
-      "label": "simpler env",
-      "sourceOrg": "simpler-env",
-      "src": "/model-logos/simpler-env.png"
-    },
-    "simworld-ai": {
-      "key": "simworld-ai",
-      "label": "SimWorld AI",
-      "sourceOrg": "SimWorld-AI",
-      "src": "/model-logos/simworld-ai.png"
-    },
-    "skywork": {
-      "key": "skywork",
-      "label": "SkyworkAI",
-      "sourceOrg": "SkyworkAI",
-      "src": "/model-logos/skywork.jpg"
-    },
-    "snap-research": {
-      "key": "snap-research",
-      "label": "snap research",
-      "sourceOrg": "snap-research",
-      "src": "/model-logos/snap-research.png"
-    },
-    "solaris-wm": {
-      "key": "solaris-wm",
-      "label": "solaris wm",
-      "sourceOrg": "solaris-wm",
-      "src": "/model-logos/solaris-wm.png"
-    },
-    "spatialvision": {
-      "key": "spatialvision",
-      "label": "SpatialVision",
-      "sourceOrg": "SpatialVision",
-      "src": "/model-logos/spatialvision.png"
-    },
-    "stability-ai": {
-      "key": "stability-ai",
-      "label": "Stability AI",
-      "sourceOrg": "Stability-AI",
-      "src": "/model-logos/stability-ai.png"
-    },
-    "stanfordvl": {
-      "key": "stanfordvl",
-      "label": "StanfordVL",
-      "sourceOrg": "StanfordVL",
-      "src": "/model-logos/stanfordvl.png"
-    },
-    "starvla": {
-      "key": "starvla",
-      "label": "starVLA",
-      "sourceOrg": "starVLA",
-      "src": "/model-logos/starvla.png"
-    },
-    "stdstu12": {
-      "key": "stdstu12",
-      "label": "stdstu12",
-      "sourceOrg": "stdstu12",
-      "src": "/model-logos/stdstu12.png"
-    },
-    "stepfun-ai": {
-      "key": "stepfun-ai",
-      "label": "stepfun ai",
-      "sourceOrg": "stepfun-ai",
-      "src": "/model-logos/stepfun-ai.png"
-    },
-    "stepjam": {
-      "key": "stepjam",
-      "label": "stepjam",
-      "sourceOrg": "stepjam",
-      "src": "/model-logos/stepjam.png"
-    },
-    "taco-group": {
-      "key": "taco-group",
-      "label": "taco group",
-      "sourceOrg": "taco-group",
-      "src": "/model-logos/taco-group.png"
-    },
-    "tangshitao": {
-      "key": "tangshitao",
-      "label": "Tangshitao",
-      "sourceOrg": "Tangshitao",
-      "src": "/model-logos/tangshitao.png"
-    },
-    "tencent-hunyuan": {
-      "key": "tencent-hunyuan",
-      "label": "Tencent Hunyuan",
-      "sourceOrg": "Tencent-Hunyuan",
-      "src": "/model-logos/tencent-hunyuan.png"
-    },
-    "tencentarc": {
-      "key": "tencentarc",
-      "label": "TencentARC",
-      "sourceOrg": "TencentARC",
-      "src": "/model-logos/tencentarc.png"
-    },
-    "thu-ml": {
-      "key": "thu-ml",
-      "label": "thu ml",
-      "sourceOrg": "thu-ml",
-      "src": "/model-logos/thu-ml.jpg"
-    },
-    "thudm": {
-      "key": "thudm",
-      "label": "THUDM",
-      "sourceOrg": "THUDM",
-      "src": "/model-logos/thudm.png"
-    },
-    "thuml": {
-      "key": "thuml",
-      "label": "thuml",
-      "sourceOrg": "thuml",
-      "src": "/model-logos/thuml.png"
-    },
-    "tiger-ai-lab": {
-      "key": "tiger-ai-lab",
-      "label": "TIGER AI Lab",
-      "sourceOrg": "TIGER-AI-Lab",
-      "src": "/model-logos/tiger-ai-lab.jpg"
-    },
-    "tonyzhaozh": {
-      "key": "tonyzhaozh",
-      "label": "tonyzhaozh",
-      "sourceOrg": "tonyzhaozh",
-      "src": "/model-logos/tonyzhaozh.jpg"
-    },
-    "tsinghua-fib-lab": {
-      "key": "tsinghua-fib-lab",
-      "label": "tsinghua fib lab",
-      "sourceOrg": "tsinghua-fib-lab",
-      "src": "/model-logos/tsinghua-fib-lab.png"
-    },
-    "umass-embodied-agi": {
-      "key": "umass-embodied-agi",
-      "label": "UMass Embodied AGI",
-      "sourceOrg": "UMass-Embodied-AGI",
-      "src": "/model-logos/umass-embodied-agi.png"
-    },
-    "unix-ai-lab": {
-      "key": "unix-ai-lab",
-      "label": "UniX AI Lab",
-      "sourceOrg": "UniX-AI-Lab",
-      "src": "/model-logos/unix-ai-lab.png"
-    },
-    "vchitect": {
-      "key": "vchitect",
-      "label": "Vchitect",
-      "sourceOrg": "Vchitect",
-      "src": "/model-logos/vchitect.jpg"
-    },
-    "video-bench": {
-      "key": "video-bench",
-      "label": "Video Bench",
-      "sourceOrg": "Video-Bench",
-      "src": "/model-logos/video-bench.png"
-    },
-    "videocrafter": {
-      "key": "videocrafter",
-      "label": "VideoCrafter",
-      "sourceOrg": "VideoCrafter",
-      "src": "/model-logos/videocrafter.png"
-    },
-    "vivocameraresearch": {
-      "key": "vivocameraresearch",
-      "label": "vivoCameraResearch",
-      "sourceOrg": "vivoCameraResearch",
-      "src": "/model-logos/vivocameraresearch.png"
-    },
-    "vye16": {
-      "key": "vye16",
-      "label": "vye16",
-      "sourceOrg": "vye16",
-      "src": "/model-logos/vye16.png"
-    },
-    "wan": {
-      "key": "wan",
-      "label": "Wan Video",
-      "sourceOrg": "Wan-Video",
-      "src": "/model-logos/wan.png"
-    },
-    "weirdlabuw": {
-      "key": "weirdlabuw",
-      "label": "WEIRDLabUW",
-      "sourceOrg": "WEIRDLabUW",
-      "src": "/model-logos/weirdlabuw.png"
-    },
-    "world-grow": {
-      "key": "world-grow",
-      "label": "world grow",
-      "sourceOrg": "world-grow",
-      "src": "/model-logos/world-grow.jpg"
-    },
-    "world-in-world": {
-      "key": "world-in-world",
-      "label": "World In World",
-      "sourceOrg": "World-In-World",
-      "src": "/model-logos/world-in-world.png"
-    },
-    "worldbenchmark": {
-      "key": "worldbenchmark",
-      "label": "WorldBenchmark",
-      "sourceOrg": "WorldBenchmark",
-      "src": "/model-logos/worldbenchmark.png"
-    },
-    "worldlabs-ai": {
-      "key": "worldlabs-ai",
-      "label": "worldlabs ai",
-      "sourceOrg": "worldlabs-ai",
-      "src": "/model-logos/worldlabs-ai.png"
-    },
-    "worldmodelbench-team": {
-      "key": "worldmodelbench-team",
-      "label": "WorldModelBench Team",
-      "sourceOrg": "WorldModelBench-Team",
-      "src": "/model-logos/worldmodelbench-team.png"
-    },
-    "wow-world-model": {
-      "key": "wow-world-model",
-      "label": "wow world model",
-      "sourceOrg": "wow-world-model",
-      "src": "/model-logos/wow-world-model.png"
-    },
-    "wzzheng": {
-      "key": "wzzheng",
-      "label": "wzzheng",
-      "sourceOrg": "wzzheng",
-      "src": "/model-logos/wzzheng.jpg"
-    },
-    "x-square-robot": {
-      "key": "x-square-robot",
-      "label": "X Square Robot",
-      "sourceOrg": "X-Square-Robot",
-      "src": "/model-logos/x-square-robot.png"
-    },
-    "xizaoqu": {
-      "key": "xizaoqu",
-      "label": "xizaoqu",
-      "sourceOrg": "xizaoqu",
-      "src": "/model-logos/xizaoqu.png"
-    },
-    "yanqinjiang": {
-      "key": "yanqinjiang",
-      "label": "yanqinJiang",
-      "sourceOrg": "yanqinJiang",
-      "src": "/model-logos/yanqinjiang.png"
-    },
-    "yaofang-liu": {
-      "key": "yaofang-liu",
-      "label": "Yaofang Liu",
-      "sourceOrg": "Yaofang-Liu",
-      "src": "/model-logos/yaofang-liu.jpg"
-    },
-    "yeppp27": {
-      "key": "yeppp27",
-      "label": "yeppp27",
-      "sourceOrg": "yeppp27",
-      "src": "/model-logos/yeppp27.png"
-    },
-    "yibo-miao": {
-      "key": "yibo-miao",
-      "label": "yibo miao",
-      "sourceOrg": "yibo-miao",
-      "src": "/model-logos/yibo-miao.png"
-    },
-    "yuantianyuan01": {
-      "key": "yuantianyuan01",
-      "label": "yuantianyuan01",
-      "sourceOrg": "yuantianyuan01",
-      "src": "/model-logos/yuantianyuan01.jpg"
-    },
-    "yvanyin": {
-      "key": "yvanyin",
-      "label": "YvanYin",
-      "sourceOrg": "YvanYin",
-      "src": "/model-logos/yvanyin.jpg"
-    },
-    "yxzzhang": {
-      "key": "yxzzhang",
-      "label": "yxzzhang",
-      "sourceOrg": "yxzzhang",
-      "src": "/model-logos/yxzzhang.jpg"
-    },
-    "yyfz": {
-      "key": "yyfz",
-      "label": "yyfz",
-      "sourceOrg": "yyfz",
-      "src": "/model-logos/yyfz.jpg"
-    },
-    "z-x-yang": {
-      "key": "z-x-yang",
-      "label": "z x yang",
-      "sourceOrg": "z-x-yang",
-      "src": "/model-logos/z-x-yang.jpg"
-    },
-    "z2tong": {
-      "key": "z2tong",
-      "label": "z2tong",
-      "sourceOrg": "z2tong",
-      "src": "/model-logos/z2tong.png"
-    },
-    "zeqing-wang": {
-      "key": "zeqing-wang",
-      "label": "Zeqing Wang",
-      "sourceOrg": "Zeqing-Wang",
-      "src": "/model-logos/zeqing-wang.jpg"
-    },
-    "zerg-overmind": {
-      "key": "zerg-overmind",
-      "label": "Zerg Overmind",
-      "sourceOrg": "Zerg-Overmind",
-      "src": "/model-logos/zerg-overmind.jpg"
-    },
-    "zhaojingjing713": {
-      "key": "zhaojingjing713",
-      "label": "ZhaoJingjing713",
-      "sourceOrg": "ZhaoJingjing713",
-      "src": "/model-logos/zhaojingjing713.png"
-    },
-    "zichengduan": {
-      "key": "zichengduan",
-      "label": "ZichengDuan",
-      "sourceOrg": "ZichengDuan",
-      "src": "/model-logos/zichengduan.jpg"
-    },
-    "ziyang-xie": {
-      "key": "ziyang-xie",
-      "label": "ZiYang xie",
-      "sourceOrg": "ZiYang-xie",
-      "src": "/model-logos/ziyang-xie.jpg"
-    }
-  },
+  "generatedBy": "docs/fumadocs/scripts/generate-org-logos.py (hand-reviewed publishing-institution mapping; GitHub user avatars are banned)",
   "modelLogos": {
-    "4d-gs": "hustvl",
-    "abot-world-0-5b-lf": "amap-cvlab",
-    "ac3d": "snap-research",
-    "act": "tonyzhaozh",
-    "adaworld": "little-podi",
-    "allegro": "rhymes-ai",
-    "animatediff": "guoyww",
-    "astra": "eternalevan",
+    "4d-gs": "hust",
+    "a1": "zju",
+    "abot-m0": "amap",
+    "abot-world-0-5b-lf": "amap",
+    "ac3d": "snap",
+    "act": "stanford",
+    "adaworld": "hkust",
+    "ahawam": "baidu",
+    "alayaworld": "alayalab",
+    "allegro": "rhymes",
+    "animatediff": "cuhk",
+    "astra": "tsinghua",
     "ati-wan21-14b": "bytedance",
     "being-h05": "beingbeyond",
     "being-h07": "beingbeyond",
     "bernini": "bytedance",
     "bernini-r-1.3b": "bytedance",
     "bernini-r-14b": "bytedance",
-    "cameractrl": "hehao13",
-    "causal-forcing": "thu-ml",
+    "cameractrl": "cuhk",
+    "causal-forcing": "tsinghua",
+    "causal-rcm": "nvidia",
     "cogact": "microsoft",
-    "cogvideox": "thudm",
-    "consistent4d": "yanqinjiang",
+    "cogvideox": "zhipu",
+    "consistent4d": "ucas",
+    "cosmos-predict-2": "nvidia",
     "cosmos-predict-2.5": "nvidia",
     "cosmos-transfer-2.5": "nvidia",
     "cosmos3": "nvidia",
-    "ctrl-world": "robert-gyj",
-    "cut3r": "cut3r",
-    "d-nerf": "albertpumarola",
-    "dap": "insta360-research-team",
+    "ctrl-world": "tsinghua",
+    "cut3r": "berkeley",
+    "d-nerf": "upc",
+    "dap": "insta360",
     "db-cogact": "dexmal",
-    "depth-anything-v1": "liheyoung",
-    "depth-anything-v2-prior": "depth-anything",
+    "depth-anything-v1": "bytedance",
+    "depth-anything-v2-prior": "bytedance",
     "depth-anything-v3": "bytedance",
     "depth-anything-v3-prior": "bytedance",
-    "diamond": "eloialonso",
-    "diffusion-policy": "real-stanford",
-    "dino-wm": "gaoyuezhou",
+    "dexora-1b": "dexora",
+    "diamond": "unige",
+    "diffusion-policy": "stanford",
+    "dino-wm": "nyu",
+    "dm0": "dexmal",
     "dreamdojo": "nvidia",
-    "dreamx-world-5b": "amap-ml",
-    "dreamx-world-5b-cam": "amap-ml",
-    "dreamzero": "dreamzero0",
-    "droid-w": "moyangli00",
-    "dualcamctrl": "envision-research",
+    "dreamx-world-5b": "amap",
+    "dreamx-world-5b-cam": "amap",
+    "dreamzero": "nvidia",
+    "dualcamctrl": "hkust",
     "dust3r": "naver",
     "dust3r-base-model": "naver",
     "dvlt": "nvidia",
-    "dynamicrafter": "doubiiu",
-    "easyanimate": "aigc-apps",
-    "echo-infinity": "echo-team-joy-future-academy-jd",
-    "egowm": "miccooper9",
-    "emu3.5": "openenvision",
-    "eo1": "eo-robotics",
-    "fantasyworld": "fantasy-amap",
-    "fastwam": "yuantianyuan01",
-    "flashworld": "imlixinyang",
-    "framepack": "lllyasviel",
+    "dynamicrafter": "tencent",
+    "easyanimate": "alibaba",
+    "echo-infinity": "jd",
+    "echo-memory-block-ssm": "jd",
+    "echo-memory-context-k1": "jd",
+    "echo-memory-context-k20": "jd",
+    "echo-memory-spatial": "jd",
+    "echo-memory-spatial-concat-text": "jd",
+    "echo-memory-spatial-cross-attn-t32": "jd",
+    "echo-memory-spatial-no-injection": "jd",
+    "echo-memory-ssm-ctx1-every4-hint21": "jd",
+    "echo-memory-ssm-ctx5-every1-hint21": "jd",
+    "echo-memory-ssm-ctx5-every4-hint81": "jd",
+    "echo-memory-videossm-hybrid": "jd",
+    "egowm": "cmu",
+    "emu3.5": "baai",
+    "eventvla": "shanghai-ai-lab",
+    "evoke": "alayalab",
+    "fantasyworld": "amap",
+    "fastvideo-causal-wan2.2": "nvidia",
+    "fastwam": "galaxea",
+    "flashworld": "tencent",
+    "framepack": "stanford",
+    "galaxea-vla": "galaxea",
     "gamma-world": "nvidia",
-    "gaussian-actor": "huggingface",
-    "gaussianflow": "zerg-overmind",
-    "gaussianobject": "gaussianobject",
+    "gaussianflow": "usc",
+    "gaussianobject": "sjtu",
     "gen3c": "nvidia",
-    "genie-envisioner": "agibottech",
-    "geocalib-prior": "cvg",
-    "geometry-prior": "openenvision",
-    "giga-brain-0": "open-gigaai",
-    "giga-world-0": "open-gigaai",
+    "genie-envisioner": "agibot",
+    "geocalib-prior": "eth",
+    "giga-brain-0": "gigaai",
+    "giga-world-0": "gigaai",
+    "giga-world-policy-0.5": "gigaai",
+    "go1": "agibot",
     "gr00t": "nvidia",
-    "hailuo-2p3": "minimax-ai",
-    "happyoyster": "api",
-    "helios": "pku-yuangroup",
-    "hexplane": "caoang327",
-    "hma": "liruiw",
+    "h-rdt": "tsinghua",
+    "hailuo-2p3": "minimax",
+    "happyoyster": "happyoyster",
+    "helios": "pku",
+    "hexplane": "umich",
+    "hma": "mit",
     "hunyuan-game-craft": "tencent-hunyuan",
     "hunyuanvideo": "tencent-hunyuan",
     "hunyuanvideo-1.5": "tencent-hunyuan",
     "hunyuanworld-1": "tencent-hunyuan",
     "hunyuanworld-mirror": "tencent-hunyuan",
     "hunyuanworld-voyager": "tencent-hunyuan",
-    "hy-embodied": "tencent-hunyuan",
+    "hy-embodied-vla": "tencent-hunyuan",
     "hy-world-2.0": "tencent-hunyuan",
     "hy-worldplay": "tencent-hunyuan",
-    "hydra": "h-embodvis",
+    "hydra": "hust",
     "hyworld-worldgen": "tencent-hunyuan",
-    "i2vgen-xl": "ali-vilab",
-    "infinite-vggt": "wzzheng",
-    "infinite-world": "meigen-ai",
+    "i2vgen-xl": "alibaba",
+    "infinite-vggt": "berkeley",
+    "infinite-world": "meigen",
     "inspatio-world": "inspatio",
+    "internvla-a1": "shanghai-ai-lab",
     "irasim": "bytedance",
-    "iris": "eloialonso",
-    "k-planes": "sarafridov",
-    "kairos-sensenova": "kairos-agi",
-    "kling-api": "kwaivgi",
-    "krea-realtime-video": "krea-ai",
+    "iris": "unige",
+    "joyai-echo-longvideo": "jd",
+    "joyai-echo-wm": "jd",
+    "k-planes": "berkeley",
+    "kairos-sensenova": "sensetime",
+    "kling-api": "kuaishou",
+    "krea-realtime-video": "krea",
     "lagernvs": "meta",
-    "lapa": "latentactionpretraining",
-    "last-r1": "chen-h01",
-    "leworldmodel": "lucas-maes",
-    "libero-para": "cau-hai-lab",
-    "lingbot-map": "lingbot",
-    "lingbot-va": "lingbot",
-    "lingbot-video": "lingbot",
-    "lingbot-vla": "lingbot",
-    "lingbot-vla-v2": "lingbot",
-    "lingbot-world": "lingbot",
-    "lingbot-world-act": "lingbot",
-    "lingbot-world-v2": "lingbot",
-    "liveworld": "zichengduan",
-    "loger": "junyi42",
-    "longcat-video": "meituan-longcat",
-    "longvie-1": "vchitect",
-    "longvie-2": "vchitect",
+    "lapa": "microsoft",
+    "last-r1": "cuhk",
+    "lda-1b": "galbot",
+    "leworldmodel": "mila",
+    "lingbot-map": "antgroup",
+    "lingbot-va": "antgroup",
+    "lingbot-video": "antgroup",
+    "lingbot-vla": "antgroup",
+    "lingbot-vla-v2": "antgroup",
+    "lingbot-world": "antgroup",
+    "lingbot-world-act": "antgroup",
+    "lingbot-world-v2": "antgroup",
+    "liveworld": "adelaide",
+    "loger": "berkeley",
+    "longcat-video": "meituan",
+    "longvie-1": "shanghai-ai-lab",
+    "longvie-2": "shanghai-ai-lab",
+    "ltx-2.5": "lightricks",
     "ltx-2.x": "lightricks",
     "ltx-video": "lightricks",
-    "luma-ray2": "lumalabs-ai",
+    "luma-ray2": "luma",
     "lyra": "nvidia",
-    "magi-1": "sandai-org",
-    "magicworld": "vivocameraresearch",
+    "magi-1": "sandai",
+    "magi2-preview": "sandai",
+    "magicworld": "vivo",
     "matrix-game-1": "skywork",
     "matrix-game-2": "skywork",
     "matrix-game-3": "skywork",
-    "metric3d-prior": "yvanyin",
+    "matrix-game-3.5-first-person": "riemann-dynamics",
+    "matrix-game-3.5-third-person": "riemann-dynamics",
+    "mem-0": "hku",
+    "metric3d-prior": "dji",
     "mineworld": "microsoft",
-    "minwm-hy-action2v": "shengshu-ai",
-    "minwm-wan-action2v": "shengshu-ai",
+    "minimax-h3": "minimax",
+    "minwm-hy-action2v": "shengshu",
+    "minwm-wan-action2v": "shengshu",
     "mira": "mira-wm",
-    "mmaudio": "hkchengrex",
-    "mme-vla": "robomme",
-    "mochi-1": "genmoai",
-    "modelscope-t2v": "modelscope",
-    "molmoact2": "allenai",
-    "molmobot": "allenai",
-    "monst3r": "junyi42",
-    "mosaicmem": "abdelstark",
+    "mmaudio": "sony",
+    "mme-vla": "umich",
+    "mochi-1": "genmo",
+    "modelscope-t2v": "alibaba",
+    "molmoact2": "ai2",
+    "molmobot": "ai2",
+    "monst3r": "google-deepmind",
+    "mosaicmem": "starkware",
     "motionbricks": "nvidia",
-    "motionctrl": "tencentarc",
-    "moverse": "orange-3dv-team",
-    "multi-task-dit": "huggingface",
-    "multiworld": "cintellifusion",
-    "mvdiffusion": "tangshitao",
-    "neoverse": "iamcreateai",
+    "motionctrl": "tencent",
+    "moverse": "alibaba",
+    "multiworld": "map-org",
+    "mvdiffusion": "sfu",
+    "neoverse": "createai",
     "nwm": "meta",
-    "oasis-500m": "etched-ai",
-    "octo": "octo-models",
+    "oasis-500m": "etched",
+    "octo": "berkeley",
     "omniforcing": "omniforcing",
-    "omnivinci": "openenvision",
-    "open-magvit2": "tencentarc",
+    "omnivinci": "nvidia",
+    "open-dreamer": "reactor",
+    "open-magvit2": "tencent",
     "open-sora": "hpcaitech",
-    "open-sora-plan": "pku-yuangroup",
+    "open-sora-plan": "pku",
     "openpi": "physical-intelligence",
-    "openpie-0.6": "exla-ai",
-    "openvla": "openvla",
-    "openvla-oft": "moojink",
-    "pandora": "maitrix-org",
+    "openvla": "stanford",
+    "openvla-oft": "stanford",
+    "pandora": "ucsd",
     "pi0": "physical-intelligence",
     "pi0-fast": "physical-intelligence",
     "pi0-worldfoundry": "physical-intelligence",
     "pi05": "physical-intelligence",
-    "pi3": "yyfz",
-    "pixelsplat": "dcharatan",
+    "pi3": "sjtu",
+    "pixelsplat": "mit",
     "pointworld": "nvidia",
-    "prior-depth-anything": "spatialvision",
-    "pusa-vidgen": "yaofang-liu",
-    "qwen2.5-omni": "openenvision",
+    "prior-depth-anything": "zju",
+    "pusa-vidgen": "cityu",
+    "qwen2.5-omni": "alibaba",
+    "rdt-1b": "tsinghua",
     "real-time-chunking": "physical-intelligence",
-    "recammaster": "klingairesearch",
-    "roboflamingo": "roboflamingo",
-    "rolling-forcing": "tencentarc",
-    "rt-1": "google-research",
-    "runway-gen4p5": "runwayml",
-    "sama-14b": "cynthiazxy123",
+    "recammaster": "kuaishou",
+    "rise": "shanghai-ai-lab",
+    "roboflamingo": "bytedance",
+    "rolling-forcing": "tencent",
+    "rt-1": "google",
+    "runway-gen4p5": "runway",
+    "sama-14b": "tsinghua",
     "sana": "nvidia",
     "sana-wm": "nvidia",
-    "sc-gs": "cvmi-lab",
-    "scope": "z2tong",
-    "self-forcing": "guandeh17",
-    "shape-of-motion": "vye16",
-    "shotstream": "klingairesearch",
-    "show-o": "showlab",
-    "simworld": "simworld-ai",
+    "sc-gs": "hku",
+    "scope": "ucas",
+    "self-forcing": "adobe",
+    "shape-of-motion": "berkeley",
+    "shotstream": "kuaishou",
+    "show-o": "nus",
+    "simworld": "simworld",
     "skyreels-v2": "skywork",
     "skyreels-v3": "skywork",
     "smolvla": "huggingface",
-    "solaris": "solaris-wm",
+    "solaris": "nyu",
+    "solarwm": "cuhk",
     "sora2": "openai",
-    "spatia": "zhaojingjing713",
-    "spatial-ladder": "openenvision",
-    "spatial-reasoner": "openenvision",
-    "spirit-v1.5": "openenvision",
-    "splatt3r": "btsmart",
-    "stable-virtual-camera": "stability-ai",
+    "spatia": "microsoft",
+    "spatial-forcing": "openhelix",
+    "spatial-ladder": "zju",
+    "spatial-reasoner": "jhu",
+    "spirit-v1.5": "spirit-ai",
+    "splatt3r": "oxford",
+    "stable-video-infinity": "epfl",
+    "stable-virtual-camera": "stability",
     "starvla": "starvla",
-    "starwm": "yxzzhang",
-    "step-video-t2v": "stepfun-ai",
-    "t2v_turbo_t2v": "ji4chenli",
-    "tdmpc": "nicklashansen",
-    "tesseract": "umass-embodied-agi",
-    "thinksound": "openenvision",
-    "tineuvox": "hustvl",
-    "track-anything-prior": "z-x-yang",
-    "uni3c": "alibaba-damo-academy",
-    "unianimate-dit": "ali-vilab",
-    "unidepth-v2-prior": "lpiccinelli-eth",
-    "unik3d-prior": "lpiccinelli-eth",
-    "uwm": "weirdlabuw",
-    "vchitect-2-t2v": "vchitect",
+    "starwm": "cas",
+    "step-video-t2v": "stepfun",
+    "t2v_turbo_t2v": "google",
+    "tesseract": "umass",
+    "tineuvox": "hust",
+    "tinyvla": "midea",
+    "track-anything-prior": "zju",
+    "uni3c": "alibaba",
+    "unianimate-dit": "alibaba",
+    "unidepth-v2-prior": "eth",
+    "unik3d-prior": "eth",
+    "uwm": "uwash",
+    "vchitect-2-t2v": "shanghai-ai-lab",
     "veo3": "google-deepmind",
-    "versecrafter": "tencentarc",
+    "versecrafter": "tencent",
     "vggt": "meta",
     "vggt-omega": "meta",
-    "vggt-world": "simonsun0810",
-    "vid2world": "thuml",
-    "video-depth-anything-prior": "depth-anything",
-    "videocrafter": "videocrafter",
-    "videocrafter1-i2v": "videocrafter",
-    "videocrafter1-t2v": "videocrafter",
-    "videocrafter2-t2v": "videocrafter",
-    "viewcrafter": "drexubery",
-    "vlanext": "dravenalg",
-    "vmem": "runjiali-rl",
-    "vqbet": "jaylee0301",
-    "wall-oss": "x-square-robot",
+    "vggt-world": "uq",
+    "vid2world": "tsinghua",
+    "video-depth-anything-prior": "bytedance",
+    "videocrafter": "tencent",
+    "videocrafter1-i2v": "tencent",
+    "videocrafter1-t2v": "tencent",
+    "videocrafter2-t2v": "tencent",
+    "vlanext": "ntu",
+    "vmem": "oxford",
     "wan-2p5": "wan",
     "wan-2p6": "wan",
     "wan-2p7": "wan",
     "wan2.1": "wan",
     "wan2.1-vace": "wan",
     "wan2.2": "wan",
-    "wan21-fun-14b-cam": "aigc-apps",
-    "wan21-fun-1p3b-cam": "aigc-apps",
-    "wan22-fun-5b-cam": "aigc-apps",
-    "wan22-fun-a14b-cam": "aigc-apps",
-    "warp-as-history": "yyfz",
-    "wilddet3d": "allenai",
-    "wildworld": "shandaai",
-    "wonderjourney": "kovenyu",
-    "wonderworld": "kovenyu",
-    "worldcam": "cvlab-kaist",
+    "wan21-fun-14b-cam": "wan",
+    "wan21-fun-1p3b-cam": "wan",
+    "wan22-fun-5b-cam": "wan",
+    "wan22-fun-a14b-cam": "wan",
+    "warp-as-history": "sjtu",
+    "wilddet3d": "ai2",
+    "wildworld": "shanda",
+    "wonderjourney": "stanford",
+    "wonderworld": "stanford",
+    "worldcam": "kaist",
     "worldfm": "inspatio",
-    "worldgen": "ziyang-xie",
-    "worldgrow": "world-grow",
-    "worldlabs": "worldlabs-ai",
-    "worldlabs-marble-1.1": "worldlabs-ai",
-    "worldmem": "xizaoqu",
-    "wow": "wow-world-model",
-    "xvla": "2toinf",
-    "yume": "stdstu12",
-    "zeroscope": "cerspense"
+    "worldgen": "meta",
+    "worldgrow": "huawei",
+    "worldlabs": "worldlabs",
+    "worldlabs-marble-1.1": "worldlabs",
+    "worldmem": "ntu",
+    "wow": "x-humanoid",
+    "x-wam": "xiaomi",
+    "xiaomi-robotics-0": "xiaomi",
+    "xiaomi-robotics-1": "xiaomi",
+    "xvla": "tsinghua",
+    "yume": "fudan",
+    "zeroscope": "modelscope"
+  },
+  "orgs": {
+    "adelaide": {
+      "abbr": "UA",
+      "key": "adelaide",
+      "license": "CC BY-SA 4.0",
+      "name": "The University of Adelaide (AIML)",
+      "source": "https://commons.wikimedia.org/wiki/File:Arms_of_the_University_of_Adelaide.svg",
+      "src": "/org-logos/adelaide.png"
+    },
+    "adobe": {
+      "abbr": "AD",
+      "key": "adobe",
+      "license": "CC0-1.0",
+      "name": "Adobe",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #FF0000",
+      "src": "/org-logos/adobe.svg"
+    },
+    "agibot": {
+      "abbr": "AB",
+      "key": "agibot",
+      "license": "Organization brand mark",
+      "name": "AgiBot",
+      "source": "GitHub organization brand avatar (github.com/AgibotTech), pre-existing repo asset",
+      "src": "/org-logos/agibot.jpg"
+    },
+    "ai2": {
+      "abbr": "AI2",
+      "key": "ai2",
+      "license": "Public domain (text logo)",
+      "name": "Allen Institute for AI (Ai2)",
+      "source": "https://commons.wikimedia.org/wiki/File:Allen_Institute_for_Artificial_Intelligence.svg",
+      "src": "/org-logos/ai2.svg"
+    },
+    "airi": {
+      "abbr": "AIRI",
+      "key": "airi",
+      "license": "Public domain (text logo)",
+      "name": "AIRI (Artificial Intelligence Research Institute)",
+      "source": "Original simple wordmark rendition for the identity mark",
+      "src": "/org-logos/airi.svg"
+    },
+    "alayalab": {
+      "abbr": "AL",
+      "key": "alayalab",
+      "license": "Public domain (simple geometry)",
+      "name": "AlayaLab",
+      "source": "Original simple A monogram for the identity mark",
+      "src": "/org-logos/alayalab.svg"
+    },
+    "alibaba": {
+      "abbr": "AL",
+      "key": "alibaba",
+      "license": "Public domain (text logo)",
+      "name": "Alibaba",
+      "source": "https://commons.wikimedia.org/wiki/File:Alibaba_en_logo.svg",
+      "src": "/org-logos/alibaba.svg"
+    },
+    "amap": {
+      "abbr": "AM",
+      "key": "amap",
+      "license": "Public domain (text logo)",
+      "name": "Amap (Alibaba)",
+      "source": "https://commons.wikimedia.org/wiki/File:Alibaba_en_logo.svg",
+      "src": "/org-logos/alibaba.svg"
+    },
+    "antgroup": {
+      "abbr": "AG",
+      "key": "antgroup",
+      "license": "Organization brand mark",
+      "name": "Ant Group (Robbyant)",
+      "source": "GitHub organization brand avatar (github.com/robbyant), pre-existing repo asset",
+      "src": "/org-logos/antgroup.png"
+    },
+    "baai": {
+      "abbr": "BAAI",
+      "key": "baai",
+      "license": "Public domain (simple geometry)",
+      "name": "Beijing Academy of Artificial Intelligence",
+      "source": "https://commons.wikimedia.org/wiki/File:Beijing_Academy_of_Artificial_Intelligence_logo.svg",
+      "src": "/org-logos/baai.svg"
+    },
+    "baidu": {
+      "abbr": "BD",
+      "key": "baidu",
+      "license": "CC0-1.0",
+      "name": "Baidu",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #2932E1",
+      "src": "/org-logos/baidu.svg"
+    },
+    "beingbeyond": {
+      "abbr": "BB",
+      "key": "beingbeyond",
+      "license": "Organization brand mark",
+      "name": "BeingBeyond",
+      "source": "GitHub organization brand avatar (github.com/BeingBeyond), pre-existing repo asset",
+      "src": "/org-logos/beingbeyond.png"
+    },
+    "benchcouncil": {
+      "abbr": "BC",
+      "key": "benchcouncil",
+      "license": "Organization brand mark",
+      "name": "BenchCouncil",
+      "source": "GitHub organization brand avatar (github.com/BenchCouncil), pre-existing repo asset",
+      "src": "/org-logos/benchcouncil.jpg"
+    },
+    "berkeley": {
+      "abbr": "UCB",
+      "key": "berkeley",
+      "license": "Public domain",
+      "name": "UC Berkeley",
+      "source": "https://commons.wikimedia.org/wiki/File:Seal_of_University_of_California,_Berkeley.svg",
+      "src": "/org-logos/berkeley.svg"
+    },
+    "buaa": {
+      "abbr": "BUAA",
+      "key": "buaa",
+      "license": "Organization brand mark",
+      "name": "Beihang University",
+      "source": "Official university brand mark (www.buaa.edu.cn), crest cropped and restored to Beihang blue #004EA2",
+      "src": "/org-logos/buaa.png"
+    },
+    "bytedance": {
+      "abbr": "BD",
+      "key": "bytedance",
+      "license": "CC0-1.0",
+      "name": "ByteDance",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #3C8CFF",
+      "src": "/org-logos/bytedance.svg"
+    },
+    "caltech": {
+      "abbr": "CIT",
+      "key": "caltech",
+      "license": "Public domain (simple seal rendition)",
+      "name": "California Institute of Technology (Caltech)",
+      "source": "Original simple circular-seal rendition of the Caltech seal (torch)",
+      "src": "/org-logos/caltech.svg"
+    },
+    "cas": {
+      "abbr": "CAS",
+      "key": "cas",
+      "license": "Organization brand mark",
+      "name": "Chinese Academy of Sciences",
+      "source": "Official CAS seal from the UCAS brand mark (www.ucas.ac.cn), crest cropped and restored to CAS navy #004B87",
+      "src": "/org-logos/cas.png"
+    },
+    "cau": {
+      "abbr": "CAU",
+      "key": "cau",
+      "license": "Public domain (simple seal rendition)",
+      "name": "Chung-Ang University (HAI Lab)",
+      "source": "Original simple circular-seal rendition of the CAU monogram",
+      "src": "/org-logos/cau.svg"
+    },
+    "cityu": {
+      "abbr": "CityU",
+      "key": "cityu",
+      "license": "Public domain (simple seal rendition)",
+      "name": "City University of Hong Kong",
+      "source": "Original simple circular-seal rendition of the CityU emblem",
+      "src": "/org-logos/cityu.svg"
+    },
+    "cmu": {
+      "abbr": "CMU",
+      "key": "cmu",
+      "license": "Public domain (text logo)",
+      "name": "Carnegie Mellon University",
+      "source": "https://commons.wikimedia.org/wiki/File:Carnegie_Mellon_wordmark.svg",
+      "src": "/org-logos/cmu.svg"
+    },
+    "createai": {
+      "abbr": "CR",
+      "key": "createai",
+      "license": "Organization brand mark",
+      "name": "CreateAI",
+      "source": "GitHub organization brand avatar (github.com/IamCreateAI), pre-existing repo asset",
+      "src": "/org-logos/createai.png"
+    },
+    "csu": {
+      "abbr": "CSU",
+      "key": "csu",
+      "license": "Organization brand mark",
+      "name": "Central South University",
+      "source": "Official university brand mark (www.csu.edu.cn), crest cropped for the identity mark",
+      "src": "/org-logos/csu.png"
+    },
+    "cuhk": {
+      "abbr": "CUHK",
+      "key": "cuhk",
+      "license": "Organization brand mark",
+      "name": "The Chinese University of Hong Kong",
+      "source": "Official university emblem cropped from the CUHK site header mark (https://www.cuhk.edu.hk/english/images/cuhk_logo_2x.png)",
+      "src": "/org-logos/cuhk.png"
+    },
+    "dexmal": {
+      "abbr": "DX",
+      "key": "dexmal",
+      "license": "Organization brand mark",
+      "name": "Dexmal",
+      "source": "GitHub organization brand avatar (github.com/Dexmal), pre-existing repo asset",
+      "src": "/org-logos/dexmal.jpg"
+    },
+    "dexora": {
+      "abbr": "DX",
+      "key": "dexora",
+      "license": "Public domain (simple geometry)",
+      "name": "Dexora",
+      "source": "Original simple dual-arm D monogram for the identity mark",
+      "src": "/org-logos/dexora.svg"
+    },
+    "dji": {
+      "abbr": "DJ",
+      "key": "dji",
+      "license": "CC0-1.0",
+      "name": "DJI",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #000000",
+      "src": "/org-logos/dji.svg"
+    },
+    "epfl": {
+      "abbr": "EPFL",
+      "key": "epfl",
+      "license": "Public domain (text logo)",
+      "name": "EPFL",
+      "source": "https://commons.wikimedia.org/wiki/File:Logo_EPFL.svg",
+      "src": "/org-logos/epfl.svg"
+    },
+    "etched": {
+      "abbr": "ET",
+      "key": "etched",
+      "license": "Organization brand mark",
+      "name": "Etched",
+      "source": "GitHub organization brand avatar (github.com/etched-ai), pre-existing repo asset",
+      "src": "/org-logos/etched.png"
+    },
+    "eth": {
+      "abbr": "ETH",
+      "key": "eth",
+      "license": "Public domain (text logo)",
+      "name": "ETH Zurich",
+      "source": "https://commons.wikimedia.org/wiki/File:ETH_Zürich_Logo_black.svg",
+      "src": "/org-logos/eth.svg"
+    },
+    "exla": {
+      "abbr": "EX",
+      "key": "exla",
+      "license": "Organization brand mark",
+      "name": "Exla AI",
+      "source": "GitHub organization brand avatar (github.com/exla-ai), pre-existing repo asset",
+      "src": "/org-logos/exla.png"
+    },
+    "farama": {
+      "abbr": "FR",
+      "key": "farama",
+      "license": "Organization brand mark",
+      "name": "Farama Foundation",
+      "source": "GitHub organization brand avatar (github.com/Farama-Foundation), pre-existing repo asset",
+      "src": "/org-logos/farama.png"
+    },
+    "freiburg": {
+      "abbr": "UFR",
+      "key": "freiburg",
+      "license": "CC BY-SA 4.0",
+      "name": "University of Freiburg",
+      "source": "https://commons.wikimedia.org/wiki/File:Wortmarke-grundform-universitaet_freiburg_blau_rgb.png",
+      "src": "/org-logos/freiburg.png"
+    },
+    "fudan": {
+      "abbr": "FDU",
+      "key": "fudan",
+      "license": "Public domain",
+      "name": "Fudan University",
+      "source": "https://commons.wikimedia.org/wiki/File:Fudan_University_Logo.svg",
+      "src": "/org-logos/fudan.svg"
+    },
+    "galaxea": {
+      "abbr": "GX",
+      "key": "galaxea",
+      "license": "Organization brand mark",
+      "name": "Galaxea AI",
+      "source": "GitHub organization brand avatar (github.com/OpenGalaxea)",
+      "src": "/org-logos/galaxea.png"
+    },
+    "galbot": {
+      "abbr": "GB",
+      "key": "galbot",
+      "license": "Organization brand mark",
+      "name": "Galbot",
+      "source": "GitHub organization brand avatar (github.com/GalaxyGeneralRobotics)",
+      "src": "/org-logos/galbot.jpg"
+    },
+    "gatech": {
+      "abbr": "GT",
+      "key": "gatech",
+      "license": "Public domain (text logo)",
+      "name": "Georgia Institute of Technology",
+      "source": "https://commons.wikimedia.org/wiki/File:Georgia_Tech_Yellow_Jackets_logo.svg",
+      "src": "/org-logos/gatech.svg"
+    },
+    "genmo": {
+      "abbr": "GM",
+      "key": "genmo",
+      "license": "Organization brand mark",
+      "name": "Genmo",
+      "source": "GitHub organization brand avatar (github.com/genmoai), pre-existing repo asset",
+      "src": "/org-logos/genmo.png"
+    },
+    "gigaai": {
+      "abbr": "GA",
+      "key": "gigaai",
+      "license": "Organization brand mark",
+      "name": "GigaAI",
+      "source": "GitHub organization brand avatar (github.com/open-gigaai), pre-existing repo asset",
+      "src": "/org-logos/gigaai.png"
+    },
+    "google": {
+      "abbr": "G",
+      "key": "google",
+      "license": "Public domain (simple geometry)",
+      "name": "Google",
+      "source": "https://commons.wikimedia.org/wiki/File:Google_\"G\"_logo.svg",
+      "src": "/org-logos/google.svg"
+    },
+    "google-deepmind": {
+      "abbr": "GDM",
+      "key": "google-deepmind",
+      "license": "Public domain (simple geometry)",
+      "name": "Google DeepMind",
+      "source": "https://commons.wikimedia.org/wiki/File:Google_DeepMind_logo.svg",
+      "src": "/org-logos/google-deepmind.svg"
+    },
+    "happyoyster": {
+      "abbr": "HO",
+      "key": "happyoyster",
+      "license": "Public domain (simple geometry)",
+      "name": "HappyOyster",
+      "source": "Original simple oyster/pearl monogram for the identity mark",
+      "src": "/org-logos/happyoyster.svg"
+    },
+    "harvard": {
+      "abbr": "HU",
+      "key": "harvard",
+      "license": "Public domain",
+      "name": "Harvard University",
+      "source": "https://commons.wikimedia.org/wiki/File:Harvard_University_shield.png",
+      "src": "/org-logos/harvard.png"
+    },
+    "hku": {
+      "abbr": "HKU",
+      "key": "hku",
+      "license": "Organization brand mark",
+      "name": "The University of Hong Kong",
+      "source": "Official university coat of arms from the HKU site mark (www.hku.hk), shield cropped for the identity mark",
+      "src": "/org-logos/hku.png"
+    },
+    "hkust": {
+      "abbr": "HKUST",
+      "key": "hkust",
+      "license": "Public domain (simple seal rendition)",
+      "name": "Hong Kong University of Science and Technology",
+      "source": "Original simple circular-seal rendition of the HKUST emblem",
+      "src": "/org-logos/hkust.svg"
+    },
+    "hpcaitech": {
+      "abbr": "HA",
+      "key": "hpcaitech",
+      "license": "Organization brand mark",
+      "name": "HPC-AI Tech",
+      "source": "GitHub organization brand avatar (github.com/hpcaitech), pre-existing repo asset",
+      "src": "/org-logos/hpcaitech.jpg"
+    },
+    "huawei": {
+      "abbr": "HW",
+      "key": "huawei",
+      "license": "CC0-1.0",
+      "name": "Huawei",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #FF0000",
+      "src": "/org-logos/huawei.svg"
+    },
+    "huggingface": {
+      "abbr": "HF",
+      "key": "huggingface",
+      "license": "CC0-1.0",
+      "name": "Hugging Face",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #FFD21E",
+      "src": "/org-logos/huggingface.svg"
+    },
+    "hust": {
+      "abbr": "HUST",
+      "key": "hust",
+      "license": "Public domain (simple seal rendition)",
+      "name": "Huazhong University of Science and Technology",
+      "source": "Original simple circular-seal rendition of the HUST emblem",
+      "src": "/org-logos/hust.svg"
+    },
+    "imperial": {
+      "abbr": "ICL",
+      "key": "imperial",
+      "license": "CC BY 3.0",
+      "name": "Imperial College London",
+      "source": "https://commons.wikimedia.org/wiki/File:Shield_of_Imperial_College_London.svg",
+      "src": "/org-logos/imperial.png"
+    },
+    "inspatio": {
+      "abbr": "IN",
+      "key": "inspatio",
+      "license": "Organization brand mark",
+      "name": "InSpatio",
+      "source": "GitHub organization brand avatar (github.com/inspatio), pre-existing repo asset",
+      "src": "/org-logos/inspatio.jpg"
+    },
+    "insta360": {
+      "abbr": "I3",
+      "key": "insta360",
+      "license": "Organization brand mark",
+      "name": "Insta360",
+      "source": "GitHub organization brand avatar (github.com/Insta360-Research-Team), pre-existing repo asset",
+      "src": "/org-logos/insta360.png"
+    },
+    "jd": {
+      "abbr": "JD",
+      "key": "jd",
+      "license": "Organization brand mark",
+      "name": "JD.com (Joy Future Academy)",
+      "source": "GitHub organization brand avatar (github.com/jd-opensource)",
+      "src": "/org-logos/jd.png"
+    },
+    "jhu": {
+      "abbr": "JHU",
+      "key": "jhu",
+      "license": "Public domain (text logo)",
+      "name": "Johns Hopkins University",
+      "source": "https://commons.wikimedia.org/wiki/File:Johns_Hopkins_University_logo.png",
+      "src": "/org-logos/jhu.png"
+    },
+    "kaist": {
+      "abbr": "KAIST",
+      "key": "kaist",
+      "license": "Public domain",
+      "name": "KAIST",
+      "source": "https://commons.wikimedia.org/wiki/File:KAIST_logo.svg",
+      "src": "/org-logos/kaist.svg"
+    },
+    "koc": {
+      "abbr": "KU",
+      "key": "koc",
+      "license": "Public domain",
+      "name": "Koç University",
+      "source": "https://commons.wikimedia.org/wiki/File:Koç_University_logo.svg",
+      "src": "/org-logos/koc.svg"
+    },
+    "krea": {
+      "abbr": "KR",
+      "key": "krea",
+      "license": "Organization brand mark",
+      "name": "Krea AI",
+      "source": "GitHub organization brand avatar (github.com/krea-ai), pre-existing repo asset",
+      "src": "/org-logos/krea.png"
+    },
+    "kuaishou": {
+      "abbr": "KS",
+      "key": "kuaishou",
+      "license": "CC0-1.0",
+      "name": "Kuaishou",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #FF4906",
+      "src": "/org-logos/kuaishou.svg"
+    },
+    "lightricks": {
+      "abbr": "LT",
+      "key": "lightricks",
+      "license": "Organization brand mark",
+      "name": "Lightricks",
+      "source": "GitHub organization brand avatar (github.com/Lightricks), pre-existing repo asset",
+      "src": "/org-logos/lightricks.jpg"
+    },
+    "luma": {
+      "abbr": "LU",
+      "key": "luma",
+      "license": "Organization brand mark",
+      "name": "Luma AI",
+      "source": "GitHub organization brand avatar (github.com/lumalabs-ai), pre-existing repo asset",
+      "src": "/org-logos/luma.png"
+    },
+    "map-org": {
+      "abbr": "MAP",
+      "key": "map-org",
+      "license": "Organization brand mark",
+      "name": "MAP (multimodal-art-projection)",
+      "source": "GitHub organization brand avatar (github.com/multimodal-art-projection)",
+      "src": "/org-logos/map-org.png"
+    },
+    "meigen": {
+      "abbr": "MG",
+      "key": "meigen",
+      "license": "Organization brand mark",
+      "name": "MeiGen-AI",
+      "source": "GitHub organization brand avatar (github.com/MeiGen-AI), pre-existing repo asset",
+      "src": "/org-logos/meigen.jpg"
+    },
+    "meituan": {
+      "abbr": "MT",
+      "key": "meituan",
+      "license": "CC0-1.0",
+      "name": "Meituan",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #FFD100",
+      "src": "/org-logos/meituan.svg"
+    },
+    "meta": {
+      "abbr": "M",
+      "key": "meta",
+      "license": "CC0-1.0",
+      "name": "Meta",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #0467DF",
+      "src": "/org-logos/meta.svg"
+    },
+    "microsoft": {
+      "abbr": "MS",
+      "key": "microsoft",
+      "license": "Public domain (simple geometry)",
+      "name": "Microsoft",
+      "source": "https://commons.wikimedia.org/wiki/File:Microsoft_icon.svg",
+      "src": "/org-logos/microsoft.svg"
+    },
+    "midea": {
+      "abbr": "MD",
+      "key": "midea",
+      "license": "Public domain (text logo)",
+      "name": "Midea Group",
+      "source": "Original simple wordmark rendition for the identity mark",
+      "src": "/org-logos/midea.svg"
+    },
+    "mila": {
+      "abbr": "MILA",
+      "key": "mila",
+      "license": "Public domain (text logo)",
+      "name": "Mila – Quebec AI Institute",
+      "source": "https://commons.wikimedia.org/wiki/File:Mila_logo.svg",
+      "src": "/org-logos/mila.svg"
+    },
+    "minimax": {
+      "abbr": "MM",
+      "key": "minimax",
+      "license": "CC0-1.0",
+      "name": "MiniMax",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #E73562",
+      "src": "/org-logos/minimax.svg"
+    },
+    "mira-wm": {
+      "abbr": "MI",
+      "key": "mira-wm",
+      "license": "Public domain (text logo)",
+      "name": "MIRA",
+      "source": "Original simple wordmark rendition for the identity mark",
+      "src": "/org-logos/mira-wm.svg"
+    },
+    "mit": {
+      "abbr": "MIT",
+      "key": "mit",
+      "license": "Public domain (text logo)",
+      "name": "MIT",
+      "source": "https://commons.wikimedia.org/wiki/File:MIT_logo.svg",
+      "src": "/org-logos/mit.svg"
+    },
+    "modelscope": {
+      "abbr": "MS",
+      "key": "modelscope",
+      "license": "Organization brand mark",
+      "name": "ModelScope",
+      "source": "GitHub organization brand avatar (github.com/modelscope)",
+      "src": "/org-logos/modelscope.png"
+    },
+    "naver": {
+      "abbr": "NA",
+      "key": "naver",
+      "license": "CC0-1.0",
+      "name": "NAVER",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #03C75A",
+      "src": "/org-logos/naver.svg"
+    },
+    "ntu": {
+      "abbr": "NTU",
+      "key": "ntu",
+      "license": "Organization brand mark",
+      "name": "Nanyang Technological University",
+      "source": "Official university brand mark (www.ntu.edu.sg), crest cropped for the identity mark",
+      "src": "/org-logos/ntu.png"
+    },
+    "nu-lab": {
+      "abbr": "NU",
+      "key": "nu-lab",
+      "license": "Public domain (simple seal rendition)",
+      "name": "Northeastern University (World Model & Embodied AI Lab)",
+      "source": "Original simple circular-seal rendition of the Northeastern N",
+      "src": "/org-logos/northeastern.svg"
+    },
+    "nus": {
+      "abbr": "NUS",
+      "key": "nus",
+      "license": "Organization brand mark",
+      "name": "National University of Singapore",
+      "source": "Official university brand mark (www.nus.edu.sg), coat of arms cropped for the identity mark",
+      "src": "/org-logos/nus.png"
+    },
+    "nvidia": {
+      "abbr": "NV",
+      "key": "nvidia",
+      "license": "CC0-1.0",
+      "name": "NVIDIA",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #76B900",
+      "src": "/org-logos/nvidia.svg"
+    },
+    "nyu": {
+      "abbr": "NYU",
+      "key": "nyu",
+      "license": "Public domain",
+      "name": "New York University",
+      "source": "https://commons.wikimedia.org/wiki/File:New_York_University_Seal.svg",
+      "src": "/org-logos/nyu.svg"
+    },
+    "omniforcing": {
+      "abbr": "OF",
+      "key": "omniforcing",
+      "license": "Organization brand mark",
+      "name": "OmniForcing",
+      "source": "GitHub organization brand avatar (github.com/OmniForcing)",
+      "src": "/org-logos/omniforcing.png"
+    },
+    "openai": {
+      "abbr": "OA",
+      "key": "openai",
+      "license": "CC0-1.0",
+      "name": "OpenAI",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #412991",
+      "src": "/org-logos/openai.svg"
+    },
+    "openenvision": {
+      "abbr": "OE",
+      "key": "openenvision",
+      "license": "Project brand mark",
+      "name": "OpenEnvision",
+      "source": "WorldFoundry / OpenEnvision site mark (docs/fumadocs/public/logo.svg)",
+      "src": "/org-logos/openenvision.svg"
+    },
+    "openhelix": {
+      "abbr": "OH",
+      "key": "openhelix",
+      "license": "Organization brand mark",
+      "name": "OpenHelix",
+      "source": "GitHub organization brand avatar (github.com/OpenHelix-Team)",
+      "src": "/org-logos/openhelix.png"
+    },
+    "oppo": {
+      "abbr": "OP",
+      "key": "oppo",
+      "license": "CC0-1.0",
+      "name": "OPPO Research Institute",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #2D683D",
+      "src": "/org-logos/oppo.svg"
+    },
+    "oxford": {
+      "abbr": "OX",
+      "key": "oxford",
+      "license": "Public domain",
+      "name": "University of Oxford",
+      "source": "https://commons.wikimedia.org/wiki/File:Oxford-University-Circlet.svg",
+      "src": "/org-logos/oxford.svg"
+    },
+    "physical-intelligence": {
+      "abbr": "PI",
+      "key": "physical-intelligence",
+      "license": "Organization brand mark",
+      "name": "Physical Intelligence",
+      "source": "GitHub organization brand avatar (github.com/Physical-Intelligence), pre-existing repo asset",
+      "src": "/org-logos/physical-intelligence.png"
+    },
+    "pku": {
+      "abbr": "PKU",
+      "key": "pku",
+      "license": "Public domain",
+      "name": "Peking University",
+      "source": "https://commons.wikimedia.org/wiki/File:Peking_University_seal.svg",
+      "src": "/org-logos/pku.svg"
+    },
+    "reactor": {
+      "abbr": "RC",
+      "key": "reactor",
+      "license": "Organization brand mark",
+      "name": "Reactor",
+      "source": "GitHub organization brand avatar (github.com/reactor-team)",
+      "src": "/org-logos/reactor.jpg"
+    },
+    "rhymes": {
+      "abbr": "RA",
+      "key": "rhymes",
+      "license": "Organization brand mark",
+      "name": "Rhymes AI",
+      "source": "GitHub organization brand avatar (github.com/rhymes-ai), pre-existing repo asset",
+      "src": "/org-logos/rhymes.png"
+    },
+    "riemann-dynamics": {
+      "abbr": "RD",
+      "key": "riemann-dynamics",
+      "license": "Organization brand mark",
+      "name": "Riemann Dynamics",
+      "source": "GitHub organization brand avatar (github.com/riemann-dynamics)",
+      "src": "/org-logos/riemann-dynamics.png"
+    },
+    "runway": {
+      "abbr": "RW",
+      "key": "runway",
+      "license": "Organization brand mark",
+      "name": "Runway",
+      "source": "GitHub organization brand avatar (github.com/runwayml), pre-existing repo asset",
+      "src": "/org-logos/runway.png"
+    },
+    "sandai": {
+      "abbr": "SD",
+      "key": "sandai",
+      "license": "Organization brand mark",
+      "name": "Sand AI",
+      "source": "GitHub organization brand avatar (github.com/SandAI-org), pre-existing repo asset",
+      "src": "/org-logos/sandai.jpg"
+    },
+    "sensetime": {
+      "abbr": "ST",
+      "key": "sensetime",
+      "license": "CC BY-SA 4.0",
+      "name": "SenseTime",
+      "source": "https://commons.wikimedia.org/wiki/File:SenseTime_logo.png",
+      "src": "/org-logos/sensetime.png"
+    },
+    "sfu": {
+      "abbr": "SFU",
+      "key": "sfu",
+      "license": "Public domain (text logo)",
+      "name": "Simon Fraser University",
+      "source": "https://commons.wikimedia.org/wiki/File:SFU_logo.png",
+      "src": "/org-logos/sfu.png"
+    },
+    "shanda": {
+      "abbr": "SH",
+      "key": "shanda",
+      "license": "Public domain (text logo)",
+      "name": "Shanda AI",
+      "source": "Original simple wordmark rendition for the identity mark",
+      "src": "/org-logos/shanda.svg"
+    },
+    "shanghai-ai-lab": {
+      "abbr": "SAIL",
+      "key": "shanghai-ai-lab",
+      "license": "Organization brand mark",
+      "name": "Shanghai AI Laboratory",
+      "source": "GitHub organization brand avatar (github.com/OpenGVLab)",
+      "src": "/org-logos/shanghai-ai-lab.png"
+    },
+    "shengshu": {
+      "abbr": "SS",
+      "key": "shengshu",
+      "license": "Organization brand mark",
+      "name": "Shengshu Technology",
+      "source": "GitHub organization brand avatar (github.com/shengshu-ai), pre-existing repo asset",
+      "src": "/org-logos/shengshu.jpg"
+    },
+    "simworld": {
+      "abbr": "SW",
+      "key": "simworld",
+      "license": "Organization brand mark",
+      "name": "SimWorld",
+      "source": "GitHub organization brand avatar (github.com/SimWorld-AI)",
+      "src": "/org-logos/simworld.png"
+    },
+    "sjsu": {
+      "abbr": "SJSU",
+      "key": "sjsu",
+      "license": "Public domain",
+      "name": "San José State University",
+      "source": "https://commons.wikimedia.org/wiki/File:San_Jose_State_University_logo.svg",
+      "src": "/org-logos/sjsu.svg"
+    },
+    "sjtu": {
+      "abbr": "SJTU",
+      "key": "sjtu",
+      "license": "Organization brand mark",
+      "name": "Shanghai Jiao Tong University",
+      "source": "Official university brand mark (www.sjtu.edu.cn), crest cropped for the identity mark",
+      "src": "/org-logos/sjtu.png"
+    },
+    "skywork": {
+      "abbr": "SK",
+      "key": "skywork",
+      "license": "Organization brand mark",
+      "name": "Skywork AI (Kunlun)",
+      "source": "GitHub organization brand avatar (github.com/SkyworkAI), pre-existing repo asset",
+      "src": "/org-logos/skywork.jpg"
+    },
+    "snap": {
+      "abbr": "SN",
+      "key": "snap",
+      "license": "CC0-1.0",
+      "name": "Snap Inc.",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0 (Snapchat mark); official brand hex #FFFC00",
+      "src": "/org-logos/snap.svg"
+    },
+    "snu": {
+      "abbr": "SNU",
+      "key": "snu",
+      "license": "Public domain (simple shield rendition)",
+      "name": "Seoul National University",
+      "source": "https://commons.wikimedia.org/wiki/File:서울대학교.svg",
+      "src": "/org-logos/snu.svg"
+    },
+    "sony": {
+      "abbr": "SO",
+      "key": "sony",
+      "license": "CC0-1.0",
+      "name": "Sony AI",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #000000",
+      "src": "/org-logos/sony.svg"
+    },
+    "spirit-ai": {
+      "abbr": "SP",
+      "key": "spirit-ai",
+      "license": "Public domain (simple geometry)",
+      "name": "Spirit AI",
+      "source": "Original simple figure monogram for the identity mark",
+      "src": "/org-logos/spirit-ai.svg"
+    },
+    "stability": {
+      "abbr": "SA",
+      "key": "stability",
+      "license": "Organization brand mark",
+      "name": "Stability AI",
+      "source": "GitHub organization brand avatar (github.com/Stability-AI), pre-existing repo asset",
+      "src": "/org-logos/stability.png"
+    },
+    "stanford": {
+      "abbr": "SU",
+      "key": "stanford",
+      "license": "Public domain (simple geometry)",
+      "name": "Stanford University",
+      "source": "https://commons.wikimedia.org/wiki/File:Stanford_Cardinal_logo.svg",
+      "src": "/org-logos/stanford.svg"
+    },
+    "starkware": {
+      "abbr": "SW",
+      "key": "starkware",
+      "license": "Public domain (simple geometry)",
+      "name": "StarkWare",
+      "source": "Original simple A-frame monogram for the identity mark",
+      "src": "/org-logos/starkware.svg"
+    },
+    "starvla": {
+      "abbr": "SV",
+      "key": "starvla",
+      "license": "Organization brand mark",
+      "name": "StarVLA",
+      "source": "GitHub organization brand avatar (github.com/starVLA)",
+      "src": "/org-logos/starvla.png"
+    },
+    "stepfun": {
+      "abbr": "SF",
+      "key": "stepfun",
+      "license": "Organization brand mark",
+      "name": "StepFun",
+      "source": "GitHub organization brand avatar (github.com/stepfun-ai), pre-existing repo asset",
+      "src": "/org-logos/stepfun.png"
+    },
+    "tamu": {
+      "abbr": "TAMU",
+      "key": "tamu",
+      "license": "Public domain (text logo)",
+      "name": "Texas A&M University",
+      "source": "https://commons.wikimedia.org/wiki/File:Texas_A&M_University_logo.svg",
+      "src": "/org-logos/tamu.svg"
+    },
+    "tencent": {
+      "abbr": "TC",
+      "key": "tencent",
+      "license": "Public domain (text logo)",
+      "name": "Tencent",
+      "source": "https://commons.wikimedia.org/wiki/File:Tencent_Logo.svg",
+      "src": "/org-logos/tencent.svg"
+    },
+    "tencent-hunyuan": {
+      "abbr": "HY",
+      "key": "tencent-hunyuan",
+      "license": "Organization brand mark",
+      "name": "Tencent Hunyuan",
+      "source": "Official Hunyuan header mark from hunyuan.tencent.com (https://hunyuan-blog-web-prod-1258344703.cos.ap-guangzhou.myqcloud.com/assets/hy-blog-logo-zh-DxX4P937.png)",
+      "src": "/org-logos/tencent-hunyuan.png"
+    },
+    "tsinghua": {
+      "abbr": "THU",
+      "key": "tsinghua",
+      "license": "Public domain",
+      "name": "Tsinghua University",
+      "source": "https://commons.wikimedia.org/wiki/File:Tsinghua_University_Logo.svg",
+      "src": "/org-logos/tsinghua.png"
+    },
+    "ucas": {
+      "abbr": "UCAS",
+      "key": "ucas",
+      "license": "Organization brand mark",
+      "name": "University of Chinese Academy of Sciences",
+      "source": "Official university brand mark (www.ucas.ac.cn), CAS seal cropped and restored to UCAS navy #003087",
+      "src": "/org-logos/ucas.png"
+    },
+    "ucla": {
+      "abbr": "UCLA",
+      "key": "ucla",
+      "license": "Public domain (simple seal rendition)",
+      "name": "UCLA",
+      "source": "Original simple circular-seal rendition of the UCLA wordmark",
+      "src": "/org-logos/ucla.svg"
+    },
+    "ucsd": {
+      "abbr": "UCSD",
+      "key": "ucsd",
+      "license": "Public domain",
+      "name": "UC San Diego",
+      "source": "https://commons.wikimedia.org/wiki/File:Seal_of_the_University_of_California,_San_Diego.svg",
+      "src": "/org-logos/ucsd.svg"
+    },
+    "umass": {
+      "abbr": "UMA",
+      "key": "umass",
+      "license": "Public domain (simple geometry)",
+      "name": "UMass Amherst",
+      "source": "https://commons.wikimedia.org/wiki/File:UMass_Amherst_athletics_logo.svg",
+      "src": "/org-logos/umass.svg"
+    },
+    "umich": {
+      "abbr": "UM",
+      "key": "umich",
+      "license": "Public domain (simple geometry)",
+      "name": "University of Michigan",
+      "source": "https://commons.wikimedia.org/wiki/File:University_of_Michigan_logo.svg",
+      "src": "/org-logos/umich.svg"
+    },
+    "unige": {
+      "abbr": "UNIGE",
+      "key": "unige",
+      "license": "Public domain",
+      "name": "University of Geneva",
+      "source": "https://commons.wikimedia.org/wiki/File:Uni_GE_logo.svg",
+      "src": "/org-logos/unige.svg"
+    },
+    "upc": {
+      "abbr": "UPC",
+      "key": "upc",
+      "license": "Public domain",
+      "name": "Universitat Politècnica de Catalunya (IRI, CSIC-UPC)",
+      "source": "https://commons.wikimedia.org/wiki/File:Logo_UPC.svg",
+      "src": "/org-logos/upc.svg"
+    },
+    "uq": {
+      "abbr": "UQ",
+      "key": "uq",
+      "license": "Public domain (simple seal rendition)",
+      "name": "The University of Queensland",
+      "source": "Original simple circular-seal rendition of the UQ coat of arms (cross pattee and open book) in official UQ purple #51247A",
+      "src": "/org-logos/uq.svg"
+    },
+    "usc": {
+      "abbr": "USC",
+      "key": "usc",
+      "license": "Public domain (text logo)",
+      "name": "University of Southern California",
+      "source": "https://commons.wikimedia.org/wiki/File:USC_Trojans_logo.svg",
+      "src": "/org-logos/usc.svg"
+    },
+    "ustc": {
+      "abbr": "USTC",
+      "key": "ustc",
+      "license": "Organization brand mark",
+      "name": "University of Science and Technology of China",
+      "source": "Official university brand mark (www.ustc.edu.cn), crest cropped for the identity mark",
+      "src": "/org-logos/ustc.png"
+    },
+    "utaustin": {
+      "abbr": "UT",
+      "key": "utaustin",
+      "license": "Public domain (simple geometry)",
+      "name": "The University of Texas at Austin",
+      "source": "https://commons.wikimedia.org/wiki/File:Texas_Longhorns_logo.svg",
+      "src": "/org-logos/utaustin.svg"
+    },
+    "uwash": {
+      "abbr": "UW",
+      "key": "uwash",
+      "license": "Public domain (text logo)",
+      "name": "University of Washington",
+      "source": "https://commons.wikimedia.org/wiki/File:Washington_Huskies_logo.svg",
+      "src": "/org-logos/uwash.svg"
+    },
+    "vivo": {
+      "abbr": "VV",
+      "key": "vivo",
+      "license": "CC0-1.0",
+      "name": "vivo",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #415FFF",
+      "src": "/org-logos/vivo.svg"
+    },
+    "wan": {
+      "abbr": "WN",
+      "key": "wan",
+      "license": "Organization brand mark",
+      "name": "Wan (Tongyi Wanxiang)",
+      "source": "Official Wan brand mark (same emblem as Wan-Video/Wan2.1 assets/logo.png); GitHub organization brand avatar (github.com/Wan-Video)",
+      "src": "/org-logos/wan.png"
+    },
+    "waterloo": {
+      "abbr": "UWL",
+      "key": "waterloo",
+      "license": "Public domain (simple seal rendition)",
+      "name": "University of Waterloo",
+      "source": "Original simple shield rendition of the University of Waterloo coat of arms",
+      "src": "/org-logos/waterloo.svg"
+    },
+    "worldfoundry": {
+      "abbr": "WF",
+      "key": "worldfoundry",
+      "license": "Project brand mark",
+      "name": "WorldFoundry",
+      "source": "WorldFoundry site mark (docs/fumadocs/public/logo.svg)",
+      "src": "/org-logos/worldfoundry.svg"
+    },
+    "worldlabs": {
+      "abbr": "WL",
+      "key": "worldlabs",
+      "license": "Organization brand mark",
+      "name": "World Labs",
+      "source": "Organization brand avatar, pre-existing repo asset",
+      "src": "/org-logos/worldlabs.png"
+    },
+    "x-humanoid": {
+      "abbr": "XH",
+      "key": "x-humanoid",
+      "license": "Public domain (simple geometry)",
+      "name": "X-Humanoid (Beijing Humanoid Robot Innovation Center)",
+      "source": "Original simple X monogram for the identity mark",
+      "src": "/org-logos/x-humanoid.svg"
+    },
+    "x-square": {
+      "abbr": "XS",
+      "key": "x-square",
+      "license": "Organization brand mark",
+      "name": "X Square Robot",
+      "source": "GitHub organization brand avatar (github.com/X-Square-Robot), pre-existing repo asset",
+      "src": "/org-logos/x-square.png"
+    },
+    "xiaomi": {
+      "abbr": "MI",
+      "key": "xiaomi",
+      "license": "CC0-1.0",
+      "name": "Xiaomi Robotics",
+      "source": "Simple Icons (https://simpleicons.org), CC0-1.0; official brand hex #FF6900",
+      "src": "/org-logos/xiaomi.svg"
+    },
+    "zhipu": {
+      "abbr": "ZP",
+      "key": "zhipu",
+      "license": "Public domain (text logo)",
+      "name": "Zhipu AI",
+      "source": "https://commons.wikimedia.org/wiki/File:Zhipu_AI.png",
+      "src": "/org-logos/zhipu.png"
+    },
+    "zju": {
+      "abbr": "ZJU",
+      "key": "zju",
+      "license": "Organization brand mark",
+      "name": "Zhejiang University",
+      "source": "Official university emblem published at https://www.zju.edu.cn/572/list.htm",
+      "src": "/org-logos/zju.png"
+    }
+  },
+  "unmapped": {
+    "benchmarks": [],
+    "models": []
   }
 }

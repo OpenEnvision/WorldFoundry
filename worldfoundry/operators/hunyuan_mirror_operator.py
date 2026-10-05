@@ -129,9 +129,3 @@ class HunyuanMirrorOperator(BaseOperator):
             "camera_intrinsics": intr,  # 相机内参 (num_frames, 3, 3)
             "image_hw": image_hw,
         }
-
-    def delete_last_interaction(self):
-        """
-        删除最后一个交互指令
-        """
-        self.current_interaction = self.current_interaction[:-1]

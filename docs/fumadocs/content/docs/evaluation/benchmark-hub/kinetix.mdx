@@ -1,126 +1,31 @@
 ---
 title: Kinetix
-description: Kinetix — metrics, requirements, and run commands.
+description: "Oxford FLAIR open-ended 2D physics RL space (ICLR 2025 oral). WorldFoundry imports official rollouts; it does not run the JAX simulator."
 ---
 
-## About
+Kinetix (FLAIR, University of Oxford; ICLR 2025 oral) is an **open-ended space of JAX-accelerated 2D physics RL environments**. Procedurally representable levels cover robotic-style locomotion, grasping, and classic control inside one simulator, so a general agent can pretrain at scale and evaluate on held-out tasks.
 
+Paper: [Kinetix](https://arxiv.org/abs/2410.23208). Code: [FLAIROx/Kinetix](https://github.com/FLAIROx/Kinetix). License: upstream terms.
 
+WorldFoundry is an **official-results importer**. Simulator execution, policy loading, and rollout collection stay upstream. The scorecard primary is `success_rate`.
 
-Kinetix external benchmark manifest for JAX physics embodied action evaluation.
+<BenchmarkPageSections id="kinetix" locale="en" />
 
-
-
-## Metrics
-
-Kinetix external benchmark manifest for JAX physics embodied action evaluation.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/kinetix.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `episode_success` | Share of episodes or tasks that complete successfully. |
-| `reward` | Cumulative RL reward on Kinetix procedurally generated 2D rigid-body control puzzles. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `kinetix-jax`.
-- **Separate setup:** this benchmark expects a dedicated conda env rather than the unified runtime.
-- Keep Kinetix in a JAX-compatible simulator environment when the unified PyTorch runtime is insufficient.
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_KINETIX_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/kinetix`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/FLAIROx--Kinetix`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_KINETIX_ROOT`
-- `WORLDFOUNDRY_KINETIX_RESULTS_PATH`
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id kinetix \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/kinetix/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/kinetix/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
+Default import: `WORLDFOUNDRY_KINETIX_RESULTS_PATH`. Optional root: `WORLDFOUNDRY_KINETIX_ROOT`.
 
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id kinetix \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/kinetix/official-run \
-  --json
-```
+In-tree pointer: `worldfoundry/data/benchmarks/tasks/external/kinetix.yaml`.
 
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id kinetix --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_KINETIX_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+Outputs include `scorecard.json` (primary `success_rate`), `raw_results.jsonl`, and `evaluation/summary.json`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

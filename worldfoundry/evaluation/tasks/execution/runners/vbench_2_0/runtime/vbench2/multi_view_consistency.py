@@ -14,7 +14,6 @@ from .dense_match.patch_auto_evaluate import PatchAutoEvaluate
 from worldfoundry.base_models.perception_core.optical_flow.raft import InputPadder, RAFT
 import json
 from vbench2.utils import load_dimension_info, split_video_into_scenes
-from tqdm import tqdm
 
 def transform_class360(vector, min_reso, factor=0.008): # 768*0.05
     scale = min_reso * factor
@@ -54,6 +53,8 @@ class CameraPredict:
         return [mean_up, mean_down, y]
 
     def infer(self, video, fps=16, end_frame=-1, save_video=False, save_dir="./saved_videos"):
+        if end_frame > 0:
+            video = video[:, :end_frame]
         b,_,_,h,w=video.shape
         self.scale=min(h,w)
         self.height=h
@@ -63,9 +64,6 @@ class CameraPredict:
             vis = Visualizer(save_dir=save_dir, pad_value=120, fps=fps, linewidth=3)
             vis.visualize(video, pred_tracks, pred_visibility, filename="temp1")
             raise
-        if end_frame!=-1:
-            pred_tracks = pred_tracks[:,:end_frame]
-            pred_visibility = pred_visibility[:,:end_frame]
         return pred_tracks[0].long().detach().cpu().numpy()
     
     def get_edge_point_360(self, track):
@@ -125,9 +123,10 @@ def whether_orbit(video_path, camera):
     if len(scene_list)!=0:
         end_frame = int(scene_list[0][1].get_frames())
     video_reader = decord.VideoReader(video_path)
-    video = video_reader.get_batch(range(len(video_reader))) 
-    frame_count, height, width = video.shape[0], video.shape[1], video.shape[2]
-    video = video.permute(0, 3, 1, 2)[None].float().cuda() # B T C H W
+    frame_count = len(video_reader)
+    decode_frames = min(end_frame, frame_count) if end_frame > 0 else frame_count
+    video = video_reader.get_batch(range(decode_frames))
+    video = video.permute(0, 3, 1, 2)[None].float().to(camera.device, non_blocking=True) # B T C H W
     cap = cv2.VideoCapture(video_path)
     fps = int(cap.get(cv2.CAP_PROP_FPS))
     predict_results = camera.predict(video, fps, end_frame)
@@ -142,7 +141,7 @@ class DynamicDegree:
 
     def load_model(self):
         self.model = RAFT(self.args)
-        ckpt = torch.load(self.args.model, map_location="cpu")
+        ckpt = torch.load(self.args.model, map_location="cpu", weights_only=True)
         new_ckpt = {k.replace('module.', ''): v for k, v in ckpt.items()}
         self.model.load_state_dict(new_ckpt)
         self.model.to(self.device)
@@ -156,7 +155,7 @@ class DynamicDegree:
         rad = np.sqrt(np.square(u) + np.square(v))
         h, w = rad.shape
         rad_flat = rad.flatten()
-        cut_index = int(h*w*0.05)
+        cut_index = max(int(h*w*0.05), 1)
         max_rad = np.mean(abs(np.sort(-rad_flat))[:cut_index])
         return max_rad.item()
 
@@ -165,8 +164,10 @@ class DynamicDegree:
         self.params = {"thres":6.0*(scale/256.0), "count_num":round(4*(count/16.0))}
 
     def infer(self, video_path, skip_frame):
-        with torch.no_grad():
+        with torch.inference_mode():
             frames, fps = self.get_frames(video_path, skip_frame)
+            if len(frames) < 2:
+                return -1, fps
             self.set_params(frame=frames[0], count=len(frames))
             static_score = []
             for image1, image2 in zip(frames[:-1], frames[1:]):
@@ -186,22 +187,23 @@ class DynamicDegree:
         video = cv2.VideoCapture(video_path)
         fps = video.get(cv2.CAP_PROP_FPS) # get fps
         interval = max(1, round(fps / 8))
+        frame_index = 0
         while video.isOpened():
             success, frame = video.read()
-            if success:
+            if not success:
+                break
+            if skip_frame != -1 and frame_index > skip_frame:
+                break
+            if frame_index % interval == 0:
                 frame = cv2.resize(frame, (854, 480))
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # convert to rgb
                 frame = torch.from_numpy(frame.astype(np.uint8)).permute(2, 0, 1).float()
-                frame = frame[None].to(self.device)
+                frame = frame[None].to(self.device, non_blocking=True)
                 frame_list.append(frame)
-            else:
-                break
+            frame_index += 1
         video.release()
-        assert frame_list != []
-        if skip_frame==-1:
-            frame_list = self.extract_frame(frame_list, len(frame_list), interval)
-        else:
-            frame_list = self.extract_frame(frame_list, skip_frame, interval)
+        if not frame_list:
+            raise ValueError(f"No decodable frames found in video: {video_path}")
         return frame_list, fps
     
     def extract_frame(self, frame_list, skip_frame, interval=1):
@@ -237,7 +239,7 @@ def multi_view_consistency(prompt_dict_ls, camera, dynamic):
             if score!=-1:
                 final_score+=score
                 valid_num+=1
-    return final_score/valid_num, processed_json
+    return (final_score / valid_num if valid_num else 0.0), processed_json
             
 def compute_multi_view_consistency(json_dir, device, submodules_dict, **kwargs):
     camera = CameraPredict(device, submodules_dict)
@@ -253,5 +255,5 @@ def compute_multi_view_consistency(json_dir, device, submodules_dict, **kwargs):
         if d['video_results']!=-1:
             num+=1
             score+= d['video_results']
-    all_results = score/num
+    all_results = score / num if num else 0.0
     return all_results, video_results

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable
 
 from worldfoundry.evaluation.tasks.catalog import BenchmarkSpec, CatalogRegistry, WorldTaskConfig
 

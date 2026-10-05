@@ -1,0 +1,37 @@
+schema_version: 2
+model_id: zing
+display_name: Zing-0.5
+task_family: world_model
+groups:
+- world
+- video
+source_repos:
+- url: https://github.com/seedleap/zing-world-model
+  revision: 11212da06f63290f4d354cdc0324241ba6eac356
+  in_tree_path: worldfoundry/synthesis/visual_generation/zing
+checkpoints:
+- repo_id: seedleap/zing-0.5
+  revision: b9ca1ed1de750bf19a0e6562c6cd71fa7ef35648
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/seedleap--zing-0.5
+  role: primary
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions:
+  - controls
+artifact_kind: generated_world
+artifact_filename: zing.mp4
+execution:
+  environment: zing
+  backend_stage: independent_in_tree_runtime
+  runtime_status: cpu_contract_validated_checkpoint_gpu_pending
+  integration_status: integrated
+  pipeline_binding: zing
+  defaults: {}
+integration:
+  status: integrated
+license: apache-2.0
+notes:
+- Tiny CPU transformer state-dict and FP32/BF16 rollout parity checked against upstream, including eviction and prompt switches.
+- Checkpoint-backed GPU generation and native auxiliary-model parity are pending.

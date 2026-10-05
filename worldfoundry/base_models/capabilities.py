@@ -34,11 +34,7 @@ def _path_tokens(env: Mapping[str, str] | None = None) -> dict[str, str]:
     cache_root = Path(core_tokens["WORLDFOUNDRY_CACHE_DIR"]).expanduser()
     data_root = Path(core_tokens["WORLDFOUNDRY_DATA_DIR"]).expanduser()
     hfd_root = Path(core_tokens["WORLDFOUNDRY_HFD_ROOT"]).expanduser()
-    hfd_dataset_root = Path(
-        environ.get("WORLDFOUNDRY_HFD_DATASET_ROOT")
-        or environ.get("WORLDFOUNDRY_LOCAL_DATA_ROOT")
-        or data_root / "hfd_datasets"
-    ).expanduser()
+    hfd_dataset_root = Path(core_tokens["WORLDFOUNDRY_HFD_DATASET_ROOT"]).expanduser()
     default_workspace_root = hfd_root.parent
     workspace_root = str(
         Path(
@@ -731,7 +727,6 @@ _IN_TREE_SOURCE_ASSETS: dict[str, tuple[str, str]] = {
     "bridgedata_v2_source_assets": ("file", "worldfoundry/data/benchmarks/tasks/external/bridgedata-v2.yaml"),
     "calvin_source_assets": ("dir", "worldfoundry/evaluation/tasks/embodied/simulators/calvin"),
     "libero_source_assets": ("dir", "worldfoundry/evaluation/tasks/embodied/simulators/libero"),
-    "libero_para_source_assets": ("file", "worldfoundry/data/benchmarks/tasks/external/libero-para.yaml"),
     "maniskill_source_assets": ("file", "worldfoundry/data/benchmarks/tasks/external/maniskill.yaml"),
     "metaworld_source_assets": ("file", "worldfoundry/data/benchmarks/tasks/external/metaworld.yaml"),
     "rlbench_source_assets": ("dir", "worldfoundry/evaluation/tasks/embodied/simulators/rlbench"),
@@ -906,6 +901,28 @@ def _perception_data_capability(
 
 
 BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
+    "vigeo": BaseModelCapability(
+        id="vigeo",
+        family="depth",
+        canonical_owner="worldfoundry.base_models.three_dimensions.depth.vigeo",
+        canonical_path="worldfoundry/base_models/three_dimensions/depth/vigeo",
+        package_imports=("torch", "numpy", "einops", "huggingface_hub"),
+        install_packages=("torch", "numpy", "einops", "huggingface-hub"),
+        asset_env=("WORLDFOUNDRY_VIGEO_MODEL_DIR", "EVOKE_VIGEO_WEIGHTS"),
+        assets=(
+            BaseModelAsset(
+                id="vigeo_model",
+                kind="dir",
+                role="model_dir",
+                env=("WORLDFOUNDRY_VIGEO_MODEL_DIR", "EVOKE_VIGEO_WEIGHTS"),
+                local_path="${WORLDFOUNDRY_HFD_ROOT}/pkqbajng--ViGeo1.1",
+                hf_repo_id="pkqbajng/ViGeo1.1",
+                hf_revision="49103e6eeab888bae974251d3578b496bec711d7",
+                required_files=("vigeo.pt",),
+                note="Shared ViGeo video geometry model; checkpoint weights are CC-BY-NC-4.0.",
+            ),
+        ),
+    ),
     "depth_anything_v3": BaseModelCapability(
         id="depth_anything_v3",
         family="depth",
@@ -1004,6 +1021,38 @@ BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
                 required_files=("config.json",),
                 required_any_paths=("model.safetensors", "pytorch_model.bin", "model-00001-of-00004.safetensors"),
                 note="Keye-VL judge model used by 4DWorldBench alignment, motion-QA, and caption-helper dimensions.",
+            ),
+        ),
+    ),
+    "qwen3_vl_8b_instruct": BaseModelCapability(
+        id="qwen3_vl_8b_instruct",
+        family="multimodal_judge",
+        canonical_owner="worldfoundry.base_models.llm_mllm_core.mllm.qwen",
+        canonical_path="worldfoundry/base_models/llm_mllm_core/mllm/qwen",
+        package_imports=("torch", "transformers"),
+        install_packages=("torch", "transformers"),
+        asset_env=("WORLDFOUNDRY_QWEN3_VL_MODEL_DIR", "QWENVL_MODEL_PATH"),
+        assets=(
+            BaseModelAsset(
+                id="qwen3_vl_8b_instruct_model_dir",
+                kind="dir",
+                role="model_dir",
+                env=("WORLDFOUNDRY_QWEN3_VL_MODEL_DIR", "QWENVL_MODEL_PATH"),
+                local_path="${WORLDFOUNDRY_HFD_ROOT}/Qwen--Qwen3-VL-8B-Instruct",
+                alternate_paths=(
+                    "${WORLDFOUNDRY_CKPT_DIR}/hfd/Qwen--Qwen3-VL-8B-Instruct",
+                    "${WORLDFOUNDRY_CKPT_DIR}/Qwen3-VL-8B-Instruct",
+                    "${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/Qwen--Qwen3-VL-8B-Instruct",
+                ),
+                hf_repo_id="Qwen/Qwen3-VL-8B-Instruct",
+                min_file_count=3,
+                required_files=("config.json",),
+                required_any_paths=(
+                    "model.safetensors",
+                    "pytorch_model.bin",
+                    "model-00001-of-00005.safetensors",
+                ),
+                note="Qwen3-VL-8B-Instruct VLM judge used by the WorldOlympiad physical, interaction, and geometry tracks; reused in place of an ad-hoc --weights-dir/QwenVL checkout.",
             ),
         ),
     ),
@@ -1251,8 +1300,8 @@ BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
         family="depth",
         canonical_owner="worldfoundry.base_models.three_dimensions.depth.unidepth",
         canonical_path="worldfoundry/base_models/three_dimensions/depth/unidepth",
-        package_imports=("torch", "torchvision", "numpy", "einops", "huggingface_hub", "safetensors"),
-        install_packages=("torch", "torchvision", "numpy", "einops", "huggingface-hub", "safetensors"),
+        package_imports=("torch", "torchvision", "numpy", "einops", "huggingface_hub", "safetensors", "xformers.components.attention"),
+        install_packages=("torch", "torchvision", "numpy", "einops", "huggingface-hub", "safetensors", "xformers==0.0.28.post3"),
         asset_env=("WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR",),
         assets=(
             BaseModelAsset(
@@ -1266,6 +1315,7 @@ BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
                     "${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/lpiccinelli--unidepth-v2-vitl14",
                 ),
                 hf_repo_id="lpiccinelli/unidepth-v2-vitl14",
+                hf_revision="1d0d3c52f60b5164629d279bb9a7546458e6dcc4",
                 min_file_count=1,
                 required_files=("config.json", "model.safetensors"),
                 note="UniDepth v2 ViT-L depth prior reused by ViPE-style geometric perception paths.",
@@ -2414,8 +2464,6 @@ BASE_MODEL_CAPABILITIES.update(
             asset_env=(
                 "WORLDFOUNDRY_WBENCH_MEGASAM_CKPT",
                 "WORLDFOUNDRY_WBENCH_MEGASAM_DEPTH_ANYTHING_CKPT",
-                "WORLDFOUNDRY_WBENCH_MEGASAM_DINOV2_CKPT",
-                "WORLDFOUNDRY_WBENCH_MEGASAM_METRIC_DEPTH_CKPT",
             ),
             asset_env_policy="all",
             assets=(
@@ -2448,36 +2496,6 @@ BASE_MODEL_CAPABILITIES.update(
                     hf_filename="megasam/depth_anything_vitl14.pth",
                     min_size_bytes=100_000_000,
                     note="Depth-Anything ViT-L checkpoint used by MegaSAM mono-depth preprocessing.",
-                ),
-                BaseModelAsset(
-                    id="wbench_megasam_dinov2_checkpoint",
-                    kind="file",
-                    role="checkpoint",
-                    env=("WORLDFOUNDRY_WBENCH_MEGASAM_DINOV2_CKPT",),
-                    local_path="${WORLDFOUNDRY_CACHE_DIR}/models/wbench/megasam/torch_hub_checkpoints/dinov2_vitl14_pretrain.pth",
-                    alternate_paths=(
-                        "${WORLDFOUNDRY_CKPT_DIR}/WBench/megasam/torch_hub_checkpoints/dinov2_vitl14_pretrain.pth",
-                        "${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/megasam/torch_hub_checkpoints/dinov2_vitl14_pretrain.pth",
-                    ),
-                    hf_repo_id="meituan-longcat/WBench-weights",
-                    hf_filename="megasam/torch_hub_checkpoints/dinov2_vitl14_pretrain.pth",
-                    min_size_bytes=100_000_000,
-                    note="DINOv2 ViT-L checkpoint used by MegaSAM/UniDepth torch.hub cache.",
-                ),
-                BaseModelAsset(
-                    id="wbench_megasam_metric_depth_checkpoint",
-                    kind="file",
-                    role="checkpoint",
-                    env=("WORLDFOUNDRY_WBENCH_MEGASAM_METRIC_DEPTH_CKPT",),
-                    local_path="${WORLDFOUNDRY_CACHE_DIR}/models/wbench/megasam/torch_hub_checkpoints/metric_depth_vit_large_800k.pth",
-                    alternate_paths=(
-                        "${WORLDFOUNDRY_CKPT_DIR}/WBench/megasam/torch_hub_checkpoints/metric_depth_vit_large_800k.pth",
-                        "${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/megasam/torch_hub_checkpoints/metric_depth_vit_large_800k.pth",
-                    ),
-                    hf_repo_id="meituan-longcat/WBench-weights",
-                    hf_filename="megasam/torch_hub_checkpoints/metric_depth_vit_large_800k.pth",
-                    min_size_bytes=100_000_000,
-                    note="Metric-depth checkpoint used by MegaSAM/UniDepth preprocessing.",
                 ),
             ),
         ),
@@ -2800,16 +2818,20 @@ BASE_MODEL_CAPABILITIES.update(
                 },
             ),
         ),
-        "libero_para_dataset_assets": _benchmark_dataset_capability(
-            "libero_para_dataset_assets",
+        "likephys_dataset_assets": _benchmark_dataset_capability(
+            "likephys_dataset_assets",
             (
                 {
-                    "asset_id": "libero_para_dataset_dir",
-                    "env": "WORLDFOUNDRY_LIBERO_PARA_DATASET_ROOT",
-                    "repo_id": "HAI-Lab/LIBERO-Para",
-                    "local_name": "HAI-Lab__LIBERO-Para",
-                    "alternate_local_names": ("HAI-Lab/LIBERO-Para", "HAI-Lab--LIBERO-Para"),
-                    "note": "LIBERO-Para public HF dataset for paraphrased language-instruction manipulation evaluation.",
+                    "asset_id": "likephys_dataset_dir",
+                    "env": "WORLDFOUNDRY_LIKEPHYS_DATASET_ROOT",
+                    "repo_id": "JianhaoDYDY/LikePhys-Benchmark",
+                    "local_name": "JianhaoDYDY__LikePhys-Benchmark",
+                    "alternate_local_names": (
+                        "JianhaoDYDY/LikePhys-Benchmark",
+                        "datasets--JianhaoDYDY--LikePhys-Benchmark",
+                        "LikePhys-Benchmark",
+                    ),
+                    "note": "LikePhys paired valid/impossible physics clips probed by the likelihood-preference evaluator.",
                 },
             ),
         ),
@@ -2823,6 +2845,23 @@ BASE_MODEL_CAPABILITIES.update(
                     "local_name": "NU-World-Model-Embodied-AI__phyground",
                     "alternate_local_names": ("NU-World-Model-Embodied-AI/phyground",),
                     "note": "PhyGround official HF dataset for grounded physical-reasoning evaluation.",
+                },
+            ),
+        ),
+        "rbench_dataset_assets": _benchmark_dataset_capability(
+            "rbench_dataset_assets",
+            (
+                {
+                    "asset_id": "rbench_dataset_dir",
+                    "env": "WORLDFOUNDRY_RBENCH_DATASET_ROOT",
+                    "repo_id": "DAGroup-PKU/RBench",
+                    "local_name": "DAGroup-PKU__RBench",
+                    "alternate_local_names": (
+                        "DAGroup-PKU/RBench",
+                        "datasets--DAGroup-PKU--RBench",
+                        "RBench",
+                    ),
+                    "note": "RBench prompts and first-frame conditioning images for robotics image-to-video evaluation.",
                 },
             ),
         ),
@@ -3074,15 +3113,6 @@ BASE_MODEL_CAPABILITIES.update(
             required_files=("README.md", "setup.py"),
             required_paths=("libero",),
             note="Official LIBERO source checkout for simulator-backed language-conditioned manipulation rollouts.",
-        ),
-        "libero_para_source_assets": _source_repo_capability(
-            capability_id="libero_para_source_assets",
-            env="WORLDFOUNDRY_LIBERO_PARA_ROOT",
-            repo_url="https://github.com/cau-hai-lab/LIBERO-Para.git",
-            local_name="cau-hai-lab--LIBERO-Para",
-            revision="dec2d93ad591a6f55d50e792dea4637a3b9dc1dd",
-            required_files=("README.md", "metrics/analyze_results.py"),
-            note="LIBERO-Para source checkout for paraphrased instruction evaluation and official result analysis.",
         ),
         "maniskill_source_assets": _source_repo_capability(
             capability_id="maniskill_source_assets",
@@ -3817,6 +3847,7 @@ BASE_MODEL_STACKS: dict[str, BaseModelStack] = {
             "wbench_pavrm_qwen3vl",
             "wbench_dreamsim",
             "wbench_megasam",
+            "unidepth_v2_vitl14",
         ),
         note="WBench in-tree metric stack: segmentation, depth, flow, quality, reward, DreamSim, and MegaSAM pose assets.",
     ),
@@ -3902,10 +3933,10 @@ BASE_MODEL_STACKS: dict[str, BaseModelStack] = {
             "iworld_bench_source_assets",
             "iworld_bench_dataset_assets",
             "libero_dataset_assets",
-            "libero_para_source_assets",
-            "libero_para_dataset_assets",
+            "likephys_dataset_assets",
             "phyground_dataset_assets",
             "physvidbench_dataset_assets",
+            "rbench_dataset_assets",
             "robotwin_dataset_assets",
             "vbench2_dataset_assets",
             "video_bench_dataset_assets",
@@ -3964,10 +3995,10 @@ BASE_MODEL_STACKS: dict[str, BaseModelStack] = {
             "iworld_bench_source_assets",
             "iworld_bench_dataset_assets",
             "libero_dataset_assets",
-            "libero_para_source_assets",
-            "libero_para_dataset_assets",
+            "likephys_dataset_assets",
             "phyground_dataset_assets",
             "physvidbench_dataset_assets",
+            "rbench_dataset_assets",
             "robotwin_dataset_assets",
             "vbench2_dataset_assets",
             "video_bench_dataset_assets",
@@ -4091,7 +4122,7 @@ BENCHMARK_DATA_ASSET_CAPABILITIES: dict[str, tuple[str, ...]] = {
     "ipv-bench": ("ipv_bench_source_assets",),
     "iworld-bench": ("iworld_bench_source_assets", "iworld_bench_dataset_assets"),
     "libero": ("libero_source_assets", "libero_dataset_assets"),
-    "libero-para": ("libero_para_source_assets", "libero_para_dataset_assets"),
+    "likephys": ("likephys_dataset_assets",),
     "maniskill": ("maniskill_source_assets",),
     "metaworld": ("metaworld_source_assets",),
     "mirabench": ("mirabench_source_assets",),
@@ -4101,6 +4132,7 @@ BENCHMARK_DATA_ASSET_CAPABILITIES: dict[str, tuple[str, ...]] = {
     "phyfps-bench-gen": ("visual_chronometer_source_assets",),
     "physics-iq": ("physics_iq_source_assets",),
     "physvidbench": ("physvidbench_dataset_assets", "physvidbench_source_assets"),
+    "rbench": ("rbench_dataset_assets",),
     "rlbench": ("rlbench_source_assets",),
     "robocasa": ("robocasa_source_assets",),
     "robotwin": ("robotwin_dataset_assets",),

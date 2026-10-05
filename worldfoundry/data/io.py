@@ -20,10 +20,10 @@ from worldfoundry.core.io import (
     load_serialized,
     save_image_or_video_tensor,
 )
-from worldfoundry.core.io.cache import (
+from worldfoundry.core.io.assets.cache import (
     download_from_cache_or_uri as _download_from_cache_or_uri,
 )
-from worldfoundry.core.io.cache import (
+from worldfoundry.core.io.assets.cache import (
     load_from_cache_or_uri as _load_from_cache_or_uri,
 )
 

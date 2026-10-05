@@ -1,0 +1,52 @@
+---
+title: "SkyReels-V2"
+description: "SkyReels-V2（Skywork AI (Kunlun)）：文生视频、图生视频；Runner 一致性待确认。"
+modelId: "skyreels-v2"
+pageSource: authored
+---
+
+SkyReels-V2 是昆仑万维 Skywork AI 基于 Wan 架构的开源影视生成模型系列，本条目记录文生视频与图生视频。WorldFoundry 提供的 1.3B 路径完全由共享的原生 Wan 图、条件器、VAE、调度器、初始化器、加载器与 runner 装配——内置的 CLI/pipeline 被有意排除在推理后端之外。
+
+<ModelPaperFigures modelId="skyreels-v2" locale="zh" />
+
+记录论文为[arXiv 2504.13074](https://arxiv.org/abs/2504.13074)。
+
+代码：[SkyworkAI/SkyReels-V2](https://github.com/SkyworkAI/SkyReels-V2)。
+
+<ModelCommandBuilder modelId="skyreels-v2" locale="zh" />
+
+## 用来做什么
+
+一条配方同时覆盖文生视频与图生视频时选 `skyreels-v2`：prompt 进、可选静帧、视频出。不必再拼两条上游 demo。
+
+manifest 将上游图记录为「FPS 条件化的 Wan 能力」：SkyReels-V2 的 diffusion-forcing 设计以帧率为条件支撑长视频生成。在 WorldFoundry 中它是原生 Wan 图装配，输入 prompt/image，产物 generated_video。该模型由昆仑万维（Skywork AI）发布。
+
+catalog 记录的任务包括 文生视频、图生视频。模态上，它接受文本、图像，输出视频。
+
+记录的评测入口包括[VBench](/zh/docs/evaluation/benchmark-hub/vbench)（标准文生视频质量评测）。
+
+不是 [SkyReels V3](/zh/docs/guides/supported-models/skyreels-v3)。 评测看 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`frames`、`fps`、`height`；产物 `skyreels-v2.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `SkyReelsV2Pipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+1.3B 路径集成已完成；尚无 runner parity 记录。 上游更大的 checkpoint（5B/14B）不是已记录路径——受支持的路径请使用 1.3B。
+
+Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run skyreels-v2 --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `Skywork/SkyReels-V2-DF-1.3B-540P`、`Skywork/SkyReels-V2-T2V-14B-720P`、`Skywork/SkyReels-V2-I2V-1.3B-540P` 等。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh skyreels-v2`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 other；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="skyreels-v2" locale="zh" />

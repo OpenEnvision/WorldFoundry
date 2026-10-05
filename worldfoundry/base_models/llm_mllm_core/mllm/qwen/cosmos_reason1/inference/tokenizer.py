@@ -17,8 +17,17 @@ from typing import Optional
 
 try:
     from qwen_vl_utils import extract_vision_info, process_vision_info
-except ImportError:
-    print("qwen_vl_utils is not available. Reason1 model will not work.")
+except ImportError as exc:
+    _QWEN_VL_UTILS_IMPORT_ERROR = exc
+
+    def _missing_qwen_vl_utils(*args, **kwargs):
+        raise ImportError(
+            "qwen_vl_utils is required for Qwen-VL image or video prompts. "
+            "Install the model runtime dependencies before using visual inputs."
+        ) from _QWEN_VL_UTILS_IMPORT_ERROR
+
+    extract_vision_info = _missing_qwen_vl_utils
+    process_vision_info = _missing_qwen_vl_utils
 
 from transformers.models.auto.processing_auto import AutoProcessor
 
@@ -91,10 +100,13 @@ class Processor:
                 add_generation_prompt=add_generation_prompt,
                 add_vision_id=add_vision_id,
             )
-            image_inputs, video_inputs, _ = process_vision_info(messages, return_video_kwargs=True)
+            if self.is_vision_tokenizer:
+                image_inputs, video_inputs, _ = process_vision_info(messages, return_video_kwargs=True)
+                vision_infos = extract_vision_info(messages)
+            else:
+                image_inputs, video_inputs, vision_infos = None, None, []
 
             # add fps ourselves, as videos have been presampled according to the specified token length
-            vision_infos = extract_vision_info(messages)
             fps_list = []
             for vision_info in vision_infos:
                 if "video" in vision_info:

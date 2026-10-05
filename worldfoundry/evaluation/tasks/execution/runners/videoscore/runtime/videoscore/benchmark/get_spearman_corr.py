@@ -1,3 +1,4 @@
+import ast
 import json
 import numpy as np
 import scipy.stats as stats
@@ -16,8 +17,8 @@ def cal_spearman_correlation(
         # result_file example: eval_video_feedback_mantisscore.json
         model_name=result_file.split(".")[0].split("_")[-1]
         all_res=json.load(open(f"{result_dir}/{result_file}","r"))
-        all_ref_scores=[eval(item["ref"]) for item in all_res]
-        all_ans_scores=[eval(item["ans"]) for item in all_res]
+        all_ref_scores=[ast.literal_eval(item["ref"]) for item in all_res]
+        all_ans_scores=[ast.literal_eval(item["ans"]) for item in all_res]
         
         spearman_list=[]
         p_value_list=[]

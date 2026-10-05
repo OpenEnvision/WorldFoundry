@@ -14,9 +14,9 @@ from typing import Iterable
 import numpy as np
 import torch
 
-from worldfoundry.base_models.diffusion_model.diffsynth.lora import GeneralLoRALoader
-from worldfoundry.base_models.diffusion_model.video.wan.utils.misc import set_seed
-from worldfoundry.base_models.diffusion_model.video.wan.utils.scheduler import (
+from worldfoundry.core.model_loading import GeneralLoRALoader
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere as set_seed
+from worldfoundry.core.nn.diffusion.schedulers import (
     FlowMatchScheduler,
     SchedulerInterface,
 )

@@ -10,6 +10,7 @@ source:
   official_repo_url: https://github.com/yxzzhang/StarWM
   hf_repo_id: yxzhang2024/StarWM
 official_sources:
+  paper: https://arxiv.org/abs/2602.14857
   project_page: https://star-wm.github.io/
   github:
     url: https://github.com/yxzzhang/StarWM
@@ -21,7 +22,7 @@ checkpoints:
 integration:
   status: runtime_ported
   notes:
-  - WorldFoundry exposes the official offline inference client in-tree under synthesis/visual_generation/world_model/starwm/offline_infer.
+  - WorldFoundry exposes the official offline inference client in-tree under synthesis/visual_generation/starwm/offline_infer.
   - Jobs use StarWM's OpenAI-compatible endpoint parameters plus the official prompt fixture format.
 runner_parity:
   status: pending
@@ -37,3 +38,23 @@ output_artifacts:
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry runtimes; blocked
   entries retain upstream provenance without runnable backends.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'StarWM is a multi-agent world model for StarCraft-style environments: it predicts action-conditioned game video across many interacting units. WorldFoundry exposes the official offline inference client in-tree; jobs talk to an OpenAI-compatible StarWM endpoint using the official prompt fixture format, with the confirmed yxzhang2024/StarWM checkpoint on Hugging Face.'
+  overview_zh: StarWM 是面向星际争霸类环境的多智能体世界模型：在大量交互单位下预测动作条件的游戏视频。 WorldFoundry 将官方离线推理客户端内置树内；作业通过 OpenAI 兼容的 StarWM 端点交互，使用官方 prompt fixture 格式，Hugging Face 上的 yxzhang2024/StarWM checkpoint 已确认。
+  architecture: 'The runtime is an endpoint-client design: the route builds the official run_inference_client.py command and validates input_file, mode, and served_model_id/api_model_id before execution. Model architecture internals are not recorded in this repository.'
+  architecture_zh: 运行时为端点-客户端设计：路由构建官方 run_inference_client.py 命令，执行前校验 input_file、mode 与 served_model_id/api_model_id。模型架构内部细节仓库未记录。
+  usage_notes: Actual generation requires a running OpenAI-compatible StarWM endpoint; the catalog route only prepares and validates the client command. Per-run validation evidence is tracked outside the model catalog.
+  usage_notes_zh: 真实生成需要一个运行中的 OpenAI 兼容 StarWM 端点；catalog 路由只负责构建并校验客户端命令。每次运行的验证证据在模型 catalog 外跟踪。
+  limitations:
+  - Needs an externally served StarWM endpoint; nothing runs standalone in-tree.
+  - Runner parity is pending; no GPU validation is recorded in this repository.
+  limitations_zh:
+  - 依赖外部部署的 StarWM 端点；树内没有独立可跑的后端。
+  - runner parity 为 pending；仓库未记录 GPU 验证。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Action-conditioned game-world rollout quality.
+    reason_zh: 动作条件游戏世界滚动生成质量。

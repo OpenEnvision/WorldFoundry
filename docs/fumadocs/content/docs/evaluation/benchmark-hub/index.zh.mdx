@@ -1,31 +1,58 @@
 ---
 title: Benchmark Hub
-description: 查找 benchmark，检查执行边界，并打开由 manifest 生成的运行配方。
+description: "按「实际测什么」选 benchmark，再打开由 manifest 生成的配方——导入、打分或闭环——不编造排名。"
 ---
+
+这个 Hub 是**配方索引**，不是排行榜站。每张卡片来自 benchmark catalog 与 task manifest：套件测什么、需要哪些文件、WorldFoundry 哪条路径是真的（官方导入、仓内打分，或闭环）。它**不会编造排名**。详情页在有作者维护的实时榜时链出去，否则引用论文表或如实写明缺失。
 
 <BenchmarkRecipeCatalog locale="zh" />
 
-## 每个 Benchmark 配方记录什么
+## 怎么选
 
-详情页直接由 benchmark catalog 与 task manifest 生成，不再依赖人工维护的长链接列表。每个配方会把下面几类声明分开呈现：
+先想清楚要检验的主张，再打开对应配方——不要先装独立环境。
 
-| 记录 | 可以确认什么 |
-| --- | --- |
-| Catalog | 稳定 benchmark ID、领域、别名、官方来源与集成状态。 |
-| Evaluation surface | 主要指标、artifact layout、judge 要求与可用执行路径。 |
-| Runtime | 仓内 evaluator、外部结果导入、托管 judge 或仿真环境边界。 |
-| Verification | Manifest 当前记录的 runner 或 normalizer 最高验证证据。 |
-| Eligibility | 现有证据是否足以支持 leaderboard-facing 声明。 |
+- **终身 / 知识迁移操作** — [LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（Franka 桌面上的四个套件）。厨房相关看 [RoboCasa](/zh/docs/evaluation/benchmark-hub/robocasa)。
+- **GPU 并行技能族** — [ManiSkill](/zh/docs/evaluation/benchmark-hub/maniskill)（SAPIEN）。WorldFoundry 导入 rollout，不替代模拟器。
+- **长时程语言链** — [CALVIN](/zh/docs/evaluation/benchmark-hub/calvin)（A/B/C → D，链长度 1–5 的成功率）。
+- **真机到仿真的策略排序** — [SimplerEnv](/zh/docs/evaluation/benchmark-hub/simpler-env)（按真机标定的 Google Robot 与 WidowX/Bridge）。
+- **带逻辑目标的家务活动** — [BEHAVIOR-1K](/zh/docs/evaluation/benchmark-hub/behavior1k)（OmniGibson 中 1000 项 BDDL 活动）。
+- **视频模型会不会续写真实物理** — [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq)（5 秒续写；仓内打分器）。只有当你要的就是那套协议时，才配 [Physics-IQ Verified](/zh/docs/evaluation/benchmark-hub/physics-iq-verified)——媒体不可互换。
+- **开源文生视频片段质量 / 组合** — [VBench](/zh/docs/evaluation/benchmark-hub/vbench)、[T2V-CompBench](/zh/docs/evaluation/benchmark-hub/t2v-compbench)、[FETV](/zh/docs/evaluation/benchmark-hub/fetv)。
 
-本 Hub **不发布 leaderboard 排名**。缺失或待完成的验证会明确显示，不会被提升为更强的支持声明。
+安装 benchmark-specific package 前先看[运行环境矩阵](/zh/docs/evaluation/benchmark-hub/runtime-environments)。它区分统一环境、仓库管理的独立环境、托管 judge，以及按维度划分的 native/checkpoint 栈。
 
-安装 benchmark-specific package 前先看[运行环境矩阵](/zh/docs/evaluation/benchmark-hub/runtime-environments)。该页面区分统一环境、仓库管理的独立环境、托管 judge service，以及 dimension-specific native/checkpoint stack。
+## 每个配方记录什么
+
+<RecipeRecords items={[
+  {
+    term: '评测维度',
+    detail: '目录真正记录的任务、评测轴、套件、赛道或划分——不是营销标签。',
+  },
+  {
+    term: '数据组成',
+    detail: '已记录的 prompt / 任务规模、数据来源、模态与许可证。',
+  },
+  {
+    term: '指标',
+    detail: 'Scorecard 键、方向，以及本次运行使用的主聚合指标。',
+  },
+  {
+    term: 'Leaderboard',
+    detail: '有作者维护的实时榜则链出去；否则引用论文表。目录收录不等于 WorldFoundry 排名。',
+  },
+  {
+    term: '如何运行',
+    detail: '官方结果导入、仓内打分、checkpoint 与环境边界。',
+  },
+]} />
 
 ## 如何运行一个 Benchmark
 
-先打开对应 benchmark 配方。Prompt 文件、generated-artifact layout、checkpoint 名称、judge model 和 official result 格式都是 benchmark-specific 的。
+先打开配方。Prompt 文件、generated-artifact 布局、checkpoint 名称、judge model 和 official result 格式都是 benchmark-specific 的。
 
 ### 导入 Official Result 文件
+
+配方写明 WorldFoundry **归一化**上游导出、不跑模拟器时用这条。
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
@@ -37,9 +64,9 @@ worldfoundry-eval zoo benchmark-run \
   --json
 ```
 
-### 给生成产物评分
+### 在仓内给生成产物打分
 
-只有 benchmark 配方明确说明仓内 runtime 可以从 generated artifacts 重新计算分数，并且所需 checkpoint 已准备好时，才使用 `official-run`：
+只有配方明确说仓内 runtime 能从 generated artifacts 重算分数，并且所需媒体或 checkpoint 已就位时，才用 `official-run`。常见例子是 Physics-IQ。
 
 ```bash
 worldfoundry-eval zoo benchmark-run \

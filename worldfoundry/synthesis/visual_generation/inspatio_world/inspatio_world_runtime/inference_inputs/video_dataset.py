@@ -1,8 +1,9 @@
-import os
-import torch
-import numpy as np
 import json
-from inference_inputs.test_dataset import TestDataset
+
+import numpy as np
+import torch
+
+from .scene_inputs import SceneInputs
 
 decord_available = False
 try:
@@ -33,7 +34,7 @@ class VideoDataset(torch.utils.data.Dataset):
         for entry in self.metadata_list:
             entry['dataset_type'] = 'test'
 
-        self.test_dataset = TestDataset(
+        self.scene_inputs = SceneInputs(
             self.sample_size,
             self.num_frames,
             traj_txt_path=self.traj_txt_path,
@@ -46,19 +47,13 @@ class VideoDataset(torch.utils.data.Dataset):
         print(f"Loaded {len(self.dataset)} videos.")
 
     def __getitem__(self, index):
-        while True:
-            try:
-                source_data_key = list(self.dataset.keys())[index]
-                data = self.test_dataset.get_data(self.dataset[source_data_key])
-                data = self._temporal_sampling(data)
-                data['index'] = index
-                break
-            except Exception as e:
-                import traceback
-                import random
-                print("Error info:", e)
-                traceback.print_exc()
-                index = random.randrange(len(self.dataset))
+        source_data_key = list(self.dataset.keys())[index]
+        try:
+            data = self.scene_inputs.get_data(self.dataset[source_data_key])
+            data = self._temporal_sampling(data)
+        except Exception as exc:
+            raise RuntimeError(f"Failed to load inference input {source_data_key}") from exc
+        data['index'] = index
         return data
 
     def _temporal_sampling(self, data):

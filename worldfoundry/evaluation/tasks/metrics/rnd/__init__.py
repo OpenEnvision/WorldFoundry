@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .wrapper import compute_rnd, compute_rnd_from_images
+compute_rnd = lazy_export(f"{__name__}.wrapper", "compute_rnd", owner=__name__)
+compute_rnd_from_images = lazy_export(f"{__name__}.wrapper", "compute_rnd_from_images", owner=__name__)
 
 METRIC_ID = "rnd"
 ALIASES = ("rnd-score", "random-network-distillation", "rnd_diversity")

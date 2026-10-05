@@ -1,0 +1,50 @@
+---
+title: "InSpatio-WorldFM"
+description: "InSpatio-WorldFM from InSpatio: world and video; Verified."
+modelId: "worldfm"
+pageSource: generated
+---
+
+InSpatio-WorldFM is a 3D world foundation model for spatial intelligence and frame generation, released with confirmed code and weights (inspatio/WorldFM on Hugging Face, Apache-2.0). In this catalog the integration is verified: the WorldFoundry runner supports the official meta.json demo in the unified environment profile with local WorldFM assets, and emits the official video and panorama artifact structure.
+
+<ModelPaperFigures modelId="worldfm" locale="en" />
+
+The recorded paper is [arXiv 2603.11911](https://arxiv.org/abs/2603.11911).
+
+Project page: [inspatio.github.io/worldfm](https://inspatio.github.io/worldfm). Code: [inspatio/worldfm](https://github.com/inspatio/worldfm). Code: [world-fm/worldfm](https://github.com/world-fm/worldfm).
+
+<ModelCommandBuilder modelId="worldfm" locale="en" />
+
+## What it is for
+
+`worldfm` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+
+Outputs cover both video and panorama artifacts, reflecting a world-generation design that renders beyond a single fixed viewport. Architecture internals beyond the official repository and checkpoint pointers are not recorded in this repository.
+
+Catalog tasks include world, video, and world model. Documented outputs include video.
+
+Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Unified world-generation quality for 3D world output).
+
+## Runtime contract
+
+Optional `input_path`, `prompt`, `interactions`, `fps`, and `meta_path`; artifacts `generated_world` and `worldfm.mp4`.
+
+CLI task profiles: `official-meta-demo`. WorldFoundry binds `WorldFMPipeline`.
+
+Family status: **Verified**.
+
+Recorded `official-meta-demo` defaults: fps=30.
+
+Drive runs through the official meta.json demo format with local WorldFM assets staged.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run worldfm --pipeline.task-profile official-meta-demo`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `inspatio/WorldFM`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh worldfm`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="worldfm" locale="en" />

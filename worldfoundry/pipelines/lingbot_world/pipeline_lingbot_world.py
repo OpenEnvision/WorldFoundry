@@ -1,5 +1,6 @@
 """Lingbot World visual generation pipeline module."""
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
@@ -40,6 +41,8 @@ WMFACTORY_INTERACTION_KEYS: Dict[str, tuple[str, ...]] = {
     "camera_dl": ("k", "j"),
     "camera_dr": ("k", "l"),
 }
+
+logger = logging.getLogger(__name__)
 
 
 def _wmfactory_trajectory_from_interactions(
@@ -113,7 +116,7 @@ class LingBotPipeline(PipelineABC):
             DEFAULT_LINGBOT_ACT_REPO if resolved_model_id == "lingbot-world-act" else DEFAULT_LINGBOT_BASE_REPO
         )
 
-        print(f"Loading LingBot World Model from {model_path}...")
+        logger.info("Loading LingBot World Model from %s...", model_path)
 
         synthesis_model = LingBotSynthesis.from_pretrained(
             pretrained_model_path=model_path,
@@ -205,7 +208,19 @@ class LingBotPipeline(PipelineABC):
                   **kwds):
 
         """Execute the complete pipeline generation flow."""
-        del operator_kwargs
+        # PipelineInvocation carries model-specific inputs separately from the
+        # common image/prompt/action fields. Keep direct-call arguments as the
+        # priority, while accepting the same pose and action payload through
+        # WorldFoundryPipelineRunner's request.inputs.
+        if isinstance(operator_kwargs, dict):
+            if action_path is None:
+                action_path = operator_kwargs.get("action_path")
+            if poses_c2ws is None:
+                poses_c2ws = operator_kwargs.get("poses_c2ws")
+            if poses_Ks is None:
+                poses_Ks = operator_kwargs.get("poses_Ks")
+            if action_matrix is None:
+                action_matrix = operator_kwargs.get("action_matrix")
         processed_inputs = self.process(
             images=images,
             prompt=prompt,
@@ -236,6 +251,22 @@ class LingBotPipeline(PipelineABC):
         )
 
         if output_video is None:
+            # The distributed LingBot runtime decodes only on rank zero.  The
+            # remaining ranks still have to execute the complete denoising
+            # graph and participate in Studio's status gather, but an empty
+            # local payload is expected there (the V2 pipeline follows the
+            # same contract).  Treat ``None`` as an error only for rank zero
+            # or a non-distributed invocation, where it really does mean that
+            # no video was produced.
+            import torch.distributed as dist
+
+            if (
+                dist.is_available()
+                and dist.is_initialized()
+                and dist.get_world_size() > 1
+                and dist.get_rank() != 0
+            ):
+                return None
             raise RuntimeError("LingBot did not return video frames on the current rank.")
         artifact_path = None
         if output_path is not None:
@@ -275,7 +306,7 @@ class LingBotPipeline(PipelineABC):
         # 1. Initialize Memory if images provided (First Turn)
         """Stream visual generation outputs chunk by chunk."""
         if images is not None:
-            print("--- Stream Started ---")
+            logger.info("--- Stream Started ---")
             self.memory_module.manage(action="reset") # Clear old memory
             self.memory_module.record(images, type="image")
 

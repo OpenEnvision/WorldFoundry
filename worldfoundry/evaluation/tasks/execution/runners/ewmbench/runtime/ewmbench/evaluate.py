@@ -5,7 +5,7 @@ import torch
 import yaml
 
 from EWMBench import EmbodiedWorldModelBenchmark
-from EWMBench.distributed import dist_init, print0
+from worldfoundry.core.distributed.collectives.evaluation import dist_init, print0
 
 
 def parse_args():

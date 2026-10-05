@@ -26,24 +26,6 @@ algorithms:
     local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/diffusion_policy
     revision: 5ba07ac6661db573af695b419a7947ecb704690f
   worldfoundry_model_id: diffusion-policy
-- id: tdmpc
-  lerobot_policy_dir: tdmpc
-  name: TD-MPC
-  source_basis: official_repo
-  official_repo:
-    url: https://github.com/nicklashansen/tdmpc
-    local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/tdmpc
-    revision: f4d85eca7419039b71bab2234ffc8aca378dd313
-  worldfoundry_model_id: tdmpc
-- id: vqbet
-  lerobot_policy_dir: vqbet
-  name: VQ-BeT
-  source_basis: official_repo
-  official_repo:
-    url: https://github.com/jayLEE0301/vq_bet_official
-    local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/vq_bet_official
-    revision: 09d4851288ca5deaaa1ab367a208e520f8ee9a84
-  worldfoundry_model_id: vqbet
 - id: pi0
   lerobot_policy_dir: pi0
   name: pi0
@@ -71,15 +53,6 @@ algorithms:
     local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/openpi
     revision: c23745b5ad24e98f66967ea795a07b2588ed6c79
   worldfoundry_model_id: pi0-fast
-- id: real-time-chunking
-  lerobot_policy_dir: rtc
-  name: Real-Time Chunking
-  source_basis: official_repo
-  official_repo:
-    url: https://github.com/Physical-Intelligence/real-time-chunking-kinetix
-    local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/real-time-chunking-kinetix
-    revision: 9296f31d62d5bfeb5779dcb2f9bcf71ca37f448b
-  worldfoundry_model_id: real-time-chunking
 - id: gr00t
   lerobot_policy_dir: groot
   name: NVIDIA GR00T
@@ -99,18 +72,6 @@ algorithms:
   model_refs:
   - repo_id: lerobot/smolvla_base
   worldfoundry_model_id: smolvla
-- id: wall-oss
-  lerobot_policy_dir: wall_x
-  name: WALL-OSS / Wall-X
-  source_basis: official_repo
-  official_repo:
-    url: https://github.com/X-Square-Robot/wall-x
-    local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/wall-x
-    revision: e23a5868465be0d4e2543d73e16210b5cf21e22e
-  model_refs:
-  - repo_id: x-square-robot/wall-oss-flow
-  - repo_id: x-square-robot/wall-oss-fast
-  worldfoundry_model_id: wall-oss
 - id: xvla
   lerobot_policy_dir: xvla
   name: X-VLA
@@ -120,15 +81,6 @@ algorithms:
     local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/X-VLA
     revision: 6bc2513f5f1cbec715cc668b414392a6cae5c671
   worldfoundry_model_id: xvla
-- id: eo1
-  lerobot_policy_dir: eo1
-  name: EO-1
-  source_basis: official_repo
-  official_repo:
-    url: https://github.com/EO-Robotics/EO
-    local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/EO
-    revision: 451c363d7dff682700789afae0b9b17c004e8f8c
-  worldfoundry_model_id: eo1
 - id: molmoact2
   lerobot_policy_dir: molmoact2
   name: MolmoAct2
@@ -138,19 +90,3 @@ algorithms:
     local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/molmoact2
     revision: 40ac992dd4b5e4f31a37b3aa26cfbb5c9fb2cf05
   worldfoundry_model_id: molmoact2
-- id: multi-task-dit
-  lerobot_policy_dir: multi_task_dit
-  name: Multi-task DiT Policy
-  source_basis: lerobot_policy_reference
-  official_repo:
-    url: https://github.com/huggingface/lerobot
-    local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/lerobot
-  worldfoundry_model_id: multi-task-dit
-- id: gaussian-actor
-  lerobot_policy_dir: gaussian_actor
-  name: Gaussian Actor
-  source_basis: lerobot_policy_reference
-  official_repo:
-    url: https://github.com/huggingface/lerobot
-    local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/lerobot
-  worldfoundry_model_id: gaussian-actor

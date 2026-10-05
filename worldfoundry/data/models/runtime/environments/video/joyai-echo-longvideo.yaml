@@ -1,0 +1,44 @@
+model_id: joyai-echo-longvideo
+env_name: joyai-echo-longvideo
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+driver_status: compatible
+conda_packages:
+- python=3.11
+- pip>=25
+- ffmpeg>=6
+pip_extra_index_url: https://download.pytorch.org/whl/cu128
+pip_packages:
+- torch==2.8.0
+- torchvision==0.23.0
+- torchaudio==2.8.0
+- torchcodec==0.7.0
+- triton==3.4.0
+- transformers==4.57.6
+- peft==0.17.1
+- accelerate>=1.10,<2
+- safetensors==0.6.2
+- huggingface-hub>=0.34,<1
+- PyYAML>=6.0.2,<7
+- numpy>=2.2,<3
+- scipy>=1.13,<2
+- einops>=0.8,<1
+- Pillow>=10,<13
+- tqdm>=4.66,<5
+- av>=14,<17
+validation_imports:
+- torch
+- torchvision
+- torchaudio
+- torchcodec
+- transformers
+- accelerate
+- safetensors
+- yaml
+- av
+notes:
+- Pins mirror the upstream Echo-LongVideo Python 3.11 / CUDA 12.8 reference environment.
+- TorchAudio 2.8 media writing uses TorchCodec; its 0.7 release matches PyTorch 2.8 and requires shared FFmpeg libraries from the conda ffmpeg package.
+- FP4 additionally requires the optional requirements-fp4.txt NVIDIA ModelOpt dependency.
+- Production voice-memory extraction additionally requires the upstream requirements-msst.txt and scripts/setup_msst.py assets.

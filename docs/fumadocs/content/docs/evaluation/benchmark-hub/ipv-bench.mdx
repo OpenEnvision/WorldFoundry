@@ -1,151 +1,37 @@
 ---
 title: IPV-Bench
-description: Impossible Videos evaluation with WorldFoundry's checked-in prompt assets, result import path, direct runner, metrics, and current gaps.
+description: "NUS Show Lab impossible-video bench: generate and recognize physically impossible events. WorldFoundry normalizes official CSV/JSON; it does not invent a board."
 ---
 
-## What It Measures
+IPV-Bench (Impossible Videos; Show Lab, NUS) flips the usual physics question. It asks whether models can **depict** counterfactual, physically impossible events — and whether video-understanding models can **recognize** them. The taxonomy covers physical, biological, geographical, and social impossibilities. Two tracks:
 
-IPV-Bench evaluates physically impossible videos. The local Impossible Videos README describes two tracks:
+- **Generation (IPV-Txt)** — visual quality and prompt following; `impossible_video_score` is the share of clips that are both high-quality and prompt-faithful.
+- **Understanding (IPV-Vid)** — judgement, multi-choice QA, and open QA against official labels.
 
-- Text-to-video generation: generate videos from impossible-scene prompts, then score visual quality and prompt following.
-- Video understanding: answer judgement, multiple-choice, and open-ended QA about impossible videos.
+`ipv_bench_average` aggregates whatever official families you supply.
 
-The official benchmark defines a taxonomy with 4 domains and 14 categories, plus an `IPV-Txt` prompt suite. WorldFoundry keeps the prompt suite and result parser in tree at `worldfoundry/evaluation/tasks/execution/runners/ipv_bench` and `worldfoundry/data/benchmarks/assets/ipv-bench`. Do not make a separate copy of the official repo for normal WorldFoundry use; the local `/Impossible-Videos` repo is a protocol reference.
+Paper: [Impossible Videos](https://arxiv.org/abs/2503.14378). Code: [showlab/Impossible-Videos](https://github.com/showlab/Impossible-Videos).
 
+WorldFoundry **normalizes official CSV/JSON exports** for both tracks. It does not run the official judges or understanding models in tree. `--run-fixture` is wiring only.
 
-## Official References
+<BenchmarkPageSections id="ipv-bench" locale="en" />
 
-| Resource | Link |
-| --- | --- |
-| Paper | [arXiv:2503.14378](https://arxiv.org/abs/2503.14378) |
-| GitHub | [github.com/showlab/Impossible-Videos](https://github.com/showlab/Impossible-Videos) |
-| HF dataset | [showlab/ImpossibleVideos](https://huggingface.co/datasets/showlab/ImpossibleVideos) |
-| In-tree runner | `worldfoundry/evaluation/tasks/execution/runners/ipv_bench/run_ipv_bench_official_runner.py` |
-
-## Prepare Data And Assets
-
-Checked-in assets:
-
-- `worldfoundry/data/benchmarks/assets/ipv-bench/ipv_txt_prompt_suite.json`
-- `worldfoundry/data/benchmarks/assets/ipv-bench/judgement_question.json`
-- `worldfoundry/data/benchmarks/assets/ipv-bench/judgement_answer.json`
-- `worldfoundry/data/benchmarks/assets/ipv-bench/mcqa_question.json`
-- `worldfoundry/data/benchmarks/assets/ipv-bench/mcqa_answer.json`
-- `worldfoundry/data/benchmarks/assets/ipv-bench/openqa_question.json`
-- `worldfoundry/data/benchmarks/assets/ipv-bench/openqa_answer.json`
-- `worldfoundry/data/benchmarks/assets/ipv-bench/sample_results.csv`
-
-The prompt suite contains 260 canonical text-to-video prompts. Generated videos should be named by `prompt_id` so coverage can be computed:
-
-```text
-/path/to/ipv/generated_videos/
-  1.mp4
-  2.mp4
-  3.mp4
-```
-
-The runner accepts `.mp4`, `.mov`, `.mkv`, `.webm`, and `.avi`.
-
-HF data can be mirrored when you need the released videos or task files:
+## How to run
 
 ```bash
-hf download showlab/ImpossibleVideos \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/ImpossibleVideos
-```
-
-## Result File Shape
-
-You can import summary metric rows:
-
-```csv
-metric_id,score
-visual_quality,0.82
-prompt_following,0.76
-impossible_video_score,0.61
-judgement_accuracy,0.73
-mcqa_accuracy,0.70
-open_qa_score,0.65
-```
-
-You can also import per-sample rows with fields such as `prompt_id`, `visual_quality`, `prompt_following`, `answer`, `pred`, `mcqa_answer`, `mcqa_pred`, `open_qa_score`, and `open_qa_pred`. The in-tree artifact importer also looks for files named like `ipv_results*.csv`, `ipv_results*.json`, `ipv_results*.jsonl`, and `*_pred_ipv_*.json`.
-
-## Output Layout
-
-Public CLI output:
-
-```text
-tmp/ipv-bench/official-validation/
-  scorecard.json
-  raw_metric_table.jsonl
-  per_sample_scores.jsonl
-  runner_runtime_report.json
-  specialized_normalizer_stdout.log
-  specialized_normalizer_stderr.log
-```
-
-Direct runner output includes the same score files and an additional metadata JSON file with the prompt manifest path, metric IDs, and source result path.
-
-## Public CLI
-
-The catalog-supported public command is result import with `official-validation`:
-
-```bash
-cd "$WORLDFOUNDRY_REPO_ROOT"
-
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id ipv-bench \
   --mode official-validation \
-  --official-results-path /path/to/ipv_results.csv \
-  --generated-artifact-dir /path/to/ipv/generated_videos \
+  --official-results-path <official_results.csv> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/ipv-bench/official-validation \
   --json
 ```
 
-## Direct Runner
+Default import: `WORLDFOUNDRY_IPV_BENCH_RESULTS_PATH`. Optional root / backend: `WORLDFOUNDRY_IPV_BENCH_ROOT`, `WORLDFOUNDRY_IPV_BENCH_RUNTIME_BACKEND`. No Hugging Face dataset is required by the contract.
 
-Import an existing CSV, JSON, or JSONL result file:
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/ipv-bench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/ipv_bench`.
 
-```bash
-cd "$WORLDFOUNDRY_REPO_ROOT"
+Outputs include `scorecard.json` (primary `ipv_bench_average`) and `raw_metric_table.jsonl`.
 
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/ipv_bench/run_ipv_bench_official_runner.py \
-  --official-results-path /path/to/ipv_results.csv \
-  --generated-artifact-dir /path/to/ipv/generated_videos \
-  --output-dir tmp/ipv-bench/direct-import \
-  --json
-```
-
-Import a result file that is already inside the generated artifact directory:
-
-```bash
-cd "$WORLDFOUNDRY_REPO_ROOT"
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/ipv_bench/run_ipv_bench_official_runner.py \
-  --run-official \
-  --generated-artifact-dir /path/to/ipv/generated_videos \
-  --output-dir tmp/ipv-bench/direct-run \
-  --json
-```
-
-For a custom prompt file, add:
-
-```bash
---prompt-manifest /path/to/ipv_txt_prompt_suite.json
-```
-
-## Metrics
-
-| Metric ID | Meaning |
-| --- | --- |
-| `visual_quality` | Mean human or judge visual-quality annotation for generated videos. |
-| `prompt_following` | Mean human or judge prompt-following annotation. |
-| `impossible_video_score` | Fraction of generation samples that pass both visual quality and prompt-following thresholds. In the current runner, both thresholds are `4.0`. |
-| `judgement_accuracy` | Exact-match accuracy for the judgement understanding task. |
-| `mcqa_accuracy` | Exact-match accuracy for the multiple-choice QA task. |
-| `open_qa_score` | Imported open-ended QA score or exact-match score when answer/prediction fields are supplied. |
-| `ipv_bench_average` | Mean of available IPV-Bench component metrics unless an imported result file supplies the aggregate directly. |
-
-All metrics are normalized to `[0, 1]`, and higher is better.
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

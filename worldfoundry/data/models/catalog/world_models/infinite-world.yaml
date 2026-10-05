@@ -19,6 +19,8 @@ name: Infinite-World
 output_artifacts:
 - generated_world
 official_sources:
+  paper: https://arxiv.org/abs/2602.02393
+  project_page: https://rq-wu.github.io/projects/infinite-world
   github:
     confirmed_by: git ls-remote --heads
     confirmed_ref: refs/heads/main
@@ -46,3 +48,24 @@ catalog_policy:
   open_source_rule: Only mark open_source when an official GitHub repository or official
     Hugging Face model page was confirmed. Do not infer checkpoint availability from
     papers, demos, or third-party mirrors.
+docs:
+  publisher: Meituan (MeiGen-AI)
+  publisher_kind: company
+  publisher_zh: 美团（MeiGen-AI）
+  overview: 'Infinite-World is MeiGen-AI''s long-horizon world video model: from one image it navigates and extends a world over long durations. In this catalog it is verified — real GPU inference produced a non-empty long-horizon world video artifact with preview metadata through the Studio workspace job path, using the official image-conditioned navigation demo settings.'
+  overview_zh: Infinite-World 是美团 MeiGen-AI 的长时程世界视频模型：从一张图出发，长时间地在世界中导航与扩展。本 catalog 中它已验证——真实 GPU 推理经 Studio workspace 任务路径、按官方图像条件导航 demo 设置，产出非空的长时程世界视频产物与预览元数据。
+  architecture: The in-tree runtime resolves local or Hugging Face checkpoint layouts without relying on an external repository at inference time. Architecture internals beyond the recorded structure are not stored in this repository.
+  architecture_zh: 树内运行时可解析本地或 Hugging Face checkpoint 布局，推理时不依赖外部仓库。除已记录结构外的架构内部细节仓库未存。
+  usage_notes: The profile matches the official local/Hugging Face checkpoint layout — start from the official image-conditioned demo settings that were verified.
+  usage_notes_zh: 档案匹配官方的本地/Hugging Face checkpoint 布局——请从已验证的官方图像条件 demo 设置出发。
+  limitations:
+  - Long-horizon quality naturally drifts; validate outputs for your duration targets.
+  limitations_zh:
+  - 长时程质量会自然漂移；请针对你的时长目标验证输出。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Long-horizon world-rollout quality.
+    reason_zh: 长时程世界滚动生成质量。
+  - id: memobench
+    reason: Long-horizon consistency evaluation.
+    reason_zh: 长时程一致性评测。

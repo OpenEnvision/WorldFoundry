@@ -1,230 +1,56 @@
 ---
 title: T2V-CompBench
-description: 面向 compositional text-to-video 的 benchmark，包含七类仓内 evaluator 与可运行 CSV/import 流程。
+description: "CVPR 2025 组合式 T2V 评测：1,400 条 prompt、七个绑定轴。WorldFoundry 内置 runtime，不编造榜单。"
 ---
 
-## 简介
+T2V-CompBench（港大，联合港中文与华为诺亚）问的是文生视频模型会不会把**正确的属性、动作和运动绑到正确的物体上**。这是组合能力，不是单一美学分。官方套件 **1,400 条 prompt**（7 × 200）：
 
-T2V-CompBench 是 CVPR 2025 的 compositional text-to-video benchmark。它测试生成视频是否能把正确属性绑定到正确物体、保持动态属性变化、满足空间关系、正确绑定运动和动作、建模物体交互，以及生成指定数量的物体。官方 prompt suite 包含 1,400 条 prompts，分为七类，每类 200 条。
+- **一致 / 动态属性绑定** — 先测静态属性，再测时变属性，是否落在正确物体上。
+- **空间关系** — 二维 / 三维布局（检测 + 深度 / SAM）。
+- **运动绑定** — 前景 vs 背景运动（DOT 跟踪）。
+- **动作绑定** 与 **物体交互** — MLLM（LLaVA 风格）评判。
+- **生成计数** — GroundingDINO 数物体。这是 WorldFoundry 已在真实 MP4 上跑过的有界官方分量。
 
-WorldFoundry 已经把官方评测脚本集成在仓内。runner 是 `worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py`；vendored runtime code 是 `worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench`；prompt 和 metadata 资产放在 `worldfoundry/data/benchmarks/assets/t2v-compbench`。
+论文：[T2V-CompBench](https://arxiv.org/abs/2407.14505)。项目：[t2v-compbench-2025.github.io](https://t2v-compbench-2025.github.io/)。代码：[KaiyueSun98/T2V-CompBench](https://github.com/KaiyueSun98/T2V-CompBench)。参考视频：[`Kaiyue/T2V-CompBench-Videos`](https://huggingface.co/datasets/Kaiyue/T2V-CompBench-Videos)（25,200 行）。
 
-官方参考：
+WorldFoundry **内置官方 runtime**，并用严格的 manifest 桥把生成视频排成 `category/NNNN.mp4`。可导入官方 CSV / JSON，或在度量资源就位后跑单个类别。只有七个类别分齐备时才写出 `t2v_compbench_average`。
 
-- Project page: [t2v-compbench-2025.github.io](https://t2v-compbench-2025.github.io/)
-- Paper: [arXiv:2407.14505](https://arxiv.org/abs/2407.14505)
-- Leaderboard: [Kaiyue/T2V-CompBench_Leaderboard](https://huggingface.co/spaces/Kaiyue/T2V-CompBench_Leaderboard)
-- Released videos dataset: [Kaiyue/T2V-CompBench-Videos](https://huggingface.co/datasets/Kaiyue/T2V-CompBench-Videos)
-- Official source reference: [KaiyueSun98/T2V-CompBench](https://github.com/KaiyueSun98/T2V-CompBench)
+<BenchmarkPageSections id="t2v-compbench" locale="zh" />
 
-## 评测协议
+## 如何运行
 
-主指标是 `t2v_compbench_average`。
+导入官方类别分：
 
-| Metric | Evaluator family | 视频子目录 |
-| --- | --- | --- |
-| `consistent_attribute_binding` | MLLM | `consistent_attr/` |
-| `dynamic_attribute_binding` | MLLM | `dynamic_attr/` |
-| `spatial_relationships` | Detection + depth | `spatial_relationships/` |
-| `motion_binding` | Segmentation + DOT tracking | `motion_binding/` |
-| `action_binding` | MLLM | `action_binding/` |
-| `object_interactions` | MLLM | `interaction/` |
-| `generative_numeracy` | Detection | `generative_numeracy/` |
-| `t2v_compbench_average` | Aggregate | 可用 category 分数的均值。 |
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id t2v-compbench \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/t2v-compbench/official-validation \
+  --json
+```
 
-每个 category 需要 200 个生成视频，命名方式跟官方 prompts 对齐：
+从已就位视频重算一个类别（计数需要 GroundingDINO 与 BERT 兼容编码器）：
+
+```bash
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
+  --generated-video-dir <generated_videos_with_t2v_compbench_generation_manifest.jsonl> \
+  --category generative_numeracy \
+  --output-dir tmp/t2v-compbench/numeracy \
+  --json
+```
+
+`--preflight` 会在开跑前检查资源。MLLM 类别需要 `WORLDFOUNDRY_T2V_COMPBENCH_LLAVA_MODEL_PATH`；运动绑定需要 DOT；空间类别需要 Depth-Anything / SAM（`WORLDFOUNDRY_T2V_COMPBENCH_SAM_CKPT`）。共享栈：`grounded_depth_segmentation_stack`。默认导入路径：`WORLDFOUNDRY_T2V_COMPBENCH_RESULTS_PATH`。可选 runtime 根：`WORLDFOUNDRY_T2V_COMPBENCH_ROOT`。
+
+仓内指针：
 
 ```text
-/path/to/t2v-compbench/videos/
-  consistent_attr/
-    0001.mp4
-    ...
-    0200.mp4
-  dynamic_attr/
-    0001.mp4
-    ...
-  spatial_relationships/
-  motion_binding/
-  action_binding/
-  interaction/
-  generative_numeracy/
+worldfoundry/data/benchmarks/tasks/external/t2v-compbench.yaml
+worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench
 ```
 
-runner 也接受官方 dataset 中常见的 alias，比如 `consistent_attr_1`、`dynamic_attr_2`、`spatial_3`、`motion_4`、`interaction_6` 和 `numeracy_7`。
+产物包括 `scorecard.json`（齐备时主键 `t2v_compbench_average`）、`raw_metric_table.jsonl`，以及来源提供时的逐样本行。
 
-## 数据与权重准备
-
-从 WorldFoundry 仓库根目录开始：
-
-```bash
-cd /path/to/WorldFoundry
-export WORLDFOUNDRY_T2V_COMPBENCH_ASSETS="$PWD/worldfoundry/data/benchmarks/assets/t2v-compbench"
-export WORLDFOUNDRY_T2V_COMPBENCH_ROOT="$PWD/worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench"
-```
-
-如果需要官方对照资产，可以下载 released reference video dataset：
-
-```bash
-hf download Kaiyue/T2V-CompBench-Videos \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/T2V-CompBench-Videos
-
-export WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT=/path/to/datasets/T2V-CompBench-Videos
-```
-
-准备 metric model checkpoints：
-
-```bash
-export WORLDFOUNDRY_T2V_COMPBENCH_LLAVA_MODEL_PATH=/path/to/llava-v1.6-34b
-export WORLDFOUNDRY_T2V_COMPBENCH_GROUNDINGDINO_CKPT=/path/to/groundingdino_swint_ogc.pth
-export WORLDFOUNDRY_T2V_COMPBENCH_SAM_CKPT=/path/to/sam_vit_h_4b8939.pth
-```
-
-对于 `motion_binding`，把官方 DOT script 需要的 DOT checkpoints 放到：
-
-```text
-worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/runtime/t2v_compbench/dot/checkpoints/
-```
-
-LLaVA、GroundingDINO、SAM、depth 和 DOT 的代码路径复用 WorldFoundry base-model packages，不需要外部 source tree。checkpoint 文件仍然可以按需要下载或本地 staged。
-
-## 生成候选视频
-
-使用 `WORLDFOUNDRY_T2V_COMPBENCH_ASSETS/prompts/` 下的 prompt files 跑候选 text-to-video 模型。把输出放到上面的 category layout，然后设置：
-
-```bash
-export WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT=/path/to/t2v-compbench/videos
-export WORLDFOUNDRY_T2V_COMPBENCH_MODEL_NAME=my_t2v_model
-```
-
-候选模型推理和训练是 model-specific 的。对于 WorldFoundry 已集成的生成模型，使用对应 synthesis workflow 跑每个 category prompt file，然后把最终视频导出到期望的 category 文件夹。
-
-## 运行 Category Scoring
-
-运行一个 MLLM category：
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
-  --video-root "${WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT}" \
-  --dataset-root "${WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT}" \
-  --model-name "${WORLDFOUNDRY_T2V_COMPBENCH_MODEL_NAME}" \
-  --category consistent_attribute_binding \
-  --llava-model-path "${WORLDFOUNDRY_T2V_COMPBENCH_LLAVA_MODEL_PATH}" \
-  --output-dir tmp/t2v-compbench/consistent-attribute \
-  --json
-```
-
-运行一个 detection/depth category：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
-  --video-root "${WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT}" \
-  --dataset-root "${WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT}" \
-  --model-name "${WORLDFOUNDRY_T2V_COMPBENCH_MODEL_NAME}" \
-  --category spatial_relationships \
-  --grounded-checkpoint "${WORLDFOUNDRY_T2V_COMPBENCH_GROUNDINGDINO_CKPT}" \
-  --sam-checkpoint "${WORLDFOUNDRY_T2V_COMPBENCH_SAM_CKPT}" \
-  --device cuda \
-  --output-dir tmp/t2v-compbench/spatial \
-  --json
-```
-
-使用必要的 two-stage path 运行 motion binding：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
-  --video-root "${WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT}" \
-  --dataset-root "${WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT}" \
-  --model-name "${WORLDFOUNDRY_T2V_COMPBENCH_MODEL_NAME}" \
-  --category motion_binding \
-  --run-motion-two-stage \
-  --grounded-checkpoint "${WORLDFOUNDRY_T2V_COMPBENCH_GROUNDINGDINO_CKPT}" \
-  --sam-checkpoint "${WORLDFOUNDRY_T2V_COMPBENCH_SAM_CKPT}" \
-  --device cuda \
-  --output-dir tmp/t2v-compbench/motion \
-  --json
-```
-
-所有资产和 metric 依赖都准备好后，可以运行完整套件：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
-  --video-root "${WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT}" \
-  --dataset-root "${WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT}" \
-  --model-name "${WORLDFOUNDRY_T2V_COMPBENCH_MODEL_NAME}" \
-  --category all \
-  --run-motion-two-stage \
-  --llava-model-path "${WORLDFOUNDRY_T2V_COMPBENCH_LLAVA_MODEL_PATH}" \
-  --grounded-checkpoint "${WORLDFOUNDRY_T2V_COMPBENCH_GROUNDINGDINO_CKPT}" \
-  --sam-checkpoint "${WORLDFOUNDRY_T2V_COMPBENCH_SAM_CKPT}" \
-  --device cuda \
-  --output-dir tmp/t2v-compbench/official-run \
-  --json
-```
-
-## 导入已有 CSV 结果
-
-官方 leaderboard submission 是一个 folder 或 zip，里面最多包含八个 CSV 文件：
-
-```text
-my_t2v_model_consistent_attr_score.csv
-my_t2v_model_dynamic_attr_score.csv
-my_t2v_model_spatial_score.csv
-my_t2v_model_motion_score.csv
-my_t2v_model_motion_back_fore.csv
-my_t2v_model_action_binding_score.csv
-my_t2v_model_object_interactions_score.csv
-my_t2v_model_numeracy_video.csv
-```
-
-将这些 CSV 转成 WorldFoundry scorecard：
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/t2v_compbench/run_t2v_compbench_official_runner.py \
-  --csv-dir /path/to/t2v-compbench/eval_results_csv \
-  --video-root "${WORLDFOUNDRY_T2V_COMPBENCH_VIDEO_ROOT}" \
-  --dataset-root "${WORLDFOUNDRY_T2V_COMPBENCH_DATASET_ROOT}" \
-  --model-name "${WORLDFOUNDRY_T2V_COMPBENCH_MODEL_NAME}" \
-  --output-dir tmp/t2v-compbench/imported \
-  --json
-```
-
-## 输出文件
-
-运行会写出：
-
-- `scorecard.json`: WorldFoundry 统一 scorecard，包含七类 category metrics 和 `t2v_compbench_average`。
-- `raw_metric_table.jsonl`: 归一化后的 metric rows。
-- `per_sample_scores.jsonl`: 当 category CSV 可解析时写出逐视频结果。
-- `leaderboard_csv_manifest.json`: 发现到的官方 CSV 文件和 checksum。
-- `generated_video_manifest.json`: category 视频覆盖情况。
-- `dataset_manifest.json`: 本地 reference dataset summary。
-- `upstream_stdout.log` and `upstream_stderr.log`: 仓内 category scripts 日志。
-
-## Leaderboard 说明
-
-T2V-CompBench 在 [Kaiyue/T2V-CompBench_Leaderboard](https://huggingface.co/spaces/Kaiyue/T2V-CompBench_Leaderboard) 维护 live leaderboard。提交 zip 时最多包含八个 CSV：
-
-```text
-<model>_consistent_attr_score.csv
-<model>_dynamic_attr_score.csv
-<model>_spatial_score.csv
-<model>_motion_score.csv
-<model>_motion_back_fore.csv
-<model>_action_binding_score.csv
-<model>_object_interactions_score.csv
-<model>_numeracy_video.csv
-```
-
-上游论文在七个 compositional category 上评测了 17 个开源和 6 个商业 T2V 系统。每个 category 期望 200 个视频；leaderboard 后端会排除得分行数不足 200 的 category。每个 category 的最终 CSV 末行必须以 `score:` 或 `Score:` 开头。
-
-WorldFoundry 的 `t2v_compbench_average` 是本地 scorecard 中可用 category 分数的均值。当前排名请以 live leaderboard 为准。
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

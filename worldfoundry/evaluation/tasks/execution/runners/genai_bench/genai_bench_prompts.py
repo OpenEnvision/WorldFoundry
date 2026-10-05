@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
+    first_existing_dir,
+    resolve_env_path,
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
 )
@@ -18,20 +19,13 @@ METADATA_REL = Path("metadata.json")
 PREFERENCE_PAIRS_REL = Path("preference_pairs.fixture.jsonl")
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
-
 
 def resolve_genai_bench_assets_root(explicit: Path | None = None) -> Path:
-    for candidate in (
+    return first_existing_dir(
         explicit,
-        _env_path("WORLDFOUNDRY_GENAI_BENCH_ASSETS_ROOT"),
+        resolve_env_path("WORLDFOUNDRY_GENAI_BENCH_ASSETS_ROOT"),
         bundled_benchmark_assets_root(BENCHMARK_ID),
-    ):
-        if candidate is not None and candidate.is_dir():
-            return candidate.expanduser().resolve()
-    return bundled_benchmark_assets_root(BENCHMARK_ID)
+    ) or bundled_benchmark_assets_root(BENCHMARK_ID)
 
 
 def resolve_metadata_path(*, assets_root: Path | None = None) -> Path:

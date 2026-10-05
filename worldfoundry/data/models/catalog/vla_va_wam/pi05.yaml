@@ -8,6 +8,8 @@ aliases:
 availability: open_source
 provider: official_repo
 official_sources:
+  paper: https://arxiv.org/abs/2410.24164
+  project_page: https://www.physicalintelligence.company/blog/pi0
   github:
     head_sha: c23745b5ad24e98f66967ea795a07b2588ed6c79
     url: https://github.com/Physical-Intelligence/openpi
@@ -16,6 +18,11 @@ integration:
   notes:
   - Concrete pi0.5 algorithm entry backed by Physical Intelligence openpi. Do not route this through LeRobot policy-zoo.
   - WorldFoundry reuses the in-tree OpenPI runtime with pi05-specific config and checkpoint selection.
+runner_parity:
+  status: checkpoint_gpu_validated
+  notes:
+  - The independent pi05 public binding produced finite 10x7 actions with the official pi05_libero Orbax checkpoint on GPU2.
+  - Inputs were synthetic dual-camera images and the checkpoint-mean state; LIBERO task success and pi05_base/pi05_droid remain unverified.
 tasks:
 - vla
 - vla.policy_rollout
@@ -28,3 +35,25 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records. Runner or pipeline targets are present
   only after a complete in-tree WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: Physical Intelligence
+  publisher_kind: company
+  publisher_zh: Physical Intelligence（PI）
+  overview: 'pi0.5 is Physical Intelligence''s open-world generalization upgrade of pi0: trained for broader scene and task transfer while keeping the flow-matching VLA recipe. The independent pi05 binding reused the in-tree OpenPI runtime and produced finite 10x7 actions with the official pi05_libero checkpoint on a GPU from synthetic observations.'
+  overview_zh: pi0.5 是 Physical Intelligence 对 pi0 的开放世界泛化升级：面向更广的场景与任务迁移训练，同时保持 flow-matching VLA 配方。独立的 pi05 绑定复用树内 OpenPI 运行时，以官方 pi05_libero 权重和合成观测在 GPU 上产出有限的 10×7 动作。
+  architecture: Same family architecture as pi0 — a PaliGemma-based VLA with a flow-matching action expert — trained with pi0.5's open-world recipe. Do not route this through LeRobot policy-zoo; the catalog uses the official openpi runtime.
+  architecture_zh: 与 pi0 同族架构——基于 PaliGemma 的 VLA 加 flow-matching 动作专家——按 pi0.5 的开放世界配方训练。请勿经 LeRobot 策略库路由；catalog 使用官方 openpi 运行时。
+  usage_notes: Stage GCS checkpoints (gs://openpi-assets) with gsutil/gcloud. The pi05_libero configuration is the validated reference path in this repository.
+  usage_notes_zh: 用 gsutil/gcloud 就位 GCS checkpoint（gs://openpi-assets）。pi05_libero 配置是本仓库中已验证的参照路径。
+  limitations:
+  - GCS-hosted checkpoints require gsutil/gcloud tooling.
+  - The recorded synthetic-input run verifies action inference structure, not LIBERO task success or pi05_base/pi05_droid.
+  - No license is recorded on this entry (see the openpi entry, Apache-2.0).
+  limitations_zh:
+  - GCS 托管 checkpoint 需要 gsutil/gcloud 工具。
+  - 已记录的合成输入运行只验证动作推理结构，不代表 LIBERO 任务成功，也不覆盖 pi05_base/pi05_droid。
+  - 本条目未记录许可证（参见 openpi 条目，Apache-2.0）。
+  recommended_benchmarks:
+  - id: libero
+    reason: pi05_libero is the validated in-tree reference.
+    reason_zh: pi05_libero 是树内已验证参照。

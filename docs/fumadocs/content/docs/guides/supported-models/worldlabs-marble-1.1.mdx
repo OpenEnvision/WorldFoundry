@@ -1,0 +1,50 @@
+---
+title: "World Labs Marble 1.1"
+description: "World Labs Marble 1.1 from World Labs: world-generation and 3d-world-generation; Planned."
+modelId: "worldlabs-marble-1.1"
+pageSource: authored
+---
+
+World Labs Marble 1.1 is a commercial API for 3D world generation: it produces explorable 3D worlds from prompts, accessed through api.worldlabs.ai. In this catalog it is exposed through the existing in-tree WorldLabs API pipeline with the marble-1.1 model id; integration is Planned and no local weights exist.
+
+<ModelPaperFigures modelId="worldlabs-marble-1.1" locale="en" />
+
+Code: [radiancefields.com/world-labs-releases-marble-1.1-and-marble-1.1-plus](https://radiancefields.com/world-labs-releases-marble-1.1-and-marble-1.1-plus). Code: [api.worldlabs.ai](https://api.worldlabs.ai).
+
+<ModelCommandBuilder modelId="worldlabs-marble-1.1" locale="en" />
+
+## What it is for
+
+`worldlabs-marble-1.1` is the recorded interactive world line. Start here when the job is stepping a world with actions.
+
+Closed API service: no architecture details are recorded in this repository. The recorded official sources are the release notes and the API endpoint.
+
+Catalog tasks include world-generation, 3d-world-generation, and api-world-model. Catalog aliases include `marble-1.1` and `worldlab-marble-1.1`.
+
+Recorded evaluation entry points include [WorldScore](/docs/evaluation/benchmark-hub/worldscore) (Explorable 3D world generation quality).
+
+Not [World Labs](/docs/guides/supported-models/worldlabs). Score on [WorldScore](/docs/evaluation/benchmark-hub/worldscore).
+
+## Runtime contract
+
+Optional `model`; artifacts `worldlabs-marble-1.1.zip`.
+
+CLI task profiles: `default`. WorldFoundry binds `WorldLabsMarble11Pipeline`.
+
+Family status: **Planned**.
+
+Requires World Labs API credentials; requests route through the in-tree WorldLabs API pipeline using model id marble-1.1. Runner parity is pending.
+
+World Labs Marble 1.1 is exposed through the existing in-tree WorldLabs API pipeline with the marble-1.1 model id.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run worldlabs-marble-1.1 --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh worldlabs-marble-1.1`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Planned**.
+
+<ModelRelatedRecipes modelId="worldlabs-marble-1.1" locale="en" />

@@ -28,7 +28,7 @@ def _transformers_no_init_weights() -> Any:
     except ImportError:
         from transformers.modeling_utils import no_init_weights
 
-        return no_init_weights(_enable=True)
+        return no_init_weights()
 
 
 @dataclass(frozen=True)
@@ -99,7 +99,7 @@ class InternVLAA1Runtime:
     def _resolve_checkpoint(self) -> Path:
         if self._checkpoint_root is not None:
             return self._checkpoint_root
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         direct = self._existing_path(self.config.checkpoint_location)
         location = str(direct) if direct is not None else self.config.checkpoint_location
@@ -114,7 +114,7 @@ class InternVLAA1Runtime:
         return root
 
     def _resolve_processor(self) -> Path:
-        from worldfoundry.core.io.hf import materialize_hf_snapshot
+        from worldfoundry.core.io.assets.hf import materialize_hf_snapshot
 
         direct = self._existing_path(self.config.processor_location)
         location = str(direct) if direct is not None else self.config.processor_location
@@ -169,7 +169,7 @@ class InternVLAA1Runtime:
         from torch import nn
         from safetensors.torch import load_model as load_safetensors_model
 
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         from .configuration import InternVLAA1Config
         from .cosmos import CosmosImageTokenizer

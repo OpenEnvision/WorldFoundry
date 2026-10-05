@@ -1,9 +1,10 @@
-import os
-import torch
-from itertools import repeat
-from contextlib import contextmanager
-from torch import nn
 import collections.abc
+import os
+from contextlib import contextmanager
+from itertools import repeat
+
+import torch
+from torch import nn
 
 
 def _ntuple(n):
@@ -122,7 +123,7 @@ TRANSFORMER_VERSION_TO_SR_VERSION = {
 
 def is_flash2_available():
     try:
-        from flash_attn import flash_attn_varlen_qkvpacked_func
+        from flash_attn import flash_attn_varlen_qkvpacked_func  # noqa: F401
 
         return True
     except Exception:
@@ -132,7 +133,7 @@ def is_flash2_available():
 def is_flash3_available():
     try:
         from flash_attn_interface import (
-            flash_attn_varlen_func as flash_attn_varlen_func_v3,
+            flash_attn_varlen_func as flash_attn_varlen_func_v3,  # noqa: F401
         )  # noqa: F401
 
         return True
@@ -176,9 +177,7 @@ def maybe_fallback_attn_mode(attn_mode, infer_state=None, block_idx=None):
     # Check for sageattn and flex-block-attn conflict
     enable_sageattn = False
     if infer_state is not None:
-        enable_sageattn = (
-            infer_state.enable_sageattn and block_idx in infer_state.sage_blocks_range
-        )
+        enable_sageattn = infer_state.enable_sageattn and block_idx in infer_state.sage_blocks_range
 
     assert not (enable_sageattn and attn_mode == "flex-block-attn"), (
         "SageAttention cannot be used with flex-block-attn mode. "
@@ -209,9 +208,7 @@ def maybe_fallback_attn_mode(attn_mode, infer_state=None, block_idx=None):
             attn_mode = "torch"
     if attn_mode in ("flex-block-attn"):
         if not is_sparse_attn_available():
-            raise ValueError(
-                f"{attn_mode} is not available for your GPU or flex-block-attn is not properly installed."
-            )
+            raise ValueError(f"{attn_mode} is not available for your GPU or flex-block-attn is not properly installed.")
     return attn_mode
 
 
@@ -219,16 +216,16 @@ def maybe_fallback_attn_mode(attn_mode, infer_state=None, block_idx=None):
 def auto_offload_model(models, device, enabled=True):
     from diffusers.hooks.group_offloading import _is_group_offload_enabled
 
-    if enabled:
-        if isinstance(models, nn.Module):
-            models = [models]
-        for model in models:
-            if model is not None:
+    models = [models] if isinstance(models, nn.Module) else list(models)
+    movable = [model for model in models if model is not None and not _is_group_offload_enabled(model)]
+    try:
+        if enabled:
+            for model in movable:
                 model.to(device)
-    yield
-    if enabled:
-        for model in models:
-            if model is not None:
+        yield
+    finally:
+        if enabled:
+            for model in movable:
                 model.to(torch.device("cpu"))
 
 

@@ -18,7 +18,7 @@ from pipeline import (
     CausalInferencePipeline
 )
 from eval_inputs import TextDataset, TextImagePairDataset
-from worldfoundry.core.utils.torch_utils import set_seed_everywhere
+from worldfoundry.core.utils.tensors.torch import set_seed_everywhere
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config_path", type=str, help="Path to the config file")
@@ -67,7 +67,7 @@ else:
     pipeline = CausalDiffusionInferencePipeline(config, device=device)
 
 if args.checkpoint_path:
-    state_dict = torch.load(args.checkpoint_path, map_location="cpu")
+    state_dict = torch.load(args.checkpoint_path, map_location="cpu", weights_only=True)
     if args.use_ema:
         state_dict_to_load = state_dict['generator_ema']
         def remove_fsdp_prefix(state_dict):

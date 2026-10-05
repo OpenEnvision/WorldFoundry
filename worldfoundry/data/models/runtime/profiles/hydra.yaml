@@ -22,8 +22,14 @@ artifact_filename: hydra.mp4
 execution:
   environment: _unified
   backend_stage: independent_in_tree_runtime
-  runtime_status: checkpoint_assets_pending_not_runnable_until_staged
-  integration_status: runtime_ported
+  runtime_status: checkpoint_backed_gpu_inference_verified_official_example
+  integration_status: integrated
   pipeline_binding: hydra
-integration: {status: runtime_ported}
-notes: [Bundled source is mandatory; external source checkouts are rejected.]
+integration: {status: integrated}
+notes:
+- Bundled source is mandatory; external source checkouts are rejected.
+- A 2026-09-25 local 50-step GPU run used the official example 1 source video,
+  camera JSON, and caption, and generated 77 coherent 832x480 frames after
+  77 condition frames; the armored subject leaves and returns to view.
+- A separate synthetic-camera run has a broad wall-like occlusion; arbitrary-path
+  visual quality and quantitative camera adherence remain unverified.

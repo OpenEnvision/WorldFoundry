@@ -1,0 +1,8 @@
+schema_version: 2
+binding_id: worldcrafter-base
+model_id: worldcrafter-base
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.worldcrafter.pipeline_worldcrafter:WorldCrafterPipeline
+  loading: {method: from_pretrained, signature: unified}
+  invocation: {mode: native_or_standard_invocation}

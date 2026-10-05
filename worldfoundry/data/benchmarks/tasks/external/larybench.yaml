@@ -41,6 +41,7 @@ metadata:
     metadata_root_env: LARY_METADATA_DIR
     latent_action_root_env: LARY_LA_DIR
     model_root_env: MODEL_DIR
+    root_env: WORLDFOUNDRY_LARYBENCH_ROOT
   runner_availability:
     available: true
     runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
@@ -53,6 +54,30 @@ metadata:
   data_refs:
     hf_dataset_id: meituan-longcat/LARYBench
     task_yaml: worldfoundry/data/benchmarks/tasks/external/larybench.yaml
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id larybench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/larybench --json
+  requires:
+  - selected LARYBench dataset shards
+  - checkpoint assets for the selected representation model
+  - extracted latent actions before classification or regression
+  blockers:
+  - Full leaderboard parity requires the complete official split, exact checkpoint, probe configuration, and retained run artifacts.
+  checkpoint_refs: []
+  validation_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - larybench
+  - --mode
+  - official-validation
+  - --official-results-path
+  - <classification_summary.json_or_best_result.json>
+  - --output-dir
+  - <out>
+  - --json
+  artifact_layout:
+    output_artifact: benchmark_scorecard
+    filename_template: scorecard.json
 tasks:
   larybench_extract:
     benchmark_name: larybench
@@ -60,7 +85,13 @@ tasks:
     capability_track: latent_action_extraction
     input_keys: [dataset_root, metadata_root, model_root]
     output_keys: [latent_action_root, metadata_csv, scorecard]
-    metric_ids: [extraction_coverage]
+    metric_ids:
+    - extraction_coverage
+    - top1_accuracy
+    - macro_f1
+    - weighted_f1
+    - val_seen_mse
+    - val_unseen_mse
     artifact_contract:
       required:
         metadata_csv: {kind: table}
@@ -69,13 +100,37 @@ tasks:
     - name: in_tree_larybench_extract
       runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
       runner_script: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+    - name: in_tree_official_runtime
+      metric_ids:
+      - extraction_coverage
+      - top1_accuracy
+      - macro_f1
+      - weighted_f1
+      - val_seen_mse
+      - val_unseen_mse
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+    metadata:
+      stage_metric_ids:
+      - extraction_coverage
+      source_kind: benchmark_zoo
+      benchmark_id: larybench
+      official_benchmark_verified: false
+      integration_evidence: true
+      leaderboard_valid: false
   larybench_classify:
     benchmark_name: larybench
     protocol: in_tree_official_benchmark
     capability_track: action_semantic_classification
     input_keys: [metadata_root, latent_action_root]
     output_keys: [scorecard, raw_metric_table, confusion_matrix]
-    metric_ids: [top1_accuracy, macro_f1, weighted_f1]
+    metric_ids:
+    - extraction_coverage
+    - top1_accuracy
+    - macro_f1
+    - weighted_f1
+    - val_seen_mse
+    - val_unseen_mse
     artifact_contract:
       required:
         benchmark_scorecard: {kind: benchmark_result}
@@ -83,13 +138,39 @@ tasks:
     - name: in_tree_larybench_classify
       runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
       runner_script: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+    - name: in_tree_official_runtime
+      metric_ids:
+      - extraction_coverage
+      - top1_accuracy
+      - macro_f1
+      - weighted_f1
+      - val_seen_mse
+      - val_unseen_mse
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+    metadata:
+      stage_metric_ids:
+      - top1_accuracy
+      - macro_f1
+      - weighted_f1
+      source_kind: benchmark_zoo
+      benchmark_id: larybench
+      official_benchmark_verified: false
+      integration_evidence: true
+      leaderboard_valid: false
   larybench_regress:
     benchmark_name: larybench
     protocol: in_tree_official_benchmark
     capability_track: physical_action_regression
     input_keys: [dataset_root, metadata_root, latent_action_root]
     output_keys: [scorecard, raw_metric_table, best_result]
-    metric_ids: [val_seen_mse, val_unseen_mse]
+    metric_ids:
+    - extraction_coverage
+    - top1_accuracy
+    - macro_f1
+    - weighted_f1
+    - val_seen_mse
+    - val_unseen_mse
     artifact_contract:
       required:
         benchmark_scorecard: {kind: benchmark_result}
@@ -97,3 +178,22 @@ tasks:
     - name: in_tree_larybench_regress
       runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
       runner_script: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+    - name: in_tree_official_runtime
+      metric_ids:
+      - extraction_coverage
+      - top1_accuracy
+      - macro_f1
+      - weighted_f1
+      - val_seen_mse
+      - val_unseen_mse
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:LARYBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/larybench/run_larybench_official_runner.py
+    metadata:
+      stage_metric_ids:
+      - val_seen_mse
+      - val_unseen_mse
+      source_kind: benchmark_zoo
+      benchmark_id: larybench
+      official_benchmark_verified: false
+      integration_evidence: true
+      leaderboard_valid: false

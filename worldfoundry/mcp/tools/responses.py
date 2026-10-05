@@ -22,15 +22,25 @@ def error_payload(message: str, *, error_type: str = "error") -> dict[str, Any]:
     return {"ok": False, "error": message, "error_type": error_type}
 
 
+def _normalized_error(exc: Exception) -> dict[str, Any]:
+    """Map one exception onto the structured MCP error envelope."""
+
+    if isinstance(exc, (ValueError, KeyError, FileNotFoundError, LookupError)):
+        return error_payload(str(exc))
+    if isinstance(exc, RuntimeError):
+        return error_payload(str(exc), error_type="runtime")
+    # Anything else (OSError, TypeError, parser errors, ...) must still reach
+    # the MCP client as a structured envelope rather than a bare exception.
+    return error_payload(f"{type(exc).__name__}: {exc}", error_type="internal")
+
+
 def invoke_tool(fn: Callable[..., _T], /, *args: Any, **kwargs: Any) -> dict[str, Any]:
     """Call a payload builder and normalize success/error envelopes."""
 
     try:
         result = fn(*args, **kwargs)
-    except (ValueError, KeyError, FileNotFoundError, LookupError) as exc:
-        return error_payload(str(exc))
-    except RuntimeError as exc:
-        return error_payload(str(exc), error_type="runtime")
+    except Exception as exc:  # noqa: BLE001 - every tool failure becomes a structured envelope.
+        return _normalized_error(exc)
     if isinstance(result, dict):
         return success_payload(result)
     return success_payload({"result": result})
@@ -46,10 +56,8 @@ async def invoke_tool_async(
 
     try:
         result = await fn(*args, **kwargs)
-    except (ValueError, KeyError, FileNotFoundError, LookupError) as exc:
-        return error_payload(str(exc))
-    except RuntimeError as exc:
-        return error_payload(str(exc), error_type="runtime")
+    except Exception as exc:  # noqa: BLE001 - every tool failure becomes a structured envelope.
+        return _normalized_error(exc)
     if isinstance(result, dict):
         return success_payload(result)
     return success_payload({"result": result})

@@ -10,7 +10,7 @@ checkpoints:
   revision: eb09036cc64ca4945051acbd1bd581d30a1d7711
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/robotics-diffusion-transformer--rdt-1b
   role: pretrained_policy
-  status: checkpoint_manifest_validated
+  status: checkpoint_not_staged
 - repo_id: google/siglip-so400m-patch14-384
   revision: 9fdffc58afc957d1a03a25b10dba0329ab15c2a3
   local_dir: ${WORLDFOUNDRY_HFD_ROOT}/google--siglip-so400m-patch14-384
@@ -38,12 +38,12 @@ artifact_kind: action_trace
 artifact_filename: rdt-1b_action_trace.json
 execution:
   backend_stage: official_in_tree_runtime
-  runtime_status: native_checkpoint_runtime_ready_assets_staged
-  integration_status: runtime_ported_checkpoint_manifest_validated
+  runtime_status: native_checkpoint_runtime_requires_policy_asset
+  integration_status: runtime_ported_checkpoint_asset_gated
   pipeline_binding: rdt-1b
 integration:
-  status: runtime_ported_checkpoint_manifest_validated
+  status: runtime_ported_checkpoint_asset_gated
 notes:
-- The RDT policy is an exact pinned snapshot; the SigLIP and T5 directories contain the complete runtime-required subsets.
-- RDT and T5 PyTorch files pass weights-only tensor-mapping validation, and SigLIP passes safetensors-header validation; no partial markers remain.
-- Numerical GPU inference is not claimed by the manifest validation.
+- The profile pins an exact RDT upstream revision; the SigLIP and T5 directories contain their runtime-required subsets.
+- The configured RDT policy checkpoint is currently absent from the resolved local checkpoint root; a CPU runtime plan reports it as a missing asset.
+- Numerical GPU inference remains blocked until the policy checkpoint is staged.

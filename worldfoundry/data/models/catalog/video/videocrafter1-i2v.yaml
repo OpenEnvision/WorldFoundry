@@ -11,6 +11,9 @@ provider: official_repo
 source:
   status: open_source
   official_repo_url: https://github.com/VideoCrafter/VideoCrafter
+official_sources:
+  project_page: https://ailab-cvc.github.io/videocrafter2/
+  paper: https://arxiv.org/abs/2401.09047
 integration:
   status: integrated
   notes:
@@ -32,3 +35,25 @@ catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries
   expose WorldFoundry pipeline targets; metadata-only entries retain upstream provenance
   without runnable WorldFoundry backends.
+docs:
+  publisher: Tencent AI Lab
+  publisher_kind: company
+  publisher_zh: 腾讯 AI Lab
+  overview: 'VideoCrafter1 I2V is the image-to-video member of Tencent AI Lab''s VideoCrafter1 release: it animates a still image while preserving its content, style, and structure. The in-tree infer-only runtime wraps the official path with local checkpoint, fps, frame count, and seed controls.'
+  overview_zh: VideoCrafter1 I2V 是腾讯 AI Lab VideoCrafter1 发布中的图生视频成员：在保持内容、风格与结构的前提下让静态图动起来。树内仅推理运行时封装官方路径，提供本地 checkpoint、fps、帧数与 seed 控制。
+  architecture: A U-Net latent video diffusion model conditioned on the input image embedding (per the upstream release). Checkpoint provenance lives on the family-level videocrafter entry; training and download scripts are intentionally not packaged.
+  architecture_zh: 以输入图像嵌入为条件的 U-Net 潜空间视频扩散模型（见上游发布）。checkpoint 溯源记录在系列级 videocrafter 条目上；训练与下载脚本有意未打包。
+  usage_notes: 'Runner parity is pending. Expect 2023-era quality: short clips, modest motion. For higher fidelity image animation use DynamiCrafter or the DiT-based I2V entries.'
+  usage_notes_zh: Runner parity 为 pending。预期是 2023 年代的质量：短片、运动幅度有限。若要更高保真的图像动画，请用 DynamiCrafter 或 DiT 系图生视频条目。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  - Legacy generation quality; superseded by newer I2V entries in this catalog.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  - 属旧代质量；已被 catalog 中较新的图生视频条目超越。
+  recommended_benchmarks:
+  - id: evalcrafter
+    reason: Companion benchmark of the VideoCrafter effort.
+    reason_zh: VideoCrafter 项目的配套评测。

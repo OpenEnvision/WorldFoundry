@@ -1,0 +1,47 @@
+schema_version: 2
+model_id: hyperflow
+display_name: HyperFlow for MiniMax-H3
+task_family: video_generation
+groups: [video, audio, image_conditioning]
+source_repos:
+- url: https://github.com/Video-Rebirth/hyperflow
+  revision: 1dd2f342aba5ab51da02b62885939655e8e268da
+checkpoints:
+- repo_id: videorebirth/hyperflow
+  revision: 5bde94d7de3e78dafa2abc43ee2f280a1cb244e8
+  role: lora
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/videorebirth--hyperflow
+  files: [minimax_h3_hyperflow_8step_v1.0.safetensors]
+- repo_id: MiniMaxAI/MiniMax-H3
+  revision: 83db0c0efe6ef9824e0e194be110346c0a9542ed
+  role: base_model
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/MiniMaxAI--MiniMax-H3
+input_schema:
+  prompt: true
+  image: optional
+  video: false
+  actions: [workflow, references, last_image, seed, height, width, num_frames]
+artifact_kind: generated_video
+artifact_filename: hyperflow.mp4
+execution:
+  environment: hyperflow
+  backend_stage: official_external_runtime
+  runtime_status: gpu_smoke_validated
+  integration_status: integrated
+  pipeline_binding: hyperflow
+  defaults:
+    num_frames: 124
+    fps: 24
+    num_inference_steps: 8
+    seed: 42
+integration:
+  status: integrated
+notes:
+- Uses the pinned upstream inference package and official diffusers H3 components; no training code is bundled.
+- The dedicated loader installs two-time conditioning and the fixed eight-step grid; ordinary LoRA loading is insufficient.
+- Local base-model shards and adapter weights are required; inference runs offline.
+- T2VA, first/last-frame FL2VA and ordered image/video/audio Ref2VA retain joint audio-video output.
+- Single GPU CPU offload is the default; 2 or 4 GPUs use the upstream Ulysses implementation.
+- T2VA, single-image FL2VA and image-reference Ref2VA passed single-H100 smoke inference at 640x384, 124 frames, 24 fps and eight steps; video and stereo audio decoded successfully.
+- High-resolution quality parity, multi-GPU inference, last-frame and video/audio reference conditioning have not been GPU validated.
+- Source code is Apache-2.0; adapter and base weights use the MiniMax H3 Community License.

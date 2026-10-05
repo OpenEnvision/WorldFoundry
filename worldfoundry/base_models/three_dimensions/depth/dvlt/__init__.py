@@ -31,6 +31,7 @@ __all__ = [
     "DEFAULT_DVLT_INFERENCE_STEPS",
     "DEFAULT_DVLT_PATCH_SIZE",
     "DVLTRuntime",
+    "DVLTSynthesis",
     "load_runtime",
     "runtime_root",
     "runtime_src",
@@ -52,9 +53,10 @@ def __getattr__(name: str) -> Any:
         "DEFAULT_DVLT_INFERENCE_STEPS",
         "DEFAULT_DVLT_PATCH_SIZE",
         "DVLTRuntime",
+        "DVLTSynthesis",
         "load_runtime",
     }:
-        module = import_module(".runtime", __name__)
+        module = import_module(".dvlt_synthesis" if name == "DVLTSynthesis" else ".runtime", __name__)
         value = getattr(module, name)
         globals()[name] = value
         return value

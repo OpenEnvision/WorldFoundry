@@ -27,7 +27,6 @@ EMBODIED_BENCHMARK_IDS: tuple[str, ...] = (
     "libero-mem",
     "libero-plus",
     "libero-pro",
-    "libero-para",
     "simpler-env",
     "robocasa",
     "calvin",
@@ -49,7 +48,7 @@ BASE_ENV_DEFAULTS = {
     "WORLDFOUNDRY_DATA_DIR": "cache/worldfoundry/data",
     "WORLDFOUNDRY_MODEL_DIR": "cache/worldfoundry/models",
     "WORLDFOUNDRY_CKPT_DIR": "${WORLDFOUNDRY_MODEL_DIR}/checkpoints",
-    "WORLDFOUNDRY_HFD_DATASET_ROOT": "${WORLDFOUNDRY_DATA_DIR}",
+    "WORLDFOUNDRY_HFD_DATASET_ROOT": "${WORLDFOUNDRY_DATA_DIR}/datasets",
 }
 
 ADDITIONAL_EMBODIED_ASSET_TEMPLATES: dict[str, dict[str, Any]] = {
@@ -291,7 +290,9 @@ def _path_env(output_root: Path) -> dict[str, str]:
     data_dir = os.environ.get("WORLDFOUNDRY_DATA_DIR") or str(REPO_ROOT / "cache" / "worldfoundry" / "data")
     model_dir = os.environ.get("WORLDFOUNDRY_MODEL_DIR") or str(REPO_ROOT / "cache" / "worldfoundry" / "models")
     ckpt_dir = os.environ.get("WORLDFOUNDRY_CKPT_DIR") or str(Path(model_dir) / "checkpoints")
-    hfd_dataset_root = os.environ.get("WORLDFOUNDRY_HFD_DATASET_ROOT") or data_dir
+    hfd_dataset_root = os.environ.get("WORLDFOUNDRY_HFD_DATASET_ROOT") or str(
+        Path(data_dir) / "datasets"
+    )
     return {
         "WORLDFOUNDRY_CACHE_DIR": cache_dir,
         "WORLDFOUNDRY_DATA_DIR": data_dir,

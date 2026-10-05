@@ -1,160 +1,43 @@
 ---
 title: VideoScore
-description: 基于人类反馈训练的视频 reward metric，包含仓内 runtime、frame-tree 要求、datasets 和运行命令。
+description: "TIGER-Lab 奖励模型：在 VideoFeedback 3.76 万条上训练的五个 1-4 分面。WorldFoundry 内置打分器，不编造榜单。"
 ---
 
-## 简介
+VideoScore（滑铁卢大学 TIGER-Lab）是 **学出来的奖励模型**，不是 prompt 套件。它在 **VideoFeedback（3.76 万条人工标注视频）** 上训练，对任意生成片段预测五个分面（官方 **1–4** 量表）：
 
-VideoScore 是 EMNLP 2024 的自动视频评测模型，用来模拟视频生成的人类细粒度反馈。它基于 VideoFeedback 训练；VideoFeedback 包含 11 个视频生成模型的 37.6K 个生成视频，并带有多方面人类评分。
+- 视觉质量
+- 时间一致性
+- 动态程度
+- 文本-视频对齐
+- 事实一致性
 
-WorldFoundry 已经把 VideoScore inference 和 benchmark evaluation runtime 集成在 `worldfoundry/evaluation/tasks/execution/runners/videoscore`。官方 repo 只作为 protocol 参考；WorldFoundry 运行仓内 VideoScore runtime，并从本地资产或 Hugging Face 加载数据和 checkpoint。
+`videoscore_average` 是五者均值。VideoScore-Bench 评估打分器与人类的相关（SPCC / 成对）。许可证：MIT（runtime）；数据集栈为 Apache-2.0 / MIT。
 
-官方参考：
+论文：[VideoScore](https://arxiv.org/abs/2406.15252)。项目：[tiger-ai-lab.github.io/VideoScore](https://tiger-ai-lab.github.io/VideoScore/)。代码：[TIGER-AI-Lab/VideoScore](https://github.com/TIGER-AI-Lab/VideoScore)。Bench 数据：[`TIGER-Lab/VideoScore-Bench`](https://huggingface.co/datasets/TIGER-Lab/VideoScore-Bench)。
 
-- Project page: [tiger-ai-lab.github.io/VideoScore](https://tiger-ai-lab.github.io/VideoScore/)
-- Paper: [arXiv:2406.15252](https://arxiv.org/abs/2406.15252)
-- Dataset: [TIGER-Lab/VideoFeedback](https://huggingface.co/datasets/TIGER-Lab/VideoFeedback)
-- Benchmark dataset: [TIGER-Lab/VideoScore-Bench](https://huggingface.co/datasets/TIGER-Lab/VideoScore-Bench)
-- Model: [TIGER-Lab/VideoScore-v1.1](https://huggingface.co/TIGER-Lab/VideoScore-v1.1)
-- 仓内 runner: `worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py`
+WorldFoundry **仓内内置 runtime**，支持有界进程内 GPU 打分，并封装 `benchmark/eval_videoscore.py`。有界官方打分器 GPU 运行已验证；**SPCC / 成对全套对齐未验证**。
 
-## 评测协议
+<BenchmarkPageSections id="videoscore" locale="zh" />
 
-VideoScore 输出五个 1-4 分 aspect scores：
-
-| Metric | 含义 |
-| --- | --- |
-| `visual_quality` | 整体视觉质量、保真度和 artifact 程度。 |
-| `temporal_consistency` | 时序稳定性和帧间一致性。 |
-| `dynamic_degree` | 运动幅度和运动质量。 |
-| `text_to_video_alignment` | prompt 和生成视频之间的对齐。 |
-| `factual_consistency` | 生成内容是否和描述场景在事实上一致。 |
-| `videoscore_average` | 五个 aspect scores 的平均值。 |
-
-WorldFoundry 会把 1-4 原始分归一化到 0-1 写入 scorecard。
-
-## 数据与 Frames 准备
-
-VideoScore benchmark evaluation 消费的是抽帧目录，不是扁平 mp4 目录。你需要准备两种输入之一：
-
-- `--frames-dir`: 已经按官方 `eval_videoscore.py` 期望 layout 准备好的 frames 目录。
-- `--bench-data-root` 加 `--bounded-sample-count`: WorldFoundry 从本地 benchmark dataset 中 materialize 少量 frames，用于小规模验证。
-
-下载 benchmark data 和可选训练/证据数据：
+## 如何运行
 
 ```bash
-export WORLDFOUNDRY_VIDEOSCORE_BENCH_ROOT=/path/to/datasets/VideoScore-Bench
-export WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT=/path/to/datasets/VideoFeedback
+hf download TIGER-Lab/VideoScore-Bench --repo-type dataset --local-dir /path/to/VideoScore-Bench
+export WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT=/path/to/VideoScore-Bench
 
-hf download TIGER-Lab/VideoScore-Bench \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_VIDEOSCORE_BENCH_ROOT}"
-
-hf download TIGER-Lab/VideoFeedback \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT}"
-```
-
-如果你自己准备完整 frame tree：
-
-```bash
-export WORLDFOUNDRY_VIDEOSCORE_FRAMES_DIR=/path/to/videoscore/frames
-```
-
-`--bench-name` 选择 VideoScore-Bench 里的 split，默认是 `video_feedback`。
-
-## Checkpoint 准备
-
-使用官方 VideoScore-v1.1 reward model 或本地 mirror：
-
-```bash
-export WORLDFOUNDRY_VIDEOSCORE_MODEL_REPO=/path/to/checkpoints/VideoScore-v1.1
-hf download TIGER-Lab/VideoScore-v1.1 \
-  --local-dir "${WORLDFOUNDRY_VIDEOSCORE_MODEL_REPO}"
-```
-
-如果不设置 `WORLDFOUNDRY_VIDEOSCORE_MODEL_REPO`，runner 会回退到 Hugging Face id `TIGER-Lab/VideoScore-v1.1`。
-
-## 运行完整 Frame-Tree 评测
-
-对准备好的 frame tree 运行 VideoScore：
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py \
-  --model-repo-name "${WORLDFOUNDRY_VIDEOSCORE_MODEL_REPO:-TIGER-Lab/VideoScore-v1.1}" \
-  --bench-data-root "${WORLDFOUNDRY_VIDEOSCORE_BENCH_ROOT}" \
-  --bench-name "${WORLDFOUNDRY_VIDEOSCORE_BENCH_NAME:-video_feedback}" \
-  --frames-dir "${WORLDFOUNDRY_VIDEOSCORE_FRAMES_DIR}" \
-  --dataset-root "${WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT}" \
-  --output-dir tmp/videoscore/official-run \
-  --timeout 7200 \
-  --json
-```
-
-这条路径会调用仓内 `benchmark/eval_videoscore.py`，并把官方结果 JSON 写到 `upstream/`。
-
-## 运行 Bounded Validation
-
-如果只想用已下载 benchmark data 做一个小规模本地验证：
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py \
-  --model-repo-name "${WORLDFOUNDRY_VIDEOSCORE_MODEL_REPO:-TIGER-Lab/VideoScore-v1.1}" \
-  --bench-data-root "${WORLDFOUNDRY_VIDEOSCORE_BENCH_ROOT}" \
   --bench-name video_feedback \
-  --bounded-sample-count 8 \
+  --bounded-sample-count 4 \
   --dataset-root "${WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT}" \
-  --output-dir tmp/videoscore/bounded8 \
+  --output-dir tmp/videoscore/bounded \
   --json
 ```
 
-bounded 路径会为少量 benchmark rows materialize frames，并运行同一套 VideoScore normalization pipeline。benchmark-scale 结果请使用完整 frame-tree evaluation。
+通过 `--official-results-path` / `--from-upstream-results` 导入上游 `eval_*_videoscore.json`。环境变量：`WORLDFOUNDRY_VIDEOSCORE_MODEL_DIR`、`WORLDFOUNDRY_VIDEOSCORE_FRAMES_DIR`、`WORLDFOUNDRY_VIDEOSCORE_ROOT`。共享栈：`videoscore_reward_metric_stack`。
 
-## 导入已有结果
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/videoscore.yaml`，`worldfoundry/evaluation/tasks/execution/runners/videoscore/runtime/videoscore`。
 
-导入已有官方兼容 VideoScore 结果 JSON：
+产物包括 `scorecard.json`（主键 `videoscore_average`）。
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videoscore/run_videoscore_official_runner.py \
-  --official-results-path /path/to/eval_video_feedback_videoscore.json \
-  --dataset-root "${WORLDFOUNDRY_VIDEOFEEDBACK_DATASET_ROOT}" \
-  --frames-dir "${WORLDFOUNDRY_VIDEOSCORE_FRAMES_DIR}" \
-  --output-dir tmp/videoscore/imported \
-  --json
-```
-
-## Training
-
-官方 VideoScore 论文使用 Mantis training stack 和 VideoFeedback 训练 reward model。WorldFoundry 集成的是 benchmark 复现需要的 inference/evaluation runtime。若要复现 VideoScore model training，请按官方 training protocol 训练，然后通过 `--model-repo-name` 传入训练后的模型目录。
-
-## 输出文件
-
-每次运行会写出：
-
-- `scorecard.json`: 归一化 aspect scores 和 `videoscore_average`。
-- `raw_metric_table.jsonl`: scorecard 使用的 metric rows。
-- `per_sample_scores.jsonl`: 如果可用，会记录逐样本 scores。
-- `generated_video_manifest.json`: 被评估 artifact 的 frame/video manifest。
-- `dataset_manifest.json`: 发现的 dataset metadata。
-- `upstream/eval_<bench_name>_videoscore.json`: 原始官方结果 JSON。
-- `upstream_stdout.log` 和 `upstream_stderr.log`: runtime logs。
-
-## Leaderboard 说明
-
-VideoScore 主要是 **reward-model / 自动评测指标**，而不是 prompt-suite 生成 leaderboard。论文报告的关键验证结果：
-
-| Setting | 与人类的 Spearman 相关 |
-| --- | ---: |
-| VideoFeedback-test | 77.1% |
-| 先前最佳自动指标 | 平均约低 27% |
-
-VideoScore-Bench 聚合约 **7,000** 个视频，来源包括 [VideoFeedback](https://huggingface.co/datasets/TIGER-Lab/VideoFeedback)、EvalCrafter、GenAI-Bench 和 VBench split。官方 bench config 包括 `video_feedback`、`eval_crafter`、`genaibench`、`vbench`。
-
-WorldFoundry 会把五个 1–4 aspect 分数归一化到 0–1，并报告 `videoscore_average`。benchmark 级证据请使用完整 frame-tree 评测；bounded sample 路径只用于本地验证。
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

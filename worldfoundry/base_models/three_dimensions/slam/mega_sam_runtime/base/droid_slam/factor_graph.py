@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from modules.corr import AltCorrBlock, CorrBlock
 import numpy as np
 import torch
-from torch_scatter import scatter_mean
+from worldfoundry.base_models.three_dimensions.general_3d.vipe.ext.scatter import scatter_mean
 
 
 MASK_TYPE = 2  # 1: GT, 2: Our pred

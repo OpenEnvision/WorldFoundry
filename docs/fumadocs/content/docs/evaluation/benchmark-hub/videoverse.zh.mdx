@@ -1,126 +1,32 @@
 ---
 title: VideoVerse
-description: WorldFoundry 中的 VideoVerse world-model T2V 评测。
+description: "OPPO 的 300 prompt 世界模型 T2V 评测：事件 LCS 加二元 QA。WorldFoundry 可跑 Gemini / URL / 本地 VLM 裁判，不编造榜单。"
 ---
 
-## 评测目标
+VideoVerse（OPPO 研究院，联合中山大学与香港理工）问的是文本生成视频离 **世界模型** 还有多远。官方规模：**300 条 prompt**，每条拆成有序事件，并带跨越 **十个维度** 的二元评测问题。分面包括 QA 准确率、事件覆盖、时间因果、世界知识一致性、静态 / 动态场景一致性。打分把检测到的事件顺序做 **事件 LCS**，再加逐题核验。
 
-VideoVerse 从 world model 角度评测 text-to-video 生成器：视频是否符合事件顺序、二元验证问题、静态场景常识、动态事件一致性、交互、相机行为、力学与世界知识。
+论文：[VideoVerse](https://arxiv.org/abs/2510.08398)。项目：[naptmn.cn/Homepage_of_VideoVerse](https://www.naptmn.cn/Homepage_of_VideoVerse/)。代码：[Zeqing-Wang/VideoVerse](https://github.com/Zeqing-Wang/VideoVerse)。许可证：Apache-2.0。
 
-官方标准集包含 300 条 prompt、815 个事件单元和 793 个验证问题。每条 prompt 记录里有用于生成视频的 `t2v_prompt`，以及后续 judge 使用的事件顺序与 yes/no 检查项。
+WorldFoundry **在仓内跑裁判**（默认 Gemini，或 URL / 本地 VLM），并用官方事件 LCS / 核验逻辑归一化 `eval_res.json`。Prompt 清单已捆绑。`--strict` 强制标准 300 prompt 套件。官方路径已接入；带凭证的完整套件 **未** 做发布级验证。
 
+<BenchmarkPageSections id="videoverse" locale="zh" />
 
-## 官方参考
-
-| 资源 | 链接 |
-| --- | --- |
-| 项目页 | [naptmn.cn/Homepage_of_VideoVerse](https://www.naptmn.cn/Homepage_of_VideoVerse/) |
-| 论文 | [arXiv:2510.08398](https://arxiv.org/abs/2510.08398) |
-| GitHub | [github.com/Zeqing-Wang/VideoVerse](https://github.com/Zeqing-Wang/VideoVerse) |
-| HF 数据集 | [NNaptmn/VideoVerse](https://huggingface.co/datasets/NNaptmn/VideoVerse) |
-| 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/videoverse/run_videoverse_official_runner.py` |
-
-## 资产与数据
-
-WorldFoundry 已经把 VideoVerse runner 和 prompt 资产放在仓内：
-
-| 资产 | 路径 |
-| --- | --- |
-| Task YAML | `worldfoundry/data/benchmarks/tasks/external/videoverse.yaml` |
-| Prompt manifest | `worldfoundry/data/benchmarks/assets/videoverse/prompt/prompts_of_VideoVerse.json` |
-| Decomposed prompt manifest | `worldfoundry/data/benchmarks/assets/videoverse/prompt/prompts_of_VideoVerse_decomposed.json` |
-| Runner | `worldfoundry/evaluation/tasks/execution/runners/videoverse/run_videoverse_official_runner.py` |
-
-可选公开数据资产在仓内记为 `videoverse_dataset_assets`，对应 Hugging Face 数据集 `NNaptmn/VideoVerse`。
-
-## 生成结果目录
-
-每个 prompt key 生成一个视频，直接放在同一个目录下，文件名使用 prompt 字典 key：
-
-```text
-/path/to/videoverse/generated/
-  8f348e44-546c-4319-aefa-b860c02d9cbc.mp4
-  dc4fa681-8b4a-413d-9571-29af7aa36c2e.mp4
-  <prompt-id>.mp4
-```
-
-支持 `.mp4`、`.mov`、`.mkv`、`.webm`、`.avi`、`.m4v`。完整评测应覆盖全部 300 个 canonical prompt id。
-
-## 依赖
-
-in-tree judge 支持几种后端：
-
-| 后端 | 必要设置 |
-| --- | --- |
-| Gemini 上传/API | `WORLDFOUNDRY_VIDEOVERSE_JUDGE_BACKEND=gemini`，并设置 `GEMINI_API_KEY` 或 `WORLDFOUNDRY_VIDEOVERSE_GEMINI_API_KEY` |
-| Gemini URL 模式 | `WORLDFOUNDRY_VIDEOVERSE_JUDGE_BACKEND=url`、API key、`WORLDFOUNDRY_VIDEOVERSE_VIDEO_BASE_URL` |
-| Local VLM | `WORLDFOUNDRY_VIDEOVERSE_JUDGE_BACKEND=local_vlm`、`WORLDFOUNDRY_VIDEOVERSE_LOCAL_VLM_PATH` |
-
-Gemini 路径还需要运行环境中安装 `google-genai`。
-
-## 命令
-
-先设置生成视频目录：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/videoverse/generated
-export WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR=tmp/videoverse/run
-```
-
-运行仓内 judge，并对生成的 `eval_res.json` 计分：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videoverse/run_videoverse_official_runner.py \
-  --run-official \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir "${WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR}" \
-  --json
-```
-
-导入已有的 official-shaped `eval_res.json` 或 metric JSON/JSONL：
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id videoverse \
   --mode official-validation \
-  --official-results-path /path/to/eval_res.json \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/videoverse/import \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/videoverse/official-validation \
   --json
 ```
 
-直接 runner 支持 `--limit N` 做小规模开发运行，但这类结果不能用于 leaderboard 对比。
+`--run-official` 对照捆绑的 `prompts_of_VideoVerse.json` / 分解版给生成视频打分（`GEMINI_API_KEY` 或 `WORLDFOUNDRY_VIDEOVERSE_GEMINI_API_KEY`）。只有非标准资产才用 `--prompt-manifest`。默认导入：`WORLDFOUNDRY_VIDEOVERSE_RESULTS_PATH`。共享资源：`videoverse_dataset_assets`。
 
-## Python 导入
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/videoverse.yaml`，`worldfoundry/data/benchmarks/assets/videoverse/prompt/`。
 
-如果只需要复用计分公式：
+产物包括 `scorecard.json`（主键 `videoverse_average`）、`eval_res.json`、`judge_responses.jsonl`。
 
-```python
-from worldfoundry.evaluation.tasks.execution.runners._benchmark_metrics.formulas import videoverse_subquestion_metrics
-```
-
-CLI runner 也可以直接导入：
-
-```python
-from worldfoundry.evaluation.tasks.execution.runners.videoverse.run_videoverse_official_runner import (
-    normalize_videoverse_results,
-    run_official_videoverse,
-)
-```
-
-## 输出
-
-输出目录包含：
-
-| 文件 | 含义 |
-| --- | --- |
-| `scorecard.json` | 运行状态、覆盖率、可比性信息和 leaderboard-facing 指标值。 |
-| `raw_metric_table.jsonl` | 每个指标一行。 |
-| `per_sample_scores.jsonl` | 从官方结果中得到的 per-video 或 per-check 行。 |
-| `eval_res.json` | 使用 `--run-official` 时由仓内 judge 写出。 |
-| `judge_responses.jsonl` | 仓内 judge 的原始响应。 |
-
-runner 输出 `qa_accuracy`、`event_coverage`、`temporal_causality`、`world_knowledge_consistency`、`static_scene_consistency`、`dynamic_event_consistency`、`videoverse_average`。七个指标都是越高越好。
-
-[← Benchmark Hub](/zh/docs/evaluation/benchmark-hub)
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

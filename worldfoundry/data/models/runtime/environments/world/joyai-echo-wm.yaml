@@ -1,0 +1,49 @@
+model_id: joyai-echo-wm
+env_name: joyai-echo-wm
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.11'
+cuda_profile: cu128
+driver_status: compatible
+conda_packages:
+- python=3.11
+- pip
+- ffmpeg
+pip_extra_index_url: https://download.pytorch.org/whl/cu128
+pip_packages:
+- torch==2.9.1
+- torchvision==0.24.1
+- torchaudio==2.9.1
+- transformers>=4.52,<5.0
+- xformers==0.0.33.post2
+- accelerate
+- safetensors
+- scipy>=1.14
+- einops
+- numpy
+- opencv-python
+- imageio
+- imageio-ffmpeg
+- av
+- pillow
+- pyyaml
+- omegaconf
+- huggingface-hub<1.0
+- sentencepiece
+- protobuf
+validation_imports:
+- torch
+- torchvision
+- torchaudio
+- transformers
+- xformers
+- accelerate
+- safetensors
+- cv2
+- imageio
+- av
+- yaml
+- omegaconf
+notes:
+- Pins mirror the upstream Echo-WM Python 3.11 / PyTorch 2.9.1 / CUDA 12.8 environment.
+- This environment is intentionally separate from Echo-LongVideo because their validated PyTorch stacks differ.
+- The Gemma 3 encoder repository is gated and must use the unquantized QAT export documented upstream.

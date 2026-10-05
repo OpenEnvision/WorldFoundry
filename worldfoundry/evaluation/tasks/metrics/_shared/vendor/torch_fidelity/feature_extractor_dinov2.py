@@ -6,10 +6,10 @@ from contextlib import redirect_stdout
 import torch
 import torchvision
 
-from torch_fidelity.feature_extractor_base import FeatureExtractorBase
-from torch_fidelity.helpers import vassert, text_to_dtype, CleanStderr
+from .feature_extractor_base import FeatureExtractorBase
+from .helpers import vassert, text_to_dtype, CleanStderr
 
-from torch_fidelity.interpolate_compat_tensorflow import interpolate_bilinear_2d_like_tensorflow1x
+from .interpolate_compat_tensorflow import interpolate_bilinear_2d_like_tensorflow1x
 
 
 MODEL_METADATA = {

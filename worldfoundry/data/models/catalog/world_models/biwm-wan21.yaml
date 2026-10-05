@@ -1,0 +1,27 @@
+schema_version: 2
+id: biwm-wan21
+name: BiWM Wan2.1
+tasks: [text-to-video, image-to-video, camera-controlled-video, world-model]
+provider: LynnReal-AI
+source:
+  status: open_source
+  official_repo_url: https://github.com/LynnReal-AI/BiWM
+  license: apache-2.0
+runtime_profile: runtime-profile:biwm-wan21
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: biwm-wan21
+integration:
+  status: integrated_checkpoint_gated
+  notes:
+  - Reuses canonical Wan transformer, UMT5, causal VAE and core video IO.
+  - Stage 1 T2V and stage 2 uncompressed-history T2V/I2V inference are supported.
+  - A trained BiWM generator is required; Wan base weights alone do not implement BiWM.
+runner_parity:
+  status: pending
+  notes:
+  - Full trained-checkpoint inference is blocked by the absence of a public generator release.
+docs:
+  limitations_zh:
+  - 已记录 pipeline 绑定，但尚无成功运行的证据；Runner parity 仍待验证，原生 Demo 证据未记录。
+  - 由于训练后的 BiWM 生成器权重尚未公开发布，完整权重推理目前受阻；仅有 Wan 基座权重不能代替它。
+catalog_category: world_models

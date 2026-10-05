@@ -252,10 +252,3 @@ class Pi3Operator(BaseOperator):
         self.check_interaction(interaction)
         self.interaction_history.append(interaction)
         return list(NAVIGATION_DELTAS.get(interaction, [0.0, 0.0, 0.0, 0.0, 0.0]))
-
-    def delete_last_interaction(self):
-        """Remove the last recorded interaction from the current list."""
-        if len(self.current_interaction) > 0:
-            self.current_interaction = self.current_interaction[:-1]
-        else:
-            raise ValueError("No interaction to delete.")

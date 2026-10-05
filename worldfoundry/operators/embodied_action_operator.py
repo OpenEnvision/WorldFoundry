@@ -156,31 +156,6 @@ class EmbodiedActionOperator(BaseOperator):
         }
 
 
-_OPERATOR_EXPORTS = {
-    "ACTOperator": ".act_operator",
-    "BeingH05Operator": ".being_h05_operator",
-    "CogACTOperator": ".vla_native_operator",
-    "DiffusionPolicyOperator": ".diffusion_policy_operator",
-    "DreamZeroOperator": ".dreamzero_operator",
-    "DBCogACTOperator": ".vla_native_operator",
-    "GigaBrain0Operator": ".giga_brain_0_operator",
-    "GR00TOperator": ".gr00t_operator",
-    "LAPAOperator": ".lapa_operator",
-    "LingBotVAOperator": ".lingbot_va_operator",
-    "MMEVLAOperator": ".vla_native_operator",
-    "MolmoAct2Operator": ".molmoact2_operator",
-    "MolmoBotOperator": ".vla_native_operator",
-    "OctoOperator": ".octo_operator",
-    "OpenPIOperator": ".openpi_operator",
-    "OpenVLAOFTOperator": ".vla_native_operator",
-    "OpenVLAOperator": ".openvla_operator",
-    "OfficialPolicyOperator": ".official_policy_operator",
-    "RoboFlamingoOperator": ".roboflamingo_operator",
-    "RT1Operator": ".rt1_operator",
-    "StarVLAOperator": ".starvla_operator",
-    "VLANeXtOperator": ".vla_native_operator",
-}
-
 __all__ = [
     "EmbodiedActionOperator",
     "_as_action_list",
@@ -188,18 +163,30 @@ __all__ = [
     "_extract_action_signal",
     "_first_present",
     "_is_empty_value",
-    *_OPERATOR_EXPORTS,
 ]
 
 
 def __getattr__(name: str):
-    """Lazy compatibility export for older imports from this module."""
+    """Resolve historical VLA imports via the package registry (OR-08).
 
-    if name not in _OPERATOR_EXPORTS:
-        raise AttributeError(name)
-    from importlib import import_module
+    Older callers imported concrete operators from this module. The only
+    class→module map is ``worldfoundry.operators._OPERATOR_MODULES``; this
+    shim proxies there and warns so the extra registry cannot drift.
+    """
+    import warnings
 
-    module = import_module(_OPERATOR_EXPORTS[name], package=__package__)
-    value = getattr(module, name)
+    from worldfoundry.operators import _OPERATOR_MODULES
+    from worldfoundry import operators as operators_pkg
+
+    if name not in _OPERATOR_MODULES:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    warnings.warn(
+        f"Importing {name!r} from {__name__!r} is deprecated; "
+        f"import it from 'worldfoundry.operators' instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    value = getattr(operators_pkg, name)
     globals()[name] = value
     return value

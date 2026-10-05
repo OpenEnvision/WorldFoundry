@@ -1,0 +1,46 @@
+---
+title: "JoyAI-Echo 1.5 / Echo-LongVideo"
+description: "JoyAI-Echo 1.5 / Echo-LongVideo from JD.com (JoyAI / Echo Team): reference-to-video and audio-video-generation; Runner parity pending; dedicated `joyai-echo-longvideo`."
+modelId: "joyai-echo-longvideo"
+pageSource: generated
+---
+
+JoyAI-Echo 1.5 is an inference-only long-form audio-video generator. Its R2V request can combine a prompt, an optional first frame, and as many as seven ordered image/audio memory slots so identity, voice, and story context persist across independently editable shots.
+
+<ModelPaperFigures modelId="joyai-echo-longvideo" locale="en" />
+
+Code: [jd-opensource/JoyAI-Echo](https://github.com/jd-opensource/JoyAI-Echo).
+
+<ModelCommandBuilder modelId="joyai-echo-longvideo" locale="en" />
+
+## What it is for
+
+Use `joyai-echo-longvideo` for catalog text-to-video inference. The recipe exists so you can launch a recorded T2V profile without assembling an upstream demo.
+
+The release builds on LTX-2.3 and adds few-step DMD generation plus a paired cross-modal memory bank. WorldFoundry keeps the official Python 3.11, PyTorch 2.8, CUDA 12.8 runtime external and communicates through the checked-in CLI contract. It is published by JD.com (JoyAI / Echo Team).
+
+Catalog tasks include reference-to-video, audio-video-generation, and long-video-generation. Catalog aliases include `joyai-echo`, `echo-longvideo`, and `joyai-echo-1.5`. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [ChronoMagic-Bench](/docs/evaluation/benchmark-hub/chronomagic-bench) (Long-horizon temporal continuity across generated shots), [VBench](/docs/evaluation/benchmark-hub/vbench) (Baseline video quality and motion evaluation).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `frames`, and `fps`; artifacts `generated_video` and `joyai-echo-longvideo.mp4`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `JoyAIEchoLongVideoPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `interactive-video` defaults: frames=241, fps=25, height=736, width=1280, seed=42.
+
+Clone JoyAI-Echo at the recorded revision, prepare its dedicated environment, and pass source_root plus local Echo and gated Gemma checkpoints. Generation is safety-gated behind execute=True. FP4 also needs NVIDIA ModelOpt; production voice-memory extraction needs the upstream MSST setup.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run joyai-echo-longvideo --pipeline.task-profile interactive-video` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+Recorded weight repositories include `jdopensource/JoyAI-Echo` and `google/gemma-3-12b-it`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh joyai-echo-longvideo`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="joyai-echo-longvideo" locale="en" />

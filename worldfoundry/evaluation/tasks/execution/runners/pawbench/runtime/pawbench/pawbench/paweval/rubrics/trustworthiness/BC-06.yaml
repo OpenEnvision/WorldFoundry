@@ -1,0 +1,69 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BC-06
+track: coverage
+title_en: Dart Throw at Board
+scene_grounding:
+- 'Initial state must match: A hand holds one dart in the visible throwing pose aimed at a wall-mounted
+  dartboard.'
+- Apparatus geometry in the opening frames must match the source image.
+action_execution:
+- 'Required action: Throw the dart once from the visible hand pose toward the board.'
+- Action must happen exactly once in the expected direction / region.
+- Action target must be identifiable in the same frame as the action onset (Track B target acquisition).
+- The action must be visible as a single continuous event from the described initial state; cuts, hidden
+  starts, or repeated attempts are action-execution failures.
+- For contact labels, the object trajectory from release/kick/throw/roll to target or miss must be continuous
+  enough to audit contact.
+target_requirements:
+- Dartboard, dart, throwing hand/release, and impact/miss region must remain visible enough to audit retained
+  hit region, board bounce-out, or off-board miss.
+- A retained-region label requires the dart to remain visibly embedded/stuck at a readable board region
+  after impact.
+- board_bounce_out requires visible board contact followed by the dart not remaining on the board.
+- The dartboard ring/center region must be readable enough for the selected region label; otherwise mark
+  READOUT_AMBIGUITY.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout window.
+- Color / identity of the subject must remain consistent across frames.
+- 'Identity continuity is fatal: the judged subject, target, and key apparatus must not swap appearance,
+  duplicate, vanish, or re-enter as a different object/person/animal.'
+- Fast-moving object continuity should prefer a continuous visible trajectory. For
+  dart throws, adjacent-frame inference is allowed only when the same dart is visible
+  immediately before release and immediately at impact/miss, the board/wall context
+  stays fixed, the implied path is physically plausible, and no duplicate dart or
+  discontinuous target jump appears.
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+- Dartboard rings/center and wall position must stay fixed so hit-region severity remains auditable.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-result side change: label-defining region changes after the first decisive post-action frame.'
+- Outcome label changes (e.g., from miss to score) via a non-physical motion after the first decisive
+  contact frame.
+- 'Dart impact contradiction: dart jumps between bullseye/inner/outer/wall regions after first visible
+  impact, appears embedded at a target without an immediately preceding held/throw-ready dart, or violates
+  the adjacent-frame fast-projectile inference rule.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after the readout window.
+- After first dart impact, the dart/board hit region must remain consistent; a stuck dart cannot slide
+  to bullseye or leave and reappear elsewhere.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Dart Throw at Board.'
+- 'Fatal severity cue: target/stimulus acquisition failure, impossible trajectory, identity discontinuity,
+  or post-result contradiction excludes strict trusted metrics even if the outcome is readable.'
+- 'BC contact trust cue: target contact/hit/miss geometry, continuous trajectory, collision consistency,
+  and apparatus stability are mandatory.'

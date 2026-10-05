@@ -32,3 +32,23 @@ runtime_profile: runtime-profile:bernini-r-14b
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: bernini-r-14b
 catalog_category: video
+docs:
+  publisher: ByteDance
+  publisher_kind: company
+  publisher_zh: 字节跳动（ByteDance）
+  overview: 'Bernini-R 14B is the renderer-only release of ByteDance''s Bernini family: the 14B rendering model packaged without the 7B semantic planner. It keeps the same six-task surface (text-to-image, image editing, text/video/reference-to-video) but takes your inputs directly instead of planning first. WorldFoundry vendors the official renderer inference in-tree and loads ByteDance/Bernini-R-Diffusers.'
+  overview_zh: Bernini-R 14B 是字节 Bernini 系列的「仅渲染器」发布：14B 渲染模型单独打包，不含 7B 语义规划器。它保留同样的六类任务（文生图、图像编辑、文/视频/参考生视频），但直接使用你的输入，不经过规划阶段。 WorldFoundry 树内内置官方渲染器推理代码，加载 ByteDance/Bernini-R-Diffusers。
+  architecture: A single 14B rendering network from the Bernini two-stage design, run standalone. The manifest records that image recipes fit on one GPU while video recipes can use explicit Ulysses sequence parallelism for speed.
+  architecture_zh: 即 Bernini 两段式设计中的 14B 渲染网络，单独运行。manifest 记录：图像配方单卡可跑，视频配方可显式启用 Ulysses 序列并行加速。
+  usage_notes: Runner parity is pending_gpu_validation. Use task_type to select the task; stage the Bernini-R-Diffusers checkpoint (apache-2.0) locally first. For quick experiments prefer the 1.3B sibling; for the planner+renderer pipeline use the flagship bernini entry.
+  usage_notes_zh: Runner parity 为 pending_gpu_validation。用 task_type 选择任务；先在本地就位 Bernini-R-Diffusers checkpoint（apache-2.0）。快速实验建议用 1.3B 兄弟条目；需要规划器+渲染器全流程时用旗舰 bernini 条目。
+  limitations:
+  - Without the semantic planner, complex multi-step instructions may underperform the full Bernini pipeline.
+  - GPU artifact parity is still pending in this workspace.
+  limitations_zh:
+  - 缺少语义规划器时，复杂多步指令的效果可能不及完整 Bernini 流程。
+  - 本工作区的 GPU 产物一致性验证仍在等待中。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Checks the renderer's raw T2V quality.
+    reason_zh: 检验渲染器本身的文生视频质量。

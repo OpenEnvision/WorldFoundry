@@ -15,6 +15,7 @@ import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import cached_property
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
@@ -32,6 +33,8 @@ from worldfoundry.evaluation.api.json_contract import (
 SHA256_HEX_LENGTH = 64
 DEFAULT_FILE_CHUNK_SIZE = 1024 * 1024
 _SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+_SQLITE_IN_CHUNK_SIZE = 400
+_SQLITE_BUSY_TIMEOUT_MS = 30_000
 
 # Schema tracking versions and valid operational strings
 GENERATION_RESULT_CACHE_SCHEMA_VERSION = "worldfoundry-generation-result-cache"
@@ -128,7 +131,7 @@ class CacheKey:
             "version_context_hash": self.version_context_hash,
         }
 
-    @property
+    @cached_property
     def key_hash(self) -> str:
         """The final flattened SHA-256 string serving as the absolute SQLite primary key."""
         return json_sha256(self.to_dict())
@@ -220,8 +223,20 @@ def generation_cache_payload(request: GenerationRequest) -> dict[str, Any]:
     }
 
 
-def make_generation_cache_key(request: GenerationRequest, version_context: Any | None = None) -> CacheKey:
+def make_generation_cache_key(
+    request: GenerationRequest,
+    version_context: Any | None = None,
+    *,
+    version_context_hash: str | None = None,
+) -> CacheKey:
     """Constructs a deterministic cache lookup key for a model generation request."""
+    if version_context_hash is not None:
+        return CacheKey(
+            stage="generation",
+            sample_id=request.sample_id,
+            payload_hash=json_sha256(generation_cache_payload(request)),
+            version_context_hash=_validate_sha256_field("version_context_hash", version_context_hash),
+        )
     return make_cache_key(
         stage="generation",
         sample_id=request.sample_id,
@@ -421,13 +436,19 @@ class GenerationResultCache:
 
     def _connect(self) -> sqlite3.Connection:
         """Instantiates a synchronous connection with safe transactional timeout defaults."""
-        connection = sqlite3.connect(str(self.cache_path), timeout=30.0)
+        connection = sqlite3.connect(
+            str(self.cache_path),
+            timeout=_SQLITE_BUSY_TIMEOUT_MS / 1000,
+        )
         connection.row_factory = sqlite3.Row
+        connection.execute(f"PRAGMA busy_timeout={_SQLITE_BUSY_TIMEOUT_MS}")
+        connection.execute("PRAGMA synchronous=NORMAL")
         return connection
 
     def _init_db(self) -> None:
         """Ensures the core caching tables and indices are initialized on disk."""
         with self._connect() as connection:
+            connection.execute("PRAGMA journal_mode=WAL")
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS generation_results (
@@ -456,17 +477,27 @@ class GenerationResultCache:
 
     def _audit(self, event: str, *, key: CacheKey | None = None, metadata: Mapping[str, Any] | None = None) -> None:
         """Appends a deterministic trace audit line of a cache event to the filesystem."""
-        row = {
-            "schema_version": GENERATION_RESULT_CACHE_SCHEMA_VERSION,
-            "event": event,
-            "namespace": self.namespace,
-            "time": _utcnow_iso(),
-            **({"key": key.to_dict(), "key_hash": key.key_hash} if key is not None else {}),
-            **({"metadata": dict(metadata)} if metadata else {}),
-        }
+        self._audit_many(((event, key, metadata),))
+
+    def _audit_many(
+        self,
+        events: Sequence[tuple[str, CacheKey | None, Mapping[str, Any] | None]],
+    ) -> None:
+        """Append multiple audit records with one metadata-file open."""
+        if not events:
+            return
         with self.audit_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(normalize_json(row), ensure_ascii=False, sort_keys=True))
-            handle.write("\n")
+            for event, key, metadata in events:
+                row = {
+                    "schema_version": GENERATION_RESULT_CACHE_SCHEMA_VERSION,
+                    "event": event,
+                    "namespace": self.namespace,
+                    "time": _utcnow_iso(),
+                    **({"key": key.to_dict(), "key_hash": key.key_hash} if key is not None else {}),
+                    **({"metadata": dict(metadata)} if metadata else {}),
+                }
+                handle.write(json.dumps(normalize_json(row), ensure_ascii=False, sort_keys=True))
+                handle.write("\n")
 
     def get(self, key: CacheKey) -> GenerationCacheRecord | None:
         """Searches the SQLite file for a matching key, logging audit hits and incrementing hit counters.
@@ -477,38 +508,81 @@ class GenerationResultCache:
         Returns:
             The loaded GenerationCacheRecord, or None if a cache miss occurred.
         """
+        return self.get_many((key,))[0]
+
+    def get_many(self, keys: Sequence[CacheKey]) -> list[GenerationCacheRecord | None]:
+        """Resolve cache keys in bounded SQL batches and commit hit counts once."""
+        if not keys:
+            return []
+
+        keyed = [(key, key.key_hash) for key in keys]
+        unique_hashes = tuple(dict.fromkeys(key_hash for _, key_hash in keyed))
+        rows_by_hash: dict[str, sqlite3.Row] = {}
+        accessed_at = _utcnow_iso()
         with self._connect() as connection:
-            row = connection.execute(
-                """
-                SELECT * FROM generation_results
-                WHERE namespace = ? AND key_hash = ?
-                """,
-                (self.namespace, key.key_hash),
-            ).fetchone()
-            if row is None:
-                self._audit("miss", key=key)
-                return None
-            hits = int(row["hits"]) + 1
-            connection.execute(
-                """
-                UPDATE generation_results
-                SET hits = ?, updated_at = ?
-                WHERE namespace = ? AND key_hash = ?
-                """,
-                (hits, _utcnow_iso(), self.namespace, key.key_hash),
-            )
-            connection.commit()
-        metadata = _json_loads_mapping(str(row["metadata_json"]))
-        result = GenerationResult.from_dict(_json_loads_mapping(str(row["result_json"])))
-        self._audit("hit", key=key)
-        return GenerationCacheRecord(
-            key=key,
-            result=result,
-            metadata=metadata,
-            created_at=str(row["created_at"]),
-            updated_at=str(row["updated_at"]),
-            hits=hits,
-        )
+            for offset in range(0, len(unique_hashes), _SQLITE_IN_CHUNK_SIZE):
+                chunk = unique_hashes[offset : offset + _SQLITE_IN_CHUNK_SIZE]
+                placeholders = ",".join("?" for _ in chunk)
+                rows = connection.execute(
+                    f"""
+                    SELECT * FROM generation_results
+                    WHERE namespace = ? AND key_hash IN ({placeholders})
+                    """,
+                    (self.namespace, *chunk),
+                ).fetchall()
+                rows_by_hash.update((str(row["key_hash"]), row) for row in rows)
+
+            hit_increments: dict[str, int] = {}
+            decoded: dict[str, tuple[GenerationResult, dict[str, Any]]] = {}
+            records: list[GenerationCacheRecord | None] = []
+            audit_events: list[tuple[str, CacheKey | None, Mapping[str, Any] | None]] = []
+            for key, key_hash in keyed:
+                row = rows_by_hash.get(key_hash)
+                if row is None:
+                    records.append(None)
+                    audit_events.append(("miss", key, None))
+                    continue
+
+                increment = hit_increments.get(key_hash, 0) + 1
+                hit_increments[key_hash] = increment
+                if key_hash not in decoded:
+                    decoded[key_hash] = (
+                        GenerationResult.from_dict(_json_loads_mapping(str(row["result_json"]))),
+                        _json_loads_mapping(str(row["metadata_json"])),
+                    )
+                result, metadata = decoded[key_hash]
+                records.append(
+                    GenerationCacheRecord(
+                        key=key,
+                        result=result,
+                        metadata=metadata,
+                        created_at=str(row["created_at"]),
+                        updated_at=accessed_at,
+                        hits=int(row["hits"]) + increment,
+                    )
+                )
+                audit_events.append(("hit", key, None))
+
+            try:
+                connection.executemany(
+                    """
+                    UPDATE generation_results
+                    SET hits = hits + ?, updated_at = ?
+                    WHERE namespace = ? AND key_hash = ?
+                    """,
+                    (
+                        (increment, accessed_at, self.namespace, key_hash)
+                        for key_hash, increment in hit_increments.items()
+                    ),
+                )
+                connection.commit()
+            except sqlite3.OperationalError as exc:
+                connection.rollback()
+                if not any(reason in str(exc).lower() for reason in ("locked", "busy")):
+                    raise
+
+        self._audit_many(audit_events)
+        return records
 
     def put(self, key: CacheKey, result: GenerationResult, *, metadata: Mapping[str, Any] | None = None) -> None:
         """Upserts a new GenerationResult record into SQLite, indexing it by CacheKey.
@@ -518,22 +592,34 @@ class GenerationResultCache:
             result: The newly compiled GenerationResult payload.
             metadata: Custom key-value diagnostics captured at execution time.
         """
+        self.put_many(((key, result, metadata),))
+
+    def put_many(
+        self,
+        entries: Sequence[tuple[CacheKey, GenerationResult, Mapping[str, Any] | None]],
+    ) -> None:
+        """Upsert generation results with one SQLite transaction and audit open."""
+        if not entries:
+            return
         now = _utcnow_iso()
-        payload = {
-            "namespace": self.namespace,
-            "key_hash": key.key_hash,
-            "stage": key.stage,
-            "sample_id": key.sample_id,
-            "payload_hash": key.payload_hash,
-            "version_context_hash": key.version_context_hash,
-            "result_json": canonical_json_dumps(result.to_dict()),
-            "metadata_json": canonical_json_dumps(metadata or {}),
-            "created_at": now,
-            "updated_at": now,
-            "hits": 0,
-        }
+        payloads = [
+            {
+                "namespace": self.namespace,
+                "key_hash": key.key_hash,
+                "stage": key.stage,
+                "sample_id": key.sample_id,
+                "payload_hash": key.payload_hash,
+                "version_context_hash": key.version_context_hash,
+                "result_json": canonical_json_dumps(result.to_dict()),
+                "metadata_json": canonical_json_dumps(metadata or {}),
+                "created_at": now,
+                "updated_at": now,
+                "hits": 0,
+            }
+            for key, result, metadata in entries
+        ]
         with self._connect() as connection:
-            connection.execute(
+            connection.executemany(
                 """
                 INSERT INTO generation_results (
                     namespace, key_hash, stage, sample_id, payload_hash, version_context_hash,
@@ -548,10 +634,10 @@ class GenerationResultCache:
                     metadata_json = excluded.metadata_json,
                     updated_at = excluded.updated_at
                 """,
-                payload,
+                payloads,
             )
             connection.commit()
-        self._audit("write", key=key)
+        self._audit_many(tuple(("write", key, None) for key, _, _ in entries))
 
 
 def _artifact_with_base(artifact: ArtifactRef, base_dir: Path) -> ArtifactRef:
@@ -653,8 +739,15 @@ def run_generation_with_cache(
     )
     if not requests:
         return [], stats
+
+    def generate_pending(rows: Sequence[GenerationRequest]) -> list[GenerationResult]:
+        from worldfoundry.core import worldfoundry_inference_context
+
+        with worldfoundry_inference_context():
+            return list(generate(rows))
+
     if not cache_enabled:
-        return list(generate(requests)), stats
+        return generate_pending(requests), stats
 
     cache = GenerationResultCache(cache_dir, namespace=stats.namespace)
     stats.cache_path = str(cache.cache_path)
@@ -663,22 +756,52 @@ def run_generation_with_cache(
     pending_keys: dict[str, CacheKey] = {}
     base_dir = Path(artifact_base_dir).expanduser().resolve() if artifact_base_dir is not None else None
 
-    # Step 1: Pre-filter workload by scanning the database cache
+    # Step 1: Classify requests and resolve cacheable keys in one batched read.
+    classified: list[tuple[GenerationRequest, CacheKey | None]] = []
+    read_positions: list[int] = []
+    read_keys: list[CacheKey] = []
+    version_context_hash = json_sha256({} if version_context is None else version_context)
     for request in requests:
         cacheable, reason = generation_request_cacheable(request)
         if not cacheable:
             stats.skip(reason or "not cacheable")
+            classified.append((request, None))
+            continue
+        key = make_generation_cache_key(request, version_context_hash=version_context_hash)
+        if stats.reads_enabled:
+            read_positions.append(len(classified))
+            read_keys.append(key)
+        classified.append((request, key))
+
+    records_by_position: dict[int, GenerationCacheRecord | None] = {}
+    if read_keys:
+        try:
+            records = cache.get_many(read_keys)
+        except Exception as exc:  # noqa: BLE001 - fall back per key after a batch-cache failure.
+            stats.error(f"batch cache read failed: {type(exc).__name__}: {exc}")
+            records = []
+            for position, key in zip(read_positions, read_keys):
+                request = classified[position][0]
+                try:
+                    record = cache.get(key)
+                except Exception as item_exc:  # noqa: BLE001 - cache must not fail generation.
+                    stats.error(
+                        f"cache read failed for {request.sample_id}: "
+                        f"{type(item_exc).__name__}: {item_exc}"
+                    )
+                    record = None
+                records_by_position[position] = record
+        else:
+            records_by_position.update(zip(read_positions, records))
+
+    for position, (request, key) in enumerate(classified):
+        if key is None:
             pending.append(request)
             continue
-        key = make_generation_cache_key(request, version_context)
         if stats.reads_enabled:
-            try:
-                record = cache.get(key)
-            except Exception as exc:  # noqa: BLE001 - cache must not fail generation.
-                stats.error(f"cache read failed for {request.sample_id}: {type(exc).__name__}: {exc}")
-                record = None
+            record = records_by_position.get(position)
             if record is not None:
-                # Validate that all required physical artifact files (e.g. MP4 videos) still exist on disk
+                # Validate that all required physical artifact files (e.g. MP4 videos) still exist on disk.
                 restored, stale_reason = _restore_cached_result(record)
                 if restored is not None:
                     cached[request.sample_id] = restored
@@ -690,12 +813,13 @@ def run_generation_with_cache(
         pending.append(request)
         pending_keys[request.sample_id] = key
 
-    # Step 2: Execute physically required workload
-    generated = list(generate(pending)) if pending else []
+    # Step 2: Execute physically required workload.
+    generated = generate_pending(pending) if pending else []
     generated_by_sample_id = {result.sample_id: result for result in generated}
 
-    # Step 3: Opportunistically write back successful results to the database
+    # Step 3: Opportunistically write successful results in one transaction.
     if stats.writes_enabled:
+        write_entries: list[tuple[CacheKey, GenerationResult, Mapping[str, Any] | None]] = []
         for request in pending:
             result = generated_by_sample_id.get(request.sample_id)
             key = pending_keys.get(request.sample_id)
@@ -704,11 +828,11 @@ def run_generation_with_cache(
             if not is_generation_result_successful(result):
                 stats.skip("generation failed")
                 continue
-            try:
-                cache.put(
+            write_entries.append(
+                (
                     key,
                     result,
-                    metadata={
+                    {
                         "schema_version": GENERATION_RESULT_CACHE_SCHEMA_VERSION,
                         "namespace": stats.namespace,
                         "cache_path": str(cache.cache_path),
@@ -717,10 +841,24 @@ def run_generation_with_cache(
                         "version_context_hash": key.version_context_hash,
                     },
                 )
+            )
+        if write_entries:
+            try:
+                cache.put_many(write_entries)
             except Exception as exc:  # noqa: BLE001 - cache writes are opportunistic.
-                stats.error(f"cache write failed for {request.sample_id}: {type(exc).__name__}: {exc}")
-                continue
-            stats.writes += 1
+                stats.error(f"batch cache write failed: {type(exc).__name__}: {exc}")
+                for key, result, metadata in write_entries:
+                    try:
+                        cache.put(key, result, metadata=metadata)
+                    except Exception as item_exc:  # noqa: BLE001 - preserve other cache writes.
+                        stats.error(
+                            f"cache write failed for {key.sample_id}: "
+                            f"{type(item_exc).__name__}: {item_exc}"
+                        )
+                    else:
+                        stats.writes += 1
+            else:
+                stats.writes += len(write_entries)
 
     # Step 4: Re-align merged results with original request ordering
     results: list[GenerationResult] = []

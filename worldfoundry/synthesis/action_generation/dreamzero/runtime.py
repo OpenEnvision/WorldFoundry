@@ -9,7 +9,6 @@ simulating a demo interaction with a running DreamZero inference server.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 import uuid
@@ -17,9 +16,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
-from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
 from worldfoundry.synthesis.action_generation.dreamzero import runtime_root as dreamzero_runtime_root
+from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
 
 # Root directory for the DreamZero runtime files.
 RUNTIME_ROOT = dreamzero_runtime_root()
@@ -596,6 +596,7 @@ class DreamZeroWebsocketClient:
         """
         # Imports are placed here to avoid making WebSocket transport a module import dependency.
         import websockets.sync.client
+
         from . import protocol as msgpack_numpy
 
         self._msgpack_numpy = msgpack_numpy
@@ -806,7 +807,7 @@ def run_default_client_demo(
     }
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     # Calculate SHA256 digest of the generated artifact.
-    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    digest = file_sha256(target)
     return {
         "status": "success",
         "model_id": model_id,

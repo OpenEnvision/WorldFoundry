@@ -11,6 +11,7 @@ checkpoint:
   repo_id: robbyant/lingbot-vla-v2-6b
   license: apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2607.06403
   github:
     url: https://github.com/Robbyant/lingbot-vla-v2
     head_sha: 69729b4ef24c
@@ -40,3 +41,17 @@ runner_parity:
   - The public 6B checkpoint uses the bundled official-derived inference config; robot-specific downstream checkpoints may override it with their own lingbotvla_cli.yaml.
 catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile planning records.
+docs:
+  publisher: Robbyant (Ant Group)
+  publisher_kind: company
+  publisher_zh: 蚂蚁灵波科技（Robbyant，蚂蚁集团）
+  overview: LingBot-VLA 2.0 is Robbyant's 6B second-generation VLA built on a Qwen3-VL mixture-of-experts policy, released as robbyant/lingbot-vla-v2-6b under Apache-2.0. WorldFoundry runs official policy inference in-process and in-tree — batching, feature transforms, robot mappings, and normalization included — with static checkpoint validation complete.
+  overview_zh: LingBot-VLA 2.0 是蚂蚁灵波科技（Robbyant）的 6B 第二代 VLA，基于 Qwen3-VL 专家混合策略，以 robbyant/lingbot-vla-v2-6b 发布，Apache-2.0 许可。WorldFoundry 在树内进程内运行官方策略推理——包含批处理、特征变换、机器人映射与归一化——静态 checkpoint 验证已完成。
+  architecture: A Qwen3-VL/MoE policy with a 55-dimensional internal representation, denoising action decoding, image_grid_thw handling, and optional torch.compile paths. Training-only perception teachers are excluded; inference consumes their distilled representations from the trained weights.
+  architecture_zh: Qwen3-VL/MoE 策略，55 维内部表征、去噪动作解码、image_grid_thw 处理与可选 torch.compile 路径。仅训练用的感知教师被排除；推理消费其蒸馏进权重的表征。
+  usage_notes: The public 6B checkpoint uses the bundled official-derived inference config; robot-specific downstream checkpoints may override it with their own lingbotvla_cli.yaml.
+  usage_notes_zh: 公开 6B checkpoint 使用捆绑的官方派生推理配置；机器人专用下游 checkpoint 可用自己的 lingbotvla_cli.yaml 覆盖。
+  limitations:
+  - GPU rollout validation is not recorded in this repository (static checkpoint validation only).
+  limitations_zh:
+  - 仓库未记录 GPU rollout 验证（仅静态 checkpoint 验证）。

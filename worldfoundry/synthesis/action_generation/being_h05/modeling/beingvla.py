@@ -781,7 +781,7 @@ class BeingH(PreTrainedModel):
                             from safetensors.torch import load_file
                             state_dict = load_file(candidate)
                         else:
-                            from worldfoundry.core.model_loading.file import load_torch_checkpoint
+                            from worldfoundry.core.model_loading.checkpoints.file import load_torch_checkpoint
 
                             state_dict = load_torch_checkpoint(
                                 candidate,

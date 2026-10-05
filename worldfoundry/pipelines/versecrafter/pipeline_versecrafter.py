@@ -9,6 +9,8 @@ from worldfoundry.synthesis.visual_generation.versecrafter import VerseCrafterSy
 
 
 class VerseCrafterPipeline(PipelineABC):
+    MODEL_PATH_OPTION = "checkpoint_path"
+
     def __init__(self, synthesis_model: VerseCrafterSynthesis, *, device: str = "cuda") -> None:
         self.synthesis_model = synthesis_model
         self.device = device
@@ -39,9 +41,10 @@ class VerseCrafterPipeline(PipelineABC):
         **kwargs: Any,
     ) -> Any:
         kwargs.pop("operator_kwargs", None)
+        kw_image_path = kwargs.pop("image_path", None)
         result = self.synthesis_model.predict(
             prompt=prompt,
-            image_path=images or kwargs.pop("image_path", None),
+            image_path=images or kw_image_path,
             output_path=output_path,
             return_dict=True,
             **kwargs,

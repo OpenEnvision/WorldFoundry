@@ -71,6 +71,9 @@ catalog_policy:
   github: Validated with git ls-remote, preferring git ls-remote --symref <repo>.git HEAD for default branch and HEAD SHA.
   huggingface: Validated with the Hugging Face /api/models endpoint. Recorded repo id, sha, private, gated, license, and selected task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit parity run and expected artifact are recorded.
+official_sources:
+  project_page: https://yzy-thu.github.io/CogVideoX-demo/
+  paper: https://arxiv.org/abs/2408.06072
 integration:
   status: integrated
   notes:
@@ -112,3 +115,26 @@ variants:
       notes:
         - The in-tree CogVideoX 5B I2V runner supports the official-style I2V parameter contract.
         - Per-run evidence is tracked outside the model catalog.
+docs:
+  publisher: Zhipu AI (THUDM)
+  publisher_kind: company
+  publisher_zh: 智谱 AI（THUDM）
+  overview: CogVideoX is Zhipu AI's open video generation family, one of the most widely used open T2V/I2V baselines. This catalog entry serves three runnable variants — 2B text-to-video, 5B text-to-video, and 5B image-to-video — through in-tree runtimes, and runner parity is verified. Weights load natively from Hugging Face (THUDM/CogVideoX-5b) or from a local mirror via model_path.
+  overview_zh: CogVideoX 是智谱 AI 的开源视频生成系列，也是使用最广的开源文生/图生视频基线之一。本条目提供三个可运行 variant——2B 文生视频、5B 文生视频、5B 图生视频——均通过树内运行时执行，且 runner parity 已验证。权重可从 Hugging Face 原生加载（THUDM/CogVideoX-5b），也可用 model_path 指向本地镜像。
+  architecture: CogVideoX uses a diffusion transformer over a 3D causal VAE latent space with an expert transformer conditioning design (per the upstream publication). In this repository, the recorded contract exposes num_inference_steps, num_frames, height, width, and fps on T2V, plus guidance_scale on I2V.
+  architecture_zh: CogVideoX 采用 3D 因果 VAE 潜空间上的扩散 Transformer，并使用专家 Transformer 条件设计（见上游论文）。在本仓库中，记录的契约为：T2V 暴露 num_inference_steps、num_frames、height、width、fps， I2V 额外暴露 guidance_scale。
+  usage_notes: 'Pick the variant by size and task: 2B T2V for fast iterations, 5B T2V for quality, 5B I2V for animating an image. Runner parity is verified; per-run visual QA is tracked outside the catalog. Note the recorded license nuance: HF metadata reports Apache-2.0 for 2B but ''other'' for several larger variants — review before commercial use.'
+  usage_notes_zh: 按大小与任务选 variant：2B T2V 适合快速迭代，5B T2V 追求质量，5B I2V 用于让图片动起来。 runner parity 已验证；每次运行的视觉 QA 在 catalog 之外跟踪。注意记录在案的许可细节：HF 元数据中 2B 为 Apache-2.0，若干更大 variant 为“other”——商用前请先审阅。
+  limitations:
+  - Larger variants carry 'other' license metadata on Hugging Face; commercial use needs review.
+  - The recorded routes are offline batch generation — no streaming or interactive control.
+  limitations_zh:
+  - 较大 variant 在 Hugging Face 上的许可元数据为“other”，商用前需审阅。
+  - 记录的路径均为离线批量生成——不含流式或交互控制。
+  recommended_benchmarks:
+  - id: vbench
+    reason: The de-facto open benchmark CogVideoX results are usually reported on.
+    reason_zh: CogVideoX 结果最常引用的开源评测。
+  - id: t2v-compbench
+    reason: Compositional prompt suite for the T2V variants.
+    reason_zh: 面向 T2V variant 的组合式提示词评测。

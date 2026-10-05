@@ -234,6 +234,6 @@ class ImageSelfAttentionWrapper(nn.Module):
             The return value.
         """
         x = rearrange(x, "(b v h w) () c -> (b v) c h w", b=b, v=v, h=h, w=w)
-        x = self.layers(x) + x
-        x = self.self_attention(x) + x
+        # The published convolutional checkpoints apply attention before the MLP.
+        x = self.layers(self.self_attention(x) + x)
         return rearrange(x, "(b v) c h w -> (b v h w) () c", b=b, v=v, h=h, w=w)

@@ -1,0 +1,2095 @@
+{
+  "version": 1,
+  "note": "HF Spaces use /embed on this docs site. Paper boards show official results figures plus a cited breakdown table. Never WorldFoundry-run scores.",
+  "boards": {
+    "ai2thor": {
+      "kind": "empty",
+      "paperTitle": "AI2-THOR: An Interactive 3D Environment for Visual AI",
+      "paperYear": "2017",
+      "paperUrl": "https://arxiv.org/abs/1712.05474",
+      "emptyReason": "AI2-THOR is a Unity household simulator. The 2017 paper describes rooms, physics, and discrete actions; it does not publish a ranked policy table for the catalog task (ALFRED/TEACh are separate stacks).",
+      "emptyReasonZh": "AI2-THOR 是 Unity 家居模拟器。2017 年论文描述房间、物理与离散动作，没有目录任务的策略排名表（ALFRED/TEACh 是独立套件）。"
+    },
+    "behavior1k": {
+      "kind": "paper",
+      "paperTitle": "BEHAVIOR-1K: A Human-Centered, Embodied AI Benchmark with 1,000 Everyday Activities and Realistic Simulation",
+      "paperYear": "2024",
+      "paperUrl": "https://arxiv.org/abs/2403.09227",
+      "metric": "StoreDecoration success",
+      "metricZh": "StoreDecoration 成功率",
+      "paperNote": "Author RL baselines on one of the paper’s three reported activities.",
+      "paperNoteZh": "论文报告的三项活动之一上的作者 RL 基线。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "RL-Prim.Hist.",
+          "score": "0.55"
+        },
+        {
+          "rank": 2,
+          "model": "RL-Prim.",
+          "score": "0.48"
+        },
+        {
+          "rank": 3,
+          "model": "RL-VMC",
+          "score": "0.0"
+        }
+      ]
+    },
+    "bridgedata-v2": {
+      "kind": "paper",
+      "paperTitle": "BridgeData V2: A Dataset for Robot Learning at Scale",
+      "paperYear": "2023",
+      "paperUrl": "https://arxiv.org/abs/2308.12952",
+      "metric": "Average success (2 reported tasks)",
+      "metricZh": "平均成功率（论文报告的 2 个任务）",
+      "paperNote": "Author comparison of BridgeData V2 vs V1+PTR on the paper’s two evaluated tasks.",
+      "paperNoteZh": "论文在两个评测任务上比较 BridgeData V2 与 V1+PTR。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "BridgeData V2",
+          "score": "0.70"
+        },
+        {
+          "rank": 2,
+          "model": "BridgeData V1 + PTR",
+          "score": "0.08"
+        }
+      ]
+    },
+    "calvin": {
+      "kind": "live",
+      "liveUrl": "http://calvin.cs.uni-freiburg.de/",
+      "liveLabel": "calvin.cs.uni-freiburg.de",
+      "liveLabelZh": "calvin.cs.uni-freiburg.de"
+    },
+    "kinetix": {
+      "kind": "empty",
+      "paperTitle": "Kinetix",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2410.23208",
+      "emptyReason": "Kinetix (arxiv 2410.23208) is an open-ended physics-control environment paper. The HTML has no numeric agent ranking table we can ingest; results are described qualitatively / in figures.",
+      "emptyReasonZh": "Kinetix（arxiv 2410.23208）是开放式物理控制环境论文。HTML 没有可收录的智能体数值排名表；结果在定性描述/图中。"
+    },
+    "larybench": {
+      "kind": "live",
+      "liveUrl": "https://meituan-longcat.github.io/LARYBench/",
+      "liveLabel": "meituan-longcat.github.io/LARYBench",
+      "liveLabelZh": "meituan-longcat.github.io/LARYBench"
+    },
+    "libero-mem": {
+      "kind": "paper",
+      "paperTitle": "Rethinking Progression of Memory State in Robotic Manipulation: An Object-Centric Perspective",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2511.11478",
+      "metric": "T1–T10 average success",
+      "metricZh": "T1–T10 平均成功率",
+      "paperNote": "Official LIBERO-Mem long-horizon suite from the paper.",
+      "paperNoteZh": "论文官方 LIBERO-Mem 长程套件。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Naive SlotSSM",
+          "score": "14.8%"
+        },
+        {
+          "rank": 2,
+          "model": "π0 (h=1)",
+          "score": "5.0%"
+        },
+        {
+          "rank": 3,
+          "model": "SlotVLA (h=8)",
+          "score": "5.0%"
+        },
+        {
+          "rank": 4,
+          "model": "SlotVLA (h=1)",
+          "score": "0%"
+        }
+      ]
+    },
+    "libero-plus": {
+      "kind": "paper",
+      "paperTitle": "LIBERO-Plus: In-depth Robustness Analysis of Vision-Language-Action Models",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2510.13626",
+      "metric": "Total success (%)",
+      "metricZh": "总分成功率（%）",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "OpenVLA-OFT+",
+          "score": "79.5",
+          "note": "paper “Ours”"
+        },
+        {
+          "rank": 2,
+          "model": "OpenVLA-OFT",
+          "score": "69.6"
+        },
+        {
+          "rank": 3,
+          "model": "RIPT-VLA",
+          "score": "68.4"
+        },
+        {
+          "rank": 4,
+          "model": "OpenVLA-OFT_m",
+          "score": "67.9"
+        },
+        {
+          "rank": 5,
+          "model": "π0-Fast",
+          "score": "61.6"
+        },
+        {
+          "rank": 6,
+          "model": "π0",
+          "score": "53.6"
+        },
+        {
+          "rank": 7,
+          "model": "NORA",
+          "score": "39.0"
+        },
+        {
+          "rank": 8,
+          "model": "OpenVLA",
+          "score": "15.6"
+        }
+      ]
+    },
+    "libero-pro": {
+      "kind": "paper",
+      "paperTitle": "LIBERO-PRO: Towards Robust and Fair Evaluation of Vision-Language-Action Models Beyond Memorization",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2510.03827",
+      "metric": "LIBERO-Goal original success",
+      "metricZh": "LIBERO-Goal 原始成功率",
+      "paperNote": "Original-split row from the paper. Task/position perturbations in LIBERO-PRO collapse to 0.00 for these models.",
+      "paperNoteZh": "论文原始划分。LIBERO-PRO 的任务/位置扰动下这些模型降至 0.00。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "OpenVLA",
+          "score": "0.98"
+        },
+        {
+          "rank": 2,
+          "model": "π0.5",
+          "score": "0.97"
+        },
+        {
+          "rank": 3,
+          "model": "π0",
+          "score": "0.92"
+        }
+      ]
+    },
+    "libero": {
+      "kind": "paper",
+      "paperTitle": "LIBERO: Benchmarking Knowledge Transfer for Lifelong Robot Learning",
+      "paperYear": "2023",
+      "paperUrl": "https://arxiv.org/abs/2306.03310",
+      "metric": "LIBERO-Spatial AUC (ResNet-T)",
+      "metricZh": "LIBERO-Spatial AUC（ResNet-T）",
+      "paperNote": "Lifelong-learning baselines from the original paper, not a later VLA board.",
+      "paperNoteZh": "原论文终身学习基线，不是后续 VLA 榜。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "PackNet",
+          "score": "0.63"
+        },
+        {
+          "rank": 2,
+          "model": "Experience Replay",
+          "score": "0.56"
+        },
+        {
+          "rank": 3,
+          "model": "Sequential fine-tuning",
+          "score": "0.20"
+        },
+        {
+          "rank": 4,
+          "model": "EWC",
+          "score": "0.06"
+        }
+      ]
+    },
+    "maniskill": {
+      "kind": "paper",
+      "paperTitle": "ManiSkill2: A Unified Benchmark for Generalizable Manipulation Skills",
+      "paperYear": "2023",
+      "paperUrl": "https://arxiv.org/abs/2302.04659",
+      "metric": "PickCube success (from-scratch visual RL)",
+      "metricZh": "PickCube 成功率（从头视觉 RL）",
+      "paperNote": "Same official paper as ManiSkill2. From-scratch visual RL on PickCube.",
+      "paperNoteZh": "与 ManiSkill2 同一篇官方论文。PickCube 上从头训练的视觉 RL。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "PPO, point cloud",
+          "score": "0.22"
+        },
+        {
+          "rank": 2,
+          "model": "PPO, RGBD",
+          "score": "0.01"
+        }
+      ]
+    },
+    "maniskill2": {
+      "kind": "paper",
+      "paperTitle": "ManiSkill2: A Unified Benchmark for Generalizable Manipulation Skills",
+      "paperYear": "2023",
+      "paperUrl": "https://arxiv.org/abs/2302.04659",
+      "metric": "PickCube success (demo-augmented visual RL)",
+      "metricZh": "PickCube 成功率（带示范的视觉 RL）",
+      "paperNote": "Official visual-RL baselines on PickCube, not a multi-lab SOTA board.",
+      "paperNoteZh": "论文官方视觉 RL 基线（PickCube），不是多实验室 SOTA 榜。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "DAPG / PPO, point cloud",
+          "score": "0.94"
+        },
+        {
+          "rank": 2,
+          "model": "DAPG / PPO, RGBD",
+          "score": "0.91"
+        }
+      ]
+    },
+    "metaworld": {
+      "kind": "paper",
+      "paperTitle": "Meta-World: A Benchmark and Evaluation for Multi-Task and Meta Reinforcement Learning",
+      "paperYear": "2019",
+      "paperUrl": "https://arxiv.org/abs/1910.10897",
+      "metric": "MT10 success",
+      "metricZh": "MT10 成功率",
+      "paperNote": "Multi-task RL baselines from the original paper (not a live board).",
+      "paperNoteZh": "原论文多任务 RL 基线（非实时榜）。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Multi-task SAC",
+          "score": "68.3%"
+        },
+        {
+          "rank": 2,
+          "model": "Multi-task TRPO",
+          "score": "31.3%"
+        },
+        {
+          "rank": 3,
+          "model": "Multi-task PPO",
+          "score": "30.5%"
+        },
+        {
+          "rank": 4,
+          "model": "Task embeddings",
+          "score": "20.9%"
+        }
+      ]
+    },
+    "mikasa": {
+      "kind": "empty",
+      "paperTitle": "Memory, Benchmark & Robots",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2502.10550",
+      "emptyReason": "The MIKASA paper catalogs 32 memory tasks (Table 1) and reports PPO-MLP / PPO-LSTM as learning curves (Figures 4–9), including a 100% oracle-state ceiling. There is no method×score ranking table to ingest, and no author-maintained live board.",
+      "emptyReasonZh": "MIKASA 论文用表 1 列出 32 个记忆任务，PPO-MLP / PPO-LSTM 结果在学习曲线里（图 4–9），含 oracle 状态 100% 上限。没有可收录的方法×分数排名表，也没有作者维护的实时榜。"
+    },
+    "molmospaces": {
+      "kind": "live",
+      "liveUrl": "https://molmospaces.allen.ai/leaderboard",
+      "liveLabel": "molmospaces.allen.ai",
+      "liveLabelZh": "molmospaces.allen.ai"
+    },
+    "rlbench": {
+      "kind": "empty",
+      "paperTitle": "RLBench: The Robot Learning Benchmark & Learning Environment",
+      "paperYear": "2019",
+      "paperUrl": "https://arxiv.org/abs/1909.12271",
+      "emptyReason": "No live RLBench board. The 2019 paper introduces the 100-task environment and demonstration API; arXiv HTML/ar5iv contain no numeric policy ranking table.",
+      "emptyReasonZh": "没有 RLBench 实时榜。2019 年论文介绍 100 任务环境与示范 API；arXiv HTML/ar5iv 没有数值化的策略排名表。"
+    },
+    "robocasa": {
+      "kind": "paper",
+      "paperTitle": "RoboCasa: Large-Scale Simulation of Everyday Tasks for Generalist Robots",
+      "paperYear": "2024",
+      "paperUrl": "https://arxiv.org/abs/2406.02523",
+      "metric": "Average success (24 atomic tasks)",
+      "metricZh": "平均成功率（24 个原子任务）",
+      "paperNote": "Same BC policy trained on different data mixes from the paper.",
+      "paperNoteZh": "同一 BC 策略、论文中不同数据配比。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Generated-3000",
+          "score": "0.476"
+        },
+        {
+          "rank": 2,
+          "model": "Generated-300",
+          "score": "0.350"
+        },
+        {
+          "rank": 3,
+          "model": "Human-50",
+          "score": "0.288"
+        },
+        {
+          "rank": 4,
+          "model": "Generated-100",
+          "score": "0.263"
+        }
+      ]
+    },
+    "robocerebra": {
+      "kind": "paper",
+      "paperTitle": "RoboCerebra: A Large-scale Benchmark for Long-horizon Robotic Manipulation Evaluation",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2506.06677",
+      "metric": "Success rate (SR)",
+      "metricZh": "成功率（SR）",
+      "paperNote": "Planner / VLM baselines from the paper.",
+      "paperNoteZh": "论文中的规划器 / VLM 基线。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "GPT-4o",
+          "score": "16.04"
+        },
+        {
+          "rank": 2,
+          "model": "GPT-4o-Blind",
+          "score": "15.10"
+        },
+        {
+          "rank": 3,
+          "model": "LLaVA-Next-Video-7B",
+          "score": "11.37"
+        },
+        {
+          "rank": 4,
+          "model": "Qwen2.5-VL-7B",
+          "score": "11.19"
+        },
+        {
+          "rank": 5,
+          "model": "Qwen2.5-VL-7B-SFT",
+          "score": "9.33"
+        }
+      ]
+    },
+    "robomme": {
+      "kind": "paper",
+      "paperTitle": "RoboMME: Benchmarking and Understanding Memory for Robotic Generalist Policies",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2603.04639",
+      "metric": "Average success (16 tasks)",
+      "metricZh": "平均成功率（16 个任务）",
+      "paperNote": "Paper AVG column. Oracle rows use privileged memory.",
+      "paperNoteZh": "论文 AVG 列。Oracle 行使用特权记忆。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Human",
+          "score": "90.50"
+        },
+        {
+          "rank": 2,
+          "model": "MME-VLA GroundSG Oracle",
+          "score": "84.08",
+          "note": "privileged"
+        },
+        {
+          "rank": 3,
+          "model": "MME-VLA SimpleSG Oracle",
+          "score": "49.58",
+          "note": "privileged"
+        },
+        {
+          "rank": 4,
+          "model": "SimpleSG QwenVL",
+          "score": "29.00"
+        },
+        {
+          "rank": 5,
+          "model": "Gemini (SimpleSG Oracle setting)",
+          "score": "23.25"
+        }
+      ]
+    },
+    "robotwin": {
+      "kind": "live",
+      "liveUrl": "https://robotwin-platform.github.io/leaderboard",
+      "liveLabel": "robotwin-platform.github.io",
+      "liveLabelZh": "robotwin-platform.github.io"
+    },
+    "simpler-env": {
+      "kind": "paper",
+      "paperTitle": "Evaluating Real-World Robot Manipulation Policies in Simulation",
+      "paperYear": "2024",
+      "paperUrl": "https://arxiv.org/abs/2405.05941",
+      "metric": "Avg. sim success (visual matching)",
+      "metricZh": "仿真平均成功率（视觉匹配）",
+      "paperNote": "SIMPLER visual-matching column from the paper. Real-robot rates are reported separately.",
+      "paperNoteZh": "论文 SIMPLER 视觉匹配列。真机成功率另行报告。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "RT-1 (converged)",
+          "score": "0.857"
+        },
+        {
+          "rank": 2,
+          "model": "RT-2-X",
+          "score": "0.787"
+        },
+        {
+          "rank": 3,
+          "model": "RT-1 (15%)",
+          "score": "0.710"
+        },
+        {
+          "rank": 4,
+          "model": "RT-1-X",
+          "score": "0.567"
+        },
+        {
+          "rank": 5,
+          "model": "RT-1 (single-task)",
+          "score": "0.403"
+        },
+        {
+          "rank": 6,
+          "model": "Octo-Base",
+          "score": "0.170"
+        },
+        {
+          "rank": 7,
+          "model": "RT-1 (begin)",
+          "score": "0.027"
+        }
+      ]
+    },
+    "vlabench": {
+      "kind": "paper",
+      "paperTitle": "VLABench: A Large-Scale Benchmark for Language-Conditioned Robotics Manipulation with Long-Horizon Reasoning Tasks",
+      "paperYear": "2024",
+      "paperUrl": "https://arxiv.org/abs/2412.18194",
+      "metric": "Seen-split average success",
+      "metricZh": "Seen 划分平均成功率",
+      "paperNote": "Official VLABench paper table (arxiv 2412.18194). Catalog abs 2502.09858 is a different paper.",
+      "paperNoteZh": "官方 VLABench 论文表（arxiv 2412.18194）。目录中的 2502.09858 是另一篇论文。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "RDT-1B (base)",
+          "score": "15.37"
+        },
+        {
+          "rank": 2,
+          "model": "OpenVLA (base)",
+          "score": "11.74"
+        },
+        {
+          "rank": 3,
+          "model": "Octo (base)",
+          "score": "1.34"
+        }
+      ]
+    },
+    "4dworldbench": {
+      "kind": "live",
+      "liveUrl": "https://yeppp27.github.io/4DWorldBench.github.io/",
+      "liveLabel": "yeppp27.github.io/4DWorldBench",
+      "liveLabelZh": "yeppp27.github.io/4DWorldBench"
+    },
+    "aigcbench": {
+      "kind": "paper",
+      "paperTitle": "AIGCBench: Comprehensive Evaluation of Image-to-Video Content Generated by AI",
+      "paperYear": "2024",
+      "paperUrl": "https://arxiv.org/abs/2401.01651",
+      "metric": "DOVER (video quality)",
+      "metricZh": "DOVER（视频质量）",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Gen2",
+          "score": "0.775"
+        },
+        {
+          "rank": 2,
+          "model": "Pika",
+          "score": "0.715"
+        },
+        {
+          "rank": 3,
+          "model": "SVD",
+          "score": "0.623"
+        },
+        {
+          "rank": 4,
+          "model": "VideoCrafter",
+          "score": "0.518"
+        },
+        {
+          "rank": 5,
+          "model": "I2VGen-XL",
+          "score": "0.510"
+        }
+      ]
+    },
+    "apple-pi": {
+      "kind": "paper",
+      "paperTitle": "Apple-π: Benchmarking Thinking with Video Towards Law-Grounded Physical Intelligence",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2607.16401",
+      "metric": "Average track-wise score",
+      "metricZh": "轨道平均分",
+      "paperNote": "Main paper table, including unified image/video models.",
+      "paperNoteZh": "论文主表，含统一图像/视频模型。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "GPT Image 2",
+          "score": "0.704",
+          "note": "unified"
+        },
+        {
+          "rank": 2,
+          "model": "Nano Banana 2",
+          "score": "0.699",
+          "note": "unified"
+        },
+        {
+          "rank": 3,
+          "model": "Seedance 2.0",
+          "score": "0.473"
+        },
+        {
+          "rank": 4,
+          "model": "VBVR-Wan2.2",
+          "score": "0.373"
+        },
+        {
+          "rank": 5,
+          "model": "SenseNova-U1-8B-MoT",
+          "score": "0.362",
+          "note": "unified"
+        },
+        {
+          "rank": 6,
+          "model": "Veo 3.1",
+          "score": "0.313"
+        },
+        {
+          "rank": 7,
+          "model": "Wan2.2",
+          "score": "0.267"
+        },
+        {
+          "rank": 8,
+          "model": "HunyuanVideo-1.5",
+          "score": "0.177"
+        }
+      ]
+    },
+    "camerabench": {
+      "kind": "live",
+      "liveUrl": "https://sy77777en.github.io/CameraBench/leaderboard/table.html",
+      "liveLabel": "sy77777en.github.io/CameraBench",
+      "liveLabelZh": "sy77777en.github.io/CameraBench"
+    },
+    "chronomagic-bench": {
+      "kind": "live",
+      "liveUrl": "https://huggingface.co/spaces/BestWishYsh/ChronoMagic-Bench",
+      "liveLabel": "Hugging Face Space (BestWishYsh)",
+      "liveLabelZh": "Hugging Face Space（BestWishYsh）",
+      "liveEmbedUrl": "https://huggingface.co/spaces/BestWishYsh/ChronoMagic-Bench/embed"
+    },
+    "devil-dynamics": {
+      "kind": "paper",
+      "paperTitle": "Evaluation of Text-to-Video Generation Models: A Dynamics Perspective",
+      "paperYear": "2024",
+      "paperUrl": "https://arxiv.org/abs/2407.01094",
+      "metric": "D_quality",
+      "metricZh": "D_quality",
+      "paperNote": "Paper dynamics-quality column.",
+      "paperNoteZh": "论文动态质量列。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "FreeNoise-Lavie",
+          "score": "66.3"
+        },
+        {
+          "rank": 2,
+          "model": "OpenSora",
+          "score": "63.7"
+        },
+        {
+          "rank": 3,
+          "model": "ModelScope",
+          "score": "62.6"
+        },
+        {
+          "rank": 4,
+          "model": "StreamingT2V",
+          "score": "60.8"
+        },
+        {
+          "rank": 5,
+          "model": "Show-1",
+          "score": "57.7"
+        },
+        {
+          "rank": 6,
+          "model": "Hotshot-XL",
+          "score": "52.2"
+        },
+        {
+          "rank": 7,
+          "model": "Pika",
+          "score": "52.1"
+        },
+        {
+          "rank": 8,
+          "model": "ZeroScope",
+          "score": "44.8"
+        }
+      ]
+    },
+    "evalcrafter": {
+      "kind": "live",
+      "liveUrl": "http://evalcrafter.github.io",
+      "liveLabel": "evalcrafter.github.io",
+      "liveLabelZh": "evalcrafter.github.io"
+    },
+    "ewmbench": {
+      "kind": "paper",
+      "paperTitle": "EWMBench: Evaluating Scene, Motion, and Semantic Quality in Embodied World Models",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2505.09694",
+      "metric": "Overall",
+      "metricZh": "总分",
+      "paperNote": "Paper overall score (scene + motion + semantics).",
+      "paperNoteZh": "论文总分（场景 + 运动 + 语义）。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "EnerVerse_FT",
+          "score": "4.7010",
+          "note": "domain-finetuned"
+        },
+        {
+          "rank": 2,
+          "model": "LTX_FT",
+          "score": "4.5493",
+          "note": "domain-finetuned"
+        },
+        {
+          "rank": 3,
+          "model": "Kling",
+          "score": "3.8698"
+        },
+        {
+          "rank": 4,
+          "model": "Hailuo",
+          "score": "3.4125"
+        },
+        {
+          "rank": 5,
+          "model": "COSMOS",
+          "score": "3.2872"
+        },
+        {
+          "rank": 6,
+          "model": "OpenSora",
+          "score": "3.1392"
+        },
+        {
+          "rank": 7,
+          "model": "LTX",
+          "score": "2.9676"
+        }
+      ]
+    },
+    "fetv": {
+      "kind": "paper",
+      "paperTitle": "FETV: A Benchmark for Fine-Grained Evaluation of Open-Domain Text-to-Video Generation",
+      "paperYear": "2023",
+      "paperUrl": "https://arxiv.org/abs/2311.01813",
+      "paperNote": "Official paper Figure 7: static quality, temporal quality, and overall alignment (1–5 human). Rows follow the overall-alignment panel; ranks are not a single Overall.",
+      "paperNoteZh": "官方论文 Figure 7：静态质量、时序质量与总体对齐（1–5 人工）。行序按总体对齐面板；不是单一 Overall 排名。",
+      "columns": [
+        {
+          "id": "static",
+          "label": "Static quality",
+          "labelZh": "静态质量"
+        },
+        {
+          "id": "temporal",
+          "label": "Temporal quality",
+          "labelZh": "时序质量"
+        },
+        {
+          "id": "alignment",
+          "label": "Overall alignment",
+          "labelZh": "总体对齐"
+        }
+      ],
+      "entries": [
+        {
+          "model": "ModelScopeT2V",
+          "scores": {
+            "static": "3.78",
+            "temporal": "4.07",
+            "alignment": "3.79"
+          }
+        },
+        {
+          "model": "ZeroScope",
+          "scores": {
+            "static": "3.52",
+            "temporal": "3.72",
+            "alignment": "3.57"
+          }
+        },
+        {
+          "model": "Text2Video-Zero",
+          "scores": {
+            "static": "4.11",
+            "temporal": "2.04",
+            "alignment": "3.42"
+          }
+        },
+        {
+          "model": "CogVideo",
+          "scores": {
+            "static": "3.24",
+            "temporal": "3.30",
+            "alignment": "3.10"
+          }
+        }
+      ]
+    },
+    "genai-bench": {
+      "kind": "paper",
+      "paperTitle": "GenAI Arena: An Open Evaluation Platform for Generative Models",
+      "paperYear": "2024",
+      "paperUrl": "https://arxiv.org/abs/2406.04485",
+      "metric": "Pairwise accuracy average (test_v1)",
+      "metricZh": "成对准确率平均（test_v1）",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "GPT-4o",
+          "score": "49.2"
+        },
+        {
+          "rank": 2,
+          "model": "Gemini-1.5-Pro",
+          "score": "48.94"
+        },
+        {
+          "rank": 3,
+          "model": "LLaVA",
+          "score": "31.17"
+        },
+        {
+          "rank": 4,
+          "model": "Idefics2",
+          "score": "28.67"
+        },
+        {
+          "rank": 5,
+          "model": "Random",
+          "score": "25.47"
+        }
+      ],
+      "paperNote": "Judge alignment with human preference, not a generator quality board. Snapshot dated 2024-08-09 on the official dataset card.",
+      "paperNoteZh": "衡量的是评判模型与人类偏好的对齐，不是生成模型画质榜。官方数据集卡片快照日期 2024-08-09。"
+    },
+    "ipv-bench": {
+      "kind": "paper",
+      "paperTitle": "Impossible Videos",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2503.14378",
+      "metric": "IPV score",
+      "metricZh": "IPV 分数",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Mochi 1",
+          "score": "37.3"
+        },
+        {
+          "rank": 2,
+          "model": "Pyramid-Flow",
+          "score": "19.6"
+        },
+        {
+          "rank": 3,
+          "model": "CogVideoX-1.5",
+          "score": "16.9"
+        },
+        {
+          "rank": 4,
+          "model": "Open-Sora",
+          "score": "15.8"
+        },
+        {
+          "rank": 5,
+          "model": "LTX",
+          "score": "10.0"
+        }
+      ]
+    },
+    "iworld-bench": {
+      "kind": "live",
+      "liveUrl": "https://iworld-bench.com/",
+      "liveLabel": "iworld-bench.com",
+      "liveLabelZh": "iworld-bench.com"
+    },
+    "likephys": {
+      "kind": "paper",
+      "paperTitle": "LikePhys: Evaluating Intuitive Physics Understanding in Video Diffusion Models via Likelihood Preference",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2510.11512",
+      "metric": "PPE average (lower is better)",
+      "metricZh": "PPE 平均（越低越好）",
+      "paperNote": "Paper overall PPE. Lower means stronger intuitive physics.",
+      "paperNoteZh": "论文总体 PPE。越低表示直觉物理越好。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Hunyuan T2V",
+          "score": "43.6"
+        },
+        {
+          "rank": 2,
+          "model": "Wan2.1-T2V-14B",
+          "score": "43.8"
+        },
+        {
+          "rank": 3,
+          "model": "CogVideoX1.5–5B",
+          "score": "43.8"
+        },
+        {
+          "rank": 4,
+          "model": "LTX v0.9.5",
+          "score": "44.7"
+        },
+        {
+          "rank": 5,
+          "model": "Wan2.1-T2V-1.3B",
+          "score": "48.0"
+        },
+        {
+          "rank": 6,
+          "model": "CogVideoX-2B",
+          "score": "48.2"
+        },
+        {
+          "rank": 7,
+          "model": "CogVideoX-5B",
+          "score": "49.8"
+        },
+        {
+          "rank": 8,
+          "model": "Mochi",
+          "score": "51.9"
+        }
+      ]
+    },
+    "memobench": {
+      "kind": "live",
+      "liveUrl": "https://memobench-team.github.io/",
+      "liveLabel": "memobench-team.github.io",
+      "liveLabelZh": "memobench-team.github.io"
+    },
+    "mind": {
+      "kind": "paper",
+      "paperTitle": "MIND: Benchmarking Memory Consistency and Action Control in World Models",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2602.08025",
+      "metric": "Long context memory (↓, MIND-First 50)",
+      "metricZh": "长上下文记忆（越低越好，MIND-First 50）",
+      "paperNote": "Table 2 first-person split. Lower MSE is better. The project page still marks a public live board as coming soon.",
+      "paperNoteZh": "表 2 第一人称划分。MSE 越低越好。项目页仍把公开实时榜标为即将开放。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "MIND-World",
+          "score": "0.1035",
+          "note": "video-to-world"
+        },
+        {
+          "rank": 2,
+          "model": "MIND-World",
+          "score": "0.1091",
+          "note": "image-to-world"
+        },
+        {
+          "rank": 3,
+          "model": "Matrix-Game 2.0",
+          "score": "0.1188",
+          "note": "image-to-world"
+        }
+      ]
+    },
+    "mirabench": {
+      "kind": "paper",
+      "paperTitle": "MiraData: A Large-Scale Video Dataset with Long Durations and Structured Captions",
+      "paperYear": "2024",
+      "paperUrl": "https://arxiv.org/abs/2407.06358",
+      "metric": "Tracking strength (TS)",
+      "metricZh": "跟踪强度（TS）",
+      "paperNote": "Table 3 TS column. MiraBench has 17 metrics; this is the paper’s motion-tracking score, not a 17-metric average.",
+      "paperNoteZh": "表 3 的 TS 列。MiraBench 有 17 个指标；这是论文的运动跟踪分，不是 17 项平均。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "MiraDiT (MiraData)",
+          "score": "49.47"
+        },
+        {
+          "rank": 2,
+          "model": "MiraDiT (WebVid-10M)",
+          "score": "22.36"
+        },
+        {
+          "rank": 3,
+          "model": "OpenSora",
+          "score": "16.07"
+        },
+        {
+          "rank": 4,
+          "model": "VideoCrafter2",
+          "score": "6.72"
+        }
+      ]
+    },
+    "pawbench": {
+      "kind": "paper",
+      "paperTitle": "PAWBench: How Far Are We from Probabilistically Aligned World Modeling?",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2608.27345",
+      "metric": "PAW-Calibration TVD ×100 (lower is better)",
+      "metricZh": "PAW-Calibration TVD ×100（越低越好）",
+      "paperNote": "Paper calibration TVD. Coverage is reported separately.",
+      "paperNoteZh": "论文校准 TVD。覆盖率另行报告。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Cosmos 3 Super I2V",
+          "score": "20.5"
+        },
+        {
+          "rank": 2,
+          "model": "MiniMax H3",
+          "score": "24.2"
+        },
+        {
+          "rank": 3,
+          "model": "Wan2.7",
+          "score": "26.3"
+        },
+        {
+          "rank": 4,
+          "model": "Wan2.2",
+          "score": "26.3"
+        },
+        {
+          "rank": 5,
+          "model": "LTX-2.3",
+          "score": "30.1"
+        },
+        {
+          "rank": 6,
+          "model": "LTX-2.5",
+          "score": "30.2"
+        },
+        {
+          "rank": 7,
+          "model": "Seedance 2",
+          "score": "30.5"
+        },
+        {
+          "rank": 8,
+          "model": "Kling 3 Std.",
+          "score": "34.9"
+        }
+      ]
+    },
+    "phyeduvideo": {
+      "kind": "paper",
+      "paperTitle": "PhyEduVideo: A Benchmark for Evaluating Text-to-Video Models for Physics Education",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2601.00943",
+      "metric": "Average scientific accuracy (SA)",
+      "metricZh": "平均科学准确性（SA）",
+      "paperNote": "Paper Average row, SA column.",
+      "paperNoteZh": "论文 Average 行的 SA 列。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Wan2.1",
+          "score": "0.83"
+        },
+        {
+          "rank": 2,
+          "model": "PhyT2V",
+          "score": "0.78"
+        },
+        {
+          "rank": 3,
+          "model": "CogVideoX",
+          "score": "0.75"
+        },
+        {
+          "rank": 4,
+          "model": "Video-MSG",
+          "score": "0.68"
+        },
+        {
+          "rank": 5,
+          "model": "VideoCrafter2",
+          "score": "0.62"
+        }
+      ]
+    },
+    "phyfps-bench-gen": {
+      "kind": "paper",
+      "paperTitle": "The Pulse of Motion: Measuring Physical Frame Rate from Visual Dynamics",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2603.14375",
+      "metric": "Avg. error vs Meta FPS (lower is better)",
+      "metricZh": "相对 Meta FPS 的平均误差（越低越好）",
+      "paperNote": "Table 1 Avg. Error column. Authors also host a submission board that had no public rows at ingest time.",
+      "paperNoteZh": "表 1 的 Avg. Error 列。作者另有投稿榜，收录时还没有公开行。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Wan2.1-T2V-1.3B",
+          "score": "7.54"
+        },
+        {
+          "rank": 2,
+          "model": "Seedance-1.0-Lite",
+          "score": "8.31",
+          "note": "closed"
+        },
+        {
+          "rank": 3,
+          "model": "Sora-2",
+          "score": "8.40",
+          "note": "closed"
+        },
+        {
+          "rank": 4,
+          "model": "Kling-o3",
+          "score": "9.10",
+          "note": "closed"
+        },
+        {
+          "rank": 5,
+          "model": "Seedance-1.5-Pro",
+          "score": "10.67",
+          "note": "closed"
+        },
+        {
+          "rank": 6,
+          "model": "Wan2.2-T2V-A14B",
+          "score": "10.74"
+        },
+        {
+          "rank": 7,
+          "model": "Wan2.1-T2V-14B",
+          "score": "10.87"
+        },
+        {
+          "rank": 8,
+          "model": "Wan2.2-TI2V-5B",
+          "score": "11.63"
+        }
+      ]
+    },
+    "phygenbench": {
+      "kind": "paper",
+      "paperTitle": "Towards World Simulator: Crafting Physical Commonsense-Based Benchmark for Video Generation",
+      "paperYear": "2024",
+      "paperUrl": "https://arxiv.org/abs/2410.05363",
+      "metric": "PhyGenEval average",
+      "metricZh": "PhyGenEval 平均",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Gen-3",
+          "score": "0.51"
+        },
+        {
+          "rank": 2,
+          "model": "Kling",
+          "score": "0.49"
+        },
+        {
+          "rank": 3,
+          "model": "Vchitect 2.0",
+          "score": "0.45"
+        },
+        {
+          "rank": 4,
+          "model": "CogVideoX 5B",
+          "score": "0.45"
+        },
+        {
+          "rank": 5,
+          "model": "Open-Sora V1.2",
+          "score": "0.44"
+        },
+        {
+          "rank": 6,
+          "model": "Pika",
+          "score": "0.44"
+        },
+        {
+          "rank": 7,
+          "model": "CogVideoX 2B",
+          "score": "0.39"
+        },
+        {
+          "rank": 8,
+          "model": "Lavie",
+          "score": "0.36"
+        }
+      ]
+    },
+    "phyground": {
+      "kind": "paper",
+      "paperTitle": "PhyGround: Benchmarking Physical Reasoning in Generative World Models",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2605.10806",
+      "metric": "Overall (1–5 human)",
+      "metricZh": "总体（1–5 人工）",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Wan2.2-27B-A14B",
+          "score": "3.28"
+        },
+        {
+          "rank": 2,
+          "model": "Veo-3.1",
+          "score": "3.28",
+          "note": "closed"
+        },
+        {
+          "rank": 3,
+          "model": "OmniWeaving",
+          "score": "3.10"
+        },
+        {
+          "rank": 4,
+          "model": "Cosmos-14B",
+          "score": "2.91"
+        },
+        {
+          "rank": 5,
+          "model": "LTX-2.3-22B",
+          "score": "2.69"
+        },
+        {
+          "rank": 6,
+          "model": "Wan2.2-TI2V-5B",
+          "score": "2.63"
+        },
+        {
+          "rank": 7,
+          "model": "Cosmos-2B",
+          "score": "2.58"
+        },
+        {
+          "rank": 8,
+          "model": "LTX-2-19B",
+          "score": "2.56"
+        }
+      ]
+    },
+    "physical-ai-bench": {
+      "kind": "paper",
+      "paperTitle": "PAI-Bench: A Comprehensive Benchmark For Physical AI",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2512.01989",
+      "metric": "Overall domain score",
+      "metricZh": "领域总分",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Veo3",
+          "score": "82.2",
+          "note": "proprietary"
+        },
+        {
+          "rank": 2,
+          "model": "HunyuanVideo-I2V",
+          "score": "77.6"
+        },
+        {
+          "rank": 3,
+          "model": "MAGI-1-4.5B",
+          "score": "77.5"
+        },
+        {
+          "rank": 4,
+          "model": "LTX-Video-2B",
+          "score": "77.5"
+        },
+        {
+          "rank": 5,
+          "model": "DynamicCrafter",
+          "score": "68.3"
+        }
+      ]
+    },
+    "physics-iq-verified": {
+      "kind": "live",
+      "liveUrl": "https://physics-iq-verified.anates.ai/",
+      "liveLabel": "physics-iq-verified.anates.ai",
+      "liveLabelZh": "physics-iq-verified.anates.ai"
+    },
+    "physics-iq": {
+      "kind": "live",
+      "liveUrl": "https://physics-iq.github.io/",
+      "liveLabel": "physics-iq.github.io (synced from the DeepMind README)",
+      "liveLabelZh": "physics-iq.github.io（与 DeepMind README 同步）"
+    },
+    "physvidbench": {
+      "kind": "paper",
+      "paperTitle": "PhysVidBench: Language-Grounded Evaluation of Physical Commonsense in Text-to-Video Models",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2507.15824",
+      "metric": "Average",
+      "metricZh": "平均分",
+      "paperNote": "Paper Average column (main score, not the parenthetical delta).",
+      "paperNoteZh": "论文 Average 列（主分数，不含括号内差值）。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Wan2.1 (14B)",
+          "score": "34.1"
+        },
+        {
+          "rank": 2,
+          "model": "MAGI-1",
+          "score": "32.6"
+        },
+        {
+          "rank": 3,
+          "model": "Wan2.1 (1.3B)",
+          "score": "30.6"
+        },
+        {
+          "rank": 4,
+          "model": "HunyuanVideo",
+          "score": "30.0"
+        },
+        {
+          "rank": 5,
+          "model": "CogVideoX (2B)",
+          "score": "25.6"
+        },
+        {
+          "rank": 6,
+          "model": "VideoCrafter2",
+          "score": "22.1"
+        },
+        {
+          "rank": 7,
+          "model": "LTX-Video",
+          "score": "21.0"
+        },
+        {
+          "rank": 8,
+          "model": "CogVideoX (5B)",
+          "score": "21.0"
+        }
+      ]
+    },
+    "rbench": {
+      "kind": "paper",
+      "paperTitle": "Rethinking Video Generation Model for the Embodied World",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2601.15282",
+      "metric": "RBench score",
+      "metricZh": "RBench 分数",
+      "paperNote": "Paper human-alignment table, RBench column.",
+      "paperNoteZh": "论文人机对齐表的 RBench 列。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Wan 2.5",
+          "score": "0.570"
+        },
+        {
+          "rank": 2,
+          "model": "Hailuo v2",
+          "score": "0.565"
+        },
+        {
+          "rank": 3,
+          "model": "Veo 3",
+          "score": "0.563"
+        },
+        {
+          "rank": 4,
+          "model": "Seedance 1.0",
+          "score": "0.551"
+        },
+        {
+          "rank": 5,
+          "model": "Cosmos 2.5",
+          "score": "0.464"
+        },
+        {
+          "rank": 6,
+          "model": "LongCat-Video",
+          "score": "0.437"
+        },
+        {
+          "rank": 7,
+          "model": "Wan2.1-14B",
+          "score": "0.399"
+        },
+        {
+          "rank": 8,
+          "model": "CogVideoX-5B",
+          "score": "0.256"
+        }
+      ]
+    },
+    "sana-wm-bench": {
+      "kind": "paper",
+      "paperTitle": "SANA-WM: Efficient Minute-Scale World Modeling with Hybrid Linear Diffusion Transformer",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2605.15178",
+      "metric": "VBench Overall (simple-trajectory)",
+      "metricZh": "VBench Overall（简单轨迹）",
+      "paperNote": "Table 2 simple-trajectory split. Resolutions differ (LingBot-World / Infinite-World / HY-WorldPlay at 480p; others 720p).",
+      "paperNoteZh": "表 2 简单轨迹划分。分辨率不同（LingBot-World / Infinite-World / HY-WorldPlay 为 480p，其余为 720p）。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "LingBot-World",
+          "score": "81.82",
+          "note": "480p"
+        },
+        {
+          "rank": 2,
+          "model": "SANA-WM + refiner",
+          "score": "80.62"
+        },
+        {
+          "rank": 3,
+          "model": "SANA-WM",
+          "score": "79.29"
+        },
+        {
+          "rank": 4,
+          "model": "Infinite-World",
+          "score": "79.18",
+          "note": "480p"
+        },
+        {
+          "rank": 5,
+          "model": "Matrix-Game 3.0",
+          "score": "78.53"
+        },
+        {
+          "rank": 6,
+          "model": "HY-WorldPlay",
+          "score": "68.82",
+          "note": "480p"
+        }
+      ]
+    },
+    "stevo-bench": {
+      "kind": "paper",
+      "paperTitle": "Out of Sight, Out of Mind? Evaluating State Evolution in Video World Models",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2603.13215",
+      "metric": "Success",
+      "metricZh": "成功率",
+      "paperNote": "Paper Success column for video models.",
+      "paperNoteZh": "论文视频模型 Success 列。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Veo 3",
+          "score": "8.7"
+        },
+        {
+          "rank": 2,
+          "model": "Sora 2 Pro",
+          "score": "8.1"
+        },
+        {
+          "rank": 3,
+          "model": "WAN 2.2",
+          "score": "0.9"
+        },
+        {
+          "rank": 4,
+          "model": "HY-Video 1.5",
+          "score": "0.9"
+        },
+        {
+          "rank": 5,
+          "model": "CogVideoX 1.5",
+          "score": "0.5"
+        }
+      ]
+    },
+    "t2v-compbench": {
+      "kind": "live",
+      "liveUrl": "https://huggingface.co/spaces/Kaiyue/T2V-CompBench_Leaderboard",
+      "liveLabel": "Hugging Face Space (Kaiyue)",
+      "liveLabelZh": "Hugging Face Space（Kaiyue）",
+      "liveEmbedUrl": "https://huggingface.co/spaces/Kaiyue/T2V-CompBench_Leaderboard/embed"
+    },
+    "t2v-safety-bench": {
+      "kind": "paper",
+      "paperTitle": "T2VSafetyBench: Evaluating the Safety of Text-to-Video Generative Models",
+      "paperYear": "2024",
+      "paperUrl": "https://arxiv.org/abs/2407.05965",
+      "metric": "Human NSFW average (lower is safer)",
+      "metricZh": "人工 NSFW 平均（越低越安全）",
+      "paperNote": "Paper NSFW Average, human column. Lower unsafe-generation rate is better.",
+      "paperNoteZh": "论文 NSFW Average 的人工列。不安全生成率越低越好。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Gen2",
+          "score": "40.9%"
+        },
+        {
+          "rank": 2,
+          "model": "SVD",
+          "score": "46.8%"
+        },
+        {
+          "rank": 3,
+          "model": "Open-Sora",
+          "score": "52.1%"
+        },
+        {
+          "rank": 4,
+          "model": "Pika",
+          "score": "59.0%"
+        }
+      ]
+    },
+    "t2vworldbench": {
+      "kind": "paper",
+      "paperTitle": "T2VWorldBench: A Benchmark for Evaluating World Knowledge in Text-to-Video Generation",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2507.18107",
+      "metric": "Average",
+      "metricZh": "平均分",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Wan2.1",
+          "score": "0.68"
+        },
+        {
+          "rank": 2,
+          "model": "LTX Video",
+          "score": "0.68"
+        },
+        {
+          "rank": 3,
+          "model": "Kling1.6",
+          "score": "0.67"
+        },
+        {
+          "rank": 4,
+          "model": "Dreamina",
+          "score": "0.67"
+        },
+        {
+          "rank": 5,
+          "model": "Mochi-1",
+          "score": "0.66"
+        },
+        {
+          "rank": 6,
+          "model": "Sora",
+          "score": "0.65"
+        },
+        {
+          "rank": 7,
+          "model": "Hailuo",
+          "score": "0.63"
+        },
+        {
+          "rank": 8,
+          "model": "Pika2.2",
+          "score": "0.60"
+        }
+      ]
+    },
+    "vbench-2.0": {
+      "kind": "live",
+      "liveUrl": "https://huggingface.co/spaces/Vchitect/VBench_Leaderboard",
+      "liveLabel": "Hugging Face Space (Vchitect, VBench-2.0 tab)",
+      "liveLabelZh": "Hugging Face Space（Vchitect，VBench-2.0 页）",
+      "liveEmbedUrl": "https://huggingface.co/spaces/Vchitect/VBench_Leaderboard/embed"
+    },
+    "vbench-plus-plus": {
+      "kind": "live",
+      "liveUrl": "https://huggingface.co/spaces/Vchitect/VBench_Leaderboard",
+      "liveLabel": "Hugging Face Space (Vchitect)",
+      "liveLabelZh": "Hugging Face Space（Vchitect）",
+      "liveEmbedUrl": "https://huggingface.co/spaces/Vchitect/VBench_Leaderboard/embed"
+    },
+    "vbench": {
+      "kind": "live",
+      "liveUrl": "https://huggingface.co/spaces/Vchitect/VBench_Leaderboard",
+      "liveLabel": "Hugging Face Space (Vchitect)",
+      "liveLabelZh": "Hugging Face Space（Vchitect）",
+      "liveEmbedUrl": "https://huggingface.co/spaces/Vchitect/VBench_Leaderboard/embed"
+    },
+    "video-bench": {
+      "kind": "paper",
+      "paperTitle": "Video-Bench: Human-Aligned Video Generation Benchmark",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2504.04907",
+      "metric": "Imaging quality",
+      "metricZh": "成像质量",
+      "paperNote": "Paper video-quality table, imaging-quality column.",
+      "paperNoteZh": "论文视频质量表的成像质量列。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Gen3",
+          "score": "4.66"
+        },
+        {
+          "rank": 2,
+          "model": "Kling",
+          "score": "4.26"
+        },
+        {
+          "rank": 3,
+          "model": "VideoCrafter2",
+          "score": "4.08"
+        },
+        {
+          "rank": 4,
+          "model": "CogVideoX",
+          "score": "3.87"
+        },
+        {
+          "rank": 5,
+          "model": "Pika-Beta",
+          "score": "3.78"
+        },
+        {
+          "rank": 6,
+          "model": "Show-1",
+          "score": "3.30"
+        },
+        {
+          "rank": 7,
+          "model": "LaVie",
+          "score": "3.00"
+        }
+      ]
+    },
+    "videophy": {
+      "kind": "paper",
+      "paperTitle": "VideoPhy: Evaluating Physical Commonsense for Video Generation",
+      "paperYear": "2024",
+      "paperUrl": "https://arxiv.org/abs/2406.03520",
+      "metric": "Overall SA, PC (%)",
+      "metricZh": "总体 SA, PC（%）",
+      "paperNote": "Paper overall semantic-adherence and physical-commonsense joint rate. Later models are on the VideoPhy-2 live board.",
+      "paperNoteZh": "论文总体语义符合×物理常识联合率。后续模型见 VideoPhy-2 实时榜。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "CogVideoX-5B",
+          "score": "39.6"
+        },
+        {
+          "rank": 2,
+          "model": "Pika",
+          "score": "19.7"
+        },
+        {
+          "rank": 3,
+          "model": "VideoCrafter2",
+          "score": "19.0"
+        },
+        {
+          "rank": 4,
+          "model": "CogVideoX-2B",
+          "score": "18.6"
+        },
+        {
+          "rank": 5,
+          "model": "LaVIE",
+          "score": "15.7"
+        },
+        {
+          "rank": 6,
+          "model": "Dream Machine",
+          "score": "13.6"
+        },
+        {
+          "rank": 7,
+          "model": "Lumiere-T2I2V",
+          "score": "12.5"
+        },
+        {
+          "rank": 8,
+          "model": "ZeroScope",
+          "score": "11.9"
+        }
+      ]
+    },
+    "videophy2": {
+      "kind": "live",
+      "liveUrl": "https://videophy2.github.io/",
+      "liveLabel": "videophy2.github.io",
+      "liveLabelZh": "videophy2.github.io"
+    },
+    "videoscience-bench": {
+      "kind": "live",
+      "liveUrl": "https://huggingface.co/spaces/lmgame/videoscience-bench",
+      "liveLabel": "Hugging Face Space (lmgame)",
+      "liveLabelZh": "Hugging Face Space（lmgame）",
+      "liveEmbedUrl": "https://huggingface.co/spaces/lmgame/videoscience-bench/embed"
+    },
+    "videoscore": {
+      "kind": "paper",
+      "paperTitle": "VideoScore: Building Automatic Metrics to Simulate Fine-grained Human Feedback for Video Generation",
+      "paperYear": "2024",
+      "paperUrl": "https://arxiv.org/abs/2406.15252",
+      "metric": "Spearman average (×100)",
+      "metricZh": "Spearman 平均（×100）",
+      "paperNote": "Judge–human correlation from the paper, not a generator quality board.",
+      "paperNoteZh": "论文中的评判–人类相关，不是生成模型画质榜。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "VideoScore (gen)",
+          "score": "77.1",
+          "note": "paper method"
+        },
+        {
+          "rank": 2,
+          "model": "VideoScore (reg)",
+          "score": "75.7",
+          "note": "paper method"
+        },
+        {
+          "rank": 3,
+          "model": "GPT-4o",
+          "score": "23.0"
+        },
+        {
+          "rank": 4,
+          "model": "Gemini-1.5-Flash",
+          "score": "20.8"
+        },
+        {
+          "rank": 5,
+          "model": "Gemini-1.5-Pro",
+          "score": "16.9"
+        }
+      ]
+    },
+    "videoverse": {
+      "kind": "paper",
+      "paperTitle": "VideoVerse: Does Your T2V Generator Have World Model Capability to Synthesize Videos?",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2510.08398",
+      "metric": "Overall (Gemini 2.5 Pro judge)",
+      "metricZh": "总分（Gemini 2.5 Pro 评判）",
+      "paperNote": "Paper Table 1 overall. Sora-2 missed 4 videos due to safety review.",
+      "paperNoteZh": "论文表 1 总分。Sora-2 因安全审核缺 4 条视频。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Sora-2",
+          "score": "1299",
+          "note": "4 videos missing"
+        },
+        {
+          "rank": 2,
+          "model": "Veo-3",
+          "score": "1292"
+        },
+        {
+          "rank": 3,
+          "model": "Minimax-Hailuo",
+          "score": "1203"
+        },
+        {
+          "rank": 4,
+          "model": "Wan2.2-A14B",
+          "score": "1085"
+        },
+        {
+          "rank": 5,
+          "model": "OpenSora2.0",
+          "score": "989"
+        },
+        {
+          "rank": 6,
+          "model": "Wan2.1-14B",
+          "score": "969"
+        },
+        {
+          "rank": 7,
+          "model": "SkyReels-V2 (L)",
+          "score": "968"
+        },
+        {
+          "rank": 8,
+          "model": "Hunyuan",
+          "score": "898"
+        }
+      ]
+    },
+    "visual-chronometer": {
+      "kind": "paper",
+      "paperTitle": "The Pulse of Motion: Measuring Physical Frame Rate from Visual Dynamics",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2603.14375",
+      "metric": "MAE on PhyFPS-Bench-Real (lower is better)",
+      "metricZh": "PhyFPS-Bench-Real 上的 MAE（越低越好）",
+      "paperNote": "Table 2 predictor accuracy, not a generator ranking. Video-based VLM rows.",
+      "paperNoteZh": "表 2 预测器精度，不是生成模型排名。视频输入的 VLM 行。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "VC-Common",
+          "score": "3.46",
+          "note": "ours"
+        },
+        {
+          "rank": 2,
+          "model": "VC-Wide",
+          "score": "7.76",
+          "note": "ours"
+        },
+        {
+          "rank": 3,
+          "model": "Seed-1.6-Flash",
+          "score": "20.00",
+          "note": "video VLM"
+        },
+        {
+          "rank": 4,
+          "model": "Seed-1.6",
+          "score": "20.40",
+          "note": "video VLM"
+        },
+        {
+          "rank": 5,
+          "model": "Gemini-3.1-Pro",
+          "score": "21.67",
+          "note": "video VLM"
+        },
+        {
+          "rank": 6,
+          "model": "Gemini-3-Flash",
+          "score": "23.40",
+          "note": "video VLM"
+        }
+      ]
+    },
+    "vmbench": {
+      "kind": "paper",
+      "paperTitle": "VMBench: A Benchmark for Perception-Aligned Video Motion Generation",
+      "paperYear": "2025",
+      "paperUrl": "https://openaccess.thecvf.com/content/ICCV2025/html/Ling_VMBench_A_Benchmark_for_Perception-Aligned_Video_Motion_Generation_ICCV_2025_paper.html",
+      "metric": "Avg (PMM)",
+      "metricZh": "PMM 平均",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Wan2.1",
+          "score": "78.4"
+        },
+        {
+          "rank": 2,
+          "model": "HunyuanVideo",
+          "score": "63.4"
+        },
+        {
+          "rank": 3,
+          "model": "CogVideoX-5B",
+          "score": "60.6"
+        },
+        {
+          "rank": 4,
+          "model": "OpenSora-Plan-v1.3.0",
+          "score": "58.9"
+        },
+        {
+          "rank": 5,
+          "model": "Mochi 1",
+          "score": "53.2"
+        },
+        {
+          "rank": 6,
+          "model": "OpenSora-v1.2",
+          "score": "51.6"
+        }
+      ]
+    },
+    "wbench": {
+      "kind": "live",
+      "liveUrl": "https://meituan-longcat.github.io/WBench/",
+      "liveLabel": "meituan-longcat.github.io/WBench",
+      "liveLabelZh": "meituan-longcat.github.io/WBench"
+    },
+    "world-in-world": {
+      "kind": "paper",
+      "paperTitle": "World-in-World: World Models in a Closed-Loop World",
+      "paperYear": "2025",
+      "paperUrl": "https://arxiv.org/abs/2510.18135",
+      "metric": "Active Recognition success",
+      "metricZh": "主动识别成功率",
+      "paperNote": "Paper Active Recognition SR. † = video-generation post-train.",
+      "paperNoteZh": "论文主动识别成功率。† 表示视频生成后训练。",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "WAN2.1 †",
+          "score": "62.98",
+          "note": "post-train"
+        },
+        {
+          "rank": 2,
+          "model": "SVD †",
+          "score": "60.62",
+          "note": "post-train"
+        },
+        {
+          "rank": 3,
+          "model": "Wan2.1",
+          "score": "58.26"
+        },
+        {
+          "rank": 4,
+          "model": "SVD",
+          "score": "57.71"
+        },
+        {
+          "rank": 5,
+          "model": "Hunyuan",
+          "score": "57.71"
+        },
+        {
+          "rank": 6,
+          "model": "SE3DS",
+          "score": "57.53"
+        },
+        {
+          "rank": 7,
+          "model": "Heuristic (w/o WM)",
+          "score": "39.02"
+        }
+      ]
+    },
+    "worldarena": {
+      "kind": "live",
+      "liveUrl": "https://huggingface.co/spaces/WorldArena/WorldArena",
+      "liveLabel": "Hugging Face Space (WorldArena)",
+      "liveLabelZh": "Hugging Face Space（WorldArena）",
+      "liveEmbedUrl": "https://huggingface.co/spaces/WorldArena/WorldArena/embed"
+    },
+    "worldbench": {
+      "kind": "paper",
+      "paperTitle": "WorldBench: Benchmarking Physical Understanding of World Models by Isolating Physics Concepts",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2601.21282",
+      "metric": "Average error (lower is better)",
+      "metricZh": "平均误差（越低越好）",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Cosmos-2.5 2B",
+          "score": "0.217"
+        },
+        {
+          "rank": 2,
+          "model": "Hunyuan Video 13B",
+          "score": "0.2275"
+        },
+        {
+          "rank": 3,
+          "model": "Cosmos-1 DM 7B",
+          "score": "0.231"
+        },
+        {
+          "rank": 4,
+          "model": "Cosmos-2 2B",
+          "score": "0.232"
+        },
+        {
+          "rank": 5,
+          "model": "Wan 2.2 5B",
+          "score": "0.253"
+        },
+        {
+          "rank": 6,
+          "model": "Cosmos-2 14B",
+          "score": "0.274"
+        },
+        {
+          "rank": 7,
+          "model": "Cosmos-1 AR 5B",
+          "score": "0.298"
+        }
+      ]
+    },
+    "worldmodelbench": {
+      "kind": "live",
+      "liveUrl": "https://worldmodelbench-team.github.io/",
+      "liveLabel": "worldmodelbench-team.github.io",
+      "liveLabelZh": "worldmodelbench-team.github.io"
+    },
+    "worldolympiad": {
+      "kind": "paper",
+      "paperTitle": "WorldOlympiad: Can Your World Model Survive a Triathlon?",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2606.11129",
+      "metric": "All (S_all)",
+      "metricZh": "综合分 S_all",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "LingBot-World",
+          "score": "0.683",
+          "note": "gaming WM"
+        },
+        {
+          "rank": 2,
+          "model": "Cosmos-Predict-2.5",
+          "score": "0.671",
+          "note": "robotics WM"
+        },
+        {
+          "rank": 3,
+          "model": "Rolling Forcing",
+          "score": "0.610"
+        },
+        {
+          "rank": 4,
+          "model": "Yume-1.5",
+          "score": "0.604"
+        },
+        {
+          "rank": 5,
+          "model": "LongLive",
+          "score": "0.584"
+        },
+        {
+          "rank": 6,
+          "model": "Hunyuan-WorldPlay",
+          "score": "0.477"
+        },
+        {
+          "rank": 7,
+          "model": "WoW",
+          "score": "0.434"
+        },
+        {
+          "rank": 8,
+          "model": "Matrix-Game 2.0",
+          "score": "0.231"
+        }
+      ]
+    },
+    "worldreasonbench": {
+      "kind": "paper",
+      "paperTitle": "WorldReasonBench: Human-Aligned Stress Testing of Video Generators as Future World-State Predictors",
+      "paperYear": "2026",
+      "paperUrl": "https://arxiv.org/abs/2605.10434",
+      "metric": "Score PR (%)",
+      "metricZh": "Score PR（%）",
+      "entries": [
+        {
+          "rank": 1,
+          "model": "Seedance2.0",
+          "score": "39.8"
+        },
+        {
+          "rank": 2,
+          "model": "Veo3.1-Fast",
+          "score": "35.3"
+        },
+        {
+          "rank": 3,
+          "model": "Sora2-8s",
+          "score": "34.3"
+        },
+        {
+          "rank": 4,
+          "model": "Kling",
+          "score": "32.7"
+        },
+        {
+          "rank": 5,
+          "model": "Wan2.6",
+          "score": "32.4"
+        },
+        {
+          "rank": 6,
+          "model": "Sora2-12s",
+          "score": "32.4"
+        },
+        {
+          "rank": 7,
+          "model": "HunyuanVideo-1.5",
+          "score": "17.9"
+        },
+        {
+          "rank": 8,
+          "model": "Wan2.2-14B",
+          "score": "17.5"
+        }
+      ]
+    },
+    "worldscore": {
+      "kind": "live",
+      "liveUrl": "https://huggingface.co/spaces/Howieeeee/WorldScore_Leaderboard",
+      "liveLabel": "Hugging Face Space (Howieeeee / authors)",
+      "liveLabelZh": "Hugging Face Space（Howieeeee / 作者）",
+      "liveEmbedUrl": "https://huggingface.co/spaces/Howieeeee/WorldScore_Leaderboard/embed"
+    },
+    "wrbench": {
+      "kind": "live",
+      "liveUrl": "https://huggingface.co/spaces/WRBench/wrbench-leaderboard",
+      "liveLabel": "Hugging Face Space (WRBench)",
+      "liveLabelZh": "Hugging Face Space（WRBench）",
+      "liveEmbedUrl": "https://huggingface.co/spaces/WRBench/wrbench-leaderboard/embed"
+    }
+  }
+}

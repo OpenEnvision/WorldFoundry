@@ -16,6 +16,7 @@ source:
   hf_repo_id: krea/krea-realtime-video
   license: apache-2.0
 official_sources:
+  project_page: https://www.krea.ai/
   github:
     url: https://github.com/krea-ai/realtime-video
   huggingface:
@@ -38,3 +39,25 @@ runtime_profile: runtime-profile:krea-realtime-video
 catalog_category: video
 catalog_scope: Video-generation and video-token catalog entries. Integrated entries expose WorldFoundry pipeline targets;
   metadata-only entries retain upstream provenance without runnable WorldFoundry backends.
+docs:
+  publisher: Krea AI
+  publisher_kind: company
+  publisher_zh: Krea AI
+  overview: 'Krea Realtime Video 14B is Krea AI''s open realtime/streaming video generation model. Unlike the batch T2V models in this catalog, it targets low-latency streaming generation: text-to-video and video-to-video in a streaming regime. The in-tree runtime lives under synthesis/visual_generation/krea_realtime, and the route exposes num_blocks, resolution, fps, and seed controls. Alias krea-rt-14b resolves here.'
+  overview_zh: Krea Realtime Video 14B 是 Krea AI 开源的实时/流式视频生成模型。与 catalog 中的批式 T2V 不同，它面向低延迟流式生成：以流式方式做文生视频与视频到视频。树内运行时位于 synthesis/visual_generation/krea_realtime，路径暴露 num_blocks、分辨率、fps 与 seed 控制。别名 krea-rt-14b 解析到本条目。
+  architecture: Upstream describes it as a 14B autoregressive/streaming video model distilled for realtime block-wise generation (weights at krea/krea-realtime-video, apache-2.0). This repository records the block-based generation controls (num_blocks) and the prompt/video input contract; deeper internals are not recorded here.
+  architecture_zh: 上游将其描述为面向实时块式生成蒸馏的 14B 自回归/流式视频模型（权重在 krea/krea-realtime-video，apache-2.0）。本仓库记录了基于块的生成控制（num_blocks）与 prompt/video 输入契约；更深的内部细节仓库未记录。
+  usage_notes: 'Runner parity is pending: the route is wired and controls are exposed, but official longer-realtime parity has not been recorded. Realtime throughput expectations depend heavily on your GPU — the 14B scale wants datacenter-class hardware for true realtime rates.'
+  usage_notes_zh: Runner parity 为 pending：路径已接通、控制项已暴露，但更长时段的官方实时一致性还没有记录。实时吞吐高度依赖你的 GPU——14B 规模要达到真正实时帧率需要数据中心级硬件。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  - True realtime rates require datacenter-class GPUs at 14B scale.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  - 14B 规模下要达到真实时帧率需要数据中心级 GPU。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Baseline quality check for streaming T2V output.
+    reason_zh: 流式文生视频输出的基础质量检查。

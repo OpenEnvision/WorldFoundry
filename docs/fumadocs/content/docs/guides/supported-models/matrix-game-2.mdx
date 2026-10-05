@@ -1,0 +1,40 @@
+---
+title: "Matrix-Game 2.0"
+description: "Matrix-Game 2.0 from Skywork AI: a 15-latent-frame short run was compared with official universal mode; full 150-frame parity remains unverified."
+modelId: "matrix-game-2"
+pageSource: authored
+---
+
+Matrix-Game 2.0 is Skywork's real-time-oriented interactive world model generation: an auto-regressive diffusion design that follows keyboard/mouse actions across game scenes. The in-tree runner was compared with official universal mode using 15 latent frames at 12 fps and 352×640 with official bench actions; full 150-latent-frame parity remains unverified.
+
+<ModelPaperFigures modelId="matrix-game-2" locale="en" />
+
+The paper is [arXiv 2508.13009](https://arxiv.org/abs/2508.13009). Project page: [matrix-game-v2.github.io](https://matrix-game-v2.github.io). Code: [SkyworkAI/Matrix-Game](https://github.com/SkyworkAI/Matrix-Game).
+
+<ModelCommandBuilder modelId="matrix-game-2" locale="en" />
+
+## What it is for
+
+Start on `matrix-game-2-universal-action-validation` with official bench actions. Not Matrix-Game 1 or 3.
+
+Launch `worldfoundry-eval run matrix-game-2-universal-action-validation` with `--pipeline.task-profile official-universal-image`.
+
+Score on [WorldModelBench](/docs/evaluation/benchmark-hub/worldmodelbench) — action-conditioned game-world rollout quality.
+
+## Runtime contract
+
+Required: `image` and `official_bench_actions`; optional: `prompt` and `video`. The recorded short-run comparison produced `matrix_game2_official_universal_seed42_15f.mp4` and a JSON sidecar; the runtime profile lists `matrix-game-2-universal-ref-image-seed42-15f.mp4`.
+
+The official default is 150 latent frames, 12 fps, 352×640, seed 42. The recorded comparison used 15 latent frames and produced 57 decoded RGB frames. No public model-zoo demo helper is packaged for this comparison.
+
+The loader accepts opt-in `fuse_qkv` with `qkv_strategy="packed"`, `"split"` or `"auto"`, `quantization`, and the shared `compile` options after restoring the DiT checkpoint. Fusion preserves the causal attention and cache algorithm. `vae_channels_last` and `vae_channels_last_3d` convert matching Conv2d/Conv3d decoder weights before compilation; the decoder retains FP16 weights when the DiT uses BF16. Unsupported optimization requests fail before loading.
+
+`overlap_vae_decode=True` optionally decodes on a pipeline-owned CUDA stream while the caller stream refreshes clean generator context. A caller-stream event join orders returned video, copies, and recurrent cache reuse without a host wait during normal generation. Each pipeline has one active session; its owner serializes start, step, reset, and close. Reset, replacement sessions, close, and failed overlapped blocks drain only the owned decoder stream. A failed overlapped session must be replaced; CPU use reports a synchronous fallback.
+
+These switches are disabled by default. Small CPU/CUDA regressions verify numerical output, cache progression, stream ordering, and cleanup. Their full-checkpoint latency benefit and full-length parity remain unmeasured; a compile wrapper or queued side-stream work is reported separately from runtime execution.
+
+## Run in WorldFoundry
+
+Status: **15-latent-frame short-run parity verified**; full-length parity and benchmark scoring remain pending. Unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `Skywork/Matrix-Game-2.0` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run matrix-game-2-universal-action-validation` with `--pipeline.task-profile official-universal-image`. License: MIT. Minimum VRAM is recorded at 24 GB.
+
+<ModelRelatedRecipes modelId="matrix-game-2" locale="en" />

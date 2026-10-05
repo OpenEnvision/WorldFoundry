@@ -9,7 +9,7 @@ groups:
 source_repos:
 - url: https://github.com/mira-wm/mira
   revision: db25448391d42547161673a77950a1154d8b5f1f
-  in_tree_path: worldfoundry/synthesis/visual_generation/world_model/mira_wm/src/mira
+  in_tree_path: worldfoundry/synthesis/visual_generation/mira_wm/src/mira
 checkpoints:
 - role: world_model_checkpoint
   local_dir: ${WORLDFOUNDRY_CKPT_DIR}/mira

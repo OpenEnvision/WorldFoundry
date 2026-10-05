@@ -5,22 +5,13 @@ description: Pipeline、operator、synthesis、representation、memory 和 hoste
 
 ## 运行形状
 
-一次模型调用在仓库里通常沿下面这条链展开：
+一次模型调用通常沿这条链展开：Pipeline 是可复现的公开入口，Operator 在执行前处理输入与媒体，Synthesis 持有 checkpoint 或 API 调用，Representation 和 Memory 只在需要几何产物或多轮状态时介入。所有路径都收敛到同一种 `GenerationResult`，Studio、CLI 和 benchmark 才能共用同一套 artifact contract。
 
-```text
-Pipeline class
-  -> Operator: validate/load/shape interactions and media
-  -> Synthesis: call model runtime or hosted API
-  -> Representation: derive depth, point cloud, 3DGS, scene, or world assets
-  -> Memory: keep prior state for streaming or multi-turn control
-  -> GenerationResult: normalized artifacts and metadata
-```
+<ArchDiagram id="model-runtime" locale="zh" />
 
-Pipeline 负责把一次运行组织成可复现的公开入口；Operator 在模型真正执行前处理输入、交互和媒体；Synthesis 持有 checkpoint 或 API 调用；Representation 和 Memory 只在任务需要几何产物或多轮状态时介入。最终所有路径都应收敛到同一种 `GenerationResult` 语义，这样 Studio、CLI 和 benchmark 才能共用同一套 artifact contract。
+模型特定的公开 wrapper 应当保持轻薄，但 inference implementation 不能散落复制在各个模型目录中。本地 diffusion 模型族应组合 `worldfoundry/base_models/diffusion_model` 中的 canonical components；family package 只保留真正属于该模型的 network block 和 adapter。职责与依赖规则见[原生 Diffusion](/zh/docs/maintainers/architecture/native-diffusion)。
 
-模型相关代码故意保持重复模式：多数模型族会有一个薄的 `pipeline_*.py`、一个 `*_operator.py`、可选的 `*_synthesis.py`，以及可选的 representation 或 memory 文件，再配一份 manifest metadata。这个形状只是脚手架；只有当 runtime 代码和真实推理路径都进入仓库后，它才算完整集成。
-
-`worldfoundry/synthesis/**` 下的 model runtime 必须是仓内实现，不能依赖机器本地的外部 checkout。外部仓库和 checkpoint 在 runtime 完成移植或 vendor review 之前，只能作为 provenance 或 acquisition metadata 存在。
+所有 model runtime 都必须是仓内实现，不能依赖机器本地的外部 checkout。DiffSynth、Diffusers、LightX2V 和各模型官方仓库只作为迁移参考，而不是 runtime backend。外部仓库和 checkpoint 在所需推理代码进入 WorldFoundry canonical components 之前，只能作为 provenance 或 acquisition metadata 存在。
 
 公开支持声明看 `integration_status`，实现深度看 `backend_stage`。只有 `integrated` 且 `in_tree_runtime` 同时成立，才代表完整 runnable integration。`metadata_only`、`profile_only` 和 `official_client_bridge_only` 对规划很有用，但不等于已经可运行。
 
@@ -30,17 +21,29 @@ Pipeline 负责把一次运行组织成可复现的公开入口；Operator 在�
 
 Binding 解析应统一走 `worldfoundry/evaluation/models/pipelines/bindings.py`。Catalog loading、pipeline loading、runner resolution 和 validation 都应调用这里的 helpers，而不是各自重新解析 route string。Runtime profile 可以携带 execution metadata、环境预期、checkpoint path 和 command hints，但它不能替代 pipeline/operator pair；`metadata_only` 或 `profile_only` 的条目不应被宣传成 runnable support。
 
-`worldfoundry/base_models/perception_core` 和 `worldfoundry/base_models/three_dimensions` 是 inference/runtime package。这里应保留推理必需的 transforms 和 geometry helpers，但不要保留 training datasets、dataloaders、callbacks、losses、augmentation-only modules 或 experiment scripts。`pixelsplat` 是当前明确的 3D cleanup 例外，直到它的官方 Lightning test runner 被纯推理 runner 替换。
+`worldfoundry/base_models/diffusion_model` 是本地 diffusion 的 canonical runtime，也是唯一 diffusion package boundary。根部 contract 与按职责组织的 `models/`、`recipes/`、`loaders/`、`runners/`、`schedulers/`、`optimizations/`、`extensions/` 共同构成架构。旧 `diffsynth/`、`image/`、`video/` 与兜底式 `common/` 子目录已经删除，不再是受支持的 ownership layer。产品模块可以单向 import 或 re-export canonical component，但 canonical component 永远不能反向 import。通用 checkpoint materialization、state-dict loading、placement/offload、distributed execution、kernel、configuration 与 IO 全部来自 `worldfoundry/core`，family package 不能重新实现一套。`worldfoundry/base_models/perception_core` 和 `worldfoundry/base_models/three_dimensions` 仍是 inference/runtime package。这里只保留推理必需的 transforms 和 geometry helpers，不保留 training datasets、dataloaders、callbacks、losses、augmentation-only modules 或 experiment scripts。
+
+内置 `wan2.1-t2v-1.3b` recipe 是这条边界的第一个完整实例；其他 diffusion family（Matrix Game 3.5、Echo Memory、LTX、Cosmos Predict/Transfer、HunyuanVideo、Sana、FLUX.2）复用同一套 role 装配，不持有自己的 pipeline、loader、scheduler 或 runner。各 family 的迁移状态——复用了哪些 role、删除了什么、以及支撑 recipe 的结构/tensor 验证证据——记录在 [原生 Diffusion 整合](/zh/docs/maintainers/native-diffusion-consolidation)。checkpoint 结构验证与 CUDA artifact parity 是两回事，后者按 family 仍是独立 release gate。
 
 ## 基础抽象
 
-`pipelines/pipeline_utils.py` 中的 `PipelineABC` 定义最小公开入口：`from_pretrained()` 负责加载，`process()` / `__call__()` 负责单次执行，`stream()` 在模型支持增量输出时使用。`operators/base_operator.py` 中的 `BaseOperator` 只处理输入和交互整形，不应承担 generation 或 scoring。`synthesis/base_synthesis.py` 中的 `BaseSynthesis` 是本地 checkpoint 或 hosted API 的执行面；`representations/base_representation.py` 负责把模型输出转成 geometry 或 world representation；`core/memory/base.py` 中的 `BaseMemory` 则为 streaming、long-context 或 interactive flow 保存和转换历史多模态状态。
+四个基类定义组装面：`PipelineABC`（load/process/stream 入口）、`BaseOperator`（仅输入与交互整形）、`BaseSynthesis`（本地 native runtime 或 hosted API）、`BaseMemory`（为流式或多轮控制保留前序状态）。`NativeDiffusionPipeline` 和 `NativeDiffusionRunner` 在 `BaseSynthesis` 边界下承担本地 diffusion 执行。各基类定义在哪个文件、各自拥有什么，见 [Runtime 组装](/zh/docs/maintainers/architecture/runtime-assembly) 的基类表；它们依赖的共享原语见 [核心基础设施](/zh/docs/maintainers/architecture/core-infrastructure)。
 
 ## 目录职责
 
-判断一个模型修复应该落在哪一层时，可以先问“这次失败发生在输入、推理、几何后处理，还是状态管理”。公开 wrapper 放在 `pipelines/<family>/pipeline_*.py`，面向用户的 class 需要记录 load path、input signature 和 output artifacts。输入在模型执行前就出错时，优先看 `operators/*_operator.py`。视觉/世界生成模型的 checkpoint 调用、hosted API、subprocess bridge 和 runtime env helper 放在 `synthesis/visual_generation/**`；embodied-action 模型放在 `synthesis/action_generation/**`，仅有 profile shell 的类不算集成完成。
+判断一个模型修复应该落在哪一层时，可以先问“这次失败发生在输入、推理、几何后处理，还是状态管理”，再映射到归属包：输入 → `operators/`，原生推理与 hosted API → `synthesis/`，3D/4D 推理与 artifact → `base_models/three_dimensions/`，流式或多轮状态 → `core/memory` 加 `synthesis/*/memory`。这些包的目录级布局（含各 family 的 `synthesis.py` 以及 CameraCtrl/MotionCtrl 的位置）见 [Runtime 组装](/zh/docs/maintainers/architecture/runtime-assembly)。仅有 profile shell 的类不算集成完成。
 
-Depth benchmark 相关逻辑在 `representations/depth_generation/**`；point cloud、3DGS、panorama 和 geometry asset builder 在 `representations/point_clouds_generation/**`。共享 memory contract 在 `core/memory/**`；visual-generation 的运行时状态在 `synthesis/visual_generation/memory/**`；action policy trace 在 `synthesis/action_generation/memory.py`。CameraCtrl 和 MotionCtrl 不共享 synthesis package，分别位于 `synthesis/visual_generation/cameractrl/synthesis.py` 和 `synthesis/visual_generation/motionctrl/synthesis.py`；共享 camera-control YAML 放在 `data/models/runtime/configs/camera_control`。
+静态推理预设在 `worldfoundry/data/models/`：`catalog/` 是元数据，`bindings/` 是 pipeline 入口，`runtime/profiles/` 是执行要求，`runtime/environments/` 是依赖规格，`runtime/configs/<model>/` 是 YAML/JSON 预设和示例输入。不要依赖工作目录，用包数据路径解析：
+
+```python
+from worldfoundry.core.io.paths import package_data_path
+
+config = package_data_path(
+    "models", "runtime", "configs", "wonderworld", "inference.yaml"
+)
+```
+
+Runtime manifest 可以用 `${WORLDFOUNDRY_DATA_ROOT}/models/runtime/configs/<model>/<file>`；WorldFoundry 启动前会展开这个 token。相对继承只放在各模型目录内。配置类留在 Python 模块。训练配方、checkpoint、数据集和生成的 job config 不属于打包数据。
 
 ## 参考实现：OpenVLA
 
@@ -64,22 +67,12 @@ Wan hosted family、Kling、Runway、Luma Ray、Hailuo hosted、Sora/Veo API 和
 
 ## 与 Evaluation 的衔接
 
-Evaluation runner 不会直接 import pipeline 文件，除非 catalog 中的 model runner 明确解析到那条 route。完整链路如下：
+Evaluation runner 不会直接 import pipeline 文件，除非 catalog 中的 model runner 明确解析到那条 route。
 
-```text
-worldfoundry/data/models/catalog/<category>/<model-id>.yaml
-  -> runner_target / pipeline_target / runtime_profile binding
-  -> resolve_pipeline_route()
-  -> resolve_model_zoo_runner()
-  -> runtime runner
-  -> pipeline class or subprocess command
-  -> GenerationResult artifacts
-```
+<ArchDiagram id="model-runtime-bridge" locale="zh" />
 
-`evaluation/models/runners/resolver.py` 和 `registry.py` 负责把 catalog 的 `runner_target` 解析成 runnable runner instance。`evaluation/models/pipelines/bindings.py` 把 catalog target、runtime-profile execution metadata 和 model binding 合成一份 route contract。`evaluation/models/runners/pipeline.py` 与 `evaluation/models/pipelines/loading.py` 则构建 `PipelineRunnerSpec`、导入 pipeline target，并调用完整 lifecycle。Planned 或 profile-only 条目可以保留 `runtime_profile`，但不应暴露 runner target；薄 planning wrapper 也不应把 `pipeline_target` 误报成已验证支持。
+`resolve_pipeline_route()`（`evaluation/models/pipelines/bindings.py:359`）与 `resolve_model_zoo_runner()`（`evaluation/models/runners/resolver.py:386`）把这条链路解析成可运行 runner。其背后的 catalog 解析、spec 合成与 runner 解析机制见 [评测核心 — 模型解析](/zh/docs/maintainers/architecture/evaluation-core)。Planned 或 profile-only 条目可以保留 `runtime_profile`，但不应暴露 runner target；薄 planning wrapper 也不应把 `pipeline_target` 误报成已验证支持。
 
 ## 模型族索引
 
-`pipelines/` 是添加或调试模型时的第一入口，每个模型族或 variant 通常对应一个公开 wrapper。`operators/` 是每个 runnable pipeline 的必需层，输入、camera control 或 interaction 异常时应先看这里。`synthesis/` 只放仓内 runtime implementation；外部 repo 或 checkpoint 在移植完成前只能作为 metadata 存在。`representations/` 负责 3D/4D artifact 和 visualization 问题；`core/memory/` 与 `synthesis/*/memory` 负责 streaming 或多轮状态。
-
-对已经声明 runnable runner 的模型，文档应解释 public class 和 public methods 的行为；对未声明或归档 wrapper，只保留短索引即可，不必展开实现细节。
+各类模型修复应落在哪个包（`pipelines/`、`operators/`、`synthesis/`、`base_models/three_dimensions/`、`core/memory`）的目录级指引见 [Runtime 组装](/zh/docs/maintainers/architecture/runtime-assembly)。对声明了可运行 runner 的模型，记录 public class 行为与 public 方法；未声明或已归档的 wrapper 只保留简短索引，不展开实现细节。

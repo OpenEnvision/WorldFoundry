@@ -10,6 +10,8 @@ source:
   official_repo_url: https://github.com/Junyi42/LoGeR
   license: apache-2.0
 official_sources:
+  project_page: https://LoGeR-project.github.io/
+  paper: https://arxiv.org/abs/2603.03269
   github:
     url: https://github.com/Junyi42/LoGeR
   huggingface:
@@ -29,3 +31,17 @@ runner_parity:
 runtime_profile: runtime-profile:loger
 catalog_category: three_d_four_d
 catalog_scope: Official-source manifest for 3D, 4D, and camera-controlled world/model generation projects.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'LoGeR reconstructs 3D scenes with camera trajectories and point clouds from input views, and is one of the verified 3D routes in this catalog: checkpoint-backed Studio inference produced finite poses, depth, and a 601,570-vertex point cloud, with evidence in inference_evidence.yaml.'
+  overview_zh: LoGeR 从输入视图重建 3D 场景、相机轨迹与点云，是本 catalog 中已验证的 3D 路径之一： checkpoint 加载的 Studio 推理产出有限位姿、深度与 601,570 顶点的点云，证据记录在 inference_evidence.yaml。
+  architecture: 'The catalog records a reconstruction-plus-trajectory model exporting binary PLY artifacts; the publishing institution and architecture internals are not recorded in this repository (upstream: Junyi42/LoGeR, apache-2.0).'
+  architecture_zh: catalog 记录其为「重建+轨迹」模型，导出二进制 PLY 产物；发表机构与架构内部细节仓库未记录（上游：Junyi42/LoGeR，apache-2.0）。
+  usage_notes: Verified end to end in the shared worldfoundry-unified-cu128 environment — a dependable choice for point-cloud navigation pipelines.
+  usage_notes_zh: 已在共享 worldfoundry-unified-cu128 环境中端到端验证——点云导航管线的可靠选择。
+  limitations:
+  - The publishing institution is not recorded in this repository.
+  limitations_zh:
+  - 发表机构在本仓库中未记录。

@@ -1,0 +1,48 @@
+---
+title: "Open-Sora"
+description: "HPC-AI Tech Open-Sora v1.2 T2V via STDiT-v3. WorldFoundry pins 480p / 51 frames / 24 fps / 30 rectified-flow steps; runner parity is not recorded."
+modelId: "open-sora"
+pageSource: authored
+---
+
+Open-Sora is HPC-AI Tech's open text-to-video stack. This catalog card is the **v1.2 STDiT-v3** inference route — prompt in, `open-sora.mp4` out — not [Open-Sora-Plan](/docs/guides/supported-models/open-sora-plan). The WorldFoundry path is an official-CLI bridge under `worldfoundry/synthesis/visual_generation/open_sora`. It reports missing weights at runtime; it does not download them.
+
+<ModelPaperFigures modelId="open-sora" locale="en" />
+
+The catalog paper field points at [Open-Sora 2.0: Training a Commercial-Level Video Generation Model in $200k](https://arxiv.org/abs/2503.09642). That is a later report. The checkpoints this page actually stages are **Open-Sora v1.2**: `hpcai-tech/OpenSora-STDiT-v3` plus `hpcai-tech/OpenSora-VAE-v1.2`. Project page: [hpcaitech.github.io/Open-Sora](https://hpcaitech.github.io/Open-Sora/). Code: [hpcaitech/Open-Sora](https://github.com/hpcaitech/Open-Sora). `paper.png` is the title thumb only.
+
+<ModelCommandBuilder modelId="open-sora" locale="en" />
+
+## What it is for
+
+Text-to-video only. `OpenSoraPipeline` takes a required `prompt` and writes `open-sora.mp4`. There is **no local I2V or V2V** on this card (upstream 1.3 / 2.0 lines advertise those; they are not bound here). Forgetting the video VAE is the usual failure. Compare clip quality on [VBench](/docs/evaluation/benchmark-hub/vbench) — the suite Open-Sora releases usually cite, not an ingested WorldFoundry table.
+
+## Inference
+
+The official-CLI wrapper overrides the vendored `sample.py` onto the Hugging Face demo quality preset:
+
+| Knob | WorldFoundry launch | Vendored `sample.py` before override |
+| --- | --- | --- |
+| Resolution | **480p** | 240p |
+| Aspect | **9:16** | 9:16 |
+| Frames | **51** (~2 s) | 51 |
+| FPS / save FPS | **24** | 24 |
+| Sampler | **rectified flow** (`rflow`, timestep transform on) | same |
+| Steps | **30** | 30 |
+| Guidance | **7.0** (`--cfg-scale`) | 7.0 |
+| Aesthetic | **6.5** (`--aes`); no forced motion score | 6.5, `flow=None` |
+| Seed | **1024** | 42 |
+
+Flash-attn and layernorm kernels are forced **off** on the recorded command. Catalog VRAM is unset. An older `hpcai-tech/OpenSora-STDiT-v1-HQ-16x512x512` repo is listed; it is not the default STDiT-v3 path. An STDiT-v2 candidate returned 401 and is not listed.
+
+## Running in WorldFoundry
+
+`worldfoundry-eval run open-sora` in `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage three Apache-2.0 public repos before launch:
+
+- `hpcai-tech/OpenSora-STDiT-v3` (`config.json` + `model.safetensors`)
+- `hpcai-tech/OpenSora-VAE-v1.2` (same pair)
+- `DeepFloyd/t5-v1_1-xxl` (index + two `.bin` shards + `spiece.model`)
+
+Status: **Runner parity pending**. A successful command is not a checkpoint-backed GPU artifact in this workspace.
+
+<ModelRelatedRecipes modelId="open-sora" locale="en" />

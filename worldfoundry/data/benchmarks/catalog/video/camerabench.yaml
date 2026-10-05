@@ -1,5 +1,7 @@
 id: camerabench
 name: CameraBench
+publisher: Carnegie Mellon University
+publisher_kind: university
 source_status: open_source
 benchmark_kind:
 - camera-motion-understanding
@@ -101,6 +103,13 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/camerabench/run_camerabench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.camerabench.run_camerabench_official_runner
+    generated_arg: null
+    dataset_root_arg: --benchmark-data-root
+    supports_run_official: false
+    input_kind: score_dir_or_official_results
   runner_target: worldfoundry.evaluation.tasks.contracts.external:CameraBenchContract
   validation_command:
   - worldfoundry-eval
@@ -122,6 +131,16 @@ runner:
     WORLDFOUNDRY_CAMERABENCH_SCORE_DIR
   - --benchmark-data-root or WORLDFOUNDRY_CAMERABENCH_DATA_ROOT for strict full-suite coverage
   - OPENAI_API_KEY only when explicitly enabling caption GPT judging
+  runtime:
+    kind: in_tree_official_source
+    root: worldfoundry/evaluation/tasks/execution/runners/camerabench/runtime/camerabench
+    repo_url: https://github.com/linzhiqiu/t2v_metrics.git
+    repo_revision: 0bd9bfc68032ce4f9d5da80d646fa5ceb3b9bb1b
+    repo_subdir: camerabench
+    runtime_root_env: WORLDFOUNDRY_CAMERABENCH_RUNTIME_ROOT
+    results_path_env: WORLDFOUNDRY_CAMERABENCH_RESULTS_PATH
+    score_dir_env: WORLDFOUNDRY_CAMERABENCH_SCORE_DIR
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   expected_artifacts:
   - scorecard.json
   - camera_predictions.jsonl
@@ -149,8 +168,13 @@ runner:
   - Contract runner exposes generated videos and camera prompts for camera-motion scoring.
   - In-tree metric aggregation validates CameraBench score-dir binary, VQA/retrieval, caption, and aggregate score 
     families from a prepared CameraBench score_dir.
+  - --run-official executes the vendored official t2v_metrics/camerabench evaluation scripts 
+    (runtime/camerabench, pinned to the upstream revision above) on a prepared score_dir; per-sample VLM score 
+    generation remains an explicit external stage.
 integration:
   status: integrated
+  tier: model_backed
+  hf_dataset_id: linzhiqiu/camerabench
   evidence:
     strict_official_runtime: worldfoundry-eval zoo benchmark-run --benchmark-id camerabench --mode 
       official-validation --official-results-path <official_results.json> --benchmark-data-root <camerabench_data_root> 
@@ -203,6 +227,9 @@ data_refs:
   - ${WORLDFOUNDRY_CAMERABENCH_DATA_ROOT}
   - cache/worldfoundry/data/hfd_datasets/syCen/CameraBench
   task_yaml: worldfoundry/data/benchmarks/tasks/external/camerabench.yaml
+  bundled_assets: worldfoundry/data/benchmarks/assets/camerabench
+  in_tree_runtime_paths:
+  - worldfoundry/evaluation/tasks/execution/runners/camerabench/runtime/camerabench
 runner_availability:
   available: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:CameraBenchContract

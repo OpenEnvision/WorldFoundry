@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="The University of Queensland">
+  <circle cx="64" cy="64" r="58" fill="#51247A"/>
+  <circle cx="64" cy="64" r="50" fill="none" stroke="#E8D48B" stroke-width="3"/>
+  <path fill="#E8D48B" d="M58 24h12l4 20h20v12l-20 4v20H58l-4-20H34V44l20-4z"/>
+  <path fill="#51247A" d="M46 56h36v22H46z"/>
+  <path fill="#F7F1DE" d="M48 58h14v18H48zm18 0h14v18H66z"/>
+  <path fill="#51247A" d="M63 58h2v18h-2z"/>
+</svg>

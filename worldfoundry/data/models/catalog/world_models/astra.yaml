@@ -42,3 +42,23 @@ runner_parity:
   - Official garden_1 Sekai demo runs through the in-tree Studio/API path with forward_left camera control, 97 frames, 832x480, and 20fps output.
 catalog_category: world_models
 catalog_scope: world-model/interactive starred models
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'Astra is an interactive world model with camera control built over a Wan2.1 backbone: from a single image it rolls out navigable world video following camera actions. In this catalog it is verified — the official garden_1 Sekai demo runs through the in-tree Studio/API path with forward_left camera control, emitting 97 frames at 832x480 and 20 fps.'
+  overview_zh: Astra 是基于 Wan2.1 基座、带相机控制的交互式世界模型：从单张图出发，跟随相机动作滚动生成可导航的世界视频。本 catalog 中它已验证——官方 garden_1 Sekai demo 通过树内 Studio/API 路径运行，使用 forward_left 相机控制，输出 832x480、20 fps 的 97 帧。
+  architecture: The catalog records a Wan2.1-T2V-1.3B-backed camera-control rollout (checkpoints EvanEternal/Astra plus Wan-AI/Wan2.1-T2V-1.3B, apache-2.0; paper arXiv 2512.08931). The inference-only Astra runtime and Wan-backed camera-control pipeline are vendored in-tree under the Kling namespace.
+  architecture_zh: catalog 记录其为 Wan2.1-T2V-1.3B 支撑的相机控制滚动生成（checkpoint 为 EvanEternal/Astra 加 Wan-AI/Wan2.1-T2V-1.3B，apache-2.0；论文 arXiv 2512.08931）。仅推理的 Astra 运行时与 Wan 支撑的相机控制 pipeline 内置于树内 Kling 命名空间下。
+  usage_notes: Studio defaults mirror the official Wan2.1-backed Sekai image rollout — start from those before customizing camera trajectories. Stage the Astra and Wan2.1 checkpoints locally first.
+  usage_notes_zh: Studio 默认值对齐官方 Wan2.1 支撑的 Sekai 图像滚动生成——自定义相机轨迹前请先从默认配置出发。请先在本地就位 Astra 与 Wan2.1 checkpoint。
+  limitations:
+  - 'Research-scale backbone (Wan2.1 1.3B): visual quality is research-preview level.'
+  - The publishing institution is not recorded in this repository.
+  limitations_zh:
+  - 研究规模基座（Wan2.1 1.3B）：视觉质量属研究预览级。
+  - 发表机构在本仓库中未记录。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Camera-following accuracy of interactive rollouts.
+    reason_zh: 交互滚动生成的相机跟随精度。

@@ -19,8 +19,10 @@ input_schema:
 artifact_kind: generated_video
 artifact_filename: ltx-2-t2v.mp4
 execution:
-  backend_stage: profile_only
-  runtime_status: profile_resolves_catalog_variant_runner_parity_pending
-  integration_status: planned
+  environment: _unified
+  backend_stage: native_diffusion
+  runtime_status: native_checkpoint_demo_pending
+  integration_status: integrated
+  pipeline_binding: ltx-2-t2v
 integration:
-  status: planned
+  status: integrated

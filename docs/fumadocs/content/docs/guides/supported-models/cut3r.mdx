@@ -1,0 +1,50 @@
+---
+title: "CUT3R"
+description: "CUT3R from UC Berkeley: 3d-reconstruction and 3dgs; Runner parity pending."
+modelId: "cut3r"
+pageSource: authored
+---
+
+CUT3R is a continuous 3D perception model with persistent state: it ingests a stream of images and continuously updates a metric-scale 3D reconstruction, without offline bundling. In this catalog the in-tree point-cloud and two-stage 3DGS routes are registered through Studio discovery. CUT3R also serves as the geometry backbone for the verified VMem entry in the video category.
+
+<ModelPaperFigures modelId="cut3r" locale="en" />
+
+The recorded paper is [arXiv 2501.12387](https://arxiv.org/abs/2501.12387).
+
+Project page: [cut3r.github.io](https://cut3r.github.io/). Code: [CUT3R/CUT3R](https://github.com/CUT3R/CUT3R).
+
+Runner parity is **pending**. Routes are registered; checkpoint-backed inference waits on staged local or Hugging Face weights. Catalog environment / VRAM / input-contract rows are unset on this card — use `worldfoundry-eval zoo model-show --model-id cut3r` after staging.
+
+<ModelCommandBuilder modelId="cut3r" locale="en" />
+
+## What it is for
+
+Use `cut3r` for catalog geometry inference. Choose it when the artifact is a reconstruction, not a generated video.
+
+A recurrent transformer maintains a persistent scene state; each new frame updates the state and outputs pointmaps and camera parameters online (per the upstream publication). The recorded routes cover raw point-cloud export and a two-stage 3DGS pipeline; weights are apache-2.0. It is published by UC Berkeley.
+
+Catalog tasks include 3d-reconstruction, 3dgs, and point-cloud. Documented outputs include point cloud.
+
+## Runtime contract
+
+Optional `input_path`, `size`, `vis_threshold`, and `revisit`.
+
+CLI task profiles: `official-export` and `two-stage-3dgs`. WorldFoundry binds `CUT3RPipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `official-export` defaults: size=512 Recorded `two-stage-3dgs` defaults: size=512, width=704, height=480.
+
+Runner parity is pending: checkpoint-backed inference depends on staged local or Hugging Face cut3r weights. Stage them before submitting Studio jobs.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run cut3r --pipeline.task-profile official-export`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+The environment profile is not recorded.
+
+Recorded weight repositories include `liguang0115/cut3r`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh cut3r`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="cut3r" locale="en" />

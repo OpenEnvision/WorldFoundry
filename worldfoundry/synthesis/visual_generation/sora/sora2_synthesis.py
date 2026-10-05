@@ -1,71 +1,21 @@
-from PIL import Image
-from typing import Optional, Union, Dict, Any, Tuple
-import mimetypes
-import io
-import logging
+"""Client for OpenAI Sora 2 video generation."""
+
+from __future__ import annotations
+
+from typing import Any, Dict, Tuple
+
+from ..api_video_client import OpenAiVideoSynthesis
 
 
-class Sora2Synthesis(object):
+class Sora2Synthesis(OpenAiVideoSynthesis):
+    """Sora2 生成合成类，提供统一的接口用于音视频生成。
+
+    负责 API 调用和模型推理相关的工作。
     """
-    Sora2 生成合成类，提供统一的接口用于音视频生成
-    
-    负责API调用和模型推理相关的工作
-    """
-    
-    def __init__(
-        self,
-        endpoint: str = "https://api.openai.com/v1",
-        api_key: str = "your_api_key",
-        logger=None,
-    ):
-        """
-        初始化 Sora2Synthesis
-        
-        Args:
-            endpoint: API基础URL
-            api_key: API密钥
-            logger: 日志记录器
-        """
-        self.endpoint = endpoint
-        self.api_key = api_key
-        self.logger = logger
-        
-        # 设置API基础URL
-        self.client = self._openai_client(api_key=self.api_key, base_url=self.endpoint)
-        
-        # 设置日志记录器
-        if logger is not None:
-            self.logger = logger
-        else:
-            self.logger = logging.getLogger(__name__)
 
-    def _openai_client(self, api_key: str, base_url: str):
-        """Create the OpenAI client only when this adapter is initialized.
+    DEFAULT_ENDPOINT = "https://api.openai.com/v1"
 
-        Args:
-            api_key: API key for OpenAI or a compatible provider.
-            base_url: API base URL.
-        """
-        from openai import OpenAI
-
-        return OpenAI(api_key=api_key, base_url=base_url)
-    
-    @classmethod
-    def api_init(
-        cls,
-        endpoint: str = "https://api.openai.com/v1",
-        api_key: str = "your_api_key",
-        logger=None,
-        **kwargs
-    ):
-        """
-        从配置加载完整的 Sora2Synthesis
-        """
-        return cls(
-            endpoint=endpoint, \
-            api_key=api_key, 
-            logger=logger,
-        )
+    MODEL = "sora-2"
 
     def generate_t2av(
         self,
@@ -73,13 +23,12 @@ class Sora2Synthesis(object):
         size: str = "1280x720",
         duration: int = 8,
     ):
-        """文本到视频生成（T2V）"""
-        size = size.replace('*', 'x')  # 兼容用户误用 *
+        """文本到视频生成（T2V）。"""
         return self.client.videos.create(
-            model="sora-2",
+            model=self.MODEL,
             prompt=input_prompt,
-            size=size,
-            seconds=str(duration)
+            size=_normalize_size(size),
+            seconds=str(duration),
         )
 
     def generate_i2av(
@@ -89,29 +38,22 @@ class Sora2Synthesis(object):
         size: str = "1280x720",
         duration: int = 8,
     ):
-        """
-        图像到视频生成（I2V）
-        
+        """图像到视频生成（I2V）。
+
         Args:
-            encoded_image: 图像数据元组 (filename, bytes, mime_type)
-            input_prompt: 输入提示词
-            size: 视频尺寸
-            duration: 视频时长（秒）
+            encoded_image: 图像数据元组 (filename, bytes, mime_type)。
+            input_prompt: 输入提示词。
+            size: 视频尺寸。
+            duration: 视频时长（秒）。
         """
-        size = size.replace('*', 'x')
-        
-        filename, image_bytes, mime_type = encoded_image
-        input_reference = (filename, image_bytes, mime_type)
-        
         return self.client.videos.create(
-            model="sora-2",
+            model=self.MODEL,
             prompt=input_prompt,
-            size=size,
+            size=_normalize_size(size),
             seconds=str(duration),
-            input_reference=input_reference
+            input_reference=tuple(encoded_image),
         )
 
-    
     def predict(
         self,
         processed_data: Dict[str, Any],
@@ -120,15 +62,17 @@ class Sora2Synthesis(object):
         duration: int = 8,
         **kwargs
     ) -> Dict[str, Any]:
+        """按输入自动选择 T2V 或 I2V 并提交生成任务。
+
+        Raises:
+            ValueError: 任务类型不支持，或 i2av 缺少 ``encoded_image``。
+        """
         prompt = processed_data.get("prompt", "")
         encoded_image = processed_data.get("encoded_image", None)
 
         if task_type == "auto":
-            if encoded_image is not None:
-                task_type = "i2av"
-            else:
-                task_type = "t2av"
-        
+            task_type = "i2av" if encoded_image is not None else "t2av"
+
         if task_type == "i2av":
             if encoded_image is None:
                 raise ValueError("i2av 任务需要提供 encoded_image 参数")
@@ -148,9 +92,17 @@ class Sora2Synthesis(object):
             )
         else:
             raise ValueError(f"不支持的任务类型: {task_type}")
-        
+
         return {
             "task_type": task_type,
             "prompt": prompt,
             "response": response
         }
+
+
+def _normalize_size(size: str) -> str:
+    """Accept ``1280*720`` as well as the ``1280x720`` the API expects."""
+    return size.replace('*', 'x')
+
+
+__all__ = ["Sora2Synthesis"]

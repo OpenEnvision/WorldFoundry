@@ -1,0 +1,48 @@
+---
+title: "WildWorld"
+description: "WildWorld：dataset、evaluation；Runner 一致性待确认。"
+modelId: "wildworld"
+pageSource: generated
+---
+
+WildWorld 是基准+数据集条目而非生成模型：在野外真实素材上评测世界模型并产出评测报告。 WorldFoundry 树内注册了官方源码路由（ShandaAI/WildWorld，锁定 head 23971043）；基准与数据集资产为运行时门控。
+
+<ModelPaperFigures modelId="wildworld" locale="zh" />
+
+记录论文为[arXiv 2603.23497](https://arxiv.org/abs/2603.23497)。
+
+项目页：[alaya-studio.github.io/wildworld-project](https://alaya-studio.github.io/wildworld-project/)。代码：[ShandaAI/WildWorld](https://github.com/ShandaAI/WildWorld)。
+
+<ModelCommandBuilder modelId="wildworld" locale="zh" />
+
+## 用来做什么
+
+需要动作条件世界步进时选 `wildworld`：记录动作与帧进、滚动生成出。用来做交互世界推理，不是把 prompt 倒进文生视频。
+
+作为评测条目，其输出产物为 evaluation_report。上游来源状态记录为 unknown；锁定仓库之外的结构仓库未记录。
+
+catalog 记录的任务包括 world-model-benchmark、dataset、evaluation。
+
+## 运行时契约
+
+产物 `evaluation_report`、`wildworld_runtime_plan.json`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `WildWorldPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+配置解析与 pipeline 导入预期可通过；在所需 checkpoint/资产就位前，真实生成会输出运行时计划。 缺失资产由计划报告，不视为 catalog 阻塞。 许可为仅限非商业研究。
+
+WorldFoundry tracks upstream source and checkpoint 计划中; no runnable pipeline is registered.
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run wildworld --pipeline.task-profile default` 推进世界。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+本卡片未记录公开 checkpoint id；按使用说明就位权重。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh wildworld`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="wildworld" locale="zh" />

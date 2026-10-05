@@ -1,126 +1,29 @@
 ---
 title: ManiSkill2
-description: ManiSkill2 — 指标、依赖与运行命令。
+description: "ICLR 2023 的 SAPIEN 套件：20 个任务族、2,000+ 物体、400 万+ 演示帧。WorldFoundry 导入官方 rollout——不跑 SAPIEN。"
 ---
 
-## 简介
+ManiSkill2（ICLR 2023，加州大学圣迭戈分校 Hao Su 实验室，联合清华）是 ManiSkill 系列的 **统一 Gym** 世代：在 **SAPIEN** 上有 **20** 个任务族、**2,000+** 物体模型、**400 万+** 演示帧。任务族覆盖固定与移动底座、单臂与双臂、刚体与软体。同一接口提供点云、RGB-D 与特权状态观测，以及多种控制器。官方评测报告见过 vs 未见的资产与构型。2022 挑战赛用过云端计分；本页未收录该榜。
 
+本卡片**不是** [ManiSkill](/zh/docs/evaluation/benchmark-hub/maniskill) 的改名。那一页跟踪后来的 GPU 并行 `maniskill.ai` 导入器。导出是 ICLR 2023 / ManiSkill2 协议时用本页。
 
+论文：[ManiSkill2: A Unified Benchmark for Generalizable Manipulation Skills](https://arxiv.org/abs/2302.04659)。项目：[maniskill2.github.io](https://maniskill2.github.io/)。代码：[haosulab/ManiSkill2](https://github.com/haosulab/ManiSkill2)（Apache-2.0）。后续树在 [haosulab/ManiSkill](https://github.com/haosulab/ManiSkill)。
 
-ManiSkill2 external benchmark manifest for simulator-backed manipulation policy rollouts.
+WorldFoundry **只导入官方结果**。你在上游跑 SAPIEN / ManiSkill2，再经 `official-validation` 归一化 JSON/CSV rollout 摘要。仓内无模拟器，也无官方策略。
 
+<BenchmarkPageSections id="maniskill2" locale="zh" />
 
-
-## 指标
-
-ManiSkill2 external benchmark manifest for simulator-backed manipulation policy rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/maniskill2.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `episode_success` | episode / task 是否成功完成的比例或成功率。 |
-| `reward` | ManiSkill2 灵巧与移动操作任务 rollout 的累计 reward。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `worldfoundry-unified-cu128`。
-- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
-- The older maniskill profile remains available; maniskill2 aligns with the external VLA evaluation benchmark id.
-
-### 测评数据
-
-- 待测模型输出目录：设置 `WORLDFOUNDRY_MANISKILL2_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/maniskill2`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/haosulab--ManiSkill`
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_MANISKILL2_ROOT`
-- `WORLDFOUNDRY_MANISKILL2_RESULTS_PATH`
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id maniskill2 \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/maniskill2/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/maniskill2/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id maniskill2 \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/maniskill2/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id maniskill2 --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_MANISKILL2_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+可选 `WORLDFOUNDRY_MANISKILL2_ROOT` 指向本地 ManiSkill2 / SAPIEN 根。默认导入路径：`WORLDFOUNDRY_MANISKILL2_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/maniskill2.yaml`。输出：`scorecard.json`（主键 `success_rate`）、`raw_results.jsonl`、`evaluation/summary.json`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

@@ -5,8 +5,10 @@ environment_id: robocasa-headless-venv
 id: robocasa
 name: RoboCasa
 docker:
-  image: ghcr.io/allenai/vla-evaluation-harness/robocasa:latest
-  source_image: ghcr.io/allenai/vla-evaluation-harness/robocasa:latest
+  image: ghcr.io/allenai/vla-evaluation-harness/robocasa@sha256:6d3e53b53c2482fe00a35d762774529bbe61cf9245fd131d6ae8df37cc4497f4
+  digest: sha256:6d3e53b53c2482fe00a35d762774529bbe61cf9245fd131d6ae8df37cc4497f4
+  source_image: ghcr.io/allenai/vla-evaluation-harness/robocasa@sha256:6d3e53b53c2482fe00a35d762774529bbe61cf9245fd131d6ae8df37cc4497f4
+  platform: linux/amd64
   python_env: robocasa
   gpus: all
 needs_new_env: false

@@ -16,7 +16,6 @@ from ...synthesis.visual_generation.hunyuan_world.hy_world_2p0_worldgen_runtime 
 )
 from ..pipeline_utils import PipelineABC
 
-
 _WORLDRECON_TASKS = {
     "worldrecon",
     "world-recon",
@@ -170,7 +169,7 @@ class HYWorld2Pipeline(PipelineABC):
                 "Use 'worldrecon' or 'panorama'. Full 'worldgen' is not integrated in-tree."
             )
 
-        from ...representations.point_clouds_generation.hunyuan_world.hy_world_2p0.worldmirror_runtime import (
+        from worldfoundry.base_models.three_dimensions.point_clouds.hyworldmirror_2p0.runtime import (
             WorldMirrorPipeline,
         )
 

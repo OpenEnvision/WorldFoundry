@@ -1,10 +1,22 @@
-"""Deterministic memory record scoring and top-k selection."""
+"""Deterministic memory record scoring and top-k selection.
+
+Scoring is a weighted sum of four signals — preferred type (±1),
+metadata key match ratio, bag-of-words overlap against
+``type + metadata + content``, and recency ``w / (1 + age)``. Ties
+break by original index so the same store + query always returns the
+same top-k. This is intentionally *not* embedding retrieval; mosaic
+and other spatial memories implement their own rankers.
+"""
 
 from __future__ import annotations
 
 from typing import Any, Mapping
 
 from .store import MemoryQuery, MemoryRecord
+
+# ──────────────────────────────────────────────────────────────────────────
+# Deterministic ranker — type / metadata / bag-of-words / recency; ties by index
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def score_record(
@@ -52,6 +64,11 @@ def select_records(records: list[Mapping[str, Any]], query: MemoryQuery) -> list
 
 
 def _newest_timestamp(records: list[Mapping[str, Any]]) -> int | float | None:
+    """Newest numeric ``timestamp``, or ``None`` when every record lacks one.
+
+    Non-numeric timestamps are ignored so a single bad row cannot disable
+    recency for the whole store.
+    """
     numeric = []
     for record in records:
         timestamp = record.get("timestamp")

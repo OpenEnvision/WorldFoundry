@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import VIDEO_SUFFIXES
 from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_metrics import METRIC_ORDER
 from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_prompts import (
     resolve_iworldbench_root,
@@ -21,7 +22,6 @@ from worldfoundry.evaluation.utils import REPO_ROOT
 EVAL_SCRIPT_REL = Path("run_iworldbench_evaluation.py")
 REPORTS_DIR_NAME = "reports"
 
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
 
 def resolve_evaluation_script(*, repo_root: Path | None = None) -> Path | None:

@@ -1,0 +1,48 @@
+---
+title: "SAMA"
+description: "SAMA：视频编辑；Runner 一致性待确认。"
+modelId: "sama-14b"
+pageSource: generated
+---
+
+SAMA 14B 是开源的指令引导视频编辑模型，输入是源视频和文本指令。发布的推理入口不接受空间蒙版或单独的参考图。WorldFoundry 在运行时报告缺失权重；权重位于 syxbb/SAMA-14B，采用 apache-2.0 许可证。
+
+<ModelPaperFigures modelId="sama-14b" locale="zh" />
+
+记录论文为[arXiv 2603.19228](https://arxiv.org/abs/2603.19228)。
+
+项目页：[cynthiazxy123.github.io/SAMA](https://cynthiazxy123.github.io/SAMA/)。代码：[Cynthiazxy123/SAMA](https://github.com/Cynthiazxy123/SAMA)。
+
+<ModelCommandBuilder modelId="sama-14b" locale="zh" />
+
+## 用来做什么
+
+用 `sama-14b` 做 catalog 视频到视频推理。输入已经是视频时从这里起步。
+
+catalog 记录这是一个 14B 参数的编辑模型，输入契约为 prompt/image/video；发表机构与架构内部细节仓库未记录——详情请查阅上游 GitHub（Cynthiazxy123/SAMA）。
+
+catalog 记录的任务包括 视频编辑。
+
+## 运行时契约
+
+可选 `prompt`、`negative_prompt`、`input_path`、`frames`、`fps`；产物 `sama-14b.mp4`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `SAMA14BPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+`interactive-video` 记录默认值：fps=16, height=480, width=832, seed=1。
+
+提供源视频和编辑指令。 已将一次使用真实权重的 17 帧运行与官方实现对照；更广泛的编辑质量仍未验证。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run sama-14b --pipeline.task-profile interactive-video` 改视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `syxbb/SAMA-14B`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh sama-14b`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="sama-14b" locale="zh" />

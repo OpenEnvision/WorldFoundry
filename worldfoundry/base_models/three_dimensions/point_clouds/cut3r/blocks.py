@@ -6,13 +6,14 @@
 
 """Module for base_models -> three_dimensions -> point_clouds -> cut3r -> blocks.py functionality."""
 
+import collections.abc
+from functools import partial
+from itertools import repeat
+
 import torch
 import torch.nn as nn
 
-from itertools import repeat
-import collections.abc
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
-from functools import partial
 
 
 def _ntuple(n):
@@ -21,6 +22,7 @@ def _ntuple(n):
     Args:
         n: The n.
     """
+
     def parse(x):
         """Parse.
 
@@ -37,16 +39,12 @@ def _ntuple(n):
 to_2tuple = _ntuple(2)
 
 
-def drop_path(
-    x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True
-):
+def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
     if drop_prob == 0.0 or not training:
         return x
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (
-        x.ndim - 1
-    )  # work with diff dim tensors, not just 2D ConvNets
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
     random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
     if keep_prob > 0.0 and scale_by_keep:
         random_tensor.div_(keep_prob)
@@ -77,7 +75,7 @@ class DropPath(nn.Module):
 
     def extra_repr(self):
         """Extra repr."""
-        return f"drop_prob={round(self.drop_prob,3):0.3f}"
+        return f"drop_prob={round(self.drop_prob, 3):0.3f}"
 
 
 class Mlp(nn.Module):
@@ -126,9 +124,7 @@ class Mlp(nn.Module):
 class Attention(nn.Module):
     """Attention implementation."""
 
-    def __init__(
-        self, dim, rope=None, num_heads=8, qkv_bias=False, attn_drop=0.0, proj_drop=0.0
-    ):
+    def __init__(self, dim, rope=None, num_heads=8, qkv_bias=False, attn_drop=0.0, proj_drop=0.0):
         """Init.
 
         Args:
@@ -158,11 +154,7 @@ class Attention(nn.Module):
         """
         B, N, C = x.shape
 
-        qkv = (
-            self.qkv(x)
-            .reshape(B, N, 3, self.num_heads, C // self.num_heads)
-            .transpose(1, 3)
-        )
+        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).transpose(1, 3)
         q, k, v = [qkv[:, :, i] for i in range(3)]
 
         q_type = q.dtype
@@ -255,9 +247,7 @@ class Block(nn.Module):
 class CrossAttention(nn.Module):
     """Cross attention implementation."""
 
-    def __init__(
-        self, dim, rope=None, num_heads=8, qkv_bias=False, attn_drop=0.0, proj_drop=0.0
-    ):
+    def __init__(self, dim, rope=None, num_heads=8, qkv_bias=False, attn_drop=0.0, proj_drop=0.0):
         """Init.
 
         Args:
@@ -296,21 +286,9 @@ class CrossAttention(nn.Module):
         Nk = key.shape[1]
         Nv = value.shape[1]
 
-        q = (
-            self.projq(query)
-            .reshape(B, Nq, self.num_heads, C // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
-        k = (
-            self.projk(key)
-            .reshape(B, Nk, self.num_heads, C // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
-        v = (
-            self.projv(value)
-            .reshape(B, Nv, self.num_heads, C // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
+        q = self.projq(query).reshape(B, Nq, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        k = self.projk(key).reshape(B, Nk, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        v = self.projv(value).reshape(B, Nv, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
 
         q_type = q.dtype
         k_type = k.dtype
@@ -627,7 +605,7 @@ class PositionGetter(object):
             w: The w.
             device: The device.
         """
-        if not (h, w) in self.cache_positions:
+        if (h, w) not in self.cache_positions:
             x = torch.arange(w, device=device)
             y = torch.arange(h, device=device)
             self.cache_positions[h, w] = torch.cartesian_prod(y, x)  # (h, w, 2)
@@ -666,9 +644,7 @@ class PatchEmbed(nn.Module):
         self.num_patches = self.grid_size[0] * self.grid_size[1]
         self.flatten = flatten
 
-        self.proj = nn.Conv2d(
-            in_chans, embed_dim, kernel_size=patch_size, stride=patch_size
-        )
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
         self.position_getter = PositionGetter()
@@ -699,47 +675,3 @@ class PatchEmbed(nn.Module):
         """Helper function to init weights."""
         w = self.proj.weight.data
         torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
-
-
-if __name__ == "__main__":
-    import os
-    import sys
-
-    from .pos_embed import get_2d_sincos_pos_embed, RoPE2D
-    from functools import partial
-    from torch.utils.checkpoint import checkpoint
-
-    torch.manual_seed(0)
-
-    enc_blocks_ray_map = (
-        nn.ModuleList(
-            [
-                Block(
-                    768,
-                    16,
-                    4,
-                    qkv_bias=True,
-                    norm_layer=partial(nn.LayerNorm, eps=1e-6),
-                    rope=RoPE2D(100),
-                )
-                for _ in range(2)
-            ]
-        )
-        .cuda()
-        .train()
-    )
-
-    x = torch.randn(2, 196, 768, requires_grad=True).cuda()
-    xpos = torch.arange(0, 196).unsqueeze(0).unsqueeze(-1).repeat(2, 1, 2).cuda().long()
-    enc_blocks_ray_map.zero_grad()
-    for blk in enc_blocks_ray_map:
-
-        x = checkpoint(blk, x, xpos)
-    enc_blocks_ray_map.zero_grad()
-    x.sum().backward()
-
-    grad_not_checkpointed = {}
-    for name, param in enc_blocks_ray_map.named_parameters():
-        grad_not_checkpointed[name] = param.grad.data.clone()
-        print(name, grad_not_checkpointed[name])
-        break

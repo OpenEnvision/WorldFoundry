@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
-from worldfoundry.evaluation.tasks.execution.framework.video_quality_registry import (
-    get_video_quality_benchmark_config,
+from worldfoundry.evaluation.tasks.execution.framework.video_quality_specs import (
     supported_video_quality_benchmark_ids,
+    video_quality_spec,
 )
 
 
@@ -123,6 +123,46 @@ def evaluate_video_quality_contract_file(
         load_artifact_manifest(artifact_manifest_path),
         artifact_root=artifact_root,
     )
+
+
+def evaluate_aigcbench_video_quality_contract_file(
+    artifact_manifest_path: str | Path,
+    *,
+    artifact_root: str | Path | None = None,
+) -> dict[str, JsonValue]:
+    return evaluate_video_quality_contract_file("aigcbench", artifact_manifest_path, artifact_root=artifact_root)
+
+
+def evaluate_fetv_video_quality_contract_file(
+    artifact_manifest_path: str | Path,
+    *,
+    artifact_root: str | Path | None = None,
+) -> dict[str, JsonValue]:
+    return evaluate_video_quality_contract_file("fetv", artifact_manifest_path, artifact_root=artifact_root)
+
+
+def evaluate_genai_bench_video_quality_contract_file(
+    artifact_manifest_path: str | Path,
+    *,
+    artifact_root: str | Path | None = None,
+) -> dict[str, JsonValue]:
+    return evaluate_video_quality_contract_file("genai-bench", artifact_manifest_path, artifact_root=artifact_root)
+
+
+def evaluate_ipv_bench_video_quality_contract_file(
+    artifact_manifest_path: str | Path,
+    *,
+    artifact_root: str | Path | None = None,
+) -> dict[str, JsonValue]:
+    return evaluate_video_quality_contract_file("ipv-bench", artifact_manifest_path, artifact_root=artifact_root)
+
+
+def evaluate_mirabench_video_quality_contract_file(
+    artifact_manifest_path: str | Path,
+    *,
+    artifact_root: str | Path | None = None,
+) -> dict[str, JsonValue]:
+    return evaluate_video_quality_contract_file("mirabench", artifact_manifest_path, artifact_root=artifact_root)
 
 
 def _manifest_rows(manifest: JsonValue) -> list[Mapping[str, JsonValue]]:
@@ -418,7 +458,7 @@ def _canonical_metric_id(value: str | None, benchmark_id: str) -> str | None:
         return None
     snake = re.sub(r"[^0-9a-zA-Z]+", "_", stripped).strip("_").lower()
     compact = snake.replace("_", "")
-    aliases = get_video_quality_benchmark_config(benchmark_id).get("metric_aliases", {})
+    aliases = video_quality_spec(benchmark_id).get("metric_aliases", {})
     return aliases.get(snake) or aliases.get(compact) or snake
 
 
@@ -458,7 +498,7 @@ def _aggregate_score_rows(
     rows: Sequence[Mapping[str, JsonValue]],
 ) -> list[dict[str, JsonValue]]:
     metric_set = set(metric_ids)
-    components = get_video_quality_benchmark_config(benchmark_id).get("aggregate_components", {})
+    components = video_quality_spec(benchmark_id).get("aggregate_components", {})
     aggregate_rows: list[dict[str, JsonValue]] = []
     available_scores = _mean_by_metric(rows)
     for metric_id, component_ids in components.items():
@@ -614,7 +654,7 @@ def _normalized_task(value: str | None) -> str | None:
 def _genai_computed_scores(pairs: Sequence[Mapping[str, str]]) -> dict[str, float]:
     scores = {"pairwise_accuracy": _pair_accuracy(pairs)}
     task_scores: list[float] = []
-    genai_task_metrics = get_video_quality_benchmark_config("genai-bench").get("genai_task_metrics", {})
+    genai_task_metrics = video_quality_spec("genai-bench").get("genai_task_metrics", {})
     for task, metric_id in genai_task_metrics.items():
         task_pairs = [row for row in pairs if row["task"] == task]
         if task_pairs:
@@ -652,7 +692,7 @@ def _preference_result(metric_id: str, score: float, pairs: Sequence[Mapping[str
 
 
 def _blocked_result(metric_id: str, benchmark_id: str) -> dict[str, JsonValue]:
-    config = get_video_quality_benchmark_config(benchmark_id)
+    config = video_quality_spec(benchmark_id)
     blocked_reason = config["blocked_reason"]
     return {
         "metric_id": metric_id,

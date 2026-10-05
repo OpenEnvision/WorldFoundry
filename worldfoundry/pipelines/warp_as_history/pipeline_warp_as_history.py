@@ -115,7 +115,14 @@ class WarpAsHistoryPipeline(PipelineABC):
             raise RuntimeError("Warp-as-History synthesis model is not loaded. Use from_pretrained() first.")
         if output_path is None and output_dir is not None:
             output_path = Path(output_dir) / f"{self.model_id}.mp4"
-        processed = self.process(prompt=prompt, images=images, **kwargs.pop("operator_kwargs", {}))
+        operator_kwargs = dict(kwargs.pop("operator_kwargs", {}))
+        ref_image_path = kwargs.pop("ref_image_path", None)
+        if images is None and ref_image_path is not None:
+            images = ref_image_path
+        for framework_key in ("sample_id", "task_name"):
+            kwargs.pop(framework_key, None)
+            operator_kwargs.pop(framework_key, None)
+        processed = self.process(prompt=prompt, images=images, **operator_kwargs)
         result = self.synthesis_model.predict(
             prompt=processed["prompt"],
             images=processed["images"],

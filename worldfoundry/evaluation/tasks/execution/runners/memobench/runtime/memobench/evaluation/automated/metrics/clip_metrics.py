@@ -1,42 +1,28 @@
-import numpy as np
-import torch
-from PIL import Image
+"""MemoBench phase-aware CLIP metrics (V-D-R protocol).
+
+Provenance: CLIP model loading and image/text embedding are delegated to the
+shared in-tree helpers in
+``worldfoundry.evaluation.tasks.metrics._shared.clip_embed`` (same
+``openai:ViT-B-32`` backbone, cached bundle). This module keeps only the
+MemoBench-specific protocol: BGR frame handling, phase index sampling, and the
+V-D-R revisit/recovery formulas.
+"""
+
 import cv2
+import numpy as np
+
+from worldfoundry.evaluation.tasks.metrics._shared.clip_embed import (
+    encode_clip_images,
+    encode_clip_texts,
+)
+
+_CLIP_MODEL = "openai:ViT-B-32"
 
 
-_model = None
-_preprocess = None
-_device = None
-
-
-def _load_clip(device: str = None):
-    global _model, _preprocess, _device
-    if _model is not None:
-        return _model, _preprocess, _device
-
-    import open_clip
-
-    if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-    _device = device
-
-    _model, _, _preprocess = open_clip.create_model_and_transforms(
-        "ViT-B-32", pretrained="openai"
-    )
-    _model = _model.to(_device).eval()
-    return _model, _preprocess, _device
-
-
-def _bgr_to_pil(img: np.ndarray) -> Image.Image:
-    return Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-
-
-@torch.no_grad()
-def _embed(model, preprocess, device, img: np.ndarray) -> np.ndarray:
-    t = preprocess(_bgr_to_pil(img)).unsqueeze(0).to(device)
-    feat = model.encode_image(t)
-    feat = feat / feat.norm(dim=-1, keepdim=True)
-    return feat.squeeze(0).cpu().float().numpy()
+def _embed(img: np.ndarray, device: str = None) -> np.ndarray:
+    """L2-normalized CLIP embedding of one BGR frame."""
+    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    return encode_clip_images([rgb], model=_CLIP_MODEL, device=device)[0]
 
 
 def _phase_indices(start: int, end: int, n: int, total: int) -> list:
@@ -61,8 +47,6 @@ def scene_consistency_score(frames, n_sample: int = 9, device: str = None,
       - scene_consistency  : mean consecutive cosine similarity
       - min_consecutive_sim: minimum consecutive similarity (flags sudden jumps)
     """
-    model, preprocess, device = _load_clip(device)
-
     N = frames.num_frames
     if end is None:
         end = N - 1
@@ -71,7 +55,7 @@ def scene_consistency_score(frames, n_sample: int = 9, device: str = None,
     if len(indices) < 2:
         return {"scene_consistency": 1.0, "min_consecutive_sim": 1.0}
 
-    embs = [_embed(model, preprocess, device, frames.get(idx)) for idx in indices]
+    embs = [_embed(frames.get(idx), device) for idx in indices]
     consecutive_sims = [float(np.dot(embs[i], embs[i + 1])) for i in range(len(embs) - 1)]
 
     return {
@@ -110,18 +94,15 @@ def revisit_metrics(frames, h_start: int, r_start: int,
       - revisit_bridge   : float in [0, 1]
       - s_O, s_H, s_R    : per-phase mean similarities (diagnostic)
     """
-    model, preprocess, device = _load_clip(device)
-
     N = frames.num_frames
     h = max(1, min(h_start, N - 2))
     r = max(h + 1, min(r_start, N - 1))
 
-    emb_0 = _embed(model, preprocess, device, frames.get(0))
+    emb_0 = _embed(frames.get(0), device)
 
     def phase_mean_sim(p_start, p_end):
         idxs = _phase_indices(p_start, p_end, n_sample, N)
-        sims = [float(np.dot(emb_0, _embed(model, preprocess, device, frames.get(i))))
-                for i in idxs]
+        sims = [float(np.dot(emb_0, _embed(frames.get(i), device))) for i in idxs]
         return float(np.mean(sims))
 
     s_O = phase_mean_sim(0, h)
@@ -137,8 +118,8 @@ def revisit_metrics(frames, h_start: int, r_start: int,
         recovery = float(np.clip((s_R - s_H) / drop, 0.0, 1.0))
 
     # RevisitBridge: continuity at the D→R boundary
-    emb_h_end   = _embed(model, preprocess, device, frames.get(h))
-    emb_r_start = _embed(model, preprocess, device, frames.get(r))
+    emb_h_end   = _embed(frames.get(h), device)
+    emb_r_start = _embed(frames.get(r), device)
     bridge = float(np.dot(emb_h_end, emb_r_start))
 
     # OcclusionDrop: D phase must actually move away from V phase baseline.
@@ -155,14 +136,6 @@ def revisit_metrics(frames, h_start: int, r_start: int,
     }
 
 
-@torch.no_grad()
-def _embed_text(model, tokenizer, device, text: str) -> np.ndarray:
-    tokens = tokenizer([text]).to(device)
-    feat = model.encode_text(tokens)
-    feat = feat / feat.norm(dim=-1, keepdim=True)
-    return feat.squeeze(0).cpu().float().numpy()
-
-
 def prompt_alignment_score(frames, prompt: str, n_sample: int = 5,
                            device: str = None) -> float:
     """
@@ -171,21 +144,12 @@ def prompt_alignment_score(frames, prompt: str, n_sample: int = 5,
 
     Returns mean cosine similarity over sampled frames (higher = better).
     """
-    import open_clip
-
-    model, preprocess, device = _load_clip(device)
-    tokenizer = open_clip.get_tokenizer("ViT-B-32")
-
-    text_emb = _embed_text(model, tokenizer, device, prompt)
+    text_emb = encode_clip_texts([prompt], model=_CLIP_MODEL, device=device)[0]
 
     N = frames.num_frames
     indices = [int(i * (N - 1) / (n_sample - 1)) for i in range(n_sample)]
 
-    sims = []
-    for idx in indices:
-        img_emb = _embed(model, preprocess, device, frames.get(idx))
-        sims.append(float(np.dot(text_emb, img_emb)))
-
+    sims = [float(np.dot(text_emb, _embed(frames.get(idx), device))) for idx in indices]
     return round(float(np.mean(sims)), 4)
 
 
@@ -196,7 +160,6 @@ def clip_frame_similarity(img_a: np.ndarray, img_b: np.ndarray,
     Used for GT-grounded R-phase comparison: generated frame vs GT frame.
     Returns a value in [0, 1].
     """
-    model, preprocess, device = _load_clip(device)
-    emb_a = _embed(model, preprocess, device, img_a)
-    emb_b = _embed(model, preprocess, device, img_b)
+    emb_a = _embed(img_a, device)
+    emb_b = _embed(img_b, device)
     return float(np.clip(float(np.dot(emb_a, emb_b)), 0.0, 1.0))

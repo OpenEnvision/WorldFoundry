@@ -1,0 +1,135 @@
+benchmark_ids:
+- worldolympiad
+id: worldolympiad
+name: WorldOlympiad
+environment_id: worldfoundry-unified-cu128
+needs_new_env: false
+status: in_tree_runtime_plan_verified_scored_triathlon_pending
+notes:
+- The official batch evaluator is checked in under the runner, so --run-official needs no external checkout.
+- Result normalization and --run-official --dry-run run in the unified WorldFoundry environment with no GPU.
+- Scored execution resolves DA3, SAM3, QwenVL, and CLIP weights plus the Depth Anything 3 source code from
+  worldfoundry/base_models by default (see optional_base_model_dependencies); --weights-dir and --da3-src
+  remain as optional overrides when a registered asset is not staged. It also needs running QwenVL, SAM3,
+  and DA3 reward services.
+- The upstream environment.yml is vendored for reference and documents the conda environment the authors used.
+- Batch manifests, logs, and judge outputs are written under --output-dir and the case root; the checked-in runtime
+  is never used as mutable work storage.
+- Set HF_ENDPOINT=https://hf-mirror.com when downloading the optional Hugging Face dataset.
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+pythonpath_roots:
+- .
+- worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad
+required_assets:
+  in_tree_runtime_paths:
+  - worldfoundry/evaluation/tasks/execution/runners/worldolympiad
+  - worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad
+  pip_requirements:
+  - worldfoundry/data/benchmarks/requirements/worldolympiad.txt
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/worldolympiad.yaml
+  fixture: worldfoundry/data/benchmarks/assets/worldolympiad
+  hf_dataset_ids:
+  - ziplab/WorldOlympiad
+required_env: []
+optional_env:
+- WORLDFOUNDRY_WORLDOLYMPIAD_ROOT
+- WORLDFOUNDRY_WORLDOLYMPIAD_RESULTS_PATH
+- WORLDFOUNDRY_WORLDOLYMPIAD_WEIGHTS_DIR
+- WORLDFOUNDRY_WORLDOLYMPIAD_DA3_SRC
+- WORLDFOUNDRY_QWEN3_VL_MODEL_DIR
+- WORLDFOUNDRY_SAM3_CKPT
+- WORLDFOUNDRY_DEPTH_ANYTHING_MODEL_DIR
+- WORLDFOUNDRY_WORLDOLYMPIAD_PYTHON
+- WORLDFOUNDRY_WORLDOLYMPIAD_GPU_SLOTS
+- WORLDFOUNDRY_WORLDOLYMPIAD_QWEN_URLS
+- WORLDFOUNDRY_WORLDOLYMPIAD_SAM3_URLS
+- WORLDFOUNDRY_WORLDOLYMPIAD_REWARD_3D_URLS
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+- HF_ENDPOINT
+required_paths:
+- id: official_runner_script
+  path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
+- id: metrics_runtime
+  path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/worldolympiad_metrics.py
+- id: runtime_root
+  path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad
+- id: runtime_entrypoint
+  path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad/batch_test/evaluate_pipelines.py
+- id: runtime_scorer
+  path: worldfoundry/evaluation/tasks/execution/runners/worldolympiad/runtime/worldolympiad/scripts/score_video_physical_3d.py
+- id: fixture
+  path: worldfoundry/data/benchmarks/assets/worldolympiad
+- id: pip_requirements
+  path: worldfoundry/data/benchmarks/requirements/worldolympiad.txt
+- id: task_yaml
+  path: worldfoundry/data/benchmarks/tasks/external/worldolympiad.yaml
+requires_cuda_visibility: false
+optional_base_model_dependencies:
+- depth_anything_3
+- sam3
+- qwenvl_openai_compatible_judge
+- clip
+validation_command:
+- python
+- worldfoundry/evaluation/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
+- --run-fixture
+- --output-dir
+- <out>
+- --json
+plan_command:
+- python
+- worldfoundry/evaluation/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
+- --run-official
+- --dry-run
+- --generated-artifact-dir
+- <case_root>
+- --pipelines
+- <pipeline_alias>
+- --output-dir
+- <out>
+normalization_command:
+- worldfoundry-eval
+- zoo
+- benchmark-run
+- --benchmark-id
+- worldolympiad
+- --mode
+- official-validation
+- --official-results-path
+- <case_root_or_judge_json>
+- --output-dir
+- <out>
+- --json
+full_runtime_command:
+- python
+- worldfoundry/evaluation/tasks/execution/runners/worldolympiad/run_worldolympiad_official_runner.py
+- --run-official
+- --generated-artifact-dir
+- <case_root>
+- --domains
+- general
+- gaming
+- embodied
+- --pipelines
+- <pipeline_alias>
+- --weights-dir
+- <weights_root>
+- --da3-src
+- <depth_anything_3>/src
+- --gpu-slots
+- <gpu_ids>
+- --workers
+- <worker_count>
+- --qwen-server-urls
+- <qwenvl_urls>
+- --sam3-server-urls
+- <sam3_urls>
+- --reward-3d-server-urls
+- <da3_urls>
+- --output-dir
+- <out>
+- --json
+full_runtime_requires:
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR or --generated-artifact-dir with the official case layout
+- Depth Anything 3 source tree and DA3, SAM3, QwenVL, and CLIP weights outside the source tree
+- Running QwenVL, SAM3, and DA3 reward services

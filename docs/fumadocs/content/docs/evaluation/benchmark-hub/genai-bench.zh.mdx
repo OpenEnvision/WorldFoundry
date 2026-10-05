@@ -1,142 +1,38 @@
 ---
 title: GenAI-Bench
-description: 使用 WorldFoundry 仓内 runner、资产、命令和指标执行 pairwise human-preference GenAI-Bench 评测。
+description: "TIGER-Lab 裁判对齐评测：在图像生成、编辑与视频上对比人工偏好的成对准确率。WorldFoundry 导入标签，不编造榜单。"
 ---
 
-## 评测内容
+GenAI-Bench（滑铁卢大学 TIGER-Lab，随 GenAI-Arena 发布）测的是**自动裁判是否对齐人工偏好**，不是生成器好不好看。每条记录是同一 prompt 的一对输出加人工标签。WorldFoundry 打整体 **成对准确率**，并按三个任务拆开：
 
-GenAI-Bench 评估多模态 judge 是否与人类 pairwise preference 一致。本地 GenAI-Bench README 描述了三类 preference track：image generation、image editing 和 video generation。每条样本让 judge 在两个生成产物之间选择，标签包括 `A>B`、`B>A`、`A=B=Good` 和 `A=B=Bad`。
+- **图像生成**
+- **图像编辑**
+- **视频生成**
 
-WorldFoundry 使用仓内 runner：`worldfoundry/evaluation/tasks/execution/runners/genai_bench/run_genai_bench_official_runner.py`。日常使用不需要为该 benchmark 另建官方 repo 副本。上游 paper 和官方 README 只作为协议参考；WorldFoundry 可运行代码已经在本仓内。
+任务级成对齐备时，`genai_bench_average` 是各任务准确率的均值。
 
-## 准备数据与资产
+论文：[GenAI-Bench](https://arxiv.org/abs/2406.04485)。代码：[TIGER-AI-Lab/GenAI-Bench](https://github.com/TIGER-AI-Lab/GenAI-Bench)。数据集：[`TIGER-Lab/GenAI-Bench`](https://huggingface.co/datasets/TIGER-Lab/GenAI-Bench)（CC-BY-4.0）。
 
-可以使用三种输入形态：
+WorldFoundry **归一化官方结果行**。一行必须有 `task`（`image_generation` / `image_editing` / `video_generation`）、人工标签（`human_label` / `human_preference`）和裁判预测（`prediction` / `judge_prediction`）。它不生成偏好标签。
 
-- 已有 preference 结果：JSONL、JSON、CSV 或 TSV，包含 `human_label` 或 `human_preference`、`prediction` 或 `judge_prediction`、`task`。
-- 仓内 scorer 输入：preference-pair JSONL，包含 `prompt`、`human_label`、可选的 `left_artifact` / `right_artifact`、`task`。
-- 生成产物：一个目录，保存 preference pair 引用到的候选图像或视频。
+<BenchmarkPageSections id="genai-bench" locale="zh" />
 
-仓内资产：
-
-- `worldfoundry/data/benchmarks/assets/genai-bench/metadata.json`
-- `worldfoundry/data/benchmarks/assets/genai-bench/preference_pairs.fixture.jsonl`
-- `worldfoundry/data/benchmarks/assets/genai-bench/sample_results.jsonl`
-
-如果需要 HF 数据或 scorer 权重，可以单独下载：
+## 如何运行
 
 ```bash
-hf download TIGER-Lab/GenAI-Bench \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/GenAI-Bench
-
-hf download zhiqiulin/clip-flant5-xxl \
-  --local-dir /path/to/checkpoints/clip-flant5-xxl
-```
-
-使用 VQAScore 风格 scorer 时，设置 backend 和 checkpoint cache：
-
-```bash
-export WORLDFOUNDRY_GENAI_BENCH_SCORER_BACKEND=vqascore
-export WORLDFOUNDRY_T2V_METRICS_MODEL=clip-flant5-xxl
-export WORLDFOUNDRY_T2V_METRICS_CACHE_DIR=/path/to/checkpoints
-export WORLDFOUNDRY_T2V_METRICS_DEVICE=cuda
-```
-
-## 输入与输出布局
-
-生成产物示例：
-
-```text
-/path/to/genai/generated_artifacts/
-  video_left_001.mp4
-  video_right_001.mp4
-  image_left_002.png
-  image_right_002.png
-```
-
-preference 结果 JSONL 示例：
-
-```jsonl
-{"task":"video_generation","human_label":"A>B","prediction":"A>B","pair_id":"video-001"}
-{"task":"image_generation","human_label":"B>A","judge_prediction":"A>B","pair_id":"image-002"}
-```
-
-WorldFoundry 输出布局：
-
-```text
-tmp/genai-bench/official-validation/
-  scorecard.json
-  raw_metric_table.jsonl
-  per_sample_scores.jsonl
-  runner_runtime_report.json
-  specialized_normalizer_stdout.log
-  specialized_normalizer_stderr.log
-```
-
-直接 runner 也会输出 `scorecard.json`、`raw_metric_table.jsonl` 和 `per_sample_scores.jsonl`。启动 scorer 时，上游形态的结果行会写到 `upstream/` 下。
-
-## 公开 CLI
-
-该页面在 catalog 中支持的公开命令是用 `official-validation` 导入结果：
-
-```bash
-cd /path/to/WorldFoundry
-
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id genai-bench \
   --mode official-validation \
-  --official-results-path /path/to/genai_preference_results.jsonl \
-  --generated-artifact-dir /path/to/genai/generated_artifacts \
+  --official-results-path <official_results.jsonl> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/genai-bench/official-validation \
   --json
 ```
 
-GenAI-Bench 的公开 catalog 条目没有发布完整 `official-run` 命令。需要使用仓内 scorer 时，用下面的直接 runner。
+`--preference-pairs-path` 提供成对清单。默认导入路径：`WORLDFOUNDRY_GENAI_BENCH_RESULTS_PATH`。共享资源：`genai_bench_dataset_assets`、`t2v_metrics_source_assets`。
 
-## 直接 Runner
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/genai-bench.yaml`。
 
-导入已有 preference 结果：
+产物包括 `scorecard.json`（主键 `genai_bench_average`）、`benchmark_contract.json`、`raw_metric_table.jsonl`。
 
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/genai_bench/run_genai_bench_official_runner.py \
-  --official-results-path /path/to/genai_preference_results.jsonl \
-  --generated-artifact-dir /path/to/genai/generated_artifacts \
-  --output-dir tmp/genai-bench/direct-import \
-  --json
-```
-
-用仓内 scorer 处理 preference-pair 文件：
-
-```bash
-cd /path/to/WorldFoundry
-
-export WORLDFOUNDRY_GENAI_BENCH_SCORER_BACKEND=vqascore
-export WORLDFOUNDRY_T2V_METRICS_MODEL=clip-flant5-xxl
-export WORLDFOUNDRY_T2V_METRICS_CACHE_DIR=/path/to/checkpoints
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/genai_bench/run_genai_bench_official_runner.py \
-  --run-official \
-  --preference-pairs-path /path/to/preference_pairs.jsonl \
-  --generated-artifact-dir /path/to/genai/generated_artifacts \
-  --output-dir tmp/genai-bench/direct-run \
-  --json
-```
-
-本地连通性验证可设置 `WORLDFOUNDRY_GENAI_BENCH_SCORER_BACKEND=mock`。该 backend 生成的是确定性占位分数，不能作为 leaderboard 依据。
-
-## 指标
-
-| Metric ID | 含义 |
-| --- | --- |
-| `pairwise_accuracy` | 所有导入 pair 行中，judge prediction 与人类 preference 标签一致的比例。 |
-| `image_generation_preference_accuracy` | task 归一到 image generation 的样本准确率。 |
-| `image_editing_preference_accuracy` | task 归一到 image editing 的样本准确率。 |
-| `video_preference_accuracy` | task 归一到 video generation 的样本准确率。 |
-| `genai_bench_average` | 可用 task-level preference accuracy 的平均值；主指标。 |
-
-所有指标都会归一到 `[0, 1]`，越高越好。
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

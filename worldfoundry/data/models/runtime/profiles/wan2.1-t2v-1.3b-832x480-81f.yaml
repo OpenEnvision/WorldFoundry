@@ -21,9 +21,9 @@ artifact_filename: wan2.1-t2v-1.3b-832x480-81f.mp4
 execution:
   backend_stage: in_tree_runtime_plan
   runtime_status: catalog_demo_and_runner_parity_recorded_checkpoint_runtime_required
-  integration_status: planned
+  integration_status: integrated
   pipeline_binding: wan2.1-t2v-1.3b-832x480-81f
 integration:
-  status: planned
+  status: integrated
 notes:
 - Variant profile for the ready Wan2.1 1.3B catalog demo contract.

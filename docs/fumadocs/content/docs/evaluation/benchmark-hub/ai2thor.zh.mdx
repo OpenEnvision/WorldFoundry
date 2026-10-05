@@ -1,102 +1,36 @@
 ---
 title: AI2-THOR
-description: AI2-THOR — 指标、依赖与运行命令。
+description: "Ai2 的 Unity 家居模拟器：120 个 iTHOR 房间。WorldFoundry 可跑闭环 FloorPlan 接线；不附带 ALFRED 或 TEACh。"
 ---
 
-## 简介
+AI2-THOR（艾伦人工智能研究所，Ai2）是面向具身 AI 的 **Unity** 家居模拟器。原始 **iTHOR** 集合是 **120** 个美术手建房间：厨房、客厅、卧室、浴室各 30 个（`FloorPlan1–30`、`201–230`、`301–330`、`401–430`）。智能体使用**离散**动作（`MoveAhead`、`RotateLeft`、`PickupObject`、开关、拨动）与物理和物体状态交互。官方常用划分是每种房型 **20 / 5 / 5** 训练 / 验证 / 测试。后续场景包（RoboTHOR、ProcTHOR）和语言套件（**ALFRED**、**TEACh**）建立在这个引擎上——不是 WorldFoundry 默认任务。
 
+论文：[AI2-THOR: An Interactive 3D Environment for Visual AI](https://arxiv.org/abs/1712.05474)。项目：[ai2thor.allenai.org](https://ai2thor.allenai.org/)。代码：[allenai/ai2thor](https://github.com/allenai/ai2thor)（Apache-2.0）。
 
+WorldFoundry **评测**原生闭环：`worldfoundry-eval embodied run` 启动 Unity 构建，逐步执行已经输出模拟器 token 的策略。仓内配置（`FloorPlan1`–`FloorPlan3`）只做**接线检查**，不是 ALFRED/TEACh。也可以通过 `WORLDFOUNDRY_AI2THOR_RESULTS_PATH` **导入**已有 rollout 导出。本页**不跑** VLA 推理——策略或策略服务由你提供。
 
-AI2-THOR external task manifest for native embodied closed-loop rollouts.
+<BenchmarkPageSections id="ai2thor" locale="zh" />
 
+## 如何运行
 
-
-## 指标
-
-AI2-THOR external task manifest for native embodied closed-loop rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/ai2thor.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `episode_success` | episode / task 是否成功完成的比例或成功率。 |
-| `reward` | AI2-THOR 交互式家庭导航与操作 episode 中，朝向语言目标的仿真器累计 reward。 |
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
+闭环接线（需要 Unity 包、模拟器缓存，以及 CloudRendering 或 X11 显示）：
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
+worldfoundry-eval embodied run \
+  --config worldfoundry/data/benchmarks/eval_configs/embodied/ai2thor/floorplan1.yaml
 ```
 
-### 导入已有官方结果
+导入已有导出：
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id ai2thor \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/ai2thor/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/ai2thor/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id ai2thor \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/ai2thor/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval embodied run --config worldfoundry/data/benchmarks/eval_configs/embodied/ai2thor/floorplan1.yaml
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- AI2-THOR Python package
-- AI2-THOR Unity simulator build/cache
-- Headless CloudRendering or X11 display backend
-- Policy checkpoint or external policy server for non-zero rollouts
-
-### Environment
-
-- `WORLDFOUNDRY_AI2THOR_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `run_manifest.json`
-- `results.jsonl`
-- `metrics/summary.json`
-
-
+可选 `WORLDFOUNDRY_AI2THOR_ROOT` 指向本地 runtime / 仓库。默认导入路径：`WORLDFOUNDRY_AI2THOR_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/ai2thor.yaml`。仓库镜像：`cache/vla_va_wam/repos/allenai--ai2thor`。产物：`scorecard.json`（主键 `success_rate`）、`run_manifest.json`、`results.jsonl`、`metrics/summary.json`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

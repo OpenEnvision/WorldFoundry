@@ -380,27 +380,6 @@ class CrossAttnDownBlock3D(nn.Module):
         for resnet, attn, motion_module in zip(self.resnets, self.attentions, self.motion_modules):
             if self.training and self.gradient_checkpointing:
                 raise NotImplementedError
-
-                def create_custom_forward(module, return_dict=None):
-                    def custom_forward(*inputs):
-                        if return_dict is not None:
-                            return module(*inputs, return_dict=return_dict)
-                        else:
-                            return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(create_custom_forward(resnet), hidden_states, temb)
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(attn, return_dict=False),
-                    hidden_states,
-                    encoder_hidden_states,
-                )[0]
-                if motion_module is not None:
-                    hidden_states = torch.utils.checkpoint.checkpoint(create_custom_forward(motion_module),
-                                                                      hidden_states.requires_grad_(), temb,
-                                                                      encoder_hidden_states)
-
             else:
                 hidden_states = rearrange(hidden_states, "b c f h w -> (b f) c h w")
                 hidden_states = resnet(hidden_states, temb_repeated)
@@ -509,18 +488,6 @@ class DownBlock3D(nn.Module):
         for resnet, motion_module in zip(self.resnets, self.motion_modules):
             if self.training and self.gradient_checkpointing:
                 raise NotImplementedError
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(create_custom_forward(resnet), hidden_states, temb)
-                if motion_module is not None:
-                    hidden_states = torch.utils.checkpoint.checkpoint(create_custom_forward(motion_module),
-                                                                      hidden_states.requires_grad_(), temb,
-                                                                      encoder_hidden_states)
             else:
                 hidden_states = rearrange(hidden_states, "b c f h w -> (b f) c h w")
                 hidden_states = resnet(hidden_states, temb_repeated)
@@ -664,27 +631,6 @@ class CrossAttnUpBlock3D(nn.Module):
 
             if self.training and self.gradient_checkpointing:
                 raise NotImplementedError
-
-                def create_custom_forward(module, return_dict=None):
-                    def custom_forward(*inputs):
-                        if return_dict is not None:
-                            return module(*inputs, return_dict=return_dict)
-                        else:
-                            return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(create_custom_forward(resnet), hidden_states, temb)
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(attn, return_dict=False),
-                    hidden_states,
-                    encoder_hidden_states,
-                )[0]
-                if motion_module is not None:
-                    hidden_states = torch.utils.checkpoint.checkpoint(create_custom_forward(motion_module),
-                                                                      hidden_states.requires_grad_(), temb,
-                                                                      encoder_hidden_states)
-
             else:
                 hidden_states = rearrange(hidden_states, "b c f h w -> (b f) c h w")
                 hidden_states = resnet(hidden_states, temb_repeated)
@@ -790,18 +736,6 @@ class UpBlock3D(nn.Module):
 
             if self.training and self.gradient_checkpointing:
                 raise NotImplementedError
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(create_custom_forward(resnet), hidden_states, temb)
-                if motion_module is not None:
-                    hidden_states = torch.utils.checkpoint.checkpoint(create_custom_forward(motion_module),
-                                                                      hidden_states.requires_grad_(), temb,
-                                                                      encoder_hidden_states)
             else:
                 hidden_states = rearrange(hidden_states, "b c f h w -> (b f) c h w")
                 hidden_states = resnet(hidden_states, temb_repeated)

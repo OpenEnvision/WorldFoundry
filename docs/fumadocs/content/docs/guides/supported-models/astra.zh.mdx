@@ -1,0 +1,41 @@
+---
+title: "Astra"
+description: "基于 Wan2.1-1.3B 的交互世界，带相机动作。官方 garden_1 Sekai demo 已 runner 验证：832×480、97 帧、20 fps。基座 Apache-2.0。"
+modelId: "astra"
+pageSource: authored
+---
+
+Astra 是架在 Wan2.1 基座上的**交互式世界模型**：一张图加相机动作，滚出可导航的世界视频。WorldFoundry 把仅推理运行时放在 `worldfoundry/synthesis/visual_generation/kling/astra_runtime`，对外是 `AstraPipeline`。Studio 默认对齐官方 Wan2.1 支撑的 **Sekai** 图像滚动。
+
+<ModelPaperFigures modelId="astra" locale="zh" />
+
+官方论文是 [Astra: General Interactive World Model with Autoregressive Denoising](https://arxiv.org/abs/2512.08931)（ICLR 2026，arXiv 2512.08931）。项目页：[eternalevan.github.io/Astra-project](https://eternalevan.github.io/Astra-project/)。代码：[EternalEvan/Astra](https://github.com/EternalEvan/Astra)。权重：`EvanEternal/Astra`（镜像 `KwaiVGI/Astra`）加 `Wan-AI/Wan2.1-T2V-1.3B`。这些基座记录的许可证是 **apache-2.0**。本仓库未记录发表机构。
+
+Runner 一致性**已验证**：官方 **garden_1** Sekai demo 走树内 Studio/API 路径，`forward_left` 相机控制，输出 **97 帧、832×480、20 fps**。
+
+<ModelCommandBuilder modelId="astra" locale="zh" />
+
+## 用来做什么
+
+按记录跑 Astra 世界 / 视频路径。
+
+启动 `worldfoundry-eval run astra --pipeline.task-profile official-sekai-image`。
+
+评测入口：[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（交互滚动生成的相机跟随精度）。
+
+## 运行时契约
+
+必填 `prompt`、`image`；可选 `video`；`actions`：camera_direction；产物 `astra.mp4`。
+
+| 旋钮 | 已验证 demo |
+| --- | --- |
+| 尺寸 | **832×480** |
+| 帧数 | **97** |
+| FPS | **20** |
+| 相机 | garden_1 上的 `forward_left` |
+
+## 在 WorldFoundry 中运行
+
+状态：**已验证**。统一环境 `worldfoundry-unified-cu128`（Python 3.11, CUDA 12.8）。先把 `EvanEternal/Astra`、`Wan-AI/Wan2.1-T2V-1.3B`、`EvanEternal/Astra` 等就位到本地，缺文件加载失败，运行时不下载。在该环境执行 `worldfoundry-eval run astra --pipeline.task-profile official-sekai-image`。catalog 未记录 VRAM。
+
+<ModelRelatedRecipes modelId="astra" locale="zh" />

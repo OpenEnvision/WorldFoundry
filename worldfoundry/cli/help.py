@@ -3,48 +3,35 @@
 from __future__ import annotations
 
 import argparse
-import os
-import shutil
 import sys
 import textwrap
 from collections.abc import Sequence
-from dataclasses import dataclass
 
-_RESET = "\033[0m"
-_ACCENT = "\033[38;5;142m"
-_HEADING = "\033[1;38;5;187m"
-_TEXT = "\033[38;5;252m"
-_MUTED = "\033[38;5;245m"
-_DEFAULT = "\033[38;5;149m"
-
-
-def _color_enabled() -> bool:
-    """Return whether interactive ANSI help should be emitted."""
-    if os.environ.get("NO_COLOR") is not None:
-        return False
-    force = os.environ.get("FORCE_COLOR")
-    if force is not None:
-        return force.lower() not in {"", "0", "false", "no"}
-    if os.environ.get("TERM") == "dumb":
-        return False
-    return bool(getattr(sys.stdout, "isatty", lambda: False)())
-
-
-def _paint(text: str, style: str) -> str:
-    return f"{style}{text}{_RESET}"
-
-
-@dataclass(frozen=True)
-class _HelpRow:
-    invocation: str
-    description: str
-
-
-@dataclass(frozen=True)
-class _HelpPanel:
-    title: str
-    rows: tuple[_HelpRow, ...]
-    description: str = ""
+from .presentation import (
+    BOLD as _HEADING,
+)
+from .presentation import (
+    MUTED as _MUTED,
+)
+from .presentation import (
+    Panel as _HelpPanel,
+)
+from .presentation import (
+    Row as _HelpRow,
+)
+from .presentation import (
+    paint as _paint,
+)
+from .presentation import (
+    print_notice,
+    terminal_width,
+)
+from .presentation import (
+    render_panels as _render_panel_grid,
+)
+from .presentation import (
+    terminal_enabled as _terminal_help_enabled,
+)
 
 
 class WorldFoundryArgumentParser(argparse.ArgumentParser):
@@ -55,71 +42,158 @@ class WorldFoundryArgumentParser(argparse.ArgumentParser):
     """
 
     def format_help(self) -> str:
-        if not _color_enabled():
+        if not _terminal_help_enabled():
             return super().format_help()
         return self._format_terminal_help()
 
-    def _format_terminal_help(self) -> str:
-        terminal_width = max(64, min(shutil.get_terminal_size((120, 24)).columns, 180))
-        usage = _wrap_usage(super().format_usage().strip(), terminal_width)
-        if usage.startswith("usage:"):
-            usage = _paint("usage:", _HEADING) + _paint(usage[len("usage:") :], _TEXT)
+    def error(self, message: str) -> None:
+        if not _terminal_help_enabled(sys.stderr):
+            super().error(message)
+        print_notice(
+            message, level="error", hint=f"Run {self.prog} --help to see commands and options.", stream=sys.stderr
+        )
+        self.exit(2)
 
-        blocks = [usage]
+    def _format_terminal_help(self) -> str:
+        width = terminal_width()
+        usage = _wrap_usage(self._terminal_usage(), width)
+        if usage.startswith("usage:"):
+            usage = _paint("usage:", _HEADING) + usage[len("usage:") :]
+
+        breadcrumb = self.prog.split(maxsplit=1)
+        title = "WorldFoundry" if breadcrumb[0].startswith("worldfoundry") else breadcrumb[0]
+        if len(breadcrumb) > 1:
+            title += " / " + breadcrumb[1]
+        blocks = [_paint(_wrap_usage(title, width), _HEADING), usage]
         if self.description:
-            blocks.append(_paint(_wrap_usage(str(self.description).strip(), terminal_width), _TEXT))
+            blocks.append(_wrap_usage(str(self.description).strip(), width))
 
         panels = self._help_panels()
-        rendered = _render_panel_grid(panels, terminal_width)
+        rendered = _render_panel_grid(panels, width)
         if rendered:
             blocks.append(rendered)
 
         if self.epilog:
-            blocks.append(_render_epilog(str(self.epilog), terminal_width))
+            blocks.append(_render_epilog(str(self.epilog), width))
         return "\n\n".join(block for block in blocks if block).rstrip() + "\n"
+
+    def _terminal_usage(self) -> str:
+        if self.usage is not None:
+            return super().format_usage().strip()
+        formatter = self._get_formatter()
+        actions = [action for action in self._actions if action.help != argparse.SUPPRESS]
+        required_groups = [group for group in self._mutually_exclusive_groups if group.required]
+        required = [
+            action
+            for action in actions
+            if action.option_strings
+            and (action.required or any(action in group._group_actions for group in required_groups))
+        ]
+        parts = [f"usage: {self.prog}"]
+        if required:
+            parts.append(formatter._format_actions_usage(required, required_groups))
+        if any(action.option_strings and action not in required for action in actions):
+            parts.append("[OPTIONS]")
+        for action in actions:
+            if isinstance(action, argparse._SubParsersAction):
+                parts.append("COMMAND ..." if action.required else "[COMMAND ...]")
+            elif not action.option_strings:
+                parts.append(formatter._format_actions_usage([action], []))
+        return " ".join(parts)
 
     def _help_panels(self) -> tuple[_HelpPanel, ...]:
         panels: list[_HelpPanel] = []
+        additional_panels: list[_HelpPanel] = []
         for group in self._action_groups:
-            actions = tuple(
-                action for action in group._group_actions if action.help is not argparse.SUPPRESS
-            )
+            actions = tuple(action for action in group._group_actions if action.help != argparse.SUPPRESS)
             if not actions:
                 continue
             if group.title == "options" and len(actions) > 12:
-                panels.extend(self._split_options(actions))
+                # Keep explicitly named pipeline groups near the top of model help.
+                for panel in self._split_options(actions):
+                    (panels if panel.title == "options" else additional_panels).append(panel)
                 continue
-            title = (
-                "commands"
-                if any(isinstance(action, argparse._SubParsersAction) for action in actions)
-                else group.title
-            )
-            panels.append(
-                _HelpPanel(
-                    str(title),
-                    tuple(self._help_row(action) for action in actions),
-                    str(group.description or ""),
+            ordinary_actions = [action for action in actions if not isinstance(action, argparse._SubParsersAction)]
+            if ordinary_actions:
+                panels.extend(
+                    self._split_options(
+                        ordinary_actions, title=str(group.title), description=str(group.description or "")
+                    )
                 )
-            )
-        return tuple(panels)
+            for action in actions:
+                if not isinstance(action, argparse._SubParsersAction):
+                    continue
+                commands = tuple(action._get_subactions())
+                rows = tuple(self._help_row(command) for command in commands if command.help != argparse.SUPPRESS)
+                # argparse only creates help pseudo-actions for commands with help=.
+                if not commands:
+                    rows = tuple(
+                        _HelpRow(name, str(parser.description or "")) for name, parser in action.choices.items()
+                    )
+                help_groups = getattr(action, "help_groups", {})
+                grouped_names = set()
+                for title, names in help_groups.items():
+                    grouped_rows = tuple(
+                        self._help_row(command)
+                        for name in names
+                        for command in commands
+                        if command.dest == name and command.help != argparse.SUPPRESS
+                    )
+                    if grouped_rows:
+                        panels.append(_HelpPanel(title, grouped_rows))
+                    grouped_names.update(names)
+                remaining = (
+                    tuple(
+                        self._help_row(command)
+                        for command in commands
+                        if command.dest not in grouped_names and command.help != argparse.SUPPRESS
+                    )
+                    if help_groups
+                    else rows
+                )
+                if remaining:
+                    panels.append(_HelpPanel("commands", remaining, str(group.description or "")))
+        return tuple(panels + additional_panels)
 
-    def _split_options(self, actions: Sequence[argparse.Action]) -> tuple[_HelpPanel, ...]:
+    def _split_options(
+        self, actions: Sequence[argparse.Action], *, title: str | None = None, description: str = ""
+    ) -> tuple[_HelpPanel, ...]:
         buckets: dict[str, list[argparse.Action]] = {}
         for action in actions:
-            title = _option_section(action)
-            buckets.setdefault(title, []).append(action)
+            dotted_prefix = next(
+                (
+                    option[2:].rsplit(".", 1)[0]
+                    for option in action.option_strings
+                    if option.startswith("--") and "." in option
+                ),
+                None,
+            )
+            section = f"{dotted_prefix} options" if dotted_prefix else title or _option_section(action)
+            buckets.setdefault(section, []).append(action)
         return tuple(
-            _HelpPanel(title, tuple(self._help_row(action) for action in section_actions))
-            for title, section_actions in buckets.items()
+            _HelpPanel(
+                section, tuple(self._help_row(action) for action in section_actions), description if index == 0 else ""
+            )
+            for index, (section, section_actions) in enumerate(buckets.items())
         )
 
     def _help_row(self, action: argparse.Action) -> _HelpRow:
         formatter = self._get_formatter()
+        original_metavar = formatter._get_default_metavar_for_optional
+
+        def metavar(item: argparse.Action) -> str:
+            kind = getattr(item.type, "__name__", "")
+            if kind in {"Path", "int", "float", "str"}:
+                return {"Path": "PATH", "int": "INT", "float": "FLOAT", "str": "STR"}[kind]
+            if item.dest.endswith(("_path", "_dir", "_root", "_file")):
+                return "PATH"
+            return original_metavar(item)
+
+        formatter._get_default_metavar_for_optional = metavar
         invocation = formatter._format_action_invocation(action)
         description = formatter._expand_help(action) if action.help else ""
-        if _should_show_default(action, description):
-            description = f"{description} (default: {_format_default(action.default)})".strip()
-        return _HelpRow(invocation=invocation, description=description)
+        default = _format_default(action.default) if _should_show_default(action, description) else None
+        return _HelpRow(invocation=invocation, description=description, default=default)
 
 
 def _wrap_usage(usage: str, width: int) -> str:
@@ -144,10 +218,7 @@ def _wrap_usage(usage: str, width: int) -> str:
 
 def _option_section(action: argparse.Action) -> str:
     dest = action.dest.replace("-", "_")
-    if (
-        dest in {"help", "json", "output", "verbose", "quiet"}
-        or dest.startswith("output_")
-    ):
+    if dest in {"help", "json", "output", "verbose", "quiet"} or dest.startswith("output_"):
         return "options"
     if dest.startswith("generation_cache") or "cache" in dest:
         return "cache options"
@@ -155,13 +226,9 @@ def _option_section(action: argparse.Action) -> str:
         return "model options"
     if dest.startswith(("benchmark", "suite", "task", "metric", "dataset")):
         return "benchmark and task options"
-    if dest.startswith(
-        ("plan", "resume", "engine", "mode", "timeout", "workdir", "env", "fail_", "skip_")
-    ):
+    if dest.startswith(("plan", "resume", "engine", "mode", "timeout", "workdir", "env", "fail_", "skip_")):
         return "execution options"
-    if dest.startswith(
-        ("input", "request", "result", "artifact", "data_", "prompt", "seed", "frame", "step")
-    ):
+    if dest.startswith(("input", "request", "result", "artifact", "data_", "prompt", "seed", "frame", "step")):
         return "input and generation options"
     return "additional options"
 
@@ -182,99 +249,6 @@ def _format_default(value: object) -> str:
     if isinstance(value, str):
         return repr(value)
     return str(value)
-
-
-def _render_panel_grid(panels: Sequence[_HelpPanel], terminal_width: int) -> str:
-    if not panels:
-        return ""
-    if terminal_width < 112 or len(panels) == 1:
-        return "\n".join(_render_panel(panel, terminal_width) for panel in panels)
-
-    gap = 2
-    left_width = (terminal_width - gap) // 2
-    right_width = terminal_width - gap - left_width
-    columns: list[list[str]] = [[], []]
-    heights = [0, 0]
-    for panel in panels:
-        column_index = 0 if heights[0] <= heights[1] else 1
-        panel_width = left_width if column_index == 0 else right_width
-        panel_lines = _render_panel_lines(panel, panel_width)
-        if columns[column_index]:
-            columns[column_index].append(" " * panel_width)
-            heights[column_index] += 1
-        columns[column_index].extend(panel_lines)
-        heights[column_index] += len(panel_lines)
-
-    output: list[str] = []
-    for row_index in range(max(heights)):
-        left_line = columns[0][row_index] if row_index < heights[0] else " " * left_width
-        right_line = columns[1][row_index] if row_index < heights[1] else ""
-        output.append(left_line + " " * gap + right_line)
-    return "\n".join(output)
-
-
-def _render_panel(panel: _HelpPanel, width: int) -> str:
-    return "\n".join(_render_panel_lines(panel, width))
-
-
-def _render_panel_lines(panel: _HelpPanel, width: int) -> list[str]:
-    width = max(48, width)
-    inner_width = width - 4
-    title = f" {panel.title} "
-    top_fill = max(0, inner_width - len(title))
-    lines = [_paint(f"╭─{title}{'─' * top_fill}─╮", _ACCENT)]
-
-    for description_line in textwrap.wrap(
-        panel.description,
-        width=inner_width,
-        break_long_words=True,
-        break_on_hyphens=False,
-    ):
-        lines.append(
-            _paint("│ ", _ACCENT)
-            + _paint(description_line.ljust(inner_width), _MUTED)
-            + _paint(" │", _ACCENT)
-        )
-
-    invocation_width = min(
-        max((len(row.invocation) for row in panel.rows), default=0),
-        max(18, inner_width // 2),
-    )
-    description_width = max(16, inner_width - invocation_width - 2)
-    for row in panel.rows:
-        invocation_lines = textwrap.wrap(
-            row.invocation,
-            width=invocation_width,
-            subsequent_indent="  ",
-            break_long_words=True,
-            break_on_hyphens=False,
-        ) or [""]
-        description_lines = textwrap.wrap(
-            row.description,
-            width=description_width,
-            break_long_words=True,
-            break_on_hyphens=False,
-        ) or [""]
-        height = max(len(invocation_lines), len(description_lines))
-        for index in range(height):
-            invocation = invocation_lines[index] if index < len(invocation_lines) else ""
-            description = description_lines[index] if index < len(description_lines) else ""
-            body = (
-                _paint(invocation.ljust(invocation_width), _TEXT)
-                + "  "
-                + _color_description(description.ljust(description_width))
-            )
-            lines.append(_paint("│ ", _ACCENT) + body + _paint(" │", _ACCENT))
-    lines.append(_paint(f"╰{'─' * (width - 2)}╯", _ACCENT))
-    return lines
-
-
-def _color_description(text: str) -> str:
-    marker = "(default:"
-    if marker not in text:
-        return _paint(text, _MUTED)
-    prefix, default = text.split(marker, 1)
-    return _paint(prefix, _MUTED) + _paint(marker + default, _DEFAULT)
 
 
 def _render_epilog(epilog: str, width: int) -> str:

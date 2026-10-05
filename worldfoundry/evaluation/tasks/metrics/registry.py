@@ -8,11 +8,18 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, MetricSpec, is_generation_result_successful
+from worldfoundry.evaluation.api import (
+    AggregateResult,
+    ArtifactRef,
+    GenerationRequest,
+    GenerationResult,
+    MetricResult,
+    MetricSpec,
+    is_generation_result_successful,
+)
 from worldfoundry.evaluation.api.artifacts import local_path_for_uri
 from worldfoundry.evaluation.api.json_contract import to_plain
-from worldfoundry.evaluation.api import ArtifactRef
-
+from worldfoundry.evaluation.api.metrics import aggregate_mean
 
 # ---------------------------------------------------------------------------
 # Metric module protocol (one-folder-per-metric packages)
@@ -236,13 +243,108 @@ def _is_failed(result: GenerationResult) -> bool:
     return not is_generation_result_successful(result)
 
 
+#: Canonical metric ids `BuiltinExistingResultsMetric.__call__` actually implements.
+OFFLINE_COMPUTABLE_METRIC_IDS: frozenset[str] = frozenset(
+    {"artifact_count", "required_artifacts_present", "numeric"}
+)
+#: Parameterized prefixes `BuiltinExistingResultsMetric.__call__` actually implements.
+OFFLINE_COMPUTABLE_METRIC_PREFIXES: tuple[str, ...] = ("has_artifact:", "numeric:")
+
+
+def is_offline_computable_metric_id(canonical_metric_id: str) -> bool:
+    """Return True when the offline existing-results evaluator can compute this id."""
+    return canonical_metric_id in OFFLINE_COMPUTABLE_METRIC_IDS or canonical_metric_id.startswith(
+        OFFLINE_COMPUTABLE_METRIC_PREFIXES
+    )
+
+
 class BuiltinExistingResultsMetric:
     """Metric callable for scoring materialized generation outputs."""
+
+    name = "existing_results_metrics"
+    version = "3"
+    higher_is_better = None
 
     def __init__(self, metrics: Sequence[str] = (), required_artifacts: Sequence[str] = ()) -> None:
         validation = validate_metric_ids(tuple(str(item) for item in (metrics or ())), raise_on_error=True)
         self.metrics = tuple(item["canonical_metric_id"] for item in validation["metrics"])
+        # Fail fast on registered-but-not-offline-computable ids (e.g. fid, cmmd,
+        # vqa_score).  Accepting them here would silently drop the metric from
+        # the scorecard, which is worse than refusing the run request.
+        unsupported = tuple(metric for metric in self.metrics if not is_offline_computable_metric_id(metric))
+        if unsupported:
+            raise MetricRegistryError(
+                "metrics not computable by the offline existing-results evaluator: "
+                f"{', '.join(sorted(unsupported))}. This evaluator only computes "
+                "artifact_count, required_artifacts_present, numeric, "
+                "has_artifact:<name>, and numeric:<name>; other registered metric "
+                "ids need the benchmark in-tree evaluator or their metric package "
+                "compute() API."
+            )
         self.required_artifacts = tuple(str(item) for item in (required_artifacts or ()))
+        self.parameters = {"metrics": self.metrics}
+        self.metric_ids = tuple(dict.fromkeys([
+            *(key.removeprefix("numeric:") for key in self.metrics),
+            *(f"has_artifact:{key}" for key in self.required_artifacts),
+            *(["required_artifacts_present"] if self.required_artifacts else []),
+            "generation_success",
+        ]))
+
+    def resolve_numeric_fields(self, results: Sequence[GenerationResult]) -> "BuiltinExistingResultsMetric":
+        """Expand the numeric wildcard once for this run without mutating a reusable metric."""
+        if "numeric" not in self.metrics:
+            return self
+        fields = sorted({
+            key for result in results if is_generation_result_successful(result)
+            for key in _numeric_values(result)
+        })
+        if not fields:
+            return self
+        metrics = tuple(dict.fromkeys(
+            value for key in self.metrics
+            for value in ([f"numeric:{field}" for field in fields] if key == "numeric" else [key])
+        ))
+        return BuiltinExistingResultsMetric(metrics, self.required_artifacts)
+
+    def metric_definition(self, metric_id: str) -> dict[str, Any]:
+        """Keep numeric field selection separate from artifact checks and metric groups."""
+        artifact_metric = (
+            metric_id in {"artifact_count", "required_artifacts_present", "generation_success"}
+            or metric_id.startswith("has_artifact:")
+        )
+        direction = True if artifact_metric else None
+        if not artifact_metric:
+            try:
+                direction = default_metric_registry().get(metric_id).higher_is_better
+            except KeyError:
+                pass
+        return {
+            "parameters": {} if artifact_metric else {"source": metric_id},
+            "required_artifacts": self.required_artifacts if metric_id == "required_artifacts_present" else (),
+            "higher_is_better": direction,
+        }
+
+    def compute_sample(self, request: GenerationRequest, result: GenerationResult) -> list[MetricResult]:
+        values = self(request, result)["metrics"]
+        rows = [
+            MetricResult(sample_id=request.sample_id, metric_id=key, raw_value=value)
+            for key, value in values.items()
+        ]
+        missing = [
+            key.removeprefix("numeric:") for key in self.metrics
+            if key.startswith("numeric:") and key.removeprefix("numeric:") not in values
+        ]
+        if "numeric" in self.metrics and not _numeric_values(result):
+            missing.append("numeric")
+        rows.extend(
+            MetricResult(sample_id=request.sample_id, metric_id=key, valid=False, coverage=0,
+                         skip_reason="numeric value not emitted by runner")
+            for key in missing
+        )
+        return rows
+
+    def aggregate(self, results: Sequence[MetricResult]) -> AggregateResult:
+        return aggregate_mean(results[0].metric_id if results else self.name, results)
 
     def __call__(self, request: GenerationRequest, result: GenerationResult) -> dict[str, Any]:
         del request
@@ -313,6 +415,7 @@ _DISCOVERABLE_METRIC_PACKAGES: tuple[str, ...] = (
     "worldfoundry.evaluation.tasks.metrics.facesim_cur",
     "worldfoundry.evaluation.tasks.metrics.sadpad",
     "worldfoundry.evaluation.tasks.metrics.opens2v",
+    "worldfoundry.evaluation.tasks.metrics.laion_aesthetic",
 )
 
 
@@ -423,6 +526,13 @@ class MetricRegistryEntry:
     @property
     def spec(self) -> MetricSpec:
         """Export public :class:`MetricSpec` for this entry."""
+        # Only the offline-computable builtin ids are implemented by
+        # BuiltinExistingResultsMetric; claiming it for every registered entry
+        # (fid, cmmd, vqa_score, ...) would misdescribe ~55 metric packages.
+        offline = is_offline_computable_metric_id(self.id) or (
+            self.parameterized_prefix is not None
+            and self.parameterized_prefix in OFFLINE_COMPUTABLE_METRIC_PREFIXES
+        )
         return MetricSpec(
             id=self.id,
             aliases=self.aliases,
@@ -430,7 +540,9 @@ class MetricRegistryEntry:
             family=self.family,
             required_artifacts=self.required_artifacts,
             higher_is_better=self.higher_is_better,
-            implementation="worldfoundry.evaluation.tasks.metrics.registry:BuiltinExistingResultsMetric",
+            implementation=(
+                "worldfoundry.evaluation.tasks.metrics.registry:BuiltinExistingResultsMetric" if offline else None
+            ),
             tags=self.tags,
             metadata={
                 "parameterized_prefix": self.parameterized_prefix,
@@ -835,7 +947,7 @@ def default_metric_registry() -> MetricRegistry:
 
 def list_metric_registry_entries() -> tuple[MetricRegistryEntry, ...]:
     """List all registered metric entries."""
-    return default_metric_registry().list()
+    return default_metric_registry().list(include_discovered=True)
 
 
 def create_existing_results_metric(
@@ -872,7 +984,10 @@ __all__ = [
     "MetricRegistry",
     "MetricRegistryEntry",
     "MetricRegistryError",
+    "OFFLINE_COMPUTABLE_METRIC_IDS",
+    "OFFLINE_COMPUTABLE_METRIC_PREFIXES",
     "UnknownMetricRegistryKeyError",
+    "is_offline_computable_metric_id",
     "create_existing_results_metric",
     "default_metric_registry",
     "discover_metric_registry_entries",

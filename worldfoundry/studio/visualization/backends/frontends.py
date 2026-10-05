@@ -1,8 +1,7 @@
 """Standalone Studio frontend launchers.
 
 Interactive world models, geometry viewers, simulator-heavy workflows, and 3DGS
-assets can each launch a purpose-built browser surface. The Gradio surface is
-available through the explicit ``unified`` frontend mode.
+assets can each launch a purpose-built browser surface.
 """
 
 from __future__ import annotations
@@ -11,8 +10,8 @@ import contextlib
 import mimetypes
 import os
 import re
-import shutil
 import shlex
+import shutil
 import socket
 import subprocess
 import sys
@@ -24,16 +23,29 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from worldfoundry.studio.catalog import CatalogEntry
-from worldfoundry.studio.launch_config import StudioLaunchConfig, env_first
+from worldfoundry.studio.inference.catalog import CatalogEntry
+from worldfoundry.studio.inference.config import env_first
 from worldfoundry.studio.serving import (
     StudioServiceTelemetry,
     StudioThreadingHTTPServer,
+    bind_security_warning,
     path_allowed,
     public_url_for_bind,
+    request_token_valid,
+    require_auth_token_for_host,
     send_file_response,
     send_json_response,
     send_text_response,
+)
+from worldfoundry.studio.ui.launch_config import StudioLaunchConfig
+from worldfoundry.studio.ui.vendor_assets import (
+    SPARK_MODULE_PATH,
+    THREE_CORE_MODULE_PATH,
+    THREE_MODULE_PATH,
+    VENDOR_ASSET_INSTALL_COMMAND,
+    VENDOR_ROOT,
+    VendorAssetError,
+    require_vendor_assets,
 )
 from worldfoundry.studio.visualization.core.artifacts import (
     StudioVisualizationArtifact,
@@ -45,7 +57,6 @@ from worldfoundry.studio.visualization.core.registry import (
     MEDIA_VISUALIZATION,
     RERUN_VISUALIZATION,
     SPARK_VISUALIZATION,
-    UNIFIED_VISUALIZATION,
     VISER_VISUALIZATION,
     BackendCapabilities,
     StudioVisualizationBackend,
@@ -60,7 +71,6 @@ EMBODIED_FRONTEND = EMBODIED_VISUALIZATION
 SPARK_FRONTEND = SPARK_VISUALIZATION
 MEDIA_FRONTEND = MEDIA_VISUALIZATION
 RERUN_FRONTEND = RERUN_VISUALIZATION
-UNIFIED_FRONTEND = UNIFIED_VISUALIZATION
 
 
 def _profile_mode(mode: str):
@@ -78,6 +88,7 @@ def _world_backend(request) -> StudioVisualizationLaunch | None:
         access_printer=print_remote_access,
     )
     return None
+
 
 
 def _points_backend(request) -> StudioVisualizationLaunch | None:
@@ -161,13 +172,6 @@ STUDIO_VISUALIZATIONS = StudioVisualizationRegistry(
             serve=_media_backend,
             capabilities=BackendCapabilities(frozenset({"image", "video", "audio", "optical_flow"}), score=60),
         ),
-        StudioVisualizationBackend(
-            mode=UNIFIED_FRONTEND,
-            title="Unified Gradio Studio",
-            default_port=7868,
-            native=False,
-            match=lambda entry, spec: False,
-        ),
     )
 )
 
@@ -175,13 +179,10 @@ NATIVE_FRONTENDS = STUDIO_VISUALIZATIONS.native_modes
 DEFAULT_FRONTEND_PORTS = STUDIO_VISUALIZATIONS.default_ports
 SPARK_ASSET_EXTS = {".ply", ".spz", ".splat", ".ksplat", ".sog"}
 MEDIA_ASSET_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".mp4", ".mov", ".webm", ".mkv", ".avi", ".wav", ".mp3", ".flac", ".ogg"}
-STUDIO_ASSET_DIR = Path(__file__).resolve().parents[2] / "assets"
-VENDOR_DIR = STUDIO_ASSET_DIR / "vendor"
-SPARK_VENDOR_DIR = VENDOR_DIR / "spark"
-THREE_VENDOR_DIR = VENDOR_DIR / "three"
-SPARK_MODULE_PATH = SPARK_VENDOR_DIR / "spark.module.min.js"
-THREE_MODULE_PATH = THREE_VENDOR_DIR / "three.module.js"
-THREE_CORE_MODULE_PATH = THREE_VENDOR_DIR / "three.core.js"
+STUDIO_ASSET_DIR = VENDOR_ROOT.parent
+VENDOR_DIR = VENDOR_ROOT
+SPARK_VENDOR_DIR = SPARK_MODULE_PATH.parent
+THREE_VENDOR_DIR = THREE_MODULE_PATH.parent
 
 
 def resolve_frontend_mode(
@@ -197,7 +198,7 @@ def resolve_frontend_mode(
 
 
 def serve_native_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig, mode: str) -> None:
-    """Launch a non-Gradio Studio frontend and block until interrupted."""
+    """Launch a standalone Studio frontend and block until interrupted."""
     STUDIO_VISUALIZATIONS.serve(entry=entry, launch_config=launch_config, mode=mode)
 
 
@@ -207,7 +208,6 @@ def host_for_frontend(launch_config: StudioLaunchConfig) -> str:
     return (
         launch_config.host
         or env_first("WORLDFOUNDRY_STUDIO_HOST")
-        or os.getenv("GRADIO_SERVER_NAME")
         or "127.0.0.1"
     ).strip() or "127.0.0.1"
 
@@ -241,6 +241,9 @@ def print_remote_access(mode: str, host: str, port: int) -> None:
     print(f"Remote bind: http://{host}:{port}", flush=True)
     if host in {"0.0.0.0", "::"}:
         print(f"Network URL: {public_url_for_bind(host, port)}", flush=True)
+    warning = bind_security_warning(host)
+    if warning:
+        print(warning, flush=True)
     print(f"Local tunnel: ssh -N -L {port}:{remote_host}:{port} {ssh_host}", flush=True)
     print(f"Browser URL: {local_url}", flush=True)
 
@@ -294,8 +297,14 @@ def serve_embodied_frontend(entry: CatalogEntry, launch_config: StudioLaunchConf
 def serve_spark_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig) -> None:
     """Serve a standalone Spark 3DGS viewer over HTTP."""
 
+    try:
+        require_vendor_assets()
+    except VendorAssetError as exc:
+        raise SystemExit(str(exc)) from None
+
     host = host_for_frontend(launch_config)
     port = port_for_frontend(launch_config, SPARK_FRONTEND)
+    auth_token = require_auth_token_for_host(host, server_name="Spark frontend")
     asset_path = _optional_asset(launch_config.asset_path)
     if asset_path is not None and asset_path.suffix.lower() not in SPARK_ASSET_EXTS:
         raise SystemExit(
@@ -309,6 +318,7 @@ def serve_spark_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig)
         title=f"{entry.display_name} · Spark 3DGS",
         allowed_roots=allowed_roots,
         telemetry=StudioServiceTelemetry(f"{SPARK_FRONTEND}:{entry.model_id}"),
+        auth_token=auth_token,
     )
     httpd = StudioThreadingHTTPServer((host, port), handler)
     print_remote_access(SPARK_FRONTEND, host, port)
@@ -329,6 +339,7 @@ def serve_media_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig)
 
     host = host_for_frontend(launch_config)
     port = port_for_frontend(launch_config, MEDIA_FRONTEND)
+    auth_token = require_auth_token_for_host(host, server_name="Media frontend")
     asset_path = _required_existing_asset(
         launch_config.asset_path,
         frontend="media",
@@ -342,8 +353,9 @@ def serve_media_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig)
         MediaViewerHandler,
         asset_path=asset_path,
         title=f"{entry.display_name} · Media Preview",
-        allowed_roots=(asset_path.parent.resolve(), Path.cwd().resolve()),
+        allowed_roots=(asset_path.parent.resolve(),),
         telemetry=StudioServiceTelemetry(f"{MEDIA_FRONTEND}:{entry.model_id}"),
+        auth_token=auth_token,
     )
     httpd = StudioThreadingHTTPServer((host, port), handler)
     print_remote_access(MEDIA_FRONTEND, host, port)
@@ -396,7 +408,9 @@ def serve_rerun_frontend(entry: CatalogEntry, launch_config: StudioLaunchConfig)
     print_remote_access(RERUN_FRONTEND, host, port)
     print(f"Rerun asset: {asset_path}", flush=True)
     print(f"Rerun command: {command}", flush=True)
-    process = subprocess.Popen(command, shell=True)
+    # Template placeholders are shlex.quote()d above, so splitting the rendered
+    # command is equivalent to the previous shell=True invocation without a shell.
+    process = subprocess.Popen(shlex.split(command))
     try:
         process.wait()
     except KeyboardInterrupt:
@@ -416,6 +430,22 @@ def _default_rerun_command_template() -> str:
     )
 
 
+def _handler_request_authorized(handler: BaseHTTPRequestHandler, parsed, auth_token: str) -> bool:
+    """Enforce the shared Studio token on an http.server request when set."""
+
+    if not auth_token:
+        return True
+    query_token = (parse_qs(parsed.query).get("token") or [""])[0]
+    if request_token_valid(
+        auth_token,
+        authorization_header=handler.headers.get("Authorization"),
+        query_token=query_token,
+    ):
+        return True
+    handler.send_error(HTTPStatus.UNAUTHORIZED, "Missing or invalid Studio auth token.")
+    return False
+
+
 class MediaViewerHandler(BaseHTTPRequestHandler):
     """Tiny HTTP surface for standalone media previews."""
 
@@ -428,16 +458,20 @@ class MediaViewerHandler(BaseHTTPRequestHandler):
         title: str,
         allowed_roots: tuple[Path, ...],
         telemetry: StudioServiceTelemetry,
+        auth_token: str = "",
         **kwargs,
     ) -> None:
         self.asset_path = asset_path
         self.title = title
         self.allowed_roots = allowed_roots
         self.telemetry = telemetry
+        self.auth_token = auth_token
         super().__init__(*args, **kwargs)
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API.
         parsed = urlparse(self.path)
+        if not _handler_request_authorized(self, parsed, self.auth_token):
+            return
         with self.telemetry.track(parsed.path):
             self._handle_get(parsed.path)
 
@@ -480,6 +514,16 @@ class SparkViewerHandler(BaseHTTPRequestHandler):
 
     server_version = "WorldFoundrySparkFrontend/1.0"
 
+    # Vendored JS modules carry no secrets and import-map fetches cannot
+    # attach the token, so they stay reachable when token auth is active.
+    AUTH_EXEMPT_PATHS = frozenset(
+        {
+            "/__worldfoundry__/spark.module.js",
+            "/__worldfoundry__/three.module.js",
+            "/__worldfoundry__/three.core.js",
+        }
+    )
+
     def __init__(
         self,
         *args,
@@ -487,16 +531,22 @@ class SparkViewerHandler(BaseHTTPRequestHandler):
         title: str,
         allowed_roots: tuple[Path, ...],
         telemetry: StudioServiceTelemetry,
+        auth_token: str = "",
         **kwargs,
     ) -> None:
         self.default_asset = default_asset
         self.title = title
         self.allowed_roots = allowed_roots
         self.telemetry = telemetry
+        self.auth_token = auth_token
         super().__init__(*args, **kwargs)
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API.
         parsed = urlparse(self.path)
+        if parsed.path not in self.AUTH_EXEMPT_PATHS and not _handler_request_authorized(
+            self, parsed, self.auth_token
+        ):
+            return
         with self.telemetry.track(parsed.path):
             self._handle_get(parsed)
 
@@ -515,21 +565,30 @@ class SparkViewerHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/__worldfoundry__/spark.module.js":
             if SPARK_MODULE_PATH.exists():
-                self._send_file(SPARK_MODULE_PATH, "text/javascript", cache_control="public, max-age=31536000, immutable")
+                self._send_file(SPARK_MODULE_PATH, "text/javascript", cache_control="no-store")
                 return
-            self.send_error(HTTPStatus.NOT_FOUND, "Vendored Spark module missing from WorldFoundry.")
+            self.send_error(
+                HTTPStatus.NOT_FOUND,
+                f"Vendored Spark module missing. Run {VENDOR_ASSET_INSTALL_COMMAND}.",
+            )
             return
         if parsed.path == "/__worldfoundry__/three.module.js":
             if THREE_MODULE_PATH.exists():
-                self._send_file(THREE_MODULE_PATH, "text/javascript", cache_control="public, max-age=31536000, immutable")
+                self._send_file(THREE_MODULE_PATH, "text/javascript", cache_control="no-store")
                 return
-            self.send_error(HTTPStatus.NOT_FOUND, "Vendored Three module missing from WorldFoundry.")
+            self.send_error(
+                HTTPStatus.NOT_FOUND,
+                f"Vendored Three module missing. Run {VENDOR_ASSET_INSTALL_COMMAND}.",
+            )
             return
         if parsed.path == "/__worldfoundry__/three.core.js":
             if THREE_CORE_MODULE_PATH.exists():
-                self._send_file(THREE_CORE_MODULE_PATH, "text/javascript", cache_control="public, max-age=31536000, immutable")
+                self._send_file(THREE_CORE_MODULE_PATH, "text/javascript", cache_control="no-store")
                 return
-            self.send_error(HTTPStatus.NOT_FOUND, "Vendored Three core module missing from WorldFoundry.")
+            self.send_error(
+                HTTPStatus.NOT_FOUND,
+                f"Vendored Three core module missing. Run {VENDOR_ASSET_INSTALL_COMMAND}.",
+            )
             return
         if parsed.path == "/__worldfoundry__/asset":
             query = parse_qs(parsed.query)
@@ -622,8 +681,13 @@ def spark_viewer_html(*, title: str, default_asset: str) -> str:
 
     const setStatus = (message) => {{ status.textContent = message; }};
     const pixelRatio = () => Math.min(Math.max(1, window.devicePixelRatio || 1), 1.5);
+    const AUTH_TOKEN = new URLSearchParams(window.location.search).get("token") || "";
     const assetFromLocation = () => new URLSearchParams(window.location.search).get("asset") || DEFAULT_ASSET || "";
-    const assetUrl = (path) => /^https?:\\/\\//i.test(path) ? path : `/__worldfoundry__/asset?path=${{encodeURIComponent(path)}}`;
+    const assetUrl = (path) => {{
+      if (/^https?:\\/\\//i.test(path)) return path;
+      const tokenParam = AUTH_TOKEN ? `&token=${{encodeURIComponent(AUTH_TOKEN)}}` : "";
+      return `/__worldfoundry__/asset?path=${{encodeURIComponent(path)}}${{tokenParam}}`;
+    }};
     const fileName = (path) => (path.split("/").pop() || "world.splat").split("?")[0];
 
     const disposeViewer = () => {{
@@ -775,12 +839,26 @@ def media_viewer_html(*, title: str, asset_path: Path) -> str:
     <div class="pill">{safe_name}</div>
   </div>
   <main>{viewer}</main>
+  <script>
+    (() => {{
+      const token = new URLSearchParams(window.location.search).get("token");
+      if (!token) return;
+      const asset = document.querySelector(".asset");
+      if (!asset) return;
+      const url = new URL(asset.getAttribute("src"), window.location.origin);
+      url.searchParams.set("token", token);
+      asset.src = url.toString();
+    }})();
+  </script>
 </body>
 </html>"""
 
 
 def _spark_allowed_roots(asset_path: Path | None) -> tuple[Path, ...]:
-    roots: list[Path] = [Path.cwd().resolve()]
+    # Only explicit workspace/artifact/model directories and the selected
+    # asset's parent are servable. The process cwd (often the repo root) is
+    # intentionally not an allowed root.
+    roots: list[Path] = []
     for raw in (
         os.getenv("WORLDFOUNDRY_STUDIO_WORKSPACE_DIR"),
         os.getenv("WORLDFOUNDRY_ARTIFACT_DIR"),

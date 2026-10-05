@@ -1,0 +1,44 @@
+{
+  "video": "cases/embodied/case_fixture_003/wf_fixture_gen_case_fixture_003.mp4",
+  "gt_video": "cases/embodied/case_fixture_003/ref_case_fixture_003.mp4",
+  "prompt": "Synthetic fixture prompt with the geometry track skipped.",
+  "physical": {
+    "score": 0.85,
+    "score_scale": "0-1",
+    "default_if_no_related": 0.5,
+    "question_count": 2,
+    "related_question_count": 2,
+    "compliant_question_count": 2,
+    "dimension_scores": {
+      "mechanics": 0.9,
+      "thermotics": 0.8,
+      "material": null
+    },
+    "results": [
+      {"question_id": "fixture_mech_1", "dimension": "mechanics", "related": true, "compliant": true, "confidence": 0.9},
+      {"question_id": "fixture_thermo_1", "dimension": "thermotics", "related": true, "compliant": true, "confidence": 0.8}
+    ]
+  },
+  "interaction": {
+    "summary": {
+      "chunk_mean": 4.1,
+      "transition_mean": 3.6,
+      "global_score": 3.8,
+      "overall": 3.9
+    },
+    "overall_raw": 3.9,
+    "overall_raw_scale": "0-5",
+    "score": 0.78,
+    "score_scale": "0-1"
+  },
+  "clip_interaction": {
+    "summary": {
+      "semantic_adherence": 0.3,
+      "num_scored_chunks": 2,
+      "num_chunks": 2,
+      "num_scored_frames": 16
+    }
+  },
+  "three_d": null,
+  "combined_score": 0.815
+}

@@ -1,0 +1,264 @@
+id: harnesseval-w
+name: HarnessEval-W
+publisher: MirroS-Lab
+publisher_kind: research_group
+benchmark_kind:
+- interactive-video-world-model
+- world-state-transition
+- world-persistence
+domains:
+- world-model
+- video-generation
+modalities:
+- image
+- video
+- text
+- action
+status: confirmed_official_code_in_github
+official_sources:
+  github:
+    url: https://github.com/MirroS-Lab/HarnessEval-W
+    revision: ed4ccc6486b8271723ee8baea60d89b32d0a7518
+    provenance_file: worldfoundry/evaluation/tasks/execution/runners/harnesseval_w/runtime/WORLDFOUNDRY_PROVENANCE.md
+  huggingface_datasets:
+  - repo_id: MirroS-Lab/HarnessEval-W
+    repo_type: dataset
+    url: https://huggingface.co/datasets/MirroS-Lab/HarnessEval-W
+    access_status: not_verified
+  paper_url: https://arxiv.org/abs/2608.16859
+  project_page: https://mirros-lab.github.io/HarnessEval-W
+  license:
+    status: upstream_readme_declaration
+    notes: Upstream README declares Apache-2.0; no standalone LICENSE file exists
+      at the pinned revision.
+benchmark_assets:
+  official_data:
+    status: external_asset
+    hf_dataset_id: MirroS-Lab/HarnessEval-W
+    expected_cases: 100
+    auth: not verified; acquisition is explicit
+  in_tree_runtime:
+    status: adapted_official_source
+    path: worldfoundry/evaluation/tasks/execution/runners/harnesseval_w/runtime
+    revision: ed4ccc6486b8271723ee8baea60d89b32d0a7518
+  in_tree_fixture:
+    path: worldfoundry/data/benchmarks/assets/harnesseval-w
+    purpose: Synthetic scores for schema/aggregation checks; not official benchmark
+      evidence.
+evaluation_surface:
+  purpose: Measure six world-transition and world-persistence families with eleven
+    evidence-producing skills.
+  tracks:
+  - exploratory_transition
+  - intentional_transition
+  - physical_transition
+  - drift_resistance
+  - return_revisit_consistency
+  - offscreen_evolution
+  requires_external_services: true
+  external_services:
+  - openai_compatible_vlm_judge
+  metric_protocol:
+    metric_ids:
+    - overall_macro
+    - overall_core_macro
+    - overall_observation_macro
+    - observation_quality_macro
+    - observation_physical_plausibility_macro
+    - exploratory_transition
+    - intentional_transition
+    - physical_transition
+    - drift_resistance
+    - return_revisit_consistency
+    - offscreen_evolution
+    primary_metric: overall_macro
+metrics:
+- id: overall_macro
+  name: Overall Macro
+  description: Equal mean of all six family scores; each case combines core and observation
+    scores at 50/50.
+  higher_is_better: true
+  leaderboard_key: overall_macro
+  aggregator: macro_mean
+  output_unit: score
+  primary: true
+- id: overall_core_macro
+  name: Overall Core Macro
+  description: Official HarnessEval common-case overall core macro score.
+  higher_is_better: true
+  leaderboard_key: overall_core_macro
+  aggregator: macro_mean
+  output_unit: score
+- id: overall_observation_macro
+  name: Overall Observation Macro
+  description: Official HarnessEval common-case overall observation macro score.
+  higher_is_better: true
+  leaderboard_key: overall_observation_macro
+  aggregator: macro_mean
+  output_unit: score
+- id: observation_quality_macro
+  name: Observation Quality Macro
+  description: Official HarnessEval common-case observation quality macro score.
+  higher_is_better: true
+  leaderboard_key: observation_quality_macro
+  aggregator: macro_mean
+  output_unit: score
+- id: observation_physical_plausibility_macro
+  name: Observation Physical Plausibility Macro
+  description: Official HarnessEval common-case observation physical plausibility
+    macro score.
+  higher_is_better: true
+  leaderboard_key: observation_physical_plausibility_macro
+  aggregator: macro_mean
+  output_unit: score
+- id: exploratory_transition
+  name: Exploratory Transition
+  description: Official HarnessEval common-case exploratory transition score.
+  higher_is_better: true
+  leaderboard_key: exploratory_transition
+  aggregator: mean
+  output_unit: score
+- id: intentional_transition
+  name: Intentional Transition
+  description: Official HarnessEval common-case intentional transition score.
+  higher_is_better: true
+  leaderboard_key: intentional_transition
+  aggregator: mean
+  output_unit: score
+- id: physical_transition
+  name: Physical Transition
+  description: Official HarnessEval common-case physical transition score.
+  higher_is_better: true
+  leaderboard_key: physical_transition
+  aggregator: mean
+  output_unit: score
+- id: drift_resistance
+  name: Drift Resistance
+  description: Official HarnessEval common-case drift resistance score.
+  higher_is_better: true
+  leaderboard_key: drift_resistance
+  aggregator: mean
+  output_unit: score
+- id: return_revisit_consistency
+  name: Return Revisit Consistency
+  description: Official HarnessEval common-case return revisit consistency score.
+  higher_is_better: true
+  leaderboard_key: return_revisit_consistency
+  aggregator: mean
+  output_unit: score
+- id: offscreen_evolution
+  name: Offscreen Evolution
+  description: Official HarnessEval common-case offscreen evolution score.
+  higher_is_better: true
+  leaderboard_key: offscreen_evolution
+  aggregator: mean
+  output_unit: score
+runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/harnesseval_w/run_harnesseval_w.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.harnesseval_w.run_harnesseval_w
+    generated_arg: --generated-artifact-dir
+    limit_arg: --limit
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    supports_fixture: true
+    input_kind: harnesseval_rollouts_or_official_results
+    model_arg: --model-id
+    dataset_manifest_arg: --manifest
+    dataset_root_arg: --assets-root
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:HarnessEvalWContract
+  runtime:
+    kind: in_tree_official_runtime
+    root: worldfoundry/evaluation/tasks/execution/runners/harnesseval_w
+    runtime_root: worldfoundry/evaluation/tasks/execution/runners/harnesseval_w/runtime
+    runtime_entrypoint: worldfoundry/evaluation/tasks/execution/runners/harnesseval_w/run_harnesseval_w.py
+    results_path_env: WORLDFOUNDRY_HARNESSEVAL_RESULTS_PATH
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  expected_artifacts:
+  - scorecard.json
+  - raw_metric_table.jsonl
+  - per_case_metrics.jsonl
+  - official_report.json
+  - benchmark_contract.json
+  validation_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - harnesseval-w
+  - --mode
+  - official-validation
+  - --official-results-path
+  - <official_results>
+  - --output-dir
+  - <out>
+  - --json
+  verification_status: normalizer_verified_full_suite_pending
+  notes:
+  - Calls Python inventory, skill workers, scoring and completion-audit APIs; does
+    not invoke upstream shell entrypoints.
+  - Result normalization preserves common-case cohorts across models; --model-id is
+    required for multiple models.
+  - --run-official --score-cached replays official metric bundles without inference.
+integration:
+  status: integrated
+  tier: model_backed
+  hf_dataset_id: MirroS-Lab/HarnessEval-W
+  blocked_reasons: &id001
+  - The complete public 100-case split has not been evaluated through this integration;
+    GPU and judge parity remain unverified.
+  - MegaSAM requires compiled CUDA extensions and staged weights; full-suite pose parity
+    and judge parity remain unverified.
+release_status: experimental
+maturity: contract_ready
+open_source_status: in_tree_runtime
+official_benchmark_verified: false
+integration_evidence: false
+leaderboard_valid: false
+requires:
+- Official manifests, initial observations and unmodified skill plans from MirroS-Lab/HarnessEval-W.
+- Generated videos and metadata in the official outputs/<axis>/<family>/<model>/<case>
+  layout.
+- Scored inference requires CUDA, staged CLIP/RAFT/AMT/HPSv3/PAVRM/MegaSAM weights
+  and an OpenAI-compatible VLM judge.
+- Canonical MegaSAM and UniDepth inference sources are included under base_models.
+  UniDepth uses WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR and the pinned compatible
+  V2 checkpoint; CUDA extensions must be built in the inference environment.
+blockers: *id001
+data_refs:
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/harnesseval-w.yaml
+  fixture: worldfoundry/data/benchmarks/assets/harnesseval-w
+  runtime_root: worldfoundry/evaluation/tasks/execution/runners/harnesseval_w/runtime
+  hf_dataset_ids:
+  - MirroS-Lab/HarnessEval-W
+runner_availability:
+  available: true
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:HarnessEvalWContract
+  runner_script_available: true
+  task_yaml_available: true
+  normalizer_verified: true
+  runtime_verified: false
+  full_suite_verified: false
+  surface: harnesseval_w_official_python
+optional_base_model_dependencies:
+- clip_vit_b32
+- raft
+- vbench_metric_checkpoint_assets
+- wbench_quality_metric_assets
+- wbench_hpsv3
+- wbench_pavrm_qwen3vl
+- wbench_megasam
+- unidepth_v2_vitl14
+validation_command:
+- python
+- -m
+- worldfoundry.evaluation.tasks.execution.runners.harnesseval_w.run_harnesseval_w
+- --run-fixture
+- --strict
+- --output-dir
+- <out>
+- --json
+artifact_layout:
+  generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  output_artifact: benchmark_scorecard
+  filename_template: scorecard.json

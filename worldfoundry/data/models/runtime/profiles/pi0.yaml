@@ -5,11 +5,11 @@ checkpoints:
 - local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openpi/openpi-assets/checkpoints/pi0_droid
   path: gs://openpi-assets/checkpoints/pi0_droid
   role: pi0_droid_checkpoint
-  status: orbax_checkpoint_metadata_validated
+  status: checkpoint_not_staged
 - local_dir: ${WORLDFOUNDRY_CKPT_DIR}/openpi/openpi-assets/checkpoints/pi0_base
   path: gs://openpi-assets/checkpoints/pi0_base
   role: pi0_base_checkpoint
-  status: orbax_checkpoint_metadata_validated
+  status: checkpoint_not_staged
 execution:
   environment: openpi
 id: pi0
@@ -28,8 +28,8 @@ notes:
   in-tree OpenPI runtime.
 - WorldFoundry keeps the inference-only OpenPI runtime directly under worldfoundry/synthesis/action_generation/openpi.
 - Default runtime config uses the in-tree pi0_droid policy config; both declared
-  Orbax checkpoints are locally staged and their metadata trees are validated.
+  Orbax checkpoints currently require local staging.
 - This profile emits action_trace artifacts and is not a video-generation profile.
-runtime_status: in_tree_openpi_pi0_runtime_ported_checkpoint_staged_gpu_parity_pending
+runtime_status: in_tree_openpi_pi0_runtime_ported_checkpoint_asset_gated
 task_family: vla_policy
 verification_status: checkpoint_parity_pending

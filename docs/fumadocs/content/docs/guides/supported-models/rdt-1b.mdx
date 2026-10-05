@@ -1,0 +1,30 @@
+---
+title: "RDT-1B"
+description: "Tsinghua 1B diffusion VLA: T5 + SigLIP, 128-D unified actions, two-frame three-camera DPM infer. Dedicated env; pretrained checkpoint only."
+modelId: "rdt-1b"
+pageSource: authored
+---
+
+RDT-1B is Tsinghua thu-ml's **Robotics Diffusion Transformer**: a 1B diffusion policy with a native **128-D unified action space**. The paper is [RDT-1B: a Diffusion Foundation Model for Bimanual Manipulation](https://arxiv.org/abs/2410.07864) (arXiv 2410.07864). The project page is [rdt-robotics.github.io/rdt-robotics](https://rdt-robotics.github.io/rdt-robotics/); code is [thu-ml/RoboticsDiffusionTransformer](https://github.com/thu-ml/RoboticsDiffusionTransformer). Aliases `rdt`, `robotics-diffusion-transformer`, and `robotics-diffusion-transformer/rdt-1b` resolve here.
+
+<ModelPaperFigures modelId="rdt-1b" locale="en" />
+
+WorldFoundry keeps the unified action model, **two-frame / three-camera** preprocessing, and **DPM** inference in-tree. Required inputs are `image`, `prompt`, `state`, and `jpeg_standardization`. Optional: two-frame three-view `image_history` (missing history is filled with a mean-color frame) and precomputed T5 `text_embeddings`. Source images are **640×480**. The deployed action layout on this card is **dual-arm 14-D unscaled**. Language goes through official **T5-XXL**; vision through **SigLIP so400m-patch14-384**.
+
+<ModelCommandBuilder modelId="rdt-1b" locale="en" />
+
+## What it is for
+
+Run the pretrained policy: cameras + instruction + proprio in; `action_trace` / `rdt-1b_action_trace.json` out through `RDT1BPipeline`. Task profiles are `vla` (default), `vla.policy_rollout`, and `robot_policy`. Launch `worldfoundry-eval run rdt-1b`.
+
+Stage `robotics-diffusion-transformer/rdt-1b`, `google/siglip-so400m-patch14-384`, and `google/t5-v1_1-xxl`. The released weight is a **pretraining** checkpoint — embodiment / task fine-tuning is usually required before you treat it as a deployable specialist. On memory-constrained hosts, encode the prompt once and pass cached T5 embeddings; the T5 encoder can be released afterward.
+
+## Runtime contract
+
+RDT, SigLIP, and T5 directories are recorded as complete runtime subsets (weights-only / safetensors-header checks). Auto dtype is **bf16** on Ampere / Ada / Hopper / Blackwell and **fp16** on older CUDA. Manifest validation does **not** claim numerical GPU inference. Integration is Runner parity pending; runner / demo status is **not recorded**.
+
+## Running in WorldFoundry
+
+Use the dedicated environment `worldfoundry-vla-rdt-1b` (Python 3.10, CUDA 12.1 or newer, `torch>=2.2`). Do not expect a verified `get_action` artifact on this card.
+
+<ModelRelatedRecipes modelId="rdt-1b" locale="en" />

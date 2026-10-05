@@ -1,0 +1,32 @@
+---
+title: "Cosmos 3"
+description: "最新一代 NVIDIA 全模态世界基础模型：图像 / 视频 / 声音，外加策略与动力学头。原生 Nano/Super；OpenMDW-1.1，未 gated。独立环境；GPU 一致性仍为 pending。"
+modelId: "cosmos3"
+pageSource: authored
+---
+
+Cosmos 3 是此处记录的**最新** Cosmos 世代：单一**全模态**世界模型，同时覆盖文生图、文生视频、图 / 视频到视频、**同步声音**，以及结构化动作推断（**策略**、**正向动力学**、**逆向动力学**）。variant 是 `cosmos3-nano` 与 `cosmos3-super`。本卡片**不是** [Predict 2](/zh/docs/guides/supported-models/cosmos-predict-2)，**不是** [Predict 2.5](/zh/docs/guides/supported-models/cosmos-predict-2.5)，也**不是** [Transfer 2.5](/zh/docs/guides/supported-models/cosmos-transfer-2.5)。
+
+<ModelPaperFigures modelId="cosmos3" locale="zh" />
+
+WorldFoundry **原生运行**——共享加载器、联合模态 runner、Karras **flow-UniPC**、Wan **VAE38**、仅推理的 **AVAE** 声音解码器。**不导入 Diffusers。** 权重大自官方 Hugging Face 仓库（`nvidia/Cosmos3-Nano`、`nvidia/Cosmos3-Super`），许可是 **OpenMDW-1.1**，**未 gated**。论文：[Cosmos 3: Omnimodal World Models for Physical AI](https://arxiv.org/abs/2606.02800)。项目页：[research.nvidia.com/labs/cosmos-lab/cosmos3](https://research.nvidia.com/labs/cosmos-lab/cosmos3/)。
+
+本仓库在 **Nano** 上实际核对过：transformer **814/814**、VAE38 **196/196**、AVAE **182/182**，以及与官方求解器数值一致的 35 步 UniPC 调度。**端到端 GPU 输出一致性仍为 pending。** 早期 Diffusers 后端的冒烟只作历史记录，不记到这条原生路径上。Super 已注册；多 GPU 视觉 / 声音 / 动作 / 全分辨率一致性同样 pending。
+
+<ModelCommandBuilder modelId="cosmos3" locale="zh" />
+
+## 用来做什么
+
+需要一个栈同时覆盖图像、视频、可选声音和结构化动作头时用 Cosmos 3。默认启动 `worldfoundry-eval run cosmos3-nano`，任务 profile 为 `t2i`。必填输入：`prompt`、`image`、`video`。`actions` 字段记录 `policy`、`forward_dynamics`、`inverse_dynamics`。产物：`cosmos3-nano.mp4`（家族默认 `cosmos3.mp4`）。
+
+只有打算用 Super checkpoint 时才选 `cosmos3-super`。本仅推理配方**不含** Reasoner、训练、guardrail 与 vLLM / vLLM-Omni serving。gated 的 T5 video2world 用 Predict 2。已验证的 1280×704 / 93 帧文生世界用 Predict 2.5。边缘控制的 sim-to-real 用 Transfer 2.5。
+
+世界生成质量的评测入口是 [WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench) 与 [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq)。那是 catalog 入口，不是已摄入的 WorldFoundry 分数。
+
+## 在 WorldFoundry 中运行
+
+`Cosmos3Pipeline` 需要**独立**环境 `worldfoundry-cosmos3-cu128`（Python 3.11，CUDA 12.8，**torch==2.10.0**）。它**不走** Predict / Transfer 用的统一 cu128 profile。基础选择路由到 Nano。当前版本证据要求确切 SHA——Nano `411f42a8fdfb8c5b2583cb8786e0938f49796eaa`，Super `e0262be9d8f7586bc24c069a2aed2b665bdff266`。`prepare_model_infer.sh` 会输出结构化 checkpoint 报告与固定 snapshot model-ref，避免把旧的本地目录默认为当前版本。
+
+原生 transformer 的参数布局对齐官方 `nvidia/Cosmos3-Nano` 与 `nvidia/Cosmos3-Super`。实现来自 NVIDIA Cosmos3 Diffusers 贡献的 `aefdf852c16237039785d84ab3327167cb0ec07f`。加载、attention 分发、调度、模态打包和执行由 WorldFoundry 持有；Diffusers 不是运行时后端。
+
+<ModelRelatedRecipes modelId="cosmos3" locale="zh" />

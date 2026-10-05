@@ -657,7 +657,7 @@ def masked_area_resize(
         return ret
 
 
-from worldfoundry.core.io.artifacts import (
+from worldfoundry.core.media.artifacts import (
     colorize_depth_map,
     colorize_normal_map,
 )

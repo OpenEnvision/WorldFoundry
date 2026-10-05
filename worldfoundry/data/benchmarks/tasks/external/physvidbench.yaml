@@ -24,8 +24,7 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: physvidbench
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id physvidbench --mode contract
-    --output-dir tmp/benchmark_zoo/benchmark_contract/physvidbench --json
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id physvidbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/physvidbench --json
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysVidBenchContract
   official_runner_command: worldfoundry-eval zoo benchmark-run
   prompt_suite:
@@ -75,17 +74,16 @@ metadata:
     bundled_asset_paths:
     - worldfoundry/data/benchmarks/assets/physvidbench/prompts_questions.csv
     - worldfoundry/data/benchmarks/assets/physvidbench/captions
-  official_runner_script:
-    worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py
+  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py
   runner_availability:
     available: true
     runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysVidBenchContract
     runner_script_available: true
     task_yaml_available: true
     runtime_verified: false
-    surface: in_tree_result_normalizer
+    surface: in_tree_result_importer_and_bounded_caption_qa
     normalizer_verified: false
-  open_source_status: in_tree_result_normalizer
+  open_source_status: in_tree_artifact_scores_ready
   local_evaluator:
     target: worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py
     status: implemented
@@ -156,6 +154,16 @@ tasks:
           kind: video
     evaluation_protocol:
     - name: result_importer_and_bounded_caption_qa
+      metric_ids:
+      - physical_commonsense_accuracy
+      - affordance_understanding
+      - tool_use_consistency
+      - material_property_consistency
+      - temporal_dynamics_consistency
+      - physvidbench_average
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysVidBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/physvidbench/run_physvidbench_official_runner.py
+    - name: external_official_runner
       metric_ids:
       - physical_commonsense_accuracy
       - affordance_understanding

@@ -1,0 +1,48 @@
+---
+title: "LingBot-World"
+description: "LingBot-World（Robbyant (Ant Group)）：世界模型、相机控制；已验证; 独立环境 `lingbot-world`。"
+modelId: "lingbot-world"
+pageSource: authored
+---
+
+LingBot-World 是蚂蚁灵波的相机可控世界视频模型。本 catalog 中它已完整验证：base-cam checkpoint 于 2026-07-28 按官方 161 帧、70 步相机控制 demo 完成全质量产物验证——包括一个四张 A100 的紧凑拓扑，自适应调整 FSDP/Ulysses 设置并产出连贯产物。
+
+<ModelPaperFigures modelId="lingbot-world" locale="zh" />
+
+记录论文为[arXiv 2601.20540](https://arxiv.org/abs/2601.20540)。
+
+项目页：[technology.robbyant.com/lingbot-world](https://technology.robbyant.com/lingbot-world)。代码：[robbyant/lingbot-world](https://github.com/robbyant/lingbot-world)。
+
+<ModelCommandBuilder modelId="lingbot-world" locale="zh" />
+
+## 用来做什么
+
+`lingbot-world` 是记录的相机控制路由。按 catalog 相机路径推进时从这里起步。
+
+官方 base-cam 配方使用八卡，DiT/T5 FSDP 加 Ulysses 序列并行；Workspace 亦支持四卡紧凑拓扑（4 与 8 都能整除模型的 40 个注意力头）。共享的时间步嵌入为整数调度时间步保留浮点精度，避免分布式序列并行的输出损坏。该模型由蚂蚁灵波科技（Robbyant，蚂蚁集团）发布。
+
+catalog 记录的任务包括 世界模型、相机控制。
+
+记录的评测入口包括[CameraBench](/zh/docs/evaluation/benchmark-hub/camerabench)（世界滚动生成的相机控制贴合度）、[WorldModelBench](/zh/docs/evaluation/benchmark-hub/worldmodelbench)（世界滚动生成的总体质量）。
+
+## 运行时契约
+
+可选 `image`、`prompt`、`interactions`、`action_path`、`frames`；产物 `lingbot-world.mp4`。
+
+CLI task profile：`image-navigation-video`、`image-action-video`。绑定的 pipeline 类是 `LingBotPipeline`。
+
+系列状态：**已验证**。
+
+`image-navigation-video` 记录默认值：frames=161, seed=42；`image-action-video` 记录默认值：frames=21, seed=42。
+
+封装仅解析本地 HFD 或显式 checkpoint 目录，不在运行时下载。Base-Cam 在专属 `lingbot-world` 环境中运行；Base-Act 单独记录。官方 Fast 权重复用 Base-Cam 的 T5/VAE 组件，并使用独立的 16 个分片。公开 binding 已在单张 H100 上生成可完整解码的 21 帧、544 × 720、16 fps Fast 视频，画面持续变化。选择 Fast 时传入 `runtime_variant=fast` 和 `fast_model_path`；由于上游按三个潜变量帧分块，帧数需取 9、21、33 等，否则会被截短。更长的 Fast 视频和相机贴合度尚未测量。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run lingbot-world --pipeline.task-profile image-navigation-video` 跟随相机路径。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+记录的权重仓库包括 `robbyant/lingbot-world-base-cam`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lingbot-world`；下载缺失的公开权重时加 `--download`。
+
+状态：**已验证**。
+
+<ModelRelatedRecipes modelId="lingbot-world" locale="zh" />

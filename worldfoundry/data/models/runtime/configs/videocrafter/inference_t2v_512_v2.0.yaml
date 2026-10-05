@@ -1,5 +1,5 @@
 model:
-  target: worldfoundry.base_models.diffusion_model.video.lvdm.models.ddpm3d.LatentDiffusion
+  target: worldfoundry.base_models.diffusion_model.models.networks.lvdm.latent_diffusion.LatentDiffusion
   params:
     linear_start: 0.00085
     linear_end: 0.012
@@ -20,7 +20,7 @@ model:
     use_scale: true
     scale_b: 0.7
     unet_config:
-      target: worldfoundry.base_models.diffusion_model.video.lvdm.modules.networks.openaimodel3d.UNetModel
+      target: worldfoundry.base_models.diffusion_model.models.networks.lvdm.unet3d.UNetModel
       params:
         in_channels: 4
         out_channels: 4
@@ -49,7 +49,7 @@ model:
         addition_attention: true
         fps_cond: true
     first_stage_config:
-      target: worldfoundry.base_models.diffusion_model.video.lvdm.models.autoencoder.AutoencoderKL
+      target: worldfoundry.base_models.diffusion_model.models.autoencoders.lvdm.model.AutoencoderKL
       params:
         embed_dim: 4
         monitor: val/rec_loss
@@ -71,7 +71,7 @@ model:
         lossconfig:
           target: torch.nn.Identity
     cond_stage_config:
-      target: worldfoundry.base_models.diffusion_model.video.lvdm.modules.encoders.condition.FrozenOpenCLIPEmbedder
+      target: worldfoundry.base_models.diffusion_model.models.encoders.lvdm.condition.FrozenOpenCLIPEmbedder
       params:
         freeze: true
         layer: penultimate

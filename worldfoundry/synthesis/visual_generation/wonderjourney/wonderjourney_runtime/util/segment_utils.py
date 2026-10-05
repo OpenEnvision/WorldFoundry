@@ -1,21 +1,7 @@
-import os
-from pathlib import Path
-
-from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
 import numpy as np
 from PIL import Image
 
-
-def _ckpt_root() -> Path:
-    return Path(os.environ.get("WORLDFOUNDRY_CKPT_DIR", Path(__file__).resolve().parents[7] / "ckpt"))
-
-
-def _first_existing_ckpt(*relative_paths: str) -> str:
-    for relative_path in relative_paths:
-        candidate = _ckpt_root() / relative_path
-        if candidate.is_file():
-            return str(candidate)
-    return str(_ckpt_root() / relative_paths[0])
+from .checkpoints import require_existing_checkpoint
 
 
 def save_sam_anns(anns, save_path="saved_image.png"):
@@ -77,11 +63,18 @@ def refine_disp_with_segments(disparity, segments, keep_threshold=7*0.3):
 
 
 def create_mask_generator():
-    sam_checkpoint = _first_existing_ckpt(
+    sam_checkpoint = require_existing_checkpoint(
         "WonderJourney/sam_vit_h_4b8939.pth",
         "WorldScore/sam_vit_h_4b8939.pth",
         "shape-of-motion/checkpoints/sam_vit_h_4b8939.pth",
     )
+    try:
+        from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
+    except ImportError as exc:
+        raise ImportError(
+            "segment_anything is required after a local WonderJourney SAM "
+            "checkpoint has been staged"
+        ) from exc
     sam = sam_model_registry["vit_h"](checkpoint=sam_checkpoint)
     sam.to(device='cuda')
     mask_generator = SamAutomaticMaskGenerator(

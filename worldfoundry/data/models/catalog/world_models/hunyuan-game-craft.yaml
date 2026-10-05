@@ -13,6 +13,8 @@ source:
   official_repo_url: https://github.com/Tencent-Hunyuan/Hunyuan-GameCraft-1.0
   license: tencent-hunyuan-community
 official_sources:
+  project_page: https://hunyuan-gamecraft.github.io/
+  paper: https://arxiv.org/abs/2506.17201
   github:
     url: https://github.com/Tencent-Hunyuan/Hunyuan-GameCraft-1.0
   huggingface:
@@ -20,17 +22,39 @@ official_sources:
     type: model
     status: confirmed
 integration:
-  status: runtime_ported
-  notes:
-  - In-tree Hunyuan GameCraft pipeline is registered; official inference uses the HYGameCraft conda profile and torchrun dispatch.
+  status: integrated
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: hunyuan-game-craft
 runner_parity:
-  status: verified
+  status: pending
   notes:
-  - The official village image-conditioned interactive demo is represented with
-    actions forward, backward, right, and left, 129 frames, 704x1216 generation,
-    50 inference steps, CFG 2.0, and torchrun over 8 ranks.
-  - Per-run visual QA and artifact checks are tracked outside the catalog.
+  - 'Single-H100 inference validated: one forward action, 33 frames at 1216x704 and 50 steps. Full upstream end-to-end
+    parity is not claimed.'
 catalog_category: world_models
 catalog_scope: world-model/interactive starred models
+docs:
+  publisher: Tencent (Hunyuan)
+  publisher_kind: company
+  publisher_zh: 腾讯（混元）
+  overview: GameCraft generates action-conditioned world video from a scene image using an inference-only runtime
+    and shared WorldFoundry model components.
+  overview_zh: GameCraft 通过仅推理运行时和 WorldFoundry 共享模型组件，从场景图像生成动作条件世界视频。
+  architecture: HunyuanVideo transformer with a GameCraft camera network and history-conditioned autoregressive
+    sampling; generic layers, VAE, encoder foundations and scheduler are shared.
+  architecture_zh: HunyuanVideo Transformer 结合 GameCraft 相机网络与历史条件自回归采样；基础层、VAE、编码器基础实现和调度器均复用共享代码。
+  usage_notes: Provide local GameCraft checkpoints. Each action generates 33 frames; explicit num_frames must equal
+    33 times the action count. CPU offload and output_path export are supported.
+  usage_notes_zh: 就位本地 GameCraft 权重。每个动作生成 33 帧；显式 num_frames 必须等于动作数量乘以 33。支持 CPU offload 与 output_path 导出。
+  limitations:
+  - Validated on one H100 with CPU offload, one action and the standard checkpoint; distributed inference is unvalidated
+    and FP8 conversion is unsupported.
+  - Dedicated environment (Python 3.10 / torch 2.5.1) isolated from the unified profile.
+  - Tencent Hunyuan community license applies; see included license and provenance.
+  limitations_zh:
+  - 已验证单张 H100、CPU offload、单动作及标准权重；多卡推理未验证，FP8 转换不受支持。
+  - 专属环境（Python 3.10 / torch 2.5.1），与统一档案隔离。
+  - 遵循腾讯混元社区许可，见附带许可与来源说明。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Action-following world-rollout quality.
+    reason_zh: 动作跟随的世界滚动生成质量。

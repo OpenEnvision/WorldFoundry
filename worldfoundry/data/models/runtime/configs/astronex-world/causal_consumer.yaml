@@ -1,0 +1,74 @@
+# Causal sampling on a consumer card. Same weights, same sampler, same output
+# as `causal.yaml` -- verified bit-identical on the 23-frame and 47-frame
+# rollouts -- with the memory peak moved off the VAE decode.
+#
+# Measured peak, 832x480, with the process capped at that size (see
+# `generate.py --vram-limit-gb`):
+#
+#   causal.yaml           37.9 GB   needs a 40 GB+ card
+#   causal.yaml @ 32 GB   27.3 GB   UMT5 swaps in per module, automatic below 40 GB
+#   this config           23.2 GB   23 and 47 latent frames alike
+#
+# So: comfortable on a 32 GB RTX 5090, and it fits a 24 GB card if little else
+# is on it. Below ~24 GB the KV caches themselves no longer fit.
+backbone_variant: wan2.2
+causal: true
+use_camera: true
+use_action: true
+num_train_timestep: 1000
+timestep_shift: 10.0
+warp_denoising_step: true
+guidance_scale: 3.0
+cond_prefill_timestep: 100
+negative_prompt: 色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走
+sampling_steps: 8
+image_or_video_shape:
+- 1
+- 17
+- 48
+- 30
+- 52
+num_frame_per_block: 8
+independent_first_frame: false
+latent_stitch_strength: 0.0
+latent_stitch_preserve_mean: true
+rgb_chroma_stabilize_strength: 1.0
+rgb_chroma_stabilize_fade: 4
+ref_cond_scale: 1.1
+ref_sequence_conditioning: true
+event_in_caption: true
+trajectory_speed: 1.0
+opening_direction_correction: false
+model_kwargs:
+  model_name: transformer
+  model_root: "@weights"
+  timestep_shift: 5.0
+  local_attn_size: 20
+  sink_size: 4
+  use_camera: true
+  use_action: true
+  action_dim: 64
+  action_output: false
+  num_embodiments: 32
+  prope_scale: 1.0
+  prope_chunk_anchor: true
+  prope_num_layers: 30
+  prope_exclude_sink: false
+  prope_sink_dual: false
+  sink_attention_repeat: 1
+  history_cross_attention: false
+  history_cross_active: false
+retrieval_window: true
+retrieval_recent_frames: 4
+retrieval_min_overlap: 0.3
+retrieval_swap_per_block: 2
+
+# The decode used to be the peak: the denoiser's KV caches were still resident
+# while the whole clip went through the VAE. They are dropped first and the
+# next rollout re-initialises them, so nothing is carried over anyway.
+free_cache_before_decode: true
+
+# Also move the denoiser to the host for the decode. Not needed at 24 GB --
+# the peak is in sampling by then -- and it costs a 10 GB round trip per
+# prompt, so it is off; turn it on if a longer clip hits the decode again.
+offload_denoiser_for_decode: false

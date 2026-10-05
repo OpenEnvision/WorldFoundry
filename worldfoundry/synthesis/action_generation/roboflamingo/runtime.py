@@ -1,15 +1,15 @@
 # Inference-only RoboFlamingo source retained in-tree.
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from worldfoundry.core import jsonable
+from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
-from worldfoundry.core.model_loading.file import load_state_dict
+from worldfoundry.core.model_loading.checkpoints.file import load_state_dict
 from worldfoundry.synthesis.action_generation.runtime_config import load_vla_va_wam_runtime_config
 
 from .configuration import RoboFlamingoArchitectureConfig, action_trace_contract
@@ -110,6 +110,14 @@ def _first_present(mapping: Mapping[str, Any], *keys: str) -> Any:
         if value not in (None, ""):
             return value
     return None
+
+
+def _adjacent_released_checkpoint(path: Path | None, *, explicit: bool, relative_path: str) -> Path | None:
+    """Use the released sibling checkpoint store when a profile default is absent."""
+    if explicit or (path is not None and path.exists()):
+        return path
+    candidate = project_root().parent / "ckpts" / relative_path
+    return candidate.resolve() if candidate.exists() else path
 
 
 def _load_rgb_image(value: Any):
@@ -223,35 +231,49 @@ def select_roboflamingo_runtime_config(
     if not isinstance(source, Mapping):
         raise TypeError("roboflamingo data config requires a source mapping")
 
-    policy_path = _path_or_none(
-        options.get("policy_checkpoint_path")
-        or options.get("checkpoint_path")
-        or options.get("ckpt_path")
-        or options.get("evaluate_from_checkpoint")
-        or _checkpoint_by_role(checkpoints, "released_calvin")
+    policy_override = _first_present(
+        options, "policy_checkpoint_path", "checkpoint_path", "ckpt_path", "evaluate_from_checkpoint"
     )
-    openflamingo_path = _path_or_none(
-        options.get("openflamingo_checkpoint_path")
-        or options.get("openflamingo_checkpoint")
-        or _checkpoint_by_role(checkpoints, "openflamingo")
+    policy_path = _adjacent_released_checkpoint(
+        _path_or_none(policy_override or _checkpoint_by_role(checkpoints, "released_calvin")),
+        explicit=policy_override is not None,
+        relative_path="robovlms--RoboFlamingo/checkpoint_gripper_post_hist_1_aug_10_4_traj_cons_ws_12_mpt_dolly_3b_2.pth",
     )
-    lang_encoder_path = _path_or_none(
-        options.get("lang_encoder_path")
-        or options.get("lm_path")
-        or _checkpoint_by_role(checkpoints, "language")
-        or _checkpoint_by_role(checkpoints, "mpt")
+    openflamingo_override = _first_present(options, "openflamingo_checkpoint_path", "openflamingo_checkpoint")
+    openflamingo_path = _adjacent_released_checkpoint(
+        _path_or_none(openflamingo_override or _checkpoint_by_role(checkpoints, "openflamingo")),
+        explicit=openflamingo_override is not None,
+        relative_path="openflamingo--OpenFlamingo-3B-vitl-mpt1b-langinstruct/checkpoint.pt",
+    )
+    language_override = _first_present(options, "lang_encoder_path", "lm_path")
+    lang_encoder_path = _adjacent_released_checkpoint(
+        _path_or_none(
+            language_override
+            or _checkpoint_by_role(checkpoints, "language")
+            or _checkpoint_by_role(checkpoints, "mpt")
+        ),
+        explicit=language_override is not None,
+        relative_path="anas-awadalla--mpt-1b-redpajama-200b-dolly",
     )
     tokenizer_path = _path_or_none(options.get("tokenizer_path") or lang_encoder_path)
+    vision_override = options.get("vision_encoder_pretrained")
+    vision_pretrained = str(
+        vision_override if vision_override is not None else architecture_defaults["vision_encoder_pretrained"]
+    )
+    if vision_override is None:
+        vision_pretrained = str(
+            _adjacent_released_checkpoint(
+                _path_or_none(vision_pretrained),
+                explicit=False,
+                relative_path="open_clip/ViT-L-14.pt",
+            ) or vision_pretrained
+        )
     architecture = RoboFlamingoArchitectureConfig(
         llm_name=str(options.get("llm_name") or architecture_defaults["llm_name"]),
         vision_encoder_path=str(
             options.get("vision_encoder_path") or architecture_defaults["vision_encoder_path"]
         ),
-        vision_encoder_pretrained=str(
-            options.get("vision_encoder_pretrained")
-            if options.get("vision_encoder_pretrained") is not None
-            else architecture_defaults["vision_encoder_pretrained"]
-        ),
+        vision_encoder_pretrained=vision_pretrained,
         cross_attn_every_n_layers=int(
             options.get("cross_attn_every_n_layers")
             or architecture_defaults["cross_attn_every_n_layers"]
@@ -398,7 +420,39 @@ class RoboFlamingoRuntime:
         )
         model.load_state_dict(openflamingo_state, strict=False)
         policy_state = load_state_dict(self.config.policy_checkpoint_path, device="cpu")
-        model.load_state_dict(policy_state["model_state_dict"], strict=False)
+        policy_weights = policy_state["model_state_dict"]
+        policy_keys = tuple(policy_weights)
+        if policy_keys and all(key.startswith("module.") for key in policy_keys):
+            # Released CALVIN checkpoints were saved from DistributedDataParallel.
+            policy_weights = {key.removeprefix("module."): value for key, value in policy_weights.items()}
+        elif any(key.startswith("module.") for key in policy_keys):
+            raise ValueError("RoboFlamingo policy checkpoint mixes DDP and unprefixed state-dict keys.")
+        model_keys = set(model.state_dict())
+        # The released LSTM checkpoint has two names for the same decoder tensors.
+        # This model exposes only lm_head; discard action_head aliases only when
+        # every corresponding tensor is present and byte-for-byte identical.
+        aliases = [key for key in policy_weights if key.startswith("action_head.") and key not in model_keys]
+        for alias in aliases:
+            decoder_key = "lm_head." + alias.removeprefix("action_head.")
+            if (
+                decoder_key not in model_keys
+                or decoder_key not in policy_weights
+                or not torch.equal(policy_weights[alias], policy_weights[decoder_key])
+            ):
+                raise RuntimeError(f"RoboFlamingo action-head alias does not match its decoder: {alias}")
+        if aliases:
+            policy_weights = {key: value for key, value in policy_weights.items() if key not in aliases}
+        loaded = model.load_state_dict(policy_weights, strict=False)
+        action_head_keys = {key for key in policy_weights if key.startswith("lm_head.")}
+        if loaded.unexpected_keys:
+            raise RuntimeError(
+                f"RoboFlamingo policy has {len(loaded.unexpected_keys)} unmatched keys; "
+                f"first: {loaded.unexpected_keys[:5]}"
+            )
+        if not action_head_keys or action_head_keys.intersection(loaded.missing_keys):
+            raise RuntimeError(
+                "RoboFlamingo policy action head did not load; refusing inference with an uninitialized head."
+            )
         model = model.to(torch.device(self.config.device)).eval()
         self._model_bundle = (model, image_processor, tokenizer)
         return self._model_bundle
@@ -465,7 +519,7 @@ class RoboFlamingoRuntime:
             "model_id": "roboflamingo",
             "artifact_kind": "action_trace",
             "artifact_path": str(target),
-            "artifact_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "artifact_sha256": file_sha256(target),
             "runtime": trace["runtime"],
             "action_shape": prediction["action_shape"],
             "action": prediction["action"],

@@ -1,174 +1,42 @@
 ---
-title: VideoPhy-2
-description: 面向生成视频物理常识的 action-centric benchmark，包含仓内 prompts、AutoEval runtime 和可运行命令。
+title: VideoPhy2
+description: "VideoPhy 的动作向后继：200 条更难 prompt，加规则级 AutoEval。WorldFoundry 提供裁判路径，不编造榜单。"
 ---
 
+VideoPhy2（UCLA 与 Google DeepMind）是 [VideoPhy](/zh/docs/evaluation/benchmark-hub/videophy) 的 **动作向** 后继。Prompt 套件聚焦更难的物理活动与物体交互（**宣称 200 个动作**）。AutoEval 增加 **规则级** 判断：哪些物理规则适用、每条是遵守还是违反（`rule_followed_rate`），同时报语义遵守、物理常识，以及主键 **联合分**。
 
-## 官方参考
+论文：[VideoPhy-2](https://arxiv.org/abs/2503.06800)。项目：[videophy2.github.io](https://videophy2.github.io/)。代码：[Hritikbansal/videophy](https://github.com/Hritikbansal/videophy)。
 
-| 资源 | 链接 |
-| --- | --- |
-| 项目页 | [videophy2.github.io](https://videophy2.github.io/) |
-| 论文 | [arXiv:2503.06800](https://arxiv.org/abs/2503.06800) |
-| GitHub | [github.com/Hritikbansal/videophy](https://github.com/Hritikbansal/videophy) |
-| HF 测试集 | [videophysics/videophy2_test](https://huggingface.co/datasets/videophysics/videophy2_test) |
-| AutoEval 权重 | [videophysics/videophy_2_auto](https://huggingface.co/videophysics/videophy_2_auto) |
-| 仓内 runner | `worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py` |
+WorldFoundry **捆绑 prompt 列表** 并驱动仓内 AutoEval 裁判（`--autoeval-checkpoint`，可选 `--autoeval-lora-checkpoint`）。官方打分路径存在；**完整 200 条 prompt 复现仍待完成**。权重要调用方提供。
 
-## 简介
+<BenchmarkPageSections id="videophy2" locale="zh" />
 
-VideoPhy-2 是面向 text-to-video 生成的 action-centric 物理常识评测。它不只是判断视频是否“看起来合理”，而是检查生成动作是否符合 caption，以及场景中隐含或显式给出的物理规则。官方发布包含 200 个 diverse actions、详细合成 prompts、人类评测标注，以及用于自动评分的 VideoPhy-2-AutoEval。
-
-WorldFoundry 已经把 prompt materialization、metric 计算和 AutoEval 推理链路集成在仓内。官方 repo 只作为 protocol 参考；这里的评测运行使用 `worldfoundry/evaluation/tasks/execution/runners/videophy2` 和 `worldfoundry/base_models/llm_mllm_core/mllm/videophy2_autoeval`。
-
-官方参考：
-
-- Project page: [videophy2.github.io](https://videophy2.github.io/)
-- Paper: [arXiv:2503.06800](https://arxiv.org/abs/2503.06800)
-- Test dataset: [videophysics/videophy2_test](https://huggingface.co/datasets/videophysics/videophy2_test)
-- Train dataset: [videophysics/videophy2_train](https://huggingface.co/datasets/videophysics/videophy2_train)
-- AutoEval weights: [videophysics/videophy_2_auto](https://huggingface.co/videophysics/videophy_2_auto)
-- 仓内 runner: `worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py`
-
-## 评测协议
-
-WorldFoundry 使用仓内 prompt manifest：`worldfoundry/data/benchmarks/assets/videophy2/prompts.json`。这个文件包含复现 VideoPhy-2 test protocol 需要的 200 个 prompt ID、caption 和 physical-rule metadata。
-
-每个候选模型需要为每条 prompt 生成一个视频。期望文件名是：
-
-```text
-<prompt_id>.mp4
-```
-
-完整官方套件下，生成产物目录应包含 `1.mp4` 到 `200.mp4`。
-
-主指标是 `videophy2_average`。
-
-| Metric | 含义 |
-| --- | --- |
-| `semantic_adherence` | 1-5 分平均值：视频是否呈现了 prompt 要求的动作、物体和场景。 |
-| `physical_commonsense` | 1-5 分平均值：动作和材料交互是否符合物理常识。 |
-| `joint_score` | semantic adherence 和 physical commonsense 同时至少达到 4/5 的 prompt 比例。 |
-| `rule_classification_accuracy` | 对列出的物理规则是否被遵守或违反进行分类的准确率。 |
-| `videophy2_average` | WorldFoundry scorecard 使用的主聚合指标。 |
-
-官方 AutoEval 内部会跑三个任务：`sa` 评估语义对齐，`pc` 评估物理常识，`rule` 评估物理规则 grounding。
-
-## 数据与权重准备
-
-prompt manifest 已经在仓内：
-
-```bash
-cd "$WORLDFOUNDRY_REPO_ROOT"
-export WORLDFOUNDRY_VIDEOPHY2_PROMPT_MANIFEST="$PWD/worldfoundry/data/benchmarks/assets/videophy2/prompts.json"
-```
-
-通过 Hugging Face 下载 AutoEval checkpoint：
-
-```bash
-export WORLDFOUNDRY_VIDEOPHY2_AUTOEVAL_CKPT=/path/to/checkpoints/videophy_2_auto
-hf download videophysics/videophy_2_auto \
-  --local-dir "${WORLDFOUNDRY_VIDEOPHY2_AUTOEVAL_CKPT}"
-```
-
-如果你需要对照官方发布的 test assets 或 annotations，可以单独下载 dataset：
-
-```bash
-hf download videophysics/videophy2_test \
-  --repo-type dataset \
-  --local-dir /path/to/datasets/videophy2_test
-```
-
-复现 benchmark 不需要训练 AutoEval。官方 training dataset 是公开的，但 WorldFoundry 只集成了评分所需的 AutoEval inference runtime。如果你自己重新训练或微调 evaluator，把产出的 checkpoint 目录通过 `--autoeval-checkpoint` 传入即可。
-
-## 生成候选视频
-
-使用候选 text-to-video 模型跑 `WORLDFOUNDRY_VIDEOPHY2_PROMPT_MANIFEST` 里的 200 条 prompts，然后按官方命名写到同一个目录：
-
-```text
-/path/to/videophy2/generated_videos/
-  1.mp4
-  2.mp4
-  ...
-  200.mp4
-```
-
-评分前设置生成产物目录：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/videophy2/generated_videos
-```
-
-候选模型的训练和推理是 model-specific 的。对于 WorldFoundry 已集成的生成模型，使用对应 synthesis 页面或 package entrypoint，然后把每个 prompt ID 的最终视频复制或导出到上面的 layout。
-
-## 运行 AutoEval 评分
-
-运行仓内 VideoPhy-2 AutoEval 链路：
-
-```bash
-cd "$WORLDFOUNDRY_REPO_ROOT"
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py \
-  --run-official \
-  --prompt-manifest "${WORLDFOUNDRY_VIDEOPHY2_PROMPT_MANIFEST}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --autoeval-checkpoint "${WORLDFOUNDRY_VIDEOPHY2_AUTOEVAL_CKPT}" \
-  --batch-size "${WORLDFOUNDRY_VIDEOPHY2_BATCH_SIZE:-1}" \
-  --num-frames "${WORLDFOUNDRY_VIDEOPHY2_NUM_FRAMES:-32}" \
-  --output-dir tmp/videophy2/official-run \
-  --strict \
-  --json
-```
-
-复现 leaderboard 时保留 `--strict`，这样缺少 200 个预期视频会直接失败。部分 research run 可以去掉 `--strict`；scorecard 仍会报告视频覆盖情况。
-
-常用 runtime 变量：
-
-```bash
-export WORLDFOUNDRY_VIDEOPHY2_BATCH_SIZE=1
-export WORLDFOUNDRY_VIDEOPHY2_NUM_FRAMES=32
-export WORLDFOUNDRY_VIDEOPHY2_AUTOEVAL_PYTHON="${WORLDFOUNDRY_UNIFIED_PYTHON:-python}"
-```
-
-## 导入已有结果
-
-如果 AutoEval 已经产出了 VideoPhy-2 结果文件，可以用同一个 runner 导入：
-
-```bash
-cd "$WORLDFOUNDRY_REPO_ROOT"
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py \
-  --official-results-path /path/to/videophy2_results.json \
-  --prompt-manifest "${WORLDFOUNDRY_VIDEOPHY2_PROMPT_MANIFEST}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/videophy2/imported \
-  --json
-```
-
-也可以通过统一 benchmark 入口导入已有结果：
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id videophy2 \
   --mode official-validation \
-  --official-results-path /path/to/videophy2_results.json \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/videophy2/official-validation \
   --json
 ```
 
-## 输出文件
+```bash
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/videophy2/run_videophy2_official_runner.py \
+  --run-official \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --autoeval-checkpoint /path/to/videophy2_autoeval \
+  --output-dir tmp/videophy2/official \
+  --json
+```
 
-运行会写出：
+环境变量：`WORLDFOUNDRY_VIDEOPHY2_RESULTS_PATH`、`WORLDFOUNDRY_VIDEOPHY2_JUDGE_BACKEND`。Prompt 列表：`worldfoundry/data/benchmarks/assets/videophy2/prompts.json`。共享资源：`videophy2_dataset_assets`。
 
-- `scorecard.json`: WorldFoundry 统一 scorecard，包含 `semantic_adherence`、`physical_commonsense`、`joint_score`、`rule_classification_accuracy` 和 `videophy2_average`。
-- `videophy2_results.json`: 使用 `--run-official` 时合并后的 AutoEval 逐 prompt 结果 JSON。
-- `raw_metric_table.jsonl`: scorecard 使用的 metric rows。
-- `per_sample_scores.jsonl`: 逐 prompt 的 SA/PC/joint/rule 结果。
-- `videophy2_autoeval_inputs/`: 自动生成的 `sa`、`pc`、`rule` CSV 输入。
-- `videophy2_autoeval_outputs/`: AutoEval 原始 CSV 输出。
-- `logs/`: AutoEval stdout/stderr 日志。
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/videophy2.yaml`，`worldfoundry/evaluation/tasks/execution/runners/videophy2`。
 
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)
+产物包括 `scorecard.json`（主键 `joint_score`）。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

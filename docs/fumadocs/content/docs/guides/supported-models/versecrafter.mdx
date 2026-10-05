@@ -1,0 +1,50 @@
+---
+title: "VerseCrafter"
+description: "VerseCrafter from Tencent ARC Lab: camera-controlled-video and image-to-video; Verified."
+modelId: "versecrafter"
+pageSource: generated
+---
+
+VerseCrafter from Tencent ARC is a camera-controlled image-to-video world model built on 4D control: a geometry-aware rendering stage produces 4D control signals that guide the diffusion stage along the requested camera path. WorldFoundry vendors the official source (revision 008693b5) plus the exact VideoX-Fun submodule (revision 246a0e3a) in-tree, with the TencentARC/VerseCrafter checkpoint reference.
+
+<ModelPaperFigures modelId="versecrafter" locale="en" />
+
+The recorded paper is [arXiv 2601.05138](https://arxiv.org/abs/2601.05138).
+
+Project page: [sixiaozheng.github.io/VerseCrafter_page](https://sixiaozheng.github.io/VerseCrafter_page/). Code: [TencentARC/VerseCrafter](https://github.com/TencentARC/VerseCrafter).
+
+<ModelCommandBuilder modelId="versecrafter" locale="en" />
+
+## What it is for
+
+Use `versecrafter` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+
+Two stages are wired in-tree: camera-only 4D-control rendering followed by the diffusion stage. The diffusion backbone comes from the pinned VideoX-Fun submodule. Further architecture internals are not recorded in this repository. It is published by Tencent ARC Lab.
+
+Catalog tasks include camera-controlled-video, image-to-video, and world-model. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-path adherence for 4D-controlled generation).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `frames`, `fps`, and `height`; artifacts `versecrafter.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `VerseCrafterPipeline`.
+
+Family status: **Verified**.
+
+Recorded `default` defaults: frames=81, fps=16, height=480, width=832, seed=2025.
+
+Note the license before any deployment: upstream is research-only, non-commercial, and excludes intended EU use. A local checkpoint-backed short video has been verified, with visible late-frame artifacts; official output parity remains unmeasured.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run versecrafter --pipeline.task-profile default` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `TencentARC/VerseCrafter`, `Wan-AI/Wan2.1-T2V-14B`, and `Ruicheng/moge-2-vitl-normal`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh versecrafter`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Verified**.
+
+<ModelRelatedRecipes modelId="versecrafter" locale="en" />

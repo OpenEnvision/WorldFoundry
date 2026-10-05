@@ -1,0 +1,39 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: A24
+track: calibration
+title_en: Colored Ball Dispenser With Text Cue
+outcome_question: Which label in ['red', 'green', 'blue', 'yellow'] is visible as
+  the first decisive post-action result?
+readout_policy: Read the first decisive post-action result window after the dispenser
+  action has actually occurred. Judge the first ball that is uniquely emitted and
+  becomes isolated/readable outside the gate before the color readout. Balls still
+  inside the dispenser and the text cue are context, not outcome evidence.
+canonical_labels:
+- red
+- green
+- blue
+- yellow
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be
+  determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- None of the canonical labels ['red', 'green', 'blue', 'yellow'] can be decisively
+  identified within the readout window.
+- No single emitted ball is color-readable after the gate opens.
+out_of_schema_rules:
+- No ball exits, or multiple balls exit together with no unique first emitted ball
+  before color readout; this is out-of-schema, not nearest-legal.
+- If disappearance, duplication, or teleportation prevents identifying a canonical label, return `unreadable`; if a readable label is already established, preserve the outcome and leave continuity failure to trustworthiness. Use out-of-schema only for visible events outside this rubric.
+priority_rules:
+- 'Tie-break: if two labels look equally consistent in the same readout frame, return
+  `unreadable` (do NOT coerce to the visually nearest label).'
+- 'First-decisive-window rule: use the earliest frame where the post-action result
+  has committed; do not re-label from later transient states.'
+- If multiple balls briefly appear at the gate, judge only if one ball becomes the
+  unique first emitted/readable object before color readout.
+notes:
+- 'Scene title: Colored Ball Dispenser With Text Cue.'
+- Ignore balls still inside the dispenser and ignore the text cue when assigning
+  the emitted-ball color. The cue may bias generation, but it is not judge evidence.

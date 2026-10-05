@@ -21,10 +21,10 @@ import torch.distributed as dist
 from PIL import Image
 
 from worldfoundry.core.io.paths import resolve_data_path
-from worldfoundry.core.realtime import DEFAULT_REALTIME_CONTROLS, RealtimeSpec
+from worldfoundry.core.execution.realtime.contracts import DEFAULT_REALTIME_CONTROLS, RealtimeSpec
 from worldfoundry.runtime.local_checkpoint_cache import stage_checkpoint_for_realtime
 
-from .checkpoints import enforce_offline_model_loading, resolve_checkpoint
+from .checkpoints import enforce_offline_model_loading, resolve_checkpoint as _resolve_checkpoint
 
 NATIVE_FPS = 16
 MIN_MODEL_FRAMES = 5
@@ -202,13 +202,13 @@ class DreamXWorldRealtimeSession:
         wan_model_path: str | Path | None = None,
     ) -> None:
         enforce_offline_model_loading()
-        self.checkpoint = resolve_checkpoint(
+        self.checkpoint = _resolve_checkpoint(
             checkpoint_source,
             default_name="DreamX-World-5B-Cam",
             required=_DREAMX_REQUIRED,
             label="DreamX-World 5B Cam",
         )
-        self.wan_model_path = resolve_checkpoint(
+        self.wan_model_path = _resolve_checkpoint(
             wan_model_path,
             default_name="Wan2.2-TI2V-5B",
             required=_WAN_REQUIRED,
@@ -240,7 +240,7 @@ class DreamXWorldRealtimeSession:
         self.weight_dtype = torch.bfloat16
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
-        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.benchmark = not torch.are_deterministic_algorithms_enabled()
 
         self.pipe, self.boundary = self._load_pipeline()
         self.fps = NATIVE_FPS
@@ -273,12 +273,19 @@ class DreamXWorldRealtimeSession:
 
         from transformers import AutoTokenizer
 
-        from worldfoundry.base_models.diffusion_model.video.wan.variants.dreamx_world import (
+        from worldfoundry.base_models.diffusion_model.loaders.wan_variant import (
+            load_wan_transformer,
+        )
+        from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.dreamx_world.vae import (
             AutoencoderKLWan3_8,
-            Wan2_2Transformer3DModel,
+        )
+        from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.dreamx_world.text_encoder import (
             WanT5EncoderModel,
         )
-        from worldfoundry.base_models.diffusion_model.video.wan.variants.dreamx_world.distributed import (
+        from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.dreamx_world.transformer import (
+            Wan2_2Transformer3DModel,
+        )
+        from worldfoundry.core.distributed.sequence_parallel.runtime import (
             set_multi_gpus_devices,
         )
         from .runtime.pipeline import Wan2_2_CameraPipeline
@@ -296,9 +303,10 @@ class DreamXWorldRealtimeSession:
         )
         transformer_kwargs["cam_method"] = "prope"
         transformer_kwargs["add_control_adapter"] = True
-        transformer = Wan2_2Transformer3DModel.from_pretrained(
+        transformer = load_wan_transformer(
+            Wan2_2Transformer3DModel,
             str(self.checkpoint),
-            transformer_additional_kwargs=transformer_kwargs,
+            additional_kwargs=transformer_kwargs,
             low_cpu_mem_usage=_env_flag("WORLDFOUNDRY_DREAMX_LOW_CPU_MEM_USAGE", True),
             torch_dtype=self.weight_dtype,
         )

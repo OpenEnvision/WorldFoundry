@@ -1,183 +1,40 @@
 ---
 title: Video-Bench
-description: Human-preference-aligned video generation evaluation with in-tree MLLM judge runtime and runnable commands.
+description: "CVPR 2025 human-aligned MLLM video bench: GPT-4o judges on 1-5 / 1-3 scales. WorldFoundry vendors the runtime; it does not invent a board."
 ---
 
-## About
+Video-Bench (SJTU, with NUS, CMU, Stanford and others; CVPR 2025) scores generated video with **MLLM judges aligned to human preference**. Two families (official scales, then mapped 0–1 in WorldFoundry):
 
-Video-Bench is a human-preference-aligned benchmark for generated video quality. It uses MLLM judges with few-shot scoring and chain-of-query prompts to evaluate video quality, motion, and text alignment in a way that correlates strongly with human annotations.
+- **Video quality (1–5)** — imaging, aesthetics, temporal consistency, motion effects.
+- **Video-condition alignment** — overall video-text consistency (1–5); object class, color, action, scene (1–3).
 
-WorldFoundry integrates the Video-Bench evaluator in tree at `worldfoundry/evaluation/tasks/execution/runners/videobench`. The official repository is a protocol reference; the runtime used by WorldFoundry is checked in and does not require an external code checkout.
+Few-shot scoring and chain-of-query structure the GPT-4o judge. A human-annotation dataset is released for calibration. License: Apache-2.0.
 
-Official references:
+Paper: [Video-Bench](https://arxiv.org/abs/2504.04907). Code: [Video-Bench/Video-Bench](https://github.com/Video-Bench/Video-Bench). Annotations: [`Video-Bench/Video-Bench_human_annotation`](https://huggingface.co/datasets/Video-Bench/Video-Bench_human_annotation). Official videos are gated (`Video-Bench_videos`).
 
-- Project page: [video-bench.github.io](https://video-bench.github.io/)
-- Paper: [arXiv:2504.04907](https://arxiv.org/abs/2504.04907)
-- Human annotation dataset: [Video-Bench/Video-Bench_human_annotation](https://huggingface.co/datasets/Video-Bench/Video-Bench_human_annotation)
-- Official videos dataset: [Video-Bench/Video-Bench_videos](https://huggingface.co/datasets/Video-Bench/Video-Bench_videos)
-- In-tree runner: `worldfoundry/evaluation/tasks/execution/runners/videobench/run_videobench_official_runner.py`
+WorldFoundry **vendors the runtime** and wraps `evaluate.py`. It writes a temporary private config from env vars instead of mutating upstream `config.json`, and rebuilds prompt metadata from human-annotation JSONs when `VideoBench_full.json` is missing. Credential-gated path is present; no credentialed release run is claimed.
 
-## Evaluation Protocol
+<BenchmarkPageSections id="video-bench" locale="en" />
 
-Video-Bench evaluates three groups:
-
-| Group | Metrics | Scale |
-| --- | --- | --- |
-| Static quality | `imaging_quality`, `aesthetic_quality` | 1-5 |
-| Dynamic quality | `temporal_consistency`, `motion_effects` | 1-5 |
-| Video-text alignment | `video_text_consistency`, `object_class_consistency`, `color_consistency`, `action_consistency`, `scene_consistency` | 1-5 for overall alignment, 1-3 for fine-grained alignment |
-
-WorldFoundry normalizes these dimensions and reports `videobench_average` as the mean normalized score across available dimensions.
-
-The bundled prompt metadata is `worldfoundry/data/benchmarks/assets/video-bench/VideoBench_full.json`. If you download the official human annotation dataset, the runner can also build prompt metadata from its per-dimension JSON files.
-
-## Data Preparation
-
-Video-Bench standard mode expects generated videos organized by dimension and model name:
-
-```text
-/path/to/video-bench/generated_videos/
-  color/
-    your_model/
-      A red bird_0.mp4
-      A red bird_1.mp4
-  object_class/
-    your_model/
-      A train_0.mp4
-  action/
-    your_model/
-      A person is marching_0.mp4
-  video-text consistency/
-    your_model/
-      Close up of grapes on a rotating table._0.mp4
-```
-
-The `action` folder is used for `action`, `temporal_consistency`, and `motion_effects`. The `video-text consistency` folder is used for `video-text consistency`, `imaging_quality`, and `aesthetic_quality`.
-
-Set:
+## How to run
 
 ```bash
-export WORLDFOUNDRY_VIDEOBENCH_GENERATED_VIDEO_DIR=/path/to/video-bench/generated_videos
-```
+hf download Video-Bench/Video-Bench_human_annotation --repo-type dataset \
+  --local-dir cache/worldfoundry/data/hfd_datasets/Video-Bench/Video-Bench_human_annotation
 
-Optional official datasets:
-
-```bash
-export WORLDFOUNDRY_VIDEOBENCH_ANNOTATION_ROOT=/path/to/datasets/Video-Bench_human_annotation
-export WORLDFOUNDRY_VIDEOBENCH_OFFICIAL_VIDEOS_ROOT=/path/to/datasets/Video-Bench_videos
-
-hf download Video-Bench/Video-Bench_human_annotation \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_VIDEOBENCH_ANNOTATION_ROOT}"
-
-hf download Video-Bench/Video-Bench_videos \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_VIDEOBENCH_OFFICIAL_VIDEOS_ROOT}"
-```
-
-Candidate model training and inference are model-specific. Generate the videos with the model package first, then place them in the Video-Bench layout above.
-
-## Judge Credentials
-
-Video-Bench uses GPT-4o and GPT-4o-mini compatible APIs for judging. WorldFoundry writes a private runtime config under the output directory, so you do not need to edit a repository-level `config.json`.
-
-```bash
-export WORLDFOUNDRY_VIDEOBENCH_GPT4O_API_KEY="${OPENAI_API_KEY}"
-export WORLDFOUNDRY_VIDEOBENCH_GPT4O_MINI_API_KEY="${OPENAI_API_KEY}"
-export WORLDFOUNDRY_VIDEOBENCH_GPT4O_BASE_URL="${OPENAI_BASE_URL:-}"
-export WORLDFOUNDRY_VIDEOBENCH_GPT4O_MINI_BASE_URL="${OPENAI_BASE_URL:-}"
-```
-
-If the judge credentials are missing, the runner writes a failed scorecard explaining the missing API keys instead of silently producing scores.
-
-## Run Standard Mode
-
-Run one standard dimension for a generated model:
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videobench/run_videobench_official_runner.py \
-  --videos-path "${WORLDFOUNDRY_VIDEOBENCH_GENERATED_VIDEO_DIR}" \
-  --full-json-dir "$PWD/worldfoundry/data/benchmarks/assets/video-bench/VideoBench_full.json" \
-  --dimension color \
-  --mode standard \
-  --models your_model \
-  --output-dir tmp/video-bench/color_your_model \
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id video-bench \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/video-bench/official-validation \
   --json
 ```
 
-Run all supported dimensions for one model:
+Runtime judging needs `WORLDFOUNDRY_VIDEOBENCH_GPT4O_API_KEY` (or `OPENAI_API_KEY`), annotation root, and generated videos. `--dimension` / `--mode` restrict the protocol. Env: `WORLDFOUNDRY_VIDEOBENCH_RESULTS_PATH`, `WORLDFOUNDRY_VIDEOBENCH_ANNOTATION_ROOT`, `WORLDFOUNDRY_VIDEOBENCH_MODEL_OUTPUT_DIR`. Shared asset: `video_bench_dataset_assets`.
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videobench/run_videobench_official_runner.py \
-  --videos-path "${WORLDFOUNDRY_VIDEOBENCH_GENERATED_VIDEO_DIR}" \
-  --full-json-dir "$PWD/worldfoundry/data/benchmarks/assets/video-bench/VideoBench_full.json" \
-  --models your_model \
-  --output-dir tmp/video-bench/your_model_full \
-  --timeout 7200 \
-  --json
-```
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/video-bench.yaml`, `worldfoundry/evaluation/tasks/execution/runners/videobench/runtime`.
 
-When `--dimension` is omitted, the runner evaluates the Video-Bench dimensions it knows about.
+Outputs include `scorecard.json` (primary `videobench_average`, leaderboard key `overall_average`).
 
-## Run Custom Mode
-
-Use `custom_static` for `imaging_quality` or `aesthetic_quality`:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videobench/run_videobench_official_runner.py \
-  --videos-path /path/to/custom/videos \
-  --dimension aesthetic_quality \
-  --mode custom_static \
-  --models your_model \
-  --prompt "a cinematic shot of a silver robot walking through rain" \
-  --output-dir tmp/video-bench/custom_static \
-  --json
-```
-
-Use `custom_nonstatic` for dynamic quality or video-text alignment dimensions:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videobench/run_videobench_official_runner.py \
-  --videos-path /path/to/custom/videos \
-  --dimension motion_effects \
-  --mode custom_nonstatic \
-  --models your_model \
-  --prompt-file /path/to/video_prompts.json \
-  --output-dir tmp/video-bench/custom_motion \
-  --json
-```
-
-`--prompt-file` should follow the official custom-mode mapping from sample index or video key to prompt.
-
-## Import Existing Results
-
-Import an official-compatible Video-Bench result JSON or result directory:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/videobench/run_videobench_official_runner.py \
-  --official-results-path /path/to/video_bench_results_or_dir \
-  --annotation-root "${WORLDFOUNDRY_VIDEOBENCH_ANNOTATION_ROOT}" \
-  --official-videos-root "${WORLDFOUNDRY_VIDEOBENCH_OFFICIAL_VIDEOS_ROOT}" \
-  --output-dir tmp/video-bench/imported \
-  --json
-```
-
-## Outputs
-
-Each run writes:
-
-- `scorecard.json`: normalized Video-Bench scores and `videobench_average`.
-- `raw_metric_table.jsonl`: metric rows used by the scorecard.
-- `per_sample_scores.jsonl`: per-sample judge scores when available.
-- `upstream/`: official runtime result files.
-- `logs/`: per-dimension judge logs.
-- `videobench_config.private.json`: generated private API config with file mode `0600`.
-
-[Back to Benchmark Hub](/docs/evaluation/benchmark-hub)
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

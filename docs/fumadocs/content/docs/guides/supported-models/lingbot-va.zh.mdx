@@ -1,0 +1,52 @@
+---
+title: "LingBot-VA"
+description: "LingBot-VA（Robbyant (Ant Group)）：视觉-语言-动作（VLA）、va；Runner 一致性待确认; 3 个 variant。"
+modelId: "lingbot-va"
+pageSource: authored
+---
+
+LingBot-VA is Robbyant's video-action model served through a vendored server/client runtime: base plus RoboTwin and LIBERO-Long post-trained checkpoints are staged (Apache-2.0). On an 80GB CUDA GPU the base transformer passed CUDA forward,…
+
+<ModelPaperFigures modelId="lingbot-va" locale="zh" />
+
+记录论文为[arXiv 2601.21998](https://arxiv.org/abs/2601.21998)。
+
+代码：[Robbyant/lingbot-va](https://github.com/Robbyant/lingbot-va)。
+
+<ModelCommandBuilder modelId="lingbot-va" locale="zh" />
+
+## 用来做什么
+
+需要 catalog 上的 VLA 策略时选 `lingbot-va-base`：指令与观测进、动作轨迹出。用来滚动已记录策略，不是用来训练新策略。
+
+transformer 视频-动作骨干；就位配置设 attn_mode=torch，build_server_command 向内置服务传递 --checkpoint-dir。官方仓库指针之外的架构内部细节仓库未记录。该模型由蚂蚁灵波科技（Robbyant，蚂蚁集团）发布。
+
+catalog 记录的任务包括 视觉-语言-动作（VLA）、va、vam、wam。别名包括 `lingbot_va`、`lingbot-va-base`、`lingbot-va-posttrain-robotwin`、`lingbot-va-posttrain-libero-long`。同系列还有 `lingbot-va-posttrain-robotwin`、`lingbot-va-posttrain-libero-long`。
+
+记录的评测入口包括[LIBERO](/zh/docs/evaluation/benchmark-hub/libero)（已就位 libero-long 后训练 checkpoint）、[RoboTwin 2.0](/zh/docs/evaluation/benchmark-hub/robotwin)（已就位 RoboTwin 后训练 checkpoint）。
+
+LingBot 视觉-动作 token，不是完整 VLA rollout 卡。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`fps`；产物 `lingbot_va_action_trace.json`。
+
+CLI task profile：`interactive-video`。绑定的 pipeline 类是 `LingBotVAPipeline`。
+
+起步 variant 是 `lingbot-va-base`。catalog 登记了 3 个 variant（上方卡片）：`lingbot-va-base`（`vam.video_action_modeling`）：Runner 一致性待确认、`lingbot-va-posttrain-robotwin`（`vla.policy_rollout`）：Runner 一致性待确认、`lingbot-va-posttrain-libero-long`（`vla.policy_rollout`）：Runner 一致性待确认。系列状态：**Runner 一致性待确认**。
+
+运行采用 server/client 分离：服务初始化已用就位 checkpoint 验证，但在客户端 rollout 与动作解码验证前，不声称官方 demo parity。
+
+完整客户端 rollout/动作解码未验证；不声称 demo parity。
+
+## 在 WorldFoundry 中运行
+
+catalog 启动命令是 `worldfoundry-eval run lingbot-va-base --pipeline.task-profile interactive-video`。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-lingbot-va-cu12`（Python 3.10，Cu126 Or Newer，torch==2.9.0）。
+
+记录的权重仓库包括 `robbyant/lingbot-va-base`、`robbyant/lingbot-va-posttrain-robotwin`、`robbyant/lingbot-va-posttrain-libero-long`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lingbot-va-base`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="lingbot-va" locale="zh" />

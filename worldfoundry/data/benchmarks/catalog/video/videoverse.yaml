@@ -1,5 +1,7 @@
 id: videoverse
 name: VideoVerse
+publisher: OPPO Research Institute
+publisher_kind: company
 benchmark_kind:
 - text-to-video
 - world-model
@@ -95,6 +97,13 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/videoverse/run_videoverse_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.videoverse.run_videoverse_official_runner
+    generated_arg: --generated-artifact-dir
+    limit_arg: --limit
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoVerseContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/videoverse/run_videoverse_official_runner.py
   run_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
@@ -148,6 +157,7 @@ runner:
   - WORLDFOUNDRY_VIDEOVERSE_VIDEO_BASE_URL
 integration:
   status: integrated
+  tier: in_tree
   evidence:
     normalizer_surface: videoverse_official_in_tree
     framework_validation: worldfoundry-eval zoo benchmark-run --benchmark-id videoverse --mode official-validation 

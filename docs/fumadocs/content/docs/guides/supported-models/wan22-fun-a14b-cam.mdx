@@ -1,0 +1,50 @@
+---
+title: "Wan2.2-Fun A14B Control Camera"
+description: "Wan2.2-Fun A14B Control Camera from Alibaba PAI (VideoX-Fun): camera-controlled-video and image-to-video; Runner parity pending."
+modelId: "wan22-fun-a14b-cam"
+pageSource: authored
+---
+
+Wan2.2-Fun A14B Control Camera is the largest Wan2.2-generation camera-control checkpoint in the VideoX-Fun family: an A14B (mixture-of-experts style) diffusion backbone steered by explicit camera pose sequences for image-to-video. WorldFoundry vendors VideoX-Fun in-tree (revision 403f1f7b) and wires a dedicated route for alibaba-pai/Wan2.2-Fun-A14B-Control-Camera under Apache-2.0.
+
+<ModelPaperFigures modelId="wan22-fun-a14b-cam" locale="en" />
+
+Code: [aigc-apps/VideoX-Fun](https://github.com/aigc-apps/VideoX-Fun).
+
+<ModelCommandBuilder modelId="wan22-fun-a14b-cam" locale="en" />
+
+## What it is for
+
+Pick `wan22-fun-a14b-cam` when you need camera-controlled video: a camera trajectory in, a steered clip out. Use it instead of unconstrained T2V when viewpoint must follow a path.
+
+An A14B Wan2.2 diffusion backbone with the VideoX-Fun Control-Camera conditioning pathway. Further internals are not recorded in this repository. It is published by Alibaba PAI (VideoX-Fun).
+
+Catalog tasks include camera-controlled-video and image-to-video. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Camera-pose adherence for controlled i2v generation).
+
+Not [Wan2.2](/docs/guides/supported-models/wan2.2) and [Wan2.2 Fun 5B Cam](/docs/guides/supported-models/wan22-fun-5b-cam). Score on [CameraBench](/docs/evaluation/benchmark-hub/camerabench).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `frames`, `fps`, and `height`; artifacts `wan22-fun-a14b-cam.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `Wan22FunA14BCameraPipeline`.
+
+Family status: **Runner parity pending**.
+
+Reserve this variant for maximum-quality camera-controlled generation once your pipeline is proven on the GPU-validated 1.3B sibling; A14B checkpoints demand the largest VRAM budget in the family. Runner parity is pending.
+
+VideoX-Fun source is vendored at revision 403f1f7b78dcafccc4f6606dda4ec28e16e667dc.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run wan22-fun-a14b-cam --pipeline.task-profile default`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `alibaba-pai/Wan2.2-Fun-A14B-Control-Camera`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh wan22-fun-a14b-cam`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="wan22-fun-a14b-cam" locale="en" />

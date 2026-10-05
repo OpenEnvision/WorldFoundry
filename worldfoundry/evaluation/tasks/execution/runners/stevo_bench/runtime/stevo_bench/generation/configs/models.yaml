@@ -1,0 +1,208 @@
+# World-model registry for STEVO-Bench generation pipeline.
+#
+# Each entry under `models` configures one world model.
+# The orchestrator (run_world_models.py) reads this file and instantiates
+# the appropriate adapter for each requested model.
+#
+# Common fields (all models):
+#   type                 "api" or "local"
+#   prompt_field         Which prompts.* YAML key to use as the text prompt.
+#                        Use "video_WM" for models that take a single text prompt.
+#                        Use "camera_WM" for models that accept camera control separately.
+#   camera_control_field Which camera_control.* YAML sub-key to extract and pass as
+#                        --camera_control to the script (or null for none).
+#
+# API model fields:
+#   provider             Adapter identifier. Currently supported: "google_veo".
+#   api_key_env          Environment variable that holds the API key.
+#   model_id             Model version string (passed to the API).
+#   poll_interval        Seconds between status-poll attempts (Veo is async).
+#   timeout              Max seconds to wait for one video before giving up.
+#
+# Local model fields:
+#   repo_path            Absolute path to the model's local repository clone.
+#                        *** Update these paths for your machine. ***
+#   script               Wrapper script path relative to repo_path.
+#                        The script must accept the standard arg contract:
+#                          --prompt TEXT
+#                          --output PATH
+#                          --init_frame PATH   (optional)
+#                          --camera_control STRING  (optional)
+#   extra_args              List of additional CLI args forwarded verbatim.
+#   camera_control_default  Fallback camera-control string used when a task has no
+#                           camera_control value for this model (null = pass nothing).
+
+models:
+
+  veo:
+    type: api
+    provider: google_veo
+    prompt_field: video_WM
+    camera_control_field: null
+    model_id: veo-3.1-fast-generate-preview
+    # model_id: veo-3.1-generate-preview
+    api_key_env: GOOGLE_API_KEY
+    poll_interval: 10
+    timeout: 600
+    seconds: 8
+    # max requests per minute (null = unlimited)
+    rpm_limit: 5
+
+  HY-WorldPlay:
+    type: local
+    prompt_field: camera_WM
+    camera_control_field: HY-WorldPlay
+    repo_path: <path_to_your_HY-WorldPlay_repo>
+    script: run_single.sh
+    extra_args: []
+    rpm_limit: null
+    # Matches the length of the standard pan (s-3, right-20, left-20 = 43 latents).
+    camera_control_default: "s-3, right-10, left-20, right-10"
+    n_gpu: 8
+    # Daemon: load pipeline once, iterate all tasks in one torchrun invocation.
+    daemon_script: generate_daemon.py
+    daemon_args:
+      - "--model_path"
+      - "<path_to_your_HunyuanVideo-1.5_ckpt>"
+      - "--action_ckpt"
+      - "<path_to_your_HY-WorldPlay_action_ckpt>"
+      - "--model_type"
+      - "ar"
+      - "--few_step"
+      - "true"
+      - "--num_inference_steps"
+      - "4"
+
+  sora:
+    type: api
+    provider: openai_sora
+    prompt_field: video_WM
+    camera_control_field: null
+    api_key_env: SORA_API_KEY
+    model_id: sora-2-pro
+    # Output resolution ("WxH"). The init_frame is auto-resized to match.
+    # Supported 16:9 options: 1280x720, 1920x1080
+    size: "1280x720"
+    seconds: 4
+    poll_interval: 20
+    timeout: 900
+    rpm_limit: null
+
+  sora_pro:
+    type: api
+    provider: openai_sora
+    prompt_field: video_WM
+    camera_control_field: null
+    api_key_env: SORA_API_KEY
+    model_id: sora-2
+    # Output resolution ("WxH"). The init_frame is auto-resized to match.
+    # Supported 16:9 options: 1280x720, 1920x1080
+    size: "1280x720"
+    seconds: 8
+    poll_interval: 20
+    timeout: 900
+    rpm_limit: null
+
+  LingBot:
+    type: local
+    runner_class: lingbot
+    prompt_field: camera_WM
+    camera_control_field: lingbot
+    repo_path: <path_to_your_lingbot-world_repo>
+    script: run_single.sh
+    extra_args: []
+    rpm_limit: null
+    # Pre-computed action folders (run precompute_lingbot_actions.py to generate)
+    lingbot_actions_root: generation/world_models/lingbot_actions
+    # Fallback when a task has lingbot: null — same pan as the standard HY-WorldPlay default
+    camera_control_default: "s-3, right-10, left-20, right-10"
+    n_gpu: 8
+    # Daemon: load weights once, iterate all tasks in one torchrun invocation.
+    daemon_script: generate_daemon.py
+    daemon_args:
+      - "--ckpt_dir"
+      - "lingbot-world-base-cam"
+      - "--dit_fsdp"
+      - "--t5_fsdp"
+
+  gen3c:
+    type: local
+    prompt_field: camera_WM
+    camera_control_field: HY-WorldPlay
+    repo_path: <path_to_your_GEN3C_repo>
+    script: run.sh
+    extra_args: []
+    rpm_limit: null
+    camera_control_default: "s-3, right-10, left-20, right-10"
+    n_gpu: 8
+    # Daemon: load pipeline once, iterate all tasks in one torchrun invocation.
+    torchrun_path: <path_to_your_torchrun>
+    daemon_script: generate_daemon.py
+    daemon_args:
+      - "--checkpoint_dir"
+      - "/dev/shm/checkpoints"
+      - "--height"
+      - "704"
+      - "--width"
+      - "1280"
+      - "--guidance"
+      - "1"
+      - "--num_gpus"
+      - "8"
+
+  wan22:
+    type: local
+    prompt_field: video_WM
+    camera_control_field: null
+    repo_path: <path_to_your_Wan2.2_repo>
+    script: run_single.sh
+    extra_args: []
+    rpm_limit: null
+    n_gpu: 8
+    # Daemon: load weights once, iterate all tasks in one torchrun invocation.
+    daemon_script: generate_daemon.py
+    daemon_args:
+      - "--ckpt_dir"
+      - "Wan2.2-I2V-A14B"    # *** update path for your machine ***
+      - "--dit_fsdp"
+      - "--t5_fsdp"
+
+  HunyuanVideo15:
+    type: local
+    prompt_field: video_WM
+    camera_control_field: null
+    repo_path: <path_to_your_HunyuanVideo-1.5_repo>
+    script: run_single.sh
+    extra_args: []
+    rpm_limit: null
+    n_gpu: 4
+    # Daemon: load pipeline once, iterate all tasks in one torchrun invocation.
+    daemon_script: generate_daemon.py
+    daemon_args:
+      - "--model_path"
+      - "<path_to_your_HunyuanVideo-1.5_repo>/ckpts"
+      - "--resolution"
+      - "720p"
+      - "--offloading"
+      - "false"
+      - "--video_length"
+      - "193"
+
+  cogvideox:
+    type: local
+    prompt_field: video_WM
+    camera_control_field: null
+    repo_path: <path_to_your_CogVideo_repo>/sat
+    script: inference.sh
+    extra_args: []
+    rpm_limit: null
+    # Each task uses exactly 1 GPU. Set n_gpu to the total number of GPUs
+    # available on the machine; the pipeline will run n_gpu tasks in parallel.
+    n_gpu: 1
+    gpu_per_task: 1
+    # Daemon: load weights once per worker, iterate assigned tasks.
+    daemon_script: generate_daemon.py
+    daemon_args:
+      - "--base"
+      - "configs/cogvideox1.5_5b_i2v.yaml"
+      - "configs/inference_daemon.yaml"

@@ -1,24 +1,37 @@
 """Module for the MatrixGame2 operator implementation."""
 
-from .base_operator import BaseOperator
-
-import torch
 import random
 
+import torch
 
-def _combine_official_action_data(data, num_frames=57, keyboard_dim=6, mouse=True):
-    """Mirror Matrix-Game-2's official utils.conditions.combine_data."""
+from .base_operator import BaseOperator
+
+# The official implementation draws every segment length from the singleton
+# list ``[12]``, so segments are always 12 frames long.
+_OFFICIAL_SEGMENT_FRAMES = 12
+
+
+def _combine_official_action_data(data, num_frames=57, keyboard_dim=6, mouse=True, rng=None):
+    """Mirror Matrix-Game-2's official utils.conditions.combine_data.
+
+    ``rng`` accepts a ``random.Random`` instance so benchmark action sequences
+    can be made reproducible; the module-level ``random`` state is used when
+    it is omitted (legacy behaviour).
+    """
     assert num_frames % 4 == 1
+    if rng is None:
+        rng = random
     keyboard_condition = torch.zeros((num_frames, keyboard_dim))
     if mouse:
         mouse_condition = torch.zeros((num_frames, 2))
 
     current_frame = 0
-    selections = [12]
 
     while current_frame < num_frames:
-        rd_frame = selections[random.randint(0, len(selections) - 1)]
-        rd = random.randint(0, len(data) - 1)
+        # Upstream samples the segment length from [12] before the action.
+        # The draw has a constant result but still advances the RNG state.
+        rng.randint(0, 0)
+        rd = rng.randint(0, len(data) - 1)
         k = data[rd]["keyboard_condition"]
         if mouse:
             m = data[rd]["mouse_condition"]
@@ -29,8 +42,13 @@ def _combine_official_action_data(data, num_frames=57, keyboard_dim=6, mouse=Tru
                 mouse_condition[:1] = m[:1]
             current_frame = 1
         else:
-            rd_frame = min(rd_frame, num_frames - current_frame)
-            repeat_time = rd_frame // 4
+            rd_frame = min(_OFFICIAL_SEGMENT_FRAMES, num_frames - current_frame)
+            samples_per_action = k.shape[0]
+            assert rd_frame % samples_per_action == 0, (
+                f"segment length {rd_frame} is not a multiple of the "
+                f"{samples_per_action} samples per action"
+            )
+            repeat_time = rd_frame // samples_per_action
             keyboard_condition[current_frame : current_frame + rd_frame] = k.repeat(repeat_time, 1)
             if mouse:
                 mouse_condition[current_frame : current_frame + rd_frame] = m.repeat(repeat_time, 1)
@@ -40,7 +58,7 @@ def _combine_official_action_data(data, num_frames=57, keyboard_dim=6, mouse=Tru
     return {"keyboard_condition": keyboard_condition}
 
 
-def official_bench_actions_universal(num_frames, num_samples_per_action=4):
+def official_bench_actions_universal(num_frames, num_samples_per_action=4, seed=None):
     """Official bench actions universal implementation."""
     actions_single_action = ["forward", "left", "right"]
     actions_double_action = ["forward_left", "forward_right"]
@@ -83,10 +101,11 @@ def official_bench_actions_universal(num_frames, num_samples_per_action=4):
                 "mouse_condition": torch.tensor(mouse_condition),
             }
         )
-    return _combine_official_action_data(data, num_frames, keyboard_dim=4, mouse=True)
+    rng = random.Random(seed) if seed is not None else None
+    return _combine_official_action_data(data, num_frames, keyboard_dim=4, mouse=True, rng=rng)
 
 
-def official_bench_actions_gta_drive(num_frames, num_samples_per_action=4):
+def official_bench_actions_gta_drive(num_frames, num_samples_per_action=4, seed=None):
     """Official bench actions gta drive implementation."""
     actions_single_action = ["forward", "back"]
     actions_single_camera = ["camera_l", "camera_r"]
@@ -119,10 +138,11 @@ def official_bench_actions_gta_drive(num_frames, num_samples_per_action=4):
                 "mouse_condition": torch.tensor(mouse_condition),
             }
         )
-    return _combine_official_action_data(data, num_frames, keyboard_dim=2, mouse=True)
+    rng = random.Random(seed) if seed is not None else None
+    return _combine_official_action_data(data, num_frames, keyboard_dim=2, mouse=True, rng=rng)
 
 
-def official_bench_actions_templerun(num_frames, num_samples_per_action=4):
+def official_bench_actions_templerun(num_frames, num_samples_per_action=4, seed=None):
     """Official bench actions templerun implementation."""
     actions_single_action = [
         "jump",
@@ -153,7 +173,8 @@ def official_bench_actions_templerun(num_frames, num_samples_per_action=4):
             for row in keyboard_condition:
                 row[col] = 1
         data.append({"keyboard_condition": torch.tensor(keyboard_condition)})
-    return _combine_official_action_data(data, num_frames, keyboard_dim=7, mouse=False)
+    rng = random.Random(seed) if seed is not None else None
+    return _combine_official_action_data(data, num_frames, keyboard_dim=7, mouse=False, rng=rng)
 
 
 def encode_actions(action_list, mode):
@@ -334,14 +355,18 @@ class MatrixGame2Operator(BaseOperator):
         else:
             raise ValueError(f"Unknown mode {self.mode}")
 
-    def process_official_bench_actions(self, num_frames):
-        """Process official bench actions implementation."""
+    def process_official_bench_actions(self, num_frames, seed=None):
+        """Process official bench actions implementation.
+
+        Pass ``seed`` to draw the benchmark action sequence from a dedicated
+        ``random.Random(seed)`` so repeated runs are reproducible.
+        """
         if self.mode == "universal":
-            return official_bench_actions_universal(num_frames)
+            return official_bench_actions_universal(num_frames, seed=seed)
         if self.mode == "gta_drive":
-            return official_bench_actions_gta_drive(num_frames)
+            return official_bench_actions_gta_drive(num_frames, seed=seed)
         if self.mode == "templerun":
-            return official_bench_actions_templerun(num_frames)
+            return official_bench_actions_templerun(num_frames, seed=seed)
         raise ValueError(f"Unknown mode {self.mode}")
 
     def process_perception(self,
@@ -352,15 +377,15 @@ class MatrixGame2Operator(BaseOperator):
                            device: str = "cuda",
                            weight_dtype = torch.bfloat16,):
         """Process perception inputs like images, videos, and reference frames."""
-        if self.frame_process is None:
-            from torchvision.transforms import v2
+        from torchvision.transforms import v2
 
+        if self.frame_process is None:
             self.frame_process = v2.Compose([
-                v2.Resize(size=(resize_H, resize_W), antialias=True),
                 v2.ToTensor(),
                 v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
             ])
         image = resizecrop(input_image, resize_H, resize_W)
+        image = v2.Resize(size=(resize_H, resize_W), antialias=True)(image)
         image = self.frame_process(image)[None, :, None, :, :].to(dtype=weight_dtype, device=device)
 
         padding_video = torch.zeros_like(image).repeat(1, 1, 4 * (num_output_frames - 1), 1, 1)

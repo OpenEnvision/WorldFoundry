@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, FrozenSet
 
-from worldfoundry.studio.catalog import CatalogEntry, find_entry
+from worldfoundry.studio.inference.catalog import CatalogEntry, find_entry
 from worldfoundry.studio.visualization.core.manifest import ViewportCapabilities, ViewportKind
 
 if TYPE_CHECKING:
-    from worldfoundry.studio.execution import RunRecord
+    from worldfoundry.studio.inference.execution import RunRecord
 
 
 def available_viewport_kinds(

@@ -1,4 +1,14 @@
-"""Model checkpoint path resolution and device/dtype placement config."""
+"""Model checkpoint path resolution and device/dtype placement config.
+
+:class:`ModelConfig` (aliased as :data:`LoaderModelConfig`) describes
+where weights come from — an explicit path or a Hugging Face /
+ModelScope repo — and how they move through offload / onload /
+preparing / computation devices. :meth:`ModelConfig.download_if_necessary`
+materializes the source and, under USP, downloads only on rank zero.
+
+This is placement and download policy, not the file deserializer
+(:mod:`worldfoundry.core.model_loading.checkpoints.file`).
+"""
 
 import glob
 import os
@@ -8,6 +18,10 @@ from typing import Dict, Optional, Union
 import torch
 
 from worldfoundry.core.io.paths import local_model_root_path
+
+# ──────────────────────────────────────────────────────────────────────────
+# Placement + download policy — not the file deserializer (see .file)
+# ──────────────────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -37,12 +51,12 @@ class ModelConfig:
         state_dict: Optional already-loaded weights, bypassing file loading.
     """
 
-    path: Union[str, list[str]] = None
-    model_id: str = None
-    origin_file_pattern: Union[str, list[str]] = None
-    download_source: str = None
-    local_model_path: str = None
-    skip_download: bool = None
+    path: Optional[Union[str, list[str]]] = None
+    model_id: Optional[str] = None
+    origin_file_pattern: Optional[Union[str, list[str]]] = None
+    download_source: Optional[str] = None
+    local_model_path: Optional[str] = None
+    skip_download: Optional[bool] = None
     offload_device: Optional[Union[str, torch.device]] = None
     offload_dtype: Optional[torch.dtype] = None
     onload_device: Optional[Union[str, torch.device]] = None
@@ -52,7 +66,7 @@ class ModelConfig:
     computation_device: Optional[Union[str, torch.device]] = None
     computation_dtype: Optional[torch.dtype] = None
     clear_parameters: bool = False
-    state_dict: Dict[str, torch.Tensor] = None
+    state_dict: Optional[Dict[str, torch.Tensor]] = None
 
     def check_input(self):
         """Require either a concrete path or a model-hub identifier."""
@@ -80,18 +94,27 @@ class ModelConfig:
         else:
             return self.download_source
 
-    def parse_skip_download(self):
-        """Resolve offline behavior from the field or environment."""
-        if self.skip_download is None:
-            if os.environ.get("WORLDFOUNDRY_SKIP_MODEL_DOWNLOAD") is not None:
-                if os.environ["WORLDFOUNDRY_SKIP_MODEL_DOWNLOAD"].lower() == "true":
-                    return True
-                elif os.environ["WORLDFOUNDRY_SKIP_MODEL_DOWNLOAD"].lower() == "false":
-                    return False
-            else:
-                return False
-        else:
+    def parse_skip_download(self) -> bool:
+        """Resolve offline behavior from the field or environment.
+
+        Accepts the common boolean spellings; an unparseable value raises
+        instead of silently falling through to "download anyway", which would
+        hang offline clusters whose users set e.g. ``=1`` expecting a skip.
+        """
+        if self.skip_download is not None:
             return self.skip_download
+        raw = os.environ.get("WORLDFOUNDRY_SKIP_MODEL_DOWNLOAD")
+        if raw is None:
+            return False
+        value = raw.strip().lower()
+        if value in {"1", "true", "yes", "y", "on"}:
+            return True
+        if value in {"", "0", "false", "no", "n", "off"}:
+            return False
+        raise ValueError(
+            "WORLDFOUNDRY_SKIP_MODEL_DOWNLOAD must be a boolean value "
+            f"(true/false, 1/0, yes/no, on/off); got {raw!r}"
+        )
 
     def download(self):
         """Download missing repository files into ``local_model_path``."""
@@ -133,8 +156,13 @@ class ModelConfig:
         return not skip_download
 
     def reset_local_model_path(self):
-        """Apply the canonical WorldFoundry model directory when needed."""
-        if os.environ.get("WORLDFOUNDRY_MODEL_DIR") is not None or self.local_model_path is None:
+        """Apply the canonical WorldFoundry model directory when none is set.
+
+        An explicitly configured ``local_model_path`` always wins;
+        ``WORLDFOUNDRY_MODEL_DIR`` is consumed by ``local_model_root_path()``
+        and only fills the default (explicit argument > environment > default).
+        """
+        if self.local_model_path is None:
             self.local_model_path = str(local_model_root_path())
 
     def download_if_necessary(self, use_usp: bool = False):
@@ -150,7 +178,14 @@ class ModelConfig:
         if use_usp:
             import torch.distributed as dist
 
-            dist.barrier(device_ids=[dist.get_rank()])
+            # ``device_ids`` expects the *local* CUDA device index, not the
+            # global rank (they only coincide on a single node). Bind the
+            # barrier to this rank's current device; on CPU-only process
+            # groups the argument is unsupported, so omit it.
+            if torch.cuda.is_available():
+                dist.barrier(device_ids=[torch.cuda.current_device()])
+            else:
+                dist.barrier()
         if self.path is None:
             if self.origin_file_pattern in [None, "", "./"]:
                 self.path = os.path.join(self.local_model_path, self.model_id)
@@ -173,4 +208,13 @@ class ModelConfig:
         }
 
 
-__all__ = ["ModelConfig"]
+# ──────────────────────────────────────────────────────────────────────────
+# Compatibility alias — prefer LoaderModelConfig in new code
+# ──────────────────────────────────────────────────────────────────────────
+
+# Prefer this unambiguous name in new code. ``ModelConfig`` remains for
+# compatibility with existing loader configs and serialized targets.
+LoaderModelConfig = ModelConfig
+
+
+__all__ = ["LoaderModelConfig", "ModelConfig"]

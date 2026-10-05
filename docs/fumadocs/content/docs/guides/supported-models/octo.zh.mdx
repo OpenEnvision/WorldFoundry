@@ -1,0 +1,41 @@
+---
+title: "Octo"
+description: "伯克利 RAIL 的 JAX 通用策略；octo-small-1.5 在 A100 上恢复，并产出有限的 (1, 4, 7) 动作块。"
+modelId: "octo"
+pageSource: authored
+---
+
+Octo 是伯克利 RAIL 的 transformer 通用机器人策略，带扩散动作头，实现是 JAX / Flax。官方论文是 [Octo: An Open-Source Generalist Robot Policy](https://arxiv.org/abs/2405.12213)（arXiv 2405.12213）。项目页：[octo-models.github.io](https://octo-models.github.io/)。代码在 [octo-models/octo](https://github.com/octo-models/octo)。
+
+<ModelPaperFigures modelId="octo" locale="zh" />
+
+WorldFoundry 在 `worldfoundry/synthesis/action_generation/octo` 下保留扁平树内推理包——没有上游 checkout、包别名或 `sys.path` 注入。两个 catalog variant 共用该包：`octo-base-1.5` 与 `octo-small-1.5`。记录在案的 GPU 路径是 **octo-small-1.5**：官方 Orbax 树在 A100 上恢复（**136,670,604** 参数），`sample_actions` 产出有限的 **(1, 4, 7)** 动作块。base checkpoint 的采样仍待另一次带 checkpoint 的运行。
+
+<ModelCommandBuilder modelId="octo" locale="zh" />
+
+## 用来做什么
+
+要跑本仓库真正在 GPU 上采样过的路径，从 `octo-small-1.5` 开始。必填 `image`、`instruction`、`prompt`、`video`。`OctoPipeline` 写出 `octo_action_trace.json`。默认运行时配置固定 `variant=small`、`dataset_key=bridge_dataset`、`image_key=image_primary`。
+
+`octo-base-1.5` 用同一建模包和已就位的 Hugging Face 树；不要把它当成 A100 `sample_actions` 证据。Open-X 通用策略的常见评测场是 [SimplerEnv](/zh/docs/evaluation/benchmark-hub/simpler-env)。真实 rollout 仍需要按 benchmark 绑定动作空间。
+
+## 运行时契约
+
+图像缩到 **256×256**。已验证的 small 策略块是 **batch 1 × 动作视野 4 × 动作维 7**。策略旁声明的文本资产：CLIP processor 在 `${WORLDFOUNDRY_HFD_ROOT}/openai--clip-vit-base-patch32`，本地多语言句向量在 `${WORLDFOUNDRY_CKPT_DIR}/octo/universal-sentence-encoder-multilingual-3`。checkpoint 里的旧类名由内部 ModuleSpec 解析器只对推理组件改写。
+
+锁定 revision：
+
+- `rail-berkeley/octo-small-1.5` @ `dc9aa3019f764726c770814b27e4ab0fc6e32a58` → `${WORLDFOUNDRY_CKPT_DIR}/octo-small-1.5`
+- `rail-berkeley/octo-base-1.5` @ `ee3c10e8edd6ce2e8b1e8744d3c6fba4097bed48` → `${WORLDFOUNDRY_HFD_ROOT}/rail-berkeley--octo-base-1.5`
+
+## 在 WorldFoundry 中运行
+
+独立环境 `worldfoundry-octo-jax`（Python 3.10，CUDA 11.8，JAX 0.4.20，cuDNN 8.9）。这不是 PyTorch 统一栈。启动已 GPU 验证的 variant：
+
+```
+worldfoundry-eval run octo-small-1.5
+```
+
+catalog 默认启动仍打印 `octo-base-1.5`。要跑已记录的 A100 采样，换 variant。本仓库未记录许可证——生产使用前请确认上游条款。
+
+<ModelRelatedRecipes modelId="octo" locale="zh" />

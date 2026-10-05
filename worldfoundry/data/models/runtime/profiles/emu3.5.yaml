@@ -1,22 +1,29 @@
 schema_version: 2
 model_id: emu3.5
 display_name: Emu3.5
-task_family: video_generation
-groups: [video, multimodal]
+task_family: multimodal_generation
+groups: [multimodal, image]
 source_repos:
+- url: https://github.com/baaivision/Emu3.5
 - url: https://huggingface.co/BAAI/Emu3.5
 checkpoints:
 - repo_id: BAAI/Emu3.5
   role: model_checkpoint
+- repo_id: BAAI/Emu3.5-VisionTokenizer
+  role: vision_tokenizer
 input_schema:
   prompt: true
   image: optional
 artifact_kind: model_response
-artifact_filename: emu3.5.json
+artifact_filename: emu3.5.pb
 execution:
-  backend_stage: official_hf_transformers_runtime
-  runtime_status: integrated_checkpoint_required
+  backend_stage: official_checkout_eager_runtime
+  runtime_status: verified_interleaved_inference
   integration_status: integrated
   pipeline_binding: emu3.5
 integration:
   status: integrated
+notes:
+- The pinned official checkout and both checkpoints are required; no weights are downloaded at runtime.
+- Official Emu3.5 generates interleaved text and images. This route emits the official protobuf response, not video.
+- The checkpoint-backed GPU howto response was parsed with text and two decoded 384x384 PNG images.

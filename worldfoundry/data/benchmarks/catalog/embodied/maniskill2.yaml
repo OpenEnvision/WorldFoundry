@@ -1,5 +1,7 @@
 id: maniskill2
 name: ManiSkill2
+publisher: UC San Diego
+publisher_kind: university
 benchmark_kind:
 - vla
 - embodied-action
@@ -22,6 +24,9 @@ official_sources:
     url: https://github.com/haosulab/ManiSkill
   license: apache-2.0
 runner:
+  normalization:
+    dispatch: embodied
+    embodied_track: vla
   runner_target: worldfoundry.evaluation.tasks.contracts.external:ManiSkill2Contract
   expected_artifacts:
   - scorecard.json

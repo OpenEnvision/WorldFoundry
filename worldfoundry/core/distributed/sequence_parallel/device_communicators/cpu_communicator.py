@@ -1,5 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Adapted from: https://github.com/vllm-project/vllm/blob/main/vllm/distributed/device_communicators/cpu_communicator.py
+"""CPU/gloo communicator for SP metadata and host tensors.
+
+Host-side sequence-parallel state (split sizes, rank maps, pickled
+objects) must not go through NCCL. :class:`CpuCommunicator` implements
+the same :class:`DeviceCommunicatorBase` surface on the CPU process
+group (typically gloo) so the SP runtime can share one call pattern
+for device tensors and host metadata.
+
+Do not use this for large activation shards.
+"""
 
 import os
 
@@ -9,7 +19,14 @@ from torch.distributed import ProcessGroup
 from .base_device_communicator import DeviceCommunicatorBase
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# gloo path — host tensors; concat-style all-gather for torch.compile
+# ──────────────────────────────────────────────────────────────────────────
+
+
 class CpuCommunicator(DeviceCommunicatorBase):
+    """Host/gloo communicator for SP metadata and small CPU tensors."""
+
     def __init__(
         self,
         cpu_group: ProcessGroup,
@@ -17,12 +34,14 @@ class CpuCommunicator(DeviceCommunicatorBase):
         device_group: ProcessGroup | None = None,
         unique_name: str = "",
     ):
+        """Keep a ``dist_module`` hook so tests can swap the gloo implementation."""
         super().__init__(cpu_group, device, device_group, unique_name)
         self.dist_module = torch.distributed
 
     def all_reduce(
-        self, input_: torch.Tensor, op: torch.distributed.ReduceOp | None = torch.distributed.ReduceOp.SUM
+        self, input_: torch.Tensor, op:         torch.distributed.ReduceOp | None = torch.distributed.ReduceOp.SUM
     ) -> torch.Tensor:
+        """In-place gloo all-reduce; no autograd — metadata is not a training tensor."""
         self.dist_module.all_reduce(input_, group=self.device_group, op=op)
         return input_
 
@@ -54,6 +73,7 @@ class CpuCommunicator(DeviceCommunicatorBase):
         return output_tensor
 
     def all_gather(self, input_: torch.Tensor, dim: int = -1) -> torch.Tensor:
+        """Concat-style gather; stack-style breaks ``torch.compile`` (PyTorch #138795)."""
         if dim < 0:
             # Convert negative dim to positive.
             dim += input_.dim()
@@ -76,8 +96,21 @@ class CpuCommunicator(DeviceCommunicatorBase):
         return output_tensor
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Optional SHM backend — requires VLLM_DIST_IDENT and torch.ops._C shm ops
+# ──────────────────────────────────────────────────────────────────────────
+
+
 class _CPUSHMDistributed:
+    """Optional shared-memory collectives when the custom ``_C`` extension is present.
+
+    Not constructed by :class:`CpuCommunicator` today; kept so a future
+    opt-in path can reuse the same group-name scheme. ``VLLM_DIST_IDENT``
+    must be set or ``__init__`` raises :class:`KeyError``.
+    """
+
     def __init__(self, communicator: CpuCommunicator):
+        """Build a unique SHM group name from env ident, ranks, and communicator name."""
         instance_identifier = os.environ["VLLM_DIST_IDENT"]
         unique_name = communicator.unique_name
         instance_identifier = f"{instance_identifier}-{unique_name}"
@@ -90,6 +123,7 @@ class _CPUSHMDistributed:
         self.handle = self._init_cpu_shm()
 
     def _init_cpu_shm(self) -> int:
+        """Create then join the SHM manager; barriers keep ranks from racing join."""
         handle = torch.ops._C.init_shm_manager(
             self.group_name,
             self.communicator.world_size,
@@ -105,6 +139,7 @@ class _CPUSHMDistributed:
         return int(handle)
 
     def all_reduce(self, input: torch.Tensor, group: ProcessGroup | None = None) -> None:
+        """SHM all-reduce in place; ``group`` is ignored (handle already binds ranks)."""
         torch.ops._C.shm_allreduce(self.handle, input)
 
     def gather(
@@ -114,10 +149,12 @@ class _CPUSHMDistributed:
         dst: int = -1,
         group: ProcessGroup | None = None,
     ) -> None:
+        """Gather into ``gather_list``; ``dst`` is a *local* group rank, not WORLD."""
         # Note: different from the torch gather, here we use local dst rank.
         torch.ops._C.shm_gather(self.handle, input, gather_list, torch.distributed.get_group_rank(group, dst))
 
     def all_gather_into_tensor(
-        self, output: torch.Tensor, input: torch.Tensor, group: ProcessGroup | None = None
+        self, output: torch.Tensor, input: torch.Tensor,         group: ProcessGroup | None = None
     ) -> None:
+        """Fill ``output`` from every rank's ``input`` through the SHM manager."""
         torch.ops._C.shm_all_gather(self.handle, input, output)

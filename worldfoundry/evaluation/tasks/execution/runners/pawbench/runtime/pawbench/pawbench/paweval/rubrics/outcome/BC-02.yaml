@@ -1,0 +1,58 @@
+schema_version: paweval.rubric/v1
+axis: outcome
+scene_id: BC-02
+track: coverage
+title_en: Basketball Shot at Hoop
+outcome_question: Which basketball shot outcome in ['swish', 'backboard_then_in', 'rim_then_in', 'rim_miss_no_score',
+  'backboard_miss_no_score', 'left_miss_no_contact', 'right_miss_no_contact', 'short_airball_no_contact',
+  'long_airball_no_contact'] is visible as the first decisive result?
+readout_policy: Read the first decisive basketball/hoop result after the single shot. Qualifying frames
+  must show the ball trajectory, hoop/rim/backboard, and miss geometry clearly enough to distinguish made-basket
+  path, contact miss surface, lateral no-contact miss, short no-contact airball, or long/over no-contact
+  airball.
+canonical_labels:
+- swish
+- backboard_then_in
+- rim_then_in
+- rim_miss_no_score
+- backboard_miss_no_score
+- left_miss_no_contact
+- right_miss_no_contact
+- short_airball_no_contact
+- long_airball_no_contact
+label_aliases: {}
+unreadable_rules:
+- Evidence frames are occluded or cropped such that the canonical label cannot be determined.
+- Heavy motion blur prevents identifying the canonical label in any qualifying frame.
+- Ball/hoop/backboard geometry is hidden at the decisive contact or miss moment.
+- A no-contact miss is visible but side versus short/long geometry cannot be determined.
+- None of the canonical labels ['swish', 'backboard_then_in', 'rim_then_in', 'rim_miss_no_score', 'backboard_miss_no_score',
+  'left_miss_no_contact', 'right_miss_no_contact', 'short_airball_no_contact', 'long_airball_no_contact']
+  can be decisively identified within the readout window.
+out_of_schema_rules:
+- Ball disappears, duplicates, teleports, or appears in/through the hoop without a continuous shot trajectory;
+  do not coerce into a score label.
+- A visible result occurs outside basketball hoop/rim/backboard/miss semantics, such as a second ball
+  scoring or target changing mid-shot; record out-of-schema.
+priority_rules:
+- 'First decisive readout is the basketball trajectory at the hoop/rim/backboard: made-basket path, rim/backboard
+  miss, lateral no-contact miss, short no-contact airball, or long/over no-contact airball.'
+- swish requires the ball to pass cleanly through the hoop without visible rim/backboard contact.
+- backboard_then_in requires backboard contact before scoring; rim_then_in requires rim contact before
+  scoring.
+- rim_miss_no_score requires visible rim contact without scoring; backboard_miss_no_score requires visible
+  backboard contact without scoring and no rim-made basket.
+- left_miss_no_contact and right_miss_no_contact require the ball to pass the hoop on that camera-visible
+  side without rim/backboard/hoop contact.
+- short_airball_no_contact means the ball falls short of the hoop without target contact; long_airball_no_contact
+  means the ball passes beyond/over the hoop region without target contact.
+- 'Priority: any made basket overrides miss labels; rim/backboard contact miss overrides no-contact miss;
+  lateral no-contact miss overrides short/long only when side is clearly the defining miss geometry. If
+  geometry is hidden, return unreadable.'
+notes:
+- Outcome set separates made-basket contact path, contact miss surface, and no-contact miss geometry because
+  these are distinct terminal shot futures.
+- 'Contact/trajectory scene: outcome label uses first decisive visible target interaction or miss geometry.'
+- 'Scene title: Basketball Shot at Hoop.'
+- 'Track B finalized content: scene-specific readout, priority, and tie-break rules are authored from
+  STAGBench metadata/action protocol.'

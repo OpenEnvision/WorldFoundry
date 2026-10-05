@@ -66,12 +66,21 @@ _setup_tf32()
 
 
 def _default_bpe_path() -> str:
-    """Helper function to default bpe path.
-
-    Returns:
-        The return value.
-    """
-    return str(files("worldfoundry.base_models.perception_core.segment.sam3").joinpath("assets/bpe_simple_vocab_16e6.txt.gz"))
+    """Resolve SAM3's CLIP vocabulary from bundled or installed package assets."""
+    filename = "bpe_simple_vocab_16e6.txt.gz"
+    bundled = files("worldfoundry.base_models.perception_core.segment.sam3").joinpath("assets", filename)
+    if bundled.is_file():
+        return str(bundled)
+    try:
+        shared = files("open_clip").joinpath(filename)
+    except ModuleNotFoundError:
+        shared = None
+    if shared is not None and shared.is_file():
+        return str(shared)
+    raise FileNotFoundError(
+        "SAM3's CLIP BPE vocabulary is missing. Pass bpe_path to the model builder "
+        "or install open-clip-torch, which includes bpe_simple_vocab_16e6.txt.gz."
+    )
 
 
 def _create_position_encoding(precompute_resolution=None):

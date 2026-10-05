@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from worldfoundry.base_models.diffusion_model.video.lvdm.utils import instantiate_from_config
+from worldfoundry.core.model_loading.factory import instantiate_from_config
 from src.Open_MAGVIT2.modules.util import SOSProvider
 
 

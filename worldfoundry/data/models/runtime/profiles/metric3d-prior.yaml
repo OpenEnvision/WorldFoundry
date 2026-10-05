@@ -1,6 +1,6 @@
 schema_version: 2
 model_id: metric3d-prior
-display_name: Metric3D Prior
+display_name: Metric3D
 task_family: three_dimension
 groups:
 - 3d

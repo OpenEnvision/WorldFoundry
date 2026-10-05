@@ -7,7 +7,7 @@ from PIL import Image
 from typing import Optional, Any, List, TYPE_CHECKING
 
 from ...operators.hunyuan_game_craft_operator import HunyuanGameCraftOperator
-from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_game_craft.config import parse_args
+from worldfoundry.synthesis.visual_generation.hunyuan_world.gamecraft_inference.config import parse_args
 from ...synthesis.visual_generation.memory.stream import LatentContextMemory
 
 if TYPE_CHECKING:
@@ -64,7 +64,7 @@ class HunyuanGameCraftPipeline(PipelineABC):
         args.cpu_offload = cpu_offload
         args.seed = seed
 
-        from worldfoundry.core.distributed.sequence_parallel_runtime import initialize_distributed
+        from worldfoundry.core.distributed.sequence_parallel.runtime import initialize_distributed
 
         initialize_distributed(args.seed)
 
@@ -77,7 +77,7 @@ class HunyuanGameCraftPipeline(PipelineABC):
 
         synthesis_model = HunyuanGameCraftSynthesis.from_pretrained(
             pretrained_model_path=synthesis_model_path,
-            device=device if not args.cpu_offload else torch.device("cpu"),
+            device=device,
             weight_dtype=weight_dtype,
             args=args,
             **kwargs,
@@ -151,7 +151,7 @@ class HunyuanGameCraftPipeline(PipelineABC):
                 size=(704, 1216),
                 height=None,
                 width=None,
-                num_frames=129,
+                num_frames=None,
                 # other generation condition
                 interaction_speed=None,
                 interaction_positive_prompt="Realistic, High-quality.",
@@ -159,12 +159,26 @@ class HunyuanGameCraftPipeline(PipelineABC):
                 cfg_scale=2.0,
                 infer_steps=50,
                 flow_shift_eval_video=5.0,
+                output_path=None,
+                fps=24,
+                return_dict=False,
                 **kwds):
         """Execute the complete pipeline generation flow."""
         if interactions is None:
             interactions = ["forward", "left", "right", "right", "camera_l", "camera_r", "camera_up", "camera_down"]
+        if not interactions:
+            raise ValueError("At least one GameCraft interaction is required.")
+        expected_frames = 33 * len(interactions)
+        if num_frames is not None and num_frames != expected_frames:
+            raise ValueError(
+                f"GameCraft generates 33 frames per action; {len(interactions)} actions "
+                f"produce {expected_frames} frames, but num_frames={num_frames} was requested."
+            )
+        num_frames = expected_frames
         if interaction_speed is None:
             interaction_speed = [0.2] * len(interactions)
+        if len(interaction_speed) != len(interactions):
+            raise ValueError("interaction_speed must contain one value per interaction.")
         if height is not None or width is not None:
             output_H, output_W = size
             size = (int(height or output_H), int(width or output_W))
@@ -193,6 +207,19 @@ class HunyuanGameCraftPipeline(PipelineABC):
             flow_shift=flow_shift_eval_video,
             **kwds
         )
+        frames = output_video["video"] if isinstance(output_video, dict) else output_video
+        if frames is not None and len(frames) != expected_frames:
+            raise RuntimeError(f"GameCraft returned {len(frames)} frames; expected {expected_frames}.")
+        if output_path is not None and frames is not None:
+            from worldfoundry.core.io import write_video
+
+            write_video(frames, output_path, fps=int(fps))
+        if return_dict:
+            result = dict(output_video) if isinstance(output_video, dict) else {"video": frames}
+            result["num_frames"] = len(frames) if frames is not None else 0
+            if output_path is not None and frames is not None:
+                result["artifact_path"] = str(output_path)
+            return result
         return output_video
 
     def stream(

@@ -53,3 +53,23 @@ catalog_policy:
   - open_weights_restricted
   - api_or_closed
   - unknown
+docs:
+  publisher: Kuaishou (Kling Team)
+  publisher_kind: company
+  publisher_zh: 快手（可灵团队）
+  overview: ReCamMaster re-renders an existing video along a new camera trajectory — camera-controlled generative rendering from a single video. In this catalog the in-tree pipeline, operator, and synthesis runtime live under the Kling namespace, and the runner is verified for the official camera-trajectory video-to-video demo with local ReCamMaster/Wan assets.
+  overview_zh: ReCamMaster 让已有视频沿新的相机轨迹重新渲染——从单个视频出发的相机可控生成式渲染。本 catalog 中其树内 pipeline、operator 与合成运行时位于 Kling 命名空间下，runner 已针对官方相机轨迹 video-to-video demo（使用本地 ReCamMaster/Wan 资产）验证。
+  architecture: Per the paper (arXiv 2503.11647), ReCamMaster conditions a pre-trained text-to-video model (Wan-family in the open release) on the source video through frame-dimension conditioning, letting camera trajectories be swapped at generation time. Runtime execution requires local Wan2.1, the ReCamMaster checkpoint, torchvision, and CUDA assets.
+  architecture_zh: 按论文（arXiv 2503.11647），ReCamMaster 通过帧维度条件化把源视频注入预训练文生视频模型（开源版基于 Wan 系），从而在生成时更换相机轨迹。运行需要本地 Wan2.1、ReCamMaster checkpoint、torchvision 与 CUDA 资产。
+  usage_notes: The open-source reference runtime is checkpoint/GPU gated — no empty runner shim is registered. Stage Wan2.1 plus the ReCamMaster checkpoint before submitting jobs; per-run visual QA is tracked outside the catalog.
+  usage_notes_zh: 开源参考运行时受 checkpoint/GPU 限制——不注册空 runner 壳。提交任务前请就位 Wan2.1 与 ReCamMaster checkpoint；每次运行的视觉 QA 在 catalog 外跟踪。
+  limitations:
+  - Requires local Wan2.1 and ReCamMaster checkpoints plus CUDA.
+  - Re-rendering quality is bounded by the source video content — unseen regions are hallucinated.
+  limitations_zh:
+  - 需要本地 Wan2.1 与 ReCamMaster checkpoint 及 CUDA。
+  - 重渲染质量受源视频内容限制——未见区域由模型补全想象。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Directly evaluates camera-trajectory control quality.
+    reason_zh: 直接评估相机轨迹控制质量。

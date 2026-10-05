@@ -1,0 +1,32 @@
+---
+title: "Warp-as-History"
+description: "Camera-controlled image-to-video: warp the still along a camera path, then refine. Dedicated env; official 33-frame / 16 fps demo is GPU-verified."
+modelId: "warp-as-history"
+pageSource: authored
+---
+
+Warp-as-History (WAH) is a camera-controlled **image-to-video** method. The paper is [Warp-as-History: Generalizable Camera-Controlled Video Generation from One Training Video](https://arxiv.org/abs/2605.15182) (arXiv 2605.15182), with a project page at [yyfz.github.io/warp-as-history](https://yyfz.github.io/warp-as-history) and code at [yyfz/Warp-as-History](https://github.com/yyfz/Warp-as-History) (**Apache-2.0**). The paper lists Shanghai Jiao Tong University and Shanghai AI Laboratory; this catalog card still has no separate institution field. Aliases `wah`, `warp_as_history`, and `yyfz233/warp-as-history` resolve here.
+
+<ModelPaperFigures modelId="warp-as-history" locale="en" />
+
+At inference time the still is geometrically warped along the requested camera path; those warps are treated as **pseudo-history** and fed through a frozen **Helios-Distilled** video model plus a task LoRA. Visible-token selection drops warp regions with no valid source. WorldFoundry vendors the official runtime under `worldfoundry/synthesis/visual_generation/warp_as_history`. Integration and runner status are **verified**: GPU parity passed with staged Helios-Distilled and LoRA weights, reproducing the official BMX / graffiti warp-video demo.
+
+<ModelCommandBuilder modelId="warp-as-history" locale="en" />
+
+## What it is for
+
+Steer camera motion from one image. Required `prompt` and `image`; optional `video`; `actions` recorded as `warp_video`, `camera_path`. Artifact: `warp-as-history.mp4` via `WarpAsHistoryPipeline`. The verified recipe is `--pipeline.task-profile official-demo-video`.
+
+The official demo contract pins **33 frames**, **16 fps**, **384×640**, seed **42**. Score camera follow on [CameraBench](/docs/evaluation/benchmark-hub/camerabench) — that is the matching eval suite, not an ingested WorldFoundry rank.
+
+Stage three external caches: `BestWishYsh/Helios-Distilled` (base), `yyfz233/warp-as-history` (`visible_lora_state_step1000.safetensors`), and `yyfz233/Pi3X` (`model.safetensors`) when you render warps from camera poses. Inject them with `model_path` / `lora_path` / `pi3x_ckpt_path` or `WAH_HELIOS_DISTILLED_PATH` / `WAH_LORA_PATH` / `WAH_PI3X_CKPT_PATH`. Pi3X is optional unless you start from poses instead of a ready warp video.
+
+## Runtime contract
+
+Dedicated environment only: `warp-as-history` pins **Python 3.10**, **CUDA 12.1**, **torch==2.5.0**. Do not run this in the unified env. Backend stage is `in_tree_official_cli`. Camera paths far from the input viewpoint degrade the warp history and the clip.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run warp-as-history --pipeline.task-profile official-demo-video` after `bash scripts/setup/model_env_install.sh --model warp-as-history`. Per-run visual QA stays outside the catalog.
+
+<ModelRelatedRecipes modelId="warp-as-history" locale="en" />

@@ -1,6 +1,6 @@
 artifact_filename: vchitect_2_t2v_public_runner.mp4
 artifact_kind: generated_video
-backend_stage: in_tree_runtime
+backend_stage: native_diffusion
 checkpoints:
 - local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Vchitect--Vchitect-2.0-2B
   repo_id: Vchitect/Vchitect-2.0-2B
@@ -15,7 +15,7 @@ input_schema:
 integration_status: integrated
 notes:
 - Official Vchitect-2.0 source is https://github.com/Vchitect/Vchitect-2.0 at be56767f1107b4fd6ba7652fe92ec0e7032878fe.
-- The vendored VchitectXLPipeline runtime source is present under worldfoundry/base_models/diffusion_model/video/vchitect/vchitect_runtime.
-- The default path loads the vendored Vchitect pipeline directly and does not emit
+- The native Vchitect recipe uses role-based DiT, conditioner, scheduler, initializer, and decoder components.
+- The default path loads the shared WorldFoundry native diffusion pipeline and does not emit
   blocked plan artifacts.
 runtime_status: integrated

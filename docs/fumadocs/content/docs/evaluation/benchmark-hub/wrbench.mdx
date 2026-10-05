@@ -1,139 +1,57 @@
 ---
 title: WRBench
-description: WRBench — metrics, requirements, and run commands.
+description: "USTC / X-Humanoid persistent-state bench: Natural-25, D1–D6 camera look-away chain. WorldFoundry checks in the package; full D1–D6 is unverified."
 ---
 
-## About
+WRBench (“Current World Models Lack a Persistent State Core”; USTC and X-Humanoid / Beijing Innovation Center of Humanoid Robotics) treats camera motion as an **observability intervention**: an event starts, the camera looks away, and on return the bench asks whether the target **advanced to the endpoint or froze**. **Natural-25** crosses 25 scene families with a four-level event design (spatial change × state change). The canonical camera track expands **100 semantic variants × five camera controls = 500 requests**.
 
-Natural-25 camera intervention benchmark for persistent visual world state.
+Hierarchical **D1–D6**:
 
-**WorldFoundry evaluation path:** Executes or normalizes the official benchmark pipeline from in-tree vendored sources on generated outputs. Candidate outputs are read from the generated-artifact directory.
+- **D1** — requested-camera precision / prompt-camera alignment
+- **D2** — visual integrity
+- **D3 / D4** — visible spatial / state consistency
+- **D5 / D6** — re-observed spatial / state consistency (aggregated **only** over judgeable hidden-and-returned evidence)
 
-## Integration status
+`wrbench_average` aggregates D1–D6. Paper: [WRBench](https://arxiv.org/abs/2606.20545). Project: [jinplu.github.io/WRBench](https://jinplu.github.io/WRBench/). Code: [JinPLu/WRBench](https://github.com/JinPLu/WRBench). Data: [`WRBench/wrbench-natural25`](https://huggingface.co/datasets/WRBench/wrbench-natural25).
 
-| Item | Current state |
-| --- | --- |
-| Catalog integration | `integrated` |
-| Runner verification | `pending` |
-| Leaderboard | not yet eligible for leaderboard claims |
+WorldFoundry **checks in the complete package and Natural-25 assets**. Natural-25 request materialization and result normalization are available; **full D1–D6 execution is unverified**. Scorers: VGGT-Omega, DINOv2, Qwen3.5, Qwen3-VL.
 
-## Metrics
+<BenchmarkPageSections id="wrbench" locale="en" />
 
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/wrbench.yaml`
-
-### Primary
-
-- `wrbench_average`
-
-| Metric | Focus |
-| --- | --- |
-| `d1_cam_prec` | Value reported for Requested-camera precision (D1-CamPrec) under the official benchmark protocol. |
-| `d1_cam_align_common_yaw` | Value reported for Prompt-camera alignment (common yaw) under the official benchmark protocol. |
-| `d1_cam_align_static_hold` | Value reported for Prompt-camera alignment (static hold) under the official benchmark protocol. |
-| `d2_visual_integrity` | Value reported for Visual integrity (D2) under the official benchmark protocol. |
-| `d3_visible_spatial_consistency` | Value reported for Visible spatial consistency (D3) under the official benchmark protocol. |
-| `d4_visible_state_consistency` | Value reported for Visible state consistency (D4) under the official benchmark protocol. |
-| `d5_reobservation_spatial_consistency` | Value reported for Re-observation spatial consistency (D5) under the official benchmark protocol. |
-| `d6_reobservation_state_consistency` | Value reported for Re-observation state consistency (D6) under the official benchmark protocol. |
-| `wrbench_average` | Aggregate benchmark score summarizing the underlying WRBench diagnostic average component metrics. |
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `worldfoundry-unified-cu128`.
-- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
-- Contract, Natural-25 request materialization, published-result normalization, and WRBench source are available in-tree.
-- Full D1-D6 execution requires external checkpoint paths in WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG.
-
-### Evaluation data
-
-- `worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench`
-- `worldfoundry/data/benchmarks/assets/wrbench/natural25`
-- `worldfoundry/data/benchmarks/tasks/external/wrbench.yaml`
-
-### Checkpoints & assets
-
-- Base-model / metric dependencies: `vggt_omega`, `dinov2`, `qwen3_5_vl`, `qwen3_vl`.
-- Default metric-checkpoint paths and override env vars are listed in the [local assets guide](/docs/guides/local-assets).
-
-### Key environment variables
-
-- `WORLDFOUNDRY_WRBENCH_ROOT`
-- `WORLDFOUNDRY_WRBENCH_ASSETS_ROOT`
-- `WORLDFOUNDRY_WRBENCH_RESULTS_PATH`
-- `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`
-- `WORLDFOUNDRY_WRBENCH_VIDEO_MANIFEST`
-- `WORLDFOUNDRY_WRBENCH_RUNTIME_CONFIG`
-
-### Verify setup
-
-```bash
-PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py --run-fixture --output-dir tmp/worldfoundry_preflight/wrbench --json
-```
-
-## Run Evaluation
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id wrbench \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/wrbench/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json_or_csv> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/wrbench/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
+`--run-official` scores generated videos plus camera sidecars against Natural-25 (`--scorer-profile`, `--sidecar-profile-gate`). Rows without re-observation support are **excluded** from D5/D6, not counted as failures. Env: `WORLDFOUNDRY_WRBENCH_RESULTS_PATH`, `WORLDFOUNDRY_WRBENCH_ROOT`. Shared stack: `vggt_omega`, `dinov2`, `qwen3_5_vl`, `qwen3_vl`.
 
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id wrbench \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/wrbench/official-run \
-  --json
-```
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/wrbench.yaml`, `worldfoundry/data/benchmarks/assets/wrbench`, `worldfoundry/evaluation/tasks/execution/runners/wrbench/runtime/wrbench`.
 
-### Direct In-Tree Runner
+Outputs include `scorecard.json` (primary `wrbench_average`, leaderboard key `Avg`) and `generation_requests.jsonl`.
 
-```bash
-${WORLDFOUNDRY_UNIFIED_PYTHON:-python} worldfoundry/evaluation/tasks/execution/runners/wrbench/run_wrbench_official_runner.py --benchmark-id wrbench --run-official --output-dir "$WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR" --generated-artifact-dir "$WORLDFOUNDRY_GENERATED_ARTIFACT_DIR" --json
-```
+## Bundled Natural-25 assets
 
-## Requirements
+`worldfoundry/data/benchmarks/assets/wrbench/natural25/` ships the prompt grid WorldFoundry materializes (Apache-2.0 with the rest of this repository). Hugging Face mirrors: [collection](https://huggingface.co/collections/WRBench/wrbench-current-world-models-lack-a-persistent-state-core-6a365c717251293c9fc2cc26), [`WRBench/wrbench-natural25`](https://huggingface.co/datasets/WRBench/wrbench-natural25), [`WRBench/wrbench-videos`](https://huggingface.co/datasets/WRBench/wrbench-videos), [leaderboard](https://huggingface.co/spaces/WRBench/wrbench-leaderboard).
 
-### Inputs
+| File | Role |
+| --- | --- |
+| `scene_events_25x4.csv` | 25 scene families × 4 event axes (none / spatial / state / full) |
+| `families.jsonl` | Scene-family metadata and prompt variants |
+| `variants.jsonl` | Deterministic TI2V variants: 25 families × 4 event tiers × 4 camera gaps. `ti2v_prompt` is the first-frame-anchored prompt of record |
+| `variants.legacy_pronoun_20260620.jsonl` | Frozen provenance snapshot; currently byte-identical to `variants.jsonl` |
+| `t2v_layout_anchors.jsonl` | Text-only layout facts (subject left, interactor right, open surface, background) |
+| `t2v_event_tails.jsonl` | Text-only event/action tails keyed by `variant_id` |
+| `prompt_profiles/t2v_layout_anchor.json` | Text-only prompt profile; bans T2I/TI2V style tokens |
+| `camera_scopes/t2v_rotation_stress_30_60.json` | T2V-only rotation-stress scope (`static`, `yaw30_LR`, `yaw30_RL`, `yaw60_LR`, `yaw60_RL`) |
+| `first_frames/` + `first_frames_manifest.json` | Released PNG first frames, one per `family_id` |
 
-- in-tree WRBench runtime and Natural-25 assets
-- generated videos and camera sidecars for a new model evaluation
-- WRBench scorer runtime configuration for full D1-D6 execution
-
-### Outputs
-
-- `scorecard.json`
-- `benchmark_contract.json`
-- `raw_metric_table.jsonl`
-- `per_sample_scores.jsonl`
-- `generation_requests.jsonl`
-
-## Official references
-
-- [GitHub](https://github.com/JinPLu/WRBench)
-- [Paper](https://arxiv.org/abs/2606.20545)
-- [Project page](https://jinplu.github.io/WRBench/)
-- [Hugging Face dataset](https://huggingface.co/datasets/WRBench/wrbench-natural25)
+You can regenerate first-frame PNGs with `wrbench firstframe` or substitute your own T2I images. Human annotation verdicts are released separately. Text-only leaderboard entries should materialize `t2v_layout_anchor` and the rotation-stress scope rather than the main TI2V/TV2V surface.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

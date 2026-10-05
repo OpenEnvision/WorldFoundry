@@ -15,6 +15,10 @@ require SAM-3 and Gemini credentials.
 
 from __future__ import annotations
 
+
+
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path, SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+
 import argparse
 import json
 import os
@@ -32,19 +36,15 @@ from worldfoundry.evaluation.tasks.execution.runners.memobench.memobench_metrics
 )
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
 
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 BENCHMARK_ID = "memobench"
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def _runtime_root(explicit: Path | None = None) -> Path:
     if explicit is not None:
         return explicit.expanduser().resolve()
-    env_root = _env_path("WORLDFOUNDRY_MEMOBENCH_ROOT")
+    env_root = resolve_env_path("WORLDFOUNDRY_MEMOBENCH_ROOT")
     if env_root is not None:
         return env_root
     return (Path(__file__).resolve().parent / "runtime" / "memobench").resolve()
@@ -75,7 +75,7 @@ def _collect_results_paths(args: argparse.Namespace) -> list[Path]:
     paths: list[Path] = []
     if args.official_results_path is not None:
         paths.append(args.official_results_path.expanduser().resolve())
-    env_results = _env_path("WORLDFOUNDRY_MEMOBENCH_RESULTS_PATH")
+    env_results = resolve_env_path("WORLDFOUNDRY_MEMOBENCH_RESULTS_PATH")
     if env_results is not None and env_results not in paths:
         paths.append(env_results)
     for name in (
@@ -84,16 +84,16 @@ def _collect_results_paths(args: argparse.Namespace) -> list[Path]:
         "WORLDFOUNDRY_MEMOBENCH_VQA_DIR",
         "WORLDFOUNDRY_MEMOBENCH_LEADERBOARD_PATH",
     ):
-        path = _env_path(name)
+        path = resolve_env_path(name)
         if path is not None and path not in paths:
             paths.append(path)
     return paths
 
 
 def _run_step1(args: argparse.Namespace, runtime_root: Path) -> tuple[Path | None, dict[str, Any]]:
-    generated_root = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
-    generated_syn = args.generated_synthetic_dir or _env_path("WORLDFOUNDRY_MEMOBENCH_GENERATED_SYNTHETIC_DIR")
-    generated_real = args.generated_real_dir or _env_path("WORLDFOUNDRY_MEMOBENCH_GENERATED_REAL_DIR")
+    generated_root = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    generated_syn = args.generated_synthetic_dir or resolve_env_path("WORLDFOUNDRY_MEMOBENCH_GENERATED_SYNTHETIC_DIR")
+    generated_real = args.generated_real_dir or resolve_env_path("WORLDFOUNDRY_MEMOBENCH_GENERATED_REAL_DIR")
     if args.mode in {"synthetic", "real"} and generated_root is None:
         raise ValueError("--generated-artifact-dir is required for --run-official with mode synthetic/real")
     if args.mode == "both" and (generated_syn is None or generated_real is None):
@@ -174,18 +174,23 @@ def _scorecard(
     }
     official_runtime_executed = official_runtime is not None
     normalization_ok = bool(available_rows)
+    component_verified = official_runtime_executed and normalization_ok
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         # ``--run-official`` executes only MemoBench Step 1.  The official
         # benchmark also requires ORS, VQA, and leaderboard aggregation, so a
         # successful Step-1 run must not be reported as full-benchmark proof.
         "official_benchmark_verified": False,
-        "integration_evidence": normalization_ok,
+        "integration_evidence": component_verified,
         "leaderboard_valid": False,
         "normalizer_only": not official_runtime_executed,
         "normalization_ok": normalization_ok,
         "run": {
-            "status": "succeeded" if normalization_ok else "failed",
+            "status": (
+                "official_component_verified" if component_verified
+                else "official_results_imported" if normalization_ok
+                else "failed"
+            ),
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_memobench_official_runner",
             "returncode": 0 if normalization_ok else 1,

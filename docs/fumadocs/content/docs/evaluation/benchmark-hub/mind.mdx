@@ -1,0 +1,103 @@
+---
+title: MIND
+description: "Closed-loop revisit bench for interactive world models: 250 clips at 1080p / 24 FPS. WorldFoundry scores videos; it does not generate them, and mind_average is not official."
+---
+
+MIND (CSU-JPG) is an open-domain **closed-loop revisit** bench: the model rolls out under camera / action commands, leaves a region, and returns. Official **MIND-Data** is **250** Unreal Engine 5 clips at **1080p / 24 FPS** across eight scene categories (40+ environments). **200** clips share one action space (100 first-person + 100 third-person); **50** use varied speeds and rotation angles (25 + 25). Scoring: long-context memory (PSNR / SSIM / LPIPS / MSE + DINOv3 patch MSE), visual quality (MUSIQ-SPAQ, LAION aesthetic), action control (ViPE relative pose error), and a **mirror test** for general scene consistency. Layout: `<model>/{1st,3rd}_data/<test_type>/<name>/video.mp4`. The project marks a public leaderboard as **coming soon**.
+
+Paper: [MIND](https://arxiv.org/abs/2602.08025). Project: [csu-jpg.github.io/MIND.github.io](https://csu-jpg.github.io/MIND.github.io/). Code: [CSU-JPG/MIND](https://github.com/CSU-JPG/MIND) (MIT). Dataset: [CSU-JPG/MIND](https://huggingface.co/datasets/CSU-JPG/MIND).
+
+WorldFoundry **vendors the metric runtime** (`run_mind_official_runner.py`). `--run-official` scores staged GT + generated videos; `--official-results-path` **imports** a finished MIND JSON; `--run-fixture` is a GPU-free normalizer check. This page does **not** run world-model inference. `mind_average` (and the four ability-group scores) are **WorldFoundry-derived** — MIND publishes no official composite.
+
+<BenchmarkPageSections id="mind" locale="en" />
+
+## How to run
+
+GPU-free fixture:
+
+```bash
+python worldfoundry/evaluation/tasks/execution/runners/mind/run_mind_official_runner.py \
+  --run-fixture \
+  --output-dir tmp/mind/fixture \
+  --json
+```
+
+Score staged GT and model outputs (DINOv3 via `--dino-path`; ViPE via `--vipe-repo` when you want action metrics):
+
+```bash
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
+  worldfoundry/evaluation/tasks/execution/runners/mind/run_mind_official_runner.py \
+  --run-official \
+  --gt-root /path/to/MIND-Data \
+  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --dino-path /path/to/dinov3_vitb16 \
+  --output-dir tmp/mind/official \
+  --json
+```
+
+Import a finished MIND result JSON:
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id mind \
+  --mode official-validation \
+  --official-results-path <mind_result.json> \
+  --output-dir tmp/mind/official-validation \
+  --json
+```
+
+`--metrics` is a comma list (`lcm,visual,dino,action,gsc`; default all). `--video-max-time` caps frames for every metric except action. DINOv3 weights default to `./dinov3_vitb16` unless `--dino-path` / `WORLDFOUNDRY_MIND_DINO_PATH`. Extra pip pins for the metric stack are in `worldfoundry/data/benchmarks/requirements/mind.txt`. Action scoring also needs a ViPE checkout (`--vipe-repo`).
+
+The vendored `src/process.py` can fan work across GPUs: videos go on a queue, each GPU takes one task, failures go back on the queue, and the result JSON is rewritten after every finished task so you can read a partial file. WorldFoundry `--run-official` is the supported entry; do not treat `src/process.py` as a second public CLI.
+
+Mutable state (work dir, `MIND_CACHE_DIR`, logs) stays under `--output-dir`. Env: `WORLDFOUNDRY_MIND_ROOT`, `WORLDFOUNDRY_MIND_RESULTS_PATH`, `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`. Manifest: `worldfoundry/data/benchmarks/tasks/external/mind.yaml`. Outputs: `scorecard.json` (primary `mind_average`), `raw_metric_table.jsonl`, `per_sample_scores.jsonl`, `benchmark_contract.json`.
+
+## Generated-video and GT layouts
+
+`--generated-artifact-dir` must mirror perspectives and test types. `{corresponding data name}` is the GT folder name. Mirror tests use ten path videos instead of one `video.mp4`:
+
+```text
+{model_name}/
+  1st_data/
+    action_space_test/{name}/video.mp4
+    mem_test/{name}/video.mp4
+    mirror_test/{any_name}/path-1.mp4 … path-10.mp4
+  3rd_data/
+    action_space_test/{name}/video.mp4
+    mem_test/{name}/video.mp4
+    mirror_test/{any_name}/path-1.mp4 … path-10.mp4
+```
+
+Official **MIND-Data** (train + test) looks like:
+
+```text
+MIND-Data/
+  1st_data/
+    test/action_space_test/{gt}/action.json + images.txt + video.mp4
+    test/mem_test/{gt}/action.json + images.txt + video.mp4
+    train/{gt}/action.json + video.mp4
+  3rd_data/
+    …same test / train split…
+```
+
+`action.json` fields:
+
+- `mark_time` — first frame of the expected prediction (memory / context divider).
+- `total_time` — GT frame count.
+- `caption` — text description.
+- `data[*].time` plus `ws` / `ad` / `ud` / `lr` action codes (`0` none; `1`/`2` the two directions).
+- `actor_pos` / `actor_rpy`; third-person clips also have `camera_pos` / `camera_rpy`.
+
+## Official `Result.json`
+
+`--official-results-path` and `--run-official` both produce the official document. Top level has `video_max_time` and `data[]`. Each row has `path`, `perspective` (`1st_data` / `3rd_data`), `test_type` (`mem_test` / `action_space_test` / `mirror_test`), optional `error`, `mark_time`, `total_time`, `sample_frames`, then metric blocks:
+
+- `lcm` — per-frame and `avg_*` for MSE / LPIPS / SSIM / PSNR.
+- `visual_quality` — per-frame `imaging` (MUSIQ-SPAQ) and `aesthetic` (LAION) plus averages.
+- `dino` — per-frame `dino_mse` and `avg_dino_mse`.
+- `action` — ViPE RPE after outlier filtering: `__overall__`, `translation`, `rotation`, `other`, and `act:<name>` (`rpe_trans_mean` / `median`, `rpe_rot_mean_deg` / `median_deg`, `count`).
+- `video_results[*].gsc` — mirror-test general scene consistency (same four pixel metrics; `sample_frames` should be `2 × mark_time`).
+
+The bundled fixture at `worldfoundry/data/benchmarks/assets/mind/fixtures/mind_result_fixture.json` follows this schema with invented numbers. It contains **no upstream MIND records** — every sample id, frame count, and score was written so normalization, aggregation, and scorecard invariants can run without GPUs, ViPE, or the official dataset. Do not publish it as a MIND score.
+
+[← Benchmark Hub](/docs/evaluation/benchmark-hub)

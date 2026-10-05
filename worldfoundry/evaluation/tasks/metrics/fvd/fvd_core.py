@@ -75,7 +75,16 @@ def frechet_distance_from_stats(
     return float(diff.dot(diff) + np.trace(sigma1) + np.trace(sigma2) - 2 * tr_covmean)
 
 
-def resolve_i3d_checkpoint(explicit: str | Path | None = None) -> str:
+def resolve_i3d_checkpoint(
+    explicit: str | Path | None = None,
+    *,
+    extra_candidates: tuple[str | Path, ...] = (),
+) -> str:
+    """Resolve the I3D checkpoint path, failing loudly when it is not staged.
+
+    ``extra_candidates`` lets benchmark runtimes prepend their official-protocol
+    staging locations without duplicating this search logic.
+    """
     if explicit is not None:
         path = Path(explicit).expanduser()
         if path.is_file():
@@ -84,6 +93,7 @@ def resolve_i3d_checkpoint(explicit: str | Path | None = None) -> str:
     candidates = [
         os.environ.get("WORLDFOUNDRY_FVD_I3D_CKPT"),
         os.environ.get("WORLDFOUNDRY_MIRABENCH_FVD_I3D_CKPT"),
+        *(str(candidate) for candidate in extra_candidates),
         str(Path(os.environ.get("WORLDFOUNDRY_CKPT_DIR", "~/.cache/huggingface/hub")).expanduser() / "i3d_pretrained_400.pt"),
         str(Path(os.environ.get("WORLDFOUNDRY_CKPT_DIR", "~/.cache/huggingface/hub")).expanduser() / "MiraBench/fvd/i3d_pretrained_400.pt"),
     ]
@@ -99,9 +109,7 @@ def resolve_i3d_checkpoint(explicit: str | Path | None = None) -> str:
 
 def load_fvd_i3d(device: torch.device, checkpoint: str | Path | None = None) -> Any:
     """Load Inception I3D model used by FVD."""
-    from worldfoundry.evaluation.tasks.execution.runners.mirabench.runtime.mirabench.evaluation.pytorch_i3d import (
-        InceptionI3d,
-    )
+    from worldfoundry.evaluation.tasks.metrics.fvd.pytorch_i3d import InceptionI3d
 
     ckpt = resolve_i3d_checkpoint(checkpoint)
     model = InceptionI3d(400, in_channels=3).to(device)

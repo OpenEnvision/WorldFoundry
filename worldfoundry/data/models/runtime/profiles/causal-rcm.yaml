@@ -1,0 +1,58 @@
+schema_version: 2
+model_id: causal-rcm
+display_name: Causal-rCM
+task_family: world_model
+groups:
+- world
+- video
+- streaming
+source_repos:
+- url: https://github.com/NVlabs/rcm
+  revision: ed3cb14dd936f92cdc9f9381af7369991509b41f
+  in_tree_path: worldfoundry/synthesis/visual_generation/rcm/rcm_runtime
+  license: apache-2.0
+checkpoints:
+- repo_id: worstcoder/rcm-Wan
+  role: causal_rcm_distilled_dit_c1_1_step4
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/rcm
+  required_paths:
+  - Causal_rCM_Wan2.1_T2V_1.3B_480p_TF-dCM-init_SF-DMD_c1-1_step4.pt
+  status: public_community_checkpoint
+  provenance: community_reproduction
+- repo_id: worstcoder/Wan
+  role: wan2pt1_vae_and_text_encoder
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/rcm
+  required_paths:
+  - Wan2.1_VAE.pth
+  - models_t5_umt5-xxl-enc-bf16.pth
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions: []
+artifact_kind: generated_world
+artifact_filename: causal-rcm.mp4
+execution:
+  environment: causal-rcm
+  backend_stage: in_tree_runtime_manifest
+  runtime_status: in_tree_runtime_manifest_checkpoint_pending
+  integration_status: runtime_ported
+  pipeline_binding: causal-rcm
+integration:
+  status: runtime_ported
+notes:
+- Causal-rCM generates autoregressively over latent-frame chunks. first_chunk_t and chunk_t select the
+  schedule; the c1-1 frame-wise setting gives the lowest streaming latency and c3-3 more throughput.
+- The released causal entrypoint is prompt and image conditioned. It exposes no discrete action space,
+  so the input schema declares no actions; the chunk schedule is the streaming control surface.
+- Distilled few-step sampling is the default (`distilled=True`, 4 steps, mid_t 15/16 5/6 5/8). Setting
+  distilled=False samples the multi-step causal-diffusion teacher with CFG instead.
+- Setting context_from_last_step=True caches the final denoising forward as the next chunk's context,
+  saving one clean forward pass per chunk. Use it only with a checkpoint trained for noisy context.
+- Inference benchmarking is built in: set warmup_iters and num_runs to report averaged timings.
+- Set kv_cache_policy=sliding_window to cap the causal cache at kv_cache_window_blocks (with optional
+  kv_cache_sink_blocks) and allocate only the retained prefix plus one in-flight chunk. The default
+  keep_all policy reproduces the upstream unbounded cache bit-for-bit. RoPE-remapping cache policies
+  stay out of this post-RoPE entrypoint and require the separate extrapolation path.
+- The upstream imaginaire package is not vendored. WorldFoundry's lazy_config, easy_io, rank-aware
+  logging, and selective activation checkpointing back the vendored runtime instead.

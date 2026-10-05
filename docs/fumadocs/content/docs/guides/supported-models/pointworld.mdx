@@ -1,0 +1,50 @@
+---
+title: "PointWorld"
+description: "PointWorld from NVIDIA: point-cloud-world-model and robot-world-model; Runner parity pending."
+modelId: "pointworld"
+pageSource: generated
+---
+
+PointWorld is NVIDIA's point-cloud world model for robotics: instead of predicting pixels it predicts future 3D point-cloud states under actions, giving geometry-native world modeling. In this catalog the official source route is registered at a pinned commit; checkpoint and point-cloud assets stay runtime-gated.
+
+<ModelPaperFigures modelId="pointworld" locale="en" />
+
+The recorded paper is [arXiv 2601.03782](https://arxiv.org/abs/2601.03782).
+
+Code: [NVlabs/PointWorld](https://github.com/NVlabs/PointWorld).
+
+<ModelCommandBuilder modelId="pointworld" locale="en" />
+
+## What it is for
+
+Use `pointworld` for catalog geometry inference. Choose it when the artifact is a reconstruction, not a generated video.
+
+Architecture internals beyond the recorded tasks are not stored in this repository (apache-2.0; checkpoints at nvidia/PointWorld_models). The recorded artifact type is generated_3d_asset.
+
+Catalog tasks include point-cloud-world-model, robot-world-model, and 3d-world-model. Documented outputs include point cloud.
+
+Recorded evaluation entry points include [EWMBench](/docs/evaluation/benchmark-hub/ewmbench) (Embodied world-model prediction quality).
+
+## Runtime contract
+
+Artifacts `generated_3d_asset` and `pointworld_runtime_plan.json`.
+
+CLI task profiles: `default`. WorldFoundry binds `PointWorldPipeline`.
+
+Family status: **Runner parity pending**.
+
+Config resolution and pipeline import are expected to pass; real generation emits a runtime plan until required checkpoints/assets are staged. Missing assets are reported by the plan and are not treated as catalog blockers. Inputs include point clouds alongside the usual prompt/image/video/actions.
+
+PointWorld official source route is registered; checkpoint/point-cloud assets are runtime-gated.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run pointworld --pipeline.task-profile default` to write geometry. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `nvidia/PointWorld_models`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh pointworld`. Add `--download` to fetch missing public checkpoints.
+
+Recorded licenses include apache-2.0; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="pointworld" locale="en" />

@@ -85,7 +85,7 @@ class CUT3ROperator(BaseOperator):
             input_signal: Visual input signal - can be:
                 - Image file path (str)
                 - List of image file paths (List[str])
-                - Numpy array (H, W, 3) in RGB or BGR format
+                - Numpy array (H, W, 3) in RGB format
                 - List of numpy arrays
                 - Torch tensor (C, H, W) or (1, C, H, W) in CHW format
                 
@@ -103,9 +103,11 @@ class CUT3ROperator(BaseOperator):
         # Handle single input
         if isinstance(input_signal, Image.Image):
             image_rgb = np.array(input_signal)
+            # PIL images decode to integer arrays; remember before the float cast.
+            is_integer_input = np.issubdtype(image_rgb.dtype, np.integer)
             if image_rgb.dtype != np.float32:
                 image_rgb = image_rgb.astype(np.float32)
-            if image_rgb.max() > 1.0:
+            if is_integer_input or image_rgb.max() > 1.0:
                 image_rgb = image_rgb / 255.0
         elif isinstance(input_signal, torch.Tensor):
             # Assume tensor is in CHW format, convert to numpy
@@ -113,14 +115,16 @@ class CUT3ROperator(BaseOperator):
                 image_rgb = input_signal.permute(1, 2, 0).cpu().numpy()
             else:
                 image_rgb = input_signal[0].permute(1, 2, 0).cpu().numpy()
-            if image_rgb.max() > 1.0:
+            # Integer dtypes are always 0-255; the value-range check is only a
+            # fallback for float inputs whose scale is ambiguous.
+            if np.issubdtype(image_rgb.dtype, np.integer) or image_rgb.max() > 1.0:
                 image_rgb = image_rgb / 255.0
         elif isinstance(input_signal, np.ndarray):
-            image_rgb = input_signal / 255.0 if input_signal.max() > 1.0 else input_signal
-            # Convert BGR to RGB if needed (heuristic: if first channel mean > last channel mean)
-            if len(image_rgb.shape) == 3 and image_rgb.shape[2] == 3:
-                if image_rgb[..., 0].mean() > image_rgb[..., 2].mean():
-                    image_rgb = image_rgb[..., ::-1]
+            # Array inputs are expected in RGB channel order.
+            if np.issubdtype(input_signal.dtype, np.integer) or input_signal.max() > 1.0:
+                image_rgb = input_signal / 255.0
+            else:
+                image_rgb = input_signal
         else:
             # String path: support single image, directory, or txt list.
             if isinstance(input_signal, (str, Path)):
@@ -212,13 +216,6 @@ class CUT3ROperator(BaseOperator):
         
         return result
     
-    def delete_last_interaction(self):
-        """Delete the last interaction from current_interaction list."""
-        if len(self.current_interaction) > 0:
-            self.current_interaction = self.current_interaction[:-1]
-        else:
-            raise ValueError("No interaction to delete.")
-
     @staticmethod
     def normalize_interaction_sequence(
         interaction: Optional[Union[str, List[str]]]

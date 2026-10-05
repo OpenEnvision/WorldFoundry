@@ -3,13 +3,12 @@ import json
 import numpy as np
 
 import torch
-import clip
 from tqdm import tqdm
 from vbench.utils import load_video, load_dimension_info, clip_transform, read_frames_decord_by_fps
 from worldfoundry.base_models.perception_core.video_text.viclip.simple_tokenizer import SimpleTokenizer
 from worldfoundry.base_models.perception_core.video_text.viclip.viclip import ViCLIP
 
-from .distributed import (
+from worldfoundry.core.distributed.collectives.evaluation import (
     get_world_size,
     get_rank,
     all_gather,

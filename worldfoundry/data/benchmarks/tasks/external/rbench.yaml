@@ -1,0 +1,295 @@
+benchmark: rbench
+name: RBench
+description: Task manifest and in-tree aggregation scorer for RBench robotics image-to-video evaluation (released with the ReVidgen project).
+tags:
+- benchmark-zoo
+- external-official
+- rbench
+- image-to-video
+- robotics-video-generation
+- embodied-world-model
+splits:
+- dual_arm
+- humanoid
+- single_arm
+- quad
+- common_manipulation
+- long-horizon_planning
+- multi-entity_collaboration
+- spatial_relationship
+- visual_reasoning
+metrics:
+  rbench_overall:
+    aggregation: mean
+    primary: true
+  embodiment_overall:
+    aggregation: mean
+  task_completion:
+    aggregation: mean
+  visual_quality:
+    aggregation: mean
+  visual_quality_base:
+    aggregation: mean
+  physical_plausibility:
+    aggregation: mean
+  task_adherence_consistency:
+    aggregation: mean
+  robot_subject_stability:
+    aggregation: mean
+  motion_smoothness:
+    aggregation: mean
+  motion_amplitude:
+    aggregation: mean
+  task_track_overall:
+    aggregation: mean
+  common_manipulation:
+    aggregation: mean
+  long_horizon_planning:
+    aggregation: mean
+  multi_entity_collaboration:
+    aggregation: mean
+  spatial_relationship:
+    aggregation: mean
+  visual_reasoning:
+    aggregation: mean
+metadata:
+  source_kind: benchmark_zoo
+  benchmark_id: rbench
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id rbench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/rbench --json
+  name: RBench
+  domain:
+  - robotics
+  - embodied-ai
+  - physical-reasoning
+  - manipulation
+  - motion-quality
+  task_type: robotics_image_to_video_generation_evaluation
+  status: integrated
+  integration_status: integrated
+  maturity: contract_ready
+  release_status: experimental
+  open_source_status: normalizer_only
+  official_benchmark_verified: false
+  integration_evidence: false
+  leaderboard_valid: false
+  base_model_dependencies: []
+  optional_base_model_dependencies:
+  - rbench_dataset_assets
+  source_provenance:
+    official_repo:
+      url: https://github.com/DAGroup-PKU/ReVidgen
+      verified_by: git clone --depth 1 https://github.com/DAGroup-PKU/ReVidgen
+      default_branch: main
+      role: aggregation_logic_reproduced_in_tree
+    hf_dataset:
+      repo_id: DAGroup-PKU/RBench
+      verified_by: HEAD https://huggingface.co/api/datasets/DAGroup-PKU/RBench
+      sha: 6bdccf349ff5a8f68302428351e94f34ecd62450
+      license: cc-by-4.0
+      private: false
+      gated: false
+      role: benchmark_prompt_and_image_suite
+    paper:
+      url: https://arxiv.org/abs/2601.15282
+  input_contract:
+  - prompt
+  - prompt_id
+  - conditioning_image
+  - generated_artifact_manifest
+  output_contract:
+  - generated_video
+  evaluation_requirements:
+  - Generate one video per RBench prompt, named by the numeric prompt index under the split's videos/ dir.
+  - Score with the official VLM rubrics (GPT or Qwen3-VL) and the motion operator stack.
+  - Aggregate per the official scripts, keeping gpt and qwen judge outputs separate.
+  - Treat rbench_overall as a WorldFoundry composite, not a published RBench number.
+  requires:
+  - RBench results tree with VQA results.csv per embodiment question and per task rubric
+  - motion/results.json per embodiment for amplitude and smoothness scores
+  - --result-model-id <model_id> when the results tree holds several generation models
+  - --vlm-backend when both gpt and qwen judge outputs are present
+  blockers:
+  - WorldFoundry aggregates supplied judge and operator outputs; it does not run the VLM judge or the GroundingDINO/SAM2/CoTracker/Q-Align stack.
+  data_refs:
+    task_yaml: worldfoundry/data/benchmarks/tasks/external/rbench.yaml
+    dataset_refs:
+    - hf_dataset_id: DAGroup-PKU/RBench
+      split: standard
+      role: benchmark_prompt_and_image_suite
+    local_dataset_layout:
+    - <rbench_data_root>/prompts/<split>_prompts.json
+    - <rbench_data_root>/imgs/<split>/
+    local_results_layout:
+    - <results_root>/4_embodiments/<model>/<embodiment>/VQA/<vlm>/<question>/results.csv
+    - <results_root>/4_embodiments/<model>/<embodiment>/motion/results.json
+    - <results_root>/5_tasks/<model>/<task>/<vlm>/results.csv
+  runner_availability:
+    available: true
+    runner_target: worldfoundry.evaluation.tasks.contracts.external:RBenchContract
+    runner_script_available: true
+    task_yaml_available: true
+    runtime_verified: false
+    surface: in_tree_official_aggregation
+    normalizer_verified: true
+  official_runner_target: worldfoundry.evaluation.tasks.contracts.external:RBenchContract
+  official_runner_script: worldfoundry/evaluation/tasks/execution/runners/rbench/run_rbench_official_runner.py
+  metric_evaluator_target: worldfoundry.evaluation.tasks.execution.runners.rbench.rbench_contract_evaluator:write_rbench_evaluation
+  metric_protocol:
+    official_definition: The embodiment track merges three VLM scores with two motion-operator scores per video, min-max normalizes each, then derives Task_Completion as their mean and Visual_Quality as 0.8*RSS + 0.2*MS minus amplitude and stability-consistency penalties, floored at zero. The task track rescales each rubric score to (score-1)/4 and pools per video for ALL_TASKS_MEAN.
+    official_results_fields:
+    - VQA/<vlm>/1_robot_subject_stability/results.csv:score,option
+    - VQA/<vlm>/2_physical_plausibility/results.csv:score
+    - VQA/<vlm>/3_task_adherence_consistency/results.csv:score
+    - motion/results.json:perceptible_amplitude_robotic_manipulator,motion_smoothness_score
+    - <task>/<vlm>/results.csv:score
+    required_artifacts:
+    - RBench prompts and conditioning images
+    - generated videos for all 650 prompts
+    - VLM judge outputs per split
+    - motion operator outputs per embodiment
+    official_metric_blocked_reason: vlm_judge_and_operator_stack_required
+  artifact_layout:
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+    output_artifact: benchmark_scorecard
+    filename_template: scorecard.json
+  runtime:
+    kind: in_tree_official_source
+    root: worldfoundry/evaluation/tasks/execution/runners/rbench
+    repo_url: https://github.com/DAGroup-PKU/ReVidgen.git
+    root_env: WORLDFOUNDRY_RBENCH_ROOT
+  official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+  local_evaluator:
+    target: worldfoundry.evaluation.tasks.execution.runners.rbench.rbench_contract_evaluator:write_rbench_evaluation
+    status: implemented
+    protocol: local_artifact_checks_and_official_aggregation
+    official_result_normalization:
+      status: implemented
+      input_keys:
+      - benchmark_data_root
+      - WORLDFOUNDRY_RBENCH_DATA_ROOT
+      - official_results_path
+      - WORLDFOUNDRY_RBENCH_RESULTS_PATH
+      formats:
+      - directory
+      - csv
+      - json
+      provenance: reproduces the official ReVidgen aggregation from caller-provided per-video outputs
+  validation_command:
+  - worldfoundry-eval
+  - zoo
+  - benchmark-run
+  - --benchmark-id
+  - rbench
+  - --mode
+  - official-validation
+  - --official-results-path
+  - <rbench_results_root>
+  - --result-model-id
+  - <model_id>
+  - --output-dir
+  - <out>
+  - --json
+  checkpoint_refs: []
+tasks:
+  rbench_standard:
+    benchmark_name: rbench
+    protocol: official_result_aggregation
+    capability_track: image_to_video
+    schema_type: generated_artifact_set
+    input_keys:
+    - prompt
+    - prompt_id
+    - conditioning_image
+    - generated_artifact_manifest
+    output_keys:
+    - generated_video
+    metric_ids:
+    - rbench_overall
+    - embodiment_overall
+    - task_completion
+    - visual_quality
+    - visual_quality_base
+    - physical_plausibility
+    - task_adherence_consistency
+    - robot_subject_stability
+    - motion_smoothness
+    - motion_amplitude
+    - task_track_overall
+    - common_manipulation
+    - long_horizon_planning
+    - multi_entity_collaboration
+    - spatial_relationship
+    - visual_reasoning
+    metric_groups:
+    - rbench_embodiment_metrics
+    - rbench_task_metrics
+    tags:
+    - benchmark-zoo
+    - external-official
+    - rbench
+    - image-to-video
+    - robotics-video-generation
+    metadata:
+      source_kind: benchmark_zoo
+      benchmark_id: rbench
+      domain:
+      - robotics
+      - embodied-ai
+      task_type: robotics_image_to_video_generation_evaluation
+      status: contract_ready
+      artifact_contract:
+        required:
+          generated_video:
+            kind: video
+      evaluation_requirements:
+      - Aggregate official VLM judge and motion operator outputs; judge execution is not provided.
+      official_benchmark_verified: false
+      integration_evidence: false
+      leaderboard_valid: false
+    dataset:
+      status: official_hf_dataset_required
+      hf_dataset_id: DAGroup-PKU/RBench
+      split: standard
+      source: benchmark_prompt_and_image_suite
+    artifact_contract:
+      required:
+        generated_video:
+          kind: video
+    evaluation_protocol:
+    - name: result_aggregator
+      metric_ids:
+      - rbench_overall
+      - embodiment_overall
+      - task_completion
+      - visual_quality
+      - task_track_overall
+      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.rbench.rbench_contract_evaluator:write_rbench_evaluation
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:RBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/rbench/run_rbench_official_runner.py
+      status: implemented
+      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id rbench --mode official-validation --official-results-path <rbench_results_root> --result-model-id <model_id> --output-dir <out> --json
+    - name: external_official_runner
+      metric_ids:
+      - rbench_overall
+      - embodiment_overall
+      - task_completion
+      - visual_quality
+      - visual_quality_base
+      - physical_plausibility
+      - task_adherence_consistency
+      - robot_subject_stability
+      - motion_smoothness
+      - motion_amplitude
+      - task_track_overall
+      - common_manipulation
+      - long_horizon_planning
+      - multi_entity_collaboration
+      - spatial_relationship
+      - visual_reasoning
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:RBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/rbench/run_rbench_official_runner.py
+    runtime_requirements:
+      benchmark_data_root_env: WORLDFOUNDRY_RBENCH_DATA_ROOT
+      results_path_env: WORLDFOUNDRY_RBENCH_RESULTS_PATH
+      vlm_backend_env: WORLDFOUNDRY_RBENCH_VLM_BACKEND
+      generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR

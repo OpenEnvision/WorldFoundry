@@ -1,0 +1,15 @@
+---
+title: Run status
+description: Reader labels for recorded route evidence. Not raw profile_resolves_* strings.
+---
+
+When a model page or catalog note talks about whether a route has been run, use these labels. Do not copy raw `profile_resolves_*` or other `runtime_status` tokens from YAML into docs or tickets as if they were product badges.
+
+- **Verified** — A GPU artifact or official-demo parity record exists for that route. Copy the model-page command and expect the recorded artifact.
+- **Runner parity pending** — An in-tree pipeline or catalog variant resolves, but WorldFoundry has not recorded runner or official-demo parity yet. You can run it; treat outputs as unvalidated.
+- **Static load only** — Checkpoint structure, import, or schema checks passed. That is not a GPU run and not official-demo evidence.
+- **Planned** — Intent and upstream source only. Nothing runnable yet.
+
+Internal strings such as `profile_resolves_catalog_variant_runner_parity_pending` mean **Runner parity pending**. Catalog readiness badges on the [model hub](/docs/guides/supported-models) (Runner verified, Integrated, and the rest) are a separate computed signal; this page does not replace them.
+
+Everyday reproducible commands use `worldfoundry-eval run <id> --pipeline.task-profile …`. See [CLI entrypoints](/docs/reference/cli#entrypoints).

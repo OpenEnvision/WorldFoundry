@@ -1,6 +1,6 @@
 from .models.wan_model import WanModel
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_text_encoder import WanTextEncoder
-from worldfoundry.base_models.diffusion_model.diffsynth.models.wan_video_image_encoder import WanImageEncoder
+from .models.wan_video_image_encoder import WanImageEncoder
+from .models.wan_video_text_encoder import WanTextEncoder
 from worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_2_runtime.extension_modules.wanx_vae.wanx_vae import (
     WanVAE as WanVideoVAE,
 )

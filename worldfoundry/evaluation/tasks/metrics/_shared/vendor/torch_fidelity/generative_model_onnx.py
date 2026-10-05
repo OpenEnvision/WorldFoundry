@@ -3,8 +3,8 @@ import os
 import numpy as np
 import torch
 
-from torch_fidelity.generative_model_base import GenerativeModelBase
-from torch_fidelity.helpers import vassert
+from .generative_model_base import GenerativeModelBase
+from .helpers import vassert
 
 
 class GenerativeModelONNX(GenerativeModelBase):

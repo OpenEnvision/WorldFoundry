@@ -21,7 +21,7 @@ import torch
 from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
 from einops import rearrange
 
-from worldfoundry.core.checkpoint import load_weights_only, require_tensor
+from worldfoundry.core.model_loading.checkpoints import load_weights_only, require_tensor
 
 if TYPE_CHECKING:
     from transformers import ProcessorMixin

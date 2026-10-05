@@ -1,0 +1,46 @@
+---
+title: "SpatialReasoner"
+description: "SpatialReasoner from Johns Hopkins University (CCVL): multimodal-reasoning and spatial-reasoning; Runner parity pending."
+modelId: "spatial-reasoner"
+pageSource: generated
+---
+
+SpatialReasoner is a vision-language model from the JHU CCVL group focused on explicit, step-wise spatial reasoning over images and video. In this catalog it is an understanding entry — spatial and multimodal reasoning plus image/video QA — returning model_response artifacts.
+
+<ModelPaperFigures modelId="spatial-reasoner" locale="en" />
+
+Code: [ccvl/SpatialReasoner](https://huggingface.co/ccvl/SpatialReasoner).
+
+<ModelCommandBuilder modelId="spatial-reasoner" locale="en" />
+
+## What it is for
+
+Use `spatial-reasoner` for multimodal reasoning inference on this card.
+
+A vision-language model with explicit 3D-aware spatial reasoning stages (per the upstream release at ccvl/SpatialReasoner). This repository records the prompt/image/video contract; scale and training details are not recorded here. It is published by Johns Hopkins University (CCVL).
+
+Catalog tasks include multimodal-reasoning, spatial-reasoning, image-question-answering, and video-question-answering. Catalog aliases include `spatial_reasoner` and `ccvl/SpatialReasoner`.
+
+## Runtime contract
+
+Optional `prompt`, `image`, `video`, `seed`, and `frames`; artifacts `spatial-reasoner.json`.
+
+CLI task profiles: `multimodal-reasoning`, `spatial-reasoning`, `image-question-answering`, `video-question-answering`, and `video_generation`. WorldFoundry binds `SpatialReasonerPipeline`.
+
+Family status: **Runner parity pending**.
+
+Pair it with generation entries to audit spatial consistency of generated worlds — e.g. object positions and relative depths.
+
+WorldFoundry route is complete; missing checkpoint/assets are reported at runtime.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run spatial-reasoner --pipeline.task-profile multimodal-reasoning` to run the reasoning route. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `ccvl/SpatialReasoner`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh spatial-reasoner`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="spatial-reasoner" locale="en" />

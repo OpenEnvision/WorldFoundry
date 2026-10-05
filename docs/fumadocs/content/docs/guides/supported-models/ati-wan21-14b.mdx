@@ -1,0 +1,54 @@
+---
+title: "ATI-Wan2.1-14B"
+description: "ATI-Wan2.1-14B from ByteDance: camera-controlled-video and image-to-video; Runner parity pending."
+modelId: "ati-wan21-14b"
+pageSource: authored
+---
+
+ATI (Any Trajectory Instruction) turns trajectory drawing into video control: draw point trajectories over an input image and the Wan2.1-14B-based model animates objects, camera, or both along them. In this catalog only ATI's official inference delta is vendored — the unchanged Wan2.1 implementation is reused from worldfoundry/base_models.
+
+<ModelPaperFigures modelId="ati-wan21-14b" locale="en" />
+
+The recorded paper is [arXiv 2505.22944](https://arxiv.org/abs/2505.22944).
+
+Code: [bytedance/ATI](https://github.com/bytedance/ATI). Code: [Wan-Video/Wan2.1](https://github.com/Wan-Video/Wan2.1).
+
+The official paper is on [arXiv 2505.22944](https://arxiv.org/abs/2505.22944). Code: [bytedance/ATI](https://github.com/bytedance/ATI). ATI weights: `bytedance-research/ATI`. Base components: `Wan-AI/Wan2.1-I2V-14B-480P`. License: **apache-2.0**.
+
+<ModelCommandBuilder modelId="ati-wan21-14b" locale="en" />
+
+## What it is for
+
+Pick `ati-wan21-14b` when you need camera-controlled video: a camera trajectory in, a steered clip out. Use it instead of unconstrained T2V when viewpoint must follow a path.
+
+Per the upstream release, ATI injects dense point-track conditioning into the Wan2.1 I2V backbone through a trajectory instruction module. Runtime checkpoint loading builds a read-only union of ATI weights (bytedance-research/ATI) and locally staged Wan2.1 I2V 480P base components. It is published by ByteDance.
+
+Catalog tasks include camera-controlled-video and image-to-video. Documented modalities: image in, video out.
+
+Recorded evaluation entry points include [CameraBench](/docs/evaluation/benchmark-hub/camerabench) (Evaluates trajectory/camera-motion adherence).
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, and `operator_kwargs`; artifacts `ati-wan21-14b.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `ATIPipeline`.
+
+Family status: **Runner parity pending**.
+
+In-tree import and camera-track compilation are verified; full GPU artifact parity requires staged weights. No source checkout or runtime download is permitted — only locally staged checkpoints are resolved. Input schema is prompt, image, and dense point tracks.
+
+Only ATI's official inference delta is vendored; the unchanged Wan2.1 implementation is reused from worldfoundry/base_models.
+
+Checkpoint loading builds a **read-only union** of ATI weights and locally staged Wan2.1 I2V 480P components. No source checkout and no runtime download. The 14B backbone needs a high-memory GPU; catalog VRAM is unset.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run ati-wan21-14b --pipeline.task-profile default` to follow the camera path. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `bytedance-research/ATI`, `Wan-AI/Wan2.1-I2V-14B-480P`, and `bytedance-research/ATI` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh ati-wan21-14b`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="ati-wan21-14b" locale="en" />

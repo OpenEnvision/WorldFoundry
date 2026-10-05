@@ -1,3 +1,4 @@
+import ast
 import os
 import json
 import fire
@@ -81,7 +82,7 @@ def main(
             if idx not in data_map:
                 data_map[idx] = {}
                 
-            scores = eval(item['ans'])
+            scores = ast.literal_eval(item['ans'])
             data_map[idx][left_or_right] = {
                 aspects[i]: scores[i] for i in range(len(aspects))
             }

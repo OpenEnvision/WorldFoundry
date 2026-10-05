@@ -1,4 +1,4 @@
-import clip
+from worldfoundry.base_models.perception_core.general_perception import openai_clip as clip
 from PIL import Image
 import numpy as np
 from einops import rearrange

@@ -1,0 +1,34 @@
+---
+title: "Wan2.1"
+description: "阿里通义实验室的开源视频系列：T2V 1.3B/14B 与 480p/720p 的 I2V 14B。已验证的是 1.3B、832×480、81 帧这条 catalog 基座路径。"
+modelId: "wan2.1"
+pageSource: authored
+---
+
+Wan2.1 是阿里通义实验室的开源视频基础系列，也是本 catalog 相当一部分条目的基座——相机控制世界模型、动作条件滚动，以及后来的 Helios 类长视频工作，都从这些权重出发。官方套件覆盖 1.3B / 14B 文生视频、480p / 720p 的 I2V 14B，以及上游的视频编辑和中英双语屏幕文字。本页只记录 WorldFoundry 实际绑定的四条 Apache-2.0 Hugging Face 线：`wan2.1-t2v-1.3b`、`wan2.1-t2v-14b`、`wan2.1-i2v-14b-480p`、`wan2.1-i2v-14b-720p`。
+
+<ModelPaperFigures modelId="wan2.1" locale="zh" />
+
+技术报告是 [Wan: Open and Advanced Large-Scale Video Generative Models](https://arxiv.org/abs/2503.20314)。代码与权重在 [Wan-Video/Wan2.1](https://github.com/Wan-Video/Wan2.1) 和 [Wan-AI](https://huggingface.co/Wan-AI)。
+
+<ModelCommandBuilder modelId="wan2.1" locale="zh" />
+
+## 用来做什么
+
+从 `wan2.1-t2v-1.3b` 开始。启动 `worldfoundry-eval run wan2.1-t2v-1.3b`。只有接受那几条仍为 **Runner 一致性待确认** 时，才换 `wan2.1-t2v-14b` 或 I2V 480p/720p。
+
+要便宜、已验证的产物，在 1.3B 线上迭代提示词。后续条目（VACE、Helios、相机控制世界模型）写「基于 Wan」时，Wan2.1 就是默认基座。片段质量对照 [VBench](/zh/docs/evaluation/benchmark-hub/vbench)，物理合理性对照 [Physics-IQ](/zh/docs/evaluation/benchmark-hub/physics-iq)——那是 Wan 发布时常用的讨论套件，不是已收录的 WorldFoundry leaderboard。
+
+## 运行时契约
+
+必填 `prompt`；可选 `image` / `video`；`actions` 是 seed。已验证 1.3B T2V：**832×480、81 帧、50 步、guidance 6.0、16 fps、shift 8.0**，走 `Wan2p1T2VPipeline`（`wan2.1-t2v-1.3b-832x480-81f`）。产物：`wan2.1-t2v-1.3b-832x480-81f.mp4`。14B T2V 默认 **1280×720**、shift **5.0**；I2V 480p 为 **832×480 / 81 帧 / 40 步 / guidance 5.0 / shift 3.0**；I2V 720p 为 **1280×720**、shift **5.0**。catalog 任务只有 `text-to-video` 与 `image-to-video`。
+
+Wan-VAE 编解码**任意长度的 1080p**，DiT 在潜空间去噪。文本是 UMT5。I2V 需要 image-encoder 权重角色。
+
+## 在 WorldFoundry 中运行
+
+统一环境 `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。就位 Wan-AI checkpoint。License Apache-2.0。1.3B 线 catalog 显存 **8 GB**。系列已记录运行时集成；先前一次本地运行产出了 81 帧的 T2V 1.3B 视频，并记录了已验证的官方 demo 与 runner 一致性。14B T2V 和两条 I2V 的输出一致性仍待验证。本仓库未提供公开的一致性 demo 脚本；复现 1.3B 产物需就位 checkpoint 和运行时环境。
+
+先生成 1.3B 文生视频，再对目录跑 [VBench](/zh/docs/evaluation/benchmark-hub/vbench) 的 `custom_input` / `aesthetic_quality`——本仓库唯一验证过的 VBench GPU 维度。读 `tmp/vbench/wan2.1/eval/scorecard.json` 里的 `aesthetic_quality`。
+
+<ModelRelatedRecipes modelId="wan2.1" locale="zh" />

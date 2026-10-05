@@ -6,7 +6,6 @@ Provides lazy-loaded access to :class:`MCPClient` and a CLI entry point
 
 from __future__ import annotations
 
-import argparse
 from typing import Any
 
 __all__ = ["MCPClient", "main"]
@@ -36,7 +35,9 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         Exit code — 0 on success, non-zero on failure.
     """
-    parser = argparse.ArgumentParser(description="Start the WorldFoundry MCP server.")
+    from worldfoundry.cli.help import WorldFoundryArgumentParser
+
+    parser = WorldFoundryArgumentParser(prog="worldfoundry-mcp", description="Start the WorldFoundry MCP server.")
     parser.add_argument(
         "--transport",
         choices=("stdio", "sse"),

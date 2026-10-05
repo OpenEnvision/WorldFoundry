@@ -1,0 +1,165 @@
+{
+  "video_max_time": 97,
+  "data": [
+    {
+      "path": "wf_fixture_1st_mem_001",
+      "perspective": "1st_data",
+      "test_type": "mem_test",
+      "error": null,
+      "mark_time": 120,
+      "total_time": 240,
+      "sample_frames": 120,
+      "lcm": {
+        "length": 97,
+        "avg_mse": 0.0192,
+        "avg_psnr": 17.41,
+        "avg_ssim": 0.6123,
+        "avg_lpips": 0.3312
+      },
+      "visual_quality": {
+        "avg_imaging": 0.5847,
+        "avg_aesthetic": 0.5121
+      },
+      "dino": {
+        "avg_dino_mse": 0.001264
+      },
+      "action": {
+        "__overall__": {
+          "count": 88,
+          "rpe_trans_mean": 0.0413,
+          "rpe_trans_median": 0.0325,
+          "rpe_rot_mean_deg": 2.714,
+          "rpe_rot_median_deg": 2.041
+        },
+        "translation": {
+          "count": 41,
+          "rpe_trans_mean": 0.0357,
+          "rpe_trans_median": 0.0291,
+          "rpe_rot_mean_deg": 1.882,
+          "rpe_rot_median_deg": 1.503
+        },
+        "rotation": {
+          "count": 29,
+          "rpe_trans_mean": 0.0498,
+          "rpe_trans_median": 0.0402,
+          "rpe_rot_mean_deg": 3.914,
+          "rpe_rot_median_deg": 3.211
+        },
+        "other": {
+          "count": 18,
+          "rpe_trans_mean": 0.0441,
+          "rpe_trans_median": 0.0361,
+          "rpe_rot_mean_deg": 2.902,
+          "rpe_rot_median_deg": 2.334
+        },
+        "act:forward": {
+          "count": 22,
+          "rpe_trans_mean": 0.0331,
+          "rpe_trans_median": 0.0274,
+          "rpe_rot_mean_deg": 1.712,
+          "rpe_rot_median_deg": 1.401
+        }
+      }
+    },
+    {
+      "path": "wf_fixture_3rd_action_002",
+      "perspective": "3rd_data",
+      "test_type": "action_space_test",
+      "error": null,
+      "mark_time": 96,
+      "total_time": 216,
+      "sample_frames": 120,
+      "lcm": {
+        "length": 97,
+        "avg_mse": 0.0241,
+        "avg_psnr": 16.18,
+        "avg_ssim": 0.5482,
+        "avg_lpips": 0.3874
+      },
+      "visual_quality": {
+        "avg_imaging": 0.5512,
+        "avg_aesthetic": 0.4883
+      },
+      "dino": {
+        "avg_dino_mse": 0.001731
+      },
+      "action": {
+        "__overall__": {
+          "count": 81,
+          "rpe_trans_mean": 0.0562,
+          "rpe_trans_median": 0.0448,
+          "rpe_rot_mean_deg": 3.905,
+          "rpe_rot_median_deg": 3.117
+        },
+        "translation": {
+          "count": 38,
+          "rpe_trans_mean": 0.0489,
+          "rpe_trans_median": 0.0391,
+          "rpe_rot_mean_deg": 2.744,
+          "rpe_rot_median_deg": 2.211
+        },
+        "rotation": {
+          "count": 27,
+          "rpe_trans_mean": 0.0651,
+          "rpe_trans_median": 0.0523,
+          "rpe_rot_mean_deg": 5.318,
+          "rpe_rot_median_deg": 4.402
+        },
+        "other": {
+          "count": 16,
+          "rpe_trans_mean": 0.0578,
+          "rpe_trans_median": 0.0461,
+          "rpe_rot_mean_deg": 4.021,
+          "rpe_rot_median_deg": 3.288
+        }
+      }
+    },
+    {
+      "path": "wf_fixture_1st_mirror_003",
+      "perspective": "1st_data",
+      "test_type": "mirror_test",
+      "error": null,
+      "videos": [
+        "path-1.mp4",
+        "path-2.mp4"
+      ],
+      "video_results": [
+        {
+          "video_name": "path-1.mp4",
+          "error": null,
+          "mark_time": 48,
+          "sample_frames": 96,
+          "gsc": {
+            "length": 48,
+            "avg_mse": 0.0154,
+            "avg_psnr": 18.32,
+            "avg_ssim": 0.6641,
+            "avg_lpips": 0.2894
+          }
+        },
+        {
+          "video_name": "path-2.mp4",
+          "error": null,
+          "mark_time": 48,
+          "sample_frames": 96,
+          "gsc": {
+            "length": 48,
+            "avg_mse": 0.0186,
+            "avg_psnr": 17.55,
+            "avg_ssim": 0.6317,
+            "avg_lpips": 0.3128
+          }
+        }
+      ]
+    },
+    {
+      "path": "wf_fixture_3rd_mem_004",
+      "perspective": "3rd_data",
+      "test_type": "mem_test",
+      "error": "frame count is not an even number!",
+      "mark_time": 120,
+      "total_time": 240,
+      "sample_frames": 119
+    }
+  ]
+}

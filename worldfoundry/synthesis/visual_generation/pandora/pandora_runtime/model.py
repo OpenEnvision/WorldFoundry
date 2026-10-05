@@ -17,10 +17,10 @@ from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast, CLIPToken
 from ChatUniVi.constants import DEFAULT_IMAGE_TOKEN
 from ChatUniVi.model import ChatUniViLlamaForCausalLM, ChatUniViConfig
 
-from worldfoundry.base_models.diffusion_model.video.lvdm.utils import instantiate_from_config
+from worldfoundry.core.model_loading.factory import instantiate_from_config
 from worldfoundry.synthesis.visual_generation.dynamicrafter.worldfoundry_runtime import load_model_checkpoint
-from worldfoundry.base_models.diffusion_model.video.lvdm.models.samplers.ddim import DDIMSampler
-from worldfoundry.base_models.diffusion_model.video.lvdm.models.samplers.ddim_multiplecond import (
+from worldfoundry.base_models.diffusion_model.schedulers.lvdm.ddim import DDIMSampler
+from worldfoundry.base_models.diffusion_model.schedulers.lvdm.ddim_multiplecond import (
     DDIMSampler as DDIMSampler_multicond,
 )
 from omegaconf import OmegaConf

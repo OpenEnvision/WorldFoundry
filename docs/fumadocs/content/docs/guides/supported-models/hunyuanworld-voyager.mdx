@@ -1,0 +1,18 @@
+---
+title: "HunyuanWorld-Voyager"
+description: "Tencent's camera-path RGB-D world generator. The public binding is verified on the official case1 example at eight steps."
+modelId: "hunyuanworld-voyager"
+pageSource: authored
+---
+
+HunyuanWorld-Voyager is designed to generate RGB-D video along a user-defined camera path from an input image. See the [official source](https://github.com/Tencent-Hunyuan/HunyuanWorld-Voyager) and [project page](https://3d-models.hunyuan.tencent.com/world/).
+
+<ModelPaperFigures modelId="hunyuanworld-voyager" locale="en" />
+
+## WorldFoundry status
+
+**Public binding verified for case1 at eight inference steps.** `WorldFoundryPipelineRunner` now invokes the official Voyager code through a small bridge. The independent official CLI and the public binding both generated a fully decodable RGB-D H.264 video from the official case1 checkpoint and 49-frame conditions. Each output has 45 frames at 768 × 1024 and 24 fps; the first, middle, and last frames were visually reviewed. This verifies that configuration only, not the official 50-step default or arbitrary camera paths.
+
+Run this binding with an external official checkout pinned to `6218ccd36df77d0254dcf24ad1fb77312f75b04a`, the official checkpoint, a dedicated Python environment with upstream dependencies, and a pre-rendered 49-frame condition directory. Set `WORLDFOUNDRY_VOYAGER_SOURCE_ROOT` and `WORLDFOUNDRY_VOYAGER_PYTHON`. The official source and weights are not redistributed by WorldFoundry. Tencent's community license excludes use in the EU, UK, and South Korea and requires its `LICENSE` and `NOTICE` when redistributing upstream materials.
+
+<ModelRelatedRecipes modelId="hunyuanworld-voyager" locale="en" />

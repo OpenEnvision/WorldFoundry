@@ -1,0 +1,42 @@
+---
+title: "Diffusion Policy"
+description: "斯坦福 REAL Lab 的动作扩散策略；WorldFoundry 只内置低维 PushT，并拒绝 dill checkpoint。"
+modelId: "diffusion-policy"
+pageSource: authored
+---
+
+Diffusion Policy 把机器人动作当成条件去噪：给定短观测历史，迭代去噪出未来动作序列，而不是回归一个均值。官方论文是 [Diffusion Policy: Visuomotor Policy Learning via Action Diffusion](https://arxiv.org/abs/2303.04137)（arXiv 2303.04137）。项目页：[diffusion-policy.cs.columbia.edu](https://diffusion-policy.cs.columbia.edu/)。代码在 [real-stanford/diffusion_policy](https://github.com/real-stanford/diffusion_policy)。
+
+<ModelPaperFigures modelId="diffusion-policy" locale="zh" />
+
+WorldFoundry 只在 `worldfoundry/synthesis/action_generation/diffusion_policy` 内置 **低维 PushT** 线。图像条件的 Diffusion Policy variant 不在树内。运行时从离线转换、完全解析的 primitive 配置加纯张量 state dict 重建发布策略。别名 `diffusion_policy`、`dp` 指到这里。
+
+<ModelCommandBuilder modelId="diffusion-policy" locale="zh" />
+
+## 用来做什么
+
+这是视觉运动 **动作** 基线，不是视频生成，也不是语言条件 VLA。必填输入是 `state`——记录为 **`state_dim` 20**、**`observation_history` 2**。已记录路由没有图像、指令或 prompt。`DiffusionPolicyPipeline` 写出 `diffusion_policy_action_trace.json`。
+
+用来在同一套低维 PushT 契约上，把扩散动作头和回归策略对比。需要 RGB 或语言时，不要用这一页。
+
+## 运行时契约
+
+视野、`n_action_steps` 与去噪步数从转换后的 checkpoint 配置恢复——本卡片不硬编码。profile 里写明的是：观测布局 `batch_time_feature`、特征维 **20**、历史 **2**、`float32`，`predict_action` → `action_trace`。
+
+唯一接受的权重是这次可信转换：
+
+`${WORLDFOUNDRY_CKPT_DIR}/embodied_action/diffusion-policy/low_dim_pusht_diffusion_policy_cnn/epoch=0550-test_mean_score=0.969.weights-only.ckpt`
+
+文件名里的 `0.969` 是 **上游文件名**，不是 WorldFoundry 分数。官方 dill workspace checkpoint 会在运行时被拒绝，没有不安全反序列化回退。环境里故意不装 `dill`。转换后的 payload 已通过 weights-only 重载、严格 model / EMA 恢复、CPU 加载，以及有限的 A100 动作探针。
+
+## 在 WorldFoundry 中运行
+
+独立环境 `worldfoundry-diffusion-policy`（Python 3.10，CUDA 11.8 或更新）。就位转换后的 checkpoint，然后：
+
+```
+worldfoundry-eval run diffusion-policy
+```
+
+本卡片未记录公开 Hugging Face 仓库，也未记录许可证——生产使用前请确认上游条款。
+
+<ModelRelatedRecipes modelId="diffusion-policy" locale="zh" />

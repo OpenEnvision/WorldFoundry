@@ -14,11 +14,20 @@ Sections:
 
 from __future__ import annotations
 
+import gc
+import inspect
 import json
+import os
+import pickle
+import sys
+import warnings
+from collections import deque
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
+from worldfoundry.core.observability.logging_setup import get_logger
+from worldfoundry.evaluation.api import is_generation_result_successful
 from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
 from worldfoundry.evaluation.models.catalog.manifest import model_zoo_entry_to_world_model_manifest
 from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import resolve_benchmark_manifest_path
@@ -35,7 +44,7 @@ from worldfoundry.evaluation.utils import (
     write_text,
 )
 
-from .cache import json_sha256
+from .cache import generation_cache_payload, json_sha256
 from .fidelity import model_benchmark_fidelity
 from .model_benchmark import CONTRACT_VALIDATION_ID, ModelBenchmarkRunRequest, run_model_benchmark
 
@@ -84,6 +93,8 @@ class ModelBenchmarkSuiteRequest:
     model_integration_status: str | None = None
     mode: str = "official-run"
     execute: bool = True
+    model_workers: int = 1
+    worker_cuda_devices: Sequence[str] = ()
     skip_incompatible: bool = True
     fail_on_skipped: bool = False
     model_runner: str | None = None
@@ -191,6 +202,102 @@ class _SuiteCellPlan:
         }
 
 
+@dataclass(frozen=True)
+class _ModelWorkerPlan:
+    """Resolved process count and immutable CUDA affinity for suite workers."""
+
+    requested_workers: int
+    worker_count: int
+    cuda_device_groups: tuple[str | None, ...]
+    device_source: str
+    use_spawn_workers: bool
+    cpu_threads_per_worker: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "spawn_per_model" if self.use_spawn_workers else "in_process",
+            "start_method": "spawn" if self.use_spawn_workers else None,
+            "requested_workers": self.requested_workers,
+            "worker_count": self.worker_count,
+            "cuda_device_groups": [group for group in self.cuda_device_groups if group is not None],
+            "device_source": self.device_source,
+            "cpu_threads_per_worker": self.cpu_threads_per_worker,
+        }
+
+
+class _SuiteGenerationMemoRunner:
+    """Reuse an identical successful request batch within one model lease.
+
+    A suite commonly scores the same generated samples with many independent
+    benchmarks. Persistent generation caching is intentionally optional, but
+    rerunning the model for every scorer is both wasteful and unfair for
+    stochastic generators. Memoization is batch-level rather than sample-level
+    so stateful world models remain correct when output depends on request order
+    or prior requests in the same rollout.
+    """
+
+    def __init__(self, runner: Any) -> None:
+        self._runner = runner
+        self._batches: dict[str, tuple[Any, ...]] = {}
+        self.batch_hits = 0
+        self.batch_misses = 0
+        self.requests_reused = 0
+        self.requests_executed = 0
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._runner, name)
+
+    @staticmethod
+    def _batch_key(requests: Sequence[Any]) -> str | None:
+        payloads: list[Any] = []
+        for request in requests:
+            policy = dict(getattr(request, "cache_policy", None) or {})
+            policy_mode = policy.get("mode", policy.get("cache"))
+            if policy_mode is False or (
+                policy_mode is not None
+                and str(policy_mode).strip().lower() in {"off", "false", "disabled", "none"}
+            ):
+                return None
+            payloads.append(generation_cache_payload(request))
+        try:
+            return json_sha256(payloads)
+        except (TypeError, ValueError):
+            # A custom request extension may contain a process-local object.
+            # It remains runnable but is not safe to identify for reuse.
+            return None
+
+    def generate(self, requests: Sequence[Any]) -> list[Any]:
+        rows = tuple(requests)
+        if not rows:
+            return []
+        batch_key = self._batch_key(rows)
+        if batch_key is not None:
+            cached = self._batches.get(batch_key)
+            if cached is not None:
+                self.batch_hits += 1
+                self.requests_reused += len(rows)
+                return list(cached)
+
+        self.batch_misses += 1
+        self.requests_executed += len(rows)
+        generated = tuple(self._runner.generate(rows))
+        if (
+            batch_key is not None
+            and len(generated) == len(rows)
+            and all(is_generation_result_successful(result) for result in generated)
+        ):
+            self._batches[batch_key] = generated
+        return list(generated)
+
+    def stats(self) -> dict[str, int]:
+        return {
+            "batch_hits": self.batch_hits,
+            "batch_misses": self.batch_misses,
+            "requests_reused": self.requests_reused,
+            "requests_executed": self.requests_executed,
+        }
+
+
 # ---------------------------------------------------------------------------
 # Planning helpers
 # ---------------------------------------------------------------------------
@@ -211,6 +318,8 @@ def _fingerprint_request(request: ModelBenchmarkSuiteRequest) -> str:
     payload.pop("generation_cache_dir", None)
     payload.pop("generation_cache_mode", None)
     payload.pop("generation_cache_namespace", None)
+    payload.pop("model_workers", None)
+    payload.pop("worker_cuda_devices", None)
     return json_sha256(payload)
 
 
@@ -244,9 +353,7 @@ def _coerce_request(
     if isinstance(request, ModelBenchmarkSuiteRequest):
         if not kwargs:
             return request
-        payload = asdict(request)
-        payload.update(kwargs)
-        return ModelBenchmarkSuiteRequest(**payload)
+        return replace(request, **kwargs)
     payload = dict(kwargs)
     if isinstance(request, Mapping):
         payload = {**dict(request), **payload}
@@ -470,7 +577,7 @@ def _benchmark_unavailable_reason(entry: BenchmarkZooEntry, *, mode: str) -> str
             # built-in model -> generated-artifact -> benchmark runs.  Keep
             # result importers usable in normalizer mode without advertising
             # them as raw-artifact evaluators in a matrix plan.
-            from ..runners.workspace_registry import workspace_benchmark_runtime_hint
+            from worldfoundry.evaluation.tasks.catalog.workspace_registry import workspace_benchmark_runtime_hint
 
             runtime_hint = workspace_benchmark_runtime_hint(entry.benchmark_id)
             if runtime_hint:
@@ -535,6 +642,100 @@ def _model_manifest_dir_for_cell(
     if known_model:
         return model_manifest_dir
     return None
+
+
+def _resolve_suite_model_runner(
+    request: ModelBenchmarkSuiteRequest,
+    plan: _SuiteCellPlan,
+) -> Any:
+    """Resolve one model lease shared by all executable cells for that model."""
+    from worldfoundry.evaluation.models import resolve_model_zoo_runner, resolve_world_model_runner
+
+    manifest_dir = _model_manifest_dir_for_cell(
+        plan.requested_model_id,
+        request.model_manifest_dir,
+        plan.known_model,
+    )
+    if manifest_dir is not None:
+        resolved = resolve_model_zoo_runner(
+            plan.requested_model_id,
+            manifest_dir=manifest_dir,
+            variant_id=request.model_variant_id,
+            parameters=request.model_parameters,
+            runtime=request.model_runtime,
+        )
+    else:
+        resolved = resolve_world_model_runner(
+            plan.requested_model_id,
+            runner=request.model_runner,
+            parameters=request.model_parameters,
+            runtime=request.model_runtime,
+            config=request.model_config,
+        )
+    return replace(resolved, runner=_SuiteGenerationMemoRunner(resolved.runner))
+
+
+def _suite_generation_memo_stats(resolved: Any | None) -> dict[str, int] | None:
+    runner = None if resolved is None else getattr(resolved, "runner", None)
+    stats = getattr(runner, "stats", None)
+    if not isinstance(runner, _SuiteGenerationMemoRunner) or not callable(stats):
+        return None
+    return stats()
+
+
+def _cleanup_suite_model_runner(resolved: Any | None) -> None:
+    """Release a shared runner exactly once after its model's suite cells."""
+    if resolved is None:
+        return
+    cleanup = getattr(resolved.runner, "cleanup", None)
+    try:
+        if callable(cleanup):
+            try:
+                cleanup()
+            except Exception as exc:  # noqa: BLE001 - process exit remains the hard release boundary.
+                warnings.warn(f"model runner cleanup failed: {exc}", RuntimeWarning, stacklevel=2)
+    finally:
+        # Do not import Torch just to clean up a CPU-only worker.  When a model
+        # already loaded it, return unused allocator and IPC blocks before this
+        # worker leases its GPU group to the next model.
+        gc.collect()
+        torch = sys.modules.get("torch")
+        cuda = getattr(torch, "cuda", None)
+        is_initialized = getattr(cuda, "is_initialized", None)
+        if callable(is_initialized) and is_initialized():
+            try:
+                empty_cache = getattr(cuda, "empty_cache", None)
+                if callable(empty_cache):
+                    empty_cache()
+                ipc_collect = getattr(cuda, "ipc_collect", None)
+                if callable(ipc_collect):
+                    ipc_collect()
+            except RuntimeError:
+                # A runner may have torn down its CUDA context during cleanup;
+                # process exit remains the final release boundary.
+                pass
+
+
+def _reset_suite_model_runner(resolved: Any) -> bool:
+    """Reset per-run state without unloading a resident suite model."""
+    runner = resolved.runner
+    reset = getattr(runner, "reset_for_evaluation", None)
+    if callable(reset):
+        reset()
+        return True
+
+    # A few policy runners expose a conventional zero-argument reset instead
+    # of the evaluation-specific hook. Never guess arguments for other reset
+    # contracts (for example simulator resets that require episode metadata).
+    reset = getattr(runner, "reset", None)
+    if not callable(reset):
+        return False
+    try:
+        inspect.signature(reset).bind()
+    except (TypeError, ValueError):
+        return False
+    reset()
+    return True
 
 
 def _cell_run_id(request: ModelBenchmarkSuiteRequest, model_id: str, benchmark_id: str) -> str | None:
@@ -656,6 +857,10 @@ def _run_cell(
     *,
     root: Path,
     plan: _SuiteCellPlan,
+    resolved_runner: Any | None = None,
+    runner_factory: Callable[[], Any] | None = None,
+    runner_reused: bool | None = None,
+    runner_state_reset: bool | None = None,
 ) -> Mapping[str, Any]:
     """Run :func:`run_model_benchmark` for one planned cell."""
     if plan.output_artifact is None:
@@ -663,6 +868,20 @@ def _run_cell(
     cell_dir = _cell_dir(root, plan.model_id, plan.benchmark.benchmark_id)
     model_parameters = dict(request.model_parameters or {})
     model_runtime = dict(request.model_runtime or {})
+    cell_run_id = _cell_run_id(request, plan.model_id, plan.benchmark.benchmark_id)
+    logger = get_logger(__name__).bind(
+        run_id=cell_run_id,
+        model_id=plan.model_id,
+        benchmark_id=plan.benchmark.benchmark_id,
+        phase="suite.cell",
+    )
+    logger.event(
+        "INFO",
+        "suite.cell.started",
+        "Model-benchmark suite cell started",
+        output_dir=str(cell_dir),
+        runner_reused=runner_reused,
+    )
     result = run_model_benchmark(
         ModelBenchmarkRunRequest(
             output_dir=cell_dir,
@@ -697,7 +916,7 @@ def _run_cell(
             generation_cache_dir=request.generation_cache_dir,
             generation_cache_mode=request.generation_cache_mode,
             generation_cache_namespace=request.generation_cache_namespace,
-            run_id=_cell_run_id(request, plan.model_id, plan.benchmark.benchmark_id),
+            run_id=cell_run_id,
             benchmark_timeout_seconds=request.benchmark_timeout_seconds,
             benchmark_workdir=request.benchmark_workdir,
             benchmark_env=request.benchmark_env,
@@ -709,7 +928,17 @@ def _run_cell(
             leaderboard_candidate=bool(
                 dict(plan.evaluation_provenance.get("claim") or {}).get("leaderboard_candidate")
             ),
-        )
+        ),
+        resolved_runner=resolved_runner,
+        runner_factory=runner_factory,
+        cleanup_runner=resolved_runner is None and runner_factory is None,
+    )
+    logger.event(
+        "INFO" if result.exit_code == 0 else "ERROR",
+        "suite.cell.finished",
+        "Model-benchmark suite cell finished",
+        status=result.status,
+        exit_code=result.exit_code,
     )
     payload = result.to_dict()
     artifacts = dict(payload.get("artifacts") or {})
@@ -731,6 +960,8 @@ def _run_cell(
             None if payload.get("generation_result") is None else payload["generation_result"].get("scorecard_path")
         ),
         "resumed": False,
+        "runner_reused": runner_reused,
+        "runner_state_reset": runner_state_reset,
         "artifacts": artifacts,
     }
 
@@ -748,6 +979,17 @@ def _suite_summary(cells: Sequence[Mapping[str, Any]], *, execute: bool) -> dict
         "succeeded": counts.get("succeeded", 0),
         "failed": counts.get("failed", 0),
         "skipped": counts.get("skipped", 0),
+        "resident_model_loads": sum(
+            1
+            for cell in cells
+            if cell.get("status") not in {"planned", "skipped"}
+            and cell.get("runner_reused") is False
+        ),
+        "runner_reuses": sum(1 for cell in cells if cell.get("runner_reused") is True),
+        "runner_state_resets": sum(1 for cell in cells if cell.get("runner_state_reset") is True),
+        "generation_batches_reused": sum(int(cell.get("generation_batches_reused") or 0) for cell in cells),
+        "generation_requests_reused": sum(int(cell.get("generation_requests_reused") or 0) for cell in cells),
+        "generation_requests_executed": sum(int(cell.get("generation_requests_executed") or 0) for cell in cells),
         "status_counts": counts,
         "models": sorted({str(cell.get("model_id")) for cell in cells if cell.get("model_id")}),
         "benchmarks": sorted({str(cell.get("benchmark_id")) for cell in cells if cell.get("benchmark_id")}),
@@ -765,6 +1007,15 @@ def build_markdown_suite_report(payload: Mapping[str, Any]) -> str:
         f"- Succeeded: {summary.get('succeeded', 0)}",
         f"- Failed: {summary.get('failed', 0)}",
         f"- Skipped: {summary.get('skipped', 0)}",
+        f"- Resident model loads: {summary.get('resident_model_loads', 0)}",
+        f"- Runner reuses: {summary.get('runner_reuses', 0)}",
+        f"- Runner state resets: {summary.get('runner_state_resets', 0)}",
+        f"- Generation batches reused: {summary.get('generation_batches_reused', 0)}",
+        f"- Generation requests reused: {summary.get('generation_requests_reused', 0)}",
+        f"- Generation requests executed: {summary.get('generation_requests_executed', 0)}",
+        f"- Model workers: {summary.get('model_workers_used', 0)} / {summary.get('model_workers_requested', 1)}",
+        f"- Parallel model execution: {summary.get('parallel_model_execution', False)}",
+        f"- Worker CUDA groups: {', '.join(summary.get('worker_cuda_device_groups') or ()) or 'inherited'}",
         "",
         "| Model | Benchmark | Artifact | Compatibility | Status | Run |",
         "| --- | --- | --- | --- | --- | --- |",
@@ -860,8 +1111,8 @@ def _write_empty_comparison(
             "comparison_markdown": str(output_md.resolve()),
         },
     }
-    write_json(output_json, payload, atomic=False)
-    write_text(output_md, build_markdown_comparison(payload), atomic=False)
+    write_json(output_json, payload)
+    write_text(output_md, build_markdown_comparison(payload))
     return payload
 
 
@@ -882,7 +1133,7 @@ def _write_suite_artifacts(root: Path, cells: Sequence[Mapping[str, Any]]) -> di
         "scorecard_count": len(scorecard_rows),
         "rows": scorecard_rows,
     }
-    write_json(scorecards_json, scorecards_payload, atomic=False)
+    write_json(scorecards_json, scorecards_payload)
     write_jsonl(scorecards_jsonl, scorecard_rows, atomic=False)
 
     summary_paths, labels = _run_summary_paths_and_labels(cells)
@@ -892,7 +1143,7 @@ def _write_suite_artifacts(root: Path, cells: Sequence[Mapping[str, Any]]) -> di
     index_html = root / "index" / "index.html"
     index_roots: Sequence[str | Path] = summary_paths if summary_paths else (root,)
     index = write_run_index(index_roots, output_json=index_json, output_jsonl=index_jsonl)
-    write_text(index_md, build_markdown_run_index(index), atomic=False)
+    write_text(index_md, build_markdown_run_index(index))
     write_run_browser(index, index_html)
 
     comparison_json = root / "comparison" / "comparison.json"
@@ -936,6 +1187,427 @@ def _write_suite_artifacts(root: Path, cells: Sequence[Mapping[str, Any]]) -> di
     }
 
 
+def _resolve_model_worker_plan(
+    request: ModelBenchmarkSuiteRequest,
+    *,
+    model_count: int,
+) -> _ModelWorkerPlan:
+    """Resolve process count and non-overlapping CUDA affinity without importing Torch."""
+    from worldfoundry.runtime.device_pool import (
+        cuda_device_discovery_source,
+        default_cuda_device_groups,
+        normalize_cuda_device_groups,
+    )
+
+    configured_workers = int(request.model_workers)
+    if configured_workers < 1:
+        raise ValueError("model_workers must be at least 1")
+    explicit_groups = normalize_cuda_device_groups(request.worker_cuda_devices)
+    explicit_group_widths = {len(group.split(",")) for group in explicit_groups}
+    if len(explicit_group_widths) > 1:
+        raise ValueError(
+            "parallel model workers require equal-sized CUDA device groups; "
+            "run models with different GPU counts as separate suites"
+        )
+    requested_workers = max(configured_workers, len(explicit_groups))
+    # Even a serial multi-model suite gets one fresh process per model.  This
+    # makes process exit the hard CUDA-release boundary when a third-party
+    # runner retains module-level tensors or allocator state after cleanup().
+    use_spawn_workers = bool(
+        request.execute and (model_count > 1 or requested_workers > 1 or explicit_groups)
+    )
+
+    if explicit_groups:
+        available_groups: tuple[str | None, ...] = explicit_groups
+        device_source = "explicit"
+    elif use_spawn_workers and requested_workers > 1:
+        discovered_groups = default_cuda_device_groups()
+        if discovered_groups:
+            available_groups = discovered_groups
+            device_source = cuda_device_discovery_source()
+        else:
+            # CPU-only suites can still use process parallelism. GPU inference
+            # should pass explicit groups when discovery is unavailable.
+            available_groups = (None,) * requested_workers
+            device_source = "unassigned"
+    else:
+        available_groups = (None,)
+        device_source = "inherited"
+
+    worker_count = min(max(model_count, 1), requested_workers, len(available_groups))
+    try:
+        available_cpus = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        available_cpus = os.cpu_count() or worker_count
+    default_cpu_threads = max(available_cpus // worker_count, 1)
+    configured_cpu_threads = os.getenv("WORLDFOUNDRY_SUITE_CPU_THREADS", "").strip()
+    try:
+        cpu_threads_per_worker = (
+            max(int(configured_cpu_threads), 1)
+            if configured_cpu_threads
+            else default_cpu_threads
+        )
+    except ValueError as exc:
+        raise ValueError("WORLDFOUNDRY_SUITE_CPU_THREADS must be a positive integer") from exc
+    return _ModelWorkerPlan(
+        requested_workers=requested_workers,
+        worker_count=worker_count,
+        cuda_device_groups=available_groups[:worker_count],
+        device_source=device_source,
+        use_spawn_workers=use_spawn_workers,
+        cpu_threads_per_worker=cpu_threads_per_worker,
+    )
+
+
+def _run_model_cells(
+    request: ModelBenchmarkSuiteRequest,
+    *,
+    root: Path,
+    run_fingerprint: str,
+    previous_cells: Mapping[str, Mapping[str, Any]],
+    model_id: str,
+) -> list[dict[str, Any]]:
+    """Run all benchmark cells for one model while keeping its runner resident."""
+    cells: list[dict[str, Any]] = []
+    model_outputs, known_model, canonical_model_id = _model_outputs(model_id, request.model_manifest_dir)
+    resolved_runner: Any | None = None
+    runner_use_count = 0
+    try:
+        for benchmark in _selected_benchmarks(request):
+            plan = _plan_cell(
+                request,
+                run_fingerprint=run_fingerprint,
+                model_id=model_id,
+                canonical_model_id=canonical_model_id,
+                known_model=known_model,
+                model_outputs=model_outputs,
+                benchmark=benchmark,
+            )
+            base_cell = plan.to_base_cell()
+            if plan.compatibility == "benchmark_unavailable" and request.skip_incompatible:
+                cells.append({**base_cell, "status": "skipped", "exit_code": 0, "reason": plan.reason})
+                continue
+            if plan.reason and request.skip_incompatible:
+                cells.append({**base_cell, "status": "skipped", "exit_code": 0, "reason": plan.reason})
+                continue
+            if not request.execute:
+                status = "planned" if not plan.reason else "blocked"
+                cells.append(
+                    {
+                        **base_cell,
+                        "status": status,
+                        "exit_code": 0 if not plan.reason else 1,
+                        "reason": plan.reason,
+                    }
+                )
+                continue
+            if plan.output_artifact is None:
+                cells.append({**base_cell, "status": "failed", "exit_code": 1, "reason": plan.reason})
+                continue
+            try:
+                if request.resume:
+                    resumed = _resume_cell(
+                        _cell_dir(root, plan.model_id, plan.benchmark.benchmark_id),
+                        previous_cells.get(plan.cell_fingerprint),
+                    )
+                    if resumed is not None:
+                        cells.append({**base_cell, **dict(resumed)})
+                        continue
+
+                runner_state: dict[str, Any] = {"reused": None, "reset": None, "memo_before": None}
+
+                def acquire_runner(plan=plan, runner_state=runner_state) -> Any:
+                    nonlocal resolved_runner, runner_use_count
+                    if resolved_runner is None:
+                        resolved_runner = _resolve_suite_model_runner(request, plan)
+                    runner_state["memo_before"] = _suite_generation_memo_stats(resolved_runner)
+                    runner_state["reused"] = runner_use_count > 0
+                    if runner_state["reused"]:
+                        runner_state["reset"] = _reset_suite_model_runner(resolved_runner)
+                    runner_use_count += 1
+                    return resolved_runner
+
+                run_cell = _run_cell(request, root=root, plan=plan, runner_factory=acquire_runner)
+                memo_before = runner_state["memo_before"]
+                memo_after = _suite_generation_memo_stats(resolved_runner)
+                memo_deltas = {
+                    "generation_batches_reused": 0,
+                    "generation_requests_reused": 0,
+                    "generation_requests_executed": 0,
+                }
+                if memo_before is not None and memo_after is not None:
+                    memo_deltas = {
+                        "generation_batches_reused": max(
+                            memo_after["batch_hits"] - memo_before["batch_hits"],
+                            0,
+                        ),
+                        "generation_requests_reused": max(
+                            memo_after["requests_reused"] - memo_before["requests_reused"],
+                            0,
+                        ),
+                        "generation_requests_executed": max(
+                            memo_after["requests_executed"] - memo_before["requests_executed"],
+                            0,
+                        ),
+                    }
+                run_cell = {
+                    **dict(run_cell),
+                    "runner_reused": runner_state["reused"],
+                    "runner_state_reset": runner_state["reset"],
+                    **memo_deltas,
+                }
+                cells.append({**base_cell, **run_cell})
+            except Exception as exc:  # noqa: BLE001 - keep suite execution moving across cells.
+                cells.append({**base_cell, "status": "failed", "exit_code": 1, "reason": str(exc)})
+    finally:
+        _cleanup_suite_model_runner(resolved_runner)
+    return cells
+
+
+def _worker_annotated_cells(
+    cells: Sequence[Mapping[str, Any]],
+    *,
+    pid: int | None,
+    cuda_visible_devices: str | None,
+) -> list[dict[str, Any]]:
+    """Attach process and CUDA-affinity evidence to model cell records."""
+    return [
+        {
+            **dict(cell),
+            "model_worker_pid": pid,
+            "model_worker_cuda_devices": cuda_visible_devices,
+        }
+        for cell in cells
+    ]
+
+
+def _configure_model_worker(
+    cuda_devices: str | None,
+    *,
+    cpu_threads: int,
+) -> None:
+    """Pin a spawned worker before any model or CUDA runtime is loaded."""
+    if cuda_devices is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_devices)
+    for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+        # Spawned workers must not inherit host-wide values such as 32/64 from
+        # managed notebook images. With eight workers that can create hundreds
+        # of runnable threads and make CPU preprocessing slower than inference.
+        os.environ[name] = str(max(int(cpu_threads), 1))
+    os.environ.setdefault("OMP_DYNAMIC", "FALSE")
+    os.environ.setdefault("MKL_DYNAMIC", "FALSE")
+    os.environ["WORLDFOUNDRY_SUITE_MODEL_WORKER"] = "1"
+    torch = sys.modules.get("torch")
+    set_num_threads = getattr(torch, "set_num_threads", None)
+    if callable(set_num_threads):
+        set_num_threads(max(int(cpu_threads), 1))
+
+
+def _run_model_worker(
+    send_connection: Any,
+    request: ModelBenchmarkSuiteRequest,
+    root: Path,
+    run_fingerprint: str,
+    previous_cells: Mapping[str, Mapping[str, Any]],
+    model_id: str,
+    cuda_devices: str | None,
+    cpu_threads: int,
+) -> None:
+    """Run exactly one model and return its cell records through a pipe."""
+    _configure_model_worker(cuda_devices, cpu_threads=cpu_threads)
+    pid = os.getpid()
+    try:
+        cells = _run_model_cells(
+            request,
+            root=root,
+            run_fingerprint=run_fingerprint,
+            previous_cells=previous_cells,
+            model_id=model_id,
+        )
+        payload = {
+            "ok": True,
+            "model_id": model_id,
+            "pid": pid,
+            "cuda_visible_devices": cuda_devices,
+            "cells": _worker_annotated_cells(
+                cells,
+                pid=pid,
+                cuda_visible_devices=cuda_devices,
+            ),
+        }
+    except BaseException as exc:  # noqa: BLE001 - parent needs structured worker failure evidence.
+        payload = {
+            "ok": False,
+            "model_id": model_id,
+            "pid": pid,
+            "cuda_visible_devices": cuda_devices,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    try:
+        send_connection.send(payload)
+    finally:
+        send_connection.close()
+
+
+def _failed_model_worker_cells(
+    request: ModelBenchmarkSuiteRequest,
+    *,
+    run_fingerprint: str,
+    model_id: str,
+    reason: str,
+) -> list[dict[str, Any]]:
+    """Materialize deterministic failed cells when a spawned model worker dies."""
+    model_outputs, known_model, canonical_model_id = _model_outputs(model_id, request.model_manifest_dir)
+    cells: list[dict[str, Any]] = []
+    for benchmark in _selected_benchmarks(request):
+        plan = _plan_cell(
+            request,
+            run_fingerprint=run_fingerprint,
+            model_id=model_id,
+            canonical_model_id=canonical_model_id,
+            known_model=known_model,
+            model_outputs=model_outputs,
+            benchmark=benchmark,
+        )
+        base_cell = plan.to_base_cell()
+        if plan.reason and request.skip_incompatible:
+            cells.append({**base_cell, "status": "skipped", "exit_code": 0, "reason": plan.reason})
+        else:
+            cells.append({**base_cell, "status": "failed", "exit_code": 1, "reason": reason})
+    return cells
+
+
+def _join_model_worker(process: Any, *, timeout_seconds: float = 5.0) -> None:
+    """Reap a completed worker, escalating only after its result was collected."""
+    process.join(timeout=max(float(timeout_seconds), 0.0))
+    if process.is_alive():
+        process.terminate()
+        process.join(timeout=max(float(timeout_seconds), 0.0))
+    if process.is_alive() and hasattr(process, "kill"):
+        process.kill()
+        process.join()
+
+
+def _run_models_in_spawn_workers(
+    request: ModelBenchmarkSuiteRequest,
+    *,
+    root: Path,
+    run_fingerprint: str,
+    previous_cells: Mapping[str, Mapping[str, Any]],
+    model_ids: Sequence[str],
+    worker_plan: _ModelWorkerPlan,
+) -> list[dict[str, Any]]:
+    """Dynamically run one model per spawned process on immutable CUDA groups."""
+    import multiprocessing
+    from multiprocessing.connection import wait as wait_for_connections
+
+    try:
+        pickle.dumps(
+            (request, root, run_fingerprint, previous_cells, tuple(model_ids)),
+            protocol=pickle.HIGHEST_PROTOCOL,
+        )
+    except (AttributeError, pickle.PickleError, TypeError) as exc:
+        raise ValueError(
+            "parallel model suites require a serializable request; use mapping-based model_config values "
+            "or set model_workers=1"
+        ) from exc
+
+    context = multiprocessing.get_context("spawn")
+    pending = deque(str(model_id) for model_id in model_ids)
+    available_devices = deque(worker_plan.cuda_device_groups)
+    cpu_threads = worker_plan.cpu_threads_per_worker
+    cells_by_model: dict[str, list[dict[str, Any]]] = {}
+    active: dict[Any, tuple[Any, str, str | None]] = {}
+
+    try:
+        while pending or active:
+            while pending and available_devices:
+                model_id = pending.popleft()
+                cuda_devices = available_devices.popleft()
+                receive_connection, send_connection = context.Pipe(duplex=False)
+                process = context.Process(
+                    target=_run_model_worker,
+                    args=(
+                        send_connection,
+                        request,
+                        root,
+                        run_fingerprint,
+                        previous_cells,
+                        model_id,
+                        cuda_devices,
+                        cpu_threads,
+                    ),
+                    name=f"worldfoundry-model-{_safe_name(model_id)}",
+                )
+                try:
+                    process.start()
+                except Exception as exc:  # noqa: BLE001 - record startup failure and continue the suite.
+                    receive_connection.close()
+                    send_connection.close()
+                    available_devices.append(cuda_devices)
+                    cells_by_model[model_id] = _failed_model_worker_cells(
+                        request,
+                        run_fingerprint=run_fingerprint,
+                        model_id=model_id,
+                        reason=f"model worker failed to start: {type(exc).__name__}: {exc}",
+                    )
+                else:
+                    send_connection.close()
+                    active[receive_connection] = (process, model_id, cuda_devices)
+
+            if not active:
+                continue
+
+            ready = set(wait_for_connections(tuple(active), timeout=0.25))
+            ready.update(connection for connection, (process, _, _) in active.items() if not process.is_alive())
+            for connection in ready:
+                process, model_id, cuda_devices = active.pop(connection)
+                payload: Any = None
+                receive_error: str | None = None
+                try:
+                    payload = connection.recv()
+                except Exception as exc:  # noqa: BLE001 - turn corrupt/dead worker payloads into failed cells.
+                    receive_error = f"{type(exc).__name__}: {exc}"
+                finally:
+                    connection.close()
+
+                _join_model_worker(process)
+                available_devices.append(cuda_devices)
+                worker_pid = process.pid
+                if isinstance(payload, Mapping) and payload.get("ok") is True and isinstance(payload.get("cells"), list):
+                    cells_by_model[model_id] = [dict(cell) for cell in payload["cells"]]
+                    continue
+
+                payload_error = payload.get("error") if isinstance(payload, Mapping) else None
+                invalid_payload = None if payload is None or isinstance(payload, Mapping) else "invalid worker payload"
+                reason_detail = (
+                    payload_error
+                    or receive_error
+                    or invalid_payload
+                    or f"worker exited with code {process.exitcode}"
+                )
+                failed_cells = _failed_model_worker_cells(
+                    request,
+                    run_fingerprint=run_fingerprint,
+                    model_id=model_id,
+                    reason=f"model worker failed: {reason_detail}",
+                )
+                cells_by_model[model_id] = _worker_annotated_cells(
+                    failed_cells,
+                    pid=worker_pid,
+                    cuda_visible_devices=cuda_devices,
+                )
+    except BaseException:
+        for connection, (process, _, _) in active.items():
+            connection.close()
+            if process.is_alive():
+                process.terminate()
+            _join_model_worker(process)
+        raise
+
+    return [cell for model_id in model_ids for cell in cells_by_model[model_id]]
+
+
 def run_model_benchmark_suite(
     request: ModelBenchmarkSuiteRequest | Mapping[str, Any] | None = None,
     **kwargs: Any,
@@ -963,54 +1635,54 @@ def run_model_benchmark_suite(
             "that declares model_ids, or set contract_fixture=True to run benchmark contract validation cells."
         )
 
-    cells: list[dict[str, Any]] = []
-    for model_id in selected_model_ids:
-        model_outputs, known_model, canonical_model_id = _model_outputs(model_id, suite_request.model_manifest_dir)
-        for benchmark in _selected_benchmarks(suite_request):
-            plan = _plan_cell(
+    worker_plan = _resolve_model_worker_plan(suite_request, model_count=len(selected_model_ids))
+    if worker_plan.use_spawn_workers:
+        cells = _run_models_in_spawn_workers(
+            suite_request,
+            root=root,
+            run_fingerprint=run_fingerprint,
+            previous_cells=previous_cells,
+            model_ids=selected_model_ids,
+            worker_plan=worker_plan,
+        )
+    else:
+        cells = []
+        parent_pid = os.getpid()
+        inherited_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
+        for model_id in selected_model_ids:
+            model_cells = _run_model_cells(
                 suite_request,
+                root=root,
                 run_fingerprint=run_fingerprint,
+                previous_cells=previous_cells,
                 model_id=model_id,
-                canonical_model_id=canonical_model_id,
-                known_model=known_model,
-                model_outputs=model_outputs,
-                benchmark=benchmark,
             )
-            base_cell = plan.to_base_cell()
-            if plan.compatibility == "benchmark_unavailable" and suite_request.skip_incompatible:
-                cells.append({**base_cell, "status": "skipped", "exit_code": 0, "reason": plan.reason})
-                continue
-            if plan.reason and suite_request.skip_incompatible:
-                cells.append({**base_cell, "status": "skipped", "exit_code": 0, "reason": plan.reason})
-                continue
-            if not suite_request.execute:
-                status = "planned" if not plan.reason else "blocked"
-                cells.append(
-                    {**base_cell, "status": status, "exit_code": 0 if not plan.reason else 1, "reason": plan.reason}
+            cells.extend(
+                _worker_annotated_cells(
+                    model_cells,
+                    pid=parent_pid,
+                    cuda_visible_devices=inherited_devices,
                 )
-                continue
-            if plan.output_artifact is None:
-                cells.append({**base_cell, "status": "failed", "exit_code": 1, "reason": plan.reason})
-                continue
-            try:
-                if suite_request.resume:
-                    resumed = _resume_cell(
-                        _cell_dir(root, plan.model_id, plan.benchmark.benchmark_id),
-                        previous_cells.get(plan.cell_fingerprint),
-                    )
-                    if resumed is not None:
-                        cells.append({**base_cell, **dict(resumed)})
-                        continue
-                run_cell = _run_cell(
-                    suite_request,
-                    root=root,
-                    plan=plan,
-                )
-                cells.append({**base_cell, **dict(run_cell)})
-            except Exception as exc:  # noqa: BLE001 - keep suite execution moving across cells.
-                cells.append({**base_cell, "status": "failed", "exit_code": 1, "reason": str(exc)})
+            )
 
     summary = _suite_summary(cells, execute=suite_request.execute)
+    worker_pids = sorted(
+        {
+            int(cell["model_worker_pid"])
+            for cell in cells
+            if cell.get("model_worker_pid") is not None
+        }
+    )
+    scheduler = worker_plan.to_dict()
+    scheduler["worker_pids"] = worker_pids
+    summary.update(
+        {
+            "model_workers_requested": worker_plan.requested_workers,
+            "model_workers_used": worker_plan.worker_count if suite_request.execute else 0,
+            "parallel_model_execution": worker_plan.use_spawn_workers and worker_plan.worker_count > 1,
+            "worker_cuda_device_groups": scheduler["cuda_device_groups"],
+        }
+    )
     artifacts = _write_suite_artifacts(root, cells)
     failed = int(summary["failed"])
     skipped = int(summary["skipped"])
@@ -1029,14 +1701,15 @@ def run_model_benchmark_suite(
         "exit_code": exit_code,
         "run_fingerprint": run_fingerprint,
         "request": jsonable(asdict(suite_request)),
+        "scheduler": scheduler,
         "summary": summary,
         "cells": cells,
         "artifacts": artifacts,
     }
     manifest_path = root / "suite_manifest.json"
     report_path = root / "suite_report.md"
-    write_json(manifest_path, payload, atomic=False)
-    write_text(report_path, build_markdown_suite_report(payload), atomic=False)
+    write_json(manifest_path, payload)
+    write_text(report_path, build_markdown_suite_report(payload))
     return ModelBenchmarkSuiteResult(
         schema_version=MODEL_BENCHMARK_SUITE_RESULT_SCHEMA_VERSION,
         status=status,

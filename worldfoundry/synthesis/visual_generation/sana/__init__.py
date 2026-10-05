@@ -1,4 +1,4 @@
-from worldfoundry.base_models.diffusion_model.image.sana.variants import (
+from worldfoundry.base_models.diffusion_model.recipes.sana_variants import (
     SANA_VARIANTS,
     SanaVariant,
     config_root,

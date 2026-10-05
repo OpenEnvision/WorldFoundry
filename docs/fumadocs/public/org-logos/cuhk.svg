@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="The Chinese University of Hong Kong">
+  <circle cx="64" cy="64" r="58" fill="#6b2c91"/>
+  <circle cx="64" cy="64" r="50" fill="none" stroke="#e8c36a" stroke-width="3"/>
+  <path fill="#e8c36a" d="M64 22c8 10 18 22 18 36 0 10-6 16-18 22-12-6-18-12-18-22 0-14 10-26 18-36z"/>
+  <path fill="#e8c36a" d="M36 58c10-2 18 2 28 10-8 8-18 12-28 8-8-3-10-12 0-18zm56 0c-10-2-18 2-28 10 8 8 18 12 28 8 8-3 10-12 0-18z"/>
+  <path fill="#6b2c91" d="M64 40c4 8 8 16 8 22s-3 10-8 14c-5-4-8-8-8-14s4-14 8-22z"/>
+</svg>

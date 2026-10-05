@@ -38,8 +38,6 @@ def _install_write_video() -> None:
         import torchvision.io as tv_io
     except Exception:
         return
-    if hasattr(tv_io, "write_video"):
-        return
 
     def write_video(
         filename: str,
@@ -66,60 +64,5 @@ def _install_write_video() -> None:
     tv_io.write_video = write_video
 
 
-def _install_flash_attention_fallback() -> None:
-    """Route official Wan flash_attention calls to SDPA when flash-attn is absent."""
-
-    try:
-        from wan.modules import attention as attention_module
-    except Exception:
-        return
-
-    if getattr(attention_module, "FLASH_ATTN_2_AVAILABLE", False) or getattr(
-        attention_module, "FLASH_ATTN_3_AVAILABLE", False
-    ):
-        return
-
-    def flash_attention_fallback(
-        q,
-        k,
-        v,
-        q_lens=None,
-        k_lens=None,
-        dropout_p=0.0,
-        softmax_scale=None,
-        q_scale=None,
-        causal=False,
-        window_size=(-1, -1),
-        deterministic=False,
-        dtype=None,
-        version=None,
-    ):
-        del version
-        dtype = dtype if dtype is not None else q.dtype
-        return attention_module.attention(
-            q=q,
-            k=k,
-            v=v,
-            q_lens=q_lens,
-            k_lens=k_lens,
-            dropout_p=dropout_p,
-            softmax_scale=softmax_scale,
-            q_scale=q_scale,
-            causal=causal,
-            window_size=window_size,
-            deterministic=deterministic,
-            dtype=dtype,
-            fa_version=None,
-        )
-
-    attention_module.flash_attention = flash_attention_fallback
-    try:
-        from wan.modules import model as model_module
-    except Exception:
-        return
-    model_module.flash_attention = flash_attention_fallback
-
-
 if not Path(sys.argv[0]).name.startswith("pip"):
     _install_write_video()
-    _install_flash_attention_fallback()

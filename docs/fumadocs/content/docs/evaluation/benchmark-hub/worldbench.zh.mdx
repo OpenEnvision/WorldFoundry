@@ -1,152 +1,68 @@
 ---
 title: WorldBench
-description: 在 WorldFoundry 中导入 WorldBench 分数或聚合仓内 artifact scores。
+description: "UCLA 诊断物理评测：425 个 Kubric 场景，SAM2 对照真值物理，外加文本 QA。WorldFoundry 实现仓内打分器，不编造榜单。"
 ---
 
-## 简介
+WorldBench（UCLA，联合 Sony AI、耶鲁与 DEVCOM ARL）诊断世界模型离 **物理** 有多近。**Kubric**（PyBullet + Blender）渲染 **425** 个物理准确场景，覆盖运动物理、物体恒存、支撑关系、尺度 / 透视，并带真值深度、法线、分割与光流。模型从初始帧生成续写；**SAM2** 跟踪首帧框，掩码与仿真比较（前景 mIoU、背景 RMSE）。文本子集另有多选与是否 QA。
 
-WorldBench 在 WorldFoundry 中表示为 physical-understanding benchmark，包含 video-based 和 text-based 两类结果组件。catalog 记录的公开数据集是 `worldbenchmark/WorldBench`，Hugging Face metadata 中会重定向到 `worldbenchmark/IntuitivePhysics`。catalog 描述了 425 个 video-based scenes，包含 RGB、normal、depth、flow、segmentation 资产，以及 181 个 text-based videos，包含 multiple-choice 和 binary 问题。
+公开评测器把 Dice 叫做 “mIoU”。WorldFoundry 分开报 **常规 `foreground_miou`** 与发布版的 **`foreground_dice` 兼容值**。当前检视的 HF 树是 **375** 个场景目录（15 情景 × 25），而不是论文的 425。
 
-WorldFoundry 已在 `worldfoundry/evaluation/tasks/execution/runners/worldbench` 中包含 WorldBench runner。使用本页流程时不要 clone 官方 repo。当前仓内 runner 可以导入用户提供的 JSON/JSONL/CSV/TSV 结果，或从 WorldFoundry artifact-score directory 聚合分数；本地 GitHub/Hugging Face 引用中没有确认到上游 evaluator 源码。
+论文：[WorldBench](https://arxiv.org/abs/2601.21282)。项目：[world-bench.github.io](https://world-bench.github.io/)。数据：[`worldbenchmark/IntuitivePhysics`](https://huggingface.co/datasets/worldbenchmark/IntuitivePhysics)。数据集与评测器 **未声明再分发许可证**。
 
-## 评测什么
+WorldFoundry 实现了仓内、模型支撑的 runner。运行时环境仍记录：**没有确认可再分发的官方原始视频评测器**，以及 **从视频做 `official-run` 不是发布声明**。兼容路径是通过 `WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH` 导入。
 
-WorldBench 问的是 generative world model 离**物理世界**还有多远。它评测从短视频输入做 continuation，以及基于文本的物理推理，关注 object permanence、support relations、motion physics 和 scale/perspective 是否随时间保持。
+<BenchmarkPageSections id="worldbench" locale="zh" />
 
-## Benchmark 设计
-
-| 轨道 | 场景 | 资产 | 评测方式 |
-| --- | --- | --- | --- |
-| Video-based | 4 类物理场景共 425 个 Kubric/PyBullet scene | RGB、normal、depth、flow、segmentation；132 帧序列 | SAM2 mask 对比 foreground mIoU |
-| Text-based | 181 个带 multiple-choice / binary 问题的视频 | 9 帧输入 + VLM QA | Language QA accuracy |
-| 类别 | Motion physics、object permanence、support relations、scale/perspective | 每个样例隔离单一物理概念 | 解耦式 diagnostic probe |
-
-官方项目用 Kubric（PyBullet + Blender）生成物理准确的 ground truth。预测 horizon 越长，性能下降越明显，首个预测帧之后下降最陡。
-
-## 官方参考
-
-- Paper: [arXiv:2601.21282](https://arxiv.org/abs/2601.21282)
-- Project page: [world-bench.github.io](https://world-bench.github.io/)
-- 数据集: [worldbenchmark/WorldBench](https://huggingface.co/datasets/worldbenchmark/WorldBench)（会重定向到 `worldbenchmark/IntuitivePhysics`）
-- 仓内 runner: `worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py`
-
-## Leaderboard 说明
-
-官方站点为世界 foundation model 报告 per-category mIoU，为 vision-language model 报告 per-category accuracy。WorldFoundry 当前没有确认来源的上游 evaluator；它导入用户提供的结果表，或从 artifact-score directory 聚合分数。完整 leaderboard parity 仍待上游 scoring workflow 审计。
-
-## 准备数据和资产
-
-从 WorldFoundry 仓库根目录运行：
+## 如何运行
 
 ```bash
-cd /path/to/WorldFoundry
-export PYTHONPATH="$PWD:${PYTHONPATH:-}"
-```
+hf download worldbenchmark/IntuitivePhysics --repo-type dataset \
+  --local-dir cache/worldfoundry/data/hfd_datasets/worldbenchmark/IntuitivePhysics
 
-如果需要本地 prompt、video 或 label，下载或放置公开 dataset：
-
-```bash
-export WORLDFOUNDRY_WORLDBENCH_DATA_ROOT=/path/to/worldbenchmark__WorldBench
-hf download worldbenchmark/WorldBench \
-  --repo-type dataset \
-  --local-dir "${WORLDFOUNDRY_WORLDBENCH_DATA_ROOT}"
-```
-
-准备下面两类 scoring input 之一：
-
-```text
-已有结果文件：
-  results.json
-  results.jsonl
-  results.csv
-  results.tsv
-
-artifact-score directory：
-  <artifact_score_dir>/
-    一个或多个可聚合为 video_based_accuracy、text_based_accuracy、
-    multiple_choice_accuracy、binary_accuracy 或 worldbench_average
-    的 WorldFoundry metric artifacts
-```
-
-最简单的支持结果表：
-
-```csv
-metric_id,score
-video_based_accuracy,0.75
-text_based_accuracy,0.75
-multiple_choice_accuracy,0.75
-binary_accuracy,0.75
-worldbench_average,0.75
-```
-
-如果 per-sample row 中包含 `sample_id`、`component`、`question_type`、`prediction`、`answer`、`correct` 或 `score` 等可识别字段，runner 也会读取。
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/worldbench/generated_videos
-export WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH=/path/to/worldbench/results.csv
-export WORLDFOUNDRY_WORLDBENCH_ARTIFACT_SCORE_DIR=/path/to/worldbench/artifact_scores
-```
-
-## 使用 WorldFoundry 运行
-
-通过公开命令导入已完成的 WorldBench result file：
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id worldbench \
-  --mode official-validation \
-  --official-results-path "${WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/worldbench/official-validation \
-  --json
-```
-
-当前 catalog entry 没有为 WorldBench 接入公开 benchmark-zoo `official-run` 命令。需要仓内 artifact-score 路径时，使用 direct runner。
-
-直接导入结果：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py \
-  --official-results-path "${WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH}" \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/worldbench/direct-import \
-  --json
-```
-
-从 WorldFoundry artifact-score directory 聚合分数：
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
+${WORLDFOUNDRY_UNIFIED_PYTHON} \
   worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py \
   --run-official \
-  --artifact-score-dir "${WORLDFOUNDRY_WORLDBENCH_ARTIFACT_SCORE_DIR}" \
+  --video-only \
+  --dataset-root "${WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT}" \
   --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/worldbench/direct-artifact-scores \
+  --sam2-checkpoint "${WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT}" \
+  --output-dir tmp/worldbench/video \
   --json
 ```
 
-artifact-score 命令会写入中间结果：
+已有掩码时用 `--predicted-mask-dir` 跳过 SAM2。`--text-only` 加 `--answer-manifest` 覆盖 QA。帧对齐：`--ground-truth-start-frame`、`--generated-skip-frames`。共享资源：`worldbench_dataset_assets`、`facebook/sam2.1-hiera-large`。
+
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/worldbench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/worldbench`。
+
+产物包括 `scorecard.json`（主键 `foreground_miou`）与 `worldbench_evaluation.json`。
+
+## 数据集、视频与帧对齐
+
+仓内 runtime **不** import 上游 checkout。SAM2 来自 `worldfoundry.base_models.perception_core.segment.sam2`。数据集根必须是公开 HF 布局：
 
 ```text
-tmp/worldbench/direct-artifact-scores/upstream/worldbench_results.json
+<dataset>/
+  scenes/<group>/<scenario>/<scene>/
+    rgba_00000.png
+    segmentation_00000.png
+    …
+  textual_questions/*.json
 ```
 
-## 指标
+生成续写可以对齐场景 id：
 
-| Metric ID | 含义 |
-| --- | --- |
-| `video_based_accuracy` | video-based physical prediction tasks 的 accuracy。fraction 和 percent 会规范到 unit score。 |
-| `text_based_accuracy` | text-question tasks 的 accuracy。 |
-| `multiple_choice_accuracy` | 当 row 暴露该 question type 时，multiple-choice text questions 的 accuracy。 |
-| `binary_accuracy` | 当 row 暴露该 question type 时，binary 或 yes/no questions 的 accuracy。 |
-| `worldbench_average` | 主聚合分数；如果输入中没有直接给出，会按可用 normalized WorldBench components 求平均。 |
+```text
+<generated>/<group>/<scenario>/<scene>.mp4
+<generated>/<group>/<scenario>/<scene>/output.mp4
+<generated>/<group>/<scenario>/<scene>/00000.png
+```
 
-## 输出
+其他视频布局用 `--video-manifest`（JSON / JSONL / CSV / TSV），每行要有 `sample_id` 与 `video_path`。文本预测用 `--answer-manifest`。稳定 `question_id` 是 `<question-file-stem>:<row>`；或同时给 `video_name` 与 `question`，因为有的视频有两道题。
 
-WorldFoundry 会在 `--output-dir` 下写入：
+评测用 **9 帧条件帧**。默认生成帧 0 对齐真值帧 9，再打 **24 帧续写**。若模型把那 9 帧也拼进输出，传 `--generated-skip-frames 9`。默认值在 `worldfoundry/data/benchmarks/assets/worldbench/evaluator.yaml`。
 
-- `scorecard.json`：规范化 WorldBench scorecard。
-- `per_sample_scores.jsonl`：输入中存在 per-sample rows 时的规范化样例分数。
-- `raw_metric_table.jsonl`：包含 raw 和 normalized scores 的指标表。
-- `upstream/worldbench_results.json`：仅在 `--run-official` 聚合 artifact scores 时写入。
+原始视频打分默认 `facebook/sam2.1-hiera-large`。本地权重用 `WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT`，否则走 HF cache。只导入时用 `--official-results-path`，不要加 `--run-official`。
+
+环境用 `worldfoundry-unified-cu128`。仓内跑通只是集成证据，在全量数值对齐审过之前不会标 `leaderboard_valid`。检视过的上游钉选 `WorldBenchmark/worldbench_eval@4575a164…` 没有 license，公开评测器也损坏；出处写在 catalog YAML，没有 `SOURCE.json`。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

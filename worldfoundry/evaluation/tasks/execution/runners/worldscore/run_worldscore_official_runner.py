@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+
+
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+
 import argparse
 import json
 import os
@@ -11,12 +15,20 @@ import time
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.evaluation.utils import REPO_ROOT
-
-from worldfoundry.runtime.env import first_env_value, resolve_hf_cache_dir  # type: ignore[reportMissingImports]  # noqa: E402
-from worldfoundry.evaluation.utils import HFD_DATASET_CACHE_ROOT, worldfoundry_hfd_dataset_root
+from worldfoundry.core.io.filesystem.file_utils import materialize_file
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
-from worldfoundry.evaluation.tasks.execution.framework.io import env_path, load_json, utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.io import (
+    env_path,
+    load_json,
+    utc_now_iso,
+    write_json,
+    write_jsonl,
+)
+from worldfoundry.evaluation.utils import HFD_DATASET_CACHE_ROOT, REPO_ROOT, worldfoundry_hfd_dataset_root
+from worldfoundry.runtime.env import (  # type: ignore[reportMissingImports]  # noqa: E402
+    first_env_value,
+    resolve_hf_cache_dir,
+)
 
 DEFAULT_WORLDSCORE_ROOT = (
     REPO_ROOT
@@ -33,7 +45,6 @@ DEFAULT_WORLDSCORE_CONFIG_ROOT = bundled_benchmark_asset("worldscore", "config")
 WORLDSCORE_HF_CACHE_DIR = "datasets--Howieeeee--WorldScore"
 WORLDSCORE_HFD_DIR_NAME = "Howieeeee__WorldScore"
 WORLDSCORE_DATASET_DIR_NAME = "WorldScore-Dataset"
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 
 CONTROLLABILITY_ASPECTS = ("camera_control", "object_control")
 QUALITY_ASPECTS = (
@@ -348,7 +359,7 @@ def stage_dynamic_worldscore_output(args: argparse.Namespace) -> dict[str, Any]:
     video_output_dir = instance_dir / "videos"
     if source_path.is_file():
         video_output_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_path, video_output_dir / "output.mp4")
+        materialize_file(source_path, video_output_dir / "output.mp4", writable=False)
 
     return {
         "split": "dynamic",
@@ -797,14 +808,18 @@ def normalize_worldscore_results(
     available_count = sum(1 for row in metric_rows if row["available"])
     contract_blockers = [] if contract_validation is None else contract_validation.get("blockers", [])
     bounded_run = run_scope.endswith("_bounded")
-    run_status = "official_verified" if returncode == 0 and available_count else "failed"
+    normalizer_only = command is None
+    normalization_ok = returncode == 0 and available_count > 0
+    official_verified = not normalizer_only and normalization_ok
+    run_status = (
+        "official_verified" if official_verified
+        else "official_results_imported" if normalization_ok
+        else "failed"
+    )
     if contract_blockers and available_count == 0:
         run_status = "blocked"
     elif returncode == 0 and available_count == 0 and contract_validation and contract_validation.get("valid"):
         run_status = "contract_validated"
-    normalization_ok = returncode == 0 and available_count > 0
-    normalizer_only = command is None
-    official_verified = command is not None and normalization_ok
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "run": {
@@ -917,12 +932,18 @@ def worldscore_pythonpath_roots(worldscore_root: Path) -> list[Path]:
 def run_command_with_timeout(command: list[str], cwd: Path, env: dict[str, str], timeout: int) -> dict[str, Any]:
     """Run an official command while preserving timeout stdout and stderr.
 
+    The child runs in its own process group so a timeout terminates the whole
+    official runtime tree (judge/dataloader descendants included) instead of
+    only the direct child.
+
     Args:
         command: Command line to execute.
         cwd: Working directory for the official process.
         env: Environment passed to the official process.
         timeout: Maximum runtime in seconds.
     """
+
+    from worldfoundry.core.execution.process import terminate_process_group
 
     process = subprocess.Popen(
         command,
@@ -931,18 +952,19 @@ def run_command_with_timeout(command: list[str], cwd: Path, env: dict[str, str],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        start_new_session=os.name == "posix",
     )
-    deadline = time.monotonic() + timeout
-    while process.poll() is None and time.monotonic() < deadline:
-        time.sleep(0.5)
-    timed_out = process.poll() is None
-    if timed_out:
-        process.kill()
-    stdout, stderr = process.communicate()
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+        timed_out = False
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        terminate_process_group(process)
+        stdout, stderr = process.communicate()
     return {
         "returncode": 124 if timed_out else process.returncode,
-        "stdout": stdout,
-        "stderr": f"Command timed out after {timeout} seconds\n{stderr}" if timed_out else stderr,
+        "stdout": stdout or "",
+        "stderr": f"Command timed out after {timeout} seconds\n{stderr or ''}" if timed_out else (stderr or ""),
     }
 
 
@@ -1180,12 +1202,25 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         scorecard = run_official_worldscore(args)
-    except (OSError, ValueError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+    except Exception as exc:  # noqa: BLE001 - failure contract: any failure still writes a failed scorecard.
+        try:
+            from worldfoundry.evaluation.tasks.execution.framework.official_runner import write_failed_scorecard
+
+            write_failed_scorecard(
+                benchmark_id=args.benchmark_id,
+                display_name="WorldScore",
+                runner_name="benchmark_zoo_worldscore_official_runner",
+                output_dir=args.output_dir,
+                reason=f"{type(exc).__name__}: {exc}",
+            )
+        except Exception:  # noqa: BLE001 - never mask the original failure with a scorecard write error.
+            pass
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
     result = {
-        "ok": scorecard["official_benchmark_verified"] and scorecard["integration_evidence"],
+        "ok": scorecard["normalization_ok"],
+        "full_official_ok": scorecard["official_benchmark_verified"] and scorecard["integration_evidence"],
         "benchmark_id": args.benchmark_id,
         "output_dir": str(args.output_dir),
         "scorecard": scorecard["artifacts"]["scorecard"],

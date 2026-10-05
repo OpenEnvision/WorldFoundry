@@ -1,0 +1,41 @@
+---
+title: BiWM
+description: Camera-controlled Wan inference using shared base models.
+pageSource: authored
+---
+
+BiWM reuses WorldFoundry's Wan transformer, UMT5 encoder, causal VAE, attention and video writer. The extension adds per-frame camera text and BiWM sampling. Model IDs are `biwm-wan21` (Wan2.1 T2V 1.3B) and `biwm-wan22` (Wan2.2 TI2V 5B).
+
+**A trained BiWM generator checkpoint is required.** The checked upstream revision publishes code, a dataset and demo videos; no public trained generator was found. Ordinary Wan weights do not substitute for BiWM. Full video quality validation remains pending that checkpoint. Training is not part of this integration.
+
+```python
+from worldfoundry.pipelines.biwm import BiWMPipeline
+
+pipe = BiWMPipeline.from_pretrained(
+    model_id="biwm-wan22",
+    generator_ckpt="/checkpoints/biwm-stage2/diffusion_pytorch_model.safetensors",
+    wan_base="/checkpoints/Wan2.2-TI2V-5B",
+    stage=2,
+    device="cuda:0",
+)
+result = pipe(
+    prompt="A sunny garden with a stone path.",
+    images="garden.png",
+    actions="w-8,right-12,s-6",
+    num_chunks=4,
+    output_path="biwm.mp4",
+    return_dict=True,
+)
+```
+
+Omit `images` for T2V. The base directory must contain its native `config.json`, `Wan2.1_VAE.pth` or `Wan2.2_VAE.pth`, `models_t5_umt5-xxl-enc-bf16.pth` and `google/umt5-xxl/` tokenizer. Generator keys and shapes are loaded strictly; compressed-history checkpoints are not silently accepted.
+
+Actions use `token-count` segments, where the count is in **latent frames**. `w/s/a/d` translate; `up/down/left/right` rotate. Numeric tokens `0..80` encode translation × 9 + rotation. The first frame is static; short sequences repeat their final label and long sequences are truncated. Alternatively pass `action_label=9` for constant forward motion. Omitting both uses upstream's seeded random action sequence.
+
+Stage 2 defaults to four latent frames per chunk, a five-chunk attention window and one sink chunk. It uses sigmas `[1, .75, .5, .25]`, shift 5, and no CFG. T2V produces `4 × num_chunks × chunk_size − 3` pixel frames; I2V produces `4 × num_chunks × chunk_size + 1`. All latents are decoded once to preserve the VAE's causal history. The default resolution is 832 × 480 at 24 FPS. Spatial dimensions must be multiples of 16 for Wan2.1 and 32 for Wan2.2.
+
+For stage 1, load the corresponding teacher checkpoint with `stage=1` and call with `num_frames=77`, `num_inference_steps=50`, `guidance_scale=5`. It supports whole-clip T2V and uses the shared Wan negative prompt by default. It does not accept image or chunk controls.
+
+This integration follows the public Wan **uncompressed-history** inference scripts. The upstream HY15/LTX training recipes and learned history compression are not exposed as supported inference paths. The Wan action-embedding MLP, when present in a checkpoint, is restored for compatibility; upstream Wan camera control actually uses per-frame text cross-attention.
+
+Source: [LynnReal-AI/BiWM](https://github.com/LynnReal-AI/BiWM), revision `e546ae0a04a831c8a19aafa437b5662fffd92d67`. Apache-2.0 attribution and license text are recorded centrally in `THIRD-PARTY-NOTICES`.

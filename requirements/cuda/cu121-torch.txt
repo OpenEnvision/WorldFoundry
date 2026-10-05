@@ -1,0 +1,9 @@
+# Torch wheel constraints for the cu121 CUDA bucket.
+#
+# These bounds must match worldfoundry.runtime.cuda_tiers.TIER_TORCH_SPECS
+# and the releases published at https://download.pytorch.org/whl/cu121.
+# This is a drift-check stub, not a full lockfile.
+
+torch>=2.4,<2.6
+torchvision>=0.19,<0.21
+torchaudio>=2.4,<2.6

@@ -1,0 +1,54 @@
+---
+title: "NVIDIA GR00T"
+description: "NVIDIA Isaac GR00T VLA: N1–N1.7 in-tree; only N1.7 LIBERO predict is CUDA-verified."
+modelId: "gr00t"
+pageSource: authored
+---
+
+NVIDIA GR00T is the Isaac GR00T humanoid / manipulation policy: a reasoner VLM plus an action head that emits a future action chunk. The official paper is [GR00T N1: An Open Foundation Model for Generalist Humanoid Robots](https://arxiv.org/abs/2503.14734) (arXiv 2503.14734). The lab write-up is on [NVIDIA Research](https://research.nvidia.com/labs/lpr/publication/gr00tn1_2025/). The GitHub tree is [NVIDIA/Isaac-GR00T](https://github.com/NVIDIA/Isaac-GR00T).
+
+<ModelPaperFigures modelId="gr00t" locale="en" />
+
+WorldFoundry keeps an inference-only runtime under `worldfoundry/synthesis/action_generation/gr00t`. Checkpoint-hosted Python is disabled; the model, processor, transforms, and policy run from the flattened in-tree package. Two catalog variants are registered: `gr00t-n1-2b` and `gr00t-n1.7-libero`. Only the N1.7 LIBERO line has a recorded CUDA `predict` — local Cosmos-Reason2-2B stacked with `nvidia/GR00T-N1.7-LIBERO/libero_10` on CUDA 11.8 with SDPA. Simulator rollout is tracked separately from that predict path.
+
+<ModelCommandBuilder modelId="gr00t" locale="en" />
+
+## What it is for
+
+Start on `gr00t-n1.7-libero` when you want the path this repository actually verified. Required inputs are RGB (`image`), a language `instruction`, and `prompt`. The runner writes `gr00t_action_trace.json` through `GR00TPipeline`. The staged N1.7 asset is the official `libero_10` subset only; inference does not download weights.
+
+Use `gr00t-n1-2b` only when you are deliberately comparing the older N1-2B card. That variant is integrated in the catalog, but it is not the recorded CUDA predict. The natural evaluation page for the verified line is [LIBERO](/docs/evaluation/benchmark-hub/libero).
+
+## Runtime contract
+
+The in-tree processor resizes images to **256×256**. The model config default is **action horizon 40** (padded up to a **max horizon of 50**). Inputs are single-frame RGB plus language — `video` is optional and unused on the recorded route. The action field is recorded as `robot_action`, `humanoid_state`, and `action_space`.
+
+Pinned, gated Hugging Face revisions:
+
+- `nvidia/GR00T-N1.7-LIBERO` @ `2ea293aa20ba7cf5bbf3ba17a5fbcb1a01cbfe21` → `${WORLDFOUNDRY_HFD_ROOT}/nvidia--GR00T-N1.7-LIBERO`
+- `nvidia/Cosmos-Reason2-2B` @ `9ce19a195e423419c349abfc86fd07178b230561` (reasoner) → `${WORLDFOUNDRY_HFD_ROOT}/nvidia--Cosmos-Reason2-2B`
+- `nvidia/GR00T-N1-2B` @ `fc879581ca32f4f6d6e02cf0cc80452f6b0c3873` for the N1-2B card
+
+## Running in WorldFoundry
+
+Dedicated environment `worldfoundry-gr00t` (Python 3.10, CUDA 11.8 or newer). Authenticate for the gated NVIDIA repos, stage the pinned revisions, then launch:
+
+```
+worldfoundry-eval run gr00t-n1.7-libero
+```
+
+The catalog default launch still prints `gr00t-n1-2b` with the same task profile. Swap the variant if you want the recorded CUDA predict. Weights stay local — the runtime never fetches them.
+
+License on the recorded cards is the **NVIDIA Open Model License**. Review the terms before commercial use.
+
+## Original N1 and GR1 checkpoint route
+
+The original `nvidia/GR00T-N1-2B` checkpoint uses `model_type=gr00t_n1`, a single `model.safetensors`, and `experiment_cfg/metadata.json`. This route requires a separate Isaac-GR00T checkout at N1 release commit `755876a9afdb41ca6eb6383b36f4a0adb085c73f` and its legacy Python environment (Transformers 4.45.2 / Tokenizers 0.20.3). Provide `n1_source_dir` and `n1_python` to `GR00TPipeline.from_pretrained`, or set `WORLDFOUNDRY_GR00T_N1_SOURCE` and `WORLDFOUNDRY_GR00T_N1_PYTHON`. `plan_only` can inspect the checkpoint without that runtime.
+
+The GR1 variant selects this N1 path when its staged checkpoint is used. For its default `gr1_arms_only` data configuration, supply an `ego_view` RGB image, an instruction, and `left_arm`, `right_arm`, `left_hand`, `right_hand` arrays in `gr00t_observation["state"]`. Named multi-camera configurations require every configured camera. A limited local GPU probe produced finite offline actions with an out-of-domain image and metadata-mean state; it does not establish GR1 task success or simulator parity.
+
+## Minimal eval
+
+`gr00t-n1.7-libero` is the recorded CUDA `predict`. Import official LIBERO results with `worldfoundry-eval zoo benchmark-run --benchmark-id libero --mode official-validation` and read `success_rate`. Simulator rollout is tracked separately; suite import is normalizer-only.
+
+<ModelRelatedRecipes modelId="gr00t" locale="en" />

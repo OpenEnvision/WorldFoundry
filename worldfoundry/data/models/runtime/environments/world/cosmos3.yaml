@@ -12,12 +12,9 @@ conda_packages:
 pip_packages:
 - torch==2.10.0
 - torchvision==0.25.0
-- diffusers==0.39.0
 - transformers>=4.57,<6
 - accelerate>=0.31
-- peft>=0.17
 - huggingface-hub>=0.34,<2
-- cosmos-guardrail==0.3.1
 - fastapi>=0.116
 - pydantic>=2,<3
 - PyYAML>=6
@@ -29,33 +26,28 @@ pip_packages:
 - safetensors
 - pillow
 - numpy
+- einops
+- ftfy
 validation_imports:
 - torch
 - torchvision
-- diffusers
 - transformers
 - accelerate
-- cosmos_guardrail
 - fastapi
 - pydantic
 - yaml
 - msgpack
 - websockets
 - imageio_ffmpeg
-- worldfoundry.base_models.diffusion_model.video.cosmos3.diffusers_cosmos3
+- worldfoundry.base_models.diffusion_model.models.networks.cosmos3
+- worldfoundry.base_models.diffusion_model.models.autoencoders.cosmos3
+- worldfoundry.base_models.diffusion_model.schedulers.cosmos3
 - worldfoundry.studio.workspace_job
 notes:
-- Uses released Diffusers only as the base framework. The Cosmos3 pipeline, transformer, and AVAE
-  inference delta from the exact revision recorded by Cosmos3 UPSTREAM.txt is vendored in tree;
-  environment setup never clones the Diffusers repository.
-- Includes NVIDIA Cosmos Guardrail because the official Diffusers pipeline enables its safety checker
-  by default. Synchronized sound uses the checkpoint's Diffusers sound-tokenizer component and does
-  not require a separate Cosmos audio package.
-- Guardrail construction uses gated nvidia/Cosmos-1.0-Guardrail plus
-  Qwen/Qwen3Guard-Gen-0.6B. Exact revisions cf03c0395fac8c4de386c0bdab12cc4fc8d66362 and
-  fada3b2f655b89601929198343c94cd2f64d93cc passed offline GPU and Workspace safety smokes.
-  Fresh machines still need NVIDIA repository authorization; the runtime fails before generator
-  loading when access is missing and explains how to opt into an explicitly unscreened run.
+- Uses WorldFoundry's native diffusion loader, joint-modality runner, core attention,
+  Wan VAE38, and flow-UniPC implementation. Diffusers is not installed or imported.
+- Synchronized sound uses the inference-only native AVAE decoder loaded directly from
+  the official sound-tokenizer safetensors component.
 - Cosmos3 Reasoner, training, and vLLM/vLLM-Omni serving dependencies are intentionally omitted.
 - Includes the minimal FastAPI/Pydantic/YAML surface imported by workspace_job so the dedicated model
   environment can execute the real Workspace inference entrypoint, not only the base runtime. Msgpack

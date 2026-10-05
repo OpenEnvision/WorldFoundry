@@ -1,36 +1,38 @@
-from typing import Any, List, Tuple, Optional, Union, Dict
-from einops import rearrange
+from functools import reduce
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
-from functools import reduce
+import torch.utils
+import torch.utils.checkpoint
+from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.loaders import PeftAdapterMixin
 from diffusers.models import ModelMixin
 from diffusers.utils import is_torch_version
-from diffusers.configuration_utils import ConfigMixin, register_to_config
-import torch.utils
-import torch.utils.checkpoint
+from einops import rearrange
 
-from worldfoundry.base_models.diffusion_model.video.hunyuan_video.modules.activation_layers import get_activation_layer
-from worldfoundry.base_models.diffusion_model.video.hunyuan_video.modules.norm_layers import get_norm_layer
-from .embed_layers import TimestepEmbedder, PatchEmbed, TextProjection
-from .attenion import attention, parallel_attention, get_cu_seqlens
+from worldfoundry.core.nn import (
+    DiTModulation as ModulateDiT,
+    activation_layer as get_activation_layer,
+    apply_gate_with_prefix as apply_gate,
+    modulate_sequence_with_prefix as modulate,
+    normalization_layer as get_norm_layer,
+)
 from worldfoundry.core.attention import (
     apply_nd_rotary_embedding as apply_rotary_emb,
+)
+from worldfoundry.core.attention import (
+    get_cu_seqlens,
     get_nd_rotary_pos_embed,
 )
-from .mlp_layers import MLP, MLPEmbedder, FinalLayer
-from worldfoundry.base_models.diffusion_model.video.hunyuan_video.modulate_layers_i2v import (
-    ModulateDiT,
-    apply_gate,
-    ckpt_wrapper,
-    modulate,
-)
-from .token_refiner import SingleTokenRefiner
-from .motion_module import ActionModule
+from worldfoundry.core.attention.backends.hybrid import attention, parallel_attention
+
+from .embed_layers import PatchEmbed, TextProjection, TimestepEmbedder
 from .layernorm import FusedLayerNorm
+from .mlp_layers import MLP, FinalLayer
+from .motion_module import ActionModule
+from .token_refiner import SingleTokenRefiner
+
 
 class MMDoubleStreamBlock(nn.Module):
     """
@@ -170,8 +172,7 @@ class MMDoubleStreamBlock(nn.Module):
         frist_frame_token_num: int = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if condition_type == "token_replace":
-            img_mod1, token_replace_img_mod1 = self.img_mod(vec, condition_type=condition_type, \
-                                                            token_replace_vec=token_replace_vec)
+            img_mod1, token_replace_img_mod1 = self.img_mod(vec, secondary_value=token_replace_vec)
             (img_mod1_shift,
              img_mod1_scale,
              img_mod1_gate,
@@ -207,9 +208,8 @@ class MMDoubleStreamBlock(nn.Module):
         img_modulated = self.img_norm1(img)
         if condition_type == "token_replace":
             img_modulated = modulate(
-                img_modulated, shift=img_mod1_shift, scale=img_mod1_scale, condition_type=condition_type,
-                tr_shift=tr_img_mod1_shift, tr_scale=tr_img_mod1_scale,
-                frist_frame_token_num=frist_frame_token_num
+                img_modulated, shift=img_mod1_shift, scale=img_mod1_scale, prefix_shift=tr_img_mod1_shift, prefix_scale=tr_img_mod1_scale,
+                prefix_length=frist_frame_token_num
             )
         else:
             img_modulated = modulate(
@@ -286,17 +286,14 @@ class MMDoubleStreamBlock(nn.Module):
 
         # Calculate the img bloks.
         if condition_type == "token_replace":
-            img = img + apply_gate(self.img_attn_proj(img_attn), gate=img_mod1_gate, condition_type=condition_type,
-                                   tr_gate=tr_img_mod1_gate, frist_frame_token_num=frist_frame_token_num)
+            img = img + apply_gate(self.img_attn_proj(img_attn), gate=img_mod1_gate, prefix_gate=tr_img_mod1_gate, prefix_length=frist_frame_token_num)
             img = img + apply_gate(
                 self.img_mlp(
                     modulate(
-                        self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale, condition_type=condition_type,
-                        tr_shift=tr_img_mod2_shift, tr_scale=tr_img_mod2_scale, frist_frame_token_num=frist_frame_token_num
+                        self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale, prefix_shift=tr_img_mod2_shift, prefix_scale=tr_img_mod2_scale, prefix_length=frist_frame_token_num
                     )
                 ),
-                gate=img_mod2_gate, condition_type=condition_type,
-                tr_gate=tr_img_mod2_gate, frist_frame_token_num=frist_frame_token_num
+                gate=img_mod2_gate, prefix_gate=tr_img_mod2_gate, prefix_length=frist_frame_token_num
             )
         else:
             img = img + apply_gate(self.img_attn_proj(img_attn), gate=img_mod1_gate)
@@ -333,8 +330,7 @@ class MMDoubleStreamBlock(nn.Module):
         frist_frame_token_num: int = None,
         ):    
         if condition_type == "token_replace":
-            img_mod1, token_replace_img_mod1 = self.img_mod(vec, condition_type=condition_type, \
-                                                            token_replace_vec=token_replace_vec)
+            img_mod1, token_replace_img_mod1 = self.img_mod(vec, secondary_value=token_replace_vec)
             (img_mod1_shift,
              img_mod1_scale,
              img_mod1_gate,
@@ -370,9 +366,8 @@ class MMDoubleStreamBlock(nn.Module):
         img_modulated = self.img_norm1(img)
         if condition_type == "token_replace":
             img_modulated = modulate(
-                img_modulated, shift=img_mod1_shift, scale=img_mod1_scale, condition_type=condition_type,
-                tr_shift=tr_img_mod1_shift, tr_scale=tr_img_mod1_scale,
-                frist_frame_token_num=frist_frame_token_num
+                img_modulated, shift=img_mod1_shift, scale=img_mod1_scale, prefix_shift=tr_img_mod1_shift, prefix_scale=tr_img_mod1_scale,
+                prefix_length=frist_frame_token_num
             )
         else:
             img_modulated = modulate(
@@ -437,17 +432,14 @@ class MMDoubleStreamBlock(nn.Module):
         # Calculate the img bloks.
         if condition_type == "token_replace":
             tr_img_mod1_shift, tr_img_mod1_scale, tr_img_mod1_gate, tr_img_mod2_shift, tr_img_mod2_scale, tr_img_mod2_gate = tr_mod1
-            img = img + apply_gate(self.img_attn_proj(img_attn), gate=img_mod1_gate, condition_type=condition_type,
-                                   tr_gate=tr_img_mod1_gate, frist_frame_token_num=frist_frame_token_num)
+            img = img + apply_gate(self.img_attn_proj(img_attn), gate=img_mod1_gate, prefix_gate=tr_img_mod1_gate, prefix_length=frist_frame_token_num)
             img = img + apply_gate(
                 self.img_mlp(
                     modulate(
-                        self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale, condition_type=condition_type,
-                        tr_shift=tr_img_mod2_shift, tr_scale=tr_img_mod2_scale, frist_frame_token_num=frist_frame_token_num
+                        self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale, prefix_shift=tr_img_mod2_shift, prefix_scale=tr_img_mod2_scale, prefix_length=frist_frame_token_num
                     )
                 ),
-                gate=img_mod2_gate, condition_type=condition_type,
-                tr_gate=tr_img_mod2_gate, frist_frame_token_num=frist_frame_token_num
+                gate=img_mod2_gate, prefix_gate=tr_img_mod2_gate, prefix_length=frist_frame_token_num
             )
         else:
             img = img + apply_gate(self.img_attn_proj(img_attn), gate=img_mod1_gate)
@@ -640,8 +632,7 @@ class MMSingleStreamBlock(nn.Module):
     ) -> torch.Tensor:
         if condition_type == "token_replace":
             mod, tr_mod = self.modulation(vec,
-                                          condition_type=condition_type,
-                                          token_replace_vec=token_replace_vec)
+                                          secondary_value=token_replace_vec)
             (mod_shift,
              mod_scale,
              mod_gate) = mod.chunk(3, dim=-1)
@@ -652,8 +643,7 @@ class MMSingleStreamBlock(nn.Module):
         else:
             mod_shift, mod_scale, mod_gate = self.modulation(vec).chunk(3, dim=-1)
         if condition_type == "token_replace":
-            x_mod = modulate(self.pre_norm(x), shift=mod_shift, scale=mod_scale, condition_type=condition_type,
-                             tr_shift=tr_mod_shift, tr_scale=tr_mod_scale, frist_frame_token_num=frist_frame_token_num)
+            x_mod = modulate(self.pre_norm(x), shift=mod_shift, scale=mod_scale, prefix_shift=tr_mod_shift, prefix_scale=tr_mod_scale, prefix_length=frist_frame_token_num)
         else:
             x_mod = modulate(self.pre_norm(x), shift=mod_shift, scale=mod_scale)
         qkv, mlp = torch.split(
@@ -719,8 +709,7 @@ class MMSingleStreamBlock(nn.Module):
         output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))
 
         if condition_type == "token_replace":
-            output = x + apply_gate(output, gate=mod_gate, condition_type=condition_type,
-                                    tr_gate=tr_mod_gate, frist_frame_token_num=frist_frame_token_num)
+            output = x + apply_gate(output, gate=mod_gate, prefix_gate=tr_mod_gate, prefix_length=frist_frame_token_num)
             return output
         else:
             return x + apply_gate(output, gate=mod_gate)
@@ -737,8 +726,7 @@ class MMSingleStreamBlock(nn.Module):
     ) -> torch.Tensor:
         if condition_type == "token_replace":
             mod, tr_mod = self.modulation(vec,
-                                          condition_type=condition_type,
-                                          token_replace_vec=token_replace_vec)
+                                          secondary_value=token_replace_vec)
             (mod_shift,
              mod_scale,
              mod_gate) = mod.chunk(3, dim=-1)
@@ -749,8 +737,7 @@ class MMSingleStreamBlock(nn.Module):
         else:
             mod_shift, mod_scale, mod_gate = self.modulation(vec).chunk(3, dim=-1)
         if condition_type == "token_replace":
-            x_mod = modulate(self.pre_norm(x), shift=mod_shift, scale=mod_scale, condition_type=condition_type,
-                             tr_shift=tr_mod_shift, tr_scale=tr_mod_scale, frist_frame_token_num=frist_frame_token_num)
+            x_mod = modulate(self.pre_norm(x), shift=mod_shift, scale=mod_scale, prefix_shift=tr_mod_shift, prefix_scale=tr_mod_scale, prefix_length=frist_frame_token_num)
         else:
             x_mod = modulate(self.pre_norm(x), shift=mod_shift, scale=mod_scale)
         qkv, mlp = torch.split(
@@ -793,8 +780,7 @@ class MMSingleStreamBlock(nn.Module):
         output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))
 
         if condition_type == "token_replace":
-            output = x + apply_gate(output, gate=mod_gate, condition_type=condition_type,
-                                    tr_gate=tr_mod_gate, frist_frame_token_num=frist_frame_token_num)
+            output = x + apply_gate(output, gate=mod_gate, prefix_gate=tr_mod_gate, prefix_length=frist_frame_token_num)
             return output
         else:
             return x + apply_gate(output, gate=mod_gate)

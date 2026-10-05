@@ -10,15 +10,13 @@ vendored configurations and checkpoints provided within the WorldFoundry framewo
 
 from __future__ import annotations
 
-import hashlib
-import sys
 from importlib import import_module
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.evaluation.utils import worldfoundry_data_path
-
+from worldfoundry.core.io import file_sha256
 from worldfoundry.evaluation.models.runtime.profiles import DEFAULT_SHARED_HFD_ROOT
+from worldfoundry.evaluation.utils import worldfoundry_data_path
 
 
 def _find_official_motionctrl_root() -> Path | None:
@@ -252,8 +250,11 @@ class MotionCtrlRuntime:
             return self._model
 
         import torch
-        from worldfoundry.synthesis.visual_generation.motionctrl.motionctrl_runtime.main.inference.motionctrl_inference import load_model_checkpoint
-        from worldfoundry.base_models.diffusion_model.video.lvdm.utils import instantiate_from_config
+
+        from worldfoundry.core.model_loading.factory import instantiate_from_config
+        from worldfoundry.synthesis.visual_generation.motionctrl.motionctrl_runtime.main.inference.motionctrl_inference import (
+            load_model_checkpoint,
+        )
 
         # Prepare any official MotionCtrl-specific imports, if necessary.
         _prepare_official_motionctrl_imports()
@@ -307,7 +308,10 @@ class MotionCtrlRuntime:
         """
         import torch
 
-        from worldfoundry.synthesis.visual_generation.motionctrl.motionctrl_runtime.main.inference.motionctrl_inference import load_camera_pose, load_trajs
+        from worldfoundry.synthesis.visual_generation.motionctrl.motionctrl_runtime.main.inference.motionctrl_inference import (
+            load_camera_pose,
+            load_trajs,
+        )
         from worldfoundry.synthesis.visual_generation.motionctrl.motionctrl_runtime.main.inference.motionctrl_prompts_camerapose_trajs import (
             both_prompt_camerapose_traj,
             cmcm_prompt_camerapose,
@@ -348,6 +352,7 @@ class MotionCtrlRuntime:
             - `trajs` (torch.Tensor or None): Loaded object trajectory tensor.
         """
         import json
+
         import numpy as np
         import torch
 
@@ -403,7 +408,8 @@ class MotionCtrlRuntime:
         """
         import torch
         import torchvision
-        import imageio.v2 as imageio
+
+        from worldfoundry.core.io import write_video
 
         raw = samples.detach().cpu().float()
 
@@ -437,8 +443,7 @@ class MotionCtrlRuntime:
         # Scale pixel values from [-1, 1] to [0, 255] and convert to uint8.
         grid = ((grid + 1.0) / 2.0 * 255).to(torch.uint8).permute(0, 2, 3, 1)  # [t, h, w, c] for imageio.
 
-        # Save the video using imageio.
-        imageio.mimsave(str(target), [frame.numpy() for frame in grid], fps=fps, quality=8, macro_block_size=1)
+        write_video(grid.numpy(), target, fps=fps, quality=8)
 
     def predict(
         self,
@@ -482,9 +487,10 @@ class MotionCtrlRuntime:
         Raises:
             ValueError: If `video` is not None, or if height/width are not multiples of 16.
         """
-        import torch
 
-        from worldfoundry.synthesis.visual_generation.motionctrl.motionctrl_runtime.main.inference.motionctrl_inference import motionctrl_sample
+        from worldfoundry.synthesis.visual_generation.motionctrl.motionctrl_runtime.main.inference.motionctrl_inference import (
+            motionctrl_sample,
+        )
 
         # Dynamically import seed_everything to avoid a top-level dependency if not strictly needed.
         seed_everything = import_module("pytorch_lightning").seed_everything
@@ -568,7 +574,7 @@ class MotionCtrlRuntime:
             "model_id": self.model_id,
             "artifact_kind": "generated_video",
             "artifact_path": str(target),
-            "video_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "video_sha256": file_sha256(target),
             "runtime": "worldfoundry.motionctrl.in_tree_runtime",
             "backend_quality": "in_tree_runtime",
             "condtype": condtype,

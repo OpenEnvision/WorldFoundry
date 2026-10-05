@@ -14,6 +14,17 @@ from PIL import Image
 DEFAULT_RUNTIME_ROOT = Path(__file__).resolve().parent / "framepack_runtime"
 
 
+def _parse_bool(value: str | bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"expected a boolean value, got {value!r}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="WorldFoundry FramePack non-interactive official runner")
     parser.add_argument("--repo-root", default=str(DEFAULT_RUNTIME_ROOT))
@@ -24,15 +35,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--image-path", required=True)
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--output-path", required=True)
-    parser.add_argument("--seconds", type=float, default=1.0)
+    parser.add_argument("--seconds", type=float, default=5.0)
     parser.add_argument("--latent-window-size", type=int, default=9)
-    parser.add_argument("--steps", type=int, default=4)
+    parser.add_argument("--steps", type=int, default=25)
     parser.add_argument("--seed", type=int, default=31337)
     parser.add_argument("--cfg", type=float, default=1.0)
     parser.add_argument("--gs", type=float, default=10.0)
     parser.add_argument("--rs", type=float, default=0.0)
     parser.add_argument("--gpu-memory-preservation", type=float, default=6.0)
-    parser.add_argument("--use-teacache", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--use-teacache", nargs="?", const=True, type=_parse_bool, default=True)
+    parser.add_argument("--no-use-teacache", dest="use_teacache", action="store_false")
     parser.add_argument("--mp4-crf", type=int, default=16)
     return parser.parse_args()
 
@@ -79,6 +91,17 @@ def _patched_script(
         f"HunyuanVideoTransformer3DModelPacked.from_pretrained({str(checkpoint_path)!r}",
     )
     if hunyuan_root:
+        # Transformers >= 4.57 probes ``config.json`` beside local fast
+        # tokenizers to detect old Mistral regexes.  The upstream HunyuanVideo
+        # repository has a non-standard root config with a trailing comma, so
+        # loading the tokenizer through the repository root fails before any
+        # inference starts.  Point the local tokenizer directly at its
+        # subdirectory; remote/offical-repository loading remains unchanged.
+        local_tokenizer = str(Path(hunyuan_root) / "tokenizer")
+        text = text.replace(
+            'LlamaTokenizerFast.from_pretrained("hunyuanvideo-community/HunyuanVideo", subfolder=\'tokenizer\')',
+            f"LlamaTokenizerFast.from_pretrained({local_tokenizer!r})",
+        )
         text = text.replace('"hunyuanvideo-community/HunyuanVideo"', repr(hunyuan_root))
     if flux_redux_root:
         text = text.replace('"lllyasviel/flux_redux_bfl"', repr(flux_redux_root))
@@ -104,6 +127,11 @@ def main() -> None:
     args = parse_args()
     repo_root = Path(args.repo_root).expanduser().resolve()
     checkpoint_path = Path(args.checkpoint_path).expanduser().resolve()
+    # The published F1 checkpoint uses forward section ordering and memory
+    # layout, whereas FramePackI2V_HY uses the original backward schedule.
+    os.environ["WORLDFOUNDRY_FRAMEPACK_VARIANT"] = (
+        "f1" if any(re.search(r"framepack[-_]f1", part.lower()) for part in checkpoint_path.parts) else "original"
+    )
     image_path = Path(args.image_path).expanduser().resolve()
     output_path = Path(args.output_path).expanduser().resolve()
     hf_home = Path(args.hf_home).expanduser().resolve()

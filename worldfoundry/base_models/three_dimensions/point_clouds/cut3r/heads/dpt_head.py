@@ -6,22 +6,23 @@
 
 """Module for base_models -> three_dimensions -> point_clouds -> cut3r -> heads -> dpt_head.py functionality."""
 
-from einops import rearrange
 from typing import List
+
 import torch
 import torch.nn as nn
+from einops import rearrange
+
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.libs.croco.dpt_block import (
+    DPTOutputAdapter,  # noqa
+)
+
+from ..blocks import ConditionModulationBlock
+from ..utils.camera import PoseDecoder
 from .postprocess import (
     postprocess,
-    postprocess_desc,
-    postprocess_rgb,
-    postprocess_pose_conf,
     postprocess_pose,
-    reg_dense_conf,
+    postprocess_rgb,
 )
-from worldfoundry.base_models.three_dimensions.general_3d.dust3r.croco.models.dpt_block import DPTOutputAdapter  # noqa
-from ..utils.camera import pose_encoding_to_camera, PoseDecoder
-from ..blocks import ConditionModulationBlock
-from torch.utils.checkpoint import checkpoint
 
 
 class DPTOutputAdapter_fix(DPTOutputAdapter):
@@ -50,9 +51,7 @@ class DPTOutputAdapter_fix(DPTOutputAdapter):
             encoder_tokens: The encoder tokens.
             image_size: The image size.
         """
-        assert (
-            self.dim_tokens_enc is not None
-        ), "Need to call init(dim_tokens_enc) function first"
+        assert self.dim_tokens_enc is not None, "Need to call init(dim_tokens_enc) function first"
 
         image_size = self.image_size if image_size is None else image_size
         H, W = image_size
@@ -62,19 +61,15 @@ class DPTOutputAdapter_fix(DPTOutputAdapter):
 
         layers = [encoder_tokens[hook] for hook in self.hooks]
 
-        layers = [self.adapt_tokens(l) for l in layers]
+        layers = [self.adapt_tokens(layer) for layer in layers]
 
-        layers = [
-            rearrange(l, "b (nh nw) c -> b c nh nw", nh=N_H, nw=N_W) for l in layers
-        ]
+        layers = [rearrange(layer, "b (nh nw) c -> b c nh nw", nh=N_H, nw=N_W) for layer in layers]
 
-        layers = [self.act_postprocess[idx](l) for idx, l in enumerate(layers)]
+        layers = [self.act_postprocess[idx](layer) for idx, layer in enumerate(layers)]
 
-        layers = [self.scratch.layer_rn[idx](l) for idx, l in enumerate(layers)]
+        layers = [self.scratch.layer_rn[idx](layer) for idx, layer in enumerate(layers)]
 
-        path_4 = self.scratch.refinenet4(layers[3])[
-            :, :, : layers[2].shape[2], : layers[2].shape[3]
-        ]
+        path_4 = self.scratch.refinenet4(layers[3])[:, :, : layers[2].shape[2], : layers[2].shape[3]]
         path_3 = self.scratch.refinenet3(path_4, layers[2])
         path_2 = self.scratch.refinenet2(path_3, layers[1])
         path_1 = self.scratch.refinenet1(path_2, layers[0])
@@ -98,7 +93,7 @@ class PixelwiseTaskWithDPT(nn.Module):
         postprocess=None,
         depth_mode=None,
         conf_mode=None,
-        **kwargs
+        **kwargs,
     ):
         """Init."""
         super(PixelwiseTaskWithDPT, self).__init__()
@@ -108,9 +103,7 @@ class PixelwiseTaskWithDPT(nn.Module):
         self.conf_mode = conf_mode
 
         assert n_cls_token == 0, "Not implemented"
-        dpt_args = dict(
-            output_width_ratio=output_width_ratio, num_channels=num_channels, **kwargs
-        )
+        dpt_args = dict(output_width_ratio=output_width_ratio, num_channels=num_channels, **kwargs)
         if hooks_idx is not None:
             dpt_args.update(hooks=hooks_idx)
         self.dpt = DPTOutputAdapter_fix(**dpt_args)
@@ -156,6 +149,7 @@ def create_dpt_head(net, has_conf=False):
 
 class DPTPts3dPose(nn.Module):
     """Dpt pts d pose implementation."""
+
     def __init__(self, net, has_conf=False, has_rgb=False, has_pose=False):
         """Init.
 
@@ -248,7 +242,7 @@ class DPTPts3dPose(nn.Module):
         if self.has_pose:
             pose_token = x[-1][:, 0].clone()
             token = x[-1][:, 1:]
-            with torch.cuda.amp.autocast(enabled=False):
+            with torch.autocast(device_type="cuda", enabled=False):
                 pose = self.pose_head(pose_token)
 
             token_cross = token.clone()
@@ -257,12 +251,10 @@ class DPTPts3dPose(nn.Module):
             x = x[:-1] + [token]
             x_cross = x[:-1] + [token_cross]
 
-        with torch.cuda.amp.autocast(enabled=False):
-            self_out = checkpoint(
-                self.dpt_self,
+        with torch.autocast(device_type="cuda", enabled=False):
+            self_out = self.dpt_self(
                 x,
                 image_size=(img_info[0], img_info[1]),
-                use_reentrant=False,
             )
 
             final_output = postprocess(self_out, self.depth_mode, self.conf_mode)
@@ -270,11 +262,9 @@ class DPTPts3dPose(nn.Module):
             final_output["conf_self"] = final_output.pop("conf")
 
             if self.has_rgb:
-                rgb_out = checkpoint(
-                    self.dpt_rgb,
+                rgb_out = self.dpt_rgb(
                     x,
                     image_size=(img_info[0], img_info[1]),
-                    use_reentrant=False,
                 )
                 rgb_output = postprocess_rgb(rgb_out)
                 final_output.update(rgb_output)
@@ -282,11 +272,9 @@ class DPTPts3dPose(nn.Module):
             if self.has_pose:
                 pose = postprocess_pose(pose, self.pose_mode)
                 final_output["camera_pose"] = pose  # B,7
-                cross_out = checkpoint(
-                    self.dpt_cross,
+                cross_out = self.dpt_cross(
                     x_cross,
                     image_size=(img_info[0], img_info[1]),
-                    use_reentrant=False,
                 )
                 tmp = postprocess(cross_out, self.depth_mode, self.conf_mode)
                 final_output["pts3d_in_other_view"] = tmp.pop("pts3d")

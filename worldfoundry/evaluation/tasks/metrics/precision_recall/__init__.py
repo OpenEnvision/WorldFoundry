@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .compute import compute_precision_recall
+compute_precision_recall = lazy_export(f"{__name__}.compute", "compute_precision_recall", owner=__name__)
 
 METRIC_ID = "precision_recall"
 ALIASES = ("prc", "precision-recall")

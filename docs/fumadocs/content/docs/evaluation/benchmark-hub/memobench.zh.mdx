@@ -1,267 +1,38 @@
 ---
 title: MemoBench
-description: 面向 Visible-Disappeared-Reappear 世界生成视频的视觉记忆 benchmark。
+description: "哈佛 / MIT 视觉记忆评测：360 条 V-D-R 片段，自动指标加 SAM-3 ORS 与 VQA。WorldFoundry 内置 Step 1，不编造榜单。"
 ---
 
-## 简介
+MemoBench（哈佛，联合 MIT 与 MIT-IBM Watson AI Lab）用 Visible → Disappeared → Reappear 范式诊断世界生成器的 **视觉记忆**：目标可见且物理过程在进行（V），相机转开而过程在画外继续（D），相机回来后模型必须把物体生成在 **已更新** 的状态（R）。套件是 **360 条真值片段**（196 合成 + 164 真实），带相机轨迹与深度。
 
-MemoBench 评估世界生成模型的视觉记忆能力。官方协议是 Visible -> Disappeared -> Reappear (V-D-R)：目标物体先出现在视野中，随后离开相机视场，最后再次进入场景。模型需要在消失间隔后仍保持物体身份、场景记忆、相机行为、几何一致性、视觉质量和合理的物理状态。
+打分分三层：
 
-benchmark 包含 360 个 clips，覆盖 synthetic 和 real-world scenes，并用 14 个指标评估视觉质量、时序一致性、几何 fidelity、object permanence、camera controllability 和 VQA-based reasoning。
+- **Step 1 自动** — CLIP-IQA+ / LAION 美学、光流平滑、DINOv2 身份、几何一致性、相机可控、ImageReward、真值 PSNR/SSIM/LPIPS。
+- **ORS** — SAM-3 Object Revisit Score。
+- **VQA** — 指令跟随、物体/背景、记忆连续性、物理遵守（Gemini 或兼容 VLM）。
 
-WorldFoundry 中的仓内 MemoBench runtime 与源文档位于：
+`memobench_average` 是已有归一化组件的均值。代码：[MemoBench-Team/MemoBench](https://github.com/MemoBench-Team/MemoBench)。
 
-`worldfoundry/evaluation/tasks/execution/runners/memobench/runtime/memobench/`
+WorldFoundry **仓内内置 runtime**，可对 `--generated-synthetic-dir` / `--generated-real-dir` 跑 Step 1。ORS 与 VQA 仍是显式外部阶段。可导入官方 CSV（`eval_csv`、`ors_scores.csv`、VQA、`leaderboard.csv`）。
 
-WorldFoundry 已包含 runtime 代码、文档、结果导入入口，以及 `worldfoundry/data/benchmarks/assets/memobench/data` 下的小型静态评测资产。完整套件所需的大型数据资产、模型 checkpoint、SAM-3 和 VLM/API 凭证仍需要显式准备。
+<BenchmarkPageSections id="memobench" locale="zh" />
 
-## 需要准备什么
-
-### 官方数据布局
-
-按官方 runtime 使用的结构准备 MemoBench 数据资产：
-
-```text
-data/
-|-- Synthetic_processed/
-|   `-- {Scene}/{Scene}_{NNN}/
-|       |-- image.jpg
-|       |-- intrinsics.npy
-|       `-- poses.npy
-|-- Real_Raw/
-|   `-- {NNN}/
-|       |-- {NNN}.mp4
-|       |-- {NNN}-intrinsics.json
-|       `-- timestamps.txt
-|-- mapanything/outputs/real/*.npz
-|-- sam3_metadata/*.csv
-`-- vqa_questions/
-    |-- *.csv
-    `-- failure-cases.csv
-```
-
-release 数据可以放在仓库外。通过仓内 MemoBench runtime 运行脚本时，把工作目录或脚本参数指向准备好的资产根目录即可。完整套件需要 SAM-3-compatible segmentation 资产来计算 Object Revisit Score，也需要 Gemini 或兼容 VLM 来跑 VQA。
-
-### 生成输出布局
-
-MemoBench 需要 frame directory，而不是每个 clip 一个单独视频文件：
-
-```text
-output/{model_name}/
-|-- Synthetic/
-|   `-- {Scene}/
-|       `-- {Scene}_{NNN}/
-|           `-- frames/
-|               |-- 00000.png
-|               `-- ...
-`-- Real/
-    `-- {NNN}/
-        `-- frames/
-            |-- 00001.png
-            `-- ...
-```
-
-Frame 应为 PNG，并使用 zero-padded 数字文件名。上游脚本按字典序排序 frame，因此 padding 不一致会改变时间顺序。
-
-## 指标
-
-### 自动指标
-
-| Metric | WorldFoundry ID | Backbone / 来源 | 范围 |
-| --- | --- | --- | --- |
-| Visual Quality | `visual_quality` | CLIP-IQA+ 和 LAION aesthetic | 全视频 |
-| Motion Smoothness | `motion_smoothness` | RAFT optical-flow warp error | Visible 与 Reappear |
-| Object Identity Consistency | `object_identity_consistency` | DINOv2 ViT-B/14 | Reappear vs 第一帧 |
-| Geo3D Consistency | `geo3d_consistency` | Depth Anything V2 | Visible 与 Reappear |
-| Camera Controllability | `camera_controllability` | MapAnything pose estimates | 全视频 |
-| Image Reward Score | `image_reward_score` | ImageReward | 全视频 |
-
-### Object Revisit
-
-| Metric | WorldFoundry ID | 来源 | 范围 |
-| --- | --- | --- | --- |
-| Object Revisit Score | `object_revisit_score` | SAM-3 text-prompted segmentation | Reappear phase |
-
-### Pixel Fidelity
-
-| Metric | WorldFoundry ID | 单位 | 方向 |
-| --- | --- | --- | --- |
-| PSNR | `gt_all_psnr` | dB | 越高越好 |
-| SSIM | `gt_all_ssim` | 0-1 | 越高越好 |
-| LPIPS | `gt_all_lpips` | 0-1 | 越低越好 |
-
-### VQA 指标
-
-| Metric | WorldFoundry ID | 关注点 |
-| --- | --- | --- |
-| Instruction Following | `instruction_following` | 是否遵循相机运动与事件指令 |
-| Object and Background | `object_background` | 物体身份与背景是否一致 |
-| Continuity of Memory | `continuity_of_memory` | 目标离开视野期间是否保持状态记忆 |
-| Physics Adherence | `physics_adherence` | 光照、阴影和运动是否物理合理 |
-
-`memobench_average` 是 WorldFoundry 对可用归一化组件指标的平均值。它适合本地验证；leaderboard 结论仍需要完整 MemoBench evidence coverage。
-
-## 运行评测
-
-### 通过 WorldFoundry 跑 Step 1 自动指标
-
-```bash
-export WORLDFOUNDRY_MEMOBENCH_MODEL_NAME=MyModel
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/output/MyModel
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/memobench/run_memobench_official_runner.py \
-  --run-official \
-  --mode both \
-  --generated-synthetic-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}/Synthetic" \
-  --generated-real-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}/Real" \
-  --model-name "${WORLDFOUNDRY_MEMOBENCH_MODEL_NAME}" \
-  --output-dir tmp/memobench/step1 \
-  --json
-```
-
-这个命令会启动仓内 `evaluation/run_eval.py` 阶段，并基于生成的 `eval_both.csv` 写出 WorldFoundry scorecard。
-
-### 通过公开 CLI 跑 Step 1
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id memobench \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/memobench/step1-cli \
+  --mode official-validation \
+  --official-results-path <official_results.csv> \
+  --generated-artifact-dir <generated_frames> \
+  --output-dir tmp/memobench/official-validation \
   --json
 ```
 
-需要传 separate synthetic / real roots、`--device`、`--max-side` 或 `--sample-step` 时，用 direct runner 更明确。
+`--run-official` 执行仓内 Step 1（`--mode both|synthetic|real`）。V-D-R 边界会按生成视频帧数缩放。环境变量：`WORLDFOUNDRY_MEMOBENCH_RESULTS_PATH`、`WORLDFOUNDRY_MEMOBENCH_GENERATED_SYNTHETIC_DIR`、`WORLDFOUNDRY_MEMOBENCH_GENERATED_REAL_DIR`。共享栈：`video_quality_dino_motion_stack`。
 
-### 导入已有 MemoBench 输出
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/memobench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/memobench/runtime/memobench`。
 
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/memobench/run_memobench_official_runner.py \
-  --official-results-path /path/to/eval_both.csv \
-  --model-name "${WORLDFOUNDRY_MEMOBENCH_MODEL_NAME}" \
-  --output-dir tmp/memobench/imported \
-  --json
-```
+产物包括 `scorecard.json`（主键 `memobench_average`），以及存在时的 `eval_csv`、`ors_scores.csv`、`leaderboard.csv`。
 
-也可以组合多个阶段目录：
-
-```bash
-export WORLDFOUNDRY_MEMOBENCH_EVAL_DIR=/path/to/step1_outputs
-export WORLDFOUNDRY_MEMOBENCH_ORS_DIR=/path/to/ors_results
-export WORLDFOUNDRY_MEMOBENCH_VQA_DIR=/path/to/vqa_results
-export WORLDFOUNDRY_MEMOBENCH_LEADERBOARD_PATH=/path/to/leaderboard.csv
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/memobench/run_memobench_official_runner.py \
-  --model-name "${WORLDFOUNDRY_MEMOBENCH_MODEL_NAME}" \
-  --output-dir tmp/memobench/combined \
-  --json
-```
-
-## 官方阶段说明
-
-### Step 1: 自动指标
-
-从仓内 runtime 目录运行：
-
-```bash
-cd worldfoundry/evaluation/tasks/execution/runners/memobench/runtime/memobench
-
-python evaluation/run_eval.py \
-  --mode both \
-  --gen_root_syn /path/to/output/MyModel/Synthetic \
-  --gen_root_real /path/to/output/MyModel/Real \
-  --out_csv outputs/eval_both.csv
-```
-
-常用参数：
-
-| Flag | 用途 |
-| --- | --- |
-| `--mode synthetic|real|both` | 选择 synthetic、real 或 combined evaluation。 |
-| `--gen_root` | 单一模式下的生成 frame 根目录。 |
-| `--gen_root_syn` / `--gen_root_real` | combined mode 下的 synthetic / real 根目录。 |
-| `--prompt_src_syn` / `--prompt_src_real` | ImageReward 所需 prompt CSV。 |
-| `--clip` / `--scene` | 只评估某个 clip 或 scene。 |
-| `--max_side` | 指标计算前限制长边大小。 |
-| `--sample_step` | temporal 和 quality 指标的 frame stride。 |
-| `--device` | CUDA 或 CPU device。 |
-| `--camera_ctrl` | 启用或关闭 camera controllability。 |
-
-Step 1 输出 one row per clip，包含 composite metrics、diagnostics 和 per-phase pixel fidelity。
-
-### Step 2: Object Revisit Score
-
-从同一个仓内 runtime 目录运行：
-
-```bash
-python evaluation/compute_ors.py \
-  --model-name MyModel \
-  --output-dir ors_results
-```
-
-该阶段默认使用 `worldfoundry/data/benchmarks/assets/memobench/data/sam3_metadata/` 中的 object description，根据 MemoBench phase-boundary 文件定位 Reappear-phase frame，然后运行 SAM-3 text-prompted segmentation。需要覆盖时设置 `WORLDFOUNDRY_MEMOBENCH_SAM3_METADATA_DIR`。输出 `ors_scores.csv`，包含 clip id、data type、scene、Reappear start index、ORS、detection rate、mean confidence 和 frame count。
-
-### Step 3: VQA Evaluation
-
-从同一个仓内 runtime 目录运行：
-
-```bash
-python evaluation/vqa/llm-vqa.py \
-  --model-name MyModel \
-  --output-dir vqa_results \
-  --questions-dir worldfoundry/data/benchmarks/assets/memobench/data/vqa_questions \
-  --cases-csv worldfoundry/data/benchmarks/assets/memobench/data/vqa_questions/failure-cases.csv
-```
-
-VQA 阶段会在 `vqa_results/{ModelName}/` 下写 per-clip CSV。每行包含 scene、video id、完整 question-level evaluation JSON，以及 instruction following、object/background consistency、continuity of memory、physics adherence 的 score dictionary。
-
-### Leaderboard
-
-当 Step 1、ORS 和 VQA 输出都准备好后，可在仓内 MemoBench runtime 中运行：
-
-```bash
-python leaderboard/leaderboard.py \
-  --model-name MyModel \
-  --output-dir leaderboard_results
-```
-
-WorldFoundry 可以导入生成的 leaderboard CSV；只有完整 evidence package 存在时，本地对比才有意义。
-
-## 环境变量
-
-| Variable | 用途 |
-| --- | --- |
-| `WORLDFOUNDRY_MEMOBENCH_ROOT` | 覆盖仓内 MemoBench runtime 根目录。 |
-| `WORLDFOUNDRY_MEMOBENCH_RESULTS_PATH` | 指向 MemoBench CSV、JSON、JSONL 或输出目录。 |
-| `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` | 包含 synthetic 和 real 生成 frame tree 的根目录。 |
-| `WORLDFOUNDRY_MEMOBENCH_GENERATED_SYNTHETIC_DIR` | 显式 synthetic frame 根目录。 |
-| `WORLDFOUNDRY_MEMOBENCH_GENERATED_REAL_DIR` | 显式 real frame 根目录。 |
-| `WORLDFOUNDRY_MEMOBENCH_SAM3_METADATA_DIR` | 覆盖仓内 ORS metadata 的可选路径。 |
-| `WORLDFOUNDRY_MEMOBENCH_EVAL_DIR` | 包含 Step 1 `eval_*.csv` 的目录。 |
-| `WORLDFOUNDRY_MEMOBENCH_ORS_DIR` | 包含 ORS 输出的目录。 |
-| `WORLDFOUNDRY_MEMOBENCH_VQA_DIR` | 包含 VQA 输出的目录。 |
-| `WORLDFOUNDRY_MEMOBENCH_LEADERBOARD_PATH` | `leaderboard.csv` 路径。 |
-| `GEMINI_API_KEY` | Gemini-backed VQA 路径需要。 |
-
-## 输入与输出
-
-### 输入
-
-- MemoBench synthetic / real clip 的 generated frame layout
-- 完整 Step 1 所需的 official dataset metadata 和 phase-boundary 文件
-- import-only 路径所需的 Step 1、ORS、VQA 或 leaderboard 输出文件
-- Object Revisit Score 所需 SAM-3 setup
-- VQA 所需 Gemini 或兼容 VLM 配置
-
-### 输出
-
-- `scorecard.json`
-- `raw_metric_table.jsonl`
-- `per_sample_scores.jsonl`
-- 使用 `--run-official` 时生成的上游 Step 1 `eval_*.csv`
-
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

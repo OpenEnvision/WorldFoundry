@@ -1,145 +1,38 @@
 ---
 title: DEVIL Dynamics
-description: DEVIL Dynamics setup, assets, and runnable WorldFoundry commands.
+description: "NeurIPS 2024 dynamics-centric T2V bench: range, controllability, dynamics-conditioned quality. WorldFoundry imports official rows or artifact scores; it does not invent a board."
 ---
 
-## About
+DEVIL (UCAS and Baidu; NeurIPS 2024) evaluates text-to-video models on **dynamics**, not beauty. Prompts are stratified by dynamics grade; scores at several temporal granularities become three protocol metrics that the paper reports at **>90% human correlation**:
 
-DEVIL Dynamics evaluates text-to-video generation from a dynamics perspective. It complements temporal-consistency suites by checking whether generated videos actually move, whether the motion follows the requested dynamics grade, and whether that motion remains visually plausible.
+- **Dynamics range** — how much content variation the model can produce.
+- **Dynamics controllability** — whether prompted dynamics levels are respected.
+- **Dynamics quality** — quality conditioned on the dynamics grade.
 
-WorldFoundry keeps the DEVIL evaluation code in-tree at `worldfoundry/evaluation/tasks/execution/runners/devil_dynamics/`. No official source checkout is needed to run this benchmark.
+`devil_dynamics_average` is the mean of those three.
 
-## Prompt Suite
+Paper: [DEVIL](https://arxiv.org/abs/2407.01094). Code: [MingXiangL/DEVIL](https://github.com/MingXiangL/DEVIL).
 
-The official prompt text files are bundled in WorldFoundry:
+WorldFoundry **materializes metric rows from staged artifact scores** (`WORLDFOUNDRY_DEVIL_DYNAMICS_ARTIFACT_SCORE_DIR`) or **imports official JSON**. Full recomputation still needs upstream checkpoints (RAFT, CLIP ViT-L/14 and ViT-B/32, ViCLIP, DINOv2, AMT, dynamics regression). The Gemini naturalness component is not part of local recomputation.
 
-```text
-worldfoundry/data/benchmarks/assets/devil-dynamics/prompts/
-  static/
-  low/
-  medium/
-  high/
-  very_high/
-```
+<BenchmarkPageSections id="devil-dynamics" locale="en" />
 
-Generate one video per prompt and keep DEVIL's dynamics-grade filename convention. Examples:
-
-```text
-static_1.mp4
-low_12.mp4
-medium_37.mp4
-high_88.mp4
-very_high_123.mp4
-```
-
-The generated video directory can be flat or recursively nested; the runner searches for `.mp4` files.
-
-## Required Assets
-
-Set `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR` to the directory containing the generated videos.
-
-For a full metric recomputation, prepare these checkpoints and credentials:
-
-| Asset | Env or flag | Notes |
-| --- | --- | --- |
-| DEVIL regression model | `WORLDFOUNDRY_DEVIL_REGRESSION_CKPT` or `--regression-ckpt` | Usually `linear_regress_model.pth` from DEVIL `model_weights`. |
-| RAFT Things | `WORLDFOUNDRY_DEVIL_RAFT_CKPT` / `WORLDFOUNDRY_RAFT_THINGS_CKPT` or `--raft-ckpt` | Reuses WorldFoundry RAFT base model assets when staged. |
-| OpenAI CLIP ViT-L/14 | `WORLDFOUNDRY_DEVIL_CLIP_VIT_L14_PT` / `WORLDFOUNDRY_VBENCH_CLIP_VIT_L14_PT` or `--clip-vit-l14` | Used by dynamics scoring. |
-| OpenAI CLIP ViT-B/32 | `WORLDFOUNDRY_DEVIL_CLIP_VIT_B32_PT` / `WORLDFOUNDRY_VBENCH_CLIP_VIT_B32_PT` or `--clip-vit-b32` | Used by quality scoring. |
-| ViCLIP | `WORLDFOUNDRY_DEVIL_VICLIP_CKPT` / `WORLDFOUNDRY_VBENCH_VICLIP_CKPT` or `--viclip-ckpt` | Reuses the VBench ViCLIP asset. |
-| DINOv2 ViT-L/14 | `WORLDFOUNDRY_DEVIL_DINOV2_VITL14_CKPT` / `WORLDFOUNDRY_WBENCH_MEGASAM_DINOV2_CKPT` or `--dinov2-vitl14-ckpt` | Used for segment-level dynamics. |
-| timm DINO ViT-S/16 | `WORLDFOUNDRY_DEVIL_TIMM_DINO_CKPT` or `--timm-dino-ckpt` | Optional when timm can resolve pretrained weights from cache/download; set it for offline reproducibility. |
-| DINO ViT-B/16 | `WORLDFOUNDRY_DEVIL_DINO_VITB16_CKPT` / `WORLDFOUNDRY_VBENCH_DINO_VITB16_CKPT` or `--dino-vitb16-ckpt` | Uses WorldFoundry's in-tree DINO shim. |
-| AMT-S config/checkpoint | `WORLDFOUNDRY_DEVIL_AMT_CONFIG`, `WORLDFOUNDRY_DEVIL_AMT_CKPT`, or flags | Config defaults to WorldFoundry's in-tree AMT-S config when available. |
-| Naturalness judge | `WORLDFOUNDRY_DEVIL_GEMINI_API_KEY` / `GEMINI_API_KEY` or `--gemini-api-key` | Required unless you pass `--naturalness-path`. |
-
-If you have the official DEVIL `model_weights` directory, you can also point `WORLDFOUNDRY_DEVIL_MODEL_WEIGHTS_DIR` or `--model-weights-dir` at it. The runner looks there for common filenames such as `linear_regress_model.pth`, `raft-things.pth`, `ViT-L-14.pt`, `ViT-B-32.pt`, `ViClip-InternVid-10M-FLT.pth`, `dinov2_vitl14_pretrain.pth`, `dino_vitbase16_pretrain.pth`, `AMT-S.yaml`, and `amt-s.pth`.
-
-The Python environment must include the video metric packages used by DEVIL, including `torch`, `torchvision`, `timm`, `decord`, `opencv-python`, `clip`, `easydict`, `scikit-image`, `pytorch-msssim`, `piqa`, `imagehash`, `pandas`, `openpyxl`, `prettytable`, `omegaconf`, and `google-generativeai`. The temporal-information component also expects system tools `ffmpeg`, `ffprobe`, and `bc`.
-
-## Full Evaluation
-
-Run the in-tree official runtime through the WorldFoundry runner:
+## How to run
 
 ```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/devil/generated-videos
-export WORLDFOUNDRY_DEVIL_MODEL_WEIGHTS_DIR=/path/to/devil/model_weights
-export GEMINI_API_KEY=...
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/devil_dynamics/run_devil_dynamics_official_runner.py \
-  --run-official \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --model-weights-dir "${WORLDFOUNDRY_DEVIL_MODEL_WEIGHTS_DIR}" \
-  --num-gpus 8 \
-  --output-dir tmp/devil-dynamics/full-run \
-  --json
-```
-
-Use fewer GPUs by changing `--num-gpus`. For a single-GPU local run, set `--num-gpus 1`.
-
-If Gemini naturalness has already been computed, skip API calls by passing the naturalness xlsx:
-
-```bash
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/devil_dynamics/run_devil_dynamics_official_runner.py \
-  --run-official \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --model-weights-dir "${WORLDFOUNDRY_DEVIL_MODEL_WEIGHTS_DIR}" \
-  --naturalness-path /path/to/naturalness_results.xlsx \
-  --num-gpus 8 \
-  --output-dir tmp/devil-dynamics/full-run-reuse-naturalness \
-  --json
-```
-
-## Import Existing Results
-
-Use this when you already have an official DEVIL result export such as `dynamics_quality_results.xlsx` or `devil_dynamics_results.json`:
-
-```bash
-export WORLDFOUNDRY_DEVIL_DYNAMICS_RESULTS_PATH=/path/to/dynamics_quality_results.xlsx
-
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id devil-dynamics \
   --mode official-validation \
-  --official-results-path "${WORLDFOUNDRY_DEVIL_DYNAMICS_RESULTS_PATH}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/devil-dynamics/import-results \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
+  --output-dir tmp/devil-dynamics/official-validation \
   --json
 ```
 
-## Output Layout
+Generate one video per official DEVIL prompt; grade stratification comes from official prompt metadata. Default import: `WORLDFOUNDRY_DEVIL_DYNAMICS_RESULTS_PATH`. Runtime scores: `WORLDFOUNDRY_DEVIL_DYNAMICS_ARTIFACT_SCORE_DIR`.
 
-A full run writes:
+In-tree pointers: `worldfoundry/data/benchmarks/tasks/external/devil-dynamics.yaml`, `worldfoundry/evaluation/tasks/execution/runners/devil_dynamics`.
 
-```text
-<output-dir>/
-  scorecard.json
-  raw_metric_table.jsonl
-  per_sample_scores.jsonl
-  upstream/
-    dynamics_results.xlsx
-    quality_results.xlsx
-    naturalness_results.xlsx
-    dynamics_quality_results.xlsx
-    devil_dynamics_results.json
-  upstream_stdout.log
-  upstream_stderr.log
-```
-
-Use `scorecard.json` for WorldFoundry's normalized aggregate and `upstream/devil_dynamics_results.json` for the DEVIL summary emitted by the in-tree runtime.
-
-## Metrics
-
-| Metric ID | Meaning | Better |
-| --- | --- | --- |
-| `dynamics_range` | Whether generated videos span the expected static-to-high-motion range. | Higher |
-| `dynamics_controllability` | Whether motion follows the prompt's requested dynamics grade ordering. | Higher |
-| `dynamics_quality` | Dynamics-aware quality and naturalness, including Gemini naturalness when computed. | Higher |
-| `devil_dynamics_average` | Mean aggregate over the DEVIL components available in the run. | Higher |
-
-## Leaderboard Notes
-
-Leaderboard-equivalent numbers require the complete DEVIL prompt suite, filenames that preserve dynamics-grade prefixes, the same checkpoint assets, and Gemini naturalness outputs produced with the same judge settings. Partial imports remain useful for regression testing, but should not be reported as full DEVIL leaderboard results.
+Outputs include `scorecard.json` (primary `devil_dynamics_average`) and `raw_metric_table.jsonl`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

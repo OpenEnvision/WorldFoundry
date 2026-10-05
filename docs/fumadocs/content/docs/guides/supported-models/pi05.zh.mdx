@@ -1,0 +1,28 @@
+---
+title: "pi0.5"
+description: "pi0.5 策略绑定已用 pi05_libero 权重和合成输入验证动作推理。"
+modelId: "pi05"
+pageSource: authored
+---
+
+pi0.5 是 Physical Intelligence 对 pi0 的开放世界泛化升级：基于 PaliGemma 的 VLA 与 flow-matching 动作专家。独立的 `pi05` 绑定复用 WorldFoundry 树内 OpenPI 运行时，并已使用官方 `pi05_libero` 权重生成动作。
+
+<ModelPaperFigures modelId="pi05" locale="zh" />
+
+<ModelCommandBuilder modelId="pi05" locale="zh" />
+
+## 用来做什么
+
+就位 `pi05_libero` 权重后可运行 `worldfoundry-eval run pi05`。该公共绑定已在 GPU 上用合成双相机图像及权重均值状态产出有限的 10×7 动作。这只证明动作推理结构，不代表 [LIBERO](/zh/docs/evaluation/benchmark-hub/libero) 任务成功。不要走 LeRobot policy-zoo。
+
+## 运行时契约
+
+必填 `image`、`instruction`、`prompt`。`actions`：`robot_action`、`proprio`、`action_space`。产物：`pi05_action_trace.json`。使用官方 OpenPI 运行时与 pi05 专用配置。
+
+## 在 WorldFoundry 中运行
+
+使用支持 JAX GPU 和 `requirements/worldfoundry-unified.txt` 所列依赖的 OpenPI 环境。用 gsutil 就位 `gs://openpi-assets`，或显式传入权重路径。许可证见 [OpenPI](/zh/docs/guides/supported-models/openpi)（Apache-2.0）。状态：`pi05_libero` 指定配置 **已验证权重驱动的推理**；任务表现及 `pi05_base`/`pi05_droid` 权重尚未验证。
+
+`pi05_libero` 是已验证的 `get_action` 参照。用 `worldfoundry-eval zoo benchmark-run --benchmark-id libero --mode official-validation` 导入官方结果，读 `success_rate`。套件导入仅 normalizer——不是 leaderboard。
+
+<ModelRelatedRecipes modelId="pi05" locale="zh" />

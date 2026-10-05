@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import csv
 import json
-import os
-import shutil
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.core.io.filesystem.file_utils import materialize_file
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
-from worldfoundry.evaluation.utils import write_jsonl
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
+    first_existing_dir,
+    resolve_env_path,
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
 )
@@ -20,6 +20,7 @@ from worldfoundry.evaluation.tasks.execution.runners.physics_iq.protocols import
     VERIFIED,
     PhysicsIQProtocolSpec,
 )
+from worldfoundry.evaluation.utils import write_jsonl
 
 BENCHMARK_ID = "physics-iq"
 DESCRIPTIONS_REL = Path("descriptions/descriptions_original.csv")
@@ -27,12 +28,7 @@ BENCHMARK_DIR_NAME = "physics-IQ-benchmark"
 
 CANONICAL_PROMPT_COUNT = 198
 VIEWS = ("perspective-left", "perspective-center", "perspective-right")
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
-
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def resolve_switch_frames_dir(
@@ -54,9 +50,9 @@ def resolve_switch_frames_dir(
     )
     candidates = [
         dataset_root.expanduser().resolve() if dataset_root is not None else None,
-        *(_env_path(name) for name in env_names),
-        _env_path("WORLDFOUNDRY_PHYSICS_IQ_DATASET_ROOT"),
-        _env_path("WORLDFOUNDRY_BENCHMARK_DATA_ROOT"),
+        *(resolve_env_path(name) for name in env_names),
+        resolve_env_path("WORLDFOUNDRY_PHYSICS_IQ_DATASET_ROOT"),
+        resolve_env_path("WORLDFOUNDRY_BENCHMARK_DATA_ROOT"),
     ]
     for candidate in candidates:
         if candidate is None:
@@ -84,14 +80,11 @@ def resolve_physics_iq_root(
     *,
     spec: PhysicsIQProtocolSpec = ORIGINAL,
 ) -> Path | None:
-    for candidate in (
+    return first_existing_dir(
         explicit,
-        _env_path("WORLDFOUNDRY_PHYSICS_IQ_ROOT"),
+        resolve_env_path("WORLDFOUNDRY_PHYSICS_IQ_ROOT"),
         bundled_benchmark_assets_root(spec.benchmark_id),
-    ):
-        if candidate is not None and candidate.is_dir():
-            return candidate.expanduser().resolve()
-    return None
+    )
 
 
 def resolve_descriptions_path(
@@ -110,7 +103,7 @@ def resolve_descriptions_path(
         if spec.protocol == "verified"
         else "WORLDFOUNDRY_PHYSICS_IQ_ORIGINAL_DESCRIPTIONS"
     )
-    env_descriptions = _env_path(protocol_env) or _env_path("WORLDFOUNDRY_PHYSICS_IQ_DESCRIPTIONS")
+    env_descriptions = resolve_env_path(protocol_env) or resolve_env_path("WORLDFOUNDRY_PHYSICS_IQ_DESCRIPTIONS")
     if env_descriptions is not None:
         if not env_descriptions.is_file():
             raise FileNotFoundError(f"Physics-IQ descriptions file not found: {env_descriptions}")
@@ -278,7 +271,7 @@ def copy_physics_iq_generated_videos(
             continue
         target_name = sample_id if sample_id.endswith(".mp4") else f"{sample_id}.mp4"
         target_path = generated_artifact_dir / target_name
-        shutil.copy2(source_path, target_path)
+        materialize_file(source_path, target_path, writable=False)
         materialized += 1
         manifest_rows.append({"sample_id": sample_id, "artifact": output_artifact, "path": str(target_path)})
 
@@ -299,7 +292,7 @@ def copy_physics_iq_generated_videos(
             target_path = generated_artifact_dir / target_name
             if target_path.is_file():
                 continue
-            shutil.copy2(source_path, target_path)
+            materialize_file(source_path, target_path, writable=False)
             materialized += 1
             manifest_rows.append(
                 {"sample_id": result.sample_id, "artifact": output_artifact, "path": str(target_path)}

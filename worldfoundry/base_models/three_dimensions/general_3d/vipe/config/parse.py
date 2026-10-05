@@ -6,13 +6,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import RLock
 from typing import Sequence
 
 import hydra
+from hydra.core.global_hydra import GlobalHydra
 from omegaconf import DictConfig, OmegaConf
 
 from worldfoundry.base_models.three_dimensions.general_3d.vipe._paths import get_config_path
 from worldfoundry.base_models.three_dimensions.general_3d.vipe.config.vipe import ViPEConfig
+
+_HYDRA_COMPOSE_LOCK = RLock()
 
 
 def _default_config_dir() -> Path:
@@ -68,8 +72,23 @@ def parse_untyped_config(
         compose_config_dir = config_registry_dir
         compose_config_name = str(config_name_path)
 
-    with hydra.initialize_config_dir(config_dir=str(compose_config_dir), version_base=None):
-        config = hydra.compose(config_name=compose_config_name, overrides=hydra_args_list)
+    # Hydra's compose API uses a process-global singleton.  ViPE is a library,
+    # so it must neither fail when the host has already initialized Hydra nor
+    # replace the host's config loader after composing its own configuration.
+    with _HYDRA_COMPOSE_LOCK:
+        global_hydra = GlobalHydra.instance()
+        previous_hydra = global_hydra.hydra
+        if previous_hydra is not None:
+            global_hydra.clear()
+
+        try:
+            with hydra.initialize_config_dir(config_dir=str(compose_config_dir), version_base=None):
+                config = hydra.compose(config_name=compose_config_name, overrides=hydra_args_list)
+        finally:
+            global_hydra = GlobalHydra.instance()
+            global_hydra.clear()
+            if previous_hydra is not None:
+                global_hydra.initialize(previous_hydra)
 
     OmegaConf.resolve(config)
     return config

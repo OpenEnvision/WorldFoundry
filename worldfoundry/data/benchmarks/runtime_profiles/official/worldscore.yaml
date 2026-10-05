@@ -99,7 +99,6 @@ required_packages:
 - lietorch
 - spacy
 - cvxpy
-- openai-clip
 - transformers
 - huggingface-hub
 - h5py

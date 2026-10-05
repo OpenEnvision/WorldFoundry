@@ -4,8 +4,7 @@ import torch, math
 import torch.nn as nn
 from typing import Tuple, Optional, Union, List
 from einops import rearrange
-from worldfoundry.base_models.diffusion_model.diffsynth.models.flux_dit import AdaLayerNorm
-from worldfoundry.base_models.diffusion_model.diffsynth.models.sd3_dit import RMSNorm, TimestepEmbeddings
+from worldfoundry.core.nn import AdaLayerNorm, ProjectedTimestepEmbedding, RMSNorm
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 
 try:
@@ -13,6 +12,9 @@ try:
     FLASH_ATTN_3_AVAILABLE = True
 except ModuleNotFoundError:
     FLASH_ATTN_3_AVAILABLE = False
+
+
+TimestepEmbeddings = ProjectedTimestepEmbedding
 
 
 def qwen_image_flash_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, num_heads: int, attention_mask = None, enable_fp8_attention: bool = False):

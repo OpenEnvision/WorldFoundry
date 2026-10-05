@@ -6,21 +6,19 @@ from collections.abc import Sequence
 
 
 def bbox_xyxy(box: Sequence[float]) -> tuple[float, float, float, float]:
-    """Normalize bbox to ``(x1, y1, x2, y2)``."""
+    """Convert four-value xyxy or five-value ``(x, y, w, h, extra)`` boxes to xyxy."""
     values = [float(v) for v in box]
     if len(values) == 4:
         x1, y1, x2, y2 = values
-        if x2 > x1 and y2 > y1 and x2 <= 1.5 and y2 <= 1.5:
-            return x1, y1, x2, y2
-        return x1, y1, x1 + x2, y1 + y2
+        return x1, y1, x2, y2
     if len(values) == 5:
-        x, y, w, h = values
+        x, y, w, h, _ = values
         return x, y, x + w, y + h
     raise ValueError(f"expected bbox with 4 or 5 values, got {box!r}")
 
 
 def bbox_iou(box_a: Sequence[float], box_b: Sequence[float]) -> float:
-    """Intersection-over-union for two boxes in xyxy or xywh format."""
+    """Intersection-over-union for four-value xyxy or five-value xywh boxes."""
     ax1, ay1, ax2, ay2 = bbox_xyxy(box_a)
     bx1, by1, bx2, by2 = bbox_xyxy(box_b)
     inter_x1 = max(ax1, bx1)

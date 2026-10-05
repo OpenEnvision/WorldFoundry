@@ -5,8 +5,8 @@ export const WORLDFOUNDRY_SLACK_INVITE =
   'https://join.slack.com/t/worldfoundrycommunity/shared_invite/zt-43nbi9fw4-okYiELzZHp0_1UPa3dh3bQ';
 export const WORLDFOUNDRY_WECHAT_QR = '/wechat_qr_2.png';
 export const OPENENVISION_ORG = 'https://github.com/OpenEnvision';
-export const OPENENVISION_GAIA_REPO = 'https://github.com/OpenEnvision/Gaia';
 export const OPENENVISION_AWESOME_WORLD_MODELING =
   'https://github.com/OpenEnvision/Awesome-World-Modeling';
 export const OPENENVISION_BLOGXIV_SITE =
-  'https://openenvision.github.io/BlogXiv/site/index.html';
+  'https://openenvision.github.io/BlogrXiv/';
+export const ROBODOJO_SITE = 'https://robodojo-benchmark.com/';

@@ -16,16 +16,16 @@ from PIL import Image
 from tqdm import tqdm
 from einops import rearrange
 from functools import partial
-from worldfoundry.core.distributed.block_fsdp import shard_model
-from worldfoundry.core.attention.memory_rope_sequence_parallel import (
+from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
+from worldfoundry.core.attention.parallel.memory_rope_sequence_parallel import (
     sp_attn_forward,
     sp_dit_forward,
 )
-from worldfoundry.core.distributed.sequence_ops import get_world_size
-from worldfoundry.base_models.diffusion_model.video.wan.core.solvers import FlowUniPCMultistepScheduler
-from worldfoundry.base_models.diffusion_model.video.wan.models.action_wan2p2 import WanModel
-from worldfoundry.base_models.diffusion_model.video.wan.components.full_context_t5 import T5EncoderModel
-from worldfoundry.base_models.diffusion_model.video.wan.vae.light_wan2p2 import Wan2_2_VAE
+from worldfoundry.core.distributed.sequence_parallel.ops import get_world_size
+from worldfoundry.base_models.diffusion_model.schedulers import FlowUniPCMultistepScheduler
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.action_22 import WanModel
+from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.full_context_t5 import T5EncoderModel
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.light_22 import Wan2_2_VAE
 from utils.visualize import process_video
 from utils.cam_utils import compute_relative_poses, select_memory_idx_fov, get_intrinsics, _interpolate_camera_poses_handedness
 from utils.utils import get_data, build_plucker_from_c2ws, build_plucker_from_pose, compute_all_poses_from_actions, get_extrinsics
@@ -192,7 +192,7 @@ class MatrixGame3Pipeline:
         else:
             use_int8 = False
         if use_int8:
-            from worldfoundry.base_models.diffusion_model.video.wan.models.action_wan2p2 import (
+            from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.action_22 import (
                 Int8Linear,
                 convert_model_to_int8,
             )
@@ -377,7 +377,7 @@ class MatrixGame3Pipeline:
         if self.rank != 0:
             return
 
-        from worldfoundry.base_models.diffusion_model.video.wan.components.action_attention_wan2p2 import (
+        from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.action_attention_22 import (
             FLASH_ATTN_2_AVAILABLE,
             FLASH_ATTN_3_AVAILABLE,
         )

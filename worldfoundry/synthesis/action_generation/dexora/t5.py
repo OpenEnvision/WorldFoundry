@@ -1,7 +1,7 @@
 import torch
 from transformers import AutoTokenizer, T5EncoderModel
 
-from worldfoundry.core.device import resolve_inference_dtype
+from worldfoundry.core.execution.device import resolve_inference_dtype
 
 
 class T5Embedder:

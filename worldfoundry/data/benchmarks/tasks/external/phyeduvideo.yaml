@@ -25,8 +25,7 @@ metrics:
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: phyeduvideo
-  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phyeduvideo --mode contract 
-    --output-dir tmp/benchmark_zoo/benchmark_contract/phyeduvideo --json
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phyeduvideo --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/phyeduvideo --json
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyEduVideoContract
   official_runner_command: worldfoundry-eval zoo benchmark-run
   name: PhyEduVideo
@@ -39,7 +38,7 @@ metadata:
   status: integrated
   maturity: contract_ready
   release_status: experimental
-  open_source_status: in_tree_result_importer
+  open_source_status: normalizer_only
   official_benchmark_verified: false
   integration_evidence: false
   leaderboard_valid: false
@@ -137,9 +136,7 @@ metadata:
     - --json
     runtime:
       results_path_env: WORLDFOUNDRY_PHYEDUVIDEO_RESULTS_PATH
-    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phyeduvideo --mode 
-      official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> 
-      --output-dir <out> --json
+    official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phyeduvideo --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
   validation_command:
   - worldfoundry-eval
   - zoo
@@ -226,13 +223,20 @@ tasks:
       - motion_smoothness
       - temporal_flickering
       - phyeduvideo_average
-      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phyeduvideo --mode 
-        official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> 
-        --output-dir <out> --json
+      official_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id phyeduvideo --mode official-validation --official-results-path <official_results.json> --generated-artifact-dir <generated_videos> --output-dir <out> --json
       required_inputs:
       - official_results_path or official_results
       - generated_video artifacts only when coverage checks are requested
       official_result_entrypoint: worldfoundry-eval zoo benchmark-run
+    - name: external_official_runner
+      metric_ids:
+      - semantic_adherence
+      - physics_commonsense
+      - motion_smoothness
+      - temporal_flickering
+      - phyeduvideo_average
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:PhyEduVideoContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/phyeduvideo/run_phyeduvideo_official_runner.py
     runtime_requirements:
       in_tree_runtime: worldfoundry/evaluation/tasks/execution/runners/phyeduvideo
       optional_root_env: WORLDFOUNDRY_PHYEDUVIDEO_ROOT

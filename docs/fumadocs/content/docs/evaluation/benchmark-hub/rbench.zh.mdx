@@ -1,0 +1,39 @@
+---
+title: RBench
+description: "北大 / 字节 Seed 的机器人 I2V 评测（ICML 2026）：650 条图文样本。WorldFoundry 聚合官方 VLM 与算子行，不编造榜单。"
+---
+
+RBench（ReVidgen；北大 DAGroup 与字节 Seed；ICML 2026）评的是 **面向机器人的图像生成视频**。**650** 条图文样本：
+
+- **任务赛道** — 250 条：常见操作、长程规划、多实体协作、空间关系、视觉推理。
+- **本体赛道** — 400 条：双臂、人形、单臂、四足。
+
+视频由 VLM judge（GPT 或 Qwen3-VL）打物理合理性、任务遵守与稳定性，外加 GroundingDINO / SAM2 / CoTracker / Q-Align 的算子指标（运动平滑 / 幅度）。论文报告与人类 **0.96 Spearman**。配套训练数据：RoVid-X（400 万条标注机器人片段）。许可证：CC-BY-4.0。
+
+论文：[RBench](https://arxiv.org/abs/2601.15282)。代码：[DAGroup-PKU/ReVidgen](https://github.com/DAGroup-PKU/ReVidgen)。数据：[`DAGroup-PKU/RBench`](https://huggingface.co/datasets/DAGroup-PKU/RBench)。
+
+WorldFoundry **复现官方 `eval/4_embodiments` 与 `eval/5_tasks` 聚合**（选项到分数映射、min-max、PAS 与一致性惩罚、幅度过滤）。不跑 VLM 或算子栈。`rbench_overall` 是两条赛道分的 **WorldFoundry 合成值**，不是已发表的 RBench 数字。GPT 与 Qwen 输出从不混用。
+
+<BenchmarkPageSections id="rbench" locale="zh" />
+
+## 如何运行
+
+```bash
+hf download DAGroup-PKU/RBench --repo-type dataset --local-dir <rbench_data_root>
+
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id rbench \
+  --mode official-validation \
+  --official-results-path <rbench_results_root> \
+  --result-model-id <model_id> \
+  --output-dir tmp/rbench/official-validation \
+  --json
+```
+
+`--track` 限制到一条赛道。两边都有结果时用 `--vlm-backend` 选 GPT 或 Qwen。`--generated-artifact-dir` 增加覆盖报告。环境变量：`WORLDFOUNDRY_RBENCH_RESULTS_PATH`、`WORLDFOUNDRY_RBENCH_DATA_ROOT`、`WORLDFOUNDRY_RBENCH_VLM_BACKEND`。
+
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/rbench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/rbench`。
+
+产物包括 `scorecard.json`（主键 `rbench_overall`）与 `track_breakdown.json`。
+
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

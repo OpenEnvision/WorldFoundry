@@ -1,0 +1,14 @@
+schema_version: 2
+binding_id: zing
+model_id: zing
+aliases:
+- zing-0.5
+- zing-world-model
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.zing.pipeline_zing:ZingPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

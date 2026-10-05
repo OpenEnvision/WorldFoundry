@@ -9,10 +9,29 @@ source:
 runtime_profile: runtime-profile:hyworld-worldgen
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: hyworld-worldgen
+official_sources:
+  project_page: https://3d-models.hunyuan.tencent.com/world/
+  paper: https://arxiv.org/abs/2604.14268
 integration:
-  status: integrated
+  status: runtime_ported
   notes:
-  - Official source is vendored at revision 7f668e67c74338d50684e57be46a438459b6bbe1.
+  - The adapter targets official revision 7f668e67c74338d50684e57be46a438459b6bbe1; the source is not bundled in the public tree.
   - This exact route is the official trajectory-render stage over a pre-materialized HY-World scene; it does not claim full five-stage world generation.
 runner_parity: {status: pending, notes: [Dedicated camera.json point-cloud rendering route is wired.]}
 catalog_category: world_models
+docs:
+  publisher: Tencent (Hunyuan)
+  publisher_kind: company
+  publisher_zh: 腾讯（混元）
+  overview: 'HY-World 2.0 Trajectory Renderer is one stage of Tencent''s world-generation chain, cataloged separately: it renders camera-controlled video from a pre-materialized HY-World scene point cloud (render_results/global_pcd.ply) along a camera JSON. It intentionally loads no model checkpoint — it is a renderer, not a generator.'
+  overview_zh: HY-World 2.0 轨迹渲染器是腾讯世界生成链中的一个阶段，单独记录：沿 camera JSON 从预先物化的 HY-World 场景点云（render_results/global_pcd.ply）渲染相机可控视频。它有意不加载任何模型 checkpoint——是渲染器，不是生成器。
+  architecture: 'The adapter invokes the official trajectory-render stage from an optional local checkout at a pinned revision (license: tencent-hunyuan-community). The public tree does not bundle that source or claim full five-stage world generation.'
+  architecture_zh: 适配器调用可选本地检出的官方轨迹渲染阶段，并固定上游版本（许可：tencent-hunyuan-community）。公开仓库未内置该源码，也不声称支持完整五阶段世界生成。
+  usage_notes: Provide an image, camera JSON, and a scene_path pointing at a pre-materialized HY-World scene. Scene materialization belongs to the separate full HY-World generation pipeline.
+  usage_notes_zh: 提供图像、camera JSON 与指向预物化 HY-World 场景的 scene_path。场景物化属于独立的完整 HY-World 生成 pipeline。
+  limitations:
+  - Requires the official runtime source installed in-tree and a pre-materialized scene (global_pcd.ply); it cannot create scenes itself.
+  - Point-splat rendering quality is bounded by the input point cloud density.
+  limitations_zh:
+  - 需要在仓内安装官方运行源码和预物化场景（global_pcd.ply）；它自身无法创建场景。
+  - 点泼溅渲染质量受输入点云密度限制。

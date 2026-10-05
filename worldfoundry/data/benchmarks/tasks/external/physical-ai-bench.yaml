@@ -4,18 +4,76 @@ tags: [benchmark-zoo, external-official, physical-ai-bench]
 splits: [generation, conditional-generation]
 
 metrics:
-  generation: [aesthetic_quality, background_consistency, imaging_quality, motion_smoothness, overall_consistency, subject_consistency, i2v_background, i2v_subject, vqa_accuracy]
-  conditional-generation: [dover_tech_score, blur_ssim, canny_f1_score, canny_precision, canny_recall, depth_si_rmse, seg_m_iou, seg_recall, lpips_diversity]
+  aesthetic_quality: {aggregation: mean}
+  background_consistency: {aggregation: mean}
+  imaging_quality: {aggregation: mean}
+  motion_smoothness: {aggregation: mean}
+  overall_consistency: {aggregation: mean}
+  subject_consistency: {aggregation: mean}
+  i2v_background: {aggregation: mean}
+  i2v_subject: {aggregation: mean}
+  vqa_accuracy: {aggregation: mean}
+  dover_tech_score: {aggregation: mean}
+  blur_ssim: {aggregation: mean}
+  canny_f1_score: {aggregation: mean}
+  canny_precision: {aggregation: mean}
+  canny_recall: {aggregation: mean}
+  depth_si_rmse: {aggregation: mean}
+  seg_m_iou: {aggregation: mean}
+  seg_recall: {aggregation: mean}
+  lpips_diversity: {aggregation: mean}
 
 metadata:
   source_kind: benchmark_zoo
   benchmark_id: physical-ai-bench
+  contract_validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id physical-ai-bench --mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/physical-ai-bench --json
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicalAIBenchContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py
+  release_status: experimental
+  maturity: verified_runner
+  open_source_status: in_tree_runtime
+  official_benchmark_verified: false
+  integration_evidence: true
+  leaderboard_valid: false
+  requires:
+  - One official Hugging Face dataset for the selected track
+  - Generated videos for generation or conditional-generation
+  - A prediction manifest or configured Qwen-compatible judge for generation VQA
+  - Model checkpoints for selected model-backed conditional metrics
+  blockers:
+  - Full-dataset numerical parity has not been audited on the roughly 273 GB conditional-generation dataset.
+  - Local scorecards are not official SHI-Labs leaderboard submissions.
+  data_refs:
+    task_yaml: worldfoundry/data/benchmarks/tasks/external/physical-ai-bench.yaml
+    evaluator_config: worldfoundry/data/benchmarks/assets/physical-ai-bench/evaluator.yaml
+    provenance: worldfoundry/data/benchmarks/assets/physical-ai-bench/provenance.yaml
+  checkpoint_refs:
+  - {id: depth_anything_checkpoint, cli_flag: --depth-checkpoint, role: depth_si_rmse}
+  - {id: grounding_dino_checkpoint, cli_flag: --grounding-checkpoint, role: segmentation_metrics}
+  - {id: sam2_checkpoint, cli_flag: --sam2-checkpoint, role: segmentation_metrics}
+  - {id: dover_checkpoint, cli_flag: --dover-checkpoint, role: dover_tech_score}
+  validation_command: ["${WORLDFOUNDRY_UNIFIED_PYTHON:-python}", -m, worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.run_physical_ai_bench_official_runner, --track, conditional-generation, --run-official, --dataset-root, "${WORLDFOUNDRY_PHYSICAL_AI_BENCH_DATASET_ROOT}", --generated-video-dir, "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}", --output-dir, <out>, --json]
+  runner_availability:
+    available: true
+    runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicalAIBenchContract
+    runner_script_available: true
+    task_yaml_available: true
+    runtime_verified: true
+    surface: raw_generated_artifact_evaluator_and_result_normalizer
+    normalizer_verified: true
+  artifact_layout:
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+    dataset_root_env: WORLDFOUNDRY_PHYSICAL_AI_BENCH_DATASET_ROOT
+    output_artifact: benchmark_scorecard
+    filename_template: scorecard.json
   runtime:
     kind: in_tree_multi_track_evaluator
+    root: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench
+    root_env: WORLDFOUNDRY_PHYSICAL_AI_BENCH_ROOT
     implementation: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/runtime/physical_ai_bench
     config: worldfoundry/data/benchmarks/assets/physical-ai-bench/evaluator.yaml
+    dataset_root_env: WORLDFOUNDRY_PHYSICAL_AI_BENCH_DATASET_ROOT
+    generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
   integration_status: integrated
   status: in_tree_runtime_ready
   shared_base_models: [vbench, vbench-plus-plus, qwen-vl, dover, lpips, video-depth-anything, grounding-dino, sam2]
@@ -27,13 +85,49 @@ tasks:
     capability_track: video_generation
     input_keys: [prompt, condition_image, generated_video]
     output_keys: [scorecard, per_sample_scores]
-    metric_ids: [aesthetic_quality, background_consistency, imaging_quality, motion_smoothness, overall_consistency, subject_consistency, i2v_background, i2v_subject, vqa_accuracy]
+    metric_ids: [aesthetic_quality, background_consistency, imaging_quality, motion_smoothness, overall_consistency, subject_consistency, i2v_background, i2v_subject, vqa_accuracy, dover_tech_score, blur_ssim, canny_f1_score, canny_precision, canny_recall, depth_si_rmse, seg_m_iou, seg_recall, lpips_diversity]
+    metadata:
+      source_kind: benchmark_zoo
+      benchmark_id: physical-ai-bench
+      track: generation
+      track_metric_ids: [aesthetic_quality, background_consistency, imaging_quality, motion_smoothness, overall_consistency, subject_consistency, i2v_background, i2v_subject, vqa_accuracy]
+      official_benchmark_verified: false
+      integration_evidence: true
+      leaderboard_valid: false
     dataset: {hf_dataset_id: shi-labs/physical-ai-bench-generation}
+    artifact_contract:
+      required:
+        generated_video: {kind: video}
+      optional:
+        prediction_manifest: {kind: jsonl}
+    evaluation_protocol:
+    - name: in_tree_official_runtime
+      metric_ids: [aesthetic_quality, background_consistency, imaging_quality, motion_smoothness, overall_consistency, subject_consistency, i2v_background, i2v_subject, vqa_accuracy, dover_tech_score, blur_ssim, canny_f1_score, canny_precision, canny_recall, depth_si_rmse, seg_m_iou, seg_recall, lpips_diversity]
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicalAIBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py
   physical_ai_bench_conditional_generation:
     benchmark_name: physical-ai-bench
     protocol: pai_bench_c
     capability_track: conditional_video_generation
     input_keys: [control_video, generated_video, captions]
     output_keys: [scorecard, per_sample_scores]
-    metric_ids: [dover_tech_score, blur_ssim, canny_f1_score, canny_precision, canny_recall, depth_si_rmse, seg_m_iou, seg_recall, lpips_diversity]
+    metric_ids: [aesthetic_quality, background_consistency, imaging_quality, motion_smoothness, overall_consistency, subject_consistency, i2v_background, i2v_subject, vqa_accuracy, dover_tech_score, blur_ssim, canny_f1_score, canny_precision, canny_recall, depth_si_rmse, seg_m_iou, seg_recall, lpips_diversity]
+    metadata:
+      source_kind: benchmark_zoo
+      benchmark_id: physical-ai-bench
+      track: conditional-generation
+      track_metric_ids: [dover_tech_score, blur_ssim, canny_f1_score, canny_precision, canny_recall, depth_si_rmse, seg_m_iou, seg_recall, lpips_diversity]
+      official_benchmark_verified: false
+      integration_evidence: true
+      leaderboard_valid: false
     dataset: {hf_dataset_id: shi-labs/physical-ai-bench-conditional-generation}
+    artifact_contract:
+      required:
+        generated_video: {kind: video}
+      optional:
+        control_video: {kind: video}
+    evaluation_protocol:
+    - name: in_tree_official_runtime
+      metric_ids: [aesthetic_quality, background_consistency, imaging_quality, motion_smoothness, overall_consistency, subject_consistency, i2v_background, i2v_subject, vqa_accuracy, dover_tech_score, blur_ssim, canny_f1_score, canny_precision, canny_recall, depth_si_rmse, seg_m_iou, seg_recall, lpips_diversity]
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:PhysicalAIBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/physical_ai_bench/run_physical_ai_bench_official_runner.py

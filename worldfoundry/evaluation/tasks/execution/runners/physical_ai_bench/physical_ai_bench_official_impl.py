@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from worldfoundry.evaluation.tasks.execution.framework.io import env_path, utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION
 
 from .runtime.physical_ai_bench.conditional_generation import (
     CONDITIONAL_METRICS,
@@ -24,7 +25,6 @@ from .runtime.physical_ai_bench.conditional_generation import (
 )
 from .runtime.physical_ai_bench.generation import GENERATION_METRICS, GenerationRequest, evaluate_generation
 
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
 TRACKS = ("generation", "conditional-generation")
 METRIC_SPECS: dict[str, tuple[str, bool, str]] = {
     "aesthetic_quality": ("Aesthetic quality", True, "generation"),

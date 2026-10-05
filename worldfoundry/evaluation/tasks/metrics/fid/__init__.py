@@ -11,11 +11,16 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .compute import compute_distribution_metrics, compute_fid, summarize_distribution_metrics
-from .scene import compute_scene_fid, extract_object_crops
-from .swav import compute_swav_fid
+compute_distribution_metrics = lazy_export(f"{__name__}.compute", "compute_distribution_metrics", owner=__name__)
+compute_fid = lazy_export(f"{__name__}.compute", "compute_fid", owner=__name__)
+compute_paired_fid_kid = lazy_export(f"{__name__}.compute", "compute_paired_fid_kid", owner=__name__)
+summarize_distribution_metrics = lazy_export(f"{__name__}.compute", "summarize_distribution_metrics", owner=__name__)
+compute_scene_fid = lazy_export(f"{__name__}.scene", "compute_scene_fid", owner=__name__)
+extract_object_crops = lazy_export(f"{__name__}.scene", "extract_object_crops", owner=__name__)
+compute_swav_fid = lazy_export(f"{__name__}.swav", "compute_swav_fid", owner=__name__)
 
 _FID_TAGS = ("distribution", "image_generation", "fid_family")
 
@@ -104,6 +109,7 @@ __all__ = [
     "compute_distribution_metrics",
     "compute_fid",
     "compute_fid_vid",
+    "compute_paired_fid_kid",
     "compute_scene_fid",
     "compute_swav_fid",
     "extract_object_crops",

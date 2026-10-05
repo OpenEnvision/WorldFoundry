@@ -1,0 +1,26 @@
+{
+    "_comment": "ZeRO-2 config for the sequence-parallel (SP) student (generator). Byte-identical to zero2_dualteacher_critic_sp.json apart from this comment, and its only difference from the non-SP ZeRO-2 config is overlap_comm:false. With SP enabled, the generator backward uses the same manual interleaving: wrap engine.backward with set_gradient_accumulation_boundary(False) + enable_backward_allreduce=False (only U-subgroup all-to-all inside the backward window, no ZeRO DP reduction), then enable_backward_allreduce=True + allreduce_gradients() (a single IPG epilogue), then engine.step() -- note that under accelerate + DeepSpeed, optimizer.step() is a no-op, so omitting engine.step() silently trains nothing. overlap_comm=false: with the reduction already separated, false buys determinism and saves one ipg_buffer (2 x 2e8 x 4B -> 1x). Measured correction to an earlier claim: the supposed invariant 'sum(numel(trainable)) < reduce_bucket_size=2e8, therefore no reduction happens inside the backward window' is WRONG -- the generator really has 625,721,344 trainable parameters, above 2e8, so roughly 4 in-bucket reductions do occur inside the window (enable_backward_allreduce=False only skips the epilogue; the per-parameter hook reduction always fires). That is harmless when there is a single U-group (G_u=1): each parameter is reduced exactly once per backward, so N partial reductions are equivalent to one whole reduction, and there is no U-subgroup all-to-all in the window to interleave with (measured at 8 GPUs: 818/818 parameters correct; at 48 GPUs the bucket-order hash agrees across all ranks). With G_u>1 it would be a deadlock risk, so the trainer hard-asserts against that case at startup. gradient_clipping=1.0 is the clip value that actually takes effect for the generator (under DeepSpeed, accelerator.clip_grad_norm_ does not clip, it only returns total_norm; training_config.max_grad_norm is dead config). stage=2 (asserted identical for generator and critic).",
+    "fp16": {
+        "enabled": false,
+        "loss_scale": 0,
+        "loss_scale_window": 1000,
+        "initial_scale_power": 16,
+        "hysteresis": 2,
+        "min_loss_scale": 1
+    },
+    "bf16": {
+        "enabled": "auto"
+    },
+    "communication_data_type": "fp32",
+    "gradient_clipping": 1.0,
+    "train_micro_batch_size_per_gpu": "auto",
+    "train_batch_size": "auto",
+    "gradient_accumulation_steps": "auto",
+    "zero_optimization": {
+        "stage": 2,
+        "overlap_comm": false,
+        "contiguous_gradients": true,
+        "reduce_bucket_size": 200000000,
+        "allgather_bucket_size": 200000000
+    }
+}

@@ -1,126 +1,27 @@
 ---
 title: MiKASA-Robo
-description: MiKASA-Robo — metrics, requirements, and run commands.
+description: "ICLR 2026 tabletop memory suite: 32 RL tasks, later 90 language-conditioned VLA tasks. WorldFoundry imports official results; it does not run ManiSkill."
 ---
 
-## About
+MiKASA-Robo is the tabletop half of **MIKASA** (Memory-Intensive Skills Assessment Suite for Agents) from AIRI, MIPT, and HSE. The ICLR 2026 paper is **32** ManiSkill RL tasks in **12** groups across four memory types: **object**, **spatial**, **sequential**, and **capacity** (occlusion recall, prior layouts, long action orders). The later **MIKASA-Robo-VLA** release grows to **90** language-conditioned tasks (**10** memory types), Short / Medium / Long horizons (25–2160 steps), and **22,500** oracle trajectories. Those two releases are **not** interchangeable.
 
+Paper: [Memory, Benchmark & Robots](https://arxiv.org/abs/2502.10550) ([OpenReview](https://openreview.net/forum?id=9cLPurIZMj)). VLA docs: [mikasarobo.github.io](https://mikasarobo.github.io/). Code: [CognitiveAISystems/MIKASA-Robo](https://github.com/CognitiveAISystems/MIKASA-Robo).
 
+WorldFoundry **imports** official result exports. It does **not** run ManiSkill, collect PPO/oracle trajectories, or pick RL vs VLA for you — declare that on the export.
 
-MiKASA-Robo external benchmark manifest for manipulation policy evaluation.
+<BenchmarkPageSections id="mikasa" locale="en" />
 
-
-
-## Metrics
-
-MiKASA-Robo external benchmark manifest for manipulation policy evaluation.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/mikasa.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | Focus |
-| --- | --- |
-| `success_rate` | Share of episodes or tasks that complete successfully. |
-| `task_success` | Share of episodes or tasks that complete successfully. |
-| `episode_success` | Share of episodes or tasks that complete successfully. |
-| `reward` | Cumulative reward on Mikasa memory-augmented embodied task rollouts in the official simulator. |
-
-
-
-## Environment setup
-
-### Runtime environment
-
-- **Conda env:** `worldfoundry-unified-cu128`.
-- **Separate setup:** defaults to the unified WorldFoundry env (`needs_new_env: false`); a benchmark-only conda env is usually not required.
-- WorldFoundry provides contract and official result normalization for caller-provided MiKASA-Robo outputs.
-
-### Evaluation data
-
-- Candidate model outputs: set `WORLDFOUNDRY_MIKASA_RESULTS_PATH` to the generated-video or rollout artifact root.
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/mikasa`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/CognitiveAISystems--MIKASA-Robo`
-
-### Checkpoints & assets
-
-- This benchmark is primarily rollout- or official-result-driven; see catalog `requires` and the task YAML for policy/simulator checkpoints.
-
-### Key environment variables
-
-- `WORLDFOUNDRY_MIKASA_ROOT`
-- `WORLDFOUNDRY_MIKASA_RESULTS_PATH`
-
-
-
-## Run Evaluation
-
-
-
-After preparing the assets and candidate artifacts listed on this page, use the public run entry points below.
-
-### Set Candidate Artifacts
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### Import Official Results
+## How to run
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id mikasa \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/mikasa/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/mikasa/official-validation \
   --json
 ```
 
-### Score Generated Artifacts
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id mikasa \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/mikasa/official-run \
-  --json
-```
-
-### Direct In-Tree Runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id mikasa --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## Requirements
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_MIKASA_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+Optional `WORLDFOUNDRY_MIKASA_ROOT` points at a local runtime/repo. Default import path: `WORLDFOUNDRY_MIKASA_RESULTS_PATH`. Manifest: `worldfoundry/data/benchmarks/tasks/external/mikasa.yaml`. Outputs: `scorecard.json` (primary `success_rate`), `raw_results.jsonl`, `evaluation/summary.json`.
 
 [← Benchmark Hub](/docs/evaluation/benchmark-hub)

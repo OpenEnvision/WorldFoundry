@@ -1,0 +1,8 @@
+transformers==4.56.0
+setuptools==68.0.0
+torchmetrics
+lpips
+pyiqa
+openai-clip
+modelscope
+av

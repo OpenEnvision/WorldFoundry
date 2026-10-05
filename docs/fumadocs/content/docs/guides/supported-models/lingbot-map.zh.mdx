@@ -1,0 +1,50 @@
+---
+title: "LingBot-Map"
+description: "LingBot-Map（Robbyant (Ant Group)）：3D 重建、depth-estimation；Runner 一致性待确认; Geometric Context Transformer for Streaming 3D Reconstruction。"
+modelId: "lingbot-map"
+pageSource: authored
+---
+
+LingBot-Map 是蚂蚁灵波的流式 3D 重建模型：通过 GCTStream 运行时消费图像流，产出相机位姿、深度与点云，LingBotMapPipeline 同时支持流式与窗口式重建。官方运行时已内置树内；checkpoint 保持为外部缓存资产。
+
+<ModelPaperFigures modelId="lingbot-map" locale="zh" />
+
+记录论文为[Geometric Context Transformer for Streaming 3D Reconstruction](https://arxiv.org/abs/2604.14141)（2026）。
+
+项目页：[technology.robbyant.com/lingbot-map](https://technology.robbyant.com/lingbot-map)。代码：[Robbyant/lingbot-map](https://github.com/Robbyant/lingbot-map)。
+
+<ModelCommandBuilder modelId="lingbot-map" locale="zh" />
+
+## 用来做什么
+
+`lingbot-map` 是记录的重建线。从记录的视图写出几何时从这里起步。
+
+内置的 GCTStream 运行时实现了上游发布所述的流式 Transformer（论文 arXiv 2604.14141）；封装默认使用 SDPA 注意力，基线运行不需要 FlashInfer（FlashInfer 可用时可传 use_sdpa=false）。该模型由蚂蚁灵波科技（Robbyant，蚂蚁集团）发布。
+
+catalog 记录的任务包括 3D 重建、streaming-3d-reconstruction、camera-pose-estimation、depth-estimation。别名包括 `lingbot_map`、`robbyant/lingbot-map`。模态上，它接受图像，输出深度。
+
+## 运行时契约
+
+可选 `input_path`、`interactions`；产物 `lingbot_map_predictions.npz`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `LingBotMapPipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+runner 状态为 Runner 一致性待确认：导入与调度已在树内，完整 GPU 一致性需要就位的 robbyant/lingbot-map checkpoint（apache-2.0）。 pipeline 接受 checkpoint 文件或本地 HF snapshot 目录。
+
+Runtime source is vendored in-tree under worldfoundry/base_models/three_dimensions/point_clouds/lingbot_map; checkpoints remain external cache assets.
+
+必填 `image`、`video`；可选 `prompt`；`actions`：streaming_reconstruction, windowed_reconstruction；产物 `lingbot_map_predictions.npz`。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run lingbot-map --pipeline.task-profile default` 写出几何。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `robbyant/lingbot-map`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh lingbot-map`；下载缺失的公开权重时加 `--download`。
+
+记录 license 为 apache-2.0；状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="lingbot-map" locale="zh" />

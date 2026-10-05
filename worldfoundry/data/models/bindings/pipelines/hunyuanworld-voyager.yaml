@@ -3,7 +3,7 @@ binding_id: hunyuanworld-voyager
 model_id: hunyuanworld-voyager
 runner: worldfoundry.pipeline
 pipeline:
-  target: worldfoundry.pipelines.hunyuan_world.pipeline_hunyuan_world_voyager:HunyuanWorldVoyagerPipeline
+  target: worldfoundry.pipelines.hunyuan_world.pipeline_hunyuan_world_voyager_official:HunyuanWorldVoyagerOfficialPipeline
   loading:
     method: from_pretrained
     signature: unified

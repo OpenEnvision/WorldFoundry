@@ -1,0 +1,65 @@
+benchmark_ids:
+- stevo-bench
+id: stevo-bench
+name: STEVO-Bench
+environment_id: worldfoundry-unified-cu128
+needs_new_env: false
+status: in_tree_official_runtime_hosted_judges_full_suite_pending
+notes:
+- Result normalization (official-validation) runs in the unified WorldFoundry environment with no GPU and no
+  network access; it reads upstream summary.json / per_task report trees.
+- --run-official executes the vendored upstream evaluator (eval/eval_cli.py) in-tree, but every judge is a
+  remote VLM API call (Gemini by default, OpenAI supported). It requires GOOGLE_API_KEY or OPENAI_API_KEY
+  and outbound network access; there are no local judge weights and no GPU dependency.
+- The 225-task YAML suite is a separate Hugging Face dataset (JhanLiufu/StEvo-Bench) supplied through
+  --task-root / WORLDFOUNDRY_STEVO_BENCH_TASK_ROOT; it is never vendored.
+- The vendored runtime tree is read-only; staged videos, upstream runs/ directories, logs, and manifests are
+  written under --output-dir.
+- Set HF_ENDPOINT=https://hf-mirror.com when downloading the task dataset through a mirror.
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+pythonpath_roots:
+- .
+- worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench
+required_assets:
+  in_tree_runtime_paths:
+  - worldfoundry/evaluation/tasks/execution/runners/stevo_bench
+  - worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench
+  pip_requirements:
+  - worldfoundry/data/benchmarks/requirements/stevo-bench.txt
+  - worldfoundry/data/benchmarks/requirements/stevo-bench-eval-se.txt
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/stevo-bench.yaml
+  fixture: worldfoundry/data/benchmarks/assets/stevo-bench/sample_run
+  hf_dataset_ids:
+  - JhanLiufu/StEvo-Bench
+required_env: []
+optional_env:
+- WORLDFOUNDRY_STEVO_BENCH_ROOT
+- WORLDFOUNDRY_STEVO_BENCH_RESULTS_PATH
+- WORLDFOUNDRY_STEVO_BENCH_TASK_ROOT
+- WORLDFOUNDRY_STEVO_BENCH_WEIGHTS_DIR
+- WORLDFOUNDRY_STEVO_BENCH_VLM_PROVIDER
+- WORLDFOUNDRY_STEVO_BENCH_JUDGE_MODEL
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+- GOOGLE_API_KEY
+- OPENAI_API_KEY
+- HF_ENDPOINT
+required_paths:
+- id: official_runner_script
+  path: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/run_stevo_bench_official_runner.py
+- id: metrics_runtime
+  path: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/stevo_bench_metrics.py
+- id: vendored_official_evaluator
+  path: worldfoundry/evaluation/tasks/execution/runners/stevo_bench/runtime/stevo_bench/eval/eval_cli.py
+- id: pip_requirements
+  path: worldfoundry/data/benchmarks/requirements/stevo-bench.txt
+- id: pip_requirements_eval_se
+  path: worldfoundry/data/benchmarks/requirements/stevo-bench-eval-se.txt
+- id: task_yaml
+  path: worldfoundry/data/benchmarks/tasks/external/stevo-bench.yaml
+requires_cuda_visibility: false
+optional_imports:
+- yaml
+- google.genai
+- openai
+validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id stevo-bench --mode official-validation
+  --official-results-path <stevo_bench_run_dir_or_summary_json> --output-dir <out> --json

@@ -1,0 +1,15 @@
+# Ripgrep / Codex file-search prune list.
+# This repo sits on BeeGFS: unscoped glob/grep is dominated by metadata, not CPU.
+# Patterns here are local junk already covered by .gitignore; they must not be walked.
+
+docs/fumadocs/node_modules/
+docs/fumadocs/.next/
+docs/fumadocs/tmp/
+tmp/
+.git/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/__pycache__/
+**/*.egg-info/
+worldfoundry.egg-info/

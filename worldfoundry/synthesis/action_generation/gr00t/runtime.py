@@ -7,7 +7,6 @@ within WorldFoundry.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import time
@@ -15,8 +14,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.core.io import file_sha256
 from worldfoundry.runtime.env import resolve_ckpt_dir, resolve_hfd_root
-from worldfoundry.synthesis.action_generation.gr00t.architecture import load_checkpoint_architecture, load_embodiment_ids
+from worldfoundry.synthesis.action_generation.gr00t.architecture import (
+    load_checkpoint_architecture,
+    load_embodiment_ids,
+)
 
 
 def _jsonable(value: Any) -> Any:
@@ -102,6 +105,10 @@ def select_gr00t_checkpoint(
     candidates.extend(dict(item) for item in checkpoints)
 
     requested = str(variant or "").lower()
+    if checkpoint_dir:
+        explicit = Path(_expand_path_template(str(checkpoint_dir))).expanduser().resolve()
+        if (explicit / "config.json").is_file():
+            return explicit
 
     # First pass: try to find a checkpoint matching the requested variant or role/path substring
     for item in candidates:
@@ -288,14 +295,35 @@ def _resolve_observation(
     language_key = str(modality_configs["language"]["modality_keys"][0])
     state_keys = [str(key) for key in modality_configs["state"]["modality_keys"]]
 
-    # Load and process the input image into a standard array format
-    image_array, image_source = _load_image_array(image)
+    # Preserve named camera views instead of duplicating the first camera.
+    cameras = image
+    if gr00t_observation:
+        supplied_video = gr00t_observation.get("video")
+        if supplied_video is None:
+            supplied_video = gr00t_observation.get("camera_views")
+        if supplied_video is not None:
+            cameras = supplied_video
+    video = {}
+    sources = {}
+    for video_key in video_keys:
+        if isinstance(cameras, Mapping):
+            if video_key not in cameras:
+                raise ValueError(f"GR00T observation is missing camera {video_key!r}.")
+            camera = cameras[video_key]
+        else:
+            camera = cameras
+        image_array, source = _load_image_array(camera)
+        video[video_key] = image_array[None, None, ...]
+        sources[video_key] = source
+    image_source = json.dumps(sources) if isinstance(cameras, Mapping) else next(iter(sources.values()))
 
     # Initialize all state modalities to zeros
     state = _zero_state(state_keys, state_statistics)
     # If proprioceptive data is provided, update the state modalities
     if gr00t_observation:
-        joint_state = gr00t_observation.get("joint_state")
+        joint_state = gr00t_observation.get("state")
+        if joint_state is None:
+            joint_state = gr00t_observation.get("joint_state")
         if joint_state is None:
             joint_state = gr00t_observation.get("proprio") # Fallback for older naming conventions
         if isinstance(joint_state, Mapping):
@@ -304,7 +332,7 @@ def _resolve_observation(
     # Construct the final observation dictionary in the format expected by GR00T
     return (
         {
-            "video": {video_key: image_array[None, None, ...] for video_key in video_keys},
+            "video": video,
             "state": state,
             "language": {language_key: [[instruction or "do something"]]},
             "metadata": {"architecture": architecture},
@@ -362,6 +390,11 @@ class GR00TRuntime:
         checkpoint = Path(checkpoint_dir).expanduser().resolve()
         # Verify essential checkpoint files exist
         _require_checkpoint_file(checkpoint, "config.json")
+        config = json.loads((checkpoint / "config.json").read_text(encoding="utf-8"))
+        if config.get("model_type") == "gr00t_n1":
+            from worldfoundry.synthesis.action_generation.gr00t.legacy_n1 import describe_n1_checkpoint
+
+            return describe_n1_checkpoint(checkpoint)
         _require_checkpoint_file(checkpoint, "processor_config.json")
         _require_checkpoint_file(checkpoint, "embodiment_id.json")
         _require_checkpoint_file(checkpoint, "model.safetensors.index.json")
@@ -386,7 +419,7 @@ class GR00TRuntime:
         """
         if self.policy is not None:
             return
-        from worldfoundry.core.device import resolve_inference_device, resolve_inference_dtype
+        from worldfoundry.core.execution.device import resolve_inference_device, resolve_inference_dtype
 
         # Ensure gr00t modules are correctly aliased before policy import
         checkpoint = self.config.checkpoint_dir.expanduser().resolve()
@@ -478,7 +511,7 @@ class GR00TRuntime:
         # Write the action trace to the specified output path
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         # Calculate SHA256 hash of the generated artifact
-        artifact_sha256 = hashlib.sha256(target.read_bytes()).hexdigest()
+        artifact_sha256 = file_sha256(target)
         # Return a summary of the action trace artifact
         return {
             "status": "success",

@@ -15,9 +15,9 @@ import torchvision
 from torch import nn
 from torch.hub import load_state_dict_from_url
 
-from torch_fidelity.feature_extractor_base import FeatureExtractorBase
-from torch_fidelity.helpers import vassert, vprint, text_to_dtype, get_kwarg
-from torch_fidelity.interpolate_compat_tensorflow import interpolate_bilinear_2d_like_tensorflow1x
+from .feature_extractor_base import FeatureExtractorBase
+from .helpers import vassert, vprint, text_to_dtype, get_kwarg
+from .interpolate_compat_tensorflow import interpolate_bilinear_2d_like_tensorflow1x
 
 MODEL_BASE_URL = "https://openaipublic.azureedge.net/clip/models"
 MODEL_METADATA = {

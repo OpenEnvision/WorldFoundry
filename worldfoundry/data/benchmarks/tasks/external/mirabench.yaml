@@ -52,7 +52,7 @@ metrics:
     aggregation: mean
     description: MiraBench RAFT optical-flow dynamic degree for motion strength.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -65,7 +65,7 @@ metrics:
     aggregation: mean
     description: MiraBench tracking-based long-range motion strength.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -78,7 +78,7 @@ metrics:
     aggregation: mean
     description: MiraBench DINO adjacent-frame structural temporal consistency.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -91,7 +91,7 @@ metrics:
     aggregation: mean
     description: MiraBench CLIP adjacent-frame semantic temporal consistency.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -104,7 +104,7 @@ metrics:
     aggregation: mean
     description: MiraBench AMT-prior temporal motion smoothness.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -117,7 +117,7 @@ metrics:
     aggregation: mean
     description: MiraBench 3D reconstruction mean absolute error; lower is better.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -130,7 +130,7 @@ metrics:
     aggregation: mean
     description: MiraBench 3D reconstruction root mean square error; lower is better.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -143,7 +143,7 @@ metrics:
     aggregation: mean
     description: MiraBench LAION aesthetic quality score.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -156,7 +156,7 @@ metrics:
     aggregation: mean
     description: MiraBench MUSIQ imaging quality score.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -169,7 +169,7 @@ metrics:
     aggregation: mean
     description: MiraBench ViCLIP camera-caption alignment.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -182,7 +182,7 @@ metrics:
     aggregation: mean
     description: MiraBench ViCLIP main-object-caption alignment.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -195,7 +195,7 @@ metrics:
     aggregation: mean
     description: MiraBench ViCLIP background-caption alignment.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -208,7 +208,7 @@ metrics:
     aggregation: mean
     description: MiraBench ViCLIP style-caption alignment.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -221,7 +221,7 @@ metrics:
     aggregation: mean
     description: MiraBench ViCLIP overall text-video alignment.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -234,7 +234,7 @@ metrics:
     aggregation: mean
     description: MiraBench Fréchet Video Distance distribution metric; lower is better.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -247,7 +247,7 @@ metrics:
     aggregation: mean
     description: MiraBench Fréchet Inception Distance distribution metric; lower is better.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -260,7 +260,7 @@ metrics:
     aggregation: mean
     description: MiraBench Kernel Inception Distance distribution metric; lower is better.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -274,7 +274,7 @@ metrics:
     primary: true
     description: MiraBench official aggregate when supplied by the official scorer or normalized output.
     evaluator:
-      target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: blocked
       blocked_reason: asset_required
       required_inputs:
@@ -296,7 +296,7 @@ metadata:
   official_runner_target: worldfoundry.evaluation.tasks.contracts.external:MiraBenchContract
   official_runner_script: worldfoundry/evaluation/tasks/execution/runners/mirabench/run_mirabench_official_runner.py
   local_evaluator:
-    target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+    target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
     status: implemented
     protocol: local_manifest_metadata_and_official_result_normalization
     output_fields:
@@ -470,7 +470,7 @@ tasks:
       metric_ids:
       - local_metadata_coverage
       - local_prompt_video_pair_completeness
-      evaluator_target: worldfoundry.evaluation.tasks.execution.runners.mirabench.mirabench_video_quality_contract:evaluate_mirabench_video_quality_contract_file
+      evaluator_target: worldfoundry.evaluation.tasks.execution.framework.video_quality_contract:evaluate_mirabench_video_quality_contract_file
       status: implemented
     - name: external_official_runner
       metric_ids:

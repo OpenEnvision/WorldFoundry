@@ -1,45 +1,27 @@
 """Module for base_models -> three_dimensions -> point_clouds -> cut3r -> model.py functionality."""
 
-from collections import OrderedDict
 import os
+from collections import OrderedDict
+from dataclasses import dataclass
+from functools import partial
+from typing import Any, List, Optional
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.checkpoint import checkpoint
-from copy import deepcopy
-from functools import partial
-from typing import Optional, Tuple, List, Any
-from dataclasses import dataclass
 from transformers import PretrainedConfig
-from transformers import PreTrainedModel
-from transformers.modeling_outputs import BaseModelOutput
 from transformers.file_utils import ModelOutput
-import time
-from .utils.misc import (
-    fill_default_args,
-    freeze_all_params,
-    is_symmetrized,
-    interleave,
-    transpose_to_landscape,
-)
-from .heads import head_factory
-from .utils.camera import PoseEncoder
-from .patch_embed import get_patch_embed
-from .croco_base import CroCoNet, CrocoConfig  # noqa
+
 from .blocks import (
     Block,
     DecoderBlock,
-    Mlp,
-    Attention,
-    CrossAttention,
-    DropPath,
-    CustomDecoderBlock,
 )  # noqa
-
-inf = float("inf")
-from accelerate.logging import get_logger
-
-printer = get_logger(__name__, log_level="DEBUG")
+from .croco_base import CrocoConfig, CroCoNet  # noqa
+from .heads import head_factory
+from .patch_embed import get_patch_embed
+from .utils.misc import (
+    fill_default_args,
+    transpose_to_landscape,
+)
 
 
 @dataclass
@@ -67,38 +49,53 @@ def strip_module(state_dict):
     return new_state_dict
 
 
-def load_model(model_path, device, verbose=True):
-    """Load model.
+def _checkpoint_config(expression):
+    """Decode the official constructor string using a restricted AST grammar."""
+    import ast
 
-    Args:
-        model_path: The model path.
-        device: The device.
-        verbose: The verbose.
-    """
-    if verbose:
-        print("... loading model from", model_path)
+    def decode(node):
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.Name) and node.id == "inf":
+            return float("inf")
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+            value = decode(node.operand)
+            return -value if isinstance(node.op, ast.USub) else value
+        if isinstance(node, (ast.Tuple, ast.List)):
+            values = [decode(x) for x in node.elts]
+            return tuple(values) if isinstance(node, ast.Tuple) else values
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id == "ARCroco3DStereo" and len(node.args) == 1 and not node.keywords:
+                return decode(node.args[0])
+            if node.func.id == "ARCroco3DStereoConfig" and not node.args:
+                if any(k.arg is None for k in node.keywords):
+                    raise ValueError("Expanded checkpoint arguments are unsupported")
+                options = {k.arg: decode(k.value) for k in node.keywords}
+                options["patch_embed_cls"] = options.get("patch_embed_cls", "PatchEmbedDust3R").replace(
+                    "ManyAR_PatchEmbed", "PatchEmbedDust3R"
+                )
+                options["landscape_only"] = False
+                return ARCroco3DStereoConfig(**options)
+        raise ValueError("Unsupported CUT3R checkpoint architecture expression")
+
+    config = decode(ast.parse(expression, mode="eval").body)
+    if not isinstance(config, ARCroco3DStereoConfig):
+        raise ValueError("Checkpoint must specify ARCroco3DStereoConfig")
+    return config
+
+
+def load_model(model_path, device, verbose=True):
+    """Load an official, trusted CUT3R pickle checkpoint with exact key validation."""
     ckpt = torch.load(model_path, map_location="cpu", weights_only=False)
-    args = ckpt["args"].model.replace(
-        "ManyAR_PatchEmbed", "PatchEmbedDust3R"
-    )  # ManyAR only for aspect ratio not consistent
-    if "landscape_only" not in args:
-        args = args[:-2] + ", landscape_only=False))"
-    else:
-        args = args.replace(" ", "").replace(
-            "landscape_only=True", "landscape_only=False"
-        )
-    assert "landscape_only=False" in args
-    if verbose:
-        print(f"instantiating : {args}")
-    net = eval(args)
-    s = net.load_state_dict(ckpt["model"], strict=False)
-    if verbose:
-        print(s)
-    return net.to(device)
+    config = _checkpoint_config(ckpt["args"].model)
+    net = ARCroco3DStereo(config)
+    net.load_state_dict(strip_module(ckpt["model"]), strict=True)
+    return net.to(device).eval().requires_grad_(False)
 
 
 class ARCroco3DStereoConfig(PretrainedConfig):
     """Ar croco d stereo config implementation."""
+
     model_type = "arcroco_3d_stereo"
 
     def __init__(
@@ -166,6 +163,7 @@ class ARCroco3DStereoConfig(PretrainedConfig):
 
 class LocalMemory(nn.Module):
     """Local memory implementation."""
+
     def __init__(
         self,
         size,
@@ -207,12 +205,8 @@ class LocalMemory(nn.Module):
         super().__init__()
         self.v_dim = v_dim
         self.proj_q = nn.Linear(k_dim, v_dim)
-        self.masked_token = nn.Parameter(
-            torch.randn(1, 1, v_dim) * 0.2, requires_grad=True
-        )
-        self.mem = nn.Parameter(
-            torch.randn(1, size, 2 * v_dim) * 0.2, requires_grad=True
-        )
+        self.masked_token = nn.Parameter(torch.randn(1, 1, v_dim) * 0.2, requires_grad=True)
+        self.mem = nn.Parameter(torch.randn(1, size, 2 * v_dim) * 0.2, requires_grad=True)
         self.write_blocks = nn.ModuleList(
             [
                 DecoderBlock(
@@ -279,9 +273,9 @@ class LocalMemory(nn.Module):
 
 class ARCroco3DStereo(CroCoNet):
     """Ar croco d stereo implementation."""
+
     config_class = ARCroco3DStereoConfig
     base_model_prefix = "arcroco3dstereo"
-    supports_gradient_checkpointing = True
 
     def __init__(self, config: ARCroco3DStereoConfig):
         """Init.
@@ -289,11 +283,7 @@ class ARCroco3DStereo(CroCoNet):
         Args:
             config: The config.
         """
-        self.gradient_checkpointing = False
-        self.fixed_input_length = True
-        config.croco_kwargs = fill_default_args(
-            config.croco_kwargs, CrocoConfig.__init__
-        )
+        config.croco_kwargs = fill_default_args(config.croco_kwargs, CrocoConfig.__init__)
         self.config = config
         self.patch_embed_cls = config.patch_embed_cls
         self.croco_args = config.croco_kwargs
@@ -316,9 +306,7 @@ class ARCroco3DStereo(CroCoNet):
         self.dec_num_heads = self.croco_args["dec_num_heads"]
         self.pose_head_flag = config.pose_head
         if self.pose_head_flag:
-            self.pose_token = nn.Parameter(
-                torch.randn(1, 1, self.dec_embed_dim) * 0.02, requires_grad=True
-            )
+            self.pose_token = nn.Parameter(torch.randn(1, 1, self.dec_embed_dim) * 0.02, requires_grad=True)
             self.pose_retriever = LocalMemory(
                 size=config.local_mem_size,
                 k_dim=self.enc_embed_dim,
@@ -333,12 +321,8 @@ class ARCroco3DStereo(CroCoNet):
         self.register_tokens = nn.Embedding(config.state_size, self.enc_embed_dim)
         self.state_size = config.state_size
         self.state_pe = config.state_pe
-        self.masked_img_token = nn.Parameter(
-            torch.randn(1, self.enc_embed_dim) * 0.02, requires_grad=True
-        )
-        self.masked_ray_map_token = nn.Parameter(
-            torch.randn(1, self.enc_embed_dim) * 0.02, requires_grad=True
-        )
+        self.masked_img_token = nn.Parameter(torch.randn(1, self.enc_embed_dim) * 0.02, requires_grad=True)
+        self.masked_ray_map_token = nn.Parameter(torch.randn(1, self.enc_embed_dim) * 0.02, requires_grad=True)
         self._set_state_decoder(
             self.enc_embed_dim,
             self.dec_embed_dim,
@@ -361,7 +345,6 @@ class ARCroco3DStereo(CroCoNet):
             config.pose_head,
             **self.croco_args,
         )
-        self.set_freeze(config.freeze)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kw):
@@ -374,13 +357,9 @@ class ARCroco3DStereo(CroCoNet):
             return load_model(pretrained_model_name_or_path, device="cpu")
         else:
             try:
-                model = super(ARCroco3DStereo, cls).from_pretrained(
-                    pretrained_model_name_or_path, **kw
-                )
-            except TypeError as e:
-                raise Exception(
-                    f"tried to load {pretrained_model_name_or_path} from huggingface, but failed"
-                )
+                model = super(ARCroco3DStereo, cls).from_pretrained(pretrained_model_name_or_path, **kw)
+            except TypeError:
+                raise Exception(f"tried to load {pretrained_model_name_or_path} from huggingface, but failed")
             return model
 
     def _set_patch_embed(self, img_size=224, patch_size=16, enc_embed_dim=768):
@@ -391,9 +370,7 @@ class ARCroco3DStereo(CroCoNet):
             patch_size: The patch size.
             enc_embed_dim: The enc embed dim.
         """
-        self.patch_embed = get_patch_embed(
-            self.patch_embed_cls, img_size, patch_size, enc_embed_dim, in_chans=3
-        )
+        self.patch_embed = get_patch_embed(self.patch_embed_cls, img_size, patch_size, enc_embed_dim, in_chans=3)
         self.patch_embed_ray_map = get_patch_embed(
             self.patch_embed_cls, img_size, patch_size, enc_embed_dim, in_chans=6
         )
@@ -478,104 +455,6 @@ class ARCroco3DStereo(CroCoNet):
         )
         self.dec_norm_state = norm_layer(dec_embed_dim)
 
-    def load_state_dict(self, ckpt, **kw):
-        """Load state dict.
-
-        Args:
-            ckpt: The ckpt.
-        """
-        if all(k.startswith("module") for k in ckpt):
-            ckpt = strip_module(ckpt)
-        new_ckpt = dict(ckpt)
-        if not any(k.startswith("dec_blocks_state") for k in ckpt):
-            for key, value in ckpt.items():
-                if key.startswith("dec_blocks"):
-                    new_ckpt[key.replace("dec_blocks", "dec_blocks_state")] = value
-        try:
-            return super().load_state_dict(new_ckpt, **kw)
-        except:
-            try:
-                new_new_ckpt = {
-                    k: v
-                    for k, v in new_ckpt.items()
-                    if not k.startswith("dec_blocks")
-                    and not k.startswith("dec_norm")
-                    and not k.startswith("decoder_embed")
-                }
-                return super().load_state_dict(new_new_ckpt, **kw)
-            except:
-                new_new_ckpt = {}
-                for key in new_ckpt:
-                    if key in self.state_dict():
-                        if new_ckpt[key].size() == self.state_dict()[key].size():
-                            new_new_ckpt[key] = new_ckpt[key]
-                        else:
-                            printer.info(
-                                f"Skipping '{key}': size mismatch (ckpt: {new_ckpt[key].size()}, model: {self.state_dict()[key].size()})"
-                            )
-                    else:
-                        printer.info(f"Skipping '{key}': not found in model")
-                return super().load_state_dict(new_new_ckpt, **kw)
-
-    def set_freeze(self, freeze):  # this is for use by downstream models
-        """Set freeze.
-
-        Args:
-            freeze: The freeze.
-        """
-        self.freeze = freeze
-        to_be_frozen = {
-            "none": [],
-            "mask": [self.mask_token] if hasattr(self, "mask_token") else [],
-            "encoder": [
-                self.patch_embed,
-                self.patch_embed_ray_map,
-                self.masked_img_token,
-                self.masked_ray_map_token,
-                self.enc_blocks,
-                self.enc_blocks_ray_map,
-                self.enc_norm,
-                self.enc_norm_ray_map,
-            ],
-            "encoder_and_head": [
-                self.patch_embed,
-                self.patch_embed_ray_map,
-                self.masked_img_token,
-                self.masked_ray_map_token,
-                self.enc_blocks,
-                self.enc_blocks_ray_map,
-                self.enc_norm,
-                self.enc_norm_ray_map,
-                self.downstream_head,
-            ],
-            "encoder_and_decoder": [
-                self.patch_embed,
-                self.patch_embed_ray_map,
-                self.masked_img_token,
-                self.masked_ray_map_token,
-                self.enc_blocks,
-                self.enc_blocks_ray_map,
-                self.enc_norm,
-                self.enc_norm_ray_map,
-                self.dec_blocks,
-                self.dec_blocks_state,
-                self.pose_retriever,
-                self.pose_token,
-                self.register_tokens,
-                self.decoder_embed_state,
-                self.decoder_embed,
-                self.dec_norm,
-                self.dec_norm_state,
-            ],
-            "decoder": [
-                self.dec_blocks,
-                self.dec_blocks_state,
-                self.pose_retriever,
-                self.pose_token,
-            ],
-        }
-        freeze_all_params(to_be_frozen[freeze])
-
     def _set_prediction_head(self, *args, **kwargs):
         """No prediction head"""
         return
@@ -612,9 +491,9 @@ class ARCroco3DStereo(CroCoNet):
             patch_size: The patch size.
             img_size: The img size.
         """
-        assert (
-            img_size[0] % patch_size == 0 and img_size[1] % patch_size == 0
-        ), f"{img_size=} must be multiple of {patch_size=}"
+        assert img_size[0] % patch_size == 0 and img_size[1] % patch_size == 0, (
+            f"{img_size=} must be multiple of {patch_size=}"
+        )
         self.output_mode = output_mode
         self.head_type = head_type
         self.depth_mode = depth_mode
@@ -630,9 +509,7 @@ class ARCroco3DStereo(CroCoNet):
             has_pose_conf=bool(pose_conf_head),
             has_pose=bool(pose_head),
         )
-        self.head = transpose_to_landscape(
-            self.downstream_head, activate=landscape_only
-        )
+        self.head = transpose_to_landscape(self.downstream_head, activate=landscape_only)
 
     def _encode_image(self, image, true_shape):
         """Helper function to encode image.
@@ -644,10 +521,7 @@ class ARCroco3DStereo(CroCoNet):
         x, pos = self.patch_embed(image, true_shape=true_shape)
         assert self.enc_pos_embed is None
         for blk in self.enc_blocks:
-            if self.gradient_checkpointing and self.training:
-                x = checkpoint(blk, x, pos, use_reentrant=False)
-            else:
-                x = blk(x, pos)
+            x = blk(x, pos)
         x = self.enc_norm(x)
         return [x], pos, None
 
@@ -661,10 +535,7 @@ class ARCroco3DStereo(CroCoNet):
         x, pos = self.patch_embed_ray_map(ray_map, true_shape=true_shape)
         assert self.enc_pos_embed is None
         for blk in self.enc_blocks_ray_map:
-            if self.gradient_checkpointing and self.training:
-                x = checkpoint(blk, x, pos, use_reentrant=False)
-            else:
-                x = blk(x, pos)
+            x = blk(x, pos)
         x = self.enc_norm_ray_map(x)
         return [x], pos, None
 
@@ -676,9 +547,7 @@ class ARCroco3DStereo(CroCoNet):
             image_pos: The image pos.
         """
         batch_size = image_tokens.shape[0]
-        state_feat = self.register_tokens(
-            torch.arange(self.state_size, device=image_pos.device)
-        )
+        state_feat = self.register_tokens(torch.arange(self.state_size, device=image_pos.device))
         if self.state_pe == "1d":
             state_pos = (
                 torch.tensor(
@@ -720,18 +589,10 @@ class ARCroco3DStereo(CroCoNet):
         if img_mask is None and ray_mask is None:
             given = False
         if not given:
-            img_mask = torch.stack(
-                [view["img_mask"] for view in views], dim=0
-            )  # Shape: (num_views, batch_size)
-            ray_mask = torch.stack(
-                [view["ray_mask"] for view in views], dim=0
-            )  # Shape: (num_views, batch_size)
-        imgs = torch.stack(
-            [view["img"] for view in views], dim=0
-        )  # Shape: (num_views, batch_size, C, H, W)
-        ray_maps = torch.stack(
-            [view["ray_map"] for view in views], dim=0
-        )  # Shape: (num_views, batch_size, H, W, C)
+            img_mask = torch.stack([view["img_mask"] for view in views], dim=0)  # Shape: (num_views, batch_size)
+            ray_mask = torch.stack([view["ray_mask"] for view in views], dim=0)  # Shape: (num_views, batch_size)
+        imgs = torch.stack([view["img"] for view in views], dim=0)  # Shape: (num_views, batch_size, C, H, W)
+        ray_maps = torch.stack([view["ray_map"] for view in views], dim=0)  # Shape: (num_views, batch_size, H, W, C)
         shapes = []
         for view in views:
             if "true_shape" in view:
@@ -739,15 +600,9 @@ class ARCroco3DStereo(CroCoNet):
             else:
                 shape = torch.tensor(view["img"].shape[-2:], device=device)
                 shapes.append(shape.unsqueeze(0).repeat(batch_size, 1))
-        shapes = torch.stack(shapes, dim=0).to(
-            imgs.device
-        )  # Shape: (num_views, batch_size, 2)
-        imgs = imgs.view(
-            -1, *imgs.shape[2:]
-        )  # Shape: (num_views * batch_size, C, H, W)
-        ray_maps = ray_maps.view(
-            -1, *ray_maps.shape[2:]
-        )  # Shape: (num_views * batch_size, H, W, C)
+        shapes = torch.stack(shapes, dim=0).to(imgs.device)  # Shape: (num_views, batch_size, 2)
+        imgs = imgs.view(-1, *imgs.shape[2:])  # Shape: (num_views * batch_size, C, H, W)
+        ray_maps = ray_maps.view(-1, *ray_maps.shape[2:])  # Shape: (num_views * batch_size, H, W, C)
         shapes = shapes.view(-1, 2)  # Shape: (num_views * batch_size, 2)
         img_masks_flat = img_mask.view(-1)  # Shape: (num_views * batch_size)
         ray_masks_flat = ray_mask.view(-1)
@@ -758,9 +613,7 @@ class ARCroco3DStereo(CroCoNet):
         else:
             raise NotImplementedError
         full_out = [
-            torch.zeros(
-                len(views) * batch_size, *img_out[0].shape[1:], device=img_out[0].device
-            )
+            torch.zeros(len(views) * batch_size, *img_out[0].shape[1:], device=img_out[0].device)
             for _ in range(len(img_out))
         ]
         full_pos = torch.zeros(
@@ -777,26 +630,12 @@ class ARCroco3DStereo(CroCoNet):
         selected_ray_maps = ray_maps[ray_masks_flat]
         selected_shapes_ray = shapes[ray_masks_flat]
         if selected_ray_maps.size(0) > 0:
-            ray_out, ray_pos, _ = self._encode_ray_map(
-                selected_ray_maps, selected_shapes_ray
-            )
+            ray_out, ray_pos, _ = self._encode_ray_map(selected_ray_maps, selected_shapes_ray)
             assert len(ray_out) == len(full_out), f"{len(ray_out)}, {len(full_out)}"
             for i in range(len(ray_out)):
                 full_out[i][ray_masks_flat] += ray_out[i]
                 full_out[i][~ray_masks_flat] += self.masked_ray_map_token
-            full_pos[ray_masks_flat] += (
-                ray_pos * (~img_masks_flat[ray_masks_flat][:, None, None]).long()
-            )
-        else:
-            raymaps = torch.zeros(
-                1, 6, imgs[0].shape[-2], imgs[0].shape[-1], device=img_out[0].device
-            )
-            ray_mask_flat = torch.zeros_like(img_masks_flat)
-            ray_mask_flat[:1] = True
-            ray_out, ray_pos, _ = self._encode_ray_map(raymaps, shapes[ray_mask_flat])
-            for i in range(len(ray_out)):
-                full_out[i][ray_mask_flat] += ray_out[i] * 0.0
-                full_out[i][~ray_mask_flat] += self.masked_ray_map_token * 0.0
+            full_pos[ray_masks_flat] += ray_pos * (~img_masks_flat[ray_masks_flat][:, None, None]).long()
         return (
             shapes.chunk(len(views), dim=0),
             [out.chunk(len(views), dim=0) for out in full_out],
@@ -823,28 +662,8 @@ class ARCroco3DStereo(CroCoNet):
             pos_img = torch.cat([pos_pose, pos_img], dim=1)
         final_output.append((f_state, f_img))
         for blk_state, blk_img in zip(self.dec_blocks_state, self.dec_blocks):
-            if (
-                self.gradient_checkpointing
-                and self.training
-                and torch.is_grad_enabled()
-            ):
-                f_state, _ = checkpoint(
-                    blk_state,
-                    *final_output[-1][::+1],
-                    pos_state,
-                    pos_img,
-                    use_reentrant=not self.fixed_input_length,
-                )
-                f_img, _ = checkpoint(
-                    blk_img,
-                    *final_output[-1][::-1],
-                    pos_img,
-                    pos_state,
-                    use_reentrant=not self.fixed_input_length,
-                )
-            else:
-                f_state, _ = blk_state(*final_output[-1][::+1], pos_state, pos_img)
-                f_img, _ = blk_img(*final_output[-1][::-1], pos_img, pos_state)
+            f_state, _ = blk_state(*final_output[-1][::+1], pos_state, pos_img)
+            f_img, _ = blk_img(*final_output[-1][::-1], pos_img, pos_state)
             final_output.append((f_state, f_img))
         del final_output[1]  # duplicate with final_output[0]
         final_output[-1] = (
@@ -861,7 +680,7 @@ class ARCroco3DStereo(CroCoNet):
             img_shape: The img shape.
         """
         B, S, D = decout[-1].shape
-        head = getattr(self, f"head")
+        head = getattr(self, "head")
         return head(decout, img_shape, **kwargs)
 
     def _init_state(self, image_tokens, image_pos):
@@ -899,9 +718,7 @@ class ARCroco3DStereo(CroCoNet):
             reset_mask: The reset mask.
             update: The update.
         """
-        new_state_feat, dec = self._decoder(
-            state_feat, state_pos, current_feat, current_pos, pose_feat, pose_pos
-        )
+        new_state_feat, dec = self._decoder(state_feat, state_pos, current_feat, current_pos, pose_feat, pose_pos)
         new_state_feat = new_state_feat[-1]
         return new_state_feat, dec
 
@@ -966,9 +783,7 @@ class ARCroco3DStereo(CroCoNet):
                 pose_feat_i = self.pose_token.expand(feat_i.shape[0], -1, -1)
             else:
                 pose_feat_i = self.pose_retriever.inquire(global_img_feat_i, mem)
-            pose_pos_i = -torch.ones(
-                feat_i.shape[0], 1, 2, device=feat_i.device, dtype=pos_i.dtype
-            )
+            pose_pos_i = -torch.ones(feat_i.shape[0], 1, 2, device=feat_i.device, dtype=pos_i.dtype)
         else:
             pose_feat_i = None
             pose_pos_i = None
@@ -985,9 +800,7 @@ class ARCroco3DStereo(CroCoNet):
             update=views[i].get("update", None),
         )
         out_pose_feat_i = dec[-1][:, 0:1]
-        new_mem = self.pose_retriever.update_mem(
-            mem, global_img_feat_i, out_pose_feat_i
-        )
+        new_mem = self.pose_retriever.update_mem(mem, global_img_feat_i, out_pose_feat_i)
         head_input = [
             dec[0].float(),
             dec[self.dec_depth * 2 // 4][:, 1:].float(),
@@ -1002,9 +815,7 @@ class ARCroco3DStereo(CroCoNet):
         else:
             update_mask = img_mask
         update_mask = update_mask[:, None, None].float()
-        state_feat = new_state_feat * update_mask + state_feat * (
-            1 - update_mask
-        )  # update global state
+        state_feat = new_state_feat * update_mask + state_feat * (1 - update_mask)  # update global state
         mem = new_mem * update_mask + mem * (1 - update_mask)  # then update local state
         reset_mask = views[i]["reset"]
         if reset_mask is not None:
@@ -1037,9 +848,7 @@ class ARCroco3DStereo(CroCoNet):
                     pose_feat_i = self.pose_token.expand(feat_i.shape[0], -1, -1)
                 else:
                     pose_feat_i = self.pose_retriever.inquire(global_img_feat_i, mem)
-                pose_pos_i = -torch.ones(
-                    feat_i.shape[0], 1, 2, device=feat_i.device, dtype=pos_i.dtype
-                )
+                pose_pos_i = -torch.ones(feat_i.shape[0], 1, 2, device=feat_i.device, dtype=pos_i.dtype)
             else:
                 pose_feat_i = None
                 pose_pos_i = None
@@ -1056,9 +865,7 @@ class ARCroco3DStereo(CroCoNet):
                 update=views[i].get("update", None),
             )
             out_pose_feat_i = dec[-1][:, 0:1]
-            new_mem = self.pose_retriever.update_mem(
-                mem, global_img_feat_i, out_pose_feat_i
-            )
+            new_mem = self.pose_retriever.update_mem(mem, global_img_feat_i, out_pose_feat_i)
             assert len(dec) == self.dec_depth + 1
             head_input = [
                 dec[0].float(),
@@ -1071,28 +878,18 @@ class ARCroco3DStereo(CroCoNet):
             img_mask = views[i]["img_mask"]
             update = views[i].get("update", None)
             if update is not None:
-                update_mask = (
-                    img_mask & update
-                )  # if don't update, then whatever img_mask
+                update_mask = img_mask & update  # if don't update, then whatever img_mask
             else:
                 update_mask = img_mask
             update_mask = update_mask[:, None, None].float()
-            state_feat = new_state_feat * update_mask + state_feat * (
-                1 - update_mask
-            )  # update global state
-            mem = new_mem * update_mask + mem * (
-                1 - update_mask
-            )  # then update local state
+            state_feat = new_state_feat * update_mask + state_feat * (1 - update_mask)  # update global state
+            mem = new_mem * update_mask + mem * (1 - update_mask)  # then update local state
             reset_mask = views[i]["reset"]
             if reset_mask is not None:
                 reset_mask = reset_mask[:, None, None].float()
-                state_feat = init_state_feat * reset_mask + state_feat * (
-                    1 - reset_mask
-                )
+                state_feat = init_state_feat * reset_mask + state_feat * (1 - reset_mask)
                 mem = init_mem * reset_mask + mem * (1 - reset_mask)
-            all_state_args.append(
-                (state_feat, state_pos, init_state_feat, mem, init_mem)
-            )
+            all_state_args.append((state_feat, state_pos, init_state_feat, mem, init_mem))
         if ret_state:
             return ress, views, all_state_args
         return ress, views
@@ -1111,9 +908,7 @@ class ARCroco3DStereo(CroCoNet):
             ress, views = self._forward_impl(views, ret_state=ret_state)
             return ARCroco3DStereoOutput(ress=ress, views=views)
 
-    def inference_step(
-        self, view, state_feat, state_pos, init_state_feat, mem, init_mem
-    ):
+    def inference_step(self, view, state_feat, state_pos, init_state_feat, mem, init_mem):
         """Inference step.
 
         Args:
@@ -1134,24 +929,20 @@ class ARCroco3DStereo(CroCoNet):
             shapes.append(
                 view.get(
                     "true_shape",
-                    torch.tensor(view["ray_map"].shape[-2:])[None].repeat(
-                        view["ray_map"].shape[0], 1
-                    ),
+                    torch.tensor(view["ray_map"].shape[-2:])[None].repeat(view["ray_map"].shape[0], 1),
                 )[[j]]
             )
 
         raymaps = torch.cat(raymaps, dim=0)
         shape = torch.cat(shapes, dim=0).to(raymaps.device)
-        feat_ls, pos, _ = self._encode_ray_map(raymaps, shapes)
+        feat_ls, pos, _ = self._encode_ray_map(raymaps, shape)
 
         feat_i = feat_ls[-1]
         pos_i = pos
         if self.pose_head_flag:
             global_img_feat_i = self._get_img_level_feat(feat_i)
             pose_feat_i = self.pose_retriever.inquire(global_img_feat_i, mem)
-            pose_pos_i = -torch.ones(
-                feat_i.shape[0], 1, 2, device=feat_i.device, dtype=pos_i.dtype
-            )
+            pose_pos_i = -torch.ones(feat_i.shape[0], 1, 2, device=feat_i.device, dtype=pos_i.dtype)
         else:
             pose_feat_i = None
             pose_pos_i = None
@@ -1169,9 +960,7 @@ class ARCroco3DStereo(CroCoNet):
         )
 
         out_pose_feat_i = dec[-1][:, 0:1]
-        new_mem = self.pose_retriever.update_mem(
-            mem, global_img_feat_i, out_pose_feat_i
-        )
+        self.pose_retriever.update_mem(mem, global_img_feat_i, out_pose_feat_i)
         assert len(dec) == self.dec_depth + 1
         head_input = [
             dec[0].float(),
@@ -1195,33 +984,18 @@ class ARCroco3DStereo(CroCoNet):
         for i, view in enumerate(views):
             device = view["img"].device
             batch_size = view["img"].shape[0]
-            img_mask = view["img_mask"].reshape(
-                -1, batch_size
-            )  # Shape: (1, batch_size)
-            ray_mask = view["ray_mask"].reshape(
-                -1, batch_size
-            )  # Shape: (1, batch_size)
+            img_mask = view["img_mask"].reshape(-1, batch_size)  # Shape: (1, batch_size)
+            ray_mask = view["ray_mask"].reshape(-1, batch_size)  # Shape: (1, batch_size)
             imgs = view["img"].unsqueeze(0)  # Shape: (1, batch_size, C, H, W)
-            ray_maps = view["ray_map"].unsqueeze(
-                0
-            )  # Shape: (num_views, batch_size, H, W, C)
+            ray_maps = view["ray_map"].unsqueeze(0)  # Shape: (num_views, batch_size, H, W, C)
             shapes = (
                 view["true_shape"].unsqueeze(0)
                 if "true_shape" in view
-                else torch.tensor(view["img"].shape[-2:], device=device)
-                .unsqueeze(0)
-                .repeat(batch_size, 1)
-                .unsqueeze(0)
+                else torch.tensor(view["img"].shape[-2:], device=device).unsqueeze(0).repeat(batch_size, 1).unsqueeze(0)
             )  # Shape: (num_views, batch_size, 2)
-            imgs = imgs.view(
-                -1, *imgs.shape[2:]
-            )  # Shape: (num_views * batch_size, C, H, W)
-            ray_maps = ray_maps.view(
-                -1, *ray_maps.shape[2:]
-            )  # Shape: (num_views * batch_size, H, W, C)
-            shapes = shapes.view(-1, 2).to(
-                imgs.device
-            )  # Shape: (num_views * batch_size, 2)
+            imgs = imgs.view(-1, *imgs.shape[2:])  # Shape: (num_views * batch_size, C, H, W)
+            ray_maps = ray_maps.view(-1, *ray_maps.shape[2:])  # Shape: (num_views * batch_size, H, W, C)
+            shapes = shapes.view(-1, 2).to(imgs.device)  # Shape: (num_views * batch_size, 2)
             img_masks_flat = img_mask.view(-1)  # Shape: (num_views * batch_size)
             ray_masks_flat = ray_mask.view(-1)
             selected_imgs = imgs[img_masks_flat]
@@ -1234,9 +1008,7 @@ class ARCroco3DStereo(CroCoNet):
             selected_ray_maps = ray_maps[ray_masks_flat]
             selected_shapes_ray = shapes[ray_masks_flat]
             if selected_ray_maps.size(0) > 0:
-                ray_out, ray_pos, _ = self._encode_ray_map(
-                    selected_ray_maps, selected_shapes_ray
-                )
+                ray_out, ray_pos, _ = self._encode_ray_map(selected_ray_maps, selected_shapes_ray)
             else:
                 ray_out, ray_pos = None, None
 
@@ -1258,9 +1030,7 @@ class ARCroco3DStereo(CroCoNet):
                 mem = self.pose_retriever.mem.expand(feat_i.shape[0], -1, -1)
                 init_state_feat = state_feat.clone()
                 init_mem = mem.clone()
-                all_state_args.append(
-                    (state_feat, state_pos, init_state_feat, mem, init_mem)
-                )
+                all_state_args.append((state_feat, state_pos, init_state_feat, mem, init_mem))
 
             if self.pose_head_flag:
                 global_img_feat_i = self._get_img_level_feat(feat_i)
@@ -1268,9 +1038,7 @@ class ARCroco3DStereo(CroCoNet):
                     pose_feat_i = self.pose_token.expand(feat_i.shape[0], -1, -1)
                 else:
                     pose_feat_i = self.pose_retriever.inquire(global_img_feat_i, mem)
-                pose_pos_i = -torch.ones(
-                    feat_i.shape[0], 1, 2, device=feat_i.device, dtype=pos_i.dtype
-                )
+                pose_pos_i = -torch.ones(feat_i.shape[0], 1, 2, device=feat_i.device, dtype=pos_i.dtype)
             else:
                 pose_feat_i = None
                 pose_pos_i = None
@@ -1287,9 +1055,7 @@ class ARCroco3DStereo(CroCoNet):
                 update=view.get("update", None),
             )
             out_pose_feat_i = dec[-1][:, 0:1]
-            new_mem = self.pose_retriever.update_mem(
-                mem, global_img_feat_i, out_pose_feat_i
-            )
+            new_mem = self.pose_retriever.update_mem(mem, global_img_feat_i, out_pose_feat_i)
             assert len(dec) == self.dec_depth + 1
             head_input = [
                 dec[0].float(),
@@ -1302,51 +1068,18 @@ class ARCroco3DStereo(CroCoNet):
             img_mask = view["img_mask"]
             update = view.get("update", None)
             if update is not None:
-                update_mask = (
-                    img_mask & update
-                )  # if don't update, then whatever img_mask
+                update_mask = img_mask & update  # if don't update, then whatever img_mask
             else:
                 update_mask = img_mask
             update_mask = update_mask[:, None, None].float()
-            state_feat = new_state_feat * update_mask + state_feat * (
-                1 - update_mask
-            )  # update global state
-            mem = new_mem * update_mask + mem * (
-                1 - update_mask
-            )  # then update local state
+            state_feat = new_state_feat * update_mask + state_feat * (1 - update_mask)  # update global state
+            mem = new_mem * update_mask + mem * (1 - update_mask)  # then update local state
             reset_mask = view["reset"]
             if reset_mask is not None:
                 reset_mask = reset_mask[:, None, None].float()
-                state_feat = init_state_feat * reset_mask + state_feat * (
-                    1 - reset_mask
-                )
+                state_feat = init_state_feat * reset_mask + state_feat * (1 - reset_mask)
                 mem = init_mem * reset_mask + mem * (1 - reset_mask)
-            all_state_args.append(
-                (state_feat, state_pos, init_state_feat, mem, init_mem)
-            )
+            all_state_args.append((state_feat, state_pos, init_state_feat, mem, init_mem))
         if ret_state:
             return ress, views, all_state_args
         return ress, views
-
-
-if __name__ == "__main__":
-    print(ARCroco3DStereo.mro())
-    cfg = ARCroco3DStereoConfig(
-        state_size=256,
-        pos_embed="RoPE100",
-        rgb_head=True,
-        pose_head=True,
-        img_size=(224, 224),
-        head_type="linear",
-        output_mode="pts3d+pose",
-        depth_mode=("exp", -inf, inf),
-        conf_mode=("exp", 1, inf),
-        pose_mode=("exp", -inf, inf),
-        enc_embed_dim=1024,
-        enc_depth=24,
-        enc_num_heads=16,
-        dec_embed_dim=768,
-        dec_depth=12,
-        dec_num_heads=12,
-    )
-    ARCroco3DStereo(cfg)

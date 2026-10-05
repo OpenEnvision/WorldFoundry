@@ -42,6 +42,8 @@ class BerniniRendererConfig(PretrainedConfig):
         use_src_id_rotary_emb: bool = True,
         interpolate_src_id: bool = True,
         max_trained_src_id: int = 5,
+        lazy_expert_loading: bool = False,
+        expert_device: str | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -59,6 +61,8 @@ class BerniniRendererConfig(PretrainedConfig):
         # unseen integer ids. The noisy target keeps source_id 0.
         self.interpolate_src_id = interpolate_src_id
         self.max_trained_src_id = max_trained_src_id
+        self.lazy_expert_loading = lazy_expert_loading
+        self.expert_device = expert_device
         self.architectures = ["BerniniRendererModel"]
 
 
@@ -127,25 +131,28 @@ class BerniniRendererModel(PreTrainedModel):
         self.t5_text_encoder = self.t5_text_encoder.to("cpu")
         torch.cuda.empty_cache()
 
-        return self.diff_dec.sample(
-            prompt_embeds=prompt_embeds,
-            uncond_prompt_embeds=uncond_prompt_embeds,
-            image_vae_latents=image_vae_latents,
-            multi_video_vae_latents=multi_video_vae_latents,
-            multi_image_vae_latents=multi_image_vae_latents,
-            num_frames=num_frames,
-            width=width,
-            height=height,
-            num_inference_steps=num_inference_steps,
-            guidance_mode=guidance_mode,
-            omega_vid=omega_vid,
-            omega_img=omega_img,
-            omega_txt=omega_txt,
-            omega_scale=omega_scale,
-            flow_shift=flow_shift,
-            seed=seed,
-            device=device,
-            eta=eta,
-            norm_threshold=norm_threshold,
-            momentum=momentum,
-        )
+        try:
+            return self.diff_dec.sample(
+                prompt_embeds=prompt_embeds,
+                uncond_prompt_embeds=uncond_prompt_embeds,
+                image_vae_latents=image_vae_latents,
+                multi_video_vae_latents=multi_video_vae_latents,
+                multi_image_vae_latents=multi_image_vae_latents,
+                num_frames=num_frames,
+                width=width,
+                height=height,
+                num_inference_steps=num_inference_steps,
+                guidance_mode=guidance_mode,
+                omega_vid=omega_vid,
+                omega_img=omega_img,
+                omega_txt=omega_txt,
+                omega_scale=omega_scale,
+                flow_shift=flow_shift,
+                seed=seed,
+                device=device,
+                eta=eta,
+                norm_threshold=norm_threshold,
+                momentum=momentum,
+            )
+        finally:
+            self.diff_dec.release_lazy_experts()

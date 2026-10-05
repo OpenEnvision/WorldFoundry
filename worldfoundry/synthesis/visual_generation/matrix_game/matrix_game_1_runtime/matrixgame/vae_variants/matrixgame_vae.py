@@ -1,8 +1,23 @@
-from worldfoundry.synthesis.visual_generation.matrix_game.shared.vae_wrapper import VAEWrapper
-import os
-import torch
-from pathlib import Path
-from worldfoundry.synthesis.visual_generation.matrix_game.vae import AutoencoderKLCausal3D
+from worldfoundry.base_models.diffusion_model.models.autoencoders.hunyuan_video import (
+    load_hunyuan_video_causal3d,
+)
+
+
+class VAEWrapper:
+    def __init__(self, vae):
+        self.vae = vae
+
+    def __getattr__(self, name):
+        if name in self.__dict__:
+            return self.__dict__[name]
+        return getattr(self.vae, name)
+
+    def encode(self, x):
+        raise NotImplementedError
+
+    def decode(self, latents):
+        raise NotImplementedError
+
 
 class MGVVAEWrapper(VAEWrapper):
     def __init__(self, vae):
@@ -26,17 +41,7 @@ class MGVVAEWrapper(VAEWrapper):
             latents = latents / self.vae.config.scaling_factor
         return self.vae.decode(latents).sample
 
+
 def get_mg_vae_wrapper(model_path, weight_dtype):
-    if model_path.endswith('.json'):
-        model_path = os.splitext(model_path)[0]
-    config = AutoencoderKLCausal3D.load_config(model_path)
-    vae = AutoencoderKLCausal3D.from_config(config)
-    vae_ckpt = Path(model_path) / "pytorch_model.pt"
-    ckpt = torch.load(vae_ckpt, map_location="cpu", weights_only=True)
-    if "state_dict" in ckpt:
-        ckpt = ckpt["state_dict"]
-    if any(k.startswith("vae.") for k in ckpt.keys()):
-        ckpt = {k.replace("vae.", ""): v for k, v in ckpt.items() if k.startswith("vae.")}
-    vae.load_state_dict(ckpt)
-    vae.to(weight_dtype)
-    return MGVVAEWrapper(vae)
+    path = model_path.removesuffix(".json")
+    return MGVVAEWrapper(load_hunyuan_video_causal3d(path, dtype=weight_dtype))

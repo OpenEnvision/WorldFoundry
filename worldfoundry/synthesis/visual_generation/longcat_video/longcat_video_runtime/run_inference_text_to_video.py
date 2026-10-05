@@ -8,15 +8,18 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
-from transformers import AutoTokenizer, UMT5EncoderModel
+from transformers import UMT5EncoderModel
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.video_io import write_video
+from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.tokenizer_loading import (
+    load_longcat_tokenizer,
+)
 
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.pipeline_longcat_video import LongCatVideoPipeline
-from worldfoundry.base_models.diffusion_model.video.cosmos.shared.scheduling_flow_match_euler_discrete import FlowMatchEulerDiscreteScheduler
+from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.scheduling_flow_match_euler import FlowMatchEulerDiscreteScheduler
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.autoencoder_kl_wan import AutoencoderKLWan
 from worldfoundry.synthesis.visual_generation.longcat_video.longcat_video_runtime.longcat_video.modules.longcat_video_dit import LongCatVideoTransformer3DModel
-from worldfoundry.core.distributed import context_parallel_util
-from worldfoundry.core.distributed.context_parallel_util import init_context_parallel
+from worldfoundry.core.distributed.model_parallel import context_state as context_parallel_util
+from worldfoundry.core.distributed.model_parallel.context_state import init_context_parallel
 
 
 def torch_gc():
@@ -54,6 +57,19 @@ def _request_float(request: dict, key: str, default: float) -> float:
         return default
 
 
+def _request_bool(request: dict, key: str, default: bool) -> bool:
+    value = request.get(key, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return bool(value)
+
+
 def generate(args):
     # case setup
     request = _load_worldfoundry_request()
@@ -68,6 +84,15 @@ def generate(args):
     guidance_scale = _request_float(request, "guidance_scale", 4.0)
     seed_override = request.get("seed")
     fps = _request_int(request, "fps", 15)
+    cpu_offload = _request_bool(request, "cpu_offload", True)
+    run_base = _request_bool(request, "run_base", True)
+    run_distill = _request_bool(request, "run_distill", True)
+    run_refiner = _request_bool(request, "run_refiner", True)
+    max_sequence_length = _request_int(request, "max_sequence_length", 512)
+    if not run_base and not run_distill:
+        raise ValueError("LongCat-Video requires at least one of run_base or run_distill.")
+    if run_refiner and not run_distill:
+        raise ValueError("LongCat-Video refinement requires run_distill=True.")
 
     # load parsed args
     checkpoint_dir = args.checkpoint_dir
@@ -88,7 +113,7 @@ def generate(args):
     cp_size = context_parallel_util.get_cp_size()
     cp_split_hw = context_parallel_util.get_optimal_split(cp_size)
 
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir, subfolder="tokenizer", torch_dtype=torch.bfloat16)
+    tokenizer = load_longcat_tokenizer(checkpoint_dir)
     text_encoder = UMT5EncoderModel.from_pretrained(checkpoint_dir, subfolder="text_encoder", torch_dtype=torch.bfloat16)
     vae = AutoencoderKLWan.from_pretrained(checkpoint_dir, subfolder="vae", torch_dtype=torch.bfloat16)
     scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(checkpoint_dir, subfolder="scheduler", torch_dtype=torch.bfloat16)
@@ -104,7 +129,10 @@ def generate(args):
         scheduler = scheduler,
         dit = dit,
     )
-    pipe.to(local_rank)
+    if cpu_offload:
+        pipe.enable_t2v_cpu_offload(local_rank)
+    else:
+        pipe.to(local_rank)
 
     global_seed = 42 if seed_override is None else _request_int(request, "seed", 42)
     seed = global_seed + global_rank
@@ -112,80 +140,86 @@ def generate(args):
     generator = torch.Generator(device=local_rank)
     generator.manual_seed(seed)
 
-    ### t2v (480p)
-    output = pipe.generate_t2v(
-        prompt=prompt,
-        negative_prompt=negative_prompt,
-        height=height,
-        width=width,
-        num_frames=num_frames,
-        num_inference_steps=num_inference_steps,
-        guidance_scale=guidance_scale,
-        generator=generator,
-    )[0]
+    if run_base:
+        ### t2v (480p)
+        output = pipe.generate_t2v(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            height=height,
+            width=width,
+            num_frames=num_frames,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            generator=generator,
+            max_sequence_length=max_sequence_length,
+        )[0]
 
-    if local_rank == 0:
-        output_tensor = torch.from_numpy(np.array(output))
-        output_tensor = (output_tensor * 255).clamp(0, 255).to(torch.uint8)
-        write_video("output_t2v.mp4", output_tensor, fps=fps, video_codec="libx264", options={"crf": f"{18}"})
-    del output
-    torch_gc()
+        if local_rank == 0:
+            output_tensor = torch.from_numpy(np.array(output))
+            output_tensor = (output_tensor * 255).clamp(0, 255).to(torch.uint8)
+            write_video("output_t2v.mp4", output_tensor, fps=fps, video_codec="libx264", options={"crf": f"{18}"})
+        del output
+        torch_gc()
 
-    ### t2v distill (480p)
-    cfg_step_lora_path = os.path.join(checkpoint_dir, 'lora/cfg_step_lora.safetensors')
-    pipe.dit.load_lora(cfg_step_lora_path, 'cfg_step_lora')
-    pipe.dit.enable_loras(['cfg_step_lora'])
+    output_distill = None
+    if run_distill:
+        ### t2v distill (480p)
+        cfg_step_lora_path = os.path.join(checkpoint_dir, 'lora/cfg_step_lora.safetensors')
+        pipe.dit.load_lora(cfg_step_lora_path, 'cfg_step_lora')
+        pipe.dit.enable_loras(['cfg_step_lora'])
 
-    if enable_compile:
-        dit = torch.compile(dit)
+        if enable_compile:
+            dit = torch.compile(dit)
 
-    output_distill = pipe.generate_t2v(
-        prompt=prompt,
-        height=height,
-        width=width,
-        num_frames=num_frames,
-        num_inference_steps=distill_steps,
-        use_distill=True,
-        guidance_scale=1.0,
-        generator=generator,
-    )[0]
-    pipe.dit.disable_all_loras()
+        output_distill = pipe.generate_t2v(
+            prompt=prompt,
+            height=height,
+            width=width,
+            num_frames=num_frames,
+            num_inference_steps=distill_steps,
+            use_distill=True,
+            guidance_scale=1.0,
+            generator=generator,
+            max_sequence_length=max_sequence_length,
+        )[0]
+        pipe.dit.disable_all_loras()
 
-    if local_rank == 0:
-        output_processed_tensor = torch.from_numpy(np.array(output_distill))
-        output_processed_tensor = (output_processed_tensor * 255).clamp(0, 255).to(torch.uint8)
-        write_video("output_t2v_distill.mp4", output_processed_tensor, fps=fps, video_codec="libx264", options={"crf": f"{18}"})
+        if local_rank == 0:
+            output_processed_tensor = torch.from_numpy(np.array(output_distill))
+            output_processed_tensor = (output_processed_tensor * 255).clamp(0, 255).to(torch.uint8)
+            write_video("output_t2v_distill.mp4", output_processed_tensor, fps=fps, video_codec="libx264", options={"crf": f"{18}"})
 
-    ### t2v refinement (720p)
-    refinement_lora_path = os.path.join(checkpoint_dir, 'lora/refinement_lora.safetensors')
-    pipe.dit.load_lora(refinement_lora_path, 'refinement_lora')
-    pipe.dit.enable_loras(['refinement_lora'])
-    pipe.dit.enable_bsa()
+    if run_refiner:
+        ### t2v refinement (720p)
+        refinement_lora_path = os.path.join(checkpoint_dir, 'lora/refinement_lora.safetensors')
+        pipe.dit.load_lora(refinement_lora_path, 'refinement_lora')
+        pipe.dit.enable_loras(['refinement_lora'])
+        pipe.dit.enable_bsa()
 
-    if enable_compile:
-        dit = torch.compile(dit)
+        if enable_compile:
+            dit = torch.compile(dit)
 
-    stage1_video = [(output_distill[i] * 255).astype(np.uint8) for i in range(output_distill.shape[0])]
-    stage1_video = [PIL.Image.fromarray(img) for img in stage1_video]
-    del output_distill 
-    torch_gc()
+        stage1_video = [(output_distill[i] * 255).astype(np.uint8) for i in range(output_distill.shape[0])]
+        stage1_video = [PIL.Image.fromarray(img) for img in stage1_video]
+        del output_distill
+        torch_gc()
 
-    output_refine = pipe.generate_refine(
-        prompt=prompt,
-        stage1_video=stage1_video,
-        num_inference_steps=num_inference_steps,
-        generator=generator,
-        spatial_refine_only=spatial_refine_only
-    )[0]
+        output_refine = pipe.generate_refine(
+            prompt=prompt,
+            stage1_video=stage1_video,
+            num_inference_steps=num_inference_steps,
+            generator=generator,
+            spatial_refine_only=spatial_refine_only,
+        )[0]
 
-    pipe.dit.disable_all_loras()
-    pipe.dit.disable_bsa()
+        pipe.dit.disable_all_loras()
+        pipe.dit.disable_bsa()
 
-    if local_rank == 0:
-        output_tensor = torch.from_numpy(output_refine)
-        output_tensor = (output_tensor * 255).clamp(0, 255).to(torch.uint8)
-        refine_fps = fps if spatial_refine_only else fps * 2
-        write_video("output_t2v_refine.mp4", output_tensor, fps=refine_fps, video_codec="libx264", options={"crf": f"{10}"})
+        if local_rank == 0:
+            output_tensor = torch.from_numpy(output_refine)
+            output_tensor = (output_tensor * 255).clamp(0, 255).to(torch.uint8)
+            refine_fps = fps if spatial_refine_only else fps * 2
+            write_video("output_t2v_refine.mp4", output_tensor, fps=refine_fps, video_codec="libx264", options={"crf": f"{10}"})
 
 
 def _parse_args():

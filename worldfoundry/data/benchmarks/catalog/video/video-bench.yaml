@@ -1,5 +1,7 @@
 id: video-bench
 name: Video-Bench
+publisher: Shanghai Jiao Tong University
+publisher_kind: university
 benchmark_kind:
 - human-preference-aligned
 - mllm-judge
@@ -143,6 +145,13 @@ metrics:
   output_unit: score
   primary: true
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/videobench/run_videobench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.videobench.run_videobench_official_runner
+    dimension_arg: --dimension
+    supports_run_official: false
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:VideoBenchContract
   validation_command:
   - worldfoundry-eval
@@ -222,6 +231,7 @@ runner:
     generated videos, the wrapper dispatches to upstream evaluate.py and normalizes official score outputs.
 integration:
   status: integrated
+  tier: in_tree
   credential_gated: true
   required_credentials:
   - WORLDFOUNDRY_VIDEOBENCH_GPT4O_API_KEY or OPENAI_API_KEY

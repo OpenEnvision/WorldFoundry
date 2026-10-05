@@ -1,0 +1,66 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BC-02
+track: coverage
+title_en: Basketball Shot at Hoop
+scene_grounding:
+- 'Initial state must match: A basketball player holds the ball in the visible shooting pose aligned with
+  a visible hoop.'
+- Apparatus geometry in the opening frames must match the source image.
+action_execution:
+- 'Required action: Shoot the basketball once from the visible shooting pose toward the hoop.'
+- Action must happen exactly once in the expected direction / region.
+- Action target must be identifiable in the same frame as the action onset (Track B target acquisition).
+- The action must be visible as a single continuous event from the described initial state; cuts, hidden
+  starts, or repeated attempts are action-execution failures.
+- For contact labels, the object trajectory from release/kick/throw/roll to target or miss must be continuous
+  enough to audit contact.
+target_requirements:
+- Hoop, rim/backboard, and ball must be visible enough to audit made basket, contact miss surface, and
+  no-contact miss geometry; the shot target is the hoop, not a generic upward toss.
+- A scoring label requires continuous ball trajectory through the hoop/rim plane; off-screen rim contact
+  or a ball appearing in the net without approach is TRAJECTORY_INVALID/OBJECT_ACQUISITION_FAIL.
+- Rim and backboard contact must be visibly separable when choosing rim_miss_no_score versus backboard_miss_no_score
+  or backboard_then_in versus rim_then_in.
+- No-contact miss labels require visible geometry relative to the hoop; if lateral/short/long miss geometry
+  is hidden, mark READOUT_AMBIGUITY.
+object_continuity:
+- Subject object(s) must not disappear, duplicate, or teleport during the readout window.
+- Color / identity of the subject must remain consistent across frames.
+- 'Identity continuity is fatal: the judged subject, target, and key apparatus must not swap appearance,
+  duplicate, vanish, or re-enter as a different object/person/animal.'
+- Fast-moving object continuity must be judged from a continuous visible trajectory, not from a before/after
+  object appearing at the target.
+apparatus_stability:
+- Scene-defining apparatus, target geometry, and support surfaces must not drift, resize, or change color mid-run.
+- Hoop, rim, net/backboard alignment must not drift or resize during the shot.
+motion_hard_failures:
+- 'Teleport: subject moves across space without a continuous trajectory.'
+- 'Post-result side change: label-defining region changes after the first decisive post-action frame.'
+- Outcome label changes (e.g., from miss to score) via a non-physical motion after the first decisive
+  contact frame.
+- 'Hoop score/miss contradiction: ball trajectory misses the hoop but later appears through the net, or
+  score changes to miss without visible rebound.'
+post_result_consistency:
+- Post-result frames must remain physically consistent with the readout label.
+- No retroactive change of the outcome label via physically impossible motion after the readout window.
+- After the first hoop/rim/backboard result, the ball must not retroactively change from airball/miss
+  to score or from score to miss without continuous rebound motion.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Basketball Shot at Hoop.'
+- 'Fatal severity cue: target/stimulus acquisition failure, impossible trajectory, identity discontinuity,
+  or post-result contradiction excludes strict trusted metrics even if the outcome is readable.'
+- 'BC contact trust cue: target contact/hit/miss geometry, continuous trajectory, collision consistency,
+  and apparatus stability are mandatory.'

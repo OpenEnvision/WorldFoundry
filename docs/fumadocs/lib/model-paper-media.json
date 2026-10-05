@@ -1,0 +1,1283 @@
+{
+  "ac3d": {
+    "paper": {
+      "title": "AC3D: Analyzing and Improving 3D Camera Control in Video Diffusion Transformers",
+      "year": 2024,
+      "venue": "CVPR 2025",
+      "arxivId": "2411.18673",
+      "abstract": "Numerous works have recently integrated 3D camera control into foundational text-to-video models, but the resulting camera control is often imprecise, and video generation quality suffers. In this work, we analyze camera motion from a first principles perspective, uncovering insights that enable precise 3D camera manipulation without compromising synthesis quality. First, we determine that motion induced by camera movements in videos is low-frequency in nature. This motivates us to adjust train and test pose conditioning schedules, accelerating training convergence while improving visual and motion quality. Then, by probing the representations of an unconditional video diffusion transformer, we observe that they implicitly perform camera pose estimation under the hood, and only a sub-portion of their layers contain the camera information. This suggested us to limit the injection of camer"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/ac3d/paper.png",
+        "caption": "AC3D: Analyzing and Improving 3D Camera Control in Video Diffusion Transformers",
+        "captionZh": "AC3D: Analyzing and Improving 3D Camera Control in Video Diffusion Transformers"
+      }
+    ]
+  },
+  "astra": {
+    "paper": {
+      "title": "Astra: General Interactive World Model with Autoregressive Denoising",
+      "year": 2025,
+      "venue": "ICLR 2026",
+      "arxivId": "2512.08931",
+      "abstract": "Recent advances in diffusion transformers have empowered video generation models to generate high-quality video clips from texts or images. However, world models with the ability to predict long-horizon futures from past observations and actions remain underexplored, especially for general-purpose scenarios and various forms of actions. To bridge this gap, we introduce Astra, an interactive general world model that generates real-world futures for diverse scenarios (e.g., autonomous driving, robot grasping) with precise action interactions (e.g., camera motion, robot action). We propose an autoregressive denoising architecture and use temporal causal attention to aggregate past observations and support streaming outputs. We use a noise-augmented history memory to avoid over-reliance on past frames to balance responsiveness with temporal coherence. For precise action control, we introduce"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/astra/paper.png",
+        "caption": "Astra: General Interactive World Model with Autoregressive Denoising",
+        "captionZh": "Astra: General Interactive World Model with Autoregressive Denoising"
+      }
+    ]
+  },
+  "cogvideox": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "teaser",
+        "src": "/models/cogvideox/teaser.webp",
+        "caption": "Paper teaser — CogVideoX generation collage",
+        "captionZh": "论文 Teaser：CogVideoX 生成拼图"
+      },
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/cogvideox/overview.jpg",
+        "caption": "Method overview — expert Transformer with 3D causal VAE",
+        "captionZh": "方法总览：专家 Transformer 与 3D 因果 VAE"
+      }
+    ]
+  },
+  "dust3r": {
+    "paper": {
+      "title": "DUSt3R: Geometric 3D Vision Made Easy",
+      "year": 2023,
+      "venue": null,
+      "arxivId": "2312.14132",
+      "abstract": "Multi-view stereo reconstruction (MVS) in the wild requires to first estimate the camera parameters e.g. intrinsic and extrinsic parameters. These are usually tedious and cumbersome to obtain, yet they are mandatory to triangulate corresponding pixels in 3D space, which is the core of all best performing MVS algorithms. In this work, we take an opposite stance and introduce DUSt3R, a radically novel paradigm for Dense and Unconstrained Stereo 3D Reconstruction of arbitrary image collections, i.e. operating without prior information about camera calibration nor viewpoint poses. We cast the pairwise reconstruction problem as a regression of pointmaps, relaxing the hard constraints of usual projective camera models. We show that this formulation smoothly unifies the monocular and binocular reconstruction cases. In the case where more than two images are provided, we further propose a simple"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/dust3r/paper.png",
+        "caption": "DUSt3R: Geometric 3D Vision Made Easy",
+        "captionZh": "DUSt3R: Geometric 3D Vision Made Easy"
+      }
+    ]
+  },
+  "fantasyworld": {
+    "paper": {
+      "title": "FantasyWorld: Geometry-Consistent World Modeling via Unified Video and 3D Prediction",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2509.21657",
+      "abstract": "High-quality 3D world models are pivotal for embodied intelligence and Artificial General Intelligence (AGI), underpinning applications such as AR/VR content creation and robotic navigation. Despite the established strong imaginative priors, current video foundation models lack explicit 3D grounding capabilities, thus being limited in both spatial consistency and their utility for downstream 3D reasoning tasks. In this work, we present FantasyWorld, a geometry-enhanced framework that augments frozen video foundation models with a trainable geometric branch, enabling joint modeling of video latents and an implicit 3D field in a single forward pass. Our approach introduces cross-branch supervision, where geometry cues guide video generation and video priors regularize 3D prediction, thus yielding consistent and generalizable 3D-aware video representations. Notably, the resulting latents fr"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/fantasyworld/paper.png",
+        "caption": "FantasyWorld: Geometry-Consistent World Modeling via Unified Video and 3D Prediction",
+        "captionZh": "FantasyWorld: Geometry-Consistent World Modeling via Unified Video and 3D Prediction"
+      }
+    ]
+  },
+  "flashworld": {
+    "paper": {
+      "title": "FlashWorld: High-quality 3D Scene Generation within Seconds",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2510.13678",
+      "abstract": "We propose FlashWorld, a generative model that produces 3D scenes from a single image or text prompt in seconds, 10~100$\\times$ faster than previous works while possessing superior rendering quality. Our approach shifts from the conventional multi-view-oriented (MV-oriented) paradigm, which generates multi-view images for subsequent 3D reconstruction, to a 3D-oriented approach where the model directly produces 3D Gaussian representations during multi-view generation. While ensuring 3D consistency, 3D-oriented method typically suffers poor visual quality. FlashWorld includes a dual-mode pre-training phase followed by a cross-mode post-training phase, effectively integrating the strengths of both paradigms. Specifically, leveraging the prior from a video diffusion model, we first pre-train a dual-mode multi-view diffusion model, which jointly supports MV-oriented and 3D-oriented generation"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/flashworld/paper.png",
+        "caption": "FlashWorld: High-quality 3D Scene Generation within Seconds",
+        "captionZh": "FlashWorld: High-quality 3D Scene Generation within Seconds"
+      }
+    ]
+  },
+  "hunyuan-game-craft": {
+    "figures": []
+  },
+  "hy-worldplay": {
+    "figures": []
+  },
+  "longvie-2": {
+    "figures": []
+  },
+  "matrix-game-2": {
+    "figures": []
+  },
+  "matrix-game-3": {
+    "figures": []
+  },
+  "neoverse": {
+    "paper": {
+      "title": "NeoVerse: Enhancing 4D World Model with in-the-wild Monocular Videos",
+      "year": 2026,
+      "venue": "CVPR 2026",
+      "arxivId": "2601.00393",
+      "abstract": "In this paper, we propose NeoVerse, a versatile 4D world model that is capable of 4D reconstruction, novel-trajectory video generation, and rich downstream applications. We first identify a common limitation of scalability in current 4D world modeling methods, caused either by expensive and specialized multi-view 4D data or by cumbersome training pre-processing. In contrast, our NeoVerse is built upon a core philosophy that makes the full pipeline scalable to diverse in-the-wild monocular videos. Specifically, NeoVerse features pose-free feed-forward 4D reconstruction, online monocular degradation pattern simulation, and other well-aligned techniques. These designs empower NeoVerse with versatility and generalization to various domains. Meanwhile, NeoVerse achieves state-of-the-art performance in standard reconstruction and generation benchmarks. Our project page is available at https://"
+    },
+    "figures": []
+  },
+  "recammaster": {
+    "paper": {
+      "title": "ReCamMaster: Camera-Controlled Generative Rendering from A Single Video",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2503.11647",
+      "abstract": "Camera control has been actively studied in text or image conditioned video generation tasks. However, altering camera trajectories of a given video remains under-explored, despite its importance in the field of video creation. It is non-trivial due to the extra constraints of maintaining multiple-frame appearance and dynamic synchronization. To address this, we present ReCamMaster, a camera-controlled generative video re-rendering framework that reproduces the dynamic scene of an input video at novel camera trajectories. The core innovation lies in harnessing the generative capabilities of pre-trained text-to-video models through a simple yet powerful video conditioning mechanism--its capability is often overlooked in current research. To overcome the scarcity of qualified training data, we construct a comprehensive multi-camera synchronized video dataset using Unreal Engine 5, which is"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/recammaster/paper.png",
+        "caption": "ReCamMaster: Camera-Controlled Generative Rendering from A Single Video",
+        "captionZh": "ReCamMaster: Camera-Controlled Generative Rendering from A Single Video"
+      }
+    ]
+  },
+  "scope": {
+    "paper": {
+      "title": "SCOPE: Simulating Cross-game Operations in Playable Environments for FPS World Models",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2605.23345",
+      "abstract": "Interactive world models for first-person shooter (FPS) games must resolve high-frequency overlapping control signals at every frame without disrupting unaffected regions. Existing methods inject actions globally and train on single titles, failing under dense FPS inputs. We observe that FPS actions are spatially selective: discrete events such as firing or reloading affect only a localized region around the weapon (the scope), while continuous camera and movement signals govern stable surroundings. We propose SCOPE, which inserts a conditioning module into each transformer block of a pretrained video diffusion model. It reshapes features into per-pixel temporal sequences so that each position computes its action response from local visual content. This separates in-scope effects from out-of-scope generation without segmentation labels. We also introduce CrossFPS, the first multi-game FP"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/scope/paper.png",
+        "caption": "SCOPE: Simulating Cross-game Operations in Playable Environments for FPS World Models",
+        "captionZh": "SCOPE: Simulating Cross-game Operations in Playable Environments for FPS World Models"
+      }
+    ]
+  },
+  "show-o": {
+    "paper": {
+      "title": "Show-o: One Single Transformer to Unify Multimodal Understanding and Generation",
+      "year": 2024,
+      "venue": "ICLR 2025",
+      "arxivId": "2408.12528",
+      "abstract": "We present a unified transformer, i.e., Show-o, that unifies multimodal understanding and generation. Unlike fully autoregressive models, Show-o unifies autoregressive and (discrete) diffusion modeling to adaptively handle inputs and outputs of various and mixed modalities. The unified model flexibly supports a wide range of vision-language tasks including visual question-answering, text-to-image generation, text-guided inpainting/extrapolation, and mixed-modality generation. Across various benchmarks, it demonstrates comparable or superior performance to existing individual models with an equivalent or larger number of parameters tailored for understanding or generation. This significantly highlights its potential as a next-generation foundation model. Code and models are released at https://github.com/showlab/Show-o."
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/show-o/paper.png",
+        "caption": "Show-o: One Single Transformer to Unify Multimodal Understanding and Generation",
+        "captionZh": "Show-o: One Single Transformer to Unify Multimodal Understanding and Generation"
+      }
+    ]
+  },
+  "solaris": {
+    "paper": {
+      "title": "Solaris: Building a Multiplayer Video World Model in Minecraft",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2602.22208",
+      "abstract": "Existing action-conditioned video generation models (video world models) are limited to single-agent perspectives, failing to capture the multi-agent interactions of real-world environments. We introduce Solaris, a multiplayer video world model that simulates consistent multi-view observations. To enable this, we develop a multiplayer data system designed for robust, continuous, and automated data collection on video games such as Minecraft. Unlike prior platforms built for single-player settings, our system supports coordinated multi-agent interaction and synchronized videos + actions capture. Using this system, we collect 12.64 million multiplayer frames and propose an evaluation framework for multiplayer movement, memory, grounding, building, and view consistency. We train Solaris using a staged pipeline that progressively transitions from single-player to multiplayer modeling, combin"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/solaris/paper.png",
+        "caption": "Solaris: Building a Multiplayer Video World Model in Minecraft",
+        "captionZh": "Solaris: Building a Multiplayer Video World Model in Minecraft"
+      }
+    ]
+  },
+  "splatt3r": {
+    "paper": {
+      "title": "Splatt3R: Zero-shot Gaussian Splatting from Uncalibrated Image Pairs",
+      "year": 2024,
+      "venue": null,
+      "arxivId": "2408.13912",
+      "abstract": "In this paper, we introduce Splatt3R, a pose-free, feed-forward method for in-the-wild 3D reconstruction and novel view synthesis from stereo pairs. Given uncalibrated natural images, Splatt3R can predict 3D Gaussian Splats without requiring any camera parameters or depth information. For generalizability, we build Splatt3R upon a ``foundation'' 3D geometry reconstruction method, MASt3R, by extending it to deal with both 3D structure and appearance. Specifically, unlike the original MASt3R which reconstructs only 3D point clouds, we predict the additional Gaussian attributes required to construct a Gaussian primitive for each point. Hence, unlike other novel view synthesis methods, Splatt3R is first trained by optimizing the 3D point cloud's geometry loss, and then a novel view synthesis objective. By doing this, we avoid the local minima present in training 3D Gaussian Splats from stere"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/splatt3r/paper.png",
+        "caption": "Splatt3R: Zero-shot Gaussian Splatting from Uncalibrated Image Pairs",
+        "captionZh": "Splatt3R: Zero-shot Gaussian Splatting from Uncalibrated Image Pairs"
+      }
+    ]
+  },
+  "vmem": {
+    "paper": {
+      "title": "VMem: Consistent Interactive Video Scene Generation with Surfel-Indexed View Memory",
+      "year": 2025,
+      "venue": "ICCV 2025 highlight",
+      "arxivId": "2506.18903",
+      "abstract": "We propose a novel memory module for building video generators capable of interactively exploring environments. Previous approaches have achieved similar results either by out-painting 2D views of a scene while incrementally reconstructing its 3D geometry-which quickly accumulates errors-or by using video generators with a short context window, which struggle to maintain scene coherence over the long term. To address these limitations, we introduce Surfel-Indexed View Memory (VMem), a memory module that remembers past views by indexing them geometrically based on the 3D surface elements (surfels) they have observed. VMem enables efficient retrieval of the most relevant past views when generating new ones. By focusing only on these relevant views, our method produces consistent explorations of imagined environments at a fraction of the computational cost required to use all past views as "
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/vmem/paper.png",
+        "caption": "VMem: Consistent Interactive Video Scene Generation with Surfel-Indexed View Memory",
+        "captionZh": "VMem: Consistent Interactive Video Scene Generation with Surfel-Indexed View Memory"
+      }
+    ]
+  },
+  "worldcam": {
+    "figures": []
+  },
+  "yume": {
+    "figures": []
+  },
+  "alayaworld": {
+    "paper": {
+      "title": "AlayaWorld: Long-Horizon and Playable Video World Generation",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2607.06291",
+      "abstract": "Game worlds have traditionally been built through labor-intensive production pipelines, making them costly to develop, difficult to customization, and expensive to modify after deployment. Recent advances in video world models offer a fundamentally different paradigm. Rather than explicitly authoring every component of a virtual environment, these models autoregressively synthesize future observations conditioned on the current world state and user interactions, enabling playable worlds to be generated online. Trained on both gameplay recordings and real-world videos, they can capture diverse visual appearances and physical dynamics, opening new opportunities for interactive applications beyond gaming, including embodied intelligence. In this paper, we present \\textbf{AlayaWorld}, a full-stack open-source framework for building interactive generative worlds. AlayaWorld enables open-ended"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/alayaworld/paper.png",
+        "caption": "AlayaWorld: Long-Horizon and Playable Video World Generation",
+        "captionZh": "AlayaWorld: Long-Horizon and Playable Video World Generation"
+      }
+    ]
+  },
+  "bernini": {
+    "paper": {
+      "title": "Bernini: Latent Semantic Planning for Video Diffusion",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2605.22344",
+      "abstract": "Multimodal large language models (MLLMs) and diffusion models have each reached remarkable maturity: MLLMs excel at reasoning over heterogeneous multimodal inputs with strong semantic grounding, while diffusion models synthesize images and videos with photorealistic fidelity. We argue that these two families can be unified through a simple division of labor: MLLMs perform semantic planning, while diffusion models render pixels from high-level semantic guidance and low-level visual features. Building on this idea, we propose Bernini, a unified framework for video generation and editing. An MLLM-based planner predicts the target semantic representation directly in the ViT embedding space, and a DiT-based renderer synthesizes pixels conditioned on this plan, augmented by text features and, for editing, source VAE features for detail preservation. Because semantics serve as the interface, th"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/bernini/paper.png",
+        "caption": "Bernini: Latent Semantic Planning for Video Diffusion",
+        "captionZh": "Bernini: Latent Semantic Planning for Video Diffusion"
+      }
+    ]
+  },
+  "bernini-r-1.3b": {
+    "paper": {
+      "title": "Bernini: Latent Semantic Planning for Video Diffusion",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2605.22344",
+      "abstract": "Multimodal large language models (MLLMs) and diffusion models have each reached remarkable maturity: MLLMs excel at reasoning over heterogeneous multimodal inputs with strong semantic grounding, while diffusion models synthesize images and videos with photorealistic fidelity. We argue that these two families can be unified through a simple division of labor: MLLMs perform semantic planning, while diffusion models render pixels from high-level semantic guidance and low-level visual features. Building on this idea, we propose Bernini, a unified framework for video generation and editing. An MLLM-based planner predicts the target semantic representation directly in the ViT embedding space, and a DiT-based renderer synthesizes pixels conditioned on this plan, augmented by text features and, for editing, source VAE features for detail preservation. Because semantics serve as the interface, th"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/bernini-r-1.3b/paper.png",
+        "caption": "Bernini: Latent Semantic Planning for Video Diffusion",
+        "captionZh": "Bernini: Latent Semantic Planning for Video Diffusion"
+      }
+    ]
+  },
+  "bernini-r-14b": {
+    "paper": {
+      "title": "Bernini: Latent Semantic Planning for Video Diffusion",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2605.22344",
+      "abstract": "Multimodal large language models (MLLMs) and diffusion models have each reached remarkable maturity: MLLMs excel at reasoning over heterogeneous multimodal inputs with strong semantic grounding, while diffusion models synthesize images and videos with photorealistic fidelity. We argue that these two families can be unified through a simple division of labor: MLLMs perform semantic planning, while diffusion models render pixels from high-level semantic guidance and low-level visual features. Building on this idea, we propose Bernini, a unified framework for video generation and editing. An MLLM-based planner predicts the target semantic representation directly in the ViT embedding space, and a DiT-based renderer synthesizes pixels conditioned on this plan, augmented by text features and, for editing, source VAE features for detail preservation. Because semantics serve as the interface, th"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/bernini-r-14b/paper.png",
+        "caption": "Bernini: Latent Semantic Planning for Video Diffusion",
+        "captionZh": "Bernini: Latent Semantic Planning for Video Diffusion"
+      }
+    ]
+  },
+  "causal-forcing": {
+    "paper": {
+      "title": "Causal Forcing: Autoregressive Diffusion Distillation Done Right for High-Quality Real-Time Interactive Video Generation",
+      "year": 2026,
+      "venue": "ICML 2026",
+      "arxivId": "2602.02214",
+      "abstract": "To achieve real-time interactive video generation, current methods distill pretrained bidirectional video diffusion models into few-step autoregressive (AR) models, facing an architectural gap when full attention is replaced by causal attention. However, existing approaches do not bridge this gap theoretically. They initialize the AR student via ODE distillation, which requires frame-level injectivity, where each noisy frame must map to a unique clean frame under the PF-ODE of an AR teacher. Distilling an AR student from a bidirectional teacher violates this condition, preventing recovery of the teacher's flow map and instead inducing a conditional-expectation solution, which degrades performance. To address this issue, we propose Causal Forcing, which uses an autoregressive teacher for ODE initialization to bridge the architectural gap, and then applies the same DMD procedure as in Self"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/causal-forcing/paper.png",
+        "caption": "Causal Forcing: Autoregressive Diffusion Distillation Done Right for High-Quality Real-Time Interactive Video Generation",
+        "captionZh": "Causal Forcing: Autoregressive Diffusion Distillation Done Right for High-Quality Real-Time Interactive Video Generation"
+      }
+    ]
+  },
+  "cosmos-predict-2.5": {
+    "figures": []
+  },
+  "dvlt": {
+    "paper": {
+      "title": "Déjà View: Looping Transformers for Multi-View 3D Reconstruction",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2605.30215",
+      "abstract": "Recent feed-forward 3D reconstruction transformers have scaled to over a billion parameters, following the broader trend of increasing model capacity in computer vision. Yet emerging evidence suggests that contiguous transformer layers often behave like repeated applications of similar operations, and multi-view reconstruction transformers refine their predictions progressively across decoder depth. We posit that model depth partially buys iteration, paid for inefficiently in unique parameters, and instead make that iteration explicit in architecture. Our model, DéjàView, applies a single looped transformer block recurrently to per-view features for K refinement steps. Trained once, it exposes K as an inference-time compute knob, matching or outperforming substantially larger feed-forward baselines across five reconstruction benchmarks spanning indoor, outdoor, object-centric, and drivin"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/dvlt/paper.png",
+        "caption": "Déjà View: Looping Transformers for Multi-View 3D Reconstruction",
+        "captionZh": "Déjà View: Looping Transformers for Multi-View 3D Reconstruction"
+      }
+    ]
+  },
+  "echo-memory-context-k1": {
+    "paper": {
+      "title": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2606.09803",
+      "abstract": "We present \\textbf{Echo-Memory}, a controlled study of memory mechanisms in action-conditioned world models. These models generate multi-segment videos from a first frame, text prompt, and camera-action sequence, but their central failure is often memory rather than local image synthesis: after the camera leaves and returns, the scene or salient object may silently change. Existing memory designs are hard to compare because gains are entangled with backbone, training, retrieval, and evaluation differences. Echo-Memory fixes the action-to-video interface and varies only how history is stored and read by the generator. Under a shared video diffusion backbone, optimizer, camera-action representation, sampler, and evaluation pipeline, we compare raw context, compression-based memory, spatial summaries with different read-out paths, and state-space recurrence. This matched matrix separates fo"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/echo-memory-context-k1/paper.png",
+        "caption": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+        "captionZh": "Echo-Memory: A Controlled Study of Memory in Action World Models"
+      }
+    ]
+  },
+  "hunyuanvideo": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/hunyuanvideo/overall.png",
+        "caption": "Method overview — Causal 3D VAE, LLM text encoder, and latent diffusion",
+        "captionZh": "方法总览：因果 3D VAE、大语言模型文本编码与潜空间扩散"
+      },
+      {
+        "kind": "image",
+        "src": "/models/hunyuanvideo/backbone.png",
+        "caption": "Dual-stream to single-stream Transformer backbone for unified image and video generation",
+        "captionZh": "双流到单流 Transformer 骨干，用于统一的图视频生成"
+      },
+      {
+        "kind": "image",
+        "src": "/models/hunyuanvideo/text_encoder.png",
+        "caption": "MLLM text encoder with a bidirectional token refiner",
+        "captionZh": "带双向 token 优化器的 MLLM 文本编码器"
+      },
+      {
+        "kind": "image",
+        "src": "/models/hunyuanvideo/3dvae.png",
+        "caption": "CausalConv3D VAE — temporal 4×, spatial 8×, 16-channel latent",
+        "captionZh": "CausalConv3D VAE：时间 4 倍、空间 8 倍压缩，16 通道潜空间"
+      },
+      {
+        "kind": "image",
+        "src": "/models/hunyuanvideo/i2v_backbone.png",
+        "caption": "HunyuanVideo-I2V architecture — token replace of the reference image into the video generator",
+        "captionZh": "HunyuanVideo-I2V 架构：用 token replace 将参考图写入视频生成过程"
+      }
+    ]
+  },
+  "hunyuanvideo-1.5": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/hunyuanvideo-1.5/overview.webp",
+        "caption": "Method overview — HunyuanVideo 1.5 DiT",
+        "captionZh": "方法总览：HunyuanVideo 1.5 DiT"
+      }
+    ]
+  },
+  "lingbot-map": {
+    "paper": {
+      "title": "Geometric Context Transformer for Streaming 3D Reconstruction",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2604.14141",
+      "abstract": "Streaming 3D reconstruction aims to recover 3D information, such as camera poses and point clouds, from a video stream, which necessitates geometric accuracy, temporal consistency, and computational efficiency. Motivated by the principles of Simultaneous Localization and Mapping (SLAM), we introduce LingBot-Map, a feed-forward 3D foundation model for reconstructing scenes from streaming data, built upon a geometric context transformer (GCT) architecture. A defining aspect of LingBot-Map lies in its carefully designed attention mechanism, which integrates an anchor context, a pose-reference window, and a trajectory memory to address coordinate grounding, dense geometric cues, and long-range drift correction, respectively. This design keeps the streaming state compact while retaining rich geometric context, enabling stable efficient inference at around 20 FPS on 518 x 378 resolution inputs"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/lingbot-map/paper.png",
+        "caption": "Geometric Context Transformer for Streaming 3D Reconstruction",
+        "captionZh": "Geometric Context Transformer for Streaming 3D Reconstruction"
+      }
+    ]
+  },
+  "longvie-1": {
+    "figures": []
+  },
+  "ltx-2.x": {
+    "figures": []
+  },
+  "ltx-video": {
+    "figures": []
+  },
+  "mira": {
+    "paper": {
+      "title": "Multiplayer Interactive World Models with Representation Autoencoders",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2607.05352",
+      "abstract": "We introduce the first multiplayer world model for highly dynamic environments governed by complex physical interactions. Whereas single-player world models treat the other agents as part of the environment, ours conditions on the action streams of multiple agents, learning to attribute changes in the scene to the correct player and to stay coherent under arbitrary combinations of their actions. We study this problem in the game of Rocket League, where players compete and cooperate under fast, tightly coupled dynamics. Trained on 10,000 hours of gameplay collected with publicly available bots, our 5-billion-parameter latent diffusion model generates four-player matches in real time, producing 20 frames per second on a single Nvidia B200 GPU. Although trained only on short clips, its rollouts stay stable far beyond the training horizon: distributional quality holds steady out to five minu"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/mira/paper.png",
+        "caption": "Multiplayer Interactive World Models with Representation Autoencoders",
+        "captionZh": "Multiplayer Interactive World Models with Representation Autoencoders"
+      }
+    ]
+  },
+  "modelscope-t2v": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/modelscope-t2v/overview.jpg",
+        "caption": "Method overview — ModelScopeT2V U-Net with temporal attention",
+        "captionZh": "方法总览：带时间注意力的 ModelScopeT2V U-Net"
+      }
+    ]
+  },
+  "mvdiffusion": {
+    "paper": {
+      "title": "MVDiffusion: Enabling Holistic Multi-view Image Generation with Correspondence-Aware Diffusion",
+      "year": 2023,
+      "venue": "NeurIPS 2023 (spotlight)",
+      "arxivId": "2307.01097",
+      "abstract": "This paper introduces MVDiffusion, a simple yet effective method for generating consistent multi-view images from text prompts given pixel-to-pixel correspondences (e.g., perspective crops from a panorama or multi-view images given depth maps and poses). Unlike prior methods that rely on iterative image warping and inpainting, MVDiffusion simultaneously generates all images with a global awareness, effectively addressing the prevalent error accumulation issue. At its core, MVDiffusion processes perspective images in parallel with a pre-trained text-to-image diffusion model, while integrating novel correspondence-aware attention layers to facilitate cross-view interactions. For panorama generation, while only trained with 10k panoramas, MVDiffusion is able to generate high-resolution photorealistic images for arbitrary texts or extrapolate one perspective image to a 360-degree view. For m"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/mvdiffusion/paper.png",
+        "caption": "MVDiffusion: Enabling Holistic Multi-view Image Generation with Correspondence-Aware Diffusion",
+        "captionZh": "MVDiffusion: Enabling Holistic Multi-view Image Generation with Correspondence-Aware Diffusion"
+      }
+    ]
+  },
+  "open-sora-plan": {
+    "figures": []
+  },
+  "rolling-forcing": {
+    "paper": {
+      "title": "Rolling Forcing: Autoregressive Long Video Diffusion in Real Time",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2509.25161",
+      "abstract": "Streaming video generation, as one fundamental component in interactive world models and neural game engines, aims to generate high-quality, low-latency, and temporally coherent long video streams. However, most existing work suffers from severe error accumulation that often significantly degrades the generated stream videos over long horizons. We design Rolling Forcing, a novel video generation technique that enables streaming long videos with minimal error accumulation. Rolling Forcing comes with three novel designs. First, instead of iteratively sampling individual frames, which accelerates error propagation, we design a joint denoising scheme that simultaneously denoises multiple frames with progressively increasing noise levels. This design relaxes the strict causality across adjacent frames, effectively suppressing error growth. Second, we introduce the attention sink mechanism int"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/rolling-forcing/paper.png",
+        "caption": "Rolling Forcing: Autoregressive Long Video Diffusion in Real Time",
+        "captionZh": "Rolling Forcing: Autoregressive Long Video Diffusion in Real Time"
+      }
+    ]
+  },
+  "sana-wm": {
+    "paper": {
+      "title": "SANA-WM: Efficient Minute-Scale World Modeling with Hybrid Linear Diffusion Transformer",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2605.15178",
+      "abstract": "We introduce SANA-WM, an efficient 2.6B-parameter open-source world model natively trained for one-minute generation, synthesizing high-fidelity, 720p, minute-scale videos with precise camera control. SANA-WM achieves visual quality comparable to large-scale industrial baselines such as LingBot-World and HY-WorldPlay, while significantly improving efficiency. Four core designs drive our architecture: (1) Hybrid Linear Attention combines frame-wise Gated DeltaNet (GDN) with softmax attention for memory-efficient long-context modeling. (2) Dual-Branch Camera Control ensures precise 6-DoF trajectory adherence. (3) Two-Stage Generation Pipeline applies a long-video refiner to stage-1 outputs, improving quality and consistency across sequences. (4) Robust Annotation Pipeline extracts accurate metric-scale 6-DoF camera poses from public videos to yield high-quality, spatiotemporally consistent"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/sana-wm/paper.png",
+        "caption": "SANA-WM: Efficient Minute-Scale World Modeling with Hybrid Linear Diffusion Transformer",
+        "captionZh": "SANA-WM: Efficient Minute-Scale World Modeling with Hybrid Linear Diffusion Transformer"
+      }
+    ]
+  },
+  "self-forcing": {
+    "paper": {
+      "title": "Self Forcing: Bridging the Train-Test Gap in Autoregressive Video Diffusion",
+      "year": 2025,
+      "venue": "NeurIPS 2025 spotlight",
+      "arxivId": "2506.08009",
+      "abstract": "We introduce Self Forcing, a novel training paradigm for autoregressive video diffusion models. It addresses the longstanding issue of exposure bias, where models trained on ground-truth context must generate sequences conditioned on their own imperfect outputs during inference. Unlike prior methods that denoise future frames based on ground-truth context frames, Self Forcing conditions each frame's generation on previously self-generated outputs by performing autoregressive rollout with key-value (KV) caching during training. This strategy enables supervision through a holistic loss at the video level that directly evaluates the quality of the entire generated sequence, rather than relying solely on traditional frame-wise objectives. To ensure training efficiency, we employ a few-step diffusion model along with a stochastic gradient truncation strategy, effectively balancing computation"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/self-forcing/paper.png",
+        "caption": "Self Forcing: Bridging the Train-Test Gap in Autoregressive Video Diffusion",
+        "captionZh": "Self Forcing: Bridging the Train-Test Gap in Autoregressive Video Diffusion"
+      }
+    ]
+  },
+  "skyreels-v3": {
+    "figures": []
+  },
+  "stable-video-infinity": {
+    "paper": {
+      "title": "Stable Video Infinity: Infinite-Length Video Generation with Error Recycling",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2510.09212",
+      "abstract": "We propose Stable Video Infinity (SVI) that is able to generate infinite-length videos with high temporal consistency, plausible scene transitions, and controllable streaming storylines. While existing long-video methods attempt to mitigate accumulated errors via handcrafted anti-drifting (e.g., modified noise scheduler, frame anchoring), they remain limited to single-prompt extrapolation, producing homogeneous scenes with repetitive motions. We identify that the fundamental challenge extends beyond error accumulation to a critical discrepancy between the training assumption (seeing clean data) and the test-time autoregressive reality (conditioning on self-generated, error-prone outputs). To bridge this hypothesis gap, SVI incorporates Error-Recycling Fine-Tuning, a new type of efficient training that recycles the Diffusion Transformer (DiT)'s self-generated errors into supervisory promp"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/stable-video-infinity/paper.png",
+        "caption": "Stable Video Infinity: Infinite-Length Video Generation with Error Recycling",
+        "captionZh": "Stable Video Infinity: Infinite-Length Video Generation with Error Recycling"
+      }
+    ]
+  },
+  "stable-virtual-camera": {
+    "paper": {
+      "title": "Stable Virtual Camera: Generative View Synthesis with Diffusion Models",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2503.14489",
+      "abstract": "We present Stable Virtual Camera (Seva), a generalist diffusion model that creates novel views of a scene, given any number of input views and target cameras. Existing works struggle to generate either large viewpoint changes or temporally smooth samples, while relying on specific task configurations. Our approach overcomes these limitations through simple model design, optimized training recipe, and flexible sampling strategy that generalize across view synthesis tasks at test time. As a result, our samples maintain high consistency without requiring additional 3D representation-based distillation, thus streamlining view synthesis in the wild. Furthermore, we show that our method can generate high-quality videos lasting up to half a minute with seamless loop closure. Extensive benchmarking demonstrates that Seva outperforms existing methods across different datasets and settings. Projec"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/stable-virtual-camera/paper.png",
+        "caption": "Stable Virtual Camera: Generative View Synthesis with Diffusion Models",
+        "captionZh": "Stable Virtual Camera: Generative View Synthesis with Diffusion Models"
+      }
+    ]
+  },
+  "t2v_turbo_t2v": {
+    "paper": {
+      "title": "T2V-Turbo: Breaking the Quality Bottleneck of Video Consistency Model with Mixed Reward Feedback",
+      "year": 2024,
+      "venue": null,
+      "arxivId": "2405.18750",
+      "abstract": "Diffusion-based text-to-video (T2V) models have achieved significant success but continue to be hampered by the slow sampling speed of their iterative sampling processes. To address the challenge, consistency models have been proposed to facilitate fast inference, albeit at the cost of sample quality. In this work, we aim to break the quality bottleneck of a video consistency model (VCM) to achieve $\\textbf{both fast and high-quality video generation}$. We introduce T2V-Turbo, which integrates feedback from a mixture of differentiable reward models into the consistency distillation (CD) process of a pre-trained T2V model. Notably, we directly optimize rewards associated with single-step generations that arise naturally from computing the CD loss, effectively bypassing the memory constraints imposed by backpropagating gradients through an iterative sampling process. Remarkably, the 4-step"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/t2v_turbo_t2v/paper.png",
+        "caption": "T2V-Turbo: Breaking the Quality Bottleneck of Video Consistency Model with Mixed Reward Feedback",
+        "captionZh": "T2V-Turbo: Breaking the Quality Bottleneck of Video Consistency Model with Mixed Reward Feedback"
+      }
+    ]
+  },
+  "unianimate-dit": {
+    "figures": []
+  },
+  "videocrafter1-i2v": {
+    "figures": []
+  },
+  "videocrafter1-t2v": {
+    "figures": []
+  },
+  "videocrafter2-t2v": {
+    "figures": []
+  },
+  "wan2.1-vace": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "teaser",
+        "src": "/models/wan2.1-vace/teaser.webp",
+        "caption": "Paper teaser — VACE all-in-one video creation and editing",
+        "captionZh": "论文 Teaser：VACE 一体化视频创作与编辑"
+      }
+    ]
+  },
+  "wonderjourney": {
+    "paper": {
+      "title": "WonderJourney: Going from Anywhere to Everywhere",
+      "year": 2023,
+      "venue": null,
+      "arxivId": "2312.03884",
+      "abstract": "We introduce WonderJourney, a modularized framework for perpetual 3D scene generation. Unlike prior work on view generation that focuses on a single type of scenes, we start at any user-provided location (by a text description or an image) and generate a journey through a long sequence of diverse yet coherently connected 3D scenes. We leverage an LLM to generate textual descriptions of the scenes in this journey, a text-driven point cloud generation pipeline to make a compelling and coherent sequence of 3D scenes, and a large VLM to verify the generated scenes. We show compelling, diverse visual results across various scene types and styles, forming imaginary \"wonderjourneys\". Project website: https://kovenyu.com/WonderJourney/"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/wonderjourney/paper.png",
+        "caption": "WonderJourney: Going from Anywhere to Everywhere",
+        "captionZh": "WonderJourney: Going from Anywhere to Everywhere"
+      }
+    ]
+  },
+  "wonderworld": {
+    "paper": {
+      "title": "WonderWorld: Interactive 3D Scene Generation from a Single Image",
+      "year": 2024,
+      "venue": "CVPR 2025",
+      "arxivId": "2406.09394",
+      "abstract": "We present WonderWorld, a novel framework for interactive 3D scene generation that enables users to interactively specify scene contents and layout and see the created scenes in low latency. The major challenge lies in achieving fast generation of 3D scenes. Existing scene generation approaches fall short of speed as they often require (1) progressively generating many views and depth maps, and (2) time-consuming optimization of the scene geometry representations. We introduce the Fast Layered Gaussian Surfels (FLAGS) as our scene representation and an algorithm to generate it from a single view. Our approach does not need multiple views, and it leverages a geometry-based initialization that significantly reduces optimization time. Another challenge is generating coherent geometry that allows all scenes to be connected. We introduce the guided depth diffusion that allows partial conditio"
+    }
+  },
+  "worldgen": {
+    "paper": {
+      "title": "WorldGen: From Text to Traversable and Interactive 3D Worlds",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2511.16825",
+      "abstract": "We introduce WorldGen, a system that enables the automatic creation of large-scale, interactive 3D worlds directly from text prompts. Our approach transforms natural language descriptions into traversable, fully textured environments that can be immediately explored or edited within standard game engines. By combining LLM-driven scene layout reasoning, procedural generation, diffusion-based 3D generation, and object-aware scene decomposition, WorldGen bridges the gap between creative intent and functional virtual spaces, allowing creators to design coherent, navigable worlds without manual modeling or specialized 3D expertise. The system is fully modular and supports fine-grained control over layout, scale, and style, producing worlds that are geometrically consistent, visually rich, and efficient to render in real time. This work represents a step towards accessible, generative world-bu"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/worldgen/paper.png",
+        "caption": "WorldGen: From Text to Traversable and Interactive 3D Worlds",
+        "captionZh": "WorldGen: From Text to Traversable and Interactive 3D Worlds"
+      }
+    ]
+  },
+  "causal-rcm": {
+    "paper": {
+      "title": "Large Scale Diffusion Distillation via Score-Regularized Continuous-Time Consistency",
+      "year": 2025,
+      "venue": "ICLR 2026",
+      "arxivId": "2510.08431",
+      "abstract": "Although continuous-time consistency models (e.g., sCM, MeanFlow) are theoretically principled and empirically powerful for fast academic-scale diffusion, its applicability to large-scale text-to-image and video tasks remains unclear due to infrastructure challenges in Jacobian-vector product (JVP) computation and the limitations of evaluation benchmarks like FID. This work represents the first effort to scale up continuous-time consistency to general application-level image and video diffusion models, and to make JVP-based distillation effective at large scale. We first develop a parallelism-compatible FlashAttention-2 JVP kernel, enabling sCM training on models with over 10 billion parameters and high-dimensional video tasks. Our investigation reveals fundamental quality limitations of sCM in fine-detail generation, which we attribute to error accumulation and the \"mode-covering\" natur"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/causal-rcm/paper.png",
+        "caption": "Large Scale Diffusion Distillation via Score-Regularized Continuous-Time Consistency",
+        "captionZh": "Large Scale Diffusion Distillation via Score-Regularized Continuous-Time Consistency"
+      }
+    ]
+  },
+  "dexora-1b": {
+    "paper": {
+      "title": "Dexora: Open-source VLA for High-DoF Bimanual Dexterity",
+      "year": 2026,
+      "venue": "ICRA 2026",
+      "arxivId": "2605.18722",
+      "abstract": "Vision-Language-Action (VLA) models have recently become a central direction in embodied AI, but current systems are restricted to either dual-gripper control or single-arm dexterous hand manipulation. While low-dimensional gripper control can often be handled with simpler methods, high-dimensional dexterous hand control benefits greatly from full end-to-end VLA learning. In this work, we introduce Dexora, the first open-source VLA system that natively targets dual-arm, dual-hand high-DoF manipulation. We design a hybrid teleoperation pipeline that decouples gross arm kinematics (captured with a custom exoskeleton backpack) from fine finger motion (markerless hand tracking via Apple Vision Pro), and that drives both a physical dual-arm dual-hand platform and an identical MuJoCo digital twin. Using that interface, we assemble a large training corpus: an embodiment-matched synthetic corpus"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/dexora-1b/paper.png",
+        "caption": "Dexora: Open-source VLA for High-DoF Bimanual Dexterity",
+        "captionZh": "Dexora: Open-source VLA for High-DoF Bimanual Dexterity"
+      }
+    ]
+  },
+  "h-rdt": {
+    "paper": {
+      "title": "Data Augmentation for Cognitive Behavioral Therapy: Leveraging ERNIE Language Models using Artificial Intelligence",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2506.23503",
+      "abstract": "Cognitive Behavioral Therapy (CBT) is a proven approach for addressing the irrational thought patterns associated with mental health disorders, but its effectiveness relies on accurately identifying cognitive pathways to provide targeted treatment. In today's digital age, individuals often express negative emotions on social media, where they may reveal cognitive distortions, and in severe cases, exhibit suicidal tendencies. However, there is a significant gap in methodologies designed to analyze these cognitive pathways, which could be critical for psychotherapists aiming to deliver timely and effective interventions in online environments. Cognitive Behavioral Therapy (CBT) framework leveraging acceptance, commitment and data augmentation to categorize and address both textual and visual content as positive or negative. Specifically, the system employs BERT, RoBERTa for Sentiment Analy"
+    }
+  },
+  "hma": {
+    "paper": {
+      "title": "Learning Real-World Action-Video Dynamics with Heterogeneous Masked Autoregression",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2502.04296",
+      "abstract": "We propose Heterogeneous Masked Autoregression (HMA) for modeling action-video dynamics to generate high-quality data and evaluation in scaling robot learning. Building interactive video world models and policies for robotics is difficult due to the challenge of handling diverse settings while maintaining computational efficiency to run in real time. HMA uses heterogeneous pre-training from observations and action sequences across different robotic embodiments, domains, and tasks. HMA uses masked autoregression to generate quantized or soft tokens for video predictions. \\ourshort achieves better visual fidelity and controllability than the previous robotic video generation models with 15 times faster speed in the real world. After post-training, this model can be used as a video simulator from low-level action inputs for evaluating policies and generating synthetic data. See this link ht"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/hma/paper.png",
+        "caption": "Learning Real-World Action-Video Dynamics with Heterogeneous Masked Autoregression",
+        "captionZh": "Learning Real-World Action-Video Dynamics with Heterogeneous Masked Autoregression"
+      }
+    ]
+  },
+  "infinite-vggt": {
+    "paper": {
+      "title": "Streaming 4D Visual Geometry Transformer",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2507.11539",
+      "abstract": "Perceiving and reconstructing 3D geometry from videos is a fundamental yet challenging computer vision task. To facilitate interactive and low-latency applications, we propose a streaming visual geometry transformer that shares a similar philosophy with autoregressive large language models. We explore a simple and efficient design and employ a causal transformer architecture to process the input sequence in an online manner. We use temporal causal attention and cache the historical keys and values as implicit memory to enable efficient streaming long-term 3D reconstruction. This design can handle low-latency 3D reconstruction by incrementally integrating historical information while maintaining high-quality spatial consistency. For efficient training, we propose to distill knowledge from the dense bidirectional visual geometry grounded transformer (VGGT) to our causal model. For inferenc"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/infinite-vggt/paper.png",
+        "caption": "Streaming 4D Visual Geometry Transformer",
+        "captionZh": "Streaming 4D Visual Geometry Transformer"
+      }
+    ]
+  },
+  "leworldmodel": {
+    "figures": []
+  },
+  "mineworld": {
+    "paper": {
+      "title": "MineWorld: a Real-Time and Open-Source Interactive World Model on Minecraft",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2504.08388",
+      "abstract": "World modeling is a crucial task for enabling intelligent agents to effectively interact with humans and operate in dynamic environments. In this work, we propose MineWorld, a real-time interactive world model on Minecraft, an open-ended sandbox game which has been utilized as a common testbed for world modeling. MineWorld is driven by a visual-action autoregressive Transformer, which takes paired game scenes and corresponding actions as input, and generates consequent new scenes following the actions. Specifically, by transforming visual game scenes and actions into discrete token ids with an image tokenizer and an action tokenizer correspondingly, we consist the model input with the concatenation of the two kinds of ids interleaved. The model is then trained with next token prediction to learn rich representations of game states as well as the conditions between states and actions simu"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/mineworld/paper.png",
+        "caption": "MineWorld: a Real-Time and Open-Source Interactive World Model on Minecraft",
+        "captionZh": "MineWorld: a Real-Time and Open-Source Interactive World Model on Minecraft"
+      }
+    ]
+  },
+  "motionbricks": {
+    "paper": {
+      "title": "MotionBricks: Scalable Real-Time Motions with Modular Latent Generative Model and Smart Primitives",
+      "year": 2026,
+      "venue": "SIGGRAPH 2026",
+      "arxivId": "2604.24833",
+      "abstract": "Despite transformative advances in generative motion synthesis, real-time interactive motion control remains dominated by traditional techniques. In this work, we identify two key challenges in bridging research and production: 1) Real-time scalability: Industry applications demand real-time generation of a vast repertoire of motion skills, while generative methods exhibit significant degradation in quality and scalability under real-time computation constraints, and 2) Integration: Industry applications demand fine-grained multi-modal control involving velocity commands, style selection, and precise keyframes, a need largely unmet by existing text- or tag-driven models. To overcome these limitations, we introduce MotionBricks: a large-scale, real-time generative framework with a two-fold solution. First, we propose a large-scale modular latent generative backbone tailored for robust rea"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/motionbricks/paper.png",
+        "caption": "MotionBricks: Scalable Real-Time Motions with Modular Latent Generative Model and Smart Primitives",
+        "captionZh": "MotionBricks: Scalable Real-Time Motions with Modular Latent Generative Model and Smart Primitives"
+      }
+    ]
+  },
+  "open-dreamer": {
+    "paper": {
+      "title": "Training Agents Inside of Scalable World Models",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2509.24527",
+      "abstract": "World models learn general knowledge from videos and simulate experience for training behaviors in imagination, offering a path towards intelligent agents. However, previous world models have been unable to accurately predict object interactions in complex environments. We introduce Dreamer 4, a scalable agent that learns to solve control tasks by reinforcement learning inside of a fast and accurate world model. In the complex video game Minecraft, the world model accurately predicts object interactions and game mechanics, outperforming previous world models by a large margin. The world model achieves real-time interactive inference on a single GPU through a shortcut forcing objective and an efficient transformer architecture. Moreover, the world model learns general action conditioning from only a small amount of data, allowing it to extract the majority of its knowledge from diverse un"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/open-dreamer/paper.png",
+        "caption": "Training Agents Inside of Scalable World Models",
+        "captionZh": "Training Agents Inside of Scalable World Models"
+      }
+    ]
+  },
+  "pi3": {
+    "paper": {
+      "title": "$π^3$: Permutation-Equivariant Visual Geometry Learning",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2507.13347",
+      "abstract": "We introduce $π^3$, a feed-forward neural network that offers a novel approach to visual geometry reconstruction, breaking the reliance on a conventional fixed reference view. Previous methods often anchor their reconstructions to a designated viewpoint, an inductive bias that can lead to instability and failures if the reference is suboptimal. In contrast, $π^3$ employs a fully permutation-equivariant architecture to predict affine-invariant camera poses and scale-invariant local point maps without any reference frames. This design not only makes our model inherently robust to input ordering, but also leads to higher accuracy and performance. These advantages enable our simple and bias-free approach to achieve state-of-the-art performance on a wide range of tasks, including camera pose estimation, monocular/video depth estimation, and dense point map reconstruction. Code and models are "
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/pi3/paper.png",
+        "caption": "$π^3$: Permutation-Equivariant Visual Geometry Learning",
+        "captionZh": "$π^3$: Permutation-Equivariant Visual Geometry Learning"
+      }
+    ]
+  },
+  "sana": {
+    "paper": {
+      "title": "SANA: Efficient High-Resolution Image Synthesis with Linear Diffusion Transformers",
+      "year": 2024,
+      "venue": null,
+      "arxivId": "2410.10629",
+      "abstract": "We introduce Sana, a text-to-image framework that can efficiently generate images up to 4096$\\times$4096 resolution. Sana can synthesize high-resolution, high-quality images with strong text-image alignment at a remarkably fast speed, deployable on laptop GPU. Core designs include: (1) Deep compression autoencoder: unlike traditional AEs, which compress images only 8$\\times$, we trained an AE that can compress images 32$\\times$, effectively reducing the number of latent tokens. (2) Linear DiT: we replace all vanilla attention in DiT with linear attention, which is more efficient at high resolutions without sacrificing quality. (3) Decoder-only text encoder: we replaced T5 with modern decoder-only small LLM as the text encoder and designed complex human instruction with in-context learning to enhance the image-text alignment. (4) Efficient training and sampling: we propose Flow-DPM-Solver"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/sana/paper.png",
+        "caption": "SANA: Efficient High-Resolution Image Synthesis with Linear Diffusion Transformers",
+        "captionZh": "SANA: Efficient High-Resolution Image Synthesis with Linear Diffusion Transformers"
+      }
+    ]
+  },
+  "vggt-world": {
+    "paper": {
+      "title": "VGGT-World: Transforming VGGT into an Autoregressive Geometry World Model",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2603.12655",
+      "abstract": "World models that forecast scene evolution by generating future video frames devote the bulk of their capacity to photometric details, yet the resulting predictions often remain geometrically inconsistent. We present VGGT-World, a geometry world model that side-steps video generation entirely and instead forecasts the temporal evolution of frozen geometry-foundation-model (GFM) features. Concretely, we repurpose the latent tokens of a frozen VGGT as the world state and train a lightweight temporal flow transformer to autoregressively predict their future trajectory. Two technical challenges arise in this high-dimensional (d=1024) feature space: (i) standard velocity-prediction flow matching collapses, and (ii) autoregressive rollout suffers from compounding exposure bias. We address the first with a clean-target (z-prediction) parameterization that yields a substantially higher signal-to"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/vggt-world/paper.png",
+        "caption": "VGGT-World: Transforming VGGT into an Autoregressive Geometry World Model",
+        "captionZh": "VGGT-World: Transforming VGGT into an Autoregressive Geometry World Model"
+      }
+    ]
+  },
+  "worldmem": {
+    "paper": {
+      "title": "WorldMem: Long-term Consistent World Simulation with Memory",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2504.12369",
+      "abstract": "World simulation has gained increasing popularity due to its ability to model virtual environments and predict the consequences of actions. However, the limited temporal context window often leads to failures in maintaining long-term consistency, particularly in preserving 3D spatial consistency. In this work, we present WorldMem, a framework that enhances scene generation with a memory bank consisting of memory units that store memory frames and states (e.g., poses and timestamps). By employing a memory attention mechanism that effectively extracts relevant information from these memory frames based on their states, our method is capable of accurately reconstructing previously observed scenes, even under significant viewpoint or temporal gaps. Furthermore, by incorporating timestamps into the states, our framework not only models a static world but also captures its dynamic evolution ov"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/worldmem/paper.png",
+        "caption": "WorldMem: Long-term Consistent World Simulation with Memory",
+        "captionZh": "WorldMem: Long-term Consistent World Simulation with Memory"
+      }
+    ]
+  },
+  "xvla": {
+    "paper": {
+      "title": "X-VLA: Soft-Prompted Transformer as Scalable Cross-Embodiment Vision-Language-Action Model",
+      "year": 2025,
+      "venue": null,
+      "arxivId": "2510.10274",
+      "abstract": "Successful generalist Vision-Language-Action (VLA) models rely on effective training across diverse robotic platforms with large-scale, cross-embodiment, heterogeneous datasets. To facilitate and leverage the heterogeneity in rich, diverse robotic data sources, we propose a novel Soft Prompt approach with minimally added parameters, by infusing prompt learning concepts into cross-embodiment robot learning and introducing separate sets of learnable embeddings for each distinct data source. These embeddings serve as embodiment-specific prompts, which in unity empower VLA models with effective exploitation of varying cross-embodiment features. Our new X-VLA, a neat flow-matching-based VLA architecture, relies exclusively on soft-prompted standard Transformer encoders, enjoying both scalability and simplicity. Evaluated across 6 simulations as well as 3 real-world robots, our 0.9B instantiat"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/xvla/paper.png",
+        "caption": "X-VLA: Soft-Prompted Transformer as Scalable Cross-Embodiment Vision-Language-Action Model",
+        "captionZh": "X-VLA: Soft-Prompted Transformer as Scalable Cross-Embodiment Vision-Language-Action Model"
+      }
+    ]
+  },
+  "echo-memory-block-ssm": {
+    "paper": {
+      "title": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2606.09803",
+      "abstract": "We present \\textbf{Echo-Memory}, a controlled study of memory mechanisms in action-conditioned world models. These models generate multi-segment videos from a first frame, text prompt, and camera-action sequence, but their central failure is often memory rather than local image synthesis: after the camera leaves and returns, the scene or salient object may silently change. Existing memory designs are hard to compare because gains are entangled with backbone, training, retrieval, and evaluation differences. Echo-Memory fixes the action-to-video interface and varies only how history is stored and read by the generator. Under a shared video diffusion backbone, optimizer, camera-action representation, sampler, and evaluation pipeline, we compare raw context, compression-based memory, spatial summaries with different read-out paths, and state-space recurrence. This matched matrix separates fo"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/echo-memory-block-ssm/paper.png",
+        "caption": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+        "captionZh": "Echo-Memory: A Controlled Study of Memory in Action World Models"
+      }
+    ]
+  },
+  "echo-memory-context-k20": {
+    "paper": {
+      "title": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2606.09803",
+      "abstract": "We present \\textbf{Echo-Memory}, a controlled study of memory mechanisms in action-conditioned world models. These models generate multi-segment videos from a first frame, text prompt, and camera-action sequence, but their central failure is often memory rather than local image synthesis: after the camera leaves and returns, the scene or salient object may silently change. Existing memory designs are hard to compare because gains are entangled with backbone, training, retrieval, and evaluation differences. Echo-Memory fixes the action-to-video interface and varies only how history is stored and read by the generator. Under a shared video diffusion backbone, optimizer, camera-action representation, sampler, and evaluation pipeline, we compare raw context, compression-based memory, spatial summaries with different read-out paths, and state-space recurrence. This matched matrix separates fo"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/echo-memory-context-k20/paper.png",
+        "caption": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+        "captionZh": "Echo-Memory: A Controlled Study of Memory in Action World Models"
+      }
+    ]
+  },
+  "echo-memory-spatial-concat-text": {
+    "paper": {
+      "title": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2606.09803",
+      "abstract": "We present \\textbf{Echo-Memory}, a controlled study of memory mechanisms in action-conditioned world models. These models generate multi-segment videos from a first frame, text prompt, and camera-action sequence, but their central failure is often memory rather than local image synthesis: after the camera leaves and returns, the scene or salient object may silently change. Existing memory designs are hard to compare because gains are entangled with backbone, training, retrieval, and evaluation differences. Echo-Memory fixes the action-to-video interface and varies only how history is stored and read by the generator. Under a shared video diffusion backbone, optimizer, camera-action representation, sampler, and evaluation pipeline, we compare raw context, compression-based memory, spatial summaries with different read-out paths, and state-space recurrence. This matched matrix separates fo"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/echo-memory-spatial-concat-text/paper.png",
+        "caption": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+        "captionZh": "Echo-Memory: A Controlled Study of Memory in Action World Models"
+      }
+    ]
+  },
+  "echo-memory-spatial-cross-attn-t32": {
+    "paper": {
+      "title": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2606.09803",
+      "abstract": "We present \\textbf{Echo-Memory}, a controlled study of memory mechanisms in action-conditioned world models. These models generate multi-segment videos from a first frame, text prompt, and camera-action sequence, but their central failure is often memory rather than local image synthesis: after the camera leaves and returns, the scene or salient object may silently change. Existing memory designs are hard to compare because gains are entangled with backbone, training, retrieval, and evaluation differences. Echo-Memory fixes the action-to-video interface and varies only how history is stored and read by the generator. Under a shared video diffusion backbone, optimizer, camera-action representation, sampler, and evaluation pipeline, we compare raw context, compression-based memory, spatial summaries with different read-out paths, and state-space recurrence. This matched matrix separates fo"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/echo-memory-spatial-cross-attn-t32/paper.png",
+        "caption": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+        "captionZh": "Echo-Memory: A Controlled Study of Memory in Action World Models"
+      }
+    ]
+  },
+  "echo-memory-spatial": {
+    "paper": {
+      "title": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2606.09803",
+      "abstract": "We present \\textbf{Echo-Memory}, a controlled study of memory mechanisms in action-conditioned world models. These models generate multi-segment videos from a first frame, text prompt, and camera-action sequence, but their central failure is often memory rather than local image synthesis: after the camera leaves and returns, the scene or salient object may silently change. Existing memory designs are hard to compare because gains are entangled with backbone, training, retrieval, and evaluation differences. Echo-Memory fixes the action-to-video interface and varies only how history is stored and read by the generator. Under a shared video diffusion backbone, optimizer, camera-action representation, sampler, and evaluation pipeline, we compare raw context, compression-based memory, spatial summaries with different read-out paths, and state-space recurrence. This matched matrix separates fo"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/echo-memory-spatial/paper.png",
+        "caption": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+        "captionZh": "Echo-Memory: A Controlled Study of Memory in Action World Models"
+      }
+    ]
+  },
+  "echo-memory-spatial-no-injection": {
+    "paper": {
+      "title": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2606.09803",
+      "abstract": "We present \\textbf{Echo-Memory}, a controlled study of memory mechanisms in action-conditioned world models. These models generate multi-segment videos from a first frame, text prompt, and camera-action sequence, but their central failure is often memory rather than local image synthesis: after the camera leaves and returns, the scene or salient object may silently change. Existing memory designs are hard to compare because gains are entangled with backbone, training, retrieval, and evaluation differences. Echo-Memory fixes the action-to-video interface and varies only how history is stored and read by the generator. Under a shared video diffusion backbone, optimizer, camera-action representation, sampler, and evaluation pipeline, we compare raw context, compression-based memory, spatial summaries with different read-out paths, and state-space recurrence. This matched matrix separates fo"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/echo-memory-spatial-no-injection/paper.png",
+        "caption": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+        "captionZh": "Echo-Memory: A Controlled Study of Memory in Action World Models"
+      }
+    ]
+  },
+  "echo-memory-ssm-ctx1-every4-hint21": {
+    "paper": {
+      "title": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2606.09803",
+      "abstract": "We present \\textbf{Echo-Memory}, a controlled study of memory mechanisms in action-conditioned world models. These models generate multi-segment videos from a first frame, text prompt, and camera-action sequence, but their central failure is often memory rather than local image synthesis: after the camera leaves and returns, the scene or salient object may silently change. Existing memory designs are hard to compare because gains are entangled with backbone, training, retrieval, and evaluation differences. Echo-Memory fixes the action-to-video interface and varies only how history is stored and read by the generator. Under a shared video diffusion backbone, optimizer, camera-action representation, sampler, and evaluation pipeline, we compare raw context, compression-based memory, spatial summaries with different read-out paths, and state-space recurrence. This matched matrix separates fo"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/echo-memory-ssm-ctx1-every4-hint21/paper.png",
+        "caption": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+        "captionZh": "Echo-Memory: A Controlled Study of Memory in Action World Models"
+      }
+    ]
+  },
+  "echo-memory-ssm-ctx5-every1-hint21": {
+    "paper": {
+      "title": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2606.09803",
+      "abstract": "We present \\textbf{Echo-Memory}, a controlled study of memory mechanisms in action-conditioned world models. These models generate multi-segment videos from a first frame, text prompt, and camera-action sequence, but their central failure is often memory rather than local image synthesis: after the camera leaves and returns, the scene or salient object may silently change. Existing memory designs are hard to compare because gains are entangled with backbone, training, retrieval, and evaluation differences. Echo-Memory fixes the action-to-video interface and varies only how history is stored and read by the generator. Under a shared video diffusion backbone, optimizer, camera-action representation, sampler, and evaluation pipeline, we compare raw context, compression-based memory, spatial summaries with different read-out paths, and state-space recurrence. This matched matrix separates fo"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/echo-memory-ssm-ctx5-every1-hint21/paper.png",
+        "caption": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+        "captionZh": "Echo-Memory: A Controlled Study of Memory in Action World Models"
+      }
+    ]
+  },
+  "echo-memory-ssm-ctx5-every4-hint81": {
+    "paper": {
+      "title": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2606.09803",
+      "abstract": "We present \\textbf{Echo-Memory}, a controlled study of memory mechanisms in action-conditioned world models. These models generate multi-segment videos from a first frame, text prompt, and camera-action sequence, but their central failure is often memory rather than local image synthesis: after the camera leaves and returns, the scene or salient object may silently change. Existing memory designs are hard to compare because gains are entangled with backbone, training, retrieval, and evaluation differences. Echo-Memory fixes the action-to-video interface and varies only how history is stored and read by the generator. Under a shared video diffusion backbone, optimizer, camera-action representation, sampler, and evaluation pipeline, we compare raw context, compression-based memory, spatial summaries with different read-out paths, and state-space recurrence. This matched matrix separates fo"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/echo-memory-ssm-ctx5-every4-hint81/paper.png",
+        "caption": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+        "captionZh": "Echo-Memory: A Controlled Study of Memory in Action World Models"
+      }
+    ]
+  },
+  "echo-memory-videossm-hybrid": {
+    "paper": {
+      "title": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+      "year": 2026,
+      "venue": null,
+      "arxivId": "2606.09803",
+      "abstract": "We present \\textbf{Echo-Memory}, a controlled study of memory mechanisms in action-conditioned world models. These models generate multi-segment videos from a first frame, text prompt, and camera-action sequence, but their central failure is often memory rather than local image synthesis: after the camera leaves and returns, the scene or salient object may silently change. Existing memory designs are hard to compare because gains are entangled with backbone, training, retrieval, and evaluation differences. Echo-Memory fixes the action-to-video interface and varies only how history is stored and read by the generator. Under a shared video diffusion backbone, optimizer, camera-action representation, sampler, and evaluation pipeline, we compare raw context, compression-based memory, spatial summaries with different read-out paths, and state-space recurrence. This matched matrix separates fo"
+    },
+    "figures": [
+      {
+        "kind": "image",
+        "src": "/models/echo-memory-videossm-hybrid/paper.png",
+        "caption": "Echo-Memory: A Controlled Study of Memory in Action World Models",
+        "captionZh": "Echo-Memory: A Controlled Study of Memory in Action World Models"
+      }
+    ]
+  },
+  "animatediff": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/animatediff/overview.png",
+        "caption": "Method overview — AnimateDiff motion module on a T2I backbone",
+        "captionZh": "方法总览：AnimateDiff 在文生图骨干上的运动模块"
+      }
+    ]
+  },
+  "being-h05": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "teaser",
+        "src": "/models/being-h05/teaser.jpg",
+        "caption": "Paper teaser — Being-H0.5 at a glance",
+        "captionZh": "论文 Teaser：Being-H0.5 一览"
+      },
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/being-h05/overview.jpg",
+        "caption": "Method overview — Mixture-of-Transformers with unified action space",
+        "captionZh": "方法总览：混合 Transformer 与统一动作空间"
+      }
+    ]
+  },
+  "cosmos-predict-2": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/cosmos-predict-2/overview.png",
+        "caption": "Method overview — Cosmos Predict2 world-model stack",
+        "captionZh": "方法总览：Cosmos Predict2 世界模型栈"
+      }
+    ]
+  },
+  "dap": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "teaser",
+        "src": "/models/dap/teaser.jpg",
+        "caption": "Paper teaser — metric panoramic depth from diverse 360° inputs",
+        "captionZh": "论文 Teaser：多样 360° 输入上的度量全景深度"
+      },
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/dap/overview.jpg",
+        "caption": "Method overview — DAP network with distortion-aware decoder",
+        "captionZh": "方法总览：带畸变感知解码器的 DAP 网络"
+      }
+    ]
+  },
+  "diffusion-policy": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "teaser",
+        "src": "/models/diffusion-policy/teaser.png",
+        "caption": "Paper teaser — visuomotor policy via diffusion",
+        "captionZh": "论文 Teaser：扩散视觉运动策略"
+      }
+    ]
+  },
+  "easyanimate": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/easyanimate/overview.jpg",
+        "caption": "Method overview — EasyAnimate transformer pipeline",
+        "captionZh": "方法总览：EasyAnimate Transformer 流程"
+      }
+    ]
+  },
+  "gr00t": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/gr00t/overview.webp",
+        "caption": "Method overview — GR00T dual-system architecture",
+        "captionZh": "方法总览：GR00T 双系统架构"
+      }
+    ]
+  },
+  "helios": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/helios/overview.jpg",
+        "caption": "Method overview — Helios autoregressive diffusion",
+        "captionZh": "方法总览：Helios 自回归扩散"
+      }
+    ]
+  },
+  "octo": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "teaser",
+        "src": "/models/octo/teaser.jpg",
+        "caption": "Paper teaser — Octo generalist robot policy",
+        "captionZh": "论文 Teaser：Octo 通用机器人策略"
+      }
+    ]
+  },
+  "open-sora": {
+    "figures": []
+  },
+  "openvla": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/openvla/overview.png",
+        "caption": "Method overview — Prismatic VLM backbone with action decoding",
+        "captionZh": "方法总览：Prismatic VLM 骨干与动作解码"
+      }
+    ]
+  },
+  "pi0": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "teaser",
+        "src": "/models/pi0/teaser.jpg",
+        "caption": "Paper teaser — π0 VLA with flow-matching action expert",
+        "captionZh": "论文 Teaser：带 flow matching 动作专家的 π0 VLA"
+      },
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/pi0/overview.jpg",
+        "caption": "Method overview — VLM backbone plus action expert",
+        "captionZh": "方法总览：VLM 骨干与动作专家"
+      }
+    ]
+  },
+  "pi05": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "teaser",
+        "src": "/models/pi05/teaser.webp",
+        "caption": "Paper teaser — π0.5 open-world generalization",
+        "captionZh": "论文 Teaser：π0.5 开放世界泛化"
+      },
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/pi05/overview.webp",
+        "caption": "Method overview — π0.5 pre-training and action expert",
+        "captionZh": "方法总览：π0.5 预训练与动作专家"
+      }
+    ]
+  },
+  "wan2.1": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "teaser",
+        "src": "/models/wan2.1/teaser.jpg",
+        "caption": "Paper teaser — Wan2.1 text-to-video samples",
+        "captionZh": "论文 Teaser：Wan2.1 文生视频样例"
+      },
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/wan2.1/overview.jpg",
+        "caption": "Method overview — Wan DiT architecture",
+        "captionZh": "方法总览：Wan DiT 架构"
+      }
+    ]
+  },
+  "wan2.2": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/wan2.2/overview.png",
+        "caption": "Method overview — Wan2.2 Mixture-of-Experts architecture",
+        "captionZh": "方法总览：Wan2.2 混合专家架构"
+      }
+    ]
+  },
+  "being-h07": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "teaser",
+        "src": "/models/being-h05/teaser.jpg",
+        "caption": "Paper teaser — Being-H0.5 at a glance",
+        "captionZh": "论文 Teaser：Being-H0.5 一览"
+      },
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/being-h05/overview.jpg",
+        "caption": "Method overview — Mixture-of-Transformers with unified action space",
+        "captionZh": "方法总览：混合 Transformer 与统一动作空间"
+      }
+    ]
+  },
+  "openpi": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "teaser",
+        "src": "/models/pi05/teaser.webp",
+        "caption": "Paper teaser — π0.5 open-world generalization",
+        "captionZh": "论文 Teaser：π0.5 开放世界泛化"
+      },
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/pi05/overview.webp",
+        "caption": "Method overview — π0.5 pre-training and action expert",
+        "captionZh": "方法总览：π0.5 预训练与动作专家"
+      }
+    ]
+  },
+  "pi0-fast": {
+    "figures": [
+      {
+        "kind": "image",
+        "role": "teaser",
+        "src": "/models/pi0/teaser.jpg",
+        "caption": "Paper teaser — π0 VLA with flow-matching action expert",
+        "captionZh": "论文 Teaser：带 flow matching 动作专家的 π0 VLA"
+      },
+      {
+        "kind": "image",
+        "role": "overview",
+        "src": "/models/pi0/overview.jpg",
+        "caption": "Method overview — VLM backbone plus action expert",
+        "captionZh": "方法总览：VLM 骨干与动作专家"
+      }
+    ]
+  }
+}

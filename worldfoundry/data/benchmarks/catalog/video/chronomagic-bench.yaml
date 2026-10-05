@@ -1,5 +1,7 @@
 id: chronomagic-bench
 name: ChronoMagic-Bench
+publisher: Peking University
+publisher_kind: university
 benchmark_kind:
 - text-to-video
 - time-lapse
@@ -104,6 +106,14 @@ metrics:
   aggregator: mean
   output_unit: score
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.chronomagic_bench.run_chronomagic_bench_official_runner
+    dataset_root_arg: --dataset-root
+    supports_run_official: false
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    default_metrics: [chscore]
   runner_target: worldfoundry.evaluation.tasks.contracts.external:ChronoMagicBenchContract
   validation_command: PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" 
     worldfoundry/evaluation/tasks/execution/runners/chronomagic_bench/run_chronomagic_bench_official_runner.py 
@@ -172,6 +182,8 @@ runner:
       checkpoint: ${WORLDFOUNDRY_HFD_ROOT}/BestWishYsh--ChronoMagic-Bench/CHScore/cotracker2.pth
 integration:
   status: integrated
+  tier: model_backed
+  hf_dataset_id: BestWishYsh/ChronoMagic-Bench
   skip_status: none
   blocker_type: not_applicable_for_integration_start
   readiness_scope: official_runtime_start_ready

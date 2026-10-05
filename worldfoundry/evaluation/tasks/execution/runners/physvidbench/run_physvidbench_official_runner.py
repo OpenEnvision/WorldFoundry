@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path, SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
 from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_captions import (
     resolve_caption_base,
     resolve_captions_dir,
@@ -31,8 +32,6 @@ from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_p
     unique_prompt_records,
 )
 
-SCORECARD_SCHEMA_VERSION = "worldfoundry-scorecard"
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -57,9 +56,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def _load_qa_rows(results_path: Path) -> list[dict[str, Any]]:
@@ -289,8 +285,8 @@ def normalize_physvidbench_results(
 ) -> dict[str, Any]:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    generated_dir = args.generated_artifact_dir or _env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
-    official_results_path = args.official_results_path or _env_path("WORLDFOUNDRY_PHYSVIDBENCH_RESULTS_PATH")
+    generated_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
+    official_results_path = args.official_results_path or resolve_env_path("WORLDFOUNDRY_PHYSVIDBENCH_RESULTS_PATH")
     if official_results_path is None:
         raise ValueError(
             "--official-results-path, WORLDFOUNDRY_PHYSVIDBENCH_RESULTS_PATH, or --run-official is required"

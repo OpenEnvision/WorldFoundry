@@ -61,6 +61,25 @@ def _clear_open_clip_attn_mask(model) -> None:
         clip_model.attn_mask = None
 
 
+def resolve_runtime_checkpoint(ckpt_path: str | Path, model_name: str) -> Path:
+    """Resolve legacy VideoCrafter filenames to staged Hub repository layouts."""
+
+    requested = Path(ckpt_path).expanduser()
+    if requested.is_file():
+        return requested
+    checkpoint_root = requested.parent.parent
+    identity = f"{model_name} {requested.name}".lower()
+    if "videocrafter2" in identity or "t2v_512_v2" in identity:
+        candidate = checkpoint_root / "VideoCrafter--VideoCrafter2" / "model.ckpt"
+    elif "image2video" in identity or "i2v" in identity:
+        candidate = checkpoint_root / "VideoCrafter--Image2Video-512" / "model.ckpt"
+    elif "text2video" in identity or "t2v_1024" in identity:
+        candidate = checkpoint_root / "VideoCrafter--Text2Video-1024" / "model.ckpt"
+    else:
+        return requested
+    return candidate if candidate.is_file() else requested
+
+
 def _normalize_lvdm_config(model_config) -> None:
     params = model_config.get("params")
     if not params:
@@ -126,7 +145,7 @@ class VideoCrafter:
 
         self.model_name = model_name
         self.config = str(resolve_runtime_config(config))
-        self.ckpt_path = str(Path(ckpt_path).expanduser())
+        self.ckpt_path = str(resolve_runtime_checkpoint(ckpt_path, model_name))
         self.height = height
         self.width = width
         self.frames = frames
@@ -213,5 +232,6 @@ class VideoCrafter:
 
 __all__ = [
     "VideoCrafter",
+    "resolve_runtime_checkpoint",
     "resolve_runtime_config",
 ]

@@ -165,12 +165,6 @@ MODEL_VISUALIZATION_CAPABILITIES = (
         "three_dimensions/general_3d/mvdiffusion/mvdiffusion_runtime/demo.py",
     ),
     _cap(
-        "shape-of-motion",
-        "three_dimensions/general_3d/shape_of_motion",
-        ("gaussian-splat", "media", "viser"),
-        "three_dimensions/general_3d/shape_of_motion/shape_of_motion_runtime/flow3d/renderer.py",
-    ),
-    _cap(
         "splatt3r",
         "three_dimensions/general_3d/splatt3r",
         ("gaussian-splat",),
@@ -391,7 +385,12 @@ MODEL_VISUALIZATION_CAPABILITIES = (
         ("mask",),
         "perception_core/segment/sam_v1/automatic_mask_generator.py",
     ),
-    _cap("aot", "perception_core/tracking/aot", ("mask", "media"), "perception_core/tracking/aot/utils/image.py"),
+    _cap(
+        "aot",
+        "perception_core/tracking/aot",
+        ("mask", "media"),
+        "perception_core/tracking/track_anything/aot/utils/image.py",
+    ),
     _cap(
         "cotracker",
         "perception_core/tracking/cotracker",

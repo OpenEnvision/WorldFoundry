@@ -1,0 +1,28 @@
+---
+title: "HunyuanVideo 1.5"
+description: "Tencent HunyuanVideo 1.5 T2V/I2V on shared native infra; I2V needs gated FLUX.1-Redux-dev."
+modelId: "hunyuanvideo-1.5"
+pageSource: authored
+---
+
+HunyuanVideo 1.5 is the newer revision of Tencent's open video family, again recorded with independent T2V and I2V recipes on one shared native infrastructure. The notable difference from the original: the I2V conditioner declares FLUX.1-Redux-dev as an independent gated vision checkpoint instead of inferring a sibling path.
+
+<ModelPaperFigures modelId="hunyuanvideo-1.5" locale="en" />
+
+<ModelCommandBuilder modelId="hunyuanvideo-1.5" locale="en" />
+
+## What it is for
+
+Start on `hunyuanvideo-1.5-t2v`. Launch `worldfoundry-eval run hunyuanvideo-1.5-t2v`. Use `hunyuanvideo-1.5-i2v` only after accepting the gated FLUX.1-Redux-dev terms.
+
+[VBench](/docs/evaluation/benchmark-hub/vbench) is the listed T2V suite.
+
+## Runtime contract
+
+Required `prompt`; `actions` is seed. Default artifact `hunyuanvideo-1.5-t2v.mp4`. Variants: `hunyuanvideo-1.5-t2v`, `hunyuanvideo-1.5-i2v`. I2V conditioner declares `black-forest-labs/FLUX.1-Redux-dev` as an independent gated vision checkpoint.
+
+## Running in WorldFoundry
+
+Unified `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8). Stage `tencent/HunyuanVideo-1.5`. Main weights carry `other` license metadata. Status: **Runner parity pending** for native checkpoint-backed CUDA. Accept FLUX.1-Redux-dev terms on Hugging Face before I2V.
+
+<ModelRelatedRecipes modelId="hunyuanvideo-1.5" locale="en" />

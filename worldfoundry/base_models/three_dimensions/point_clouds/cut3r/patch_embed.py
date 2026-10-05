@@ -7,6 +7,7 @@
 """Module for base_models -> three_dimensions -> point_clouds -> cut3r -> patch_embed.py functionality."""
 
 import torch
+
 from .blocks import PatchEmbed  # noqa
 
 
@@ -20,13 +21,15 @@ def get_patch_embed(patch_embed_cls, img_size, patch_size, enc_embed_dim, in_cha
         enc_embed_dim: The enc embed dim.
         in_chans: The in chans.
     """
-    assert patch_embed_cls in ["PatchEmbedDust3R", "ManyAR_PatchEmbed"]
-    patch_embed = eval(patch_embed_cls)(img_size, patch_size, in_chans, enc_embed_dim)
-    return patch_embed
+    implementations = {"PatchEmbedDust3R": PatchEmbedDust3R, "ManyAR_PatchEmbed": ManyAR_PatchEmbed}
+    if patch_embed_cls not in implementations:
+        raise ValueError(f"Unsupported CUT3R patch embedding: {patch_embed_cls!r}")
+    return implementations[patch_embed_cls](img_size, patch_size, in_chans, enc_embed_dim)
 
 
 class PatchEmbedDust3R(PatchEmbed):
     """Patch embed dust r implementation."""
+
     def forward(self, x, **kw):
         """Forward.
 
@@ -34,12 +37,12 @@ class PatchEmbedDust3R(PatchEmbed):
             x: The x.
         """
         B, C, H, W = x.shape
-        assert (
-            H % self.patch_size[0] == 0
-        ), f"Input image height ({H}) is not a multiple of patch size ({self.patch_size[0]})."
-        assert (
-            W % self.patch_size[1] == 0
-        ), f"Input image width ({W}) is not a multiple of patch size ({self.patch_size[1]})."
+        assert H % self.patch_size[0] == 0, (
+            f"Input image height ({H}) is not a multiple of patch size ({self.patch_size[0]})."
+        )
+        assert W % self.patch_size[1] == 0, (
+            f"Input image width ({W}) is not a multiple of patch size ({self.patch_size[1]})."
+        )
         x = self.proj(x)
         pos = self.position_getter(B, x.size(2), x.size(3), x.device)
         if self.flatten:
@@ -85,12 +88,12 @@ class ManyAR_PatchEmbed(PatchEmbed):
         """
         B, C, H, W = img.shape
 
-        assert (
-            H % self.patch_size[0] == 0
-        ), f"Input image height ({H}) is not a multiple of patch size ({self.patch_size[0]})."
-        assert (
-            W % self.patch_size[1] == 0
-        ), f"Input image width ({W}) is not a multiple of patch size ({self.patch_size[1]})."
+        assert H % self.patch_size[0] == 0, (
+            f"Input image height ({H}) is not a multiple of patch size ({self.patch_size[0]})."
+        )
+        assert W % self.patch_size[1] == 0, (
+            f"Input image width ({W}) is not a multiple of patch size ({self.patch_size[1]})."
+        )
         assert true_shape.shape == (
             B,
             2,
@@ -108,15 +111,8 @@ class ManyAR_PatchEmbed(PatchEmbed):
         x = img.new_zeros((B, n_tokens, self.embed_dim))
         pos = img.new_zeros((B, n_tokens, 2), dtype=torch.int64)
 
-        x[is_landscape] = (
-            self.proj(img[is_landscape]).permute(0, 2, 3, 1).flatten(1, 2).float()
-        )
-        x[is_portrait] = (
-            self.proj(img[is_portrait].swapaxes(-1, -2))
-            .permute(0, 2, 3, 1)
-            .flatten(1, 2)
-            .float()
-        )
+        x[is_landscape] = self.proj(img[is_landscape]).permute(0, 2, 3, 1).flatten(1, 2).float()
+        x[is_portrait] = self.proj(img[is_portrait].swapaxes(-1, -2)).permute(0, 2, 3, 1).flatten(1, 2).float()
 
         pos[is_landscape] = self.position_getter(1, H, W, pos.device)
         pos[is_portrait] = self.position_getter(1, W, H, pos.device)

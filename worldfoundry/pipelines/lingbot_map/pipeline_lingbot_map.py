@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from ...synthesis.visual_generation.memory.runtime import RuntimeMemory
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -10,11 +9,20 @@ from typing import Any, Dict, Optional
 import numpy as np
 from PIL import Image
 
-from worldfoundry.core.io.artifacts import depths_to_pil_images
+from worldfoundry.base_models.three_dimensions.point_clouds.lingbot_map.runtime import (
+    LingBotMapRepresentation,
+)
+from worldfoundry.core.io import artifact_root_path
+from worldfoundry.core.media.artifacts import depths_to_pil_images
 
 from ...operators.lingbot_map_operator import LingBotMapOperator
-from ...representations.point_clouds_generation.lingbot_map import LingBotMapRepresentation
+from ...synthesis.visual_generation.memory.runtime import RuntimeMemory
 from ..pipeline_utils import PipelineABC
+
+
+def _default_output_dir(name: str = "lingbot_map_output") -> str:
+    """Resolve a stable default output directory instead of writing to the CWD."""
+    return str(artifact_root_path() / name)
 
 
 class LingBotMapResult:
@@ -114,7 +122,7 @@ class LingBotMapResult:
         return np.concatenate([flat, pad], axis=0)
 
     def _project_depth_to_points(self, max_points: int = 50000) -> tuple[np.ndarray, np.ndarray] | None:
-        """Project depth to points for LingBotMapResult."""
+        """Project depth to world-space points using LingBot-Map C2W extrinsics."""
         depth = self.numpy_data.get("depth")
         intrinsic = self.numpy_data.get("intrinsic")
         extrinsic = self.numpy_data.get("extrinsic")
@@ -164,14 +172,13 @@ class LingBotMapResult:
             if extrinsic_arr is not None and len(extrinsic_arr):
                 ext = extrinsic_arr[min(frame_idx, len(extrinsic_arr) - 1)]
                 if ext.shape == (3, 4):
-                    ext_h = np.eye(4, dtype=np.float32)
-                    ext_h[:3, :] = ext
+                    camera_to_world = np.eye(4, dtype=np.float32)
+                    camera_to_world[:3, :] = ext
                 elif ext.shape == (4, 4):
-                    ext_h = ext
+                    camera_to_world = ext
                 else:
-                    ext_h = None
-                if ext_h is not None:
-                    camera_to_world = ext_h
+                    camera_to_world = None
+                if camera_to_world is not None:
                     pts = pts @ camera_to_world[:3, :3].T + camera_to_world[:3, 3]
             if color_arr is not None and color_arr.ndim == 4:
                 color_frame = color_arr[min(frame_idx, color_arr.shape[0] - 1)]
@@ -214,7 +221,7 @@ class LingBotMapResult:
 
     def save(self, output_dir: str | Path | None = None, output_name: str = "lingbot_map_predictions.npz") -> list[str]:
         """Save for LingBotMapResult."""
-        output_path = Path(output_dir or "./lingbot_map_output")
+        output_path = Path(output_dir or _default_output_dir())
         output_path.mkdir(parents=True, exist_ok=True)
         saved: list[str] = []
 

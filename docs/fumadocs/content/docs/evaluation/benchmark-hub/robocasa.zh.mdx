@@ -1,131 +1,25 @@
 ---
 title: RoboCasa
-description: RoboCasa — 指标、依赖与运行命令。
+description: "UT Austin 与 NVIDIA 的厨房仿真——120 个场景、100+ 原子与组合任务。WorldFoundry 导入官方 rollout。"
 ---
 
-## 简介
+RoboCasa 是 UT Austin 与 NVIDIA 面向通才机器人的大规模**厨房**仿真：**120** 个真实厨房布局、**2500+** 三维资产（不少由生成模型制作），大约 **100** 个原子技能加**组合**长时程活动，并带大规模演示。论文是 [RoboCasa: Large-Scale Simulation of Everyday Tasks for Generalist Robots](https://arxiv.org/abs/2406.02523)。项目：[robocasa.ai](https://robocasa.ai/)。代码：[robocasa/robocasa](https://github.com/robocasa/robocasa)。本 catalog 里 GitHub 许可元数据是 `other:noassertion_github_api`——复用前先读上游条款。
 
+WorldFoundry **导入**官方 rollout 导出。场景资产与长时程策略执行留在上游。仓库镜像：`cache/vla_va_wam/repos/robocasa--robocasa`。[Being-H0.5](/zh/docs/guides/supported-models/being-h05) 等模型发布了 RoboCasa 专家线；那不是本页上的分数。
 
+<BenchmarkPageSections id="robocasa" locale="zh" />
 
-RoboCasa external benchmark task manifest for long-horizon robot manipulation policy rollouts.
-
-
-
-## 指标
-
-RoboCasa external benchmark task manifest for long-horizon robot manipulation policy rollouts.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/robocasa.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `episode_success` | episode / task 是否成功完成的比例或成功率。 |
-| `reward` | RoboCasa 官方家庭仿真器厨房操作任务的累计 reward。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `robocasa-headless-venv`。
-- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
-- RoboCasa/robosuite import 已在 headless venv 可见；完整官方状态仍需要 assets、task suite 和 policy rollout。
-
-### 测评数据
-
-- RoboCasa uses simulator assets and generated policy rollouts rather than a single public HF benchmark table.
-- 待测模型输出目录：设置 `WORLDFOUNDRY_ROBOCASA_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/robocasa--robocasa`
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_ROBOCASA_ROOT`
-- `WORLDFOUNDRY_ROBOCASA_RESULTS_PATH`
-
-### 环境检查
-
-```bash
-PYTHONPATH=${WORLDFOUNDRY_CACHE_DIR}/repos/robocasa--robocasa:src ${WORLDFOUNDRY_CONDA_ENVS_ROOT}/worldfoundry-robocasa-headless-venv/bin/python -m worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile robocasa --manifest worldfoundry/data/benchmarks/runtime_profiles/official/robocasa.yaml --output-dir tmp/worldfoundry_preflight/robocasa --json
-```
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id robocasa \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robocasa/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/robocasa/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id robocasa \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/robocasa/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id robocasa --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official RoboCasa repository checkout
-- RoboCasa simulator assets
-- Long-horizon policy checkpoint
-- Official task and scene split declaration
-
-### Environment
-
-- `WORLDFOUNDRY_ROBOCASA_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-
-
+默认导入路径：`WORLDFOUNDRY_ROBOCASA_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/robocasa.yaml`。导出时声明原子还是组合（以及场景划分）。产物：`scorecard.json`（主键 `success_rate`）与 `raw_results.jsonl`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

@@ -30,6 +30,7 @@ _EXPORT_MODULES: dict[str, str] = {
     "build_model_manifests": "worldfoundry.evaluation.models.catalog.manifest",
     "builtin_model_runner_registry": "worldfoundry.evaluation.models.runners.registry",
     "default_model_runner_registry": "worldfoundry.evaluation.models.runners.registry",
+    "clear_model_registry_cache": "worldfoundry.evaluation.models.catalog.registry",
     "discover_model_registry": "worldfoundry.evaluation.models.catalog.registry",
     "get_builtin_runtime_runner_class": "worldfoundry.evaluation.models.runners.builtins",
     "import_object": "worldfoundry.evaluation.models.runners.resolver",

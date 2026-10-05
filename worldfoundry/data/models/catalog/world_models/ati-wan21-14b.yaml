@@ -11,6 +11,7 @@ checkpoints:
 - repo_id: Wan-AI/Wan2.1-I2V-14B-480P
   role: wan21_i2v_base_components
 official_sources:
+  paper: https://arxiv.org/abs/2505.22944
   github:
     url: https://github.com/bytedance/ATI
     revision: 1a002caf7bb55cfb016dcc670c357bd803af3a0d
@@ -27,5 +28,25 @@ integration:
   - Runtime checkpoint loading builds a read-only union of ATI weights and locally staged Wan2.1 I2V base components.
 runner_parity:
   status: pending
-  notes: [In-tree import and camera-track compilation are verified; full GPU artifact parity requires staged weights.]
+  notes: [Real checkpoint-backed 81-frame GPU inference is verified; quantitative point-track adherence and official artifact parity remain unmeasured.]
 catalog_category: world_models
+docs:
+  publisher: ByteDance
+  publisher_kind: company
+  publisher_zh: 字节跳动
+  overview: 'ATI (Any Trajectory Instruction) turns trajectory drawing into video control: draw point trajectories over an input image and the Wan2.1-14B-based model animates objects, camera, or both along them. In this catalog only ATI''s official inference delta is vendored — the unchanged Wan2.1 implementation is reused from worldfoundry/base_models.'
+  overview_zh: ATI（Any Trajectory Instruction）把「画轨迹」变成视频控制：在输入图上画出点轨迹，基于 Wan2.1-14B 的模型就让物体、相机或两者沿轨迹运动。本 catalog 中仅内置 ATI 的官方推理增量——未改动的 Wan2.1 实现从 worldfoundry/base_models 复用。
+  architecture: Per the upstream release, ATI injects dense point-track conditioning into the Wan2.1 I2V backbone through a trajectory instruction module. Runtime checkpoint loading builds a read-only union of ATI weights (bytedance-research/ATI) and locally staged Wan2.1 I2V 480P base components.
+  architecture_zh: 按上游发布，ATI 通过轨迹指令模块把稠密点轨迹条件注入 Wan2.1 I2V 基座。运行时 checkpoint 加载构建 ATI 权重（bytedance-research/ATI）与本地就位的 Wan2.1 I2V 480P 基座组件的只读并集。
+  usage_notes: Real 81-frame GPU inference is verified with local ATI and Wan2.1 I2V 480P checkpoints. Point-track accuracy and official artifact parity remain unmeasured. No source checkout or runtime download is permitted. Packed tracks have shape [N,121,1,3], with x/y pixel coordinates multiplied by 8; visibility may be normalized [0,1] or upstream quantized [0,8], consistently within each track.
+  usage_notes_zh: 已用本地 ATI 与 Wan2.1 I2V 480P 权重验证真实的 81 帧 GPU 推理；点轨迹精度和官方产物一致性尚未测量。不允许源码检出或运行时下载。打包轨迹形状为 [N,121,1,3]，x/y 像素坐标乘以 8；可见度可用归一化 [0,1] 或上游量化 [0,8]，每条轨迹内部应保持一种编码。
+  limitations:
+  - Point-trajectory adherence and official artifact parity are not established by the synthetic-track smoke test.
+  - '14B backbone: needs high-memory GPUs for practical inference.'
+  limitations_zh:
+  - 合成轨迹短测尚不能证明点轨迹贴合度或官方产物一致性。
+  - 14B 基座：实际推理需要大显存 GPU。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Evaluates trajectory/camera-motion adherence.
+    reason_zh: 评估轨迹/相机运动的贴合度。

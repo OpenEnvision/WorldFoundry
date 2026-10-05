@@ -5,22 +5,32 @@ task_family: video_generation
 groups:
 - video
 source_repos:
-- url: https://github.com/Lightricks/LTX-Video
+- url: https://github.com/Lightricks/LTX-2
 checkpoints:
 - repo_id: Lightricks/LTX-2
   revision: 47da56e2ad66ce4125a9922b4a8826bf407f9d0a
-  role: v2v_checkpoint
+  role: distilled_base_checkpoint
+- repo_id: Lightricks/LTX-2-19b-IC-LoRA-Pose-Control
+  revision: ecdabfb03acd2e807c90ea260ccc136140e7ac80
+  role: pose_control_ic_lora
 input_schema:
   prompt: true
   image: false
   video: true
   actions:
   - seed
+  - control_type
 artifact_kind: generated_video
 artifact_filename: ltx-2-v2v.mp4
 execution:
-  backend_stage: profile_only
-  runtime_status: profile_resolves_catalog_variant_runner_parity_pending
-  integration_status: planned
+  backend_stage: official_ic_lora
+  runtime_status: verified_inference_only
+  integration_status: integrated
+  pipeline_binding: ltx-2-v2v
 integration:
-  status: planned
+  status: integrated
+notes:
+- Official V2V path uses the distilled LTX-2 checkpoint with Pose-Control IC-LoRA.
+- The input video must encode body-pose control; arbitrary RGB footage is not an equivalent conditioning signal.
+- The official ltx-pipelines runtime must be installed in the selected Python environment; set LTX_PIPELINES_PYTHON when it differs from WorldFoundry's interpreter.
+- A 17-frame 256x256 synthetic static-pose case completed the public binding; dynamic motion and default-resolution quality remain unverified.

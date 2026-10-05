@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 import importlib.util
+import os
 from pathlib import Path
+import random
 
 from worldfoundry.evaluation.utils import worldfoundry_data_path
 
@@ -11,9 +13,9 @@ DEFAULT_DYNAMICRAFTER_CONFIG_ROOT = worldfoundry_data_path(
 )
 REQUIRED_IMPORTS = {
     "einops": "einops",
+    "numpy": "numpy",
     "omegaconf": "omegaconf",
     "open_clip": "open_clip",
-    "pytorch_lightning": "pytorch_lightning",
     "torch": "torch",
     "torchvision": "torchvision",
 }
@@ -97,6 +99,28 @@ def plan_runtime(config: str, ckpt_path: str) -> DynamiCrafterRuntimePlan:
     )
 
 
+def _seed_everything(seed: int) -> int:
+    """Seed DynamiCrafter without importing the full Lightning stack.
+
+    DynamiCrafter previously imported :mod:`pytorch_lightning` solely for its
+    ``seed_everything`` helper.  On network filesystems that transitively scans
+    torchmetrics and transformers and can add several minutes to every cold
+    model load.  Keep the helper's relevant ``workers=False`` semantics local.
+    """
+    import numpy as np
+    import torch
+
+    value = int(seed)
+    if not 0 <= value <= 2**32 - 1:
+        raise ValueError(f"{value} is not in bounds, numpy accepts from 0 to {2**32 - 1}")
+    os.environ["PL_GLOBAL_SEED"] = str(value)
+    os.environ["PL_SEED_WORKERS"] = "0"
+    random.seed(value)
+    np.random.seed(value)
+    torch.manual_seed(value)
+    return value
+
+
 class DynamiCrafter:
     def __init__(
         self,
@@ -121,6 +145,7 @@ class DynamiCrafter:
         timestep_spacing: str = "uniform",
         guidance_rescale: float = 0.0,
         seed: int = 123,
+        device: str = "cuda",
     ):
         """Initialize DynamiCrafter from an in-tree runtime.
 
@@ -146,6 +171,7 @@ class DynamiCrafter:
             timestep_spacing: DDIM timestep schedule name.
             guidance_rescale: Noise guidance rescale factor.
             seed: Sampling seed.
+            device: Explicit torch device assigned by the Workspace GPU lease.
         """
         assert generation_type == "i2v"
 
@@ -168,20 +194,21 @@ class DynamiCrafter:
             )
 
         from omegaconf import OmegaConf
-        from pytorch_lightning import seed_everything
+        import torch
 
-        from worldfoundry.base_models.diffusion_model.video.lvdm.utils import (
+        from worldfoundry.core.model_loading.factory import (
             instantiate_from_config,
         )
 
-        seed_everything(seed)
+        _seed_everything(seed)
         model_config = OmegaConf.load(runtime_plan.config_path).pop("model", OmegaConf.create())
 
         # set use_checkpoint as False as when using deepspeed, it encounters an error
         # "deepspeed backend not set"
         model_config["params"]["unet_config"]["params"]["use_checkpoint"] = False
         model = instantiate_from_config(model_config)
-        model = model.cuda()
+        self.device = torch.device(device)
+        model = model.to(self.device)
         model.perframe_ae = perframe_ae
 
         self.model = load_model_checkpoint(model, str(runtime_plan.checkpoint_path))
@@ -226,16 +253,19 @@ class DynamiCrafter:
         n_frames = self.video_length
         noise_shape = [1, self.channels, self.video_length, h, w]
 
-        with torch.no_grad(), torch.amp.autocast("cuda"):
+        with torch.no_grad(), torch.amp.autocast(
+            self.device.type,
+            enabled=self.device.type == "cuda",
+        ):
             videos = load_data_images(
                 image_path,
                 video_size=(self.height, self.width),
                 video_frames=n_frames,
             )
             if isinstance(videos, list):
-                videos = torch.stack(videos, dim=0).to("cuda")
+                videos = torch.stack(videos, dim=0).to(self.device)
             else:
-                videos = videos.unsqueeze(0).to("cuda")
+                videos = videos.unsqueeze(0).to(self.device)
 
             batch_samples = image_guided_synthesis(
                 self.model,
@@ -274,7 +304,12 @@ def load_model_checkpoint(model, ckpt):
     """
     import torch
 
-    state_dict = torch.load(ckpt, map_location="cpu")
+    state_dict = torch.load(
+        ckpt,
+        map_location="cpu",
+        mmap=True,
+        weights_only=True,
+    )
     if "state_dict" in list(state_dict.keys()):
         state_dict = state_dict["state_dict"]
         model_keys = set(model.state_dict().keys())
@@ -382,8 +417,8 @@ def image_guided_synthesis(
     import torch
     from einops import repeat
 
-    from worldfoundry.base_models.diffusion_model.video.lvdm.models.samplers.ddim import DDIMSampler
-    from worldfoundry.base_models.diffusion_model.video.lvdm.models.samplers.ddim_multiplecond import (
+    from worldfoundry.base_models.diffusion_model.schedulers.lvdm.ddim import DDIMSampler
+    from worldfoundry.base_models.diffusion_model.schedulers.lvdm.ddim_multiplecond import (
         DDIMSampler as DDIMSampler_multicond,
     )
 

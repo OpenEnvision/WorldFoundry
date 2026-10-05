@@ -30,6 +30,13 @@ checkpoint:
     gated: false
     tasks:
     - video-autoencoder
+  - id: DeepFloyd/t5-v1_1-xxl
+    sha: c9c625d2ec93667ec579ede125fd3811d1f81d37
+    license: apache-2.0
+    private: false
+    gated: false
+    tasks:
+    - text-encoding
   - id: hpcai-tech/OpenSora-STDiT-v1-HQ-16x512x512
     sha: 45dcc2854df21b814108ac4abf4956965dac72b1
     license: apache-2.0
@@ -38,6 +45,9 @@ checkpoint:
     tasks:
     - text-to-video
   notes: OpenSora-STDiT-v2 candidate returned 401 in this pass and is not listed.
+official_sources:
+  project_page: https://hpcaitech.github.io/Open-Sora/
+  paper: https://arxiv.org/abs/2503.09642
 integration:
   status: integrated
   notes:
@@ -46,8 +56,8 @@ demo_parity:
   status: pending
   notes: No WorldFoundry runtime or official-output parity run was performed for this
     manifest update.
-notes: Open-Sora often requires separate model and VAE repos; both confirmed public
-  HF repos are listed.
+notes: Open-Sora requires separate model, video VAE, and T5-XXL repos; all three
+  confirmed public HF repos are listed.
 catalog_category: video
 catalog_scope: Official GitHub and/or Hugging Face confirmed open-source or open-weight
   video generation models. Checkpoints are not tracked in git; local validation may
@@ -59,3 +69,23 @@ catalog_policy:
     id, sha, private, gated, license, and selected task tags only.
   parity: This manifest does not claim WorldFoundry runtime parity unless an explicit
     parity run and expected artifact are recorded.
+docs:
+  publisher: HPC-AI Tech
+  publisher_kind: company
+  publisher_zh: 潞晨科技（HPC-AI Tech）
+  overview: 'Open-Sora is HPC-AI Tech''s fully open text-to-video project — model, training code, and data pipeline are all published, which made it a popular reproducible baseline. The WorldFoundry route is complete and reports missing checkpoints at runtime. Note the recorded packaging detail: Open-Sora often requires separate model and VAE repositories, and both confirmed public HF repos are listed in the manifest.'
+  overview_zh: Open-Sora 是潞晨科技（HPC-AI Tech）的全开源文生视频项目——模型、训练代码与数据管线全部公开，因此成为流行的可复现基线。WorldFoundry 路径已完备，checkpoint 缺失会在运行时报告。注意记录在案的打包细节： Open-Sora 通常需要模型与 VAE 两个独立仓库，manifest 中列出了两个已确认的公开 HF 仓库。
+  architecture: Open-Sora uses a spatial-temporal diffusion transformer (its STDiT design) over a video VAE latent space, per the upstream project. This repository records the prompt-only input contract and the two-repo (model + VAE) checkpoint layout; version-specific internals are not recorded here.
+  architecture_zh: Open-Sora 采用视频 VAE 潜空间上的时空扩散 Transformer（其 STDiT 设计），见上游项目。本仓库记录仅 prompt 的输入契约与「模型 + VAE」双仓库 checkpoint 布局；具体版本的内部细节仓库未记录。
+  usage_notes: No runner-parity record exists yet. Stage both the model and VAE repositories before running — forgetting the VAE is the most common failure. Best used as a reproducible research baseline rather than a production generator.
+  usage_notes_zh: 尚无 runner parity 记录。运行前请同时就位模型与 VAE 两个仓库——漏掉 VAE 是最常见的失败原因。它更适合作为可复现研究基线，而非生产级生成器。
+  limitations:
+  - 'Runner parity is recorded as pending: the WorldFoundry route is wired, but a checkpoint-backed GPU artifact has not been verified in this workspace, so do not treat this page as proof of a validated end-to-end run.'
+  - Checkpoints are external assets — missing weights are reported at runtime rather than downloaded automatically.
+  limitations_zh:
+  - Runner parity 记录为 pending：WorldFoundry 路径已接好，但本工作区尚未完成 checkpoint 加载的 GPU 产物验证，请勿把本页当作端到端跑通的证明。
+  - Checkpoint 属于外部资产——权重缺失时会在运行时报告，而不会自动下载。
+  recommended_benchmarks:
+  - id: vbench
+    reason: The suite Open-Sora releases habitually report on.
+    reason_zh: Open-Sora 系列发布惯常引用的评测。

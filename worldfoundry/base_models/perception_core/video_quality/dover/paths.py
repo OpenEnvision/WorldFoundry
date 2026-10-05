@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from worldfoundry.core.io.paths import package_data_path
+
 _ROOT = Path(__file__).resolve().parent
 
 
@@ -13,7 +15,7 @@ def package_root() -> Path:
 
 
 def config_path() -> Path:
-    return _ROOT / "dover.yml"
+    return package_data_path('models', 'runtime', 'configs', 'dover', 'dover.yml')
 
 
 def checkpoint_path() -> Path:

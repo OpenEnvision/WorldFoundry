@@ -7,10 +7,10 @@ interaction controls, and dispatches calls to pipeline objects.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from worldfoundry.core.contracts import PipelineInvocation
 from worldfoundry.evaluation.api import GenerationRequest
 
 from .loading import first_text
@@ -47,35 +47,6 @@ ACTION_CONTROL_KEYS = (
 # All input keys that are consumed by the invocation builder and excluded
 # from operator-specific kwargs.
 CONSUMED_INPUT_KEYS = frozenset((*TEXT_INPUT_KEYS, *IMAGE_INPUT_KEYS, *VIDEO_INPUT_KEYS, "ref_image_path"))
-
-
-# ── Invocation dataclass ──────────────────────────────────────────────
-
-@dataclass(frozen=True)
-class PipelineInvocation:
-    """Normalized inputs for one pipeline-backed generation request.
-
-    Attributes:
-        request: The original :class:`GenerationRequest` from the evaluation API.
-        prompt: Resolved text prompt (first truthy value across text input keys).
-        image: Resolved image input, or ``None`` if not provided.
-        video: Resolved video input, or ``None`` if not provided.
-        interactions: Resolved action / interaction control signals.
-        ref_image_path: Optional path to a reference image on disk.
-        output_path: Absolute file path for the generated artifact.
-        operator_kwargs: Extra keyword arguments forwarded to the pipeline operator.
-        pipeline_kwargs: Remaining generation kwargs not consumed by the builder.
-    """
-
-    request: GenerationRequest
-    prompt: str
-    image: Any
-    video: Any
-    interactions: Any
-    ref_image_path: Any
-    output_path: Path
-    operator_kwargs: Mapping[str, Any]
-    pipeline_kwargs: Mapping[str, Any]
 
 
 # ── Output path helpers ──────────────────────────────────────────────

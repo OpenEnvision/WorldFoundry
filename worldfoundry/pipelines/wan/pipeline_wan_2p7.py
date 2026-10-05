@@ -1,15 +1,18 @@
 """Wan 2P7 visual generation pipeline module."""
 
 from ..pipeline_utils import PipelineABC
-import time
+import logging
 from typing import Optional, Dict, Any
 
 from ...operators.wan_2p7_operator import Wan2p7Operator
 from ...synthesis.visual_generation.wan.wan_2p7_synthesis import Wan2p7Synthesis
-from ..api_runtime import resolve_api_key
+from ..api_runtime import load_api_pipeline_from_pretrained, resolve_api_key
+from ._hosted_polling import poll_wan_task_status
 
 
 _API_KEY_ENV = ("DASHSCOPE_API_KEY", "WAN_API_KEY", "ALIYUN_API_KEY")
+
+logger = logging.getLogger(__name__)
 
 
 class Wan2p7Pipeline(PipelineABC):
@@ -30,6 +33,27 @@ class Wan2p7Pipeline(PipelineABC):
         self.api_key = api_key
         self.operator = operator
         self.synthesis_model = synthesis_model
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        model_path: Any = None,
+        required_components: Optional[Dict[str, Any]] = None,
+        device: str = "cuda",
+        model_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> "Wan2p7Pipeline":
+        """Build the API-only pipeline through the unified loader contract."""
+        return load_api_pipeline_from_pretrained(
+            cls,
+            model_path=model_path,
+            required_components=required_components,
+            device=device,
+            model_id=model_id,
+            default_endpoint="https://dashscope.aliyuncs.com/api/v1",
+            service_name="Wan 2.7",
+            **kwargs,
+        )
 
     @classmethod
     def api_init(
@@ -111,26 +135,15 @@ class Wan2p7Pipeline(PipelineABC):
         if self.synthesis_model is None:
             raise ValueError("Synthesis model is not initialized")
 
-        completed_statuses = {"SUCCEEDED"}
-        failed_statuses = {"FAILED", "CANCELED"}
-        last_status = None
-
-        for _ in range(max_retries):
-            task_info = self.synthesis_model.get_task(task_id)
-            task_status = self._extract_task_status(task_info).upper()
-
-            if task_status and task_status != last_status:
-                print(f"Wan2.7 task {task_id}: {task_status}")
-                last_status = task_status
-
-            if task_status in completed_statuses:
-                return task_info
-            if task_status in failed_statuses:
-                return task_info
-
-            time.sleep(poll_interval)
-
-        raise TimeoutError(f"Wan2.7 task {task_id} polling timed out.")
+        return poll_wan_task_status(
+            get_task=self.synthesis_model.get_task,
+            extract_status=self._extract_task_status,
+            task_id=task_id,
+            service_label="Wan2.7",
+            logger=logger,
+            poll_interval=poll_interval,
+            max_retries=max_retries,
+        )
 
     def __call__(
         self,

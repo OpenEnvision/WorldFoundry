@@ -6,13 +6,13 @@ runtime class to interact with the GigaBrain-0 model.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
 
 
@@ -572,7 +572,7 @@ class GigaBrain0Runtime:
         # Write the JSON payload to the specified output file
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         # Calculate SHA256 hash of the generated artifact
-        artifact_sha256 = hashlib.sha256(target.read_bytes()).hexdigest()
+        artifact_sha256 = file_sha256(target)
 
         # Return a summary of the prediction
         return {

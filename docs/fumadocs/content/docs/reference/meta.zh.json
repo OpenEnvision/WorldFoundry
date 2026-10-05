@@ -4,6 +4,7 @@
   "pages": [
     "environments",
     "cli",
-    "validation"
+    "validation",
+    "vendored-licenses"
   ]
 }

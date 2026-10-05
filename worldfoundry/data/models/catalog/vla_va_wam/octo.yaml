@@ -20,6 +20,8 @@ integration:
   status: integrated
 name: Octo
 official_sources:
+  paper: https://arxiv.org/abs/2405.12213
+  project_page: https://octo-models.github.io/
   github:
     head_sha: 241fb3514b7c40957a86d869fecb7c7fc353f540
     url: https://github.com/octo-models/octo
@@ -61,3 +63,23 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint
   metadata, and runtime-profile planning records. Runner or pipeline targets are present
   only after a complete in-tree WorldFoundry model runtime is registered and validated.
+docs:
+  publisher: University of California, Berkeley (RAIL)
+  publisher_kind: university
+  publisher_zh: 加州大学伯克利分校（RAIL 实验室）
+  overview: Octo is Berkeley RAIL's generalist robot policy trained on Open X-Embodiment data, released as octo-base-1.5 and octo-small-1.5 with pinned revisions. In this catalog the official octo-small-1.5 Orbax tree restored on an A100 (136.7M parameters) and sample_actions produced a finite (1, 4, 7) action chunk — a real-GPU validation of the in-tree JAX runtime.
+  overview_zh: Octo 是伯克利 RAIL 在 Open X-Embodiment 数据上训练的通用机器人策略，发布 octo-base-1.5 与 octo-small-1.5 并锁定 revision。本 catalog 中官方 octo-small-1.5 的 Orbax 树在 A100 上恢复（1.367 亿参数），sample_actions 产出有限的 (1, 4, 7) 动作块——树内 JAX 运行时的真实 GPU 验证。
+  architecture: A transformer generalist policy with diffusion action heads, implemented in JAX/Flax. The in-tree package is flat with one-level modeling and preprocessing modules; legacy class names in checkpoints are translated by an internal ModuleSpec resolver for inference components only.
+  architecture_zh: 带扩散动作头的 transformer 通用策略，以 JAX/Flax 实现。树内包为扁平结构、单层建模与预处理模块；checkpoint 中的旧类名由内部 ModuleSpec 解析器仅针对推理组件转换。
+  usage_notes: Choose octo-small-1.5 (GPU-validated restore) or octo-base-1.5; both use the same in-tree modeling package. No source checkout, package alias, or sys.path injection is used.
+  usage_notes_zh: 选择 octo-small-1.5（GPU 已验证恢复）或 octo-base-1.5；两者共用同一树内建模包。不使用源码 checkout、包别名或 sys.path 注入。
+  limitations:
+  - JAX/Flax stack — environment differs from PyTorch entries.
+  - No license is recorded in this repository.
+  limitations_zh:
+  - JAX/Flax 栈——环境与 PyTorch 条目不同。
+  - 仓库未记录许可证。
+  recommended_benchmarks:
+  - id: simpler-env
+    reason: Common evaluation venue for Open X generalist policies.
+    reason_zh: Open X 通用策略的常用评测场。

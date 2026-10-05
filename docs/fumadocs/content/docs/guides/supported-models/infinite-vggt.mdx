@@ -1,0 +1,48 @@
+---
+title: "Infinite VGGT"
+description: "Infinite VGGT from Tsinghua University: 3d-reconstruction and streaming-3d; Runner parity pending; Streaming 4D Visual Geometry Transformer."
+modelId: "infinite-vggt"
+pageSource: generated
+---
+
+Infinite VGGT (StreamVGGT) turns the feed-forward VGGT reconstructor into a streaming model: it processes incoming frames causally with cached tokens, so reconstruction extends indefinitely instead of being bounded by a fixed window. The in-tree pipeline is registered for streaming 3D reconstruction.
+
+<ModelPaperFigures modelId="infinite-vggt" locale="en" />
+
+The recorded paper is [Streaming 4D Visual Geometry Transformer](https://arxiv.org/abs/2507.11539) (2025).
+
+Project page: [wzzheng.net/StreamVGGT](https://wzzheng.net/StreamVGGT/). Code: [wzzheng/StreamVGGT](https://github.com/wzzheng/StreamVGGT).
+
+<ModelCommandBuilder modelId="infinite-vggt" locale="en" />
+
+## What it is for
+
+`infinite-vggt` is the recorded reconstruction line. Start here to emit geometry from the documented views.
+
+A causal transformer with cached-token knowledge distillation from VGGT (per arXiv 2507.11539). License is CC-BY-NC-4.0 — non-commercial. It is published by Tsinghua University.
+
+Catalog tasks include 3d-reconstruction and streaming-3d. Catalog aliases include `stream-vggt` and `streamvggt`.
+
+## Runtime contract
+
+Optional `input_path`, `interactions`, and `output_format`.
+
+CLI task profiles: `interactive-video`. WorldFoundry binds `InfiniteVGGTPipeline`.
+
+Family status: **Runner parity pending**.
+
+Use the vggt entry for offline reconstruction and this one when frames arrive as a stream.
+
+In-tree StreamVGGT (Infinite VGGT) pipeline is registered for streaming 3D reconstruction.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run infinite-vggt --pipeline.task-profile interactive-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+The environment profile is not recorded.
+
+Recorded weight repositories include `lch01/StreamVGGT`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh infinite-vggt`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="infinite-vggt" locale="en" />

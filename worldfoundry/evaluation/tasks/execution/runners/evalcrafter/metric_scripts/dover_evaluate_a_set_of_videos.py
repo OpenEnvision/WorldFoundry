@@ -88,15 +88,15 @@ if __name__ == "__main__":
         dataset, batch_size=1, num_workers=opt["num_workers"], pin_memory=True,
     )
 
+    resume_path = f"dover_predictions/val-custom_{dir_videos.split('/')[-1]}.pkl"
     try:
-        with open(
-            f"dover_predictions/val-custom_{dir_videos.split('/')[-1]}.pkl",
-            "rb",
-        ) as rf:
-            all_results = pkl.dump(all_results, rf)
+        with open(resume_path, "rb") as rf:
+            all_results = pkl.load(rf)
         print(f"Starting from {len(all_results)}.")
-    except:
+    except FileNotFoundError:
         print("Starting over.")
+    except Exception as exc:
+        print(f"Starting over: failed to load resume state {resume_path}: {exc!r}")
 
     sample_types = ["aesthetic", "technical"]
 

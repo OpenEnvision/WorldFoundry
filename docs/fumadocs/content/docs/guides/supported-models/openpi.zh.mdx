@@ -1,0 +1,26 @@
+---
+title: "OpenPI"
+description: "Physical Intelligence 的 OpenPI 运行时（Apache-2.0）：pi0 / pi0-FAST / pi0.5 的树内共享基础设施，权重在 GCS。"
+modelId: "openpi"
+pageSource: authored
+---
+
+OpenPI 是 Physical Intelligence 官方开源的 pi 系列机器人策略（Apache-2.0）。WorldFoundry 将推理运行时扁平化内置树内并端到端验证：py_compile、导入/from_pretrained、仅计划 predict 与 checkpoint 驱动的 pi05_libero 策略推理全部通过，输出配置的动作 schema。
+
+<ModelPaperFigures modelId="openpi" locale="zh" />
+
+<ModelCommandBuilder modelId="openpi" locale="zh" />
+
+## 用来做什么
+
+本页是共享 OpenPI 基础设施——variant 包括 `pi0-base`、`pi05-libero`、`pi0-fast-base`、`pi0-fast-droid`。具体算法转到 π0 / π0-FAST / π0.5。已验证路径是 [LIBERO](/zh/docs/evaluation/benchmark-hub/libero) 上带 checkpoint 的 `pi05_libero`。
+
+## 运行时契约
+
+必填 `image`、`instruction`、`prompt`。`actions`：`robot_action`、`proprio`、`action_space`。产物：`openpi_action_trace.json`。动作 schema 经 `create_trained_policy_infer` 写出。运行时在 `worldfoundry/synthesis/action_generation/openpi`。
+
+## 在 WorldFoundry 中运行
+
+独立环境 `worldfoundry-openpi-cu12`（Python 3.11，CUDA 12.4 或更新）。用 gsutil 就位 `gs://openpi-assets`。License Apache-2.0。状态：共享基础设施 / `pi05_libero` **已验证**。家族默认启动 `worldfoundry-eval run pi0-base`。
+
+<ModelRelatedRecipes modelId="openpi" locale="zh" />

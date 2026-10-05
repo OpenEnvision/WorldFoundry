@@ -14,8 +14,8 @@ from src.models.controlnet import WanAttnProcessorSP
 from src.models.pcd_controller import PCDController
 from src.pipelines.pipeline_pcd import PCDControllerPipeline
 from src.utils import create_logger, is_main_process
+from src.xfuser_compat import get_sequence_parallel_world_size, require_xfuser
 from transformers import AutoTokenizer, CLIPImageProcessor, CLIPVisionModel, UMT5EncoderModel
-from xfuser.core.distributed import get_sequence_parallel_world_size
 
 if __name__ == '__main__':
     torch.set_grad_enabled(False)
@@ -66,6 +66,7 @@ if __name__ == '__main__':
     logger.info(f"World size: {world_size}")
 
     if args.enable_sp:
+        require_xfuser("multi-GPU sequence-parallel inference")
         from xfuser.core.distributed import (
             init_distributed_environment,
             initialize_model_parallel,

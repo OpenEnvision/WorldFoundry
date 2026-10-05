@@ -140,6 +140,11 @@ def build_comparison_identity(
         ),
         "split": _text(dataset_payload.get("split")),
         "metric_ids": _metric_ids(metrics_payload),
+        "metric_definitions": {
+            str(key): dict(definition)
+            for key, value in _mapping(metrics_payload.get("per_metric")).items()
+            if isinstance(definition := _mapping(value).get("definition"), Mapping)
+        },
         "metric_revision": _text(
             _first(metrics_payload, "metric_revision", "metrics_revision", "revision", "scorer_revision")
             or _first(metrics_summary, "metric_revision", "metrics_revision", "revision", "scorer_revision")
@@ -156,6 +161,8 @@ def build_comparison_identity(
             if key == "metric_ids":
                 values = value if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) else (value,)
                 derived[key] = sorted(str(item) for item in values)
+            elif key == "metric_definitions":
+                derived[key] = _mapping(value)
             else:
                 derived[key] = _text(value)
 
@@ -168,8 +175,7 @@ def build_comparison_identity(
         "data_fidelity",
         "dataset_revision",
         "dataset_hash",
-        "metric_revision",
-        "metric_config_hash",
+        "metric_definitions",
     )
     missing_required = [field for field in required if not derived.get(field)]
     missing_recommended = [field for field in recommended if not derived.get(field)]
@@ -203,7 +209,9 @@ def comparison_identity_from_summary(summary: Mapping[str, Any]) -> dict[str, An
     return identity
 
 
-def compare_identities(identities: Sequence[Mapping[str, Any]]) -> tuple[list[str], list[str]]:
+def compare_identities(
+    identities: Sequence[Mapping[str, Any]], *, metric_ids: Sequence[str] | None = None,
+) -> tuple[list[str], list[str]]:
     """Return hard incompatibilities and non-blocking identity warnings."""
 
     if not identities:
@@ -214,6 +222,15 @@ def compare_identities(identities: Sequence[Mapping[str, Any]]) -> tuple[list[st
         left_identity = dict(left_value)
         for right_index, right_value in enumerate(identities[left_index + 1 :], start=left_index + 1):
             right_identity = dict(right_value)
+            left_metrics = _mapping(left_identity.get("metric_definitions"))
+            right_metrics = _mapping(right_identity.get("metric_definitions"))
+            selected = set(metric_ids) if metric_ids is not None else set(left_metrics).intersection(right_metrics)
+            for metric_id in sorted(selected):
+                left, right = left_metrics.get(metric_id), right_metrics.get(metric_id)
+                if left is None or right is None:
+                    warnings.append(f"runs {left_index} and {right_index} cannot verify definition of {metric_id}")
+                elif left != right:
+                    errors.append(f"runs {left_index} and {right_index} differ on definition of {metric_id}")
             for field in _STRICT_FIELDS:
                 left = left_identity.get(field)
                 right = right_identity.get(field)

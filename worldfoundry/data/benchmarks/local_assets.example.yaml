@@ -113,6 +113,7 @@ benchmarks:
   - id: official_repo
     kind: repo
     repo_url: https://github.com/Lifelong-Robot-Learning/LIBERO
+    revision: 8f1084e3132a39270c3a13ebe37270a43ece2a01
     path: ${WORLDFOUNDRY_CACHE_DIR}/repos/Lifelong-Robot-Learning--LIBERO
     env: WORLDFOUNDRY_LIBERO_ROOT
   - id: lerobot_dataset
@@ -166,59 +167,12 @@ benchmarks:
     - official_results_dump
     required_for: leaderboard_evidence
     note: Run the official LIBERO evaluator in the upstream checkout, then import its result dump with benchmark-run --mode official-validation.
-- id: libero-para
-  assets:
-  - id: official_repo
-    kind: repo
-    repo_url: https://github.com/cau-hai-lab/LIBERO-Para
-    path: ${WORLDFOUNDRY_CACHE_DIR}/repos/cau-hai-lab--LIBERO-Para
-    env: WORLDFOUNDRY_LIBERO_PARA_ROOT
-  - id: official_dataset
-    kind: dataset
-    hf_dataset_id: HAI-Lab/LIBERO-Para
-    path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/HAI-Lab__LIBERO-Para
-    env: WORLDFOUNDRY_LIBERO_PARA_DATASET_ROOT
-    access: manual_license_review
-  - id: paraphrase_split
-    kind: dataset_split
-    path: ${WORLDFOUNDRY_HFD_DATASET_ROOT}/HAI-Lab__LIBERO-Para
-    split_env: WORLDFOUNDRY_LIBERO_PARA_SPLIT
-    default_split: paraphrase_eval
-    allowed_splits:
-    - paraphrase_eval
-    - paraphrase_train
-    - libero_10_para
-    required_for: official_rollout_execution
-    note: Keep the paraphrase split mapping fixed when comparing policies.
-  - id: simulator_assets
-    kind: simulator_asset
-    path: ${WORLDFOUNDRY_DATA_DIR}/datasets/libero-para/simulator_assets
-    note: Stage the LIBERO-compatible simulator assets expected by the LIBERO-Para checkout.
-  - id: policy_checkpoint
-    kind: checkpoint
-    env: WORLDFOUNDRY_LIBERO_PARA_POLICY_CHECKPOINT
-    path: ${WORLDFOUNDRY_CKPT_DIR}/libero-para/policy
-    required_for: official_rollout_execution
-  - id: official_results_dump
-    kind: result_dump
-    path: ${WORLDFOUNDRY_ARTIFACT_DIR}/runs/libero-para/official_results
-    env: WORLDFOUNDRY_LIBERO_PARA_RESULTS_PATH
-  - id: upstream_rollout_execution
-    kind: upstream_rollout_execution
-    depends_on:
-    - official_repo
-    - official_dataset
-    - paraphrase_split
-    - simulator_assets
-    - policy_checkpoint
-    - official_results_dump
-    required_for: leaderboard_evidence
-    note: Run the upstream LIBERO-Para evaluator with the selected paraphrase split, then import the rollout result dump.
 - id: simpler-env
   assets:
   - id: official_repo
     kind: repo
     repo_url: https://github.com/simpler-env/SimplerEnv
+    revision: 06accaca93535902d408da4855f21cece12bceb7
     path: ${WORLDFOUNDRY_CACHE_DIR}/repos/simpler-env--SimplerEnv
     env: WORLDFOUNDRY_SIMPLERENV_ROOT
   - id: embodiment_assets
@@ -258,6 +212,7 @@ benchmarks:
   - id: official_repo
     kind: repo
     repo_url: https://github.com/robocasa/robocasa
+    revision: 56e355ccc64389dfc1b8a61a33b9127b975ba681
     path: ${WORLDFOUNDRY_CACHE_DIR}/repos/robocasa--robocasa
     env: WORLDFOUNDRY_ROBOCASA_ROOT
   - id: kitchen_assets
@@ -298,6 +253,7 @@ benchmarks:
   - id: official_repo
     kind: repo
     repo_url: https://github.com/mees/calvin
+    revision: fa03f01f19c65920e18cf37398a9ce859274af76
     path: ${WORLDFOUNDRY_CACHE_DIR}/repos/mees--calvin
     env: WORLDFOUNDRY_CALVIN_ROOT
   - id: dataset_root
@@ -344,6 +300,7 @@ benchmarks:
   - id: official_repo
     kind: repo
     repo_url: https://github.com/haosulab/ManiSkill
+    revision: a4a4f9272ad64b1564035874b605ceb687b63ed8
     path: ${WORLDFOUNDRY_CACHE_DIR}/repos/haosulab--ManiSkill
     env: WORLDFOUNDRY_MANISKILL_ROOT
   - id: simulator_assets
@@ -384,6 +341,7 @@ benchmarks:
   - id: official_repo
     kind: repo
     repo_url: https://github.com/stepjam/RLBench
+    revision: 02720bba4c73fe02eb75df946b8791b806028a9d
     path: ${WORLDFOUNDRY_CACHE_DIR}/repos/stepjam--RLBench
     env: WORLDFOUNDRY_RLBENCH_ROOT
   - id: coppeliasim_runtime
@@ -549,6 +507,7 @@ benchmarks:
   - id: official_repo
     kind: repo
     repo_url: https://github.com/RoboTwin-Platform/RoboTwin
+    revision: 0aeea2d669c0f8516f4d5785f0aa33ba812c14b4
     path: ${WORLDFOUNDRY_CACHE_DIR}/repos/RoboTwin-Platform--RoboTwin
     env: WORLDFOUNDRY_ROBOTWIN_ROOT
   - id: public_simulator_assets

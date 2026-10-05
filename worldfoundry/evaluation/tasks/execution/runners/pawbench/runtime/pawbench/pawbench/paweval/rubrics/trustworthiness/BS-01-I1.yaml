@@ -1,0 +1,53 @@
+schema_version: paweval.rubric/v1
+axis: trustworthiness
+scene_id: BS-01-I1
+track: coverage
+title_en: Bottle Flip with Marked Landing Cue
+scene_grounding:
+- 'Initial state must match: A bottle-flip setup matching `BS-01`, with a visible
+  marked landing cue on the table.'
+- The bottle, hand, table, and marked landing cue must remain visible enough to
+  audit the flip and final support contact.
+action_execution:
+- 'Required action: Flip the bottle once.'
+- The hand must release/flip the bottle once; the marked cue is contextual and must
+  not hide target acquisition or landing.
+- A final bottle appearing near the cue without visible flight/rotation is action
+  execution failure.
+target_requirements:
+- Target object is the bottle, not the cue; base/cap/side and visible support contact
+  must be readable after landing.
+- The cue must not be used as a fake support unless actual bottle-cue contact is
+  visible.
+object_continuity:
+- The same bottle must remain continuous through release, rotation, and landing;
+  the cue must not duplicate or replace the bottle.
+- Bottle identity, size, and cap/base orientation must remain coherent.
+apparatus_stability:
+- Marked landing cue and table plane must stay fixed relative to the camera and
+  bottle throughout the readout.
+motion_hard_failures:
+- 'Bottle teleport: final pose appears near the cue without continuous trajectory.'
+- 'Cue drift: the marked cue shifts or is redrawn to match the final bottle pose.'
+- 'Post-settle pose change: support contact changes after stable landing without
+  continuous motion.'
+post_result_consistency:
+- The stable pose and cue relationship must remain consistent after first decisive
+  landing; later impossible correction is fatal for strict trusted metrics.
+- If the cue occludes the support contact, mark readout ambiguity rather than
+  inventing a supported label.
+severity_rules:
+  fatal_for_strict_trusted:
+  - SCENE_GROUNDING_FAIL
+  - ACTION_EXECUTION_FAIL
+  - OBJECT_CONTINUITY_FAIL
+  - TRAJECTORY_INVALID
+  - APPARATUS_INSTABILITY
+  - POST_RESULT_INCONSISTENCY
+  - OBJECT_ACQUISITION_FAIL
+  nonfatal_warnings:
+  - MINOR_VISUAL_ARTIFACT
+  - READOUT_AMBIGUITY
+notes:
+- 'Scene title: Bottle Flip with Marked Landing Cue.'
+- 'Track B family: stability_stack.'

@@ -11,6 +11,7 @@ integration:
   verification_status: gpu_validation_verified
 name: RoboFlamingo
 official_sources:
+  paper: https://arxiv.org/abs/2311.01378
   github:
     head_sha: 1475a07d043a62bb07ab11abfc71115bb72e2a16
     url: https://github.com/RoboFlamingo/RoboFlamingo
@@ -33,3 +34,23 @@ catalog_category: vla_va_wam
 catalog_scope: VLA / VA(VAM) / WAM model entries tracked as upstream provenance, checkpoint metadata, and runtime-profile
   planning records. Runner or pipeline targets are present only after a complete in-tree WorldFoundry model runtime is registered
   and validated.
+docs:
+  publisher: Open-source research release (institution not recorded)
+  publisher_kind: lab
+  publisher_zh: 开源研究发布（仓库未记录正式机构）
+  overview: 'RoboFlamingo adapts the OpenFlamingo vision-language model into a robot imitation policy: a lightweight policy head turns the VLM''s visual-language features into actions. In this catalog it is GPU-validated — the vendored architecture passed public pipeline CUDA action_trace validation with staged RoboFlamingo, OpenFlamingo, and MPT checkpoints, and runner parity is verified.'
+  overview_zh: RoboFlamingo 将 OpenFlamingo 视觉-语言模型改造为机器人模仿策略：轻量策略头把 VLM 的视觉-语言特征转为动作。本 catalog 中已 GPU 验证——内置架构以就位的 RoboFlamingo、OpenFlamingo 与 MPT checkpoint 通过公开 pipeline 的 CUDA action_trace 验证，runner parity 为 verified。
+  architecture: An OpenFlamingo backbone (MPT language model with cross-attention vision fusion) plus a recurrent policy head for action prediction. The full architecture and inference source are vendored in-tree.
+  architecture_zh: OpenFlamingo 骨干（MPT 语言模型加交叉注意力视觉融合），配循环策略头做动作预测。完整架构与推理源码内置树内。
+  usage_notes: Stage the RoboFlamingo policy, OpenFlamingo backbone, and MPT language model checkpoints locally. Per-run action trace evidence is tracked outside the model catalog.
+  usage_notes_zh: 在本地就位 RoboFlamingo 策略、OpenFlamingo 骨干与 MPT 语言模型 checkpoint。每次运行的动作轨迹证据在模型 catalog 外跟踪。
+  limitations:
+  - Three separate checkpoint stacks (policy, backbone, LM) must be staged.
+  - No license is recorded in this repository.
+  limitations_zh:
+  - 需就位三套 checkpoint（策略、骨干、语言模型）。
+  - 仓库未记录许可证。
+  recommended_benchmarks:
+  - id: calvin
+    reason: RoboFlamingo's standard long-horizon evaluation suite.
+    reason_zh: RoboFlamingo 的标准长时程评测套件。

@@ -1,5 +1,6 @@
 import math
 import os
+import inspect
 from typing import Optional, Tuple
 
 import torch
@@ -20,6 +21,22 @@ try:
     from flash_attn_interface import flash_attn_varlen_func as flash_attn_varlen_func_v3
 except Exception:  # pragma: no cover - optional CUDA kernel.
     flash_attn_varlen_func_v3 = None
+
+
+def _flash_attn_varlen_v3_compat(**kwargs):
+    """Call both the original and newer FA3 varlen Python signatures."""
+
+    if flash_attn_varlen_func_v3 is None:
+        raise RuntimeError("flash_attn_interface.flash_attn_varlen_func is required.")
+    try:
+        parameters = inspect.signature(flash_attn_varlen_func_v3).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+    if "seqused_q" in parameters:
+        kwargs.setdefault("seqused_q", None)
+    if "seqused_k" in parameters:
+        kwargs.setdefault("seqused_k", None)
+    return flash_attn_varlen_func_v3(**kwargs)
 
 try:
     from .moe_pack_kernels import reorder_tokens_triton_pack
@@ -260,10 +277,8 @@ class LingBotVideoAttention(nn.Module):
                 parallel_config=parallel_config,
             )
         else:
-            if flash_attn_varlen_func_v3 is None:
-                raise RuntimeError("flash_attn_interface.flash_attn_varlen_func is required.")
             if parallel_config is None:
-                result = flash_attn_varlen_func_v3(
+                result = _flash_attn_varlen_v3_compat(
                     q=q.reshape(-1, self.num_heads, self.head_dim),
                     k=k.reshape(-1, self.num_heads, self.head_dim),
                     v=v.reshape(-1, self.num_heads, self.head_dim),
@@ -300,7 +315,7 @@ class LingBotVideoAttention(nn.Module):
                 q_flat = q_global.reshape(-1, local_heads, self.head_dim)
                 k_flat = k_global.reshape(-1, local_heads, self.head_dim)
                 v_flat = v_global.reshape(-1, local_heads, self.head_dim)
-                result = flash_attn_varlen_func_v3(
+                result = _flash_attn_varlen_v3_compat(
                     q=q_flat,
                     k=k_flat,
                     v=v_flat,

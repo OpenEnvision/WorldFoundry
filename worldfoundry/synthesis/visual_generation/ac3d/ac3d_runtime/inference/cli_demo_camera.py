@@ -1,6 +1,12 @@
 import sys
+from pathlib import Path
 
-sys.path.append('..')
+# Modified by WorldFoundry: upstream appended the CWD-relative '..' (only valid when the
+# process CWD is inference/). Anchor to the ac3d_runtime root instead so the bare imports
+# below (cogvideo_controlnet, controlnet_pipeline, inference.*) resolve regardless of CWD.
+_AC3D_RUNTIME_ROOT = str(Path(__file__).resolve().parents[1])
+if _AC3D_RUNTIME_ROOT not in sys.path:
+    sys.path.append(_AC3D_RUNTIME_ROOT)
 import argparse
 import os
 
@@ -15,7 +21,7 @@ from transformers import T5EncoderModel, T5Tokenizer
 
 from inference.datasets.controlnet_datasets_camera import RealEstate10KPoseControlnetDataset
 from inference.utils import stack_images_horizontally
-from worldfoundry.core.checkpoint import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 
 
 @torch.no_grad()
@@ -177,6 +183,8 @@ def generate_video(
         video_generate_all = pipe(
             prompt=prompt,
             controlnet_latents=controlnet_latents,  # The path of the image to be used as the background of the video
+            height=height,
+            width=width,
             num_videos_per_prompt=num_videos_per_prompt,  # Number of videos to generate per prompt
             num_inference_steps=num_inference_steps,  # Number of inference steps
             num_frames=num_frames,  # Number of frames to generate，changed to 49 for diffusers version `0.30.3` and after.

@@ -6,11 +6,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from diffusers.models.modeling_outputs import Transformer2DModelOutput
-from diffusers.models.transformers.transformer_wan import WanTransformer3DModel, WanRotaryPosEmbed
+from diffusers.models.transformers.transformer_wan import WanRotaryPosEmbed, WanTransformer3DModel
 from diffusers.utils import USE_PEFT_BACKEND, logging, scale_lora_layers, unscale_lora_layers
-from xfuser.core.distributed import get_sequence_parallel_rank, get_sp_group
 
-from src.models.controlnet import zero_module, WanXControlNet
+from src.models.controlnet import WanXControlNet, zero_module
+from src.models.rotary_compat import split_rotary_embedding
+from src.xfuser_compat import get_sequence_parallel_rank, get_sp_group
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -180,7 +181,11 @@ class PCDController(WanTransformer3DModel):
         if self.sp_size > 1:
             assert controlnet_inputs.shape[1] % self.sp_size == 0
             controlnet_inputs = torch.chunk(controlnet_inputs, self.sp_size, dim=1)[get_sequence_parallel_rank()]
-            controlnet_rotary_emb = torch.chunk(controlnet_rotary_emb, self.sp_size, dim=2)[get_sequence_parallel_rank()]
+            controlnet_rotary_emb = split_rotary_embedding(
+                controlnet_rotary_emb,
+                chunks=self.sp_size,
+                rank=get_sequence_parallel_rank(),
+            )
 
         with torch.autocast("cuda", dtype=self.dtype, enabled=True):
             controlnet_states = self.controlnet(hidden_states=controlnet_inputs,
@@ -192,7 +197,11 @@ class PCDController(WanTransformer3DModel):
         if self.sp_size > 1:
             assert hidden_states.shape[1] % self.sp_size == 0
             hidden_states = torch.chunk(hidden_states, self.sp_size, dim=1)[get_sequence_parallel_rank()]
-            rotary_emb = torch.chunk(rotary_emb, self.sp_size, dim=2)[get_sequence_parallel_rank()]
+            rotary_emb = split_rotary_embedding(
+                rotary_emb,
+                chunks=self.sp_size,
+                rank=get_sequence_parallel_rank(),
+            )
 
         # 4. Transformer blocks
         if torch.is_grad_enabled() and self.gradient_checkpointing:

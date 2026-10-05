@@ -1,14 +1,12 @@
 import os
 import json
 import argparse
-import torch
 import torch.distributed as dist
 from PIL import Image
 import decord
 from worldfoundry.core.io import save_video
-from worldfoundry.base_models.diffusion_model.diffsynth.pipelines.wan_video_new_longvie import (
-    LongViePipeline,
-    ModelConfig,
+from worldfoundry.synthesis.visual_generation.longvie.worldfoundry_runtime import (
+    LongVieOfficialRuntime,
 )
 
 # Target resolution (width, height)
@@ -24,23 +22,19 @@ def resize_video_frames(video_np):
 
 
 def main(args):
-    pipe = LongViePipeline.from_pretrained(
-        torch_dtype=torch.bfloat16,
+    runtime = LongVieOfficialRuntime(
+        control_weight_path=args.control_weight_path,
+        dit_weight_path=args.dit_weight_path or None,
+        weight_dir=None,
+        wan_base_dir=args.wan_base_dir,
+        tokenizer_dir=args.tokenizer_dir,
         device="cuda",
         use_usp=args.use_usp,
-        model_configs=[
-            ModelConfig(model_id="Wan-AI/Wan2.1-I2V-14B-480P", origin_file_pattern="diffusion_pytorch_model*.safetensors", offload_device="cpu", skip_download=True),
-            ModelConfig(model_id="Wan-AI/Wan2.1-I2V-14B-480P", origin_file_pattern="models_t5_umt5-xxl-enc-bf16.pth", offload_device="cpu", skip_download=True),
-            ModelConfig(model_id="Wan-AI/Wan2.1-I2V-14B-480P", origin_file_pattern="Wan2.1_VAE.pth", offload_device="cpu", skip_download=True),
-            ModelConfig(model_id="Wan-AI/Wan2.1-I2V-14B-480P", origin_file_pattern="models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth", offload_device="cpu", skip_download=True),
-        ],
-        redirect_common_files=False,
-        control_weight_path=args.control_weight_path, # control weight
-        dit_weight_path=args.dit_weight_path, # attention weight
-        ring_degree=args.ring_degree, 
-        ulysses_degree=args.ulysses_degree
+        ring_degree=args.ring_degree,
+        ulysses_degree=args.ulysses_degree,
+        variant="longvie-2" if args.dit_weight_path else "longvie-1",
     )
-    pipe.enable_vram_management()
+    pipe = runtime.load()
 
     with open(args.json_file, "r") as f:
         samples = json.load(f)
@@ -92,6 +86,8 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--control_weight_path", type=str, required=True)
     parser.add_argument("--dit_weight_path", type=str, default="")
+    parser.add_argument("--wan_base_dir", type=str, default=None)
+    parser.add_argument("--tokenizer_dir", type=str, default=None)
     parser.add_argument("--local_rank", type=int, default=-1)
     parser.add_argument("--ulysses_degree", type=int, default=1)
     parser.add_argument("--ring_degree", type=int, default=1)

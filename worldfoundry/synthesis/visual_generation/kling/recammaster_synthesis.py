@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 from torchvision.transforms import v2
 
-from worldfoundry.core.checkpoint import load_tensor_state_dict
+from worldfoundry.core.model_loading.checkpoints import load_tensor_state_dict
 from worldfoundry.synthesis.visual_generation.kling.recammaster_runtime.model_manager import ModelManager
 from worldfoundry.synthesis.visual_generation.kling.recammaster_runtime.pipelines.wan_video_recammaster import (
     WanVideoReCamMasterPipeline,
@@ -128,6 +128,7 @@ class ReCamMasterSynthesis(BaseSynthesis):
                 num_frames=81,
                 height=480,
                 width=832,
+                num_inference_steps=50,
                 cfg_scale=5.0):
         """
         Generates a video based on a text prompt, an input video, and a camera trajectory.
@@ -155,7 +156,7 @@ class ReCamMasterSynthesis(BaseSynthesis):
             height=height,
             width=width,
             num_frames=num_frames,
-            num_inference_steps=50,
+            num_inference_steps=num_inference_steps,
             seed=0, tiled=True
         )
         return video

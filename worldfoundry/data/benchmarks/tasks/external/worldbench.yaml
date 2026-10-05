@@ -51,9 +51,10 @@ metadata:
     answer_manifest_env: WORLDFOUNDRY_WORLDBENCH_ANSWER_MANIFEST
     sam2_checkpoint_env: WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT
     results_path_env: WORLDFOUNDRY_WORLDBENCH_RESULTS_PATH
+    root_env: WORLDFOUNDRY_WORLDBENCH_ROOT
   release_status: experimental
-  maturity: runtime_ready
-  open_source_status: in_tree_clean_reimplementation
+  maturity: verified_runner
+  open_source_status: in_tree_runtime
   official_benchmark_verified: false
   integration_evidence: true
   leaderboard_valid: false
@@ -130,10 +131,24 @@ metadata:
   integration_status: integrated
   status: in_tree_runtime_ready
   checkpoint_refs:
-  - repo_id: facebook/sam2.1-hiera-large
+  - id: worldbench_sam2_1_hiera_large
+    repo_id: facebook/sam2.1-hiera-large
     filename: sam2.1_hiera_large.pt
     env: WORLDFOUNDRY_WORLDBENCH_SAM2_CKPT
+    shared_implementation: worldfoundry.base_models.perception_core.segment.sam2
 
+  validation_command:
+  - ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+  - -m
+  - worldfoundry.evaluation.tasks.execution.runners.worldbench.run_worldbench_official_runner
+  - --run-official
+  - --dataset-root
+  - ${WORLDFOUNDRY_WORLDBENCH_DATASET_ROOT}
+  - --generated-video-dir
+  - ${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}
+  - --output-dir
+  - <out>
+  - --json
 tasks:
   worldbench_intuitive_physics_standard:
     benchmark_name: worldbench
@@ -188,5 +203,15 @@ tasks:
       runner_script: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
     - name: in_tree_text_evaluator
       metric_ids: [text_based_accuracy, multiple_choice_accuracy, binary_accuracy]
+      runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
+      runner_script: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py
+    - name: in_tree_official_runtime
+      metric_ids:
+      - foreground_miou
+      - foreground_dice
+      - background_rmse
+      - text_based_accuracy
+      - multiple_choice_accuracy
+      - binary_accuracy
       runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldBenchContract
       runner_script: worldfoundry/evaluation/tasks/execution/runners/worldbench/run_worldbench_official_runner.py

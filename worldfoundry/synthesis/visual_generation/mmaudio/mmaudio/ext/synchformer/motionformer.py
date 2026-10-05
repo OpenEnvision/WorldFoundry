@@ -3,12 +3,13 @@ from pathlib import Path
 
 import einops
 import torch
+from mmaudio.ext.synchformer.utils import check_if_file_exists_else_download
+from mmaudio.ext.synchformer.video_model_builder import VisionTransformer
 from omegaconf import OmegaConf
 from timm.layers import trunc_normal_
 from torch import nn
 
-from mmaudio.ext.synchformer.utils import check_if_file_exists_else_download
-from mmaudio.ext.synchformer.video_model_builder import VisionTransformer
+from worldfoundry.core.io.paths import package_data_path
 
 FILE2URL = {
     # cfg
@@ -97,7 +98,7 @@ class MotionFormer(VisionTransformer):
         elif cfg_fname == 'joint_224_16x4.yaml':
             pos_emb_type = 'joint'
 
-        self.mformer_cfg_path = Path(__file__).absolute().parent / cfg_fname
+        self.mformer_cfg_path = package_data_path('models', 'runtime', 'configs', 'mmaudio', 'synchformer') / cfg_fname
 
         check_if_file_exists_else_download(self.mformer_cfg_path, FILE2URL)
         mformer_cfg = OmegaConf.load(self.mformer_cfg_path)

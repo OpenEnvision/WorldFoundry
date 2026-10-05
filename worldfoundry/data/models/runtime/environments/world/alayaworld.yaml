@@ -38,7 +38,7 @@ validation_imports:
 - safetensors
 - einops
 - cv2
-- worldfoundry.base_models.diffusion_model.video.ltx2.alayaworld
+- worldfoundry.base_models.diffusion_model.models.networks.ltx.alayaworld
 - worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3.api
 - worldfoundry.synthesis.visual_generation.alayaworld
 notes:

@@ -40,3 +40,19 @@ catalog_category: three_d_four_d
 catalog_scope: 3D Gaussian-splatting catalog entries. Integrated entries expose in-tree
   WorldFoundry runtimes; metadata-only entries retain upstream provenance without runnable
   backends.
+docs:
+  publisher: University of Oxford (Active Vision Lab)
+  publisher_kind: university
+  publisher_zh: 牛津大学（Active Vision Lab）
+  overview: 'Splatt3R predicts a 3D Gaussian splat scene directly from an uncalibrated image pair — zero shot, no camera parameters, no per-scene optimization. In this catalog it is fully verified: checkpoint-backed GPU inference produced a finite 344,064-Gaussian PLY from the bundled official-style views, with evidence in inference_evidence.yaml.'
+  overview_zh: Splatt3R 直接从未标定的图像对预测 3D 高斯泼溅场景——零样本、无需相机参数、无需逐场景优化。本 catalog 中它已完整验证：checkpoint 加载的 GPU 推理从内置官方风格视图产出含 344,064 个高斯的有限 PLY，证据记录在 inference_evidence.yaml。
+  architecture: Per the paper (arXiv 2408.13912), Splatt3R builds on MASt3R's two-view geometry backbone and adds a Gaussian-parameter head. WorldFoundry keeps the runtime under base_models/three_dimensions/general_3d/splatt3r/splatt3r_runtime, importing MASt3R/DUSt3R from their canonical sibling paths; the packaged runtime is inference-only (training loaders and demo code are pruned).
+  architecture_zh: 按论文（arXiv 2408.13912），Splatt3R 在 MASt3R 的双视图几何主干上增加高斯参数头。 WorldFoundry 将运行时放在 base_models/three_dimensions/general_3d/splatt3r/splatt3r_runtime，并从规范兄弟路径导入 MASt3R/DUSt3R；打包的运行时仅含推理（训练加载器与 demo 代码已裁剪）。
+  usage_notes: Splatt3RSynthesis loads the in-tree runtime in-process and emits a PLY Gaussian-splat artifact. Checkpoints stay external assets (brandonsmart/splatt3r_v1.0) — stage them before running.
+  usage_notes_zh: Splatt3RSynthesis 在进程内加载树内运行时，输出 PLY 高斯泼溅产物。checkpoint 保持为外部资产（brandonsmart/splatt3r_v1.0）——运行前请先就位。
+  limitations:
+  - 'Two-view input: large scenes need multiple pairs and external merging.'
+  - Inherits MASt3R/DUSt3R licensing considerations through its backbone lineage.
+  limitations_zh:
+  - 双视图输入：大场景需要多对图像并在外部合并。
+  - 经主干继承 MASt3R/DUSt3R 的许可注意事项。

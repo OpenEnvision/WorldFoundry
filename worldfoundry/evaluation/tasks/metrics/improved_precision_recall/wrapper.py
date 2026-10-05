@@ -46,11 +46,12 @@ def compute_improved_precision_recall(
     return {"precision": float(precision), "recall": float(recall)}
 
 
-def _custom_loader(*args: Any, **kwargs: Any) -> Any:
+def _custom_loader(path: str, **kwargs: Any) -> Any:
     prepend_import_path(PACKAGE_ROOT)
     from improved_precision_recall import get_custom_loader
 
-    return get_custom_loader(*args, **kwargs)
+    inputs = [path] if Path(path).is_file() else path
+    return get_custom_loader(inputs, **kwargs)
 
 
 def _load_image_tensor(image: np.ndarray, device: str) -> Any:
@@ -82,7 +83,7 @@ def compute_realism_score(
     k: int = 3,
     num_samples: int = 5000,
     device: str | None = None,
-) -> float | dict[str, float]:
+) -> float | dict[str, float | list[float]]:
     """Compute IPR realism score(s) relative to a reference image manifold."""
     import torch
 
@@ -95,7 +96,7 @@ def compute_realism_score(
             loader = _custom_loader(str(generated), batch_size=batch_size, num_samples=num_samples)
             scores: list[float] = []
             for batch in loader:
-                scores.append(float(ipr.realism(batch)))
+                scores.extend(float(ipr.realism(image.unsqueeze(0))) for image in batch)
             if not scores:
                 raise ValueError(f"no images found in generated path: {generated}")
             return {"mean_realism": float(np.mean(scores)), "realism_scores": scores}

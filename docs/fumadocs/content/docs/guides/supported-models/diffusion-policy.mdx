@@ -1,0 +1,42 @@
+---
+title: "Diffusion Policy"
+description: "Stanford REAL Lab action-diffusion policy; WorldFoundry vendors low-dim PushT only and rejects dill checkpoints."
+modelId: "diffusion-policy"
+pageSource: authored
+---
+
+Diffusion Policy treats robot actions as a conditional denoising problem: given a short observation history, it iteratively denoises a future action sequence instead of regressing a single mean. The official paper is [Diffusion Policy: Visuomotor Policy Learning via Action Diffusion](https://arxiv.org/abs/2303.04137) (arXiv 2303.04137). The project page is [diffusion-policy.cs.columbia.edu](https://diffusion-policy.cs.columbia.edu/). The GitHub tree is [real-stanford/diffusion_policy](https://github.com/real-stanford/diffusion_policy).
+
+<ModelPaperFigures modelId="diffusion-policy" locale="en" />
+
+WorldFoundry vendors only the **low-dimensional PushT** line under `worldfoundry/synthesis/action_generation/diffusion_policy`. Image-conditioned Diffusion Policy variants are not in-tree. The runtime rebuilds the released policy from an offline-converted, fully resolved primitive config plus tensor-only state dictionaries. Aliases `diffusion_policy` and `dp` resolve here.
+
+<ModelCommandBuilder modelId="diffusion-policy" locale="en" />
+
+## What it is for
+
+This is a visuomotor **action** baseline, not a video generator and not a language-conditioned VLA. The required input is `state` — recorded as **`state_dim` 20** with **`observation_history` 2**. There is no image, instruction, or prompt on the recorded route. `DiffusionPolicyPipeline` writes `diffusion_policy_action_trace.json`.
+
+Use it to compare a diffusion action head against a regression policy on the same low-dim PushT contract. If you need RGB or language, this card is the wrong page.
+
+## Runtime contract
+
+Horizon, `n_action_steps`, and denoising steps are restored from the converted checkpoint config — they are not hard-coded on this card. What is recorded in the profile: observation layout `batch_time_feature`, feature dim **20**, history **2**, `float32`, `predict_action` → `action_trace`.
+
+The only accepted weight file is the trusted conversion:
+
+`${WORLDFOUNDRY_CKPT_DIR}/embodied_action/diffusion-policy/low_dim_pusht_diffusion_policy_cnn/epoch=0550-test_mean_score=0.969.weights-only.ckpt`
+
+The `0.969` token is the **upstream filename**, not a WorldFoundry score. Official dill workspace checkpoints are rejected at runtime with no unsafe deserialization fallback. `dill` is deliberately absent from the environment. The converted payload passed weights-only reload, strict model / EMA restore, CPU load, and a finite A100 action probe.
+
+## Running in WorldFoundry
+
+Dedicated environment `worldfoundry-diffusion-policy` (Python 3.10, CUDA 11.8 or newer). Stage the converted checkpoint, then:
+
+```
+worldfoundry-eval run diffusion-policy
+```
+
+No public Hugging Face repo is recorded on this card. No license is recorded in this repository — confirm upstream terms before production use.
+
+<ModelRelatedRecipes modelId="diffusion-policy" locale="en" />

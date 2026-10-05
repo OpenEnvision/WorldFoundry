@@ -1,0 +1,44 @@
+---
+title: "AlayaWorld v1.1"
+description: "AlayaWorld v1.1 from AlayaLab: image-to-video and camera-controlled-video; Runner parity pending; dedicated `alayaworld-v1.1`."
+modelId: "alayaworld-v1.1"
+pageSource: generated
+---
+
+Separate AR and four-step DMD inference for AlayaWorld v1.1 with ViGeo spatial memory.
+
+<ModelPaperFigures modelId="alayaworld-v1.1" locale="en" />
+
+Code: [AlayaLab/AlayaWorld](https://github.com/AlayaLab/AlayaWorld).
+
+<ModelCommandBuilder modelId="alayaworld-v1.1" locale="en" />
+
+## What it is for
+
+Use `alayaworld-v1.1` for camera-conditioned video inference. The recipe binds the recorded camera-control profile.
+
+The inference-only rollout methods and three small configuration adapters are extracted from the pinned upstream and paired with WorldFoundry checkpoint/LoRA loaders, LTX VAE, Gemma encoding and the existing Alaya history encoder. An inference-only entry skips trainer setup, optimizers, critics and training data. It is published by AlayaLab.
+
+Catalog tasks include image-to-video, camera-controlled-video, and interactive-world-model. Catalog aliases include `alayaworld-v11` and `alaya-world-v1.1`. Documented modalities: image in, video out.
+
+## Runtime contract
+
+Required `input_path`, `load.base_checkpoint`, `load.gemma_path`, and `load.vigeo_checkpoint`; optional `prompt`, `load.checkpoint_dir`, `rounds`, `seed`, and `camera_path`; artifacts `generated_world` and `alayaworld-v1.1.mp4`.
+
+CLI task profiles: `image-to-video`. WorldFoundry binds `AlayaWorldV11Pipeline`.
+
+Family status: **Runner parity pending**.
+
+Recorded `image-to-video` defaults: seed=42.
+
+Select variant=ar (30 steps) or dmd (4 steps). Stage2b transformer/history weights, the LTX-2.3 base, Gemma and ViGeo1.1 are required; DMD additionally needs stage3 LoRA. This is separate from the original merged DA3 checkpoint route.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run alayaworld-v1.1 --pipeline.task-profile image-to-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+Recorded weight repositories include `AlayaLab/AlayaWorld-v1.1-stage2b`, `AlayaLab/AlayaWorld-v1.1-stage3`, and `Lightricks/LTX-2.3` among others. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh alayaworld-v1.1`. Add `--download` to fetch missing public checkpoints.
+
+Gated `google/gemma-3-12b-it-qat-q4_0-unquantized` — accept upstream terms before download; status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="alayaworld-v1.1" locale="en" />

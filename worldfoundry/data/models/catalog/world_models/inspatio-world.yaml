@@ -13,6 +13,8 @@ source:
   hf_repo_id: inspatio/world
   license: apache-2.0
 official_sources:
+  paper: https://arxiv.org/abs/2604.07209
+  project_page: https://inspatio.github.io/inspatio-world/
   github:
     url: https://github.com/inspatio/inspatio-world
     head_sha: fef970664e33f519a31f0ee19d58689e41752c0e
@@ -35,3 +37,23 @@ runner_parity:
 catalog_category: world_models
 catalog_scope: World-model catalog entries. Integrated entries expose in-tree WorldFoundry
   runtimes; blocked entries retain upstream provenance without runnable backends.
+docs:
+  publisher: InSpatio (formal institution not recorded)
+  publisher_kind: lab
+  publisher_zh: InSpatio（GitHub 组织，正式机构未记录）
+  overview: 'InSpatio-World is a 1.3B video-conditioned world generator: given a video and a target trajectory it synthesizes trajectory-conditioned novel views of the same world. In this catalog it is fully verified — the in-tree pipeline generated and visually validated a 297-frame video through the Workspace on 2026-07-10, with every default component resolving from local checkpoint storage.'
+  overview_zh: InSpatio-World 是 1.3B 的视频条件世界生成器：给定一段视频与目标轨迹，合成同一世界的轨迹条件新视角。本 catalog 中它已完整验证——树内 pipeline 于 2026-07-10 经 Workspace 生成并通过视觉验证 297 帧视频，所有默认组件均从本地 checkpoint 存储解析。
+  architecture: The recorded checkpoint is inspatio/world (apache-2.0); official inference source is retained in-tree. An optional use_tae path resolves taew2_1.pth from the shared checkpoint root but is not required for the default Wan VAE path.
+  architecture_zh: 记录的 checkpoint 为 inspatio/world（apache-2.0）；官方推理源码保留在树内。可选的 use_tae 路径会从共享 checkpoint 根解析 taew2_1.pth，但默认 Wan VAE 路径不需要它。
+  usage_notes: Every default component resolves from local checkpoint storage only — stage the inspatio/world weights first, then run the standard pipeline.
+  usage_notes_zh: 所有默认组件仅从本地 checkpoint 存储解析——请先就位 inspatio/world 权重，再运行标准 pipeline。
+  limitations:
+  - 'Video-conditioned by design: it needs an input video, not just an image or prompt.'
+  - The formal publishing institution behind the InSpatio organization is not recorded.
+  limitations_zh:
+  - 设计上以视频为条件：需要输入视频，而不仅是图像或提示词。
+  - InSpatio 组织背后的正式发表机构未记录。
+  recommended_benchmarks:
+  - id: camerabench
+    reason: Trajectory-following accuracy of generated views.
+    reason_zh: 生成视角的轨迹跟随精度。

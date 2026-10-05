@@ -1,180 +1,34 @@
 ---
 title: T2VWorldBench
-description: 面向 text-to-video 世界知识的评测，包含仓内 official runtime 和可运行评分命令。
+description: "WACV 2026 的世界知识 T2V 评测：6 类 1,200 条 prompt。WorldFoundry 导入官方行；VLM 裁判仍在上游。"
 ---
 
-## 简介
+T2VWorldBench（圣何塞州立大学，联合 UC Berkeley、UW-Madison、UW 与桂林电子科大；WACV 2026）问的是文本生成视频模型能否用 **世界知识** 做事实生成。官方规模：**6 大类、60 子类、1,200 条 prompt** — 物理、自然、活动、文化、因果、物体知识。打分混合人工与 VLM。论文对 10 个前沿系统的评估发现，多数模型无法生成真正知识正确的视频。
 
-T2VWorldBench 评估 text-to-video 模型是否能生成具备世界知识的视频，而不只是表面视觉细节。这个 WACV 2026 benchmark 覆盖六类：physics、nature、activity、culture、causality 和 object knowledge。论文使用人类评测与 VLM 自动评测结合的 hybrid protocol；公开代码实现的是其中 VLM assessment 部分。
+公开的 `eval.py` 产出 `quality`、`realism`、`relevance`、`consistency` 四项 0–5 分，以及 `final` 0–20 分。六大知识类别描述的是 prompt 集；公开 CSV 没有单独的类别分。
 
-WorldFoundry 已经把官方 runtime 集成在仓内。runner、结果解析和 scorecard 写出在 `worldfoundry/evaluation/tasks/execution/runners/t2vworldbench`；vendored official `eval.py` 保留在 `runtime/t2vworldbench`，prompt 和 metadata 资产放在 `worldfoundry/data/benchmarks/assets/t2vworldbench`。
+论文：[T2VWorldBench](https://arxiv.org/abs/2507.18107)。代码：[magiclinux/world_knowledge](https://github.com/magiclinux/world_knowledge)。Prompt CSV 已内置；完整元数据 / 样例视频在 Drive。
 
-官方参考：
+WorldFoundry **内置 runtime 源码并归一化官方结果文件**。完整官方 VLM 评测仍需上游 LLaVA runtime 与已就位的 Drive 资产。
 
-- Paper: [arXiv:2507.18107](https://arxiv.org/abs/2507.18107)
-- Official source reference: [magiclinux/world_knowledge](https://github.com/magiclinux/world_knowledge)
-- Full metadata and sample videos: [official Google Drive folder](https://drive.google.com/drive/folders/1-E9CPJf-M6_RuATjIfpYfiUEFhEYwuaF)
-- 仓内 runner: `worldfoundry/evaluation/tasks/execution/runners/t2vworldbench/run_t2vworldbench_official_runner.py`
+<BenchmarkPageSections id="t2vworldbench" locale="zh" />
 
-## 评测什么
-
-T2VWorldBench 评估 text-to-video 模型是否表达**世界知识**——physics、nature、activity、culture、causality、object understanding——而不只是表面视觉细节。这个 WACV 2026 benchmark 有 1,200 个 prompt，覆盖 6 大类、60 子类，采用 human + VLM hybrid protocol。
-
-## Benchmark 设计
-
-| 类别 | 关注点 |
-| --- | --- |
-| Physics | 物理现象与 intuitive physics |
-| Nature | 自然场景、天气、生物与环境知识 |
-| Activity | 人类动作与 activity-specific 世界知识 |
-| Culture | 文化对象、习俗、地点与惯例 |
-| Causality | 生成视频中的因果关系 |
-| Object | 物体身份、用途与行为 |
-
-主汇总指标：`world_knowledge_average`（各可用类别分数的均值）。
-
-## 评测协议
-
-论文 prompt CSV 已经放在仓内：
-
-```text
-worldfoundry/data/benchmarks/assets/t2vworldbench/prompt/prompt.csv
-```
-
-官方 VLM evaluator 实际读取 JSON metadata。每个条目应包含：
-
-| Field | 作用 |
-| --- | --- |
-| `id` or `name` | 用来匹配生成视频的 filename stem。 |
-| `number` | 处理顺序。 |
-| `prompt` | 生成视频时使用的原始文本 prompt。 |
-| `explanation` | evaluator 使用的世界知识解释。 |
-
-生成视频目录可以包含整套视频，也可以只包含单个视频。完整复现时，准备完整官方 metadata JSON，并为每个 metadata 条目生成一个视频：
-
-```text
-/path/to/t2vworldbench/generated_videos/
-  Chopsticks.mp4
-  Mongolia.mp4
-  ...
-
-/path/to/t2vworldbench/meta_data.json
-```
-
-如果你使用 `0001.mp4` 这类编号文件名，请确保 metadata JSON 里的 `id` 或 `name` 也是 `0001`；`number` 只用于排序，不用于 prompt lookup。
-
-主指标是 `world_knowledge_average`。
-
-| Metric | 含义 |
-| --- | --- |
-| `physics_knowledge` | 物理现象与直觉物理的世界知识分数。 |
-| `nature_knowledge` | 自然场景、天气、生物和环境知识分数。 |
-| `activity_knowledge` | 人类动作和活动相关世界知识分数。 |
-| `culture_knowledge` | 文化物体、实践、地点和习俗分数。 |
-| `causality_knowledge` | 生成视频中因果关系的分数。 |
-| `object_knowledge` | 物体身份、用途和行为分数。 |
-| `world_knowledge_average` | 可用 category 分数的均值。 |
-
-## 数据与模型准备
-
-从 WorldFoundry 仓库根目录开始：
-
-```bash
-cd /path/to/WorldFoundry
-export WORLDFOUNDRY_T2VWORLDBENCH_RUNTIME="$PWD/worldfoundry/evaluation/tasks/execution/runners/t2vworldbench/runtime/t2vworldbench"
-export WORLDFOUNDRY_T2VWORLDBENCH_ASSETS="$PWD/worldfoundry/data/benchmarks/assets/t2vworldbench"
-export WORLDFOUNDRY_T2VWORLDBENCH_PROMPT_CSV="$WORLDFOUNDRY_T2VWORLDBENCH_ASSETS/prompt/prompt.csv"
-export WORLDFOUNDRY_T2VWORLDBENCH_PROMPT_FILE="$WORLDFOUNDRY_T2VWORLDBENCH_ASSETS/data/meta_data/meta_data.json"
-```
-
-下载或准备官方 metadata JSON。仓内有一个极小示例：
-
-```text
-worldfoundry/data/benchmarks/assets/t2vworldbench/data/meta_data/meta_data.json
-```
-
-仓内文件只是一个小的 metadata 资产。复现 leaderboard-style 结果时，使用官方 Drive release 里的完整 metadata：
-
-```bash
-export WORLDFOUNDRY_T2VWORLDBENCH_PROMPT_FILE=/path/to/t2vworldbench/meta_data.json
-```
-
-VLM evaluator 使用已经通过 WorldFoundry base-model modules 集成的 LLaVA-based code。按你的本地 base-model 约定准备 LLaVA checkpoint，并使用能 import WorldFoundry evaluation 依赖的 Python 环境运行。
-
-## 生成候选视频
-
-用候选 T2V 模型跑 metadata 或 `prompt.csv` 里的 prompts，然后按 metadata 可匹配的文件名写出视频：
-
-```text
-/path/to/t2vworldbench/generated_videos/
-  <id>.mp4
-  <id>.mp4
-  ...
-```
-
-评分前设置视频目录和模型名：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/t2vworldbench/generated_videos
-export WORLDFOUNDRY_T2VWORLDBENCH_MODEL_NAME=my_t2v_model
-```
-
-候选模型推理和训练是 model-specific 的。对于 WorldFoundry 已集成的生成模型，使用对应 synthesis workflow 跑这些 prompts，然后把最终视频导出到上面的 layout。
-
-## 运行 VLM 评分
-
-运行仓内 T2VWorldBench official runtime：
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/t2vworldbench/run_t2vworldbench_official_runner.py \
-  --run-official \
-  --model-name "${WORLDFOUNDRY_T2VWORLDBENCH_MODEL_NAME}" \
-  --prompt-file "${WORLDFOUNDRY_T2VWORLDBENCH_PROMPT_FILE}" \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/t2vworldbench/official-run \
-  --json
-```
-
-官方 evaluator 会在 runner 输出目录下写出 `<model_name>_video_assessment_scores.csv`。WorldFoundry 会把这个 CSV 解析成统一 scorecard。
-
-## 导入已有结果
-
-如果你已经跑过 T2VWorldBench evaluator，并拿到了官方 CSV，可以直接导入：
-
-```bash
-cd /path/to/WorldFoundry
-
-PYTHONPATH=. "${WORLDFOUNDRY_UNIFIED_PYTHON:-python}" \
-  worldfoundry/evaluation/tasks/execution/runners/t2vworldbench/run_t2vworldbench_official_runner.py \
-  --official-results-path /path/to/my_t2v_model_video_assessment_scores.csv \
-  --generated-video-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/t2vworldbench/imported \
-  --json
-```
-
-也可以通过统一 benchmark 入口导入同一个 CSV：
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id t2vworldbench \
   --mode official-validation \
-  --official-results-path /path/to/my_t2v_model_video_assessment_scores.csv \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --official-results-path <model_video_assessment_scores.csv> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/t2vworldbench/official-validation \
   --json
 ```
 
-## 输出文件
+默认导入：`WORLDFOUNDRY_T2VWORLDBENCH_RESULTS_PATH`。可选根：`WORLDFOUNDRY_T2VWORLDBENCH_ROOT`。仓内 prompt：`worldfoundry/data/benchmarks/assets/t2vworldbench/prompt/prompt.csv`。
 
-运行会写出：
+仓内指针：`worldfoundry/data/benchmarks/tasks/external/t2vworldbench.yaml`，`worldfoundry/evaluation/tasks/execution/runners/t2vworldbench/runtime/t2vworldbench`。
 
-- `scorecard.json`: WorldFoundry 统一 scorecard，包含六类 category metrics 和 `world_knowledge_average`。
-- `raw_metric_table.jsonl`: 从官方 CSV 解析出的 metric rows。
-- `per_sample_scores.jsonl`: 当 CSV 暴露 sample-level 分数时写出逐视频结果。
-- `upstream_stdout.log` and `upstream_stderr.log`: 仓内 official runtime 日志。
-- `upstream/`: 使用 `--run-official` 时的原始 evaluator 输出目录。
+产物包括 `scorecard.json`（主键 `final`）与 `raw_metric_table.jsonl`。
 
-[返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)
+[← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

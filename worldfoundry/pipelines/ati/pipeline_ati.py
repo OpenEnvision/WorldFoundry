@@ -44,17 +44,21 @@ class ATIPipeline(PipelineABC):
         interactions: Any = None,
         output_path: Any = None,
         return_dict: bool = False,
-        operator_kwargs: Any = None,
+        operator_kwargs: Mapping[str, Any] | None = None,
         **kwargs: Any,
     ) -> Any:
-        del interactions, operator_kwargs
+        del interactions
+        if operator_kwargs is not None and not isinstance(operator_kwargs, Mapping):
+            raise TypeError("operator_kwargs must be a mapping")
+        runtime_kwargs = dict(operator_kwargs or {})
+        runtime_kwargs.update(kwargs)
         image_value = image if image is not None else images
         result = self.synthesis_model.predict(
             prompt=prompt,
             image=image_value,
             output_path=output_path,
             return_dict=True,
-            **kwargs,
+            **runtime_kwargs,
         )
         return result if return_dict else result.get("video")
 

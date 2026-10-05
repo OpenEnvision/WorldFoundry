@@ -155,7 +155,6 @@ def run_check_data(args: Namespace) -> None:
     else:
         print("-- Data is incomplete!")
         return False, count, total_count
-    print("=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=")
 
 def run_check_score(args: Namespace) -> None:
     from omegaconf import OmegaConf
@@ -253,7 +252,6 @@ def run_check_score(args: Namespace) -> None:
     else:
         print("-- Score data is incomplete!")
         return False, count, total_count
-    print("=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=")
    
     
 def run_analysis(args: Namespace) -> None:

@@ -14,21 +14,44 @@ source:
   license: mit
 checkpoint_refs:
 - repo_id: dylanebert/pixelSplat
+  revision: f66c00e4f43b7347f61eee8801f19c5a09405d10
   license: mit
+official_sources:
+  project_page: https://dcharatan.github.io/pixelsplat
+  paper: https://arxiv.org/abs/2312.12337
 integration:
   kind: pipeline_runner
-  status: planned
+  status: integrated
   notes:
-  - Runtime source is vendored in-tree; inference is blocked until a local Gaussian
-    rasterization extension is provided and re10k.ckpt is staged.
+  - Original convolutional re10k.ckpt and acid.ckpt are supported through the public
+    pipeline with local rasterization dependencies and calibrated input views.
 runtime_profile: runtime-profile:pixelsplat
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: pixelsplat
 runner_parity:
-  status: implemented_local_extension_pending
+  status: selected_checkpoint_gpu_validated
   notes:
   - PixelSplatSynthesis provides an in-tree wrapper around the official test entrypoint.
+  - Both checkpoints passed real GPU rendering on two posed scenes each; this is not a full benchmark or complete upstream numerical parity claim.
 catalog_category: three_d_four_d
 catalog_scope: 3D Gaussian-splatting catalog entries. Integrated entries expose in-tree
   WorldFoundry runtimes; metadata-only entries retain upstream provenance without runnable
   backends.
+docs:
+  publisher: Massachusetts Institute of Technology (MIT)
+  publisher_kind: university
+  publisher_zh: 麻省理工学院（MIT）
+  overview: pixelSplat reconstructs a 3D Gaussian scene from two calibrated views in a single forward pass (CVPR 2024). The in-tree runtime supports the original convolutional RE10K and ACID checkpoints and has been verified with real posed inputs on GPU.
+  overview_zh: pixelSplat 在单次前向中从两张标定视图重建 3D 高斯场景（CVPR 2024）。树内运行时支持原始卷积版本的 RE10K 和 ACID 权重，已使用真实标定输入完成 GPU 验证。
+  architecture: Per the publication, an epipolar transformer resolves scale ambiguity between the two views, and the network predicts a probabilistic distribution over Gaussian parameters. WorldFoundry vendors the source under base_models/three_dimensions/point_clouds/pixelsplat with a lazy wrapper around the official test entrypoint (MIT license; checkpoint mirror dylanebert/pixelSplat).
+  architecture_zh: 按论文，极线 Transformer 消解两视图间的尺度歧义，网络预测高斯参数的概率分布。 WorldFoundry 将源码内置于 base_models/three_dimensions/point_clouds/pixelsplat，并对官方测试入口做惰性封装（MIT 许可；checkpoint 镜像 dylanebert/pixelSplat）。
+  usage_notes: Provide model_path pointing to re10k.ckpt or acid.ckpt, the matching experiment, and posed dataset_roots/index_path. Install the declared runtime dependencies and local Gaussian rasterizer. Bare image lists use a synthetic baseline. PLY output exports normalized geometry and DC color with standard opacity logits.
+  usage_notes_zh: model_path 指向 re10k.ckpt 或 acid.ckpt，同时指定匹配的 experiment 与标定数据 dataset_roots/index_path。需安装已声明的运行依赖和本地高斯光栅化扩展。仅传图像列表时使用合成基线。PLY 导出归一化几何、DC 颜色和标准透明度 logit。
+  limitations:
+  - Supports the original convolutional checkpoints; newer camera-ready architectures are not interchangeable.
+  - Validation covers two scenes per dataset, not the complete benchmark. Unposed input does not establish geometric accuracy.
+  - PLY export retains only DC color; view-dependent appearance is available in the native renderer.
+  limitations_zh:
+  - 支持原始卷积版本权重，不能直接替换为更新的 camera-ready 网络权重。
+  - 验证覆盖每个数据集的两个场景，并非完整基准；未标定输入不能证明几何准确性。
+  - PLY 仅保留 DC 颜色，视角相关外观仍需使用原生渲染器。

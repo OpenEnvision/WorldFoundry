@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, MetricResult
+from worldfoundry.core.io.formats.serialization import JsonlWriter
+from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
 from worldfoundry.evaluation.tasks.embodied.config_loader import load_canonical_embodied_config
 from worldfoundry.evaluation.tasks.embodied.docker_runner import inside_docker, run_embodied_via_docker
 from worldfoundry.evaluation.tasks.embodied.materialize_rollouts import materialize_embodied_rollout_requests
@@ -20,6 +22,11 @@ from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import (
     EvaluateRunResult,
 )
 from worldfoundry.evaluation.tasks.execution.orchestration.existing_results import run_existing_results
+from worldfoundry.evaluation.tasks.execution.orchestration.run_session import (
+    prepare_generation,
+    run_stage,
+    session_paths,
+)
 from worldfoundry.evaluation.utils import write_json
 
 logger = logging.getLogger(__name__)
@@ -55,15 +62,6 @@ def _shard_requests(
     if shard_id < 0 or shard_id >= num_shards:
         raise ValueError(f"shard_id must be in [0, {num_shards})")
     return tuple(request for index, request in enumerate(requests) if index % num_shards == shard_id)
-
-
-def _metric_callable(metric_ids: Sequence[str] | None = None):
-    metrics = metric_suite(metric_ids or ("generation_success", "task_success", "success_rate"), track="vla")
-
-    def compute(request: GenerationRequest, result: GenerationResult) -> list[MetricResult]:
-        return [metric.compute_sample(request, result) for metric in metrics]
-
-    return compute
 
 
 class EmbodiedEvalOrchestrator:
@@ -113,47 +111,59 @@ class EmbodiedEvalOrchestrator:
         all_requests: list[GenerationRequest] = []
         all_results: list[GenerationResult] = []
         benchmark_contexts: list[dict[str, Any]] = []
-        total_requests = 0
-        for bench_cfg in self.config.get("benchmarks") or ():
-            requests = materialize_embodied_rollout_requests(bench_cfg)
-            total_requests += len(_shard_requests(requests, shard_id=self.shard_id, num_shards=self.num_shards))
-        self._update_progress(0, total_requests, 0)
-
-        completed = 0
-        errors = 0
+        benchmark_requests = []
         for bench_cfg in self.config.get("benchmarks") or ():
             benchmark_id = str(bench_cfg.get("benchmark_id") or bench_cfg.get("id") or "libero")
             benchmark_params = dict(bench_cfg.get("params") or {})
-            run_parameters = {
-                **model_parameters,
-                "benchmark_id": benchmark_id,
-                "benchmark_kwargs": benchmark_params,
-            }
             requests = _shard_requests(
                 materialize_embodied_rollout_requests(bench_cfg),
                 shard_id=self.shard_id,
                 num_shards=self.num_shards,
             )
-            runner = build_embodied_closed_loop_runner(
-                model_id,
-                benchmark_id,
-                run_parameters,
-                server_url=str(server_url) if server_url else None,
-                zero_policy=bool(model_parameters.get("zero_policy")),
-            )
+            all_requests.extend(requests)
+            benchmark_requests.append((benchmark_id, benchmark_params, requests))
             benchmark_contexts.append({"benchmark_id": benchmark_id, "params": benchmark_params, "request_count": len(requests)})
-            try:
-                for request in requests:
-                    result_batch = await asyncio.to_thread(runner.generate, [request])
-                    result = tuple(result_batch)[0]
-                    all_requests.append(request)
-                    all_results.append(result)
-                    completed += 1
-                    if result.error:
-                        errors += 1
-                    self._update_progress(completed, total_requests, errors)
-            finally:
-                runner.cleanup()
+        run_metadata = {
+            "schema_version": "worldfoundry-embodied-orchestrator-run",
+            "delegate_runner": "worldfoundry.embodied-orchestrator",
+            "benchmarks": benchmark_contexts,
+            "shard": {"id": self.shard_id, "total": self.num_shards} if self.shard_id is not None else None,
+        }
+        completed = 0
+        errors = 0
+        with ExitStack() as stack:
+            writer = None
+            if not self.no_save:
+                paths = session_paths(self.output_dir)
+                stack.enter_context(run_stage(paths, "generate", manifest={
+                    **run_metadata, "run_id": self.eval_id, "sample_count": len(all_requests),
+                    "model": {"model_id": model_id},
+                }))
+                prepare_generation(paths, all_requests, {})
+                writer = stack.enter_context(JsonlWriter(paths["results"], mode="a"))
+            self._update_progress(0, len(all_requests), 0)
+            for benchmark_id, benchmark_params, requests in benchmark_requests:
+                runner = build_embodied_closed_loop_runner(
+                    model_id,
+                    benchmark_id,
+                    {**model_parameters, "benchmark_id": benchmark_id, "benchmark_kwargs": benchmark_params},
+                    server_url=str(server_url) if server_url else None,
+                    zero_policy=bool(model_parameters.get("zero_policy")),
+                )
+                try:
+                    for request in requests:
+                        result_batch = await asyncio.to_thread(runner.generate, [request])
+                        result = tuple(result_batch)[0]
+                        all_results.append(result)
+                        if writer is not None:
+                            writer.write(result.to_dict())
+                            writer.flush()
+                        completed += 1
+                        if result.error:
+                            errors += 1
+                        self._update_progress(completed, len(all_requests), errors)
+                finally:
+                    runner.cleanup()
 
         if self.progress_path.exists():
             self.progress_path.unlink()
@@ -172,7 +182,7 @@ class EmbodiedEvalOrchestrator:
             output_dir=self.output_dir,
             requests=all_requests,
             results=all_results,
-            metric=_metric_callable(metric_ids),
+            metrics=metric_suite(metric_ids, track="vla"),
             benchmark={
                 "suite": "vla_va_wam",
                 "benchmark_name": self.config.get("id", "embodied_eval"),
@@ -196,16 +206,7 @@ class EmbodiedEvalOrchestrator:
                 "sample_count": len(all_requests),
             },
             run_id=self.eval_id,
-            run_metadata={
-                "schema_version": "worldfoundry-embodied-orchestrator-run",
-                "delegate_runner": "worldfoundry.embodied-orchestrator",
-                "benchmarks": benchmark_contexts,
-                "shard": (
-                    {"id": self.shard_id, "total": self.num_shards}
-                    if self.shard_id is not None and self.num_shards is not None
-                    else None
-                ),
-            },
+            run_metadata=run_metadata,
         )
         evaluate_result = EvaluateRunResult(
             schema_version=EVALUATE_RUN_RESULT_SCHEMA_VERSION,

@@ -1,25 +1,43 @@
-artifact_filename: egowm_runtime_plan.json
-artifact_kind: generated_video
-backend_stage: worldfoundry_runtime_plan
+schema_version: 2
+model_id: egowm
 display_name: EgoWM
-id: egowm
+task_family: video_generation
+groups:
+- world
+- action_conditioned
+source_repos:
+- url: https://github.com/miccooper9/egowm
+  revision: 4a24b6fb917b8b86cea892312971f39691c532e8
+  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/egowm
+  role: official_inference_checkout
+  required_paths:
+  - models/svd_wrapper.py
+  - data/cmu_clicks/realw_0.png
+checkpoints:
+- repo_id: anuragba/egowm
+  role: egowm_25dof_navigation_checkpoint
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/anuragba--egowm/svd_25dof_nav.pth
+- repo_id: stabilityai/stable-video-diffusion-img2vid
+  role: svd_base_model
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/stabilityai--stable-video-diffusion-img2vid
 input_schema:
   actions:
-  - action
+  - navigation_action
+  - egocentric_action
   image: true
   prompt: true
-  video: true
-integration_status: runtime_ported
-notes:
-- EgoWM official source route is registered; checkpoint/assets are runtime-gated.
-- Missing checkpoints/assets are reported by the runtime plan and are not catalog
-  blockers.
-- WorldFoundry tracks upstream source and checkpoint metadata only; no runnable pipeline
-  is registered.
-- Official source is bound from ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/egowm at 4a24b6fb917b8b86cea892312971f39691c532e8.
-runtime_status: route_ready_assets_pending
-task_family: world_model
+  video: false
+artifact_kind: generated_video
+artifact_filename: egowm.mp4
 execution:
   pipeline_binding: egowm
-  backend_stage: worldfoundry_runtime_plan
-  runtime_status: route_ready_assets_pending
+  backend_stage: in_tree_runtime_manifest
+  runtime_status: official_runtime_checkpoint_bound
+  integration_status: runtime_ported
+integration:
+  status: runtime_ported
+notes:
+- WorldFoundry launches the user-staged official source through a narrow compatibility wrapper; upstream source is not vendored.
+- The wrapper passes the configured SVD base model explicitly, avoiding the workstation-specific default embedded in the upstream builder.
+- Paired 25-DoF inference takes physical_initial_state and physical_actions in conditions_path; paired 3-DoF inference takes pre-normalized per-frame actions in actions_path.
+- A constant 3-DoF action_scale or synthetic 25-DoF state/actions is only a generation smoke control.

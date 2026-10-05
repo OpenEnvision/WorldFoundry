@@ -1,0 +1,42 @@
+---
+title: "Depth Anything 3"
+description: "ByteDance Seed multi-view geometry foundation. Official SOH export route is ported; runner pending. Not the metric-prior card. Apache-2.0 weights."
+modelId: "depth-anything-v3"
+pageSource: authored
+---
+
+Depth Anything 3 (DA3) is ByteDance Seed's **geometry foundation**: beyond monocular depth it predicts **multi-view consistent** geometry. This card is the in-tree official **SOH export** route (`DepthAnything3Pipeline`). It is **not** the verified metric prior at [depth-anything-v3-prior](/docs/guides/supported-models/depth-anything-v3-prior). Aliases `da3` and `depth-anything-3` resolve here.
+
+<ModelPaperFigures modelId="depth-anything-v3" locale="en" />
+
+The official paper is on [arXiv 2511.10647](https://arxiv.org/abs/2511.10647). Project: [depth-anything-3.github.io](https://depth-anything-3.github.io/). Code: [ByteDance-Seed/Depth-Anything-3](https://github.com/ByteDance-Seed/Depth-Anything-3). Weights: `depth-anything/DA3-LARGE` (**apache-2.0**).
+
+Status: **Runner parity pending**. Recipe env / VRAM / artifact rows are unset — inspect with `model-show` after staging.
+
+<ModelCommandBuilder modelId="depth-anything-v3" locale="en" />
+
+## What it is for
+
+Full DA3 SOH export. Need only metric depth? Use the prior sibling.
+
+Launch `worldfoundry-eval run depth-anything-v3` with `--pipeline.task-profile official-soh-export`.
+
+## Runtime contract
+
+Required: `input_path`; optional: `export_format`, `process_res`, `process_res_method`, `max_frames`, `frame_stride`, and `infer_gs`.
+
+| Knob | Default |
+| --- | --- |
+| `input_path` | bundled SOH example under `data/test_cases/depth_anything_v3/examples/SOH` |
+| `export_format` | `mini_npz` |
+| `process_res` | **504** |
+| `process_res_method` | `upper_bound_resize` |
+| `max_frames` | **2** |
+| `frame_stride` | **1** |
+| `infer_gs` | **false** |
+
+## Run in WorldFoundry
+
+Status: **Runner parity pending**. Stage weights locally — the runtime does not download them. Run `worldfoundry-eval run depth-anything-v3` with `--pipeline.task-profile official-soh-export`. Catalog VRAM is unset.
+
+<ModelRelatedRecipes modelId="depth-anything-v3" locale="en" />

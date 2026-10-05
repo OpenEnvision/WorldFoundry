@@ -1,0 +1,99 @@
+schema_version: 2
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+model_id: joyai-echo-longvideo
+name: JoyAI-Echo 1.5 / Echo-LongVideo
+family: JoyAI-Echo
+domain: video
+aliases:
+- joyai-echo
+- echo-longvideo
+- joyai-echo-1.5
+tasks:
+- reference-to-video
+- audio-video-generation
+- long-video-generation
+output_artifacts:
+- generated_video
+capabilities:
+  task_family: video_generation
+  modalities:
+  - reference-to-video
+  - audio-video-generation
+  - long-video-generation
+  - multi-shot-memory
+availability:
+  source: open_source
+  license: ltx-2-community-license
+  requires_auth: true
+sources:
+  paper: https://arxiv.org/abs/2608.23383
+  project_page: https://echo-team-joy-future-academy-jd.github.io/Echo-1.5-Page/
+  github:
+    url: https://github.com/jd-opensource/JoyAI-Echo
+    revision: 0b931fd42f5ef51410019ae41b261eb3b8936410
+  huggingface:
+  - repo_id: jdopensource/JoyAI-Echo
+    type: model
+    status: confirmed
+  - repo_id: google/gemma-3-12b-it
+    type: model
+    status: gated_dependency
+checkpoints:
+  primary:
+    repo_id: jdopensource/JoyAI-Echo
+    revision: 9ec5d876c4ac73e2912a18e11c03fb03489d0903
+    gated: false
+    private: false
+    variants:
+    - echo15_full_dmd
+    - echo15_fp8
+    - echo15_fp4
+  text_encoder:
+    repo_id: google/gemma-3-12b-it
+    gated: true
+integration:
+  status: integrated
+  runtime_profile: joyai-echo-longvideo
+  pipeline_binding: joyai-echo-longvideo
+  runner: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: joyai-echo-longvideo
+runtime_profile: runtime-profile:joyai-echo-longvideo
+evidence:
+  notes:
+  - WorldFoundry normalizes R2V requests and launches the official Echo-LongVideo CLI in its dedicated environment.
+  - BF16, FP8, FP4, consumer, and low-VRAM upstream configuration routes are represented.
+  - The local BF16, FP8, and FP4 Echo checkpoints and CUDA devices are present, but GPU inference is blocked by the gated Gemma 3 12B encoder and missing dedicated environment.
+runner_parity:
+  status: pending
+  expected_artifacts:
+  - result.mp4
+  - run_metadata.json
+  notes:
+  - Command construction and official request-schema mapping are CPU-tested.
+  - Checkpoint-backed audio-video quality parity requires CUDA and external assets.
+catalog_category: video
+docs:
+  publisher: JD.com (JoyAI / Echo Team)
+  publisher_kind: company
+  publisher_zh: 京东（JoyAI / Echo 团队）
+  overview: JoyAI-Echo 1.5 is an inference-only long-form audio-video generator. Its R2V request can combine a prompt, an optional first frame, and as many as seven ordered image/audio memory slots so identity, voice, and story context persist across independently editable shots.
+  overview_zh: JoyAI-Echo 1.5 是仅推理的长时程音视频生成模型。R2V 请求可组合提示词、可选首帧与最多七个有序图像/音频记忆槽，使角色身份、声音与故事上下文在可独立编辑的镜头间延续。
+  architecture: The release builds on LTX-2.3 and adds few-step DMD generation plus a paired cross-modal memory bank. WorldFoundry keeps the official Python 3.11, PyTorch 2.8, CUDA 12.8 runtime external and communicates through the checked-in CLI contract.
+  architecture_zh: 该版本基于 LTX-2.3，加入少步 DMD 生成与成对跨模态记忆库。WorldFoundry 将官方 Python 3.11、PyTorch 2.8、CUDA 12.8 运行环境保持外置，并通过已发布 CLI 契约调用。
+  usage_notes: Clone JoyAI-Echo at the recorded revision, prepare its dedicated environment, and pass source_root plus local Echo and gated Gemma checkpoints. Generation is safety-gated behind execute=True. FP4 also needs NVIDIA ModelOpt; production voice-memory extraction needs the upstream MSST setup.
+  usage_notes_zh: 请检出记录的 JoyAI-Echo revision，准备专用环境，并传入 source_root、本地 Echo checkpoint 与受限访问的 Gemma checkpoint。生成必须显式设置 execute=True。FP4 还需 NVIDIA ModelOpt，生产级语音记忆提取需完成上游 MSST 设置。
+  limitations:
+  - The upstream release is marked for academic research and non-commercial use and remains subject to the LTX-2 Community License.
+  - GPU artifact and visual parity remain unvalidated: the local Echo checkpoints are present, but this account cannot access the gated Gemma 3 12B encoder and the dedicated environment is absent.
+  - Checkpoints, Gemma access, MSST assets, and the upstream source checkout are external and are never downloaded during prediction.
+  limitations_zh:
+  - 上游版本标注为学术研究与非商业用途，并受 LTX-2 Community License 约束。
+  - 本地 Echo 权重与 CUDA 设备已就位，但当前账户无法访问受限的 Gemma 3 12B 编码器，且专用环境缺失，因此尚未验证 GPU 产物与视觉一致性。
+  - Checkpoint、Gemma 权限、MSST 资产与上游源码检出均为外部资源，预测期间不会自动下载。
+  recommended_benchmarks:
+  - id: chronomagic-bench
+    reason: Long-horizon temporal continuity across generated shots.
+    reason_zh: 评测生成镜头间的长时程时间连续性。
+  - id: vbench
+    reason: Baseline video quality and motion evaluation.
+    reason_zh: 基础视频质量与运动评测。

@@ -12,18 +12,19 @@ input_schema:
   - action_space
   image: true
   instruction: true
+  language_embedding: true
   prompt: true
   video: false
 integration_status: runtime_ported
 notes:
 - RT-1/Robotics Transformer is modeled as a language-conditioned robot policy.
-- The profile expects an RT-1 TensorFlow SavedModel directory at ${WORLDFOUNDRY_CKPT_DIR}/embodied_action/rt-1/rt1main
-  when users stage one locally. The current workspace does not include that SavedModel.
+- The profile expects an RT-1 TensorFlow SavedModel directory at ${WORLDFOUNDRY_CKPT_DIR}/embodied_action/rt-1/rt1main.
+- Pass a checkpoint-compatible 512-D language_embedding with each inference request;
+  the released SavedModel does not encode prompt strings, and text-only calls fail explicitly.
 - The profile emits action_trace artifacts; benchmark wrappers are responsible for
   environment replay and success metrics.
-- WorldFoundry vendors RT-1 SavedModel runtime and upstream source under worldfoundry/synthesis/action_generation/rt1/rt1_runtime.
-  py_compile, import/from_pretrained, and plan generation passed; real predict_action
-  remains blocked because the profile checkpoint directory is not staged locally.
-runtime_status: in_tree_rt1_runtime_ported_savedmodel_checkpoint_missing
+- The in-tree RT-1 SavedModel adapter completed offline GPU action inference with
+  rt1main, rt1multirobot, and rt1simreal official checkpoints and supplied embeddings.
+runtime_status: in_tree_savedmodel_action_inference_gpu_verified_embedding_required
 task_family: vla_policy
-verification_status: plan_only_ready_checkpoint_required
+verification_status: checkpoint_backed_action_inference_embedding_required

@@ -7,6 +7,9 @@ from mmaudio.ext.autoencoder.vae import VAE, get_my_vae
 from mmaudio.ext.bigvgan import BigVGAN
 from mmaudio.ext.bigvgan_v2.bigvgan import BigVGAN as BigVGANv2
 from mmaudio.model.utils.distributions import DiagonalGaussianDistribution
+from worldfoundry.synthesis.visual_generation.mmaudio.checkpoints import (
+    resolve_bigvgan_v2_checkpoint,
+)
 
 
 class AutoEncoderModule(nn.Module):
@@ -27,8 +30,11 @@ class AutoEncoderModule(nn.Module):
             assert vocoder_ckpt_path is not None
             self.vocoder = BigVGAN(vocoder_ckpt_path).eval()
         elif mode == '44k':
-            self.vocoder = BigVGANv2.from_pretrained('nvidia/bigvgan_v2_44khz_128band_512x',
-                                                     use_cuda_kernel=False)
+            self.vocoder = BigVGANv2.from_pretrained(
+                str(resolve_bigvgan_v2_checkpoint()),
+                local_files_only=True,
+                use_cuda_kernel=False,
+            )
             self.vocoder.remove_weight_norm()
         else:
             raise ValueError(f'Unknown mode: {mode}')

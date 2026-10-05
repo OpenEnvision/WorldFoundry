@@ -16,7 +16,6 @@ from worldfoundry.synthesis.visual_generation.lingbot_world.lingbot_world_runtim
     runtime_root as lingbot_runtime_root,
 )
 
-
 DEFAULT_LINGBOT_BASE_REPO = "robbyant/lingbot-world-base-cam"
 DEFAULT_LINGBOT_FAST_REPO = "robbyant/lingbot-world-fast"
 DEFAULT_LINGBOT_ACT_REPO = "robbyant/lingbot-world-base-act-preview"
@@ -51,15 +50,13 @@ def _patch_fast_attention_fallback(use_fast: bool) -> None:
     if not use_fast:
         return
     try:
-        from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules import (
-            lingbot_attention as attention_module,
+        from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.lingbot import (
+            attention as attention_module,
         )
-        from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules import (
-            lingbot_model as model_module,
+        from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.lingbot import (
+            fast as model_fast_module,
         )
-        from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules import (
-            lingbot_model_fast as model_fast_module,
-        )
+        from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.lingbot import model as model_module
     except Exception:
         return
 
@@ -77,10 +74,16 @@ def _patch_fast_attention_fallback(use_fast: bool) -> None:
 class LingBotWorldRuntime:
     """In-tree LingBot World runtime facade around the vendored official runtime."""
 
-    def __init__(self, core_model: Any, default_offload_model: bool = True):
+    def __init__(
+        self,
+        core_model: Any,
+        default_offload_model: bool = True,
+        runtime_variant: str = "base",
+    ):
         self.core_model = core_model
         self.config = core_model.config
         self.default_offload_model = default_offload_model
+        self.runtime_variant = runtime_variant
 
     @classmethod
     def from_pretrained(
@@ -146,7 +149,11 @@ class LingBotWorldRuntime:
         if use_fast and "fast_checkpoint_dir" in signature(core_model_cls.__init__).parameters:
             core_model_kwargs["fast_checkpoint_dir"] = resolved_fast_model_path
         core_model = core_model_cls(**core_model_kwargs)
-        return cls(core_model=core_model, default_offload_model=offload_model)
+        return cls(
+            core_model=core_model,
+            default_offload_model=offload_model,
+            runtime_variant="fast" if use_fast else "base",
+        )
 
     @staticmethod
     def _validate_parallelism(
@@ -497,6 +504,14 @@ class LingBotWorldRuntime:
         action_matrix: Optional[np.ndarray] = None,
         **kwargs,
     ):
+        if self.runtime_variant == "fast":
+            requested_frames = int(num_output_frames)
+            latent_frames = (requested_frames - 1) // 4 + 1
+            if requested_frames < 9 or (requested_frames - 1) % 4 or latent_frames % 3:
+                raise ValueError(
+                    "LingBot Fast requires frame_num=12n-3 (9, 21, 33, ...); "
+                    f"got {requested_frames}. The upstream runtime otherwise silently truncates the clip."
+                )
         pil_image = self._to_pil_image(pil_image=pil_image, image_tensor=image_tensor)
         offload_model = self.default_offload_model if offload_model is None else offload_model
         seed = self._synchronized_seed(seed)

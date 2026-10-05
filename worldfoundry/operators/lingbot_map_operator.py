@@ -70,6 +70,15 @@ class LingBotMapOperator(BaseOperator):
         return {"mode": mode} if mode else {}
 
     def delete_last_interaction(self):
-        """Remove the last recorded interaction from the current list."""
+        """Clear the entire current interaction list (not just the last item).
+
+        ``BaseOperator.delete_last_interaction`` pops one entry and raises
+        ``ValueError`` when the list is empty. This override instead empties
+        the list: ``LingBotMapPipeline.process`` records one or more template
+        tokens in a single ``get_interaction`` call, then always invokes this
+        method in ``finally`` to reset per-request state. Raising on empty, or
+        popping only the last token, would leak leftover modes across calls
+        or break the cleanup path. An already-empty list is a no-op.
+        """
         if self.current_interaction:
             self.current_interaction = []

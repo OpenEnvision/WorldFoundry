@@ -1,0 +1,65 @@
+schema_version: 2
+model_id: echo-memory-context-k1
+display_name: Echo-Memory Context K=1
+task_family: world_model
+groups:
+- world
+- video
+- image_to_video
+- camera_control
+- autoregressive_video
+- memory_research
+source_repos:
+- url: https://github.com/Echo-Team-Joy-Future-Academy-JD/Echo-Memory
+  revision: 30eaffb55b264e1d8dfef70a8934d34c86e29947
+  in_tree_path: worldfoundry/base_models/diffusion_model/models/networks/echo_memory
+checkpoints:
+- role: echo_memory_finetune
+  repo_id: Echo-Team/Echo-Memory
+  filename: context_k1/epoch-0.safetensors
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Echo-Memory/context_k1/epoch-0.safetensors
+  status: official_huggingface_current_main_default_cuda_validated
+- role: wan_2p1_t2v_1p3b_backbone
+  repo_id: Wan-AI/Wan2.1-T2V-1.3B
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Wan2.1-T2V-1.3B
+  status: public_upstream_backbone
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions:
+  - camera_trajectory
+artifact_kind: generated_world
+artifact_filename: echo-memory-context-k1.mp4
+execution:
+  environment: echo-memory
+  backend_stage: native_diffusion
+  runtime_status: native_pipeline_cuda_artifact_pending
+  integration_status: integrated
+  pipeline_binding: echo-memory-context-k1
+  defaults:
+    width: 640
+    height: 352
+    frames: 81
+    fps: 15
+    num_chunks: 2
+    context_frames: 1
+    sample_steps: 50
+    sample_shift: 5.0
+integration:
+  status: integrated
+license: cc-by-4.0
+usage_restrictions:
+- attribution-required
+gpu_targets:
+- NVIDIA Ampere
+- NVIDIA Ada
+- NVIDIA Hopper
+- NVIDIA Blackwell
+notes:
+- Public model identity is permanently bound to release tier paper_primary and checkpoint context_k1/epoch-0.safetensors.
+- The official Hugging Face main branch serves this checkpoint. The 2026-07-20 A100 artifact predates the NativeDiffusionPipeline cutover; fresh native CUDA artifact validation is pending.
+- The rollout owns a BaseMemory frame store and submits DiffusionRequest inputs to the canonical frozen-context execution strategy.
+- The sampler uses target-noise followed by clean-context suffix, target-only CFG, context relocking after every solver step, and target-only decode.
+- FSDP and USP are rejected until distributed checkpoint parity is validated.
+- Upstream official-sample parity and benchmark scoring remain pending.

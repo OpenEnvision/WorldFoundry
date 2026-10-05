@@ -730,9 +730,6 @@ def drawMatches(img1, img2, kp1, kp2, radius=2, mask=None, color_by=0, row_cat=F
     else:
         whole_img = np.concatenate([img1, img2], axis=1)
     return whole_img
-    if row_cat:
-        return np.concatenate([img1, img2], axis=0)
-    return np.concatenate([img1, img2], axis=1)
 
 
 def drawMatches_lines(
@@ -833,9 +830,6 @@ def drawMatches_lines(
                         cv2.LINE_AA,
                     )
     return whole_img
-    if row_cat:
-        return np.concatenate([img1, img2], axis=0)
-    return np.concatenate([img1, img2], axis=1)
 
 
 import torch
@@ -917,58 +911,6 @@ class PointCloudViewer:
 
         if not self.fix_camera:
             raise NotImplementedError
-
-            R21, T21 = find_rigid_alignment_batched(
-                torch.from_numpy(pc_dict["pred_pts1_2"][None]),
-                torch.from_numpy(pc_dict["pred_pts1_1"][None]),
-            )
-            R12, T12 = find_rigid_alignment_batched(
-                torch.from_numpy(pc_dict["pred_pts2_1"][None]),
-                torch.from_numpy(pc_dict["pred_pts2_2"][None]),
-            )
-            R21 = R21[0].numpy()
-            T21 = T21.numpy()
-            R12 = R12[0].numpy()
-            T12 = T12.numpy()
-            pred_pts1_2 = pc_dict["pred_pts1_2"] @ R21.T + T21
-            pred_pts2_1 = pc_dict["pred_pts2_1"] @ R12.T + T12
-            self.server.add_point_cloud(
-                name=f"/frames/{step}/pred_pts1_2_{step}",
-                points=pred_pts1_2,
-                colors=pc_dict["color1_2"],
-                point_size=0.002,
-            )
-
-            self.server.add_point_cloud(
-                name=f"/frames/{step}/pred_pts2_1_{step}",
-                points=pred_pts2_1,
-                colors=pc_dict["color2_1"],
-                point_size=0.002,
-            )
-            img1 = pc_dict["color1_1"].reshape(224, 224, 3)
-            img2 = pc_dict["color2_2"].reshape(224, 224, 3)
-            self.camera_handles.append(
-                self.server.add_camera_frustum(
-                    name=f"/frames/{step}/camera1_{step}",
-                    fov=2.0 * np.arctan(224.0 / 490.0),
-                    aspect=1.0,
-                    scale=self.camera_scale.value,
-                    color=(1.0, 0, 0),
-                    image=img1,
-                )
-            )
-            self.camera_handles.append(
-                self.server.add_camera_frustum(
-                    name=f"/frames/{step}/camera2_{step}",
-                    fov=2.0 * np.arctan(224.0 / 490.0),
-                    aspect=1.0,
-                    scale=self.camera_scale.value,
-                    color=(0, 0, 1.0),
-                    wxyz=rotation_matrix_to_quaternion(R21),
-                    position=T21,
-                    image=img2,
-                )
-            )
 
     def animate(self):
         with self.server.add_gui_folder("Playback"):

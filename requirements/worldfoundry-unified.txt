@@ -13,6 +13,7 @@
 build
 pytest
 h5py
+colorama==0.4.6
 colorspacious
 numpy==1.26.4
 numpydantic
@@ -30,13 +31,16 @@ rerun-sdk==0.22.1
 clip @ git+https://github.com/openai/CLIP.git
 timm
 torchao
+torchdata>=0.11,<0.12
 # GEN3C imports NVIDIA Warp as `warp` for ray-triangle intersection.
 warp-lang
 iopath
 xformers
+xfuser==0.4.5
+mup @ git+https://github.com/janEbert/mup.git@22ca9dd6964f8b7e2d309e2ec588f71edf26f78c
 
 # Default transformer/diffusion stack.
-diffusers>=0.37.0
+diffusers>=0.39.0
 peft
 tokenizers
 transformers>=4.57.0,<5
@@ -73,7 +77,9 @@ trimesh
 decord
 modelscope
 sentencepiece
+segment-anything==1.0
 ftfy
+flash-linear-attention @ git+https://github.com/fla-org/flash-linear-attention.git@2e0f6c31f9db50f010cb157c712c048b8a3a89d2
 pydantic
 hydra-core
 omegaconf
@@ -81,6 +87,7 @@ pyarrow
 moviepy
 safetensors
 einops
+einops-exts==0.0.4
 accelerate
 imageio
 imageio-ffmpeg
@@ -92,7 +99,7 @@ aiohttp>=3.10,<4
 aiortc>=1.9,<2
 av>=12
 
-# Infer-only world-model runtimes integrated under worldfoundry.synthesis.visual_generation.world_model.
+# Infer-only world-model runtimes integrated under worldfoundry.synthesis.visual_generation.
 # DIAMOND follows its official Atari play demo; DINO-WM keeps the official gym planning route;
 # LeWorldModel uses the official stable-worldmodel eval stack. HDF5 format and
 # PushT env packages are pinned explicitly; keep broad stable-worldmodel[env]
@@ -108,3 +115,9 @@ shapely==2.1.2
 torcheval==0.0.7
 tqdm
 stable-worldmodel[train]
+
+# GigaWorld-0's released sparse-attention checkpoint. NATTEN 0.20 keeps the
+# stride-aware generic 3D API while remaining source-compatible with Torch 2.5;
+# build it for the CUDA architecture(s) available during environment setup.
+natten==0.20.1
+giga-models @ git+https://github.com/open-gigaai/giga-models.git@b0e05c7353a2d5d06fa8a92d2103c0fdd52e2e4d

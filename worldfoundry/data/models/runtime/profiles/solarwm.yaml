@@ -1,0 +1,45 @@
+schema_version: 2
+model_id: solarwm
+display_name: SolarWM
+task_family: world_model
+groups:
+- world
+- video
+source_repos:
+- url: https://github.com/Junchao-cs/SolarWM
+  revision: 2fe1ea9aca072f787bbba07ee9380b0e1ea7563b
+  local_dir: ${WORLDFOUNDRY_MODEL_SOURCE_DIR}/Junchao-cs--SolarWM
+checkpoints:
+- repo_id: junchaoh-cs/SolarWM
+  revision: fe1587a9392bb91df5c90bcbe849064a5e88c546
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/junchaoh-cs--SolarWM
+  role: primary
+  gated: true
+- repo_id: junchaoh-cs/SolarWM-H3-33B
+  revision: 028f22ab01b61cd5f14237f4eded507782d1d054
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/junchaoh-cs--SolarWM-H3-33B
+  role: primary
+  gated: true
+input_schema:
+  prompt: false
+  image: false
+  video: false
+  actions:
+  - overrides
+artifact_kind: generated_world
+artifact_filename: solarwm.mp4
+execution:
+  environment: solarwm
+  backend_stage: official_external_runtime
+  runtime_status: cpu_contract_validated_checkpoint_gpu_pending
+  integration_status: integrated
+  pipeline_binding: solarwm
+  defaults:
+    variant: wan-5b-dmd
+integration:
+  status: integrated
+license: apache-2.0
+notes:
+- Only the infer action is exposed. Training, preencoding and data-engine commands are excluded.
+- Code is Apache-2.0; LTX and H3 base/adapter weights retain their respective community licenses and restrictions.
+- Checkpoint-backed GPU generation is pending.

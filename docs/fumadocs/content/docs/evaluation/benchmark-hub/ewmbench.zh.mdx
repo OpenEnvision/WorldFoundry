@@ -1,153 +1,42 @@
 ---
 title: EWMBench
-description: EWMBench — WorldFoundry 实用配置、指标与命令。
+description: "AgiBot 具身世界模型视频评测：场景、运动、语义、多样性。WorldFoundry 导入官方结果行，不编造榜单。"
 ---
 
-## 简介
+EWMBench（AgiBot / AgibotTech）评的是 AgiBot-World 生态里**动作条件**的机器人操作视频。这是世界模型质量评测，不是桌面操作成功率套件。四个分面汇总为 `ewmbench_average`：
 
-EWMBench 评估具身世界模型视频的场景稳定性、机器人运动正确性、语义对齐和生成多样性。它适合用于判断模型是否保留任务相关状态，而不仅是生成看起来合理的画面。
+- **场景一致性** — 工作空间是否保持稳定？
+- **运动正确性** — 机械臂 / 物体轨迹是否匹配任务？
+- **语义对齐** — 片段是否匹配语言指令？
+- **多样性** — 生成 rollout 的多样性。
 
-## 评测什么
+论文：[EWMBench](https://arxiv.org/abs/2505.09694)。数据 / 项目：[`agibot-world/EWMBench`](https://huggingface.co/datasets/agibot-world/EWMBench)（CC-BY-NC-SA-4.0）。代码：[AgibotTech/EWMBench](https://github.com/AgibotTech/EWMBench)。
 
-EWMBench 评估**具身世界模型视频**的场景一致性、机器人运动正确性、语义对齐和生成多样性。它从 AgiBot World 操作 episode 采样，关注生成 rollout 是否保留任务相关状态，而不只是画面是否合理。
+WorldFoundry **内置 runtime 资源**，并通过 `benchmark-run` 归一化官方结果文件。依赖就位时，`--run-official` 可调度上游 `evaluate.py`。检测器 / VLM 裁判资源仍在上游。
 
-## Benchmark 设计
+<BenchmarkPageSections id="ewmbench" locale="zh" />
 
-| 指标族 | 检查内容 | 上游依据 |
-| --- | --- | --- |
-| Scene consistency | DINO 驱动的帧/块布局稳定性 | 具身场景外观随时间是否稳定 |
-| Motion correctness | 末端执行器轨迹与 ground truth 对齐 | 官方 scorer 的 `trajectory_consistency` |
-| Semantic alignment | caption + VLM + CLIP 的任务/事件对齐 | 指令与事件是否正确 |
-| Diversity | 同初始状态+指令下的重复生成差异 | 生成多样性 |
-
-官方数据集约 4,644 行（~270 MB），来自 AgiBot World 采样。评测要求预处理后的 `gt_dataset/` 与 `*_dataset/` 帧目录，以及轨迹和 gripper-detection 输出。
-
-## 官方参考
-
-- Paper: [arXiv:2505.09694](https://arxiv.org/abs/2505.09694)
-- 官方源码参考: [github.com/AgibotTech/EWMBench](https://github.com/AgibotTech/EWMBench)
-- 数据集: [agibot-world/EWMBench](https://huggingface.co/datasets/agibot-world/EWMBench)
-- 模型权重: [agibot-world/EWMBench-model](https://huggingface.co/agibot-world/EWMBench-model)
-- 仓内 runner: `worldfoundry/evaluation/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py`
-
-## Leaderboard 说明
-
-官方 leaderboard 声明需要完整 Hugging Face 数据集、EWMBench 风格预处理、DINOv2/YOLO-World/Qwen/CLIP checkpoint，以及与上游兼容的 `ewmbm_final_table.csv`。WorldFoundry 默认 direct scorer backend 是确定性接线占位；只有在资产齐备后才应设置 `WORLDFOUNDRY_EWMBENCH_SCORER_BACKEND=official`。
-
-## 数据、Checkpoint 与资产
-
-如果只是导入已有结果，准备一个 EWMBench 结果表：
-
-- `ewmbm_final_table.csv`，或带 EWMBench 指标字段的 JSON/CSV summary。
-- 如需在 scorecard 中记录覆盖信息，把生成视频放到 `WORLDFOUNDRY_GENERATED_ARTIFACT_DIR`。
-
-如果要完整运行 EWMBench 评分，准备官方数据和指标模型：
-
-- Hugging Face 数据集：`agibot-world/EWMBench`。
-- EWMBench 布局下的 ground-truth 数据：`gt_dataset/task_*/episode_*/prompt/`、`video/`，处理后还应有 `traj/` 和 `gripper_detection/`。
-- 生成样本目录名需要以 `_dataset` 结尾，并包含 `task_*/episode_*/<trial>/video/frame_*.jpg` 以及处理后的轨迹和检测输出。
-- Qwen checkpoint：`Qwen/Qwen2.5-VL-7B-Instruct`。
-- CLIP checkpoint：`openai/clip-vit-base-patch16` 与 `ViT-B-32.pt`。
-- `agibot-world/EWMBench-model` 中的 EWMBench 模型权重，包括 fine-tuned DINOv2 与 YOLO-World。
-- 与 `worldfoundry/data/benchmarks/assets/ewmbench/config.template.yaml` 匹配的配置文件，填好 `data.gt_path`、`data.val_base`、`save_path` 和 `ckpt` 路径。
-
-WorldFoundry 还带有小型任务 manifest：`worldfoundry/data/benchmarks/assets/ewmbench/task_manifest.json`。它适合用于命令接线和覆盖检查，但不是完整 benchmark 数据集。
-
-建议固定这些路径：
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/ewmbench/generated-videos
-export WORLDFOUNDRY_EWMBENCH_RESULTS_PATH=/path/to/ewmbm_final_table.csv
-export WORLDFOUNDRY_EWMBENCH_CONFIG_PATH=/path/to/ewmbench/config.yaml
-```
-
-## 生成产物布局
-
-成功运行后，所选输出目录下会写入以下稳定产物：
-
-```text
-<output-dir>/
-  scorecard.json
-  raw_metric_table.jsonl
-  per_sample_scores.jsonl
-  ewmbench_results.csv              # 直接评分路径
-  runner_runtime_report.json        # public CLI 路径
-```
-
-`scorecard.json` 是聚合结果，`raw_metric_table.jsonl` 是指标级行。`per_sample_scores.jsonl` 会在可用时映射 EWMBench 表中的行。
-
-## 运行命令
-
-### Public CLI：导入 EWMBench 结果
-
-已有 `ewmbm_final_table.csv` 或其他受支持的结果导出时使用：
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id ewmbench \
   --mode official-validation \
-  --official-results-path "${WORLDFOUNDRY_EWMBENCH_RESULTS_PATH}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
+  --official-results-path <official_results.json> \
+  --generated-artifact-dir <generated_videos> \
   --output-dir tmp/ewmbench/official-validation \
   --json
 ```
 
-### 直接 runner：导入 EWMBench 结果
+`--task-manifest` 与 `--config-path` 绑定任务集和打分配置；`--limit` 限制接线运行。默认导入路径：`WORLDFOUNDRY_EWMBENCH_RESULTS_PATH`。可选根：`WORLDFOUNDRY_EWMBENCH_ROOT`。共享资源：`ewmbench_dataset_assets`。
 
-该命令直接调用仓内 runner 脚本，并接受同一个结果表。
+仓内指针：
 
-```bash
-PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} \
-  worldfoundry/evaluation/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py \
-  --official-results-path "${WORLDFOUNDRY_EWMBENCH_RESULTS_PATH}" \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/ewmbench/direct-import \
-  --json
+```text
+worldfoundry/data/benchmarks/tasks/external/ewmbench.yaml
+worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench
 ```
 
-### 直接 runner：执行内置 EWMBench scorer 路径
-
-直接 scorer 默认 backend 是 `mock`；它会写出确定性的占位 CSV 分数，用于 CI 和命令接线检查。只有在数据集、预处理、配置和 checkpoint 都准备好后，才使用 `official`。
-
-```bash
-export WORLDFOUNDRY_EWMBENCH_SCORER_BACKEND=official
-
-PYTHONPATH=. ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} \
-  worldfoundry/evaluation/tasks/execution/runners/ewmbench/run_ewmbench_official_runner.py \
-  --run-official \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --config-path "${WORLDFOUNDRY_EWMBENCH_CONFIG_PATH}" \
-  --output-dir tmp/ewmbench/direct-run \
-  --json
-```
-
-## 指标
-
-| Metric ID | 含义 | 越高越好 |
-| --- | --- | --- |
-| `scene_consistency` | 基于 DINO 的帧间/patch 一致性，衡量具身场景布局与外观是否随时间稳定。 | 是 |
-| `motion_correctness` | 运动正确性，由 EWMBench `trajectory_consistency` 映射而来，用于评估机器人或末端执行器轨迹是否符合预期。 | 是 |
-| `semantic_alignment` | 任务和事件语义对齐；由 scorer 生成时可包含 caption/VLM 与 CLIP 风格证据。 | 是 |
-| `diversity` | 同一初始状态和指令下多次生成结果的多样性。 | 是 |
-| `ewmbench_average` | 对 scene、motion、semantic、diversity 分量求平均，是 WorldFoundry 主指标。 | 是 |
-
-## Runtime 说明
-
-EWMBench 复用仓内组件。Scene consistency 调用
-`worldfoundry/base_models/perception_core/general_perception/dinov2`，并使用随
-runtime 打包的
-`worldfoundry/evaluation/tasks/execution/runners/ewmbench/runtime/ewmbench/dino_config.yaml`。
-只有需要覆盖主 EWMBench runtime config 时才设置
-`WORLDFOUNDRY_EWMBENCH_CONFIG_PATH`。`json_repair` 和 `fastdtw` 都是可选依赖：
-缺少 `json_repair` 时使用标准库 `json` 解析严格 JSON；缺少 `fastdtw` 时使用
-确定性的 NumPy DTW fallback。
-
-## 局限
-
-- 内置任务 manifest 刻意保持很小。完整覆盖请使用 Hugging Face 数据集。
-- 默认直接 scorer backend 不是 leaderboard scorer；它是本地命令接线检查用的确定性占位评分。
-- `official` backend 需要 `config.yaml` 中已经指向 EWMBench 风格的预处理目录和 checkpoint 路径。它不会把任意平铺视频转换为完整 EWMBench 数据布局。
-- Public CLI 路径导入已有结果行。只有生成视频不会产生 EWMBench 指标。
-- 等价 leaderboard 的结论需要完整数据集、预处理、DINOv2、YOLO-World、Qwen、CLIP checkpoint，以及与上游兼容的结果表。
+产物包括 `scorecard.json`（主键 `ewmbench_average`）、`benchmark_contract.json`、`raw_metric_table.jsonl`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

@@ -1,0 +1,40 @@
+---
+title: "Galaxea G0Plus"
+description: "Galaxea AI PaliGemma-3B flow VLA. Static load only. Non-commercial G0-Plus community license. GPU numerical rollout pending."
+modelId: "galaxea-vla"
+pageSource: authored
+---
+
+Galaxea G0Plus is Galaxea AI's open VLA: RGB, language, and state in; an action trace out. The released checkpoint sits on a **PaliGemma-3B** base with a **flow-matching** action sampler and KV-cached decoding. WorldFoundry keeps architecture, KV cache, flow sampler, strict checkpoint loader, tokenizer adapter, preprocessing, and normalization **in-tree**. Restoration is strict on official parameter names. Runtime accepts only staged local assets and never executes checkpoint-provided Python.
+
+<ModelPaperFigures modelId="galaxea-vla" locale="en" />
+
+Paper: [arXiv 2608.11739](https://arxiv.org/abs/2608.11739). Project: [opengalaxea.github.io/G05](https://opengalaxea.github.io/G05/). Code: [OpenGalaxea/GalaxeaVLA](https://github.com/OpenGalaxea/GalaxeaVLA). Weights: `OpenGalaxea/G0-VLA` plus `google/paligemma-3b-pt-224`. Aliases: `g0plus`, `open-galaxea/g0-vla`. License: **`g0-plus-community-license-non-commercial`**. Integration: Static load only. Runner: **Static load only**. GPU numerical rollout is **pending**.
+
+The released G0Plus base is intended for **downstream fine-tuning**, not claimed as a task-ready policy. The exact paired `dataset_stats.json` is mandatory — normalization never fabricates values.
+
+<ModelCommandBuilder modelId="galaxea-vla" locale="en" />
+
+## What it is for
+
+Galaxea / G0-VLA static-load route. GPU numerical rollout is still pending.
+
+Launch `worldfoundry-eval run galaxea-vla`.
+
+## Runtime contract
+
+Required: `image`, `prompt`, and `state`; optional: `model_id` and `policy_family`; artifacts: `action_trace` and `galaxea_vla_action_trace.json`.
+
+| Variant | Cameras | State / action | Chunk |
+| --- | --- | --- | --- |
+| `r1lite_mobile` | 3 | 21 / 26 | 32 |
+| `r1lite_arm` | 3 | 14 / 14 | 32 |
+| `libero` | 2 | 8 / 7 | 32 |
+
+Action chunks are **32** steps. The staged transformer lives in `G0Plus_3B_base` under `OpenGalaxea/G0-VLA`. Catalog example embodiments (not GPU-validated here):
+
+## Run in WorldFoundry
+
+Status: **Static load only**. Dedicated environment `worldfoundry-vla-galaxea` (Python 3.11, Cu124 Or Newer). Stage `OpenGalaxea/G0-VLA` and `google/paligemma-3b-pt-224` locally — missing files fail at load, nothing is downloaded. Run `worldfoundry-eval run galaxea-vla`. Catalog VRAM is unset.
+
+<ModelRelatedRecipes modelId="galaxea-vla" locale="en" />

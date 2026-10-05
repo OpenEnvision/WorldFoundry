@@ -1,54 +1,93 @@
 ---
 title: WorldFoundry
-description: 统一的世界模型推理与评测基础设施
+description: 面向世界智能的通用基础设施
 ---
 
-WorldFoundry 是一套**运行与评测世界模型的开源基础设施**。它不是一个新的单一模型架构，而是把模型发现、runtime 准备、推理、artifact 检查、benchmark 执行与证据报告连接成一条工作流，覆盖视频、3D/4D、交互式世界和具身系统：
+WorldFoundry 是面向世界智能的开源基础设施。世界智能不能被压成单一的生成任务：系统需要从观察中推断结构化状态，预测状态如何演化，用任务相关的输出表达后果，并在交互中使用这些预测。视频生成、神经场景表征、4D 模型与具身策略各自覆盖其中一部分。
 
-> 发现模型，准备 runtime 与资产，生成可检查的 artifact，评测 artifact，再把结果保留为可审查证据。
+模型发现、runtime 与资产准备、推理、artifact 检查和 benchmark 证据走同一条工作流，覆盖这些家族——**同时不被强迫接受同一种表征、任务或指标**。
 
-这里的区别很重要。Catalog 中存在一个模型，不等于它的 runtime 已经可运行；一个效果很好的 demo，不等于已经形成 benchmark 证据；成功导入一个分数，也不等于复现了官方 leaderboard。WorldFoundry 会把这些状态分开记录并明确展示。
+## 第一次运行
 
-它解决的是一个具体研究问题：不同上游项目都能产出有价值的结果，但各自使用不同环境、checkpoint、输入、启动命令、输出 layout 和评测 protocol。WorldFoundry 保留这些原生差异，同时统一它们周围的系统边界。
-
-<TeaserImage alt="WorldFoundry 统一世界模型发现、推理、检查与评测" />
-
-## 它解决的问题
-
-世界模型通常以彼此独立的仓库发布。不同项目分别定义环境、checkpoint、输入格式、启动脚本、输出目录、预览工具和评测代码。当团队需要比较多个系统时，往往要为每个模型重复搭建同一层集成胶水。
-
-碎片化首先出现在发现阶段。同一个模型可能同时使用论文名、仓库名、checkpoint 名和本地目录名。WorldFoundry 为模型和 benchmark 提供稳定 ID 与声明式 manifest，让用户在运行昂贵任务之前，就能看清来源、预期能力、runtime binding、所需资产和已知 blocker。
-
-执行阶段也存在同样的问题。WorldFoundry 不再让用户把 checkpoint 和 dataset 放进每个上游脚本偶然约定的目录，而是定义可复用的本地资产根目录和模型专属 runtime profile。Pipeline 与 operator 保留模型的原生差异，同时向系统其他部分提供一致的 request、result 和 artifact 边界。
-
-评测阶段则需要解决证据丢失。视频、mesh、动作和 trace 不应该消失在自定义目录或一次性 notebook 中。WorldFoundry 会保留实际请求、执行状态、生成内容、打分方式、sample 覆盖率，以及仍然阻止官方声明的条件。
-
-它的目标不是用一个极小 API 抹平所有模型差异，而是把差异放回正确的层，同时让端到端研究工作流保持一致。
-
-## 项目怎样工作
-
-<WorldFoundryWorkflow locale="zh" />
-
-整个设计的核心边界是 **artifact**。模型 runner 把归一化 request 转成包含视频、几何、动作 trace 或其他输出的 result；benchmark runner 消费这些输出，再产出 metric 与证据。这样，同一份模型输出可以先被人工检查，再交给多个兼容 benchmark 使用，而模型实现不需要耦合 evaluator 内部逻辑。
-
-Catalog 构成这条边界周围的控制平面。它描述系统中有什么、来自哪里、需要什么、如何调度，以及哪些证据支撑当前 readiness。TUI、CLI、Studio、Python 和 MCP 只是操作同一底层系统的不同方式，不是彼此独立的实现。
-
-### 一个具体 run：Matrix-Game 2
-
-例如，第一次运行 `matrix-game-2` 时，可以先让 catalog 与本地资产检查回答“模型是谁、checkpoint 是否就绪”，然后只生成一个小型结果：
+[快速开始](/zh/docs/quickstart) 的环境已经 source 之后，为 `matrix-game-2` 生成一份可检查的 artifact：
 
 ```bash
 bash scripts/inference/prepare_model_infer.sh matrix-game-2 --download
-python -m worldfoundry.evaluation zoo model-download \
-  --model-id matrix-game-2 --check-local --json
-
-bash scripts/inference/test_nav_video_gen.sh matrix-game-2 \
-  --output-dir tmp/matrix_game2_first_run
+worldfoundry-eval run matrix-game-2-universal-action-validation \
+  --pipeline.task-profile official-universal-image
 ```
 
-最后一个命令使用动作条件输入运行模型，并把视频及相关运行记录写入指定目录。此时能声称的是“这个配置产生了可检查 artifact”；可以在 Studio 或本地播放器中检查运动与连贯性，也可以把兼容 artifact 交给 metric。它还不能单凭一段视频声称某个 benchmark 已完整跑通。这正是 WorldFoundry 把生成、检查、评分和资格判断拆开的原因。
+这次运行只支撑一个结论：这套配置产出了可检查的 artifact，并不等于某个 benchmark 已经跑完。日常命令用 `worldfoundry-eval run`。各层与清单见[设计](/zh/docs/overview/design)。
 
-如果要理解各层、契约和设计理由，请继续阅读[设计](/zh/docs/overview/design)。
+<h2 id="operational-definition">操作定义</h2>
+
+视觉逼真度衡量的是观察质量，并不足以证明世界建模。一段照片级视频仍可能丢掉物体身份、违反动力学，或对干预没有因果响应。
+
+因此，我们把**生成式世界模型**定义为一个学习得到的、由历史与控制条件化的潜在动力学系统。它推断并维护持久的环境状态，在内生动力学与外部干预下演化该状态，并吸收新的观察，使后续预测对刚刚发生的事情负责。
+
+<DocsImage
+  src="/paper/operational-definition.webp"
+  alt="世界模型的操作定义：状态推断、前向仿真与交互响应，并由观察反馈闭合"
+  width={1800}
+  height={739}
+/>
+
+定义能落地，是因为三件事必须耦合：
+
+1. **状态推断** — 从交互历史中估计任务相关的潜在状态。
+2. **前向仿真** — 在自主动力学、物理约束与动作下预测该状态如何演化。
+3. **交互响应** — 在不同干预下产生可区分且连贯的未来，再把观察到的结果写回所维护的状态。
+
+一个与模态无关的紧凑形式是
+
+<MathBlock tex={'z_t \\sim q(z_t \\mid h_t),\\qquad z_{t+1} \\sim p(z_{t+1} \\mid z_t, c_t),\\qquad \\hat{o}_{t+1} \\sim g(o_{t+1} \\mid z_{t+1}).'} />
+
+其中 <MathInline tex="h_t" /> 是观察–控制历史，<MathInline tex="c_t" /> 是动作或干预（包括空控制），<MathInline tex="z_t" /> 是推断出的环境状态，<MathInline tex={'\\hat{o}_{t+1}'} /> 是视觉、几何或任务相关输出。这是功能抽象，不是架构断言：<MathInline tex="z_t" /> 可以是循环的、物体中心的、几何的、token 化的，或其他结构化形式。
+
+<Callout type="info">
+  从同一推断状态出发，具有不同环境后果的控制应诱导出可区分但连贯的 rollout；干预范围之外的因素应继续服从同一条件动力学。新的观察必须更新此后使用的状态。
+</Callout>
+
+<h2 id="capability-progression">能力分层</h2>
+
+WorldFoundry 并不给每个模型贴一个互斥等级，而是记录**能力剖面**：系统实际支持哪些功能，以及这些功能是否耦合。
+
+<DocsImage
+  src="/paper/capability-progression.webp"
+  alt="从感知锚定到世界模型主轴（持久状态、动力学、闭环交互）的能力分层，可控变换作为正交能力"
+  width={1800}
+  height={1012}
+/>
+
+<WorldModelProgression locale="zh" />
+
+**感知锚定**提供观察层证据。真正构成世界模型的是**主轴上的耦合**：持久状态、受干预条件化的动力学，以及由反馈驱动的更新。**可控变换**可以出现在任一阶段旁边——改沙发颜色或删掉书架，本身并不能证明系统能把场景向前推演，或闭合交互环。
+
+<h2 id="foundation-and-world-models">基础生成模型与生成式世界模型</h2>
+
+这是功能分类，不是视觉质量排名。
+
+**基础生成模型**学习视觉、几何或时空先验，用于合成、重建与可控编辑。它们可以在外观、短时连贯或选择性编辑上很强，但没有把状态、动力学与反馈集成成完整的世界建模环。
+
+**生成式世界模型**集成了这个环。干预效果会在后续转移中保持，新的观察会修正此后预测所依赖的状态。更高保真度、更宽的 prompt 或更大的规模，本身并不会把系统从第一类提升到第二类。
+
+正因为如此，WorldFoundry 把 catalog 收录、可运行推理、可检查 artifact 与可进入 benchmark 的证据分开记录。一次好看的 demo 仍然可能只是感知锚定。当前覆盖范围和 readiness 以[模型目录](/zh/docs/guides/supported-models)与[评测中心](/zh/docs/evaluation/benchmark-hub)为准。被 catalog 收录，不等于 runtime 能跑；demo 效果好，不等于已有 benchmark 证据；分数导入成功，也不等于官方 leaderboard 水平。这些状态分开记录，并保留 provenance。
+
+<h2 id="why-a-shared-workflow">为什么需要共享工作流</h2>
+
+WorldFoundry 的价值出现在**跨模型、跨 benchmark、跨界面**的工作流里。技术报告把这一点表述为**可通约而不均质化**：异构系统应能在共享的运行与证据契约下被检查，而不被强迫接受同一种表征、任务或指标。
+
+因此才需要这条共享工作流：
+
+- **统一的运行语义。** 稳定的 model ID 与 benchmark ID，加上 request、result、artifact、manifest 与 scorecard，替代仓库昵称和手写路径。可以查证模型只是被收录还是真的执行过、用了哪个 checkpoint 与 runtime、sample 是否覆盖，以及分数是归一化、官方计算，还是已经过 leaderboard 校验。
+- **集成只做一次。** 环境准备、checkpoint 查找、输入输出整理、job 记录、预览与 metric 汇总保持共享。模型差异留在 pipeline 与 operator，benchmark 差异留在 runner 与 metric。
+- **产物可复用。** 生成结果不绑定于一次 UI 会话。同一批 artifact 可以检查、重新打分、转换、对照或审计，而不必再加载模型。
+- **记录比命令更完整。** checkpoint、依赖、dataset 或 evaluator 一变，同一条命令就可能不可比。ledger、身份、blocker 与 scorecard 同时说明实际跑了什么，以及该结果被允许主张什么。
+- **多入口，同一后端。** TUI、CLI、Studio、Python 与 MCP 共用 catalog 与契约。界面可以换，run 身份与持久输出保持一致。
+
+这适合需要长期维护或比较多个世界模型家族、将生成与评测解耦、复用昂贵 artifact，或为人与 agent 提供稳定机器可读发现的团队。模型、benchmark、机器与 reviewer 越多，这些契约越划算。
+
+<TeaserImage alt="WorldFoundry 统一世界模型发现、推理、检查与评测" />
 
 ## 致谢
 

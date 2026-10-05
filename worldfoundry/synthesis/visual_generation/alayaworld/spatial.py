@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from worldfoundry.core.spatial_warp import (
+from worldfoundry.core.geometry.warp import (
     Sparse3DCache,
     forward_warp_indexed_frames,
     pixel_intrinsics,
@@ -94,7 +94,14 @@ class AlayaSpatialMemory:
             DepthAnything3,
         )
 
-        self._da3 = DepthAnything3.from_pretrained(str(path)).to(self.device).eval()
+        if path.is_file():
+            self._da3 = DepthAnything3.from_pretrained(
+                "depth-anything/DA3NESTED-GIANT-LARGE-1.1",
+                model_name="da3nested-giant-large",
+                weights_path=str(path),
+            ).to(self.device).eval()
+        else:
+            self._da3 = DepthAnything3.from_pretrained(str(path)).to(self.device).eval()
         return self._da3
 
     @staticmethod
@@ -378,6 +385,17 @@ class AlayaSpatialMemory:
             bank.pixels.append(pixels[:, :, index].detach())
             bank.camera_frame_indices.append(frame)
             bank.depths.append(depths[index])
+
+    def offload_depth_model(self) -> None:
+        """Keep DA3 available for later spatial updates without GPU residency."""
+
+        if self._da3 is None:
+            return
+        self._da3.to("cpu")
+        if hasattr(self._da3, "device"):
+            self._da3.device = torch.device("cpu")
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def release(self) -> None:
         if self._da3 is not None:

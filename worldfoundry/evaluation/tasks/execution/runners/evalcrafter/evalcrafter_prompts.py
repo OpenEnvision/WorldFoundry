@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
-import os
-import shutil
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.core.io.filesystem.file_utils import materialize_file
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
+    first_existing_dir,
+    resolve_env_path,
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
 )
@@ -21,23 +22,15 @@ METADATA_REL = Path("metadata.json")
 CANONICAL_PROMPT_COUNT = 700
 EXPECTED_VIDEO_COUNT = 700
 
-VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
 
-
-def _env_path(name: str) -> Path | None:
-    value = os.environ.get(name)
-    return Path(value).expanduser().resolve() if value else None
 
 
 def resolve_evalcrafter_root(explicit: Path | None = None) -> Path | None:
-    for candidate in (
+    return first_existing_dir(
         explicit,
-        _env_path("WORLDFOUNDRY_EVALCRAFTER_ROOT"),
+        resolve_env_path("WORLDFOUNDRY_EVALCRAFTER_ROOT"),
         bundled_benchmark_assets_root(BENCHMARK_ID),
-    ):
-        if candidate is not None and candidate.is_dir():
-            return candidate.expanduser().resolve()
-    return None
+    )
 
 
 def resolve_prompt700_path(
@@ -50,7 +43,7 @@ def resolve_prompt700_path(
         if not path.is_file():
             raise FileNotFoundError(f"EvalCrafter prompt700.txt not found: {path}")
         return path
-    env_manifest = _env_path("WORLDFOUNDRY_EVALCRAFTER_PROMPT_MANIFEST")
+    env_manifest = resolve_env_path("WORLDFOUNDRY_EVALCRAFTER_PROMPT_MANIFEST")
     if env_manifest is not None:
         if not env_manifest.is_file():
             raise FileNotFoundError(f"EvalCrafter prompt700.txt not found: {env_manifest}")
@@ -71,7 +64,7 @@ def resolve_prompt700_path(
 
 
 def resolve_metadata_path(*, repo_root: Path | None = None) -> Path | None:
-    env_metadata = _env_path("WORLDFOUNDRY_EVALCRAFTER_METADATA")
+    env_metadata = resolve_env_path("WORLDFOUNDRY_EVALCRAFTER_METADATA")
     if env_metadata is not None:
         return env_metadata if env_metadata.is_file() else None
     bundled = bundled_benchmark_asset(BENCHMARK_ID, METADATA_REL)
@@ -228,7 +221,7 @@ def copy_evalcrafter_generated_videos(
         target_path = generated_artifact_dir / official_video_filename_for_record(
             record_by_id.get(sample_id, {"prompt_id": sample_id})
         )
-        shutil.copy2(source_path, target_path)
+        materialize_file(source_path, target_path, writable=False)
         materialized += 1
         manifest_rows.append({"sample_id": sample_id, "artifact": output_artifact, "path": str(target_path)})
 
@@ -250,7 +243,7 @@ def copy_evalcrafter_generated_videos(
             target_path = generated_artifact_dir / official_video_filename_for_record(record)
             if target_path.is_file():
                 continue
-            shutil.copy2(source_path, target_path)
+            materialize_file(source_path, target_path, writable=False)
             materialized += 1
             manifest_rows.append(
                 {"sample_id": result.sample_id, "artifact": output_artifact, "path": str(target_path)}

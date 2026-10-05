@@ -57,3 +57,23 @@ catalog_policy:
   checkpoint_rule: Only list checkpoints that were confirmed on official source pages or staged locally. Do not download weights.
   integration_rule: Closed, API-only, or unknown releases stay blocked or planned until an official integration surface is available.
   open_source_rule: Only mark open_source when an official GitHub repository or official model page was confirmed.
+docs:
+  publisher: Adobe Research / The University of Texas at Austin
+  publisher_kind: company
+  publisher_zh: Adobe 研究院 / 得克萨斯大学奥斯汀分校
+  overview: 'Self-Forcing bridges the train-test gap in autoregressive video diffusion: by simulating the inference process during training — conditioning each frame on its own previously generated frames — it enables real-time streaming text-to-video on a single GPU (arXiv 2506.08009). In this catalog the official infer-only runtime is vendored in-tree; parity waits on the Self-Forcing DMD checkpoint plus Wan2.1 weights.'
+  overview_zh: Self-Forcing 弥合了自回归视频扩散的训练-推理差距：在训练时模拟推理过程——让每帧以自己先前生成的帧为条件——从而在单卡上实现实时流式文生视频（arXiv 2506.08009）。本 catalog 中官方仅推理运行时已内置树内；一致性待 Self-Forcing DMD checkpoint 与 Wan2.1 权重就位。
+  architecture: 'Per the paper, a Wan2.1-based causal student is trained with holistic distribution matching over self-generated rollouts, plus KV caching for streaming. The runner owns prompt/i2v data materialization, Wan weight symlinks, command construction, and output loading in-tree (checkpoint: gdhe17/Self-Forcing).'
+  architecture_zh: 按论文，基于 Wan2.1 的因果学生在自生成滚动上做整体分布匹配训练，并用 KV 缓存实现流式。runner 在树内负责提示词/i2v 数据物化、Wan 权重软链、命令构造与输出加载（checkpoint： gdhe17/Self-Forcing）。
+  usage_notes: The default checkpoint path follows the official HF layout under ${WORLDFOUNDRY_CKPT_DIR}/Self-Forcing — override checkpoint_path if staged elsewhere. Full parity needs Wan2.1 weights under a wan_models-compatible layout; supply benchmark prompt lists separately through your local input configuration.
+  usage_notes_zh: 默认 checkpoint 路径遵循 ${WORLDFOUNDRY_CKPT_DIR}/Self-Forcing 的官方 HF 布局——另行就位时请覆盖 checkpoint_path。完整一致性需要 wan_models 兼容布局下的 Wan2.1 权重；benchmark 提示词列表需自行准备，并通过本地输入配置提供。
+  limitations:
+  - Runner parity is pending staged Self-Forcing and Wan2.1 weights.
+  - 'Distilled few-step student: quality trails the bidirectional teacher.'
+  limitations_zh:
+  - runner parity 待 Self-Forcing 与 Wan2.1 权重就位。
+  - 蒸馏的少步学生：质量弱于双向教师。
+  recommended_benchmarks:
+  - id: vbench
+    reason: Video quality for streaming text-to-video.
+    reason_zh: 流式文生视频的质量评测。

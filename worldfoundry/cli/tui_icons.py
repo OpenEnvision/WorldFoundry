@@ -44,6 +44,7 @@ _NERD = {
     "stop": "\uf04d Stop",
     "copy": "\U000f018f Copy",
     "cmd": "\uf489 Cmd",
+    "hide_cmd": "\uf489 Hide",
     "check": "\uf00c Check",
     "files": "\U000f024b Files",
     "gpu": "\U000f089f GPU",
@@ -71,8 +72,9 @@ _UNICODE = {
     "benchmarks": "\u25a3 Benchmarks",
     "run": "\u25b6 Run",
     "stop": "\u25a0 Stop",
-    "copy": "\u29c9 Copy",
+    "copy": "\u25a3 Copy",
     "cmd": "$ Cmd",
+    "hide_cmd": "$ Hide",
     "check": "\u2713 Check",
     "files": "\u25a4 Files",
     "gpu": "\u2699 GPU",
@@ -102,6 +104,7 @@ _ASCII = {
     "stop": "x Stop",
     "copy": "cp Copy",
     "cmd": "$ Cmd",
+    "hide_cmd": "$ Hide",
     "check": "ok Check",
     "files": "dir Files",
     "gpu": "GPU",
@@ -139,7 +142,7 @@ def _remote_dev_host() -> bool:
 # ── Icon resolution ────────────────────────────────────────────────
 
 def resolve_icon_mode() -> IconMode:
-    """Resolve icon mode from ``WORLDFOUNDRY_TUI_ICONS`` or remote-host defaults."""
+    """Use Unicode unless an icon mode or configured Nerd Font is requested."""
     raw = os.environ.get("WORLDFOUNDRY_TUI_ICONS", "").strip().lower()
     if raw in {"ascii", "plain", "text", "0", "false", "off"}:
         return "ascii"
@@ -147,9 +150,7 @@ def resolve_icon_mode() -> IconMode:
         return "nerd"
     if raw in {"unicode", "uni", "compat", "default"}:
         return "unicode"
-    if _remote_dev_host():
-        return "unicode"
-    return "nerd"
+    return "nerd" if nerd_font_configured() else "unicode"
 
 
 def nerd_font_configured() -> bool:
@@ -222,12 +223,6 @@ class TuiIcons:
 
     def startup_hint(self) -> str | None:
         """Return a Rich-markup hint about font setup, or ``None`` if no hint is needed."""
-        if self.mode == "unicode" and _remote_dev_host():
-            return (
-                "[dim]Remote host uses Unicode icons. Install JetBrainsMono Nerd Font on this "
-                "machine (bash scripts/setup/install_tui_nerd_font.sh) and on your local Cursor "
-                "client, then export WORLDFOUNDRY_TUI_ICONS=nerd.[/]"
-            )
         if not self.uses_nerd_font or nerd_font_configured():
             return None
         return (

@@ -18,8 +18,8 @@ _ALIASES = (
     "model_benchmark",
     "model_benchmark_suite",
     "plan",
+    "run_session",
     "runtime_preflight",
-    "run_mode",
     "service",
 )
 

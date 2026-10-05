@@ -1,5 +1,7 @@
 id: worldreasonbench
 name: WorldReasonBench
+publisher: Tsinghua University
+publisher_kind: university
 benchmark_kind:
 - image-to-video
 - world-reasoning
@@ -26,8 +28,7 @@ official_sources:
   project_page: https://unix-ai-lab.github.io/WorldReasonBench/
   license:
     status: restricted_noncommercial
-    notes: The upstream repository has no LICENSE file at the pinned revision. Its README prohibits redistribution,
-      modification, and commercial use without prior approval despite also referring to MIT.
+    notes: The upstream repository has no LICENSE file at the pinned revision. Its README prohibits redistribution, modification, and commercial use without prior approval despite also referring to MIT.
 benchmark_assets:
   official_data:
     status: external_restricted_asset
@@ -150,6 +151,14 @@ metrics:
   aggregator: mean
   output_unit: accuracy
 runner:
+  official_script: worldfoundry/evaluation/tasks/execution/runners/worldreasonbench/run_worldreasonbench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.worldreasonbench.run_worldreasonbench_official_runner
+    generated_arg: --generated-artifact-dir
+    limit_arg: --limit
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    supports_fixture: true
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldReasonBenchContract
   validation_command:
   - worldfoundry-eval
@@ -178,12 +187,14 @@ runner:
   verification_status: normalizer_only
 integration:
   status: integrated
+  tier: model_backed
+  judge_model_id: qwen3.5-27b
   blocked_reasons:
   - Real judge execution requires an OpenAI-compatible multimodal endpoint and official restricted assets.
   - Upstream redistribution restrictions prevent vendoring its data, templates, and evaluator source without approval.
 release_status: experimental
 maturity: verified_runner
-open_source_status: in_tree_result_normalizer
+open_source_status: normalizer_only
 official_benchmark_verified: false
 integration_evidence: false
 leaderboard_valid: false
@@ -205,8 +216,19 @@ runner_availability:
   normalizer_verified: true
 optional_base_model_dependencies:
 - openai_compatible_multimodal_judge
-validation_command: worldfoundry-eval zoo benchmark-run --benchmark-id worldreasonbench --mode official-validation
-  --official-results-path <official_results_dir> --output-dir <out> --json
+validation_command:
+- worldfoundry-eval
+- zoo
+- benchmark-run
+- --benchmark-id
+- worldreasonbench
+- --mode
+- official-validation
+- --official-results-path
+- <official_results_dir>
+- --output-dir
+- <out>
+- --json
 checkpoint_refs: []
 artifact_layout:
   generated_artifact_dir_env: WORLDFOUNDRY_GENERATED_ARTIFACT_DIR

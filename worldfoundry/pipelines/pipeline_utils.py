@@ -271,6 +271,25 @@ class PipelineABC:
             ref_image_path=ref_image_path,
             **operator_inputs,
         )
+        # The synthesis dispatch below reads these keys unconditionally; a
+        # custom operator/process override that drops one used to surface as a
+        # bare KeyError far from the offending component (PL-04).
+        required_keys = ("prompt", "images", "video", "actions")
+        if not isinstance(processed, Mapping):
+            raise TypeError(
+                f"{type(self).__name__}.process() must return a mapping with keys "
+                f"{required_keys}, got {type(processed).__name__}; check the "
+                f"operator ({type(self.operator).__name__ if self.operator is not None else None}) "
+                "process_prompt/process_perception/process_interaction outputs"
+            )
+        missing = [key for key in required_keys if key not in processed]
+        if missing:
+            raise TypeError(
+                f"{type(self).__name__}.process() output is missing required keys {missing}; "
+                f"the component contract requires {required_keys}. Check the operator "
+                f"({type(self.operator).__name__ if self.operator is not None else None}) "
+                "process_prompt/process_perception/process_interaction outputs"
+            )
         model_specific = {
             key: value for key, value in processed.items() if key not in self.RESERVED_SYNTHESIS_KEYS
         }

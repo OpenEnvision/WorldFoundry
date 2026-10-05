@@ -1,0 +1,44 @@
+schema_version: 2
+model_id: sana-streaming-2b-720p
+display_name: SANA-Streaming 2B 720p
+task_family: video_generation
+groups:
+- video
+- video_to_video
+- streaming
+checkpoints:
+- local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Efficient-Large-Model--SANA-Streaming
+  repo_id: Efficient-Large-Model/SANA-Streaming
+  revision: 534c946811822f70117b8549b7e072120a4414d2
+  role: sana_streaming_long_v2v_checkpoint_and_assets
+  required_paths:
+  - dit/sana_streaming_ar.pth
+- local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Lightricks--LTX-2
+  repo_id: Lightricks/LTX-2
+  revision: 47da56e2ad66ce4125a9922b4a8826bf407f9d0a
+  role: sana_streaming_ltx2_vae
+  required_paths:
+  - vae/config.json
+  - vae/diffusion_pytorch_model.safetensors
+- local_dir: ${WORLDFOUNDRY_HFD_ROOT}/Efficient-Large-Model--gemma-2-2b-it
+  repo_id: Efficient-Large-Model/gemma-2-2b-it
+  revision: 569d9809d0c8b6722d4d31b5a77a2ec7a400650a
+  role: sana_streaming_text_encoder
+  required_paths:
+  - config.json
+  - model.safetensors.index.json
+  - tokenizer_config.json
+  - tokenizer.model
+input_schema:
+  prompt: true
+  image: false
+  video: true
+artifact_kind: generated_video
+artifact_filename: sana-streaming-2b-720p.mp4
+execution:
+  backend_stage: in_tree_official_cli
+  runtime_status: in_tree_official_cli_streaming
+  integration_status: integrated
+  pipeline_binding: sana-streaming-2b-720p
+integration:
+  status: integrated

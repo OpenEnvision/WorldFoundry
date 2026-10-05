@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Union
 
+from worldfoundry.core.media.codecs.image import load_pil_image
+
 from .base_operator import BaseOperator
-from ..pipelines.lyra.lyra_utils import load_pil_image
 
 
 class Lyra1Operator(BaseOperator):

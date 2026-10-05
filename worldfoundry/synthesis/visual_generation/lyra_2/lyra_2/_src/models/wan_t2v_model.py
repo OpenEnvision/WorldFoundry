@@ -32,7 +32,7 @@ from torch.distributed.tensor import distribute_tensor
 from torch.nn.modules.module import _IncompatibleKeys
 
 try:
-    from worldfoundry.core.distributed.megatron_compat import parallel_state
+    from worldfoundry.core.distributed.model_parallel.megatron_compat import parallel_state
 except ModuleNotFoundError:
 
     class _ParallelStateFallback:
@@ -63,27 +63,21 @@ from lyra_2._src.models.utils import (
 from lyra_2._src.modules.conditioner import DataType, T2VCondition
 from lyra_2._src.utils.resolution import VIDEO_RES_SIZE_INFO
 
-from worldfoundry.base_models.diffusion_model.video.cosmos.cosmos2.runtime.cosmos_predict2.cosmos_predict2._src.predict2.models.fm_solvers_unipc import (
-    FlowUniPCMultistepScheduler,
-)
-from worldfoundry.base_models.diffusion_model.video.cosmos.cosmos2.runtime.cosmos_predict2.cosmos_predict2._src.predict2.tokenizers.base_vae import (
-    BaseVAE,
-)
-from worldfoundry.base_models.diffusion_model.video.cosmos.shared.diffusion_types import DenoisePrediction
+from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import FlowUniPCMultistepScheduler
 from worldfoundry.core.configuration.lazy_config import LazyDict
 from worldfoundry.core.configuration.lazy_config import instantiate as lazy_instantiate
 from worldfoundry.core.distributed import broadcast_dtensor_model_states
-from worldfoundry.core.distributed.context_parallel import (
+from worldfoundry.core.distributed.model_parallel.context import (
     broadcast,
     broadcast_split_tensor,
     cat_outputs_cp,
 )
-from worldfoundry.core.distributed.fsdp_runtime import hsdp_device_mesh
-from worldfoundry.core.distributed.logging import log
+from worldfoundry.core.distributed.sharding.fsdp_runtime import hsdp_device_mesh
+from worldfoundry.core.distributed.runtime.logging import log
 from worldfoundry.core.model_loading import InferenceModel, load_state_dict, non_strict_load_model
-from worldfoundry.core.time import CudaSyncTimer as sync_timer
+from worldfoundry.core.observability.time import CudaSyncTimer as sync_timer
 from worldfoundry.core.utils import count_parameters as count_params
-from worldfoundry.core.utils import inference_runtime as misc
+from worldfoundry.core.execution import inference_runtime as misc
 
 IS_PREPROCESSED_KEY = "is_preprocessed"
 NUM_EMBEDDING_PADDING_TOKENS = 512
@@ -155,7 +149,7 @@ class WANDiffusionModel(InferenceModel):
 
         # 3. tokenizer
         with misc.timer("DiffusionModel: set_up_tokenizer"):
-            self.tokenizer: BaseVAE = lazy_instantiate(config.tokenizer)
+            self.tokenizer: Any = lazy_instantiate(config.tokenizer)
             assert self.tokenizer.latent_ch == self.config.state_ch, (
                 f"latent_ch {self.tokenizer.latent_ch} != state_shape {self.config.state_ch}"
             )
@@ -793,7 +787,7 @@ class WANDiffusionModel(InferenceModel):
         )
         return is_image
 
-    def denoise(self, xt_B_C_T_H_W: torch.Tensor, timestep: torch.Tensor, condition: T2VCondition) -> DenoisePrediction:
+    def denoise(self, xt_B_C_T_H_W: torch.Tensor, timestep: torch.Tensor, condition: T2VCondition) -> Tensor:
         """
         Performs denoising on the input noise data, noise level, and condition
 

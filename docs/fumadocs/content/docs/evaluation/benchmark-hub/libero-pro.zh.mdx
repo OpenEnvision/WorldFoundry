@@ -1,126 +1,37 @@
 ---
 title: LIBERO-Pro
-description: LIBERO-Pro — 指标、依赖与运行命令。
+description: "即插即用的 LIBERO 叠加层，探测死记：物体、位姿、指令、任务与环境偏移。WorldFoundry 导入官方 rollout。"
 ---
 
-## 简介
+LIBERO-PRO（华中科技大学，联合哈佛、MIT、武汉理工与 Lehigh）**不是**新的终身学习套件，也**不是** [LIBERO-Plus](/zh/docs/evaluation/benchmark-hub/libero-plus) 的 10,030 实例因子网格。它是叠在原始 LIBERO 任务上的**即插即用**层。论点是：原版 LIBERO 的训练 / 评测几乎是同一场景，所以 90%+ 可能是轨迹回放。PRO 施加**合理**扰动，再问策略是否仍把指令接地。
 
+论文图 6 的五类：
 
+- **物体属性** — 颜色、纹理、尺度；语义目标不变。
+- **初始构型** — 仍物理可行的摆放。很小的位置偏移就会让许多 VLA 归零。
+- **指令** — 同一目标的改写。
+- **任务重设计** — 新的物体集合或组合目标。这类**不**与另外四类混用。
+- **环境** — 背景、光照、纹理；可行性不变。
 
-LIBERO-Pro external benchmark manifest for professional-grade language-conditioned manipulation tasks.
+另外四类可以组合。官方评测与原版 LIBERO 一致：**每任务 50 个 episode**。论文报告干净 LIBERO 上超过 **90%** 的模型在泛化 PRO 设置下塌到 **0%**——这是上游结论，不是 Hub 行。
 
+论文：[LIBERO-PRO](https://arxiv.org/abs/2510.03827)。项目：[LIBERO-PRO 主页](https://zxy-mllab.github.io/LIBERO-PRO-Webpage/)。代码：[Zxy-MLlab/LIBERO-PRO](https://github.com/Zxy-MLlab/LIBERO-PRO)（MIT）。数据集：`zhouxueyang/LIBERO-Pro`。
 
+WorldFoundry **只导入官方结果**。你在上游跑该叠加层，再经 `official-validation` 归一化导出。仓内不跑 robosuite。[基础 LIBERO](/zh/docs/evaluation/benchmark-hub/libero) 可以接线闭环；本页不行。
 
-## 指标
+<BenchmarkPageSections id="libero-pro" locale="zh" />
 
-LIBERO-Pro external benchmark manifest for professional-grade language-conditioned manipulation tasks.
-
-### Task YAML
-
-`worldfoundry/data/benchmarks/tasks/external/libero-pro.yaml`
-
-### Primary
-
-- `success_rate`
-
-| Metric | 关注点 |
-| --- | --- |
-| `success_rate` | episode / task 是否成功完成的比例或成功率。 |
-| `task_success` | episode / task 是否成功完成的比例或成功率。 |
-| `episode_success` | episode / task 是否成功完成的比例或成功率。 |
-| `action_accuracy` | 预测动作、状态或结果相对 benchmark 成功标准的正确性。 |
-
-
-
-## 环境准备
-
-### 运行环境
-
-- **Conda 环境：** `worldfoundry-unified-cu128`。
-- **单独配置：** 默认复用 WorldFoundry 统一环境（`needs_new_env: false`），通常不需要额外 benchmark-only conda env。
-- WorldFoundry provides contract and official result normalization for caller-provided LIBERO-Pro outputs.
-
-### 测评数据
-
-- 待测模型输出目录：设置 `WORLDFOUNDRY_LIBERO_PRO_RESULTS_PATH` 指向生成视频或 rollout artifact 根目录。
-- `${WORLDFOUNDRY_DATA_DIR}/datasets/libero-pro`
-- `${WORLDFOUNDRY_CACHE_DIR}/repos/Lifelong-Robot-Learning--LIBERO`
-
-### Checkpoint 与资产
-
-- 该 benchmark 以官方结果归一化或仿真 rollout 为主；policy / simulator checkpoint 见 catalog `requires` 与 task YAML。
-
-### 关键环境变量
-
-- `WORLDFOUNDRY_LIBERO_PRO_ROOT`
-- `WORLDFOUNDRY_LIBERO_PRO_RESULTS_PATH`
-
-
-
-## 运行评测
-
-
-
-准备好该 benchmark 页面列出的资产和候选产物后，使用下面的公开运行入口。
-
-### 设置候选产物目录
-
-```bash
-export WORLDFOUNDRY_GENERATED_ARTIFACT_DIR=/path/to/generated/artifacts
-```
-
-### 导入已有官方结果
+## 如何运行
 
 ```bash
 worldfoundry-eval zoo benchmark-run \
   --benchmark-id libero-pro \
-  --mode normalizer \
-  --official-results-path /path/to/official/results-or-report \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero-pro/normalizer \
+  --mode official-validation \
+  --official-results-path <official_results.json> \
+  --output-dir tmp/libero-pro/official-validation \
   --json
 ```
 
-### 从生成产物重新打分
-
-```bash
-worldfoundry-eval zoo benchmark-run \
-  --benchmark-id libero-pro \
-  --mode official-run \
-  --generated-artifact-dir "${WORLDFOUNDRY_GENERATED_ARTIFACT_DIR}" \
-  --output-dir tmp/libero-pro/official-run \
-  --json
-```
-
-### 直接调用仓内 runner
-
-```bash
-worldfoundry-eval zoo benchmark-run --benchmark-id libero-pro --mode official-validation --official-results-path <official_results.json> --output-dir <out> --json
-```
-
-
-
-## 依赖与产物
-
-
-
-### Inputs
-
-- Official simulator runtime
-- benchmark assets
-- policy checkpoint
-- official result dump
-
-### Environment
-
-- `WORLDFOUNDRY_LIBERO_PRO_RESULTS_PATH`
-
-### Outputs
-
-- `scorecard.json`
-- `raw_results.jsonl`
-- `evaluation/summary.json`
-
-
+可选 `WORLDFOUNDRY_LIBERO_PRO_ROOT` 指向 `Zxy-MLlab/LIBERO-PRO` 检出。默认导入路径：`WORLDFOUNDRY_LIBERO_PRO_RESULTS_PATH`。清单：`worldfoundry/data/benchmarks/tasks/external/libero-pro.yaml`。输出：`scorecard.json`（主键 `success_rate`）、`raw_results.jsonl`、`evaluation/summary.json`。
 
 [← 返回 Benchmark Hub](/zh/docs/evaluation/benchmark-hub)

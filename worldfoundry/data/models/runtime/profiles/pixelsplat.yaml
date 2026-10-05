@@ -7,10 +7,22 @@ input_schema:
   - view_sequence
   image: true
   prompt: false
-integration_status: planned
+integration_status: integrated
+checkpoints:
+- repo_id: dylanebert/pixelSplat
+  revision: f66c00e4f43b7347f61eee8801f19c5a09405d10
+  filename: re10k.ckpt
+  role: re10k_checkpoint
+- repo_id: dylanebert/pixelSplat
+  revision: f66c00e4f43b7347f61eee8801f19c5a09405d10
+  filename: acid.ckpt
+  role: acid_checkpoint
 notes:
 - WorldFoundry vendors the pixelSplat source and runtime under worldfoundry/base_models/three_dimensions/point_clouds/pixelsplat
   and registers a lazy wrapper.
-- Actual inference requires a locally provided Gaussian rasterization extension
-  and a staged re10k.ckpt checkpoint.
-runtime_status: in_tree_pixelsplat_runtime_blocked_on_local_extension
+- Requires the declared pixelSplat environment dependencies, a local Gaussian rasterization
+  extension, and a staged re10k.ckpt or acid.ckpt from the original convolutional model.
+- Both checkpoints were validated on real posed two-view inputs. Unposed image input uses
+  a synthetic camera baseline and does not establish accurate scene geometry.
+- PLY export stores world-space rotations and standard opacity logits; only DC color is exported.
+runtime_status: checkpoint_backed_gpu_verified

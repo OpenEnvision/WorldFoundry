@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
+from worldfoundry.evaluation.tasks.metrics._shared.lazy import lazy_export
 from worldfoundry.evaluation.tasks.metrics.registry import metric_module_from_globals
 
-from .compute import NetType, compute_lpips
+NetType = Literal["alex", "vgg", "squeeze"]
+compute_lpips = lazy_export(f"{__name__}.compute", "compute_lpips", owner=__name__)
 
 METRIC_ID = "lpips"
 ALIASES: tuple[str, ...] = ()
