@@ -197,7 +197,7 @@ export function ModelRecipeCatalog({ locale = 'en' }: { locale?: Locale }) {
           <strong>{results.length}</strong> {t.results}
         </p>
         <div>
-          <label>
+          <label className={status !== 'all' ? 'is-set' : undefined}>
             <span>{t.status}</span>
             <select
               value={status}
@@ -215,7 +215,7 @@ export function ModelRecipeCatalog({ locale = 'en' }: { locale?: Locale }) {
               <option value="blocked">Blocked</option>
             </select>
           </label>
-          <label>
+          <label className={runtime !== 'all' ? 'is-set' : undefined}>
             <span>{t.runtime}</span>
             <select
               value={runtime}
@@ -230,7 +230,7 @@ export function ModelRecipeCatalog({ locale = 'en' }: { locale?: Locale }) {
               <option value="unrecorded">{t.unrecorded}</option>
             </select>
           </label>
-          <label>
+          <label className={sort !== 'readiness' ? 'is-set' : undefined}>
             <span>{t.sort}</span>
             <select value={sort} onChange={(event) => setSort(event.target.value as SortMode)}>
               <option value="readiness">{t.readiness}</option>

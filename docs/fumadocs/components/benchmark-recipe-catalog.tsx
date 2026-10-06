@@ -263,7 +263,7 @@ export function BenchmarkRecipeCatalog({ locale = 'en' }: { locale?: Locale }) {
           <strong>{results.length}</strong> {t.results}
         </p>
         <div>
-          <label>
+          <label className={status !== 'all' ? 'is-set' : undefined}>
             <span>{t.status}</span>
             <select
               value={status}
@@ -280,7 +280,7 @@ export function BenchmarkRecipeCatalog({ locale = 'en' }: { locale?: Locale }) {
               <option value="blocked">{t.blocked}</option>
             </select>
           </label>
-          <label>
+          <label className={judge !== 'all' ? 'is-set' : undefined}>
             <span>{t.judge}</span>
             <select
               value={judge}
@@ -294,7 +294,7 @@ export function BenchmarkRecipeCatalog({ locale = 'en' }: { locale?: Locale }) {
               <option value="hosted">{t.hosted}</option>
             </select>
           </label>
-          <label>
+          <label className={sort !== 'readiness' ? 'is-set' : undefined}>
             <span>{t.sort}</span>
             <select value={sort} onChange={(event) => setSort(event.target.value as SortMode)}>
               <option value="readiness">{t.readiness}</option>
