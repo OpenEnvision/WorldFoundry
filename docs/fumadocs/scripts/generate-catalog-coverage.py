@@ -22,10 +22,6 @@ FAMILY_META = {
         "Video",
         "Text-, image-, and video-conditioned generation, editing, and audio-video systems.",
     ),
-    "multimodal": (
-        "Multimodal",
-        "Image-text understanding and generation systems without a video inference route.",
-    ),
     "world_models": (
         "World models",
         "Interactive worlds, camera/action conditioning, navigation, and simulator-shaped systems.",
@@ -162,7 +158,11 @@ def main() -> int:
     families = []
     for fam, (label, blurb) in FAMILY_META.items():
         raw = []
-        for path in sorted((ROOT / "worldfoundry/data/models/catalog" / fam).glob("*.yaml")):
+        catalog_root = ROOT / "worldfoundry/data/models/catalog"
+        catalog_paths = list((catalog_root / fam).glob("*.yaml"))
+        if fam == "video":
+            catalog_paths.extend((catalog_root / "multimodal").glob("*.yaml"))
+        for path in sorted(catalog_paths):
             if path.name.startswith("_"):
                 continue
             for item in model_items(path):

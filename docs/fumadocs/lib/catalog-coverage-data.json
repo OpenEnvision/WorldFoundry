@@ -7,7 +7,7 @@
       "id": "video",
       "label": "Video",
       "blurb": "Text-, image-, and video-conditioned generation, editing, and audio-video systems.",
-      "count": 55,
+      "count": 56,
       "entries": [
         {
           "id": "allegro",
@@ -68,6 +68,14 @@
           "status": "integrated",
           "aliases": [
             "easyanimate"
+          ]
+        },
+        {
+          "id": "emu3.5",
+          "name": "Emu 3.5",
+          "status": "integrated",
+          "aliases": [
+            "emu3.5"
           ]
         },
         {
@@ -453,22 +461,6 @@
           "status": "integrated",
           "aliases": [
             "zeroscope"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "multimodal",
-      "label": "Multimodal",
-      "blurb": "Image-text understanding and generation systems without a video inference route.",
-      "count": 1,
-      "entries": [
-        {
-          "id": "emu3.5",
-          "name": "Emu 3.5",
-          "status": "integrated",
-          "aliases": [
-            "emu3.5"
           ]
         }
       ]
