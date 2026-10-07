@@ -552,7 +552,7 @@ class NativeVisualDiffusionPipeline(PipelineABC):
             )
         )
         sample = output.sample
-        if self.OUTPUT_LAYOUT == "FHWC":
+        if self.OUTPUT_LAYOUT == "FHWC" and output_type != "latent":
             sample = sample.permute(3, 0, 1, 2).unsqueeze(0)
         artifact_path = None
         if output_path is not None and output_type != "latent":

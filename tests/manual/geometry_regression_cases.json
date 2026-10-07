@@ -3911,5 +3911,669 @@
       }
     ],
     "scope": "Released-checkpoint fixed-seed A/B/A control replay, request isolation and decoded MP4 geometry; definition only, with accepted-reference and GPU replay evidence recorded separately."
+  },
+  "worldplay2-controls-short": {
+    "id": "worldplay2-controls-short",
+    "model_id": "worldplay2",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.worldplay2.pipeline_worldplay2:WorldPlay2Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/aejion--WorldPlay2-Fast",
+      "base_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-I2V-A14B",
+      "mode": "few_step",
+      "device": "cuda",
+      "dtype": "bfloat16",
+      "attention_backend": "sdpa"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+          "actions": "w-4,w+right-4",
+          "perspective": "tps",
+          "height": 128,
+          "width": 256,
+          "num_frames": 29,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 16,
+          "seed": 42,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+          "actions": "w-4,w+left-4",
+          "perspective": "tps",
+          "height": 128,
+          "width": 256,
+          "num_frames": 29,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 16,
+          "seed": 42,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+          "actions": "w-4,w+right-4",
+          "perspective": "tps",
+          "height": 128,
+          "width": 256,
+          "num_frames": 29,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 16,
+          "seed": 42,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/aejion--WorldPlay2-Fast",
+      "base-model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-I2V-A14B",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "a.sample",
+      "a.latents",
+      "b.sample",
+      "b.latents",
+      "repeat.sample",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.sample": {
+        "shape": [
+          1,
+          3,
+          29,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "b.sample": {
+        "shape": [
+          1,
+          3,
+          29,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "repeat.sample": {
+        "shape": [
+          1,
+          3,
+          29,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          29,
+          128,
+          256,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.sample",
+        "right": "repeat.sample",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.sample",
+        "right": "b.sample",
+        "relation": "different"
+      }
+    ],
+    "scope": "Released-checkpoint fixed-seed A/B/A control replay, request isolation and decoded MP4 geometry; definition only, with accepted-reference and GPU replay evidence recorded separately."
+  },
+  "worldplay2-fast-controls-short": {
+    "id": "worldplay2-fast-controls-short",
+    "model_id": "worldplay2-fast",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.worldplay2.pipeline_worldplay2:WorldPlay2Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/aejion--WorldPlay2-Fast",
+      "base_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-I2V-A14B",
+      "mode": "few_step",
+      "device": "cuda",
+      "dtype": "bfloat16",
+      "attention_backend": "sdpa"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+          "actions": "w-4,w+right-4",
+          "perspective": "tps",
+          "height": 128,
+          "width": 256,
+          "num_frames": 29,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 16,
+          "seed": 42,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+          "actions": "w-4,w+left-4",
+          "perspective": "tps",
+          "height": 128,
+          "width": 256,
+          "num_frames": 29,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 16,
+          "seed": 42,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+          "actions": "w-4,w+right-4",
+          "perspective": "tps",
+          "height": 128,
+          "width": 256,
+          "num_frames": 29,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 16,
+          "seed": 42,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/aejion--WorldPlay2-Fast",
+      "base-model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-I2V-A14B",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "a.sample",
+      "a.latents",
+      "b.sample",
+      "b.latents",
+      "repeat.sample",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.sample": {
+        "shape": [
+          1,
+          3,
+          29,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "b.sample": {
+        "shape": [
+          1,
+          3,
+          29,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "repeat.sample": {
+        "shape": [
+          1,
+          3,
+          29,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          29,
+          128,
+          256,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.sample",
+        "right": "repeat.sample",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.sample",
+        "right": "b.sample",
+        "relation": "different"
+      }
+    ],
+    "scope": "Released-checkpoint fixed-seed A/B/A control replay, request isolation and decoded MP4 geometry; definition only, with accepted-reference and GPU replay evidence recorded separately."
+  },
+  "worldplay2-ar-controls-short": {
+    "id": "worldplay2-ar-controls-short",
+    "model_id": "worldplay2-ar",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.worldplay2.pipeline_worldplay2:WorldPlay2Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/aejion--WorldPlay2-AR",
+      "base_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-I2V-A14B",
+      "mode": "ar",
+      "device": "cuda",
+      "dtype": "bfloat16",
+      "attention_backend": "sdpa"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+          "actions": "w-4,w+right-4",
+          "perspective": "tps",
+          "height": 128,
+          "width": 256,
+          "num_frames": 29,
+          "num_inference_steps": 40,
+          "guidance_scale": 3.5,
+          "fps": 16,
+          "seed": 42,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+          "actions": "w-4,w+left-4",
+          "perspective": "tps",
+          "height": 128,
+          "width": 256,
+          "num_frames": 29,
+          "num_inference_steps": 40,
+          "guidance_scale": 3.5,
+          "fps": 16,
+          "seed": 42,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+          "actions": "w-4,w+right-4",
+          "perspective": "tps",
+          "height": 128,
+          "width": 256,
+          "num_frames": 29,
+          "num_inference_steps": 40,
+          "guidance_scale": 3.5,
+          "fps": 16,
+          "seed": 42,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/aejion--WorldPlay2-AR",
+      "base-model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-I2V-A14B",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "a.sample",
+      "a.latents",
+      "b.sample",
+      "b.latents",
+      "repeat.sample",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.sample": {
+        "shape": [
+          1,
+          3,
+          29,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "b.sample": {
+        "shape": [
+          1,
+          3,
+          29,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "repeat.sample": {
+        "shape": [
+          1,
+          3,
+          29,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          29,
+          128,
+          256,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.sample",
+        "right": "repeat.sample",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.sample",
+        "right": "b.sample",
+        "relation": "different"
+      }
+    ],
+    "scope": "Released-checkpoint fixed-seed A/B/A control replay, request isolation and decoded MP4 geometry; definition only, with accepted-reference and GPU replay evidence recorded separately."
+  },
+  "worldplay2-bi-controls-short": {
+    "id": "worldplay2-bi-controls-short",
+    "model_id": "worldplay2-bi",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.worldplay2.pipeline_worldplay2:WorldPlay2Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/aejion--WorldPlay2-BI",
+      "base_model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-I2V-A14B",
+      "mode": "bi",
+      "device": "cuda",
+      "dtype": "bfloat16",
+      "attention_backend": "sdpa"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+          "actions": "w-16,w+right-16",
+          "perspective": "tps",
+          "height": 128,
+          "width": 256,
+          "num_frames": 125,
+          "num_inference_steps": 40,
+          "guidance_scale": 3.5,
+          "fps": 16,
+          "seed": 42,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+          "actions": "w-16,w+left-16",
+          "perspective": "tps",
+          "height": 128,
+          "width": 256,
+          "num_frames": 125,
+          "num_inference_steps": 40,
+          "guidance_scale": 3.5,
+          "fps": 16,
+          "seed": 42,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+          "actions": "w-16,w+right-16",
+          "perspective": "tps",
+          "height": 128,
+          "width": 256,
+          "num_frames": 125,
+          "num_inference_steps": 40,
+          "guidance_scale": 3.5,
+          "fps": 16,
+          "seed": 42,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/aejion--WorldPlay2-BI",
+      "base-model": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-I2V-A14B",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "a.sample",
+      "a.latents",
+      "b.sample",
+      "b.latents",
+      "repeat.sample",
+      "repeat.latents"
+    ],
+    "array_contracts": {
+      "a.sample": {
+        "shape": [
+          1,
+          3,
+          125,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "b.sample": {
+        "shape": [
+          1,
+          3,
+          125,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "repeat.sample": {
+        "shape": [
+          1,
+          3,
+          125,
+          128,
+          256
+        ],
+        "dtype": "float32"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          125,
+          128,
+          256,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.sample",
+        "right": "repeat.sample",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.sample",
+        "right": "b.sample",
+        "relation": "different"
+      }
+    ],
+    "scope": "Released-checkpoint fixed-seed A/B/A control replay, request isolation and decoded MP4 geometry; definition only, with accepted-reference and GPU replay evidence recorded separately."
   }
 }

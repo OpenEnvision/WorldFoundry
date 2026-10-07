@@ -1,0 +1,79 @@
+---
+title: "WorldPlay2"
+description: "Action-controlled world video with scheduled scene prompts."
+modelId: "worldplay2"
+pageSource: authored
+---
+
+WorldPlay2 generates world video from an image, navigation actions and scene prompts. The native WorldFoundry pipeline reuses the Wan2.2 transformer, UMT5 encoder, Wan2.1 VAE, checkpoint loader, attention backends and media IO. WorldPlay2 synthesis extensions add six-channel action conditioning, causal memory compression and chunked context attention.
+
+Code: [WorldPlay2/WorldPlay2](https://github.com/WorldPlay2/WorldPlay2). Paper: [arXiv 2609.35560](https://arxiv.org/abs/2609.35560). Weights: [Fast](https://huggingface.co/aejion/WorldPlay2-Fast), [AR](https://huggingface.co/aejion/WorldPlay2-AR) and [BI](https://huggingface.co/aejion/WorldPlay2-BI).
+
+```python
+from worldfoundry.pipelines.worldplay2 import WorldPlay2Pipeline
+
+pipeline = WorldPlay2Pipeline.from_pretrained(
+    model_path="checkpoints/WorldPlay2-Fast",
+    base_model_path="checkpoints/Wan2.2-I2V-A14B",
+    device="cuda",
+    dtype="bfloat16",
+    attention_backend="sdpa",
+)
+result = pipeline(
+    images="first_frame.png",
+    prompt="The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+    actions="w-4,right-4",
+    perspective="tps",
+    num_frames=29,
+    seed=42,
+    output_path="outputs/worldplay2.mp4",
+    return_dict=True,
+)
+```
+
+`result["sample"]` is a BCTHW video tensor in [0, 1]; `result["artifact_path"]` points to the exported MP4. The default request generates 125 frames at 832×448 and 16 FPS using `actions="w-32"`. Both dimensions must be multiples of 64.
+
+Stage both `high_noise_model/diffusion_pytorch_model.safetensors` and `low_noise_model/diffusion_pytorch_model.safetensors` from the selected WorldPlay2 repository. The [Wan2.2-I2V-A14B](https://huggingface.co/Wan-AI/Wan2.2-I2V-A14B) support directory supplies `models_t5_umt5-xxl-enc-bf16.pth`, `google/umt5-xxl/`, `Wan2.1_VAE.pth` and the two expert `config.json` files.
+
+## Sampling modes
+
+| Model ID | Loading mode | Steps | Latent frames per chunk | Guidance scale |
+| --- | --- | --- | --- | --- |
+| `worldplay2` / `worldplay2-fast` | `few_step` | 4 | 4 | 1.0 |
+| `worldplay2-ar` | `ar` | 40 | 4 | 3.5 |
+| `worldplay2-bi` | `bi` | 40 | 32 | 3.5 |
+
+Pass `mode="ar"` or `mode="bi"` to `from_pretrained` with the corresponding expert directory. Each mode uses its own released weights. AR and Fast roll forward in four-latent-frame chunks; BI samples 32-latent-frame chunks bidirectionally.
+
+Actions use comma-separated `action-duration` segments. Movement keys are `w`, `s`, `a`, `d`, `wa`, `wd`, `sa` and `sd`; look directions are `left`, `right`, `up` and `down`. `space` is the special action and `none` is stationary. Combine categories with `+`, for example `w+right-4`.
+
+Durations count latent frames, including the stationary first latent. A total of `L` latent frames produces `4 * (L - 1) + 1` video frames. Total duration must be a multiple of four for Fast/AR or 32 for BI. Prompt changes must align with the same chunk boundaries. `perspective` is `fps` for first-person or `tps` for third-person.
+
+## Prompt scheduling
+
+A single `prompt` applies to every chunk. For a scene change, provide named prompts and their latent durations:
+
+```python
+rain = "The scene in the video is: a forest trail. The event is: rain begins to fall."
+sun = "The scene in the video is: a forest trail. The event is: sunlight breaks through clouds."
+pipeline(
+    images="first_frame.png",
+    prompt=rain,
+    prompts={"prompt1": rain, "prompt2": sun},
+    prompt_event="prompt1-4,prompt2-4",
+    actions="w-4,w+right-4",
+    perspective="fps",
+    num_frames=29,
+    output_path="outputs/worldplay2-prompts.mp4",
+)
+```
+
+Prompt-event durations must equal the total action duration. Prompts describe the scene using `The scene in the video is: ...`; third-person prompts also include `The character is: ...`. Add `The event is: ...` when the scene has an event.
+
+Small-graph FP32 CPU transformer checks match the pinned official implementation within 1e-6 for BI, cached AR and both Fast experts. Three-chunk Fast sampling also matches within 1e-6 across 12 latent frames, including memory compression and KV-cache reuse.
+
+## Limitations
+
+- WorldPlay2 code and weights use [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).
+- CPU parity uses a small transformer with deterministic text and codec fixtures. Checkpoint-backed GPU generation and full-size output parity remain pending. The official launchers default to eight GPUs with Ulysses sequence parallelism; hardware throughput has not been measured in this integration.
+- WorldPlay2-TAE weights have not been released; the pipeline uses the shared Wan2.1 VAE.

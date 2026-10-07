@@ -1,5 +1,5 @@
 {
-  "total": 269,
+  "total": 270,
   "categories": [
     {
       "id": "video",
@@ -20,7 +20,7 @@
       "label": "World models",
       "label_zh": "世界模型",
       "description": "Interactive worlds, prediction, navigation, and simulator-shaped systems.",
-      "count": 108
+      "count": 109
     },
     {
       "id": "three_d_four_d",
@@ -99130,6 +99130,995 @@
         "run": "worldfoundry-eval run \\\n  worldgen \\\n  --pipeline.task-profile default \\\n  --json"
       },
       "catalogPath": "worldfoundry/data/models/catalog/three_d_four_d/worldgen.yaml"
+    },
+    {
+      "id": "worldplay2",
+      "name": "WorldPlay2",
+      "category": "world_models",
+      "categoryLabel": "World models",
+      "categoryLabelZh": "世界模型",
+      "provider": "WorldPlay2 team",
+      "summary": "WorldPlay2 generates action-controlled world video from an image, with first-person or third-person navigation and chunk-aligned prompt changes.",
+      "aliases": [
+        "world-play2",
+        "aejion/WorldPlay2-Fast"
+      ],
+      "tasks": [
+        "image-to-video",
+        "action-conditioned-video",
+        "interactive-world-model"
+      ],
+      "status": {
+        "group": "integrated",
+        "label": "Integrated",
+        "integration": "integrated",
+        "runner": "pending",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "worldplay2",
+        "bindingId": "worldplay2",
+        "runnerTarget": "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.worldplay2.pipeline_worldplay2:WorldPlay2Pipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "native_diffusion",
+        "runtimeStatus": "native_small_graph_cpu_parity_validated_checkpoint_gpu_pending",
+        "environmentId": "_unified",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": "compatible_unified_default",
+        "condaPackages": [
+          "python=3.11",
+          "pip",
+          "ffmpeg",
+          "setuptools",
+          "wheel"
+        ],
+        "pipPackages": [
+          "torch",
+          "torchvision",
+          "torchaudio",
+          "xfuser"
+        ],
+        "packageVersions": {
+          "torch": "torch",
+          "torchvision": "torchvision",
+          "torchaudio": "torchaudio",
+          "xfuser": "xfuser"
+        },
+        "validationImports": [
+          "torch",
+          "torchvision",
+          "numpy",
+          "transformers",
+          "diffusers",
+          "xfuser",
+          "worldfoundry"
+        ],
+        "notes": [
+          "Native WorldPlay2 inference reuses shared Wan2.2 transformers, UMT5, Wan2.1 VAE, checkpoint loading, attention and media IO.",
+          "Each WorldPlay2 variant supplies its own high-noise and low-noise expert weights; Wan2.2 is used only for support assets.",
+          "Action durations count latent frames, including the stationary first latent; 32 latent frames decode to 125 video frames.",
+          "Total action duration and prompt boundaries must align with chunk_length.",
+          "Small-graph FP32 CPU BI/AR/Fast transformer parity and three-chunk Fast sampling match the pinned official code within 1e-6.",
+          "CPU sampling uses deterministic text and codec fixtures; released-checkpoint CUDA generation and official full-size artifact parity remain pending.",
+          "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
+          "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
+          "Source the environment file emitted by `scripts/setup/unified_install.sh` so WORLDFOUNDRY_USE_UNIFIED_ENV=1 routes compatible profiles here.",
+          "Runnable GPU models that previously used cu113/cu118/cu124 CUDA buckets are mapped to this tier when they do not carry hard ABI pins requiring isolation."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "project",
+          "label": "Project",
+          "url": "https://worldplay2.github.io/"
+        },
+        {
+          "kind": "paper",
+          "label": "Paper",
+          "url": "https://arxiv.org/abs/2609.35560"
+        },
+        {
+          "kind": "source",
+          "label": "GitHub",
+          "url": "https://github.com/WorldPlay2/WorldPlay2"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/aejion/WorldPlay2-Fast"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/aejion/WorldPlay2-AR",
+          "revision": "09ddd0161a4aaae8eef0eea65068be72dccc222f"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/aejion/WorldPlay2-BI",
+          "revision": "18f84ce25548383160edd0b5f66dc069ad05cd73"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/WorldPlay2/WorldPlay2#readme"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "aejion/WorldPlay2-Fast",
+          "revision": "1991d1cd9a3b116c2f6d9513a220c0ee5077ab79",
+          "license": "cc-by-nc-4.0",
+          "notes": [
+            "High-noise and low-noise WorldPlay2 Fast experts."
+          ]
+        },
+        {
+          "id": "Wan-AI/Wan2.2-I2V-A14B",
+          "revision": "206a9ee1b7bfaaf8f7e4d81335650533490646a3",
+          "license": "apache-2.0",
+          "notes": [
+            "Shared UMT5",
+            "tokenizer",
+            "Wan2.1 VAE and model configuration assets."
+          ]
+        },
+        {
+          "id": "aejion/WorldPlay2-Fast",
+          "license": "cc-by-nc-4.0"
+        }
+      ],
+      "variants": [
+        {
+          "id": "worldplay2-fast",
+          "label": "WorldPlay2-Fast",
+          "task": "action-conditioned-video",
+          "runtimeProfile": "worldplay2-fast",
+          "pipelineBinding": "worldplay2-fast",
+          "status": "integrated",
+          "pipelineTarget": "worldfoundry.pipelines.worldplay2.pipeline_worldplay2:WorldPlay2Pipeline",
+          "runner": "worldfoundry.pipeline",
+          "loadingMethod": "from_pretrained",
+          "invocationMode": "native_or_standard_invocation",
+          "environmentName": "worldfoundry-unified-cu128",
+          "environmentKind": "unified",
+          "python": "3.11",
+          "cudaLabel": "CUDA 12.8",
+          "backendStage": "native_diffusion",
+          "runtimeStatus": "native_small_graph_cpu_parity_validated_checkpoint_gpu_pending",
+          "inputContract": [
+            {
+              "field": "prompt",
+              "detail": "Required"
+            },
+            {
+              "field": "image",
+              "detail": "Required"
+            },
+            {
+              "field": "video",
+              "detail": "Optional"
+            },
+            {
+              "field": "actions",
+              "detail": "actions, perspective, prompts, prompt_event, seed"
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "worldplay2-fast.mp4"
+            }
+          ]
+        },
+        {
+          "id": "worldplay2-ar",
+          "label": "WorldPlay2-AR",
+          "task": "action-conditioned-video",
+          "runtimeProfile": "worldplay2-ar",
+          "pipelineBinding": "worldplay2-ar",
+          "status": "integrated",
+          "pipelineTarget": "worldfoundry.pipelines.worldplay2.pipeline_worldplay2:WorldPlay2Pipeline",
+          "runner": "worldfoundry.pipeline",
+          "loadingMethod": "from_pretrained",
+          "invocationMode": "native_or_standard_invocation",
+          "environmentName": "worldfoundry-unified-cu128",
+          "environmentKind": "unified",
+          "python": "3.11",
+          "cudaLabel": "CUDA 12.8",
+          "backendStage": "native_diffusion",
+          "runtimeStatus": "native_small_graph_cpu_parity_validated_checkpoint_gpu_pending",
+          "inputContract": [
+            {
+              "field": "prompt",
+              "detail": "Required"
+            },
+            {
+              "field": "image",
+              "detail": "Required"
+            },
+            {
+              "field": "video",
+              "detail": "Optional"
+            },
+            {
+              "field": "actions",
+              "detail": "actions, perspective, prompts, prompt_event, seed"
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "worldplay2-ar.mp4"
+            }
+          ]
+        },
+        {
+          "id": "worldplay2-bi",
+          "label": "WorldPlay2-BI",
+          "task": "action-conditioned-video",
+          "runtimeProfile": "worldplay2-bi",
+          "pipelineBinding": "worldplay2-bi",
+          "status": "integrated",
+          "pipelineTarget": "worldfoundry.pipelines.worldplay2.pipeline_worldplay2:WorldPlay2Pipeline",
+          "runner": "worldfoundry.pipeline",
+          "loadingMethod": "from_pretrained",
+          "invocationMode": "native_or_standard_invocation",
+          "environmentName": "worldfoundry-unified-cu128",
+          "environmentKind": "unified",
+          "python": "3.11",
+          "cudaLabel": "CUDA 12.8",
+          "backendStage": "native_diffusion",
+          "runtimeStatus": "native_small_graph_cpu_parity_validated_checkpoint_gpu_pending",
+          "inputContract": [
+            {
+              "field": "prompt",
+              "detail": "Required"
+            },
+            {
+              "field": "image",
+              "detail": "Required"
+            },
+            {
+              "field": "video",
+              "detail": "Optional"
+            },
+            {
+              "field": "actions",
+              "detail": "actions, perspective, prompts, prompt_event, seed"
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "worldplay2-bi.mp4"
+            }
+          ]
+        }
+      ],
+      "inferenceTasks": [
+        {
+          "id": "interactive-video",
+          "label": "Interactive Video",
+          "description": "Run Worldplay2 through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [
+            "worldplay2-fast"
+          ],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct Worldplay2 inference."
+            },
+            {
+              "field": "negative-prompt",
+              "option": "--pipeline.negative-prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Negative Prompt passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "input-path",
+              "option": "--pipeline.input-path",
+              "detail": "Required",
+              "kind": "path",
+              "target": "input",
+              "required": true,
+              "default": "/workspace/worldfoundry/data/test_cases/studio_demo/00/image.jpg",
+              "choices": [],
+              "description": "Input Path used as the input for direct Worldplay2 inference."
+            },
+            {
+              "field": "interactions",
+              "option": "--pipeline.interactions",
+              "detail": "Optional",
+              "kind": "interaction_tokens",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Interactions passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Frames passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "FPS passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Height passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Width passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Steps passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Guidance passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "frame-num",
+              "option": "--pipeline.frame-num",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Frame Num passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "embedded-guidance-scale",
+              "option": "--pipeline.embedded-guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Embedded Guidance Scale passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "shift",
+              "option": "--pipeline.shift",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Shift passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "output-type",
+              "option": "--pipeline.output-type",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output Type passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "worldplay2-fast.mp4"
+            }
+          ]
+        },
+        {
+          "id": "interactive-video",
+          "label": "Interactive Video",
+          "description": "Run Worldplay2 through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [
+            "worldplay2-ar"
+          ],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct Worldplay2 inference."
+            },
+            {
+              "field": "negative-prompt",
+              "option": "--pipeline.negative-prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Negative Prompt passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "input-path",
+              "option": "--pipeline.input-path",
+              "detail": "Required",
+              "kind": "path",
+              "target": "input",
+              "required": true,
+              "default": "/workspace/worldfoundry/data/test_cases/studio_demo/00/image.jpg",
+              "choices": [],
+              "description": "Input Path used as the input for direct Worldplay2 inference."
+            },
+            {
+              "field": "interactions",
+              "option": "--pipeline.interactions",
+              "detail": "Optional",
+              "kind": "interaction_tokens",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Interactions passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Frames passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "FPS passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Height passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Width passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Steps passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Guidance passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "frame-num",
+              "option": "--pipeline.frame-num",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Frame Num passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "embedded-guidance-scale",
+              "option": "--pipeline.embedded-guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Embedded Guidance Scale passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "shift",
+              "option": "--pipeline.shift",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Shift passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "output-type",
+              "option": "--pipeline.output-type",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output Type passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "worldplay2-ar.mp4"
+            }
+          ]
+        },
+        {
+          "id": "interactive-video",
+          "label": "Interactive Video",
+          "description": "Run Worldplay2 through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [
+            "worldplay2-bi"
+          ],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct Worldplay2 inference."
+            },
+            {
+              "field": "negative-prompt",
+              "option": "--pipeline.negative-prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Negative Prompt passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "input-path",
+              "option": "--pipeline.input-path",
+              "detail": "Required",
+              "kind": "path",
+              "target": "input",
+              "required": true,
+              "default": "/workspace/worldfoundry/data/test_cases/studio_demo/00/image.jpg",
+              "choices": [],
+              "description": "Input Path used as the input for direct Worldplay2 inference."
+            },
+            {
+              "field": "interactions",
+              "option": "--pipeline.interactions",
+              "detail": "Optional",
+              "kind": "interaction_tokens",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Interactions passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Frames passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "FPS passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Height passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Width passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Steps passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Guidance passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "frame-num",
+              "option": "--pipeline.frame-num",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Frame Num passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "embedded-guidance-scale",
+              "option": "--pipeline.embedded-guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Embedded Guidance Scale passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "shift",
+              "option": "--pipeline.shift",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Shift passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "output-type",
+              "option": "--pipeline.output-type",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output Type passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "worldplay2-bi.mp4"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "image",
+          "detail": "Required"
+        },
+        {
+          "field": "video",
+          "detail": "Optional"
+        },
+        {
+          "field": "actions",
+          "detail": "actions, perspective, prompts, prompt_event, seed"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_video",
+          "filename": ""
+        },
+        {
+          "kind": "generated_video",
+          "filename": "worldplay2.mp4"
+        }
+      ],
+      "notes": [
+        "Native Wan2.2 dual-expert inference with six-channel actions and scheduled prompts.",
+        "Reuses canonical Wan transformer layers, UMT5, Wan VAE, checkpoint loading, attention and media IO.",
+        "Fast is the default; AR and BI use the same pipeline with independent expert checkpoints.",
+        "Small-graph FP32 CPU BI/AR/Fast transformer parity and three-chunk Fast sampling match the pinned official code within 1e-6.",
+        "CPU sampling uses deterministic text and codec fixtures; released-checkpoint CUDA generation and official artifact parity remain pending.",
+        "Native WorldPlay2 inference reuses shared Wan2.2 transformers, UMT5, Wan2.1 VAE, checkpoint loading, attention and media IO.",
+        "Each WorldPlay2 variant supplies its own high-noise and low-noise expert weights; Wan2.2 is used only for support assets.",
+        "Action durations count latent frames, including the stationary first latent; 32 latent frames decode to 125 video frames.",
+        "Total action duration and prompt boundaries must align with chunk_length.",
+        "CPU sampling uses deterministic text and codec fixtures; released-checkpoint CUDA generation and official full-size artifact parity remain pending."
+      ],
+      "docs": {
+        "curated": true,
+        "publisher": {
+          "name": "WorldPlay2 team",
+          "nameZh": "WorldPlay2 团队",
+          "kind": "lab"
+        },
+        "overview": [
+          "WorldPlay2 generates action-controlled world video from an image, with first-person or third-person navigation and chunk-aligned prompt changes."
+        ],
+        "overviewZh": [
+          "WorldPlay2 从图像生成动作可控的世界视频，支持第一或第三人称导航与按块切换提示词。"
+        ],
+        "architecture": [
+          "Wan2.2 dual-expert video transformer with six-channel action conditioning, causal memory compression and chunked context attention. WorldPlay2 synthesis extensions reuse shared Wan layers, UMT5, VAE, loading and media output."
+        ],
+        "architectureZh": [
+          "基于 Wan2.2 双专家视频 transformer，加入六通道动作条件、因果记忆压缩与按块上下文注意力；WorldPlay2 的 synthesis 扩展复用共享 Wan 层、UMT5、VAE、权重加载与媒体输出。"
+        ],
+        "usageNotes": [
+          "Use WorldPlay2Pipeline.from_pretrained with WorldPlay2 expert and Wan2.2 support-asset directories. Fast uses four steps; AR and BI use 40 steps. Action durations count latent frames; total duration and prompt boundaries must align with the selected chunk length."
+        ],
+        "usageNotesZh": [
+          "使用 WorldPlay2Pipeline.from_pretrained 加载 WorldPlay2 专家目录与 Wan2.2 支持资产目录。Fast 使用四步，AR 与 BI 使用 40 步。动作时长按 latent 帧计数，总时长及提示词切换边界须与所选块长度对齐。"
+        ],
+        "highlights": [
+          "Image To Video",
+          "Action Conditioned Video",
+          "Interactive World Model",
+          "3 runnable WorldFoundry variants",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "图生视频",
+          "动作条件视频生成",
+          "交互式世界模型",
+          "3 个可运行的 WorldFoundry variant",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [
+            "image"
+          ],
+          "outputs": [
+            "video"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [
+          {
+            "id": "worldmodelbench",
+            "name": "WorldModelBench",
+            "category": "World Models",
+            "categoryZh": "世界模型",
+            "summary": "In-tree official runtime scores generated videos per prompt",
+            "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分",
+            "href": "/docs/evaluation/benchmark-hub/worldmodelbench",
+            "source": "docs",
+            "reason": "Action-controlled world-rollout quality.",
+            "reasonZh": "动作控制的世界滚动生成质量。"
+          },
+          {
+            "id": "camerabench",
+            "name": "CameraBench",
+            "category": "Video Generation",
+            "categoryZh": "视频生成",
+            "summary": "In-tree official runtime scores generated videos per prompt; some dimensions may call a hosted API",
+            "summaryZh": "仓内 official runtime 对生成视频逐 prompt 评分；部分维度可能调用 hosted API",
+            "href": "/docs/evaluation/benchmark-hub/camerabench",
+            "source": "docs",
+            "reason": "Camera-navigation adherence.",
+            "reasonZh": "相机导航的贴合度。"
+          }
+        ],
+        "limitations": [
+          "Code and WorldPlay2 weights use CC BY-NC 4.0.",
+          "Checkpoint-backed GPU generation and full-size output parity remain pending.",
+          "WorldPlay2-TAE weights have not been released."
+        ],
+        "limitationsZh": [
+          "代码与 WorldPlay2 权重采用 CC BY-NC 4.0 许可。",
+          "checkpoint GPU 生成与完整模型输出一致性仍待验证。",
+          "WorldPlay2-TAE 权重尚未发布。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh worldplay2-fast",
+        "install": "bash scripts/setup/model_env_install.sh --model worldplay2-fast",
+        "inspect": "worldfoundry-eval zoo model-show --model-id worldplay2 --include-manifest --json",
+        "check": "worldfoundry-eval zoo model-download --model-id worldplay2 --check-local --json",
+        "run": "worldfoundry-eval run \\\n  worldplay2-fast \\\n  --pipeline.task-profile interactive-video \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/world_models/worldplay2.yaml"
     },
     {
       "id": "xgen-jing",

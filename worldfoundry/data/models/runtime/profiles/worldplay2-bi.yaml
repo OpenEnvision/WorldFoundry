@@ -1,0 +1,62 @@
+schema_version: 2
+model_id: worldplay2-bi
+display_name: WorldPlay2-BI
+task_family: world_model
+groups: [world, video, action_control, camera_control]
+source_repos:
+- url: https://github.com/WorldPlay2/WorldPlay2
+  revision: c5d83e32099116ff3a1437a8a05c764d579f704b
+checkpoints:
+- repo_id: aejion/WorldPlay2-BI
+  revision: 18f84ce25548383160edd0b5f66dc069ad05cd73
+  role: worldplay2_dual_expert_checkpoint
+  files:
+  - high_noise_model/diffusion_pytorch_model.safetensors
+  - low_noise_model/diffusion_pytorch_model.safetensors
+- repo_id: Wan-AI/Wan2.2-I2V-A14B
+  revision: 206a9ee1b7bfaaf8f7e4d81335650533490646a3
+  role: shared_support_assets
+  files:
+  - models_t5_umt5-xxl-enc-bf16.pth
+  - google/umt5-xxl/*
+  - Wan2.1_VAE.pth
+  - high_noise_model/config.json
+  - low_noise_model/config.json
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions: [actions, perspective, prompts, prompt_event, seed]
+artifact_kind: generated_video
+artifact_filename: worldplay2-bi.mp4
+execution:
+  backend_stage: native_diffusion
+  runtime_status: native_small_graph_cpu_parity_validated_checkpoint_gpu_pending
+  integration_status: integrated
+  pipeline_binding: worldplay2-bi
+  defaults:
+    mode: bi
+    width: 832
+    height: 448
+    num_frames: 125
+    fps: 16
+    num_inference_steps: 40
+    guidance_scale: 3.5
+    shift: 5.0
+    chunk_length: 32
+    sink_size: 1
+    temporal_size: 1
+    seed: 42
+    actions: w-32
+    perspective: tps
+    yaw_rotation_speed_deg: 3.0
+    pitch_rotation_speed_deg: 3.0
+integration:
+  status: integrated
+notes:
+- Native WorldPlay2 inference reuses shared Wan2.2 transformers, UMT5, Wan2.1 VAE, checkpoint loading, attention and media IO.
+- Each WorldPlay2 variant supplies its own high-noise and low-noise expert weights; Wan2.2 is used only for support assets.
+- Action durations count latent frames, including the stationary first latent; 32 latent frames decode to 125 video frames.
+- Total action duration and prompt boundaries must align with chunk_length.
+- Small-graph FP32 CPU BI/AR/Fast transformer parity and three-chunk Fast sampling match the pinned official code within 1e-6.
+- CPU sampling uses deterministic text and codec fixtures; released-checkpoint CUDA generation and official full-size artifact parity remain pending.

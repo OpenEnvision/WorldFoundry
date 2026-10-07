@@ -196,6 +196,14 @@ def build_vchitect_strategy(context: ExecutionBuildContext) -> NativeDiffusionRu
     return build_standard_strategy(context, runner_type=VchitectGuidanceRunner)
 
 
+def build_compressed_memory_strategy(context: ExecutionBuildContext) -> NativeDiffusionRunner:
+    """Run native dual experts with causal HR/LR memory between temporal chunks."""
+
+    from worldfoundry.synthesis.visual_generation.worldplay2.runner import CompressedMemoryRunner
+
+    return build_standard_strategy(context, runner_type=CompressedMemoryRunner)
+
+
 def build_dual_condition_guidance_strategy(
     context: ExecutionBuildContext,
 ) -> DualConditionGuidanceRunner:
@@ -526,6 +534,7 @@ def default_execution_strategy_registry() -> ExecutionStrategyRegistry:
 
     registry = ExecutionStrategyRegistry()
     registry.register("standard", build_standard_strategy)
+    registry.register("compressed-memory", build_compressed_memory_strategy)
     registry.register("vchitect-guidance", build_vchitect_strategy)
     from .kandinsky6 import build_kandinsky6_strategy
     registry.register("kandinsky6-joint", build_kandinsky6_strategy)

@@ -232,6 +232,10 @@
     "helixworld-synthesis": [
       "worldfoundry/pipelines/helixworld/**",
       "worldfoundry/synthesis/visual_generation/helixworld/**"
+    ],
+    "worldplay2-synthesis": [
+      "worldfoundry/pipelines/worldplay2/**",
+      "worldfoundry/synthesis/visual_generation/worldplay2/**"
     ]
   },
   "cases": {
@@ -382,6 +386,18 @@
     ],
     "helixworld-controls-short": [
       "helixworld-synthesis"
+    ],
+    "worldplay2-controls-short": [
+      "worldplay2-synthesis"
+    ],
+    "worldplay2-fast-controls-short": [
+      "worldplay2-synthesis"
+    ],
+    "worldplay2-ar-controls-short": [
+      "worldplay2-synthesis"
+    ],
+    "worldplay2-bi-controls-short": [
+      "worldplay2-synthesis"
     ]
   },
   "coverage_scope": "Declared short 3D, video generation and world-model cases; variants and unlisted integrations are not implied covered.",

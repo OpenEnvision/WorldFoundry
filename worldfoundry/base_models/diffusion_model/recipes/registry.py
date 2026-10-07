@@ -202,6 +202,9 @@ def default_native_diffusion_registry() -> NativeDiffusionRegistry:
     registry = NativeDiffusionRegistry()
 
     entries = (
+        ("worldplay2", "worldfoundry.synthesis.visual_generation.worldplay2.recipe", "worldplay2_recipe", ("worldplay2-fast", "aejion/WorldPlay2-Fast")),
+        ("worldplay2-ar", "worldfoundry.synthesis.visual_generation.worldplay2.recipe", "worldplay2_ar_recipe", ("aejion/WorldPlay2-AR",)),
+        ("worldplay2-bi", "worldfoundry.synthesis.visual_generation.worldplay2.recipe", "worldplay2_bi_recipe", ("aejion/WorldPlay2-BI",)),
         (
             "wan2.1-vace",
             ".wan",
