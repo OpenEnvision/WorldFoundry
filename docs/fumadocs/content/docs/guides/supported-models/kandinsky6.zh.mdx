@@ -1,0 +1,70 @@
+---
+title: Kandinsky 6.0
+description: 支持首帧图像条件的原生 Lite 与 Pro 音视频生成。
+pageSource: authored
+---
+
+Kandinsky 6.0 从文本生成同步的视频与 44.1 kHz 音频，也可使用首帧图像作为条件。WorldFoundry 通过原生 diffusion recipe registry 提供六个官方权重快照：
+
+| 模型 ID | 网络 | 采样器 | 默认步数 |
+| --- | --- | --- | --- |
+| `kandinsky6-pro-distill` | Pro，29B | PiFlow | 10 |
+| `kandinsky6-pro` | Pro，29B | Flow matching + CFG | 50 |
+| `kandinsky6-pro-pretrain` | Pro，29B | Flow matching + CFG | 50 |
+| `kandinsky6-lite-distill` | Lite，3B | PiFlow | 10 |
+| `kandinsky6-lite` | Lite，3B | Flow matching + CFG | 50 |
+| `kandinsky6-lite-pretrain` | Lite，3B | Flow matching + CFG | 50 |
+
+`kandinsky6` 和 `kandinsky-6` 均选择 `kandinsky6-pro-distill`。默认输出为 121 帧、24 FPS、864×480 的视频，音频合入 MP4。
+
+## 运行
+
+按照 `worldfoundry/data/models/runtime/environments/video/kandinsky6.yaml` 准备独立的 Python 3.10 / CUDA 12.6 环境，其中固定的依赖版本与 checkpoint GPU 验证环境一致。在该环境中安装 WorldFoundry，并下载完整的官方 Diffusers 权重快照，包括两个文本编码器、tokenizer、两个 VAE 和 vocoder。
+
+```python
+from worldfoundry.pipelines.kandinsky6 import Kandinsky6Pipeline
+
+pipe = Kandinsky6Pipeline.from_pretrained(
+    "/path/to/Kandinsky-6.0-Pro-distill-5s-Diffusers",
+    model_id="kandinsky6-pro-distill",
+    device="cuda",
+    offload_mode="component",
+    attention_backend="sdpa",
+)
+result = pipe(
+    prompt="A cat walks through a garden, birds singing in the background.",
+    images="/path/to/first-frame.png",  # 可选的首帧图像条件。
+    seed=42,
+    output_path="outputs/kandinsky6.mp4",
+    return_dict=True,
+)
+```
+
+Pipeline 写出 MP4、JSON 运行报告及包含编码后提示词的文本文件。`offload_mode="component"` 按完整模块搬移权重；`"block"` 按 transformer block 搬移；`"none"` 将全部权重保留在指定设备上。宽高须为正数且是 16 的倍数，帧数须满足 `4*n+1`。
+
+非蒸馏权重支持 `sample_audio=False`。蒸馏权重必须生成音频，并使用 `guidance_scale=1.0`。未指定本地 checkpoint 时，组件通过 WorldFoundry 原生 Hugging Face checkpoint resolver 获取。
+
+## 架构
+
+Transformer 与 PiFlow head 位于 `base_models/diffusion_model/models/networks/kandinsky6`。提示词编码器和视频/音频 codec 分别由对应组件管理。框架负责 checkpoint 加载、flow schedule、联合采样及 MP4 音视频合流；推理时可直接使用 WorldFoundry，无需额外源码 checkout 或上游 CLI。
+
+官方源码：[kandinskylab/kandinsky-6](https://github.com/kandinskylab/kandinsky-6)，固定版本为 `b224b77cb458c2f9241a5a245bedc4fd43817b11`。源码采用 MIT 许可，随附音频组件保留各自的许可声明。
+
+## CUDA 验证
+
+固定版本的 `kandinsky6-pro-distill` 权重已在单张 NVIDIA H100 80GB 上完成文生视频验证，使用 SDPA、component offload、10 步采样及种子 42。产物包含 121 帧、864×480、24 FPS 的视频和 44.1 kHz 音频。权重加载耗时 85.2 秒，生成耗时 140.4 秒。PyAV 检查确认视频与音频流、分辨率、帧数、采样率及音频有限值；首帧、中间帧和末帧均显示提示词中的橘猫在花园中行走。
+
+验证环境使用 Python 3.10.16、PyTorch 2.9.0+cu126、Diffusers 0.40.0、Transformers 5.14.1、Safetensors 0.8.0 和 PyAV 16.0.1。视频 VAE 选择空间分块时计入卷积工作区，并保留不完整的边缘块。
+
+```bash
+python scripts/inference/check_kandinsky6.py \
+  --checkpoint-dir ../ckpt/kandinskylab--Kandinsky-6.0-Pro-distill-5s-Diffusers \
+  --output-dir outputs/kandinsky6-pro-distill-validation \
+  --offload-mode component --attention-backend sdpa
+```
+
+该命令写出 `output.mp4`、`cuda-validation.json` 和三张预览帧。报告包含依赖版本、加载与生成耗时、CUDA 峰值显存、视频指标，以及音频 RMS 和峰值。
+
+## 限制
+
+GPU 验证覆盖 Pro-distill 文生视频。图生视频、其余五个权重快照及与官方 demo 的输出一致性仍待验证；这五个 catalog 条目保留 `planned` 状态。CPU 测试覆盖普通与 PiFlow 原生 runner、请求规范化、本地 checkpoint 错误、空间分块边缘覆盖及 MP4 音视频流。独立的 Kandinsky 超分辨率模型尚未集成。
