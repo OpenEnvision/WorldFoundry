@@ -1,0 +1,47 @@
+schema_version: 2
+model_id: helixworld
+display_name: HelixWorld Preview v1
+task_family: world_model
+groups: [world, video, audio, camera_control]
+source_repos:
+- url: https://github.com/NoizAI/HelixWorld
+  revision: 3fa5f166834b08ea20ddc925c01f85d936ac03b5
+checkpoints:
+- repo_id: NoizAI/HelixWorld-preview
+  revision: 0f6aa9f329a118fcf0e16e0d315da026455ad8da
+  role: joint_audio_video_checkpoint
+  files: [weights/model.safetensors]
+- repo_id: google/gemma-3-12b-it-qat-q4_0-unquantized
+  revision: 68f7ee4fbd59087436ada77ed2d62f373fdd4482
+  role: text_encoder
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions: [actions, perspective, audio_prompt, av_prompt, seed]
+artifact_kind: generated_video
+artifact_filename: helixworld.mp4
+execution:
+  backend_stage: native_diffusion
+  runtime_status: native_full_checkpoint_cuda_generation_validated_gpu_parity_pending
+  integration_status: integrated
+  pipeline_binding: helixworld
+  defaults:
+    width: 768
+    height: 512
+    num_frames: 121
+    fps: 24
+    num_inference_steps: 4
+    guidance_scale: 1.0
+    seed: 42
+    actions: W
+    perspective: first_person
+integration:
+  status: integrated
+notes:
+- Reuses native LTX transformers, Gemma conditioning, video/audio VAE, vocoder, checkpoint loading and media IO.
+- Four-step stochastic joint generation uses four latent frames per chunk and rebuilt prefix-plus-recent context.
+- Released checkpoint tensor names and shapes match; small-graph CPU generation matches upstream within 1e-6.
+- Full-checkpoint BF16 CUDA generation on H100 80 GB with default block offload exports 121 frames at 768x512 with 48 kHz stereo audio.
+- The checkpoint-backed run took 24.1 seconds after loading; peak CUDA allocations were 26.0 GiB and reservations were 37.6 GiB.
+- The official BF16 reference run uses about 70 GB VRAM; an 80 GB GPU is recommended.

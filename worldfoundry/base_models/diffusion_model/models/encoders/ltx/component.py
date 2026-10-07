@@ -136,8 +136,9 @@ def convert_ltx_gemma_state_dict(state_dict: Mapping[str, object]) -> Mapping[st
     """Map official Gemma weights to the installed Transformers module layout."""
 
     converted: dict[str, object] = {}
-    for key, value in state_dict.items():
+    for key in state_dict:
         if key.startswith("language_model.model."):
+            value = state_dict[key]
             destination = f"model.model.language_model.{key.removeprefix('language_model.model.')}"
             converted[destination] = value
             if key == "language_model.model.embed_tokens.weight":
@@ -148,9 +149,9 @@ def convert_ltx_gemma_state_dict(state_dict: Mapping[str, object]) -> Mapping[st
             suffix = key.removeprefix("vision_tower.").removeprefix("vision_model.")
             if _gemma_vision_has_wrapper():
                 suffix = f"vision_model.{suffix}"
-            converted[f"model.model.vision_tower.{suffix}"] = value
+            converted[f"model.model.vision_tower.{suffix}"] = state_dict[key]
         elif key.startswith("multi_modal_projector."):
-            converted[f"model.model.{key}"] = value
+            converted[f"model.model.{key}"] = state_dict[key]
     return converted
 
 
@@ -166,10 +167,10 @@ def convert_ltx_embedding_processor_state_dict(
         "model.diffusion_model.audio_embeddings_connector.": "processor.audio_connector.",
     }
     converted: dict[str, object] = {}
-    for key, value in state_dict.items():
+    for key in state_dict:
         for source, destination in prefixes.items():
             if key.startswith(source):
-                converted[f"{destination}{key.removeprefix(source)}"] = value
+                converted[f"{destination}{key.removeprefix(source)}"] = state_dict[key]
                 break
     return converted
 

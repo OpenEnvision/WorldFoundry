@@ -23,6 +23,8 @@ from worldfoundry.core.nn import DEFAULT_TRANSFORMER_OPS, TransformerOpsConfig
 class LTXModelConfigurator:
     """Build the LTX-2 joint audio-video transformer from a config dict."""
 
+    MODEL_CLS = LTXModel
+
     @classmethod
     def from_config(cls, config: dict, ops: TransformerOpsConfig = DEFAULT_TRANSFORMER_OPS) -> LTXModel:
         """Instantiate :class:`LTXModel` with audio-video ABI checks."""
@@ -51,7 +53,7 @@ class LTXModelConfigurator:
         check_config_value(config, "use_middle_indices_grid", True)
         check_config_value(config, "num_attention_heads", config.get("audio_num_attention_heads", float("nan")))
 
-        return LTXModel(
+        return cls.MODEL_CLS(
             model_type=LTXModelType.AudioVideo,
             num_attention_heads=config.get("num_attention_heads", 32),
             attention_head_dim=config.get("attention_head_dim", 128),

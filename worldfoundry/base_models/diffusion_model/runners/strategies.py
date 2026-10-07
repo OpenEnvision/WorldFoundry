@@ -369,6 +369,24 @@ def build_joint_multistage_strategy(
     )
 
 
+def build_joint_chunked_strategy(context: ExecutionBuildContext) -> DiffusionExecutor:
+    """Reuse joint component binding for chunked clean-context generation."""
+    from .joint_chunked import JointChunkedDiffusionRunner
+
+    bound = build_joint_multistage_strategy(context)
+    options = context.recipe.execution.options
+    return JointChunkedDiffusionRunner(
+        model_id=bound.model_id, components=bound.components, stage_steps=bound.stage_steps,
+        device=bound.device, dtype=bound.dtype,
+        frames_per_chunk=int(options.get("frames_per_chunk", 4)),
+        temporal_compression=int(options.get("temporal_compression", 8)),
+        history_chunks=int(options.get("history_chunks", 3)),
+        prefix_chunks=int(options.get("prefix_chunks", 1)),
+        sampling_seed_offset=int(options.get("sampling_seed_offset", 0)),
+        token_conditions=options.get("token_conditions", {}),
+    )
+
+
 def build_autoregressive_window_strategy(
     context: ExecutionBuildContext,
 ) -> AutoregressiveWindowRunner:
@@ -516,6 +534,7 @@ def default_execution_strategy_registry() -> ExecutionStrategyRegistry:
     registry.register("frozen-context", build_frozen_context_strategy)
     registry.register("masked-latent", build_masked_latent_strategy)
     registry.register("joint-multistage", build_joint_multistage_strategy)
+    registry.register("joint-chunked", build_joint_chunked_strategy)
     registry.register("autoregressive-window", build_autoregressive_window_strategy)
     registry.register("chunked-kv-cache", build_chunked_kv_cache_strategy)
     registry.register("chunked-additive-cache", build_chunked_kv_cache_strategy)

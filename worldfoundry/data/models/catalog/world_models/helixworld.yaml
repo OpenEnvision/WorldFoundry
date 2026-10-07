@@ -1,0 +1,54 @@
+id: helixworld
+name: HelixWorld Preview v1
+aliases: [helixworld-preview, helix-world, NoizAI/HelixWorld-preview]
+tasks: [image-to-video, action-conditioned-video, camera-pose-controlled-video, audio-video-generation]
+provider: official_repo
+source:
+  status: open_source
+  official_repo_url: https://github.com/NoizAI/HelixWorld
+  hf_repo_id: NoizAI/HelixWorld-preview
+  license: apache-2.0
+official_sources:
+  project_page: https://helixworld.org/
+  github:
+    url: https://github.com/NoizAI/HelixWorld
+    head_sha: 3fa5f166834b08ea20ddc925c01f85d936ac03b5
+  huggingface:
+  - repo_id: NoizAI/HelixWorld-preview
+    revision: 0f6aa9f329a118fcf0e16e0d315da026455ad8da
+    type: model
+    status: confirmed
+checkpoints:
+- repo_id: NoizAI/HelixWorld-preview
+  revision: 0f6aa9f329a118fcf0e16e0d315da026455ad8da
+- repo_id: google/gemma-3-12b-it-qat-q4_0-unquantized
+  revision: 68f7ee4fbd59087436ada77ed2d62f373fdd4482
+runtime_profile: runtime-profile:helixworld
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: helixworld
+catalog_category: world_models
+integration:
+  status: integrated
+  notes:
+  - Native LTX-2.3 joint audio/video inference with camera PRoPE and discrete actions.
+  - Reuses canonical LTX encoders, codecs, checkpoint loading, attention backends and media output.
+  - Full-checkpoint BF16 CUDA generation with default block offload is validated on H100 80 GB, including 121-frame video and 48 kHz stereo audio export.
+runner_parity:
+  status: pending
+  upstream_revision: 3fa5f166834b08ea20ddc925c01f85d936ac03b5
+  notes:
+  - Checkpoint tensor names and shapes are validated; six-chunk small-graph CPU generation matches upstream within 1e-6.
+  - Full-checkpoint CUDA artifact comparison remains pending.
+docs:
+  publisher: Noiz AI
+  publisher_kind: company
+  overview: HelixWorld Preview v1 generates camera-controlled video and spatial audio together from one image and three scene descriptions.
+  overview_zh: HelixWorld Preview v1 从一张图像及视觉、声音、联合场景描述生成相机可控视频与空间音频。
+  architecture: LTX-2.3 joint audio/video transformer with action timestep embeddings, camera PRoPE, four-step stochastic sampling and bounded clean-context replay.
+  architecture_zh: 基于 LTX-2.3 联合音视频 transformer，加入动作时间步嵌入、相机 PRoPE、四步随机采样与有界历史上下文重放。
+  limitations:
+  - Full-checkpoint CUDA output parity has not been validated.
+  - Preview inference is released; full-model training code and the technical report are forthcoming.
+  limitations_zh:
+  - 尚未验证完整 checkpoint 的 CUDA 输出一致性。
+  - 当前公开 Preview 推理版本，完整模型训练代码及技术报告尚待发布。

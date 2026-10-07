@@ -1,0 +1,42 @@
+---
+title: "HelixWorld"
+description: "从一张图像生成相机可控的视频与空间音频。"
+modelId: "helixworld"
+pageSource: authored
+---
+
+HelixWorld Preview v1 从一张图像、视觉/声音/联合场景描述及动作计划共同生成视频与空间音频。WorldFoundry 原生 recipe 复用 LTX-2.3 transformer、Gemma 文本编码器、视频/音频 VAE、vocoder、checkpoint loader 与媒体 IO。
+
+代码：[NoizAI/HelixWorld](https://github.com/NoizAI/HelixWorld)。权重：[NoizAI/HelixWorld-preview](https://huggingface.co/NoizAI/HelixWorld-preview)。
+
+```python
+from worldfoundry.pipelines.helixworld import HelixWorldPipeline
+
+pipeline = HelixWorldPipeline.from_pretrained(device="cuda")
+result = pipeline(
+    prompt="A forest path with rustling leaves as the camera walks forward.",
+    audio_prompt="Footsteps on gravel, birds and wind in the trees.",
+    av_prompt="The footsteps and sound field follow the camera movement.",
+    images="first_frame.png",
+    actions="W:5,right:5,stop:5",
+    perspective="first_person",
+    num_frames=121,
+    seed=42,
+    output_path="outputs/helixworld.mp4",
+    return_dict=True,
+)
+```
+
+MP4 包含生成的音轨，返回字典还提供音频波形、采样率与视频 tensor。使用本地资产时，将 checkpoint 文件传入 `model_path`，Gemma 目录传入 `text_encoder_path`。
+
+支持 `W`、`A`、`S`、`D`、`left`、`right`、`up`、`down` 与 `stop`，可用 `+` 组合，例如 `W+right:5`。冒号后的时长以 latent 转移计数：121 帧对应 15 次转移。最后一段可省略时长以填满剩余转移。支持 `first_person` 和 `third_person` 两种视角。
+
+默认分辨率为 768×512、24 FPS。帧数支持 121、153、185 等，每次增加 32 帧。每个四 latent 帧分段执行四步随机采样，并从初始分段及最近两个分段重建历史上下文。初始化和采样使用独立随机生成器，采样种子沿用官方偏移。
+
+完整 checkpoint 已在 H100 80 GB 上使用 BF16 和默认 block offload 完成 CUDA 生成验证。768×512、121 帧的运行生成了含 48 kHz 双声道音轨的 MP4；加载后生成耗时 24.1 秒，CUDA 峰值分配为 26.0 GiB、预留为 37.6 GiB。导出的 MP4 保留全部生成视频帧。
+
+## 限制
+
+- 官方 BF16 参考运行约使用 70 GB 显存，建议 80 GB GPU；Gemma 资产需要接受 Google 模型条款。
+- Preview 每次请求生成一个样本。
+- 完整 checkpoint 的 CUDA 输出一致性尚待验证。当前公开 Preview 离线推理，训练代码及技术报告尚待发布。

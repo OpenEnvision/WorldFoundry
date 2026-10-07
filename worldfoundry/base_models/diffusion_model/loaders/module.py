@@ -266,6 +266,10 @@ class NativeModuleLoader:
                 torch_dtype=policy.dtype,
                 device=load_device,
                 state_dict_converter=spec.state_dict_converter,
+                use_disk_map=all(
+                    str(path).endswith((".safetensors", ".safetensors.index.json"))
+                    for path in sources
+                ),
                 module_map=module_map,
                 vram_config=vram_config,
                 vram_limit=spec.vram_limit_gib,

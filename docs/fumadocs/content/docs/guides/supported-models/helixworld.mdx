@@ -1,0 +1,42 @@
+---
+title: "HelixWorld"
+description: "Camera-controlled joint audio-video generation from one image."
+modelId: "helixworld"
+pageSource: authored
+---
+
+HelixWorld Preview v1 generates video and spatial audio together from one image, three scene descriptions and a camera/action plan. Its native WorldFoundry recipe reuses the LTX-2.3 transformer, Gemma text encoder, video/audio VAE, vocoder, checkpoint loader and media IO.
+
+Code: [NoizAI/HelixWorld](https://github.com/NoizAI/HelixWorld). Weights: [NoizAI/HelixWorld-preview](https://huggingface.co/NoizAI/HelixWorld-preview).
+
+```python
+from worldfoundry.pipelines.helixworld import HelixWorldPipeline
+
+pipeline = HelixWorldPipeline.from_pretrained(device="cuda")
+result = pipeline(
+    prompt="A forest path with rustling leaves as the camera walks forward.",
+    audio_prompt="Footsteps on gravel, birds and wind in the trees.",
+    av_prompt="The footsteps and sound field follow the camera movement.",
+    images="first_frame.png",
+    actions="W:5,right:5,stop:5",
+    perspective="first_person",
+    num_frames=121,
+    seed=42,
+    output_path="outputs/helixworld.mp4",
+    return_dict=True,
+)
+```
+
+The MP4 includes generated audio. `result` also exposes the waveform, sampling rate and video tensor. For existing assets, pass the checkpoint file as `model_path` and the Gemma directory as `text_encoder_path`.
+
+Actions are `W`, `A`, `S`, `D`, `left`, `right`, `up`, `down` and `stop`. Combine keys with `+`, for example `W+right:5`. Durations count latent transitions: 121 frames require 15 transitions. The final segment may omit its duration to fill the remaining transitions. Both `first_person` and `third_person` perspectives are supported.
+
+The default is 768×512 at 24 FPS. Frame counts are 121, 153, 185, …; inference uses four stochastic updates per four-latent-frame chunk. Each chunk rebuilds context from the initial chunk and the two most recent chunks. The sampling generator is separate from initialization, matching the released seed offset.
+
+Full-checkpoint CUDA generation is validated on an H100 80 GB with BF16 and the default block offload. A 768×512, 121-frame run produced an MP4 with 48 kHz stereo audio in 24.1 seconds after loading, with peak CUDA allocations of 26.0 GiB and reservations of 37.6 GiB. The exported MP4 retains every generated video frame.
+
+## Limitations
+
+- The official BF16 reference run uses about 70 GB VRAM; an 80 GB GPU is recommended. Gemma assets require acceptance of Google's model terms.
+- Preview generates one sample per request.
+- Full-checkpoint CUDA output parity remains pending. The released preview provides offline inference; training code and the technical report are forthcoming.

@@ -22,6 +22,8 @@ import torch
 import torch.nn.functional as functional
 from PIL import Image
 
+from worldfoundry.core.media.processing.image_utils import center_crop_resize_geometry
+
 from ...components import ComponentBuildContext
 from ...contracts import DiffusionRequest, ModalityState
 from ...runners import MultiStageLatentInitializer
@@ -41,6 +43,7 @@ class LTXMultiStageLatentInitializer(MultiStageLatentInitializer):
         stage_divisors: tuple[int, ...] = (2, 1),
         first_stage_scale: float | None = None,
         include_audio: bool = True,
+        image_resize_mode: str = "stretch",
     ) -> None:
         self.video_encoder = video_encoder
         if not stage_divisors or any(value <= 0 for value in stage_divisors):
@@ -50,6 +53,7 @@ class LTXMultiStageLatentInitializer(MultiStageLatentInitializer):
             raise ValueError("LTX first-stage scale must be in (0, 1]")
         self.first_stage_scale = None if first_stage_scale is None else float(first_stage_scale)
         self.include_audio = bool(include_audio)
+        self.image_resize_mode = image_resize_mode
 
     @staticmethod
     def _round_down_to_vae(value: int) -> int:
@@ -94,6 +98,7 @@ class LTXMultiStageLatentInitializer(MultiStageLatentInitializer):
         width: int,
         device: torch.device,
         dtype: torch.dtype,
+        resize_mode: str = "stretch",
     ) -> torch.Tensor:
         if isinstance(value, (str, Path)):
             value = Image.open(Path(value).expanduser()).convert("RGB")
@@ -114,7 +119,17 @@ class LTXMultiStageLatentInitializer(MultiStageLatentInitializer):
         tensor = tensor.to(device=device, dtype=torch.float32)
         if float(tensor.max().item()) > 1.5:
             tensor = tensor / 255.0
-        tensor = functional.interpolate(tensor, size=(height, width), mode="bilinear", align_corners=False)
+        if resize_mode == "center_crop":
+            source_height, source_width = tensor.shape[-2:]
+            resized_height, resized_width, top, left = center_crop_resize_geometry(
+                source_height, source_width, height, width,
+            )
+            tensor = functional.interpolate(
+                tensor, size=(resized_height, resized_width), mode="bicubic", align_corners=False, antialias=True,
+            ).clamp(0, 1)
+            tensor = tensor[:, :, top:top + height, left:left + width]
+        else:
+            tensor = functional.interpolate(tensor, size=(height, width), mode="bilinear", align_corners=False)
         tensor = tensor.mul(2).sub(1)
         if tensor.shape[0] == 1 and batch > 1:
             tensor = tensor.expand(batch, -1, -1, -1)
@@ -203,6 +218,7 @@ class LTXMultiStageLatentInitializer(MultiStageLatentInitializer):
                 width=width,
                 device=device,
                 dtype=dtype,
+                resize_mode=self.image_resize_mode,
             )
             encoded = self.video_encoder(image_tensor)
             video_state = self._inject_first_frame(
@@ -235,7 +251,11 @@ def build_ltx_multistage_latent_initializer(
     context: ComponentBuildContext,
 ) -> LTXMultiStageLatentInitializer:
     """Build the LTX-2 joint audio-video two-stage initializer."""
-    return LTXMultiStageLatentInitializer(load_ltx_video_encoder(context))
+    return LTXMultiStageLatentInitializer(
+        load_ltx_video_encoder(context),
+        stage_divisors=tuple(context.component_options.get("stage_divisors", (2, 1))),
+        image_resize_mode=str(context.component_options.get("image_resize_mode", "stretch")),
+    )
 
 
 def build_ltx_video_latent_initializer(
