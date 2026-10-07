@@ -3720,6 +3720,198 @@
       }
     }
   },
+  "helixworld-controls-short": {
+    "id": "helixworld-controls-short",
+    "model_id": "helixworld",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.helixworld.pipeline_helixworld:HelixWorldPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/NoizAI--HelixWorld-preview/weights/model.safetensors",
+      "text_encoder_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/google--gemma-3-12b-it-qat-q4_0-unquantized",
+      "device": "cuda",
+      "dtype": "bfloat16",
+      "attention_backend": "sdpa",
+      "offload_mode": "block"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "A cowboy wearing a white hat walks through a western town.",
+          "audio_prompt": "Footsteps on gravel and quiet voices in the distance.",
+          "av_prompt": "The camera follows the cowboy while footsteps accompany his movement.",
+          "actions": "W:4,right:4",
+          "perspective": "third_person",
+          "height": 256,
+          "width": 384,
+          "num_frames": 65,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 24,
+          "seed": 42,
+          "return_dict": true,
+          "output_path": "${OUTPUT_DIR}/export/a.mp4"
+        },
+        "outputs": [
+          "sample",
+          "latents",
+          "audio"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "A cowboy wearing a white hat walks through a western town.",
+          "audio_prompt": "Footsteps on gravel and quiet voices in the distance.",
+          "av_prompt": "The camera follows the cowboy while footsteps accompany his movement.",
+          "actions": "W:4,left:4",
+          "perspective": "third_person",
+          "height": 256,
+          "width": 384,
+          "num_frames": 65,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 24,
+          "seed": 42,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents",
+          "audio"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "A cowboy wearing a white hat walks through a western town.",
+          "audio_prompt": "Footsteps on gravel and quiet voices in the distance.",
+          "av_prompt": "The camera follows the cowboy while footsteps accompany his movement.",
+          "actions": "W:4,right:4",
+          "perspective": "third_person",
+          "height": 256,
+          "width": 384,
+          "num_frames": 65,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 24,
+          "seed": 42,
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents",
+          "audio"
+        ]
+      }
+    ],
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/NoizAI--HelixWorld-preview/weights/model.safetensors",
+      "text-encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/google--gemma-3-12b-it-qat-q4_0-unquantized",
+      "input": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}"
+    },
+    "required_outputs": [
+      "a.sample",
+      "a.latents",
+      "b.sample",
+      "b.latents",
+      "repeat.sample",
+      "repeat.latents",
+      "a.audio",
+      "b.audio",
+      "repeat.audio"
+    ],
+    "array_contracts": {
+      "a.sample": {
+        "shape": [
+          1,
+          3,
+          65,
+          256,
+          384
+        ],
+        "dtype": "float32"
+      },
+      "b.sample": {
+        "shape": [
+          1,
+          3,
+          65,
+          256,
+          384
+        ],
+        "dtype": "float32"
+      },
+      "repeat.sample": {
+        "shape": [
+          1,
+          3,
+          65,
+          256,
+          384
+        ],
+        "dtype": "float32"
+      },
+      "export.export/a.mp4.frames": {
+        "shape": [
+          65,
+          256,
+          384,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "export.export/a.mp4.fps": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64",
+        "values": [
+          24,
+          1
+        ]
+      },
+      "a.audio": {
+        "dtype": "float32"
+      },
+      "b.audio": {
+        "dtype": "float32"
+      },
+      "repeat.audio": {
+        "dtype": "float32"
+      }
+    },
+    "export_artifacts": [
+      "export/*.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.sample",
+        "right": "repeat.sample",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.sample",
+        "right": "b.sample",
+        "relation": "different"
+      },
+      {
+        "left": "a.audio",
+        "right": "repeat.audio",
+        "relation": "equal"
+      }
+    ],
+    "scope": "Released-checkpoint fixed-seed A/B/A control replay, request isolation and decoded MP4 geometry; definition only, with accepted-reference and GPU replay evidence recorded separately."
+  },
   "worldplay2-controls-short": {
     "id": "worldplay2-controls-short",
     "model_id": "worldplay2",

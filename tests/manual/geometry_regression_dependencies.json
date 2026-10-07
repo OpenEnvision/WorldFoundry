@@ -229,6 +229,10 @@
       "worldfoundry/synthesis/visual_generation/diamond/**",
       "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py"
     ],
+    "helixworld-synthesis": [
+      "worldfoundry/pipelines/helixworld/**",
+      "worldfoundry/synthesis/visual_generation/helixworld/**"
+    ],
     "worldplay2-synthesis": [
       "worldfoundry/pipelines/worldplay2/**",
       "worldfoundry/synthesis/visual_generation/worldplay2/**"
@@ -379,6 +383,9 @@
     ],
     "diamond-csgo-conditioned-short": [
       "diamond"
+    ],
+    "helixworld-controls-short": [
+      "helixworld-synthesis"
     ],
     "worldplay2-controls-short": [
       "worldplay2-synthesis"

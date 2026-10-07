@@ -1,5 +1,5 @@
 {
-  "total": 269,
+  "total": 270,
   "categories": [
     {
       "id": "video",
@@ -20,7 +20,7 @@
       "label": "World models",
       "label_zh": "世界模型",
       "description": "Interactive worlds, prediction, navigation, and simulator-shaped systems.",
-      "count": 108
+      "count": 109
     },
     {
       "id": "three_d_four_d",
@@ -49563,6 +49563,417 @@
         "run": "worldfoundry-eval run \\\n  helios-distilled \\\n  --pipeline.task-profile text-to-video \\\n  --json"
       },
       "catalogPath": "worldfoundry/data/models/catalog/video/helios.yaml"
+    },
+    {
+      "id": "helixworld",
+      "name": "HelixWorld Preview v1",
+      "category": "world_models",
+      "categoryLabel": "World models",
+      "categoryLabelZh": "世界模型",
+      "provider": "Noiz AI",
+      "summary": "HelixWorld Preview v1 generates camera-controlled video and spatial audio together from one image and three scene descriptions.",
+      "aliases": [
+        "helixworld-preview",
+        "helix-world",
+        "NoizAI/HelixWorld-preview"
+      ],
+      "tasks": [
+        "image-to-video",
+        "action-conditioned-video",
+        "camera-pose-controlled-video",
+        "audio-video-generation"
+      ],
+      "status": {
+        "group": "integrated",
+        "label": "Integrated",
+        "integration": "integrated",
+        "runner": "pending",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "helixworld",
+        "bindingId": "helixworld",
+        "runnerTarget": "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.helixworld.pipeline_helixworld:HelixWorldPipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "native_diffusion",
+        "runtimeStatus": "native_full_checkpoint_cuda_generation_validated_gpu_parity_pending",
+        "environmentId": "_unified",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": "compatible_unified_default",
+        "condaPackages": [
+          "python=3.11",
+          "pip",
+          "ffmpeg",
+          "setuptools",
+          "wheel"
+        ],
+        "pipPackages": [
+          "torch",
+          "torchvision",
+          "torchaudio",
+          "xfuser"
+        ],
+        "packageVersions": {
+          "torch": "torch",
+          "torchvision": "torchvision",
+          "torchaudio": "torchaudio",
+          "xfuser": "xfuser"
+        },
+        "validationImports": [
+          "torch",
+          "torchvision",
+          "numpy",
+          "transformers",
+          "diffusers",
+          "xfuser",
+          "worldfoundry"
+        ],
+        "notes": [
+          "Reuses native LTX transformers, Gemma conditioning, video/audio VAE, vocoder, checkpoint loading and media IO.",
+          "Four-step stochastic joint generation uses four latent frames per chunk and rebuilt prefix-plus-recent context.",
+          "Released checkpoint tensor names and shapes match; small-graph CPU generation matches upstream within 1e-6.",
+          "Full-checkpoint BF16 CUDA generation on H100 80 GB with default block offload exports 121 frames at 768x512 with 48 kHz stereo audio.",
+          "The checkpoint-backed run took 24.1 seconds after loading; peak CUDA allocations were 26.0 GiB and reservations were 37.6 GiB.",
+          "The official BF16 reference run uses about 70 GB VRAM; an 80 GB GPU is recommended.",
+          "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
+          "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
+          "Source the environment file emitted by `scripts/setup/unified_install.sh` so WORLDFOUNDRY_USE_UNIFIED_ENV=1 routes compatible profiles here.",
+          "Runnable GPU models that previously used cu113/cu118/cu124 CUDA buckets are mapped to this tier when they do not carry hard ABI pins requiring isolation."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "project",
+          "label": "Project",
+          "url": "https://helixworld.org/"
+        },
+        {
+          "kind": "source",
+          "label": "GitHub",
+          "url": "https://github.com/NoizAI/HelixWorld"
+        },
+        {
+          "kind": "weights",
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/NoizAI/HelixWorld-preview"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/NoizAI/HelixWorld#readme"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "NoizAI/HelixWorld-preview",
+          "revision": "0f6aa9f329a118fcf0e16e0d315da026455ad8da"
+        },
+        {
+          "id": "google/gemma-3-12b-it-qat-q4_0-unquantized",
+          "revision": "68f7ee4fbd59087436ada77ed2d62f373fdd4482"
+        },
+        {
+          "id": "NoizAI/HelixWorld-preview",
+          "license": "apache-2.0"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "interactive-video",
+          "label": "Interactive Video",
+          "description": "Run Helixworld through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct Helixworld inference."
+            },
+            {
+              "field": "negative-prompt",
+              "option": "--pipeline.negative-prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Negative Prompt passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "input-path",
+              "option": "--pipeline.input-path",
+              "detail": "Required",
+              "kind": "path",
+              "target": "input",
+              "required": true,
+              "default": "/workspace/worldfoundry/data/test_cases/studio_demo/00/image.jpg",
+              "choices": [],
+              "description": "Input Path used as the input for direct Helixworld inference."
+            },
+            {
+              "field": "interactions",
+              "option": "--pipeline.interactions",
+              "detail": "Optional",
+              "kind": "interaction_tokens",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Interactions passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Frames passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "FPS passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Height passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Width passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Steps passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Guidance passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Seed passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "frame-num",
+              "option": "--pipeline.frame-num",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Frame Num passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "embedded-guidance-scale",
+              "option": "--pipeline.embedded-guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Embedded Guidance Scale passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "shift",
+              "option": "--pipeline.shift",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Shift passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "output-type",
+              "option": "--pipeline.output-type",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output Type passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": "helixworld.mp4"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "image",
+          "detail": "Required"
+        },
+        {
+          "field": "video",
+          "detail": "Optional"
+        },
+        {
+          "field": "actions",
+          "detail": "actions, perspective, audio_prompt, av_prompt, seed"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_video",
+          "filename": "helixworld.mp4"
+        }
+      ],
+      "notes": [
+        "Native LTX-2.3 joint audio/video inference with camera PRoPE and discrete actions.",
+        "Reuses canonical LTX encoders, codecs, checkpoint loading, attention backends and media output.",
+        "Full-checkpoint BF16 CUDA generation with default block offload is validated on H100 80 GB, including 121-frame video and 48 kHz stereo audio export.",
+        "Checkpoint tensor names and shapes are validated; six-chunk small-graph CPU generation matches upstream within 1e-6.",
+        "Full-checkpoint CUDA artifact comparison remains pending.",
+        "Reuses native LTX transformers, Gemma conditioning, video/audio VAE, vocoder, checkpoint loading and media IO.",
+        "Four-step stochastic joint generation uses four latent frames per chunk and rebuilt prefix-plus-recent context.",
+        "Released checkpoint tensor names and shapes match; small-graph CPU generation matches upstream within 1e-6.",
+        "Full-checkpoint BF16 CUDA generation on H100 80 GB with default block offload exports 121 frames at 768x512 with 48 kHz stereo audio.",
+        "The checkpoint-backed run took 24.1 seconds after loading; peak CUDA allocations were 26.0 GiB and reservations were 37.6 GiB.",
+        "The official BF16 reference run uses about 70 GB VRAM; an 80 GB GPU is recommended."
+      ],
+      "docs": {
+        "curated": true,
+        "publisher": {
+          "name": "Noiz AI",
+          "nameZh": "Noiz AI",
+          "kind": "company"
+        },
+        "overview": [
+          "HelixWorld Preview v1 generates camera-controlled video and spatial audio together from one image and three scene descriptions."
+        ],
+        "overviewZh": [
+          "HelixWorld Preview v1 从一张图像及视觉、声音、联合场景描述生成相机可控视频与空间音频。"
+        ],
+        "architecture": [
+          "LTX-2.3 joint audio/video transformer with action timestep embeddings, camera PRoPE, four-step stochastic sampling and bounded clean-context replay."
+        ],
+        "architectureZh": [
+          "基于 LTX-2.3 联合音视频 transformer，加入动作时间步嵌入、相机 PRoPE、四步随机采样与有界历史上下文重放。"
+        ],
+        "usageNotes": [],
+        "usageNotesZh": [],
+        "highlights": [
+          "Image To Video",
+          "Action Conditioned Video",
+          "Camera Pose Controlled Video",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "图生视频",
+          "动作条件视频生成",
+          "camera-pose-controlled-video",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [
+            "image"
+          ],
+          "outputs": [
+            "video"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "Full-checkpoint CUDA output parity has not been validated.",
+          "Preview inference is released; full-model training code and the technical report are forthcoming."
+        ],
+        "limitationsZh": [
+          "尚未验证完整 checkpoint 的 CUDA 输出一致性。",
+          "当前公开 Preview 推理版本，完整模型训练代码及技术报告尚待发布。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh helixworld",
+        "install": "bash scripts/setup/model_env_install.sh --model helixworld",
+        "inspect": "worldfoundry-eval zoo model-show --model-id helixworld --include-manifest --json",
+        "check": "worldfoundry-eval zoo model-download --model-id helixworld --check-local --json",
+        "run": "worldfoundry-eval run \\\n  helixworld \\\n  --pipeline.task-profile interactive-video \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/world_models/helixworld.yaml"
     },
     {
       "id": "hunyuan-game-craft",

@@ -11,6 +11,8 @@ from dataclasses import dataclass, replace
 
 import torch
 
+from worldfoundry.core.attention.cache.context import ContextAttentionCache
+
 from worldfoundry.base_models.diffusion_model.models.networks.ltx.adaln import AdaLayerNormSingle
 from worldfoundry.base_models.diffusion_model.models.networks.ltx.modality import Modality
 from worldfoundry.base_models.diffusion_model.models.networks.ltx.perturbations import (
@@ -47,6 +49,8 @@ class TransformerArgs:
     self_attention_mask: torch.Tensor | None = (
         None  # Additive log-space self-attention bias (B, 1, T, T), None = full attention
     )
+    video_control: object | None = None
+    attention_cache: ContextAttentionCache | None = None
     # Per-block perturbation state, precomputed by `LTXModel._process_transformer_blocks`
     # so the block forward needs no per-block identity. The bool shortcuts
     # (`*_all_perturbed`, `cross_attn_skip_all`) are Python bools that Dynamo specialises
@@ -119,6 +123,7 @@ class TransformerArgsPreprocessor:
         rope_type: LTXRopeType,
         caption_projection: torch.nn.Module | None = None,
         prompt_adaln: AdaLayerNormSingle | None = None,
+        action_embedder: torch.nn.Module | None = None,
     ) -> None:
         self.patchify_proj = patchify_proj
         self.adaln = adaln
@@ -132,16 +137,23 @@ class TransformerArgsPreprocessor:
         self.rope_type = rope_type
         self.caption_projection = caption_projection
         self.prompt_adaln = prompt_adaln
+        self.action_embedder = action_embedder
 
     def _prepare_timestep(
-        self, timestep: torch.Tensor, adaln: AdaLayerNormSingle, batch_size: int, hidden_dtype: torch.dtype
+        self, timestep: torch.Tensor, adaln: AdaLayerNormSingle, batch_size: int, hidden_dtype: torch.dtype,
+        video_control: object | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Prepare timestep embeddings."""
         timestep_scaled = timestep * self.timestep_scale_multiplier
-        timestep, embedded_timestep = adaln(
-            timestep_scaled.flatten(),
-            hidden_dtype=hidden_dtype,
-        )
+        if self.action_embedder is None or video_control is None or not video_control.has_action:
+            timestep, embedded_timestep = adaln(timestep_scaled.flatten(), hidden_dtype=hidden_dtype)
+        else:
+            embedded_timestep = adaln.emb(timestep_scaled.flatten(), hidden_dtype=hidden_dtype)
+            embedded_timestep = embedded_timestep.view(batch_size, -1, embedded_timestep.shape[-1])
+            embedded_timestep = embedded_timestep + self.action_embedder(
+                video_control.action_ids, video_control.action_valid_mask, hidden_dtype=hidden_dtype,
+            )
+            timestep = adaln.linear(adaln.silu(embedded_timestep))
         # Second dimension is 1 or number of tokens (if timestep_per_token)
         timestep = timestep.view(batch_size, -1, timestep.shape[-1])
         embedded_timestep = embedded_timestep.view(batch_size, -1, embedded_timestep.shape[-1])
@@ -232,7 +244,7 @@ class TransformerArgsPreprocessor:
         x = self.patchify_proj(modality.latent)
         batch_size = x.shape[0]
         timestep, embedded_timestep = self._prepare_timestep(
-            modality.timesteps, self.adaln, batch_size, modality.latent.dtype
+            modality.timesteps, self.adaln, batch_size, modality.latent.dtype, modality.video_control
         )
         prompt_timestep = None
         if self.prompt_adaln is not None:
@@ -263,6 +275,8 @@ class TransformerArgsPreprocessor:
             enabled=modality.enabled,
             prompt_timestep=prompt_timestep,
             self_attention_mask=self_attention_mask,
+            video_control=modality.video_control,
+            attention_cache=modality.attention_cache,
         )
 
 
@@ -288,6 +302,7 @@ class MultiModalTransformerArgsPreprocessor:
         av_ca_timestep_scale_multiplier: int,
         caption_projection: torch.nn.Module | None = None,
         prompt_adaln: AdaLayerNormSingle | None = None,
+        action_embedder: torch.nn.Module | None = None,
     ) -> None:
         self.simple_preprocessor = TransformerArgsPreprocessor(
             patchify_proj=patchify_proj,
@@ -302,6 +317,7 @@ class MultiModalTransformerArgsPreprocessor:
             rope_type=rope_type,
             caption_projection=caption_projection,
             prompt_adaln=prompt_adaln,
+            action_embedder=action_embedder,
         )
         self.cross_scale_shift_adaln = cross_scale_shift_adaln
         self.cross_gate_adaln = cross_gate_adaln

@@ -29,9 +29,11 @@ from .ltx_configurator import LTXModelConfigurator, LTXVideoOnlyModelConfigurato
 class LTXAVTransformerModule(torch.nn.Module):
     """Checkpoint-configured LTX transformer with a stable loader surface."""
 
+    CONFIGURATOR = LTXModelConfigurator
+
     def __init__(self, checkpoint_config: Mapping[str, object]) -> None:
         super().__init__()
-        self.velocity_model = LTXModelConfigurator.from_config(dict(checkpoint_config))
+        self.velocity_model = self.CONFIGURATOR.from_config(dict(checkpoint_config))
 
     def forward(self, *args, **kwargs):
         return self.velocity_model(*args, **kwargs)
@@ -57,8 +59,8 @@ def convert_ltx_transformer_state_dict(state_dict: Mapping[str, object]) -> Mapp
         f"{prefix}audio_embeddings_connector.",
     )
     return {
-        f"velocity_model.{key.removeprefix(prefix)}": value
-        for key, value in state_dict.items()
+        f"velocity_model.{key.removeprefix(prefix)}": state_dict[key]
+        for key in state_dict
         if key.startswith(prefix) and not key.startswith(excluded)
     }
 
@@ -70,8 +72,8 @@ def convert_ltx_video_transformer_state_dict(
 
     prefix = "model.diffusion_model."
     return {
-        f"velocity_model.{key.removeprefix(prefix)}": value
-        for key, value in state_dict.items()
+        f"velocity_model.{key.removeprefix(prefix)}": state_dict[key]
+        for key in state_dict
         if key.startswith(prefix)
     }
 
@@ -95,6 +97,8 @@ class LTXJointDenoiser:
         sigma: torch.Tensor,
         context: torch.Tensor,
         context_mask: torch.Tensor | None,
+        video_control: object | None = None,
+        attention_cache=None,
     ) -> Modality:
         batch = state.latent.shape[0]
         sigma = sigma.reshape(-1)
@@ -111,6 +115,8 @@ class LTXJointDenoiser:
             context=context,
             context_mask=context_mask,
             attention_mask=state.attention_mask,
+            video_control=video_control,
+            attention_cache=attention_cache,
         )
 
     def __call__(self, model_input: MultiModalDenoiserInput) -> MultiModalDenoiserOutput:
@@ -139,12 +145,15 @@ class LTXJointDenoiser:
             sigma=model_input.timestep,
             context=video_context,
             context_mask=video_context_mask,
+            video_control=model_input.conditioning.get("video_control"),
+            attention_cache=model_input.conditioning.get("attention_cache"),
         )
         audio = self._modality(
             audio_state,
             sigma=model_input.timestep,
             context=audio_context,
             context_mask=audio_context_mask,
+            attention_cache=model_input.conditioning.get("attention_cache"),
         )
         perturbations = BatchedPerturbationConfig.empty(video_state.latent.shape[0])
         with torch.autocast(
@@ -157,10 +166,14 @@ class LTXJointDenoiser:
             raise RuntimeError("LTX audio-video transformer returned an absent modality")
         return MultiModalDenoiserOutput(
             samples={
-                "video": video.latent - video.timesteps * video_velocity,
-                "audio": audio.latent - audio.timesteps * audio_velocity,
+                "video": self._clean_prediction(video, video_velocity),
+                "audio": self._clean_prediction(audio, audio_velocity),
             }
         )
+
+    @staticmethod
+    def _clean_prediction(modality: Modality, velocity: torch.Tensor) -> torch.Tensor:
+        return modality.latent - modality.timesteps * velocity
 
     @staticmethod
     def _context_mask(
@@ -224,7 +237,12 @@ class LTXVideoDenoiser:
         return MultiModalDenoiserOutput(samples={"video": video.latent - video.timesteps * velocity})
 
 
-def build_ltx_joint_denoiser(context: ComponentBuildContext) -> LTXJointDenoiser:
+def build_ltx_joint_denoiser(
+    context: ComponentBuildContext,
+    *,
+    module_class: type[LTXAVTransformerModule] = LTXAVTransformerModule,
+    denoiser_class: type[LTXJointDenoiser] = LTXJointDenoiser,
+) -> LTXJointDenoiser:
     """Load one LTX-2.x AV transformer through the shared native loader."""
 
     from worldfoundry.core.vram import (
@@ -263,7 +281,7 @@ def build_ltx_joint_denoiser(context: ComponentBuildContext) -> LTXJointDenoiser
 
     model = NativeModuleLoader().load(
         ModuleLoadSpec(
-            module_class=LTXAVTransformerModule,
+            module_class=module_class,
             config_resolver=lambda checkpoint: {"checkpoint_config": safetensors_json_metadata(checkpoint)},
             state_dict_converter=convert_ltx_transformer_state_dict,
             vram_module_map={
@@ -282,7 +300,7 @@ def build_ltx_joint_denoiser(context: ComponentBuildContext) -> LTXJointDenoiser
     if not isinstance(model, LTXAVTransformerModule):
         raise TypeError(f"expected LTXAVTransformerModule, got {type(model).__name__}")
     model.velocity_model.refresh_preprocessor_bindings()
-    return LTXJointDenoiser(model, compute_dtype=context.policy.dtype)
+    return denoiser_class(model, compute_dtype=context.policy.dtype)
 
 
 def build_ltx_video_denoiser(context: ComponentBuildContext) -> LTXVideoDenoiser:

@@ -29,10 +29,9 @@ import numpy as np
 import torch
 from PIL import Image
 
-from worldfoundry.core.utils.tensors.arrays import any_describe
 from worldfoundry.core.utils.python.misc_utils import global_once
+from worldfoundry.core.utils.tensors.arrays import any_describe
 from worldfoundry.core.utils.tensors.torch import torch_normalize
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # PIL / layout — RGB views for eval UIs; not encoder-specific preprocess
@@ -233,6 +232,17 @@ def resize_and_letterbox(
         ((target_width - resized_width) // 2, (target_height - resized_height) // 2),
     )
     return canvas
+
+
+def center_crop_resize_geometry(
+    source_height: int, source_width: int, target_height: int, target_width: int,
+) -> tuple[int, int, int, int]:
+    """Return floor-sized resize height/width and centered crop top/left."""
+    if source_width / source_height > target_width / target_height:
+        resized_height, resized_width = target_height, int(source_width * target_height / source_height)
+    else:
+        resized_height, resized_width = int(source_height * target_width / source_width), target_width
+    return resized_height, resized_width, (resized_height - target_height) // 2, (resized_width - target_width) // 2
 
 
 def resize_and_center_crop_pytorch(image, target_width, target_height):

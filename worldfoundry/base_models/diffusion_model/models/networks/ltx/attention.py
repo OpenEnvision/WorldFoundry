@@ -7,6 +7,8 @@ optional per-head gating.  Backends come from :class:`TransformerAttentionOps`.
 
 import torch
 
+from worldfoundry.core.attention.cache.context import ContextAttentionCache, prepend_history_mask
+
 from worldfoundry.core.nn import TransformerAttentionOps as AttentionOps
 
 from .rope import LTXRopeType, apply_rotary_emb
@@ -70,6 +72,8 @@ class Attention(torch.nn.Module):
         k_pe: torch.Tensor | None = None,
         perturbation_mask: torch.Tensor | None = None,
         all_perturbed: bool = False,
+        camera_control: object | None = None,
+        cache: ContextAttentionCache | None = None,
     ) -> torch.Tensor:
         """Multi-head attention with optional RoPE, perturbation masking, and per-head gating.
         When ``perturbation_mask`` is all zeros, the expensive query/key path
@@ -101,23 +105,38 @@ class Attention(torch.nn.Module):
         use_attention = not all_perturbed
 
         v = self.to_v(context)
+        current_value = v
+        camera_out = None
 
         if not use_attention:
             out = v
         else:
             q = self.to_q(x)
             k = self.to_k(context)
+            if camera_control is not None:
+                camera_q, camera_k = self.preattention_function(q, k, self, mask, None, None)
+                camera_out = self._camera_attention(
+                    camera_q, camera_k, v, x, camera_control, mask, perturbation_mask, cache,
+                )
             q, k = self.preattention_function(q, k, self, mask, pe, k_pe)
+            if cache is not None:
+                k, v, _, history_tokens = cache.combine(self, k, v)
+                mask = prepend_history_mask(mask, history_tokens)
             if mask is None:
                 out = self.attention_function(q, k, v, self.heads)  # (B, T, H*D)
             else:
                 out = self.masked_attention_function(q, k, v, self.heads, mask)
 
             if perturbation_mask is not None:
-                out = out * perturbation_mask + v * (1 - perturbation_mask)
+                out = out * perturbation_mask + current_value * (1 - perturbation_mask)
 
         # Apply per-head gating if enabled
         if self.to_gate_logits is not None:
             out = self.gated_attention_function(x, out, self)
 
-        return self.to_out(out)
+        out = self.to_out(out)
+        return out if camera_out is None else out + camera_out
+
+    def _camera_attention(self, q, k, v, x, control, mask, perturbation_mask, cache):
+        """Optional checkpoint-owned projective residual."""
+        return None

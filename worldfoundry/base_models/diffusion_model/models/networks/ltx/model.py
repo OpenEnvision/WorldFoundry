@@ -60,6 +60,8 @@ class LTXModelType(Enum):
 class LTXModel(torch.nn.Module):
     """Checkpoint-compatible LTX velocity DiT (video, audio, or joint AV)."""
 
+    TRANSFORMER_BLOCK_CLS = BasicAVTransformerBlock
+
     def __init__(  # noqa: PLR0913
         self,
         *,
@@ -256,6 +258,7 @@ class LTXModel(torch.nn.Module):
                 av_ca_timestep_scale_multiplier=self.av_ca_timestep_scale_multiplier,
                 caption_projection=getattr(self, "caption_projection", None),
                 prompt_adaln=getattr(self, "prompt_adaln_single", None),
+                action_embedder=getattr(self, "video_action_embedder", None),
             )
             self.audio_args_preprocessor = MultiModalTransformerArgsPreprocessor(
                 patchify_proj=self.audio_patchify_proj,
@@ -356,7 +359,7 @@ class LTXModel(torch.nn.Module):
         )
         self.transformer_blocks = torch.nn.ModuleList(
             [
-                BasicAVTransformerBlock(
+                self.TRANSFORMER_BLOCK_CLS(
                     video=video_config,
                     audio=audio_config,
                     rope_type=self.rope_type,

@@ -572,7 +572,7 @@ class NativeVisualDiffusionPipeline(PipelineABC):
                         audio, Path(directory) / "audio.wav",
                         sample_rate=int(output.artifacts["audio_sampling_rate"]),
                     )
-                    artifact_path = mux_audio_video(artifact_path, audio_path)
+                    artifact_path = mux_audio_video(artifact_path, audio_path, shortest=False)
         is_image = sample.ndim == 4
         result = {
             "sample": sample,
