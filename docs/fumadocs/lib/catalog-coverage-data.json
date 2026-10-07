@@ -1,13 +1,13 @@
 {
-  "modelsTotal": 267,
-  "modelsListed": 257,
+  "modelsTotal": 275,
+  "modelsListed": 265,
   "benchmarksTotal": 74,
   "modelFamilies": [
     {
       "id": "video",
       "label": "Video",
       "blurb": "Text-, image-, and video-conditioned generation, editing, and audio-video systems.",
-      "count": 56,
+      "count": 62,
       "entries": [
         {
           "id": "allegro",
@@ -140,6 +140,54 @@
           "status": "integrated",
           "aliases": [
             "joyai-echo-longvideo"
+          ]
+        },
+        {
+          "id": "kandinsky6-lite",
+          "name": "Kandinsky 6.0 lite",
+          "status": "planned",
+          "aliases": [
+            "kandinsky6-lite"
+          ]
+        },
+        {
+          "id": "kandinsky6-lite-distill",
+          "name": "Kandinsky 6.0 lite-distill",
+          "status": "planned",
+          "aliases": [
+            "kandinsky6-lite-distill"
+          ]
+        },
+        {
+          "id": "kandinsky6-lite-pretrain",
+          "name": "Kandinsky 6.0 lite-pretrain",
+          "status": "planned",
+          "aliases": [
+            "kandinsky6-lite-pretrain"
+          ]
+        },
+        {
+          "id": "kandinsky6-pro",
+          "name": "Kandinsky 6.0 pro",
+          "status": "planned",
+          "aliases": [
+            "kandinsky6-pro"
+          ]
+        },
+        {
+          "id": "kandinsky6-pro-distill",
+          "name": "Kandinsky 6.0 pro-distill",
+          "status": "integrated",
+          "aliases": [
+            "kandinsky6-pro-distill"
+          ]
+        },
+        {
+          "id": "kandinsky6-pro-pretrain",
+          "name": "Kandinsky 6.0 pro-pretrain",
+          "status": "planned",
+          "aliases": [
+            "kandinsky6-pro-pretrain"
           ]
         },
         {
@@ -469,7 +517,7 @@
       "id": "world_models",
       "label": "World models",
       "blurb": "Interactive worlds, camera/action conditioning, navigation, and simulator-shaped systems.",
-      "count": 104,
+      "count": 106,
       "entries": [
         {
           "id": "abot-world-0-5b-lf",
@@ -738,6 +786,14 @@
           "status": "runtime_ported",
           "aliases": [
             "happyoyster"
+          ]
+        },
+        {
+          "id": "helixworld",
+          "name": "HelixWorld Preview v 1",
+          "status": "integrated",
+          "aliases": [
+            "helixworld"
           ]
         },
         {
@@ -1299,6 +1355,14 @@
           "status": "runtime_ported",
           "aliases": [
             "worldmem"
+          ]
+        },
+        {
+          "id": "worldplay2",
+          "name": "WorldPlay 2",
+          "status": "integrated",
+          "aliases": [
+            "worldplay2"
           ]
         },
         {
