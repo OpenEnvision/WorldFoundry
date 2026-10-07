@@ -14806,7 +14806,7 @@
               "kind": "string",
               "target": "call",
               "required": false,
-              "default": "/mnt/dolphinfs/ssd_pool/docker/user/hadoop-nlp-hl02/hadoop-aipnlp/3A/multimodal/yangboxue/arena/conda/envs/ltx23/bin/python",
+              "default": "python3",
               "choices": [],
               "description": "Python Executable passed to the pipeline for every generated sample."
             },
@@ -56605,7 +56605,7 @@
               "kind": "string",
               "target": "call",
               "required": false,
-              "default": "/mnt/dolphinfs/ssd_pool/docker/user/hadoop-nlp-hl02/hadoop-aipnlp/3A/multimodal/yangboxue/arena/conda/envs/ltx23/bin/python",
+              "default": "python3",
               "choices": [],
               "description": "Python Executable passed to the pipeline for every generated sample."
             },
@@ -71990,7 +71990,7 @@
               "kind": "string",
               "target": "call",
               "required": false,
-              "default": "/mnt/dolphinfs/ssd_pool/docker/user/hadoop-nlp-hl02/hadoop-aipnlp/3A/multimodal/yangboxue/arena/conda/envs/ltx23/bin/python",
+              "default": "python3",
               "choices": [],
               "description": "Python Executable passed to the pipeline for every generated sample."
             },
@@ -88125,7 +88125,7 @@
               "kind": "string",
               "target": "call",
               "required": false,
-              "default": "/mnt/dolphinfs/ssd_pool/docker/user/hadoop-nlp-hl02/hadoop-aipnlp/3A/multimodal/yangboxue/arena/conda/envs/ltx23/bin/python",
+              "default": "python3",
               "choices": [],
               "description": "Python Executable passed to the pipeline for every generated sample."
             },
@@ -97777,7 +97777,7 @@
               "kind": "string",
               "target": "call",
               "required": false,
-              "default": "/mnt/dolphinfs/ssd_pool/docker/user/hadoop-nlp-hl02/hadoop-aipnlp/3A/multimodal/yangboxue/arena/conda/envs/ltx23/bin/python",
+              "default": "python3",
               "choices": [],
               "description": "Python Executable passed to the pipeline for every generated sample."
             },
@@ -98506,7 +98506,7 @@
               "kind": "string",
               "target": "call",
               "required": false,
-              "default": "/mnt/dolphinfs/ssd_pool/docker/user/hadoop-nlp-hl02/hadoop-aipnlp/3A/multimodal/yangboxue/arena/conda/envs/ltx23/bin/python",
+              "default": "python3",
               "choices": [],
               "description": "Python Executable passed to the pipeline for every generated sample."
             },
