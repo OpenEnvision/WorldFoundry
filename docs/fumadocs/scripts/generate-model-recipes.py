@@ -103,7 +103,6 @@ from typing import Any, Iterable
 
 import yaml
 
-
 ROOT = Path(__file__).resolve().parents[3]
 DOCS_ROOT = Path(__file__).resolve().parents[1]
 OUT = DOCS_ROOT / "lib" / "model-recipes-data.json"
@@ -132,8 +131,9 @@ os.environ.update(
 
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from worldfoundry.cli.model_run import load_model_run_schema  # noqa: E402
 from model_page_mdx import sync_model_pages  # noqa: E402
+
+from worldfoundry.cli.model_run import load_model_run_schema  # noqa: E402
 
 CATALOG_ROOT = ROOT / "worldfoundry/data/models/catalog"
 PROFILE_ROOT = ROOT / "worldfoundry/data/models/runtime/profiles"
@@ -236,7 +236,7 @@ def compact_text(value: Any, limit: int = 420) -> str | None:
 
 
 def portable_doc_value(value: Any) -> Any:
-    """Keep checked-in docs independent of the checkout's absolute path."""
+    """Keep checked-in docs independent of the checkout and Python executable."""
 
     if isinstance(value, dict):
         return {key: portable_doc_value(item) for key, item in value.items()}
@@ -245,6 +245,8 @@ def portable_doc_value(value: Any) -> Any:
     if isinstance(value, tuple):
         return tuple(portable_doc_value(item) for item in value)
     if isinstance(value, str):
+        if value == sys.executable:
+            return "python3"
         replacements = (
             (str(ROOT / "worldfoundry"), CANONICAL_PACKAGE_ROOT),
             (str(ROOT), CANONICAL_PROJECT_ROOT),
