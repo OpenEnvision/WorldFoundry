@@ -12,6 +12,8 @@ from dataclasses import dataclass
 
 import torch
 
+from worldfoundry.core.attention.cache.context import ContextAttentionCache
+
 
 @dataclass(frozen=True)
 class Modality:
@@ -60,6 +62,8 @@ class Modality:
     enabled: bool = True
     context_mask: torch.Tensor | None = None
     attention_mask: torch.Tensor | None = None
+    video_control: object | None = None
+    attention_cache: ContextAttentionCache | None = None
 
     def split(self, sizes: list[int]) -> list[Modality]:
         """Split along the batch dimension into chunks of the given sizes."""
@@ -71,6 +75,8 @@ class Modality:
                 split_fields[f.name] = list(value.split(sizes, dim=0))
             elif value is None or isinstance(value, bool):
                 split_fields[f.name] = [value] * n
+            elif f.name == "video_control":
+                split_fields[f.name] = value.split(sizes)
             else:
                 raise TypeError(f"Cannot split field {f.name!r}: unsupported type {type(value)}")
         return [Modality(**{name: parts[i] for name, parts in split_fields.items()}) for i in range(n)]

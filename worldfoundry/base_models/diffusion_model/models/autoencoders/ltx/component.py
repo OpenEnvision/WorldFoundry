@@ -88,7 +88,7 @@ def _prefixed_state_dict(
     prefixes: Mapping[str, str],
 ) -> Mapping[str, object]:
     converted: dict[str, object] = {}
-    for key, value in state_dict.items():
+    for key in state_dict:
         for source, destination in prefixes.items():
             if key.startswith(source):
                 suffix = key.removeprefix(source)
@@ -97,7 +97,7 @@ def _prefixed_state_dict(
                     "std-of-means",
                 }:
                     break
-                converted[f"{destination}{suffix}"] = value
+                converted[f"{destination}{suffix}"] = state_dict[key]
                 break
     return converted
 

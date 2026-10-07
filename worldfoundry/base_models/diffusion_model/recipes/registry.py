@@ -326,6 +326,7 @@ def default_native_diffusion_registry() -> NativeDiffusionRegistry:
         ("ltx-2.3-i2v", ".ltx", "ltx23_i2v_recipe", ("ltx2.3-i2v", "ltx2_3_i2v")),
         ("ltx-2.3-t2v", ".ltx", "ltx23_t2v_recipe", ("ltx2.3-t2v", "ltx2_3_t2v")),
         ("ltx-video-i2v", ".ltx", "ltx_video_i2v_recipe", ("ltx-video",)),
+        ("helixworld", "worldfoundry.synthesis.visual_generation.helixworld.recipe", "helixworld_recipe", ("helixworld-preview", "helix-world", "NoizAI/HelixWorld-preview")),
         (
             "hello-world",
             ".hello_world",

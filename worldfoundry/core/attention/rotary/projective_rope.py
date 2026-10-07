@@ -277,6 +277,16 @@ def lift_k(intrinsics: torch.Tensor) -> torch.Tensor:
     return out
 
 
+def apply_token_projective_matrix(features: torch.Tensor, matrix: torch.Tensor, heads: int) -> torch.Tensor:
+    """Apply token-local 4x4 transforms to every four-vector in packed BTHD features."""
+
+    batch, tokens, inner_dim = features.shape
+    if inner_dim % (heads * 4):
+        raise ValueError("projective attention requires a head dimension divisible by four")
+    chunks = features.reshape(batch, tokens, heads, inner_dim // (heads * 4), 4)
+    return torch.einsum("btij,bthkj->bthki", matrix.to(features.dtype), chunks).reshape_as(features)
+
+
 ROPE3_EACH = 8
 
 

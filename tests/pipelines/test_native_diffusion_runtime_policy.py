@@ -265,6 +265,7 @@ def test_wan_save_uses_known_output_range_without_device_reduction(
     pipeline.native_pipeline = lambda _request: SimpleNamespace(
         sample=sample,
         latents=torch.zeros(1),
+        artifacts={},
         metadata={},
     )
     captured: dict[str, object] = {}

@@ -43,6 +43,7 @@ class BasicAVTransformerBlock(torch.nn.Module):
         rope_type: LTXRopeType = LTXRopeType.SPLIT,
         norm_eps: float = 1e-6,
         ops: TransformerOpsConfig | None = None,
+        video_attention_class: type[Attention] = Attention,
     ):
         """Construct only the stems present in ``video`` / ``audio`` configs."""
         super().__init__()
@@ -52,7 +53,7 @@ class BasicAVTransformerBlock(torch.nn.Module):
         self.ada_zero_function = ops.ada_zero_function
         self.post_sa_function = ops.post_sa_function
         if video is not None:
-            self.attn1 = Attention(
+            self.attn1 = video_attention_class(
                 query_dim=video.dim,
                 heads=video.heads,
                 dim_head=video.d_head,
@@ -234,6 +235,8 @@ class BasicAVTransformerBlock(torch.nn.Module):
                 mask=video.self_attention_mask,
                 perturbation_mask=video.self_attn_perturbation_mask,
                 all_perturbed=video.self_attn_all_perturbed,
+                camera_control=video.video_control,
+                cache=video.attention_cache,
             )
             vx = vx + vx_msa_out * vgate_msa
             del vgate_msa, norm_vx, vx_msa_out
@@ -262,6 +265,7 @@ class BasicAVTransformerBlock(torch.nn.Module):
                 mask=audio.self_attention_mask,
                 perturbation_mask=audio.self_attn_perturbation_mask,
                 all_perturbed=audio.self_attn_all_perturbed,
+                cache=audio.attention_cache,
             )
             ax = ax + ax_msa_out * agate_msa
             del agate_msa, norm_ax, ax_msa_out
@@ -309,6 +313,7 @@ class BasicAVTransformerBlock(torch.nn.Module):
                         context=a2v_ax_scaled,
                         pe=video.cross_positional_embeddings,
                         k_pe=audio.cross_positional_embeddings,
+                        cache=video.attention_cache,
                     )
                     * gate_out_a2v
                     * video.cross_attn_perturbation_mask
@@ -340,6 +345,7 @@ class BasicAVTransformerBlock(torch.nn.Module):
                         context=v2a_vx_scaled,
                         pe=audio.cross_positional_embeddings,
                         k_pe=video.cross_positional_embeddings,
+                        cache=audio.attention_cache,
                     )
                     * gate_out_v2a
                     * audio.cross_attn_perturbation_mask
