@@ -1,0 +1,84 @@
+schema_version: 2
+id: kandinsky6-pro-distill
+name: Kandinsky 6.0 pro-distill
+family: Kandinsky6
+domain: video
+tasks:
+- text-to-video
+- image-to-video
+- audio-video-generation
+output_artifacts:
+- generated_video
+availability:
+  source: open_source
+  license: mit
+  requires_auth: false
+sources:
+  github:
+    url: https://github.com/kandinskylab/kandinsky-6
+    revision: b224b77cb458c2f9241a5a245bedc4fd43817b11
+  paper: https://arxiv.org/abs/2610.05608
+  huggingface:
+  - repo_id: kandinskylab/Kandinsky-6.0-Pro-distill-5s-Diffusers
+    type: model
+    status: confirmed
+checkpoints:
+  primary:
+    repo_id: kandinskylab/Kandinsky-6.0-Pro-distill-5s-Diffusers
+    revision: 4a852c02855395e2757f852e9b1d2bf537cec517
+pipeline_binding: kandinsky6-pro-distill
+runtime_profile: runtime-profile:kandinsky6-pro-distill
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+integration:
+  status: integrated
+  runtime_profile: kandinsky6-pro-distill
+  pipeline_binding: kandinsky6-pro-distill
+runner_parity:
+  status: pending
+  expected_artifacts:
+  - output.mp4
+  - output.json
+evidence:
+  artifacts:
+  - outputs/kandinsky6-pro-distill-validation/output.mp4
+  - outputs/kandinsky6-pro-distill-validation/cuda-validation.json
+  notes:
+  - Official inference components are owned by role-based base_models packages; sampling
+    and assembly use the native recipe registry.
+  - The pinned Pro-distill snapshot generated 121 frames at 864x480 and 24 fps,
+    with 44.1 kHz audio, on one NVIDIA H100 80GB using SDPA and component offload.
+  - Python 3.10.16, PyTorch 2.9.0+cu126, Diffusers 0.40.0, and Transformers 5.14.1
+    were validated. Weight loading took 85.2 seconds; generation took 140.4 seconds.
+  - GPU evidence covers text-to-video; image-to-video and official demo parity remain pending.
+catalog_category: video
+aliases:
+- kandinsky6
+- kandinsky-6
+docs:
+  overview: >-
+    Kandinsky 6.0 Pro-distill generates synchronized video and 44.1 kHz audio
+    from text, with optional first-frame image conditioning. WorldFoundry runs
+    the Pro transformer with 10 PiFlow steps through its native diffusion components.
+  overview_zh: >-
+    Kandinsky 6.0 Pro-distill 根据文本生成同步视频和 44.1 kHz 音频，
+    并支持可选的首帧图像条件。WorldFoundry 通过原生扩散组件运行
+    Pro transformer，默认使用 10 步 PiFlow 采样。
+  usage_notes: >-
+    Text-to-video passed on one H100 80GB with SDPA, component offload, and seed 42:
+    121 frames at 864x480 and 24 fps, with muxed audio. Weight loading took
+    85.2 seconds and generation took 140.4 seconds in the pinned Python 3.10 /
+    CUDA 12.6 environment. The validation report is
+    outputs/kandinsky6-pro-distill-validation/cuda-validation.json.
+  usage_notes_zh: >-
+    文生视频已在单张 H100 80GB 上验证通过，使用 SDPA、component offload
+    和 seed 42，输出 121 帧、864x480、24 fps 的视频及同步音频。
+    固定的 Python 3.10 / CUDA 12.6 环境中，权重加载耗时 85.2 秒，
+    生成耗时 140.4 秒。验证报告位于
+    outputs/kandinsky6-pro-distill-validation/cuda-validation.json。
+  modalities:
+    inputs: [text, image]
+    outputs: [video, audio]
+  limitations:
+  - Image-to-video and parity with the official demo remain unvalidated.
+  limitations_zh:
+  - 图生视频和与官方 demo 的一致性仍待验证。

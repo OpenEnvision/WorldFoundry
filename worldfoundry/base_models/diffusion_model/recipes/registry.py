@@ -452,6 +452,15 @@ def default_native_diffusion_registry() -> NativeDiffusionRegistry:
     )
     for model_id, aliases in echo_entries:
         registry.register_lazy(model_id, _lazy_echo_recipe(model_id), aliases=aliases)
+    for checkpoint_name in ("pro-distill", "pro", "pro-pretrain", "lite", "lite-distill", "lite-pretrain"):
+        def provider(name=checkpoint_name):
+            from .kandinsky6 import kandinsky6_recipe
+            return kandinsky6_recipe(name)
+        repo = "kandinskylab/Kandinsky-6.0-" + checkpoint_name.replace("pro", "Pro", 1).replace("lite", "Lite", 1) + "-5s-Diffusers"
+        registry.register_lazy(
+            "kandinsky6-" + checkpoint_name, provider,
+            aliases=("kandinsky6", "kandinsky-6", repo) if checkpoint_name == "pro-distill" else (repo,),
+        )
     registry.freeze()
     return registry
 

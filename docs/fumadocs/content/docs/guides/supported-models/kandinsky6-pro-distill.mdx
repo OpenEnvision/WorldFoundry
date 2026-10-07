@@ -1,0 +1,44 @@
+---
+title: "Kandinsky 6.0 pro-distill"
+description: "Kandinsky 6.0 pro-distill from Kandinsky6: text-to-video and image-to-video; Runner parity pending; dedicated `worldfoundry-kandinsky6-cu126`."
+modelId: "kandinsky6-pro-distill"
+pageSource: generated
+---
+
+Kandinsky 6.0 Pro-distill generates synchronized video and 44.1 kHz audio from text, with optional first-frame image conditioning. WorldFoundry runs the Pro transformer with 10 PiFlow steps through its native diffusion components.
+
+<ModelPaperFigures modelId="kandinsky6-pro-distill" locale="en" />
+
+Code: [kandinskylab/kandinsky-6](https://github.com/kandinskylab/kandinsky-6).
+
+<ModelCommandBuilder modelId="kandinsky6-pro-distill" locale="en" />
+
+## What it is for
+
+Use `kandinsky6-pro-distill` for the family's joint T2V/I2V inference path. The catalog records both task profiles on this page.
+
+Catalog tasks include text-to-video, image-to-video, and audio-video-generation. Catalog aliases include `kandinsky6` and `kandinsky-6`. Documented modalities: text and image in, video and audio out.
+
+## Runtime contract
+
+Optional `prompt`, `input_path`, `interactions`, `operator_kwargs`, and `ref_image_path`; artifacts `generated_video` and `kandinsky6-pro-distill.mp4`.
+
+CLI task profiles: `default`. WorldFoundry binds `Kandinsky6Pipeline`.
+
+Family status: **Runner parity pending**.
+
+Text-to-video passed on one H100 80GB with SDPA, component offload, and seed 42: 121 frames at 864x480 and 24 fps, with muxed audio. Weight loading took 85.2 seconds and generation took 140.4 seconds in the pinned Python 3.10 / CUDA 12.6 environment. The validation report is outputs/kandinsky6-pro-distill-validation/cuda-validation.json.
+
+Default text-to-video generation passed on one H100 80GB with SDPA and component offload.
+
+## Running in WorldFoundry
+
+Launch `worldfoundry-eval run kandinsky6-pro-distill --pipeline.task-profile default` to sample the clip. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the dedicated environment `worldfoundry-kandinsky6-cu126` (Python 3.10, CUDA 12.6, torch==2.9.0+cu126).
+
+Recorded weight repositories include `kandinskylab/Kandinsky-6.0-Pro-distill-5s-Diffusers`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh kandinsky6-pro-distill`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Runner parity pending**.
+
+<ModelRelatedRecipes modelId="kandinsky6-pro-distill" locale="en" />

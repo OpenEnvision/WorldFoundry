@@ -1,0 +1,44 @@
+---
+title: "Kandinsky 6.0 lite-distill"
+description: "Kandinsky 6.0 lite-distill from Kandinsky6: text-to-video and image-to-video; Planned."
+modelId: "kandinsky6-lite-distill"
+pageSource: generated
+---
+
+Kandinsky 6.0 lite-distill is a video generation model from Kandinsky6. The catalog records it for text-to-video, image-to-video, and audio-video-generation.
+
+<ModelPaperFigures modelId="kandinsky6-lite-distill" locale="en" />
+
+Code: [kandinskylab/kandinsky-6](https://github.com/kandinskylab/kandinsky-6).
+
+<ModelCommandBuilder modelId="kandinsky6-lite-distill" locale="en" />
+
+## What it is for
+
+Use `kandinsky6-lite-distill` for the family's joint T2V/I2V inference path. The catalog records both task profiles on this page.
+
+Catalog tasks include text-to-video, image-to-video, and audio-video-generation. Documented modalities: text and image in, video out.
+
+## Runtime contract
+
+Optional `prompt`, `image`, `seed`, `frames`, and `fps`; artifacts `generated_video` and `kandinsky6-lite-distill.mp4`.
+
+CLI task profiles: `text-to-video`, `image-to-video`, `audio-video-generation`, and `video_generation`. WorldFoundry binds `Kandinsky6Pipeline`.
+
+Family status: **Planned**.
+
+Native audio-video inference; checkpoint-backed CUDA parity is pending.
+
+A pipeline binding is recorded, but a successful run has not been established for this entry.
+
+## Running in WorldFoundry
+
+The catalog launch is `worldfoundry-eval run kandinsky6-lite-distill --pipeline.task-profile text-to-video`. The command builder above switches `--pipeline.task-profile` among recorded tasks and still emits `worldfoundry-eval run`.
+
+It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CUDA 12.8).
+
+Recorded weight repositories include `kandinskylab/Kandinsky-6.0-Lite-distill-5s-Diffusers`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh kandinsky6-lite-distill`. Add `--download` to fetch missing public checkpoints.
+
+Status: **Planned**.
+
+<ModelRelatedRecipes modelId="kandinsky6-lite-distill" locale="en" />

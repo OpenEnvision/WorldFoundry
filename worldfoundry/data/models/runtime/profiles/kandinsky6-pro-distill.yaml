@@ -1,0 +1,37 @@
+schema_version: 2
+model_id: kandinsky6-pro-distill
+display_name: Kandinsky 6.0 pro-distill
+task_family: video_generation
+groups:
+- video
+- audio
+source_repos:
+- url: https://github.com/kandinskylab/kandinsky-6
+  revision: b224b77cb458c2f9241a5a245bedc4fd43817b11
+checkpoints:
+- repo_id: kandinskylab/Kandinsky-6.0-Pro-distill-5s-Diffusers
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/kandinskylab--Kandinsky-6.0-Pro-distill-5s-Diffusers
+  role: joint_audio_video_snapshot
+  revision: 4a852c02855395e2757f852e9b1d2bf537cec517
+input_schema:
+  prompt: true
+  image: true
+  video: false
+artifact_kind: generated_video
+artifact_filename: kandinsky6-pro-distill.mp4
+execution:
+  environment: kandinsky6
+  backend_stage: native_diffusion
+  pipeline_binding: kandinsky6-pro-distill
+  defaults:
+    num_frames: 121
+    width: 864
+    height: 480
+    fps: 24
+    sample_audio: true
+integration:
+  status: integrated
+notes:
+- Default text-to-video generation passed on one H100 80GB with SDPA and component offload.
+- Evidence is recorded in outputs/kandinsky6-pro-distill-validation/cuda-validation.json.
+- Image-to-video and official demo parity remain pending.

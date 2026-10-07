@@ -1,0 +1,46 @@
+schema_version: 2
+id: kandinsky6-lite-distill
+name: Kandinsky 6.0 lite-distill
+family: Kandinsky6
+domain: video
+tasks:
+- text-to-video
+- image-to-video
+- audio-video-generation
+output_artifacts:
+- generated_video
+availability:
+  source: open_source
+  license: mit
+  requires_auth: false
+sources:
+  github:
+    url: https://github.com/kandinskylab/kandinsky-6
+    revision: b224b77cb458c2f9241a5a245bedc4fd43817b11
+  paper: https://arxiv.org/abs/2610.05608
+  huggingface:
+  - repo_id: kandinskylab/Kandinsky-6.0-Lite-distill-5s-Diffusers
+    type: model
+    status: confirmed
+checkpoints:
+  primary:
+    repo_id: kandinskylab/Kandinsky-6.0-Lite-distill-5s-Diffusers
+    revision: e056a84f34d9617e86b3ae47c792fe626cbe53f8
+pipeline_binding: kandinsky6-lite-distill
+runtime_profile: runtime-profile:kandinsky6-lite-distill
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+integration:
+  status: planned
+  runtime_profile: kandinsky6-lite-distill
+  pipeline_binding: kandinsky6-lite-distill
+runner_parity:
+  status: pending
+  expected_artifacts:
+  - output.mp4
+  - output.json
+evidence:
+  notes:
+  - Official inference components are owned by role-based base_models packages; sampling
+    and assembly use the native recipe registry.
+  - Checkpoint-backed CUDA inference has not been validated.
+catalog_category: video

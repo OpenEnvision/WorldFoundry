@@ -1,12 +1,12 @@
 {
-  "total": 262,
+  "total": 268,
   "categories": [
     {
       "id": "video",
       "label": "Video",
       "label_zh": "视频",
       "description": "Video, image, and audio-visual generation or editing runtimes.",
-      "count": 57
+      "count": 63
     },
     {
       "id": "multimodal",
@@ -142898,6 +142898,3633 @@
         "run": "worldfoundry-eval run \\\n  worldlabs-marble-1.1 \\\n  --pipeline.task-profile default \\\n  --json"
       },
       "catalogPath": "worldfoundry/data/models/catalog/world_models/worldlabs-marble-1.1.yaml"
+    },
+    {
+      "id": "kandinsky6-pro-distill",
+      "name": "Kandinsky 6.0 pro-distill",
+      "category": "video",
+      "categoryLabel": "Video",
+      "categoryLabelZh": "视频",
+      "provider": "Kandinsky6",
+      "summary": "Kandinsky 6.0 Pro-distill generates synchronized video and 44.1 kHz audio from text, with optional first-frame image conditioning. WorldFoundry runs the Pro transformer with 10 PiFlow steps through its native diffusion components.",
+      "aliases": [
+        "kandinsky6",
+        "kandinsky-6"
+      ],
+      "tasks": [
+        "text-to-video",
+        "image-to-video",
+        "audio-video-generation"
+      ],
+      "status": {
+        "group": "integrated",
+        "label": "Integrated",
+        "integration": "integrated",
+        "runner": "pending",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "kandinsky6-pro-distill",
+        "bindingId": "kandinsky6-pro-distill",
+        "runnerTarget": "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "native_diffusion",
+        "runtimeStatus": null,
+        "environmentId": "kandinsky6",
+        "environmentName": "worldfoundry-kandinsky6-cu126",
+        "environmentKind": "dedicated",
+        "python": "3.10",
+        "cudaProfile": "cu126",
+        "cudaLabel": "CUDA 12.6",
+        "driverStatus": null,
+        "condaPackages": [],
+        "pipPackages": [
+          "torch==2.9.0+cu126",
+          "torchvision==0.24.0+cu126",
+          "diffusers==0.40.0",
+          "transformers==5.14.1",
+          "accelerate==1.12.0",
+          "safetensors==0.8.0",
+          "pydantic==2.12.5",
+          "numpy",
+          "pillow",
+          "einops",
+          "av==16.0.1",
+          "librosa==0.11.0",
+          "pyyaml",
+          "tqdm"
+        ],
+        "packageVersions": {
+          "torch": "torch==2.9.0+cu126",
+          "torchvision": "torchvision==0.24.0+cu126",
+          "diffusers": "diffusers==0.40.0",
+          "transformers": "transformers==5.14.1",
+          "accelerate": "accelerate==1.12.0"
+        },
+        "validationImports": [
+          "torch",
+          "diffusers",
+          "transformers",
+          "av"
+        ],
+        "notes": [
+          "Default text-to-video generation passed on one H100 80GB with SDPA and component offload.",
+          "Evidence is recorded in outputs/kandinsky6-pro-distill-validation/cuda-validation.json.",
+          "Image-to-video and official demo parity remain pending.",
+          "Pro-distill default text-to-video generation is validated on one H100 80GB with this environment."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "source",
+          "label": "Source",
+          "url": "https://github.com/kandinskylab/kandinsky-6",
+          "revision": "b224b77cb458c2f9241a5a245bedc4fd43817b11"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/kandinskylab/kandinsky-6#readme",
+          "revision": "b224b77cb458c2f9241a5a245bedc4fd43817b11"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "kandinskylab/Kandinsky-6.0-Pro-distill-5s-Diffusers",
+          "revision": "4a852c02855395e2757f852e9b1d2bf537cec517",
+          "role": "joint_audio_video_snapshot"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "default",
+          "label": "Default",
+          "description": "Run Kandinsky6 Pro Distill through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": "A slow exploratory camera move through a believable scene with stable geometry and lighting.",
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky6 Pro Distill inference."
+            },
+            {
+              "field": "input-path",
+              "option": "--pipeline.input-path",
+              "detail": "Required",
+              "kind": "path",
+              "target": "input",
+              "required": true,
+              "default": "/workspace/worldfoundry/data/test_cases/studio_demo/00/image.jpg",
+              "choices": [],
+              "description": "Input Path used as the input for direct Kandinsky6 Pro Distill inference."
+            },
+            {
+              "field": "interactions",
+              "option": "--pipeline.interactions",
+              "detail": "Optional",
+              "kind": "interaction_tokens",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Interactions passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "operator-kwargs",
+              "option": "--pipeline.operator-kwargs",
+              "detail": "Optional",
+              "kind": "json",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Operator Kwargs passed to the pipeline for every generated sample."
+            },
+            {
+              "field": "ref-image-path",
+              "option": "--pipeline.ref-image-path",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Ref Image Path passed to the pipeline for every generated sample."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-pro-distill.mp4"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "image",
+          "detail": "Required"
+        },
+        {
+          "field": "video",
+          "detail": "Optional"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_video",
+          "filename": ""
+        },
+        {
+          "kind": "generated_video",
+          "filename": "kandinsky6-pro-distill.mp4"
+        }
+      ],
+      "notes": [
+        "Default text-to-video generation passed on one H100 80GB with SDPA and component offload.",
+        "Evidence is recorded in outputs/kandinsky6-pro-distill-validation/cuda-validation.json.",
+        "Image-to-video and official demo parity remain pending."
+      ],
+      "docs": {
+        "curated": true,
+        "publisher": null,
+        "overview": [
+          "Kandinsky 6.0 Pro-distill generates synchronized video and 44.1 kHz audio from text, with optional first-frame image conditioning. WorldFoundry runs the Pro transformer with 10 PiFlow steps through its native diffusion components."
+        ],
+        "overviewZh": [
+          "Kandinsky 6.0 Pro-distill 根据文本生成同步视频和 44.1 kHz 音频， 并支持可选的首帧图像条件。WorldFoundry 通过原生扩散组件运行 Pro transformer，默认使用 10 步 PiFlow 采样。"
+        ],
+        "architecture": [],
+        "architectureZh": [],
+        "usageNotes": [
+          "Text-to-video passed on one H100 80GB with SDPA, component offload, and seed 42: 121 frames at 864x480 and 24 fps, with muxed audio. Weight loading took 85.2 seconds and generation took 140.4 seconds in the pinned Python 3.10 / CUDA 12.6 environment. The validation report is outputs/kandinsky6-pro-distill-validation/cuda-validation.json."
+        ],
+        "usageNotesZh": [
+          "文生视频已在单张 H100 80GB 上验证通过，使用 SDPA、component offload 和 seed 42，输出 121 帧、864x480、24 fps 的视频及同步音频。 固定的 Python 3.10 / CUDA 12.6 环境中，权重加载耗时 85.2 秒， 生成耗时 140.4 秒。验证报告位于 outputs/kandinsky6-pro-distill-validation/cuda-validation.json。"
+        ],
+        "highlights": [
+          "Text To Video",
+          "Image To Video",
+          "Audio Video Generation",
+          "Dedicated env · Python 3.10 · CUDA 12.6",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "文生视频",
+          "图生视频",
+          "音视频联合生成",
+          "独立环境 · Python 3.10 · CUDA 12.6",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [
+            "text",
+            "image"
+          ],
+          "outputs": [
+            "video",
+            "audio"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "Image-to-video and parity with the official demo remain unvalidated."
+        ],
+        "limitationsZh": [
+          "图生视频和与官方 demo 的一致性仍待验证。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh kandinsky6-pro-distill",
+        "install": "bash scripts/setup/model_env_install.sh --model kandinsky6-pro-distill",
+        "inspect": "worldfoundry-eval zoo model-show --model-id kandinsky6-pro-distill --include-manifest --json",
+        "check": "worldfoundry-eval zoo model-download --model-id kandinsky6-pro-distill --check-local --json",
+        "run": "worldfoundry-eval run \\\n  kandinsky6-pro-distill \\\n  --pipeline.task-profile default \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/video/kandinsky6-pro-distill.yaml"
+    },
+    {
+      "id": "kandinsky6-lite",
+      "name": "Kandinsky 6.0 lite",
+      "category": "video",
+      "categoryLabel": "Video",
+      "categoryLabelZh": "视频",
+      "provider": "Kandinsky6",
+      "summary": "Native audio-video inference; checkpoint-backed CUDA parity is pending.",
+      "aliases": [],
+      "tasks": [
+        "text-to-video",
+        "image-to-video",
+        "audio-video-generation"
+      ],
+      "status": {
+        "group": "planned",
+        "label": "Planned",
+        "integration": "planned",
+        "runner": "pending",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "kandinsky6-lite",
+        "bindingId": "kandinsky6-lite",
+        "runnerTarget": "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "native_diffusion",
+        "runtimeStatus": null,
+        "environmentId": "_unified",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": "compatible_unified_default",
+        "condaPackages": [
+          "python=3.11",
+          "pip",
+          "ffmpeg",
+          "setuptools",
+          "wheel"
+        ],
+        "pipPackages": [
+          "torch",
+          "torchvision",
+          "torchaudio",
+          "xfuser"
+        ],
+        "packageVersions": {
+          "torch": "torch",
+          "torchvision": "torchvision",
+          "torchaudio": "torchaudio",
+          "xfuser": "xfuser"
+        },
+        "validationImports": [
+          "torch",
+          "torchvision",
+          "numpy",
+          "transformers",
+          "diffusers",
+          "xfuser",
+          "worldfoundry"
+        ],
+        "notes": [
+          "Native audio-video inference; checkpoint-backed CUDA parity is pending.",
+          "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
+          "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
+          "Source the environment file emitted by `scripts/setup/unified_install.sh` so WORLDFOUNDRY_USE_UNIFIED_ENV=1 routes compatible profiles here.",
+          "Runnable GPU models that previously used cu113/cu118/cu124 CUDA buckets are mapped to this tier when they do not carry hard ABI pins requiring isolation."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "source",
+          "label": "Source",
+          "url": "https://github.com/kandinskylab/kandinsky-6",
+          "revision": "b224b77cb458c2f9241a5a245bedc4fd43817b11"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/kandinskylab/kandinsky-6#readme",
+          "revision": "b224b77cb458c2f9241a5a245bedc4fd43817b11"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "kandinskylab/Kandinsky-6.0-Lite-5s-Diffusers",
+          "revision": "50029a58a512c694d5995bdde9f5cae955e4655b",
+          "role": "joint_audio_video_snapshot"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "text-to-video",
+          "label": "Text To Video",
+          "description": "Run Kandinsky 6.0 lite through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 lite inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 lite inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-lite.mp4"
+            }
+          ]
+        },
+        {
+          "id": "image-to-video",
+          "label": "Image To Video",
+          "description": "Run Kandinsky 6.0 lite through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 lite inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 lite inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-lite.mp4"
+            }
+          ]
+        },
+        {
+          "id": "audio-video-generation",
+          "label": "Audio Video Generation",
+          "description": "Run Kandinsky 6.0 lite through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 lite inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 lite inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-lite.mp4"
+            }
+          ]
+        },
+        {
+          "id": "video_generation",
+          "label": "Video Generation",
+          "description": "Run Kandinsky 6.0 lite through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 lite inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 lite inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-lite.mp4"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "image",
+          "detail": "Required"
+        },
+        {
+          "field": "video",
+          "detail": "Optional"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_video",
+          "filename": ""
+        },
+        {
+          "kind": "generated_video",
+          "filename": "kandinsky6-lite.mp4"
+        }
+      ],
+      "notes": [
+        "Native audio-video inference; checkpoint-backed CUDA parity is pending."
+      ],
+      "docs": {
+        "curated": false,
+        "publisher": null,
+        "overview": [
+          "Kandinsky 6.0 lite is a video generation model from Kandinsky6. The catalog records it for text-to-video, image-to-video, and audio-video-generation.",
+          "WorldFoundry records a binding to the worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline pipeline via worldfoundry.pipeline; this binding alone does not establish a successful run.",
+          "It runs in the shared unified environment worldfoundry-unified-cu128 (Python 3.11, CUDA 12.8).",
+          "Weights are pulled from the Hugging Face repository kandinskylab/Kandinsky-6.0-Lite-5s-Diffusers, pinned to revision 50029a58a.",
+          "Runner parity is currently “Pending” and native-demo parity is “Not Recorded”; treat end-to-end GPU evidence as not yet recorded."
+        ],
+        "overviewZh": [
+          "Kandinsky 6.0 lite 是来自 Kandinsky6 的视频生成模型。Catalog 将它记录为文生视频、图生视频、音视频联合生成任务。",
+          "WorldFoundry 记录了到 worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline pipeline 的绑定（runner：worldfoundry.pipeline）；仅有绑定记录并不代表已成功运行。",
+          "它运行在统一环境 worldfoundry-unified-cu128 中（Python 3.11，CUDA 12.8）。",
+          "权重来自 Hugging Face 仓库 kandinskylab/Kandinsky-6.0-Lite-5s-Diffusers，固定在 revision 50029a58a。",
+          "当前 runner parity 为“Pending”，原生 demo parity 为“Not Recorded”；端到端 GPU 证据应视为尚未记录。"
+        ],
+        "architecture": [],
+        "architectureZh": [],
+        "usageNotes": [],
+        "usageNotesZh": [],
+        "highlights": [
+          "Text To Video",
+          "Image To Video",
+          "Audio Video Generation",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "文生视频",
+          "图生视频",
+          "音视频联合生成",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [
+            "text",
+            "image"
+          ],
+          "outputs": [
+            "video"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "A pipeline binding is recorded, but a successful run has not been established for this entry.",
+          "Runner evidence is “Pending” — not a verified end-to-end GPU run. Do not treat this page as proof the route is fully validated.",
+          "Native demo evidence: Not recorded."
+        ],
+        "limitationsZh": [
+          "该条目已记录 pipeline 绑定，但尚未建立成功运行的证据。",
+          "Runner 证据为“Pending”——这不是经过验证的端到端 GPU 运行结果，请勿将本页视为该路径已被完整验证的证明。",
+          "原生 Demo 证据：未记录。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh kandinsky6-lite",
+        "install": "bash scripts/setup/model_env_install.sh --model kandinsky6-lite",
+        "inspect": "worldfoundry-eval zoo model-show --model-id kandinsky6-lite --include-manifest --json",
+        "check": "worldfoundry-eval zoo model-download --model-id kandinsky6-lite --check-local --json",
+        "run": "worldfoundry-eval run \\\n  kandinsky6-lite \\\n  --pipeline.task-profile text-to-video \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/video/kandinsky6-lite.yaml"
+    },
+    {
+      "id": "kandinsky6-lite-distill",
+      "name": "Kandinsky 6.0 lite-distill",
+      "category": "video",
+      "categoryLabel": "Video",
+      "categoryLabelZh": "视频",
+      "provider": "Kandinsky6",
+      "summary": "Native audio-video inference; checkpoint-backed CUDA parity is pending.",
+      "aliases": [],
+      "tasks": [
+        "text-to-video",
+        "image-to-video",
+        "audio-video-generation"
+      ],
+      "status": {
+        "group": "planned",
+        "label": "Planned",
+        "integration": "planned",
+        "runner": "pending",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "kandinsky6-lite-distill",
+        "bindingId": "kandinsky6-lite-distill",
+        "runnerTarget": "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "native_diffusion",
+        "runtimeStatus": null,
+        "environmentId": "_unified",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": "compatible_unified_default",
+        "condaPackages": [
+          "python=3.11",
+          "pip",
+          "ffmpeg",
+          "setuptools",
+          "wheel"
+        ],
+        "pipPackages": [
+          "torch",
+          "torchvision",
+          "torchaudio",
+          "xfuser"
+        ],
+        "packageVersions": {
+          "torch": "torch",
+          "torchvision": "torchvision",
+          "torchaudio": "torchaudio",
+          "xfuser": "xfuser"
+        },
+        "validationImports": [
+          "torch",
+          "torchvision",
+          "numpy",
+          "transformers",
+          "diffusers",
+          "xfuser",
+          "worldfoundry"
+        ],
+        "notes": [
+          "Native audio-video inference; checkpoint-backed CUDA parity is pending.",
+          "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
+          "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
+          "Source the environment file emitted by `scripts/setup/unified_install.sh` so WORLDFOUNDRY_USE_UNIFIED_ENV=1 routes compatible profiles here.",
+          "Runnable GPU models that previously used cu113/cu118/cu124 CUDA buckets are mapped to this tier when they do not carry hard ABI pins requiring isolation."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "source",
+          "label": "Source",
+          "url": "https://github.com/kandinskylab/kandinsky-6",
+          "revision": "b224b77cb458c2f9241a5a245bedc4fd43817b11"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/kandinskylab/kandinsky-6#readme",
+          "revision": "b224b77cb458c2f9241a5a245bedc4fd43817b11"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "kandinskylab/Kandinsky-6.0-Lite-distill-5s-Diffusers",
+          "revision": "e056a84f34d9617e86b3ae47c792fe626cbe53f8",
+          "role": "joint_audio_video_snapshot"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "text-to-video",
+          "label": "Text To Video",
+          "description": "Run Kandinsky 6.0 lite-distill through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 lite-distill inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 lite-distill inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-lite-distill.mp4"
+            }
+          ]
+        },
+        {
+          "id": "image-to-video",
+          "label": "Image To Video",
+          "description": "Run Kandinsky 6.0 lite-distill through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 lite-distill inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 lite-distill inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-lite-distill.mp4"
+            }
+          ]
+        },
+        {
+          "id": "audio-video-generation",
+          "label": "Audio Video Generation",
+          "description": "Run Kandinsky 6.0 lite-distill through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 lite-distill inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 lite-distill inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-lite-distill.mp4"
+            }
+          ]
+        },
+        {
+          "id": "video_generation",
+          "label": "Video Generation",
+          "description": "Run Kandinsky 6.0 lite-distill through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 lite-distill inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 lite-distill inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-lite-distill.mp4"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "image",
+          "detail": "Required"
+        },
+        {
+          "field": "video",
+          "detail": "Optional"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_video",
+          "filename": ""
+        },
+        {
+          "kind": "generated_video",
+          "filename": "kandinsky6-lite-distill.mp4"
+        }
+      ],
+      "notes": [
+        "Native audio-video inference; checkpoint-backed CUDA parity is pending."
+      ],
+      "docs": {
+        "curated": false,
+        "publisher": null,
+        "overview": [
+          "Kandinsky 6.0 lite-distill is a video generation model from Kandinsky6. The catalog records it for text-to-video, image-to-video, and audio-video-generation.",
+          "WorldFoundry records a binding to the worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline pipeline via worldfoundry.pipeline; this binding alone does not establish a successful run.",
+          "It runs in the shared unified environment worldfoundry-unified-cu128 (Python 3.11, CUDA 12.8).",
+          "Weights are pulled from the Hugging Face repository kandinskylab/Kandinsky-6.0-Lite-distill-5s-Diffusers, pinned to revision e056a84f3.",
+          "Runner parity is currently “Pending” and native-demo parity is “Not Recorded”; treat end-to-end GPU evidence as not yet recorded."
+        ],
+        "overviewZh": [
+          "Kandinsky 6.0 lite-distill 是来自 Kandinsky6 的视频生成模型。Catalog 将它记录为文生视频、图生视频、音视频联合生成任务。",
+          "WorldFoundry 记录了到 worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline pipeline 的绑定（runner：worldfoundry.pipeline）；仅有绑定记录并不代表已成功运行。",
+          "它运行在统一环境 worldfoundry-unified-cu128 中（Python 3.11，CUDA 12.8）。",
+          "权重来自 Hugging Face 仓库 kandinskylab/Kandinsky-6.0-Lite-distill-5s-Diffusers，固定在 revision e056a84f3。",
+          "当前 runner parity 为“Pending”，原生 demo parity 为“Not Recorded”；端到端 GPU 证据应视为尚未记录。"
+        ],
+        "architecture": [],
+        "architectureZh": [],
+        "usageNotes": [],
+        "usageNotesZh": [],
+        "highlights": [
+          "Text To Video",
+          "Image To Video",
+          "Audio Video Generation",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "文生视频",
+          "图生视频",
+          "音视频联合生成",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [
+            "text",
+            "image"
+          ],
+          "outputs": [
+            "video"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "A pipeline binding is recorded, but a successful run has not been established for this entry.",
+          "Runner evidence is “Pending” — not a verified end-to-end GPU run. Do not treat this page as proof the route is fully validated.",
+          "Native demo evidence: Not recorded."
+        ],
+        "limitationsZh": [
+          "该条目已记录 pipeline 绑定，但尚未建立成功运行的证据。",
+          "Runner 证据为“Pending”——这不是经过验证的端到端 GPU 运行结果，请勿将本页视为该路径已被完整验证的证明。",
+          "原生 Demo 证据：未记录。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh kandinsky6-lite-distill",
+        "install": "bash scripts/setup/model_env_install.sh --model kandinsky6-lite-distill",
+        "inspect": "worldfoundry-eval zoo model-show --model-id kandinsky6-lite-distill --include-manifest --json",
+        "check": "worldfoundry-eval zoo model-download --model-id kandinsky6-lite-distill --check-local --json",
+        "run": "worldfoundry-eval run \\\n  kandinsky6-lite-distill \\\n  --pipeline.task-profile text-to-video \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/video/kandinsky6-lite-distill.yaml"
+    },
+    {
+      "id": "kandinsky6-lite-pretrain",
+      "name": "Kandinsky 6.0 lite-pretrain",
+      "category": "video",
+      "categoryLabel": "Video",
+      "categoryLabelZh": "视频",
+      "provider": "Kandinsky6",
+      "summary": "Native audio-video inference; checkpoint-backed CUDA parity is pending.",
+      "aliases": [],
+      "tasks": [
+        "text-to-video",
+        "image-to-video",
+        "audio-video-generation"
+      ],
+      "status": {
+        "group": "planned",
+        "label": "Planned",
+        "integration": "planned",
+        "runner": "pending",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "kandinsky6-lite-pretrain",
+        "bindingId": "kandinsky6-lite-pretrain",
+        "runnerTarget": "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "native_diffusion",
+        "runtimeStatus": null,
+        "environmentId": "_unified",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": "compatible_unified_default",
+        "condaPackages": [
+          "python=3.11",
+          "pip",
+          "ffmpeg",
+          "setuptools",
+          "wheel"
+        ],
+        "pipPackages": [
+          "torch",
+          "torchvision",
+          "torchaudio",
+          "xfuser"
+        ],
+        "packageVersions": {
+          "torch": "torch",
+          "torchvision": "torchvision",
+          "torchaudio": "torchaudio",
+          "xfuser": "xfuser"
+        },
+        "validationImports": [
+          "torch",
+          "torchvision",
+          "numpy",
+          "transformers",
+          "diffusers",
+          "xfuser",
+          "worldfoundry"
+        ],
+        "notes": [
+          "Native audio-video inference; checkpoint-backed CUDA parity is pending.",
+          "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
+          "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
+          "Source the environment file emitted by `scripts/setup/unified_install.sh` so WORLDFOUNDRY_USE_UNIFIED_ENV=1 routes compatible profiles here.",
+          "Runnable GPU models that previously used cu113/cu118/cu124 CUDA buckets are mapped to this tier when they do not carry hard ABI pins requiring isolation."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "source",
+          "label": "Source",
+          "url": "https://github.com/kandinskylab/kandinsky-6",
+          "revision": "b224b77cb458c2f9241a5a245bedc4fd43817b11"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/kandinskylab/kandinsky-6#readme",
+          "revision": "b224b77cb458c2f9241a5a245bedc4fd43817b11"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "kandinskylab/Kandinsky-6.0-Lite-pretrain-5s-Diffusers",
+          "revision": "ae9378bb1d3cd382aa96ce36cc2df59fe7d28556",
+          "role": "joint_audio_video_snapshot"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "text-to-video",
+          "label": "Text To Video",
+          "description": "Run Kandinsky 6.0 lite-pretrain through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 lite-pretrain inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 lite-pretrain inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-lite-pretrain.mp4"
+            }
+          ]
+        },
+        {
+          "id": "image-to-video",
+          "label": "Image To Video",
+          "description": "Run Kandinsky 6.0 lite-pretrain through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 lite-pretrain inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 lite-pretrain inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-lite-pretrain.mp4"
+            }
+          ]
+        },
+        {
+          "id": "audio-video-generation",
+          "label": "Audio Video Generation",
+          "description": "Run Kandinsky 6.0 lite-pretrain through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 lite-pretrain inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 lite-pretrain inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-lite-pretrain.mp4"
+            }
+          ]
+        },
+        {
+          "id": "video_generation",
+          "label": "Video Generation",
+          "description": "Run Kandinsky 6.0 lite-pretrain through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 lite-pretrain inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 lite-pretrain inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-lite-pretrain.mp4"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "image",
+          "detail": "Required"
+        },
+        {
+          "field": "video",
+          "detail": "Optional"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_video",
+          "filename": ""
+        },
+        {
+          "kind": "generated_video",
+          "filename": "kandinsky6-lite-pretrain.mp4"
+        }
+      ],
+      "notes": [
+        "Native audio-video inference; checkpoint-backed CUDA parity is pending."
+      ],
+      "docs": {
+        "curated": false,
+        "publisher": null,
+        "overview": [
+          "Kandinsky 6.0 lite-pretrain is a video generation model from Kandinsky6. The catalog records it for text-to-video, image-to-video, and audio-video-generation.",
+          "WorldFoundry records a binding to the worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline pipeline via worldfoundry.pipeline; this binding alone does not establish a successful run.",
+          "It runs in the shared unified environment worldfoundry-unified-cu128 (Python 3.11, CUDA 12.8).",
+          "Weights are pulled from the Hugging Face repository kandinskylab/Kandinsky-6.0-Lite-pretrain-5s-Diffusers, pinned to revision ae9378bb1.",
+          "Runner parity is currently “Pending” and native-demo parity is “Not Recorded”; treat end-to-end GPU evidence as not yet recorded."
+        ],
+        "overviewZh": [
+          "Kandinsky 6.0 lite-pretrain 是来自 Kandinsky6 的视频生成模型。Catalog 将它记录为文生视频、图生视频、音视频联合生成任务。",
+          "WorldFoundry 记录了到 worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline pipeline 的绑定（runner：worldfoundry.pipeline）；仅有绑定记录并不代表已成功运行。",
+          "它运行在统一环境 worldfoundry-unified-cu128 中（Python 3.11，CUDA 12.8）。",
+          "权重来自 Hugging Face 仓库 kandinskylab/Kandinsky-6.0-Lite-pretrain-5s-Diffusers，固定在 revision ae9378bb1。",
+          "当前 runner parity 为“Pending”，原生 demo parity 为“Not Recorded”；端到端 GPU 证据应视为尚未记录。"
+        ],
+        "architecture": [],
+        "architectureZh": [],
+        "usageNotes": [],
+        "usageNotesZh": [],
+        "highlights": [
+          "Text To Video",
+          "Image To Video",
+          "Audio Video Generation",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "文生视频",
+          "图生视频",
+          "音视频联合生成",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [
+            "text",
+            "image"
+          ],
+          "outputs": [
+            "video"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "A pipeline binding is recorded, but a successful run has not been established for this entry.",
+          "Runner evidence is “Pending” — not a verified end-to-end GPU run. Do not treat this page as proof the route is fully validated.",
+          "Native demo evidence: Not recorded."
+        ],
+        "limitationsZh": [
+          "该条目已记录 pipeline 绑定，但尚未建立成功运行的证据。",
+          "Runner 证据为“Pending”——这不是经过验证的端到端 GPU 运行结果，请勿将本页视为该路径已被完整验证的证明。",
+          "原生 Demo 证据：未记录。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh kandinsky6-lite-pretrain",
+        "install": "bash scripts/setup/model_env_install.sh --model kandinsky6-lite-pretrain",
+        "inspect": "worldfoundry-eval zoo model-show --model-id kandinsky6-lite-pretrain --include-manifest --json",
+        "check": "worldfoundry-eval zoo model-download --model-id kandinsky6-lite-pretrain --check-local --json",
+        "run": "worldfoundry-eval run \\\n  kandinsky6-lite-pretrain \\\n  --pipeline.task-profile text-to-video \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/video/kandinsky6-lite-pretrain.yaml"
+    },
+    {
+      "id": "kandinsky6-pro",
+      "name": "Kandinsky 6.0 pro",
+      "category": "video",
+      "categoryLabel": "Video",
+      "categoryLabelZh": "视频",
+      "provider": "Kandinsky6",
+      "summary": "Native audio-video inference; checkpoint-backed CUDA parity is pending.",
+      "aliases": [],
+      "tasks": [
+        "text-to-video",
+        "image-to-video",
+        "audio-video-generation"
+      ],
+      "status": {
+        "group": "planned",
+        "label": "Planned",
+        "integration": "planned",
+        "runner": "pending",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "kandinsky6-pro",
+        "bindingId": "kandinsky6-pro",
+        "runnerTarget": "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "native_diffusion",
+        "runtimeStatus": null,
+        "environmentId": "_unified",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": "compatible_unified_default",
+        "condaPackages": [
+          "python=3.11",
+          "pip",
+          "ffmpeg",
+          "setuptools",
+          "wheel"
+        ],
+        "pipPackages": [
+          "torch",
+          "torchvision",
+          "torchaudio",
+          "xfuser"
+        ],
+        "packageVersions": {
+          "torch": "torch",
+          "torchvision": "torchvision",
+          "torchaudio": "torchaudio",
+          "xfuser": "xfuser"
+        },
+        "validationImports": [
+          "torch",
+          "torchvision",
+          "numpy",
+          "transformers",
+          "diffusers",
+          "xfuser",
+          "worldfoundry"
+        ],
+        "notes": [
+          "Native audio-video inference; checkpoint-backed CUDA parity is pending.",
+          "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
+          "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
+          "Source the environment file emitted by `scripts/setup/unified_install.sh` so WORLDFOUNDRY_USE_UNIFIED_ENV=1 routes compatible profiles here.",
+          "Runnable GPU models that previously used cu113/cu118/cu124 CUDA buckets are mapped to this tier when they do not carry hard ABI pins requiring isolation."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "source",
+          "label": "Source",
+          "url": "https://github.com/kandinskylab/kandinsky-6",
+          "revision": "b224b77cb458c2f9241a5a245bedc4fd43817b11"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/kandinskylab/kandinsky-6#readme",
+          "revision": "b224b77cb458c2f9241a5a245bedc4fd43817b11"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "kandinskylab/Kandinsky-6.0-Pro-5s-Diffusers",
+          "revision": "e8e4a00259946892631a33a899237edf50c7232f",
+          "role": "joint_audio_video_snapshot"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "text-to-video",
+          "label": "Text To Video",
+          "description": "Run Kandinsky 6.0 pro through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 pro inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 pro inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-pro.mp4"
+            }
+          ]
+        },
+        {
+          "id": "image-to-video",
+          "label": "Image To Video",
+          "description": "Run Kandinsky 6.0 pro through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 pro inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 pro inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-pro.mp4"
+            }
+          ]
+        },
+        {
+          "id": "audio-video-generation",
+          "label": "Audio Video Generation",
+          "description": "Run Kandinsky 6.0 pro through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 pro inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 pro inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-pro.mp4"
+            }
+          ]
+        },
+        {
+          "id": "video_generation",
+          "label": "Video Generation",
+          "description": "Run Kandinsky 6.0 pro through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 pro inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 pro inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-pro.mp4"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "image",
+          "detail": "Required"
+        },
+        {
+          "field": "video",
+          "detail": "Optional"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_video",
+          "filename": ""
+        },
+        {
+          "kind": "generated_video",
+          "filename": "kandinsky6-pro.mp4"
+        }
+      ],
+      "notes": [
+        "Native audio-video inference; checkpoint-backed CUDA parity is pending."
+      ],
+      "docs": {
+        "curated": false,
+        "publisher": null,
+        "overview": [
+          "Kandinsky 6.0 pro is a video generation model from Kandinsky6. The catalog records it for text-to-video, image-to-video, and audio-video-generation.",
+          "WorldFoundry records a binding to the worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline pipeline via worldfoundry.pipeline; this binding alone does not establish a successful run.",
+          "It runs in the shared unified environment worldfoundry-unified-cu128 (Python 3.11, CUDA 12.8).",
+          "Weights are pulled from the Hugging Face repository kandinskylab/Kandinsky-6.0-Pro-5s-Diffusers, pinned to revision e8e4a0025.",
+          "Runner parity is currently “Pending” and native-demo parity is “Not Recorded”; treat end-to-end GPU evidence as not yet recorded."
+        ],
+        "overviewZh": [
+          "Kandinsky 6.0 pro 是来自 Kandinsky6 的视频生成模型。Catalog 将它记录为文生视频、图生视频、音视频联合生成任务。",
+          "WorldFoundry 记录了到 worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline pipeline 的绑定（runner：worldfoundry.pipeline）；仅有绑定记录并不代表已成功运行。",
+          "它运行在统一环境 worldfoundry-unified-cu128 中（Python 3.11，CUDA 12.8）。",
+          "权重来自 Hugging Face 仓库 kandinskylab/Kandinsky-6.0-Pro-5s-Diffusers，固定在 revision e8e4a0025。",
+          "当前 runner parity 为“Pending”，原生 demo parity 为“Not Recorded”；端到端 GPU 证据应视为尚未记录。"
+        ],
+        "architecture": [],
+        "architectureZh": [],
+        "usageNotes": [],
+        "usageNotesZh": [],
+        "highlights": [
+          "Text To Video",
+          "Image To Video",
+          "Audio Video Generation",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "文生视频",
+          "图生视频",
+          "音视频联合生成",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [
+            "text",
+            "image"
+          ],
+          "outputs": [
+            "video"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "A pipeline binding is recorded, but a successful run has not been established for this entry.",
+          "Runner evidence is “Pending” — not a verified end-to-end GPU run. Do not treat this page as proof the route is fully validated.",
+          "Native demo evidence: Not recorded."
+        ],
+        "limitationsZh": [
+          "该条目已记录 pipeline 绑定，但尚未建立成功运行的证据。",
+          "Runner 证据为“Pending”——这不是经过验证的端到端 GPU 运行结果，请勿将本页视为该路径已被完整验证的证明。",
+          "原生 Demo 证据：未记录。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh kandinsky6-pro",
+        "install": "bash scripts/setup/model_env_install.sh --model kandinsky6-pro",
+        "inspect": "worldfoundry-eval zoo model-show --model-id kandinsky6-pro --include-manifest --json",
+        "check": "worldfoundry-eval zoo model-download --model-id kandinsky6-pro --check-local --json",
+        "run": "worldfoundry-eval run \\\n  kandinsky6-pro \\\n  --pipeline.task-profile text-to-video \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/video/kandinsky6-pro.yaml"
+    },
+    {
+      "id": "kandinsky6-pro-pretrain",
+      "name": "Kandinsky 6.0 pro-pretrain",
+      "category": "video",
+      "categoryLabel": "Video",
+      "categoryLabelZh": "视频",
+      "provider": "Kandinsky6",
+      "summary": "Native audio-video inference; checkpoint-backed CUDA parity is pending.",
+      "aliases": [],
+      "tasks": [
+        "text-to-video",
+        "image-to-video",
+        "audio-video-generation"
+      ],
+      "status": {
+        "group": "planned",
+        "label": "Planned",
+        "integration": "planned",
+        "runner": "pending",
+        "demo": "not_recorded"
+      },
+      "runtime": {
+        "profileId": "kandinsky6-pro-pretrain",
+        "bindingId": "kandinsky6-pro-pretrain",
+        "runnerTarget": "worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner",
+        "runner": "worldfoundry.pipeline",
+        "pipelineTarget": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+        "loadingMethod": "from_pretrained",
+        "invocationMode": "native_or_standard_invocation",
+        "backendStage": "native_diffusion",
+        "runtimeStatus": null,
+        "environmentId": "_unified",
+        "environmentName": "worldfoundry-unified-cu128",
+        "environmentKind": "unified",
+        "python": "3.11",
+        "cudaProfile": "cu128",
+        "cudaLabel": "CUDA 12.8",
+        "driverStatus": "compatible_unified_default",
+        "condaPackages": [
+          "python=3.11",
+          "pip",
+          "ffmpeg",
+          "setuptools",
+          "wheel"
+        ],
+        "pipPackages": [
+          "torch",
+          "torchvision",
+          "torchaudio",
+          "xfuser"
+        ],
+        "packageVersions": {
+          "torch": "torch",
+          "torchvision": "torchvision",
+          "torchaudio": "torchaudio",
+          "xfuser": "xfuser"
+        },
+        "validationImports": [
+          "torch",
+          "torchvision",
+          "numpy",
+          "transformers",
+          "diffusers",
+          "xfuser",
+          "worldfoundry"
+        ],
+        "notes": [
+          "Native audio-video inference; checkpoint-backed CUDA parity is pending.",
+          "Default unified WorldFoundry runtime for modern NVIDIA hosts. Install with `bash scripts/setup/unified_install.sh`.",
+          "Override tier with `--cuda cu124` or `--cuda cu121` when an upstream model still pins an older CUDA wheel bucket.",
+          "Source the environment file emitted by `scripts/setup/unified_install.sh` so WORLDFOUNDRY_USE_UNIFIED_ENV=1 routes compatible profiles here.",
+          "Runnable GPU models that previously used cu113/cu118/cu124 CUDA buckets are mapped to this tier when they do not carry hard ABI pins requiring isolation."
+        ]
+      },
+      "sources": [
+        {
+          "kind": "source",
+          "label": "Source",
+          "url": "https://github.com/kandinskylab/kandinsky-6",
+          "revision": "b224b77cb458c2f9241a5a245bedc4fd43817b11"
+        },
+        {
+          "kind": "docs",
+          "label": "Upstream README",
+          "url": "https://github.com/kandinskylab/kandinsky-6#readme",
+          "revision": "b224b77cb458c2f9241a5a245bedc4fd43817b11"
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "kandinskylab/Kandinsky-6.0-Pro-pretrain-5s-Diffusers",
+          "revision": "fd9a3fcd1967acc20a1911444b733405f51b6530",
+          "role": "joint_audio_video_snapshot"
+        }
+      ],
+      "variants": [],
+      "inferenceTasks": [
+        {
+          "id": "text-to-video",
+          "label": "Text To Video",
+          "description": "Run Kandinsky 6.0 pro-pretrain through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 pro-pretrain inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 pro-pretrain inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-pro-pretrain.mp4"
+            }
+          ]
+        },
+        {
+          "id": "image-to-video",
+          "label": "Image To Video",
+          "description": "Run Kandinsky 6.0 pro-pretrain through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 pro-pretrain inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 pro-pretrain inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-pro-pretrain.mp4"
+            }
+          ]
+        },
+        {
+          "id": "audio-video-generation",
+          "label": "Audio Video Generation",
+          "description": "Run Kandinsky 6.0 pro-pretrain through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 pro-pretrain inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 pro-pretrain inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-pro-pretrain.mp4"
+            }
+          ]
+        },
+        {
+          "id": "video_generation",
+          "label": "Video Generation",
+          "description": "Run Kandinsky 6.0 pro-pretrain through the public CLI contract.",
+          "source": "cli",
+          "variantIds": [],
+          "inputs": [
+            {
+              "field": "prompt",
+              "option": "--pipeline.prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Prompt used as the input for direct Kandinsky 6.0 pro-pretrain inference."
+            },
+            {
+              "field": "image",
+              "option": "--pipeline.image",
+              "detail": "Optional",
+              "kind": "path",
+              "target": "input",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Image used as the input for direct Kandinsky 6.0 pro-pretrain inference."
+            },
+            {
+              "field": "seed",
+              "option": "--pipeline.seed",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "RNG seed for deterministic generation."
+            },
+            {
+              "field": "frames",
+              "option": "--pipeline.frames",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of frames to generate."
+            },
+            {
+              "field": "fps",
+              "option": "--pipeline.fps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output video frame rate."
+            },
+            {
+              "field": "height",
+              "option": "--pipeline.height",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output height in pixels."
+            },
+            {
+              "field": "width",
+              "option": "--pipeline.width",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Output width in pixels."
+            },
+            {
+              "field": "steps",
+              "option": "--pipeline.steps",
+              "detail": "Optional",
+              "kind": "integer",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Number of inference or sampling steps."
+            },
+            {
+              "field": "guidance-scale",
+              "option": "--pipeline.guidance-scale",
+              "detail": "Optional",
+              "kind": "number",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Classifier-free guidance scale."
+            }
+          ],
+          "artifacts": [
+            {
+              "kind": "generated_video",
+              "filename": ""
+            },
+            {
+              "kind": "generated_video",
+              "filename": "kandinsky6-pro-pretrain.mp4"
+            }
+          ]
+        }
+      ],
+      "inputContract": [
+        {
+          "field": "prompt",
+          "detail": "Required"
+        },
+        {
+          "field": "image",
+          "detail": "Required"
+        },
+        {
+          "field": "video",
+          "detail": "Optional"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "generated_video",
+          "filename": ""
+        },
+        {
+          "kind": "generated_video",
+          "filename": "kandinsky6-pro-pretrain.mp4"
+        }
+      ],
+      "notes": [
+        "Native audio-video inference; checkpoint-backed CUDA parity is pending."
+      ],
+      "docs": {
+        "curated": false,
+        "publisher": null,
+        "overview": [
+          "Kandinsky 6.0 pro-pretrain is a video generation model from Kandinsky6. The catalog records it for text-to-video, image-to-video, and audio-video-generation.",
+          "WorldFoundry records a binding to the worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline pipeline via worldfoundry.pipeline; this binding alone does not establish a successful run.",
+          "It runs in the shared unified environment worldfoundry-unified-cu128 (Python 3.11, CUDA 12.8).",
+          "Weights are pulled from the Hugging Face repository kandinskylab/Kandinsky-6.0-Pro-pretrain-5s-Diffusers, pinned to revision fd9a3fcd1.",
+          "Runner parity is currently “Pending” and native-demo parity is “Not Recorded”; treat end-to-end GPU evidence as not yet recorded."
+        ],
+        "overviewZh": [
+          "Kandinsky 6.0 pro-pretrain 是来自 Kandinsky6 的视频生成模型。Catalog 将它记录为文生视频、图生视频、音视频联合生成任务。",
+          "WorldFoundry 记录了到 worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline pipeline 的绑定（runner：worldfoundry.pipeline）；仅有绑定记录并不代表已成功运行。",
+          "它运行在统一环境 worldfoundry-unified-cu128 中（Python 3.11，CUDA 12.8）。",
+          "权重来自 Hugging Face 仓库 kandinskylab/Kandinsky-6.0-Pro-pretrain-5s-Diffusers，固定在 revision fd9a3fcd1。",
+          "当前 runner parity 为“Pending”，原生 demo parity 为“Not Recorded”；端到端 GPU 证据应视为尚未记录。"
+        ],
+        "architecture": [],
+        "architectureZh": [],
+        "usageNotes": [],
+        "usageNotesZh": [],
+        "highlights": [
+          "Text To Video",
+          "Image To Video",
+          "Audio Video Generation",
+          "Unified env · Python 3.11 · CUDA 12.8",
+          "Public Hugging Face weights"
+        ],
+        "highlightsZh": [
+          "文生视频",
+          "图生视频",
+          "音视频联合生成",
+          "统一环境 · Python 3.11 · CUDA 12.8",
+          "公开的 Hugging Face 权重"
+        ],
+        "modalities": {
+          "inputs": [
+            "text",
+            "image"
+          ],
+          "outputs": [
+            "video"
+          ]
+        },
+        "useCases": [],
+        "useCasesZh": [],
+        "hardware": {
+          "minVramGb": null,
+          "recommended": null,
+          "notes": []
+        },
+        "benchmarks": [],
+        "limitations": [
+          "A pipeline binding is recorded, but a successful run has not been established for this entry.",
+          "Runner evidence is “Pending” — not a verified end-to-end GPU run. Do not treat this page as proof the route is fully validated.",
+          "Native demo evidence: Not recorded."
+        ],
+        "limitationsZh": [
+          "该条目已记录 pipeline 绑定，但尚未建立成功运行的证据。",
+          "Runner 证据为“Pending”——这不是经过验证的端到端 GPU 运行结果，请勿将本页视为该路径已被完整验证的证明。",
+          "原生 Demo 证据：未记录。"
+        ],
+        "paper": null,
+        "figures": []
+      },
+      "commands": {
+        "prepare": "bash scripts/inference/prepare_model_infer.sh kandinsky6-pro-pretrain",
+        "install": "bash scripts/setup/model_env_install.sh --model kandinsky6-pro-pretrain",
+        "inspect": "worldfoundry-eval zoo model-show --model-id kandinsky6-pro-pretrain --include-manifest --json",
+        "check": "worldfoundry-eval zoo model-download --model-id kandinsky6-pro-pretrain --check-local --json",
+        "run": "worldfoundry-eval run \\\n  kandinsky6-pro-pretrain \\\n  --pipeline.task-profile text-to-video \\\n  --json"
+      },
+      "catalogPath": "worldfoundry/data/models/catalog/video/kandinsky6-pro-pretrain.yaml"
     }
   ]
 }

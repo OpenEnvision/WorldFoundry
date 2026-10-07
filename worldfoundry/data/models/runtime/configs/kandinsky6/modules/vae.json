@@ -1,0 +1,32 @@
+{
+  "_class_name": "AutoencoderKLHunyuanVideo",
+  "_diffusers_version": "0.32.0.dev0",
+  "act_fn": "silu",
+  "block_out_channels": [
+    128,
+    256,
+    512,
+    512
+  ],
+  "down_block_types": [
+    "HunyuanVideoDownBlock3D",
+    "HunyuanVideoDownBlock3D",
+    "HunyuanVideoDownBlock3D",
+    "HunyuanVideoDownBlock3D"
+  ],
+  "in_channels": 3,
+  "latent_channels": 16,
+  "layers_per_block": 2,
+  "mid_block_add_attention": true,
+  "norm_num_groups": 32,
+  "out_channels": 3,
+  "scaling_factor": 0.476986,
+  "spatial_compression_ratio": 8,
+  "temporal_compression_ratio": 4,
+  "up_block_types": [
+    "HunyuanVideoUpBlock3D",
+    "HunyuanVideoUpBlock3D",
+    "HunyuanVideoUpBlock3D",
+    "HunyuanVideoUpBlock3D"
+  ]
+}

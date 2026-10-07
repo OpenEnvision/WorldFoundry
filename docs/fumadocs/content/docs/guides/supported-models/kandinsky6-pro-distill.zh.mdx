@@ -1,0 +1,44 @@
+---
+title: "Kandinsky 6.0 pro-distill"
+description: "Kandinsky 6.0 pro-distill（Kandinsky6）：文生视频、图生视频；Runner 一致性待确认; 独立环境 `worldfoundry-kandinsky6-cu126`。"
+modelId: "kandinsky6-pro-distill"
+pageSource: generated
+---
+
+Kandinsky 6.0 Pro-distill 根据文本生成同步视频和 44.1 kHz 音频， 并支持可选的首帧图像条件。WorldFoundry 通过原生扩散组件运行 Pro transformer，默认使用 10 步 PiFlow 采样。
+
+<ModelPaperFigures modelId="kandinsky6-pro-distill" locale="zh" />
+
+代码：[kandinskylab/kandinsky-6](https://github.com/kandinskylab/kandinsky-6)。
+
+<ModelCommandBuilder modelId="kandinsky6-pro-distill" locale="zh" />
+
+## 用来做什么
+
+用 `kandinsky6-pro-distill` 跑本系列联合 T2V/I2V 推理路径。本页记录了这两种任务 profile。
+
+catalog 记录的任务包括 文生视频、图生视频、音视频联合生成。别名包括 `kandinsky6`、`kandinsky-6`。模态上，它接受文本、图像，输出视频、音频。
+
+## 运行时契约
+
+可选 `prompt`、`input_path`、`interactions`、`operator_kwargs`、`ref_image_path`；产物 `generated_video`、`kandinsky6-pro-distill.mp4`。
+
+CLI task profile：`default`。绑定的 pipeline 类是 `Kandinsky6Pipeline`。
+
+系列状态：**Runner 一致性待确认**。
+
+文生视频已在单张 H100 80GB 上验证通过，使用 SDPA、component offload 和 seed 42，输出 121 帧、864x480、24 fps 的视频及同步音频。 固定的 Python 3.10 / CUDA 12.6 环境中，权重加载耗时 85.2 秒， 生成耗时 140.4 秒。 验证报告位于 outputs/kandinsky6-pro-distill-validation/cuda-validation.json。
+
+图生视频和与官方 demo 的一致性仍待验证。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run kandinsky6-pro-distill --pipeline.task-profile default` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是独立 profile `worldfoundry-kandinsky6-cu126`（Python 3.10，CUDA 12.6，torch==2.9.0+cu126）。
+
+记录的权重仓库包括 `kandinskylab/Kandinsky-6.0-Pro-distill-5s-Diffusers`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh kandinsky6-pro-distill`；下载缺失的公开权重时加 `--download`。
+
+状态：**Runner 一致性待确认**。
+
+<ModelRelatedRecipes modelId="kandinsky6-pro-distill" locale="zh" />

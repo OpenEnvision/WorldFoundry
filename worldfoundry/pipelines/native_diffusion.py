@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import secrets
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, ClassVar
@@ -53,6 +54,7 @@ class NativeVisualDiffusionPipeline(PipelineABC):
     DEFAULT_NEGATIVE_PROMPT: ClassVar[str | None] = None
     DEFAULT_FPS: ClassVar[int] = 24
     OUTPUT_VALUE_RANGE: ClassVar[str | tuple[float, float]] = "auto"
+    OUTPUT_LAYOUT: ClassVar[str] = "BCTHW"
     DEFAULT_SCHEDULER_OPTIONS: ClassVar[Mapping[str, object]] = {}
     SCHEDULER_OPTION_ALIASES: ClassVar[Mapping[str, str]] = {}
     REQUEST_INPUT_DEFAULTS: ClassVar[Mapping[str, object]] = {}
@@ -515,10 +517,12 @@ class NativeVisualDiffusionPipeline(PipelineABC):
             raise TypeError(f"unsupported {self.model_id} inference options: {sorted(options)}")
 
         processed = self.process(prompt=prompt, images=images, video=video)
-        actual_fps = int(self.DEFAULT_FPS if fps is None else fps)
+        actual_fps = int(request_inputs.get("frame_rate", self.DEFAULT_FPS) if fps is None else fps)
         if actual_fps <= 0:
             raise ValueError("fps must be positive")
         request_inputs.update({"fps": actual_fps, "return_latent": output_type == "latent"})
+        if "frame_rate" in request_inputs:
+            request_inputs["frame_rate"] = actual_fps
         if self.ACCEPTS_IMAGES:
             request_inputs["images"] = processed["images"]
         if self.ACCEPTS_VIDEO:
@@ -547,19 +551,32 @@ class NativeVisualDiffusionPipeline(PipelineABC):
                 inputs=request_inputs,
             )
         )
+        sample = output.sample
+        if self.OUTPUT_LAYOUT == "FHWC":
+            sample = sample.permute(3, 0, 1, 2).unsqueeze(0)
         artifact_path = None
         if output_path is not None and output_type != "latent":
-            sample_to_save = output.sample.unsqueeze(2) if output.sample.ndim == 4 else output.sample
+            sample_to_save = sample.unsqueeze(2) if sample.ndim == 4 else sample
             artifact_path = save_image_or_video_tensor(
                 sample_to_save,
                 output_path,
                 fps=actual_fps,
                 value_range=self.OUTPUT_VALUE_RANGE,
             )
-        is_image = output.sample.ndim == 4
+            audio = output.artifacts.get("audio")
+            if artifact_path is not None and audio is not None:
+                from worldfoundry.core.media.codecs.audio import mux_audio_video, write_audio
+
+                with tempfile.TemporaryDirectory(prefix="worldfoundry-audio-") as directory:
+                    audio_path = write_audio(
+                        audio, Path(directory) / "audio.wav",
+                        sample_rate=int(output.artifacts["audio_sampling_rate"]),
+                    )
+                    artifact_path = mux_audio_video(artifact_path, audio_path)
+        is_image = sample.ndim == 4
         result = {
-            "sample": output.sample,
-            "generated": output.sample,
+            "sample": sample,
+            "generated": sample,
             "latents": output.latents,
             "artifact_path": artifact_path,
             "generated_image_path": artifact_path if is_image else None,
@@ -568,11 +585,14 @@ class NativeVisualDiffusionPipeline(PipelineABC):
             "generation_type": self.GENERATION_TYPE,
             "metadata": dict(output.metadata),
         }
+        for key in ("audio", "audio_sampling_rate"):
+            if key in output.artifacts:
+                result[key] = output.artifacts[key]
         if is_image:
-            result.update(image=output.sample, generated_image=output.sample)
+            result.update(image=sample, generated_image=sample)
         else:
-            result.update(video=output.sample, generated_video=output.sample)
-        return result if return_dict else (artifact_path or output.sample)
+            result.update(video=sample, generated_video=sample)
+        return result if return_dict else (artifact_path or sample)
 
     def stream(
         self,
