@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
-from ..components import ComponentKey, ComponentKind, ComponentSpec, ExecutionSpec
-from ..loaders import CheckpointSpec
-from ..models.autoencoders.ltx import build_ltx_media_decoder
-from ..models.denoisers.helixworld import build_helixworld_denoiser
-from ..models.encoders.helixworld import build_helixworld_conditioner
-from ..models.initializers.ltx import build_ltx_multistage_latent_initializer
-from ..schedulers.clean_sample import build_clean_sample_noise_scheduler
-from .spec import NativeDiffusionRecipe
+from worldfoundry.base_models.diffusion_model.components import (
+    ComponentKey,
+    ComponentKind,
+    ComponentSpec,
+    ExecutionSpec,
+)
+from worldfoundry.base_models.diffusion_model.loaders import CheckpointSpec
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx import build_ltx_media_decoder
+from worldfoundry.base_models.diffusion_model.models.initializers.ltx import build_ltx_multistage_latent_initializer
+from worldfoundry.base_models.diffusion_model.recipes.spec import NativeDiffusionRecipe
+
+from .denoiser import build_helixworld_denoiser
+from .encoders import build_helixworld_conditioner
+from .scheduler import build_clean_sample_noise_scheduler
 
 MODEL_ID = "helixworld"
 MODEL_REPO = "NoizAI/HelixWorld-preview"

@@ -10,6 +10,9 @@ from dataclasses import dataclass, fields, replace
 
 import torch
 
+from worldfoundry.base_models.diffusion_model.models.networks.ltx.attention import Attention
+from worldfoundry.base_models.diffusion_model.models.networks.ltx.model import LTXModel
+from worldfoundry.base_models.diffusion_model.models.networks.ltx.transformer import BasicAVTransformerBlock
 from worldfoundry.core.attention.cache.context import prepend_history_mask
 from worldfoundry.core.attention.rotary.projective_rope import (
     apply_token_projective_matrix,
@@ -18,10 +21,6 @@ from worldfoundry.core.attention.rotary.projective_rope import (
     lift_k,
 )
 from worldfoundry.core.nn.diffusion.timestep import TimestepEmbedding, get_timestep_embedding
-
-from .attention import Attention
-from .model import LTXModel
-from .transformer import BasicAVTransformerBlock
 
 
 @dataclass(frozen=True)

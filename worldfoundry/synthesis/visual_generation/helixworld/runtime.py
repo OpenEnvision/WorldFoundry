@@ -6,10 +6,9 @@ from dataclasses import dataclass
 
 import torch
 
+from worldfoundry.base_models.diffusion_model.contracts import Conditioning, DiffusionOutput, ModalityState
+from worldfoundry.base_models.diffusion_model.runners.multistage import JointMultiStageDiffusionRunner
 from worldfoundry.core.attention.cache.context import ContextAttentionCache
-
-from ..contracts import Conditioning, DiffusionOutput, ModalityState
-from .multistage import JointMultiStageDiffusionRunner
 
 
 @dataclass(frozen=True)

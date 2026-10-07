@@ -371,7 +371,7 @@ def build_joint_multistage_strategy(
 
 def build_joint_chunked_strategy(context: ExecutionBuildContext) -> DiffusionExecutor:
     """Reuse joint component binding for chunked clean-context generation."""
-    from .joint_chunked import JointChunkedDiffusionRunner
+    from worldfoundry.synthesis.visual_generation.helixworld.runtime import JointChunkedDiffusionRunner
 
     bound = build_joint_multistage_strategy(context)
     options = context.recipe.execution.options

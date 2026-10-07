@@ -10,24 +10,24 @@ from worldfoundry.base_models.diffusion_model.contracts import (
     DiffusionRequest,
     SamplingConfig,
 )
-from worldfoundry.base_models.diffusion_model.models.denoisers.helixworld import HelixWorldDenoiser
-from worldfoundry.base_models.diffusion_model.models.encoders.helixworld import HelixWorldConditioner
-from worldfoundry.base_models.diffusion_model.models.encoders.helixworld_controls import (
+from worldfoundry.base_models.diffusion_model.models.initializers.ltx import LTXMultiStageLatentInitializer
+from worldfoundry.base_models.diffusion_model.runners.multistage import MultiStageComponents
+from worldfoundry.core.attention.cache.context import ContextAttentionCache
+from worldfoundry.synthesis.visual_generation.helixworld.controls import (
     action_id,
     camera_poses,
     expand_action_plan,
     prepare_video_control,
 )
-from worldfoundry.base_models.diffusion_model.models.initializers.ltx import LTXMultiStageLatentInitializer
-from worldfoundry.base_models.diffusion_model.models.networks.ltx.helixworld import (
+from worldfoundry.synthesis.visual_generation.helixworld.denoiser import HelixWorldDenoiser
+from worldfoundry.synthesis.visual_generation.helixworld.encoders import HelixWorldConditioner
+from worldfoundry.synthesis.visual_generation.helixworld.modeling import (
     HelixWorldAttention,
     HelixWorldModel,
     VideoControlCondition,
 )
-from worldfoundry.base_models.diffusion_model.runners.joint_chunked import JointChunkedDiffusionRunner
-from worldfoundry.base_models.diffusion_model.runners.multistage import MultiStageComponents
-from worldfoundry.base_models.diffusion_model.schedulers.clean_sample import CleanSampleNoiseScheduler
-from worldfoundry.core.attention.cache.context import ContextAttentionCache
+from worldfoundry.synthesis.visual_generation.helixworld.runtime import JointChunkedDiffusionRunner
+from worldfoundry.synthesis.visual_generation.helixworld.scheduler import CleanSampleNoiseScheduler
 
 
 def _request(**kwargs):

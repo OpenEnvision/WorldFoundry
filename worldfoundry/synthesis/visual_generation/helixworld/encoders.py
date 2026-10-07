@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ...contracts import Conditioning
-from .helixworld_controls import prepare_video_control
-from .ltx import build_ltx_prompt_conditioner
+from worldfoundry.base_models.diffusion_model.contracts import Conditioning
+from worldfoundry.base_models.diffusion_model.models.encoders.ltx import build_ltx_prompt_conditioner
+
+from .controls import prepare_video_control
 
 
 class HelixWorldConditioner:

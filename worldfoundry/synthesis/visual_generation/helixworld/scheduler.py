@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from .ltx import LTXFixedEulerScheduler
+from worldfoundry.base_models.diffusion_model.schedulers.ltx import LTXFixedEulerScheduler
 
 
 class CleanSampleNoiseScheduler(LTXFixedEulerScheduler):

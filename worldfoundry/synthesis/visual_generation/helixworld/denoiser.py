@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from ..networks.ltx.helixworld import HelixWorldModel
-from .ltx import LTXAVTransformerModule, LTXJointDenoiser, build_ltx_joint_denoiser
-from .ltx_configurator import LTXModelConfigurator
+from worldfoundry.base_models.diffusion_model.models.denoisers.ltx import (
+    LTXAVTransformerModule,
+    LTXJointDenoiser,
+    build_ltx_joint_denoiser,
+)
+from worldfoundry.base_models.diffusion_model.models.denoisers.ltx_configurator import LTXModelConfigurator
+
+from .modeling import HelixWorldModel
 
 
 class HelixWorldModelConfigurator(LTXModelConfigurator):

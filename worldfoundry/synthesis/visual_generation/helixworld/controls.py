@@ -13,7 +13,7 @@ from PIL import Image
 
 from worldfoundry.core.media.processing.image_utils import center_crop_resize_geometry
 
-from ..networks.ltx.helixworld import VideoControlCondition
+from .modeling import VideoControlCondition
 
 _NAVIGATION = {
     "W": (1, 0, 0, 0), "S": (-1, 0, 0, 0), "A": (0, -1, 0, 0), "D": (0, 1, 0, 0),
