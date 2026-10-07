@@ -11,7 +11,7 @@ from worldfoundry.evaluation.models.runtime.validate import validate_runtime_pro
 from worldfoundry.pipelines.native_diffusion import NativeVisualDiffusionPipeline
 
 MODEL_DATA = Path(__file__).resolve().parents[2] / "worldfoundry" / "data" / "models"
-PIPELINE_TARGET = "worldfoundry.pipelines.worldplay2:WorldPlay2Pipeline"
+PIPELINE_TARGET = "worldfoundry.pipelines.worldplay2.pipeline_worldplay2:WorldPlay2Pipeline"
 BASE_REPO = "Wan-AI/Wan2.2-I2V-A14B"
 
 

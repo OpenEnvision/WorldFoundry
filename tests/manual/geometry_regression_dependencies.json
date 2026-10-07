@@ -228,6 +228,10 @@
     "diamond": [
       "worldfoundry/synthesis/visual_generation/diamond/**",
       "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py"
+    ],
+    "worldplay2-synthesis": [
+      "worldfoundry/pipelines/worldplay2/**",
+      "worldfoundry/synthesis/visual_generation/worldplay2/**"
     ]
   },
   "cases": {
@@ -375,6 +379,18 @@
     ],
     "diamond-csgo-conditioned-short": [
       "diamond"
+    ],
+    "worldplay2-controls-short": [
+      "worldplay2-synthesis"
+    ],
+    "worldplay2-fast-controls-short": [
+      "worldplay2-synthesis"
+    ],
+    "worldplay2-ar-controls-short": [
+      "worldplay2-synthesis"
+    ],
+    "worldplay2-bi-controls-short": [
+      "worldplay2-synthesis"
     ]
   },
   "coverage_scope": "Declared short 3D, video generation and world-model cases; variants and unlisted integrations are not implied covered.",

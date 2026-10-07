@@ -3,7 +3,7 @@ binding_id: worldplay2-bi
 model_id: worldplay2-bi
 runner: worldfoundry.pipeline
 pipeline:
-  target: worldfoundry.pipelines.worldplay2:WorldPlay2Pipeline
+  target: worldfoundry.pipelines.worldplay2.pipeline_worldplay2:WorldPlay2Pipeline
   loading:
     method: from_pretrained
     signature: unified

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -17,15 +18,18 @@ from worldfoundry.synthesis.visual_generation.worldplay2.modeling.model import W
 from worldfoundry.synthesis.visual_generation.worldplay2.runner import CompressedMemoryRunner
 from worldfoundry.synthesis.visual_generation.worldplay2.scheduler import FixedPDD4Scheduler
 
-_FIXTURE = Path(__file__).parents[1] / "fixtures" / "worldplay2" / "upstream_cpu.npz"
+_FIXTURE = Path(__file__).parents[1] / "fixtures" / "worldplay2" / "upstream_cpu.json"
 
 
 @pytest.fixture(scope="module")
 def reference():
     threads = torch.get_num_threads()
     torch.set_num_threads(2)
-    with np.load(_FIXTURE) as values:
-        fixtures = {name: torch.from_numpy(values[name]) for name in values.files}
+    fixtures = {}
+    for name, record in json.loads(_FIXTURE.read_text()).items():
+        dtype = record["dtype"]
+        values = np.asarray(record["values"], dtype="float64" if dtype == "complex128" else dtype)
+        fixtures[name] = torch.from_numpy(values.view(dtype).reshape(record["shape"]))
     yield fixtures
     torch.set_num_threads(threads)
 
