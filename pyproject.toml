@@ -618,6 +618,11 @@ include-package-data = true
 "worldfoundry.synthesis.visual_generation.egowm" = ["nav_25dof_stats.json"]
 "worldfoundry.synthesis.visual_generation.vid2world.csgo_utils" = ["test_split.txt"]
 "worldfoundry.base_models.diffusion_model.models.networks.evoke" = ["PROVENANCE.md"]
+"worldfoundry.base_models.diffusion_model.models.autoencoders.kandinsky6" = [
+    "mmaudio/ext/bigvgan_v2/config.json",
+    "mmaudio/ext/bigvgan_v2/LICENSE",
+    "mmaudio/ext/bigvgan_v2/incl_licenses/LICENSE_*",
+]
 "worldfoundry.base_models.three_dimensions.depth.vigeo" = ["PROVENANCE.md"]
 "*" = ["*.npy", "*.npz"]
 "worldfoundry.cli" = [

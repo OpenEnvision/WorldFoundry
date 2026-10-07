@@ -1,0 +1,35 @@
+schema_version: 2
+model_id: kandinsky6-lite-pretrain
+display_name: Kandinsky 6.0 lite-pretrain
+task_family: video_generation
+groups:
+- video
+- audio
+source_repos:
+- url: https://github.com/kandinskylab/kandinsky-6
+  revision: b224b77cb458c2f9241a5a245bedc4fd43817b11
+checkpoints:
+- repo_id: kandinskylab/Kandinsky-6.0-Lite-pretrain-5s-Diffusers
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/kandinskylab--Kandinsky-6.0-Lite-pretrain-5s-Diffusers
+  role: joint_audio_video_snapshot
+  revision: ae9378bb1d3cd382aa96ce36cc2df59fe7d28556
+input_schema:
+  prompt: true
+  image: true
+  video: false
+artifact_kind: generated_video
+artifact_filename: kandinsky6-lite-pretrain.mp4
+execution:
+  environment: kandinsky6
+  backend_stage: native_diffusion
+  pipeline_binding: kandinsky6-lite-pretrain
+  defaults:
+    num_frames: 121
+    width: 864
+    height: 480
+    fps: 24
+    sample_audio: true
+integration:
+  status: planned
+notes:
+- Native audio-video inference; checkpoint-backed CUDA parity is pending.

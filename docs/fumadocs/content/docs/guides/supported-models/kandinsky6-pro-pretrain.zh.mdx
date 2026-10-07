@@ -1,0 +1,42 @@
+---
+title: "Kandinsky 6.0 pro-pretrain"
+description: "Kandinsky 6.0 pro-pretrain（Kandinsky6）：文生视频、图生视频；计划中。"
+modelId: "kandinsky6-pro-pretrain"
+pageSource: generated
+---
+
+Kandinsky 6.0 pro-pretrain 是来自 Kandinsky6 的视频生成模型。Catalog 将它记录为文生视频、图生视频、音视频联合生成任务。
+
+<ModelPaperFigures modelId="kandinsky6-pro-pretrain" locale="zh" />
+
+代码：[kandinskylab/kandinsky-6](https://github.com/kandinskylab/kandinsky-6)。
+
+<ModelCommandBuilder modelId="kandinsky6-pro-pretrain" locale="zh" />
+
+## 用来做什么
+
+一条配方同时覆盖文生视频与图生视频时选 `kandinsky6-pro-pretrain`：prompt 进、可选静帧、视频出。不必再拼两条上游 demo。
+
+catalog 记录的任务包括 文生视频、图生视频、音视频联合生成。模态上，它接受文本、图像，输出视频。
+
+## 运行时契约
+
+可选 `prompt`、`image`、`seed`、`frames`、`fps`；产物 `generated_video`、`kandinsky6-pro-pretrain.mp4`。
+
+CLI task profile：`text-to-video`、`image-to-video`、`audio-video-generation`、`video_generation`。绑定的 pipeline 类是 `Kandinsky6Pipeline`。
+
+系列状态：**计划中**。
+
+该条目已记录 pipeline 绑定，但尚未建立成功运行的证据。
+
+## 在 WorldFoundry 中运行
+
+启动 `worldfoundry-eval run kandinsky6-pro-pretrain --pipeline.task-profile text-to-video` 采样视频。上方命令构建器按已记录任务切换 `--pipeline.task-profile`，发出的仍是 `worldfoundry-eval run`。
+
+运行环境是统一 profile `worldfoundry-unified-cu128`（Python 3.11，CUDA 12.8）。
+
+记录的权重仓库包括 `kandinskylab/Kandinsky-6.0-Pro-pretrain-5s-Diffusers`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh kandinsky6-pro-pretrain`；下载缺失的公开权重时加 `--download`。
+
+状态：**计划中**。
+
+<ModelRelatedRecipes modelId="kandinsky6-pro-pretrain" locale="zh" />

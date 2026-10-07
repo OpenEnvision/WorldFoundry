@@ -1,0 +1,37 @@
+# kandinskylab/Kandinsky-6.0-Lite-pretrain-5s-Diffusers
+# branch main
+checkpoint: lite-pretrain
+dit: transformer_lite
+
+paths:
+  dit: transformer/diffusion_pytorch_model.safetensors
+  vae: vae
+  qwen: text_encoder
+  clip: text_encoder_2
+
+generation:
+  height: 480
+  width: 864
+  latent_frames: 31
+  sample_frames: 121
+  num_steps: 50
+  guidance_weight: 5.0
+  scheduler_scale: 5.0
+  scale_factor: [1.0, 2.0, 2.0]
+
+text_embedder:
+  max_length: 1024
+
+scheduler:
+  class_name: FlowMatchEulerDiscreteScheduler
+  shift: 5.0
+
+audio_vae:
+  tod_vae_ckpt: audio_vae
+  scaling_factor: 0.417
+
+vocoder:
+  ckpt: vocoder
+
+piflow:
+  enabled: false

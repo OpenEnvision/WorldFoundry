@@ -1,0 +1,46 @@
+schema_version: 2
+id: kandinsky6-pro-pretrain
+name: Kandinsky 6.0 pro-pretrain
+family: Kandinsky6
+domain: video
+tasks:
+- text-to-video
+- image-to-video
+- audio-video-generation
+output_artifacts:
+- generated_video
+availability:
+  source: open_source
+  license: mit
+  requires_auth: false
+sources:
+  github:
+    url: https://github.com/kandinskylab/kandinsky-6
+    revision: b224b77cb458c2f9241a5a245bedc4fd43817b11
+  paper: https://arxiv.org/abs/2610.05608
+  huggingface:
+  - repo_id: kandinskylab/Kandinsky-6.0-Pro-pretrain-5s-Diffusers
+    type: model
+    status: confirmed
+checkpoints:
+  primary:
+    repo_id: kandinskylab/Kandinsky-6.0-Pro-pretrain-5s-Diffusers
+    revision: fd9a3fcd1967acc20a1911444b733405f51b6530
+pipeline_binding: kandinsky6-pro-pretrain
+runtime_profile: runtime-profile:kandinsky6-pro-pretrain
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+integration:
+  status: planned
+  runtime_profile: kandinsky6-pro-pretrain
+  pipeline_binding: kandinsky6-pro-pretrain
+runner_parity:
+  status: pending
+  expected_artifacts:
+  - output.mp4
+  - output.json
+evidence:
+  notes:
+  - Official inference components are owned by role-based base_models packages; sampling
+    and assembly use the native recipe registry.
+  - Checkpoint-backed CUDA inference has not been validated.
+catalog_category: video

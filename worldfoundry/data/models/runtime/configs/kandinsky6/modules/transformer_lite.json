@@ -1,0 +1,44 @@
+{
+  "audio_freqs_scaling": 0.144,
+  "axes_dims": [
+    16,
+    24,
+    24
+  ],
+  "axes_dims_a": [
+    16,
+    24,
+    24
+  ],
+  "ca_rope": true,
+  "cross_gates": true,
+  "ff_dim": 7168,
+  "ff_dim_a": 3584,
+  "fix_modulation": true,
+  "in_audio_dim": 40,
+  "in_text_dim": 3584,
+  "in_text_dim2": 768,
+  "in_visual_dim": 16,
+  "is_multimodal": true,
+  "model_dim": 1792,
+  "model_dim_a": 896,
+  "num_text_blocks": 2,
+  "num_visual_blocks": 32,
+  "out_audio_dim": 40,
+  "out_visual_dim": 16,
+  "patch_size": [
+    1,
+    2,
+    2
+  ],
+  "scale_factor": [
+    1.0,
+    2.0,
+    2.0
+  ],
+  "text_token_padding": true,
+  "time_dim": 512,
+  "time_dim_a": 512,
+  "visual_cond": true,
+  "visual_token_type_num_embeddings": 2
+}

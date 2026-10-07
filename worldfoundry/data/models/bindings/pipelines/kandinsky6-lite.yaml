@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: kandinsky6-lite
+model_id: kandinsky6-lite
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

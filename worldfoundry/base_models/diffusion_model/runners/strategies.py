@@ -509,6 +509,8 @@ def default_execution_strategy_registry() -> ExecutionStrategyRegistry:
     registry = ExecutionStrategyRegistry()
     registry.register("standard", build_standard_strategy)
     registry.register("vchitect-guidance", build_vchitect_strategy)
+    from .kandinsky6 import build_kandinsky6_strategy
+    registry.register("kandinsky6-joint", build_kandinsky6_strategy)
     registry.register("dual-condition-guidance", build_dual_condition_guidance_strategy)
     registry.register("wan22-dual-expert-guidance", build_wan22_dual_expert_guidance_strategy)
     registry.register("frozen-context", build_frozen_context_strategy)
