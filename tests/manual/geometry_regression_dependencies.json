@@ -228,6 +228,10 @@
     "diamond": [
       "worldfoundry/synthesis/visual_generation/diamond/**",
       "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py"
+    ],
+    "helixworld-synthesis": [
+      "worldfoundry/pipelines/helixworld/**",
+      "worldfoundry/synthesis/visual_generation/helixworld/**"
     ]
   },
   "cases": {
@@ -375,6 +379,9 @@
     ],
     "diamond-csgo-conditioned-short": [
       "diamond"
+    ],
+    "helixworld-controls-short": [
+      "helixworld-synthesis"
     ]
   },
   "coverage_scope": "Declared short 3D, video generation and world-model cases; variants and unlisted integrations are not implied covered.",

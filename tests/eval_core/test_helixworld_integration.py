@@ -23,7 +23,7 @@ def test_helixworld_catalog_recipe_and_public_pipeline_resolve():
     assert entry.model_id == "helixworld"
     assert entry.integration_status == "integrated"
     spec = build_pipeline_runner_spec(WorldModelConfig(model_id="helixworld", runner="worldfoundry.pipeline"))
-    assert spec.pipeline_target == "worldfoundry.pipelines.helixworld:HelixWorldPipeline"
+    assert spec.pipeline_target == "worldfoundry.pipelines.helixworld.pipeline_helixworld:HelixWorldPipeline"
     profile = load_runtime_profile_manifest(MODEL_DATA / "runtime" / "profiles" / "helixworld.yaml")
     assert profile.execution["defaults"]["num_frames"] == 121
     recipe = default_native_diffusion_registry().resolve("NoizAI/HelixWorld-preview")

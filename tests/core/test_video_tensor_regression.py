@@ -338,7 +338,7 @@ def native_adapter():
 
     def infer(value):
         requests.append(value)
-        return SimpleNamespace(sample=torch.zeros(1, 3, 1, 2, 2), latents=torch.zeros(1), metadata={})
+        return SimpleNamespace(sample=torch.zeros(1, 3, 1, 2, 2), latents=torch.zeros(1), artifacts={}, metadata={})
 
     adapter.native_pipeline = infer
     return adapter, requests
