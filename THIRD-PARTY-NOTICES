@@ -5606,3 +5606,20 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
+
+WorldPlay2 native inference components
+-------------------------------------
+Source: https://github.com/WorldPlay2/WorldPlay2
+Source revision: c5d83e32099116ff3a1437a8a05c764d579f704b
+License: Creative Commons Attribution-NonCommercial 4.0 International
+https://creativecommons.org/licenses/by-nc/4.0/
+The complete CC-BY-NC-4.0 license text is retained above.
+
+WorldFoundry adapts the WorldPlay2 action conditioning, compressed causal
+memory and PDD sampling for its shared Wan transformer, components and loaders.
+The released WorldPlay2 model assets use the same CC-BY-NC-4.0 terms.
+Wan2.2 support assets retain their Apache-2.0 license.
+
+Original-File: WorldPlay2/WorldPlay2/LICENSE.txt
+license: cc-by-nc-4.0

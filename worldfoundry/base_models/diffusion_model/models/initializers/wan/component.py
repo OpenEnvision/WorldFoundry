@@ -40,6 +40,26 @@ from ....contracts import DiffusionRequest, LatentEncoder, LatentInitialization
 WAN_DENOISE_MASK_IS_ALL_ONES = "_worldfoundry_wan_denoise_mask_is_all_ones"
 
 
+def encode_wan_image_condition(
+    pixels: torch.Tensor,
+    *,
+    num_frames: int,
+    latent_encoder: LatentEncoder,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> torch.Tensor:
+    """Encode the first-frame-plus-zero clip and Wan's four-channel mask."""
+
+    batch, _, _, height, width = pixels.shape
+    codec_dtype = getattr(latent_encoder, "dtype", torch.float32)
+    video = torch.zeros(batch, 3, num_frames, height, width, device=device, dtype=codec_dtype)
+    video[:, :, :1] = pixels.to(device=device, dtype=codec_dtype)
+    image_latents = latent_encoder.encode(video).to(device=device, dtype=dtype)
+    mask = image_latents.new_zeros(batch, 4, image_latents.shape[2], *image_latents.shape[-2:])
+    mask[:, :, :1] = 1.0
+    return torch.cat((mask, image_latents), dim=1)
+
+
 class WanTextToVideoLatentInitializer:
     """Create the canonical Wan noise tensor without model-owned runtime state."""
 
@@ -261,66 +281,17 @@ class WanImageToVideoLatentInitializer(WanTextToVideoLatentInitializer):
             align_corners=False,
         )
         pixels = pixels.unsqueeze(2).repeat(request.batch_size, 1, 1, 1, 1)
-        codec_dtype = self._codec_dtype(latent_encoder)
-        video = torch.zeros(
-            request.batch_size,
-            3,
-            request.num_frames,
-            request.height,
-            request.width,
-            device=device,
-            dtype=codec_dtype,
+        condition_latents = encode_wan_image_condition(
+            pixels, num_frames=request.num_frames, latent_encoder=latent_encoder,
+            device=device, dtype=noise.dtype,
         )
-        video[:, :, :1] = pixels.to(device=device, dtype=codec_dtype)
-        image_latents = latent_encoder.encode(video).to(device=device, dtype=noise.dtype)
+        image_latents = condition_latents[:, 4:]
         if image_latents.shape != noise.shape:
             raise ValueError(
                 "encoded Wan image condition must match generated latent geometry: "
                 f"{tuple(image_latents.shape)} vs {tuple(noise.shape)}"
             )
 
-        latent_frames = int(noise.shape[2])
-        latent_height, latent_width = int(noise.shape[-2]), int(noise.shape[-1])
-        mask = torch.zeros(
-            request.batch_size,
-            request.num_frames,
-            latent_height,
-            latent_width,
-            device=device,
-            dtype=noise.dtype,
-        )
-        mask[:, :1] = 1.0
-        mask = torch.cat(
-            (
-                mask[:, :1].repeat(1, self.temporal_compression, 1, 1),
-                mask[:, 1:],
-            ),
-            dim=1,
-        )
-        target_frames = latent_frames * self.temporal_compression
-        if mask.shape[1] < target_frames:
-            mask = torch.cat(
-                (
-                    mask,
-                    mask.new_zeros(
-                        request.batch_size,
-                        target_frames - mask.shape[1],
-                        latent_height,
-                        latent_width,
-                    ),
-                ),
-                dim=1,
-            )
-        elif mask.shape[1] > target_frames:
-            mask = mask[:, :target_frames]
-        mask = mask.view(
-            request.batch_size,
-            latent_frames,
-            self.temporal_compression,
-            latent_height,
-            latent_width,
-        ).transpose(1, 2)
-        condition_latents = torch.cat((mask, image_latents), dim=1)
         return LatentInitialization(
             noise,
             {

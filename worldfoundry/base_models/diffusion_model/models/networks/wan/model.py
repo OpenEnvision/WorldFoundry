@@ -57,6 +57,7 @@ from worldfoundry.core.nn.checkpointing.gradient import gradient_checkpoint_forw
 from .adapter import SimpleAdapter
 
 _SELF_ATTENTION_INTERNAL_KWARGS = (
+    "_worldfoundry_attention_context",
     "_worldfoundry_rope_precision",
     "_worldfoundry_rope_grid",
     "_worldfoundry_rope_table",
@@ -1100,6 +1101,12 @@ class WanModel(torch.nn.Module):
         del block_id, token_state, kwargs
         return x
 
+    def project_output(self, x: torch.Tensor, t: torch.Tensor, **kwargs: Any) -> torch.Tensor:
+        """Project target tokens through the checkpoint's output head."""
+
+        del kwargs
+        return self.head(x, t)
+
     def forward(
         self,
         x: torch.Tensor,
@@ -1404,7 +1411,7 @@ class WanModel(torch.nn.Module):
             x = x[:, :sequence_parallel_length]
 
         x, auxiliary = self.finalize_token_sequence(x, token_state, **kwargs)
-        x = self.head(x, t)
+        x = self.project_output(x, t, **kwargs)
         x = self.unpatchify(x, (f, h, w))
         return (x, auxiliary) if auxiliary is not None else x
 

@@ -1,0 +1,79 @@
+---
+title: "WorldPlay2"
+description: "支持动作控制与场景提示词切换的世界视频生成。"
+modelId: "worldplay2"
+pageSource: authored
+---
+
+WorldPlay2 从图像、导航动作及场景提示词生成世界视频。WorldFoundry 的原生 pipeline 复用 Wan2.2 transformer、UMT5 编码器、Wan2.1 VAE、权重加载器、注意力后端与媒体 IO。WorldPlay2 的 synthesis 扩展增加六通道动作条件、因果记忆压缩及按块上下文注意力。
+
+代码：[WorldPlay2/WorldPlay2](https://github.com/WorldPlay2/WorldPlay2)。论文：[arXiv 2609.35560](https://arxiv.org/abs/2609.35560)。权重：[Fast](https://huggingface.co/aejion/WorldPlay2-Fast)、[AR](https://huggingface.co/aejion/WorldPlay2-AR) 与 [BI](https://huggingface.co/aejion/WorldPlay2-BI)。
+
+```python
+from worldfoundry.pipelines.worldplay2 import WorldPlay2Pipeline
+
+pipeline = WorldPlay2Pipeline.from_pretrained(
+    model_path="checkpoints/WorldPlay2-Fast",
+    base_model_path="checkpoints/Wan2.2-I2V-A14B",
+    device="cuda",
+    dtype="bfloat16",
+    attention_backend="sdpa",
+)
+result = pipeline(
+    images="first_frame.png",
+    prompt="The scene in the video is: a forest trail. The character is: a hiker in a blue jacket.",
+    actions="w-4,right-4",
+    perspective="tps",
+    num_frames=29,
+    seed=42,
+    output_path="outputs/worldplay2.mp4",
+    return_dict=True,
+)
+```
+
+`result["sample"]` 是取值为 [0, 1] 的 BCTHW 视频张量；`result["artifact_path"]` 指向导出的 MP4。默认请求以 `actions="w-32"` 生成 125 帧、832×448、16 FPS 视频。宽高都须为 64 的倍数。
+
+所选 WorldPlay2 仓库中的 `high_noise_model/diffusion_pytorch_model.safetensors` 与 `low_noise_model/diffusion_pytorch_model.safetensors` 须同时就位。[Wan2.2-I2V-A14B](https://huggingface.co/Wan-AI/Wan2.2-I2V-A14B) 支持目录提供 `models_t5_umt5-xxl-enc-bf16.pth`、`google/umt5-xxl/`、`Wan2.1_VAE.pth` 及两个专家的 `config.json`。
+
+## 采样模式
+
+| 模型 ID | 加载模式 | 步数 | 每块 latent 帧数 | Guidance scale |
+| --- | --- | --- | --- | --- |
+| `worldplay2` / `worldplay2-fast` | `few_step` | 4 | 4 | 1.0 |
+| `worldplay2-ar` | `ar` | 40 | 4 | 3.5 |
+| `worldplay2-bi` | `bi` | 40 | 32 | 3.5 |
+
+加载 AR 或 BI 专家目录时向 `from_pretrained` 传入 `mode="ar"` 或 `mode="bi"`。各模式使用各自公开的权重。AR 与 Fast 按每块四个 latent 帧向前滚动；BI 在 32 个 latent 帧的块内双向采样。
+
+动作采用逗号分隔的 `action-duration` 段。移动键为 `w`、`s`、`a`、`d`、`wa`、`wd`、`sa`、`sd`，视角旋转为 `left`、`right`、`up`、`down`；`space` 为特殊动作，`none` 为静止。不同类别可用 `+` 组合，例如 `w+right-4`。
+
+时长按 latent 帧计数，包含始终静止的第一帧。总计 `L` 个 latent 帧输出 `4 * (L - 1) + 1` 个视频帧。Fast/AR 的总时长须为四的倍数，BI 则须为 32 的倍数；提示词切换也须对齐相同块边界。`perspective="fps"` 表示第一人称，`"tps"` 表示第三人称。
+
+## 提示词调度
+
+单个 `prompt` 应用于每个块。切换场景时提供具名提示词及各自的 latent 时长：
+
+```python
+rain = "The scene in the video is: a forest trail. The event is: rain begins to fall."
+sun = "The scene in the video is: a forest trail. The event is: sunlight breaks through clouds."
+pipeline(
+    images="first_frame.png",
+    prompt=rain,
+    prompts={"prompt1": rain, "prompt2": sun},
+    prompt_event="prompt1-4,prompt2-4",
+    actions="w-4,w+right-4",
+    perspective="fps",
+    num_frames=29,
+    output_path="outputs/worldplay2-prompts.mp4",
+)
+```
+
+提示词事件时长须与动作总时长相等。使用 `The scene in the video is: ...` 描述场景，第三人称提示词还包含 `The character is: ...`。需要描述事件时加入 `The event is: ...`。
+
+小图 FP32 CPU transformer 检查与固定版本的官方实现误差均小于 1e-6，覆盖 BI、含缓存的 AR 及两个 Fast 专家。Fast 的三块完整采样在 12 个 latent 帧上也与官方实现误差小于 1e-6，包含记忆压缩与 KV cache 复用。
+
+## 限制
+
+- WorldPlay2 代码与权重采用 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) 许可。
+- CPU 一致性检查使用小 transformer 及确定性的文本、codec fixture。checkpoint GPU 生成与完整模型输出一致性仍待验证。官方脚本默认八卡及 Ulysses 序列并行；本集成尚未测量硬件吞吐。
+- WorldPlay2-TAE 权重尚未发布，pipeline 使用共享的 Wan2.1 VAE。

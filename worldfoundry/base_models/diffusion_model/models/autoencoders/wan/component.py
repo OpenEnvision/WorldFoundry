@@ -537,6 +537,56 @@ class WanVideoDecoder:
     def clear_cache(self) -> None:
         self.vae.model.clear_cache()
 
+    def new_stream_state(self) -> dict[str, object]:
+        """Create request-owned causal encoder and decoder caches."""
+
+        from .model import count_conv3d
+
+        model = self.vae.model
+        return {"encode": [None] * count_conv3d(model.encoder),
+                "decode": [None] * count_conv3d(model.decoder)}
+
+    @torch.no_grad()
+    def encode_chunk(self, pixels: torch.Tensor, *, state: dict, is_first_chunk=False) -> torch.Tensor:
+        """Continue Wan2.1 encoding with separate caches from the decoder."""
+
+        model = self.vae.model
+        pixels = pixels.to(device=self.device, dtype=self.dtype)
+        frames = pixels.shape[2]
+        if not is_first_chunk and frames % 4:
+            raise ValueError("continuing Wan streaming encode requires groups of four pixel frames")
+        count = 1 + (frames - 1) // 4 if is_first_chunk else frames // 4
+        encoded = []
+        for index in range(count):
+            if is_first_chunk:
+                start, end = (0, 1) if index == 0 else (1 + 4 * (index - 1), 1 + 4 * index)
+            else:
+                start, end = 4 * index, 4 * (index + 1)
+            value, state["encode"], _ = model.encoder(
+                pixels[:, :, start:end], feat_cache=state["encode"], feat_idx=[0],
+            )
+            encoded.append(value)
+        mean = model.conv1(torch.cat(encoded, dim=2)).chunk(2, dim=1)[0]
+        offset, scale = (value.to(mean).view(1, self.vae.z_dim, 1, 1, 1) for value in self.vae.scale)
+        return ((mean - offset) * scale).float()
+
+    @torch.no_grad()
+    def decode_chunk(self, latents: torch.Tensor, *, state: dict, is_first_chunk=False) -> torch.Tensor:
+        """Continue causal Wan2.1 decode without retaining output frames on GPU."""
+
+        del is_first_chunk
+        model = self.vae.model
+        latents = latents.to(device=self.device, dtype=self.dtype)
+        offset, scale = (value.to(latents).view(1, self.vae.z_dim, 1, 1, 1) for value in self.vae.scale)
+        value = model.conv2(latents / scale + offset)
+        decoded = []
+        for index in range(value.shape[2]):
+            pixels, state["decode"], _ = model.decoder(
+                value[:, :, index:index + 1], feat_cache=state["decode"], feat_idx=[0],
+            )
+            decoded.append(pixels)
+        return torch.cat(decoded, dim=2).float().clamp_(-1, 1)
+
     def reset_dtype(self) -> None:
         """Compatibility no-op; dtype placement belongs to RuntimePolicy."""
 

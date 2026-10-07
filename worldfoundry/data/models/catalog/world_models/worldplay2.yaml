@@ -1,0 +1,118 @@
+id: worldplay2
+name: WorldPlay2
+family: Wan2.2
+aliases: [world-play2, aejion/WorldPlay2-Fast]
+tasks: [image-to-video, action-conditioned-video, interactive-world-model]
+output_artifacts: [generated_video]
+provider: official_repo
+source:
+  status: open_source
+  official_repo_url: https://github.com/WorldPlay2/WorldPlay2
+  hf_repo_id: aejion/WorldPlay2-Fast
+  license: cc-by-nc-4.0
+official_sources:
+  project_page: https://worldplay2.github.io/
+  paper: https://arxiv.org/abs/2609.35560
+  github:
+    url: https://github.com/WorldPlay2/WorldPlay2
+    head_sha: c5d83e32099116ff3a1437a8a05c764d579f704b
+  huggingface:
+  - repo_id: aejion/WorldPlay2-Fast
+    revision: 1991d1cd9a3b116c2f6d9513a220c0ee5077ab79
+    type: model
+    status: confirmed
+  - repo_id: aejion/WorldPlay2-AR
+    revision: 09ddd0161a4aaae8eef0eea65068be72dccc222f
+    type: model
+    status: confirmed
+  - repo_id: aejion/WorldPlay2-BI
+    revision: 18f84ce25548383160edd0b5f66dc069ad05cd73
+    type: model
+    status: confirmed
+checkpoint_refs:
+- repo_id: aejion/WorldPlay2-Fast
+  revision: 1991d1cd9a3b116c2f6d9513a220c0ee5077ab79
+  license: cc-by-nc-4.0
+  notes: [High-noise and low-noise WorldPlay2 Fast experts.]
+- repo_id: Wan-AI/Wan2.2-I2V-A14B
+  revision: 206a9ee1b7bfaaf8f7e4d81335650533490646a3
+  license: apache-2.0
+  notes: [Shared UMT5, tokenizer, Wan2.1 VAE and model configuration assets.]
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: worldplay2
+runtime_profile: runtime-profile:worldplay2
+catalog_category: world_models
+integration:
+  status: integrated
+  notes:
+  - Native Wan2.2 dual-expert inference with six-channel actions and scheduled prompts.
+  - Reuses canonical Wan transformer layers, UMT5, Wan VAE, checkpoint loading, attention and media IO.
+  - Fast is the default; AR and BI use the same pipeline with independent expert checkpoints.
+runner_parity:
+  status: pending
+  upstream_revision: c5d83e32099116ff3a1437a8a05c764d579f704b
+  notes:
+  - Small-graph FP32 CPU BI/AR/Fast transformer parity and three-chunk Fast sampling match the pinned official code within 1e-6.
+  - CPU sampling uses deterministic text and codec fixtures; released-checkpoint CUDA generation and official artifact parity remain pending.
+variants:
+- id: worldplay2-fast
+  name: WorldPlay2-Fast
+  task: action-conditioned-video
+  checkpoint:
+    repo_id: aejion/WorldPlay2-Fast
+    revision: 1991d1cd9a3b116c2f6d9513a220c0ee5077ab79
+    license: cc-by-nc-4.0
+  pipeline_binding: worldplay2-fast
+  runtime_profile: runtime-profile:worldplay2-fast
+  integration: {status: integrated}
+  runner_parity: {status: pending}
+  notes: [4-step autoregressive sampling with 4 latent frames per chunk.]
+- id: worldplay2-ar
+  name: WorldPlay2-AR
+  task: action-conditioned-video
+  checkpoint:
+    repo_id: aejion/WorldPlay2-AR
+    revision: 09ddd0161a4aaae8eef0eea65068be72dccc222f
+    license: cc-by-nc-4.0
+  pipeline_binding: worldplay2-ar
+  runtime_profile: runtime-profile:worldplay2-ar
+  integration: {status: integrated}
+  runner_parity: {status: pending}
+  notes: [40-step autoregressive sampling with 4 latent frames per chunk.]
+- id: worldplay2-bi
+  name: WorldPlay2-BI
+  task: action-conditioned-video
+  checkpoint:
+    repo_id: aejion/WorldPlay2-BI
+    revision: 18f84ce25548383160edd0b5f66dc069ad05cd73
+    license: cc-by-nc-4.0
+  pipeline_binding: worldplay2-bi
+  runtime_profile: runtime-profile:worldplay2-bi
+  integration: {status: integrated}
+  runner_parity: {status: pending}
+  notes: [40-step bidirectional sampling with 32 latent frames per chunk.]
+docs:
+  publisher: WorldPlay2 team
+  publisher_kind: lab
+  publisher_zh: WorldPlay2 团队
+  overview: WorldPlay2 generates action-controlled world video from an image, with first-person or third-person navigation and chunk-aligned prompt changes.
+  overview_zh: WorldPlay2 从图像生成动作可控的世界视频，支持第一或第三人称导航与按块切换提示词。
+  architecture: Wan2.2 dual-expert video transformer with six-channel action conditioning, causal memory compression and chunked context attention. WorldPlay2 synthesis extensions reuse shared Wan layers, UMT5, VAE, loading and media output.
+  architecture_zh: 基于 Wan2.2 双专家视频 transformer，加入六通道动作条件、因果记忆压缩与按块上下文注意力；WorldPlay2 的 synthesis 扩展复用共享 Wan 层、UMT5、VAE、权重加载与媒体输出。
+  usage_notes: Use WorldPlay2Pipeline.from_pretrained with WorldPlay2 expert and Wan2.2 support-asset directories. Fast uses four steps; AR and BI use 40 steps. Action durations count latent frames; total duration and prompt boundaries must align with the selected chunk length.
+  usage_notes_zh: 使用 WorldPlay2Pipeline.from_pretrained 加载 WorldPlay2 专家目录与 Wan2.2 支持资产目录。Fast 使用四步，AR 与 BI 使用 40 步。动作时长按 latent 帧计数，总时长及提示词切换边界须与所选块长度对齐。
+  limitations:
+  - Code and WorldPlay2 weights use CC BY-NC 4.0.
+  - Checkpoint-backed GPU generation and full-size output parity remain pending.
+  - WorldPlay2-TAE weights have not been released.
+  limitations_zh:
+  - 代码与 WorldPlay2 权重采用 CC BY-NC 4.0 许可。
+  - checkpoint GPU 生成与完整模型输出一致性仍待验证。
+  - WorldPlay2-TAE 权重尚未发布。
+  recommended_benchmarks:
+  - id: worldmodelbench
+    reason: Action-controlled world-rollout quality.
+    reason_zh: 动作控制的世界滚动生成质量。
+  - id: camerabench
+    reason: Camera-navigation adherence.
+    reason_zh: 相机导航的贴合度。

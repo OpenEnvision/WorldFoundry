@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: worldplay2
+model_id: worldplay2
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.worldplay2:WorldPlay2Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation
