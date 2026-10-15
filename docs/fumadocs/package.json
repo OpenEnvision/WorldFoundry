@@ -39,7 +39,7 @@
     "predev": "node scripts/predev.mjs",
     "pretypes:check": "npm run api:generate",
     "start": "node scripts/serve-static.mjs",
-    "types:check": "fumadocs-mdx && next typegen && tsc --noEmit"
+    "types:check": "fumadocs-mdx && _FUMADOCS_MDX=1 next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@fontsource/noto-sans-sc": "^5.2.9",

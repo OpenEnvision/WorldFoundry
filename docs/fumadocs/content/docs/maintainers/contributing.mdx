@@ -47,6 +47,11 @@ Python-backed docs codegen and drift checks (`api:*`, `models:*`, `coverage:*`, 
 `cli:screenshots`) go through `docs/fumadocs/scripts/run-python.sh`. Override the interpreter
 with `WF_DOCS_PYTHON` (then `PYTHON`, then `python3` / `python`) when needed.
 
+`npm run types:check` completes MDX generation before generating Next.js route
+types, then runs TypeScript. The route-type command sets `_FUMADOCS_MDX=1`
+to reuse the completed output rather than starting another background MDX
+generation over the same files.
+
 ## Fast site iteration
 
 Model demo videos are served from GitHub CDN; docs development does not need `git lfs pull`.

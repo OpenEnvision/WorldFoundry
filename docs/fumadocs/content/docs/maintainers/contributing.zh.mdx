@@ -47,6 +47,10 @@ Fumadocs 是唯一维护的文档面。新增或修改页面时，在 `docs/fuma
 `cli:screenshots`）统一经 `docs/fumadocs/scripts/run-python.sh` 调用解释器。需要覆盖时，
 解析顺序为 `WF_DOCS_PYTHON`、`PYTHON`、`python3`、`python`。
 
+`npm run types:check` 先完成 MDX 生成，再生成 Next.js 路由类型，最后执行
+TypeScript 检查。路由类型命令设置 `_FUMADOCS_MDX=1`，复用已经完成的输出，
+避免后台再次生成 MDX 并改写同一组文件。
+
 ## 快速站点迭代
 
 模型演示视频由 GitHub CDN 提供，文档开发不需要执行 `git lfs pull`。
