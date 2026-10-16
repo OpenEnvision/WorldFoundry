@@ -995,6 +995,8 @@
           <label>Dataset ID<input id="evalDatasetId" placeholder="optional dataset id" /></label>
           <label class="wide">Dataset Root<input id="evalDatasetRoot" placeholder="optional benchmark dataset root" /></label>
           <label class="wide">Dataset Manifest<input id="evalDatasetManifest" placeholder="optional dataset manifest JSON/JSONL" /></label>
+          <label class="check"><input type="checkbox" id="evalResume" /> Resume Completed Samples</label>
+          <label>Metric Batch Size<input id="evalMetricBatchSize" type="number" min="1" step="1" value="32" /></label>
           <label>Cache<select id="evalCacheMode"><option value="off">off</option><option value="read">read</option><option value="write">write</option><option value="read-write">read-write</option><option value="refresh">refresh</option></select></label>
           <label class="wide">Metrics<input id="evalMetrics" value="artifact_count" list="evalMetricSuggestions" placeholder="artifact_count, required_artifacts_present" /></label>
           <datalist id="evalMetricSuggestions"></datalist>
@@ -1956,6 +1958,9 @@
       setFieldVisible("evalDatasetId", evaluation);
       setFieldVisible("evalDatasetRoot", evaluation && mode !== "generate-and-score");
       setFieldVisible("evalDatasetManifest", evaluation && mode === "generate-and-score");
+      const supportsCheckpoints = (modelMode || existingMode) && !(existingMode && benchmarkRuntimeMode);
+      ["evalResume", "evalMetricBatchSize"].forEach(id => setFieldVisible(id, evaluation && supportsCheckpoints));
+      if (!supportsCheckpoints) { $("evalResume").checked = false; $("evalMetricBatchSize").value = "32"; }
     }
     function populateModelSelect() {
       const workload = $("workloadType").value;
@@ -2022,7 +2027,7 @@
       $("inferSpecSummary").classList.toggle("hidden", !inference);
       [
         "evalMode","evalPreset","evalBenchmark","evalResultsPath","evalRequestsPath","evalOutputDir","evalRunPlanPath",
-        "evalModelId","evalModelRunner","evalModelVariant","evalDatasetId","evalDatasetRoot","evalDatasetManifest","evalCacheMode","evalMetrics",
+        "evalModelId","evalModelRunner","evalModelVariant","evalDatasetId","evalDatasetRoot","evalDatasetManifest","evalCacheMode","evalMetrics","evalResume","evalMetricBatchSize",
         "evalRequiredArtifacts","evalModelParameters","evalRuntime"
       ].forEach(id => setFieldVisible(id, evaluation));
       syncEvaluationMode();
@@ -2605,6 +2610,8 @@
             dataset_root: $("evalDatasetRoot").value,
             dataset_manifest: $("evalDatasetManifest").value,
             generation_cache_mode: $("evalCacheMode").value,
+            resume: $("evalResume").checked,
+            metric_batch_size: Number($("evalMetricBatchSize").value),
             metrics: splitList($("evalMetrics").value),
             required_artifacts: splitList($("evalRequiredArtifacts").value),
             call_kwargs: parseJsonField("evalModelParameters", {}),

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from fractions import Fraction
 from importlib import import_module
@@ -27,6 +28,8 @@ from importlib.util import find_spec
 from typing import TYPE_CHECKING, Any, Callable
 
 import numpy as np
+
+from worldfoundry.studio.serving.realtime.telemetry import FrameContext, frame_context, frame_pixels
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from av.packet import Packet
@@ -172,6 +175,7 @@ class NVENCFrameEncoder:
         self._gpu_id = gpu_id
         self._shape = (height, width, 3)
         self.fps = fps
+        self.bitrate = bitrate
         self._time_base = Fraction(1, _RTP_VIDEO_CLOCK)
         self._pts_counter = 0
         self._closed = False
@@ -238,6 +242,21 @@ class NVENCFrameEncoder:
             on_packet(packet)
         return 1
 
+    def set_bitrate(self, bitrate: int) -> None:
+        """Reconfigure CBR on the encoding worker without resetting the RTP clock."""
+        if bitrate <= 0:
+            raise ValueError("bitrate must be positive")
+        if self._closed:
+            raise RuntimeError("NVENC encoder is closed")
+        if bitrate == self.bitrate:
+            return
+        params = self._encoder.GetEncodeReconfigureParams()
+        params.averageBitrate = bitrate
+        params.vbvBufferSize = max(bitrate // self.fps, 1)
+        params.vbvInitialDelay = params.vbvBufferSize
+        self._encoder.Reconfigure(params)
+        self.bitrate = bitrate
+
     def close(self) -> None:
         if self._closed:
             return
@@ -294,7 +313,9 @@ def build_nvenc_track(
 
         def __init__(self) -> None:
             super().__init__()
-            self._packets: asyncio.Queue[Packet | None] = asyncio.Queue(maxsize=maxsize)
+            self._packets: asyncio.Queue[tuple[Packet, FrameContext | None, float, float] | None] = asyncio.Queue(
+                maxsize=maxsize
+            )
             self._interval = 1.0 / fps
             self._closed = False
             self._error: Exception | None = None
@@ -308,6 +329,22 @@ def build_nvenc_track(
             self._encoder_shape: tuple[int, int] | None = None
             self._pts_counter = 0
             self._real_frames = presentation_mode == "real-frames"
+            self._feedback_lock = threading.Lock()
+            self._keyframe_requested = False
+            self._target_bitrate: int | None = None
+            self.delivery_context: FrameContext | None = None
+            self.delivery_started_at = 0.0
+            self.delivery_encode_ms: float | None = None
+
+        def request_keyframe(self) -> None:
+            """Coalesce receiver requests into the next native encode."""
+            with self._feedback_lock:
+                self._keyframe_requested = True
+
+        def set_target_bitrate(self, target: int) -> None:
+            """Hand the latest receiver bandwidth estimate to the encoder worker."""
+            with self._feedback_lock:
+                self._target_bitrate = max(int(target), 1)
 
         def start(self) -> None:
             if self._pump is None:
@@ -315,6 +352,12 @@ def build_nvenc_track(
 
         def _encode(self, frame: Any, pts: int) -> list[Packet]:
             height, width = int(frame.shape[0]), int(frame.shape[1])
+            with self._feedback_lock:
+                force_keyframe = self._keyframe_requested
+                self._keyframe_requested = False
+                target = self._target_bitrate
+            ceiling = bitrate or bitrate_for_resolution(width, height, fps)
+            desired = ceiling if target is None else min(ceiling, max(100_000, target))
             if self._encoder is None or self._encoder_shape != (height, width):
                 if self._encoder is not None:
                     self._encoder.close()
@@ -322,14 +365,24 @@ def build_nvenc_track(
                     width=width,
                     height=height,
                     fps=fps,
-                    bitrate=bitrate or bitrate_for_resolution(width, height, fps),
+                    bitrate=desired,
                     gpu_id=gpu_id,
                     gop=gop,
                 )
                 self._encoder_shape = (height, width)
                 self._first_frame = True
+            elif target is not None:
+                # Bandwidth reductions apply immediately; small upward changes
+                # wait for a 10% increase to avoid needless SDK reconfiguration.
+                if desired < self._encoder.bitrate or desired > self._encoder.bitrate * 1.1:
+                    self._encoder.set_bitrate(desired)
             packets: list[Packet] = []
-            self._encoder.encode_frame(frame, force_keyframe=self._first_frame, on_packet=packets.append, pts=pts)
+            self._encoder.encode_frame(
+                frame,
+                force_keyframe=self._first_frame or force_keyframe,
+                on_packet=packets.append,
+                pts=pts,
+            )
             self._first_frame = False
             return packets
 
@@ -367,11 +420,19 @@ def build_nvenc_track(
                     else:
                         pts = self._pts_counter
                     self._pts_counter = pts + max(_RTP_VIDEO_CLOCK // fps, 1)
-                    self._encode_future = loop.run_in_executor(self._worker, self._encode, self._last_frame, pts)
+                    started_at = loop.time()
+                    context = frame_context(self._last_frame)
+                    self._encode_future = loop.run_in_executor(
+                        self._worker,
+                        self._encode,
+                        frame_pixels(self._last_frame),
+                        pts,
+                    )
                     packets = await asyncio.shield(self._encode_future)
                     self._encode_future = None
+                    encode_ms = (loop.time() - started_at) * 1000.0
                     for packet in packets:
-                        await self._packets.put(packet)
+                        await self._packets.put((packet, context, started_at, encode_ms))
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -391,9 +452,10 @@ def build_nvenc_track(
             if self._closed:
                 raise MediaStreamError
             self.start()
-            packet = await self._packets.get()
-            if packet is None:
+            delivery = await self._packets.get()
+            if delivery is None:
                 raise MediaStreamError from self._error
+            packet, self.delivery_context, self.delivery_started_at, self.delivery_encode_ms = delivery
             return packet
 
         async def close(self) -> None:

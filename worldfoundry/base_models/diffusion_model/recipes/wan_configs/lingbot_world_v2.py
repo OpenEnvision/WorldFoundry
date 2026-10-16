@@ -28,6 +28,18 @@ LINGBOT_WORLD_V2_CONFIG.sample_neg_prompt = (
     "3D渲染感，人物，行人，游客，汽车，电线"
 )
 
+LINGBOT_WORLD_V2_1P3B_CONFIG = deepcopy(LINGBOT_WORLD_V2_CONFIG)
+LINGBOT_WORLD_V2_1P3B_CONFIG.__name__ = "Config: LingBot-World-V2 I2V 1.3B causal-fast"
+LINGBOT_WORLD_V2_1P3B_CONFIG.update(
+    dim=1536, ffn_dim=8960, num_heads=12, num_layers=30,
+    fast_checkpoint=".", sample_shift=5.0, reference_noise_chunks=20, frame_num=317,
+)
+
+LINGBOT_WORLD_V2_CONFIGS = {
+    "lingbot-world-v2": LINGBOT_WORLD_V2_CONFIG,
+    "lingbot-world-v2-1.3b": LINGBOT_WORLD_V2_1P3B_CONFIG,
+}
+
 SUPPORTED_SIZES = frozenset({"720*1280", "1280*720", "480*832", "832*480"})
 
-__all__ = ["LINGBOT_WORLD_V2_CONFIG", "SUPPORTED_SIZES"]
+__all__ = ["LINGBOT_WORLD_V2_CONFIG", "LINGBOT_WORLD_V2_1P3B_CONFIG", "LINGBOT_WORLD_V2_CONFIGS", "SUPPORTED_SIZES"]

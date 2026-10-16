@@ -34,11 +34,11 @@ artifact_kind: generated_video
 artifact_filename: minimax-h3.mp4
 execution:
   backend_stage: in_tree_runtime_plan
-  runtime_status: checkpoint_runtime_required
-  integration_status: planned
+  runtime_status: checkpoint_backed_parity_pending
+  integration_status: integrated
   pipeline_binding: minimax-h3
 integration:
-  status: planned
+  status: integrated
 notes:
 - MiniMax H3 joint audio+video DiT ported from SGLang multimodal_gen (Apache-2.0).
 - Tasks t2va / fl2va (keyframe) / ref2va (reference); coupled rectified-flow denoise.

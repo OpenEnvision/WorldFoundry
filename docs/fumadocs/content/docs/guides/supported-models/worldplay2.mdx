@@ -72,6 +72,15 @@ Prompt-event durations must equal the total action duration. Prompts describe th
 
 Small-graph FP32 CPU transformer checks match the pinned official implementation within 1e-6 for BI, cached AR and both Fast experts. Three-chunk Fast sampling also matches within 1e-6 across 12 latent frames, including memory compression and KV-cache reuse.
 
+The fixed reference tensors in `tests/fixtures/worldplay2/upstream_cpu.json`
+come from upstream revision `c5d83e32099116ff3a1437a8a05c764d579f704b`.
+The FP32 fixture uses two transformer layers, four heads and width 32, with
+parameters drawn in sorted checkpoint-key order from seeds 123 (BI/AR),
+456 (high expert) and 789 (low expert). Its three-chunk Fast rollout executes
+the official `WorldPlay2Pipeline.generate_chunked` with deterministic text and
+codec doubles, 12 latent frames, 45 RGB frames, four evaluations per chunk and
+seed 42. Complex RoPE entries retain float64 real/imaginary pairs.
+
 ## Limitations
 
 - WorldPlay2 code and weights use [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).

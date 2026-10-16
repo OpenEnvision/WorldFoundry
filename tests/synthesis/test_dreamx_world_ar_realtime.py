@@ -115,6 +115,11 @@ def test_ar_commits_only_the_clean_latent_to_persistent_kv_cache() -> None:
     session._chunk_index = 0
     session._camera_condition = lambda *_args: {}
 
-    session.generate(interactions=())
+    result = session.generate(interactions=())
 
+    chunk = result["video_chunk"]
+    assert chunk.frames is result["video"] is result["frames"]
+    assert chunk.layout == "thwc"
+    assert chunk.value_range == "0,255"
+    assert chunk.frame_count == 9
     assert calls == ["none", "none", "none", "none", "commit_detached"]

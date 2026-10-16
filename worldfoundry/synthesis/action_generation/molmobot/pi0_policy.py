@@ -43,8 +43,6 @@ class Pi0JointPositionPolicy:
     """Load the official Pi0 config and infer one joint-position action."""
 
     def __init__(self, checkpoint_dir: str, *, device: str, camera_keys: tuple[str, str]) -> None:
-        # Unpickling is only reached after runtime.py verifies the exact
-        # train_config.pkl SHA-256 supplied in the selected runtime variant.
         import molmobot_pi0.config_openpi as _molmobot_config  # noqa: F401
         from openpi.models.pi0_config import Pi0Config
         from openpi.training.config import TrainConfig

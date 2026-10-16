@@ -1,0 +1,12 @@
+schema_version: 2
+binding_id: matrix-game-4-egypt
+model_id: matrix-game-4-egypt
+runner: worldfoundry.pipeline
+aliases: [matrix-game-4-ancient-egypt]
+pipeline:
+  target: worldfoundry.pipelines.matrix_game.pipeline_matrix_game4:MatrixGame4EgyptPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

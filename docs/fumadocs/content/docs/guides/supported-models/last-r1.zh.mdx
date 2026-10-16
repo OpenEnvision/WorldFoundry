@@ -1,11 +1,11 @@
 ---
 title: "LaST-R1"
-description: "LaST-R1：视觉-语言-动作（VLA）、策略执行；计划中。"
+description: "LaST-R1：视觉-语言-动作（VLA）、策略执行；Runner 一致性待确认。"
 modelId: "last-r1"
 pageSource: generated
 ---
 
-LaST-R1 是 MIT 许可、以强化学习训练的 VLA 策略。libero_10 RL 权重已在本地就位，但 WorldFoundry 尚缺少推理所需的模型专用 rollout 适配器。
+LaST-R1 是 MIT 许可的 VLA 策略。WorldFoundry 已通过模型专用 latent/action-token 适配器接入离线图像与指令推理。
 
 <ModelPaperFigures modelId="last-r1" locale="zh" />
 
@@ -31,11 +31,11 @@ catalog 记录的任务包括 视觉-语言-动作（VLA）、reinforcement_lear
 
 CLI task profile：`interactive-video`。绑定的 pipeline 类是 `LastR1Pipeline`。
 
-系列状态：**计划中**。
+系列状态：**Runner 一致性待确认**。
 
-本地 libero_10 checkpoint 两片权重齐全；libero_goal 尚未下载完整。 官方 latent/action-token rollout 完成适配和验证前不可推理。
+准备 runtime profile 声明的 libero_10 权重与锁定版本的官方源码。 适配器从一幅图像与一条指令返回八步有限值的七维动作。
 
-仓库未记录 LaST-R1 策略推理或 GPU 验证。
+集成范围为离线动作推理；尚未验证闭环 LIBERO rollout 与任务成功率。
 
 ## 在 WorldFoundry 中运行
 
@@ -45,6 +45,6 @@ CLI task profile：`interactive-video`。绑定的 pipeline 类是 `LastR1Pipeli
 
 记录的权重仓库包括 `chenhao01/LaST-R1`。准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh last-r1`；下载缺失的公开权重时加 `--download`。
 
-状态：**计划中**。
+状态：**Runner 一致性待确认**。
 
 <ModelRelatedRecipes modelId="last-r1" locale="zh" />

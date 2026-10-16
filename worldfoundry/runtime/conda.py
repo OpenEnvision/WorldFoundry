@@ -27,6 +27,7 @@ from worldfoundry.core.io.paths import (
 )
 
 from .cuda_tiers import (
+    DEFAULT_CUDA_TIER,
     SUPPORTED_CUDA_TIERS,
     cuda_version_tuple,
     detect_nvidia_driver_cuda,
@@ -68,9 +69,7 @@ def runtime_env_is_usable(prefix: str | Path) -> bool:
         path / RUNTIME_ENV_INSTALLING_MARKER,
         path.with_name(f"{path.name}{RUNTIME_ENV_INSTALLING_MARKER}"),
     )
-    return (path / "bin" / "python").is_file() and not any(
-        marker.exists() for marker in installing_markers
-    )
+    return (path / "bin" / "python").is_file() and not any(marker.exists() for marker in installing_markers)
 
 
 def _canonical_model_id(model_id: str) -> str:
@@ -84,12 +83,14 @@ def _expand_runtime_path(value: str | Path | None) -> Path | None:
     if value is None:
         return None
     tokens = worldfoundry_path_tokens()
-    tokens.update({
-        "WORLDFOUNDRY_BENCH_ROOT": os.environ.get("WORLDFOUNDRY_BENCH_ROOT", str(REPO_ROOT)),
-        "WORLDFOUNDRY_REPO_ROOT": os.environ.get("WORLDFOUNDRY_REPO_ROOT", str(REPO_ROOT)),
-        "WORLDFOUNDRY_CKPT_DIR": str(resolve_ckpt_dir()),
-        "WORLDFOUNDRY_HFD_ROOT": str(resolve_hfd_root()),
-    })
+    tokens.update(
+        {
+            "WORLDFOUNDRY_BENCH_ROOT": os.environ.get("WORLDFOUNDRY_BENCH_ROOT", str(REPO_ROOT)),
+            "WORLDFOUNDRY_REPO_ROOT": os.environ.get("WORLDFOUNDRY_REPO_ROOT", str(REPO_ROOT)),
+            "WORLDFOUNDRY_CKPT_DIR": str(resolve_ckpt_dir()),
+            "WORLDFOUNDRY_HFD_ROOT": str(resolve_hfd_root()),
+        }
+    )
     return resolve_worldfoundry_path(value, tokens)
 
 
@@ -358,9 +359,12 @@ def _load_runtime_conda_env_specs_uncached(
     resolved_manifest = Path(manifest_path) if manifest_path is not None else DEFAULT_ENV_MANIFEST
     payload = _load_manifest_mapping(resolved_manifest)
     defaults = payload.get("defaults") if isinstance(payload.get("defaults"), Mapping) else {}
-    resolved_root = _expand_runtime_path(
-        env_root or os.environ.get("WORLDFOUNDRY_CONDA_ENV_ROOT") or defaults.get("env_root") or DEFAULT_ENV_ROOT
-    ) or DEFAULT_ENV_ROOT
+    resolved_root = (
+        _expand_runtime_path(
+            env_root or os.environ.get("WORLDFOUNDRY_CONDA_ENV_ROOT") or defaults.get("env_root") or DEFAULT_ENV_ROOT
+        )
+        or DEFAULT_ENV_ROOT
+    )
     default_channels = _tuple_of_str(defaults.get("channels"))
     default_extra_index = defaults.get("torch_cuda_extra_index_url")
 
@@ -431,12 +435,15 @@ def load_runtime_conda_env_specs(
 
 def _resolved_unified_env_root(env_root: str | Path | None = None) -> Path:
     """Resolve the root directory for unified-tier conda environments."""
-    return _expand_runtime_path(
-        env_root
-        or os.environ.get("WORLDFOUNDRY_CONDA_ENVS_ROOT")
-        or os.environ.get("WORLDFOUNDRY_CONDA_ENV_ROOT")
+    return (
+        _expand_runtime_path(
+            env_root
+            or os.environ.get("WORLDFOUNDRY_CONDA_ENVS_ROOT")
+            or os.environ.get("WORLDFOUNDRY_CONDA_ENV_ROOT")
+            or DEFAULT_ENV_ROOT
+        )
         or DEFAULT_ENV_ROOT
-    ) or DEFAULT_ENV_ROOT
+    )
 
 
 def apply_unified_env_override(
@@ -463,7 +470,7 @@ def apply_unified_env_override(
         driver_cuda=os.environ.get("WORLDFOUNDRY_DETECTED_DRIVER_CUDA", ""),
         preferred_tier=preferred_unified_tier(),
     )
-    if tier in {"", "cpu", "prepare_only"}:
+    if tier != DEFAULT_CUDA_TIER:
         return spec
 
     return RuntimeCondaEnvSpec(
@@ -619,6 +626,7 @@ def resolve_conda_executable(
         return None
     candidate = spec.executable(executable)
     return str(candidate) if candidate.is_file() else None
+
 
 __all__ = [
     "RuntimeCondaEnvSpec",

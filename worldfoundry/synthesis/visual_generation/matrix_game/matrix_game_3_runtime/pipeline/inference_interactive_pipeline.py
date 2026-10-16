@@ -11,6 +11,7 @@ import torch
 import atexit
 import time
 import torch.distributed as dist
+from torch.distributed.fsdp import FullyShardedDataParallel
 import torch.nn.functional as torch_F
 from PIL import Image
 from tqdm import tqdm
@@ -687,6 +688,11 @@ class MatrixGame3Pipeline:
                     "predict_latent_idx": (latent_start_idx, latent_end_idx),
                 }
                     
+                if self.sp_size == 1 and not isinstance(self.model, FullyShardedDataParallel):
+                    conditions_full["plucker_emb"] = self.model.prepare_camera_condition(plucker, token_length=max_seq_len)
+                    if use_base_model:
+                        conditions_null["plucker_emb"] = self.model.prepare_camera_condition(plucker_no_mem, token_length=max_seq_len)
+
                 for _, t in enumerate(tqdm(timesteps, disable=(self.rank != 0))):
                     latent_model_input = latents
 

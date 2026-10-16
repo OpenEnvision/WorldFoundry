@@ -1,0 +1,123 @@
+---
+title: "WonderWorld"
+description: "Native image-to-world generation with camera-path extension and Gaussian-splat export."
+modelId: "wonderworld"
+pageSource: authored
+---
+
+WorldFoundry integrates **WonderWorld** as an in-tree offline image-to-3D-world pipeline. It combines SD2 inpainting, Marigold depth and normals, OneFormer/RepViT-SAM scene segmentation, and layered Gaussian reconstruction. One seed image and an optional camera path produce a `.splat` world, RGB previews, depth arrays, and scene metadata. Integration status: **Integrated**.
+
+Reference: [WonderWorld source](https://github.com/KovenYu/WonderWorld/tree/5cf11467ad21a9d7bca269f961855a235c7d352e), [project](https://kovenyu.com/wonderworld/), [paper](https://arxiv.org/abs/2406.09394).
+
+## Inputs and output
+
+- Supply exactly one RGB image by path, PIL image, or uint8 HWC array. The native seed view is **512×512**.
+- An optional prompt describes newly visible regions. A prompt alone is not an image input.
+- `camera_path` accepts a JSON path or `[N,4,4]` array of row-major **OpenCV world-to-camera** matrices. Translations use exported scene units; ordinary geometry is approximately 1–6 units from the seed camera.
+- A JSON object with `camera_view_matrix_sequence` accepts the upstream viewer's column-major 16-value matrices and converts its camera convention.
+- The output `.splat` uses standard 32-byte records: XYZ, scales, RGBA, and WXYZ quaternion. Scene/object layers start with a 0.7-pixel tangent footprint, 0.7-pixel normal thickness and 0.15 opacity; all three scales, orientation and opacity are fitted. Sky is flat and frozen. Tangent covariance follows the perspective pixel footprint, with a ten-footprint scale cap at grazing angles.
+
+The pipeline starts at the identity seed camera, then visits each supplied camera. Disoccluded regions are inpainted and depth is aligned to existing geometry. New Gaussians precede the frozen scene, retaining the released compositing priority at equal depth; only the new particle range is fitted or pruned. Ground anchors use the released ADE20K categories, including sea and lake, with 3×3 erosion. Request-local scene state is discarded after the call; loaded component weights can remain resident.
+
+## Environment and assets
+
+Use the [unified GPU environment](/docs/maintainers/contributing). `gsplat` needs a complete CUDA development toolkit for its first extension build, including `nvcc` and `cuda_runtime.h`; set `CUDA_HOME` to that toolkit if auto-discovery selects an incomplete installation. Triton computes opacity-crossing median depth from the same gsplat projections and tile lists.
+
+WonderWorld uses shared released component weights rather than a separate trained WonderWorld generator checkpoint. The default checkpoint layout is:
+
+```text
+/weights/
+  stable-diffusion-2-inpainting/
+  prs-eth--marigold-depth-v1-0/
+  prs-eth--marigold-normals-v0-1/
+  oneformer_ade20k_swin_large/
+  RepViT/repvit_sam.pt
+```
+
+Pinned sources:
+
+| Component | Public source | Revision |
+| --- | --- | --- |
+| SD2 Inpainting | `sd2-community/stable-diffusion-2-inpainting` | `5f74973cbb64c8568780732c17f43eb269d63a0d` |
+| Depth | `prs-eth/marigold-depth-v1-0` | `f4fc453d7d217cbe30ddcad3eb311d1ad9a11c4c` |
+| Normals | `prs-eth/marigold-normals-v0-1` | `b105f7cfa1972b57d8e9ed72a896b2768a52f8e9` |
+| OneFormer | `shi-labs/oneformer_ade20k_swin_large` | `4a5bac8e64f82681a12db2e151a4c2f4ce6092b2` |
+| RepViT-SAM | [v1.0 release](https://github.com/THU-MIG/RepViT/releases/download/v1.0/repvit_sam.pt) | `repvit_sam.pt` |
+
+For each diffusion repository, retain `unet`, `vae`, and `text_encoder` **fp16 safetensors**, their `config.json` files, `tokenizer` resources, `scheduler/scheduler_config.json`, and the license files. OneFormer requires `model.safetensors`, its processor/tokenizer resources, and **`ade20k_panoptic.json`** beside the configuration. Loading is local-only.
+
+## Public pipeline
+
+```python
+from worldfoundry.pipelines.three_d_four_d.pipeline_wonderworld import WonderWorldPipeline
+
+pipeline = WonderWorldPipeline.from_pretrained(
+    {"checkpoint_root": "/weights", "dtype": "bfloat16"},
+    device="cuda",
+)
+result = pipeline(
+    images="/inputs/room.png",
+    prompt="A sunlit room with wooden furniture",
+    camera_path="/inputs/cameras.json",
+    output_path="/outputs/room.splat",
+    depth_steps=30,
+    inpaint_steps=50,
+    normal_steps=10,
+    refinement_steps=100,
+    seed=42,
+    return_dict=True,
+)
+print(result["artifact_path"], result["preview_path"])
+```
+
+Each component location can be overridden through `inpainting_path`, `depth_path`, `normals_path`, `oneformer_path`, and `repvit_checkpoint`. The default focal length is `500`; `gen_layer=True` enables hidden-background completion. `negative_prompt` controls novel-view completion; the background stage uses the released `tree, plant` negative prompt. `depth_steps` accepts 1–1000; `inpaint_steps` and `normal_steps` accept 1–999 for the pinned DDIM schedules. `refinement_steps` is a nonnegative integer. These bounds are checked before loading weights.
+
+The catalog loader and Studio expose the same dedicated pipeline and checkpoint fields. CLI schema inspection is weight-free:
+
+```bash
+worldfoundry-eval run wonderworld --print-config --json \
+  --pipeline.depth-steps 30 \
+  --pipeline.load.checkpoint-root /weights
+```
+
+## Validation
+
+Component contracts cover FP32/BF16 DDIM and unscaled-Euler trajectories, schedule boundaries, stateless guidance probes, real small U-Net channel ordering, VAE posterior/RNG ordering, depth decoding, pinned recipes, and shared codec ownership. Analytic geometry contracts cover perspective pixel covariance, tilted ground planes, off-axis pixels, and camera rotation. Reconstruction contracts cover equal-depth compositing, bounded trainable ranges, frozen-prefix/suffix preservation, pruning-state migration, nonmutation of input scenes, and median-depth traversal after exactly 50% transmission. Public contracts exercise standard evaluation invocation, image aliases, camera controls, generation-parameter precedence, lazy loading, input preflight, and failed/cancelled initialization cleanup.
+
+The checkpoint-backed component contract checks every loaded tensor against its BF16-cast safetensors value, then compares native conditioning, initialization, U-Net prediction, scheduler update, and decoding against the corresponding network/schedule primitives. It also exercises decoded-depth gradients with frozen model weights:
+
+```bash
+python tests/manual/wonderworld_components.py \
+  --checkpoint-root /weights --output /outputs/component-parity.json
+```
+
+Released-stage comparison uses the pinned reference source outside the production tree and shares the same frozen primitive weights:
+
+```bash
+python tests/manual/wonderworld_reference.py \
+  --reference-root /references/WonderWorld-5cf1146 \
+  --checkpoint-root /weights --image /inputs/room.png \
+  --mode depth --output /outputs/released-depth
+```
+
+Modes `depth`, `normals` and `inpaint` default to 30, 10 and 50 steps. Depth additionally supports `--guided` and `--farther`. The receipt compares encoder pixels, every U-Net input/context/prediction/timestep and final output under MATH attention. This is stage control-flow comparison, not an independent official end-to-end world replay.
+
+The checkpoint-backed artifact replay command is:
+
+```bash
+python tests/manual/wonderworld_inference.py \
+  --checkpoint-root /weights --image /inputs/room.png \
+  --camera-path /inputs/cameras.json \
+  --output /outputs/wonderworld-replay --refinement-steps 0 --repeat
+```
+
+The replay resolves the catalog loader and executes the standard evaluation invocation, including normalized image and camera controls. It uses MATH attention and PyTorch's deterministic-algorithm preference (`warn_only=True`). It validates finite Gaussian parameters and depth arrays, nontrivial 512×512 previews at every camera, camera-path extension, `.splat` record layout, and exact A/B/A request isolation before CUDA fitting. Evidence is written only after those contracts pass. For fitted artifact validation, use `--refinement-steps 100` without `--repeat`.
+
+## Limitations
+
+- Unrestricted CUDA decoded-depth gradients and photometric fitting do not guarantee bitwise repeatability. Small geometry differences can change disocclusion masks and subsequent generated regions. The exact A/B/A replay uses the documented MATH/deterministic-preference configuration and `refinement_steps=0`.
+- The translated/rolled room replay has visible boundary holes and fragmented surfaces; visual quality is not accepted. Native artifact validation, released-stage numerical comparison, independent official full-pipeline parity and performance acceptance are separate gates.
+- Native reconstruction uses gsplat RGB, opacity-crossing median depth, `0.8 L1 + 0.2 DSSIM`, and opacity/extent pruning. The pinned FLAGS fork regularizes covariance differently in forward and backward and can miss a later median-depth crossing after exactly 50% transmission. Native gradients are checked by finite differences and median depth by opacity-compositing fixtures, not fitted-output bitwise equivalence. Panorama generation, GPT prompts and the upstream browser server are outside this offline API. `stream()` is unsupported.
+- The pinned upstream repository publishes inference source but does not identify a root software license. Public availability is not an OSI-license claim. SD2 weights retain Open RAIL++-M terms; Marigold, OneFormer, RepViT-SAM, and gsplat retain their component terms. The catalog records component-specific licensing.
+
+<ModelRelatedRecipes modelId="wonderworld" locale="en" />

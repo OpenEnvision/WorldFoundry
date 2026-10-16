@@ -72,6 +72,13 @@ pipeline(
 
 小图 FP32 CPU transformer 检查与固定版本的官方实现误差均小于 1e-6，覆盖 BI、含缓存的 AR 及两个 Fast 专家。Fast 的三块完整采样在 12 个 latent 帧上也与官方实现误差小于 1e-6，包含记忆压缩与 KV cache 复用。
 
+固定参考张量 `tests/fixtures/worldplay2/upstream_cpu.json` 来自上游版本
+`c5d83e32099116ff3a1437a8a05c764d579f704b`。FP32 fixture 使用两层 transformer、
+四个头及 32 维隐藏层，按排序后的 checkpoint 键，以 seed 123（BI/AR）、456（高噪声专家）
+和 789（低噪声专家）生成参数。三块 Fast 回放执行官方
+`WorldPlay2Pipeline.generate_chunked`，使用确定性的文本及 codec 替身、12 个 latent 帧、
+45 个 RGB 帧、每块四次计算及 seed 42。复数 RoPE 项保留 float64 实部/虚部对。
+
 ## 限制
 
 - WorldPlay2 代码与权重采用 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) 许可。

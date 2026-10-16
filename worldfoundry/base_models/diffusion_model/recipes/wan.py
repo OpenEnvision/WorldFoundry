@@ -12,13 +12,12 @@ Family split
 - Wan 2.2 A14B T2V / I2V: dual low/high-noise experts and
   ``wan22-dual-expert-guidance`` (timestep-routed CFG scales).
 
-Checkpoint identity is pinned to immutable Hub revisions plus file SHA-256
-so a README-only upstream change cannot silently swap weights.
+Official model sources are pinned to immutable Hub revisions.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 
 from ..components import ComponentKey, ComponentKind, ComponentSpec, ExecutionSpec
 from ..loaders import CheckpointSpec
@@ -90,32 +89,6 @@ FASTVIDEO_CAUSAL_WAN22_REVISION = "0977572ccf137da5e577d62e3231ca840151af38"
 # above so a README-only source change cannot silently alter checkpoint
 # identity.
 WAN21_UPSTREAM_SOURCE_REVISION = "9737cba9c1c3c4d04b33fcad41c111989865d315"
-WAN21_T2V_1P3B_FILE_SHA256 = {
-    "diffusion_pytorch_model.safetensors": (
-        "96b6b242ca1c2f24e9d02cd6596066fab6d310e2d7538f33ae267cb18d957e8f"
-    ),
-    "models_t5_umt5-xxl-enc-bf16.pth": (
-        "7cace0da2b446bbbbc57d031ab6cf163a3d59b366da94e5afe36745b746fd81d"
-    ),
-    "Wan2.1_VAE.pth": (
-        "38071ab59bd94681c686fa51d75a1968f64e470262043be31f7a094e442fd981"
-    ),
-    "google/umt5-xxl/spiece.model": (
-        "e3909a67b780650b35cf529ac782ad2b6b26e6d1f849d3fbb6a872905f452458"
-    ),
-    "google/umt5-xxl/tokenizer.json": (
-        "6e197b4d3dbd71da14b4eb255f4fa91c9c1f2068b20a2de2472967ca3d22602b"
-    ),
-}
-WAN21_T2V_1P3B_FILE_SIZE_BYTES = {
-    "diffusion_pytorch_model.safetensors": 5_676_070_424,
-    "models_t5_umt5-xxl-enc-bf16.pth": 11_361_920_418,
-    "Wan2.1_VAE.pth": 507_609_880,
-    "google/umt5-xxl/special_tokens_map.json": 6_623,
-    "google/umt5-xxl/spiece.model": 4_548_313,
-    "google/umt5-xxl/tokenizer.json": 16_837_417,
-    "google/umt5-xxl/tokenizer_config.json": 61_728,
-}
 
 WAN_TOKENIZER_FILES = (
     "google/umt5-xxl/special_tokens_map.json",
@@ -155,11 +128,7 @@ def _checkpoints(
     *,
     sharded_dit: bool,
     image_to_video: bool,
-    file_sha256: Mapping[str, str] | None = None,
-    file_size_bytes: Mapping[str, int] | None = None,
 ) -> dict[str, CheckpointSpec]:
-    integrity = dict(file_sha256 or {})
-    sizes = dict(file_size_bytes or {})
     metadata = {
         "license": "Apache-2.0",
         "repository_revision": revision,
@@ -177,40 +146,12 @@ def _checkpoints(
             files=(dit_file,),
             allow_patterns=("diffusion_pytorch_model*",),
             metadata=metadata,
-            file_sha256=(
-                {dit_file: integrity[dit_file]}
-                if dit_file in integrity
-                else {}
-            ),
-            file_size_bytes=(
-                {dit_file: sizes[dit_file]}
-                if dit_file in sizes
-                else {}
-            ),
         ),
         "text-encoder": CheckpointSpec(
             repo_id=repo_id,
             revision=revision,
             files=("models_t5_umt5-xxl-enc-bf16.pth",),
             metadata=metadata,
-            file_sha256=(
-                {
-                    "models_t5_umt5-xxl-enc-bf16.pth": integrity[
-                        "models_t5_umt5-xxl-enc-bf16.pth"
-                    ]
-                }
-                if "models_t5_umt5-xxl-enc-bf16.pth" in integrity
-                else {}
-            ),
-            file_size_bytes=(
-                {
-                    "models_t5_umt5-xxl-enc-bf16.pth": sizes[
-                        "models_t5_umt5-xxl-enc-bf16.pth"
-                    ]
-                }
-                if "models_t5_umt5-xxl-enc-bf16.pth" in sizes
-                else {}
-            ),
         ),
         "tokenizer": CheckpointSpec(
             repo_id=repo_id,
@@ -218,32 +159,12 @@ def _checkpoints(
             files=WAN_TOKENIZER_FILES,
             allow_patterns=("google/umt5-xxl/*",),
             metadata=metadata,
-            file_sha256={
-                name: integrity[name]
-                for name in WAN_TOKENIZER_FILES
-                if name in integrity
-            },
-            file_size_bytes={
-                name: sizes[name]
-                for name in WAN_TOKENIZER_FILES
-                if name in sizes
-            },
         ),
         "vae": CheckpointSpec(
             repo_id=repo_id,
             revision=revision,
             files=("Wan2.1_VAE.pth",),
             metadata=metadata,
-            file_sha256=(
-                {"Wan2.1_VAE.pth": integrity["Wan2.1_VAE.pth"]}
-                if "Wan2.1_VAE.pth" in integrity
-                else {}
-            ),
-            file_size_bytes=(
-                {"Wan2.1_VAE.pth": sizes["Wan2.1_VAE.pth"]}
-                if "Wan2.1_VAE.pth" in sizes
-                else {}
-            ),
         ),
     }
     if image_to_video:
@@ -273,16 +194,6 @@ def _wan21_recipe(
         revision,
         sharded_dit=parameter_scale == "14B",
         image_to_video=image_to_video,
-        file_sha256=(
-            WAN21_T2V_1P3B_FILE_SHA256
-            if model_id == WAN21_T2V_1P3B_MODEL_ID
-            else None
-        ),
-        file_size_bytes=(
-            WAN21_T2V_1P3B_FILE_SIZE_BYTES
-            if model_id == WAN21_T2V_1P3B_MODEL_ID
-            else None
-        ),
     )
     conditioner_checkpoints = {
         "weights": "text-encoder",
@@ -793,7 +704,6 @@ __all__ = [
     "WAN21_T2V_1P3B_MODEL_ID",
     "WAN21_T2V_1P3B_REPO_ID",
     "WAN21_T2V_1P3B_REVISION",
-    "WAN21_T2V_1P3B_FILE_SHA256",
     "WAN21_T2V_14B_MODEL_ID",
     "WAN21_T2V_14B_REPO_ID",
     "WAN21_T2V_14B_REVISION",

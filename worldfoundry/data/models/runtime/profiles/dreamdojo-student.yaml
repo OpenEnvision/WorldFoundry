@@ -1,0 +1,51 @@
+schema_version: 2
+model_id: dreamdojo-student
+display_name: DreamDojo 2B GR-1 distilled student
+task_family: world_model
+groups:
+- world
+- robot
+source_repos:
+- url: https://github.com/NVIDIA/DreamDojo
+  revision: 02f119b759d5c7f84a399fdeea3c6e82e7ed6cff
+  in_tree_path: worldfoundry/synthesis/action_generation/dreamdojo
+checkpoints:
+- repo_id: nvidia/Cosmos-Predict2.5-2B
+  revision: f176dc95b4a70f53ce01c4b302851595e7322b00
+  role: video_tokenizer
+- repo_id: nvidia/Cosmos-Reason1-7B
+  revision: 375e24000b24baed78f4618d3dd779e47cd96323
+  role: text_encoder
+input_schema:
+  image: true
+  prompt: true
+  video: false
+  actions:
+  - normalized_unified_384d_action
+  - action_file
+artifact_kind: generated_world
+artifact_filename: dreamdojo_world.mp4
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: native_student_checkpoint_required
+  integration_status: integrated
+  pipeline_binding: dreamdojo-student
+  defaults:
+    height: 480
+    width: 640
+    fps: 10
+    num_inference_steps: 4
+    guidance_scale: 1.0
+integration:
+  status: integrated
+notes:
+- Native causal action DiT reuses canonical Cosmos parameters, Reason1 conditioning, and Wan video encoding/decoding.
+- Explicit student_checkpoint_path is required. The pinned DreamDojo Hub snapshot contains no distilled student weights; post-trained teacher weights are not substituted.
+- Student checkpoints may be an exported EMA file, an iteration directory containing model/.metadata, or the DCP model directory itself.
+- TrigFlow uses one to four released sampling times and distilled guidance. Playback is 10 fps; measured inference throughput is pending student-weight replay.
+- First STEP consumes 12 normalized 384-D actions and returns 13 frames. Each subsequent STEP consumes 4 new actions and returns 4 new frames.
+- Continuation retains nine RGB frames and eight historical actions; new actions condition only their corresponding generated latent transition.
+- KV caches are request-local, store only clean prefill, retain at most three latent frames per layer, and are released after each window.
+- Reset discards rollout history and cached text conditioning while keeping model weights resident. Offline calls own isolated sessions.
+- Dataset normalization, teleoperation-to-action mapping, and robot control remain caller-owned.
+- Student checkpoint-backed output quality, official parity, closed-loop robot quality, and 10-fps generation throughput are not yet validated.

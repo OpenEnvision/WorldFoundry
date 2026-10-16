@@ -6,24 +6,28 @@ for video generation, including functionalities like model loading, patching, fr
 diffusion prediction, and video decoding.
 """
 import os
+from copy import copy
 from pathlib import Path
+from threading import Lock
 
+import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub import snapshot_download
 
-from ...base_synthesis import BaseSynthesis
 from worldfoundry.core import maybe_download_hf_repo_on_rank0
-
+from worldfoundry.synthesis.visual_generation.kling.astra_runtime.astra_utils import (
+    add_framepack_components,
+    add_moe_components,
+    replace_dit_model_in_manager,
+)
+from worldfoundry.synthesis.visual_generation.kling.astra_runtime.models.model_manager import ModelManager
 from worldfoundry.synthesis.visual_generation.kling.astra_runtime.pipelines.wan_video_astra import (
     WanVideoAstraPipeline,
 )
-from worldfoundry.synthesis.visual_generation.kling.astra_runtime.models.model_manager import ModelManager
-import numpy as np
 
-from worldfoundry.synthesis.visual_generation.kling.astra_runtime.astra_utils import (
-    replace_dit_model_in_manager, add_framepack_components, add_moe_components
-)
+from ...base_synthesis import BaseSynthesis
+
 
 class AstraSynthesis(BaseSynthesis):
     """
@@ -43,6 +47,8 @@ class AstraSynthesis(BaseSynthesis):
         self.pipe = pipe
         self.device = pipe.device
         self.tiler_kwargs = {"tiled": True, "tile_size": (34, 34), "tile_stride": (18, 16)}
+        # Wan's VAE stores temporal scratch buffers on the shared module.
+        self._vae_lock = Lock()
 
     @staticmethod
     def _looks_like_hf_repo_id(path_or_id):
@@ -204,9 +210,11 @@ class AstraSynthesis(BaseSynthesis):
         """
         # Add a batch dimension and move frames to the appropriate device and dtype.
         frames = frames.unsqueeze(0).to(self.device, dtype=torch.bfloat16)
-        with torch.no_grad():
-            # Encode the video using the pipeline's VAE, applying tiling as configured.
-            latents = self.pipe.encode_video(frames, **self.tiler_kwargs)[0]
+        with self._vae_lock, torch.no_grad():
+            try:
+                latents = self.pipe.encode_video(frames, **self.tiler_kwargs)[0]
+            finally:
+                self.pipe.vae.model.clear_cache()
         # Remove the batch dimension if it was added and is now redundant.
         if latents.dim() == 5 and latents.shape[0] == 1:
             latents = latents.squeeze(0)
@@ -269,7 +277,8 @@ class AstraSynthesis(BaseSynthesis):
         model_dtype = next(self.pipe.dit.parameters()).dtype
         # Set the number of inference steps for the scheduler.
         num_inference_steps = max(1, int(getattr(args, "num_inference_steps", 50)))
-        self.pipe.scheduler.set_timesteps(num_inference_steps)
+        scheduler = copy(self.pipe.scheduler)
+        scheduler.set_timesteps(num_inference_steps)
         
         # Prepare input tensors by extracting them from framepack_data and adding batch dimensions.
         clean_latents = framepack_data['clean_latents'].unsqueeze(0)
@@ -301,11 +310,12 @@ class AstraSynthesis(BaseSynthesis):
         new_latents = torch.randn(1, C, current_generation, H, W, device=device, dtype=model_dtype, generator=generator)
         # Prepare any additional input required by the pipeline.
         extra_input = self.pipe.prepare_extra_input(new_latents)
-        timesteps = self.pipe.scheduler.timesteps
+        timesteps = scheduler.timesteps
         
         # Main diffusion denoising loop.
         for i, timestep in enumerate(timesteps):
-            if i % 10 == 0: print(f"  Denoising step {i+1}/{len(timesteps)}")
+            if i % 10 == 0:
+                print(f"  Denoising step {i+1}/{len(timesteps)}")
             timestep_tensor = timestep.unsqueeze(0).to(device, dtype=model_dtype)
             
             # --- CFG LOGIC ---
@@ -337,7 +347,7 @@ class AstraSynthesis(BaseSynthesis):
                  noise_pred, _ = self.pipe.dit(new_latents, timestep=timestep_tensor, cam_emb=camera_embedding, modality_inputs=modality_inputs, latent_indices=latent_indices, clean_latents=clean_latents, clean_latent_indices=clean_latent_indices, clean_latents_2x=clean_latents_2x, clean_latent_2x_indices=clean_latent_2x_indices, clean_latents_4x=clean_latents_4x, clean_latent_4x_indices=clean_latent_4x_indices, **prompt_emb_pos, **extra_input)
             
             # Take a single denoising step using the scheduler.
-            new_latents = self.pipe.scheduler.step(noise_pred, timestep, new_latents)
+            new_latents = scheduler.step(noise_pred, timestep, new_latents)
         
         return new_latents
 
@@ -356,7 +366,11 @@ class AstraSynthesis(BaseSynthesis):
                            scaled to [0, 255] and of type uint8.
         """
         # Decode the latents into video frames using the pipeline's VAE decoder.
-        decoded_video = self.pipe.decode_video(latents, tiled=tiled, tile_size=tile_size, tile_stride=tile_stride)
+        with self._vae_lock, torch.no_grad():
+            try:
+                decoded_video = self.pipe.decode_video(latents, tiled=tiled, tile_size=tile_size, tile_stride=tile_stride)
+            finally:
+                self.pipe.vae.model.clear_cache()
         # Convert the decoded video tensor to a NumPy array, permuting dimensions
         # from (B, T, C, H, W) to (T, H, W, C) for common video formats.
         video_np = decoded_video[0].to(torch.float32).permute(1, 2, 3, 0).cpu().numpy()

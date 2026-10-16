@@ -96,7 +96,8 @@ class DiffusionExtension:
     ) -> DenoiserInput:
         """Inject step-local conditions immediately before the network call.
 
-        Runs once per CFG branch.  Must return a :class:`~..contracts.DenoiserInput`.
+        Runs once per branch or negotiated CFG batch. Must return a
+        :class:`~..contracts.DenoiserInput`.
         """
 
         return model_input
@@ -106,7 +107,7 @@ class DiffusionExtension:
         context: DiffusionRunContext,
         model_output: DenoiserOutput,
     ) -> DenoiserOutput:
-        """Observe or transform one branch prediction.
+        """Observe or transform one branch or negotiated CFG-batch prediction.
 
         Must return a :class:`~..contracts.DenoiserOutput`.
         """

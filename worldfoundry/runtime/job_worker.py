@@ -75,11 +75,12 @@ def main() -> int:
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         parser.error("command cannot be empty")
-    interrupted = False
+    termination_reason: str | None = None
 
-    def on_term(_signum, _frame):
-        nonlocal interrupted
-        interrupted = True
+    def on_term(_signum: int, _frame: object) -> None:
+        nonlocal termination_reason
+        if termination_reason is None:
+            termination_reason = "cancelled"
 
     signal.signal(signal.SIGTERM, on_term)
     signal.signal(signal.SIGINT, on_term)
@@ -88,21 +89,20 @@ def main() -> int:
     process = None
     status, error, returncode = "failed", None, None
     try:
-        if not interrupted:
+        if termination_reason is None:
             process = subprocess.Popen(command)
-        timed_out = False
-        while process is not None and process.poll() is None and not interrupted:
+        while process is not None and process.poll() is None and termination_reason is None:
             if args.timeout is not None and time.monotonic() - started >= args.timeout:
-                timed_out = True
+                termination_reason = "timeout"
                 break
             time.sleep(0.03)
         if process is not None:
             _stop_children(process)
             returncode = process.returncode
-        if interrupted:
-            status, error = "cancelled", "cancelled by request"
-        elif timed_out:
+        if termination_reason == "timeout":
             status, error = "failed", f"job timed out after {args.timeout}s"
+        elif termination_reason == "cancelled":
+            status, error = "cancelled", "cancelled by request"
         else:
             status = "completed" if returncode == 0 else "failed"
             if status == "failed":

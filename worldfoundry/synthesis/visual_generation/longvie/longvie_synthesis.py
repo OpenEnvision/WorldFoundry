@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 from typing import Any, Mapping
 
-from worldfoundry.core.io import file_sha256
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 from worldfoundry.synthesis.visual_generation.longvie.worldfoundry_runtime import (
     LONGVIE_NEGATIVE_PROMPT,
     TARGET_SIZE,
@@ -434,8 +434,6 @@ class LongVieSynthesis(BaseSynthesis):
             "model_id": self.model_id,
             "artifact_kind": "generated_video",
             "artifact_path": artifact_path,
-            # Calculate SHA256 hash of the saved artifact if available.
-            "artifact_sha256": file_sha256(artifact_path) if artifact_path else None,
             "runtime": "worldfoundry.native_diffusion.wan.longvie",
             "backend_quality": "native_inference",
             "metadata": {
@@ -453,6 +451,7 @@ class LongVieSynthesis(BaseSynthesis):
                 ),
             },
             "video": generated,
+            "video_chunk": VideoChunk(frames=generated, layout="frame-list", value_range="0,255"),
             "noise": next_noise,
             "last_frame": generated[-1],
             "segment_spec": segment_spec,

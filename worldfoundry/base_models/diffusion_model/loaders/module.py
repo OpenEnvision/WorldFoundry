@@ -12,7 +12,7 @@ already-constructed ``Denoiser`` / encoder / VAE.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 import torch
 
@@ -25,8 +25,11 @@ CheckpointConfigResolver = Callable[[MaterializedCheckpoint], Mapping[str, objec
 ApproximateAttentionStateResolver = Callable[[], Mapping[str, object]]
 PostLoadHook = Callable[[torch.nn.Module], None]
 
+if TYPE_CHECKING:
+    from worldfoundry.core.execution.compile_cache import CompilePolicy
 
-def _compile_policy_from_runtime(policy: RuntimePolicy):
+
+def _compile_policy_from_runtime(policy: RuntimePolicy) -> tuple[CompilePolicy, dict[str, Any]]:
     """Resolve the public compile knobs and external CUDA-Graph interaction."""
 
     from worldfoundry.core.execution.compile_cache import CompilePolicy
@@ -40,6 +43,7 @@ def _compile_policy_from_runtime(policy: RuntimePolicy):
     compile_options = dict(raw_options)
     configured_mode = policy.options.get("compile_mode")
     cuda_graph = bool(policy.options.get("cuda_graph", False))
+    regional = policy.options.get("compile_scope") == "regional"
     if compile_options and configured_mode is not None:
         raise ValueError(
             "compile_mode and compile_options are mutually exclusive in torch.compile"
@@ -47,12 +51,12 @@ def _compile_policy_from_runtime(policy: RuntimePolicy):
     if compile_options and cuda_graph and backend == "inductor":
         raise ValueError(
             "external cuda_graph cannot be combined with custom Inductor compile_options; "
-            "use compile_mode='max-autotune-no-cudagraphs'"
+            "select a supported compile_mode instead"
         )
     if compile_options:
         mode = None
     elif configured_mode is None:
-        mode = "max-autotune-no-cudagraphs" if cuda_graph and backend == "inductor" else "default"
+        mode = "max-autotune-no-cudagraphs" if cuda_graph and backend == "inductor" and not regional else "default"
     else:
         mode = str(configured_mode).strip()
     allowed_modes = {
@@ -65,7 +69,10 @@ def _compile_policy_from_runtime(policy: RuntimePolicy):
         raise ValueError(
             f"unsupported compile_mode {mode!r}; expected one of {sorted(allowed_modes)}"
         )
-    if cuda_graph and backend == "inductor" and mode != "max-autotune-no-cudagraphs":
+    if (
+        cuda_graph and backend == "inductor" and mode != "max-autotune-no-cudagraphs"
+        and not (regional and mode == "default")
+    ):
         raise ValueError(
             "external cuda_graph with the Inductor backend requires "
             "compile_mode='max-autotune-no-cudagraphs' to avoid nested CUDA Graph capture"
@@ -76,6 +83,35 @@ def _compile_policy_from_runtime(policy: RuntimePolicy):
     fullgraph_value = policy.options.get("compile_fullgraph", False)
     if not isinstance(fullgraph_value, bool):
         raise TypeError("compile_fullgraph must be a bool")
+    if backend == "inductor" and regional:
+        from torch._inductor import list_mode_options
+
+        resolved_options = {**(list_mode_options(mode) if mode is not None else {}), **compile_options}
+        if resolved_options.get("max_autotune", False) or resolved_options.get("max_autotune_gemm", False):
+            raise ValueError("regional compile requires native GEMM dispatch; use compile_mode='default'")
+        if (
+            compile_options.get("emulate_precision_casts", True) is not True
+            or compile_options.get("triton.codegen_upcast_to_fp32", False) is not False
+            or compile_options.get("pattern_matcher", False) is not False
+            or compile_options.get("epilogue_fusion", False) is not False
+        ):
+            raise ValueError("regional compile requires eager low-precision rounding")
+        # Preserve both low-precision pointwise results and explicit dtype
+        # round trips, including RMSNorm's FP32 -> BF16 -> FP32 affine path.
+        # Keep addmm's single rounding boundary: splitting it into mm + bias
+        # changes low-precision inputs to the following normalization.
+        # Materialize GEMM outputs before nonlinearities and residual gates.
+        # Resolve mode into options because torch.compile accepts only one.
+        compile_options = {
+            **resolved_options,
+            "max_autotune": False,
+            "max_autotune_gemm": False,
+            "emulate_precision_casts": True,
+            "triton.codegen_upcast_to_fp32": False,
+            "pattern_matcher": False,
+            "epilogue_fusion": False,
+        }
+        mode = None
     return (
         CompilePolicy(
             backend=backend,
@@ -85,6 +121,28 @@ def _compile_policy_from_runtime(policy: RuntimePolicy):
         ),
         compile_options,
     )
+
+
+def _audited_compile_call(
+    function: Callable[..., Any], runtime: dict[str, Any],
+) -> Callable[..., Any]:
+    """Count calls outside the compiled region, preserving execution failures."""
+    from worldfoundry.core.attention.backends.dispatch import attention_compile_receipt_scope
+
+    def forward(*args: Any, **kwargs: Any) -> Any:
+        try:
+            with attention_compile_receipt_scope(runtime["attention_provider_graph_traces"]):
+                output = function(*args, **kwargs)
+        except Exception as error:
+            runtime["failures"] += 1
+            runtime["request_failures"] += 1
+            runtime["last_error"] = runtime["request_last_error"] = f"{type(error).__name__}: {error}"
+            raise
+        runtime["calls"] += 1
+        runtime["request_calls"] += 1
+        return output
+
+    return forward
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +175,9 @@ class ModuleLoadSpec:
             layerwise CPU offload and ``device_map=balanced``.
         vram_limit_gib: Optional per-module VRAM budget forwarded to core.
         post_load_hook: Mutation after restore; rejected with disk offload.
+        compile_regions: Stable compute module paths. ModuleList entries are
+            compiled individually; components without regions stay eager when
+            ``compile_scope=regional`` is selected.
     """
 
     module_class: type[torch.nn.Module]
@@ -130,6 +191,7 @@ class ModuleLoadSpec:
     vram_limit_gib: float | None = None
     post_load_hook: PostLoadHook | None = None
     supports_acceleration_plugins: bool = False
+    compile_regions: tuple[str, ...] = ()
 
 
 class NativeModuleLoader:
@@ -151,6 +213,20 @@ class NativeModuleLoader:
         checkpoint: CheckpointSpec,
         policy: RuntimePolicy,
     ) -> torch.nn.Module:
+        compile_scope = policy.options.get("compile_scope", "full")
+        if compile_scope not in {"full", "regional"}:
+            raise ValueError("compile_scope must be 'full' or 'regional'")
+        if (
+            policy.options.get("static_cross_kv")
+            and (policy.options.get("cuda_graph") or (policy.compile and compile_scope == "regional"))
+            and (policy.offload.mode is not OffloadMode.NONE or policy.options.get("device_map"))
+        ):
+            raise ValueError("static cross-KV with Graph/regional compile requires resident unsharded weights")
+        compile_setup = (
+            _compile_policy_from_runtime(policy)
+            if policy.compile and (compile_scope == "full" or spec.compile_regions)
+            else None
+        )
         materialized = NativeCheckpointResolver().materialize(checkpoint)
         sources = tuple(str(path) for path in materialized.paths)
         config = dict(spec.config)
@@ -546,28 +622,42 @@ class NativeModuleLoader:
                 fallback_device=policy.device,
             )
 
-        if policy.compile:
-            from worldfoundry.core.attention.backends.dispatch import (
-                attention_compile_receipt_scope,
-            )
-            from worldfoundry.runtime.compile_cache import compile_callable_cached
+        if compile_setup is not None:
+            from worldfoundry.core.execution.compile_cache import compile_callable_cached
 
-            # Compile the bound forward callable and retain the concrete model
-            # instance. Compiling an entire module returns OptimizedModule,
-            # which breaks the checkpoint-compatible type contract enforced by
-            # every component factory (and hides model-specific seams such as
-            # Wan's cache lifecycle). A compiled bound method gives the same
-            # lazy Dynamo/Inductor execution path without changing the loader's
-            # return type.
-            compile_policy, compile_options = _compile_policy_from_runtime(policy)
-            eager_forward = module.forward
-            compiled_forward = compile_callable_cached(
-                eager_forward,
-                policy=compile_policy,
-                namespace="diffusion-module-forward",
-                options=compile_options,
-            )
-            wrapper_installed = compiled_forward is not eager_forward
+            compile_policy, compile_options = compile_setup
+            targets = [("", module)]
+            if compile_scope == "regional":
+                targets = []
+                for path in spec.compile_regions:
+                    region = module.get_submodule(path)
+                    if isinstance(region, torch.nn.ModuleList):
+                        targets.extend((f"{path}.{index}", child) for index, child in enumerate(region))
+                    else:
+                        targets.append((path, region))
+                if not targets:
+                    raise ValueError("regional compile requires nonempty declared compute regions")
+            original_forwards = [target.forward for _, target in targets]
+            prepared_norms: list[torch.nn.Module] = []
+            if compile_scope == "regional" and compile_policy.backend == "inductor":
+                from worldfoundry.core.execution.compile_numerics import preserve_normalization_reductions
+
+                for _, target in targets:
+                    prepared_norms.extend(preserve_normalization_reductions(target))
+            prepared = []
+            for name, target in targets:
+                eager = target.forward
+                compiled = compile_callable_cached(
+                    eager,
+                    policy=compile_policy,
+                    namespace="diffusion-module-forward",
+                    options=compile_options,
+                )
+                prepared.append((name, target, eager, compiled))
+            wrapper_installed = all(compiled is not eager for _, _, eager, compiled in prepared)
+            if not wrapper_installed:
+                for norm in prepared_norms:
+                    delattr(norm, "forward")
             compile_runtime = {
                 "wrapper_installed": wrapper_installed,
                 # ``calls``/``failures`` are lifetime totals retained for
@@ -582,37 +672,26 @@ class NativeModuleLoader:
                 "request_last_error": None,
                 "attention_provider_graph_traces": {},
             }
-            if wrapper_installed:
-                def audited_compiled_forward(*args, **kwargs):
-                    try:
-                        with attention_compile_receipt_scope(
-                            compile_runtime["attention_provider_graph_traces"]
-                        ):
-                            output = compiled_forward(*args, **kwargs)
-                    except Exception as error:
-                        compile_runtime["failures"] += 1
-                        compile_runtime["request_failures"] += 1
-                        error_text = (
-                            f"{type(error).__name__}: {error}"
-                        )
-                        compile_runtime["last_error"] = error_text
-                        compile_runtime["request_last_error"] = error_text
-                        raise
-                    compile_runtime["calls"] += 1
-                    compile_runtime["request_calls"] += 1
-                    return output
-
-                module.forward = audited_compiled_forward
-            else:
-                module.forward = eager_forward
+            # Retain concrete modules and checkpoint keys. Placement hooks
+            # remain outside the bound compute callable on each module.
+            for (_, target, _, compiled), original in zip(prepared, original_forwards, strict=True):
+                target.forward = (
+                    _audited_compile_call(compiled, compile_runtime)
+                    if wrapper_installed else original
+                )
             module._worldfoundry_compile_runtime = compile_runtime
-            module._worldfoundry_compile_config = {
+            compile_config: dict[str, Any] = {
                 "backend": compile_policy.backend,
                 "mode": compile_policy.mode,
                 "fullgraph": compile_policy.fullgraph,
                 "dynamic": compile_policy.dynamic,
                 "options": compile_options,
             }
+            if compile_scope == "regional":
+                compile_config.update(
+                    scope="regional", regions=[name for name, *_ in prepared],
+                )
+            module._worldfoundry_compile_config = compile_config
             applied = getattr(module, "_worldfoundry_applied_optimizations", None)
             if applied is not None:
                 applied.record_compile(
@@ -624,6 +703,8 @@ class NativeModuleLoader:
             applied = getattr(module, "_worldfoundry_applied_optimizations", None)
             if applied is not None:
                 applied.record_compile(requested=False)
+                if policy.compile and compile_scope == "regional":
+                    applied.effective["compile"] = "eager (no declared compute regions)"
         if not isinstance(module, torch.nn.Module):
             raise TypeError(f"module loader returned {type(module).__name__}, expected torch.nn.Module")
         return module

@@ -26,11 +26,7 @@ def _identity(
     start_time_ticks: int = 1234,
 ) -> dict:
     host_pid = local_pid if host_pid is None else host_pid
-    namespace_pids = (
-        [local_pid]
-        if host_pid == local_pid
-        else [host_pid, local_pid]
-    )
+    namespace_pids = [local_pid] if host_pid == local_pid else [host_pid, local_pid]
     return {
         "local_pid": local_pid,
         "host_pid": host_pid,
@@ -135,9 +131,7 @@ def _vmoba_optimization_report() -> dict[str, object]:
                     "output_dtype": tensor["dtype"],
                 }
                 if sparse:
-                    route, layout, provider_chunk_size, requested_topk = routes[
-                        layer % len(routes)
-                    ]
+                    route, layout, provider_chunk_size, requested_topk = routes[layer % len(routes)]
                     chunk_calls[route] += 1
                     event.update(
                         {
@@ -243,9 +237,7 @@ def _vmoba_optimization_report() -> dict[str, object]:
         "requested": {"approximate_attention": "vmoba"},
         "effective": {"approximate_attention_kernel": "vmoba"},
         "fallbacks": [],
-        "runtime": {
-            "approximate_attention": receipt
-        },
+        "runtime": {"approximate_attention": receipt},
     }
 
 
@@ -286,8 +278,7 @@ def _lightx2v_optimization_report(
     total_steps = int(workload["total_steps"])
     routed_steps = bool(workload["expected_routed_steps"])
     normalized_branch_steps = branch_steps or {
-        str(branch): tuple(int(step) for step in steps)
-        for branch, steps in dict(workload["branch_steps"]).items()
+        str(branch): tuple(int(step) for step in steps) for branch, steps in dict(workload["branch_steps"]).items()
     }
     tokens = grid[0] * grid[1] * grid[2]
     tensor = {
@@ -299,10 +290,7 @@ def _lightx2v_optimization_report(
     for branch, steps in normalized_branch_steps.items():
         for step in steps:
             for layer in range(blocks):
-                sparse = not (
-                    step < int(profile["dense_steps"])
-                    or step >= total_steps - int(profile["dense_steps"])
-                )
+                sparse = not (step < int(profile["dense_steps"]) or step >= total_steps - int(profile["dense_steps"]))
                 event: dict[str, object] = {
                     "algorithm": kind,
                     "request_id": request_id,
@@ -351,34 +339,20 @@ def _lightx2v_optimization_report(
                             "operator": operator,
                             "nbhd_coefficient": profile["nbhd_coefficient"],
                             "nbhd_min_width": profile["nbhd_min_width"],
-                            "attnmap_frame_num": profile["attnmap_frame_num"]
-                            or grid[0],
-                            "per_block_mean": profile[
-                                "lightx2v_per_block_mean"
-                            ],
+                            "attnmap_frame_num": profile["attnmap_frame_num"] or grid[0],
+                            "per_block_mean": profile["lightx2v_per_block_mean"],
                             "pool_size": profile["lightx2v_pool_size"],
-                            "skip_timesteps": profile[
-                                "lightx2v_skip_timesteps"
-                            ],
-                            "dense_attn_type": profile[
-                                "lightx2v_dense_attn_type"
-                            ],
-                            "svg_sample_mse_max_row": profile[
-                                "svg_sample_mse_max_row"
-                            ],
-                            "svg_num_sampled_rows": profile[
-                                "svg_num_sampled_rows"
-                            ],
-                            "svg_context_length": profile[
-                                "svg_context_length"
-                            ],
+                            "skip_timesteps": profile["lightx2v_skip_timesteps"],
+                            "dense_attn_type": profile["lightx2v_dense_attn_type"],
+                            "svg_sample_mse_max_row": profile["svg_sample_mse_max_row"],
+                            "svg_num_sampled_rows": profile["svg_num_sampled_rows"],
+                            "svg_context_length": profile["svg_context_length"],
                         },
                     }
                     if kind == "nbhd":
                         provider_fields.update(
                             {
-                                "attnmap_frame_num": profile["attnmap_frame_num"]
-                                or grid[0],
+                                "attnmap_frame_num": profile["attnmap_frame_num"] or grid[0],
                                 "nbhd_coefficient": profile["nbhd_coefficient"],
                                 "nbhd_min_width": profile["nbhd_min_width"],
                             }
@@ -481,24 +455,15 @@ def _lightx2v_optimization_report(
 
 
 def _fastvideo_sla_source_expectation(kind: str) -> dict[str, object]:
-    provider_class = (
-        "SLAAttentionImpl"
-        if kind == "fastvideo_sla"
-        else "SageSLAAttentionImpl"
-    )
+    provider_class = "SLAAttentionImpl" if kind == "fastvideo_sla" else "SageSLAAttentionImpl"
     family = (
-        "fastvideo/sparse-linear-attention"
-        if kind == "fastvideo_sla"
-        else "fastvideo/sage-sparse-linear-attention"
+        "fastvideo/sparse-linear-attention" if kind == "fastvideo_sla" else "fastvideo/sage-sparse-linear-attention"
     )
     return {
         "kind": kind,
-        "provider_path": (
-            "fastvideo.attention.backends.sla." + provider_class
-        ),
+        "provider_path": ("fastvideo.attention.backends.sla." + provider_class),
         "provider_family": family,
         "commit": "1b2b2a0161bc6b3b80158d1fa6380a051c6530c7",
-        "source_fingerprint": "a" * 64,
         "source_root": "/opt/FastVideo",
         "source_file": "/opt/FastVideo/fastvideo/attention/backends/sla.py",
     }
@@ -538,7 +503,6 @@ def _fastvideo_sla_optimization_report(
     provider = str(expectation["provider_path"])
     provider_family = str(expectation["provider_family"])
     commit = str(expectation["commit"])
-    source_fingerprint = str(expectation["source_fingerprint"])
     source_root = str(expectation["source_root"])
     source_file = str(expectation["source_file"])
     checkpoint_layout = str(expectation["checkpoint_layout"])
@@ -549,25 +513,20 @@ def _fastvideo_sla_optimization_report(
     total_steps = int(workload["total_steps"])
     routed_steps = bool(workload["expected_routed_steps"])
     normalized_branch_steps = branch_steps or {
-        str(branch): tuple(int(step) for step in steps)
-        for branch, steps in dict(workload["branch_steps"]).items()
+        str(branch): tuple(int(step) for step in steps) for branch, steps in dict(workload["branch_steps"]).items()
     }
     tensor = {
         "shape": [1, grid[0] * grid[1] * grid[2], 24, 128],
         "device": "cuda:0",
         "dtype": "torch.bfloat16",
     }
-    layer_projection_fingerprints = {
-        layer: f"{layer + 1:064x}" for layer in range(blocks)
-    }
+    layer_projection_fingerprints = {layer: f"{layer + 1:064x}" for layer in range(blocks)}
     layer_source_keys: dict[int, list[str]] = {}
     for layer in range(blocks):
         if checkpoint_layout == "fastvideo_diffusers":
             prefix = f"blocks.{layer}.attn1.attn_impl.proj_l"
         else:
-            prefix = (
-                f"blocks.{layer}.self_attn.attn_op.local_attn.proj_l"
-            )
+            prefix = f"blocks.{layer}.self_attn.attn_op.local_attn.proj_l"
         layer_source_keys[layer] = [f"{prefix}.weight", f"{prefix}.bias"]
 
     events: list[dict[str, object]] = []
@@ -577,10 +536,7 @@ def _fastvideo_sla_optimization_report(
         for step in steps:
             for layer in range(blocks):
                 dense_steps = int(profile["dense_steps"])
-                sparse = not (
-                    step < dense_steps
-                    or step >= total_steps - dense_steps
-                )
+                sparse = not (step < dense_steps or step >= total_steps - dense_steps)
                 event: dict[str, object] = {
                     "algorithm": kind,
                     "request_id": request_id,
@@ -619,18 +575,13 @@ def _fastvideo_sla_optimization_report(
                             "reference_fastvideo_commit": commit,
                             "provider_source_commit": commit,
                             "provider_source_clean": True,
-                            "provider_source_fingerprint": source_fingerprint,
                             "provider_source_root": source_root,
                             "provider_source_file": source_file,
                             "reference_parity_verified": True,
                             "checkpoint_layout": checkpoint_layout,
                             "projection_source_keys": layer_source_keys[layer],
-                            "projection_weight_fingerprint": (
-                                layer_projection_fingerprints[layer]
-                            ),
-                            "all_projection_weights_fingerprint": (
-                                projection_fingerprint
-                            ),
+                            "projection_weight_fingerprint": (layer_projection_fingerprints[layer]),
+                            "all_projection_weights_fingerprint": (projection_fingerprint),
                             "layer_prefix": f"blocks.{layer}.attn1",
                             "call_index": call_index,
                             "layer_call_index": layer_call_indices[layer],
@@ -717,7 +668,6 @@ def _fastvideo_sla_optimization_report(
             "reference_fastvideo_commit": commit,
             "provider_source_commit": commit,
             "provider_source_commits": [commit],
-            "provider_source_fingerprints": [source_fingerprint],
             "provider_fingerprints": [provider_fingerprint],
             "provider_source_root": source_root,
             "provider_source_roots": [source_root],
@@ -731,12 +681,9 @@ def _fastvideo_sla_optimization_report(
             "all_projection_weights_fingerprint": projection_fingerprint,
             "projection_fingerprints": [projection_fingerprint],
             "layer_projection_fingerprints": {
-                str(layer): fingerprint
-                for layer, fingerprint in layer_projection_fingerprints.items()
+                str(layer): fingerprint for layer, fingerprint in layer_projection_fingerprints.items()
             },
-            "projection_source_keys": {
-                str(layer): keys for layer, keys in layer_source_keys.items()
-            },
+            "projection_source_keys": {str(layer): keys for layer, keys in layer_source_keys.items()},
             "topk_ratio": profile["fastvideo_topk_ratio"],
             "feature_map": profile["fastvideo_feature_map"],
             "provider_calls": len(sparse_events),
@@ -784,12 +731,8 @@ def _dual_expert_input(timestep: float, *, step_index: int) -> DenoiserInput:
 def _finalized_dual_expert_report() -> dict[str, object]:
     route_calls = {"high-noise": 2, "low-noise": 2}
     branch_calls = {"positive": 2, "negative": 2}
-    events = [
-        {"expert": "high-noise", "branch": branch, "step_index": 0}
-        for branch in ("positive", "negative")
-    ] + [
-        {"expert": "low-noise", "branch": branch, "step_index": 1}
-        for branch in ("positive", "negative")
+    events = [{"expert": "high-noise", "branch": branch, "step_index": 0} for branch in ("positive", "negative")] + [
+        {"expert": "low-noise", "branch": branch, "step_index": 1} for branch in ("positive", "negative")
     ]
     receipt = {
         "request_id": "request-current",
@@ -919,12 +862,8 @@ def test_parser_accepts_complete_inline_and_file_vmoba_profiles(tmp_path) -> Non
     request = benchmark._approximate_attention_request(inline)
 
     assert request == {"kind": "vmoba", **profile}
-    assert benchmark._expected_requests(inline)["denoiser"][
-        "approximate_attention"
-    ] == "vmoba"
-    assert "approximate_attention=vmoba" in benchmark._candidate_reference_reasons(
-        inline
-    )
+    assert benchmark._expected_requests(inline)["denoiser"]["approximate_attention"] == "vmoba"
+    assert "approximate_attention=vmoba" in benchmark._candidate_reference_reasons(inline)
 
     profile_path = tmp_path / "vmoba.json"
     profile_path.write_text(json.dumps({"kind": "vmoba", **profile}))
@@ -1049,12 +988,8 @@ def test_parser_exposes_canonical_lightx2v_sparse_kinds(
     assert request["kind"] == kind
     assert workload is not None
     assert workload["kind"] == kind
-    assert workload["lightx2v"]["commit"] == (
-        "6fb7c1362b89d4908a9ea197bac4fbd7482ee2d5"
-    )
-    assert workload["provider_paths"] == [
-        workload["lightx2v"]["provider_symbol"]
-    ]
+    assert workload["lightx2v"]["commit"] == ("6fb7c1362b89d4908a9ea197bac4fbd7482ee2d5")
+    assert workload["provider_paths"] == [workload["lightx2v"]["provider_symbol"]]
 
 
 @pytest.mark.parametrize(
@@ -1103,20 +1038,11 @@ def test_parser_exposes_fastvideo_learned_sla_profiles(
     assert workload is not None
     assert workload["kind"] == kind
     assert workload["profile"]["fastvideo_topk_ratio"] == expected_topk
-    assert (
-        workload["profile"]["fastvideo_feature_map"]
-        == expected_feature_map
-    )
-    assert workload["fastvideo_sla"]["commit"] == (
-        "1b2b2a0161bc6b3b80158d1fa6380a051c6530c7"
-    )
-    assert workload["fastvideo_sla"]["checkpoint_layout"] == (
-        "fastvideo_diffusers"
-    )
+    assert workload["profile"]["fastvideo_feature_map"] == expected_feature_map
+    assert workload["fastvideo_sla"]["commit"] == ("1b2b2a0161bc6b3b80158d1fa6380a051c6530c7")
+    assert workload["fastvideo_sla"]["checkpoint_layout"] == ("fastvideo_diffusers")
     assert workload["fastvideo_sla"]["projection_fingerprint"] == "b" * 64
-    assert workload["provider_paths"] == [
-        workload["fastvideo_sla"]["provider_path"]
-    ]
+    assert workload["provider_paths"] == [workload["fastvideo_sla"]["provider_path"]]
 
 
 def test_fastvideo_sla_profile_rejects_lightx2v_only_fields(
@@ -1172,7 +1098,6 @@ def test_fastvideo_sla_expectation_uses_pinned_runtime_source_resolver(
     ("field", "value"),
     (
         ("commit", "0" * 40),
-        ("source_fingerprint", "not-sha256"),
         ("provider_path", ""),
     ),
 )
@@ -1218,9 +1143,7 @@ def test_fastvideo_sla_checkpoint_preflight_hashes_exact_projection_set(
         if layout == "fastvideo_diffusers":
             prefix = f"blocks.{layer}.attn1.attn_impl.proj_l"
         else:
-            prefix = (
-                f"blocks.{layer}.self_attn.attn_op.local_attn.proj_l"
-            )
+            prefix = f"blocks.{layer}.self_attn.attn_op.local_attn.proj_l"
         state[f"{prefix}.weight"] = torch.full(
             (128, 128),
             float(layer + 1),
@@ -1235,9 +1158,7 @@ def test_fastvideo_sla_checkpoint_preflight_hashes_exact_projection_set(
 
     assert expectation["checkpoint_layout"] == layout
     assert len(expectation["projection_fingerprint"]) == 64
-    assert set(expectation["projection_fingerprint"]) <= set(
-        "0123456789abcdef"
-    )
+    assert set(expectation["projection_fingerprint"]) <= set("0123456789abcdef")
 
 
 def test_fastvideo_sla_checkpoint_preflight_rejects_dense_checkpoint(
@@ -1501,9 +1422,7 @@ def test_generation_isolation_does_not_grandfather_external_baseline_pid(
 
     assert report["allowed_compute_pids"] == []
     assert report["contaminated"] is True
-    assert report["added_compute_apps"] == [
-        {"pid": 200, "used_memory_mib": 2000.0}
-    ]
+    assert report["added_compute_apps"] == [{"pid": 200, "used_memory_mib": 2000.0}]
 
 
 def test_generation_isolation_binds_host_pid_then_rejects_extra_pid(
@@ -1543,9 +1462,7 @@ def test_generation_isolation_binds_host_pid_then_rejects_extra_pid(
     report = monitor.stop()
 
     assert report["bound_host_compute_pids"] == [900]
-    assert report["added_compute_apps"] == [
-        {"pid": 901, "used_memory_mib": 2000.0}
-    ]
+    assert report["added_compute_apps"] == [{"pid": 901, "used_memory_mib": 2000.0}]
     assert report["contaminated"] is True
 
 
@@ -1582,9 +1499,7 @@ def test_generation_isolation_does_not_reuse_host_pid_binding_slot(
     report = monitor.stop()
 
     assert report["bound_host_compute_pids"] == [900]
-    assert report["added_compute_apps"] == [
-        {"pid": 901, "used_memory_mib": 2000.0}
-    ]
+    assert report["added_compute_apps"] == [{"pid": 901, "used_memory_mib": 2000.0}]
     assert report["contaminated"] is True
 
 
@@ -1609,9 +1524,7 @@ def test_compute_exclusive_temporal_binding_certifies_hidden_nspid(
 
     monitor._sample()
     monitor.mark_cuda_initialization_started()
-    monitor.set_cuda_affinity(
-        {"passed": True, "one_rank_per_physical_gpu": True}
-    )
+    monitor.set_cuda_affinity({"passed": True, "one_rank_per_physical_gpu": True})
     monitor._sample()
     monitor.mark_output_encoding_completed()
     report = monitor.stop()
@@ -1649,9 +1562,7 @@ def test_compute_exclusive_temporal_binding_is_never_reused(monkeypatch) -> None
 
     monitor._sample()
     monitor.mark_cuda_initialization_started()
-    monitor.set_cuda_affinity(
-        {"passed": True, "one_rank_per_physical_gpu": True}
-    )
+    monitor.set_cuda_affinity({"passed": True, "one_rank_per_physical_gpu": True})
     monitor._sample()
     monitor._sample()
     monitor.mark_output_encoding_completed()
@@ -1659,9 +1570,7 @@ def test_compute_exclusive_temporal_binding_is_never_reused(monkeypatch) -> None
 
     assert report["bound_host_compute_pids"] == [900]
     assert report["retired_host_compute_pids"] == [900]
-    assert report["added_compute_apps"] == [
-        {"pid": 901, "used_memory_mib": 1000.0}
-    ]
+    assert report["added_compute_apps"] == [{"pid": 901, "used_memory_mib": 1000.0}]
     assert any("disappeared" in error for error in report["monitor_errors"])
     assert report["certifying"] is False
 
@@ -1686,9 +1595,7 @@ def test_generation_isolation_rejects_bare_pid_numeric_collision(
 
     assert report["allowed_local_pids"] == [100]
     assert report["allowed_compute_pids"] == []
-    assert report["added_compute_apps"] == [
-        {"pid": 100, "used_memory_mib": 2000.0}
-    ]
+    assert report["added_compute_apps"] == [{"pid": 100, "used_memory_mib": 2000.0}]
     assert report["contaminated"] is True
 
 
@@ -1712,9 +1619,7 @@ def test_generation_isolation_rejects_single_namespace_nspid_as_unproven(
 
     assert report["namespace_mapping_proven"] is False
     assert any("unproven NSpid" in error for error in report["namespace_mapping_errors"])
-    assert report["added_compute_apps"] == [
-        {"pid": 100, "used_memory_mib": 1000.0}
-    ]
+    assert report["added_compute_apps"] == [{"pid": 100, "used_memory_mib": 1000.0}]
     assert report["contaminated"] is True
     assert report["certifying"] is False
 
@@ -1747,9 +1652,7 @@ def test_generation_isolation_fails_closed_on_query_timeout(monkeypatch) -> None
     monkeypatch.setattr(
         benchmark,
         "_gpu_compute_apps",
-        lambda _gpu: (_ for _ in ()).throw(
-            subprocess.TimeoutExpired(cmd="nvidia-smi", timeout=5.0)
-        ),
+        lambda _gpu: (_ for _ in ()).throw(subprocess.TimeoutExpired(cmd="nvidia-smi", timeout=5.0)),
     )
     monkeypatch.setattr(
         benchmark,
@@ -1850,10 +1753,7 @@ def test_bounded_polling_is_always_non_certifying(monkeypatch) -> None:
     assert report["contaminated"] is False
     assert report["certifying"] is False
     assert any("diagnostic-only" in reason for reason in report["non_certifying_reasons"])
-    assert any(
-        "diagnostic-only" in issue
-        for issue in benchmark._gpu_isolation_audit_issues(report)
-    )
+    assert any("diagnostic-only" in issue for issue in benchmark._gpu_isolation_audit_issues(report))
 
 
 def test_generation_isolation_requires_output_completion_marker(monkeypatch) -> None:
@@ -1871,9 +1771,7 @@ def test_generation_isolation_requires_output_completion_marker(monkeypatch) -> 
 
     monitor._sample()
     monitor.mark_cuda_initialization_started()
-    monitor.set_cuda_affinity(
-        {"passed": True, "one_rank_per_physical_gpu": True}
-    )
+    monitor.set_cuda_affinity({"passed": True, "one_rank_per_physical_gpu": True})
     report = monitor.stop()
 
     assert report["window"]["full_window_covered"] is False
@@ -1999,9 +1897,7 @@ def test_failure_report_retains_generation_isolation(tmp_path) -> None:
     failure = json.loads((output_dir / "failure.json").read_text(encoding="utf-8"))
     assert failure["gpu_isolation"]["pre_load_idle"]["passed"] is True
     assert failure["gpu_isolation"]["generation"] == generation
-    audit = json.loads(
-        (output_dir / "failure-isolation-rank-0.json").read_text(encoding="utf-8")
-    )
+    audit = json.loads((output_dir / "failure-isolation-rank-0.json").read_text(encoding="utf-8"))
     assert audit == failure["gpu_isolation"]
 
 
@@ -2018,9 +1914,7 @@ def test_async_block_offload_is_public_and_part_of_runtime_audit(tmp_path) -> No
 
     assert args.offload_mode == "block"
     assert benchmark._expected_requests(args)["denoiser"]["offload"] == "block"
-    assert "offload=async-double-buffer" in (
-        benchmark._candidate_reference_reasons(args)
-    )
+    assert "offload=async-double-buffer" in (benchmark._candidate_reference_reasons(args))
 
 
 @pytest.mark.parametrize(
@@ -2093,9 +1987,7 @@ def test_quantization_request_exposes_qualified_excludes_and_storage_policy(
         ),
     ],
 )
-def test_parallel_configuration_resolves_required_world_size(
-    tmp_path, extra, expected
-) -> None:
+def test_parallel_configuration_resolves_required_world_size(tmp_path, extra, expected) -> None:
     assert benchmark._expected_world_size(_args(tmp_path, *extra)) == expected
 
 
@@ -2156,17 +2048,24 @@ def test_candidate_optimization_accepts_both_reference_artifacts(tmp_path) -> No
     benchmark._validate_args(args)
 
 
-@pytest.mark.parametrize("override", [None, {"calls": 0}, {"accelerated_calls": 0}, {"fallback_calls": 1}, {"blocks": False}, {"calls": "30"}])
+@pytest.mark.parametrize(
+    "override",
+    [None, {"calls": 0}, {"accelerated_calls": 0}, {"fallback_calls": 1}, {"blocks": False}, {"calls": "30"}],
+)
 def test_residual_adaln_requires_real_accelerated_execution(tmp_path, override):
     args = _args(tmp_path, "--fused-residual-adaln")
     assert benchmark._expected_requests(args)["denoiser"]["fused_residual_adaln"] is True
     counters = {"blocks": 30, "calls": 60, "accelerated_calls": 60, "fallback_calls": 0}
     counters.update(override or {})
-    report = {"requested": {"fused_residual_adaln": True},
-              "effective": {"fused_residual_adaln_runtime": counters},
-              "runtime": {"fused_residual_adaln": counters}, "fallbacks": []}
+    report = {
+        "requested": {"fused_residual_adaln": True},
+        "effective": {"fused_residual_adaln_runtime": counters},
+        "runtime": {"fused_residual_adaln": counters},
+        "fallbacks": [],
+    }
     audit = benchmark._optimization_audit(
-        {"denoiser": report}, expected_requests={"denoiser": {"fused_residual_adaln": True}},
+        {"denoiser": report},
+        expected_requests={"denoiser": {"fused_residual_adaln": True}},
     )
     assert audit["passed"] is (override is None)
 
@@ -2219,9 +2118,7 @@ def test_validation_rejects_missing_preview_decoder_checkpoint(tmp_path) -> None
         ("--vae-parallel-degree", "2"),
     ],
 )
-def test_validation_rejects_preview_with_official_vae_acceleration(
-    tmp_path, conflicting_args
-) -> None:
+def test_validation_rejects_preview_with_official_vae_acceleration(tmp_path, conflicting_args) -> None:
     preview = tmp_path / "taew2_2.pth"
     preview.touch()
     args = _args(
@@ -2425,9 +2322,10 @@ def test_dual_expert_request_reset_prevents_previous_route_false_positive(
     # allowed to make the following one-expert request pass the E2E audit.
     denoiser(_dual_expert_input(900.0, step_index=0))
     denoiser(_dual_expert_input(100.0, step_index=1))
-    assert denoiser.runtime_optimization_report()["runtime"]["dual_expert"][
-        "route_calls"
-    ] == {"high-noise": 1, "low-noise": 1}
+    assert denoiser.runtime_optimization_report()["runtime"]["dual_expert"]["route_calls"] == {
+        "high-noise": 1,
+        "low-noise": 1,
+    }
 
     denoiser(_dual_expert_input(next_request_timestep, step_index=0))
     report = denoiser.runtime_optimization_report()
@@ -2438,11 +2336,7 @@ def test_dual_expert_request_reset_prevents_previous_route_false_positive(
         expected_requests={"denoiser": {}},
     )
     assert audit["passed"] is False
-    assert any(
-        f"denoiser.{missing_expert}: dual-expert route_calls must be > 0"
-        in issue
-        for issue in audit["issues"]
-    )
+    assert any(f"denoiser.{missing_expert}: dual-expert route_calls must be > 0" in issue for issue in audit["issues"])
 
 
 def test_dual_expert_audit_accepts_finalized_request_owned_route_receipt() -> None:
@@ -2736,9 +2630,7 @@ def test_lightx2v_audit_accepts_complete_multigpu_receipt(tmp_path: Path) -> Non
 
     audit = benchmark._optimization_audit(
         {"denoiser": report},
-        expected_requests={
-            "denoiser": {"approximate_attention": "dynamic_sparse"}
-        },
+        expected_requests={"denoiser": {"approximate_attention": "dynamic_sparse"}},
         expected_approximate_workload=workload,
     )
 
@@ -2788,9 +2680,7 @@ def test_fastvideo_sla_audit_accepts_complete_projection_receipt(
 
     audit = benchmark._optimization_audit(
         {"denoiser": report},
-        expected_requests={
-            "denoiser": {"approximate_attention": kind}
-        },
+        expected_requests={"denoiser": {"approximate_attention": kind}},
         expected_approximate_workload=workload,
     )
 
@@ -2804,7 +2694,6 @@ def test_fastvideo_sla_audit_accepts_complete_projection_receipt(
         ("provider", "receipt.fastvideo_sla.events"),
         ("family", "receipt.fastvideo_sla.events"),
         ("source-commit", "receipt.fastvideo_sla.events"),
-        ("source-fingerprint", "receipt.fastvideo_sla.events"),
         ("source-root", "receipt.fastvideo_sla.events"),
         ("dirty", "receipt.fastvideo_sla.events"),
         ("parity", "receipt.fastvideo_sla.events"),
@@ -2844,11 +2733,7 @@ def test_fastvideo_sla_audit_rejects_mutated_execution_evidence(
     report = _fastvideo_sla_optimization_report(workload)
     approximate = report["runtime"]["approximate_attention"]
     fastvideo = approximate["fastvideo_sla"]
-    sparse_events = [
-        event
-        for event in approximate["events"]
-        if event["execution"] == "sparse"
-    ]
+    sparse_events = [event for event in approximate["events"] if event["execution"] == "sparse"]
     event = sparse_events[0]
     if mutation == "provider":
         event["provider_path"] = "fastvideo.attention.backends.sla.Fake"
@@ -2856,8 +2741,6 @@ def test_fastvideo_sla_audit_rejects_mutated_execution_evidence(
         event["provider_family"] = "fastvideo/fake"
     elif mutation == "source-commit":
         event["provider_source_commit"] = "0" * 40
-    elif mutation == "source-fingerprint":
-        event["provider_source_fingerprint"] = "0" * 64
     elif mutation == "source-root":
         event["provider_source_root"] = "/tmp/untrusted"
     elif mutation == "dirty":
@@ -2879,11 +2762,7 @@ def test_fastvideo_sla_audit_rejects_mutated_execution_evidence(
     elif mutation == "global-call":
         sparse_events[1]["call_index"] = event["call_index"]
     elif mutation == "layer-call":
-        same_layer = next(
-            candidate
-            for candidate in sparse_events[1:]
-            if candidate["layer_idx"] == event["layer_idx"]
-        )
+        same_layer = next(candidate for candidate in sparse_events[1:] if candidate["layer_idx"] == event["layer_idx"])
         same_layer["layer_call_index"] = event["layer_call_index"]
     elif mutation == "timestep":
         event["current_timestep"] = 99
@@ -2902,9 +2781,7 @@ def test_fastvideo_sla_audit_rejects_mutated_execution_evidence(
 
     audit = benchmark._optimization_audit(
         {"denoiser": report},
-        expected_requests={
-            "denoiser": {"approximate_attention": "fastvideo_sla"}
-        },
+        expected_requests={"denoiser": {"approximate_attention": "fastvideo_sla"}},
         expected_approximate_workload=workload,
     )
 
@@ -2943,9 +2820,7 @@ def test_dual_expert_lightx2v_audit_accepts_complete_per_expert_receipts(
 
     audit = benchmark._optimization_audit(
         {"denoiser": report},
-        expected_requests={
-            "denoiser": {"approximate_attention": "dynamic_sparse"}
-        },
+        expected_requests={"denoiser": {"approximate_attention": "dynamic_sparse"}},
         expected_approximate_workload=workload,
     )
 
@@ -2971,9 +2846,7 @@ def test_dual_expert_fastvideo_sla_audit_accepts_per_expert_receipts(
     assert workload is not None
     report = _finalized_dual_expert_report()
     report["requested"] = {"approximate_attention": "fastvideo_sagesla"}
-    report["effective"]["approximate_attention_kernel"] = (
-        "fastvideo_sagesla"
-    )
+    report["effective"]["approximate_attention_kernel"] = "fastvideo_sagesla"
     experts = report["runtime"]["dual_expert"]["experts"]
     experts["high-noise"] = _fastvideo_sla_optimization_report(
         workload,
@@ -2988,9 +2861,7 @@ def test_dual_expert_fastvideo_sla_audit_accepts_per_expert_receipts(
 
     audit = benchmark._optimization_audit(
         {"denoiser": report},
-        expected_requests={
-            "denoiser": {"approximate_attention": "fastvideo_sagesla"}
-        },
+        expected_requests={"denoiser": {"approximate_attention": "fastvideo_sagesla"}},
         expected_approximate_workload=workload,
     )
 
@@ -3148,11 +3019,7 @@ def _fused_rope_optimization_report(
     runtime = {
         "fused_rope": {
             "installed_blocks": 30,
-            "effective": (
-                "compiled-graph-traced"
-                if compiled
-                else "accelerated-provider-executed"
-            ),
+            "effective": ("compiled-graph-traced" if compiled else "accelerated-provider-executed"),
             "eager_calls": 0 if compiled else 1500,
             "compiled_graph_traces": 1 if compiled else 0,
             "provider_calls": 0 if compiled else 1500,
@@ -3160,9 +3027,7 @@ def _fused_rope_optimization_report(
             "provider_failures": 0,
             "quarantined_skips": 0,
             "malformed_receipts": 0,
-            "provider_paths": (
-                [] if compiled else ["triton_hidden_qk_rmsnorm_rope_3d"]
-            ),
+            "provider_paths": ([] if compiled else ["triton_hidden_qk_rmsnorm_rope_3d"]),
         }
     }
     effective = {"fused_rope": "hidden_qk_rmsnorm_rope_3d:fp64"}
@@ -3221,9 +3086,7 @@ def test_fused_rope_audit_rejects_unexercised_or_fallback_paths(
     value,
     issue_fragment,
 ) -> None:
-    report = _fused_rope_optimization_report(
-        sequence_parallel=target == "sequence_parallel"
-    )
+    report = _fused_rope_optimization_report(sequence_parallel=target == "sequence_parallel")
     report["runtime"][target][field] = value
 
     audit = benchmark._optimization_audit(
@@ -3333,9 +3196,7 @@ def test_attention_audit_rejects_unproven_or_failed_eager_provider(
     issue_fragment,
 ) -> None:
     report = _attention_optimization_report()
-    report["runtime"]["attention_dispatch"]["provider_calls"][
-        "flash_attention_3"
-    ][counter] = value
+    report["runtime"]["attention_dispatch"]["provider_calls"]["flash_attention_3"][counter] = value
 
     audit = benchmark._optimization_audit(
         {"denoiser": report},
@@ -3402,9 +3263,7 @@ def test_optimization_audit_rejects_silent_noop() -> None:
         expected_requests={"denoiser": {"quantization": "fp8"}},
     )
     assert audit["passed"] is False
-    assert "denoiser: requested.quantization has neither effective state nor fallback" in audit[
-        "issues"
-    ]
+    assert "denoiser: requested.quantization has neither effective state nor fallback" in audit["issues"]
     assert any("runtime.quantization evidence" in issue for issue in audit["issues"])
 
 
@@ -3457,9 +3316,7 @@ def test_optimization_audit_rejects_silent_noop() -> None:
                     "vae_decode": "parallel-spatial-tiled (single-tile)",
                     "vae_spatial_tiles": 1,
                 },
-                "fallbacks": [
-                    "vae_spatial_tiling: requested shape produced one tile; no benefit"
-                ],
+                "fallbacks": ["vae_spatial_tiling: requested shape produced one tile; no benefit"],
                 "runtime": {
                     "parallel_tiled_decode_calls": 1,
                     "last_spatial_tile_count": 1,

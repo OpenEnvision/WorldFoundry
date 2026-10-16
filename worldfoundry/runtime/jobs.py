@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import signal
 import subprocess
 import sys
 import time
@@ -19,6 +18,7 @@ from worldfoundry.core.execution.process import (
     process_group_alive,
     process_identity,
     terminate_owned_process_group,
+    terminate_process_group,
 )
 from worldfoundry.core.observability.time import utc_now_iso as _utc_now_iso
 
@@ -112,17 +112,6 @@ def _decode_process_text(value: str | bytes | None) -> str:
     return value
 
 
-def _kill_process_group(process: subprocess.Popen[str]) -> None:
-    """Force-kill the entire process group for a subprocess on POSIX systems."""
-    if sys.platform == "win32":
-        process.kill()
-        return
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
-
-
 def run_bounded_command(
     command: Sequence[str],
     *,
@@ -131,7 +120,7 @@ def run_bounded_command(
     timeout: int,
     kill_timeout: int = 5,
 ) -> dict[str, Any]:
-    """Run a command with a hard timeout and always return captured output.
+    """Run a command with a hard timeout and stop its owned group on every exit.
 
     This helper is intended for official benchmark subprocesses. Some simulator
     or CUDA-backed scripts can ignore ordinary timeout handling while stuck in
@@ -167,7 +156,10 @@ def run_bounded_command(
         # Native CUDA simulators can ignore regular interrupt signals, so we
         # terminate the whole process group first and then force-kill if needed.
         timed_out = True
-        _kill_process_group(process)
+        try:
+            terminate_process_group(process, grace_seconds=0)
+        except (TimeoutError, subprocess.TimeoutExpired):
+            kill_stuck = True
         try:
             stdout, stderr = process.communicate(timeout=kill_timeout)
         except subprocess.TimeoutExpired as kill_exc:
@@ -175,6 +167,12 @@ def run_bounded_command(
             stdout = _decode_process_text(kill_exc.stdout or exc.stdout)
             stderr = _decode_process_text(kill_exc.stderr or exc.stderr)
         stderr = (f"{_decode_process_text(stderr)}\nTimeoutExpired: command exceeded {timeout}s").strip()
+    finally:
+        if not timed_out:
+            terminate_process_group(process, grace_seconds=0)
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
     return {
         "command": list(command_tuple),
         "stdout": _decode_process_text(stdout),
@@ -704,13 +702,17 @@ class AsyncCommandJobStore:
                     budget = timeout + 4 if job.completion_path else timeout
                     await asyncio.wait_for(_pump_and_wait(), timeout=budget)
                 except asyncio.TimeoutError:
-                    await self._terminate_process(job)
-                    job.returncode = job._process.returncode
                     if job.status != "cancelled":
                         job.status = "failed"
                         job.error = f"job timed out after {timeout}s"
+                        self._persist()
                         self._append_job_log(job, "stderr", f"TimeoutError: job exceeded {timeout}s\n")
                         self._write_lifecycle_event(job, "ERROR", "job.timeout", "WorldFoundry job timed out")
+                    await self._terminate_process(job)
+                    job.returncode = job._process.returncode
+                    receipt = self._read_completion(job)
+                    if receipt is not None:
+                        job.returncode = receipt.get("returncode")
                     return
             if job.status == "cancelled":
                 return

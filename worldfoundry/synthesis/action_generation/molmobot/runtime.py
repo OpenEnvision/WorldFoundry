@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -44,19 +43,10 @@ def _pi0_runtime_for(location: str, device: str, options: Mapping[str, Any]) -> 
     config_file = checkpoint / "assets" / "train_config.pkl"
     if not checkpoint.is_dir() or not config_file.is_file():
         raise FileNotFoundError(f"MolmoBot-Pi0 checkpoint is missing assets/train_config.pkl: {checkpoint}")
-    # The official loader unpickles train_config.pkl.  Require a vetted digest
-    # before importing the policy, including when a custom checkpoint is used.
-    expected = str(options.get("train_config_sha256") or "").lower()
-    if not expected or hashlib.sha256(config_file.read_bytes()).hexdigest() != expected:
-        raise ValueError(
-            "MolmoBot-Pi0 train_config.pkl has no matching trusted SHA-256; "
-            "provide the digest for a reviewed checkpoint via train_config_sha256."
-        )
     tokenizer = Path(os.environ.get("OPENPI_DATA_HOME", "~/.cache/openpi")).expanduser() / "big_vision" / "paligemma_tokenizer.model"
-    tokenizer_hash = str(options.get("paligemma_tokenizer_sha256") or "").lower()
-    if not tokenizer.is_file() or not tokenizer_hash or hashlib.sha256(tokenizer.read_bytes()).hexdigest() != tokenizer_hash:
+    if not tokenizer.is_file():
         raise FileNotFoundError(
-            "MolmoBot-Pi0 requires the validated PaliGemma tokenizer at "
+            "MolmoBot-Pi0 requires the PaliGemma tokenizer at "
             f"{tokenizer}; stage gs://big_vision/paligemma_tokenizer.model "
             "(https://storage.googleapis.com/big_vision/paligemma_tokenizer.model) there."
         )

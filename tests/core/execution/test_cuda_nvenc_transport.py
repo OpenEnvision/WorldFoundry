@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import weakref
 from types import SimpleNamespace
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -13,6 +14,7 @@ import torch
 from worldfoundry.core.execution.realtime.frame_prefetch import LazyCudaFrame
 from worldfoundry.core.media.processing.postprocess import (
     IdentityVideoPostProcessor,
+    VideoChunk,
     VideoPostprocessChain,
     VideoPostprocessStream,
 )
@@ -34,7 +36,10 @@ def _require_cuda():
 
 
 @pytest.mark.parametrize("queue_kind", ["latest", "presentation"])
-def test_device_transport_waits_for_producer_owns_pixels_and_avoids_host_materialization(monkeypatch, queue_kind):
+@pytest.mark.parametrize("declared", [False, True])
+def test_device_transport_waits_for_producer_owns_pixels_and_avoids_host_materialization(
+    monkeypatch, queue_kind, declared
+):
     device = _require_cuda()
     reference = np.arange(2 * 4 * 5 * 3, dtype=np.uint8).reshape(2, 4, 5, 3)
     producer = torch.cuda.Stream(device=device)
@@ -51,7 +56,8 @@ def test_device_transport_waits_for_producer_owns_pixels_and_avoids_host_materia
         raise AssertionError("NVENC transport unexpectedly materialized CPU pixels")
 
     monkeypatch.setattr(LazyCudaFrame, "to_numpy", reject_host)
-    frames = realtime_frames_from_result({"frames": lazy}, preserve_cuda=True)
+    result = {"video_chunk": VideoChunk(frames=lazy, value_range="0,255")} if declared else {"frames": lazy}
+    frames = realtime_frames_from_result(result, preserve_cuda=True)
     assert frames[0].shape == (4, 5, 3)
     assert str(frames[0].dtype) == "uint8"
     # Original decoder storage can be reused after its ordered snapshot.
@@ -62,13 +68,14 @@ def test_device_transport_waits_for_producer_owns_pixels_and_avoids_host_materia
     assert runtime._cuda_transport_enabled
     frames = runtime._postprocess_frames(frames)
     assert runtime._postprocess.chunk_index == 1
+    assert runtime._postprocess.input_spec is not None
     assert runtime._postprocess.input_spec.dtype == "uint8"
 
     async def exercise():
         buffer = (
             LatestFrameBuffer(maxsize=2, policy=FrameQueuePolicy.ORDERED_QUALITY)
-            if queue_kind == "latest" else
-            ChunkPresentationBuffer(fps=1000, maximum_fps=1000, policy=FrameQueuePolicy.ORDERED_QUALITY)
+            if queue_kind == "latest"
+            else ChunkPresentationBuffer(fps=1000, maximum_fps=1000, policy=FrameQueuePolicy.ORDERED_QUALITY)
         )
         buffer.preserve_cuda_frames = True
         assert await buffer.put_chunk(frames) == 2
@@ -102,7 +109,9 @@ def test_raw_device_result_snapshot_survives_decoder_reuse_and_latest_drop():
         assert buffer.dropped_frames == 2
         assert all(reference() is None for reference in dropped_refs)
         frame = await buffer.get()
-        np.testing.assert_array_equal(_rgb_frame_to_abgr_cuda(frame, torch).cpu().numpy()[..., :3], np.full((2, 3, 3), 23, np.uint8))
+        np.testing.assert_array_equal(
+            _rgb_frame_to_abgr_cuda(frame, torch).cpu().numpy()[..., :3], np.full((2, 3, 3), 23, np.uint8)
+        )
         await buffer.put_chunk([frame])
         held = weakref.ref(frame)
         del frame
@@ -113,11 +122,30 @@ def test_raw_device_result_snapshot_survives_decoder_reuse_and_latest_drop():
     asyncio.run(exercise())
 
 
+def test_declared_device_layout_owns_pixels_without_host_materialization(monkeypatch: pytest.MonkeyPatch) -> None:
+    device = _require_cuda()
+    source = torch.arange(3 * 5 * 3 * 4, dtype=torch.uint8, device=device).reshape(1, 3, 5, 3, 4)
+    expected = source[0].permute(1, 2, 3, 0).cpu().numpy().copy()
+
+    def reject_host(self: LazyCudaFrame) -> Any:
+        raise AssertionError("declared CUDA transport must retain device pixels")
+
+    monkeypatch.setattr(LazyCudaFrame, "to_numpy", reject_host)
+    frames = realtime_frames_from_result(
+        {"video_chunk": VideoChunk(frames=source, layout="bcthw", value_range="0,255")},
+        preserve_cuda=True,
+    )
+    assert len(frames) == 5
+    source.zero_()
+    actual = torch.stack([frame.to_cuda_tensor() for frame in frames]).cpu().numpy()
+    np.testing.assert_array_equal(actual, expected)
+
+
 def test_device_transport_declines_custom_postprocess_and_rejects_wrong_encoder_device():
     device = _require_cuda()
     runtime = object.__new__(ResidentWorldRuntime)
     runtime.preserve_cuda_frames = True
-    runtime._postprocess = SimpleNamespace(chain=VideoPostprocessChain((IdentityVideoPostProcessor(),)))
+    runtime._postprocess = cast(Any, SimpleNamespace(chain=VideoPostprocessChain((IdentityVideoPostProcessor(),))))
     assert not runtime._cuda_transport_enabled
     source = torch.zeros((2, 2, 3), dtype=torch.uint8, device=device)
     with pytest.raises(ValueError, match="does not match NVENC device"):

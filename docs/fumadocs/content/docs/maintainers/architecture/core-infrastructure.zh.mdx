@@ -116,6 +116,12 @@ description: worldfoundry/core 共享层 —— 加载、attention、分布式�
 - **Memory** —— `core/memory/base.py` 定义契约；`synthesis/*/memory` 的流式/长上下文状态与 `synthesis/action_generation/memory.py` 的动作策略 trace 状态实现它。
 - **分布式执行** —— `core/distributed` 是模型并行组初始化的唯一位置；任何 family 包都不得自启 NCCL group。
 
+### Cache 与 memory 身份
+
+本地分片 safetensors cache 在合并文件的 metadata 中记录 index 和被引用 shard 的路径、大小及纳秒修改时间。仅在源文件状态一致时复用；源文件改变或缺失不能被合并 cache 掩盖。Cache 仍原子发布。
+
+`MemoryStore` 的默认 timestamp 独立于容量淘汰持续递增。显式和恢复的数值 timestamp 会推进下一默认时间；`reset()` 开始新时间线，`replace()` 从传入记录重建时间线。Recency 排序使用记录 timestamp，而不是有界列表长度。
+
 ## 不属于此处的内容
 
 训练入口、数据集、dataloader、loss、callback、仅增强模块、实验脚本都不属于 `core`，也不属于 `base_models`。`core` 是推理基础设施；若某模块只在训练时有用，不要加到这里。

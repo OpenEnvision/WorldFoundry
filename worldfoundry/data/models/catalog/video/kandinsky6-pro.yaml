@@ -30,7 +30,7 @@ pipeline_binding: kandinsky6-pro
 runtime_profile: runtime-profile:kandinsky6-pro
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 integration:
-  status: planned
+  status: integrated
   runtime_profile: kandinsky6-pro
   pipeline_binding: kandinsky6-pro
 runner_parity:

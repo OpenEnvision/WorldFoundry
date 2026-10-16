@@ -1,35 +1,9 @@
-runs_dir: output/real_campus_2
-example_name: real_campus_2
-image_filepath: ""
-content_prompt: "campus, buildings, trees"
-style_prompt: "photorealistic"
-negative_prompt: ""
-background: null
-control_text: null
-outdoor: true
-
-seed: 1
-# enable guided depth diffusion
-depth_conditioning: True
-
-# use gpt to generate scene description
-use_gpt: False
-debug: True
-
-# depth model and camera/depth parameters
-depth_model: marigold
-camera_speed: 0.001
-fg_depth_range: 0.015
-depth_shift: 0.001
-sky_hard_depth: 0.02
-init_focal_length: 960
-
-# re-generate sky panorama images
-gen_sky_image: False
-# generate sky point cloud
-gen_sky: False
-
-# enable layer-wise generation
-gen_layer: True
-# load previously generated gaussians
-load_gen: False
+# Native offline pipeline call defaults. Supply images/input_path explicitly.
+seed: 42
+depth_steps: 30
+inpaint_steps: 50
+normal_steps: 10
+refinement_steps: 100
+focal_length: 500
+gen_layer: true
+negative_prompt: collage, text, writings, signs, text, white border, photograph border, artifacts, blur, blurry, foggy, fog, person, bad quality, distortions, distorted image, watermark, signature, fisheye look

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import Any, Dict, Optional, Sequence, Union, cast
 
 import torch
 from PIL import Image
@@ -44,7 +44,7 @@ class Lyra2Pipeline(PipelineABC):
         self.weight_dtype = weight_dtype
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]
         cls,
         model_path: Optional[str] = None,
         required_components: Optional[Dict[str, Any]] = None,
@@ -166,8 +166,8 @@ class Lyra2Pipeline(PipelineABC):
         seed: int = 1,
         return_dict: bool = False,
         show_progress: bool = True,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> Any:
         """Execute the complete pipeline generation flow."""
         processed = self.process(
             images=images,
@@ -177,7 +177,8 @@ class Lyra2Pipeline(PipelineABC):
             region_hint=region_hint,
         )
 
-        synthesis_result = self.synthesis_model.predict(
+        execute = kwargs.get("execute", True)
+        synthesis_result = cast(Lyra2Synthesis, self.synthesis_model).predict(
             input_image=processed["image"],
             camera_w2c=processed["camera_w2c"],
             prompt=processed["prompt"],
@@ -192,8 +193,22 @@ class Lyra2Pipeline(PipelineABC):
             offload=kwargs.get("offload"),
             offload_when_prompt=kwargs.get("offload_when_prompt"),
             show_progress=show_progress,
-            execute=kwargs.get("execute", True),
+            execute=execute,
+            output_path=Path(output_dir) / "lyra2_plan.json" if output_dir and not execute else None,
         )
+
+        if synthesis_result.get("status") in {"planned", "blocked"}:
+            return {
+                **synthesis_result,
+                "prompt": processed["prompt"],
+                "actions": processed["actions"],
+                "camera_w2c": processed["camera_w2c"],
+                "zoom_factors": processed["zoom_factors"],
+                "chunk_captions": processed["chunk_captions"],
+                "camera_path": processed.get("camera_path"),
+                "region_hint": processed.get("region_hint", ""),
+                "fps": fps,
+            }
 
         generated_video_path = None
         reconstruction_result = None
@@ -221,6 +236,8 @@ class Lyra2Pipeline(PipelineABC):
 
         result = {
             "video": synthesis_result["video"],
+            "video_chunk": synthesis_result.get("video_chunk"),
+            "fps": fps,
             "video_tensor": synthesis_result["video_tensor"],
             "generated_video_path": generated_video_path,
             "reconstruction": reconstruction_result,
@@ -250,8 +267,8 @@ class Lyra2Pipeline(PipelineABC):
         seed: int = 1,
         reset_memory: bool = False,
         return_dict: bool = False,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> Any:
         """Stream visual generation outputs chunk by chunk."""
         if reset_memory:
             self.memory_module.manage(action="reset")
@@ -277,9 +294,11 @@ class Lyra2Pipeline(PipelineABC):
             return_dict=True,
             **kwargs,
         )
+        if result.get("status") in {"planned", "blocked"}:
+            return result
         self.memory_module.record(
             result,
-            metadata={"prompt": prompt, "interactions": list(interactions)},
+            metadata={"prompt": prompt, "interactions": list(interactions or [])},
         )
         if reconstruct_3d or return_dict:
             return result
@@ -288,4 +307,5 @@ class Lyra2Pipeline(PipelineABC):
 
 class LyraPipeline(Lyra2Pipeline):
     """Pipeline implementation for Lyra visual generation."""
+
     MODEL_ID = "lyra"

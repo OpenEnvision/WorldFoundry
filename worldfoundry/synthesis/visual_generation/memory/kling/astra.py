@@ -1,122 +1,138 @@
+"""Astra's bounded latent history and absolute camera progression."""
+
+from typing import Any
+
 import torch
 
 from worldfoundry.core.memory import BaseMemory
 
 
 class AstraMemory(BaseMemory):
-    def __init__(self, capacity=49, **kwargs):
-        self.capacity = capacity
-        self.history_latents = None # [C, T, H, W]
+    """Keep the initial latent and a recent window without rewinding the camera."""
 
-    def record(self, new_latents_squeezed, **kwargs):
-        """
-        Ingest new latents and update sliding window.
-        new_latents_squeezed: [C, T_new, H, W]
-        """
+    def __init__(self, capacity: int = 49, **kwargs: Any) -> None:
+        super().__init__(capacity=capacity, **kwargs)
+        self.capacity: int = capacity
+        self.history_latents: torch.Tensor | None = None  # [C, T, H, W]
+        self.total_latent_frames = 0
+
+    def reset(self) -> None:
+        """Release this session's latents, records and absolute progress."""
+        self.history_latents = None
+        self.total_latent_frames = 0
+        self.reset_records()
+
+    def record(self, new_latents_squeezed: torch.Tensor, **kwargs: Any) -> None:  # ty: ignore[invalid-method-override]
+        """Append [C, T_new, H, W] latents and advance the absolute frame count."""
         if self.history_latents is None:
             self.history_latents = new_latents_squeezed
         else:
             self.history_latents = torch.cat([self.history_latents, new_latents_squeezed], dim=1)
-        
+        self.total_latent_frames += new_latents_squeezed.shape[1]
         self.manage()
 
-    def manage(self, **kwargs):
-        """Sliding window logic: keep first frame + recent frames"""
-        if self.history_latents is not None and self.history_latents.shape[1] > self.capacity:
-            first_frame = self.history_latents[:, 0:1, :, :]
-            recent_frames = self.history_latents[:, -(self.capacity-1):, :, :]
-            self.history_latents = torch.cat([first_frame, recent_frames], dim=1)
-            print(f"⚠️ History window full, keeping first frame + latest {self.capacity-1} frames")
+    def manage(self, **kwargs: Any) -> None:
+        """Keep the first frame and latest frames, or reset the whole session."""
+        if kwargs.get("action") == "reset":
+            self.reset()
+        elif self.history_latents is not None and self.history_latents.shape[1] > self.capacity:
+            first_frame = self.history_latents[:, 0:1]
+            recent_start = self.history_latents.shape[1] - self.capacity + 1
+            self.history_latents = torch.cat([first_frame, self.history_latents[:, recent_start:]], dim=1)
 
-    def select(self, target_frames_to_generate, camera_embedding_full, start_frame, modality_type):
-        """
-        Retrieves the prepared inputs (FramePack) for the model.
-        """
+    def select(  # ty: ignore[invalid-method-override]
+        self,
+        target_frames_to_generate: int,
+        camera_embedding_full: torch.Tensor,
+        start_frame: int,
+        modality_type: str,
+    ) -> dict[str, Any]:
+        """Build FramePack context using absolute camera rows and retained latents."""
+        if self.history_latents is None:
+            raise ValueError("Astra memory requires initial latents before selection.")
         return self.prepare_framepack_sliding_window_with_camera_moe(
             self.history_latents,
             target_frames_to_generate,
             camera_embedding_full,
             start_frame,
             modality_type,
-            self.capacity
+            self.capacity,
+            total_latent_frames=self.total_latent_frames,
         )
 
-    # =========================================================================
-    # FramePack preparation with sliding window - Mixture of Experts (MoE) version
-    # =========================================================================
-    
     def prepare_framepack_sliding_window_with_camera_moe(
         self,
-        history_latents, 
-        target_frames_to_generate, 
-        camera_embedding_full, 
-        start_frame, 
-        modality_type, 
-        max_history_frames=49):
-        """FramePack sliding window mechanism - MoE version"""
-        # history_latents: [C, T, H, W] current history latents
+        history_latents: torch.Tensor,
+        target_frames_to_generate: int,
+        camera_embedding_full: torch.Tensor,
+        start_frame: int,
+        modality_type: str,
+        max_history_frames: int = 49,
+        *,
+        total_latent_frames: int | None = None,
+    ) -> dict[str, Any]:
+        """Pack local latent indices while camera rows follow episode progress.
+
+        Camera embeddings are already aligned by the pipeline. Standalone calls
+        without ``total_latent_frames`` describe an untruncated history.
+        """
         C, T, H, W = history_latents.shape
-        
+        current_length = T if total_latent_frames is None else total_latent_frames
         total_indices_length = 1 + 16 + 2 + 1 + target_frames_to_generate
         indices = torch.arange(0, total_indices_length)
         split_sizes = [1, 16, 2, 1, target_frames_to_generate]
-        clean_latent_indices_start, clean_latent_4x_indices, clean_latent_2x_indices, clean_latent_1x_indices, latent_indices = \
-            indices.split(split_sizes, dim=0)
+        (
+            clean_latent_indices_start,
+            clean_latent_4x_indices,
+            clean_latent_2x_indices,
+            clean_latent_1x_indices,
+            latent_indices,
+        ) = indices.split(split_sizes, dim=0)
         clean_latent_indices = torch.cat([clean_latent_indices_start, clean_latent_1x_indices], dim=0)
-        
-        if camera_embedding_full.shape[0] < total_indices_length:
-            shortage = total_indices_length - camera_embedding_full.shape[0]
-            padding = torch.zeros(shortage, camera_embedding_full.shape[1], 
-                                dtype=camera_embedding_full.dtype, device=camera_embedding_full.device)
+
+        needed_camera_rows = max(total_indices_length, current_length + target_frames_to_generate)
+        if camera_embedding_full.shape[0] < needed_camera_rows:
+            padding = camera_embedding_full.new_zeros(
+                needed_camera_rows - camera_embedding_full.shape[0], camera_embedding_full.shape[1]
+            )
             camera_embedding_full = torch.cat([camera_embedding_full, padding], dim=0)
-        
-        combined_camera = torch.zeros(
-            total_indices_length, 
-            camera_embedding_full.shape[1],
-            dtype=camera_embedding_full.dtype,
-            device=camera_embedding_full.device)
-        
-        history_slice = camera_embedding_full[max(T - 19, 0):T, :].clone()
-        combined_camera[19 - history_slice.shape[0]:19, :] = history_slice
-        
-        target_slice = camera_embedding_full[T:T + target_frames_to_generate, :].clone()
-        combined_camera[19:19 + target_slice.shape[0], :] = target_slice
-        
-        combined_camera[:, -1] = 0.0 
-        
-        if T > 0:
-            available_frames = min(T, 19)
-            start_pos = 19 - available_frames
-            combined_camera[start_pos:19, -1] = 1.0 
-        
-        clean_latents_combined = torch.zeros(C, 19, H, W, dtype=history_latents.dtype, device=history_latents.device)
-        
-        if T > 0:
-            available_frames = min(T, 19)
-            start_pos = 19 - available_frames
-            clean_latents_combined[:, start_pos:, :, :] = history_latents[:, -available_frames:, :, :]
-        
-        clean_latents_4x = clean_latents_combined[:, 0:16, :, :]
-        clean_latents_2x = clean_latents_combined[:, 16:18, :, :]
-        clean_latents_1x = clean_latents_combined[:, 18:19, :, :]
-        
-        if T > 0:
-            start_latent = history_latents[:, 0:1, :, :]
-        else:
-            start_latent = torch.zeros(C, 1, H, W, dtype=history_latents.dtype, device=history_latents.device)
-        
+
+        combined_camera = camera_embedding_full.new_zeros(total_indices_length, camera_embedding_full.shape[1])
+        available_frames = min(T, 19)
+        start_pos = 19 - available_frames
+        if available_frames:
+            history_positions = torch.arange(
+                current_length - available_frames, current_length, device=camera_embedding_full.device
+            )
+            # A short retained window includes the pinned first frame.
+            if T < current_length and available_frames == T:
+                history_positions[0] = 0
+            combined_camera[start_pos:19] = camera_embedding_full[history_positions]
+        combined_camera[19 : 19 + target_frames_to_generate] = camera_embedding_full[
+            current_length : current_length + target_frames_to_generate
+        ]
+        combined_camera[:, -1] = 0.0
+        combined_camera[start_pos:19, -1] = 1.0
+
+        clean_latents_combined = history_latents.new_zeros(C, 19, H, W)
+        if available_frames:
+            clean_latents_combined[:, start_pos:] = history_latents[:, -available_frames:]
+        clean_latents_4x = clean_latents_combined[:, 0:16]
+        clean_latents_2x = clean_latents_combined[:, 16:18]
+        clean_latents_1x = clean_latents_combined[:, 18:19]
+        start_latent = history_latents[:, 0:1] if T else history_latents.new_zeros(C, 1, H, W)
         clean_latents = torch.cat([start_latent, clean_latents_1x], dim=1)
-        
+
         return {
-            'latent_indices': latent_indices,
-            'clean_latents': clean_latents,
-            'clean_latents_2x': clean_latents_2x,
-            'clean_latents_4x': clean_latents_4x,
-            'clean_latent_indices': clean_latent_indices,
-            'clean_latent_2x_indices': clean_latent_2x_indices,
-            'clean_latent_4x_indices': clean_latent_4x_indices,
-            'camera_embedding': combined_camera,
-            'modality_type': modality_type,
-            'current_length': T,
-            'next_length': T + target_frames_to_generate
+            "latent_indices": latent_indices,
+            "clean_latents": clean_latents,
+            "clean_latents_2x": clean_latents_2x,
+            "clean_latents_4x": clean_latents_4x,
+            "clean_latent_indices": clean_latent_indices,
+            "clean_latent_2x_indices": clean_latent_2x_indices,
+            "clean_latent_4x_indices": clean_latent_4x_indices,
+            "camera_embedding": combined_camera,
+            "modality_type": modality_type,
+            "current_length": current_length,
+            "next_length": current_length + target_frames_to_generate,
         }

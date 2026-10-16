@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from worldfoundry.base_models.diffusion_model.models.networks.wan.model import WanModel
 
 
-def test_tiny_wan_forward_is_cpu_fullgraph_compilable() -> None:
+@pytest.mark.parametrize("compatibility_mode", (False, True))
+def test_tiny_wan_forward_is_cpu_fullgraph_compilable(compatibility_mode: bool) -> None:
     torch.manual_seed(0)
     model = WanModel(
         dim=96,
@@ -23,7 +25,7 @@ def test_tiny_wan_forward_is_cpu_fullgraph_compilable() -> None:
         has_image_input=False,
         require_vae_embedding=False,
     ).eval()
-    model.set_attention_compatibility_mode(True)
+    model.set_attention_compatibility_mode(compatibility_mode)
     x = torch.randn(1, 4, 2, 4, 4)
     timestep = torch.tensor([10.0])
     context = torch.randn(1, 5, 32)

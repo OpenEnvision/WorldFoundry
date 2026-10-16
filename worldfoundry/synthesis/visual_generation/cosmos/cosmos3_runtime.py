@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
 from worldfoundry.pipelines.cosmos.pipeline_cosmos3 import Cosmos3Pipeline
+
+if TYPE_CHECKING:
+    from worldfoundry.core.media.processing.postprocess import VideoChunk
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +32,8 @@ class Cosmos3RuntimeOutput:
     action: Any = None
     audio_sample_rate: int | None = None
     artifact_path: str | None = None
+    video_chunk: VideoChunk | None = None
+    fps: float | None = None
 
 
 class Cosmos3Runtime:
@@ -91,6 +96,8 @@ class Cosmos3Runtime:
             action=result.get("action"),
             audio_sample_rate=result.get("audio_sampling_rate"),
             artifact_path=result.get("artifact_path"),
+            video_chunk=result.get("video_chunk"),
+            fps=result.get("fps"),
         )
 
     def api_init(self, *args: Any, **kwargs: Any) -> None:

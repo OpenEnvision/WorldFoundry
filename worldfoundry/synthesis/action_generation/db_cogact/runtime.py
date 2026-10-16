@@ -13,8 +13,7 @@ from worldfoundry.synthesis.action_generation._native_policy_runtime import (
     option_int,
 )
 
-
-_RUNTIME_CACHE: dict[tuple[Any, ...], Any] = {}
+_RUNTIME_CACHE: dict[tuple[Any, ...], tuple[Any, Any]] = {}
 
 
 def clear_runtime_cache() -> None:
@@ -49,13 +48,19 @@ def _normalization_stats(checkpoint_path: str, options: Mapping[str, Any]) -> di
     return {"min": -1, "max": 1}
 
 
-def _runtime_for(location: str, device: str, options: Mapping[str, Any]) -> Any:
-    camera_order = tuple(str(item) for item in options.get("camera_order") or ("front", "left_wrist", "right_wrist"))
+def _model_resources_for(location: str, device: str, options: Mapping[str, Any]) -> tuple[Any, Any]:
+    """Reuse checkpoint-backed model and tokenizer independently of request normalization."""
     cpu_offload_enabled = option_bool(options.get("cpu_offload"), False)
-    key = (location, device, camera_order, options.get("torch_dtype"), options.get("attention_backend"), cpu_offload_enabled)
-    policy = _RUNTIME_CACHE.get(key)
-    if policy is not None:
-        return policy
+    key = (
+        location,
+        device,
+        options.get("torch_dtype"),
+        options.get("attention_backend"),
+        cpu_offload_enabled,
+    )
+    resources = _RUNTIME_CACHE.get(key)
+    if resources is not None:
+        return resources
 
     import torch
     from transformers import AutoTokenizer
@@ -65,8 +70,7 @@ def _runtime_for(location: str, device: str, options: Mapping[str, Any]) -> Any:
     from worldfoundry.core.model_loading.checkpoints import load_safetensors_into_model_streaming
     from worldfoundry.core.vram import skip_model_initialization
 
-    from .modeling.architecture import CogACTForCausalLM, CogActConfig
-    from .modeling.policy import CogACTPolicy
+    from .modeling.architecture import CogActConfig, CogACTForCausalLM
 
     dtype_name = str(options.get("torch_dtype") or "bfloat16").lower()
     dtype = {
@@ -127,17 +131,28 @@ def _runtime_for(location: str, device: str, options: Mapping[str, Any]) -> Any:
         trust_remote_code=option_bool(options.get("trust_remote_code"), False),
         local_files_only=True,
     )
-    policy = CogACTPolicy(
+    resources = (model, tokenizer)
+    _RUNTIME_CACHE[key] = resources
+    return resources
+
+
+def _runtime_for(location: str, device: str, options: Mapping[str, Any]) -> Any:
+    """Bind a request's resolved action statistics to shared checkpoint-backed resources."""
+    from .modeling.policy import CogACTPolicy
+
+    norm_stats = _normalization_stats(location, options)
+    model, tokenizer = _model_resources_for(location, device, options)
+    return CogACTPolicy(
         model=model,
         tokenizer=tokenizer,
-        norm_stats=_normalization_stats(location, options),
-        camera_order=list(camera_order),
+        norm_stats=norm_stats,
+        camera_order=[str(item) for item in options.get("camera_order") or ("front", "left_wrist", "right_wrist")],
     )
-    _RUNTIME_CACHE[key] = policy
-    return policy
 
 
-def _policy_observation(observation: Mapping[str, Any], image: Any, instruction: str, options: Mapping[str, Any]) -> dict[str, Any]:
+def _policy_observation(
+    observation: Mapping[str, Any], image: Any, instruction: str, options: Mapping[str, Any]
+) -> dict[str, Any]:
     camera_order = [str(item) for item in options.get("camera_order") or ("front", "left_wrist", "right_wrist")]
     payload: dict[str, Any] = {"prompt": first_present(observation, "prompt") or instruction}
     for key, value in observation.items():

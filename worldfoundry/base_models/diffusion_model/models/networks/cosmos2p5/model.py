@@ -26,6 +26,7 @@ import torch.nn.functional as functional
 from einops import rearrange, repeat
 
 from worldfoundry.core.attention import apply_rotary_embedding, scaled_dot_product_attention
+from worldfoundry.core.attention.cache.kvcache import CompactingKVCache
 from worldfoundry.core.nn.diffusion.timestep import Timesteps
 
 
@@ -139,6 +140,8 @@ class Cosmos25Attention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         rotary_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
         total_context_tokens: int | None = None,
+        kv_cache: CompactingKVCache | None = None,
+        store_kv: bool = False,
     ) -> torch.Tensor:
         """Attend ``B S C`` queries to context; RoPE is applied in fp32 then cast back."""
         context = hidden_states if encoder_hidden_states is None else encoder_hidden_states
@@ -156,6 +159,14 @@ class Cosmos25Attention(nn.Module):
         if total_context_tokens is not None and encoder_hidden_states is None:
             key = self.parallel_context.gather_tokens(key, total=total_context_tokens, dim=2)
             value = self.parallel_context.gather_tokens(value, total=total_context_tokens, dim=2)
+        if kv_cache is not None:
+            current_key, current_value = key, value
+            if kv_cache.length:
+                history_key, history_value = kv_cache.cached()
+                key = torch.cat((history_key, key), dim=2)
+                value = torch.cat((history_value, value), dim=2)
+            if store_kv:
+                kv_cache.append(current_key.detach(), current_value.detach(), frame_count=1)
         value = scaled_dot_product_attention(query, key, value, attn_mask=attention_mask)
         value = value.transpose(1, 2).flatten(2, 3).type_as(query)
         return self.to_out[1](self.to_out[0](value))
@@ -215,11 +226,14 @@ class Cosmos25TransformerBlock(nn.Module):
         rotary_emb: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         total_context_tokens: int | None = None,
+        kv_cache: CompactingKVCache | None = None,
+        store_kv: bool = False,
     ) -> torch.Tensor:
         """Run the three AdaLN-gated residual branches on ``B S C`` tokens."""
         normalized, gate = self.norm1(hidden_states, embedded_timestep, temb)
         hidden_states = hidden_states + gate * self.attn1(
             normalized, rotary_emb=rotary_emb, total_context_tokens=total_context_tokens,
+            kv_cache=kv_cache, store_kv=store_kv,
         )
         normalized, gate = self.norm2(hidden_states, embedded_timestep, temb)
         hidden_states = hidden_states + gate * self.attn2(

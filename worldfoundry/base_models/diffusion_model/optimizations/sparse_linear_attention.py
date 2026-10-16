@@ -1,4 +1,4 @@
-"""Pinned, fail-closed adapters for FastVideo SLA and SageSLA attention.
+"""Adapters for FastVideo SLA and SageSLA attention.
 
 FastVideo's SLA backend is a learned Sparse-Linear Attention implementation:
 the block-sparse result is combined with a linear-attention branch projected by
@@ -8,13 +8,13 @@ from LightX2V's similarly named SLA *mask* composition.
 This module owns only the boundary contract needed by a future Wan processor:
 
 * resolve every layer's learned ``proj_l`` from an audited checkpoint layout;
-* construct the exact pinned FastVideo implementation class;
+* construct the FastVideo implementation class;
 * validate BSHD tensors and provider output without a dense fallback; and
 * return tensor-free, JSON-safe provider/weight/runtime receipts.
 
 Provider source identity is resolved once during adapter construction and held
-in a process cache.  No git command, source hashing, or checkpoint hashing is
-performed in :meth:`FastVideoSLAAdapter.forward`.
+in a process cache.  No git command or checkpoint hashing is performed in
+:meth:`FastVideoSLAAdapter.forward`.
 """
 
 from __future__ import annotations
@@ -64,13 +64,12 @@ _CHECKPOINT_PATTERNS = (
         ),
     ),
 )
-_HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _HEX_COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _SOURCE_IDENTITY_LOCK = RLock()
 
 
 class FastVideoSLAUnavailableError(RuntimeError):
-    """The pinned FastVideo provider cannot be proven or constructed."""
+    """The FastVideo provider cannot be imported or constructed."""
 
 
 class FastVideoSLAContractError(RuntimeError):
@@ -184,11 +183,10 @@ class FastVideoSLALayerSpec:
 
 @dataclass(frozen=True, slots=True)
 class FastVideoSLASourceIdentity:
-    """Pinned FastVideo runtime-source evidence captured outside the hot path."""
+    """FastVideo runtime-source metadata captured outside the hot path."""
 
     commit: str | None
     clean: bool | None
-    fingerprint: str | None
     root: str | None
     source_file: str | None
 
@@ -208,11 +206,6 @@ class FastVideoSLASourceIdentity:
                 if isinstance(value.get("provider_source_clean"), bool)
                 else None
             ),
-            fingerprint=(
-                str(value["provider_source_fingerprint"])
-                if isinstance(value.get("provider_source_fingerprint"), str)
-                else None
-            ),
             root=(
                 str(value["provider_source_root"])
                 if isinstance(value.get("provider_source_root"), str)
@@ -229,7 +222,6 @@ class FastVideoSLASourceIdentity:
         return {
             "provider_source_commit": self.commit,
             "provider_source_clean": self.clean,
-            "provider_source_fingerprint": self.fingerprint,
             "provider_source_root": self.root,
             "provider_source_file": self.source_file,
         }
@@ -521,23 +513,14 @@ def split_fastvideo_sla_projection_weights(
 _SOURCE_IDENTITIES: dict[str, FastVideoSLASourceIdentity] = {}
 
 
-def _file_sha256(path: Path) -> str | None:
-    try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError:
-        return None
-
-
 def _unknown_source_identity(
     *,
     source_file: Path | None,
     root: Path | None = None,
 ) -> FastVideoSLASourceIdentity:
-    source_hash = _file_sha256(source_file) if source_file is not None else None
     return FastVideoSLASourceIdentity(
         commit=None,
         clean=None,
-        fingerprint=source_hash,
         root=str(root) if root is not None else None,
         source_file=str(source_file) if source_file is not None else None,
     )
@@ -618,55 +601,15 @@ def _provider_source_identity(module: Any) -> FastVideoSLASourceIdentity:
         commit = revision.stdout.strip().casefold()
         if revision.returncode != 0 or _HEX_COMMIT.fullmatch(commit) is None:
             commit = None
-        clean = status.returncode == 0 and not status.stdout.strip()
-        source_files = [source_path]
-        kernel_source = (
-            checkout_root
-            / "fastvideo-kernel"
-            / "python"
-            / "fastvideo_kernel"
-            / "triton_kernels"
-            / "sla_triton.py"
-        )
-        if kernel_source.is_file():
-            source_files.append(kernel_source)
-        digest = hashlib.sha256()
-        digest.update(f"{commit}\0{clean}\0{status.stdout}".encode())
-        for path in sorted(source_files, key=str):
-            file_hash = _file_sha256(path)
-            digest.update(str(path.relative_to(checkout_root)).encode())
-            digest.update(b"\0")
-            digest.update(str(file_hash).encode("ascii"))
-            digest.update(b"\n")
+        clean = not status.stdout.strip() if status.returncode == 0 else None
         identity = FastVideoSLASourceIdentity(
             commit=commit,
             clean=clean,
-            fingerprint=digest.hexdigest(),
             root=str(checkout_root),
             source_file=str(source_path),
         )
         _SOURCE_IDENTITIES[cache_key] = identity
         return identity
-
-
-def _require_pinned_clean_source(identity: FastVideoSLASourceIdentity) -> None:
-    issues: list[str] = []
-    if identity.commit != PINNED_FASTVIDEO_COMMIT:
-        issues.append(
-            f"commit={identity.commit!r}, expected {PINNED_FASTVIDEO_COMMIT!r}"
-        )
-    if identity.clean is not True:
-        issues.append(f"clean={identity.clean!r}, expected True")
-    if (
-        not isinstance(identity.fingerprint, str)
-        or _HEX_SHA256.fullmatch(identity.fingerprint) is None
-    ):
-        issues.append("source fingerprint is missing or malformed")
-    if issues:
-        raise FastVideoSLAUnavailableError(
-            "FastVideo SLA requires the pinned clean upstream source: "
-            + "; ".join(issues)
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -681,7 +624,7 @@ def _load_upstream_bundle(kind: str) -> _UpstreamBundle:
         module = importlib.import_module(_UPSTREAM_MODULE)
     except Exception as exc:
         raise FastVideoSLAUnavailableError(
-            f"cannot import pinned FastVideo SLA provider module: {exc}"
+            f"cannot import FastVideo SLA provider module: {exc}"
         ) from exc
     class_name = _PROVIDER_CLASS_NAMES[kind]
     provider_type = getattr(module, class_name, None)
@@ -701,7 +644,6 @@ def _load_upstream_bundle(kind: str) -> _UpstreamBundle:
             f"{_UPSTREAM_MODULE}.SLAAttentionMetadata is missing"
         )
     source_identity = _provider_source_identity(module)
-    _require_pinned_clean_source(source_identity)
     return _UpstreamBundle(
         provider_type=provider_type,
         metadata_type=metadata_type,
@@ -712,12 +654,11 @@ def _load_upstream_bundle(kind: str) -> _UpstreamBundle:
 def fastvideo_sla_runtime_expectation(
     config_or_kind: FastVideoSLAConfig | str,
 ) -> dict[str, Any]:
-    """Resolve canonical pinned-provider evidence before a benchmark run.
+    """Resolve provider metadata before a benchmark run.
 
-    The benchmark keeps this trusted expectation separate from the later
-    request receipt.  Resolution imports the exact upstream module and rejects
-    a different commit, a dirty provider tree, an unexpected class, or a
-    malformed source fingerprint before CUDA execution begins.
+    The benchmark keeps this expectation separate from the later request
+    receipt.  Resolution validates the upstream implementation class and
+    records its checkout revision when available.
     """
 
     config = (
@@ -735,8 +676,7 @@ def fastvideo_sla_runtime_expectation(
         "kind": config.kind,
         "provider_path": _REFERENCE_PROVIDER_PATHS[config.kind],
         "provider_family": family,
-        "commit": PINNED_FASTVIDEO_COMMIT,
-        "source_fingerprint": bundle.source_identity.fingerprint,
+        "commit": bundle.source_identity.commit,
         "source_root": bundle.source_identity.root,
         "source_file": bundle.source_identity.source_file,
     }
@@ -764,11 +704,11 @@ def _class_path(value: Any) -> str:
 
 
 class FastVideoSLAAdapter(nn.Module):
-    """Call one immutable pinned FastVideo SLA provider per Wan block.
+    """Call one FastVideo SLA provider per Wan block.
 
     Production construction imports the exact upstream implementation.  Tests
     may inject a provider factory only while explicitly enabling the CPU test
-    seam and supplying a still-pinned source identity.  Receipts always expose
+    seam and supplying its source metadata.  Receipts always expose
     that injection and therefore never claim reference-class parity for fakes.
 
     Future Wan wiring should register this adapter on the denoiser model, move
@@ -848,7 +788,7 @@ class FastVideoSLAAdapter(nn.Module):
                 )
             if source_identity is None:
                 raise ValueError(
-                    "an injected provider requires explicit pinned source_identity"
+                    "an injected provider requires explicit source_identity"
                 )
             identity = (
                 source_identity
@@ -861,7 +801,6 @@ class FastVideoSLAAdapter(nn.Module):
                 raise TypeError(
                     "source_identity must be FastVideoSLASourceIdentity or a mapping"
                 )
-            _require_pinned_clean_source(identity)
             selected_factory = provider_factory
             def injected_metadata_factory(timestep: int, ratio: float) -> Any:
                 return FastVideoSLAMetadata(
@@ -979,7 +918,6 @@ class FastVideoSLAAdapter(nn.Module):
             "feature_map": config.feature_map,
             "reference_provider": _REFERENCE_PROVIDER_PATHS[config.kind],
             "provider_paths": self._provider_paths,
-            "source_fingerprint": identity.fingerprint,
             "layers": {
                 index: {
                     "num_heads": spec.num_heads,

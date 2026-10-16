@@ -27,7 +27,8 @@ default numerical result is unchanged (the same projections, just reused).
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Callable
 
 import torch
 from torch import nn
@@ -55,12 +56,8 @@ class StaticCrossKVProcessor:
         self._inner = inner
         self._cache = cache
 
-    def __call__(self, attention: nn.Module, x: torch.Tensor, context: torch.Tensor, **kwargs: Any) -> torch.Tensor:
-        # Unknown processor kwargs may change how context is interpreted.
-        if kwargs:
-            self._cache.record_bypass(kwargs)
-            return self._inner(attention, x, context, **kwargs)
-
+    def prepare(self, attention: nn.Module, context: torch.Tensor) -> tuple[torch.Tensor, ...]:
+        """Resolve projected K/V outside a compiled or captured compute region."""
         entry = self._cache.get(attention, context)
         if entry is None:
             from ..models.networks.wan.model import project_wan_cross_kv
@@ -76,16 +73,23 @@ class StaticCrossKVProcessor:
             if getattr(attention, "has_image_input", False):
                 tensors += (image_key, image_value)
             self._cache.put(attention, context, *tensors)
-        else:
-            key, value, *image_entry = entry
+            return tensors
+        return entry
+
+    def __call__(self, attention: nn.Module, x: torch.Tensor, context: torch.Tensor, **kwargs: Any) -> torch.Tensor:
+        # Explicit K/V are already resolved by the denoiser; replay must not
+        # query a Python cache or retain a previous request's tensors.
+        if "_worldfoundry_cross_kv" in kwargs:
+            return self._inner(attention, x, context, **kwargs)
+        if kwargs:
+            self._cache.record_bypass(kwargs)
+            return self._inner(attention, x, context, **kwargs)
+        key, value, *image_entry = self.prepare(attention, context)
         query = attention.norm_q(attention.q(x))
         output = attention.attn(query, key, value)
         if getattr(attention, "has_image_input", False):
-            if entry is None:
-                cached_image_key, cached_image_value = image_key, image_value
-            else:
-                cached_image_key, cached_image_value = image_entry
-            output = output + attention.attn(query, cached_image_key, cached_image_value)
+            image_key, image_value = image_entry
+            output = output + attention.attn(query, image_key, image_value)
         return attention.o(output)
 
 
@@ -251,6 +255,79 @@ class _StaticCrossKVCache:
         }
 
 
+@dataclass
+class StaticConditionCache:
+    """One request's fixed text/image conditions and lazy projected context/KV.
+
+    Keep weights, precision and source tensors fixed for this object's lifetime.
+    CFG slices own their original projection batch shapes. Projection remains
+    inside model forwards so autocast and placement hooks retain control.
+    """
+
+    source: torch.Tensor
+    clip_feature: torch.Tensor | None = None
+    store: _StaticCrossKVCache = field(default_factory=_StaticCrossKVCache, init=False, repr=False)
+    _batches: dict[tuple[int | None, int | None, int | None], StaticConditionCache] = field(
+        default_factory=dict, init=False, repr=False,
+    )
+
+    def __len__(self) -> int:
+        return len(self.source)
+
+    def __getitem__(self, selection: slice) -> StaticConditionCache:
+        key = (selection.start, selection.stop, selection.step)
+        if key not in self._batches:
+            clip = self.clip_feature
+            if clip is not None and len(clip) == len(self):
+                clip = clip[selection]
+            self._batches[key] = StaticConditionCache(self.source[selection], clip)
+        return self._batches[key]
+
+    def project_context(
+        self, module: nn.Module,
+        project: Callable[[torch.Tensor, torch.Tensor | None], torch.Tensor],
+    ) -> torch.Tensor:
+        """Project once in eval/no-grad inference, preserving the caller's math."""
+        _require_static_inference(module)
+        result = self.store.get_condition_context(self.source, self.clip_feature)
+        if result is None:
+            result = project(self.source, self.clip_feature)
+            self.store.put_condition_context(self.source, self.clip_feature, result)
+        return result
+
+    @property
+    def nbytes(self) -> int:
+        """Projected context/KV storage, excluding the original conditions."""
+        tensors = [entry[2] for entry in self.store._condition_entries.values()]
+        tensors.extend(
+            tensor for entries in self.store._entries.values()
+            for _, projected in entries.values() for tensor in projected
+        )
+        return sum(t.numel() * t.element_size() for t in tensors) + sum(
+            batch.nbytes for batch in self._batches.values()
+        )
+
+
+def _require_static_inference(module: nn.Module) -> None:
+    if module.training or torch.is_grad_enabled():
+        raise RuntimeError("static condition reuse requires eval no-grad inference")
+
+
+def reuse_cross_kv(
+    module: nn.Module, context: torch.Tensor, store: _StaticCrossKVCache | None,
+    project: Callable[[], tuple[torch.Tensor, ...]],
+) -> tuple[torch.Tensor, ...]:
+    """Reuse normalized condition K/V; queries and attention always run live."""
+    if store is None:
+        return project()
+    _require_static_inference(module)
+    result = store.get(module, context)
+    if result is None:
+        result = project()
+        store.put(module, context, *result)
+    return result
+
+
 def install_static_cross_kv_cache(model: nn.Module) -> _StaticCrossKVCache:
     """Wrap every eligible cross-attention processor with a caching processor.
 
@@ -283,7 +360,9 @@ def reset_static_cross_kv(cache: _StaticCrossKVCache) -> None:
 
 
 __all__ = [
+    "StaticConditionCache",
     "StaticCrossKVProcessor",
+    "reuse_cross_kv",
     "install_static_cross_kv_cache",
     "reset_static_cross_kv",
 ]

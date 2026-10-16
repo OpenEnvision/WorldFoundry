@@ -1,34 +1,34 @@
 conda_packages:
 - python
 - pip
-- ffmpeg
-cuda_profile: cu124
-driver_status: requires_local_extension_build:pytorch3d
-env_name: wonderworld
+cuda_profile: cu128
+driver_status: requires_cuda_compatible_gsplat
+env_name: worldfoundry-unified
 env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
 model_id: wonderworld
 notes:
-- Uses the local WonderWorld runtime environment because the infer path imports PyTorch3D CUDA extensions.
-- The public tree does not contain WonderWorld run.py; provide an authorized
-  runtime source checkout, checkpoint assets, and PyTorch3D-compatible CUDA
-  extensions before running inference.
+- Uses the unified WorldFoundry GPU environment and an ABI-compatible gsplat build.
+- All inference orchestration is in-tree; no external checkout, PyTorch3D, Flask server, or OpenAI credential is needed.
+- Stage the public SD2 Inpainting, Marigold depth/normals, OneFormer ADE20K metadata/weights, and RepViT-SAM weights outside the source tree.
 pip_packages:
 - torch
 - torchvision
-- pytorch3d
 - transformers
 - diffusers
-- omegaconf
+- timm
+- gsplat
+- triton
+- matplotlib
+- scipy
 - opencv-python
-- imageio
-- imageio-ffmpeg
-- spacy
-- flask
-python: '3.10'
+- pillow
+python: '3.11'
 validation_imports:
 - torch
-- pytorch3d
 - transformers
 - diffusers
-- omegaconf
+- gsplat
+- triton
+- matplotlib
+- timm
 - cv2

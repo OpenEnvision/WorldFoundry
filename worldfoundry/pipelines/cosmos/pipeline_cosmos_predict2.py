@@ -19,6 +19,7 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
     parse_torch_dtype,
 )
 from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 
 from ..pipeline_utils import PipelineABC
 
@@ -89,11 +90,7 @@ def _text_encoder_override(path: Path) -> CheckpointSpec | str | None:
     if not isinstance(weight_map, Mapping) or not weight_map:
         raise ValueError(f"invalid T5 safetensors index: {index_path}")
     shards = tuple(dict.fromkeys(str(filename) for filename in weight_map.values()))
-    unsafe = tuple(
-        filename
-        for filename in shards
-        if Path(filename).is_absolute() or ".." in Path(filename).parts
-    )
+    unsafe = tuple(filename for filename in shards if Path(filename).is_absolute() or ".." in Path(filename).parts)
     if unsafe:
         raise ValueError(f"unsafe T5 safetensors shard paths in {index_path}: {list(unsafe)}")
     missing = tuple(filename for filename in shards if not (path / filename).is_file())
@@ -142,14 +139,16 @@ class CosmosPredict2Pipeline(PipelineABC):
                 overrides["transformer"] = str(path.resolve())
             elif path.is_dir():
                 variant_name = (
-                    "Cosmos-Predict2-14B-Video2World"
-                    if "14b" in model_id
-                    else "Cosmos-Predict2-2B-Video2World"
+                    "Cosmos-Predict2-14B-Video2World" if "14b" in model_id else "Cosmos-Predict2-2B-Video2World"
                 )
-                model_root = path if (path / "model-720p-16fps.pt").is_file() else _subdirectory(
-                    path,
-                    (variant_name, f"nvidia--{variant_name}"),
-                    required_file="model-720p-16fps.pt",
+                model_root = (
+                    path
+                    if (path / "model-720p-16fps.pt").is_file()
+                    else _subdirectory(
+                        path,
+                        (variant_name, f"nvidia--{variant_name}"),
+                        required_file="model-720p-16fps.pt",
+                    )
                 )
                 if model_root is not None:
                     overrides.update({"transformer": str(model_root.resolve()), "vae": str(model_root.resolve())})
@@ -310,11 +309,20 @@ class CosmosPredict2Pipeline(PipelineABC):
                 inputs=inputs,
             )
         )
+        video_chunk = None
+        if output_type != "latent":
+            video_chunk = VideoChunk(
+                frames=output.sample, layout="bcthw", value_range="-1,1", metadata={"fps": int(fps)}
+            )
         artifact_path = None
-        if output_path is not None and output_type != "latent":
-            artifact_path = save_image_or_video_tensor(output.sample, output_path, fps=int(fps))
+        if output_path is not None and video_chunk is not None:
+            artifact_path = save_image_or_video_tensor(
+                output.sample, output_path, fps=int(fps), layout=video_chunk.layout, value_range=video_chunk.value_range
+            )
         result = {
             "video": output.sample,
+            "video_chunk": video_chunk,
+            "fps": int(fps),
             "generated_video": output.sample,
             "latents": output.latents,
             "artifact_path": artifact_path,

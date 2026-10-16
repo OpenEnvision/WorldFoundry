@@ -276,8 +276,9 @@ def test_create_answer_selects_real_frame_presentation(monkeypatch: pytest.Monke
             self.localDescription = types.SimpleNamespace(sdp="", type="answer")
             peers_created.append(self)
 
-        def addTrack(self, track: object) -> None:  # noqa: N802 - aiortc compatibility
+        def addTrack(self, track: object) -> object:  # noqa: N802 - aiortc compatibility
             self.tracks.append(track)
+            return types.SimpleNamespace(_next_encoded_frame=lambda codec: None)
 
         def on(self, name: str):
             def register(handler):
@@ -366,10 +367,7 @@ def test_presentation_buffer_replaces_only_the_complete_pending_chunk() -> None:
 
         assert buffer.dropped_chunks == 1
         assert buffer.dropped_frames == 2
-        values = [
-            int((await asyncio.wait_for(buffer.get(), timeout=0.5))[0, 0, 0])
-            for _ in range(5)
-        ]
+        values = [int((await asyncio.wait_for(buffer.get(), timeout=0.5))[0, 0, 0]) for _ in range(5)]
         assert values == [1, 2, 3, 6, 7]
         assert buffer.presented_frames == 5
         assert buffer.qsize() == 0

@@ -16,6 +16,7 @@ Public surface
 """
 
 import asyncio
+import multiprocessing as mp
 import os
 from functools import wraps
 from multiprocessing import cpu_count
@@ -24,7 +25,6 @@ from threading import Thread
 from typing import Any, Callable, Dict, List
 
 from tqdm import tqdm
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Async / fire-and-forget — I/O only; do not capture CUDA Graphs here

@@ -27,6 +27,8 @@ from typing import TYPE_CHECKING, Any, Iterable, cast
 if TYPE_CHECKING:
     import numpy as np
 
+    from worldfoundry.core.media.processing.postprocess import VideoChunk, VideoTensorLayout
+
 from worldfoundry.core.io.filesystem.storage import (
     local_path_for_uri,
     parse_uri_scheme,
@@ -150,6 +152,7 @@ def video_tensor_to_uint8_frames(
     video_tensor: Any,
     *,
     value_range: str | tuple[float, float] = "auto",
+    layout: VideoTensorLayout | None = None,
     max_frames: int | None = None,
     from_end: bool = False,
 ) -> np.ndarray:
@@ -170,13 +173,17 @@ def video_tensor_to_uint8_frames(
     # one byte per channel, so doing the numerically identical FP32 work on the
     # accelerator cuts both PCIe traffic and public-generation latency.
     tensor = video_tensor.detach()
+    if layout is not None:
+        from worldfoundry.core.media.processing.postprocess import VideoChunk, video_chunk_as_thwc
+
+        tensor = video_chunk_as_thwc(VideoChunk(frames=tensor, layout=layout))
     if tensor.ndim == 5:
         if tensor.shape[0] != 1:
             raise ValueError(f"Expected batch size 1 for 5D video tensor, got shape {tuple(tensor.shape)}")
         tensor = tensor[0]
     if tensor.ndim != 4:
         raise ValueError(f"Expected video tensor shape [C,T,H,W], got {tuple(tensor.shape)}")
-    if tensor.shape[-1] in {1, 3, 4}:
+    if layout is not None or tensor.shape[-1] in {1, 3, 4}:
         video = tensor
     elif tensor.shape[0] in {1, 3, 4}:
         video = tensor.permute(1, 2, 3, 0)
@@ -184,23 +191,54 @@ def video_tensor_to_uint8_frames(
         video = tensor.permute(0, 2, 3, 1)
     else:
         raise ValueError(f"Unable to infer channel layout for video tensor shape {tuple(tensor.shape)}")
+    if video.dtype == torch.uint8:
+        if max_frames is not None:
+            video = video[-max_frames:] if from_end else video[:max_frames]
+        return video.contiguous().cpu().numpy()
     video = video.float()
-    if value_range == "auto":
-        low, high = (-1.0, 1.0) if float(video.min()) < 0.0 else (0.0, 1.0)
-    elif value_range == "-1,1":
-        low, high = -1.0, 1.0
-    elif value_range == "0,1":
-        low, high = 0.0, 1.0
-    else:
-        low, high = cast(tuple[float, float], value_range)
-    if high <= low:
-        raise ValueError("value_range high bound must be larger than low bound.")
+    low, high = _video_range_bounds(video, value_range)
     # Range inference must see the original input, but only selected frames
     # need conversion and the CUDA-to-host copy.
     if max_frames is not None:
         video = video[-max_frames:] if from_end else video[:max_frames]
     video = ((video.clamp(float(low), float(high)) - float(low)) * (255.0 / (float(high) - float(low)))).to(torch.uint8)
     return video.contiguous().cpu().numpy()
+
+
+def _video_range_bounds(video: Any, value_range: str | tuple[float, float]) -> tuple[float, float]:
+    """Resolve declared pixel bounds identically for NumPy and Torch."""
+    if value_range == "auto":
+        return (-1.0, 1.0) if float(video.min()) < 0.0 else (0.0, 1.0)
+    if isinstance(value_range, str):
+        ranges = {"-1,1": (-1.0, 1.0), "0,1": (0.0, 1.0), "0,255": (0.0, 255.0)}
+        if value_range not in ranges:
+            raise ValueError(f"Unsupported video value range: {value_range!r}")
+        return ranges[value_range]
+    low, high = value_range
+    if high <= low:
+        raise ValueError("value_range high bound must be larger than low bound.")
+    return float(low), float(high)
+
+
+def video_chunk_to_uint8_frames(chunk: VideoChunk) -> np.ndarray:
+    """Convert a declared chunk to THWC uint8; preserve its frame count."""
+    import numpy as np
+
+    from worldfoundry.core.media.processing.postprocess import video_chunk_as_thwc
+
+    if chunk.frame_count == 0:
+        return np.empty((0, 0, 0, 3), dtype=np.uint8)
+    frames = video_chunk_as_thwc(chunk)
+    if isinstance(frames, (list, tuple)):
+        frames = np.asarray(frames)
+    if not isinstance(frames, np.ndarray):
+        return video_tensor_to_uint8_frames(frames, layout="thwc", value_range=chunk.value_range)
+    if frames.dtype == np.uint8:
+        return np.ascontiguousarray(frames)
+    video = frames.astype(np.float32)
+    low, high = _video_range_bounds(video, chunk.value_range)
+    video = (np.clip(video, low, high) - low) * (255.0 / (high - low))
+    return np.ascontiguousarray(video.astype(np.uint8))
 
 
 def _validate_frame_limit(max_frames: int | None, from_end: bool) -> int | None:
@@ -841,10 +879,11 @@ def save_image_or_video_tensor(
     tensor,
     save_path,
     *,
-    fps: int = 24,
+    fps: float = 24,
     quality: int | None = None,
     ffmpeg_params: list[str] | None = None,
     value_range: str | tuple[float, float] = "auto",
+    layout: VideoTensorLayout | None = None,
     image_format: str = "JPEG",
     video_format: str = "mp4",
     **kwargs,
@@ -860,7 +899,7 @@ def save_image_or_video_tensor(
 
     from PIL import Image
 
-    frames = video_tensor_to_uint8_frames(tensor, value_range=value_range)
+    frames = video_tensor_to_uint8_frames(tensor, value_range=value_range, layout=layout)
     target = save_path
     is_file_obj = hasattr(target, "write")
 
@@ -1105,6 +1144,7 @@ __all__ = [
     "save_video_frames",
     "save_videos_grid",
     "video_tensor_to_uint8_frames",
+    "video_chunk_to_uint8_frames",
     "write_video",
     "write_video_torchvision",
 ]

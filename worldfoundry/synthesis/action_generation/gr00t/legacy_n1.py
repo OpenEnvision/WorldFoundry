@@ -15,7 +15,6 @@ import time
 from pathlib import Path
 from typing import Any, Mapping
 
-from worldfoundry.core.io import file_sha256
 
 
 N1_RELEASE_COMMIT = "755876a9afdb41ca6eb6383b36f4a0adb085c73f"
@@ -212,7 +211,6 @@ def predict_n1_action(
         "model_id": "gr00t",
         "artifact_kind": "action_trace",
         "artifact_path": str(target),
-        "artifact_sha256": file_sha256(target),
         "backend": "worldfoundry.gr00t.official_n1_release_subprocess",
         "backend_quality": "official_checkpoint_wrapper",
         "duration_seconds": round(time.monotonic() - started, 3),

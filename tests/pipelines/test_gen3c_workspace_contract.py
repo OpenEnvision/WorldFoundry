@@ -6,17 +6,18 @@ import pytest
 # "ftfy" dependency at import time; skip when it is unavailable.
 pytest.importorskip("ftfy")
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import torch
 
 from worldfoundry.pipelines.gen3c import pipeline_gen3c
-from worldfoundry.pipelines.gen3c.pipeline_gen3c import Gen3CPipeline
-from worldfoundry.runtime.inference_catalog import GEN3C_INFERENCE_SPEC
 from worldfoundry.pipelines.gen3c.constants import (
     DEFAULT_GEN3C_NEGATIVE_PROMPT,
     DEFAULT_GEN3C_PROMPT,
 )
+from worldfoundry.pipelines.gen3c.pipeline_gen3c import Gen3CPipeline
+from worldfoundry.runtime.inference_catalog import GEN3C_INFERENCE_SPEC
 from worldfoundry.studio.inference.catalog import find_entry
 
 
@@ -34,7 +35,7 @@ def test_workspace_official_defaults_are_normalized(monkeypatch, tmp_path) -> No
             "mapped_trajectories": [],
         }
 
-    instance.process = process
+    monkeypatch.setattr(instance, "process", process)
 
     def native(request):
         captured["request"] = request
@@ -46,11 +47,15 @@ def test_workspace_official_defaults_are_normalized(monkeypatch, tmp_path) -> No
         )
 
     instance.native_pipeline = native
-    monkeypatch.setattr(
-        pipeline_gen3c,
-        "save_image_or_video_tensor",
-        lambda sample, path, fps: str(path),
-    )
+
+    def save(
+        sample: torch.Tensor, path: str | Path, *, fps: int, layout: str, value_range: str | tuple[float, float]
+    ) -> str:
+        assert sample.shape == (1, 3, 2, 4, 4)
+        assert fps == 24 and layout == "bcthw" and value_range == "-1,1"
+        return str(path)
+
+    monkeypatch.setattr(pipeline_gen3c, "save_image_or_video_tensor", save)
 
     result = instance(
         images="image.png",
@@ -84,6 +89,8 @@ def test_workspace_official_defaults_are_normalized(monkeypatch, tmp_path) -> No
     assert captured["interactions"] == ["left"]
     assert request.metadata["trajectory"] == "left"
     assert result["artifact_path"] == str(tmp_path / "gen3c.mp4")
+    assert result["video_chunk"].frames is result["video"]
+    assert result["video_chunk"].frame_count == 2
 
 
 def test_workspace_native_defaults_do_not_reserve_ignored_legacy_gpus() -> None:

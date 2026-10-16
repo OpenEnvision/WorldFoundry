@@ -16,6 +16,13 @@ from worldfoundry.core.kernels import (
     residual_gate_add,
 )
 
+from worldfoundry.base_models.diffusion_model.optimizations.camera_condition import (
+    apply_camera_modulation,
+    camera_condition_for_block,
+    embed_wan_camera_condition,
+    prepare_wan_camera_condition,
+)
+
 from .attention import flash_attention
 
 __all__ = ['WanModel']
@@ -315,14 +322,7 @@ class WanAttentionBlock(nn.Module):
         with torch.amp.autocast('cuda', dtype=torch.float32):
             x = residual_gate_add(x, y, e[2].squeeze(2))
 
-        # cam injection (only if dit_cond_dict is provided and contains c2ws_plucker_emb)
-        if dit_cond_dict is not None and "c2ws_plucker_emb" in dit_cond_dict:
-            c2ws_plucker_emb = dit_cond_dict["c2ws_plucker_emb"]
-            c2ws_hidden_states = self.cam_injector_layer2(torch_F.silu(self.cam_injector_layer1(c2ws_plucker_emb)))
-            c2ws_hidden_states = c2ws_hidden_states + c2ws_plucker_emb
-            cam_scale = self.cam_scale_layer(c2ws_hidden_states)
-            cam_shift = self.cam_shift_layer(c2ws_hidden_states)
-            x = (1.0 + cam_scale) * x + cam_shift
+        x = apply_camera_modulation(self, x, dit_cond_dict)
 
         # cross-attention & ffn function
         def cross_attn_ffn(x, context, context_lens, e):
@@ -398,6 +398,7 @@ class WanModel(nn.Module, NativeConfigMixin):
         'patch_size', 'cross_attn_norm', 'qk_norm', 'text_dim', 'window_size'
     ]
     _no_split_modules = ['WanAttentionBlock']
+    prepare_camera_condition = prepare_wan_camera_condition
 
     @register_to_config
     def __init__(self,
@@ -586,27 +587,10 @@ class WanModel(nn.Module, NativeConfigMixin):
                 for u in context
             ]))
         
-        # cam
-        if dit_cond_dict is not None and "c2ws_plucker_emb" in dit_cond_dict:
-            c2ws_plucker_emb = dit_cond_dict["c2ws_plucker_emb"]
-            c2ws_plucker_emb = [
-                rearrange(
-                    i,
-                    '1 c (f c1) (h c2) (w c3) -> 1 (f h w) (c c1 c2 c3)',
-                    c1=self.patch_size[0],
-                    c2=self.patch_size[1],
-                    c3=self.patch_size[2],
-                ) for i in c2ws_plucker_emb
-            ]
-            c2ws_plucker_emb = torch.cat(
-                c2ws_plucker_emb, dim=1)  # [1, (L1+...+Ln), C]
-            c2ws_plucker_emb = self.patch_embedding_wancamctrl(
-                c2ws_plucker_emb)
-            c2ws_hidden_states = self.c2ws_hidden_states_layer2(
-                torch_F.silu(self.c2ws_hidden_states_layer1(c2ws_plucker_emb)))
+        # Prepared camera tensors belong to this request, not to the model.
+        if dit_cond_dict is not None and "c2ws_plucker_emb" in dit_cond_dict and "_camera_modulations" not in dit_cond_dict:
             dit_cond_dict = dict(dit_cond_dict)
-            dit_cond_dict["c2ws_plucker_emb"] = (
-                c2ws_plucker_emb + c2ws_hidden_states)
+            dit_cond_dict["c2ws_plucker_emb"] = embed_wan_camera_condition(self, dit_cond_dict["c2ws_plucker_emb"])
 
         # arguments
         kwargs = dict(
@@ -618,7 +602,8 @@ class WanModel(nn.Module, NativeConfigMixin):
             context_lens=context_lens,
             dit_cond_dict=dit_cond_dict)
 
-        for block in self.blocks:
+        for block_index, block in enumerate(self.blocks):
+            kwargs["dit_cond_dict"] = camera_condition_for_block(dit_cond_dict, block_index)
             x = block(x, **kwargs)
 
         # head

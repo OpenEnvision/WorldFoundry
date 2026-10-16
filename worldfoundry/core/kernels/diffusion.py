@@ -31,6 +31,11 @@ from functools import lru_cache
 import torch
 import torch.nn.functional as F
 
+from worldfoundry.core.execution.compile_numerics import (
+    compiled_layer_norm_scale_shift,
+    compiled_residual_gate,
+    compiled_residual_gate_inplace,
+)
 from worldfoundry.core.kernels.capabilities import (
     QUALIFIED_TRITON_CAPABILITIES,
     default_kernel_thresholds,
@@ -624,14 +629,14 @@ def _residual_gate_inplace_torch(
     return residual.add_(update * gate)
 
 
-def residual_gate_add(residual: torch.Tensor, update: torch.Tensor, gate: torch.Tensor, *, backend: str | None = None) -> torch.Tensor:
+def residual_gate_add(
+    residual: torch.Tensor, update: torch.Tensor, gate: torch.Tensor, *, backend: str | None = None
+) -> torch.Tensor:
     """Return ``residual + update * gate`` with broadcast-aware fusion."""
 
-    # Inductor already emits one pointwise kernel for this expression and can
-    # fuse it with adjacent compiled work. Keep the explicit Triton kernel for
-    # eager execution, where PyTorch otherwise launches multiply and add
-    # separately. An explicit backend override remains available for profiling.
     requested = _requested_kernel_backend() if backend is None else backend
+    if torch.compiler.is_compiling() and not torch.is_grad_enabled():
+        return compiled_residual_gate(residual, update, gate, requested)
     if (
         torch.compiler.is_compiling()
         or requested in _TORCH_BACKENDS
@@ -667,14 +672,16 @@ def residual_gate_add_(
     """
 
     requested = _requested_kernel_backend()
+    if torch.compiler.is_compiling() and not torch.is_grad_enabled():
+        compiled_residual_gate_inplace(residual, update, gate)
+        return residual
     if (
         torch.compiler.is_compiling()
         or requested in _TORCH_BACKENDS
         or (
             requested == "auto"
             and not kernel_autotune_enabled()
-            and residual.numel()
-            < _kernel_threshold(residual, "residual_gate_add", update, gate)
+            and residual.numel() < _kernel_threshold(residual, "residual_gate_add", update, gate)
         )
     ):
         return _residual_gate_inplace_torch(residual, update, gate)
@@ -785,7 +792,9 @@ def _scale_shift_triton(x: torch.Tensor, scale: torch.Tensor, shift: torch.Tenso
     return implementation(x, scale, shift)
 
 
-def scale_shift(x: torch.Tensor, scale: torch.Tensor, shift: torch.Tensor, *, backend: str | None = None) -> torch.Tensor:
+def scale_shift(
+    x: torch.Tensor, scale: torch.Tensor, shift: torch.Tensor, *, backend: str | None = None
+) -> torch.Tensor:
     """Return ``x * (1 + scale) + shift`` with eager BF16 rounding parity."""
 
     requested = _requested_kernel_backend() if backend is None else backend
@@ -883,6 +892,17 @@ def layer_norm_scale_shift(
     """Fuse affine-free LayerNorm with AdaLN scale and shift."""
 
     requested = _requested_kernel_backend() if backend is None else backend
+    if torch.compiler.is_compiling() and not torch.is_grad_enabled():
+        return compiled_layer_norm_scale_shift(
+            x,
+            scale,
+            shift,
+            eps,
+            upcast,
+            requested,
+            torch.is_autocast_enabled(x.device.type),
+            torch.get_autocast_dtype(x.device.type),
+        )
     if (
         torch.compiler.is_compiling()
         or requested in _TORCH_BACKENDS
@@ -1122,11 +1142,7 @@ def _hidden_qk_rmsnorm_rope_3d_torch(
     valid = positions < int(valid_tokens)
     selected_cosine = torch.where(valid[:, None], selected_cosine, torch.ones_like(selected_cosine))
     selected_sine = torch.where(valid[:, None], selected_sine, torch.zeros_like(selected_sine))
-    rope_compute_dtype = (
-        torch.float64
-        if freqs.dtype in {torch.float64, torch.complex128}
-        else torch.float32
-    )
+    rope_compute_dtype = torch.float64 if freqs.dtype in {torch.float64, torch.complex128} else torch.float32
     selected_cosine = selected_cosine[None, :, None, :].to(rope_compute_dtype)
     selected_sine = selected_sine[None, :, None, :].to(rope_compute_dtype)
 
@@ -1205,10 +1221,7 @@ def _eligible_hidden_qk_rmsnorm_rope_3d(
     return (
         _inference_only(q, k, q_weight, k_weight, freqs)
         and _same_cuda_device(q, k, q_weight, k_weight, freqs)
-        and all(
-            _triton_device_supported(tensor)
-            for tensor in (q, k, q_weight, k_weight, freqs)
-        )
+        and all(_triton_device_supported(tensor) for tensor in (q, k, q_weight, k_weight, freqs))
         and q.dtype in _FLOAT_DTYPES
         and k.dtype == q.dtype
         and q_weight.dtype == q.dtype

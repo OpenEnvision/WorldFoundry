@@ -9,7 +9,7 @@ An environment is the dependency and launch context expected by a model or bench
 
 The repository still uses `runtime_profile` as a metadata field because it points to a concrete environment record in `worldfoundry/data/models/runtime/profiles/<model-id>.yaml`. In reader-facing docs, this page calls the same concept an environment.
 
-WorldFoundry uses conda as the single supported environment path. The documented workflow creates one named conda environment for the main framework and separate conda environments only when an upstream simulator or official runtime requires isolation.
+WorldFoundry is GPU-first and uses conda as the supported runtime and development environment path. The documented workflow creates one named CUDA environment for the main framework; separate environments are used only when an upstream simulator or official runtime requires isolation. Install `.[dev,test]` into the active GPU environment for contribution work.
 
 1. Start with `bash scripts/setup/bootstrap_worldfoundry.sh` for model inference.
 2. Use `bash scripts/setup/model_env_install.sh --list` to inspect every model-to-env mapping, or `--model <model-id>` when you need the exact env for one model.
@@ -51,15 +51,15 @@ WorldFoundry uses conda as the single supported environment path. The documented
     { name: <><code>studio_rerun</code></>, description: "Rerun-based Studio visualization.", reads: [{ label: "In all", value: "Yes" }, { label: "Install", value: <><code>.[studio_rerun]</code></> }] },
     { name: <><code>studio_geometry</code></>, description: "Geometry and Open3D Studio visualization.", reads: [{ label: "In all", value: "Yes" }, { label: "Install", value: <><code>.[studio_geometry]</code></> }] },
     { name: <><code>studio_plot</code></>, description: "Plotting and color utilities for Studio.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[studio_plot]</code></> }] },
-    { name: <><code>dev</code></>, description: "Build, pre-commit, and repository-pinned lint tooling.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[dev]</code></> }] },
-    { name: <><code>test</code></>, description: "Public CPU inference and packaging tests; no Torch or model downloads required.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[test]</code></> }] },
-    { name: <><code>eval_core</code></>, description: "Optional CPU evaluation dependencies.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[eval_core]</code></> }] },
+    { name: <><code>dev</code></>, description: "Build, pre-commit, Ruff, and ty development tooling.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[dev]</code></> }] },
+    { name: <><code>test</code></>, description: "Fast, weight-free inference and packaging tests.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[test]</code></> }] },
+    { name: <><code>eval_core</code></>, description: "Extended evaluation test dependencies.", reads: [{ label: "In all", value: "No" }, { label: "Install", value: <><code>.[eval_core]</code></> }] },
     { name: <><code>all</code></>, description: "Curated general runtime bundle described above.", reads: [{ label: "Install", value: <><code>.[all]</code></> }] }
   ]} />
 
 The source-only dependency groups are narrower resolver building blocks:
 
-- `lint` — Repository-pinned pre-commit and Ruff toolchain.
+- `lint` — Pre-commit, Ruff, ty, and pytest for PR quality checks.
 - `flash_attn_fa25` — Flash-attention bucket for FA 2.5-compatible environments.
 - `flash_attn_fa28` — Flash-attention bucket for FA 2.8-compatible environments.
 - `runtime_clip_bundle` — CLIP-oriented runtime compatibility bundle.
@@ -81,17 +81,16 @@ surface, not local machine notes.
 - **`scripts/inference/prepare_model_infer.sh`** — Checkpoint/Hugging Face preparation per model. Defaults to a plan/check-local flow. Add `--download` only after reviewing license, gated access, and storage requirements.
 - **`scripts/workspace/run_workspace.sh`** — Start the browser Workspace from an activated runtime. Keeps `PYTHONPATH=.`, `WORLDFOUNDRY_WORKSPACE_MAX_JOBS`, and `WORLDFOUNDRY_CKPT_DIR` explicit.
 
-The unified installer selects a Torch range that exists on the resolved wheel
-index: cu121 uses Torch 2.4–2.5, cu124 uses 2.4–2.6, and cu128 uses 2.7 or
-newer within the repository upper bound. After the CUDA-index install, the
+The unified installer uses cu128 and Torch 2.7 or newer within the repository
+upper bound. GPU execution requires a NVIDIA driver with CUDA 12.8+ support;
+older drivers and cu121/cu124 requests are rejected before installation.
+Model-specific environments retain their documented older CUDA/Torch stacks.
+After the CUDA-index install, the
 exact Torch/Torchvision/Torchaudio versions constrain the remaining PyPI pass
 so indirect dependencies cannot replace the selected CUDA build. On hosts
 without `nvidia-smi`, bootstrap explicitly uses the cu128 wheel index while
 enabling `--allow-no-cuda` and skipping flash-attn; direct installer calls with
-`--cuda auto` instead fail fast and ask for an explicit tier. If another
-selected extra requires a newer Torch than that tier publishes, dependency
-resolution fails explicitly instead of falling back to a PyPI CPU/different
-CUDA wheel.
+`--cuda auto` instead ask for `--cuda cu128` on CPU-only hosts.
 
 Recommended fresh-clone path:
 
@@ -509,9 +508,9 @@ When working with complex setups involving CUDA, simulators, or external evaluat
 
 ### 1. CUDA mismatch
 **Symptom**: `CUDA error: no kernel image is available for execution on the device` or PyTorch cannot find a GPU.
-**Solution**: Ensure your NVIDIA driver is up-to-date and supports the CUDA version installed by Conda. If you are on an older driver, you can force the installation script to use an older CUDA wheel bucket:
+**Solution**: Update the NVIDIA driver to support CUDA 12.8 or newer for the unified environment. Model-specific environments use the CUDA/Torch versions in their profiles:
 ```bash
-bash scripts/setup/unified_install.sh --cuda cu121
+bash scripts/setup/unified_install.sh --cuda cu128
 ```
 
 ### 2. Missing system dependencies (e.g., for OpenGL/3D)

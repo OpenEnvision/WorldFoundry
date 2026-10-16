@@ -3,6 +3,16 @@
 This file records the local provenance review for vendored code under `thirdparty/`.
 Entries are based only on files present in this repository.
 
+## `matrix-game` (optional Git submodule)
+
+- upstream_url: `https://github.com/SkyworkAI/Matrix-Game.git`
+- local_path: `thirdparty/matrix-game`
+- source_commit: `5446525c80da2a4a2f87801addbbc7faa8d2486e`
+- fork_status: **unmodified** — the gitlink fixes the complete upstream repository.
+- purpose: Optional native game source under `Matrix-Game-4/game/`; WorldFoundry's Python renderer never imports this checkout.
+- assets: Downloaded separately through the upstream `releases/game-assets.json` manifest; not stored in Git or Python distributions.
+- license_summary: Apache-2.0, with nested dependency licenses retained upstream; see root `THIRD-PARTY-NOTICES`.
+
 ## `simple-knn` (modified fork)
 
 - upstream_url: `https://github.com/camenduru/simple-knn`

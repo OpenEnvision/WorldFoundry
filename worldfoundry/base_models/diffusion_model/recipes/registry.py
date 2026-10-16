@@ -202,9 +202,11 @@ def default_native_diffusion_registry() -> NativeDiffusionRegistry:
     registry = NativeDiffusionRegistry()
 
     entries = (
-        ("worldplay2", "worldfoundry.synthesis.visual_generation.worldplay2.recipe", "worldplay2_recipe", ("worldplay2-fast", "aejion/WorldPlay2-Fast")),
-        ("worldplay2-ar", "worldfoundry.synthesis.visual_generation.worldplay2.recipe", "worldplay2_ar_recipe", ("aejion/WorldPlay2-AR",)),
-        ("worldplay2-bi", "worldfoundry.synthesis.visual_generation.worldplay2.recipe", "worldplay2_bi_recipe", ("aejion/WorldPlay2-BI",)),
+        ("dreamdojo", ".dreamdojo", "dreamdojo_recipe", ("nvidia/DreamDojo",)),
+        ("dreamdojo-student", ".dreamdojo", "dreamdojo_student_recipe", ()),
+        ("worldplay2", ".worldplay2", "worldplay2_recipe", ("worldplay2-fast", "aejion/WorldPlay2-Fast")),
+        ("worldplay2-ar", ".worldplay2", "worldplay2_ar_recipe", ("aejion/WorldPlay2-AR",)),
+        ("worldplay2-bi", ".worldplay2", "worldplay2_bi_recipe", ("aejion/WorldPlay2-BI",)),
         (
             "wan2.1-vace",
             ".wan",
@@ -278,6 +280,9 @@ def default_native_diffusion_registry() -> NativeDiffusionRegistry:
             "fastvideo_causal_wan22_i2v_14b_recipe",
             ("FastVideo/CausalWan2.2-I2V-A14B-Preview-Diffusers",),
         ),
+        ("sd2-inpaint", ".stable_diffusion", "sd2_inpaint_recipe", ()),
+        ("wonderworld-marigold-depth", ".stable_diffusion", "wonderworld_depth_recipe", ()),
+        ("marigold-normals-v0-1", ".stable_diffusion", "marigold_normals_recipe", ()),
         (
             "t2v_turbo_t2v",
             ".t2v_turbo",
@@ -313,6 +318,12 @@ def default_native_diffusion_registry() -> NativeDiffusionRegistry:
             ),
         ),
         (
+            "matrix-game-4-egypt",
+            ".matrix_game",
+            "matrix_game4_egypt_recipe",
+            ("matrix-game-4-ancient-egypt", "Skywork/Matrix-Game-4.0:fps-egypt"),
+        ),
+        (
             "matrix-game-3.5-first-person",
             ".matrix_game",
             "matrix_game_35_first_person_recipe",
@@ -329,7 +340,7 @@ def default_native_diffusion_registry() -> NativeDiffusionRegistry:
         ("ltx-2.3-i2v", ".ltx", "ltx23_i2v_recipe", ("ltx2.3-i2v", "ltx2_3_i2v")),
         ("ltx-2.3-t2v", ".ltx", "ltx23_t2v_recipe", ("ltx2.3-t2v", "ltx2_3_t2v")),
         ("ltx-video-i2v", ".ltx", "ltx_video_i2v_recipe", ("ltx-video",)),
-        ("helixworld", "worldfoundry.synthesis.visual_generation.helixworld.recipe", "helixworld_recipe", ("helixworld-preview", "helix-world", "NoizAI/HelixWorld-preview")),
+        ("helixworld", ".helixworld", "helixworld_recipe", ("helixworld-preview", "helix-world", "NoizAI/HelixWorld-preview")),
         (
             "hello-world",
             ".hello_world",

@@ -17,6 +17,17 @@ Studio exposes multiple frontends:
 - **`rerun`** — Rerun recordings and timeline inspection.
 - **`auto`** — Default. Routes interactive worlds to `world`, 3D scenes to `spark`, point/depth workflows to `points`, and embodied policies to `embodied`.
 
+Before opening the Spark viewer, install its version-pinned browser modules:
+
+```bash
+python -m worldfoundry.studio.ui.vendor_assets
+python -m worldfoundry.studio.ui.vendor_assets --check
+```
+
+The installer downloads missing, empty, or unreadable files and reuses readable
+nonempty local modules. Install modules separately from starting Studio;
+`--check` runs offline.
+
 ## What it shows
 
 - **World console** — Live video, keyboard and joystick controls, immersive fullscreen, and runtime logs.
@@ -476,6 +487,112 @@ control, start at 1.5x `HIGH`; reserve `ULTRA` and 2–4x output for GPUs with
 measured headroom. `rtx-deblur-ultra` is same-resolution and therefore avoids
 the bandwidth increase.
 
+### Browser presentation timing and encoder feedback
+
+The WebRTC status strip shows **E2E**, the median time from submitting a control
+in the browser to presenting a frame from the chunk that consumed it. Hover over
+the strip for p90, server control-to-queue time, RTT, jitter-buffer delay, and
+decode time. The distribution contains the latest 256 measured controls and
+excludes configured warmup chunks. Keyboard/joystick edges, STEP, and live text
+updates carry control IDs. Coalesced inputs and controls whose frames never
+present do not create synthetic latency samples.
+
+Frame receipts carry the actual RTP timestamp, chunk index, and frame index over
+the existing DataChannel. The browser matches them to
+`requestVideoFrameCallback().rtpTimestamp`, including when video arrives before
+its receipt. Repeated hold frames count once per control. Both endpoints keep
+bounded, session-local timing histories. Browser duration measurements never
+subtract a server clock from a browser clock.
+
+With `WORLDFOUNDRY_REALTIME_PERF_JSONL` set, the trace also records
+`realtime.frame_presented` (control ID, chunk/frame identity, `control_to_display_ms`,
+`queue_ms`, and `encode_ms`) and `realtime.browser_transport` (two-second WebRTC
+stats samples). These are separate from `realtime.chunk_timing`; the chunk
+regression manifest below continues to evaluate server-side generation. Browser
+stats use interval deltas for bitrate, average jitter-buffer delay, and decode
+time. Timing receipts yield to controls when the DataChannel is congested.
+
+The existing opt-in NVENC path (`WORLDFOUNDRY_REALTIME_NVENC=1`) forwards receiver
+PLI/FIR requests to the next native encode and REMB bandwidth estimates to the
+encoder's CBR configuration. Reconfiguration runs on the encoder worker, keeps
+the RTP clock, and retains CUDA-backed pixels. The target is bounded by the
+configured/resolution-derived bitrate ceiling and a 100 kbit/s floor (or a lower
+explicit ceiling). Reductions apply at the next encode; increases below 10% are
+coalesced. Model cadence, inference resolution, and frame queue policies are
+unchanged.
+
+**Limitations:** E2E measures a correlated chunk frame reaching the browser's
+presentation callback, not a detected pixel response or physical display scanout.
+Browsers without RTP timestamps in video-frame callbacks, WebSocket playback,
+or sessions without matching receipts show E2E as unavailable rather than
+substituting server time. NVENC feedback requires PyNvVideoCodec and a GPU with an NVENC engine;
+CUDA availability alone is insufficient. Encoder bitrate adaptation changes
+transport compression quality, not generated model pixels.
+
+### Checkpoint-backed network replay
+
+`tests/manual/realtime_replay.py` launches the public Studio CLI with local
+weights and drives the actual Chromium client. Each repeat resets the session,
+reuses a fixed seed and image, and issues one STEP per native model chunk. It
+waits for that chunk's final source frame to be presented before issuing the next
+STEP. The example uses Matrix-Game 2's native 640×352, 12 FPS, 9/12-frame cadence,
+three repeats per network condition, one warmup chunk and six measured chunks.
+
+Prepare the unified Python environment, Node.js and Playwright/Chromium with its
+system libraries. Browser packages can live outside the checkout:
+
+```bash
+npm install --prefix /private/replay-browser playwright
+/private/replay-browser/node_modules/.bin/playwright install chromium
+export NODE_PATH=/private/replay-browser/node_modules
+cp tests/manual/realtime_replay.example.json /private/realtime-profile.json
+# Edit model_ref, image and the physical GPU index in the private profile.
+source tmp/worldfoundry_unified_env.sh
+PYTHONPATH=. "$WORLDFOUNDRY_UNIFIED_ENV_PREFIX/bin/python" \
+  tests/manual/realtime_replay.py \
+  --profile /private/realtime-profile.json \
+  --output outputs/realtime-mg2-run
+```
+
+The output directory must be new. `CHROMIUM_EXECUTABLE` can select an existing
+Chromium binary. All browser/server processes run on the same Linux host; the
+runner binds Studio and its UDP relay to loopback. No root access or changes to
+host network interfaces are needed.
+
+The clean, limited/lossy and interrupted-link cases all use the same isolated
+UDP relay. Both SDP candidate sets are rewritten, and the selected remote ICE
+candidate must point to the relay. Delay, jitter, serialization rate and seeded
+packet loss therefore affect WebRTC media, feedback and DataChannel traffic,
+not just HTTP signaling. `delay_ms` is per direction; `rate_bps: 0` means
+unlimited. The finite `queue_ms` budget drops excess queued datagrams. The
+interruption case drops both directions for 1.5 seconds during measured STEP
+requests. Link counters record loss, queue and interruption drops separately.
+
+Artifacts include `report.json`, `report.md`, raw `timing.jsonl`, `browser.json`,
+per-run screenshots, one-second Studio process CPU/RSS/GPU-memory samples, and
+`environment.json` with source state, package versions, command and GPU
+co-tenancy. The report retains each repeat's E2E p50/p90, missing controls,
+unique generated frames presented, presentation gaps and WebRTC stats. CPU
+percent is for the Studio process, with 100% equal to one CPU core. GPU memory
+is a sampled process footprint, not the CUDA allocator's exact peak.
+
+Missing runs, unmatched browser/server receipts, browser errors, incomplete
+chunks or failed reset/shutdown checks fail the run. Server-side thresholds
+reuse `RealtimeRegressionThresholds`; the private profile can additionally set
+`max_e2e_p90_ms`, `max_stall_fraction` and `max_reset_ms` under
+`delivery_thresholds`. Set latency limits from an accepted, matched-stack
+baseline; the example checks completeness and lifecycle without inventing a
+latency target. Preserve the profile and all per-run values for comparisons.
+
+**Evidence scope:** This is checkpoint-backed transport and lifecycle evidence,
+not the accepted numerical replay required for inference changes. Presentation
+gaps can include generation and intentional pacing. Shared-GPU measurements
+must retain their co-tenancy context. The default profile uses software encoding;
+negotiated H.264 alone does not certify NVENC execution.
+
+Weight-free script and report contracts run in `make test-infer-tensors` and
+`make test-realtime-client`; the checkpoint/browser replay remains manual.
+
 ### Realtime performance regression gate
 
 Capture a representative interaction with raw timing enabled, then check the
@@ -724,8 +841,8 @@ ssh -N -L 7868:127.0.0.1:7868 user@gpu-host
 # http://127.0.0.1:7868
 ```
 
-The status strip reports RTC playback FPS, generation time, control latency,
-queue depth, and dropped stale frames. An ICE timeout is surfaced explicitly
+The status strip reports RTC playback FPS, generation time, browser presentation
+latency (E2E), queue depth, and dropped stale frames. An ICE timeout is surfaced explicitly
 instead of leaving the page indefinitely in a connecting state.
 
 ## Interaction modes
@@ -1188,10 +1305,13 @@ browser backends remain available through `worldfoundry-studio`.
 | Implementation | Caller |
 | --- | --- |
 | `perception/render.py` | `models visualize` CLI and Grounding DINO annotation. |
-| `perception/human_pose.py` | Wan Animate's `AAPoseMeta.draw_aapose` conditioning image. |
 | `scene3d/projection.py` | VIPE projection videos, SLAM overlays, and video writing. |
 | `scene3d/depth_anything_v3/export_vis.py` | Depth Anything 3 depth, feature, and Gaussian exports. |
 | `styles/colormaps.py` | Depth and normal rendering in `perception/render.py`. |
+
+Wan Animate conditioning images are model inputs, owned by
+`base_models/diffusion_model/models/encoders/wan/variants/animate/render.py`
+and called by `AAPoseMeta.draw_aapose` without a Studio dependency.
 
 The unused media and robotics helpers, pixelSplat training visualization,
 duplicate DVLT visualization, HED annotator, sky-segmentation/GLB export chain,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io import file_sha256, write_json
+from worldfoundry.core.io import write_json
 from worldfoundry.core.io.paths import hfd_root_path
 from worldfoundry.core.io.paths import package_module_root as package_root
 
@@ -277,7 +277,6 @@ class Splatt3RRuntime:
             "model_id": self.model_id,
             "artifact_kind": "generated_3d_asset",
             "artifact_path": str(target),
-            "artifact_sha256": file_sha256(target),
             "runtime": "worldfoundry.splatt3r.in_tree_runtime",
             "backend_quality": "in_tree_runtime",
             "image_paths": image_paths,

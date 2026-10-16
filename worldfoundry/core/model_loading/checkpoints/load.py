@@ -65,9 +65,7 @@ logger = get_logger(__name__)
 # Cache roots — S3 credentials and the shared merged-weight cache directory
 # ──────────────────────────────────────────────────────────────────────────
 
-_OMNIDREAMS_CHECKPOINT_CREDENTIAL_PATH = os.getenv(
-    "WORLDFOUNDRY_S3_CREDENTIALS", "credentials/s3_checkpoint.secret"
-)
+_OMNIDREAMS_CHECKPOINT_CREDENTIAL_PATH = os.getenv("WORLDFOUNDRY_S3_CREDENTIALS", "credentials/s3_checkpoint.secret")
 _OMNIDREAMS_CHECKPOINT_LOCAL_CACHE_DIR = os.path.expanduser(
     os.getenv("WORLDFOUNDRY_CACHE_DIR", "~/.cache/worldfoundry")
 )
@@ -397,10 +395,35 @@ def _load_sharded_safetensors_index_checkpoint(
     if local_cache_dir is None:
         raise ValueError("local_cache_dir is required to cache merged sharded safetensors")
     cache_path = _sharded_safetensors_merge_cache_path(checkpoint_path, local_cache_dir)
+    is_hf_url = _is_huggingface_checkpoint_url(checkpoint_path)
+    source_state = None
+    if not is_hf_url:
+        if not os.path.isfile(checkpoint_path):
+            raise FileNotFoundError(f"Sharded safetensors index not found: {checkpoint_path}")
+        with open(checkpoint_path) as f:
+            index = json.load(f)
+        weight_map = index.get("weight_map")
+        if not isinstance(weight_map, dict) or not weight_map:
+            raise ValueError(f"Invalid or empty weight_map in safetensors index: {checkpoint_path}")
+        base_dir = os.path.dirname(os.path.abspath(checkpoint_path))
+        source_paths = [
+            os.path.abspath(checkpoint_path),
+            *(os.path.join(base_dir, shard) for shard in sorted(set(weight_map.values()))),
+        ]
+        source_files = []
+        for path in source_paths:
+            stat = os.stat(path)
+            source_files.append((path, stat.st_size, stat.st_mtime_ns))
+        source_state = json.dumps(source_files)
     if os.path.exists(cache_path):
-        logger.info(f"Loading merged sharded checkpoint from cache: {cache_path}")
         try:
-            return _load_checkpoint_from_local(cache_path, ".safetensors", map_location)
+            current = True
+            if source_state is not None:
+                with safe_open(cache_path, framework="pt", device="cpu") as cached:
+                    current = (cached.metadata() or {}).get("worldfoundry_source_state") == source_state
+            if current:
+                logger.info(f"Loading merged sharded checkpoint from cache: {cache_path}")
+                return _load_checkpoint_from_local(cache_path, ".safetensors", map_location)
         except SafetensorError as exc:
             # SafetensorError also covers unsupported devices. Only a malformed
             # CPU-readable file warrants deleting and rebuilding the cache.
@@ -412,12 +435,9 @@ def _load_sharded_safetensors_index_checkpoint(
             else:
                 raise
             logger.warning(
-                f"Discarding unreadable merged checkpoint cache {cache_path} ({exc}); "
-                f"rebuilding from {checkpoint_path}"
+                f"Discarding unreadable merged checkpoint cache {cache_path} ({exc}); rebuilding from {checkpoint_path}"
             )
             _discard_corrupt_cache(cache_path)
-
-    is_hf_url = _is_huggingface_checkpoint_url(checkpoint_path)
 
     if is_hf_url:
         from huggingface_hub import hf_hub_download
@@ -479,15 +499,7 @@ def _load_sharded_safetensors_index_checkpoint(
             map_location=map_location,
         )
     else:
-        if not os.path.isfile(checkpoint_path):
-            raise FileNotFoundError(f"Sharded safetensors index not found: {checkpoint_path}")
         logger.info(f"Merging sharded safetensors from local index: {checkpoint_path}")
-        with open(checkpoint_path) as f:
-            index = json.load(f)
-        weight_map = index.get("weight_map")
-        if not isinstance(weight_map, dict) or not weight_map:
-            raise ValueError(f"Invalid or empty weight_map in safetensors index: {checkpoint_path}")
-        base_dir = os.path.dirname(os.path.abspath(checkpoint_path))
 
         def resolve_shard_path(shard_file: str) -> str:
             """Resolve a shard name relative to the local index file's directory."""
@@ -506,6 +518,7 @@ def _load_sharded_safetensors_index_checkpoint(
             cache_path,
             ".safetensors",
             label="merged sharded checkpoint cache",
+            metadata=None if source_state is None else {"worldfoundry_source_state": source_state},
         )
         logger.info(f"Saved merged sharded checkpoint to: {cache_path}")
     return merged
@@ -903,6 +916,7 @@ def _save_to_local_cache(
     ext: str,
     *,
     label: str = "checkpoint cache",
+    metadata: Mapping[str, str] | None = None,
 ) -> None:
     """Atomically publish ``state_dict`` to the local cache file ``path``.
 
@@ -923,7 +937,7 @@ def _save_to_local_cache(
     try:
         if ext == ".safetensors":
             # safetensors serializes directly to a path; fsync afterwards.
-            save_safetensors(dict(state_dict), tmp_path)
+            save_safetensors(dict(state_dict), tmp_path, metadata=None if metadata is None else dict(metadata))
             with open(tmp_path, "rb+") as handle:
                 os.fsync(handle.fileno())
         else:

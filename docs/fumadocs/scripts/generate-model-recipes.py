@@ -98,8 +98,9 @@ import re
 import shlex
 import sys
 from collections import Counter
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Generator, Iterable
 
 import yaml
 
@@ -235,6 +236,39 @@ def compact_text(value: Any, limit: int = 420) -> str | None:
     return result[: limit - 1].rstrip() + "…"
 
 
+def _canonical_checkpoint_ref(*repo_dir_names: str, fallback: str = "") -> str:
+    """Use declared checkpoint defaults without inspecting installed weights."""
+    from worldfoundry.core.io.paths import checkpoint_root_path
+
+    if fallback:
+        return fallback
+    name = next((name for name in repo_dir_names if name), "")
+    return str(checkpoint_root_path(*Path(name).parts)) if name else ""
+
+
+def _first_model_ref(*candidates: str) -> str:
+    return next((candidate for candidate in candidates if candidate), "")
+
+
+@contextmanager
+def _canonical_catalog_defaults() -> Generator[None, None, None]:
+    """Keep documentation schemas independent of locally staged checkpoints."""
+    from unittest.mock import patch
+
+    from worldfoundry.studio.inference import catalog
+
+    catalog.discover_catalog.cache_clear()
+    try:
+        with (
+            patch.object(catalog, "_checkpoint_model_ref", _canonical_checkpoint_ref),
+            patch.object(catalog, "_prefer_existing_model_ref", _first_model_ref),
+            patch.object(catalog, "_local_root_with_files", return_value=""),
+        ):
+            yield
+    finally:
+        catalog.discover_catalog.cache_clear()
+
+
 def portable_doc_value(value: Any) -> Any:
     """Keep checked-in docs independent of the checkout and Python executable."""
 
@@ -248,6 +282,8 @@ def portable_doc_value(value: Any) -> Any:
         if value == sys.executable:
             return "python3"
         replacements = (
+            (str(ROOT.parent / "ckpts") + "/", f"{CANONICAL_HOME}/checkpoints/"),
+            (str(ROOT.parent / "ckpt") + "/", f"{CANONICAL_HOME}/checkpoints/"),
             (str(ROOT / "worldfoundry"), CANONICAL_PACKAGE_ROOT),
             (str(ROOT), CANONICAL_PROJECT_ROOT),
             (str(ROOT.parent), ""),
@@ -313,9 +349,7 @@ def get_status(value: Any) -> str | None:
 
 def status_data(item: dict[str, Any], profile: dict[str, Any] | None) -> dict[str, str]:
     integration = (
-        get_status(item.get("integration"))
-        or text(item.get("integration_status"))
-        or text(item.get("status"))
+        get_status(item.get("integration")) or text(item.get("integration_status")) or text(item.get("status"))
     )
     if not integration and profile:
         execution = profile.get("execution") if isinstance(profile.get("execution"), dict) else {}
@@ -372,7 +406,9 @@ def profile_candidates(item: dict[str, Any], model_id: str) -> list[str]:
     )
 
 
-def select_manifest(index: dict[str, dict[str, Any]], candidates: list[str]) -> tuple[str | None, dict[str, Any] | None]:
+def select_manifest(
+    index: dict[str, dict[str, Any]], candidates: list[str]
+) -> tuple[str | None, dict[str, Any] | None]:
     for candidate in candidates:
         if candidate in index:
             return candidate, index[candidate]
@@ -446,7 +482,11 @@ def source_links(item: dict[str, Any], profile: dict[str, Any] | None) -> list[d
             add("source", "GitHub", value.get("url"), value.get("revision") or value.get("sha"))
         else:
             add("source", "GitHub", value, source.get("revision"))
-    add("weights", "Hugging Face", f"https://huggingface.co/{source['hf_repo_id']}" if source.get("hf_repo_id") else None)
+    add(
+        "weights",
+        "Hugging Face",
+        f"https://huggingface.co/{source['hf_repo_id']}" if source.get("hf_repo_id") else None,
+    )
 
     source_status = item.get("source_status") if isinstance(item.get("source_status"), dict) else {}
     github_status = source_status.get("github") if isinstance(source_status.get("github"), dict) else {}
@@ -455,7 +495,12 @@ def source_links(item: dict[str, Any], profile: dict[str, Any] | None) -> list[d
     for record in as_list(official.get("huggingface")):
         if isinstance(record, dict):
             repo_id = record.get("repo_id") or record.get("id")
-            add("weights", "Hugging Face", f"https://huggingface.co/{repo_id}" if repo_id else record.get("url"), record.get("revision") or record.get("sha"))
+            add(
+                "weights",
+                "Hugging Face",
+                f"https://huggingface.co/{repo_id}" if repo_id else record.get("url"),
+                record.get("revision") or record.get("sha"),
+            )
         elif isinstance(record, str):
             add("weights", "Hugging Face", record if record.startswith("http") else f"https://huggingface.co/{record}")
 
@@ -690,7 +735,16 @@ def package_versions(packages: list[str]) -> dict[str, str]:
         if not name_match:
             continue
         name = name_match.group(1).lower().replace("_", "-")
-        if name in {"torch", "torchvision", "torchaudio", "diffusers", "transformers", "xfuser", "accelerate", "flash-attn"}:
+        if name in {
+            "torch",
+            "torchvision",
+            "torchaudio",
+            "diffusers",
+            "transformers",
+            "xfuser",
+            "accelerate",
+            "flash-attn",
+        }:
             output.setdefault(name, normalized)
     return output
 
@@ -719,8 +773,7 @@ def runtime_data(
     if env_kind == "unified":
         python_version = text(unified_environment.get("python"))
         conda_packages = [
-            f"python={python_version}" if package.startswith("python=") else package
-            for package in conda_packages
+            f"python={python_version}" if package.startswith("python=") else package for package in conda_packages
         ]
 
     return {
@@ -817,7 +870,9 @@ def inference_task_data(
     for run_id in run_ids:
         default_schema = load_model_run_schema(run_id)
         for task_id in dict.fromkeys((default_schema.task_id, *default_schema.task_choices)):
-            schema = default_schema if task_id == default_schema.task_id else load_model_run_schema(run_id, task_id=task_id)
+            schema = (
+                default_schema if task_id == default_schema.task_id else load_model_run_schema(run_id, task_id=task_id)
+            )
             inputs = [
                 {
                     "field": field.option.removeprefix("--pipeline."),
@@ -1105,7 +1160,10 @@ def benchmark_refs(item: dict[str, Any], docs: dict[str, Any]) -> list[dict[str,
         entry = BENCH_STATUS.get(bench_id)
         if entry is None or bench_id in seen:
             if entry is None and source == "docs":
-                print(f"warning: docs.recommended_benchmarks references unknown benchmark id '{bench_id}'", file=sys.stderr)
+                print(
+                    f"warning: docs.recommended_benchmarks references unknown benchmark id '{bench_id}'",
+                    file=sys.stderr,
+                )
             return
         seen.add(bench_id)
         refs.append(
@@ -1275,7 +1333,9 @@ def synthesize_overview(
         identity_en += f" The catalog records it for {task_list_en}."
         identity_zh += f"Catalog 将它记录为{task_list_zh}任务。"
     if aliases:
-        identity_en += f" It is also cataloged under the alias{'es' if len(aliases) > 1 else ''} {join_en(aliases[:3])}."
+        identity_en += (
+            f" It is also cataloged under the alias{'es' if len(aliases) > 1 else ''} {join_en(aliases[:3])}."
+        )
         identity_zh += f"它还有别名 {join_zh(aliases[:3])}。"
     en.append(identity_en)
     zh.append(identity_zh)
@@ -1289,7 +1349,9 @@ def synthesize_overview(
             f"WorldFoundry serves it through {len(runnable_ids)} recorded runnable "
             f"variant{'s' if len(runnable_ids) > 1 else ''} ({join_en(runnable_ids[:4])})."
         )
-        route_zh = f"WorldFoundry 通过 {len(runnable_ids)} 个已记录的可运行 variant（{join_zh(runnable_ids[:4])}）来运行它。"
+        route_zh = (
+            f"WorldFoundry 通过 {len(runnable_ids)} 个已记录的可运行 variant（{join_zh(runnable_ids[:4])}）来运行它。"
+        )
         if pipeline_target:
             route_en += f" The default route binds to the {pipeline_target} pipeline."
             route_zh += f"默认路径绑定到 {pipeline_target} pipeline。"
@@ -1351,7 +1413,9 @@ def synthesize_overview(
             weight_en += f" (license: {first['license']})"
             weight_zh += f"（license：{first['license']}）"
         if len(checkpoints) > 1:
-            weight_en += f", plus {len(checkpoints) - 1} more recorded repositor{'ies' if len(checkpoints) > 2 else 'y'}"
+            weight_en += (
+                f", plus {len(checkpoints) - 1} more recorded repositor{'ies' if len(checkpoints) > 2 else 'y'}"
+            )
             weight_zh += f"，另有 {len(checkpoints) - 1} 个已记录仓库"
         gated = [checkpoint["id"] for checkpoint in checkpoints if checkpoint.get("gated")]
         weight_en += "."
@@ -1407,7 +1471,9 @@ def synthesize_highlights(
         kind = "Dedicated env" if runtime.get("environmentKind") == "dedicated" else "Unified env"
         kind_zh = "独立环境" if runtime.get("environmentKind") == "dedicated" else "统一环境"
         detail = " · ".join(
-            part for part in (f"Python {runtime['python']}" if runtime.get("python") else None, runtime.get("cudaLabel")) if part
+            part
+            for part in (f"Python {runtime['python']}" if runtime.get("python") else None, runtime.get("cudaLabel"))
+            if part
         )
         en.append(f"{kind}{f' · {detail}' if detail else ''}")
         zh.append(f"{kind_zh}{f' · {detail}' if detail else ''}")
@@ -1443,7 +1509,9 @@ def synthesize_limitations(
     runner_status = status.get("runner", "not_recorded").lower().replace("-", "_")
     if runner_status not in {"verified", "validated", "passed"}:
         if runner_status == "not_recorded":
-            en.append("Runner evidence: Not recorded. No verified end-to-end WorldFoundry GPU artifact exists for this model.")
+            en.append(
+                "Runner evidence: Not recorded. No verified end-to-end WorldFoundry GPU artifact exists for this model."
+            )
             zh.append("Runner 证据：未记录。该模型还没有经过验证的 WorldFoundry 端到端 GPU 产物。")
         else:
             en.append(
@@ -1622,6 +1690,7 @@ def command_data(model_id: str, runtime_model_id: str, default_task: dict[str, A
     }
 
 
+@_canonical_catalog_defaults()
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1684,7 +1753,9 @@ def main() -> int:
                 runtime_model_id = variant_records[0]["id"] if variant_records else model_id
                 aliases = unique_strings(as_list(item.get("aliases")))
                 provider = provider_name(item, links, checkpoints)
-                runtime = runtime_data(item, profile_id, profile, env_id, environment, binding_id, binding, unified_environment)
+                runtime = runtime_data(
+                    item, profile_id, profile, env_id, environment, binding_id, binding, unified_environment
+                )
                 docs = docs_data(
                     item,
                     category_id,
@@ -1798,9 +1869,7 @@ def main() -> int:
     outputs = ((OUT, serialized_payload), (INDEX_OUT, serialized_index))
     if args.check:
         stale_paths = [
-            path
-            for path, expected in outputs
-            if not path.is_file() or path.read_text(encoding="utf-8") != expected
+            path for path, expected in outputs if not path.is_file() or path.read_text(encoding="utf-8") != expected
         ]
         page_status = sync_model_pages(recipes, check=True)
         if stale_paths:

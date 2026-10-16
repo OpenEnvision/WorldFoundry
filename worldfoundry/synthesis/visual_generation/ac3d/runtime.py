@@ -13,7 +13,6 @@ from typing import Any, Mapping, Sequence
 import imageio.v3 as iio
 import numpy as np
 
-from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import checkpoint_root_candidates
 from worldfoundry.core.media.codecs.video import materialize_video_input
 
@@ -609,7 +608,6 @@ class AC3DRuntime:
             "generated_video_path": str(artifact_path),
             "video": frames,
             "frames": frames,
-            "video_sha256": file_sha256(artifact_path),
             "runtime": "worldfoundry.ac3d.official_in_tree_runtime",
             "backend_quality": "official_in_tree_runtime",
             "runtime_plan": plan,

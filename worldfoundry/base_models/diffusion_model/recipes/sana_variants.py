@@ -13,8 +13,6 @@ path, resolution, optional ``mode``) and composes the native recipe.
 - ``streaming``: video-to-video; ``mode=="long_streaming"`` selects
   ``chunked-kv-cache``, otherwise bidirectional short stays ``standard``.
 
-Do not treat this table as a SHA rewrite surface; pin fields stay as
-declared on each :class:`SanaVariant`.
 """
 
 from __future__ import annotations
@@ -33,7 +31,7 @@ class SanaVariant:
     ``task`` / ``runner`` / ``mode`` decide which factories and strategy
     :func:`sana_recipe` selects.  Optional ``default_*`` fields are
     sampling hints for callers; they are not written into ExecutionSpec
-    here.  Checkpoint pin fields (revision, SHA-256, size) are optional.
+    here.  Checkpoint revisions are optional.
     """
 
     model_id: str
@@ -45,8 +43,6 @@ class SanaVariant:
     resolution: str
     repo_id: str
     checkpoint_revision: str | None = None
-    checkpoint_sha256: str | None = None
-    checkpoint_size_bytes: int | None = None
     diffusers_repo_id: str | None = None
     default_steps: int | None = None
     default_cfg_scale: float | None = None
@@ -87,8 +83,6 @@ SANA_VARIANTS: Mapping[str, SanaVariant] = {
         resolution="512px",
         repo_id="Efficient-Large-Model/Sana_600M_512px",
         checkpoint_revision="a189ee0678ba4b806c2091396fa07dedf8946913",
-        checkpoint_sha256="cbb880000c9c2594f00e16fff43be67733f0e2e75a4391e4897ffdbe74a19881",
-        checkpoint_size_bytes=2371119642,
         diffusers_repo_id="Efficient-Large-Model/Sana_600M_512px_diffusers",
         default_steps=20,
         default_cfg_scale=4.5,
@@ -251,8 +245,6 @@ SANA_VARIANTS: Mapping[str, SanaVariant] = {
         resolution="1024px",
         repo_id="Efficient-Large-Model/Sana_Sprint_0.6B_1024px",
         checkpoint_revision="268b7e32816200db48e0b0a8939f32397ae6889f",
-        checkpoint_sha256="fd1f4497ba127cac3da5cc6832306cc8b554c187ce6f86ab9b7e0064d0f1b503",
-        checkpoint_size_bytes=2381713754,
         diffusers_repo_id="Efficient-Large-Model/Sana_Sprint_0.6B_1024px_diffusers",
         default_steps=2,
         default_cfg_scale=1.0,
@@ -270,8 +262,6 @@ SANA_VARIANTS: Mapping[str, SanaVariant] = {
         resolution="1024px",
         repo_id="Efficient-Large-Model/Sana_Sprint_1.6B_1024px",
         checkpoint_revision="9f6866d6962d5d91d213f113e162cb18bffe741c",
-        checkpoint_sha256="180d3c8cfb1e85e907c7f02f431900343d5768ee86a2f20a5af56f9e3b7a2862",
-        checkpoint_size_bytes=6453060642,
         diffusers_repo_id="Efficient-Large-Model/Sana_Sprint_1.6B_1024px_diffusers",
         default_steps=2,
         default_cfg_scale=1.0,

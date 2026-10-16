@@ -690,7 +690,7 @@ class HunyuanGameCraftRuntime:
 
             if rank == 0:
                 sub_samples = outputs["samples"][0]
-                out_cat = sub_samples if out_cat is None else torch.cat([out_cat, sub_samples], dim=2)
+                out_cat = sub_samples if out_cat is None else torch.cat([out_cat, sub_samples[:, :, 1:]], dim=2)
 
         video_frames = convert_videos_to_grid(out_cat, n_rows=1) if rank == 0 and out_cat is not None else None
         if return_latents:

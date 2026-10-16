@@ -1,0 +1,123 @@
+---
+title: "WonderWorld"
+description: "仓库内单图世界生成、相机路径扩展与高斯场景导出。"
+modelId: "wonderworld"
+pageSource: authored
+---
+
+WorldFoundry 已将 **WonderWorld** 接入仓库内的离线图像到三维世界管线，组合 SD2 图像补全、Marigold 深度与法线、OneFormer/RepViT-SAM 场景分割和分层高斯重建。输入一张初始图像及可选相机路径，输出 `.splat` 世界、RGB 预览、深度数组和场景元数据。集成状态：**Integrated**。
+
+参考：[WonderWorld 源码](https://github.com/KovenYu/WonderWorld/tree/5cf11467ad21a9d7bca269f961855a235c7d352e)、[项目](https://kovenyu.com/wonderworld/)、[论文](https://arxiv.org/abs/2406.09394)。
+
+## 输入与产物
+
+- 输入恰好一张 RGB 图像，可使用路径、PIL 图像或 uint8 HWC 数组。原生初始视图为 **512×512**。
+- 可选提示词描述新显露的区域；仅提供提示词不能替代图像输入。
+- `camera_path` 接受 JSON 路径或 `[N,4,4]` 数组，使用按行存储的 **OpenCV 世界到相机**矩阵。平移使用导出场景单位；普通几何距初始相机约 1–6 个单位。
+- 包含 `camera_view_matrix_sequence` 的 JSON 对象可使用上游查看器按列存储的 16 元素矩阵，管线会转换相机约定。
+- 输出 `.splat` 使用标准的 32 字节记录：XYZ、尺度、RGBA、WXYZ 四元数。场景与物体层以 0.7 像素切线足迹、0.7 像素法线厚度及 0.15 透明度初始化，拟合三个轴的尺度、方向和透明度；天空为冻结的平面高斯。切线协方差遵循透视投影的像素足迹，掠射角处的尺度上限为十个足迹。
+
+管线先在单位矩阵初始相机下重建，再依次访问指定相机。新显露区域经过图像补全与深度对齐，新高斯排在冻结旧场景之前，保持发布实现中同深度重叠时的合成优先级；只拟合或剪枝新增粒子范围。地面锚点使用发布实现的 ADE20K 类别，包含海面和湖面，并做 3×3 腐蚀。每次调用独占场景状态，结束后释放；组件权重可以常驻复用。
+
+## 环境与权重
+
+使用[统一 GPU 环境](/docs/maintainers/contributing)。`gsplat` 首次构建扩展需要完整 CUDA 开发工具链，包括 `nvcc` 和 `cuda_runtime.h`；若自动发现的安装不完整，通过 `CUDA_HOME` 指向完整工具链。Triton 从同一份 gsplat 投影和瓦片列表计算透明度越过 50% 时的中位深度。
+
+WonderWorld 使用已经公开的共享组件权重，不需要单独训练的 WonderWorld 生成器检查点。默认目录布局：
+
+```text
+/weights/
+  stable-diffusion-2-inpainting/
+  prs-eth--marigold-depth-v1-0/
+  prs-eth--marigold-normals-v0-1/
+  oneformer_ade20k_swin_large/
+  RepViT/repvit_sam.pt
+```
+
+固定来源：
+
+| 组件 | 公开来源 | 修订 |
+| --- | --- | --- |
+| SD2 图像补全 | `sd2-community/stable-diffusion-2-inpainting` | `5f74973cbb64c8568780732c17f43eb269d63a0d` |
+| 深度 | `prs-eth/marigold-depth-v1-0` | `f4fc453d7d217cbe30ddcad3eb311d1ad9a11c4c` |
+| 法线 | `prs-eth/marigold-normals-v0-1` | `b105f7cfa1972b57d8e9ed72a896b2768a52f8e9` |
+| OneFormer | `shi-labs/oneformer_ade20k_swin_large` | `4a5bac8e64f82681a12db2e151a4c2f4ce6092b2` |
+| RepViT-SAM | [v1.0 发布包](https://github.com/THU-MIG/RepViT/releases/download/v1.0/repvit_sam.pt) | `repvit_sam.pt` |
+
+每个扩散模型目录需保留 `unet`、`vae`、`text_encoder` 的 **fp16 safetensors** 及各自 `config.json`、`tokenizer` 资源、`scheduler/scheduler_config.json` 和许可证文件。OneFormer 需要 `model.safetensors`、处理器与 tokenizer 资源，以及配置目录中的 **`ade20k_panoptic.json`**。加载过程仅使用本地文件。
+
+## 公共管线
+
+```python
+from worldfoundry.pipelines.three_d_four_d.pipeline_wonderworld import WonderWorldPipeline
+
+pipeline = WonderWorldPipeline.from_pretrained(
+    {"checkpoint_root": "/weights", "dtype": "bfloat16"},
+    device="cuda",
+)
+result = pipeline(
+    images="/inputs/room.png",
+    prompt="A sunlit room with wooden furniture",
+    camera_path="/inputs/cameras.json",
+    output_path="/outputs/room.splat",
+    depth_steps=30,
+    inpaint_steps=50,
+    normal_steps=10,
+    refinement_steps=100,
+    seed=42,
+    return_dict=True,
+)
+print(result["artifact_path"], result["preview_path"])
+```
+
+可通过 `inpainting_path`、`depth_path`、`normals_path`、`oneformer_path`、`repvit_checkpoint` 分别覆盖组件位置。默认焦距为 `500`，`gen_layer=True` 开启隐藏背景补全。`negative_prompt` 控制新视角补全；背景阶段使用发布实现中的 `tree, plant` 负向提示词。`depth_steps` 范围为 1–1000；固定 DDIM 排程的 `inpaint_steps`、`normal_steps` 范围为 1–999；`refinement_steps` 为非负整数。这些边界在加载权重前检查。
+
+目录加载器和 Studio 使用同一专用管线与权重字段。CLI 配置查看不需要加载权重：
+
+```bash
+worldfoundry-eval run wonderworld --print-config --json \
+  --pipeline.depth-steps 30 \
+  --pipeline.load.checkpoint-root /weights
+```
+
+## 验证
+
+组件契约覆盖 FP32/BF16 的 DDIM 与不缩放输入的 Euler 轨迹、排程边界、无状态引导探测、真实小 U-Net 的通道拼接、VAE 后验与随机数顺序、深度解码、固定配方和共享编解码器所有权。解析几何契约覆盖透视像素协方差、倾斜地面、离轴像素和相机旋转。重建契约覆盖同深度合成顺序、限定可训练区间、冻结前后缀保留、剪枝状态迁移、输入场景不变性，以及恰好 50% 透射率后的中位深度遍历。公共契约执行标准评估 invocation，检查图像别名、相机控制、生成参数优先级、延迟加载、输入预检及加载失败或取消时的清理。
+
+真实权重组件契约逐张量核对加载值与 safetensors 转换为 BF16 后的值，并将原生条件编码、初始化、U-Net 预测、调度更新和解码与对应网络及调度原语比较，同时执行冻结模型权重下的解码深度梯度检查：
+
+```bash
+python tests/manual/wonderworld_components.py \
+  --checkpoint-root /weights --output /outputs/component-parity.json
+```
+
+发布阶段对照使用生产代码树外的固定版本参考源码，并共享相同的冻结原语权重：
+
+```bash
+python tests/manual/wonderworld_reference.py \
+  --reference-root /references/WonderWorld-5cf1146 \
+  --checkpoint-root /weights --image /inputs/room.png \
+  --mode depth --output /outputs/released-depth
+```
+
+`depth`、`normals`、`inpaint` 默认分别执行 30、10、50 步；深度还支持 `--guided` 和 `--farther`。回执比较编码器像素、每次 U-Net 输入、上下文、预测、时间步及最终输出，使用 MATH 注意力。这是阶段控制流对照，不等同于独立运行官方端到端世界生成。
+
+真实权重产物回放命令：
+
+```bash
+python tests/manual/wonderworld_inference.py \
+  --checkpoint-root /weights --image /inputs/room.png \
+  --camera-path /inputs/cameras.json \
+  --output /outputs/wonderworld-replay --refinement-steps 0 --repeat
+```
+
+回放通过目录加载器解析管线，并执行包含归一化图像与相机控制的标准评估 invocation。它使用 MATH 注意力，并优先采用 PyTorch 确定性算法（`warn_only=True`），检查高斯参数和深度数组有限、每个相机的 512×512 预览包含非平凡像素变化、相机路径扩展、`.splat` 记录布局，以及 CUDA 拟合前精确的 A/B/A 请求隔离，全部通过后才写入验收证据。拟合产物验证使用 `--refinement-steps 100`，不加 `--repeat`。
+
+## 限制
+
+- 不约束后端时，CUDA 解码深度梯度和光度拟合不保证逐位重复；几何的细微差异可能改变显露区域掩码，进而改变后续生成内容。精确 A/B/A 回放使用上述 MATH/确定性优先配置及 `refinement_steps=0`。
+- 平移/滚转房间回放仍有可见的边界孔洞和表面碎裂，视觉质量未验收。原生产物验证、发布阶段数值对照、独立官方端到端对齐与性能验收属于不同门禁。
+- 原生重建使用 gsplat RGB、透明度中位深度、`0.8 L1 + 0.2 DSSIM` 及透明度/尺度剪枝。固定版本 FLAGS 的协方差正向与反向正则项不一致，且可能漏掉恰好 50% 透射率之后的中位深度跨越。原生梯度通过有限差分校验，中位深度通过透明度合成样例验证，不以拟合产物逐位一致作为证明。全景生成、GPT 提示词和上游浏览器服务器不属于此离线 API。暂不支持 `stream()`。
+- 固定版本的上游仓库公开了推理源码，但没有标明根目录软件许可证。公开可获取不等于采用 OSI 许可证。SD2 权重保留 Open RAIL++-M 条款；Marigold、OneFormer、RepViT-SAM、gsplat 保留各自条款，目录按组件记录许可。
+
+<ModelRelatedRecipes modelId="wonderworld" locale="zh" />

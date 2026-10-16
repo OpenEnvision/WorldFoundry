@@ -14,6 +14,7 @@ from worldfoundry.base_models.three_dimensions.point_clouds.lyra.utils import (
     resolve_lyra1_repo_root,
 )
 from worldfoundry.core.io.paths import scratch_directory
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 
 from ...operators.lyra1_operator import Lyra1Operator
 from ...synthesis.visual_generation.lyra_1.synthesis import Lyra1Synthesis
@@ -24,6 +25,7 @@ from .checkpoints import prepare_lyra1_checkpoint_root
 
 class Lyra1Pipeline(PipelineABC):
     """Lyra-1 pipeline supporting static image or dynamic video reconstruction."""
+
     MODEL_ID = "lyra-1"
 
     def __init__(
@@ -47,7 +49,7 @@ class Lyra1Pipeline(PipelineABC):
         self.default_mode = str(default_mode).lower()
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]
         cls,
         model_path: Optional[str] = None,
         required_components: Optional[Dict[str, Any]] = None,
@@ -59,9 +61,7 @@ class Lyra1Pipeline(PipelineABC):
         """Load the pipeline from pretrained checkpoints and configurations."""
         required_components = required_components or {}
         repo_root = required_components.get("repo_root") or model_path
-        default_mode = str(
-            required_components.get("default_mode", kwargs.get("default_mode", "static"))
-        ).lower()
+        default_mode = str(required_components.get("default_mode", kwargs.get("default_mode", "static"))).lower()
 
         synthesis_model = Lyra1Synthesis.from_pretrained(
             pretrained_model_path=repo_root,
@@ -156,9 +156,11 @@ class Lyra1Pipeline(PipelineABC):
         reconstruct_3d: bool = False,
         output_dir: Optional[str] = None,
         return_dict: bool = False,
-        **kwargs,
-    ):
-        """Execute the complete pipeline generation flow."""
+        *,
+        fps: int | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Execute generation or return a plan without declaring RGB frames."""
         if self.synthesis_model is None:
             raise RuntimeError("Synthesis model is not loaded. Use from_pretrained() first.")
 
@@ -190,6 +192,7 @@ class Lyra1Pipeline(PipelineABC):
             trajectory=processed["trajectory"],
             output_root=str(generated_root),
             multi_trajectory=multi_trajectory,
+            fps=fps,
             **synthesis_kwargs,
         )
         if synthesis_result.get("status") == "planned":
@@ -212,9 +215,7 @@ class Lyra1Pipeline(PipelineABC):
                 "output_dir": str(reconstruction_root),
                 **kwargs,
             }
-            reconstruction_result = self.representation_model.get_representation(
-                representation_input
-            )
+            reconstruction_result = self.representation_model.get_representation(representation_input)
 
         result = {
             "mode": mode,
@@ -225,6 +226,7 @@ class Lyra1Pipeline(PipelineABC):
             "generated_root": synthesis_result["generated_root"],
             "generated_video_path": synthesis_result["generated_video_path"],
             "video": synthesis_result["video"],
+            "video_chunk": synthesis_result.get("video_chunk"),
             "fps": synthesis_result["fps"],
             "reconstruction": reconstruction_result,
             "input_image": processed["visual_input"] if mode == "static" else None,
@@ -246,9 +248,11 @@ class Lyra1Pipeline(PipelineABC):
         output_dir: Optional[str] = None,
         reset_memory: bool = False,
         return_dict: bool = False,
-        **kwargs,
-    ):
-        """Stream visual generation outputs chunk by chunk."""
+        *,
+        fps: int | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Continue from visual memory, retaining declared output or plan semantics."""
         mode = str(mode or self.default_mode).lower()
         if reset_memory:
             self.memory_module.manage(action="reset")
@@ -264,6 +268,13 @@ class Lyra1Pipeline(PipelineABC):
                 "No input found in memory. Provide `images` for static mode or `videos` for dynamic mode on the first turn."
             )
 
+        if mode == "dynamic":
+            previous = self.memory_module.select(context_query="latest_result")
+            if isinstance(previous, dict):
+                chunk = previous.get("video_chunk")
+                if isinstance(chunk, VideoChunk) and chunk.frames is current_visual:
+                    current_visual = chunk
+
         result = self.__call__(
             images=current_visual if mode == "static" else None,
             videos=current_visual if mode == "dynamic" else None,
@@ -274,8 +285,11 @@ class Lyra1Pipeline(PipelineABC):
             reconstruct_3d=reconstruct_3d,
             output_dir=output_dir,
             return_dict=True,
+            fps=fps,
             **kwargs,
         )
+        if result.get("status") == "planned":
+            return result
         self.memory_module.record(
             result,
             metadata={

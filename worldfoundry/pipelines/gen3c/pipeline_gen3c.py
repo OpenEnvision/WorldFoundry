@@ -20,6 +20,7 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
     parse_torch_dtype,
 )
 from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 from worldfoundry.operators.gen3c_operator import Gen3COperator
 from worldfoundry.synthesis.visual_generation.memory.stream import VisualFrameMemory
 
@@ -91,28 +92,38 @@ class Gen3CPipeline(PipelineABC):
             if root.is_file():
                 overrides["transformer"] = str(root.resolve())
             elif root.is_dir():
-                transformer = root if (root / "model.pt").is_file() else _existing_subdirectory(
-                    root, ("GEN3C-Cosmos-7B", "nvidia--GEN3C-Cosmos-7B"), "model.pt"
+                transformer = (
+                    root
+                    if (root / "model.pt").is_file()
+                    else _existing_subdirectory(root, ("GEN3C-Cosmos-7B", "nvidia--GEN3C-Cosmos-7B"), "model.pt")
                 )
-                tokenizer = root if (root / "encoder.jit").is_file() else _existing_subdirectory(
-                    root,
-                    ("Cosmos-Tokenize1-CV8x8x8-720p", "nvidia--Cosmos-Tokenize1-CV8x8x8-720p"),
-                    "encoder.jit",
+                tokenizer = (
+                    root
+                    if (root / "encoder.jit").is_file()
+                    else _existing_subdirectory(
+                        root,
+                        ("Cosmos-Tokenize1-CV8x8x8-720p", "nvidia--Cosmos-Tokenize1-CV8x8x8-720p"),
+                        "encoder.jit",
+                    )
                 )
-                text = root if (root / "pytorch_model.bin").is_file() else _existing_subdirectory(
-                    root, ("t5-11b", "google-t5/t5-11b", "google-t5--t5-11b"), "pytorch_model.bin"
+                text = (
+                    root
+                    if (root / "pytorch_model.bin").is_file()
+                    else _existing_subdirectory(
+                        root, ("t5-11b", "google-t5/t5-11b", "google-t5--t5-11b"), "pytorch_model.bin"
+                    )
                 )
-                depth = root if (root / "model.pt").is_file() and root.name == "moge-vitl" else _existing_subdirectory(
-                    root, ("moge-vitl", "Ruicheng--moge-vitl"), "model.pt"
+                depth = (
+                    root
+                    if (root / "model.pt").is_file() and root.name == "moge-vitl"
+                    else _existing_subdirectory(root, ("moge-vitl", "Ruicheng--moge-vitl"), "model.pt")
                 )
                 if transformer is not None:
                     overrides["transformer"] = str(transformer.resolve())
                 if tokenizer is not None:
                     overrides["tokenizer"] = str(tokenizer.resolve())
                 if text is not None:
-                    overrides.update(
-                        {"text-encoder": str(text.resolve()), "text-tokenizer": str(text.resolve())}
-                    )
+                    overrides.update({"text-encoder": str(text.resolve()), "text-tokenizer": str(text.resolve())})
                 if depth is not None:
                     overrides["depth-model"] = str(depth.resolve())
         explicit = {
@@ -128,7 +139,7 @@ class Gen3CPipeline(PipelineABC):
         return overrides or None
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]
         cls,
         model_path: str | Mapping[str, Any] | None = None,
         required_components: Mapping[str, Any] | None = None,
@@ -144,9 +155,7 @@ class Gen3CPipeline(PipelineABC):
                     options.get("torch_dtype", options.get("weight_dtype", options.get("dtype"))),
                     owner="GEN3C",
                 ),
-                offload=parse_offload_policy(
-                    options.get("offload_mode", "block"), allow_disk=False, owner="GEN3C"
-                ),
+                offload=parse_offload_policy(options.get("offload_mode", "block"), allow_disk=False, owner="GEN3C"),
             ),
             checkpoint_overrides=cls._checkpoint_overrides(model_path, options),
         )
@@ -320,11 +329,20 @@ class Gen3CPipeline(PipelineABC):
                 metadata={"trajectory": processed["trajectory"]},
             )
         )
+        video_chunk = None
+        if output_type != "latent":
+            video_chunk = VideoChunk(
+                frames=output.sample, layout="bcthw", value_range="-1,1", metadata={"fps": int(fps)}
+            )
         artifact_path = None
-        if output_path is not None and output_type != "latent":
-            artifact_path = save_image_or_video_tensor(output.sample, output_path, fps=int(fps))
+        if output_path is not None and video_chunk is not None:
+            artifact_path = save_image_or_video_tensor(
+                output.sample, output_path, fps=int(fps), layout=video_chunk.layout, value_range=video_chunk.value_range
+            )
         result = {
             "video": output.sample,
+            "video_chunk": video_chunk,
+            "fps": int(fps),
             "generated_video": output.sample,
             "latents": output.latents,
             "artifact_path": artifact_path,
@@ -343,9 +361,12 @@ class Gen3CPipeline(PipelineABC):
         images: Image.Image | Any = None,
         prompt: str = "",
         reset_memory: bool = False,
+        *,
+        return_dict: bool = False,
+        fps: int = GEN3C_DEFAULT_FPS,
+        num_frames: int = GEN3C_DEFAULT_NUM_FRAMES,
         **kwargs: Any,
     ) -> Any:
-        return_dict = bool(kwargs.pop("return_dict", False))
         if reset_memory:
             self.memory_module.manage(action="reset")
         if images is not None:
@@ -358,9 +379,12 @@ class Gen3CPipeline(PipelineABC):
             interactions=interactions,
             prompt=prompt,
             return_dict=True,
+            fps=fps,
+            num_frames=num_frames,
             **kwargs,
         )
-        self.memory_module.record(result, metadata={"prompt": prompt, "interactions": interactions})
+        if result["video_chunk"] is not None:
+            self.memory_module.record(result, metadata={"prompt": prompt, "interactions": interactions})
         return result if return_dict else result.get("artifact_path") or result["video"]
 
     def get_synthesis_model(self) -> NativeDiffusionPipeline:

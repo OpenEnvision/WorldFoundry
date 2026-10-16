@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -37,10 +38,13 @@ from worldfoundry.core.io.paths import (
     official_runtime_repo_path,
     project_root,
 )
+from worldfoundry.runtime.dreamdojo_inference_spec import DREAMDOJO_STUDENT_INFERENCE_SPEC
 from worldfoundry.runtime.hyperflow_inference_spec import HYPERFLOW_INFERENCE_SPEC
 from worldfoundry.runtime.interactive_inference_catalog import INTERACTIVE_INFERENCE_SPECS
+from worldfoundry.runtime.matrix_game4_inference_spec import MATRIX_GAME4_EGYPT_INFERENCE_SPEC
 from worldfoundry.runtime.rt1_inference_spec import RT1_INFERENCE_SPEC
 from worldfoundry.runtime.uniworld_view_inference_spec import UNIWORLD_VIEW_INFERENCE_SPEC
+from worldfoundry.runtime.wonderworld_inference_spec import WONDERWORLD_INFERENCE_SPEC
 
 LINGBOT_WORLD_MODEL_ID = "lingbot-world"
 LINGBOT_VARIANT_FAST = "fast"
@@ -99,9 +103,10 @@ _PROJECT_ROOT = project_root(__file__)
 _WORKSPACE_ROOT = _PROJECT_ROOT.parent
 DINO_WM_CHECKPOINT_BASE = str(
     Path(
-        os.environ.get("WORLDFOUNDRY_DINO_WM_CKPT_BASE")
-        or _first_existing_path(*checkpoint_root_candidates("dino_wm"))
-    ).expanduser().resolve()
+        os.environ.get("WORLDFOUNDRY_DINO_WM_CKPT_BASE") or _first_existing_path(*checkpoint_root_candidates("dino_wm"))
+    )
+    .expanduser()
+    .resolve()
 )
 GENERIC_IMAGE_FIXTURE = str(_TEST_CASES_ROOT / "studio_demo" / "00" / "image.jpg")
 GENERIC_3D_FIXTURE = str(_TEST_CASES_ROOT / "vggt" / "examples" / "kitchen" / "images")
@@ -114,9 +119,7 @@ MIRA_DEFAULT_CHECKPOINT = str(checkpoint_root_path("mira"))
 MIRA_DEFAULT_DATASET = str(local_data_root_path() / "rocket-science" / "test")
 _WOW_OFFICIAL_LOCAL_CHECKPOINT = _WORKSPACE_ROOT / "ckpt" / "WoW-1-Wan-14B-600k"
 WOW_LOCAL_CHECKPOINT = (
-    str(_WOW_OFFICIAL_LOCAL_CHECKPOINT)
-    if _WOW_OFFICIAL_LOCAL_CHECKPOINT.exists()
-    else "X-Humanoid/WoW-1-Wan-14B-600k"
+    str(_WOW_OFFICIAL_LOCAL_CHECKPOINT) if _WOW_OFFICIAL_LOCAL_CHECKPOINT.exists() else "X-Humanoid/WoW-1-Wan-14B-600k"
 )
 HELIOS_CHECKPOINT_ROOT = _WORKSPACE_ROOT / "ckpt"
 HELIOS_BASE_CHECKPOINT = _local_hfd_checkpoint_path("BestWishYsh--Helios-Base")
@@ -149,9 +152,7 @@ ROLLING_FORCING_DEMO_PROMPT = (
 )
 BERNINI_CHECKPOINT = _local_hfd_checkpoint_path("ByteDance--Bernini-Diffusers")
 BERNINI_R_CHECKPOINT = _local_hfd_checkpoint_path("ByteDance--Bernini-R-Diffusers")
-BERNINI_R_1P3B_CHECKPOINT = _local_hfd_checkpoint_path(
-    "ByteDance--Bernini-R-1.3B-Diffusers"
-)
+BERNINI_R_1P3B_CHECKPOINT = _local_hfd_checkpoint_path("ByteDance--Bernini-R-1.3B-Diffusers")
 BERNINI_WORKSPACE_NPROC = 1
 # Product inference must not depend on private or repository test prompts. The
 # required field remains empty until the user supplies their own description.
@@ -164,8 +165,7 @@ WOW_OFFICIAL_PROMPT = "The Franka robot grasps the red bottle on the table."
 LINGBOT_WORLD_DEMO_ROOT = _TEST_CASES_ROOT / "lingbot_world" / "00"
 STABLE_VIDEO_INFINITY_DEMO_ROOT = _TEST_CASES_ROOT / "stable-video-infinity" / "svi-2.0"
 STABLE_VIDEO_INFINITY_OFFICIAL_PROMPT = (
-    "The water shimmers with dancing caustics as gentle bubbles rise; "
-    "the camera dolly-ins through a blue haze."
+    "The water shimmers with dancing caustics as gentle bubbles rise; the camera dolly-ins through a blue haze."
 )
 LINGBOT_WORLD_V2_MODEL_ID = "lingbot-world-v2"
 LINGBOT_WORLD_V2_CHECKPOINT = _first_existing_path(
@@ -237,6 +237,7 @@ TEXT_ONLY_DEFAULT_VIDEO_MODEL_IDS = frozenset(
         "self-forcing",
     }
 )
+
 
 def _field(
     field_id: str,
@@ -558,6 +559,45 @@ LINGBOT_WORLD_V2_INFERENCE_SPEC = ModelInferenceSpec(
     ),
 )
 
+_LINGBOT_V2_SMALL_DEFAULTS = {
+    **LINGBOT_WORLD_V2_INFERENCE_SPEC.tasks[0].default_call_kwargs,
+    "frame_num": 317,
+    "sample_shift": 5.0,
+    "nproc_per_node": 1,
+    "t5_fsdp": False,
+    "dit_fsdp": False,
+}
+LINGBOT_WORLD_V2_SMALL_INFERENCE_SPEC = replace(
+    LINGBOT_WORLD_V2_INFERENCE_SPEC,
+    model_family_id="lingbot-world-v2-1.3b",
+    display_name="LingBot-World-V2 1.3B",
+    default_variant_id="causal-fast-1.3b",
+    aliases=("lingbot-v2-1.3b",),
+    variants=(
+        InferenceVariantSpec(
+            variant_id="causal-fast-1.3b",
+            label="Causal Fast 1.3B",
+            status="configured",
+            checkpoints=(
+                InferenceCheckpointRef(
+                    role="primary", uri="robbyant/lingbot-world-v2-1.3b-causal-fast", status="configured"
+                ),
+            ),
+        ),
+    ),
+    tasks=(
+        replace(
+            LINGBOT_WORLD_V2_INFERENCE_SPEC.tasks[0],
+            inputs=tuple(
+                replace(field, default=_LINGBOT_V2_SMALL_DEFAULTS.get(field.field_id, field.default))
+                for field in LINGBOT_WORLD_V2_INFERENCE_SPEC.tasks[0].inputs
+            ),
+            default_call_kwargs=_LINGBOT_V2_SMALL_DEFAULTS,
+        ),
+    ),
+    notes=("1.3B, four-latent causal-fast runtime with shared Wan T5/tokenizer/VAE assets.",),
+)
+
 WARP_AS_HISTORY_INFERENCE_SPEC = ModelInferenceSpec(
     model_family_id="warp-as-history",
     display_name="Warp-as-History",
@@ -636,9 +676,7 @@ GEN3C_OFFICIAL_CALL_KWARGS = {
     "seed": 1,
 }
 
-LYRA1_STATIC_OFFICIAL_FIXTURE = (
-    "${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/data/test_cases/lyra/Lyra-1/00172.png"
-)
+LYRA1_STATIC_OFFICIAL_FIXTURE = "${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/data/test_cases/lyra/Lyra-1/00172.png"
 LYRA2_OFFICIAL_FIXTURE = str(_TEST_CASES_ROOT / "lyra" / "Lyra-2" / "00.png")
 LYRA2_OFFICIAL_PROMPT = _read_text_file_or_default(
     _TEST_CASES_ROOT / "lyra" / "Lyra-2" / "00.txt",
@@ -1469,9 +1507,7 @@ def _cosmos3_action_task_profile(mode: str, label: str) -> InferenceTaskProfile:
             target="input_path",
             required=True,
             default="",
-            description=(
-                "Policy and forward dynamics use the first frame; inverse dynamics conditions on the clip."
-            ),
+            description=("Policy and forward dynamics use the first frame; inverse dynamics conditions on the clip."),
         ),
         _field(
             "action_mode",
@@ -1596,9 +1632,7 @@ COSMOS3_INFERENCE_SPEC = ModelInferenceSpec(
             variant_id="cosmos3-nano",
             label="Cosmos3 Nano",
             status="integrated",
-            checkpoints=(
-                InferenceCheckpointRef(role="primary", uri=COSMOS3_NANO_REPO_ID, status="official"),
-            ),
+            checkpoints=(InferenceCheckpointRef(role="primary", uri=COSMOS3_NANO_REPO_ID, status="official"),),
             load_kwargs={
                 "variant_id": "cosmos3-nano",
                 "profile_id": "cosmos3-nano",
@@ -1613,9 +1647,7 @@ COSMOS3_INFERENCE_SPEC = ModelInferenceSpec(
             variant_id="cosmos3-super",
             label="Cosmos3 Super",
             status="checkpoint-required",
-            checkpoints=(
-                InferenceCheckpointRef(role="primary", uri=COSMOS3_SUPER_REPO_ID, status="official"),
-            ),
+            checkpoints=(InferenceCheckpointRef(role="primary", uri=COSMOS3_SUPER_REPO_ID, status="official"),),
             load_kwargs={
                 "variant_id": "cosmos3-super",
                 "profile_id": "cosmos3-super",
@@ -2262,9 +2294,7 @@ HELIOS_INFERENCE_SPEC = ModelInferenceSpec(
 def _sana_streaming_inference_spec(*, bidirectional: bool) -> ModelInferenceSpec:
     """Build the explicit Workspace contract for one SANA-Streaming route."""
 
-    model_id = (
-        "sana-streaming-bidirectional-2b-720p" if bidirectional else "sana-streaming-2b-720p"
-    )
+    model_id = "sana-streaming-bidirectional-2b-720p" if bidirectional else "sana-streaming-2b-720p"
     checkpoint = SANA_STREAMING_BIDIRECTIONAL_CHECKPOINT if bidirectional else SANA_STREAMING_CHECKPOINT
     mode = "bidirectional_short" if bidirectional else "long_streaming"
     steps = 50 if bidirectional else 4
@@ -2297,8 +2327,8 @@ def _sana_streaming_inference_spec(*, bidirectional: bool) -> ModelInferenceSpec
                 notes=(
                     "Uses the official short bidirectional denoising route."
                     if bidirectional
-                    else "Uses state-cached autoregressive attention with sink-token caching."
-                ,),
+                    else "Uses state-cached autoregressive attention with sink-token caching.",
+                ),
             ),
         ),
         tasks=(
@@ -2363,8 +2393,8 @@ def _sana_streaming_inference_spec(*, bidirectional: bool) -> ModelInferenceSpec
         ),
         notes=(
             "The Workspace default is an 81-frame bounded validation; the long-streaming runtime itself retains "
-            "the official 969-frame default when called without an override."
-        ,),
+            "the official 969-frame default when called without an override.",
+        ),
     )
 
 
@@ -2406,7 +2436,7 @@ def _bernini_task_profile(
             )
         )
     frames = 1 if image_output else 81
-    height, width = ((512, 512) if image_output else (480, 848))
+    height, width = (512, 512) if image_output else (480, 848)
     steps = 50 if task_id in {"t2i", "t2v"} else 40
     fields.extend(
         (
@@ -2435,8 +2465,10 @@ def _bernini_task_profile(
             _field("plan_only", "Plan Only", kind="boolean", target="call_kwargs", default=False),
         )
     )
-    artifact = _artifact("image", "generated_image", required=True, preview=True) if image_output else _artifact(
-        "video", "video", required=True, preview=True
+    artifact = (
+        _artifact("image", "generated_image", required=True, preview=True)
+        if image_output
+        else _artifact("video", "video", required=True, preview=True)
     )
     return InferenceTaskProfile(
         task_id=task_id,
@@ -2470,9 +2502,7 @@ BERNINI_INFERENCE_SPEC = ModelInferenceSpec(
             variant_id="planner-renderer",
             label="7B Planner + 14B Renderer",
             status="local_required",
-            checkpoints=(
-                InferenceCheckpointRef(role="primary", uri=BERNINI_CHECKPOINT, status="local_required"),
-            ),
+            checkpoints=(InferenceCheckpointRef(role="primary", uri=BERNINI_CHECKPOINT, status="local_required"),),
             load_kwargs={"model_id": "bernini"},
             notes=(
                 "Uses the full 81-frame/50-step recipe on one H100 because each additional Ulysses rank "
@@ -2526,9 +2556,7 @@ BERNINI_INFERENCE_SPEC = ModelInferenceSpec(
             reference_image=True,
         ),
     ),
-    notes=(
-        "Checkpoint integrity and host/GPU memory are preflighted before any heavyweight model load.",
-    ),
+    notes=("Checkpoint integrity and host/GPU memory are preflighted before any heavyweight model load.",),
 )
 
 LINGBOT_VIDEO_INFERENCE_SPEC = ModelInferenceSpec(
@@ -2756,18 +2784,14 @@ STABLE_VIDEO_INFINITY_INFERENCE_SPEC = ModelInferenceSpec(
             status="configured",
             load_kwargs={"lazy": True},
             aliases=("default", "svi-2.0", "wan2.1-i2v-14b"),
-            notes=(
-                "Loads the locally staged Wan2.1-I2V-14B-480P base and official SVI 2.0 LoRA.",
-            ),
+            notes=("Loads the locally staged Wan2.1-I2V-14B-480P base and official SVI 2.0 LoRA.",),
         ),
     ),
     tasks=(
         InferenceTaskProfile(
             task_id="prompt-stream-i2v",
             label="Prompt Stream Image to Long Video",
-            description=(
-                "Generate linked SVI 2.0 clips from one reference image and an optional JSON prompt stream."
-            ),
+            description=("Generate linked SVI 2.0 clips from one reference image and an optional JSON prompt stream."),
             aliases=("default", "i2v", "image-to-video", "long-video", "prompt-stream"),
             inputs=(
                 _field(
@@ -3481,10 +3505,7 @@ GENIE_ENVISIONER_INFERENCE_SPEC = ModelInferenceSpec(
             checkpoints=(
                 InferenceCheckpointRef(
                     role="genie_envisioner_transformer",
-                    uri=(
-                        "${WORLDFOUNDRY_CKPT_DIR}/agibot-world--Genie-Envisioner/"
-                        "GE_base_fast_v0.1.safetensors"
-                    ),
+                    uri=("${WORLDFOUNDRY_CKPT_DIR}/agibot-world--Genie-Envisioner/GE_base_fast_v0.1.safetensors"),
                     status="required",
                 ),
                 InferenceCheckpointRef(
@@ -3496,8 +3517,7 @@ GENIE_ENVISIONER_INFERENCE_SPEC = ModelInferenceSpec(
             load_kwargs={
                 "model_id": "genie-envisioner",
                 "checkpoint_path": (
-                    "${WORLDFOUNDRY_CKPT_DIR}/agibot-world--Genie-Envisioner/"
-                    "GE_base_fast_v0.1.safetensors"
+                    "${WORLDFOUNDRY_CKPT_DIR}/agibot-world--Genie-Envisioner/GE_base_fast_v0.1.safetensors"
                 ),
                 "base_model_dir": "${WORLDFOUNDRY_CKPT_DIR}/Lightricks--LTX-Video",
             },
@@ -3539,10 +3559,7 @@ GENIE_ENVISIONER_INFERENCE_SPEC = ModelInferenceSpec(
                     kind="path",
                     target="load_kwargs",
                     required=True,
-                    default=(
-                        "${WORLDFOUNDRY_CKPT_DIR}/agibot-world--Genie-Envisioner/"
-                        "GE_base_fast_v0.1.safetensors"
-                    ),
+                    default=("${WORLDFOUNDRY_CKPT_DIR}/agibot-world--Genie-Envisioner/GE_base_fast_v0.1.safetensors"),
                 ),
                 _field(
                     "base_model_dir",
@@ -3648,10 +3665,7 @@ GIGA_WORLD_0_INFERENCE_SPEC = ModelInferenceSpec(
             checkpoints=(
                 InferenceCheckpointRef(
                     role="giga_world_0_gr1_transformer",
-                    uri=(
-                        "${WORLDFOUNDRY_CKPT_DIR}/"
-                        "open-gigaai--GigaWorld-0-Video-GR1-2b/transformer"
-                    ),
+                    uri=("${WORLDFOUNDRY_CKPT_DIR}/open-gigaai--GigaWorld-0-Video-GR1-2b/transformer"),
                     status="required",
                 ),
                 InferenceCheckpointRef(
@@ -3661,26 +3675,15 @@ GIGA_WORLD_0_INFERENCE_SPEC = ModelInferenceSpec(
                 ),
                 InferenceCheckpointRef(
                     role="wan_diffusers_vae",
-                    uri=(
-                        "${WORLDFOUNDRY_CKPT_DIR}/"
-                        "Wan-AI--Wan2.1-T2V-1.3B-Diffusers/vae"
-                    ),
+                    uri=("${WORLDFOUNDRY_CKPT_DIR}/Wan-AI--Wan2.1-T2V-1.3B-Diffusers/vae"),
                     status="required",
                 ),
             ),
             load_kwargs={
                 "model_id": "giga-world-0",
-                "transformer_model_dir": (
-                    "${WORLDFOUNDRY_CKPT_DIR}/"
-                    "open-gigaai--GigaWorld-0-Video-GR1-2b/transformer"
-                ),
-                "text_encoder_model_dir": (
-                    "${WORLDFOUNDRY_CKPT_DIR}/google-t5--t5-11b-encoder"
-                ),
-                "vae_model_dir": (
-                    "${WORLDFOUNDRY_CKPT_DIR}/"
-                    "Wan-AI--Wan2.1-T2V-1.3B-Diffusers/vae"
-                ),
+                "transformer_model_dir": ("${WORLDFOUNDRY_CKPT_DIR}/open-gigaai--GigaWorld-0-Video-GR1-2b/transformer"),
+                "text_encoder_model_dir": ("${WORLDFOUNDRY_CKPT_DIR}/google-t5--t5-11b-encoder"),
+                "vae_model_dir": ("${WORLDFOUNDRY_CKPT_DIR}/Wan-AI--Wan2.1-T2V-1.3B-Diffusers/vae"),
             },
             aliases=("default", "official", "gr1"),
             notes=(
@@ -3719,10 +3722,7 @@ GIGA_WORLD_0_INFERENCE_SPEC = ModelInferenceSpec(
                     kind="path",
                     target="load_kwargs",
                     required=True,
-                    default=(
-                        "${WORLDFOUNDRY_CKPT_DIR}/"
-                        "open-gigaai--GigaWorld-0-Video-GR1-2b/transformer"
-                    ),
+                    default=("${WORLDFOUNDRY_CKPT_DIR}/open-gigaai--GigaWorld-0-Video-GR1-2b/transformer"),
                 ),
                 _field(
                     "text_encoder_model_dir",
@@ -3738,10 +3738,7 @@ GIGA_WORLD_0_INFERENCE_SPEC = ModelInferenceSpec(
                     kind="path",
                     target="load_kwargs",
                     required=True,
-                    default=(
-                        "${WORLDFOUNDRY_CKPT_DIR}/"
-                        "Wan-AI--Wan2.1-T2V-1.3B-Diffusers/vae"
-                    ),
+                    default=("${WORLDFOUNDRY_CKPT_DIR}/Wan-AI--Wan2.1-T2V-1.3B-Diffusers/vae"),
                 ),
                 _field(
                     "attention_backend",
@@ -3995,7 +3992,13 @@ CTRL_WORLD_INFERENCE_SPEC = ModelInferenceSpec(
                     choices=("stationary", "forward", "backward", "left", "right", "up", "down", "open", "close"),
                 ),
                 _field("action_distance", "XYZ Distance (metres)", kind="number", target="call_kwargs", default=0.08),
-                _field("action_scale", "Smoke Normalized Delta", kind="number", target="call_kwargs", description="Only used with synthetic-zero-smoke conditioning."),
+                _field(
+                    "action_scale",
+                    "Smoke Normalized Delta",
+                    kind="number",
+                    target="call_kwargs",
+                    description="Only used with synthetic-zero-smoke conditioning.",
+                ),
                 _field("height", "Per-View Height", kind="integer", target="call_kwargs", default=192),
                 _field("width", "Per-View Width", kind="integer", target="call_kwargs", default=320),
                 _field("num_frames", "Frames", kind="integer", target="call_kwargs", default=5),
@@ -4188,16 +4191,11 @@ MIRA_INFERENCE_SPEC = ModelInferenceSpec(
                     kind="json",
                     target="load_kwargs",
                     default=(),
-                    description=(
-                        "JSON segments such as [{\"player\":0,\"keys\":[\"W\",\"D\"],"
-                        "\"start\":0,\"frames\":20}]."
-                    ),
+                    description=('JSON segments such as [{"player":0,"keys":["W","D"],"start":0,"frames":20}].'),
                 ),
                 _field("seed", "Seed", kind="integer", target="load_kwargs", default=42),
                 _field("clip_index", "Dataset Clip", kind="integer", target="load_kwargs", default=0),
-                _field(
-                    "n_context_frames", "Context Frames", kind="integer", target="load_kwargs", default=38
-                ),
+                _field("n_context_frames", "Context Frames", kind="integer", target="load_kwargs", default=38),
                 _field(
                     "num_unrolled_frames",
                     "Generated Latent Frames",
@@ -4205,9 +4203,7 @@ MIRA_INFERENCE_SPEC = ModelInferenceSpec(
                     target="load_kwargs",
                     default=20,
                 ),
-                _field(
-                    "n_diffusion_steps", "Diffusion Steps", kind="integer", target="load_kwargs", default=10
-                ),
+                _field("n_diffusion_steps", "Diffusion Steps", kind="integer", target="load_kwargs", default=10),
                 _field(
                     "schedule_type",
                     "Schedule",
@@ -4217,16 +4213,10 @@ MIRA_INFERENCE_SPEC = ModelInferenceSpec(
                 ),
                 _field("noise_level", "Cache Noise", kind="number", target="load_kwargs", default=0.0),
                 _field("compile", "Compile Model", kind="boolean", target="load_kwargs", default=False),
-                _field(
-                    "overlay_actions", "Overlay Actions", kind="boolean", target="load_kwargs", default=True
-                ),
-                _field(
-                    "generated_only", "Generated Frames Only", kind="boolean", target="load_kwargs", default=False
-                ),
+                _field("overlay_actions", "Overlay Actions", kind="boolean", target="load_kwargs", default=True),
+                _field("generated_only", "Generated Frames Only", kind="boolean", target="load_kwargs", default=False),
                 _field("plan_only", "Plan Only", kind="boolean", target="call_kwargs", default=False),
-                _field(
-                    "timeout_seconds", "Timeout Seconds", kind="integer", target="call_kwargs", default=21600
-                ),
+                _field("timeout_seconds", "Timeout Seconds", kind="integer", target="call_kwargs", default=21600),
             ),
             outputs=(
                 _artifact("video", "video", required=True, preview=True),
@@ -4502,8 +4492,7 @@ EGOWM_INFERENCE_SPEC = ModelInferenceSpec(
                     target="call_kwargs",
                     description="For 3dof, supply normalized_actions with one [x, y, yaw] row per generated frame, paired with the initial image.",
                 ),
-                _field("variant", "Checkpoint Variant", kind="string", target="call_kwargs",
-                       choices=("25dof", "3dof")),
+                _field("variant", "Checkpoint Variant", kind="string", target="call_kwargs", choices=("25dof", "3dof")),
                 _field(
                     "checkpoint_path",
                     "EgoWM Checkpoint",
@@ -4526,9 +4515,16 @@ EGOWM_INFERENCE_SPEC = ModelInferenceSpec(
                 _field("height", "Height", kind="integer", target="call_kwargs", default=512),
                 _field("width", "Width", kind="integer", target="call_kwargs", default=512),
                 _field("motion_bucket_id", "Motion Bucket", kind="integer", target="call_kwargs", default=180),
-                _field("smoke_synthetic", "Synthetic Smoke Test Only", kind="boolean", target="call_kwargs", default=False),
-                _field("action_scale", "3-DoF Action Offset", kind="number", target="call_kwargs",
-                       description="Constant normalized x offset for a 3dof smoke test; paired inference uses actions_path."),
+                _field(
+                    "smoke_synthetic", "Synthetic Smoke Test Only", kind="boolean", target="call_kwargs", default=False
+                ),
+                _field(
+                    "action_scale",
+                    "3-DoF Action Offset",
+                    kind="number",
+                    target="call_kwargs",
+                    description="Constant normalized x offset for a 3dof smoke test; paired inference uses actions_path.",
+                ),
                 _field("plan_only", "Plan Only", kind="boolean", target="call_kwargs", default=False),
                 _field("timeout_seconds", "Timeout Seconds", kind="integer", target="call_kwargs", default=21600),
             ),
@@ -4666,8 +4662,14 @@ HMA_INFERENCE_SPEC = ModelInferenceSpec(
                     default="right",
                     choices=("right", "left", "down", "up"),
                 ),
-                _field("action_scale", "Smoke Action Scale", kind="number", target="call_kwargs", default=0.05,
-                       description="Repeated raw LangTable 2D delta in the selected direction; ignored for trajectory_path."),
+                _field(
+                    "action_scale",
+                    "Smoke Action Scale",
+                    kind="number",
+                    target="call_kwargs",
+                    default=0.05,
+                    description="Repeated raw LangTable 2D delta in the selected direction; ignored for trajectory_path.",
+                ),
                 _field("fps", "FPS", kind="integer", target="call_kwargs", default=2),
                 _field("seed", "Seed", kind="integer", target="call_kwargs", default=42),
                 _field("plan_only", "Plan Only", kind="boolean", target="call_kwargs", default=False),
@@ -5024,9 +5026,7 @@ ROLLING_FORCING_INFERENCE_SPEC = ModelInferenceSpec(
                 "save_with_index": True,
             },
             aliases=("default", "official", "ema"),
-            notes=(
-                "Uses the official five-step DMD checkpoint and three-latent-frame rolling block.",
-            ),
+            notes=("Uses the official five-step DMD checkpoint and three-latent-frame rolling block.",),
         ),
     ),
     tasks=(
@@ -5188,6 +5188,7 @@ UNI3C_INFERENCE_SPEC = ModelInferenceSpec(
     ),
 )
 
+
 def _ltx_ic_lora_v2v_inference_spec(
     model_id: str,
     base_repo: str,
@@ -5221,11 +5222,18 @@ def _ltx_ic_lora_v2v_inference_spec(
                 inputs=(
                     _field("prompt", "Prompt", target="prompt", required=True),
                     _field(
-                        "input_path", "Control Video", kind="path", target="input_path", required=True,
+                        "input_path",
+                        "Control Video",
+                        kind="path",
+                        target="input_path",
+                        required=True,
                         description=f"A {control_label.lower()} control video, not ordinary RGB footage.",
                     ),
                     _field(
-                        "control_type", "Control Type", required=True, choices=control_types,
+                        "control_type",
+                        "Control Type",
+                        required=True,
+                        choices=control_types,
                         description="Type of control encoded in the supplied video.",
                     ),
                     _field("num_frames", "Frames", kind="integer", default=121),
@@ -5249,15 +5257,22 @@ def _ltx_ic_lora_v2v_inference_spec(
                 ),
             ),
         ),
-        notes=("An explicit control type and matching versioned IC-LoRA are required; RGB source video is not a control video.",),
+        notes=(
+            "An explicit control type and matching versioned IC-LoRA are required; RGB source video is not a control video.",
+        ),
     )
 
 
 LTX2_V2V_INFERENCE_SPEC = _ltx_ic_lora_v2v_inference_spec(
-    "ltx-2-v2v", "Lightricks/LTX-2", "Lightricks/LTX-2-19b-IC-LoRA-Pose-Control", ("pose",),
+    "ltx-2-v2v",
+    "Lightricks/LTX-2",
+    "Lightricks/LTX-2-19b-IC-LoRA-Pose-Control",
+    ("pose",),
 )
 LTX23_V2V_INFERENCE_SPEC = _ltx_ic_lora_v2v_inference_spec(
-    "ltx-2.3-v2v", "Lightricks/LTX-2.3", "Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control",
+    "ltx-2.3-v2v",
+    "Lightricks/LTX-2.3",
+    "Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control",
     ("canny", "depth", "pose"),
 )
 
@@ -5265,6 +5280,9 @@ LTX23_V2V_INFERENCE_SPEC = _ltx_ic_lora_v2v_inference_spec(
 _MODEL_INFERENCE_SPECS: dict[str, ModelInferenceSpec] = {
     "hyperflow": HYPERFLOW_INFERENCE_SPEC,
     RT1_INFERENCE_SPEC.model_family_id: RT1_INFERENCE_SPEC,
+    DREAMDOJO_STUDENT_INFERENCE_SPEC.model_family_id: DREAMDOJO_STUDENT_INFERENCE_SPEC,
+    MATRIX_GAME4_EGYPT_INFERENCE_SPEC.model_family_id: MATRIX_GAME4_EGYPT_INFERENCE_SPEC,
+    WONDERWORLD_INFERENCE_SPEC.model_family_id: WONDERWORLD_INFERENCE_SPEC,
     ADAWORLD_INFERENCE_SPEC.model_family_id: ADAWORLD_INFERENCE_SPEC,
     UNIWORLD_VIEW_INFERENCE_SPEC.model_family_id: UNIWORLD_VIEW_INFERENCE_SPEC,
     **INTERACTIVE_INFERENCE_SPECS,
@@ -5282,6 +5300,7 @@ _MODEL_INFERENCE_SPECS: dict[str, ModelInferenceSpec] = {
     SHOTSTREAM_INFERENCE_SPEC.model_family_id: SHOTSTREAM_INFERENCE_SPEC,
     LINGBOT_WORLD_INFERENCE_SPEC.model_family_id: LINGBOT_WORLD_INFERENCE_SPEC,
     LINGBOT_WORLD_V2_INFERENCE_SPEC.model_family_id: LINGBOT_WORLD_V2_INFERENCE_SPEC,
+    LINGBOT_WORLD_V2_SMALL_INFERENCE_SPEC.model_family_id: LINGBOT_WORLD_V2_SMALL_INFERENCE_SPEC,
     ROLLING_FORCING_INFERENCE_SPEC.model_family_id: ROLLING_FORCING_INFERENCE_SPEC,
     STARWM_INFERENCE_SPEC.model_family_id: STARWM_INFERENCE_SPEC,
     WARP_AS_HISTORY_INFERENCE_SPEC.model_family_id: WARP_AS_HISTORY_INFERENCE_SPEC,

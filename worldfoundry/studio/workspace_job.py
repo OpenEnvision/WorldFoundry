@@ -7,16 +7,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from fastapi import HTTPException
-
 from worldfoundry.studio.inference.catalog import find_entry
 from worldfoundry.studio.inference.dispatch import dispatch_spec_for_inference, run_manager_payload_in_conda
 from worldfoundry.studio.inference.execution import StudioManager
-from worldfoundry.studio.serving.workspace import (
-    SETTINGS,
+from worldfoundry.studio.inference.requests import (
+    DEFAULT_SETTINGS,
     JobCreateRequest,
-    _call_param_names,
-    _inference_run_kwargs,
+    build_inference_run_kwargs,
+    call_param_names,
 )
 
 
@@ -44,8 +42,6 @@ def _parse_json_mapping(value: str | None, *, label: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"{label} must be a JSON object")
     return dict(payload)
-
-
 
 
 def _apply_size_param(params: dict[str, Any], value: str | None) -> None:
@@ -80,13 +76,13 @@ def _build_infer_payload(args: argparse.Namespace) -> JobCreateRequest:
     if args.interactions:
         params["interactions"] = args.interactions
 
-    call_param_names = _call_param_names(entry)
+    call_names = call_param_names(entry)
     call_kwargs = _parse_json_mapping(args.call_json, label="call-json")
     load_kwargs = _parse_json_mapping(args.load_json, label="load-json")
     if args.guidance_scale not in {"", None}:
         guidance_value = _float_value(args.guidance_scale)
         guidance_param = next(
-            (name for name in ("guidance_scale", "cfg_scale", "guidance", "scale") if name in call_param_names),
+            (name for name in ("guidance_scale", "cfg_scale", "guidance", "scale") if name in call_names),
             None,
         )
         if guidance_param is None:
@@ -94,7 +90,7 @@ def _build_infer_payload(args: argparse.Namespace) -> JobCreateRequest:
         else:
             call_kwargs[guidance_param] = guidance_value
     if args.size:
-        if "size" in call_param_names:
+        if "size" in call_names:
             call_kwargs["size"] = args.size
         else:
             _apply_size_param(params, args.size)
@@ -128,7 +124,7 @@ def _build_infer_payload(args: argparse.Namespace) -> JobCreateRequest:
     for key, value in optional_call_values.items():
         if value in {"", None}:
             continue
-        if key in call_param_names:
+        if key in call_names:
             call_kwargs[key] = value
 
     input_path = _blank_to_none(args.input_path) or _blank_to_none(args.video_path) or ""
@@ -144,7 +140,7 @@ def _build_infer_payload(args: argparse.Namespace) -> JobCreateRequest:
         backend=args.backend or "auto",
         endpoint=args.endpoint or "",
         api_key=args.api_key or "",
-        device=args.device or str(SETTINGS.get("device") or "cuda"),
+        device=args.device or str(DEFAULT_SETTINGS.get("device") or "cuda"),
         params=params,
         call_kwargs=call_kwargs,
         load_kwargs=load_kwargs,
@@ -153,7 +149,7 @@ def _build_infer_payload(args: argparse.Namespace) -> JobCreateRequest:
 
 def _run_infer(args: argparse.Namespace) -> int:
     payload = _build_infer_payload(args)
-    entry, run_kwargs = _inference_run_kwargs(payload)
+    entry, run_kwargs = build_inference_run_kwargs(payload)
     workspace_root = str(Path(args.output_dir).expanduser())
     backend = str(run_kwargs.get("backend") or "auto")
     if backend == "auto" and not entry.supports_from_pretrained and entry.supports_api_init:
@@ -236,9 +232,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return int(args.func(args))
-    except HTTPException as exc:
-        print(str(exc.detail), file=sys.stderr)
-        return int(exc.status_code or 1)
     except (RuntimeError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2

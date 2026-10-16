@@ -391,9 +391,9 @@ _PROVIDER_RUNTIME_EVENT_NAMES = (
 )
 _PROVIDER_RUNTIME: dict[str, dict[str, int]] = {}
 _PROVIDER_RUNTIME_LOCK = threading.Lock()
-_PROVIDER_COMPILE_RECEIPT_SINK: ContextVar[
-    MutableMapping[str, int] | None
-] = ContextVar("worldfoundry_attention_compile_receipt_sink", default=None)
+_PROVIDER_COMPILE_RECEIPT_SINK: ContextVar[MutableMapping[str, int] | None] = ContextVar(
+    "worldfoundry_attention_compile_receipt_sink", default=None
+)
 
 
 @contextmanager
@@ -478,10 +478,7 @@ def attention_provider_runtime_report() -> dict[str, dict[str, int]]:
     """
 
     with _PROVIDER_RUNTIME_LOCK:
-        return {
-            provider: dict(counters)
-            for provider, counters in sorted(_PROVIDER_RUNTIME.items())
-        }
+        return {provider: dict(counters) for provider, counters in sorted(_PROVIDER_RUNTIME.items())}
 
 
 def reset_attention_provider_runtime() -> None:
@@ -502,6 +499,7 @@ def _invoke_attention_provider(
     out_pattern: str,
     dims,
     scale,
+    backend_options=None,
 ) -> torch.Tensor:
     """Invoke one qualified non-Torch provider or fail for an unwired name."""
 
@@ -511,6 +509,12 @@ def _invoke_attention_provider(
         q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, "b n s d", dims)
         output = native_cudnn_fp8_sdpa(q, k, v, scale=scale)
         return rearrange_out(output, out_pattern, "b n s d", dims)
+    if selected == "scaled_int8_fp8":
+        from worldfoundry.core.attention.backends.scaled_int8_fp8 import scaled_int8_fp8_attention
+
+        q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, "b s n d", dims)
+        output = scaled_int8_fp8_attention(q, k, v, scale=scale, **(backend_options or {}))
+        return rearrange_out(output, out_pattern, "b s n d", dims)
     if selected == "triton_tma":
         from worldfoundry.core.attention.backends.triton_tma import triton_tma_sdpa
 
@@ -532,9 +536,7 @@ def _invoke_attention_provider(
     # Gives VSA/FlexBlock/V-MoBA/SLA/SageSLA an actionable model-contract
     # error. Any other resolved-but-unwired provider is an invariant breach.
     require_generic_attention_backend(selected)
-    raise RuntimeError(
-        f"Attention backend {selected!r} resolved as executable but has no generic provider callable"
-    )
+    raise RuntimeError(f"Attention backend {selected!r} resolved as executable but has no generic provider callable")
 
 
 def _invoke_attention_provider_audited(selected: str, *args, **kwargs) -> torch.Tensor:
@@ -627,8 +629,8 @@ def attention_forward(
         ``clear_attention_dispatch_cache``.
     """
     preferred = ATTENTION_IMPLEMENTATION if backend is None else normalize_attention_backend(backend)
-    if backend_options and preferred != "sol_attn":
-        raise ValueError("backend_options are currently supported only for explicit Sol-Attn")
+    if backend_options and preferred not in {"sol_attn", "scaled_int8_fp8"}:
+        raise ValueError("backend_options require explicit Sol-Attn or scaled_int8_fp8")
     # Validate before compatibility/mask short-circuiting. An explicit sparse
     # request must never look successful merely because it silently took SDPA.
     require_generic_attention_backend(preferred)
@@ -648,13 +650,32 @@ def attention_forward(
         else:
             _record_provider_runtime("sol_attn", attempts=1, successes=1)
         return rearrange_out(output, out_pattern, "b s n d", dims)
-    if preferred in {"cudnn_fp8", "triton_tma"}:
+    if preferred in {"cudnn_fp8", "triton_tma", "scaled_int8_fp8"}:
         if compatibility_mode or attn_mask is not None:
             raise ValueError(f"Explicit {preferred} does not support attention masks or compatibility-mode fallback")
         return _invoke_uncompiled_attention_provider_audited(
-            preferred, q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale,
+            preferred,
+            q,
+            k,
+            v,
+            q_pattern,
+            k_pattern,
+            v_pattern,
+            out_pattern,
+            dims,
+            scale,
+            backend_options=backend_options,
         )
-    if compatibility_mode or (attn_mask is not None):
+    # Native-only dispatch has no external provider to probe or quarantine.
+    # Keep those Python locks and capability probes outside compiled compute.
+    if (
+        compatibility_mode
+        or attn_mask is not None
+        or (
+            torch.compiler.is_compiling()
+            and (preferred == "torch" or (preferred == "auto" and not _auto_attention_backends(q.device)))
+        )
+    ):
         return _invoke_torch_sdpa_audited(
             q,
             k,
@@ -992,11 +1013,7 @@ def attention_dispatch_report() -> dict[str, object]:
         "compute_capability": capability,
         "auto_priority": list(_auto_attention_backends(device)) or ["torch"],
         "native_sdpa_priority": list(native_sdpa_priority(device)) or ["pytorch-auto"],
-        "selection_cache": (
-            cache_info()._asdict()
-            if callable(cache_info)
-            else {"injected_selector": True}
-        ),
+        "selection_cache": (cache_info()._asdict() if callable(cache_info) else {"injected_selector": True}),
         "unavailable_backends": list(_unavailable_backends_snapshot()),
         "failed_signatures": len(_FAILED_ATTENTION_SIGNATURES),
         "provider_calls": attention_provider_runtime_report(),
@@ -1075,8 +1092,7 @@ def _is_unsupported_kernel_error(exc: RuntimeError) -> bool:
 def _warn_backend_fallback(selected: str, exc: BaseException) -> None:
     """Warn that ``selected`` failed and the next eligible backend will run."""
     warnings.warn(
-        f"Attention backend {selected!r} is unavailable for this workload; "
-        f"trying the next eligible backend: {exc}",
+        f"Attention backend {selected!r} is unavailable for this workload; trying the next eligible backend: {exc}",
         RuntimeWarning,
         stacklevel=3,
     )

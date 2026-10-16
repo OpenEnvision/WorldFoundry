@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 from dataclasses import dataclass
@@ -44,12 +43,6 @@ def resolve_dmd_contract_path(checkpoint_path: str | Path) -> Path:
     if path.suffix:
         return path.parent / DMD_TIMESTEP_CONTRACT_FILENAME
     return path / DMD_TIMESTEP_CONTRACT_FILENAME
-
-
-def _canonical_json(payload: Mapping[str, Any]) -> bytes:
-    return json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    ).encode("utf-8")
 
 
 def _require_exact_keys(
@@ -200,7 +193,6 @@ class DmdTimestepContract:
     normal_stages: tuple[tuple[DmdTimestepStep, ...], ...]
     empty_history_stages: tuple[tuple[DmdTimestepStep, ...], ...]
     student_scheduler: DmdSchedulerConfig
-    fingerprint: str
 
     def __post_init__(self) -> None:
         self._validate()
@@ -397,22 +389,14 @@ class DmdTimestepContract:
         path: str | Path,
         *,
         expected_latent_shape=None,
-        expected_fingerprint: str | None = None,
     ) -> "DmdTimestepContract":
         path = Path(path)
         source = (
             path if path.suffix.lower() == ".json" else resolve_dmd_contract_path(path)
         )
         document = json.loads(source.read_text(encoding="utf-8"))
-        if not isinstance(document, dict) or "fingerprint" not in document:
-            raise ValueError(f"Missing DMD contract fingerprint: {source}")
-        claimed = document.pop("fingerprint")
-        actual = hashlib.sha256(_canonical_json(document)).hexdigest()
-        if claimed != actual or (
-            expected_fingerprint is not None and actual != expected_fingerprint
-        ):
-            raise ValueError(f"DMD contract fingerprint mismatch: {source}")
-        # Hash the complete original document, including metadata unused by inference.
+        if not isinstance(document, dict):
+            raise ValueError(f"DMD contract must be a JSON object: {source}")
         student = document["student"]
         if student["condition_dtype"] != "float32":
             raise ValueError("DMD timestep conditions must use float32")
@@ -434,7 +418,6 @@ class DmdTimestepContract:
             student_scheduler=DmdSchedulerConfig.from_dict(
                 student["scheduler_provenance"]
             ),
-            fingerprint=actual,
         )
         if expected_latent_shape is not None and contract.latent_shape != tuple(
             expected_latent_shape

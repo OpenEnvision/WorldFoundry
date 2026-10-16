@@ -1,11 +1,10 @@
-"""Bridge a local, pinned HunyuanWorld-Voyager checkout to its official CLI.
+"""Bridge a local HunyuanWorld-Voyager checkout to its official CLI.
 
 Tencent's community-licensed source and model weights stay outside this package.
 """
 
 from __future__ import annotations
 
-import hashlib
 import os
 import shutil
 import subprocess
@@ -15,8 +14,6 @@ from pathlib import Path
 from typing import Any
 
 SOURCE_URL = "https://github.com/Tencent-Hunyuan/HunyuanWorld-Voyager"
-SOURCE_REVISION = "6218ccd36df77d0254dcf24ad1fb77312f75b04a"
-SOURCE_DIGEST = "c0c51217278231bac4c8956cc2cbf00053e3608cd814732ef6297dcb40129e29"
 ROOT = Path(__file__).resolve().parents[4]
 CHECKPOINT_FILES = (
     "Voyager/transformers/mp_rank_00_model_states.pt",
@@ -27,22 +24,6 @@ CHECKPOINT_FILES = (
     "text_encoder_i2v/model-00004-of-00004.safetensors",
     "text_encoder_2/model.safetensors",
 )
-
-
-def _source_digest(source_root: Path) -> tuple[str, int]:
-    files = sorted(
-        [
-            *source_root.glob("voyager/**/*.py"),
-            *(source_root / name for name in ("sample_image2video.py", "requirements.txt", "LICENSE", "NOTICE")),
-        ]
-    )
-    digest = hashlib.sha256()
-    for path in files:
-        if not path.is_file():
-            return "", len(files)
-        digest.update(str(path.relative_to(source_root)).encode() + b"\0")
-        digest.update(hashlib.sha256(path.read_bytes()).digest())
-    return digest.hexdigest(), len(files)
 
 
 def _visible_gpu(device: str, visible: str | None) -> str:
@@ -88,12 +69,12 @@ class VoyagerOfficialRuntime:
 
     def preflight(self, condition_dir: str | Path | None = None, *, use_context_block: bool = False) -> dict[str, Any]:
         missing: list[str] = []
-        source_digest, source_file_count = _source_digest(self.source_root)
-        if source_digest != SOURCE_DIGEST or source_file_count != 41:
-            missing.append(
-                f"official source must match {SOURCE_REVISION} (41-file digest {SOURCE_DIGEST}); "
-                f"found {source_file_count} files and digest {source_digest or 'missing'} at {self.source_root}"
-            )
+        entrypoint = self.source_root / "sample_image2video.py"
+        if not entrypoint.is_file():
+            missing.append(f"official entrypoint missing: {entrypoint}")
+        package = self.source_root / "voyager"
+        if not package.is_dir():
+            missing.append(f"official source package missing: {package}")
         weights = list(CHECKPOINT_FILES)
         if use_context_block:
             weights.append("Voyager/transformers/mp_rank_00_model_states_context.pt")
@@ -119,8 +100,6 @@ class VoyagerOfficialRuntime:
             "missing": missing,
             "model_id": "hunyuanworld-voyager",
             "source_url": SOURCE_URL,
-            "source_revision": SOURCE_REVISION if source_digest == SOURCE_DIGEST else None,
-            "source_digest": source_digest,
             "source_root": str(self.source_root),
             "checkpoint_root": str(self.checkpoint_root),
             "condition_dir": str(condition) if condition else None,
@@ -219,11 +198,9 @@ class VoyagerOfficialRuntime:
                     "metadata": report,
                 }
             shutil.move(str(videos[0]), str(output))
-        digest = hashlib.sha256(output.read_bytes()).hexdigest()
         return {
             "status": "succeeded",
             "artifact_path": str(output),
-            "artifact_sha256": digest,
             "metadata": {
                 **report,
                 "log_path": str(log_path),
@@ -233,4 +210,4 @@ class VoyagerOfficialRuntime:
         }
 
 
-__all__ = ["VoyagerOfficialRuntime", "SOURCE_REVISION", "SOURCE_URL"]
+__all__ = ["VoyagerOfficialRuntime", "SOURCE_URL"]

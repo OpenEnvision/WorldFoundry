@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
 
 
@@ -482,7 +481,6 @@ class BeingH05Runtime:
             "model_id": "being-h05",
             "artifact_kind": "action_trace",
             "artifact_path": str(target),
-            "artifact_sha256": file_sha256(target),
             "duration_seconds": round(time.monotonic() - start, 3),
             "runtime": trace["runtime"],
             "prediction": trace["prediction"],

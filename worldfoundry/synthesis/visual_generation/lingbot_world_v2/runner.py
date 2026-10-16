@@ -14,7 +14,7 @@ import torch.distributed as dist
 from PIL import Image
 
 from worldfoundry.base_models.diffusion_model.recipes.wan_configs.lingbot_world_v2 import (
-    LINGBOT_WORLD_V2_CONFIG,
+    LINGBOT_WORLD_V2_CONFIGS,
     SUPPORTED_SIZES,
 )
 from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
@@ -25,15 +25,18 @@ from .inference import LingBotWorldV2Inference
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="WorldFoundry LingBot-World-V2 causal-fast runner")
     parser.add_argument("--checkpoint-dir", required=True)
+    parser.add_argument("--model-id", choices=sorted(LINGBOT_WORLD_V2_CONFIGS), default="lingbot-world-v2")
+    parser.add_argument("--shared-assets-path")
+    parser.add_argument("--attention-backend", choices=("auto", "torch", "scaled_int8_fp8"), default="auto")
     parser.add_argument("--image", required=True)
     parser.add_argument("--action-path", required=True)
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--size", choices=sorted(SUPPORTED_SIZES), default="480*832")
-    parser.add_argument("--frame-num", type=int, default=361)
+    parser.add_argument("--frame-num", type=int)
     parser.add_argument("--chunk-size", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--sample-shift", type=float, default=10.0)
+    parser.add_argument("--sample-shift", type=float)
     parser.add_argument("--local-attn-size", type=int, default=18)
     parser.add_argument("--sink-size", type=int, default=6)
     parser.add_argument("--max-attention-size", type=int)
@@ -42,6 +45,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--t5-cpu", action="store_true")
     parser.add_argument("--offload-model", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--convert-model-dtype", action="store_true")
+    parser.add_argument("--vae-streaming-compile", action="store_true")
     return parser
 
 
@@ -60,8 +64,11 @@ def main() -> None:
         dist.init_process_group("nccl", init_method="env://")
     elif args.t5_fsdp or args.dit_fsdp:
         raise ValueError("FSDP requires a multi-process launch.")
-    if LINGBOT_WORLD_V2_CONFIG.num_heads % world_size:
-        raise ValueError(f"num_heads={LINGBOT_WORLD_V2_CONFIG.num_heads} is not divisible by world_size={world_size}.")
+    config = LINGBOT_WORLD_V2_CONFIGS[args.model_id]
+    if args.frame_num is None:
+        args.frame_num = int(config.get("frame_num", 361))
+    if config.num_heads % world_size:
+        raise ValueError(f"num_heads={config.num_heads} is not divisible by world_size={world_size}.")
     if args.frame_num < 5 or (args.frame_num - 1) % 4:
         raise ValueError("frame_num must be at least 5 and follow the 4n+1 layout.")
     latent_frames = (args.frame_num - 1) // 4 + 1
@@ -94,6 +101,10 @@ def main() -> None:
         convert_model_dtype=args.convert_model_dtype,
         local_attn_size=args.local_attn_size,
         sink_size=args.sink_size,
+        model_id=args.model_id,
+        shared_assets_path=args.shared_assets_path,
+        attention_backend=args.attention_backend,
+        vae_streaming_compile=args.vae_streaming_compile,
     )
     video = pipeline.generate(
         args.prompt,
@@ -111,7 +122,7 @@ def main() -> None:
         save_image_or_video_tensor(
             video,
             args.output,
-            fps=LINGBOT_WORLD_V2_CONFIG.sample_fps,
+            fps=config.sample_fps,
             value_range=(-1.0, 1.0),
         )
         logging.info("Saved video: %s", args.output)

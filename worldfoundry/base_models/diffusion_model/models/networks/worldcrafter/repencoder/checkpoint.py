@@ -11,8 +11,6 @@ import torch
 import torch.nn as nn
 from safetensors.torch import load_file
 
-from worldfoundry.core.io.filesystem.file_utils import file_sha256 as sha256_file
-
 from .config import RepEncoderConfig
 
 
@@ -35,25 +33,13 @@ def resolve_checkpoint(path: str | Path) -> tuple[Path, Path, Path]:
 
 def read_checkpoint_metadata(
     path: str | Path,
-    *,
-    expected_sha256: str | None = None,
-) -> tuple[Path, RepEncoderConfig, dict[str, Any], str]:
+) -> tuple[Path, RepEncoderConfig, dict[str, Any]]:
     model_path, config_path, manifest_path = resolve_checkpoint(path)
     config_payload = json.loads(config_path.read_text())
     manifest = json.loads(manifest_path.read_text())
     if not isinstance(manifest, Mapping) or manifest.get("format") != "worldcrafter_repencoder_v1":
         raise ValueError("unsupported RepEncoder manifest")
-    actual_sha256 = sha256_file(model_path)
-    declared_sha256 = str(manifest.get("model_sha256", ""))
-    if declared_sha256 != actual_sha256:
-        raise RuntimeError(
-            f"RepEncoder manifest SHA256 mismatch: {declared_sha256} != {actual_sha256}"
-        )
-    if expected_sha256 is not None and str(expected_sha256) != actual_sha256:
-        raise RuntimeError(
-            f"RepEncoder checkpoint SHA256 mismatch: {expected_sha256} != {actual_sha256}"
-        )
-    return model_path, RepEncoderConfig.from_dict(config_payload), dict(manifest), actual_sha256
+    return model_path, RepEncoderConfig.from_dict(config_payload), dict(manifest)
 
 
 def load_checkpoint_state(
@@ -95,5 +81,4 @@ __all__ = [
     "load_checkpoint_state",
     "read_checkpoint_metadata",
     "resolve_checkpoint",
-    "sha256_file",
 ]

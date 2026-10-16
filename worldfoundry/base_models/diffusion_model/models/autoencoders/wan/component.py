@@ -429,6 +429,7 @@ class WanVideoDecoder:
         channels_last_requested: bool = False,
         channels_last_effective: int = 0,
         conv2d_count: int = 0,
+        streaming_compile: bool = False,
     ) -> None:
         self.vae = vae
         self.device = device
@@ -475,6 +476,9 @@ class WanVideoDecoder:
         self.channels_last_requested = bool(channels_last_requested)
         self.channels_last_effective = int(channels_last_effective)
         self.conv2d_count = int(conv2d_count)
+        self.streaming_compile = bool(streaming_compile)
+        self._streaming_decoder = None
+        self._streaming_decode_calls = 0
         self._decode_calls = 0
         self._dense_decode_calls = 0
         self._spatial_tiled_decode_calls = 0
@@ -550,8 +554,11 @@ class WanVideoDecoder:
     def encode_chunk(self, pixels: torch.Tensor, *, state: dict, is_first_chunk=False) -> torch.Tensor:
         """Continue Wan2.1 encoding with separate caches from the decoder."""
 
+        from worldfoundry.core.execution.realtime.feature_cache import commit_feature_cache
+
         model = self.vae.model
-        pixels = pixels.to(device=self.device, dtype=self.dtype)
+        memory_format = torch.channels_last_3d if self.channels_last_3d_requested else torch.contiguous_format
+        pixels = pixels.to(device=self.device, dtype=self.dtype).contiguous(memory_format=memory_format)
         frames = pixels.shape[2]
         if not is_first_chunk and frames % 4:
             raise ValueError("continuing Wan streaming encode requires groups of four pixel frames")
@@ -562,9 +569,11 @@ class WanVideoDecoder:
                 start, end = (0, 1) if index == 0 else (1 + 4 * (index - 1), 1 + 4 * index)
             else:
                 start, end = 4 * index, 4 * (index + 1)
-            value, state["encode"], _ = model.encoder(
-                pixels[:, :, start:end], feat_cache=state["encode"], feat_idx=[0],
+            value, updated, _ = model.encoder(
+                pixels[:, :, start:end].contiguous(memory_format=memory_format),
+                feat_cache=list(state["encode"]), feat_idx=[0],
             )
+            commit_feature_cache(state["encode"], updated)
             encoded.append(value)
         mean = model.conv1(torch.cat(encoded, dim=2)).chunk(2, dim=1)[0]
         offset, scale = (value.to(mean).view(1, self.vae.z_dim, 1, 1, 1) for value in self.vae.scale)
@@ -575,17 +584,18 @@ class WanVideoDecoder:
         """Continue causal Wan2.1 decode without retaining output frames on GPU."""
 
         del is_first_chunk
-        model = self.vae.model
-        latents = latents.to(device=self.device, dtype=self.dtype)
-        offset, scale = (value.to(latents).view(1, self.vae.z_dim, 1, 1, 1) for value in self.vae.scale)
-        value = model.conv2(latents / scale + offset)
-        decoded = []
-        for index in range(value.shape[2]):
-            pixels, state["decode"], _ = model.decoder(
-                value[:, :, index:index + 1], feat_cache=state["decode"], feat_idx=[0],
-            )
-            decoded.append(pixels)
-        return torch.cat(decoded, dim=2).float().clamp_(-1, 1)
+        from .streaming import decode_wan_chunk
+
+        if self._streaming_decoder is None:
+            self._streaming_decoder = self.vae.model.decoder
+            if self.streaming_compile:
+                self._streaming_decoder = torch.compile(
+                    self._streaming_decoder, dynamic=False, fullgraph=True, options={"triton.cudagraphs": False},
+                )
+        pixels = decode_wan_chunk(self.vae.model, self.vae.scale, latents, state["decode"],
+                                  channels_last_3d=self.channels_last_3d_requested, decoder=self._streaming_decoder)
+        self._streaming_decode_calls += latents.shape[2]
+        return pixels
 
     def reset_dtype(self) -> None:
         """Compatibility no-op; dtype placement belongs to RuntimePolicy."""
@@ -750,6 +760,7 @@ class WanVideoDecoder:
             "vae_temporal_chunk_size": self.temporal_chunk_size or False,
             "vae_parallel_degree": self.parallel_degree,
             "vae_offload": self.offload_requested,
+            "vae_streaming_compile": self.streaming_compile,
         }
         if self._parallel_tiled_decode_calls:
             decode_effective = "parallel-spatial-tiled"
@@ -800,6 +811,8 @@ class WanVideoDecoder:
             "quality_tier": "numerically-approximate" if approximate else "exact",
             "runtime": {
                 "window_id": self._decode_window,
+                "streaming_latent_decode_calls": self._streaming_decode_calls,
+                "streaming_compiled_decode_calls": self._streaming_decode_calls if self.streaming_compile else 0,
                 "vae_channels_last_3d_conv3d": self.channels_last_3d_effective,
                 "vae_conv3d_count": self.conv3d_count,
                 "vae_channels_last_conv2d": self.channels_last_effective,
@@ -1051,6 +1064,7 @@ def _load_wan_video_decoder(
         channels_last_requested=channels_last,
         channels_last_effective=layout_report.conv2d_converted,
         conv2d_count=layout_report.conv2d_total,
+        streaming_compile=policy.compile and policy.options.get("compile_scope", "full") == "full",
     )
     if fp8_calibration is not None:
         from ....optimizations.lightvae_fp8 import install_lightvae_fp8

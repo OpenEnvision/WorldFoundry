@@ -55,7 +55,7 @@ If a capability can serve a non-diffusion model, implement it in `worldfoundry/c
 
 ## Dependency rule
 
-Canonical files may depend on PyTorch, reusable `diffusers` model/operator primitives, and narrow framework-core utilities. `diffusers` is an allowed library dependency, but its Pipeline abstraction must not become a second runtime backend or ownership boundary. Canonical files must not import `diffsynth`, the legacy `diffsynth/`, `image/`, or `video/` children, `worldfoundry.synthesis`, `worldfoundry.pipelines`, or `worldfoundry.evaluation`.
+Canonical files may depend on PyTorch, reusable `diffusers` model/operator primitives, and narrow framework-core utilities. `diffusers` is an allowed library dependency, but its Pipeline abstraction must not become a second runtime backend or ownership boundary. Canonical files must not import `diffsynth`, the legacy `diffsynth/`, `image/`, or `video/` children, `worldfoundry.synthesis`, `worldfoundry.pipelines`, `worldfoundry.studio`, `worldfoundry.operators`, or `worldfoundry.evaluation`. The boundary gate checks ordinary and lazy imports as well as literal registration targets.
 
 Migration is one-way:
 
@@ -64,6 +64,8 @@ product compatibility boundary -> canonical diffusion_model root -> core / PyTor
 ```
 
 The reverse edge is forbidden. Once every caller of a legacy implementation has moved, delete that implementation instead of maintaining a second copy.
+
+WorldPlay2's Wan network variants, HR/LR initialization, controls, expert adapters, and PDD scheduler belong to their canonical roles; its recipes select `runners/compressed_memory.py`. HelixWorld's LTX variants and camera/action encoders compose through `recipes/helixworld.py` and `runners/joint_chunked.py`. Wan Animate's pose-conditioning renderer lives beside its encoder in `models/encoders/wan/variants/animate/render.py`. Studio consumes model outputs; model conditioning does not depend on Studio.
 
 ## Component contracts
 
@@ -97,6 +99,8 @@ Extensions are installed on a runner instance and identified by a unique `extens
 ## Adding or migrating a model
 
 Port the smallest inference slice from the official repository: checkpoint-compatible network definitions, required encoders and autoencoder, numerical schedule, and preprocessing/postprocessing whose behavior affects results. Map those parts to native contracts and create one recipe per public model ID. Reuse an existing canonical component when its checkpoint semantics match; do not copy it into the family package.
+
+Choose the smallest integration delta: configuration and checkpoint bindings for an existing graph, a checkpoint-visible network or condition variant when needed, or a reusable framework strategy for a genuinely different execution algorithm. Shared components and loaders keep their canonical owners. Serving adaptation is a separate boundary: request/session isolation, cancellation, output cadence, backpressure, and cleanup need application-level evidence.
 
 Then connect the recipe to the existing public pipeline and catalog route, validate deterministic low-resolution inference, and compare a real checkpoint output against the official implementation. Only after callers use the native path should the old implementation become a one-way compatibility re-export and then be removed. A metadata-only recipe or a toy test is not evidence that a real model has completed migration.
 

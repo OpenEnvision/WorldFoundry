@@ -1,0 +1,47 @@
+{
+  "model_id": "matrix-game-2",
+  "model_ref": "/private/checkpoints/Matrix-Game-2.0",
+  "image": "/private/inputs/matrix-game-2.png",
+  "prompt": "",
+  "seed": 42,
+  "gpu": 0,
+  "repeats": 3,
+  "warmup_steps": 1,
+  "steps": 6,
+  "timeout_ms": 300000,
+  "environment": {
+    "WORLDFOUNDRY_REALTIME_NVENC": "0",
+    "WORLDFOUNDRY_REALTIME_PRESENTATION_MODE": "hold-last",
+    "WORLDFOUNDRY_REALTIME_FRAME_QUEUE_POLICY": "ordered-quality",
+    "WORLDFOUNDRY_REALTIME_WARMUP_CHUNKS": "0",
+    "WORLDFOUNDRY_REALTIME_WEBSOCKET_ONLY": "0",
+    "OMP_NUM_THREADS": "2",
+    "MKL_NUM_THREADS": "2"
+  },
+  "thresholds": {
+    "min_chunks": 6,
+    "min_output_frames": 72,
+    "max_dropped_frames": 0
+  },
+  "delivery_thresholds": {
+    "max_reset_ms": 10000
+  },
+  "networks": [
+    {
+      "name": "clean",
+      "uplink": {"delay_ms": 0, "jitter_ms": 0, "rate_bps": 0, "loss": 0, "queue_ms": 250},
+      "downlink": {"delay_ms": 0, "jitter_ms": 0, "rate_bps": 0, "loss": 0, "queue_ms": 250}
+    },
+    {
+      "name": "limited-lossy",
+      "uplink": {"delay_ms": 60, "jitter_ms": 10, "rate_bps": 600000, "loss": 0.005, "queue_ms": 250},
+      "downlink": {"delay_ms": 60, "jitter_ms": 10, "rate_bps": 1500000, "loss": 0.015, "queue_ms": 250}
+    },
+    {
+      "name": "interruption",
+      "uplink": {"delay_ms": 0, "jitter_ms": 0, "rate_bps": 0, "loss": 0, "queue_ms": 250},
+      "downlink": {"delay_ms": 0, "jitter_ms": 0, "rate_bps": 0, "loss": 0, "queue_ms": 250},
+      "outage": {"after_steps": 2, "duration_ms": 1500}
+    }
+  ]
+}

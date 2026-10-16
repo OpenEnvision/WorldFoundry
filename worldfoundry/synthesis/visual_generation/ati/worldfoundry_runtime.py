@@ -9,7 +9,6 @@ from typing import Any, Mapping
 
 import numpy as np
 
-from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import hfd_root_path
 
 DEFAULT_ATI_REPO = "bytedance-research/ATI"
@@ -261,7 +260,6 @@ class ATIRuntime:
             "artifact_path": str(artifact),
             "generated_video_path": str(artifact),
             "video": video,
-            "video_sha256": file_sha256(artifact),
             "runtime_plan": self.plan(),
         }
         return result if return_dict else video

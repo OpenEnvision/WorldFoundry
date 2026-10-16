@@ -33,6 +33,7 @@ from worldfoundry.runtime.inference_catalog import (
     LINGBOT_VARIANT_BASE_CAM,
 )
 from worldfoundry.studio.inference.catalog import CatalogEntry, lingbot_world_fast_load_kwargs
+from worldfoundry.studio.inference.config import env_first
 from worldfoundry.studio.inference.execution import (
     IMAGE_EXTS,
     LINGBOT_VARIANT_FAST,
@@ -47,9 +48,6 @@ from worldfoundry.studio.inference.execution import (
     ensure_torchrun_lingbot_fast_control_group,
     shutdown_torchrun_lingbot_fast_runtime,
 )
-from worldfoundry.studio.ui.interfaces import interface_spec_for_entry
-from worldfoundry.studio.ui.launch_config import StudioLaunchConfig, launch_uses_lingbot_torchrun_rollout
-from worldfoundry.studio.inference.config import env_first
 from worldfoundry.studio.serving import (
     StudioServiceTelemetry,
     parse_byte_range,
@@ -58,10 +56,10 @@ from worldfoundry.studio.serving import (
     send_json_response,
     send_text_response,
 )
+from worldfoundry.studio.ui.interfaces import interface_spec_for_entry
+from worldfoundry.studio.ui.launch_config import StudioLaunchConfig, launch_uses_lingbot_torchrun_rollout
 
-WORLD_REFERENCE_IMAGE_ROOT = (
-    Path(__file__).resolve().parents[2] / "assets" / "reference_images" / "world"
-)
+WORLD_REFERENCE_IMAGE_ROOT = Path(__file__).resolve().parents[2] / "assets" / "reference_images" / "world"
 # Kept as a compatibility alias for callers that imported the previous name.
 WORLD_DEMO_IMAGE_ROOT = WORLD_REFERENCE_IMAGE_ROOT
 WORLD_UPLOAD_DIR_NAME = "world_frontend_inputs"
@@ -169,9 +167,7 @@ def world_frontend_html(entry: CatalogEntry, launch_config: StudioLaunchConfig) 
     else:
         interaction_hint = "HOLD WASD / DRAG STICKS"
     stick_class = "stick-well is-hidden" if non_keyboard_mode else "stick-well"
-    look_stick_class = (
-        "stick-well stick-right is-hidden" if non_keyboard_mode else "stick-well stick-right"
-    )
+    look_stick_class = "stick-well stick-right is-hidden" if non_keyboard_mode else "stick-well stick-right"
     video_control_class = "video-only is-hidden" if non_keyboard_mode else "video-only"
     standard_control_class = "is-hidden" if queued_segments else ""
     queued_control_class = "" if queued_segments else "is-hidden"
@@ -181,9 +177,7 @@ def world_frontend_html(entry: CatalogEntry, launch_config: StudioLaunchConfig) 
     start_label = "RUN" if queued_segments else "START"
     console_title = "QUEUED SEGMENTS" if queued_segments else "REALTIME STREAM"
     stats_label = "WS READY" if non_keyboard_mode else "RTC OFF"
-    image_label = (
-        "INITIAL IMAGE" if queued_segments else "OPTIONAL IMAGE" if prompt_scheduled else "IMAGE"
-    )
+    image_label = "INITIAL IMAGE" if queued_segments else "OPTIONAL IMAGE" if prompt_scheduled else "IMAGE"
     rollout_title = (
         "Full-quality segments run sequentially while weights and continuation state remain resident."
         if queued_segments
@@ -217,6 +211,8 @@ def world_frontend_html(entry: CatalogEntry, launch_config: StudioLaunchConfig) 
           <img id="frameImage" alt="" draggable="false">
           <video id="frameVideo" muted playsinline></video>
           <canvas id="frameCanvas" aria-label="Decoded generated world frames"></canvas>
+          <div id="sensorGrid" aria-label="Synchronized sensor views"></div>
+          <div id="sensorControls" aria-label="Sensor presentation controls"></div>
           <div class="screen-noise"></div>
           <div class="floating-state" id="livePill">FROZEN</div>
           <div class="start-overlay is-hidden" id="startOverlay" aria-hidden="true">
@@ -513,6 +509,33 @@ button:disabled,
 #frameCanvas.is-visible {
   display: block;
 }
+
+#sensorGrid {
+  display: none;
+  position: absolute;
+  inset: 0;
+  gap: 4px;
+  background: #050608;
+  z-index: 1;
+}
+#sensorGrid.is-visible { display: grid; }
+.sensor-tile { position: relative; min-width: 0; min-height: 0; }
+.sensor-tile canvas { width: 100%; height: 100%; object-fit: contain; }
+.sensor-tile span { position: absolute; top: 4px; left: 6px; color: #fff; font-size: 11px; }
+#sensorControls {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  background: #050608cc;
+  color: #fff;
+  font-size: 11px;
+}
+#sensorControls:empty { display: none; }
+#sensorControls select { color: #fff; background: #161719; }
 
 .screen-noise {
   position: absolute;
@@ -2605,9 +2628,7 @@ class WorldFrontendHandler(BaseHTTPRequestHandler):
             self._send_head_json(self._session_payload())
             return
         if parsed.path == "/api/datasets":
-            self._send_head_json(
-                {"datasets": [self._demo_dataset_payload()], "examples": self._example_payloads()}
-            )
+            self._send_head_json({"datasets": [self._demo_dataset_payload()], "examples": self._example_payloads()})
             return
         if parsed.path == "/api/file":
             query = parse_qs(parsed.query)
@@ -2804,10 +2825,7 @@ class WorldFrontendHandler(BaseHTTPRequestHandler):
 
     def _health_payload(self) -> dict[str, object]:
         with self.state.manager.lock:
-            cached_model_ids = [
-                context.entry.model_id
-                for context in self.state.manager.pipeline_cache.values()
-            ]
+            cached_model_ids = [context.entry.model_id for context in self.state.manager.pipeline_cache.values()]
         with self.state.lock:
             model_loaded = self.state.model_loaded
             session_count = len(self.state.sessions)
@@ -3018,12 +3036,18 @@ class WorldFrontendHandler(BaseHTTPRequestHandler):
         raw_path = str(payload.get("init_image_path") or "").strip()
         if raw_path:
             path = Path(raw_path).expanduser().resolve()
-            if not path.exists() or path.suffix.lower() not in IMAGE_EXTS or not path_allowed(path, self.state.allowed_roots):
+            if (
+                not path.exists()
+                or path.suffix.lower() not in IMAGE_EXTS
+                or not path_allowed(path, self.state.allowed_roots)
+            ):
                 raise ValueError("Selected image is not available to the world frontend.")
             with Image.open(path) as image:
                 return image.convert("RGB")
 
-        asset_path = Path(self.state.launch_config.asset_path).expanduser() if self.state.launch_config.asset_path else None
+        asset_path = (
+            Path(self.state.launch_config.asset_path).expanduser() if self.state.launch_config.asset_path else None
+        )
         if asset_path and asset_path.exists() and asset_path.suffix.lower() in IMAGE_EXTS:
             with Image.open(asset_path) as image:
                 return image.convert("RGB")
@@ -3046,7 +3070,11 @@ class WorldFrontendHandler(BaseHTTPRequestHandler):
         raw_path = str(payload.get("init_video_path") or "").strip()
         if raw_path:
             path = Path(raw_path).expanduser().resolve()
-            if not path.exists() or path.suffix.lower() not in VIDEO_EXTS or not path_allowed(path, self.state.allowed_roots):
+            if (
+                not path.exists()
+                or path.suffix.lower() not in VIDEO_EXTS
+                or not path_allowed(path, self.state.allowed_roots)
+            ):
                 raise ValueError("Selected video is not available to the world frontend.")
             return str(path)
         return ""
@@ -3370,9 +3398,7 @@ def _demo_image_files(root: Path | None = None) -> tuple[Path, ...]:
         return ()
     return tuple(
         sorted(
-            path.resolve()
-            for path in source_root.rglob("*")
-            if path.is_file() and path.suffix.lower() in IMAGE_EXTS
+            path.resolve() for path in source_root.rglob("*") if path.is_file() and path.suffix.lower() in IMAGE_EXTS
         )
     )
 
@@ -3458,9 +3484,4 @@ def _api_key() -> str:
 
 
 def _html_escape(value: str) -> str:
-    return (
-        value.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")

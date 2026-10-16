@@ -5,7 +5,7 @@ modelId: "helixworld"
 pageSource: authored
 ---
 
-HelixWorld Preview v1 generates video and spatial audio together from one image, three scene descriptions and a camera/action plan. Its WorldFoundry synthesis extensions reuse the LTX-2.3 transformer, Gemma text encoder, video/audio VAE, vocoder, checkpoint loader and media IO from the shared base model. HelixWorld-specific controls, sampling and recipe live in `worldfoundry/synthesis/visual_generation/helixworld/`.
+HelixWorld Preview v1 generates video and spatial audio together from one image, three scene descriptions and a camera/action plan. Its native components reuse the LTX-2.3 transformer, Gemma text encoder, video/audio VAE, vocoder, checkpoint loader and media IO. HelixWorld's network variant, camera/action encoders and recipe belong to their roles under `worldfoundry/base_models/diffusion_model/`; the framework-owned `runners/joint_chunked.py` owns sampling.
 
 Code: [NoizAI/HelixWorld](https://github.com/NoizAI/HelixWorld). Weights: [NoizAI/HelixWorld-preview](https://huggingface.co/NoizAI/HelixWorld-preview).
 

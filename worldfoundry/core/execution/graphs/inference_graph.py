@@ -35,11 +35,12 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import OrderedDict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
+from contextlib import contextmanager
 from typing import Any
 
 import torch
-from torch.utils._pytree import tree_map
+from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
 
 from worldfoundry.core.execution.graphs.cuda_graph import _tensor_tree_signature, graph_pool_handle
 
@@ -53,11 +54,9 @@ _DEFAULT_MAX_GRAPHS = 16
 
 
 def _flatten_tensors(args: Sequence[Any], kwargs: Mapping[str, Any] | None = None) -> list[torch.Tensor]:
-    """Collect tensor leaves from ``args`` / ``kwargs``; non-tensors are ignored."""
-    tensors = [a for a in args if isinstance(a, torch.Tensor)]
-    if kwargs:
-        tensors.extend(v for v in kwargs.values() if isinstance(v, torch.Tensor))
-    return tensors
+    """Collect tensor leaves, including explicit per-layer K/V tuples."""
+    leaves, _ = tree_flatten((args, kwargs or {}))
+    return [leaf for leaf in leaves if isinstance(leaf, torch.Tensor)]
 
 
 def _ambient_policy_key() -> dict[str, Any]:
@@ -79,45 +78,54 @@ def _ambient_policy_key() -> dict[str, Any]:
         "float32_matmul_precision": torch.get_float32_matmul_precision(),
         "matmul_allow_tf32": torch.backends.cuda.matmul.allow_tf32,
         "cudnn_allow_tf32": torch.backends.cudnn.allow_tf32,
+        "deterministic_algorithms": torch.are_deterministic_algorithms_enabled(),
     }
 
 
 def _arg_signature(value: Any) -> Any:
-    """Tensor identity or a ``repr`` constant; non-tensors must stay stable per key."""
-    return _tensor_tree_signature(value) if isinstance(value, torch.Tensor) else {"const": repr(value)}
+    """Describe pytree structure, tensor layouts and immutable constants."""
+    leaves, spec = tree_flatten(value)
+    return {
+        "tree": str(spec),
+        "leaves": [
+            _tensor_tree_signature(leaf)
+            if isinstance(leaf, torch.Tensor)
+            else {"type": type(leaf).__qualname__, "const": repr(leaf)}
+            for leaf in leaves
+        ],
+    }
 
 
 def _signature_key(args: Sequence[Any], kwargs: Mapping[str, Any], extra_key: str | None) -> str:
     """Hash args, kwargs, ambient policy, and optional salt into one cache key."""
     payload = {
-        "version": 2,
+        "version": 3,
         "args": [_arg_signature(a) for a in args],
         "kwargs": {name: _arg_signature(kwargs[name]) for name in sorted(kwargs)},
         "policy": _ambient_policy_key(),
         "extra_key": extra_key,
     }
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    return f"infer-graph-v2:{hashlib.sha256(serialized.encode('utf-8')).hexdigest()}"
+    return f"infer-graph-v3:{hashlib.sha256(serialized.encode('utf-8')).hexdigest()}"
 
 
 class _CapturedGraph:
     """One captured Graph plus the static buffers replay must copy into."""
 
-    __slots__ = ("graph", "static_inputs", "static_outputs", "input_addresses")
+    __slots__ = ("graph", "static_inputs", "static_outputs", "input_indices")
 
     def __init__(
         self,
         graph: "torch.cuda.CUDAGraph",
         static_inputs: list[torch.Tensor],
         static_outputs: Any,
-        input_addresses: list[int | str],
+        input_indices: list[int],
     ) -> None:
-        """Store graph, static I/O, and positional / keyword address tags."""
+        """Store graph, static I/O, and indices in the flattened input tree."""
         self.graph = graph
         self.static_inputs = static_inputs
         self.static_outputs = static_outputs
-        # Each address is a positional index (int) or a keyword name (str).
-        self.input_addresses = input_addresses
+        self.input_indices = input_indices
 
 
 class InferenceCUDAGraphRunner:
@@ -140,12 +148,9 @@ class InferenceCUDAGraphRunner:
 
     - CPU tensors, empty tensor lists, ``requires_grad``, or ``grad_enabled``
       cannot be captured safely — Graph replay would alias autograd storage.
-    - Capture warmup or ``torch.cuda.graph`` raising ``RuntimeError`` disables
-      that signature forever (``_disabled_keys``) so a flaky kernel is not
-      retried every step. OOM during capture is *not* swallowed by the
-      warmup/capture ``except`` if it is raised as a non-RuntimeError; a
-      RuntimeError still disables the key and falls back to eager rather than
-      growing peak memory with another capture attempt.
+    - Capture warmup or ``torch.cuda.graph`` raising a non-OOM ``RuntimeError``
+      disables that signature until invalidation. Allocator OOM propagates;
+      an eager retry must not conceal a failed memory budget.
     - Unseen signatures after ``max_graphs`` stay eager. Unbounded capture
       would pin a Graph (and its static buffers) per rare shape.
 
@@ -193,6 +198,45 @@ class InferenceCUDAGraphRunner:
         self.stats = {"capture": 0, "replay": 0, "eager": 0, "capture_failed": 0}
         self._request_window_id = 0
         self._request_window_baseline = dict(self.stats)
+        self._capture_on_miss = True
+
+    def freeze(self) -> None:
+        """Use eager execution for uncaptured signatures after service warmup.
+
+        Explicit :meth:`capture` remains available between requests. Existing
+        signatures still replay; request execution never starts a new capture.
+        """
+        self._capture_on_miss = False
+
+    @contextmanager
+    def capture_scope(self) -> Generator[None, None, None]:
+        """Allow capture during explicit warmup, then restore the serving policy."""
+        previous = self._capture_on_miss
+        self._capture_on_miss = True
+        try:
+            yield
+        finally:
+            self._capture_on_miss = previous
+
+    @property
+    def capture_on_miss(self) -> bool:
+        """Whether an ordinary call may capture an unseen signature."""
+        return self._capture_on_miss
+
+    def capture(self, *args: Any, **kwargs: Any) -> bool:
+        """Prepare one signature between requests; return whether it is captured.
+
+        This does not return graph-owned outputs or count a replay. CPU and
+        unsupported inputs return False; allocator OOM propagates.
+        """
+        if not self._eligible(args, kwargs):
+            return False
+        key = _signature_key(args, kwargs, self._extra_key)
+        if key in self._graphs:
+            return True
+        if key in self._disabled_keys or len(self._graphs) >= self._max_graphs:
+            return False
+        return self._capture(key, args, kwargs) is not None
 
     # ──────────────────────────────────────────────────────────────────────
     # Eligibility / capture / replay — eager on CPU, grad, or capture failure
@@ -218,11 +262,15 @@ class InferenceCUDAGraphRunner:
         tensors = _flatten_tensors(args, kwargs)
         if not tensors:
             return False
-        if any(t.device.type != "cuda" for t in tensors):
+        if any(t.device.type != "cuda" or t.device != tensors[0].device for t in tensors):
             return False
         if any(t.requires_grad for t in tensors) or torch.is_grad_enabled():
             return False
-        return True
+        leaves, _ = tree_flatten((args, kwargs))
+        return all(
+            isinstance(leaf, (torch.Tensor, bool, int, float, str, torch.dtype, torch.device)) or leaf is None
+            for leaf in leaves
+        )
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Replay a captured Graph for this signature, or run ``fn`` eagerly.
@@ -240,7 +288,7 @@ class InferenceCUDAGraphRunner:
         if captured is not None:
             self._graphs.move_to_end(key)
             return self._replay(captured, args, kwargs)
-        if key in self._disabled_keys or len(self._graphs) >= self._max_graphs:
+        if not self._capture_on_miss or key in self._disabled_keys or len(self._graphs) >= self._max_graphs:
             self.stats["eager"] += 1
             return self._fn(*args, **kwargs)
 
@@ -251,63 +299,85 @@ class InferenceCUDAGraphRunner:
         return self._replay(captured, args, kwargs)
 
     def _capture(self, key: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> _CapturedGraph | None:
-        """Warm up, capture, and cache; ``RuntimeError`` disables ``key`` forever."""
+        """Warm up and capture; remember unsupported signatures, propagate OOM."""
+        from worldfoundry.core.execution.inference_runtime import is_accelerator_out_of_memory
+
         device = _flatten_tensors(args, kwargs)[0].device
+        # Every tensor leaf becomes an explicit replay input, including nested
+        # per-layer conditions. Warm these exact buffers: cloning a sliced or
+        # expanded view changes its strides and therefore compiler guards.
+        leaves, spec = tree_flatten((args, {name: kwargs[name] for name in sorted(kwargs)}))
+        input_indices = [index for index, leaf in enumerate(leaves) if isinstance(leaf, torch.Tensor)]
+        static_inputs = [leaves[index].clone() for index in input_indices]
+        for index, buffer in zip(input_indices, static_inputs):
+            leaves[index] = buffer
+        call_args, call_kwargs = tree_unflatten(leaves, spec)
+
         # Warm up on a side stream so lazy allocations / autotune settle and do
         # not get baked into the captured graph.
         try:
             side = torch.cuda.Stream(device=device)
             side.wait_stream(torch.cuda.current_stream(device))
-            with torch.cuda.stream(side):
+            # Autocast's weight cache dies at the enclosing context exit.
+            # Capture casts as graph operations instead of retaining pointers
+            # to that temporary cache across requests.
+            with (
+                torch.cuda.stream(side),
+                torch.autocast(
+                    "cuda",
+                    enabled=torch.is_autocast_enabled("cuda"),
+                    cache_enabled=False,
+                ),
+            ):
                 for _ in range(max(self._warmup, 1)):
-                    self._fn(*args, **kwargs)
+                    self._fn(*call_args, **call_kwargs)
             torch.cuda.current_stream(device).wait_stream(side)
             torch.cuda.synchronize(device)
-        except RuntimeError:
+        except RuntimeError as error:
+            if is_accelerator_out_of_memory(error):
+                raise
             self.stats["capture_failed"] += 1
             self._disabled_keys.add(key)
             return None
-
-        # Static input buffers hold the exact captured storage; replay copies
-        # fresh inputs into them. Addresses cover positional indices and keyword
-        # names so a captured graph rebinds every tensor argument on replay.
-        input_addresses: list[int | str] = [i for i, a in enumerate(args) if isinstance(a, torch.Tensor)]
-        input_addresses.extend(name for name, v in kwargs.items() if isinstance(v, torch.Tensor))
-        static_inputs = [self._read_address(args, kwargs, addr).clone() for addr in input_addresses]
-        call_args = list(args)
-        call_kwargs = dict(kwargs)
-        for addr, buf in zip(input_addresses, static_inputs):
-            if isinstance(addr, int):
-                call_args[addr] = buf
-            else:
-                call_kwargs[addr] = buf
 
         if self._pool is None:
             self._pool = graph_pool_handle()
         graph = torch.cuda.CUDAGraph()
+        inference_mode = torch.is_inference_mode_enabled()
         try:
-            with torch.cuda.graph(graph, pool=self._pool):
-                static_outputs = self._fn(*call_args, **call_kwargs)
-        except RuntimeError:
+            # CUDA Graph control updates process-owned generator tensors, which
+            # compilation may have created in inference mode. Keep those updates
+            # inference-safe while preserving the caller's mode for compute.
+            with torch.cuda.device(device), torch.inference_mode(), torch.cuda.graph(graph, pool=self._pool):
+                with (
+                    torch.inference_mode(inference_mode),
+                    torch.no_grad(),
+                    torch.autocast(
+                        "cuda",
+                        enabled=torch.is_autocast_enabled("cuda"),
+                        cache_enabled=False,
+                    ),
+                ):
+                    static_outputs = self._fn(*call_args, **call_kwargs)
+        except RuntimeError as error:
+            if is_accelerator_out_of_memory(error):
+                raise
             self.stats["capture_failed"] += 1
             self._disabled_keys.add(key)
             return None
 
-        captured = _CapturedGraph(graph, static_inputs, static_outputs, input_addresses)
+        captured = _CapturedGraph(graph, static_inputs, static_outputs, input_indices)
         self._graphs[key] = captured
         self.stats["capture"] += 1
         return captured
 
-    @staticmethod
-    def _read_address(args: tuple[Any, ...], kwargs: Mapping[str, Any], addr: int | str) -> torch.Tensor:
-        """Resolve a captured address tag to the live tensor (int index or kw name)."""
-        return args[addr] if isinstance(addr, int) else kwargs[addr]
-
     def _replay(self, captured: _CapturedGraph, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
-        """``copy_`` fresh inputs into static buffers, replay, then materialize outputs."""
-        for buf, addr in zip(captured.static_inputs, captured.input_addresses):
-            buf.copy_(self._read_address(args, kwargs, addr))
-        captured.graph.replay()
+        """``copy_`` fresh tensor leaves, replay, then materialize owned outputs."""
+        leaves, _ = tree_flatten((args, {name: kwargs[name] for name in sorted(kwargs)}))
+        for buf, index in zip(captured.static_inputs, captured.input_indices):
+            buf.copy_(leaves[index])
+        with torch.inference_mode():
+            captured.graph.replay()
         self.stats["replay"] += 1
         return self._materialize(captured.static_outputs)
 
@@ -321,11 +391,11 @@ class InferenceCUDAGraphRunner:
         """Return request-window counters plus separate lifetime diagnostics."""
 
         window = {
-            name: int(value) - int(self._request_window_baseline.get(name, 0))
-            for name, value in self.stats.items()
+            name: int(value) - int(self._request_window_baseline.get(name, 0)) for name, value in self.stats.items()
         }
         return {
             "enabled": self._enabled,
+            "capture_on_miss": self._capture_on_miss,
             "window_id": self._request_window_id,
             "graphs": len(self._graphs),
             "max_graphs": self._max_graphs,
@@ -343,8 +413,7 @@ class InferenceCUDAGraphRunner:
         Call between requests, with no concurrent calls to this runner.
         """
         devices = {
-            tensor.device for captured in self._graphs.values()
-            for tensor in captured.static_inputs if tensor.is_cuda
+            tensor.device for captured in self._graphs.values() for tensor in captured.static_inputs if tensor.is_cuda
         }
         for device in devices:
             torch.cuda.synchronize(device)
