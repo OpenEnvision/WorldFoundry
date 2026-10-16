@@ -33,7 +33,9 @@ def test_ruff_hooks_do_not_repeat_the_upstream_entry_exclusion_flag() -> None:
 def test_ci_installs_declared_quality_and_protocol_extras() -> None:
     workflow = (REPO_ROOT / ".github/workflows/pr-checks.yml").read_text()
     assert 'python -m pip install -e ".[lint,test,mcp]" imageio' in workflow
-    assert '"torch==2.9.0+cpu" --index-url https://download.pytorch.org/whl/cpu' in workflow
+    assert '"torch==2.9.0+cpu" "torchvision==0.24.0+cpu" --index-url https://download.pytorch.org/whl/cpu' in workflow
+    assert "opencv-python-headless" in workflow
+    assert '"einops>=0.7,<0.9"' in workflow
 
 
 def git(repo: Path, *args: str) -> str:
