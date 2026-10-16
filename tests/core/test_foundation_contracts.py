@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_by_path(module_name: str, relative_path: str, stubs: dict[str, types.ModuleType] | None = None):
@@ -40,6 +40,7 @@ def _load_by_path(module_name: str, relative_path: str, stubs: dict[str, types.M
     for stub_name, stub in (stubs or {}).items():
         sys.modules[stub_name] = stub
     spec = importlib.util.spec_from_file_location(module_name, REPO_ROOT / relative_path)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -166,7 +167,7 @@ def cosmos_config_module():
     class LazyDict(dict):
         pass
 
-    stub.LazyDict = LazyDict
+    setattr(stub, "LazyDict", LazyDict)
     previous = sys.modules.get("worldfoundry.core.configuration.lazy_config")
     module = _load_by_path(
         "wf_test_cosmos_config",

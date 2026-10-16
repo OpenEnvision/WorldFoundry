@@ -38,9 +38,9 @@ def fake_xformers(monkeypatch):
         return out.permute(0, 2, 1, 3).to(v.dtype)
 
     ops_module = types.ModuleType("xformers.ops")
-    ops_module.memory_efficient_attention = memory_efficient_attention
+    setattr(ops_module, "memory_efficient_attention", memory_efficient_attention)
     xformers_module = types.ModuleType("xformers")
-    xformers_module.ops = ops_module
+    setattr(xformers_module, "ops", ops_module)
     monkeypatch.setitem(sys.modules, "xformers", xformers_module)
     monkeypatch.setitem(sys.modules, "xformers.ops", ops_module)
     return recorded
@@ -143,9 +143,7 @@ def test_mask_width_not_multiple_of_8_is_padded_storage_only(fake_xformers):
     bool_mask = torch.ones(seq, seq, dtype=torch.bool)
     bool_mask[0, 1] = False
 
-    out = XFormersAttention()(
-        _flatten_heads(q), _flatten_heads(k), _flatten_heads(v), heads, mask=bool_mask
-    )
+    out = XFormersAttention()(_flatten_heads(q), _flatten_heads(k), _flatten_heads(v), heads, mask=bool_mask)
     bias = fake_xformers["attn_bias"]
     assert bias.shape[-1] == seq
     reference = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=bool_mask)

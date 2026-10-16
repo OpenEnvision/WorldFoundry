@@ -19,9 +19,9 @@ import types
 import pytest
 import torch
 
-from worldfoundry.core.execution import inference as core_inference
 from worldfoundry.core.attention.backends import probe as backends
 from worldfoundry.core.attention.backends.probe import AttentionKernelCapability
+from worldfoundry.core.execution import inference as core_inference
 
 
 def test_varlen_flash_attention_accepts_precomputed_max_lengths(monkeypatch):
@@ -34,7 +34,7 @@ def test_varlen_flash_attention_accepts_precomputed_max_lengths(monkeypatch):
         return torch.zeros_like(kwargs["q"])
 
     fake_flash_attn = types.ModuleType("flash_attn")
-    fake_flash_attn.flash_attn_varlen_func = fake_flash_attn_varlen_func
+    setattr(fake_flash_attn, "flash_attn_varlen_func", fake_flash_attn_varlen_func)
     monkeypatch.setitem(sys.modules, "flash_attn", fake_flash_attn)
     monkeypatch.setattr(
         varlen,
