@@ -439,6 +439,11 @@ WorldFoundry
 
 If you use WorldFoundry or its benchmark/model integrations in research, cite this repository and the upstream methods, checkpoints, datasets, and benchmarks that your run depends on. A formal paper citation will be added when the technical report is released.
 
+## Community Policies
+
+Contributions follow the [Code of Conduct](CODE_OF_CONDUCT.md). Use the
+[Security Policy](SECURITY.md) for private vulnerability reports.
+
 ## License
 
 WorldFoundry-authored code is licensed under the [Apache License 2.0](THIRD-PARTY-NOTICES), except where a file or component carries a different license notice. Vendored and adapted upstream components remain subject to their original licenses.
