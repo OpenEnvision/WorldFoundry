@@ -1,14 +1,13 @@
+# SPDX-FileCopyrightText: 2026 OpenEnvision
+# SPDX-License-Identifier: Apache-2.0
+
+"""Component build-purpose and selective materialization contracts."""
+
 from __future__ import annotations
 
-import pytest
-
-# This test module imports worldfoundry code that requires the optional
-# "ftfy" dependency at import time; skip when it is unavailable.
-pytest.importorskip("ftfy")
+from typing import Any
 
 import pytest
-
-torch = pytest.importorskip("torch")
 
 from worldfoundry.base_models.diffusion_model.assembly import NativeDiffusionAssembler  # noqa: E402
 from worldfoundry.base_models.diffusion_model.components import (  # noqa: E402
@@ -26,14 +25,16 @@ from worldfoundry.base_models.diffusion_model.optimizations import (  # noqa: E4
 )
 from worldfoundry.base_models.diffusion_model.recipes.spec import NativeDiffusionRecipe  # noqa: E402
 
+pytestmark = pytest.mark.unit
+
 
 class _Denoiser:
-    def __call__(self, model_input):
+    def __call__(self, model_input: Any) -> Any:
         return model_input
 
 
 class _Codec:
-    def encode(self, images):
+    def encode(self, images: Any) -> Any:
         return images
 
 
@@ -70,11 +71,11 @@ def test_training_assembler_can_materialize_only_requested_components() -> None:
     denoiser_key = ComponentKey(ComponentKind.DENOISER)
     codec_key = ComponentKey(ComponentKind.LATENT_ENCODER, "codec")
 
-    def denoiser_factory(context):
+    def denoiser_factory(context: ComponentBuildContext) -> _Denoiser:
         built.append(context.key)
         return _Denoiser()
 
-    def codec_factory(context):
+    def codec_factory(context: ComponentBuildContext) -> _Codec:
         built.append(context.key)
         return _Codec()
 

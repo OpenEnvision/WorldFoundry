@@ -38,7 +38,7 @@ python -m pytest -q tests/runtime/test_geometry_regression_impact.py
 | `tests/core/`、`tests/runtime/`、`tests/studio/` | 共享基础设施的单元与集成测试 |
 | `tests/eval_core/` | 扩展 evaluation 契约，使用 `make test-eval-core` |
 | 其他模块目录 | 对应运行时模块的测试 |
-| `tests/training/` | 需要另行提供的 training 实现和 configs |
+| `tests/base_models/diffusion_model/test_build_purpose.py` | 组件 build-purpose 与选择性实例化契约 |
 | `tests/manual/` | 手动模型推理与托管 API smoke 脚本 |
 | `tests/stream/` | 手动 streaming / incremental inference 脚本 |
 
