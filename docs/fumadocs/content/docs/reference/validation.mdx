@@ -338,6 +338,16 @@ pixels and frame rate against the reference. Oasis uses this route because
 its subprocess returns an MP4 without in-memory tensors; its generator fixes
 the random seed to 0.
 
+Kandinsky6 Lite/Pro, including each distilled and pretraining variant, has its
+own `kandinsky6-<variant>-video-short` case. Stage the matching Diffusers release
+under `WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT` at the case's `assets.checkpoint`
+path. Each video-only case uses seed 42, 121 frames, 480×864 and 24 FPS, and
+compares every decoded RGB frame and the frame rate. Distilled variants use
+ten steps and guidance 1; the other variants use fifty steps and guidance 5.
+Audio requires separate replay evidence. The CPU tensor gate includes
+`tests/pipelines/test_kandinsky6_replay_recipes.py` for concrete loading,
+checkpoint routing and request wiring; it does not execute these checkpoints.
+
 ```bash
 make coverage-inference PYTHON=python3
 make plan-inference PYTHON=python3 INFERENCE_BASE=<comparison-commit>

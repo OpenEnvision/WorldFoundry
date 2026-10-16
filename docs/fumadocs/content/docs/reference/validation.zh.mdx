@@ -210,6 +210,15 @@ LTX 的 timestep-conditioned VAE 在解码时也会注入噪声。视频、音�
 
 只返回视频路径的生成器可以用 `output_arrays` 选择运行目录内的 MP4、WebM、MOV 或 MKV。回归工具完整解码后，将 `artifact.<相对路径>.frames` 和 `.fps` 保存到 `arrays.npz`，因此路径或计划本身不能满足必需数值输出。还应在 `export_artifacts` 中声明视频，比较导出文件解码后的像素及帧率。Oasis 的子进程只返回 MP4，没有内存张量，因此使用此入口；生成器的随机种子固定为 0。
 
+Kandinsky6 Lite/Pro 及各自的蒸馏、预训练变体均有独立的
+`kandinsky6-<variant>-video-short` 用例。将匹配的 Diffusers 发布权重放在
+`WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT` 下的用例 `assets.checkpoint` 路径。
+每个纯视频用例固定 seed 42、121 帧、480×864、24 FPS，比较完整解码的 RGB
+帧及帧率。蒸馏变体使用 10 步、guidance 1，其余变体使用 50 步、guidance 5。
+音频需要独立回放证据。CPU 张量门禁包含
+`tests/pipelines/test_kandinsky6_replay_recipes.py`，检查具体加载入口、权重路由
+和请求接线；该测试不执行这些真实权重。
+
 ```bash
 make coverage-inference PYTHON=python3
 make plan-inference PYTHON=python3 INFERENCE_BASE=<comparison-commit>
