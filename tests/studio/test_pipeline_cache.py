@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import tempfile
 import os
+import tempfile
 import threading
 import unittest
 import weakref
@@ -10,8 +10,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from worldfoundry.studio.inference.catalog import find_entry
 from worldfoundry.studio.inference import execution as execution
+from worldfoundry.studio.inference.catalog import find_entry
 from worldfoundry.studio.inference.execution import BaseRuntimeDriver, PipelineContext, PreparedInputs, StudioManager
 
 
@@ -74,14 +74,13 @@ def test_api_clients_are_request_scoped_for_explicit_and_environment_credentials
             credentials.append(client.api_key)
             return client
 
-    manager.import_pipeline_class = lambda _: _DummyPipeline
+    monkeypatch.setattr(manager, "import_pipeline_class", lambda _: _DummyPipeline)
     _DummyPipeline.manager = manager
     _DummyPipeline.cache_sizes_during_load = []
     weights = driver.load_pipeline(manager, entry, _request(tmp_path))
-    manager.import_pipeline_class = lambda _: DummyApi
+    monkeypatch.setattr(manager, "import_pipeline_class", lambda _: DummyApi)
     request = replace(_request(tmp_path), backend="api_init", endpoint="https://example.invalid")
-    clients = [driver.load_pipeline(manager, entry, replace(request, api_key=key))
-               for key in ("dummy-A", "dummy-B")]
+    clients = [driver.load_pipeline(manager, entry, replace(request, api_key=key)) for key in ("dummy-A", "dummy-B")]
     for key in ("env-A", "env-B"):
         monkeypatch.setenv("TEST_PROVIDER_API_KEY", key)
         clients.append(driver.load_pipeline(manager, entry, request))
@@ -89,7 +88,7 @@ def test_api_clients_are_request_scoped_for_explicit_and_environment_credentials
     assert credentials == ["dummy-A", "dummy-B", "env-A", "env-B"]
     assert len({id(client) for client in clients}) == 4
     assert list(manager.pipeline_cache.values()) == [weights]
-    manager.import_pipeline_class = lambda _: _DummyPipeline
+    monkeypatch.setattr(manager, "import_pipeline_class", lambda _: _DummyPipeline)
     assert driver.load_pipeline(manager, entry, _request(tmp_path)) is weights
 
 
@@ -113,10 +112,10 @@ class WorldFoundryStudioPipelineCacheTest(unittest.TestCase):
             del old_pipeline
             manager.pipeline_cache["old"] = old_context
             collected_after_release = []
-            manager._collect_device_memory = (  # type: ignore[method-assign]
-                lambda: collected_after_release.append(old_pipeline_ref() is None)
+            setattr(
+                manager, "_collect_device_memory", lambda: collected_after_release.append(old_pipeline_ref() is None)
             )
-            manager.import_pipeline_class = lambda selected: _DummyPipeline  # type: ignore[method-assign]
+            setattr(manager, "import_pipeline_class", lambda selected: _DummyPipeline)
             _DummyPipeline.manager = manager
             _DummyPipeline.cache_sizes_during_load = []
 
@@ -131,7 +130,7 @@ class WorldFoundryStudioPipelineCacheTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             manager = StudioManager(workspace_root=tmp_dir, max_cached_pipelines=0)
             entry = find_entry("infinite-world")
-            manager.import_pipeline_class = lambda selected: _DummyPipeline  # type: ignore[method-assign]
+            setattr(manager, "import_pipeline_class", lambda selected: _DummyPipeline)
             _DummyPipeline.manager = manager
             _DummyPipeline.cache_sizes_during_load = []
 
@@ -159,9 +158,7 @@ class WorldFoundryStudioPipelineCacheTest(unittest.TestCase):
             del pipeline
             manager.pipeline_cache[context.cache_key] = context
             collected_after_release = []
-            manager._collect_device_memory = (  # type: ignore[method-assign]
-                lambda: collected_after_release.append(pipeline_ref() is None)
-            )
+            setattr(manager, "_collect_device_memory", lambda: collected_after_release.append(pipeline_ref() is None))
 
             message = manager._unload_local(entry.model_id)
 
@@ -299,9 +296,7 @@ class WorldFoundryStudioPipelineCacheTest(unittest.TestCase):
                     cuda=SimpleNamespace(
                         is_available=lambda: True,
                         device_count=lambda: 2,
-                        get_device_properties=lambda index: SimpleNamespace(
-                            total_memory=total_gib * 1024**3
-                        ),
+                        get_device_properties=lambda index: SimpleNamespace(total_memory=total_gib * 1024**3),
                     )
                 )
 

@@ -6,6 +6,7 @@ import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -32,7 +33,7 @@ def _worker(key: tuple[str, ...], *, last_used_at: float, in_use: int = 0) -> co
         key=key,
         base_key=key,
         model_id=key[0],
-        process=_FakeProcess(),  # type: ignore[arg-type]
+        process=cast(subprocess.Popen, _FakeProcess()),
         lock=threading.RLock(),
         decoder=codecs.getincrementaldecoder("utf-8")("replace"),
         command=["python"],
@@ -190,7 +191,7 @@ def test_resident_worker_lease_is_released_when_dispatch_raises(monkeypatch, tmp
 
 def test_waiting_for_worker_lock_honors_cancel_when_timeout_is_disabled():
     worker = _worker(("model",), last_used_at=10.0)
-    worker.lock = threading.Lock()  # type: ignore[assignment]
+    setattr(worker, "lock", threading.Lock())
     worker.lock.acquire()
     checks = 0
 
@@ -215,7 +216,7 @@ def test_waiting_for_worker_lock_honors_cancel_when_timeout_is_disabled():
 
 def test_waiting_for_worker_lock_uses_dispatch_deadline():
     worker = _worker(("model",), last_used_at=10.0)
-    worker.lock = threading.Lock()  # type: ignore[assignment]
+    setattr(worker, "lock", threading.Lock())
     worker.lock.acquire()
     try:
         with pytest.raises(TimeoutError, match="0.0s"):
@@ -296,9 +297,7 @@ def test_lowered_cap_is_enforced_before_existing_worker_reuse(monkeypatch, tmp_p
     requested = _worker(("requested",), last_used_at=30.0)
     oldest = _worker(("oldest",), last_used_at=10.0)
     recent = _worker(("recent",), last_used_at=20.0)
-    conda_dispatch._RESIDENT_WORKERS.update(
-        {requested.key: requested, oldest.key: oldest, recent.key: recent}
-    )
+    conda_dispatch._RESIDENT_WORKERS.update({requested.key: requested, oldest.key: oldest, recent.key: recent})
     stopped: list[conda_dispatch._ResidentWorker] = []
     monkeypatch.setenv(conda_dispatch.RESIDENT_WORKER_MAX_WORKERS_ENV, "2")
     monkeypatch.setenv(conda_dispatch.RESIDENT_WORKER_IDLE_TTL_ENV, "0")
@@ -324,9 +323,7 @@ def test_reaper_collects_expired_and_dead_idle_workers_but_not_busy(monkeypatch)
     dead = _worker(("dead",), last_used_at=999.0)
     dead.process.returncode = 1
     busy = _worker(("busy",), last_used_at=10.0, in_use=1)
-    conda_dispatch._RESIDENT_WORKERS.update(
-        {expired.key: expired, dead.key: dead, busy.key: busy}
-    )
+    conda_dispatch._RESIDENT_WORKERS.update({expired.key: expired, dead.key: dead, busy.key: busy})
     stopped: list[conda_dispatch._ResidentWorker] = []
     monkeypatch.setenv(conda_dispatch.RESIDENT_WORKER_IDLE_TTL_ENV, "100")
     monkeypatch.setattr(conda_dispatch, "_shutdown_resident_worker", lambda worker, force=False: stopped.append(worker))
@@ -366,7 +363,7 @@ def test_worker_start_and_write_os_errors_are_resident_unavailable(monkeypatch, 
         def flush(self):
             pass
 
-    worker.process.stdin = _BrokenInput()  # type: ignore[attr-defined]
+    setattr(worker.process, "stdin", _BrokenInput())
     with pytest.raises(conda_dispatch._ResidentWorkerUnavailable, match="pipe closed"):
         conda_dispatch._send_resident_worker_request(worker, request_payload={"request_id": "x"})
 
@@ -398,13 +395,14 @@ def test_shutdown_reaps_after_terminate_and_kill(monkeypatch):
         def wait(self, timeout=None):
             self.wait_calls.append(timeout)
             if len(self.wait_calls) <= 2:
+                assert timeout is not None
                 raise subprocess.TimeoutExpired("worker", timeout)
             self.returncode = -9
             return self.returncode
 
     process = _StubbornProcess()
     worker = _worker(("stubborn",), last_used_at=10.0)
-    worker.process = process  # type: ignore[assignment]
+    setattr(worker, "process", process)
     terminations: list[float] = []
 
     def stop(process, *, grace_seconds):
