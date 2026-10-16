@@ -40,7 +40,7 @@ def test_install_docs_keep_cpu_gpu_and_native_boundaries_explicit() -> None:
         assert "CPU" in text and "GPU" in text
 
 
-def test_maintainer_docs_name_generated_recipe_and_cpu_eval_gates() -> None:
+def test_maintainer_docs_name_setup_and_contribution_gates() -> None:
     for path in (
         REPO_ROOT / "CONTRIBUTING.md",
         DOCS_ROOT / "maintainers" / "contributing.mdx",
@@ -51,6 +51,12 @@ def test_maintainer_docs_name_generated_recipe_and_cpu_eval_gates() -> None:
         assert "test-infer" in text
         assert "test-geometry" in text
         assert "models:check" in text
+        assert "bootstrap_worldfoundry.sh" in text
+        assert "git commit --signoff" in text
+        assert "make pr-check" in text
+        assert "CODEOWNERS" in text
+        assert "Ruff" in text and "ty" in text
+        assert "[type]Description" in text
 
     for name in ("validation.mdx", "validation.zh.mdx"):
         assert "npm run models:check" in _text(DOCS_ROOT / "reference" / name)

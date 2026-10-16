@@ -38,7 +38,7 @@ assignees: ""
 - Suggested profile:
 - Python / CUDA constraints:
 - GPU memory estimate:
-- CPU-only support:
+- Minimum GPU / architecture and tested device:
 - Known upstream dependency risks:
 
 ## Benchmark And Validation Plan

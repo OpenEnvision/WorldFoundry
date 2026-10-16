@@ -6,65 +6,116 @@ description: Maintainer checklist for scoped changes, validation, docs, and rele
 ## Repository workflow
 
 The root [CONTRIBUTING.md](https://github.com/OpenEnvision/WorldFoundry/blob/main/CONTRIBUTING.md)
-owns contribution conventions. Use a focused branch and the environment required
-by the affected runtime. New Python functions and public contracts are annotated;
-use Ruff and ty for Python checks and run pre-commit on staged files. Preserve
-lazy control-plane imports and upstream attribution.
+owns coding and PR conventions. Use the unified GPU environment for development,
+inference, Studio, and evaluation. Each contribution commit needs a
+[Developer Certificate of Origin](https://developercertificate.org/) sign-off:
+`git commit --signoff`. Commit subjects and PR titles use `[type]Description`,
+with no space after the bracket and an English imperative description, such as
+`[test]Cover session cleanup`.
 
-Each contribution commit carries a
-[Developer Certificate of Origin](https://developercertificate.org/) sign-off
-using the contributor's configured name and email:
+Participants follow the
+[Code of Conduct](https://github.com/OpenEnvision/WorldFoundry/blob/main/CODE_OF_CONDUCT.md).
+Potential vulnerabilities use the private reporting process in the
+[Security Policy](https://github.com/OpenEnvision/WorldFoundry/blob/main/SECURITY.md).
+First-party contributions use the
+[Apache License 2.0](https://github.com/OpenEnvision/WorldFoundry/blob/main/LICENSE),
+with retained upstream terms recorded in
+[Third-party notices](/docs/reference/vendored-licenses).
 
-```bash
-git commit --signoff -m "Describe the scoped change"
-```
+New Python functions and public contracts are type-annotated. Ruff owns format
+and import order; ty checks types. Pre-commit validates staged files, and the
+`Python quality` PR check validates changed Python files. Keep upstream attribution
+and the configured imported-code exclusions. Mark weight-free unit tests with
+`unit`, CUDA tests with `gpu`, and keep manual inference scripts under
+`tests/manual/` or `tests/stream/`.
 
-Use the repository's [PR template](https://github.com/OpenEnvision/WorldFoundry/blob/main/.github/PULL_REQUEST_TEMPLATE.md).
-Include exact commands, results, resource requirements and relevant artifacts.
-An applicable check that failed or did not run remains visible in the evidence;
-imports and mocked contracts are not checkpoint-backed inference results.
-
-Obtain the applicable maintainer/code-owner review and passing checks before
-merging. Follow [CODEOWNERS](https://github.com/OpenEnvision/WorldFoundry/blob/main/.github/CODEOWNERS)
-for review responsibility and retain contributor DCO trailers in squash commits.
-These review conventions do not configure GitHub branch protection.
+CODEOWNERS covers the repository. PRs need applicable CI results and an approving
+maintainer/code-owner review. Use squash merge, a descriptive PR title, and
+retain DCO trailers. Administrators configure `main` rulesets as described in
+CONTRIBUTING.md.
 
 ## Agent Skills
 
-Repository [Agent Skills](https://github.com/OpenEnvision/WorldFoundry/blob/main/skills/index.md)
-provide model integration, benchmark integration, inference optimization,
-numerical validation, and repository maintenance workflows. Each directory uses
-`SKILL.md` frontmatter with a name, description, license and environment needs;
-references link to the owning architecture and validation contracts.
-`CONTRIBUTING.md` and `AGENTS.md` remain authoritative.
+Repository-authored [Agent Skills](https://agentskills.io/specification) live in
+[`skills/`](https://github.com/OpenEnvision/WorldFoundry/tree/main/skills).
+The [skill index](https://github.com/OpenEnvision/WorldFoundry/blob/main/skills/index.md)
+covers model integration, benchmark integration, inference optimization,
+inference validation, and repository maintenance. Each skill uses a `SKILL.md`
+with YAML `name`, `description`, and Markdown instructions linked to current
+framework contracts.
 
-Load a skill explicitly, or opt in through your client's local skill directory.
-From the repository root, choose the command for your client:
+Workflows include component-first numerical parity, checkpoint-conversion
+checks, first-divergence diagnosis, executed-backend verification, and separate
+cold-start/steady-state measurement. Compile, graph, warmup, and offload work
+loads the execution-lifecycle reference; failing numerical comparisons load
+the parity reference. The skill index records upstream workflow sources.
+WorldFoundry's architecture and validation contracts own all commands and
+gates; model integration does not imply serving reliability.
+
+Load a relevant `SKILL.md` explicitly, or opt in through your client's local
+skill directory. From the repository root, choose the command for your client:
 
 ```bash
 # Clients that discover .agents/skills
 mkdir -p .agents && ln -s ../skills .agents/skills
+
 # Claude Code
 mkdir -p .claude && ln -s ../skills .claude/skills
+
 # Cursor
 mkdir -p .cursor && ln -s ../skills .cursor/skills
 ```
 
-These client directories are gitignored. For an existing skills directory, link
-one selected skill instead:
+These client directories are gitignored. To load one skill into an existing
+skill directory, link only that skill, for example:
 
 ```bash
 mkdir -p .agents/skills
 ln -s ../../skills/worldfoundry-model-integration .agents/skills/worldfoundry-model-integration
 ```
 
-Validate metadata and repository links with
-`python -m pytest -q tests/core/test_agent_skills.py`. The official
-[skills-ref validator](https://github.com/agentskills/agentskills/tree/main/skills-ref)
-checks the standard format with `skills-ref validate skills/<skill-name>`.
-Format and link checks are separate from client activation and task quality:
-evaluate representative tasks and a nearby non-triggering request in clean
-contexts with and without the skill. Keep evaluation artifacts outside Git.
+Client discovery and activation depend on the client's configuration. Skills
+complement `AGENTS.md` and CONTRIBUTING.md; those files still own repository
+rules. Use `skills/index.md` for the directory index and keep the repository's
+single root README.
+
+### Authoring and validation
+
+Follow the official [specification](https://agentskills.io/specification) and
+[best practices](https://agentskills.io/skill-creation/best-practices).
+
+- `SKILL.md` starts with YAML frontmatter. Required fields are `name` and
+  `description`; the body contains the task procedure.
+- Names are 1–64 lowercase letters, digits, and hyphens, with no leading,
+  trailing, or repeated hyphens, and must match the parent directory.
+  Repository skills use the `worldfoundry-` prefix.
+- Descriptions are non-empty and at most 1024 characters. Start with "Use this
+  skill when…" and describe the user's intent and relevant task contexts.
+- `license`, `compatibility`, `metadata`, and `allowed-tools` are optional
+  standard fields. Repository skills declare `Apache-2.0`; use `compatibility`
+  for specific checkout or environment requirements (at most 500 characters).
+- Keep each skill focused and its `SKILL.md` below 500 lines. Discovery loads
+  name and description, activation loads instructions, and execution loads
+  references as needed. State when to read a reference and resolve file links
+  relative to the skill directory. Repository commands run from the repo root.
+- Add `scripts/`, `references/`, or `assets/` only when the task needs them.
+  Scripts use explicit arguments, documented dependencies, `--help`, and
+  non-interactive execution. Include bundled resources in `MANIFEST.in`.
+
+Once the official [skills-ref reference CLI](https://github.com/agentskills/agentskills/tree/main/skills-ref)
+is installed, validate format and repository references from the repo root:
+
+```bash
+skills-ref validate skills/worldfoundry-model-integration
+python -m pytest -q tests/core/test_agent_skills.py
+```
+
+Format validation does not prove activation reliability or task quality.
+For [behavior evaluation](https://agentskills.io/skill-creation/evaluating-skills),
+start with two or three representative tasks and a nearby request that should
+not activate the skill. Use clean contexts with and without the skill, check
+whether the relevant `SKILL.md` was loaded, and compare concrete outputs and
+commands. Keep generated evaluation outputs under `tmp/`, outside Git.
 
 ## Before a PR
 
@@ -80,7 +131,7 @@ Before opening a PR, confirm the following:
 - **Python** — Keep imports lazy when a model or benchmark has heavy optional dependencies.
 - **Public entry points** — Put user-facing runtime classes under `worldfoundry/pipelines/` or evaluation runners under `worldfoundry/evaluation/`.
 - **Model runtimes** — Implement runtime integrations under `worldfoundry/synthesis/**` in-tree. Do not depend on machine-local external checkouts; record external repos/checkpoints only as provenance or acquisition metadata until ported or vendor-reviewed.
-- **Vendored code** — Treat reviewed `thirdparty/` code as isolated code. Record its license name and upstream URL in the repository notice and provenance files linked from [Third-party notices](/docs/reference/vendored-licenses). Retain copyright notices and component license files required by the upstream terms; central provenance does not replace those obligations. Operational documentation belongs in Fumadocs rather than colocated README files. Prefer git submodules for large independently versioned upstreams; keep in-tree copies only when heavy patching is required. Do not duplicate code that already lives under `worldfoundry/base_models/` or `worldfoundry/synthesis/`. Current trees: FlashAttention is an external install (`scripts/setup/install_flash_attn.sh`); `diff-gaussian-rasterization/` is the canonical depth-capable Gaussian rasterizer; `simple-knn/` is the CUDA KNN extension; `fastvideo-kernel/` is the optional STA / VSA / VMoBA / TurboDiffusion kernel tree (build with `CUDA_HOME` + `./build.sh`; ThunderKittens only on Hopper `sm_90a` non-aarch64; FP4 attention only on Blackwell `sm_120a` with CUDA ≥ 12.8).
+- **Vendored code** — Treat reviewed `thirdparty/` code as isolated code. Record its license name and upstream URL in the repository notice and provenance files linked from [Third-party notices](/docs/reference/vendored-licenses). Retain component license files required by upstream distribution terms and declare them in package data; the license gate records reviewed exceptions. Keep the project license at the repository root and provenance in the central notices. Operational documentation belongs in Fumadocs. Prefer git submodules for large independently versioned upstreams; keep in-tree copies only when heavy patching is required. Do not duplicate code that already lives under `worldfoundry/base_models/` or `worldfoundry/synthesis/`. Current trees: FlashAttention is an external install (`scripts/setup/install_flash_attn.sh`); `diff-gaussian-rasterization/` is the canonical depth-capable Gaussian rasterizer; `simple-knn/` is the CUDA KNN extension; `fastvideo-kernel/` is the optional STA / VSA / VMoBA / TurboDiffusion kernel tree (build with `CUDA_HOME` + `./build.sh`; ThunderKittens only on Hopper `sm_90a` non-aarch64; FP4 attention only on Blackwell `sm_120a` with CUDA ≥ 12.8).
 - **Synthesis** — Keep `worldfoundry/synthesis/**` infer-only: runtime wrappers, model code needed at inference time, checkpoint/path helpers, and minimal runtime configs. Do not add training launchers, dataset builders, demo media, notebooks, or generated outputs. Keep local demo assets under the gitignored `testcase/` directory.
 - **Formatting** — Avoid large unrelated formatting changes. Do not rewrite generated or vendored files unless the task requires it.
 - **Naming** — Prefer canonical ids and direct runner paths; when a public name changes, document the migration instead of adding long-lived compatibility maps.
@@ -94,15 +145,6 @@ Match validation evidence to the surface you changed:
 - **Stateful or interactive pipeline** — A documented stream command with bounded runtime evidence.
 - **Benchmark runner** — Runner execution plus `zoo benchmark-run --mode official-validation` with official-shaped result files when normalizer review is needed.
 - **Model runner** — Resolver/manifest validation plus a clear skipped path for missing checkpoint or credentials.
-
-## Community policies
-
-Participants follow the root
-[Code of Conduct](https://github.com/OpenEnvision/WorldFoundry/blob/main/CODE_OF_CONDUCT.md).
-Report potential vulnerabilities privately using the
-[Security Policy](https://github.com/OpenEnvision/WorldFoundry/blob/main/SECURITY.md).
-These root policies own conduct and disclosure procedures; the existing
-community channels and CODEOWNERS identify the maintainer contact route.
 
 ## Docs expectations
 
@@ -118,11 +160,6 @@ When you change behavior, update the page that owns it:
 Python-backed docs codegen and drift checks (`api:*`, `models:*`, `coverage:*`, and
 `cli:screenshots`) go through `docs/fumadocs/scripts/run-python.sh`. Override the interpreter
 with `WF_DOCS_PYTHON` (then `PYTHON`, then `python3` / `python`) when needed.
-
-`npm run types:check` completes MDX generation before generating Next.js route
-types, then runs TypeScript. The route-type command sets `_FUMADOCS_MDX=1`
-to reuse the completed output rather than starting another background MDX
-generation over the same files.
 
 ## Fast site iteration
 
@@ -274,16 +311,20 @@ Production deploy speed is separate: CI runs full `types:check`, catalog drift c
 ## Local validation
 
 ```bash
-bash scripts/setup/conda_install.sh --preset slim --env-name worldfoundry
+bash scripts/setup/bootstrap_worldfoundry.sh
+source tmp/worldfoundry_unified_env.sh
+conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
+python -m pip install -e ".[dev,test]"
+pre-commit install
+pre-commit run
 make lint
 make docs-check
 cd docs/fumadocs && npm run types:check && npm run build
 ```
 
-Public CPU checks do not require model weights:
+Run the fast, weight-free checks in the same GPU development environment:
 
 ```bash
-python -m pip install -e ".[dev,test]"
 make test-infer
 make cli-check cli-entrypoint-check packaging-check
 ```
@@ -309,23 +350,14 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval run --all-be
 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-artifact tmp/worldfoundry_plan_matrix/suite_manifest.json --kind suite-manifest --strict --json
 ```
 
-## PR evidence template
+## PR evidence
 
-```md
-## Scope
-- Changed:
-- Not changed:
+Use the repository's [PR template](https://github.com/OpenEnvision/WorldFoundry/blob/main/.github/PULL_REQUEST_TEMPLATE.md).
+Include commands, results, hardware and asset requirements, affected docs, and
+relevant run artifacts. After signing your commits, run:
 
-## Evidence
-- Command:
-- Output:
-- Scorecard/report:
-- Skipped stages:
-- Blockers:
-
-## Docs
-- English page:
-- Chinese page:
+```bash
+make pr-check BASE_REF="$(git merge-base origin/main HEAD)"
 ```
 
 <Callout title="Review rule">

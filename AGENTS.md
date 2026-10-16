@@ -1,10 +1,29 @@
 # WorldFoundry development guidance
 
-Task workflows are indexed in [skills/index.md](skills/index.md). Load the
-relevant `SKILL.md` for repository maintenance, model or benchmark integration,
-inference optimization, or numerical validation. Skills supplement
-[CONTRIBUTING.md](CONTRIBUTING.md) and the maintained architecture and validation
-contracts. Client discovery is opt-in.
+## Code and contribution workflow
+
+- User and developer setup is GPU-first: `scripts/setup/bootstrap_worldfoundry.sh`,
+  source `tmp/worldfoundry_unified_env.sh`, and activate the unified environment.
+  Install `.[dev,test]` into that same environment for development.
+- `CONTRIBUTING.md` owns coding, DCO sign-off, review, and merge conventions.
+  Use the PR template and maintain paired English/Chinese Fumadocs pages.
+- Annotate new Python functions and public contracts, keep heavy imports lazy,
+  and retain upstream attribution. Reuse canonical model components.
+- Use `[type]Description` for commit subjects and PR titles, retaining DCO
+  sign-offs as required by `CONTRIBUTING.md`.
+- Use pre-commit for staged files. `make pr-check BASE_REF=<base>` checks
+  committed Python changes with Ruff and ty and verifies DCO trailers.
+- Keep fast, weight-free checks distinct from CUDA and real-checkpoint replays.
+  Inference changes require the existing affected-case evidence gates.
+
+## Task workflows
+
+Task-specific Agent Skills are indexed in [skills/index.md](skills/index.md).
+Load the relevant `SKILL.md` when using a repository skill; it links to the
+current architecture and validation contracts. Client discovery is opt-in.
+`CONTRIBUTING.md` remains the source of truth for contribution rules.
+
+## Scope limits
 
 HERO scope limits, from [HERO-Anti-OverDefense](https://github.com/wanshuiyin/HERO-Anti-OverDefense/blob/main/RULES.md).
 Licensed under [MIT](https://github.com/wanshuiyin/HERO-Anti-OverDefense/blob/main/LICENSE); the license text is included in THIRD-PARTY-NOTICES.

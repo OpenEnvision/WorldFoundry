@@ -32,11 +32,19 @@ repos:
         name: ruff import sort
         id: ruff-check
         args: ["--fix", "--select", "I"]
-        files: ^(worldfoundry/(cli|mcp|runtime|evaluation/(api|models/runtime|tasks/catalog|tasks/execution/orchestration))|scripts/(benchmark_zoo|model_zoo))/.*\.py$
+        files: ^(worldfoundry|scripts|tests)/.*\.py$
+      - id: ruff-check
+        files: ^(worldfoundry|scripts|tests)/.*\.py$
       - id: ruff-format
-        files: ^(worldfoundry/(cli|mcp|runtime|evaluation/(api|models/runtime|tasks/catalog|tasks/execution/orchestration))|scripts/(benchmark_zoo|model_zoo))/.*\.py$
+        files: ^(worldfoundry|scripts|tests)/.*\.py$
   - repo: local
     hooks:
+      - id: ty
+        name: ty type check
+        entry: python -m ty check --force-exclude
+        language: system
+        types: [python]
+        files: ^(worldfoundry|scripts|tests)/.*\.py$
       - id: worldfoundry-lightweight-lint
         name: worldfoundry lightweight lint
         entry: make lint
