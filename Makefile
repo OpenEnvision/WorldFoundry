@@ -24,6 +24,7 @@ PUBLIC_GATE_CONTRACTS = \
 	tests/runtime/test_geometry_regression_lazy_dispatch.py \
 	tests/runtime/test_native_coverage_policy.py \
 	tests/runtime/test_junit_contract_validator.py \
+	tests/core/test_docs_toolchain.py \
 	tests/runtime/test_inference_actions_evidence.py \
 	tests/synthesis/test_matrix_game_2_historical_reference.py
 VIDEO_TENSOR_CONTRACTS = tests/core/test_video_tensor_regression.py tests/core/test_causal_video_cache.py tests/base_models/diffusion_model/optimizations/test_static_cross_kv.py
