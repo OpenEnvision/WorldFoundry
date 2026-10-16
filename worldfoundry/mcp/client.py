@@ -175,6 +175,7 @@ class MCPClient:
 
         return _SessionContext()
 
+
 # ── OpenAI-format conversion ───────────────────────────────────
 
 
@@ -183,7 +184,8 @@ def convert_result_to_openai_format(result: Any) -> list[dict[str, Any]]:
 
     Handles text, image, and audio content from MCP result objects or raw
     dictionaries, mapping them into the ``text``, ``image_url``, and
-    ``audio_url`` block types expected by the OpenAI Chat API.
+    ``input_audio`` block types expected by the OpenAI Chat API. Audio must
+    use WAV or MP3; other MIME types raise ``ValueError``.
     """
 
     if result is None:
@@ -204,7 +206,7 @@ def convert_result_to_openai_format(result: Any) -> list[dict[str, Any]]:
             return [{"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{result['data']}"}}]
         if result.get("type") == "audio" and "data" in result:
             mime_type = str(result.get("mimeType") or result.get("mime_type") or "audio/wav")
-            return [{"type": "audio_url", "audio_url": {"url": f"data:{mime_type};base64,{result['data']}"}}]
+            return [_openai_audio_block(str(result["data"]), mime_type)]
         # NOTE: Unrecognised dict content is serialised as a JSON text block.
         return [{"type": "text", "text": _json_text(result)}]
 
@@ -220,11 +222,21 @@ def convert_result_to_openai_format(result: Any) -> list[dict[str, Any]]:
         return [{"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{getattr(result, 'data')}"}}]
     if "audio" in content_type and hasattr(result, "data"):
         mime_type = str(getattr(result, "mimeType", None) or getattr(result, "mime_type", None) or "audio/wav")
-        return [{"type": "audio_url", "audio_url": {"url": f"data:{mime_type};base64,{getattr(result, 'data')}"}}]
+        return [_openai_audio_block(str(getattr(result, "data")), mime_type)]
     # NOTE: Fallback — serialise the entire object as a text string.
     return [{"type": "text", "text": str(result)}]
 
+
 # ── Utility helpers ────────────────────────────────────────────
+
+
+def _openai_audio_block(data: str, mime_type: str) -> dict[str, Any]:
+    """Map MCP audio MIME types to the Chat API's inline audio contract."""
+    formats = {"audio/wav": "wav", "audio/x-wav": "wav", "audio/mpeg": "mp3", "audio/mp3": "mp3"}
+    audio_format = formats.get(mime_type.lower())
+    if audio_format is None:
+        raise ValueError(f"OpenAI Chat input_audio supports WAV or MP3, not {mime_type!r}")
+    return {"type": "input_audio", "input_audio": {"data": data, "format": audio_format}}
 
 
 def _json_text(value: Any) -> str:

@@ -333,6 +333,12 @@ worldfoundry-eval mcp --transport sse
 
 Server 注册 27 个工具：`server_info`；discovery（`list_models`、`get_model_info`、`list_benchmarks`、`get_benchmark_info`、`list_tasks`、`get_task_info`、`list_metrics`、`show_metric`、`check_benchmark_datasets`）；run 生命周期（`preview_run`、`evaluate`、`list_runs`、`get_run_status`、`get_run_result`、`get_run_samples`、`cancel_run`）；以及 Studio workspace（`list_studio_models`、`get_studio_model_info`、`submit_studio_inference`、`list_studio_jobs`、`get_studio_job`、`wait_for_studio_job`、`stop_studio_job`、`get_studio_job_logs`、`list_studio_artifacts`、`get_studio_manifest`）。Studio 工具默认访问 `WORLDFOUNDRY_STUDIO_WORKSPACE_URL`（通常是 `http://127.0.0.1:7870`）。Run 文件写到 `WORLDFOUNDRY_MCP_RUN_ROOT`；未设置时为 `runs/mcp`。
 
+Python 客户端可通过 `worldfoundry.mcp.client.MCPClient` 和
+`convert_result_to_openai_format()` 将工具结果转换为 OpenAI Chat 内容块。
+音频使用 `input_audio` 块，其中 `data` 为 base64，`format` 为 `wav` 或 `mp3`。
+转换器接受 WAV/MP3 的 MIME 别名，其他音频格式会抛出 `ValueError`。
+文本与图像块保留原内容和 data URI；转换在本地完成，不调用 API provider。
+
 Parser 才是 flag 的事实来源。请使用 `worldfoundry-eval <command> [<subcommand>] --help`，不要从无关模型或 benchmark recipe 复制参数。
 
 ## 常用工作流
