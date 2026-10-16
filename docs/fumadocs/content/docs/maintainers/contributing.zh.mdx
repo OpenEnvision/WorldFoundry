@@ -6,54 +6,93 @@ description: 面向维护者的范围、验证、文档和发布证据 checklist
 ## 仓库协作流程
 
 根目录 [CONTRIBUTING.md](https://github.com/OpenEnvision/WorldFoundry/blob/main/CONTRIBUTING.md)
-维护贡献约定。使用聚焦分支和对应 runtime 要求的环境。新增 Python 函数及公开契约补齐类型注解，
-用 Ruff 和 ty 检查 Python，对暂存文件运行 pre-commit，保持控制面 lazy import 与上游署名。
+统一定义代码和 PR 规范。开发、推理、Studio 与评测使用同一个 GPU 环境。
+每个贡献 commit 都需要 [Developer Certificate of Origin](https://developercertificate.org/)
+签名确认，即 `git commit --signoff`。Commit subject 和 PR 标题统一使用 `[type]Description`，
+右括号后不加空格，描述使用英文祈使句，例如 `[test]Cover session cleanup`。
 
-每个贡献 commit 使用贡献者已配置的姓名和邮箱添加
-[Developer Certificate of Origin](https://developercertificate.org/) sign-off：
+参与者遵守[行为准则](https://github.com/OpenEnvision/WorldFoundry/blob/main/CODE_OF_CONDUCT.md)。
+潜在漏洞通过[安全政策](https://github.com/OpenEnvision/WorldFoundry/blob/main/SECURITY.md)中的私密渠道报告。
+一方贡献采用 [Apache License 2.0](https://github.com/OpenEnvision/WorldFoundry/blob/main/LICENSE)，
+保留的上游许可条款记录在[第三方许可与来源](/zh/docs/reference/vendored-licenses)。
 
-```bash
-git commit --signoff -m "Describe the scoped change"
-```
+新增 Python 函数和公开契约必须有类型注解。Ruff 统一格式和 import 顺序，ty 检查类型。
+pre-commit 检查 staged 文件，PR 的 `Python quality` 检查变更 Python 文件。
+保留上游署名及导入代码的检查排除规则。无权重的单元测试标记为 `unit`，CUDA 测试标记为
+`gpu`，手动推理脚本放在 `tests/manual/` 或 `tests/stream/`。
 
-使用仓库 [PR 模板](https://github.com/OpenEnvision/WorldFoundry/blob/main/.github/PULL_REQUEST_TEMPLATE.md)，
-记录精确命令、结果、资源要求与相关产物。适用检查的失败或未执行状态保留在证据中；
-import 与 mock 契约不能当作真实 checkpoint 推理结果。
-
-合并前取得适用的维护者/code-owner review，并通过相关检查。
-按 [CODEOWNERS](https://github.com/OpenEnvision/WorldFoundry/blob/main/.github/CODEOWNERS)
-确定审查责任，squash commit 保留贡献者 DCO trailer。这些协作约定不会自动配置 GitHub 分支保护。
+CODEOWNERS 覆盖整个仓库。PR 需要适用的 CI 结果和维护者/code owner 的批准。
+使用 squash merge 和描述性 PR 标题，并保留 DCO trailers。管理员按 CONTRIBUTING.md
+配置 `main` 的 ruleset。
 
 ## Agent Skills
 
-仓库 [Agent Skills](https://github.com/OpenEnvision/WorldFoundry/blob/main/skills/index.md)
-提供模型集成、benchmark 集成、推理优化、数值验证和仓库维护流程。每个目录使用 `SKILL.md`，
-在 frontmatter 中声明名称、描述、许可和环境要求；引用链接指向对应架构与验证契约。
-`CONTRIBUTING.md` 和 `AGENTS.md` 仍是仓库规则的权威来源。
+仓库维护的 [Agent Skills](https://agentskills.io/specification) 放在
+[`skills/`](https://github.com/OpenEnvision/WorldFoundry/tree/main/skills)。
+[技能索引](https://github.com/OpenEnvision/WorldFoundry/blob/main/skills/index.md)
+覆盖模型集成、benchmark 集成、推理优化、推理验证和仓库维护。
+每项技能使用 `SKILL.md`，包含 YAML `name`、`description` 和链接到当前框架契约的 Markdown 指令。
 
-可以显式加载某个 skill，或自行启用客户端的本地发现目录。从仓库根目录选择对应命令：
+工作流包括先做组件级数值对齐、校验 checkpoint 转换、定位首个数值偏差、确认实际执行后端，
+以及分别测量冷启动和稳态性能。Compile、CUDA graph、warmup 与 offload 任务按需加载执行生命周期参考，
+数值比较失败时加载 parity 参考。技能索引记录借鉴的上游工作流来源。
+所有命令和门禁仍由 WorldFoundry 的架构与验证契约统一定义；模型集成不代表服务可靠性已验证。
+
+可以显式加载对应的 `SKILL.md`，也可以按需接入客户端的本地技能目录。
+从仓库根目录运行对应客户端的命令：
 
 ```bash
 # 发现 .agents/skills 的客户端
 mkdir -p .agents && ln -s ../skills .agents/skills
+
 # Claude Code
 mkdir -p .claude && ln -s ../skills .claude/skills
+
 # Cursor
 mkdir -p .cursor && ln -s ../skills .cursor/skills
 ```
 
-这些客户端目录已被 Git 忽略。已有 skills 目录时，仅链接所需 skill：
+这些客户端目录已被 Git 忽略。若只需向已有技能目录加载一项技能，可以单独链接：
 
 ```bash
 mkdir -p .agents/skills
 ln -s ../../skills/worldfoundry-model-integration .agents/skills/worldfoundry-model-integration
 ```
 
-运行 `python -m pytest -q tests/core/test_agent_skills.py` 检查元数据与仓库内引用。
-官方 [skills-ref validator](https://github.com/agentskills/agentskills/tree/main/skills-ref)
-通过 `skills-ref validate skills/<skill-name>` 验证标准格式。
-格式、链接检查与客户端激活、任务质量分开验收：在启用与不启用 skill 的干净上下文中，
-比较代表性任务及一个不应触发 skill 的相邻请求。评估产物保留在 Git 之外。
+发现与启用方式取决于客户端配置。Skills 补充 `AGENTS.md` 和 CONTRIBUTING.md，
+仓库规则仍由这两份文件统一维护。目录索引使用 `skills/index.md`，
+仓库仍只保留根目录的一份 README。
+
+### 编写与验证
+
+遵循官方[格式规范](https://agentskills.io/specification)和
+[编写最佳实践](https://agentskills.io/skill-creation/best-practices)。
+
+- `SKILL.md` 以 YAML frontmatter 开始。必需字段为 `name` 和 `description`，正文描述任务步骤。
+- 名称为 1–64 个小写字母、数字或连字符，不能有首尾或连续连字符，且必须与父目录名称一致。
+  仓库技能使用 `worldfoundry-` 前缀。
+- 描述非空且不超过 1024 字符，以 “Use this skill when…” 开头，说明用户意图及适用任务场景。
+- `license`、`compatibility`、`metadata` 和 `allowed-tools` 是标准中的可选字段。
+  仓库技能声明 `Apache-2.0`；有特定 checkout 或环境要求时使用 `compatibility`，最多 500 字符。
+- 每项技能保持聚焦，`SKILL.md` 少于 500 行。发现阶段只加载名称和描述，启用阶段加载指令，
+  执行阶段按需读取参考文件。说明何时加载参考内容，文件链接相对于技能目录解析，
+  仓库命令从仓库根目录执行。
+- 按任务需要添加 `scripts/`、`references/` 或 `assets/`。脚本使用显式参数、声明依赖、提供
+  `--help` 且非交互执行；新增随技能分发的资源需纳入 `MANIFEST.in`。
+
+安装官方 [skills-ref 参考 CLI](https://github.com/agentskills/agentskills/tree/main/skills-ref) 后，
+从仓库根目录验证格式和仓库引用：
+
+```bash
+skills-ref validate skills/worldfoundry-model-integration
+python -m pytest -q tests/core/test_agent_skills.py
+```
+
+格式通过不代表触发可靠性或任务效果已验证。
+[行为评测](https://agentskills.io/skill-creation/evaluating-skills)先选两三项代表性任务，
+再增加一个相近但不应触发技能的请求。分别在加载与不加载技能的干净上下文中执行，
+检查是否读取了对应 `SKILL.md`，并比较实际输出和命令。
+生成的评测产物放在 `tmp/`，不进入 Git。
 
 ## PR 前检查
 
@@ -69,7 +108,7 @@ ln -s ../../skills/worldfoundry-model-integration .agents/skills/worldfoundry-mo
 - **Python** — 模型或 benchmark 有重依赖时保持 lazy import。
 - **公开入口** — 用户可见 runtime class 放在 `worldfoundry/pipelines/`；评测适配器放在 `worldfoundry/evaluation/`。
 - **Model runtimes** — `worldfoundry/synthesis/**` 下的 runtime integration 必须仓内实现。不要依赖机器本地的外部 checkout；外部仓库/checkpoint 在移植或 vendor review 前只能记录为 provenance 或 acquisition metadata。
-- **Vendored code** — 已 review 的 `thirdparty/` 代码按隔离代码处理。许可名称和上游 URL 记录在[第三方许可与来源](/zh/docs/reference/vendored-licenses)所链接的仓库声明与来源文件中，按上游条款保留版权声明和必需的组件许可文件，中央来源记录不能替代这些义务。操作文档放在 Fumadocs，而不是源码旁的 README。大型、独立版本的上游优先用 git submodule；只有需要重度打补丁时才仓内拷贝。不要再复制已经在 `worldfoundry/base_models/` 或 `worldfoundry/synthesis/` 里的代码。当前树：FlashAttention 是外部安装（`scripts/setup/install_flash_attn.sh`）；`diff-gaussian-rasterization/` 是带深度的规范高斯光栅器；`simple-knn/` 是 CUDA KNN 扩展；`fastvideo-kernel/` 是可选的 STA / VSA / VMoBA / TurboDiffusion kernel 树（`CUDA_HOME` + `./build.sh`；ThunderKittens 只在非 aarch64 的 Hopper `sm_90a`；FP4 attention 只在 Blackwell `sm_120a` 且 CUDA ≥ 12.8）。
+- **Vendored code** — 已 review 的 `thirdparty/` 代码按隔离代码处理。许可名称和上游 URL 记录在[第三方许可与来源](/zh/docs/reference/vendored-licenses)所链接的仓库声明与来源文件中，保留上游分发条款要求的组件许可文件，并在 package data 中声明；许可门禁记录已审查的例外。项目许可证放在根目录，来源记录保存在集中声明中，操作文档维护在 Fumadocs。大型、独立版本的上游优先用 git submodule；只有需要重度打补丁时才仓内拷贝。不要再复制已经在 `worldfoundry/base_models/` 或 `worldfoundry/synthesis/` 里的代码。当前树：FlashAttention 是外部安装（`scripts/setup/install_flash_attn.sh`）；`diff-gaussian-rasterization/` 是带深度的规范高斯光栅器；`simple-knn/` 是 CUDA KNN 扩展；`fastvideo-kernel/` 是可选的 STA / VSA / VMoBA / TurboDiffusion kernel 树（`CUDA_HOME` + `./build.sh`；ThunderKittens 只在非 aarch64 的 Hopper `sm_90a`；FP4 attention 只在 Blackwell `sm_120a` 且 CUDA ≥ 12.8）。
 - **Synthesis** — 保持 `worldfoundry/synthesis/**` 仅用于推理：runtime wrapper、推理所需模型代码、checkpoint/path helper 和最小 runtime config。不要添加 training launcher、dataset builder、demo 媒体、notebook 或生成输出。本地 demo 资产放在已被 Git 忽略的 `testcase/` 目录。
 - **Formatting** — 避免无关大规模格式化；除非任务需要，不重写生成文件或 vendored 文件。
 - **Naming** — 优先使用 canonical id 和直接 runner path；公开名称变化时，写 migration 说明，而不是长期保留 compatibility map。
@@ -83,14 +122,6 @@ ln -s ../../skills/worldfoundry-model-integration .agents/skills/worldfoundry-mo
 - **Stateful / interactive pipeline** — 使用文档化 stream 命令，并提供有界 runtime 证据。
 - **Benchmark runner** — Runner execution；需要 normalizer review 时，用 official-shaped result files 跑 `zoo benchmark-run --mode official-validation`。
 - **Model runner** — Resolver/manifest validation，并为缺 checkpoint/credentials 提供 skipped path。
-
-## 社区规范
-
-参与者遵守根目录
-[行为准则](https://github.com/OpenEnvision/WorldFoundry/blob/main/CODE_OF_CONDUCT.md)。
-潜在漏洞按
-[安全政策](https://github.com/OpenEnvision/WorldFoundry/blob/main/SECURITY.md)
-私下报告。根目录政策维护行为与披露流程；通过已有社区渠道和 CODEOWNERS 联系维护者。
 
 ## 文档要求
 
@@ -106,10 +137,6 @@ Fumadocs 是唯一维护的文档面。新增或修改页面时，在 `docs/fuma
 基于 Python 的文档 codegen 与漂移检查（`api:*`、`models:*`、`coverage:*` 和
 `cli:screenshots`）统一经 `docs/fumadocs/scripts/run-python.sh` 调用解释器。需要覆盖时，
 解析顺序为 `WF_DOCS_PYTHON`、`PYTHON`、`python3`、`python`。
-
-`npm run types:check` 先完成 MDX 生成，再生成 Next.js 路由类型，最后执行
-TypeScript 检查。路由类型命令设置 `_FUMADOCS_MDX=1`，复用已经完成的输出，
-避免后台再次生成 MDX 并改写同一组文件。
 
 ## 快速站点迭代
 
@@ -261,16 +288,20 @@ SSD 缓存辅助命令：`npm run ssd:setup`、`npm run ssd:status`、`npm run s
 ## 本地验证
 
 ```bash
-bash scripts/setup/conda_install.sh --preset slim --env-name worldfoundry
+bash scripts/setup/bootstrap_worldfoundry.sh
+source tmp/worldfoundry_unified_env.sh
+conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
+python -m pip install -e ".[dev,test]"
+pre-commit install
+pre-commit run
 make lint
 make docs-check
 cd docs/fumadocs && npm run types:check && npm run build
 ```
 
-公开版本的 CPU 检查无需模型权重：
+在同一个 GPU 开发环境中运行不加载权重的快速检查：
 
 ```bash
-python -m pip install -e ".[dev,test]"
 make test-infer
 make cli-check cli-entrypoint-check packaging-check
 ```
@@ -296,23 +327,13 @@ conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval run --all-be
 conda run -p "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}" worldfoundry-eval validate-artifact tmp/worldfoundry_plan_matrix/suite_manifest.json --kind suite-manifest --strict --json
 ```
 
-## PR 证据模板
+## PR 证据
 
-```md
-## Scope
-- Changed:
-- Not changed:
+统一使用仓库的 [PR 模板](https://github.com/OpenEnvision/WorldFoundry/blob/main/.github/PULL_REQUEST_TEMPLATE.md)，
+提供命令、结果、硬件和资产要求、受影响文档及相关运行产物。提交签名后运行：
 
-## Evidence
-- Command:
-- Output:
-- Scorecard/report:
-- Skipped stages:
-- Blockers:
-
-## Docs
-- English page:
-- Chinese page:
+```bash
+make pr-check BASE_REF="$(git merge-base origin/main HEAD)"
 ```
 
 <Callout title="Review 规则">

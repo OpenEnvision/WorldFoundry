@@ -87,6 +87,6 @@ State plainly when the scoped change is correct.
 Use the [PR template](../../.github/PULL_REQUEST_TEMPLATE.md). Record scoped
 changes, executed checks, resource requirements, artifacts, and remaining
 blockers. Sign off each contribution commit with `git commit --signoff`, then
-check the scoped diff with `git diff --check`, and run applicable Ruff and ty
-checks for changed Python files. Follow CODEOWNERS review and squash-merge
-conventions from the maintainer guide.
+run `make pr-check BASE_REF="$(git merge-base origin/main HEAD)"` against the
+committed changes. Follow CODEOWNERS review and squash-merge rules from
+CONTRIBUTING.md.

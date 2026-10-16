@@ -1,6 +1,6 @@
 .PHONY: help install-core install-dev test test-infer test-infer-tensors test-infer-contracts test-infer-cuda-contracts test-geometry test-eval-core docs-check docs-dev-fast docs-dev-ssd docs-dev-local docs-build-fast cli-entrypoint-check lint ruff-check format-check shell-check data-check runtime-registry-check workspace-registry-check check-cuda-constraints packaging-check compile-eval cli-check precommit precommit-install preflight
 .PHONY: test-infer-video-tensors plan-inference replay-inference coverage-inference verify-inference
-.PHONY: test-docs-contracts
+.PHONY: test-docs-contracts pr-check
 .PHONY: test-mg2-checkpoint-contracts test-mg2-trajectory-contracts test-mg2-conditioned-trajectory-contracts
 .PHONY: test-infer-sol-cuda-contracts test-lightvae-checkpoint-contracts
 
@@ -13,6 +13,8 @@ PREFLIGHT_PROFILE ?= all
 PREFLIGHT_OUTPUT ?= tmp/preflight
 CLI_CHECK_OUTPUT ?= tmp/ci-cli-check
 TEST_ARGS ?=
+BASE_REF ?=
+HEAD_REF ?= HEAD
 PUBLIC_TEST_MANIFEST ?= tmp/public-cpu-selection.json
 PUBLIC_TEST_JUNIT ?= tmp/public-cpu-contracts.xml
 DOCS_TEST_MANIFEST ?= tmp/docs-contract-selection.json
@@ -25,6 +27,7 @@ PUBLIC_GATE_CONTRACTS = \
 	tests/runtime/test_native_coverage_policy.py \
 	tests/runtime/test_junit_contract_validator.py \
 	tests/core/test_repository_policies.py \
+	tests/scripts/test_pr_checks.py \
 	tests/core/test_docs_toolchain.py \
 	tests/core/test_agent_skills.py \
 	tests/runtime/test_inference_actions_evidence.py \
@@ -207,6 +210,7 @@ help:
 		'  make cli-entrypoint-check Validate documented CLI entrypoints.' \
 		'  make lint              Run lightweight source and catalog checks.' \
 		'  make preflight         Run the public runtime preflight.' \
+		'  make pr-check          Check committed PR Python changes and DCO sign-offs; requires BASE_REF.' \
 		'  make check-cuda-constraints  Verify CUDA-tier torch constraint stubs.' \
 		'  make packaging-check   Audit package discovery and license-gated wheel content.'
 
@@ -375,6 +379,11 @@ cli-check:
 		--metric artifact_count \
 		--required-artifact video \
 		--json
+
+pr-check:
+	@test -n "$(BASE_REF)" || (echo 'Set BASE_REF to the PR comparison commit.'; exit 2)
+	$(PYTHON) scripts/dev/check_python_changes.py --base "$(BASE_REF)" --head "$(HEAD_REF)"
+	$(PYTHON) scripts/dev/check_dco.py --base "$(BASE_REF)" --head "$(HEAD_REF)"
 
 precommit:
 	$(PRE_COMMIT) run -a
