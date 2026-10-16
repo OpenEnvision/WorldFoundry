@@ -229,6 +229,11 @@
       "worldfoundry/synthesis/visual_generation/diamond/**",
       "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py"
     ],
+    "kandinsky6": [
+      "worldfoundry/pipelines/kandinsky6/**",
+      "worldfoundry/operators/kandinsky6_operator.py",
+      "worldfoundry/base_models/diffusion_model/**"
+    ],
     "helixworld-synthesis": [
       "worldfoundry/pipelines/helixworld/**",
       "worldfoundry/synthesis/visual_generation/helixworld/**"
@@ -398,6 +403,24 @@
     ],
     "worldplay2-bi-controls-short": [
       "worldplay2-synthesis"
+    ],
+    "kandinsky6-lite-video-short": [
+      "kandinsky6"
+    ],
+    "kandinsky6-lite-distill-video-short": [
+      "kandinsky6"
+    ],
+    "kandinsky6-lite-pretrain-video-short": [
+      "kandinsky6"
+    ],
+    "kandinsky6-pro-video-short": [
+      "kandinsky6"
+    ],
+    "kandinsky6-pro-distill-video-short": [
+      "kandinsky6"
+    ],
+    "kandinsky6-pro-pretrain-video-short": [
+      "kandinsky6"
     ]
   },
   "coverage_scope": "Declared short 3D, video generation and world-model cases; variants and unlisted integrations are not implied covered.",
