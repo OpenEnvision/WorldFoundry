@@ -1,5 +1,5 @@
 # Adapted from https://github.com/junjun3518/alias-free-torch under the Apache License 2.0
-#   LICENSE is in incl_licenses directory.
+# License text: THIRD-PARTY-NOTICES, BigVGAN alias-free-torch LICENSE_3.
 
 import torch.nn as nn
 
