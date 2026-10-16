@@ -1,5 +1,11 @@
 # WorldFoundry development guidance
 
+Task workflows are indexed in [skills/index.md](skills/index.md). Load the
+relevant `SKILL.md` for repository maintenance, model or benchmark integration,
+inference optimization, or numerical validation. Skills supplement
+[CONTRIBUTING.md](CONTRIBUTING.md) and the maintained architecture and validation
+contracts. Client discovery is opt-in.
+
 HERO scope limits, from [HERO-Anti-OverDefense](https://github.com/wanshuiyin/HERO-Anti-OverDefense/blob/main/RULES.md).
 Licensed under [MIT](https://github.com/wanshuiyin/HERO-Anti-OverDefense/blob/main/LICENSE); the license text is included in THIRD-PARTY-NOTICES.
 

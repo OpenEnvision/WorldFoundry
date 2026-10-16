@@ -29,6 +29,43 @@ merging. Follow [CODEOWNERS](https://github.com/OpenEnvision/WorldFoundry/blob/m
 for review responsibility and retain contributor DCO trailers in squash commits.
 These review conventions do not configure GitHub branch protection.
 
+## Agent Skills
+
+Repository [Agent Skills](https://github.com/OpenEnvision/WorldFoundry/blob/main/skills/index.md)
+provide model integration, benchmark integration, inference optimization,
+numerical validation, and repository maintenance workflows. Each directory uses
+`SKILL.md` frontmatter with a name, description, license and environment needs;
+references link to the owning architecture and validation contracts.
+`CONTRIBUTING.md` and `AGENTS.md` remain authoritative.
+
+Load a skill explicitly, or opt in through your client's local skill directory.
+From the repository root, choose the command for your client:
+
+```bash
+# Clients that discover .agents/skills
+mkdir -p .agents && ln -s ../skills .agents/skills
+# Claude Code
+mkdir -p .claude && ln -s ../skills .claude/skills
+# Cursor
+mkdir -p .cursor && ln -s ../skills .cursor/skills
+```
+
+These client directories are gitignored. For an existing skills directory, link
+one selected skill instead:
+
+```bash
+mkdir -p .agents/skills
+ln -s ../../skills/worldfoundry-model-integration .agents/skills/worldfoundry-model-integration
+```
+
+Validate metadata and repository links with
+`python -m pytest -q tests/core/test_agent_skills.py`. The official
+[skills-ref validator](https://github.com/agentskills/agentskills/tree/main/skills-ref)
+checks the standard format with `skills-ref validate skills/<skill-name>`.
+Format and link checks are separate from client activation and task quality:
+evaluate representative tasks and a nearby non-triggering request in clean
+contexts with and without the skill. Keep evaluation artifacts outside Git.
+
 ## Before a PR
 
 Before opening a PR, confirm the following:
