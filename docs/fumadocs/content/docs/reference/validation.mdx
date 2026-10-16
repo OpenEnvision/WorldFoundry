@@ -130,6 +130,16 @@ python -m pytest -q tests/pipelines/test_pi3x_real_inference.py
 This is a state-isolation check, not an accepted-output quality baseline. The
 fixed-weight numerical replay gate remains necessary for changed model behavior.
 
+### Video reader ownership
+
+`make test-infer-tensors` includes `tests/core/test_video_codec_contracts.py`.
+These CPU contracts verify that `read_video()` closes its ImageIO reader before
+releasing the local-input lease, on successful decoding, decoding failure and
+metadata failure. They also preserve ImageIO array/format forwarding, decoded
+pixel/fps parity with the direct backend, image conditioning, materialization
+directories and OpenCV writer release. These checks require no model weights
+or GPU.
+
 ### Video generation and world models
 
 `make test-infer-tensors` includes the video component numerical contracts;

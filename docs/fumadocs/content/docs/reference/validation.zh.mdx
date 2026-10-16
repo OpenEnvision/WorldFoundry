@@ -85,6 +85,14 @@ python -m pytest -q tests/pipelines/test_pi3x_real_inference.py
 
 这是请求状态隔离检查，不代表结果质量已经验收。模型行为发生变化时仍需运行固定权重的数值回归门禁。
 
+### 视频 reader 所有权
+
+`make test-infer-tensors` 包含 `tests/core/test_video_codec_contracts.py`。
+这些 CPU 契约验证 `read_video()` 在成功解码、解码失败、元数据读取失败时，
+都先关闭 ImageIO reader，再释放本地输入租约。契约同时覆盖 ImageIO 数组与
+format 参数透传、与直接后端解码所得像素及 fps 的精确一致、图像条件输入、
+物化目录和 OpenCV writer 释放，不需要模型权重或 GPU。
+
 ### Video generation 与 world model
 
 LTX 的 timestep-conditioned VAE 在解码时也会注入噪声。视频、音视频和带请求的张量解码现在使用 latent 所在设备上的独立 generator，seed 来自当前请求。真实小型 VAE 测试覆盖分块与不分块解码、A/B/A seed、全局随机状态隔离，以及与原 VAE 在相同随机状态下的精确一致性。不分块的张量解码直接调用 decoder。旧 LTX RGB 受未固定的全局随机状态影响；建立确定性 reference 时必须记录这一行为修复，并独立证明 latent 与受控解码的一致性，不能静默替换失败基准。

@@ -22,7 +22,10 @@ import subprocess
 import tempfile
 import threading
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import TYPE_CHECKING, Any, Iterable, cast
+
+if TYPE_CHECKING:
+    import numpy as np
 
 from worldfoundry.core.io.filesystem.storage import (
     local_path_for_uri,
@@ -69,11 +72,11 @@ def _resolve_ffmpeg_executable(
 
     if explicit is not None:
         return str(explicit)
-    requested = str(
-        preference
-        if preference is not None
-        else os.getenv("WORLDFOUNDRY_FFMPEG_PREFERENCE", "bundled")
-    ).strip().casefold()
+    requested = (
+        str(preference if preference is not None else os.getenv("WORLDFOUNDRY_FFMPEG_PREFERENCE", "bundled"))
+        .strip()
+        .casefold()
+    )
     aliases = {
         "bundle": "bundled",
         "bundled": "bundled",
@@ -84,9 +87,7 @@ def _resolve_ffmpeg_executable(
     try:
         resolved_preference = aliases[requested]
     except KeyError as error:
-        raise ValueError(
-            "WORLDFOUNDRY_FFMPEG_PREFERENCE must be 'bundled' or 'system'"
-        ) from error
+        raise ValueError("WORLDFOUNDRY_FFMPEG_PREFERENCE must be 'bundled' or 'system'") from error
 
     if resolved_preference == "system":
         return shutil.which("ffmpeg") or _imageio_ffmpeg_executable()
@@ -105,14 +106,14 @@ def extract_frames_from_video_url(video_url: str):
 def resize_video_tensor_to_resolution(video_tensor, resolution: Iterable[int]):
     """Resize and center-crop a ``[T,C,H,W]`` tensor to ``(target_h, target_w)``."""
 
-    import torchvision
+    from torchvision.transforms import functional
 
     target_h, target_w = [int(value) for value in resolution]
     orig_h, orig_w = int(video_tensor.shape[2]), int(video_tensor.shape[3])
     scaling_ratio = max(target_w / orig_w, target_h / orig_h)
-    resizing_shape = (int(math.ceil(scaling_ratio * orig_h)), int(math.ceil(scaling_ratio * orig_w)))
-    resized = torchvision.transforms.functional.resize(video_tensor, resizing_shape)
-    return torchvision.transforms.functional.center_crop(resized, [target_h, target_w])
+    resizing_shape = [int(math.ceil(scaling_ratio * orig_h)), int(math.ceil(scaling_ratio * orig_w))]
+    resized = functional.resize(video_tensor, resizing_shape)
+    return functional.center_crop(resized, [target_h, target_w])
 
 
 def read_image_as_video_tensor(
@@ -125,8 +126,8 @@ def read_image_as_video_tensor(
     """Load an image and materialize a ``[1,C,T,H,W]`` uint8 conditioning video tensor."""
 
     import torch
-    import torchvision
     from PIL import Image
+    from torchvision.transforms.functional import to_tensor
 
     path = Path(image_path)
     if path.suffix.lower() not in IMAGE_EXTENSIONS:
@@ -135,7 +136,7 @@ def read_image_as_video_tensor(
         raise ValueError("num_video_frames must be at least 1")
 
     image = Image.open(path).convert("RGB")
-    image_tensor = torchvision.transforms.functional.to_tensor(image)
+    image_tensor = to_tensor(image)
     first_frame = image_tensor.unsqueeze(0)
     zero_tail = torch.zeros_like(first_frame).repeat(num_video_frames - 1, 1, 1, 1)
     video = torch.cat([first_frame, zero_tail], dim=0)
@@ -146,12 +147,12 @@ def read_image_as_video_tensor(
 
 
 def video_tensor_to_uint8_frames(
-    video_tensor,
+    video_tensor: Any,
     *,
     value_range: str | tuple[float, float] = "auto",
     max_frames: int | None = None,
     from_end: bool = False,
-) -> "object":
+) -> np.ndarray:
     """Convert a normalized torch video tensor to uint8 THWC frames.
 
     ``value_range="auto"`` treats tensors with negative values as ``[-1, 1]``
@@ -191,17 +192,14 @@ def video_tensor_to_uint8_frames(
     elif value_range == "0,1":
         low, high = 0.0, 1.0
     else:
-        low, high = value_range
+        low, high = cast(tuple[float, float], value_range)
     if high <= low:
         raise ValueError("value_range high bound must be larger than low bound.")
     # Range inference must see the original input, but only selected frames
     # need conversion and the CUDA-to-host copy.
     if max_frames is not None:
         video = video[-max_frames:] if from_end else video[:max_frames]
-    video = (
-        (video.clamp(float(low), float(high)) - float(low))
-        * (255.0 / (float(high) - float(low)))
-    ).to(torch.uint8)
+    video = ((video.clamp(float(low), float(high)) - float(low)) * (255.0 / (float(high) - float(low)))).to(torch.uint8)
     return video.contiguous().cpu().numpy()
 
 
@@ -310,7 +308,8 @@ def load_video_frames(video_path: str | Path, *, max_frames: int | None = None, 
             frames = deque(maxlen=max_frames)
             reader = imageio.get_reader(str(local_path), mode="I")
             try:
-                for frame in reader:
+                # ImageIO's Reader stub annotates __iter__ as a frame, not an iterator.
+                for frame in cast(Iterable[np.ndarray], reader):
                     # Some readers reuse a frame buffer on their next read.
                     frames.append(np.array(frame, copy=True))
                     if not from_end and len(frames) == max_frames:
@@ -675,7 +674,9 @@ def load_frames_from_video(
     return torch.tensor(batch.asnumpy())
 
 
-def read_video(video_path: str | Path, *, return_metadata: bool = True):
+def read_video(
+    video_path: str | Path, *, return_metadata: bool = True
+) -> np.ndarray | tuple[np.ndarray, dict[str, Any]]:
     """Decode a video into frames and optional metadata."""
 
     import imageio
@@ -683,8 +684,12 @@ def read_video(video_path: str | Path, *, return_metadata: bool = True):
 
     with local_path_for_uri(video_path) as local_path:
         reader = imageio.get_reader(str(local_path))
-        frames = [np.asarray(frame) for frame in reader]
-        metadata = reader.get_meta_data()
+        try:
+            # ImageIO's Reader stub annotates __iter__ as a frame, not an iterator.
+            frames = [np.asarray(frame) for frame in cast(Iterable[np.ndarray], reader)]
+            metadata = reader.get_meta_data()
+        finally:
+            reader.close()
     if len(frames) == 0:
         raise ValueError(f"No frames found in video: {video_path}")
     stacked = np.stack(frames, axis=0)
@@ -969,7 +974,7 @@ def write_video_torchvision(
     output_path = Path(filename)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     height, width = int(frames.shape[1]), int(frames.shape[2])
-    writer = cv2.VideoWriter(str(output_path), cv2.VideoWriter_fourcc(*"mp4v"), float(fps), (width, height))
+    writer = cv2.VideoWriter(str(output_path), cv2.VideoWriter.fourcc(*"mp4v"), float(fps), (width, height))
     if not writer.isOpened():
         raise OSError(f"failed to open video writer for {output_path}")
     try:
@@ -1003,12 +1008,7 @@ def write_video(
         target = uri_to_local_path(output_path)
         target.parent.mkdir(parents=True, exist_ok=True)
         normalized_format = None if format is None else str(format).lstrip(".").casefold()
-        if (
-            target.suffix.casefold() == ".mp4"
-            and normalized_format in {None, "mp4"}
-            and quality is None
-            and not kwargs
-        ):
+        if target.suffix.casefold() == ".mp4" and normalized_format in {None, "mp4"} and quality is None and not kwargs:
             save_video_h264(frames, target, fps=fps, crf=23)
             return
 
@@ -1017,7 +1017,8 @@ def write_video(
         write_kwargs = {"fps": fps, "macro_block_size": 1, **kwargs}
         if quality is not None:
             write_kwargs["quality"] = quality
-        imageio.mimsave(str(target), frames, format=format, **write_kwargs)
+        # ImageIO v2 accepts THWC arrays and format names; its stub only declares lists and Format objects.
+        imageio.mimsave(str(target), frames, format=format, **write_kwargs)  # ty: ignore[no-matching-overload]
         return
 
     import imageio
@@ -1027,14 +1028,15 @@ def write_video(
         write_kwargs["quality"] = quality
     suffix = Path(str(output_path)).suffix or ".mp4"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=True) as handle:
-        imageio.mimsave(handle.name, frames, format=format, **write_kwargs)
+        # The same ImageIO v2 array/format contract applies to remote staging.
+        imageio.mimsave(handle.name, frames, format=format, **write_kwargs)  # ty: ignore[no-matching-overload]
         handle.seek(0)
         write_binary_uri(output_path, handle.read())
 
 
 def materialize_video_input(
-    video_input,
-    output_dir: Optional[str] = None,
+    video_input: Any,
+    output_dir: str | Path | None = None,
     filename: str = "input.mp4",
     fps: int = 24,
 ) -> str:
@@ -1052,9 +1054,8 @@ def materialize_video_input(
         ):
             return str(candidate.resolve())
 
-    if output_dir is None:
-        output_dir = scratch_directory("worldfoundry_video_")
-    output_path = Path(output_dir).expanduser().resolve() / filename
+    directory = scratch_directory("worldfoundry_video_") if output_dir is None else Path(output_dir)
+    output_path = directory.expanduser().resolve() / filename
     frames = coerce_video_frames(video_input)
     save_video_frames(frames, str(output_path), fps=fps)
     return str(output_path)

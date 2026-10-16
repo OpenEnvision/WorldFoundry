@@ -33,7 +33,7 @@ PUBLIC_GATE_CONTRACTS = \
 	tests/cli/test_mcp_content_conversion.py \
 	tests/runtime/test_inference_actions_evidence.py \
 	tests/synthesis/test_matrix_game_2_historical_reference.py
-VIDEO_TENSOR_CONTRACTS = tests/core/test_video_tensor_regression.py tests/core/test_causal_video_cache.py tests/base_models/diffusion_model/optimizations/test_static_cross_kv.py
+VIDEO_TENSOR_CONTRACTS = tests/core/test_video_tensor_regression.py tests/core/test_video_codec_contracts.py tests/core/test_causal_video_cache.py tests/base_models/diffusion_model/optimizations/test_static_cross_kv.py
 STREAMING_CPU_CONTRACTS = \
 	tests/synthesis/test_base_synthesis_lazy_grad.py \
 	tests/synthesis/test_matrix_game_2_encoder_precision.py \
