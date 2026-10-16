@@ -24,6 +24,7 @@ PUBLIC_GATE_CONTRACTS = \
 	tests/runtime/test_geometry_regression_lazy_dispatch.py \
 	tests/runtime/test_native_coverage_policy.py \
 	tests/runtime/test_junit_contract_validator.py \
+	tests/core/test_repository_policies.py \
 	tests/core/test_docs_toolchain.py \
 	tests/core/test_agent_skills.py \
 	tests/runtime/test_inference_actions_evidence.py \

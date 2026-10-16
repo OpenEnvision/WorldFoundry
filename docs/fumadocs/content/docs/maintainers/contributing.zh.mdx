@@ -84,6 +84,14 @@ ln -s ../../skills/worldfoundry-model-integration .agents/skills/worldfoundry-mo
 - **Benchmark runner** — Runner execution；需要 normalizer review 时，用 official-shaped result files 跑 `zoo benchmark-run --mode official-validation`。
 - **Model runner** — Resolver/manifest validation，并为缺 checkpoint/credentials 提供 skipped path。
 
+## 社区规范
+
+参与者遵守根目录
+[行为准则](https://github.com/OpenEnvision/WorldFoundry/blob/main/CODE_OF_CONDUCT.md)。
+潜在漏洞按
+[安全政策](https://github.com/OpenEnvision/WorldFoundry/blob/main/SECURITY.md)
+私下报告。根目录政策维护行为与披露流程；通过已有社区渠道和 CODEOWNERS 联系维护者。
+
 ## 文档要求
 
 Fumadocs 是唯一维护的文档面。新增或修改页面时，在 `docs/fumadocs/content/docs` 下维护英文和中文成对页面。本仓库只允许根目录那一份 `README.md`。不要在源码、vendor 树、fixture 或模型网络旁再加 `README.md`、`readme.md` 或 `README_*`。

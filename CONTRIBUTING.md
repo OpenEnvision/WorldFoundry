@@ -13,6 +13,9 @@ Model demo videos are served from GitHub CDN; docs development does not need `gi
 GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenEnvision/WorldFoundry.git
 ```
 
+Participants follow the [Code of Conduct](CODE_OF_CONDUCT.md). Report potential
+vulnerabilities privately using the [Security Policy](SECURITY.md).
+
 ## Before Opening A Pull Request
 
 - Keep the change scoped to one pipeline, benchmark path, CLI surface, or docs area.
