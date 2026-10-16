@@ -333,6 +333,13 @@ worldfoundry-eval mcp --transport sse
 
 The server registers 27 tools: `server_info`; discovery (`list_models`, `get_model_info`, `list_benchmarks`, `get_benchmark_info`, `list_tasks`, `get_task_info`, `list_metrics`, `show_metric`, `check_benchmark_datasets`); run lifecycle (`preview_run`, `evaluate`, `list_runs`, `get_run_status`, `get_run_result`, `get_run_samples`, `cancel_run`); and Studio workspace (`list_studio_models`, `get_studio_model_info`, `submit_studio_inference`, `list_studio_jobs`, `get_studio_job`, `wait_for_studio_job`, `stop_studio_job`, `get_studio_job_logs`, `list_studio_artifacts`, `get_studio_manifest`). Studio tools default to `WORLDFOUNDRY_STUDIO_WORKSPACE_URL` (typically `http://127.0.0.1:7870`). Run files land under `WORLDFOUNDRY_MCP_RUN_ROOT`, or `runs/mcp` when that variable is unset.
 
+Python clients can use `worldfoundry.mcp.client.MCPClient` and
+`convert_result_to_openai_format()` to adapt tool results to OpenAI Chat content.
+Audio uses an `input_audio` block with base64 `data` and `format` set to `wav` or
+`mp3`. The converter accepts WAV/MP3 MIME aliases and raises `ValueError` for
+other audio formats. Text and image blocks retain their content and data URIs.
+Conversion is local and does not call an API provider.
+
 The parser is the source of truth for flags. Use `worldfoundry-eval <command> [<subcommand>] --help` instead of copying flags from an unrelated model or benchmark recipe.
 
 ## Common workflows

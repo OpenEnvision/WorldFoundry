@@ -322,6 +322,8 @@ dev = [
 ]
 test = [
     "fastapi",
+    "openai>=1.61",
+    "pydantic>=2,<3",
     "numpy>=1.26,<3",
     "pillow>=10",
     "pytest>=8,<9",
