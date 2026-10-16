@@ -286,6 +286,53 @@ After that dispatch succeeds, retry the candidate's `inference-replay` job.
 The companion `inference-evidence-verified.yml` performs this retry once it is
 installed on the repository's default branch; until then retry it explicitly.
 
+### Component parity and first divergence
+
+For a model port or changed tensor math, compare components before composing the
+full sampling loop. Use the same source weights and inputs for the denoiser,
+condition encoders, latent codec and scheduler. Cover checkpoint conversion
+separately from direct construction: inspect missing/unexpected keys, remapping,
+fused projections, normalization, latent scaling and dtype. Matching shapes or
+successful loading alone does not establish numerical parity.
+
+Fix the checkpoint variant, seed and generator, prompt or controls, dimensions,
+frame count, schedule, guidance, precision and attention backend. Compare initial
+noise and conditioning, then per-step predictions and scheduler updates, then
+decoded frames before lossy encoding. If a result diverges, locate the earliest
+boundary with different values and compare its inputs before investigating later
+outputs. Use small FP32 components when supported, then cover the deployment
+precision and representative shapes. The owning case determines tolerances;
+never widen them or replace the accepted reference to conceal a mismatch.
+
+Keep temporary diagnostics instance-local, remove instrumentation after use, and
+store captures under `tmp/`, outside Git. Component comparisons supplement the
+public loader and accepted-reference replay; they do not replace either route.
+
+### Request isolation and evidence scope
+
+For reusable models, run A/B/A with the first and third requests identical and
+change only the intended conditioning in B. Cover reset, a failed request, and
+subsequent reuse. Check mutable scheduler, cache, decoder and memory state without
+copying reusable model weights. Use the same state and shapes when comparing
+eager, compiled, graph or offloaded paths.
+
+State the execution scope of each result:
+
+- Mocked contracts verify dispatch and request wiring.
+- Small real components verify their executed arithmetic and state handling.
+- CUDA checks verify the selected device kernels, streams and precision paths.
+- Released-checkpoint sampling verifies the executed weights and requests;
+  accepted-reference comparison is needed to establish numerical regression.
+- Serving acceptance additionally exercises live cancellation, worker reuse,
+  simultaneous sessions and the advertised rank topology.
+
+Injected cancellation and deterministic interleaving establish bounded cleanup
+and isolation, not live service or CUDA concurrency. Separate functional and
+numerical results from performance: measure loading, cold compilation, warmup,
+steady-state sampling, decode, transfer and encoding independently. Use CUDA
+events or explicit synchronization for completed GPU work and keep profiler
+attribution separate from latency measurements.
+
 ### Validation while optimizing
 
 | Change | Checks on every change | Broader evidence |
