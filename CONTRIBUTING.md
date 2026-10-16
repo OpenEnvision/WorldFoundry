@@ -22,6 +22,14 @@ GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenEnvision/WorldFoundry.git
 - Run `bash scripts/docs/build.sh --skip-bootstrap` when docs or README links change.
 - Include scorecard, preflight, or validation evidence for any readiness claim.
 
+## Agent Skills
+
+Task workflows live in [skills/index.md](skills/index.md), using the vendor-neutral
+`skills/<name>/SKILL.md` format. They supplement repository rules and the maintained
+architecture and validation contracts. Client discovery is opt-in; see the
+[maintainer guide](docs/fumadocs/content/docs/maintainers/contributing.mdx#agent-skills)
+for local setup.
+
 ## Change Checklists
 
 ### Add Or Update A Model

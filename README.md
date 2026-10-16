@@ -385,6 +385,9 @@ The docs app serves English routes under `/docs` and Chinese routes under `/zh/d
 
 ## Development Checks
 
+Repository [Agent Skills](skills/index.md) provide opt-in workflows for model and
+benchmark integration, inference optimization, numerical validation, and maintenance.
+
 Use these checks before opening a PR or marking a model/benchmark ready:
 
 ```bash

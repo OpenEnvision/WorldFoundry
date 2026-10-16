@@ -24,6 +24,37 @@ import 与 mock 契约不能当作真实 checkpoint 推理结果。
 按 [CODEOWNERS](https://github.com/OpenEnvision/WorldFoundry/blob/main/.github/CODEOWNERS)
 确定审查责任，squash commit 保留贡献者 DCO trailer。这些协作约定不会自动配置 GitHub 分支保护。
 
+## Agent Skills
+
+仓库 [Agent Skills](https://github.com/OpenEnvision/WorldFoundry/blob/main/skills/index.md)
+提供模型集成、benchmark 集成、推理优化、数值验证和仓库维护流程。每个目录使用 `SKILL.md`，
+在 frontmatter 中声明名称、描述、许可和环境要求；引用链接指向对应架构与验证契约。
+`CONTRIBUTING.md` 和 `AGENTS.md` 仍是仓库规则的权威来源。
+
+可以显式加载某个 skill，或自行启用客户端的本地发现目录。从仓库根目录选择对应命令：
+
+```bash
+# 发现 .agents/skills 的客户端
+mkdir -p .agents && ln -s ../skills .agents/skills
+# Claude Code
+mkdir -p .claude && ln -s ../skills .claude/skills
+# Cursor
+mkdir -p .cursor && ln -s ../skills .cursor/skills
+```
+
+这些客户端目录已被 Git 忽略。已有 skills 目录时，仅链接所需 skill：
+
+```bash
+mkdir -p .agents/skills
+ln -s ../../skills/worldfoundry-model-integration .agents/skills/worldfoundry-model-integration
+```
+
+运行 `python -m pytest -q tests/core/test_agent_skills.py` 检查元数据与仓库内引用。
+官方 [skills-ref validator](https://github.com/agentskills/agentskills/tree/main/skills-ref)
+通过 `skills-ref validate skills/<skill-name>` 验证标准格式。
+格式、链接检查与客户端激活、任务质量分开验收：在启用与不启用 skill 的干净上下文中，
+比较代表性任务及一个不应触发 skill 的相邻请求。评估产物保留在 Git 之外。
+
 ## PR 前检查
 
 提交 PR 前，请确认：
