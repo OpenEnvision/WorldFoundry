@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 SCAN_ROOTS = (
     REPO_ROOT / "worldfoundry/core",
@@ -32,8 +32,7 @@ SCAN_ROOTS = (
 # tree this tick must not edit (core/distributed).
 ALLOWLIST = {
     "worldfoundry/core/observability/logging_setup.py": (
-        "WONTFIX: configure_logging is the CLI/process entry that must "
-        "install root handlers"
+        "WONTFIX: configure_logging is the CLI/process entry that must install root handlers"
     ),
     "worldfoundry/core/distributed/sequence_parallel/logger.py": (
         "dictConfig remains for the trainer logger only; root key is stripped"
@@ -114,9 +113,7 @@ class _RootMutationVisitor(ast.NodeVisitor):
         )
 
     def _is_root_expr(self, node: ast.AST) -> bool:
-        if isinstance(node, ast.Name) and (
-            node.id in self.root_vars or self.imported.get(node.id) == "root"
-        ):
+        if isinstance(node, ast.Name) and (node.id in self.root_vars or self.imported.get(node.id) == "root"):
             return True
         if self._is_logging_attr(node, "root"):
             return True
@@ -170,11 +167,7 @@ class _RootMutationVisitor(ast.NodeVisitor):
                 if isinstance(target, ast.Name):
                     self.root_vars.add(target.id)
         for target in node.targets:
-            if (
-                isinstance(target, ast.Attribute)
-                and target.attr == "handlers"
-                and self._is_root_expr(target.value)
-            ):
+            if isinstance(target, ast.Attribute) and target.attr == "handlers" and self._is_root_expr(target.value):
                 self._hit(node, "assign logging.root.handlers")
         self.generic_visit(node)
 
