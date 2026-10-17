@@ -28,12 +28,12 @@ Install the default unified WorldFoundry GPU environment. This is the recommende
 one-command setup for local inference on modern NVIDIA hosts.
 
 Default stack:
-  CUDA tier: auto (cu128 on CUDA 12.8+ drivers, cu124 on 12.4+, cu121 on 12.1+)
+  CUDA tier: auto (cu128, requiring a CUDA 12.8+ NVIDIA driver)
   install preset: max-infer
   env prefix: ${WORLDFOUNDRY_HOME:-$HOME/.cache/worldfoundry}/conda_envs/worldfoundry-unified-<tier>
 
 Options:
-  --cuda TIER           auto, cu128, cu124, or cu121. Default: auto.
+  --cuda TIER           auto or cu128. Default: auto.
   --environment-file PATH
                         Conda environment YAML. Default: environment.yml.
   --env-name NAME       Override unified env name.
@@ -257,12 +257,8 @@ if [[ "$WRITE_ENV_FILE" == "1" ]]; then
   echo "WorldFoundry env exports: ${ENV_FILE}"
 fi
 
-bash "$ROOT/scripts/setup/conda_install.sh" \
-  --prefix "$ENV_PREFIX" \
-  --cuda "$CUDA_TIER" \
-  --environment-file "$CONDA_ENVIRONMENT_FILE" \
-  --preset "$INSTALL_PRESET" \
-  "${INSTALL_ARGS[@]}"
+INSTALL_ARGS+=(--prefix "$ENV_PREFIX" --cuda "$CUDA_TIER" --environment-file "$CONDA_ENVIRONMENT_FILE" --preset "$INSTALL_PRESET")
+bash "$ROOT/scripts/setup/conda_install.sh" "${INSTALL_ARGS[@]}"
 
 install_worldfoundry_wrapper() {
   local name="$1"

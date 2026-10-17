@@ -390,7 +390,10 @@ worldfoundry/studio/assets/vendor/
 /plan/
 /memory/
 /configs/
-/benchmarks/
+/benchmarks/*
+!/benchmarks/inference/
+/benchmarks/inference/*
+!/benchmarks/inference/wan_execution_preparation.py
 /gg
 
 # Public branch: keep private training and embedded upstream QA out of commits.
@@ -988,6 +991,7 @@ worldfoundry/studio/assets/vendor/
 /tests/**
 !/tests/**/
 !/tests/**/*.py
+!/tests/**/*.mjs
 !/tests/**/*.md
 !/tests/**/*.sh
 !/tests/**/*.yaml

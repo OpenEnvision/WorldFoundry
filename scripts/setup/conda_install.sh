@@ -32,8 +32,8 @@ Creates or updates the open-source WorldFoundry GPU conda environment.
 Options:
   --env-name NAME       Conda environment name. Default: worldfoundry.
   --prefix PATH         Conda environment prefix instead of --env-name.
-  --cuda PROFILE        PyTorch CUDA wheel bucket: auto, cu128, cu124, or cu121.
-                       Default: auto; modern CUDA 12.8 hosts resolve to cu128.
+  --cuda PROFILE        auto or cu128. Default: auto.
+                       The unified Torch 2.7+ stack requires CUDA 12.8+ drivers.
   --environment-file PATH
                        Conda environment YAML. Default: environment.yml.
   --preset NAME         max-infer or slim. Default: max-infer.
@@ -225,12 +225,12 @@ env_selector() {
 
 conda_run() {
   local args=()
-  local env_prefix=()
   mapfile -t args < <(env_selector)
   if [[ -n "${PIP_CONFIG_FILE:-}" ]]; then
-    env_prefix=(env "PIP_CONFIG_FILE=${PIP_CONFIG_FILE}")
+    env "PIP_CONFIG_FILE=${PIP_CONFIG_FILE}" "$CONDA_EXE_PATH" run "${args[@]}" "$@"
+  else
+    "$CONDA_EXE_PATH" run "${args[@]}" "$@"
   fi
-  "${env_prefix[@]}" "$CONDA_EXE_PATH" run "${args[@]}" "$@"
 }
 
 ensure_matching_cuda_nvcc() {

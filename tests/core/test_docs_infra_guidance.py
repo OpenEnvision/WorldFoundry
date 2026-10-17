@@ -28,16 +28,16 @@ def test_environment_and_cli_docs_cover_compile_cache_and_logging() -> None:
         assert "WORLDFOUNDRY_LOG_CONTEXT" in text
 
 
-def test_install_docs_keep_cpu_gpu_and_native_boundaries_explicit() -> None:
+def test_install_docs_use_the_unified_gpu_environment() -> None:
     for path in (
         REPO_ROOT / "README.md",
         DOCS_ROOT / "quickstart.mdx",
         DOCS_ROOT / "quickstart.zh.mdx",
     ):
         text = _text(path)
-        assert 'pip install -e ".[tui]"' in text
         assert "bootstrap_worldfoundry.sh" in text
-        assert "CPU" in text and "GPU" in text
+        assert "GPU" in text and "CUDA 12.8" in text
+        assert 'conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"' in text
 
 
 def test_maintainer_docs_name_setup_and_contribution_gates() -> None:

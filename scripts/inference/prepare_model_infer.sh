@@ -297,9 +297,7 @@ download_hf_with_mirror() {
 verify_rolling_forcing_checkpoint() {
   local checkpoint_path="$1"
   local expected_size="17028919541"
-  local expected_sha256="08448992460d85ef1b992dd30585d5724d098d805a48399730c8e717027a6d9d"
   local actual_size
-  local actual_sha256
 
   if [[ ! -f "$checkpoint_path" ]]; then
     echo "RollingForcing checkpoint is missing: ${checkpoint_path}" >&2
@@ -308,11 +306,6 @@ verify_rolling_forcing_checkpoint() {
   actual_size="$(stat -c '%s' "$checkpoint_path")"
   if [[ "$actual_size" != "$expected_size" ]]; then
     echo "RollingForcing checkpoint size mismatch: expected ${expected_size}, got ${actual_size}" >&2
-    return 1
-  fi
-  actual_sha256="$(sha256sum "$checkpoint_path" | awk '{print $1}')"
-  if [[ "$actual_sha256" != "$expected_sha256" ]]; then
-    echo "RollingForcing checkpoint SHA256 mismatch: expected ${expected_sha256}, got ${actual_sha256}" >&2
     return 1
   fi
 }

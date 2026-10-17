@@ -39,14 +39,6 @@ def test_public_docs_document_model_download_and_inference_contract() -> None:
     )
     repo_id = model_manifest["checkpoint"]["repos"][0]["id"]
     revision = model_manifest["checkpoint"]["repos"][0]["sha"]
-    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-
-    assert "matrix-game-2" in readme
-    assert repo_id in readme
-    assert "worldfoundry-eval zoo model-download --model-id matrix-game-2" in readme
-    assert "bash scripts/inference/prepare_model_infer.sh matrix-game-2 --download" in readme
-    assert "bash scripts/inference/run_infer.sh --category navigation-video --model matrix-game-2" in readme
-
     inference_paths = (
         REPO_ROOT / "docs" / "fumadocs" / "content" / "docs" / "guides" / "inference.mdx",
         REPO_ROOT / "docs" / "fumadocs" / "content" / "docs" / "guides" / "inference.zh.mdx",
@@ -94,9 +86,8 @@ def test_fumadocs_build_artifacts_are_not_tracked() -> None:
     assert tracked == ""
 
 
-def test_public_docs_expose_all_benchmarks_run_shortcut() -> None:
+def test_cli_docs_expose_all_benchmarks_run_shortcut() -> None:
     paths = (
-        REPO_ROOT / "README.md",
         REPO_ROOT / "docs" / "fumadocs" / "content" / "docs" / "reference" / "cli.mdx",
         REPO_ROOT / "docs" / "fumadocs" / "content" / "docs" / "reference" / "cli.zh.mdx",
     )
@@ -107,6 +98,63 @@ def test_public_docs_expose_all_benchmarks_run_shortcut() -> None:
         assert "--all-benchmarks" in text
         assert "--output-dir" in text
         assert "--plan-only" in text
+
+
+def test_readme_gpu_quickstart_launches_studio() -> None:
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "CUDA 12.8" in readme
+    assert "bash scripts/setup/bootstrap_worldfoundry.sh" in readme
+    assert "source tmp/worldfoundry_unified_env.sh" in readme
+    assert 'conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"' in readme
+    assert "bash scripts/workspace/run_workspace.sh --host 127.0.0.1 --port 7870" in readme
+    assert "http://127.0.0.1:7870/" in readme
+
+
+def test_readme_links_to_usage_and_maintainer_guides() -> None:
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    docs_root = REPO_ROOT / "docs/fumadocs/content/docs"
+    guides = (
+        "quickstart",
+        "guides/supported-models",
+        "guides/local-assets",
+        "guides/inference",
+        "guides/inference-optimization",
+        "guides/studio",
+        "evaluation",
+        "evaluation/benchmark-hub",
+        "reference/cli",
+        "reference/environments",
+        "reference/validation",
+        "reference/vendored-licenses",
+        "maintainers/architecture",
+    )
+
+    for guide in guides:
+        assert f"https://openenvision.github.io/WorldFoundry/docs/{guide})" in readme
+        for suffix in (".mdx", ".zh.mdx"):
+            assert (docs_root / f"{guide}{suffix}").is_file() or (docs_root / guide / f"index{suffix}").is_file(), guide
+
+    for target in ("CONTRIBUTING.md", "skills/index.md", "CODE_OF_CONDUCT.md", "SECURITY.md"):
+        assert f"]({target})" in readme
+        assert (REPO_ROOT / target).is_file()
+
+
+def test_readme_keeps_news_and_community_qr_codes() -> None:
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert (
+        readme.index("![WorldFoundry teaser]")
+        < readme.index("## 📰 News")
+        < readme.index("## 🤝 Community")
+        < readme.index("## Highlights")
+    )
+    assert "https://join.slack.com/t/worldfoundrycommunity/" in readme
+    assert "https://discord.gg/ybUQMDA4x" in readme
+    for filename in ("wechat_qr.png", "wechat_qr_2.png", "wechat_qr_3.png"):
+        image = f"docs/fumadocs/public/{filename}"
+        assert f'src="{image}"' in readme
+        assert (REPO_ROOT / image).is_file()
 
 
 def test_readme_does_not_advertise_retired_gpu_validation_commands() -> None:

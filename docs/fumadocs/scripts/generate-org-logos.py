@@ -35,7 +35,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from pathlib import Path
+from typing import cast
 
 DOCS_ROOT = Path(__file__).resolve().parents[1]
 LOGO_DIR = DOCS_ROOT / "public" / "org-logos"
@@ -143,7 +145,8 @@ def recolor_university_seals() -> int:
             raise SystemExit(f"missing university seal: {path}")
         target = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
         image = Image.open(path).convert("RGBA")
-        pixels = list(image.getdata())
+        # Pillow's ImagingCore supports iteration without declaring the protocol in its stub.
+        pixels = list(cast(Iterable[tuple[int, int, int, int]], image.getdata()))
         opaque = [px for px in pixels if px[3] > 30]
         if not opaque:
             continue
@@ -1243,7 +1246,6 @@ MODEL_ORGS: dict[str, str] = {
     "infinite-world": "meigen",
     "inspatio-world": "inspatio",
     "internvla-a1": "shanghai-ai-lab",
-    "irasim": "bytedance",
     "iris": "unige",
     "joyai-echo-longvideo": "jd",
     "joyai-echo-wm": "jd",
@@ -1315,7 +1317,6 @@ MODEL_ORGS: dict[str, str] = {
     "openpi": "physical-intelligence",
     "openvla": "stanford",
     "openvla-oft": "stanford",
-    "pandora": "ucsd",
     "pi0": "physical-intelligence",
     "pi0-fast": "physical-intelligence",
     "pi0-worldfoundry": "physical-intelligence",
@@ -1612,7 +1613,7 @@ def write_sources(orgs: dict[str, dict]) -> None:
     lines.append("")
     lines.append("Institutions without a committed logo render their abbreviation instead:")
     abbr_only = [
-        f"`{org_id}` ({entry['name']}, \"{entry['abbr']}\")"
+        f'`{org_id}` ({entry["name"]}, "{entry["abbr"]}")'
         for org_id, entry in sorted(orgs.items())
         if "src" not in entry
     ]

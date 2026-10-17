@@ -45,7 +45,7 @@ Common examples:
   bash scripts/setup/bootstrap_worldfoundry.sh --prepare-model skyreels-v3 --download-model-assets
 
 Options:
-  --cuda TIER              auto, cu128, cu124, or cu121. Default: auto.
+  --cuda TIER              auto or cu128. Requires a CUDA 12.8+ NVIDIA driver.
   --home PATH              WorldFoundry runtime root. Default: ${XDG_CACHE_HOME:-$HOME/.cache}/worldfoundry.
   --env-root PATH          Conda envs root. Default: ${WORLDFOUNDRY_HOME}/conda_envs.
   --data-root PATH         Data root forwarded to unified_install.sh.
@@ -212,7 +212,8 @@ if [[ -z "$ENV_PREFIX" && "$INSTALL_UNIFIED" != "1" ]]; then
 fi
 
 if [[ "$VERIFY" == "1" && -n "$ENV_PREFIX" ]]; then
-  conda run -p "$ENV_PREFIX" python - <<'PY'
+  if [[ "$INSTALL_UNIFIED" != "1" ]]; then
+    conda run -p "$ENV_PREFIX" python - <<'PY'
 import json
 import importlib
 import torch
@@ -224,10 +225,11 @@ result["cuda_available"] = torch.cuda.is_available()
 result["cuda_device_count"] = torch.cuda.device_count()
 print(json.dumps(result, sort_keys=True))
 PY
+  fi
   conda run -p "$ENV_PREFIX" worldfoundry-eval zoo models --json >/dev/null
 fi
 
-for model_id in "${MODELS[@]}"; do
+for model_id in ${MODELS[@]+"${MODELS[@]}"}; do
   args=(bash "$ROOT/scripts/setup/model_env_install.sh" --model "$model_id" --cuda "$CUDA_TIER" --home "$HOME_ROOT")
   [[ -n "$ENV_ROOT" ]] && args+=(--env-root "$ENV_ROOT")
   [[ "$VERIFY_ONLY" == "1" ]] && args+=(--verify-only)
@@ -236,7 +238,7 @@ for model_id in "${MODELS[@]}"; do
   "${args[@]}"
 done
 
-for model_id in "${PREPARE_MODELS[@]}"; do
+for model_id in ${PREPARE_MODELS[@]+"${PREPARE_MODELS[@]}"}; do
   args=(bash "$ROOT/scripts/inference/prepare_model_infer.sh" "$model_id" --skip-env)
   if [[ "$DOWNLOAD_MODEL_ASSETS" == "1" ]]; then
     args+=(--download)

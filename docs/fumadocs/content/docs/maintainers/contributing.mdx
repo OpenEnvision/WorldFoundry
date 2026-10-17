@@ -161,6 +161,45 @@ Python-backed docs codegen and drift checks (`api:*`, `models:*`, `coverage:*`, 
 `cli:screenshots`) go through `docs/fumadocs/scripts/run-python.sh`. Override the interpreter
 with `WF_DOCS_PYTHON` (then `PYTHON`, then `python3` / `python`) when needed.
 
+## Documentation setup and deployment
+
+The documentation app uses Next.js 16, React 19, Fumadocs, and Tailwind CSS 4.
+Use Node.js 22 (`docs/fumadocs/.nvmrc`), npm, and the unified Python environment.
+From the repository root:
+
+```bash
+npm --prefix docs/fumadocs ci
+npm --prefix docs/fumadocs run dev
+bash scripts/docs/build.sh
+npm --prefix docs/fumadocs start
+```
+
+The development and static-preview servers use `http://localhost:3000`; both
+`/docs` and `/zh/docs` are available. Add `--skip-install` to the build command
+when dependencies are already installed. The build checks types and generated
+data before exporting `docs/fumadocs/out/`.
+
+Inside `docs/fumadocs/`, `app/` owns routes, `components/` shared UI,
+`content/docs/` paired pages, `content/blog/` articles, `mdx/partials/` shared
+prose, `lib/` helpers and catalog data, `public/` assets, and `scripts/` tooling.
+`source.config.ts` configures collections; `next.config.mjs` configures static
+export and caching. `.source/`, `generated/`, `tmp/`, `.next/`, and `out/` are
+generated. Run `api:generate`, `models:generate`, `benchmarks:generate`, or
+`coverage:generate` after changing their inputs, then the matching `*:check`.
+`models:homes:check` validates model pages; `types:check` generates MDX/types
+and checks TypeScript.
+
+`.github/workflows/deploy-docs.yml` publishes the static export on matching
+`main` changes or manual dispatch. Set these values before the deployment build:
+
+| Variable | Official deployment |
+| --- | --- |
+| `NEXT_PUBLIC_BASE_PATH` | `/WorldFoundry`; empty for local development. |
+| `NEXT_PUBLIC_SITE_URL` | `https://openenvision.github.io`. |
+| `NEXT_PUBLIC_DEMO_ASSET_BASE_URL` | GitHub media CDN for `docs/fumadocs/public`. |
+
+Demo videos remain on the CDN rather than in the Pages artifact.
+
 ## Fast site iteration
 
 Model demo videos are served from GitHub CDN; docs development does not need `git lfs pull`.
