@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
 from typing import Any
 
 from worldfoundry.core.io.filesystem.file_utils import materialize_file
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
+from worldfoundry.evaluation.api import GenerationRequest
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
-    first_existing_dir,
-    resolve_env_path,
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
+    first_existing_dir,
+    resolve_env_path,
+)
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    iter_generation_video_artifacts,
+    reset_generation_artifact_staging,
 )
 from worldfoundry.evaluation.utils import write_jsonl
 
@@ -34,7 +37,6 @@ META_COLUMNS = (
     "style_caption",
     "camera_caption",
 )
-
 
 
 def resolve_mirabench_root(explicit: Path | None = None) -> Path | None:
@@ -127,7 +129,9 @@ def unique_prompt_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         seen.add(prompt_id)
         records.append(row)
-    return sorted(records, key=lambda item: int(item["prompt_id"]) if str(item["prompt_id"]).isdigit() else item["prompt_id"])
+    return sorted(
+        records, key=lambda item: int(item["prompt_id"]) if str(item["prompt_id"]).isdigit() else item["prompt_id"]
+    )
 
 
 def official_video_filename_for_record(record: dict[str, Any]) -> str:
@@ -200,23 +204,6 @@ def write_meta_csv(
     return output_path
 
 
-def _resolve_source_video(
-    *,
-    sample_id: str,
-    source_path: Path,
-    record_by_id: dict[str, dict[str, Any]],
-) -> Path:
-    if source_path.is_file():
-        return source_path
-    record = record_by_id.get(sample_id)
-    if record is not None:
-        official_name = official_video_filename_for_record(record)
-        sibling = source_path.parent / official_name
-        if sibling.is_file():
-            return sibling
-    return source_path
-
-
 def copy_mirabench_generated_videos(
     *,
     generation_output_dir: Path,
@@ -225,60 +212,23 @@ def copy_mirabench_generated_videos(
     output_artifact: str = "generated_video",
     meta_csv_path: Path | None = None,
 ) -> tuple[int, int]:
-    generated_artifact_dir.mkdir(parents=True, exist_ok=True)
+    reset_generation_artifact_staging(generation_output_dir, generated_artifact_dir)
     records = unique_prompt_records(load_prompt_records(meta_csv_path=meta_csv_path))
     record_by_id = {record["prompt_id"]: record for record in records}
     materialized = 0
     placeholders = 0
     manifest_rows: list[dict[str, Any]] = []
 
-    for sample_dir in sorted(path for path in generation_output_dir.iterdir() if path.is_dir()):
-        result_path = sample_dir / "result.json"
-        if not result_path.is_file():
+    for result, _, source_path in iter_generation_video_artifacts(generation_output_dir, output_artifact):
+        if source_path is None or not source_path.is_file():
             continue
-        payload = json.loads(result_path.read_text(encoding="utf-8"))
-        sample_id = str(payload.get("sample_id") or sample_dir.name)
-        outputs = payload.get("outputs") if isinstance(payload.get("outputs"), dict) else {}
-        source = outputs.get(output_artifact) or outputs.get("generated_video")
-        if not source:
+        record = record_by_id.get(result.sample_id, {"prompt_id": result.sample_id})
+        target_path = generated_artifact_dir / video_filename_for_record(record)
+        if target_path.is_file():
             continue
-        source_path = _resolve_source_video(
-            sample_id=sample_id,
-            source_path=Path(str(source)),
-            record_by_id=record_by_id,
-        )
-        if not source_path.is_file():
-            continue
-        target_path = generated_artifact_dir / video_filename_for_record(
-            record_by_id.get(sample_id, {"prompt_id": sample_id})
-        )
         materialize_file(source_path, target_path, writable=False)
         materialized += 1
-        manifest_rows.append({"sample_id": sample_id, "artifact": output_artifact, "path": str(target_path)})
-
-    results_path = generation_output_dir / "results.jsonl"
-    if results_path.is_file():
-        for line in results_path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            result = GenerationResult.from_dict(json.loads(line))
-            artifact = result.artifacts.get(output_artifact) or result.artifacts.get("generated_video")
-            if artifact is None:
-                continue
-            from worldfoundry.evaluation.utils import local_path_for_uri
-
-            source_path = local_path_for_uri(str(artifact))
-            if source_path is None or not source_path.is_file():
-                continue
-            record = record_by_id.get(result.sample_id, {"prompt_id": result.sample_id})
-            target_path = generated_artifact_dir / video_filename_for_record(record)
-            if target_path.is_file():
-                continue
-            materialize_file(source_path, target_path, writable=False)
-            materialized += 1
-            manifest_rows.append(
-                {"sample_id": result.sample_id, "artifact": output_artifact, "path": str(target_path)}
-            )
+        manifest_rows.append({"sample_id": result.sample_id, "artifact": output_artifact, "path": str(target_path)})
 
     write_jsonl(artifact_manifest_path, manifest_rows)
     return materialized, placeholders

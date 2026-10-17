@@ -61,6 +61,7 @@ class WorldFoundryRunRequest:
     output_artifact: str | None = None
     required_artifacts: Sequence[str] | None = None
     metrics: Sequence[str] = ("artifact_count", "required_artifacts_present")
+    metric_batch_size: int = 32
     generation_cache_dir: str | Path | None = None
     generation_cache_mode: str = "off"
     generation_cache_namespace: str = "worldfoundry_run"
@@ -173,9 +174,13 @@ def _delegate_artifact_summary(delegate_payload: Any) -> dict[str, Any]:
         generation_map.get("scorecard_path"),
         artifact_map.get("generation_scorecard"),
     )
-    generation_scorecard_path = _first_text(generation_map.get("scorecard_path"), artifact_map.get("generation_scorecard"))
+    generation_scorecard_path = _first_text(
+        generation_map.get("scorecard_path"), artifact_map.get("generation_scorecard")
+    )
     benchmark_scorecard_path = _first_text(benchmark_map.get("scorecard_path"), artifact_map.get("benchmark_scorecard"))
-    artifact_manifest_path = _first_text(delegate_payload.get("artifact_manifest_path"), artifact_map.get("generated_artifact_manifest"))
+    artifact_manifest_path = _first_text(
+        delegate_payload.get("artifact_manifest_path"), artifact_map.get("generated_artifact_manifest")
+    )
     suite_manifest_path = _first_text(delegate_payload.get("suite_manifest_path"))
     suite_report_path = _first_text(delegate_payload.get("suite_report_path"))
 
@@ -325,6 +330,7 @@ def _benchmark_execution_kwargs(request: WorldFoundryRunRequest) -> dict[str, An
     """Extract benchmark execution and timeout options from the run request."""
     return {
         "metrics": tuple(request.metrics),
+        "metric_batch_size": request.metric_batch_size,
         "benchmark_timeout_seconds": request.benchmark_timeout_seconds,
         "benchmark_workdir": request.benchmark_workdir,
         "benchmark_env": request.benchmark_env,
@@ -372,6 +378,7 @@ def _run_existing_or_model(request: WorldFoundryRunRequest) -> WorldFoundryRunRe
             dataset_id=request.dataset_id,
             run_id=request.run_id,
             resume=request.resume,
+            metric_batch_size=request.metric_batch_size,
             fail_on_sample_error=request.fail_on_sample_error,
             write_artifacts_index=request.write_artifacts_index,
             generation_cache_dir=request.generation_cache_dir,
@@ -391,6 +398,7 @@ def _run_single_benchmark(request: WorldFoundryRunRequest, model_id: str, benchm
             benchmark_id=benchmark_id,
             benchmark_manifest_path=request.benchmark_manifest_dir,
             benchmark_mode=request.benchmark_mode,
+            resume=request.resume,
             model_id=model_id,
             model_zoo_manifest_dir=_model_manifest_dir_for(request, model_id),
             **_runner_kwargs(request),
@@ -403,7 +411,9 @@ def _run_single_benchmark(request: WorldFoundryRunRequest, model_id: str, benchm
     return _result("model-benchmark", delegate)
 
 
-def _run_suite(request: WorldFoundryRunRequest, model_ids: Sequence[str], benchmark_ids: Sequence[str]) -> WorldFoundryRunResult:
+def _run_suite(
+    request: WorldFoundryRunRequest, model_ids: Sequence[str], benchmark_ids: Sequence[str]
+) -> WorldFoundryRunResult:
     """Execute a multi-model or multi-benchmark evaluation suite."""
     delegate = run_model_benchmark_suite(
         ModelBenchmarkSuiteRequest(
@@ -448,7 +458,9 @@ def _should_run_suite(
     return bool(benchmark_ids) and not request.execute
 
 
-def _suite_model_ids(request: WorldFoundryRunRequest, model_ids: Sequence[str], benchmark_ids: Sequence[str]) -> tuple[str, ...]:
+def _suite_model_ids(
+    request: WorldFoundryRunRequest, model_ids: Sequence[str], benchmark_ids: Sequence[str]
+) -> tuple[str, ...]:
     """Resolve the model identifiers to evaluate within a suite run."""
     from worldfoundry.evaluation.tasks.execution.orchestration.model_benchmark import CONTRACT_VALIDATION_ID
 
@@ -468,6 +480,10 @@ def run_worldfoundry(
     """Dispatch the public WorldFoundry run surface to the narrow canonical runners."""
 
     run_request = _coerce_request(request, kwargs)
+    if run_request.metric_batch_size < 1:
+        raise ValueError("metric_batch_size must be positive")
+    if run_request.results_path is not None:
+        return _run_existing_or_model(run_request)
     explicit_model_ids = _model_ids(run_request, default=())
     benchmark_ids = _benchmark_ids(run_request)
 
@@ -481,9 +497,7 @@ def run_worldfoundry(
 
             model_ids = (CONTRACT_VALIDATION_ID,)
         else:
-            raise ValueError(
-                "model-benchmark runs require --model."
-            )
+            raise ValueError("model-benchmark runs require --model.")
         return _run_single_benchmark(run_request, model_ids[0], benchmark_ids[0])
     return _run_existing_or_model(run_request)
 

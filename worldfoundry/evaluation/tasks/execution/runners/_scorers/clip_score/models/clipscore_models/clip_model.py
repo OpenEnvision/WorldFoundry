@@ -1,55 +1,44 @@
-from abc import abstractmethod
 from typing import List
-import torch
-import open_clip
 
-from ..model import ScoreModel
-from ...constants import HF_CACHE_DIR
+import open_clip
+import torch
+
+from worldfoundry.base_models.perception_core.video_text.vqa_score.constants import HF_CACHE_DIR
+from worldfoundry.base_models.perception_core.video_text.vqa_score.models.model import ScoreModel
 
 CLIP_MODELS = [f"{pretrained}:{arch}" for arch, pretrained in open_clip.list_pretrained()]
 
+
 class CLIPScoreModel(ScoreModel):
     "A wrapper for OpenCLIP models (including openAI's CLIP, OpenCLIP, DatacompCLIP)"
+
     video_mode = "concat"
     allows_image = True
-    def __init__(self,
-                 model_name='openai:ViT-L-14',
-                 device='cuda',
-                 cache_dir=HF_CACHE_DIR):
+
+    def __init__(self, model_name="openai:ViT-L-14", device="cuda", cache_dir=HF_CACHE_DIR):
         assert model_name in CLIP_MODELS
-        
-        super().__init__(model_name=model_name,
-                         device=device,
-                         cache_dir=cache_dir)
-    
+
+        super().__init__(model_name=model_name, device=device, cache_dir=cache_dir)
+
     def load_model(self):
-        """Load the model, tokenizer, image transform
-        """
-        self.pretrained, self.arch = self.model_name.split(':')
+        """Load the model, tokenizer, image transform"""
+        self.pretrained, self.arch = self.model_name.split(":")
         self.model, _, self.preprocess = open_clip.create_model_and_transforms(
-            self.arch,
-            pretrained=self.pretrained,
-            device=self.device,
-            cache_dir=self.cache_dir
+            self.arch, pretrained=self.pretrained, device=self.device, cache_dir=self.cache_dir
         )
         self.tokenizer = open_clip.get_tokenizer(self.arch)
         self.model.eval()
-    
-    def load_images(self,
-                    image: List[str]) -> torch.Tensor:
-        """Load the image(s), and return a tensor (after preprocessing) put on self.device
-        """
+
+    def load_images(self, image: List[str]) -> torch.Tensor:
+        """Load the image(s), and return a tensor (after preprocessing) put on self.device"""
         image = [self.image_loader(x) for x in image]
         image = [self.preprocess(x) for x in image]
         image = torch.stack(image, dim=0).to(self.device)
         return image
-    
+
     @torch.no_grad()
-    def forward(self,
-                images: List[str],
-                texts: List[str]) -> torch.Tensor:
-        """Forward pass of the model to return n scores for n (image, text) pairs (in PyTorch Tensor)
-        """
+    def forward(self, images: List[str], texts: List[str]) -> torch.Tensor:
+        """Forward pass of the model to return n scores for n (image, text) pairs (in PyTorch Tensor)"""
         assert len(images) == len(texts)
         image = self.load_images(images)
         text = self.tokenizer(texts).to(self.device)
@@ -57,6 +46,6 @@ class CLIPScoreModel(ScoreModel):
         image_features /= image_features.norm(dim=-1, keepdim=True)
         text_features = self.model.encode_text(text)
         text_features /= text_features.norm(dim=-1, keepdim=True)
-        
+
         # return cosine similarity as scores
         return (image_features * text_features).sum(dim=-1)

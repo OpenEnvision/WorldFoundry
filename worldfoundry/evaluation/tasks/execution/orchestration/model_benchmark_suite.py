@@ -22,10 +22,11 @@ import pickle
 import sys
 import warnings
 from collections import deque
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Iterator, Mapping, Sequence
 
+from worldfoundry.core.io.formats.serialization import read_jsonl_objects
 from worldfoundry.core.observability.logging_setup import get_logger
 from worldfoundry.evaluation.api import is_generation_result_successful
 from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
@@ -45,8 +46,15 @@ from worldfoundry.evaluation.utils import (
 )
 
 from .cache import generation_cache_payload, json_sha256
+from .evaluate import _coerce_generation_requests, _load_optional_source, _model_execution_identity
 from .fidelity import model_benchmark_fidelity
-from .model_benchmark import CONTRACT_VALIDATION_ID, ModelBenchmarkRunRequest, run_model_benchmark
+from .model_benchmark import (
+    CONTRACT_VALIDATION_ID,
+    ModelBenchmarkRunRequest,
+    prepare_benchmark_generation,
+    run_model_benchmark,
+)
+from .run_session import resume_generation, session_paths
 
 # ---------------------------------------------------------------------------
 # Schema constants and artifact compatibility
@@ -116,6 +124,7 @@ class ModelBenchmarkSuiteRequest:
     output_artifact: str | None = None
     required_artifacts: Sequence[str] | None = None
     metrics: Sequence[str] = ("artifact_count", "required_artifacts_present")
+    metric_batch_size: int = 32
     generation_cache_dir: str | Path | None = None
     generation_cache_mode: str = "off"
     generation_cache_namespace: str = "model_benchmark_suite"
@@ -254,8 +263,7 @@ class _SuiteGenerationMemoRunner:
             policy = dict(getattr(request, "cache_policy", None) or {})
             policy_mode = policy.get("mode", policy.get("cache"))
             if policy_mode is False or (
-                policy_mode is not None
-                and str(policy_mode).strip().lower() in {"off", "false", "disabled", "none"}
+                policy_mode is not None and str(policy_mode).strip().lower() in {"off", "false", "disabled", "none"}
             ):
                 return None
             payloads.append(generation_cache_payload(request))
@@ -267,27 +275,36 @@ class _SuiteGenerationMemoRunner:
             return None
 
     def generate(self, requests: Sequence[Any]) -> list[Any]:
+        return list(self.generate_iter(requests))
+
+    def generate_iter(self, requests: Sequence[Any]) -> Iterator[Any]:
+        """Forward complete results, memoizing only a successful whole batch."""
         rows = tuple(requests)
         if not rows:
-            return []
+            return
         batch_key = self._batch_key(rows)
         if batch_key is not None:
             cached = self._batches.get(batch_key)
             if cached is not None:
                 self.batch_hits += 1
                 self.requests_reused += len(rows)
-                return list(cached)
+                yield from cached
+                return
 
         self.batch_misses += 1
         self.requests_executed += len(rows)
-        generated = tuple(self._runner.generate(rows))
+        stream = getattr(self._runner, "generate_iter", None)
+        outputs = stream(rows) if callable(stream) else self._runner.generate(rows)
+        generated = []
+        for result in outputs:
+            generated.append(result)
+            yield result
         if (
             batch_key is not None
             and len(generated) == len(rows)
             and all(is_generation_result_successful(result) for result in generated)
         ):
-            self._batches[batch_key] = generated
-        return list(generated)
+            self._batches[batch_key] = tuple(generated)
 
     def stats(self) -> dict[str, int]:
         return {
@@ -315,11 +332,14 @@ def _fingerprint_request(request: ModelBenchmarkSuiteRequest) -> str:
     payload.pop("output_dir", None)
     payload.pop("run_id", None)
     payload.pop("resume", None)
+    payload.pop("metric_batch_size", None)
     payload.pop("generation_cache_dir", None)
     payload.pop("generation_cache_mode", None)
     payload.pop("generation_cache_namespace", None)
     payload.pop("model_workers", None)
     payload.pop("worker_cuda_devices", None)
+    if request.requests_path is not None:
+        payload["materialized_requests"] = _load_optional_source(None, request.requests_path)
     return json_sha256(payload)
 
 
@@ -331,6 +351,7 @@ def _fingerprint_cell(
     output_artifact: str | None,
     required_artifacts: Sequence[str],
     mode: str,
+    benchmark_manifest: Mapping[str, Any],
 ) -> str:
     """Builds a deterministic caching/run fingerprint for a specific 1:1 Model-to-Benchmark test cell."""
     return json_sha256(
@@ -341,6 +362,7 @@ def _fingerprint_cell(
             "output_artifact": output_artifact,
             "required_artifacts": list(required_artifacts),
             "mode": mode,
+            "benchmark_manifest": benchmark_manifest,
         }
     )
 
@@ -581,9 +603,10 @@ def _benchmark_unavailable_reason(entry: BenchmarkZooEntry, *, mode: str) -> str
 
             runtime_hint = workspace_benchmark_runtime_hint(entry.benchmark_id)
             if runtime_hint:
-                if runtime_hint.get("supports_official_runtime") is True and runtime_hint.get(
-                    "accepts_generated_artifacts"
-                ) is True:
+                if (
+                    runtime_hint.get("supports_official_runtime") is True
+                    and runtime_hint.get("accepts_generated_artifacts") is True
+                ):
                     return None
                 return (
                     "benchmark has an existing-result normalizer/importer but no official runtime "
@@ -764,7 +787,26 @@ def _load_previous_suite_cells(root: Path) -> dict[str, Mapping[str, Any]]:
     }
 
 
-def _resume_cell(cell_dir: Path, expected_cell: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
+def _cell_artifact_state(artifacts: Mapping[str, Any]) -> dict[str, list[int]] | None:
+    """Record required reports and staged media so deleted or replaced outputs cannot resume."""
+    files: set[Path] = set()
+    for value in artifacts.values():
+        path = Path(str(value))
+        if not path.exists():
+            return None
+        if path.is_dir():
+            files.update(item for item in path.rglob("*") if item.is_file())
+        else:
+            files.add(path)
+    return {str(path): [path.stat().st_size, path.stat().st_mtime_ns] for path in sorted(files)}
+
+
+def _resume_cell(
+    cell_dir: Path,
+    expected_cell: Mapping[str, Any] | None,
+    *,
+    request: ModelBenchmarkRunRequest,
+) -> Mapping[str, Any] | None:
     """Return cached cell payload when resume can skip re-execution."""
     if expected_cell is None or expected_cell.get("status") != "succeeded":
         return None
@@ -777,8 +819,36 @@ def _resume_cell(cell_dir: Path, expected_cell: Mapping[str, Any] | None) -> Map
     artifacts = dict(payload.get("artifacts") or {})
     benchmark_payload = dict(payload.get("benchmark") or {})
     generation_payload = payload.get("generation")
+    state = _cell_artifact_state(artifacts)
+    if not state or state != expected_cell.get("artifact_state"):
+        return None
+    if generation_payload is not None:
+        prepared = prepare_benchmark_generation(request, cell_dir)
+        if prepared is None:
+            return None
+        requests = _coerce_generation_requests(_load_optional_source(prepared.requests, prepared.requests_path))
+        paths = session_paths(cell_dir / "generation")
+        if not paths["requests"].is_file() or list(read_jsonl_objects(paths["requests"])) != [
+            row.to_dict() for row in requests
+        ]:
+            return None
+        resolved_config = None
+        if prepared.model_zoo_manifest_dir is not None:
+            from worldfoundry.evaluation.models import resolve_model_zoo_config
+
+            resolved_config = resolve_model_zoo_config(
+                prepared.model_id,
+                manifest_dir=prepared.model_zoo_manifest_dir,
+                variant_id=prepared.model_variant_id,
+                parameters=prepared.model_parameters,
+                runtime=prepared.model_runtime,
+            )
+        identity = _model_execution_identity(prepared, resolved_zoo_config=resolved_config)
+        if len(resume_generation(paths, requests, identity)) != len(requests):
+            return None
     return {
         "status": "succeeded",
+        "artifact_state": state,
         "exit_code": 0,
         "resumed": True,
         "run_dir": str(cell_dir),
@@ -848,8 +918,41 @@ def _plan_cell(
             output_artifact=output_artifact,
             required_artifacts=required_artifacts,
             mode=request.mode,
+            benchmark_manifest=benchmark.to_dict(),
         ),
     )
+
+
+def _cell_request(
+    request: ModelBenchmarkSuiteRequest,
+    *,
+    root: Path,
+    plan: _SuiteCellPlan,
+) -> ModelBenchmarkRunRequest:
+    """Apply cell bindings to the shared single-run request fields."""
+    values = {
+        field.name: getattr(request, field.name)
+        for field in fields(ModelBenchmarkRunRequest)
+        if hasattr(request, field.name)
+    }
+    values.update(
+        output_dir=_cell_dir(root, plan.model_id, plan.benchmark.benchmark_id),
+        benchmark_id=plan.benchmark.benchmark_id,
+        benchmark_manifest_path=plan.benchmark_manifest_path,
+        benchmark_mode=request.mode,
+        model_id=plan.requested_model_id,
+        model_zoo_manifest_dir=_model_manifest_dir_for_cell(
+            plan.requested_model_id,
+            request.model_manifest_dir,
+            plan.known_model,
+        ),
+        output_artifact=plan.output_artifact,
+        required_artifacts=plan.required_artifacts,
+        run_id=_cell_run_id(request, plan.model_id, plan.benchmark.benchmark_id),
+        evaluation_provenance=plan.evaluation_provenance,
+        leaderboard_candidate=bool(dict(plan.evaluation_provenance.get("claim") or {}).get("leaderboard_candidate")),
+    )
+    return ModelBenchmarkRunRequest(**values)
 
 
 def _run_cell(
@@ -866,8 +969,6 @@ def _run_cell(
     if plan.output_artifact is None:
         raise ValueError("cannot run a matrix cell without a selected output artifact")
     cell_dir = _cell_dir(root, plan.model_id, plan.benchmark.benchmark_id)
-    model_parameters = dict(request.model_parameters or {})
-    model_runtime = dict(request.model_runtime or {})
     cell_run_id = _cell_run_id(request, plan.model_id, plan.benchmark.benchmark_id)
     logger = get_logger(__name__).bind(
         run_id=cell_run_id,
@@ -883,52 +984,7 @@ def _run_cell(
         runner_reused=runner_reused,
     )
     result = run_model_benchmark(
-        ModelBenchmarkRunRequest(
-            output_dir=cell_dir,
-            benchmark_id=plan.benchmark.benchmark_id,
-            benchmark_manifest_path=plan.benchmark_manifest_path,
-            benchmark_mode=request.mode,
-            model_id=plan.requested_model_id,
-            model_runner=request.model_runner,
-            model_zoo_manifest_dir=_model_manifest_dir_for_cell(
-                plan.requested_model_id,
-                request.model_manifest_dir,
-                plan.known_model,
-            ),
-            model_variant_id=request.model_variant_id,
-            model_parameters=model_parameters,
-            model_runtime=model_runtime,
-            model_config=request.model_config,
-            requests_path=request.requests_path,
-            task_name=request.task_name,
-            task_roots=request.task_roots,
-            task_benchmark=request.task_benchmark,
-            task_recursive=request.task_recursive,
-            task_root_dir=request.task_root_dir,
-            dataset_root=request.dataset_root,
-            dataset_id=request.dataset_id,
-            split=request.split,
-            num_samples=request.num_samples,
-            generated_artifact_dir=request.generated_artifact_dir,
-            output_artifact=plan.output_artifact,
-            required_artifacts=plan.required_artifacts,
-            metrics=tuple(request.metrics),
-            generation_cache_dir=request.generation_cache_dir,
-            generation_cache_mode=request.generation_cache_mode,
-            generation_cache_namespace=request.generation_cache_namespace,
-            run_id=cell_run_id,
-            benchmark_timeout_seconds=request.benchmark_timeout_seconds,
-            benchmark_workdir=request.benchmark_workdir,
-            benchmark_env=request.benchmark_env,
-            benchmark_parameters=request.benchmark_parameters,
-            materialize_placeholders=request.materialize_placeholders,
-            contract_fixture=request.contract_fixture,
-            fail_on_generation_error=request.fail_on_generation_error,
-            evaluation_provenance=plan.evaluation_provenance,
-            leaderboard_candidate=bool(
-                dict(plan.evaluation_provenance.get("claim") or {}).get("leaderboard_candidate")
-            ),
-        ),
+        _cell_request(request, root=root, plan=plan),
         resolved_runner=resolved_runner,
         runner_factory=runner_factory,
         cleanup_runner=resolved_runner is None and runner_factory is None,
@@ -943,6 +999,7 @@ def _run_cell(
     payload = result.to_dict()
     artifacts = dict(payload.get("artifacts") or {})
     return {
+        "artifact_state": _cell_artifact_state(artifacts),
         "model_id": plan.model_id,
         "requested_model_id": plan.requested_model_id,
         "benchmark_id": plan.benchmark.benchmark_id,
@@ -982,8 +1039,7 @@ def _suite_summary(cells: Sequence[Mapping[str, Any]], *, execute: bool) -> dict
         "resident_model_loads": sum(
             1
             for cell in cells
-            if cell.get("status") not in {"planned", "skipped"}
-            and cell.get("runner_reused") is False
+            if cell.get("status") not in {"planned", "skipped"} and cell.get("runner_reused") is False
         ),
         "runner_reuses": sum(1 for cell in cells if cell.get("runner_reused") is True),
         "runner_state_resets": sum(1 for cell in cells if cell.get("runner_state_reset") is True),
@@ -1213,9 +1269,7 @@ def _resolve_model_worker_plan(
     # Even a serial multi-model suite gets one fresh process per model.  This
     # makes process exit the hard CUDA-release boundary when a third-party
     # runner retains module-level tensors or allocator state after cleanup().
-    use_spawn_workers = bool(
-        request.execute and (model_count > 1 or requested_workers > 1 or explicit_groups)
-    )
+    use_spawn_workers = bool(request.execute and (model_count > 1 or requested_workers > 1 or explicit_groups))
 
     if explicit_groups:
         available_groups: tuple[str | None, ...] = explicit_groups
@@ -1242,11 +1296,7 @@ def _resolve_model_worker_plan(
     default_cpu_threads = max(available_cpus // worker_count, 1)
     configured_cpu_threads = os.getenv("WORLDFOUNDRY_SUITE_CPU_THREADS", "").strip()
     try:
-        cpu_threads_per_worker = (
-            max(int(configured_cpu_threads), 1)
-            if configured_cpu_threads
-            else default_cpu_threads
-        )
+        cpu_threads_per_worker = max(int(configured_cpu_threads), 1) if configured_cpu_threads else default_cpu_threads
     except ValueError as exc:
         raise ValueError("WORLDFOUNDRY_SUITE_CPU_THREADS must be a positive integer") from exc
     return _ModelWorkerPlan(
@@ -1309,6 +1359,7 @@ def _run_model_cells(
                     resumed = _resume_cell(
                         _cell_dir(root, plan.model_id, plan.benchmark.benchmark_id),
                         previous_cells.get(plan.cell_fingerprint),
+                        request=_cell_request(request, root=root, plan=plan),
                     )
                     if resumed is not None:
                         cells.append({**base_cell, **dict(resumed)})
@@ -1574,17 +1625,18 @@ def _run_models_in_spawn_workers(
                 _join_model_worker(process)
                 available_devices.append(cuda_devices)
                 worker_pid = process.pid
-                if isinstance(payload, Mapping) and payload.get("ok") is True and isinstance(payload.get("cells"), list):
+                if (
+                    isinstance(payload, Mapping)
+                    and payload.get("ok") is True
+                    and isinstance(payload.get("cells"), list)
+                ):
                     cells_by_model[model_id] = [dict(cell) for cell in payload["cells"]]
                     continue
 
                 payload_error = payload.get("error") if isinstance(payload, Mapping) else None
                 invalid_payload = None if payload is None or isinstance(payload, Mapping) else "invalid worker payload"
                 reason_detail = (
-                    payload_error
-                    or receive_error
-                    or invalid_payload
-                    or f"worker exited with code {process.exitcode}"
+                    payload_error or receive_error or invalid_payload or f"worker exited with code {process.exitcode}"
                 )
                 failed_cells = _failed_model_worker_cells(
                     request,
@@ -1622,6 +1674,8 @@ def run_model_benchmark_suite(
     * Aggregate index, comparison, and ``suite_manifest.json``.
     """
     suite_request = _coerce_request(request, kwargs)
+    if suite_request.metric_batch_size < 1:
+        raise ValueError("metric_batch_size must be positive")
     if suite_request.contract_fixture and suite_request.mode != "contract":
         suite_request = replace(suite_request, mode="contract")
     root = Path(suite_request.output_dir).expanduser().resolve()
@@ -1666,13 +1720,7 @@ def run_model_benchmark_suite(
             )
 
     summary = _suite_summary(cells, execute=suite_request.execute)
-    worker_pids = sorted(
-        {
-            int(cell["model_worker_pid"])
-            for cell in cells
-            if cell.get("model_worker_pid") is not None
-        }
-    )
+    worker_pids = sorted({int(cell["model_worker_pid"]) for cell in cells if cell.get("model_worker_pid") is not None})
     scheduler = worker_plan.to_dict()
     scheduler["worker_pids"] = worker_pids
     summary.update(

@@ -295,9 +295,13 @@ def _runtime_root_env(
         return {}
     env_root = os.environ.get(str(root_env))
     if external_repo_runtime:
-        explicit_root = clone_root or env_root or runtime.get("clone_dir") or runtime.get("root") or runtime.get("default_root")
+        explicit_root = (
+            clone_root or env_root or runtime.get("clone_dir") or runtime.get("root") or runtime.get("default_root")
+        )
     else:
-        explicit_root = clone_root or runtime.get("clone_dir") or runtime.get("root") or runtime.get("default_root") or env_root
+        explicit_root = (
+            clone_root or runtime.get("clone_dir") or runtime.get("root") or runtime.get("default_root") or env_root
+        )
     if explicit_root:
         root = _runtime_path(explicit_root)
     elif external_repo_runtime:
@@ -326,7 +330,9 @@ def _runner_runtime_spec(
         getattr(entry.runner, "clone_dir", None) if runtime_kind == "external_official_repo" else None
     )
     root_env_mapping = (
-        _runtime_root_env(runtime, clone_root=clone_root, external_repo_runtime=runtime_kind == "external_official_repo")
+        _runtime_root_env(
+            runtime, clone_root=clone_root, external_repo_runtime=runtime_kind == "external_official_repo"
+        )
         if isinstance(runtime, Mapping)
         else {}
     )
@@ -726,7 +732,9 @@ def _run_embodied_result_normalizer(
         "stdout_path": None,
         "stderr_path": None,
         "scorecard": scorecard,
-        "error": error if error else (None if normalization_ok else "embodied normalizer produced no available metrics"),
+        "error": error
+        if error
+        else (None if normalization_ok else "embodied normalizer produced no available metrics"),
     }
 
 
@@ -900,6 +908,22 @@ class ManifestBenchmarkRunner:
         command = _command_for_mode(self.entry, resolved_mode)
         command_kind = _command_kind_for_mode(resolved_mode) if resolved_mode in _OFFICIAL_MODES else None
         runtime_spec = _runner_runtime_spec(self.entry, benchmark_id=self.benchmark_id, kwargs=kwargs)
+        input_path = runtime_spec.get("results_path")
+        input_path = Path(str(input_path)).resolve() if input_path else None
+        reports = {
+            root / name
+            for name in (
+                "scorecard.json",
+                "summary.json",
+                "report.md",
+                "raw_metric_table.jsonl",
+                "runner_runtime_report.json",
+            )
+        }
+        reports.update(Path(item["resolved_path"]) for item in _expected_artifact_checks(self.entry, root))
+        for path in reports:
+            if path.resolve().is_relative_to(root.resolve()) and path.resolve() != input_path and path.is_file():
+                path.unlink()
         return OfficialRunStage(
             benchmark_id=self.benchmark_id,
             stage="prepare",
@@ -996,7 +1020,11 @@ class ManifestBenchmarkRunner:
             if workspace_command is not None:
                 command = workspace_command
         runtime_spec = data.get("runtime")
-        runtime_spec = dict(runtime_spec) if isinstance(runtime_spec, Mapping) else _runner_runtime_spec(self.entry, benchmark_id=self.benchmark_id)
+        runtime_spec = (
+            dict(runtime_spec)
+            if isinstance(runtime_spec, Mapping)
+            else _runner_runtime_spec(self.entry, benchmark_id=self.benchmark_id)
+        )
         data["runtime"] = runtime_spec
         metadata = {
             **prepared.metadata,
@@ -1251,13 +1279,13 @@ class ManifestBenchmarkRunner:
 
         data["generated_files"] = generated_files
         data["generated_file_count"] = len(generated_files)
-        data["output_files"] = [
-            str(path)
-            for path in sorted(run_result.output_dir.rglob("*"))
-            if path.is_file()
-        ]
+        data["output_files"] = [str(path) for path in sorted(run_result.output_dir.rglob("*")) if path.is_file()]
         data["expected_artifact_checks"] = _expected_artifact_checks(self.entry, run_result.output_dir)
-        data["scorecard_runtime_flags"] = inspect_scorecard_runtime_flags(run_result.output_dir / "scorecard.json")
+        data["scorecard_runtime_flags"] = (
+            {}
+            if data.get("run_status") == "official_results_import"
+            else inspect_scorecard_runtime_flags(run_result.output_dir / "scorecard.json")
+        )
         return OfficialRunStage(
             benchmark_id=self.benchmark_id,
             stage="collect",
@@ -1348,8 +1376,17 @@ class ManifestBenchmarkRunner:
 
         raw_rows = [_metric_raw_row(result) for result in metric_results]
         per_metric = {str(result["metric_id"]): _metric_scorecard_entry(result) for result in metric_results}
-        blocked_count = sum(1 for result in metric_results if result.get("skip_reason") in {"judge_api_required", "judge_required", "external_runtime_required"})
-        failed_count = sum(1 for result in metric_results if result.get("valid") is not True and result.get("skip_reason") not in {"judge_api_required", "judge_required", "external_runtime_required"})
+        blocked_count = sum(
+            1
+            for result in metric_results
+            if result.get("skip_reason") in {"judge_api_required", "judge_required", "external_runtime_required"}
+        )
+        failed_count = sum(
+            1
+            for result in metric_results
+            if result.get("valid") is not True
+            and result.get("skip_reason") not in {"judge_api_required", "judge_required", "external_runtime_required"}
+        )
         available_count = sum(1 for result in raw_rows if result.get("available") is True)
 
         scorecard = {
@@ -1453,7 +1490,9 @@ class ManifestBenchmarkRunner:
         normalization = OfficialResultsNormalizer.from_benchmark_entry(self.entry).normalize_file(str(results_path))
         raw_metric_path = root / "raw_metric_table.jsonl"
         raw_metric_path.write_text(
-            "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in normalization.raw_metric_rows()),
+            "".join(
+                json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in normalization.raw_metric_rows()
+            ),
             encoding="utf-8",
         )
         per_metric = normalization.scorecard_metrics()
@@ -1574,24 +1613,20 @@ class ManifestBenchmarkRunner:
             **dict(scorecard_flags),
         }
         runtime_spec = data.get("runtime")
-        runtime_spec = dict(runtime_spec) if isinstance(runtime_spec, Mapping) else _runner_runtime_spec(self.entry, benchmark_id=self.benchmark_id)
+        runtime_spec = (
+            dict(runtime_spec)
+            if isinstance(runtime_spec, Mapping)
+            else _runner_runtime_spec(self.entry, benchmark_id=self.benchmark_id)
+        )
         expected_artifact_checks = [
-            dict(item)
-            for item in data.get("expected_artifact_checks") or ()
-            if isinstance(item, Mapping)
+            dict(item) for item in data.get("expected_artifact_checks") or () if isinstance(item, Mapping)
         ]
         artifacts_ok = all(item.get("ok") is True for item in expected_artifact_checks)
         command_ok = data.get("returncode") == 0
         official_benchmark_verified = (
-            command_ok
-            and artifacts_ok
-            and scorecard_flags.get("official_benchmark_verified") is True
+            command_ok and artifacts_ok and scorecard_flags.get("official_benchmark_verified") is True
         )
-        integration_evidence = (
-            command_ok
-            and artifacts_ok
-            and scorecard_flags.get("integration_evidence") is True
-        )
+        integration_evidence = command_ok and artifacts_ok and scorecard_flags.get("integration_evidence") is True
         runtime_report = {
             "schema_version": "worldfoundry-official-benchmark-runtime-report",
             "benchmark_id": self.benchmark_id,
@@ -1621,7 +1656,11 @@ class ManifestBenchmarkRunner:
         extra_metadata = dict(kwargs) if isinstance(kwargs, Mapping) else {}
         score_dir = extra_metadata.get("score_dir") if self.benchmark_id == "camerabench" else None
         has_score_dir = score_dir not in (None, "") and Path(str(score_dir)).is_dir()
-        has_results_path = bool("results_path" in runtime_spec and runtime_spec["results_path"] and Path(str(runtime_spec["results_path"])).exists())
+        has_results_path = bool(
+            "results_path" in runtime_spec
+            and runtime_spec["results_path"]
+            and Path(str(runtime_spec["results_path"])).exists()
+        )
         if has_results_path or has_score_dir:
             specialized = _run_specialized_result_normalizer(
                 benchmark_id=self.benchmark_id,
@@ -1672,9 +1711,7 @@ class ManifestBenchmarkRunner:
                             and scorecard_runtime_flags.get("official_benchmark_verified") is True
                         ),
                         "integration_evidence": (
-                            command_ok
-                            and artifacts_ok
-                            and scorecard_runtime_flags.get("integration_evidence") is True
+                            command_ok and artifacts_ok and scorecard_runtime_flags.get("integration_evidence") is True
                         ),
                     }
                 )
@@ -1741,7 +1778,9 @@ class ManifestBenchmarkRunner:
                     raw_results_path=(
                         raw_metric_path
                         if raw_metric_path.is_file()
-                        else raw_results_path if raw_results_path.is_file() else None
+                        else raw_results_path
+                        if raw_results_path.is_file()
+                        else None
                     ),
                     official_benchmark_verified=scorecard.get("official_benchmark_verified") is True,
                     integration_evidence=scorecard.get("integration_evidence") is True,
@@ -1889,13 +1928,10 @@ class ManifestBenchmarkRunner:
 
         kwargs = data.get("kwargs")
         extra_metadata = dict(kwargs) if isinstance(kwargs, Mapping) else {}
-        normalizer_only = (
-            scorecard_runtime_flags.get("validation_normalizer_only") is True
-            or (
-                scorecard_runtime_flags.get("normalization_ok") is True
-                and not official_benchmark_verified
-                and not integration_evidence
-            )
+        normalizer_only = scorecard_runtime_flags.get("validation_normalizer_only") is True or (
+            scorecard_runtime_flags.get("normalization_ok") is True
+            and not official_benchmark_verified
+            and not integration_evidence
         )
         return OfficialRunResult(
             benchmark_id=self.benchmark_id,
@@ -2027,7 +2063,9 @@ class BenchmarkRunnerRegistry:
 def build_benchmark_runner_registry(path: str | Path = DEFAULT_MANIFEST_PATH) -> BenchmarkRunnerRegistry:
     """Load benchmark-zoo manifests and build a :class:`BenchmarkRunnerRegistry`."""
     manifest_path = Path(path)
-    entries = load_benchmark_zoo_registry(manifest_path).list() if manifest_path.is_dir() else load_entries(manifest_path)
+    entries = (
+        load_benchmark_zoo_registry(manifest_path).list() if manifest_path.is_dir() else load_entries(manifest_path)
+    )
     return BenchmarkRunnerRegistry(entries, manifest_path=manifest_path)
 
 

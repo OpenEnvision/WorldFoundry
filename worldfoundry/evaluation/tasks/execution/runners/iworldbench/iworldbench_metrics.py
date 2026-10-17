@@ -8,6 +8,8 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.evaluation.tasks.execution.framework.io import mean_numeric as _mean
+
 COMPONENT_METRIC_ORDER = (
     "image_quality",
     "brightness_consistency",
@@ -197,8 +199,10 @@ def _read_csv_rows(path: Path) -> list[dict[str, Any]]:
 
 
 def collect_result_rows(path: Path) -> list[dict[str, Any]]:
-    files = [path] if path.is_file() else sorted(
-        item for item in path.rglob("*") if item.suffix.lower() in {".csv", ".tsv", ".json", ".jsonl"}
+    files = (
+        [path]
+        if path.is_file()
+        else sorted(item for item in path.rglob("*") if item.suffix.lower() in {".csv", ".tsv", ".json", ".jsonl"})
     )
     rows: list[dict[str, Any]] = []
     for file_path in files:
@@ -215,7 +219,9 @@ def collect_result_rows(path: Path) -> list[dict[str, Any]]:
             continue
         file_metric_id = _metric_id_from_text(file_path.stem)
         for row in raw_rows:
-            metric_id = _metric_id_from_text(row.get("metric_id") or row.get("metric") or row.get("name")) or file_metric_id
+            metric_id = (
+                _metric_id_from_text(row.get("metric_id") or row.get("metric") or row.get("name")) or file_metric_id
+            )
             if metric_id is None:
                 continue
             score = _row_score(row)
@@ -228,11 +234,6 @@ def collect_result_rows(path: Path) -> list[dict[str, Any]]:
                 }
             )
     return rows
-
-
-def _mean(values: Sequence[float]) -> float | None:
-    clean = [float(value) for value in values]
-    return sum(clean) / len(clean) if clean else None
 
 
 def compute_iworldbench_metrics(

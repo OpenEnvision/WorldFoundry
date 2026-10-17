@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from math import isfinite
 from numbers import Real
 from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
@@ -16,6 +17,27 @@ from .generation import GenerationRequest, GenerationResult
 METRIC_SPEC_SCHEMA_VERSION = "worldfoundry-metric-spec"
 METRIC_RESULT_SCHEMA_VERSION = "worldfoundry-metric-result"
 AGGREGATE_RESULT_SCHEMA_VERSION = "worldfoundry-aggregate-result"
+
+
+def _sanitize_nonfinite(value: Any, path: str, nonfinite: dict[str, str]) -> Any:
+    if isinstance(value, Real) and not isfinite(value):
+        nonfinite[path] = str(value)
+        return None
+    if isinstance(value, Mapping):
+        return {key: _sanitize_nonfinite(item, f"{path}.{key}", nonfinite) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_sanitize_nonfinite(item, f"{path}[{index}]", nonfinite) for index, item in enumerate(value)]
+    to_list = getattr(value, "tolist", None)
+    if callable(to_list):
+        return _sanitize_nonfinite(to_list(), path, nonfinite)
+    return value
+
+
+def _normalize_finite_fields(result: MetricResult | AggregateResult, names: Sequence[str]) -> dict[str, str]:
+    nonfinite: dict[str, str] = {}
+    for name in names:
+        object.__setattr__(result, name, _sanitize_nonfinite(getattr(result, name), name, nonfinite))
+    return nonfinite
 
 
 @dataclass(frozen=True, init=False)
@@ -155,6 +177,15 @@ class MetricResult(JsonContract):
         object.__setattr__(self, "diagnostics", copy_mapping(self.diagnostics))
         object.__setattr__(self, "artifact_refs", coerce_artifact_refs(self.artifact_refs))
         object.__setattr__(self, "judge_trace", copy_mapping(self.judge_trace))
+        nonfinite = _normalize_finite_fields(
+            self,
+            ("raw_value", "normalized_value", "components", "coverage", "diagnostics", "judge_trace"),
+        )
+        if nonfinite:
+            object.__setattr__(self, "valid", False)
+            object.__setattr__(self, "coverage", 0.0)
+            object.__setattr__(self, "skip_reason", self.skip_reason or "nonfinite_metric_output")
+            object.__setattr__(self, "diagnostics", {**self.diagnostics, "nonfinite_values": nonfinite})
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "MetricResult":
@@ -209,6 +240,13 @@ class AggregateResult(JsonContract):
         )
         object.__setattr__(self, "valid", bool(self.valid))
         object.__setattr__(self, "diagnostics", copy_mapping(self.diagnostics))
+        nonfinite = _normalize_finite_fields(
+            self,
+            ("raw_stats", "normalized_stats", "confidence_interval", "stderr", "diagnostics"),
+        )
+        if nonfinite:
+            object.__setattr__(self, "valid", False)
+            object.__setattr__(self, "diagnostics", {**self.diagnostics, "nonfinite_values": nonfinite})
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "AggregateResult":
@@ -229,23 +267,24 @@ class AggregateResult(JsonContract):
 
 
 def aggregate_mean(metric_id: str, rows: Sequence[MetricResult]) -> AggregateResult:
-    """Mean numeric metric values while retaining validity and skip counts."""
+    """Average valid normalized scores, falling back to raw scores for each sample."""
     raw = [
         float(row.raw_value)
         for row in rows
         if row.valid and isinstance(row.raw_value, Real) and not isinstance(row.raw_value, bool)
     ]
-    normalized = [float(row.normalized_value) for row in rows if row.valid and row.normalized_value is not None]
-    values = (row.normalized_value if row.normalized_value is not None else row.raw_value for row in rows if row.valid)
-    n_valid = sum(isinstance(value, Real) and not isinstance(value, bool) for value in values)
+    scores = (row.normalized_value if row.normalized_value is not None else row.raw_value for row in rows if row.valid)
+    values = [float(value) for value in scores if isinstance(value, Real) and not isinstance(value, bool)]
+    has_normalized_values = any(row.valid and row.normalized_value is not None for row in rows)
+    n_valid = len(values)
     return AggregateResult(
         metric_id=metric_id,
         n_total=len(rows),
         n_valid=n_valid,
         n_skipped=len(rows) - n_valid,
-        valid=bool(raw or normalized),
+        valid=bool(values),
         raw_stats={"mean": sum(raw) / len(raw)} if raw else {},
-        normalized_stats={"mean": sum(normalized) / len(normalized)} if normalized else {},
+        normalized_stats={"mean": sum(values) / n_valid} if values and has_normalized_values else {},
         skip_breakdown=dict(Counter(row.skip_reason or "invalid" for row in rows if not row.valid)),
     )
 
@@ -259,11 +298,9 @@ class Metric(Protocol):
     required_artifacts: tuple[str, ...]
     higher_is_better: bool | None
 
-    def compute_sample(self, request: GenerationRequest, result: GenerationResult) -> MetricResult:
-        ...
+    def compute_sample(self, request: GenerationRequest, result: GenerationResult) -> MetricResult: ...
 
-    def aggregate(self, results: Sequence[MetricResult]) -> AggregateResult:
-        ...
+    def aggregate(self, results: Sequence[MetricResult]) -> AggregateResult: ...
 
 
 @runtime_checkable
@@ -289,15 +326,12 @@ def align_batch_metric_outputs(outputs: Any, sample_ids: Sequence[str]) -> tuple
         unexpected = sorted(set(keyed).difference(expected_ids))
         if missing or unexpected:
             raise ValueError(
-                "batch metric output sample ids do not match requests: "
-                f"missing={missing}, unexpected={unexpected}"
+                f"batch metric output sample ids do not match requests: missing={missing}, unexpected={unexpected}"
             )
         return tuple(keyed[sample_id] for sample_id in expected_ids)
     if not isinstance(outputs, Iterable) or isinstance(outputs, (str, bytes, bytearray)):
         raise TypeError("batch metric output must be an iterable or a sample-id mapping")
     aligned = tuple(outputs)
     if len(aligned) != len(expected_ids):
-        raise ValueError(
-            f"batch metric returned {len(aligned)} outputs for {len(expected_ids)} requests"
-        )
+        raise ValueError(f"batch metric returned {len(aligned)} outputs for {len(expected_ids)} requests")
     return aligned

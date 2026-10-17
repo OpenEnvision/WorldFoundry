@@ -2,33 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, field
 import hashlib
 import json
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from worldfoundry.evaluation.api.json_contract import sha256_file as file_sha256
 from worldfoundry.evaluation.utils import jsonable, read_json, read_json_or_jsonl, write_json
 
-
 DATASET_MANIFEST_SCHEMA_VERSION = "worldfoundry-dataset-manifest"
-
-
-def file_sha256(path: str | Path) -> str:
-    """Calculate the SHA256 checksum of a file on disk.
-
-    Args:
-        path: Path to the target file.
-
-    Returns:
-        The SHA256 hex digest string.
-    """
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _canonical_json_sha256(value: Any) -> str:
@@ -163,6 +147,7 @@ class DatasetManifest:
         metadata: Optional extra arbitrary metadata.
         schema_version: Schema version of the manifest format.
     """
+
     dataset_id: str
     samples_path: str
     sample_count: int

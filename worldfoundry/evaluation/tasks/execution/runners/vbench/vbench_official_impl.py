@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-
-
-from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
-
 import argparse
 import json
 import math
@@ -16,10 +12,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.core.io.paths import cache_root_path
 from worldfoundry.core.execution.process import run_logged_subprocess
+from worldfoundry.core.io.paths import cache_root_path
+from worldfoundry.evaluation.api.metrics import _sanitize_nonfinite
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
 from worldfoundry.evaluation.tasks.execution.framework.io import env_path, utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION
 from worldfoundry.evaluation.utils import REPO_ROOT
 
 IN_TREE_VBENCH_ROOT = Path(__file__).resolve().parent / "runtime"
@@ -173,9 +171,7 @@ class VBenchRunRequest:
             timeout=self.timeout,
             load_ckpt_from_local=self.load_ckpt_from_local,
             read_frame=self.read_frame,
-            from_upstream_results=None
-            if self.from_upstream_results is None
-            else Path(self.from_upstream_results),
+            from_upstream_results=None if self.from_upstream_results is None else Path(self.from_upstream_results),
             json=False,
         )
 
@@ -183,7 +179,9 @@ class VBenchRunRequest:
 def split_dimensions(values: list[str] | None, presets: list[str] | None = None) -> list[str]:
     raw_values = [*(presets or ()), *(values or ())]
     if not raw_values:
-        raw_values = [os.environ.get("WORLDFOUNDRY_VBENCH_PRESET") or os.environ.get("WORLDFOUNDRY_VBENCH_DIMENSIONS", "")]
+        raw_values = [
+            os.environ.get("WORLDFOUNDRY_VBENCH_PRESET") or os.environ.get("WORLDFOUNDRY_VBENCH_DIMENSIONS", "")
+        ]
     dimensions: list[str] = []
     for raw_value in raw_values:
         for item in str(raw_value).replace(",", " ").split():
@@ -208,11 +206,7 @@ def list_video_files(path: Path | None) -> list[str]:
         return []
     if path.is_file():
         return [str(path)] if path.suffix.lower() in {".mp4", ".gif"} else []
-    return [
-        str(item)
-        for item in sorted(path.iterdir())
-        if item.is_file() and item.suffix.lower() in {".mp4", ".gif"}
-    ]
+    return [str(item) for item in sorted(path.iterdir()) if item.is_file() and item.suffix.lower() in {".mp4", ".gif"}]
 
 
 def materialize_custom_prompt_file(args: argparse.Namespace, output_dir: Path) -> Path | None:
@@ -300,11 +294,7 @@ def _payload_dimensions(payload: dict[str, Any]) -> set[str]:
     if isinstance(raw_dimensions, str):
         return {canonical_dimension_id(raw_dimensions)}
     if isinstance(raw_dimensions, list) or isinstance(raw_dimensions, tuple):
-        return {
-            canonical_dimension_id(str(item))
-            for item in raw_dimensions
-            if str(item).strip()
-        }
+        return {canonical_dimension_id(str(item)) for item in raw_dimensions if str(item).strip()}
     return set()
 
 
@@ -448,9 +438,7 @@ def validate_prompt_suite_materialization(args: argparse.Namespace) -> dict[str,
 
     report["ok"] = not report["issues"]
     report["reasons"] = [
-        issue["message"]
-        for issue in report["issues"]
-        if isinstance(issue, dict) and issue.get("message")
+        issue["message"] for issue in report["issues"] if isinstance(issue, dict) and issue.get("message")
     ]
     report["full_suite_complete"] = (
         report["ok"]
@@ -547,6 +535,8 @@ def normalize_vbench_results(
         metric_id = canonical_dimension_id(dimension)
         raw_value = raw_result_for_dimension(raw_results, metric_id)
         score = extract_scalar(raw_value)
+        nonfinite: dict[str, str] = {}
+        raw_value = _sanitize_nonfinite(raw_value, "raw_value", nonfinite)
         row = {
             "metric_id": metric_id,
             "available": score is not None,
@@ -554,8 +544,10 @@ def normalize_vbench_results(
             "normalized_score": score,
             "raw_value": raw_value,
         }
+        if nonfinite:
+            row["diagnostics"] = {"nonfinite_values": nonfinite}
         if score is None:
-            row["reason"] = "score_not_found_in_vbench_results"
+            row["reason"] = "nonfinite_metric_output" if nonfinite else "score_not_found_in_vbench_results"
         else:
             leaderboard[metric_id] = score
             if metric_id in VBENCH_DIMENSIONS:
@@ -572,15 +564,9 @@ def normalize_vbench_results(
 
     available_count = sum(1 for row in metric_rows if row["available"])
     dimension_metrics = [
-        str(row["metric_id"])
-        for row in metric_rows
-        if row["available"] and row.get("aggregate") is not True
+        str(row["metric_id"]) for row in metric_rows if row["available"] and row.get("aggregate") is not True
     ]
-    aggregate_metrics = [
-        str(row["metric_id"])
-        for row in aggregate_rows
-        if row["available"]
-    ]
+    aggregate_metrics = [str(row["metric_id"]) for row in aggregate_rows if row["available"]]
     output_dir.mkdir(parents=True, exist_ok=True)
     scorecard_path = output_dir / "scorecard.json"
     raw_metric_table_path = output_dir / "raw_metric_table.jsonl"
@@ -780,7 +766,9 @@ def run_official_vbench(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     if args.videos_path is None:
-        raise ValueError("--videos-path or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required unless --official-results-path is used")
+        raise ValueError(
+            "--videos-path or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required unless --official-results-path is used"
+        )
     full_json_path = resolved_full_json_path(args.full_json_dir, args.vbench_root)
     if not full_json_path.is_file():
         raise FileNotFoundError(f"VBench full-info asset not found: {full_json_path}")
@@ -847,7 +835,9 @@ def run_official_vbench(args: argparse.Namespace) -> dict[str, Any]:
 
     upstream_results_path = latest_upstream_results(upstream_output_dir)
     if upstream_results_path is None:
-        failure_results = {dimension: {"error": "missing upstream VBench *_eval_results.json"} for dimension in args.dimension}
+        failure_results = {
+            dimension: {"error": "missing upstream VBench *_eval_results.json"} for dimension in args.dimension
+        }
         upstream_results_path = upstream_output_dir / "missing_eval_results.json"
         write_json(upstream_results_path, failure_results)
         raw_results = failure_results
@@ -881,7 +871,9 @@ def run_vbench(request: VBenchRunRequest | None = None, **kwargs: Any) -> dict[s
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run official VBench and normalize its output to a WorldFoundry scorecard.")
+    parser = argparse.ArgumentParser(
+        description="Run official VBench and normalize its output to a WorldFoundry scorecard."
+    )
     parser.add_argument("--benchmark-id", default=os.environ.get("WORLDFOUNDRY_BENCHMARK_ID", "vbench"))
     parser.add_argument("--vbench-root", type=Path, default=None)
     parser.add_argument("--videos-path", type=Path, default=env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR"))
@@ -892,7 +884,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt")
     parser.add_argument("--prompt-file", type=Path)
     parser.add_argument("--category")
-    parser.add_argument("--imaging-quality-preprocessing-mode", default=os.environ.get("WORLDFOUNDRY_VBENCH_IMAGING_QUALITY_PREPROCESSING_MODE", "longer"))
+    parser.add_argument(
+        "--imaging-quality-preprocessing-mode",
+        default=os.environ.get("WORLDFOUNDRY_VBENCH_IMAGING_QUALITY_PREPROCESSING_MODE", "longer"),
+    )
     parser.add_argument("--full-json-dir", type=Path)
     parser.add_argument("--python", default=os.environ.get("WORLDFOUNDRY_VBENCH_PYTHON", sys.executable))
     parser.add_argument("--timeout", type=int, default=int(os.environ.get("WORLDFOUNDRY_VBENCH_TIMEOUT", "1800")))

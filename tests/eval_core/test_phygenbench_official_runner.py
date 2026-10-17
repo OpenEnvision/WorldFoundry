@@ -14,7 +14,6 @@ from worldfoundry.evaluation.tasks.execution.runners.phygenbench.phygenbench_pro
 )
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -32,12 +31,15 @@ def test_phygenbench_canonical_prompt_count_from_upstream_repo() -> None:
 
 
 def test_phygenbench_metrics_from_summary_csv() -> None:
-    rows = [{"metric_id": metric_id, "score": 0.75} for metric_id in (
-        "physical_commonsense",
-        "physical_law_adherence",
-        "semantic_adherence",
-        "phygenbench_average",
-    )]
+    rows = [
+        {"metric_id": metric_id, "score": 0.75}
+        for metric_id in (
+            "physical_commonsense",
+            "physical_law_adherence",
+            "semantic_adherence",
+            "phygenbench_average",
+        )
+    ]
     metrics = compute_phygenbench_metrics(rows=rows)["metrics"]
     assert metrics["physical_commonsense"] == 0.75
     assert metrics["phygenbench_average"] == 0.75
@@ -119,6 +121,9 @@ def test_phygenbench_official_run_with_mock_backend_writes_scorecard(tmp_path: P
     assert completed.returncode == 0, completed.stderr
     scorecard = json.loads((output_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert (output_dir / "phygenbench_results.json").is_file()
-    assert scorecard["evaluation"]["kind"] == "phygenbench_official_in_tree"
-    assert scorecard["normalizer_only"] is False
+    assert scorecard["evaluation"]["kind"] == "phygenbench_mock_or_result_normalizer"
+    assert scorecard["normalizer_only"] is True
+    assert scorecard["official_benchmark_verified"] is False
+    assert scorecard["integration_evidence"] is False
+    assert scorecard["metrics"]["summary"]["official_available_count"] == 0
     assert scorecard["metrics"]["summary"]["available_metric_count"] == 4

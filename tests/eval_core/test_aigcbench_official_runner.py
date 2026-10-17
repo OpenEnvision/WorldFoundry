@@ -9,9 +9,9 @@ from pathlib import Path
 from worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_metrics import compute_aigcbench_metrics
 from worldfoundry.evaluation.tasks.execution.runners.aigcbench.aigcbench_prompts import (
     CANONICAL_PROMPT_COUNT,
+    load_prompt_records,
     materialize_aigcbench_generation_requests,
     unique_prompt_records,
-    load_prompt_records,
 )
 
 
@@ -41,20 +41,23 @@ def test_aigcbench_prompt_materialization_from_manifest(tmp_path: Path) -> None:
 
 
 def test_aigcbench_metrics_from_summary_csv() -> None:
-    rows = [{"metric_id": metric_id, "score": 0.75} for metric_id in (
-        "mse_first",
-        "ssim_first",
-        "image_genvideo_clip",
-        "genvideo_text_clip",
-        "genvideo_refvideo_clip_keyframes",
-        "flow_square_mean",
-        "genvideo_refvideo_clip_corresponding_frames",
-        "genvideo_clip_adjacent_frames",
-        "frame_count",
-        "dover",
-        "genvideo_refvideo_ssim",
-        "aigcbench_average",
-    )]
+    rows = [
+        {"metric_id": metric_id, "score": 0.75}
+        for metric_id in (
+            "mse_first",
+            "ssim_first",
+            "image_genvideo_clip",
+            "genvideo_text_clip",
+            "genvideo_refvideo_clip_keyframes",
+            "flow_square_mean",
+            "genvideo_refvideo_clip_corresponding_frames",
+            "genvideo_clip_adjacent_frames",
+            "frame_count",
+            "dover",
+            "genvideo_refvideo_ssim",
+            "aigcbench_average",
+        )
+    ]
     metrics = compute_aigcbench_metrics(rows=rows)["metrics"]
     assert metrics["dover"] == 0.75
     assert metrics["aigcbench_average"] == 0.75
@@ -141,8 +144,10 @@ def test_aigcbench_official_run_imports_workspace_artifact(tmp_path: Path) -> No
     assert completed.returncode == 0, completed.stderr
     scorecard = json.loads((output_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert (output_dir / "aigcbench_results.csv").is_file()
-    assert scorecard["evaluation"]["kind"] == "aigcbench_official_in_tree"
-    assert scorecard["normalizer_only"] is False
+    assert scorecard["evaluation"]["kind"] == "aigcbench_result_normalizer"
+    assert scorecard["normalizer_only"] is True
+    assert scorecard["official_benchmark_verified"] is False
+    assert scorecard["integration_evidence"] is False
     assert scorecard["metrics"]["summary"]["available_metric_count"] >= 1
     assert scorecard["run"]["scorer_summary"]["source_results_path"] == str(generated_results_path.resolve())
 

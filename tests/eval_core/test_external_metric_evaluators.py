@@ -10,7 +10,6 @@ from worldfoundry.evaluation.tasks.metrics import (
     get_external_metric_evaluator,
 )
 
-
 NEW_VIDEO_WORLD_CONTRACT_IDS = (
     "aigcbench",
     "mirabench",
@@ -74,9 +73,9 @@ def test_external_metric_entries_report_blocked_runtime_for_non_local_metrics() 
 def test_external_contract_registry_uses_source_aware_registration_primitive() -> None:
     from worldfoundry.evaluation.tasks.contracts.registry import (
         DuplicateExternalBenchmarkContractError,
+        ExternalBenchmarkContract,
         ExternalBenchmarkContractRegistry,
     )
-    from worldfoundry.evaluation.tasks.contracts.registry import ExternalBenchmarkContract
 
     builtin = ExternalBenchmarkContract(
         benchmark_id="toy-benchmark",
@@ -111,17 +110,22 @@ def test_external_contract_registry_uses_source_aware_registration_primitive() -
 
 
 def test_metric_package_exports_canonical_metrics_registry() -> None:
-    import worldfoundry.evaluation.tasks.metrics.artifacts as canonical_artifacts
-    import worldfoundry.evaluation.tasks.metrics.bindings as canonical_bindings
-    import worldfoundry.evaluation.tasks.metrics.evaluators as canonical
-    import worldfoundry.evaluation.tasks.metrics.local_evaluators as canonical_local_evaluators
+    import worldfoundry.evaluation.tasks.metrics.registry as canonical_artifacts
     from worldfoundry.evaluation.tasks import metrics
+    from worldfoundry.evaluation.tasks.execution.runners._benchmark_metrics import (
+        bindings as canonical_bindings,
+    )
+    from worldfoundry.evaluation.tasks.execution.runners._benchmark_metrics import (
+        evaluators as canonical,
+    )
+    from worldfoundry.evaluation.tasks.execution.runners._benchmark_metrics import (
+        local_evaluators as canonical_local_evaluators,
+    )
 
     assert metrics.ExternalMetricEvaluationRequest is canonical.ExternalMetricEvaluationRequest
     assert metrics.ExternalMetricEvaluatorEntry is canonical.ExternalMetricEvaluatorEntry
     assert metrics.ExternalMetricEvaluatorRegistry is canonical.ExternalMetricEvaluatorRegistry
     assert metrics.evaluate_external_metric is canonical.evaluate_external_metric
-    assert metrics.ExternalMetricEvaluatorRegistry is canonical.ExternalMetricEvaluatorRegistry
     assert metrics.normalize_artifact_records is canonical_artifacts.normalize_artifact_records
     assert metrics.missing_artifacts is canonical_artifacts.missing_artifacts
     assert metrics.FORMULA_EVALUATOR_BINDINGS is canonical_bindings.FORMULA_EVALUATOR_BINDINGS

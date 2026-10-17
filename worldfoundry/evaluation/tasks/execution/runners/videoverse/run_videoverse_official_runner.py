@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-
-
-from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
-    SCORECARD_SCHEMA_VERSION,
-    VIDEO_SUFFIXES,
-    resolve_env_path,
-)
-
 import argparse
 import json
 import os
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Mapping
 
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    SCORECARD_SCHEMA_VERSION,
+    VIDEO_SUFFIXES,
+    resolve_env_path,
+)
 from worldfoundry.evaluation.tasks.execution.runners._benchmark_metrics.formulas import (
     videoverse_subquestion_metrics,
 )
@@ -95,13 +92,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--benchmark-id", default="videoverse")
     parser.add_argument("--official-results-path", dest="official_results_path", type=Path)
     parser.add_argument("--from-upstream-results", dest="official_results_path", type=Path, help=argparse.SUPPRESS)
-    parser.add_argument("--run-official", action="store_true", help="Execute the in-tree VideoVerse judge and normalize scores.")
+    parser.add_argument(
+        "--run-official", action="store_true", help="Execute the in-tree VideoVerse judge and normalize scores."
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--generated-artifact-dir", type=Path)
     parser.add_argument("--prompt-manifest", type=Path)
     parser.add_argument("--decomposed-prompt-manifest", type=Path)
     parser.add_argument("--limit", type=int, help="Optional prompt-count cap for in-tree judge execution.")
-    parser.add_argument("--strict", action="store_true", help="Return non-zero unless the canonical full suite is complete.")
+    parser.add_argument(
+        "--strict", action="store_true", help="Return non-zero unless the canonical full suite is complete."
+    )
     parser.add_argument("--json", action="store_true")
     return parser.parse_args(argv)
 
@@ -165,7 +166,10 @@ def _is_metric_row_payload(payload: Any) -> bool:
         rows = value if isinstance(value, list) else None
     if not rows:
         return False
-    return all(isinstance(row, Mapping) and any(key in row for key in ("metric_id", "metric", "leaderboard_key")) for row in rows)
+    return all(
+        isinstance(row, Mapping) and any(key in row for key in ("metric_id", "metric", "leaderboard_key"))
+        for row in rows
+    )
 
 
 def _metric_rows_from_payload(payload: Any) -> list[dict[str, Any]]:
@@ -236,11 +240,6 @@ def _unit(value: float | None) -> float | None:
     return value
 
 
-def _mean(values: Iterable[float | None]) -> float | None:
-    clean = [float(value) for value in values if value is not None]
-    return sum(clean) / len(clean) if clean else None
-
-
 def _safe_div(numerator: int | float, denominator: int | float) -> float | None:
     return (float(numerator) / float(denominator)) if denominator else None
 
@@ -308,10 +307,7 @@ def _bounded_prompt_manifest(
         return {str(key): dict(value) for key, value in prompt_manifest.items()}
     if limit <= 0:
         raise ValueError("VideoVerse --limit must be a positive integer")
-    return {
-        prompt_id: dict(prompt_manifest[prompt_id])
-        for prompt_id in sorted(prompt_manifest)[:limit]
-    }
+    return {prompt_id: dict(prompt_manifest[prompt_id]) for prompt_id in sorted(prompt_manifest)[:limit]}
 
 
 def _video_index(generated_dir: Path | None) -> dict[str, Any]:
@@ -387,7 +383,9 @@ def _result_check_scores(
     for index, manifest_check in enumerate(manifest_checks):
         if not isinstance(manifest_check, Mapping):
             continue
-        result_check = result_checks[index] if index < len(result_checks) and isinstance(result_checks[index], Mapping) else {}
+        result_check = (
+            result_checks[index] if index < len(result_checks) and isinstance(result_checks[index], Mapping) else {}
+        )
         check_type = str(result_check.get("check_type") or manifest_check.get("check_type") or "Unknown")
         response = _yes_no(result_check.get("res"))
         by_type[check_type]["total"] += 1
@@ -575,9 +573,7 @@ def _scorecard(
     normalization_ok = bool(available_rows)
     official_runtime_ok = official_runtime_executed and normalization_ok
     official_verified = official_runtime_ok and full_suite_valid
-    integration_evidence = official_runtime_ok or (
-        not official_runtime_executed and full_suite_valid
-    )
+    integration_evidence = official_runtime_ok or (not official_runtime_executed and full_suite_valid)
     normalizer_only = not official_runtime_executed and not integration_evidence
     eligibility_reasons = []
     if official_runtime_executed:
@@ -636,7 +632,9 @@ def _scorecard(
         },
         "dataset": {
             "prompt_manifest": str(prompt_manifest_path),
-            "decomposed_prompt_manifest": None if decomposed_prompt_manifest_path is None else str(decomposed_prompt_manifest_path),
+            "decomposed_prompt_manifest": None
+            if decomposed_prompt_manifest_path is None
+            else str(decomposed_prompt_manifest_path),
             "official_results_path": str(official_results_path),
             "manifest_stats": dict(manifest_stats),
             "result_coverage": dict(result_coverage),
@@ -669,8 +667,12 @@ def _scorecard(
         },
         "evaluation": {
             "available": bool(available_rows),
-            "kind": "videoverse_official_in_tree" if official_runtime_executed else "videoverse_official_result_normalizer",
-            "evidence_level": "official_runtime_executed" if official_runtime_executed else "official_results_normalized",
+            "kind": "videoverse_official_in_tree"
+            if official_runtime_executed
+            else "videoverse_official_result_normalizer",
+            "evidence_level": "official_runtime_executed"
+            if official_runtime_executed
+            else "official_results_normalized",
             "num_results": len(metric_rows),
             "skip_count": len(metric_rows) - len(available_rows),
             "blocked_count": len(metric_rows) - len(available_rows),
@@ -719,9 +721,7 @@ def normalize_videoverse_results(
     if not isinstance(prompt_payload, Mapping):
         raise ValueError(f"VideoVerse prompt manifest must be an object keyed by prompt id: {prompt_manifest_path}")
     full_prompt_manifest = {
-        str(key): dict(value)
-        for key, value in prompt_payload.items()
-        if isinstance(value, Mapping)
+        str(key): dict(value) for key, value in prompt_payload.items() if isinstance(value, Mapping)
     }
     prompt_manifest = _bounded_prompt_manifest(full_prompt_manifest, args.limit)
     manifest_stats = _manifest_stats(prompt_manifest)
@@ -794,10 +794,7 @@ def normalize_videoverse_results(
     write_jsonl(output_dir / "raw_metric_table.jsonl", rows)
     write_jsonl(
         output_dir / "per_sample_scores.jsonl",
-        [
-            {"prompt_id": prompt_id, "available": prompt_id in result_records}
-            for prompt_id in sorted(prompt_manifest)
-        ],
+        [{"prompt_id": prompt_id, "available": prompt_id in result_records} for prompt_id in sorted(prompt_manifest)],
     )
     write_json(
         output_dir / "benchmark_contract.json",
@@ -837,7 +834,9 @@ def run_official_videoverse(args: argparse.Namespace) -> dict[str, Any]:
         )
     generated_artifact_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
     if generated_artifact_dir is None:
-        raise ValueError("--generated-artifact-dir or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required for --run-official")
+        raise ValueError(
+            "--generated-artifact-dir or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required for --run-official"
+        )
 
     prompt_payload = _load_json(prompt_manifest_path)
     if not isinstance(prompt_payload, Mapping):
@@ -905,7 +904,11 @@ def main(argv: list[str] | None = None) -> int:
             },
             "benchmark": {"benchmark_id": args.benchmark_id, "name": "VideoVerse"},
             "metrics": {"leaderboard": {}, "per_metric": {}, "summary": {"available_metric_count": 0}},
-            "evaluation": {"available": False, "kind": "videoverse_official_result_normalizer", "blocked_count": len(METRIC_ORDER)},
+            "evaluation": {
+                "available": False,
+                "kind": "videoverse_official_result_normalizer",
+                "blocked_count": len(METRIC_ORDER),
+            },
             "artifacts": {"scorecard": str((args.output_dir / "scorecard.json").resolve())},
         }
         write_json(args.output_dir / "scorecard.json", scorecard)

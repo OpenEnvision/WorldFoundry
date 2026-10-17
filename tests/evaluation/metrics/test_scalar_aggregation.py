@@ -32,6 +32,20 @@ class NumpyMetric:
 
 
 class ScalarAggregationTests(unittest.TestCase):
+    def test_mixed_raw_and_normalized_scores_include_each_valid_sample(self):
+        rows = [
+            MetricResult(sample_id="normalized", metric_id="quality", raw_value=50, normalized_value=0.5),
+            MetricResult(sample_id="raw", metric_id="quality", raw_value=1.0),
+            MetricResult(sample_id="skip", metric_id="quality", raw_value=10, valid=False, skip_reason="missing"),
+        ]
+
+        result = aggregate_mean("quality", rows)
+
+        self.assertEqual((result.n_total, result.n_valid, result.n_skipped), (3, 2, 1))
+        self.assertEqual(result.raw_stats, {"mean": 25.5})
+        self.assertEqual(result.normalized_stats, {"mean": 0.75})
+        self.assertEqual(result.skip_breakdown, {"missing": 1})
+
     def test_numpy_scores_use_the_same_mean_and_validity_rules(self):
         for scalar in (float, np.float32, np.float64, np.int64):
             for normalized in (False, True):

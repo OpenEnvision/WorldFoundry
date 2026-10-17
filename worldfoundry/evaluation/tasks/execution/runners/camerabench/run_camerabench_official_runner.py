@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-
-
-from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
-
 import argparse
 import json
 import os
@@ -27,6 +23,7 @@ from worldfoundry.evaluation.tasks.execution.framework.io import (  # noqa: E402
     write_json,
     write_jsonl,
 )
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION
 from worldfoundry.evaluation.tasks.execution.runners.camerabench.camerabench_metrics import (
     evaluate_camerabench_from_score_dir,
 )
@@ -317,7 +314,9 @@ def extract_scores(raw_results: dict[str, Any]) -> dict[str, dict[str, Any]]:
             scalar(raw_results.get("evaluated_splits")),
         )
     if auc is not None:
-        extracted["camera_motion_roc_auc"] = score_item(auc, "overall_roc_auc", scalar(raw_results.get("evaluated_splits")))
+        extracted["camera_motion_roc_auc"] = score_item(
+            auc, "overall_roc_auc", scalar(raw_results.get("evaluated_splits"))
+        )
 
     vqa_score = mean([scalar(raw_results.get("overall_binary_acc")), scalar(raw_results.get("overall_question_acc"))])
     if vqa_score is not None:
@@ -337,7 +336,9 @@ def extract_scores(raw_results: dict[str, Any]) -> dict[str, dict[str, Any]]:
     if caption_score is not None:
         extracted["camera_caption_score"] = score_item(caption_score, "mean_caption_metrics", caption_count)
 
-    component_scores = [item["raw_score"] for metric_id, item in extracted.items() if metric_id != "camerabench_average"]
+    component_scores = [
+        item["raw_score"] for metric_id, item in extracted.items() if metric_id != "camerabench_average"
+    ]
     average_score = mean(component_scores)
     if average_score is not None:
         extracted["camerabench_average"] = score_item(average_score, "computed_from_available_camerabench_metrics")
@@ -449,7 +450,11 @@ def normalize_camerabench_results(
     scorecard = {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "run": {
-            "status": "official_verified" if official_verified else "failed" if strict_failed else "official_results_normalized",
+            "status": "official_verified"
+            if official_verified
+            else "failed"
+            if strict_failed
+            else "official_results_normalized",
             "started_at": utc_now_iso(),
             "runner": "benchmark_zoo_camerabench_official_runner",
             "command": command,
@@ -624,7 +629,9 @@ def run_official_camerabench(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Compute or normalize CameraBench metrics to a WorldFoundry scorecard.")
+    parser = argparse.ArgumentParser(
+        description="Compute or normalize CameraBench metrics to a WorldFoundry scorecard."
+    )
     parser.add_argument("--benchmark-id", default=os.environ.get("WORLDFOUNDRY_BENCHMARK_ID", "camerabench"))
     parser.add_argument(
         "--official-results-path",
@@ -635,8 +642,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--from-upstream-results", dest="from_upstream_results", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--score-dir", type=Path, default=env_path("WORLDFOUNDRY_CAMERABENCH_SCORE_DIR"))
     parser.add_argument("--benchmark-data-root", type=Path, default=_candidate_dataset_root(None))
-    parser.add_argument("--task", choices=("binary", "vqa_retrieval", "caption", "all"), default=os.environ.get("WORLDFOUNDRY_CAMERABENCH_TASK", "binary"))
-    parser.add_argument("--mode", choices=("vqa", "retrieval", "both"), default=os.environ.get("WORLDFOUNDRY_CAMERABENCH_MODE", "both"))
+    parser.add_argument(
+        "--task",
+        choices=("binary", "vqa_retrieval", "caption", "all"),
+        default=os.environ.get("WORLDFOUNDRY_CAMERABENCH_TASK", "binary"),
+    )
+    parser.add_argument(
+        "--mode", choices=("vqa", "retrieval", "both"), default=os.environ.get("WORLDFOUNDRY_CAMERABENCH_MODE", "both")
+    )
     parser.add_argument("--output-dir", type=Path, default=env_path("WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR"))
     parser.add_argument(
         "--run-official",
@@ -652,7 +665,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=int, default=int(os.environ.get("WORLDFOUNDRY_BENCHMARK_TIMEOUT", "7200")))
     parser.add_argument("--no-gpt", action="store_true")
     parser.add_argument("--openai-api-key", default=os.environ.get("OPENAI_API_KEY"))
-    parser.add_argument("--strict", action="store_true", help="Require complete local testset coverage and all CameraBench metric families.")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Require complete local testset coverage and all CameraBench metric families.",
+    )
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -670,7 +687,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     result = {
-        "ok": scorecard["integration_evidence"] is True,
+        "ok": scorecard["normalization_ok"] is True,
         "benchmark_id": args.benchmark_id,
         "output_dir": str(args.output_dir),
         "scorecard": scorecard["artifacts"]["scorecard"],

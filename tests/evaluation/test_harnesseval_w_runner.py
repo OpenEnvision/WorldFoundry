@@ -358,8 +358,10 @@ def test_megasam_missing_registered_unidepth_weights_do_not_use_legacy(tmp_path,
     from worldfoundry.base_models.three_dimensions.slam import megasam_resident as resident
 
     legacy = (
-        tmp_path / "huggingface/hub/models--lpiccinelli--unidepth-v2-vitl14/snapshots"
-        / resident.UNIDEPTH_REVISION / "model.safetensors"
+        tmp_path
+        / "huggingface/hub/models--lpiccinelli--unidepth-v2-vitl14/snapshots"
+        / resident.UNIDEPTH_REVISION
+        / "model.safetensors"
     )
     legacy.parent.mkdir(parents=True)
     legacy.touch()
@@ -371,9 +373,19 @@ def test_megasam_missing_registered_unidepth_weights_do_not_use_legacy(tmp_path,
     monkeypatch.setitem(
         resident.BASE_MODEL_CAPABILITIES,
         "unidepth_v2_vitl14",
-        type("Capability", (), {"assets": [type("Asset", (), {"check": lambda self: {
-            "matched_path": None, "local_path": str(tmp_path / "missing")
-        }})()]})(),
+        type(
+            "Capability",
+            (),
+            {
+                "assets": [
+                    type(
+                        "Asset",
+                        (),
+                        {"check": lambda self: {"matched_path": None, "local_path": str(tmp_path / "missing")}},
+                    )()
+                ]
+            },
+        )(),
     )
     assert resident.find_unidepth_weights(tmp_path) == legacy
 
@@ -402,7 +414,7 @@ def test_unidepth_loader_rejects_incompatible_weights(tmp_path, monkeypatch):
 
     from worldfoundry.base_models.three_dimensions.depth import unidepth
 
-    (tmp_path / "config.json").write_text("{}")
+    (tmp_path / "config.json").write_text(json.dumps({"data": {"shape_constraints": {}}}))
     save_file({"weight": torch.ones(3, 2), "bias": torch.ones(3)}, str(tmp_path / "model.safetensors"))
     monkeypatch.setattr(unidepth, "UniDepthV2", lambda config: torch.nn.Linear(2, 2))
     with pytest.raises(RuntimeError, match="size mismatch"):
@@ -473,7 +485,7 @@ def test_megasam_tracking_writes_only_camera_output(tmp_path, monkeypatch):
     seen = []
 
     class Droid:
-        video = SimpleNamespace(intrinsics=torch.tensor([[20., 20., 16., 12.]]))
+        video = SimpleNamespace(intrinsics=torch.tensor([[20.0, 20.0, 16.0, 12.0]]))
 
         def track(self, timestamp, image, depth, **kwargs):
             seen.append(timestamp)
@@ -486,7 +498,9 @@ def test_megasam_tracking_writes_only_camera_output(tmp_path, monkeypatch):
             assert len(list(stream)) == 3
             return np.zeros((3, 7)), None, None
 
-    output = run_tracking(frames, mono.parent, metric.parent, "scene", tmp_path / "poses.npz", droid_factory=lambda args: Droid())
+    output = run_tracking(
+        frames, mono.parent, metric.parent, "scene", tmp_path / "poses.npz", droid_factory=lambda args: Droid()
+    )
     with np.load(output) as data:
         assert set(data.files) == {"cam_c2w", "intrinsic"}
         assert data["cam_c2w"].shape == (3, 4, 4)

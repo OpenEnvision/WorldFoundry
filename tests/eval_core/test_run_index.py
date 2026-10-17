@@ -26,7 +26,6 @@ def _summary(*, run_id: str, model_id: str, quality: float, failed_samples: int 
             "started_at": "2026-01-01T00:00:00Z",
             "finished_at": "2026-01-01T00:01:00Z",
             "worldfoundry_version": "test",
-            "run_fingerprint": f"fingerprint-{run_id}",
         },
         "benchmark": {"benchmark_name": "index-benchmark", "task_type": "index-task"},
         "model": {"model_id": model_id, "model_name": model_id},
@@ -81,7 +80,9 @@ def test_discover_run_summaries_prefers_root_summaries_and_prunes_artifacts(tmp_
     _write_json(root / "run-a" / "metrics" / "summary.json", _summary(run_id="nested", model_id="bad", quality=0.1))
     _write_json(root / "run-b" / "scorecard.json", _scorecard(run_id="run-b", model_id="model-b", quality=0.8))
     _write_json(root / "run-c" / "summary.json", _summary(run_id="run-c", model_id="model-c", quality=0.9))
-    _write_json(root / "run-c" / "scorecard.json", _scorecard(run_id="run-c-scorecard", model_id="model-c", quality=0.1))
+    _write_json(
+        root / "run-c" / "scorecard.json", _scorecard(run_id="run-c-scorecard", model_id="model-c", quality=0.1)
+    )
 
     discovered = [path.relative_to(root).as_posix() for path in discover_run_summaries(root)]
 

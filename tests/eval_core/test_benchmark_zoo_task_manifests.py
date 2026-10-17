@@ -7,25 +7,18 @@ from pathlib import Path
 import yaml
 
 from worldfoundry.base_models.capabilities import resolve_base_model_capability_ids
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import (
-    FORMAL_BENCHMARK_INVENTORY_SUITE_ID,
-    formal_benchmark_ids,
-)
-from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import (
-    DEFAULT_EMBODIED_CATALOG_DIR,
-    DEFAULT_VIDEO_CATALOG_DIR,
-    benchmark_catalog_ids,
-)
+from worldfoundry.evaluation.tasks import load_task_registry_from_paths
 from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import (
     DEFAULT_BENCHMARK_RUNTIME_PROFILE_PATH,
+    DEFAULT_EMBODIED_CATALOG_DIR,
+    DEFAULT_VIDEO_CATALOG_DIR,
+    formal_benchmark_ids,
     load_benchmark_runtime_profiles,
 )
 from worldfoundry.evaluation.tasks.catalog.integrity import (
     build_benchmark_inventory_integrity,
     build_docs_benchmark_coverage,
 )
-from worldfoundry.evaluation.tasks import load_task_registry_from_paths
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TASK_ROOT = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "tasks" / "external"
@@ -46,6 +39,8 @@ def _runtime_profiles() -> list[dict]:
 
 def _runtime_profiles_by_id() -> dict[str, dict]:
     return {str(profile["id"]): profile for profile in _runtime_profiles()}
+
+
 BENCHMARK_DOCS_PATH = REPO_ROOT / "docs" / "fumadocs" / "content" / "docs" / "evaluation" / "benchmarks.mdx"
 BENCHMARK_DOCS_ZH_PATH = REPO_ROOT / "docs" / "fumadocs" / "content" / "docs" / "evaluation" / "benchmarks.zh.mdx"
 BENCHMARK_HUB_DATA_PATH = REPO_ROOT / "docs" / "fumadocs" / "lib" / "benchmark-hub-data.ts"
@@ -82,7 +77,7 @@ EMBODIED_NORMALIZER_ONLY_NO_RUNNER_SCRIPT_IDS = frozenset(
         "bridgedata-v2",
         "calvin",
         "libero",
-        "libero-para",
+        "libero-plus",
         "maniskill",
         "metaworld",
         "rlbench",
@@ -117,8 +112,12 @@ VIDEO_WORLD_OFFICIAL_RESULT_NORMALIZER_IDS = {
     "vmbench",
 }
 FORMAL_BENCHMARK_COUNT = len(formal_benchmark_ids(CATALOG_DIR))
-VIDEO_CATALOG_COUNT = len(list(VIDEO_BENCHMARKS_DIR.glob("*.yaml"))) - int((VIDEO_BENCHMARKS_DIR / "_manifest.yaml").is_file())
-EMBODIED_CATALOG_COUNT = len(list(EMBODIED_BENCHMARKS_DIR.glob("*.yaml"))) - int((EMBODIED_BENCHMARKS_DIR / "_manifest.yaml").is_file())
+VIDEO_CATALOG_COUNT = len(list(VIDEO_BENCHMARKS_DIR.glob("*.yaml"))) - int(
+    (VIDEO_BENCHMARKS_DIR / "_manifest.yaml").is_file()
+)
+EMBODIED_CATALOG_COUNT = len(list(EMBODIED_BENCHMARKS_DIR.glob("*.yaml"))) - int(
+    (EMBODIED_BENCHMARKS_DIR / "_manifest.yaml").is_file()
+)
 
 
 def _has_verified_official_start_evidence(source: dict) -> bool:
@@ -299,8 +298,6 @@ def test_catalog_entries_link_their_task_yaml_contracts() -> None:
             assert entry["runner_availability"]["task_yaml_available"] is True
 
 
-
-
 def test_video_world_metrics_reuse_base_model_dependencies() -> None:
     expected = {
         "aigcbench": ["video_quality_motion_stack"],
@@ -355,14 +352,14 @@ def test_video_world_metrics_reuse_base_model_dependencies() -> None:
             "worldscore_official_assets",
             "droid_slam",
             "grounding_dino",
-                "raft",
-                "sam_v1",
-                "sam2",
-                "sea_raft",
-                "flowformerplusplus",
-                "vfimamba",
-            ],
-        }
+            "raft",
+            "sam_v1",
+            "sam2",
+            "sea_raft",
+            "flowformerplusplus",
+            "vfimamba",
+        ],
+    }
     catalog_entries = _catalog_entries()
     runtime_profiles_by_id = _runtime_profiles_by_id()
 
@@ -458,7 +455,10 @@ def test_benchmark_status_docs_match_current_catalog_summary() -> None:
     assert "bounded-runner" in hub_text
     assert "Core video-generation quality benchmark with bounded official GPU-validation evidence" in hub_text
     assert "Bounded Diversity GPU validation is recorded" in hub_text
-    assert "Extended I2V, long-video, and trustworthiness dimensions with bounded official GPU-validation evidence" in hub_text
+    assert (
+        "Extended I2V, long-video, and trustworthiness dimensions with bounded official GPU-validation evidence"
+        in hub_text
+    )
     assert "WorldScore" in hub_text and "Bounded official GPU validation is recorded" in hub_text
 
     for benchmark_id in ("bridgedata-v2", "videoscore", "camerabench"):
@@ -578,7 +578,9 @@ def test_camerabench_strict_official_result_path_is_framework_ready_without_lead
     assert manifest["metadata"]["leaderboard_valid"] is False
     assert manifest["metadata"]["maturity"] == "verified_runner"
     assert "official_results_path" in " ".join(manifest["metadata"]["requires"])
-    assert "full_suite_valid" in " ".join(manifest["tasks"]["camerabench_camera_motion_standard"]["evaluation_protocol"][0]["acceptance"])
+    assert "full_suite_valid" in " ".join(
+        manifest["tasks"]["camerabench_camera_motion_standard"]["evaluation_protocol"][0]["acceptance"]
+    )
     assert catalog_entry["runner"]["assets"]["official_validation"]["full_suite_verified"] is False
     assert catalog_entry["integration"]["status"] == "integrated"
     assert catalog_entry["integration_evidence"] is True
@@ -933,7 +935,10 @@ def test_robotwin_embodied_task_manifest_loads_with_official_task_list() -> None
 
     assert manifest["benchmark"] == "robotwin"
     assert manifest["metadata"]["source_kind"] == "benchmark_zoo"
-    assert manifest["metadata"]["official_runner_script"] == "worldfoundry/evaluation/tasks/embodied/runners/robotwin/run_robotwin_official_runner.py"
+    assert (
+        manifest["metadata"]["official_runner_script"]
+        == "worldfoundry/evaluation/tasks/embodied/runners/robotwin/run_robotwin_official_runner.py"
+    )
     assert manifest["metadata"]["runtime"]["root_env"] == "WORLDFOUNDRY_ROBOTWIN_ROOT"
     assert manifest["metadata"]["runtime"]["task_count"] == 50
     assert len(manifest["metadata"]["official_task_groups"]["all_50_tasks"]) == 50

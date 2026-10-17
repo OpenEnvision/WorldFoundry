@@ -12,7 +12,7 @@ import inspect
 import sys
 import warnings
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, WorldModelConfig
 
@@ -220,16 +220,18 @@ class WorldFoundryPipelineRunner:
         Returns:
             A list of :class:`GenerationResult` objects, one per request.
         """
+        return list(self.generate_iter(requests))
+
+    def generate_iter(self, requests: Sequence[GenerationRequest]) -> Iterator[GenerationResult]:
+        """Yield each complete sample/rollout using one lifecycle for the batch."""
         if self.cleaned:
             raise RuntimeError("cannot generate with a cleaned WorldFoundryPipelineRunner")
         lifecycle = self._lifecycle(self._runtime_profile())
         from worldfoundry.core import worldfoundry_inference_context
 
         with worldfoundry_inference_context():
-            return [
-                self._generate_one(self._apply_generation_defaults(request), lifecycle)
-                for request in requests
-            ]
+            for request in requests:
+                yield self._generate_one(self._apply_generation_defaults(request), lifecycle)
 
     def reset_for_evaluation(self) -> None:
         """Clear request/session state while keeping model weights resident."""

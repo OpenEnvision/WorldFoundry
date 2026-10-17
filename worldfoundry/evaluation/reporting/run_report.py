@@ -24,9 +24,7 @@ from .comparison_identity import build_comparison_identity, comparison_identity_
 RUN_SUMMARY_SCHEMA_VERSION = "worldfoundry-run-summary"
 
 MOCK_EVALUATION_BACKEND = "mock"
-MOCK_BACKEND_BLOCKING_REASON = (
-    "evaluation backend is mock (fixture output, not benchmark evidence)"
-)
+MOCK_BACKEND_BLOCKING_REASON = "evaluation backend is mock (fixture output, not benchmark evidence)"
 _BACKEND_CONTAINER_KEYS = ("evaluation", "run", "generation")
 
 # ── Aliases for shared utility functions ──────────────────────
@@ -228,13 +226,17 @@ def build_run_summary(scorecard: Mapping[str, Any]) -> dict[str, Any]:
     )
 
     sample_count = _int_or_zero(
-        metrics_summary.get("sample_count"), generation.get("num_requests"), dataset.get("sample_count"),
+        metrics_summary.get("sample_count"),
+        generation.get("num_requests"),
+        dataset.get("sample_count"),
     )
     successful_samples = _int_or_zero(
-        metrics_summary.get("successful_samples"), generation.get("successful"),
+        metrics_summary.get("successful_samples"),
+        generation.get("successful"),
     )
     failed_samples = _int_or_zero(
-        metrics_summary.get("failed_samples"), generation.get("failed"),
+        metrics_summary.get("failed_samples"),
+        generation.get("failed"),
     )
 
     backend = evaluation_backend_from_payload(scorecard)
@@ -260,7 +262,6 @@ def build_run_summary(scorecard: Mapping[str, Any]) -> dict[str, Any]:
             "started_at": run.get("started_at"),
             "finished_at": run.get("finished_at"),
             "worldfoundry_version": run.get("worldfoundry_version"),
-            "run_fingerprint": run.get("run_fingerprint"),
         },
         "benchmark": {
             "benchmark_id": _first_present(benchmark, "benchmark_id", "id", "benchmark_name", "name"),
@@ -335,13 +336,15 @@ def load_run_summary(path: str | Path) -> dict[str, Any]:
     if schema_version == "worldfoundry-scorecard":
         return build_run_summary(payload)
     if schema_version == "worldfoundry-run-manifest":
-        return build_run_summary({
-            "schema_version": schema_version,
-            "run": payload,
-            **{key: payload.get(key, {}) for key in ("benchmark", "model", "dataset", "artifacts")},
-            "generation": {"num_requests": payload.get("sample_count", 0)},
-            "eligibility": {"score_valid": False, "leaderboard_valid": False, "leaderboard_eligible": False},
-        })
+        return build_run_summary(
+            {
+                "schema_version": schema_version,
+                "run": payload,
+                **{key: payload.get(key, {}) for key in ("benchmark", "model", "dataset", "artifacts")},
+                "generation": {"num_requests": payload.get("sample_count", 0)},
+                "eligibility": {"score_valid": False, "leaderboard_valid": False, "leaderboard_eligible": False},
+            }
+        )
     raise ValueError(f"unsupported run summary schema_version in {source_path}: {schema_version!r}")
 
 
@@ -433,7 +436,9 @@ def write_run_report_artifacts(
         A dict mapping ``"summary"`` and ``"report"`` to resolved ``Path`` objects.
     """
     root = Path(output_dir)
-    scorecard_payload = dict(scorecard) if scorecard is not None else read_json_object(Path(scorecard_path or root / "scorecard.json"))
+    scorecard_payload = (
+        dict(scorecard) if scorecard is not None else read_json_object(Path(scorecard_path or root / "scorecard.json"))
+    )
     summary = build_run_summary(scorecard_payload)
     resolved_summary_path = Path(summary_path or root / "summary.json")
     resolved_report_path = Path(report_path or root / "report.md")

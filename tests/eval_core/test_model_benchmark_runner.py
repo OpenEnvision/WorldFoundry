@@ -6,16 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.cli import main
 from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_MODEL_ID, CONTRACT_FIXTURE_RUNNER_TARGET
+from worldfoundry.cli import main
 from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import formal_benchmark_ids
 from worldfoundry.evaluation.tasks.execution.orchestration import model_benchmark as model_benchmark_module
+from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import OfficialRunResult
 from worldfoundry.evaluation.tasks.execution.orchestration.model_benchmark import (
     ModelBenchmarkRunRequest,
     run_model_benchmark,
 )
-from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import OfficialRunResult
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "catalog"
@@ -100,14 +99,13 @@ def test_model_benchmark_runner_feeds_model_outputs_to_benchmark_runner(tmp_path
     assert run_summary["run"]["started_at"].endswith("Z")
     assert run_summary["run"]["finished_at"].endswith("Z")
     assert run_summary["run"]["worldfoundry_version"]
-    assert len(run_summary["run"]["run_fingerprint"]["hash"]) == 64
-    assert standard_manifest["run_fingerprint"] == run_summary["run"]["run_fingerprint"]
+    assert standard_manifest["version_context"] == run_summary["run"]["version_context"]
     assert run_summary["artifacts"]["generated_artifact_manifest"].endswith("generated_artifacts.jsonl")
     assert run_summary["artifacts"]["benchmark_scorecard"].endswith("benchmark/scorecard.json")
-    assert run_summary["leaderboard"]["materialized_artifact_count"] == 1.0
-    assert run_summary["leaderboard"]["placeholder_artifact_count"] == 1.0
-    assert run_summary["leaderboard"]["real_artifact_count"] == 0.0
-    assert run_summary["leaderboard"]["benchmark_ok"] == 0.0
+    assert run_summary["generation"]["materialized_artifact_count"] == 1
+    assert run_summary["generation"]["placeholder_artifact_count"] == 1
+    assert run_summary["generation"]["real_artifact_count"] == 0
+    assert "benchmark_ok" not in run_summary["leaderboard"]
     assert run_summary["eligibility"]["score_valid"] is False
     assert run_summary["eligibility"]["leaderboard_valid"] is False
     assert run_summary["eligibility"]["leaderboard_eligible"] is False
