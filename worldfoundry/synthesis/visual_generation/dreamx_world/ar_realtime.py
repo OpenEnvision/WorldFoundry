@@ -21,6 +21,7 @@ from safetensors.torch import load_file
 
 from worldfoundry.core.execution.realtime.contracts import DEFAULT_REALTIME_CONTROLS, RealtimeSpec
 from worldfoundry.core.geometry.transforms import euler_angles_to_rotation_matrix_zyx
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 from worldfoundry.runtime.local_checkpoint_cache import stage_checkpoint_for_realtime
 
 from .checkpoints import enforce_offline_model_loading, resolve_checkpoint
@@ -503,9 +504,11 @@ class DreamXWorldARRealtimeSession:
             "decode_ms": decode_ms,
             "total_ms": (time.perf_counter() - started) * 1000.0,
         }
+        frames = np.ascontiguousarray(frames)
         return {
-            "frames": np.ascontiguousarray(frames),
-            "video": np.ascontiguousarray(frames),
+            "frames": frames,
+            "video": frames,
+            "video_chunk": VideoChunk(frames=frames, layout="thwc", value_range="0,255"),
             "fps": NATIVE_FPS,
             "realtime_spec": self.realtime_spec().to_payload(),
             "realtime_metrics": dict(self.last_metrics),

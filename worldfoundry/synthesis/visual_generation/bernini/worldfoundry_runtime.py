@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import (
     checkpoint_root_path,
     hfd_root_path,
@@ -901,7 +900,6 @@ class BerniniRuntime:
             "backend_quality": "official_in_tree_runtime",
             "artifact_path": str(output),
             "artifact_kind": "generated_image" if task_type in {"t2i", "i2i"} else "generated_video",
-            "artifact_sha256": file_sha256(output),
             "metadata": {
                 "model_id": self.variant.model_id,
                 "task_type": task_type,

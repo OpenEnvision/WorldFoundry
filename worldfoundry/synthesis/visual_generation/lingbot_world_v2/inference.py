@@ -36,7 +36,7 @@ from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.lingb
     LingBotWorldV2Model,
 )
 from worldfoundry.base_models.diffusion_model.recipes.wan_configs.lingbot_world_v2 import (
-    LINGBOT_WORLD_V2_CONFIG,
+    LINGBOT_WORLD_V2_CONFIGS,
 )
 from worldfoundry.base_models.diffusion_model.schedulers.flow_unipc import (
     FlowUniPCMultistepScheduler,
@@ -48,6 +48,7 @@ from worldfoundry.core.attention.parallel.causal_rope_sequence_parallel import (
 from worldfoundry.core.distributed.sharding.block_fsdp import shard_model
 from worldfoundry.core.distributed.sequence_parallel.ops import get_world_size
 from worldfoundry.core.geometry.transforms import ray_condition
+from worldfoundry.core.execution.realtime.flow_sampling import reference_flow_schedule, reference_flow_to_clean
 from worldfoundry.operators.lingbot_world_operator import (
     compute_relative_poses,
     get_Ks_transformed,
@@ -65,7 +66,7 @@ def _is_fsdp_module(module: torch.nn.Module) -> bool:
 
 
 class LingBotWorldV2Inference:
-    """Public LingBot-World-V2 14B causal-fast inference implementation."""
+    """Public LingBot-World-V2 causal-fast inference with explicit model variants."""
 
     @staticmethod
     @contextmanager
@@ -109,8 +110,17 @@ class LingBotWorldV2Inference:
         pipe_dtype: torch.dtype = torch.bfloat16,
         local_attn_size: int = 18,
         sink_size: int = 6,
+        model_id: str = "lingbot-world-v2",
+        shared_assets_path: str | Path | None = None,
+        attention_backend: str = "auto",
+        vae_streaming_compile: bool = False,
     ) -> None:
-        self.config = LINGBOT_WORLD_V2_CONFIG
+        if model_id not in LINGBOT_WORLD_V2_CONFIGS:
+            raise ValueError(f"Unsupported LingBot-World-V2 model id: {model_id}")
+        self.model_id = model_id
+        self.config = LINGBOT_WORLD_V2_CONFIGS[model_id]
+        self.reference_sampling = model_id == "lingbot-world-v2-1.3b"
+        self.vae_streaming_compile = bool(vae_streaming_compile)
         self.device = torch.device(f"cuda:{device_id}")
         self.rank = rank
         self.t5_cpu = t5_cpu
@@ -126,6 +136,11 @@ class LingBotWorldV2Inference:
         self.sink_size = sink_size
         self.sp_size = get_world_size() if use_sp else 1
         checkpoint_dir = Path(checkpoint_dir)
+        asset_dir = Path(shared_assets_path) if shared_assets_path is not None else checkpoint_dir
+        if attention_backend not in {"auto", "torch", "scaled_int8_fp8"}:
+            raise ValueError("LingBot V2 attention_backend must be auto, torch or scaled_int8_fp8")
+        if attention_backend == "scaled_int8_fp8" and use_sp:
+            raise ValueError("LingBot scaled INT8/FP8 sequence-parallel attention is unvalidated")
 
         if t5_fsdp or dit_fsdp or use_sp:
             init_on_cpu = False
@@ -134,24 +149,38 @@ class LingBotWorldV2Inference:
             text_len=self.config.text_len,
             dtype=self.config.t5_dtype,
             device=torch.device("cpu"),
-            checkpoint_path=str(checkpoint_dir / self.config.t5_checkpoint),
-            tokenizer_path=str(checkpoint_dir / self.config.t5_tokenizer),
+            checkpoint_path=str(asset_dir / self.config.t5_checkpoint),
+            tokenizer_path=str(asset_dir / self.config.t5_tokenizer),
             shard_fn=shard_fn if t5_fsdp else None,
         )
         self.vae = Wan2_1_VAE(
-            vae_pth=str(checkpoint_dir / self.config.vae_checkpoint),
+            vae_pth=str(asset_dir / self.config.vae_checkpoint),
             device=self.device,
         )
 
         logging.info("Loading LingBot-World-V2 causal-fast DiT from %s", checkpoint_dir)
-        with self._transformer_load_root(checkpoint_dir, self.config.fast_checkpoint) as load_root:
-            model = LingBotWorldV2Model.from_pretrained(
-                load_root,
-                torch_dtype=torch.bfloat16,
-                local_attn_size=local_attn_size,
-                sink_size=sink_size,
-            )
+        if self.reference_sampling:
+            from worldfoundry.core.model_loading.model import load_model
+
+            architecture = {name: self.config[name] for name in (
+                "patch_size", "text_len", "dim", "ffn_dim", "freq_dim", "num_heads",
+                "num_layers", "qk_norm", "cross_attn_norm", "eps",
+            )}
+            architecture.update(model_type="i2v", in_dim=36, out_dim=16, text_dim=4096,
+                                local_attn_size=local_attn_size, sink_size=sink_size)
+            model = load_model(LingBotWorldV2Model, checkpoint_dir / "model.safetensors.index.json",
+                               config=architecture, torch_dtype=self.param_dtype)
+        else:
+            with self._transformer_load_root(checkpoint_dir, self.config.fast_checkpoint) as load_root:
+                model = LingBotWorldV2Model.from_pretrained(
+                    load_root,
+                    torch_dtype=torch.bfloat16,
+                    local_attn_size=local_attn_size,
+                    sink_size=sink_size,
+                )
         model.eval().requires_grad_(False)
+        for block in model.blocks:
+            block.self_attn.attention_backend = attention_backend
         if use_sp:
             for block in model.blocks:
                 block.self_attn.forward = types.MethodType(
@@ -324,7 +353,7 @@ class LingBotWorldV2Inference:
         max_area: int = 480 * 832,
         frame_num: int = 361,
         timestep_indices: tuple[int, ...] = (0, 250, 500, 750),
-        shift: float = 10.0,
+        shift: float | None = None,
         seed: int = 42,
         offload_model: bool = False,
         max_sequence_length: int = 512,
@@ -374,7 +403,7 @@ class LingBotWorldV2Inference:
         )
         noise = torch.randn(
             16,
-            latent_frames,
+            max(latent_frames, chunk_size * self.config.reference_noise_chunks) if self.reference_sampling else latent_frames,
             latent_height,
             latent_width,
             dtype=torch.float32,
@@ -386,8 +415,12 @@ class LingBotWorldV2Inference:
         mask = torch.cat([mask[:, :1].repeat_interleave(4, dim=1), mask[:, 1:]], dim=1)
         mask = mask.view(1, mask.shape[1] // 4, 4, latent_height, latent_width).transpose(1, 2)[0]
 
+        shift = self.config.sample_shift if shift is None else shift
         self.scheduler.set_timesteps(self.config.num_train_timesteps, shift=shift)
         timesteps = self.scheduler.timesteps[list(timestep_indices)]
+        sigmas = None
+        if self.reference_sampling:
+            timesteps, sigmas = reference_flow_schedule(indices=timestep_indices, shift=shift, device=self.device)
         context = self._encode_prompt(prompt, offload_model)
         camera = self._camera_condition(
             poses,
@@ -440,7 +473,7 @@ class LingBotWorldV2Inference:
             for chunk_id, (latent, current_condition, current_camera) in enumerate(
                 tqdm(
                     zip(
-                        noise.split(chunk_size, dim=1),
+                        noise[:, :latent_frames].split(chunk_size, dim=1),
                         condition.split(chunk_size, dim=1),
                         camera.split(chunk_size, dim=2),
                     ),
@@ -458,6 +491,10 @@ class LingBotWorldV2Inference:
                     "max_attention_size": kv_size if max_attention_size is None else max_attention_size,
                     "frame_seqlen": frame_seq_len,
                 }
+                if self.sp_size == 1 and not _is_fsdp_module(self.model):
+                    model_kwargs["dit_cond_dict"] = self.model.prepare_camera_condition(
+                        model_kwargs["dit_cond_dict"], token_length=max_seq_len,
+                    )
                 for timestep_index, timestep in enumerate(timesteps):
                     noise_prediction = self.model(
                         x=[latent.to(self.device)],
@@ -466,13 +503,17 @@ class LingBotWorldV2Inference:
                         **model_kwargs,
                     )[0]
                     self._cross_attention_initialized = True
-                    x0 = self._flow_to_x0(noise_prediction, latent, timestep, self.scheduler)
+                    if self.reference_sampling:
+                        x0 = reference_flow_to_clean(latent, noise_prediction.to(self.param_dtype), sigmas[timestep_index])
+                    else:
+                        x0 = self._flow_to_x0(noise_prediction, latent, timestep, self.scheduler)
                     if timestep_index + 1 < len(timesteps):
-                        latent = self.scheduler.add_noise(
-                            x0,
-                            torch.randn(x0.shape, generator=generator, device=x0.device, dtype=x0.dtype),
-                            timesteps[timestep_index + 1],
-                        )
+                        step_noise = torch.empty_like(x0).normal_(generator=generator)
+                        if self.reference_sampling:
+                            next_sigma = sigmas[timestep_index + 1]
+                            latent = ((1.0 - next_sigma) * x0 + next_sigma * step_noise).to(x0.dtype)
+                        else:
+                            latent = self.scheduler.add_noise(x0, step_noise, timesteps[timestep_index + 1])
                 predicted_chunks.append(x0)
                 self.model(
                     x=[x0],

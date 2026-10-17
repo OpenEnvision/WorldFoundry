@@ -1,0 +1,44 @@
+model_id: lingbot-world-v2-1.3b
+env_name: lingbot-world-v2
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+python: '3.10'
+cuda_profile: cu121
+driver_status: compatible
+conda_packages:
+- python=3.10
+- pip
+- ffmpeg
+pip_packages:
+- torch==2.5.1
+- torchvision==0.20.1
+- transformers==4.51.3
+- tokenizers>=0.20.3
+- accelerate>=1.1.1
+- huggingface-hub
+- safetensors
+- numpy>=1.23.5,<2
+- scipy
+- imageio[ffmpeg]
+- imageio-ffmpeg
+- einops
+- easydict
+- ftfy
+- tqdm
+- pillow
+- pyyaml
+validation_imports:
+- torch
+- torchvision
+- transformers
+- huggingface_hub
+- safetensors
+- numpy
+- scipy
+- imageio
+- einops
+- worldfoundry.pipelines.lingbot_world_v2
+- worldfoundry.synthesis.visual_generation.lingbot_world_v2
+notes:
+- Shares the in-tree LingBot V2 environment; the native SDPA and scaled INT8/FP8 routes do not require external attention repositories.
+- Transformer shards are separate from the shared Wan2.1 T5, tokenizer and VAE assets.
+- CC BY-NC-SA 4.0 non-commercial license.

@@ -69,7 +69,7 @@ class LingBotWorldV2Pipeline(PipelineABC):
         input_dir: str | Path | None = None,
         output_path: str | Path | None = None,
         return_dict: bool = False,
-        frame_num: int = 361,
+        frame_num: int | None = None,
         num_frames: int | None = None,
         resize_H: int = 480,
         resize_W: int = 832,
@@ -78,6 +78,9 @@ class LingBotWorldV2Pipeline(PipelineABC):
         if self.synthesis_model is None:
             raise RuntimeError("LingBotWorldV2Pipeline is not initialized.")
         action_path = action_path or input_dir
+        if frame_num is None:
+            runtime = getattr(self.synthesis_model, "runtime", None)
+            frame_num = int(getattr(runtime, "defaults", {}).get("frame_num", 361))
         frame_num = int(num_frames) if num_frames is not None else frame_num
         if interactions and not isinstance(interactions, Mapping) and (resize_H, resize_W) != (480, 832):
             raise ValueError("Generated LingBot-World-V2 camera controls use the official 480x832 calibration.")
@@ -105,9 +108,39 @@ class LingBotWorldV2Pipeline(PipelineABC):
             return None
         return result if return_dict else result["artifact_path"]
 
-    def stream(self, *args: Any, **kwargs: Any) -> Any:
-        """Run one official causal-fast batch; the public release is not a streaming API."""
-        return self(*args, **kwargs)
+    def stream(
+        self,
+        images: Any = None,
+        prompt: str = "",
+        interactions: Sequence[Any] | Mapping[str, Any] | None = None,
+        action_path: str | Path | None = None,
+        input_dir: str | Path | None = None,
+        output_path: str | Path | None = None,
+        return_dict: bool = False,
+        frame_num: int | None = None,
+        num_frames: int | None = None,
+        resize_H: int = 480,
+        resize_W: int = 832,
+        *,
+        fps: int | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Run one causal-fast batch, retaining structured artifact output when requested."""
+        return self(
+            images=images,
+            prompt=prompt,
+            interactions=interactions,
+            action_path=action_path,
+            input_dir=input_dir,
+            output_path=output_path,
+            return_dict=return_dict,
+            frame_num=frame_num,
+            num_frames=num_frames,
+            resize_H=resize_H,
+            resize_W=resize_W,
+            fps=fps,
+            **kwargs,
+        )
 
     def _ensure_realtime_session(self) -> Any:
         """Load one distributed resident core per Studio worker process."""
@@ -128,23 +161,21 @@ class LingBotWorldV2Pipeline(PipelineABC):
         )
         from ...synthesis.visual_generation.lingbot_world_v2.realtime import (
             LingBotWorldV2RealtimeSession,
-        )
-        from ...synthesis.visual_generation.lingbot_world_v2.runtime import (
-            REQUIRED_CHECKPOINT_PATHS,
+            LingBotWorldV2SmallRealtimeSession,
         )
 
         runtime = self.synthesis_model.runtime
         checkpoint = stage_checkpoint_for_realtime(
             runtime._resolve_checkpoint(required=True),
-            required_paths=REQUIRED_CHECKPOINT_PATHS,
+            required_paths=runtime.required_checkpoint_paths,
             distributed=dist,
         )
         defaults = dict(runtime.defaults)
         rank = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
         world_size = dist.get_world_size() if dist.is_available() and dist.is_initialized() else 1
-        if 40 % world_size:
+        if runtime.num_heads % world_size:
             raise ValueError(
-                "LingBot-World-V2 realtime world size must divide 40 attention heads; "
+                f"LingBot-World-V2 realtime world size must divide {runtime.num_heads} attention heads; "
                 f"got world_size={world_size}."
             )
         if torch.cuda.is_available():
@@ -162,8 +193,14 @@ class LingBotWorldV2Pipeline(PipelineABC):
             convert_model_dtype=bool(defaults.get("convert_model_dtype", False)),
             local_attn_size=int(defaults.get("local_attn_size", 18)),
             sink_size=int(defaults.get("sink_size", 6)),
+            **runtime.inference_options(),
         )
-        self._realtime_session = LingBotWorldV2RealtimeSession(self._realtime_core)
+        session_type = (
+            LingBotWorldV2SmallRealtimeSession
+            if runtime.model_id == "lingbot-world-v2-1.3b"
+            else LingBotWorldV2RealtimeSession
+        )
+        self._realtime_session = session_type(self._realtime_core)
         return self._realtime_session
 
     def prepare_realtime(self) -> dict[str, Any]:
@@ -214,4 +251,10 @@ class LingBotWorldV2Pipeline(PipelineABC):
             self._realtime_session.reset()
 
 
-__all__ = ["LingBotWorldV2Pipeline"]
+class LingBotWorldV2SmallPipeline(LingBotWorldV2Pipeline):
+    """Separately selectable 1.3B model with the shared causal pipeline contract."""
+
+    MODEL_ID = "lingbot-world-v2-1.3b"
+
+
+__all__ = ["LingBotWorldV2Pipeline", "LingBotWorldV2SmallPipeline"]

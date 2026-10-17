@@ -6,6 +6,7 @@ import importlib.util
 import json
 import shlex
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -85,7 +86,12 @@ def test_shared_profile_validation_does_not_verify_untested_variants(recipes, ge
     shared = {
         "id": "shared-family",
         "variants": [
-            {"id": name, "runtimeProfile": "shared", "runtimeStatus": "all_released_checkpoints_gpu_validated", "status": "integrated"}
+            {
+                "id": name,
+                "runtimeProfile": "shared",
+                "runtimeStatus": "all_released_checkpoints_gpu_validated",
+                "status": "integrated",
+            }
             for name in ("first", "second")
         ],
     }
@@ -124,9 +130,7 @@ def test_model_page_generators_share_the_same_article_template(recipes, generato
 
     recipe = next(item for item in recipes if item["id"] == "hy-worldplay")
     for locale in ("en", "zh"):
-        assert render_model_page(recipe, locale) == prose.render_page(
-            recipe, locale, page_source_override="generated"
-        )
+        assert render_model_page(recipe, locale) == prose.render_page(recipe, locale, page_source_override="generated")
 
 
 def test_documented_python_version_matches_the_selected_installer(generators):
@@ -145,3 +149,70 @@ def test_documented_python_version_matches_the_selected_installer(generators):
     runtime = commands.runtime_data({}, None, None, "dedicated-model", dedicated, None, None, unified)
     assert runtime["python"] == "3.10"
     assert "python=3.10" in runtime["condaPackages"]
+
+
+@pytest.mark.parametrize("directory", ["ckpt", "ckpts"])
+def test_documentation_normalizes_adjacent_checkpoint_defaults(
+    generators: tuple[ModuleType, ModuleType], directory: str
+) -> None:
+    _, commands = generators
+    checkpoint = commands.ROOT.parent / directory / "mt5-xxl"
+    assert commands.portable_doc_value(str(checkpoint)) == f"{commands.CANONICAL_HOME}/checkpoints/mt5-xxl"
+
+
+@pytest.mark.parametrize(
+    ("model_id", "field", "checkpoint_name"),
+    [
+        ("lagernvs", "model_repo", "lagernvs_general_512"),
+        ("open-sora-plan", "text_encoder_name_1", "mt5-xxl"),
+    ],
+)
+def test_checkpoint_defaults_are_resolved_inside_the_documentation_scope(
+    generators: tuple[ModuleType, ModuleType],
+    monkeypatch: pytest.MonkeyPatch,
+    model_id: str,
+    field: str,
+    checkpoint_name: str,
+) -> None:
+    from worldfoundry.core.io.paths import checkpoint_root_path
+    from worldfoundry.studio.inference import catalog
+
+    _, commands = generators
+    monkeypatch.setattr(catalog, "_checkpoint_model_ref", lambda *names, **kwargs: "installed/model")
+    monkeypatch.setattr(catalog, "_prefer_existing_model_ref", lambda *names: "installed/model")
+    defaults = catalog.CURATED_OVERRIDES[model_id]["default_call_kwargs"]
+    assert callable(defaults)
+    assert defaults()[field] == "installed/model"
+    with commands._canonical_catalog_defaults():
+        assert defaults()[field] == str(checkpoint_root_path(checkpoint_name))
+    assert defaults()[field] == "installed/model"
+
+
+def test_documentation_defaults_ignore_existing_checkpoints(
+    generators: tuple[ModuleType, ModuleType],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from worldfoundry.core.io.paths import checkpoint_root_path
+    from worldfoundry.studio.inference import catalog
+
+    _, commands = generators
+    checkpoint = tmp_path / "installed-model"
+    checkpoint.mkdir()
+    (checkpoint / "config.json").write_text("{}", encoding="utf-8")
+    missing = tmp_path / "declared-model"
+    monkeypatch.setattr(catalog, "_cache_candidates", lambda *names: [str(checkpoint)])
+
+    assert catalog._checkpoint_model_ref("model", fallback="owner/model") == str(checkpoint)
+    assert catalog._prefer_existing_model_ref(str(missing), str(checkpoint)) == str(checkpoint)
+    assert catalog._local_root_with_files([checkpoint], ["config.json"]) == str(checkpoint)
+
+    with commands._canonical_catalog_defaults():
+        assert catalog._checkpoint_model_ref("model", fallback="owner/model") == "owner/model"
+        assert catalog._checkpoint_model_ref("model") == str(checkpoint_root_path("model"))
+        assert catalog._prefer_existing_model_ref(str(missing), str(checkpoint)) == str(missing)
+        assert catalog._local_root_with_files([checkpoint], ["config.json"]) == ""
+
+    assert catalog._checkpoint_model_ref("model", fallback="owner/model") == str(checkpoint)
+    assert catalog._prefer_existing_model_ref(str(missing), str(checkpoint)) == str(checkpoint)
+    assert catalog._local_root_with_files([checkpoint], ["config.json"]) == str(checkpoint)

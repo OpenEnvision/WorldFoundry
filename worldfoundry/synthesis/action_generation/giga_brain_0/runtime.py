@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
 
 
@@ -525,7 +524,7 @@ class GigaBrain0Runtime:
                             to include in the trace.
 
         Returns:
-            A dictionary summarizing the prediction result, including artifact path and SHA256.
+            A dictionary summarizing the prediction result, including the artifact path.
         """
         self.load() # Ensure the model is loaded before prediction
         assert self.policy is not None
@@ -571,8 +570,6 @@ class GigaBrain0Runtime:
         }
         # Write the JSON payload to the specified output file
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        # Calculate SHA256 hash of the generated artifact
-        artifact_sha256 = file_sha256(target)
 
         # Return a summary of the prediction
         return {
@@ -580,7 +577,6 @@ class GigaBrain0Runtime:
             "model_id": "giga-brain-0",
             "artifact_kind": "action_trace",
             "artifact_path": str(target),
-            "artifact_sha256": artifact_sha256,
             "backend": payload["backend"],
             "backend_quality": payload["backend_quality"],
             "duration_seconds": payload["duration_seconds"],

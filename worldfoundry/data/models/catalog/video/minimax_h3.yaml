@@ -1,4 +1,6 @@
 id: minimax-h3
+integration:
+  status: integrated
 name: MiniMax H3
 aliases:
   - minimax_h3

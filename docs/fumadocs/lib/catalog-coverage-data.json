@@ -145,7 +145,7 @@
         {
           "id": "kandinsky6-lite",
           "name": "Kandinsky 6.0 lite",
-          "status": "planned",
+          "status": "integrated",
           "aliases": [
             "kandinsky6-lite"
           ]
@@ -153,7 +153,7 @@
         {
           "id": "kandinsky6-lite-distill",
           "name": "Kandinsky 6.0 lite-distill",
-          "status": "planned",
+          "status": "integrated",
           "aliases": [
             "kandinsky6-lite-distill"
           ]
@@ -161,7 +161,7 @@
         {
           "id": "kandinsky6-lite-pretrain",
           "name": "Kandinsky 6.0 lite-pretrain",
-          "status": "planned",
+          "status": "integrated",
           "aliases": [
             "kandinsky6-lite-pretrain"
           ]
@@ -169,7 +169,7 @@
         {
           "id": "kandinsky6-pro",
           "name": "Kandinsky 6.0 pro",
-          "status": "planned",
+          "status": "integrated",
           "aliases": [
             "kandinsky6-pro"
           ]
@@ -185,7 +185,7 @@
         {
           "id": "kandinsky6-pro-pretrain",
           "name": "Kandinsky 6.0 pro-pretrain",
-          "status": "planned",
+          "status": "integrated",
           "aliases": [
             "kandinsky6-pro-pretrain"
           ]
@@ -265,7 +265,7 @@
         {
           "id": "magi2-preview",
           "name": "MAGI-2 Preview",
-          "status": null,
+          "status": "integrated",
           "aliases": [
             "magi2-preview"
           ]
@@ -273,7 +273,7 @@
         {
           "id": "minimax-h3",
           "name": "MiniMax H 3",
-          "status": null,
+          "status": "integrated",
           "aliases": [
             "minimax-h3"
           ]
@@ -584,22 +584,6 @@
           ]
         },
         {
-          "id": "biwm-wan21",
-          "name": "BiWM Wan 2.1",
-          "status": "integrated_checkpoint_gated",
-          "aliases": [
-            "biwm-wan21"
-          ]
-        },
-        {
-          "id": "biwm-wan22",
-          "name": "BiWM Wan 2.2",
-          "status": "integrated_checkpoint_gated",
-          "aliases": [
-            "biwm-wan22"
-          ]
-        },
-        {
           "id": "cameractrl",
           "name": "CameraCtrl",
           "status": "verified",
@@ -682,9 +666,17 @@
         {
           "id": "dreamdojo",
           "name": "DreamDojo",
-          "status": "planned",
+          "status": "integrated",
           "aliases": [
             "dreamdojo"
+          ]
+        },
+        {
+          "id": "dreamdojo-student",
+          "name": "DreamDojo Student",
+          "status": "integrated",
+          "aliases": [
+            "dreamdojo-student"
           ]
         },
         {
@@ -901,14 +893,6 @@
           ]
         },
         {
-          "id": "irasim",
-          "name": "IRASim",
-          "status": "planned",
-          "aliases": [
-            "irasim"
-          ]
-        },
-        {
           "id": "kairos-sensenova",
           "name": "Kairos Sensenova",
           "status": "verified",
@@ -940,9 +924,17 @@
         {
           "id": "lingbot-world-v2",
           "name": "LingBot-World-V 2",
-          "status": "implemented_checkpoint_manifest_validated",
+          "status": "integrated",
           "aliases": [
             "lingbot-world-v2"
+          ]
+        },
+        {
+          "id": "lingbot-world-v2-1.3b",
+          "name": "LingBot-World-V 2 1.3B",
+          "status": "integrated",
+          "aliases": [
+            "lingbot-world-v2-1.3b"
           ]
         },
         {
@@ -996,6 +988,14 @@
           "versions": [
             "First-Person",
             "Third-Person"
+          ]
+        },
+        {
+          "id": "matrix-game-4-egypt",
+          "name": "Matrix-Game 4 Ancient Egypt",
+          "status": "integrated",
+          "aliases": [
+            "matrix-game-4-egypt"
           ]
         },
         {
@@ -1097,14 +1097,6 @@
           "status": "runtime_ported",
           "aliases": [
             "open-dreamer"
-          ]
-        },
-        {
-          "id": "pandora",
-          "name": "Pandora",
-          "status": "planned",
-          "aliases": [
-            "pandora"
           ]
         },
         {
@@ -1304,9 +1296,17 @@
         {
           "id": "worldlabs-marble-1.1",
           "name": "World Labs Marble 1.1",
-          "status": "planned",
+          "status": "integrated",
           "aliases": [
             "worldlabs-marble-1.1"
+          ]
+        },
+        {
+          "id": "world-observer",
+          "name": "World Observer",
+          "status": "blocked",
+          "aliases": [
+            "world-observer"
           ]
         },
         {
@@ -1674,7 +1674,7 @@
         {
           "id": "wonderworld",
           "name": "WonderWorld",
-          "status": "blocked",
+          "status": "integrated",
           "aliases": [
             "wonderworld"
           ]
@@ -1858,7 +1858,7 @@
         {
           "id": "last-r1",
           "name": "LaST-R 1",
-          "status": "planned",
+          "status": "integrated",
           "aliases": [
             "last-r1"
           ]

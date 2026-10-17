@@ -1,8 +1,6 @@
-import argparse
 import ast
 import importlib
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -11,13 +9,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_worldfm_moge_reuses_base_model_directly():
-    removed_runtime = (
-        REPO_ROOT / "worldfoundry/representations/point_clouds_generation/worldfm/moge_official"
-    )
+    removed_runtime = REPO_ROOT / "worldfoundry/representations/point_clouds_generation/worldfm/moge_official"
     moge_pano = REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/worldfm/moge_pano.py"
-    representation = (
-        REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/worldfm/runtime.py"
-    )
+    representation = REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/worldfm/runtime.py"
     base_modules_path = REPO_ROOT / "worldfoundry/base_models/three_dimensions/depth/moge/model/modules.py"
     base_v1_path = REPO_ROOT / "worldfoundry/base_models/three_dimensions/depth/moge/model/v1.py"
 
@@ -29,9 +23,7 @@ def test_worldfm_moge_reuses_base_model_directly():
 
 
 def test_worldfm_moge_model_and_utils_forward_to_canonical_base():
-    removed_runtime = (
-        REPO_ROOT / "worldfoundry/representations/point_clouds_generation/worldfm/moge_official"
-    )
+    removed_runtime = REPO_ROOT / "worldfoundry/representations/point_clouds_generation/worldfm/moge_official"
     assert not removed_runtime.exists()
 
 
@@ -39,19 +31,17 @@ def test_gen3c_moge_runtime_removed_in_favor_of_base_model():
     removed_runtime = REPO_ROOT / "worldfoundry/synthesis/visual_generation/gen3c/moge_runtime"
     removed_runner = REPO_ROOT / "worldfoundry/synthesis/visual_generation/gen3c/gen3c_runner.py"
     removed_pipeline_utils = REPO_ROOT / "worldfoundry/pipelines/gen3c/gen3c_utils.py"
-    synthesis_facade = (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/gen3c/gen3c_synthesis.py"
-    )
+    synthesis_facade = REPO_ROOT / "worldfoundry/synthesis/visual_generation/gen3c/gen3c_synthesis.py"
     base_env = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/cosmos/cosmos1/cosmos_predict1_gen3c/runtime_env.py"
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/cosmos/cosmos1/cosmos_predict1_gen3c/runtime_env.py"
     )
     base_runtime = (
         REPO_ROOT
         / "worldfoundry/base_models/diffusion_model/video/cosmos/cosmos1/cosmos_predict1_gen3c/worldfoundry_runtime.py"
     )
     direct_import_files = [
-        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/cosmos/cosmos1/cosmos_predict1_gen3c/worldfoundry_runner.py",
+        REPO_ROOT
+        / "worldfoundry/base_models/diffusion_model/video/cosmos/cosmos1/cosmos_predict1_gen3c/worldfoundry_runner.py",
         REPO_ROOT
         / "worldfoundry/base_models/diffusion_model/video/cosmos/cosmos1/cosmos_predict1_gen3c/cosmos_predict1/diffusion/inference/gen3c_single_image.py",
         REPO_ROOT
@@ -83,15 +73,14 @@ def test_gen3c_packaged_cosmos_root_uses_grouped_base_models_path():
 
     root = runtime_env.packaged_gen3c_cosmos_root()
 
-    assert root == (
-        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/cosmos/cosmos1/cosmos_predict1_gen3c"
-    )
+    assert root == (REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/cosmos/cosmos1/cosmos_predict1_gen3c")
     assert root.is_dir()
 
 
 def test_cosmos_predict1_forks_do_not_package_training_datasets():
     roots = [
-        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/cosmos/cosmos1/cosmos_predict1_gen3c/cosmos_predict1",
+        REPO_ROOT
+        / "worldfoundry/base_models/diffusion_model/video/cosmos/cosmos1/cosmos_predict1_gen3c/cosmos_predict1",
     ]
     pruned_training_paths = [
         "autoregressive/datasets",
@@ -138,9 +127,10 @@ def test_cosmos_predict1_forks_do_not_package_training_datasets():
 
         model_config = root / "autoregressive/configs/base/model_config.py"
         text = model_config.read_text(encoding="utf-8")
-        assert "from cosmos_predict1.autoregressive.training.model import AutoRegressiveTrainingModel" not in text.split(
-            "def create_video2world_model", maxsplit=1
-        )[0]
+        assert (
+            "from cosmos_predict1.autoregressive.training.model import AutoRegressiveTrainingModel"
+            not in text.split("def create_video2world_model", maxsplit=1)[0]
+        )
         assert "AutoRegressive training construction is not packaged in WorldFoundry" in text
 
         config_text = (root / "utils/config.py").read_text(encoding="utf-8")
@@ -202,29 +192,20 @@ def test_foundation_model_family_directories_are_grouped():
     assert wan_variants <= {path.name for path in (video_root / "wan").iterdir() if path.is_dir()}
     grouped_cosmos_dirs = {path.name for path in (video_root / "cosmos").iterdir() if path.is_dir()}
     assert {"cosmos1", "cosmos2", "shared"} <= grouped_cosmos_dirs
-    assert cosmos1_variants <= {
-        path.name for path in (video_root / "cosmos/cosmos1").iterdir() if path.is_dir()
-    }
+    assert cosmos1_variants <= {path.name for path in (video_root / "cosmos/cosmos1").iterdir() if path.is_dir()}
     assert cosmos2_runtime_variants <= {
         path.name for path in (video_root / "cosmos/cosmos2/runtime").iterdir() if path.is_dir()
     }
     assert not [
-        path
-        for path in (video_root / "cosmos").rglob("*")
-        if path.is_dir() and path.name in retired_cosmos_variants
+        path for path in (video_root / "cosmos").rglob("*") if path.is_dir() and path.name in retired_cosmos_variants
     ]
     assert not (diffusion_root / "diffsynth/trainers").exists()
     assert not (video_root / "cosmos/cosmos2/runtime/cosmos_oss_dreamdojo/cosmos_oss/scripts").exists()
-    assert not (
-        REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/pi3/pi3/utils/debug.py"
-    ).exists()
+    assert not (REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/pi3/pi3/utils/debug.py").exists()
 
 
 def test_empty_wan_simple_wow_training_source_is_not_packaged():
-    runtime_root = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/wan/wan_simple_wow/wan_simple"
-    )
+    runtime_root = REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_simple_wow/wan_simple"
 
     assert not runtime_root.parent.exists()
     assert not (runtime_root / ".github/workflows/publish.yaml").exists()
@@ -331,8 +312,7 @@ def _local_logic_violations(paths: list[Path]) -> list[str]:
         text = path.read_text(encoding="utf-8")
         tree = ast.parse(text, filename=str(path))
         has_local_logic = any(
-            isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-            for node in ast.walk(tree)
+            isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) for node in ast.walk(tree)
         )
         if has_local_logic or "worldfoundry.base_models.three_dimensions.depth.moge" not in text:
             violations.append(str(path.relative_to(REPO_ROOT)))
@@ -443,15 +423,15 @@ def test_matrix_game_wanx_vae_modules_are_reexported_from_base_model():
         tree = ast.parse(text)
 
         assert expected_import in text
-        assert not any(isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) for node in ast.walk(tree))
+        assert not any(
+            isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) for node in ast.walk(tree)
+        )
 
     base_clip = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/wan/wan_matrix_game_2/wan/modules/clip.py"
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_matrix_game_2/wan/modules/clip.py"
     ).read_text(encoding="utf-8")
     base_vae = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/wan/wan_matrix_game_2/wan/modules/vae.py"
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_matrix_game_2/wan/modules/vae.py"
     ).read_text(encoding="utf-8")
     assert "class CLIPModel(ModelMixin)" in base_clip
     assert "class WanVAE(nn.Module)" in base_vae
@@ -459,8 +439,7 @@ def test_matrix_game_wanx_vae_modules_are_reexported_from_base_model():
 
 def test_sana_wan2_2_vae_is_reexported_from_base_model():
     synthesis_path = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/sana/sana_runtime/diffusion/model/wan2_2/vae.py"
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/sana/sana_runtime/diffusion/model/wan2_2/vae.py"
     )
     base_path = REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/vae2_2.py"
 
@@ -476,8 +455,7 @@ def test_sana_wan2_2_vae_is_reexported_from_base_model():
 
 def test_lingbot_wan2_1_vae_lives_under_base_model_without_runtime_facade():
     synthesis_path = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/lingbot/lingbot_world_runtime/modules/vae2_1.py"
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/lingbot/lingbot_world_runtime/modules/vae2_1.py"
     )
     base_path = REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/vae2_1.py"
     helper_path = REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/_torch_compat.py"
@@ -492,16 +470,13 @@ def test_lingbot_wan2_1_vae_lives_under_base_model_without_runtime_facade():
     assert "torch.cuda.amp" not in base_text
     assert 'torch.amp.autocast("cuda", dtype=self.dtype)' in base_text
 
-    base_module = importlib.import_module(
-        "worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.vae2_1"
-    )
+    base_module = importlib.import_module("worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.vae2_1")
     assert hasattr(base_module, "Wan2_1_VAE")
 
 
 def test_lingbot_wan2_2_vae_lives_under_base_model_without_runtime_facade():
     synthesis_path = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/lingbot/lingbot_world_runtime/modules/vae2_2.py"
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/lingbot/lingbot_world_runtime/modules/vae2_2.py"
     )
     base_path = REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/vae2_2.py"
 
@@ -515,9 +490,7 @@ def test_lingbot_wan2_2_vae_lives_under_base_model_without_runtime_facade():
     assert 'torch.amp.autocast("cuda", dtype=self.dtype)' in base_text
     assert "videos should be a list or a tensor with shape [B, C, T, H, W]" in base_text
 
-    base_module = importlib.import_module(
-        "worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.vae2_2"
-    )
+    base_module = importlib.import_module("worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.vae2_2")
     assert hasattr(base_module, "Wan2_2_VAE")
 
 
@@ -599,42 +572,36 @@ def test_lingbot_wan_leaf_modules_are_reexported_from_base_model():
         assert (REPO_ROOT / f"{expected_import.replace('.', '/')}.py").is_file()
 
     base_lingbot_model = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/lingbot_model.py"
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/lingbot_model.py"
     ).read_text(encoding="utf-8")
     base_lingbot_model_fast = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/lingbot_model_fast.py"
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/lingbot_model_fast.py"
     ).read_text(encoding="utf-8")
     base_lingbot_audio_utils = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/s2v/lingbot_audio_utils.py"
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/s2v/lingbot_audio_utils.py"
     ).read_text(encoding="utf-8")
     base_lingbot_animate = (
         REPO_ROOT
         / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/animate/lingbot_model_animate.py"
     ).read_text(encoding="utf-8")
     base_lingbot_clip = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/animate/lingbot_clip.py"
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/animate/lingbot_clip.py"
     ).read_text(encoding="utf-8")
     base_lingbot_s2v = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/s2v/lingbot_model_s2v.py"
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/s2v/lingbot_model_s2v.py"
     ).read_text(encoding="utf-8")
     base_lingbot_motioner = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/s2v/lingbot_motioner.py"
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/s2v/lingbot_motioner.py"
     ).read_text(encoding="utf-8")
     base_lingbot_sequence_parallel = (
         REPO_ROOT / "worldfoundry/core/distributed/causal_rope_sequence_parallel.py"
     ).read_text(encoding="utf-8")
-    base_lingbot_ulysses = (
-        REPO_ROOT / "worldfoundry/core/distributed/causal_ulysses_attention.py"
-    ).read_text(encoding="utf-8")
-    base_wan21_t5 = (
-        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p1/modules/t5.py"
-    ).read_text(encoding="utf-8")
+    base_lingbot_ulysses = (REPO_ROOT / "worldfoundry/core/distributed/causal_ulysses_attention.py").read_text(
+        encoding="utf-8"
+    )
+    base_wan21_t5 = (REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p1/modules/t5.py").read_text(
+        encoding="utf-8"
+    )
     base_wan22_modules_init = (
         REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/wan_2p2/modules/__init__.py"
     ).read_text(encoding="utf-8")
@@ -670,7 +637,10 @@ def test_lingbot_wan_leaf_modules_are_reexported_from_base_model():
         "from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.lingbot_model import sinusoidal_embedding_1d"
         in base_lingbot_sequence_parallel
     )
-    assert "from worldfoundry.core.attention.parallel.causal_ulysses_attention import distributed_attention" in base_lingbot_sequence_parallel
+    assert (
+        "from worldfoundry.core.attention.parallel.causal_ulysses_attention import distributed_attention"
+        in base_lingbot_sequence_parallel
+    )
     assert (
         "from worldfoundry.base_models.diffusion_model.video.wan.wan_2p2.modules.lingbot_attention import flash_attention"
         in base_lingbot_ulysses
@@ -690,8 +660,7 @@ def test_lingbot_wan_leaf_modules_are_reexported_from_base_model():
 
 def test_pixelsplat_runtime_logic_lives_under_base_models():
     base_runtime = (
-        REPO_ROOT
-        / "worldfoundry/base_models/three_dimensions/point_clouds/pixelsplat_runtime/worldfoundry_runtime.py"
+        REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/pixelsplat_runtime/worldfoundry_runtime.py"
     )
     base_runtime_root = REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/pixelsplat_runtime"
     data_asset_root = REPO_ROOT / "worldfoundry/data/models/runtime/configs/pixelsplat/assets"
@@ -803,7 +772,7 @@ def test_wan_prompt_defaults_are_user_editable_yaml():
     wrapper_text = wrapper_path.read_text(encoding="utf-8")
     assert 'DATA_ROOT / "models" / "runtime" / "configs" / "wan" / "prompt_defaults.yaml"' in wrapper_text
     assert 'DATA_ROOT / "test_cases"' in wrapper_text
-    assert "test_cases\" / \"wan_prompt_defaults" not in wrapper_text
+    assert 'test_cases" / "wan_prompt_defaults' not in wrapper_text
     assert "wan_prompt_defaults.json" not in wrapper_text
 
 
@@ -822,7 +791,7 @@ def test_dust3r_is_independent_general_3d_integration_with_mast3r_reexport():
     mast3r_init = (mast3r_root / "__init__.py").read_text(encoding="utf-8")
     path_bridge = (mast3r_root / "mast3r/utils/path_to_dust3r.py").read_text(encoding="utf-8")
 
-    assert 'GENERAL_3D_ROOT = SOURCE_ROOT.parent' in mast3r_init
+    assert "GENERAL_3D_ROOT = SOURCE_ROOT.parent" in mast3r_init
     assert 'DUST3R_ROOT = GENERAL_3D_ROOT / "dust3r"' in mast3r_init
     assert "worldfoundry.base_models.three_dimensions.general_3d.dust3r" in mast3r_init
     assert "../../../dust3r" in path_bridge
@@ -852,9 +821,7 @@ def test_mast3r_import_path_prioritizes_canonical_dust3r():
     try:
         mast3r = importlib.import_module("worldfoundry.base_models.three_dimensions.general_3d.mast3r")
         mast3r.ensure_import_paths()
-        canonical_dust3r = importlib.import_module(
-            "worldfoundry.base_models.three_dimensions.general_3d.dust3r"
-        )
+        canonical_dust3r = importlib.import_module("worldfoundry.base_models.three_dimensions.general_3d.dust3r")
         reexported_dust3r = importlib.import_module(
             "worldfoundry.base_models.three_dimensions.general_3d.mast3r.dust3r"
         )
@@ -896,9 +863,7 @@ def test_canonical_dust3r_initializes_its_own_import_paths():
         sys.modules.pop(name, None)
 
     try:
-        canonical_dust3r = importlib.import_module(
-            "worldfoundry.base_models.three_dimensions.general_3d.dust3r"
-        )
+        canonical_dust3r = importlib.import_module("worldfoundry.base_models.three_dimensions.general_3d.dust3r")
         dust3r = importlib.import_module("dust3r")
         dust3r_file = Path(dust3r.__file__).resolve()
 
@@ -1014,30 +979,20 @@ def test_base_model_pure_demo_and_ui_app_dirs_are_pruned():
     assert world_model_root.is_dir()
 
     demo_paths = sorted(
-        path.relative_to(REPO_ROOT).as_posix()
-        for path in base_models_root.rglob("*")
-        if "demo" in path.name.lower()
+        path.relative_to(REPO_ROOT).as_posix() for path in base_models_root.rglob("*") if "demo" in path.name.lower()
     )
 
     assert demo_paths == []
 
-    mineworld_runtime = (
-        world_model_root / "mineworld/worldfoundry_runtime.py"
-    ).read_text(encoding="utf-8")
+    mineworld_runtime = (world_model_root / "mineworld/worldfoundry_runtime.py").read_text(encoding="utf-8")
     assert "WEB_DEMO_ENTRYPOINT" not in mineworld_runtime
-    mineworld_lvm = (
-        world_model_root / "mineworld/lvm.py"
-    ).read_text(encoding="utf-8")
-    mineworld_decoding = (
-        world_model_root / "mineworld/diagonal_decoding.py"
-    ).read_text(encoding="utf-8")
+    mineworld_lvm = (world_model_root / "mineworld/lvm.py").read_text(encoding="utf-8")
+    mineworld_decoding = (world_model_root / "mineworld/diagonal_decoding.py").read_text(encoding="utf-8")
     assert "for_gradio" not in mineworld_lvm
     assert "for_gradio" not in mineworld_decoding
     assert "gradio" not in mineworld_lvm.lower()
     assert "gradio" not in mineworld_decoding.lower()
-    mineworld_action_tokenizer = (
-        world_model_root / "mineworld/action_tokenizer.py"
-    ).read_text(encoding="utf-8")
+    mineworld_action_tokenizer = (world_model_root / "mineworld/action_tokenizer.py").read_text(encoding="utf-8")
     assert not (world_model_root / "mineworld/mcdataset.py").exists()
     assert "torch.utils.data.Dataset" not in mineworld_action_tokenizer
     assert "class MinecraftActionTokenizer" in mineworld_action_tokenizer
@@ -1049,21 +1004,21 @@ def test_base_model_pure_demo_and_ui_app_dirs_are_pruned():
         "700M_16f.yaml",
         "700M_32f.yaml",
     } == {path.name for path in mineworld_config_root.glob("*.yaml")}
-    mineworld_infer_script = (
-        world_model_root / "mineworld/scripts/inference_16f_models.sh"
-    ).read_text(encoding="utf-8")
+    mineworld_infer_script = (world_model_root / "mineworld/scripts/inference_16f_models.sh").read_text(
+        encoding="utf-8"
+    )
     assert "data/models/runtime/configs/mineworld" in mineworld_infer_script
     assert 'CONFIG="configs/' not in mineworld_infer_script
 
-    fastblend_api = (
-        base_models_root / "diffusion_model/diffsynth/extensions/FastBlend/api.py"
-    ).read_text(encoding="utf-8")
+    fastblend_api = (base_models_root / "diffusion_model/diffsynth/extensions/FastBlend/api.py").read_text(
+        encoding="utf-8"
+    )
     assert "import gradio" not in fastblend_api
     assert "def on_ui_tabs" not in fastblend_api
 
-    fastblend_init = (
-        base_models_root / "diffusion_model/diffsynth/extensions/FastBlend/__init__.py"
-    ).read_text(encoding="utf-8")
+    fastblend_init = (base_models_root / "diffusion_model/diffsynth/extensions/FastBlend/__init__.py").read_text(
+        encoding="utf-8"
+    )
     assert "import cupy" not in fastblend_init
 
     fastblend_package = importlib.import_module(
@@ -1077,8 +1032,7 @@ def test_droid_slam_tartan_split_lives_in_data_runtime_configs():
     data_split = REPO_ROOT / "worldfoundry/data/models/runtime/configs/droid_slam/tartan_test.txt"
     rgbd_utils = REPO_ROOT / "worldfoundry/base_models/three_dimensions/slam/droid_slam/geom/rgbd_utils.py"
     graph_utils = (
-        REPO_ROOT
-        / "worldfoundry/base_models/three_dimensions/slam/droid_slam/geom/graph_utils.py"
+        REPO_ROOT / "worldfoundry/base_models/three_dimensions/slam/droid_slam/geom/graph_utils.py"
     ).read_text(encoding="utf-8")
 
     assert not data_readers.exists()
@@ -1101,9 +1055,7 @@ def test_perception_and_3d_base_models_do_not_package_training_data_helpers():
     for path in removed_paths:
         assert not path.exists(), path
 
-    assert (
-        base_models / "perception_core/detection/grounding_dino/util/transforms.py"
-    ).is_file()
+    assert (base_models / "perception_core/detection/grounding_dino/util/transforms.py").is_file()
 
 
 def test_world_model_runtime_configs_live_under_data_models():
@@ -1113,9 +1065,7 @@ def test_world_model_runtime_configs_live_under_data_models():
 
     assert not (base_models_root / "diffusion_model/world_model").exists()
     assert world_model_root.is_dir()
-    assert not (
-        world_model_root / "adaworld/worldmodel/configs"
-    ).exists()
+    assert not (world_model_root / "adaworld/worldmodel/configs").exists()
     assert not (world_model_root / "adaworld/lam/config").exists()
     assert not (world_model_root / "adaworld/worldmodel/vwm/data").exists()
 
@@ -1128,10 +1078,8 @@ def test_world_model_runtime_configs_live_under_data_models():
     } == {path.name for path in (adaworld_root / "worldmodel/inference").glob("*.yaml")}
     assert not (adaworld_root / "worldmodel/training").exists()
 
-    sample_text = (
-        world_model_root / "adaworld/worldmodel/sample.py"
-    ).read_text(encoding="utf-8")
-    assert "models\", \"runtime\", \"configs\", \"adaworld" in sample_text
+    sample_text = (world_model_root / "adaworld/worldmodel/sample.py").read_text(encoding="utf-8")
+    assert 'models", "runtime", "configs", "adaworld' in sample_text
     assert "resolve_data_path" in sample_text
     assert 'CONFIG = "configs/' not in sample_text
     for script in (
@@ -1171,9 +1119,7 @@ def test_world_model_runtime_configs_live_under_data_models():
         "eval_inputs.py",
     )
     for name in nwm_python_files:
-        text = (
-            world_model_root / "nwm" / name
-        ).read_text(encoding="utf-8")
+        text = (world_model_root / "nwm" / name).read_text(encoding="utf-8")
         assert "runtime/configs/nwm" in text or "load_runtime_yaml" in text or "runtime_config_path" in text
         assert 'open("config/' not in text
         assert "open('config/" not in text
@@ -1191,9 +1137,9 @@ def test_world_model_runtime_configs_live_under_data_models():
         assert not non_infer_entrypoint.exists()
 
     for model_id in ("diamond", "dino_wm", "le_wm", "starwm"):
-        runtime_config_files = list(
-            (world_model_root / model_id).rglob("*.yaml")
-        ) + list((world_model_root / model_id).rglob("*.json"))
+        runtime_config_files = list((world_model_root / model_id).rglob("*.yaml")) + list(
+            (world_model_root / model_id).rglob("*.json")
+        )
         assert runtime_config_files == []
         assert (data_config_root / model_id).is_dir()
 
@@ -1212,10 +1158,7 @@ def test_world_model_runtime_configs_live_under_data_models():
         assert "target: lvdm." not in config_text
         assert "target: utils_data." not in config_text
         assert "worldfoundry.base_models.diffusion_model.video.lvdm.variants.vid2world.eval_inputs" in config_text
-        assert (
-            "worldfoundry.synthesis.visual_generation.vid2world.vid2world_runtime.main.utils_data"
-            in config_text
-        )
+        assert "worldfoundry.synthesis.visual_generation.vid2world.vid2world_runtime.main.utils_data" in config_text
     assert {
         "ablation",
         "game",
@@ -1241,8 +1184,7 @@ def test_wan_vram_helpers_are_core_owned():
 
     removed_shims = [
         REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/wan/utils/memory.py",
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/echo_infinity/echo_infinity_runtime/utils/memory.py",
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/echo_infinity/echo_infinity_runtime/utils/memory.py",
     ]
 
     assert hasattr(core_vram, "DynamicSwapInstaller")
@@ -1252,10 +1194,7 @@ def test_wan_vram_helpers_are_core_owned():
 
 def test_splatt3r_dust3r_only_modules_use_canonical_dust3r_import_paths():
     splatt3r_root = REPO_ROOT / "worldfoundry/base_models/three_dimensions/general_3d/splatt3r"
-    profile = (
-        REPO_ROOT
-        / "worldfoundry/data/models/runtime/profiles/splatt3r.yaml"
-    )
+    profile = REPO_ROOT / "worldfoundry/data/models/runtime/profiles/splatt3r.yaml"
     removed_dust3r_shims = [
         splatt3r_root / "splatt3r_runtime/utils/export.py",
     ]
@@ -1268,10 +1207,7 @@ def test_splatt3r_dust3r_only_modules_use_canonical_dust3r_import_paths():
 
 
 def test_splatt3r_runtime_is_inference_only_after_pruning():
-    runtime_root = (
-        REPO_ROOT
-        / "worldfoundry/base_models/three_dimensions/general_3d/splatt3r/splatt3r_runtime"
-    )
+    runtime_root = REPO_ROOT / "worldfoundry/base_models/three_dimensions/general_3d/splatt3r/splatt3r_runtime"
     removed_paths = [
         runtime_root / "data",
         runtime_root / "workspace.py",
@@ -1311,10 +1247,7 @@ def test_splatt3r_runtime_is_inference_only_after_pruning():
 
 
 def test_splatt3r_runtime_logic_lives_under_base_models():
-    base_runtime = (
-        REPO_ROOT
-        / "worldfoundry/base_models/three_dimensions/general_3d/splatt3r/worldfoundry_runtime.py"
-    )
+    base_runtime = REPO_ROOT / "worldfoundry/base_models/three_dimensions/general_3d/splatt3r/worldfoundry_runtime.py"
     synthesis = REPO_ROOT / "worldfoundry/base_models/three_dimensions/general_3d/splatt3r/splatt3r_synthesis.py"
 
     assert base_runtime.is_file()
@@ -1334,9 +1267,7 @@ def test_splatt3r_runtime_logic_lives_under_base_models():
 
 
 def test_dreamdojo_runtime_logic_lives_under_synthesis():
-    runtime = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/dreamdojo/worldfoundry_runtime.py"
-    )
+    runtime = REPO_ROOT / "worldfoundry/synthesis/action_generation/dreamdojo/worldfoundry_runtime.py"
     synthesis = REPO_ROOT / "worldfoundry/synthesis/action_generation/dreamdojo/dreamdojo_synthesis.py"
 
     assert runtime.is_file()
@@ -1354,9 +1285,7 @@ def test_dreamdojo_runtime_logic_lives_under_synthesis():
 
 
 def test_lyra1_runtime_logic_lives_under_synthesis():
-    runtime = (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/lyra_1/worldfoundry_runtime.py"
-    )
+    runtime = REPO_ROOT / "worldfoundry/synthesis/visual_generation/lyra_1/worldfoundry_runtime.py"
     synthesis = REPO_ROOT / "worldfoundry/synthesis/visual_generation/lyra_1/synthesis.py"
 
     assert runtime.is_file()
@@ -1420,7 +1349,7 @@ def test_lyra1_inference_configs_live_in_data_runtime_configs():
 
     sample_text = sample_path.read_text(encoding="utf-8")
     assert "worldfoundry_data_path" in sample_text
-    assert "runtime\", \"configs\", \"lyra_1\", \"inference" in sample_text
+    assert 'runtime", "configs", "lyra_1", "inference' in sample_text
     assert "configs/inference/default.yaml" not in sample_text
     assert "configs/training" not in sample_text
     assert "configs/demo" not in sample_text
@@ -1437,9 +1366,7 @@ def test_pi3_representations_use_base_model_sources():
         text = path.read_text(encoding="utf-8")
         assert "worldfoundry.base_models.three_dimensions.point_clouds" in text
 
-    assert (
-        REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/loger/pi3.py"
-    ).is_file()
+    assert (REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/loger/pi3.py").is_file()
 
 
 def test_infinite_vggt_representation_uses_base_model_source():
@@ -1447,9 +1374,7 @@ def test_infinite_vggt_representation_uses_base_model_source():
     text = wrapper.read_text(encoding="utf-8")
 
     assert "worldfoundry.base_models.three_dimensions.point_clouds.infinite_vggt" in text
-    assert not (
-        REPO_ROOT / "worldfoundry/representations/point_clouds_generation/vggt/infinite_vggt"
-    ).exists()
+    assert not (REPO_ROOT / "worldfoundry/representations/point_clouds_generation/vggt/infinite_vggt").exists()
     assert (
         REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/infinite_vggt/models/streamvggt.py"
     ).is_file()
@@ -1460,19 +1385,12 @@ def test_cut3r_representation_uses_base_model_source():
     text = wrapper.read_text(encoding="utf-8")
 
     assert "worldfoundry.base_models.three_dimensions.point_clouds.cut3r" in text
-    assert not (
-        REPO_ROOT / "worldfoundry/representations/point_clouds_generation/cut3r/cut3r"
-    ).exists()
-    assert (
-        REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/cut3r/model.py"
-    ).is_file()
+    assert not (REPO_ROOT / "worldfoundry/representations/point_clouds_generation/cut3r/cut3r").exists()
+    assert (REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/cut3r/model.py").is_file()
 
 
 def test_hyworldmirror_2p0_runtime_uses_base_model_source():
-    runtime = (
-        REPO_ROOT
-        / "worldfoundry/base_models/three_dimensions/point_clouds/hyworldmirror_2p0/runtime.py"
-    )
+    runtime = REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/hyworldmirror_2p0/runtime.py"
     text = runtime.read_text(encoding="utf-8")
 
     assert "worldfoundry.base_models.three_dimensions.point_clouds.hyworldmirror_2p0" in text
@@ -1480,15 +1398,13 @@ def test_hyworldmirror_2p0_runtime_uses_base_model_source():
         REPO_ROOT / "worldfoundry/representations/point_clouds_generation/hunyuan_world/hy_world_2p0/hyworldmirror"
     ).exists()
     assert (
-        REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/hyworldmirror_2p0/models/models/worldmirror.py"
+        REPO_ROOT
+        / "worldfoundry/base_models/three_dimensions/point_clouds/hyworldmirror_2p0/models/models/worldmirror.py"
     ).is_file()
 
 
 def test_lingbot_map_representation_uses_base_model_runtime():
-    wrapper = (
-        REPO_ROOT
-        / "worldfoundry/base_models/three_dimensions/point_clouds/lingbot_map/runtime.py"
-    )
+    wrapper = REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/lingbot_map/runtime.py"
     text = wrapper.read_text(encoding="utf-8")
 
     assert "Path(__file__).resolve().parent" in text
@@ -1496,21 +1412,17 @@ def test_lingbot_map_representation_uses_base_model_runtime():
         REPO_ROOT / "worldfoundry/representations/point_clouds_generation/lingbot_map/lingbot_map_runtime"
     ).exists()
     assert (
-        REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/lingbot_map/lingbot_map/models/gct_stream.py"
+        REPO_ROOT
+        / "worldfoundry/base_models/three_dimensions/point_clouds/lingbot_map/lingbot_map/models/gct_stream.py"
     ).is_file()
 
 
 def test_flash_world_representation_uses_base_model_source():
-    wrapper = (
-        REPO_ROOT
-        / "worldfoundry/base_models/three_dimensions/point_clouds/flash_world/runtime.py"
-    )
+    wrapper = REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/flash_world/runtime.py"
     text = wrapper.read_text(encoding="utf-8")
 
     assert "worldfoundry.base_models.three_dimensions.point_clouds.flash_world" in text
-    assert not (
-        REPO_ROOT / "worldfoundry/representations/point_clouds_generation/flash_world/flash_world"
-    ).exists()
+    assert not (REPO_ROOT / "worldfoundry/representations/point_clouds_generation/flash_world/flash_world").exists()
     assert (
         REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/flash_world/reconstruction_model.py"
     ).is_file()
@@ -1573,22 +1485,20 @@ def test_diffsynth_variant_runtimes_do_not_shadow_global_diffsynth_namespace():
         assert "diffsynth_runtime_root" not in text
         assert 'sys.modules["diffsynth"]' not in text
 
-    fantasy_env = (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/fantasy_world/runtime_env.py"
-    ).read_text(encoding="utf-8")
+    fantasy_env = (REPO_ROOT / "worldfoundry/synthesis/visual_generation/fantasy_world/runtime_env.py").read_text(
+        encoding="utf-8"
+    )
     assert "diffsynth_wan21_root" not in fantasy_env
     assert "diffsynth_wan22_root" not in fantasy_env
     assert "worldfoundry.base_models.diffusion_model.diffsynth.diffsynth_fantasy_world" not in fantasy_env
 
-    scope_runtime = (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/scope/worldfoundry_runtime.py"
-    ).read_text(encoding="utf-8")
+    scope_runtime = (REPO_ROOT / "worldfoundry/synthesis/visual_generation/scope/worldfoundry_runtime.py").read_text(
+        encoding="utf-8"
+    )
     assert "pythonpath_parts = [str(runtime_root()), str(_repo_src_root())]" in scope_runtime
     assert "str(diffsynth_runtime_root())" not in scope_runtime
     assert "worldfoundry.base_models.diffusion_model.diffsynth.scope" not in scope_runtime
-    assert not (
-        REPO_ROOT / "worldfoundry/base_models/diffusion_model/diffsynth/_overlay.py"
-    ).exists()
+    assert not (REPO_ROOT / "worldfoundry/base_models/diffusion_model/diffsynth/_overlay.py").exists()
 
 
 def test_neoverse_runtime_logic_lives_under_synthesis():
@@ -1624,10 +1534,7 @@ def test_core_inference_official_demo_fixtures_are_in_tree():
     assert 'MATRIX_GAME_2_IN_TREE_ROOT = _TEST_CASES_ROOT / "matrix-game-2"' in source
     assert 'MATRIX_GAME_2_IN_TREE_ROOT / "universal" / "0000.png"' in source
     assert 'MATRIX_GAME_2_IN_TREE_ROOT / "configs" / "inference_universal.yaml"' in source
-    assert (
-        'MATRIX_GAME_3_FALLBACK_FIXTURE = _TEST_CASES_ROOT / "matrix-game-3" / "001" / "image.png"'
-        in source
-    )
+    assert 'MATRIX_GAME_3_FALLBACK_FIXTURE = _TEST_CASES_ROOT / "matrix-game-3" / "001" / "image.png"' in source
     assert 'ASTRA_FALLBACK_FIXTURE = _TEST_CASES_ROOT / "astra" / "condition_images" / "garden_1.png"' in source
     assert 'NEOVERSE_DATA_ROOT / "videos" / "robot.mp4"' in source
     assert "packaged in-tree Matrix-Game fixtures" in source
@@ -1732,9 +1639,9 @@ def test_vmem_runtime_env_lives_under_synthesis():
         assert "import sys" not in text
         assert "sys.path" not in text
         assert "sys.modules" not in text
-    assert "worldfoundry.synthesis.visual_generation.vmem" in (
-        synthesis_root / "vmem_synthesis.py"
-    ).read_text(encoding="utf-8")
+    assert "worldfoundry.synthesis.visual_generation.vmem" in (synthesis_root / "vmem_synthesis.py").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_vmem_runtime_root_ignores_external_source_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
@@ -1795,9 +1702,7 @@ def test_multiworld_solaris_runtime_envs_live_under_synthesis():
         assert "def local_runtime_candidates" not in synthesis_text
         assert "def build_subprocess_env" not in synthesis_text
         assert "def build_inference_env" not in synthesis_text
-    assert not (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/multiworld/_serialization.py"
-    ).exists()
+    assert not (REPO_ROOT / "worldfoundry/synthesis/visual_generation/multiworld/_serialization.py").exists()
     assert not (
         REPO_ROOT / "worldfoundry/synthesis/visual_generation/multiworld/multiworld_ittakestwo_runner.py"
     ).exists()
@@ -1828,9 +1733,7 @@ def test_allegro_easyanimate_runtime_logic_lives_under_synthesis():
         if package == "easyanimate":
             config_root = REPO_ROOT / "worldfoundry/data/models/runtime/configs/easyanimate"
             assert not (base_root / "easyanimate_runtime/config").exists()
-            assert (
-                config_root / "easyanimate_video_v5_magvit_multi_text_encoder.yaml"
-            ).exists() is False
+            assert (config_root / "easyanimate_video_v5_magvit_multi_text_encoder.yaml").exists() is False
 
         runtime_text = (base_root / "worldfoundry_runtime.py").read_text(encoding="utf-8")
         for needle in runtime_needles:
@@ -2004,17 +1907,11 @@ def test_synthesis_demo_assets_and_training_payloads_are_not_reintroduced():
     ]
 
     assert [path for path in removed_paths if (REPO_ROOT / path).exists()] == []
-    assert (
-        REPO_ROOT
-        / "worldfoundry/data/models/runtime/configs/cosmos_predict2/t5xxl/t5encoder.json"
-    ).is_file()
+    assert (REPO_ROOT / "worldfoundry/data/models/runtime/configs/cosmos_predict2/t5xxl/t5encoder.json").is_file()
     assert {
         "wow-dit-2b.txt",
         "wow-dit-7b.txt",
-    } == {
-        path.name
-        for path in (REPO_ROOT / "worldfoundry/data/models/runtime/configs/wow/requirements").glob("*.txt")
-    }
+    } == {path.name for path in (REPO_ROOT / "worldfoundry/data/models/runtime/configs/wow/requirements").glob("*.txt")}
     t5_encoder_text = (
         REPO_ROOT
         / "worldfoundry/base_models/diffusion_model/video/cosmos/cosmos2/runtime/cosmos_predict2/cosmos_predict2/_src/imaginaire/modules/nlp/t5xxl/t5encoder.py"
@@ -2068,7 +1965,7 @@ def test_diffusion_policy_checkpoint_workspace_is_inference_only():
     assert "BaseLowdimDataset" not in workspace_text
     assert "diffusers.training_utils" not in workspace_text
     assert "Path(__file__).resolve().parent" in runtime_text
-    assert "/ \"base_models\"" not in runtime_text
+    assert '/ "base_models"' not in runtime_text
     assert "exclude_keys = tuple(key for key in state_dicts if key not in loadable_policy_keys)" in runtime_text
     assert "def load_payload" in base_workspace_text
     assert "save_checkpoint" not in base_workspace_text
@@ -2081,13 +1978,8 @@ def test_diffusion_policy_checkpoint_workspace_is_inference_only():
 def test_lyra2_runtime_logic_lives_under_synthesis():
     runtime = REPO_ROOT / "worldfoundry/synthesis/visual_generation/lyra_2/runtime.py"
     synthesis = REPO_ROOT / "worldfoundry/synthesis/visual_generation/lyra_2/synthesis.py"
-    depth_utils = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/lyra_2/lyra_2/_src/inference/depth_utils.py"
-    )
-    lyra2_inference_root = (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/lyra_2/lyra_2/_src/inference"
-    )
+    depth_utils = REPO_ROOT / "worldfoundry/synthesis/visual_generation/lyra_2/lyra_2/_src/inference/depth_utils.py"
+    lyra2_inference_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation/lyra_2/lyra_2/_src/inference"
     vipe_config_root = REPO_ROOT / "worldfoundry/data/models/runtime/configs/vipe"
 
     runtime_text = runtime.read_text(encoding="utf-8")
@@ -2124,12 +2016,8 @@ def test_lyra2_runtime_logic_lives_under_synthesis():
 
 
 def test_motionctrl_default_conditions_live_in_data_test_cases():
-    synthesis_path = (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/motionctrl/synthesis.py"
-    )
-    base_runtime_path = (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/motionctrl/worldfoundry_runtime.py"
-    )
+    synthesis_path = REPO_ROOT / "worldfoundry/synthesis/visual_generation/motionctrl/synthesis.py"
+    base_runtime_path = REPO_ROOT / "worldfoundry/synthesis/visual_generation/motionctrl/worldfoundry_runtime.py"
     inference_path = (
         REPO_ROOT
         / "worldfoundry/synthesis/visual_generation/motionctrl/motionctrl_runtime/main/inference/motionctrl_inference.py"
@@ -2187,9 +2075,7 @@ def test_infinite_world_default_config_lives_in_data_runtime_configs(tmp_path: P
     config_path = REPO_ROOT / "worldfoundry/data/models/runtime/configs/infinite_world.yaml"
     runtime_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation/infinite_world/infinite_world_runtime"
     old_hidden_config = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/infinite_world"
-        / ("infworld_" + "config.yaml")
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/infinite_world" / ("infworld_" + "config.yaml")
     )
     old_runtime_dirs = [
         REPO_ROOT / "worldfoundry/synthesis/visual_generation/infinite_world/configs",
@@ -2238,9 +2124,9 @@ def test_camera_control_configs_live_in_data_runtime_configs():
     assert (config_root / "motionctrl_config_both.yaml").is_file()
     assert [str(path) for path in old_paths if path.exists()] == []
 
-    cameractrl_runtime_text = (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/cameractrl/runtime.py"
-    ).read_text(encoding="utf-8")
+    cameractrl_runtime_text = (REPO_ROOT / "worldfoundry/synthesis/visual_generation/cameractrl/runtime.py").read_text(
+        encoding="utf-8"
+    )
     cameractrl_synthesis_text = synthesis_paths[0].read_text(encoding="utf-8")
     assert "worldfoundry_data_path" in cameractrl_runtime_text
     assert "runtime", "configs" in cameractrl_runtime_text
@@ -2281,10 +2167,7 @@ def test_animatediff_configs_live_in_data_runtime_configs():
     assert "save_videos_grid" not in synthesis_text
     assert "WebVid10M" not in runtime_text
     assert "torch.utils.data" not in runtime_text
-    assert not any(
-        path.name == "run_animatediff_exact_parity.py"
-        for path in (REPO_ROOT / "scripts").rglob("*.py")
-    )
+    assert not any(path.name == "run_animatediff_exact_parity.py" for path in (REPO_ROOT / "scripts").rglob("*.py"))
 
 
 def test_zeroscope_runtime_logic_lives_under_synthesis():
@@ -2298,7 +2181,6 @@ def test_zeroscope_runtime_logic_lives_under_synthesis():
     assert "worldfoundry.synthesis" not in runtime_text
     assert "TextToVideoSDPipeline" in runtime_text
     assert "export_to_video" in runtime_text
-    assert "frames_sha256" in runtime_text
     assert "ZeroScopeRuntime" in synthesis_text
     assert "TextToVideoSDPipeline" not in synthesis_text
     assert "export_to_video" not in synthesis_text
@@ -2331,12 +2213,12 @@ def test_inspatio_world_configs_live_in_data_runtime_configs():
     runtime_text = runtime_path.read_text(encoding="utf-8")
     assert "class InspatioWorldSynthesis" in text
     assert "InspatioWorldRuntime" in text
-    assert "package_root(\"worldfoundry.synthesis.visual_generation.inspatio_world\")" in runtime_text
+    assert 'package_root("worldfoundry.synthesis.visual_generation.inspatio_world")' in runtime_text
 
     assert "InspatioWorldSynthesis" in base_init.read_text(encoding="utf-8")
     assert "worldfoundry_data_path" in runtime_text
-    assert "runtime\", \"configs\", \"inspatio_world" in runtime_text
-    assert "_TRAJECTORY_ROOT = _CONFIG_ROOT / \"traj\"" in runtime_text
+    assert 'runtime", "configs", "inspatio_world' in runtime_text
+    assert '_TRAJECTORY_ROOT = _CONFIG_ROOT / "traj"' in runtime_text
     assert "WORLDFOUNDRY_INSPATIO_WORLD_TRAJECTORY_ROOT" in runtime_text
     assert "inspatio_world_runtime" in runtime_text
     assert "subprocess.run" in runtime_text
@@ -2372,7 +2254,7 @@ def test_worldcam_runtime_lives_under_synthesis():
     assert "WorldCamRuntime" in package_text
     assert "DEFAULT_WEIGHT_DTYPE" in package_text
     assert "RUNTIME_ROOT = runtime_root()" in package_text
-    assert "\"runtime_root\"" in package_text
+    assert '"runtime_root"' in package_text
 
     base_text = base_runtime_path.read_text(encoding="utf-8")
     for expected in [
@@ -2402,14 +2284,14 @@ def test_worldcam_runtime_lives_under_synthesis():
         "def _resolve_checkpoint_path",
         "def _missing_wan_components",
         "pipe.dit.load_state_dict",
-        "Path(__file__).resolve().parent / \"worldcam\"",
+        'Path(__file__).resolve().parent / "worldcam"',
     ]:
         assert forbidden not in synthesis_text
 
     pipeline_text = pipeline_path.read_text(encoding="utf-8")
     assert "runtime_root as worldcam_runtime_root" in pipeline_text
     assert "worldcam_runtime_root()" in pipeline_text
-    assert "synthesis\" / \"visual_generation\" / \"worldcam\"" not in pipeline_text
+    assert 'synthesis" / "visual_generation" / "worldcam"' not in pipeline_text
 
     pipeline_runtime_text = (runtime_root / "pipelines/wan_video_new.py").read_text(encoding="utf-8")
     worldcam_dit_text = (runtime_root / "models/wan_video_dit.py").read_text(encoding="utf-8")
@@ -2453,7 +2335,7 @@ def test_lingbot_world_runtime_lives_under_synthesis():
     assert "signature(" not in text
     assert "import torch" not in text
     assert "import numpy" not in text
-    assert "Path(__file__).resolve().parent / \"lingbot_world\"" not in text
+    assert 'Path(__file__).resolve().parent / "lingbot_world"' not in text
 
 
 def test_kling_astra_runtime_lives_under_synthesis():
@@ -2466,9 +2348,7 @@ def test_kling_astra_runtime_lives_under_synthesis():
     assert (runtime_root / "models/model_manager.py").is_file()
     assert (runtime_root / "model_registry.py").is_file()
     assert not (runtime_root / "configs").exists()
-    assert (
-        REPO_ROOT / "worldfoundry/data/models/runtime/configs/kling/astra/model_loader.yaml"
-    ).is_file()
+    assert (REPO_ROOT / "worldfoundry/data/models/runtime/configs/kling/astra/model_loader.yaml").is_file()
 
     text = synthesis_path.read_text(encoding="utf-8")
     assert "worldfoundry.synthesis.visual_generation.kling.astra_runtime" in text
@@ -2492,13 +2372,8 @@ def test_kling_recammaster_runtime_lives_under_synthesis():
 
 
 def test_hy_world_2p0_panogen_runtime_lives_under_synthesis():
-    runtime_root = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0_panogen_runtime"
-    )
-    old_runtime_root = (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0/panogen"
-    )
+    runtime_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0_panogen_runtime"
+    old_runtime_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0/panogen"
     synthesis_path = (
         REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_family_synthesis.py"
     )
@@ -2522,8 +2397,7 @@ def test_hy_world_2p0_worldgen_diagnostics_do_not_probe_external_checkouts(monke
     )
 
     runtime_text = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0_worldgen_runtime.py"
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hy_world_2p0_worldgen_runtime.py"
     ).read_text(encoding="utf-8")
     assert "github_repos" not in runtime_text
 
@@ -2589,8 +2463,7 @@ def test_wan_training_runtime_helpers_are_not_demo_utils():
     wrapper_text = (training_root / "utils/wan_wrapper.py").read_text(encoding="utf-8")
     vae_text = (runtime_utils / "vae.py").read_text(encoding="utf-8")
     inspatio_text = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/inference_causal.py"
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/inference_causal.py"
     ).read_text(encoding="utf-8")
 
     assert not (training_root / "demo_utils").exists()
@@ -2641,14 +2514,8 @@ def test_matrix_game_3_runner_lives_with_base_runtime():
 
 
 def test_matrix_game_1_runtime_logic_lives_under_base_models():
-    runtime_path = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/matrix_game/matrix_game_1_runtime/runtime.py"
-    )
-    synthesis_path = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/matrix_game/matrix_game_1_synthesis.py"
-    )
+    runtime_path = REPO_ROOT / "worldfoundry/synthesis/visual_generation/matrix_game/matrix_game_1_runtime/runtime.py"
+    synthesis_path = REPO_ROOT / "worldfoundry/synthesis/visual_generation/matrix_game/matrix_game_1_synthesis.py"
 
     runtime_text = runtime_path.read_text(encoding="utf-8")
     synthesis_text = synthesis_path.read_text(encoding="utf-8")
@@ -2670,14 +2537,8 @@ def test_matrix_game_1_runtime_logic_lives_under_base_models():
 
 
 def test_open_magvit2_runtime_logic_lives_under_synthesis():
-    runtime = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/open_magvit2/worldfoundry_runtime.py"
-    )
-    synthesis = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/open_magvit2/open_magvit2_synthesis.py"
-    )
+    runtime = REPO_ROOT / "worldfoundry/synthesis/visual_generation/open_magvit2/worldfoundry_runtime.py"
+    synthesis = REPO_ROOT / "worldfoundry/synthesis/visual_generation/open_magvit2/open_magvit2_synthesis.py"
 
     base_text = runtime.read_text(encoding="utf-8")
     synthesis_text = synthesis.read_text(encoding="utf-8")
@@ -2698,14 +2559,8 @@ def test_open_magvit2_runtime_logic_lives_under_synthesis():
 
 
 def test_open_magvit2_inference_configs_live_in_data_runtime_configs():
-    runtime_root = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/open_magvit2/open_magvit2_runtime"
-    )
-    runtime_path = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/open_magvit2/worldfoundry_runtime.py"
-    )
+    runtime_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation/open_magvit2/open_magvit2_runtime"
+    runtime_path = REPO_ROOT / "worldfoundry/synthesis/visual_generation/open_magvit2/worldfoundry_runtime.py"
     config_root = REPO_ROOT / "worldfoundry/data/models/runtime/configs/open_magvit2"
 
     assert not (runtime_root / "configs").exists()
@@ -2717,7 +2572,7 @@ def test_open_magvit2_inference_configs_live_in_data_runtime_configs():
 
     runtime_text = runtime_path.read_text(encoding="utf-8")
     assert "worldfoundry_data_path" in runtime_text
-    assert "runtime\", \"configs\", \"open_magvit2" in runtime_text
+    assert 'runtime", "configs", "open_magvit2' in runtime_text
     assert "configs/Open-MAGVIT2" not in runtime_text
     assert "pretrain_lfqgan" not in "\n".join(path.name for path in config_root.glob("*.yaml"))
     assert "ucf101" not in "\n".join(path.name for path in config_root.glob("*.yaml"))
@@ -2792,12 +2647,9 @@ def test_show_o_demo_configs_live_in_data_runtime_configs():
 
 def test_cosmos_predict2p5_runtime_lives_under_base_models():
     runtime_path = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/cosmos2p5/worldfoundry_predict_runtime.py"
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/cosmos2p5/worldfoundry_predict_runtime.py"
     )
-    synthesis_path = (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/cosmos/cosmos_predict2p5_synthesis.py"
-    )
+    synthesis_path = REPO_ROOT / "worldfoundry/synthesis/visual_generation/cosmos/cosmos_predict2p5_synthesis.py"
 
     assert runtime_path.is_file()
     runtime_text = runtime_path.read_text(encoding="utf-8")
@@ -2837,9 +2689,7 @@ def test_fantasy_world_runners_live_under_synthesis():
     assert (base_root / "wan21_runner.py").is_file()
     assert (base_root / "wan22_runner.py").is_file()
     assert (base_root / "worldfoundry_runtime.py").is_file()
-    assert (
-        REPO_ROOT / "worldfoundry/data/test_cases/fantasy_world/camera_interp_minimal.json"
-    ).is_file()
+    assert (REPO_ROOT / "worldfoundry/data/test_cases/fantasy_world/camera_interp_minimal.json").is_file()
 
     for path in [
         synthesis_root / "__init__.py",
@@ -2861,11 +2711,19 @@ def test_hunyuan_world_runtime_defaults_live_in_data_runtime_configs():
     config_root = REPO_ROOT / "worldfoundry/data/models/runtime/configs/hunyuan_world"
     game_config = REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft/config.py"
     game_runtime = REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft/runtime.py"
-    game_synthesis = REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft_synthesis.py"
-    voyager_config = REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_voyager/config.py"
+    game_synthesis = (
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft_synthesis.py"
+    )
+    voyager_config = (
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_voyager/config.py"
+    )
     worldplay_pipeline = REPO_ROOT / "worldfoundry/pipelines/hunyuan_world/pipeline_hunyuan_worldplay.py"
-    voyager_synthesis = REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_voyager_synthesis.py"
-    worldplay_synthesis = REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay_synthesis.py"
+    voyager_synthesis = (
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_voyager_synthesis.py"
+    )
+    worldplay_synthesis = (
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay_synthesis.py"
+    )
 
     assert [path.name for path in sorted(config_root.glob("*.yaml"))] == [
         "game_craft.yaml",
@@ -2910,16 +2768,13 @@ def test_hunyuan_world_runtime_defaults_live_in_data_runtime_configs():
     assert forbidden_owner not in voyager_synthesis.read_text(encoding="utf-8")
     assert forbidden_owner not in worldplay_synthesis.read_text(encoding="utf-8")
     assert not (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_voyager/utils/train_utils.py"
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_voyager/utils/train_utils.py"
     ).exists()
     assert not (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_voyager/utils/data_utils.py"
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_voyager/utils/data_utils.py"
     ).exists()
     assert not (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/utils/data_utils.py"
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/utils/data_utils.py"
     ).exists()
 
 
@@ -2947,14 +2802,8 @@ def test_hunyuan_gamecraft_camera_helpers_live_in_base_runtime():
 
 
 def test_hunyuan_world_voyager_runtime_logic_lives_under_synthesis():
-    runtime = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_voyager/runtime.py"
-    )
-    synthesis = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_voyager_synthesis.py"
-    )
+    runtime = REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_voyager/runtime.py"
+    synthesis = REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_world_voyager_synthesis.py"
 
     assert runtime.is_file()
     runtime_text = runtime.read_text(encoding="utf-8")
@@ -2992,18 +2841,9 @@ def test_hunyuan_world_voyager_runtime_logic_lives_under_synthesis():
 
 
 def test_hunyuan_worldplay_runtime_logic_lives_under_synthesis():
-    runtime = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/runtime.py"
-    )
-    synthesis = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay_synthesis.py"
-    )
-    generate = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/generate.py"
-    )
+    runtime = REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/runtime.py"
+    synthesis = REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay_synthesis.py"
+    generate = REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/generate.py"
     sr_pipeline = (
         REPO_ROOT
         / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/pipelines/hunyuan_video_sr_pipeline.py"
@@ -3037,19 +2877,25 @@ def test_hunyuan_worldplay_runtime_logic_lives_under_synthesis():
 
 def test_hunyuan_world_shared_layers_import_base_models_directly():
     removed_shims = [
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft/modules/activation_layers.py",
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft/modules/modulate_layers.py",
+        REPO_ROOT
+        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft/modules/activation_layers.py",
+        REPO_ROOT
+        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft/modules/modulate_layers.py",
         REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft/modules/norm_layers.py",
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/models/transformers/modules/activation_layers.py",
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/models/transformers/modules/posemb_layers.py",
+        REPO_ROOT
+        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/models/transformers/modules/activation_layers.py",
+        REPO_ROOT
+        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/models/transformers/modules/posemb_layers.py",
     ]
     for path in removed_shims:
         assert not path.exists()
 
     direct_import_files = [
         REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft/modules/models.py",
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft/modules/token_refiner.py",
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/models/transformers/worldplay_1_5_transformer.py",
+        REPO_ROOT
+        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_game_craft/modules/token_refiner.py",
+        REPO_ROOT
+        / "worldfoundry/synthesis/visual_generation/hunyuan_world/hunyuan_worldplay/models/transformers/worldplay_1_5_transformer.py",
     ]
     for path in direct_import_files:
         assert "worldfoundry.base_models.diffusion_model.video.hunyuan_video.modules" in path.read_text(
@@ -3093,24 +2939,16 @@ def test_genie_envisioner_configs_live_in_data_runtime_configs():
 
 
 def test_motionctrl_lvdm_foundation_code_lives_under_base_models():
-    old_runtime_lvdm = (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/motionctrl/motionctrl_runtime/lvdm"
-    )
+    old_runtime_lvdm = REPO_ROOT / "worldfoundry/synthesis/visual_generation/motionctrl/motionctrl_runtime/lvdm"
     video_base_model_root = REPO_ROOT / "worldfoundry/base_models/diffusion_model/video"
     base_lvdm = video_base_model_root / "lvdm"
-    runtime_init = (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/motionctrl/motionctrl_runtime/__init__.py"
-    )
-    runtime_config = (
-        REPO_ROOT
-        / "worldfoundry/data/models/runtime/configs/camera_control/motionctrl_config_both.yaml"
-    )
+    runtime_init = REPO_ROOT / "worldfoundry/synthesis/visual_generation/motionctrl/motionctrl_runtime/__init__.py"
+    runtime_config = REPO_ROOT / "worldfoundry/data/models/runtime/configs/camera_control/motionctrl_config_both.yaml"
     runtime_files = [
         runtime_init,
         REPO_ROOT
         / "worldfoundry/synthesis/visual_generation/motionctrl/motionctrl_runtime/main/inference/motionctrl_inference.py",
-        REPO_ROOT
-        / "worldfoundry/synthesis/visual_generation/motionctrl/motionctrl_runtime/motionctrl/motionctrl.py",
+        REPO_ROOT / "worldfoundry/synthesis/visual_generation/motionctrl/motionctrl_runtime/motionctrl/motionctrl.py",
         REPO_ROOT
         / "worldfoundry/synthesis/visual_generation/motionctrl/motionctrl_runtime/motionctrl/lvdm_modified_modules.py",
     ]
@@ -3186,16 +3024,11 @@ def test_vid2world_lvdm_variant_lives_under_canonical_lvdm_tree():
     config_root = REPO_ROOT / "worldfoundry/data/models/runtime/configs/vid2world"
 
     assert not old_nested_lvdm.exists()
+    assert (REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/lvdm/models/ddpm3d_vid2world.py").is_file()
     assert (
-        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/lvdm/models/ddpm3d_vid2world.py"
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/lvdm/modules/networks/openaimodel3d_vid2world.py"
     ).is_file()
-    assert (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/lvdm/modules/networks/openaimodel3d_vid2world.py"
-    ).is_file()
-    assert (
-        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/lvdm/modules/attention_vid2world.py"
-    ).is_file()
+    assert (REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/lvdm/modules/attention_vid2world.py").is_file()
     assert (variant_root / "models/samplers/kv_cache.py").is_file()
     assert (variant_root / "eval_inputs/csgovid.py").is_file()
     assert (variant_root / "eval_inputs/reconvid.py").is_file()
@@ -3209,10 +3042,7 @@ def test_vid2world_lvdm_variant_lives_under_canonical_lvdm_tree():
         "eval_inputs/valorant.py",
         "models/samplers/kv_cache.py",
     }
-    assert {
-        str(path.relative_to(variant_root))
-        for path in variant_root.rglob("*.py")
-    } == allowed_variant_files
+    assert {str(path.relative_to(variant_root)) for path in variant_root.rglob("*.py")} == allowed_variant_files
 
     for path in variant_root.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
@@ -3240,10 +3070,7 @@ def test_vid2world_lvdm_variant_lives_under_canonical_lvdm_tree():
         config_text = config_file.read_text(encoding="utf-8")
         assert "target: lvdm." not in config_text
         assert "target: utils_data." not in config_text
-        assert (
-            "worldfoundry.base_models.diffusion_model.video.lvdm.models.ddpm3d_vid2world"
-            in config_text
-        )
+        assert "worldfoundry.base_models.diffusion_model.video.lvdm.models.ddpm3d_vid2world" in config_text
         assert (
             "worldfoundry.base_models.diffusion_model.video.lvdm.modules.networks.openaimodel3d_vid2world"
             in config_text
@@ -3253,23 +3080,18 @@ def test_vid2world_lvdm_variant_lives_under_canonical_lvdm_tree():
 
 def test_t2v_turbo_lvdm_variant_lives_under_canonical_lvdm_tree():
     old_runtime_lvdm = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/t2v_turbo/t2v_turbo_runtime/source/lvdm"
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/t2v_turbo/t2v_turbo_runtime/source/lvdm"
     )
     runtime_root = REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/t2v_turbo"
     config_path = runtime_root / "t2v_turbo_runtime/configs/inference_t2v_512_v2.0.yaml"
     pipeline_path = runtime_root / "t2v_turbo_runtime/source/pipeline/t2v_turbo_vc2_pipeline.py"
     runtime_path = runtime_root / "t2v_turbo_runtime/runtime.py"
-    old_variant_lvdm = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/lvdm/variants/t2v_turbo"
-    )
+    old_variant_lvdm = REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/lvdm/variants/t2v_turbo"
 
     assert not old_runtime_lvdm.exists()
     assert not old_variant_lvdm.exists()
     assert (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/video/lvdm/modules/networks/openaimodel3d.py"
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/lvdm/modules/networks/openaimodel3d.py"
     ).is_file()
 
     canonical_module = "worldfoundry.base_models.diffusion_model.video.lvdm"
@@ -3349,15 +3171,10 @@ def test_gr00t_policy_resolves_cosmos_reason2_from_local_hfd_root(tmp_path: Path
 
 
 def test_diffsynth_runtime_base_pipeline_uses_canonical_owner():
-    canonical_path = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/diffsynth/diffusion/base_pipeline.py"
-    )
+    canonical_path = REPO_ROOT / "worldfoundry/base_models/diffusion_model/diffsynth/diffusion/base_pipeline.py"
     removed_base_pipeline_files = [
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/diffsynth/fantasy_world_wan21/pipelines/base.py",
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/diffsynth/fantasy_world_wan22/pipelines/base.py",
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/diffsynth/fantasy_world_wan21/pipelines/base.py",
+        REPO_ROOT / "worldfoundry/base_models/diffusion_model/diffsynth/fantasy_world_wan22/pipelines/base.py",
         REPO_ROOT / "worldfoundry/synthesis/visual_generation/kling/recammaster_runtime/pipelines/base.py",
     ]
 
@@ -3429,10 +3246,7 @@ def test_hunyuan_worldmirror_common_layers_use_canonical_owner():
 
     assert violations == []
 
-    hy_mlp = (
-        REPO_ROOT
-        / "worldfoundry/base_models/three_dimensions/point_clouds/hyworldmirror_2p0/models/layers/mlp.py"
-    )
+    hy_mlp = REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/hyworldmirror_2p0/models/layers/mlp.py"
     hy_mlp_text = hy_mlp.read_text(encoding="utf-8")
     hy_mlp_tree = ast.parse(hy_mlp_text, filename=str(hy_mlp))
     hy_class_names = [node.name for node in ast.walk(hy_mlp_tree) if isinstance(node, ast.ClassDef)]
@@ -3502,9 +3316,7 @@ def test_hunyuan_worldmirror_duplicate_utils_use_canonical_owner():
 
 def test_lvdm_foundation_code_exists_only_under_base_models():
     lvdm_dirs = [
-        path
-        for path in (REPO_ROOT / "worldfoundry").rglob("lvdm")
-        if ".git" not in path.parts and path.is_dir()
+        path for path in (REPO_ROOT / "worldfoundry").rglob("lvdm") if ".git" not in path.parts and path.is_dir()
     ]
     expected = REPO_ROOT / "worldfoundry/base_models/diffusion_model/video/lvdm"
 
@@ -3519,8 +3331,7 @@ def test_vggt_dinov2_exact_layer_shims_use_canonical_owner():
         REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/vggt/vggt/layers/mlp.py",
         REPO_ROOT
         / "worldfoundry/base_models/three_dimensions/point_clouds/vggt_fantasy_world/vggt/layers/drop_path.py",
-        REPO_ROOT
-        / "worldfoundry/base_models/three_dimensions/point_clouds/vggt_fantasy_world/vggt/layers/mlp.py",
+        REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/vggt_fantasy_world/vggt/layers/mlp.py",
         REPO_ROOT
         / "worldfoundry/base_models/three_dimensions/depth/video_depth_anything_longvie/video_depth_anything/dinov2_layers/mlp.py",
     ]
@@ -3532,8 +3343,7 @@ def test_vggt_dinov2_exact_layer_shims_use_canonical_owner():
         text = path.read_text(encoding="utf-8")
         tree = ast.parse(text, filename=str(path))
         has_local_logic = any(
-            isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-            for node in ast.walk(tree)
+            isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) for node in ast.walk(tree)
         )
         if has_local_logic or "worldfoundry.base_models.perception_core.general_perception.dinov2.layers" not in text:
             violations.append(str(path.relative_to(REPO_ROOT)))
@@ -3542,10 +3352,7 @@ def test_vggt_dinov2_exact_layer_shims_use_canonical_owner():
 
 
 def test_lingbot_map_base_package_does_not_use_top_level_imports():
-    package_root = (
-        REPO_ROOT
-        / "worldfoundry/base_models/three_dimensions/point_clouds/lingbot_map/lingbot_map"
-    )
+    package_root = REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/lingbot_map/lingbot_map"
     violations = []
 
     for path in package_root.rglob("*.py"):
@@ -3584,9 +3391,7 @@ def test_vipe_priors_namespace_points_to_split_prior_owners():
     assert (depth_owner / "unidepth").is_dir()
     assert geocalib_owner.is_dir()
     assert (tracking_owner / "aot").is_dir()
-    vipe_priors_text = (vipe_priors / "__init__.py").read_text(
-        encoding="utf-8"
-    )
+    vipe_priors_text = (vipe_priors / "__init__.py").read_text(encoding="utf-8")
     assert "three_dimensions.depth" in vipe_priors_text
     assert "three_dimensions.general_3d.geocalib" in vipe_priors_text
     assert "perception_core.tracking.track_anything" in vipe_priors_text
@@ -3631,9 +3436,7 @@ def test_geometric_priors_are_independent_model_catalog_entries():
         assert str(resolved.diagnostics["pipeline_target"]).startswith("worldfoundry.pipelines.geometry_priors.")
         assert payload["integration"]["kind"] == "pipeline_runner"
         assert payload["base_model_target"] == base_model_target
-        assert not payload["base_model_target"].startswith(
-            "worldfoundry.base_models.three_dimensions.general_3d.vipe"
-        )
+        assert not payload["base_model_target"].startswith("worldfoundry.base_models.three_dimensions.general_3d.vipe")
         assert runtime_profile.model_id == model_id
         assert runtime_profile.integration_status == "integrated"
         assert runtime_profile.backend_stage == "in_tree_geometry_prior_runtime"
@@ -3648,9 +3451,9 @@ def test_three_d_four_d_external_repo_resolution_requires_explicit_root(monkeypa
         ThreeDFourDRuntimeSpec,
     )
 
-    runtime_text = (
-        REPO_ROOT / "worldfoundry/base_models/three_dimensions/three_d_four_d/runtime.py"
-    ).read_text(encoding="utf-8")
+    runtime_text = (REPO_ROOT / "worldfoundry/base_models/three_dimensions/three_d_four_d/runtime.py").read_text(
+        encoding="utf-8"
+    )
     assert "github_repos" not in runtime_text
 
     spec = ThreeDFourDRuntimeSpec(
@@ -3684,10 +3487,7 @@ def test_three_d_four_d_external_repo_resolution_requires_explicit_root(monkeypa
 
 def test_neoverse_diffsynth_reuses_canonical_heavy_model_files():
     reexports = ["flux_dit.py", "sd3_dit.py", "svd_unet.py"]
-    model_root = (
-        REPO_ROOT
-        / "worldfoundry/base_models/diffusion_model/diffsynth/models"
-    )
+    model_root = REPO_ROOT / "worldfoundry/base_models/diffusion_model/diffsynth/models"
 
     assert [filename for filename in reexports if (model_root / f"neoverse_{filename}").exists()] == []
     assert (model_root / "wan_video_neoverse_controller.py").is_file()

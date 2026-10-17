@@ -25,8 +25,9 @@ import inspect
 import pprint
 import warnings
 from collections.abc import Mapping, Sequence
+from importlib import import_module
+from types import ModuleType
 from typing import Any, Dict, Literal
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Type tests — strings are scalars here, never walked as sequences
@@ -146,8 +147,9 @@ def make_recursive_func(fn, *, with_path=False):
     """
     import functools
 
+    tree: ModuleType | None
     try:
-        import tree
+        tree = import_module("tree")
     except ImportError:
         tree = None
 
@@ -225,19 +227,21 @@ def call_once(func, on_second_call: Literal["noop", "raise", "warn"] = "noop"):
         "warn",
     ], "mode must be one of 'noop', 'raise', 'warn'"
 
+    called = False
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         """Run ``func`` once; later calls follow ``on_second_call``."""
-        if wrapper._called:
+        nonlocal called
+        if called:
             if on_second_call == "raise":
                 raise RuntimeError(f"{func.__name__} has already been called. Can only call once.")
             elif on_second_call == "warn":
                 warnings.warn(f"{func.__name__} has already been called. Should only call once.")
         else:
-            wrapper._called = True
+            called = True
             return func(*args, **kwargs)
 
-    wrapper._called = False
     return wrapper
 
 
@@ -312,7 +316,7 @@ class ClassRegistry:
     print(registry)
     """
 
-    def __init__(self, base_class_name: str = None):
+    def __init__(self, base_class_name: str | None = None) -> None:
         """Optional ``base_class_name`` is only used in missing-key error text."""
         self.registry = {}
         self._base_class_name = base_class_name
@@ -326,7 +330,7 @@ class ClassRegistry:
         if name not in self.registry:
             existing_cls = list(self.registry.keys())
             base_name = self._base_class_name + " " if self._base_class_name else ""
-            raise KeyError(f"{base_name} subclass '{name}' not found in registry: {existing_cls}")
+            raise KeyError(f"{base_name}subclass '{name}' not found in registry: {existing_cls}")
         return self.registry[name]
 
     def __str__(self):
@@ -525,7 +529,7 @@ def accepts_kwargs(func):
 def is_signature_compatible(func, *args, **kwargs):
     """True if ``func(*args, **kwargs)`` would bind; :exc:`TypeError` stays False."""
     try:
-        sig.bind(*args, **kwargs)
+        inspect.signature(func).bind(*args, **kwargs)
         return True
     except TypeError:
         return False

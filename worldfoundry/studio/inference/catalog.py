@@ -92,11 +92,7 @@ def _sana_folded_studio_model_ids() -> frozenset[str]:
 
     from worldfoundry.base_models.diffusion_model.recipes.sana_variants import SANA_VARIANTS
 
-    return frozenset(
-        variant.model_id
-        for variant in SANA_VARIANTS.values()
-        if variant.runner in _SANA_IMAGE_RUNNERS
-    )
+    return frozenset(variant.model_id for variant in SANA_VARIANTS.values() if variant.runner in _SANA_IMAGE_RUNNERS)
 
 
 def _cogvideox_canonical_id(model_id: str) -> str:
@@ -137,32 +133,35 @@ def cogvideox_runtime_model_id(model_id: str, variant_id: str = "") -> str | Non
     return _cogvideox_variant_id(variant_id or model_id) or COGVIDEOX_DEFAULT_VARIANT_ID
 
 
-STUDIO_HIDDEN_CATALOG_MODEL_IDS: frozenset[str] = frozenset(
-    {
-        # Internal shared operator/contract surface. Concrete priors such as metric3d-prior,
-        # unidepth-v2-prior, dap, and video-depth-anything-prior are the user-facing entries.
-        "geometry-prior",
-        # The complete Wan2.2 camera/base/LoRA/MoGe assets pass CPU schema validation,
-        # but the official dual-A14B GPU memory strategy still needs a real artifact run.
-        "fantasyworld-wan22",
-        # Lyra-2 alias; keep lyra-1 / lyra-2 as the canonical Create Job entries.
-        "lyra",
-        # Runtime-environment alias for ltx-2.3-i2v. Keeping it as a separate
-        # catalog row duplicates the same pipeline and invents a non-existent
-        # ``Ltx23I2VPipeline`` class name during canonical-entry synthesis.
-        "ltx2_3_i2v",
-        # Hidden official weights; keep provenance in the model catalog but do not
-        # expose a Studio infer row that cannot return a real artifact.
-        "pandora",
-        "omnivinci",
-        "emu3.5",
-        "qwen2.5-omni",
-        "spatial-ladder",
-        "spatial-reasoner",
-        # Image / Sprint / ControlNet checkpoints are variants on the Sana card.
-        # CogVideoX 2B T2V and 5B I2V share the CogVideoX card with 5B T2V.
-    }
-) | _sana_folded_studio_model_ids() | _cogvideox_folded_studio_model_ids()
+STUDIO_HIDDEN_CATALOG_MODEL_IDS: frozenset[str] = (
+    frozenset(
+        {
+            # Internal shared operator/contract surface. Concrete priors such as metric3d-prior,
+            # unidepth-v2-prior, dap, and video-depth-anything-prior are the user-facing entries.
+            "geometry-prior",
+            # The complete Wan2.2 camera/base/LoRA/MoGe assets pass CPU schema validation,
+            # but the official dual-A14B GPU memory strategy still needs a real artifact run.
+            "fantasyworld-wan22",
+            # Lyra-2 alias; keep lyra-1 / lyra-2 as the canonical Create Job entries.
+            "lyra",
+            # Runtime-environment alias for ltx-2.3-i2v. Keeping it as a separate
+            # catalog row duplicates the same pipeline and invents a non-existent
+            # ``Ltx23I2VPipeline`` class name during canonical-entry synthesis.
+            "ltx2_3_i2v",
+            # Hidden official weights; keep provenance in the model catalog but do not
+            # expose a Studio infer row that cannot return a real artifact.
+            "omnivinci",
+            "emu3.5",
+            "qwen2.5-omni",
+            "spatial-ladder",
+            "spatial-reasoner",
+            # Image / Sprint / ControlNet checkpoints are variants on the Sana card.
+            # CogVideoX 2B T2V and 5B I2V share the CogVideoX card with 5B T2V.
+        }
+    )
+    | _sana_folded_studio_model_ids()
+    | _cogvideox_folded_studio_model_ids()
+)
 
 # These Workspace matrix ids intentionally retain underscores while their AST
 # pipeline ids are filename-derived hyphenated slugs. Resolve them through the
@@ -233,11 +232,11 @@ def _cache_candidates(*repo_dir_names: str) -> list[str]:
                     if revision:
                         candidates.append(str(snapshots_dir / revision))
                 if snapshots_dir.is_dir():
-                    candidates.extend(str(path) for path in snapshots_dir.iterdir() if path.is_dir() or path.is_symlink())
+                    candidates.extend(
+                        str(path) for path in snapshots_dir.iterdir() if path.is_dir() or path.is_symlink()
+                    )
                 candidates.append(str(repo_path))
     return candidates
-
-
 
 
 def _slug_from_filename(path: Path) -> str:
@@ -273,7 +272,9 @@ def _summary_from_category(category: str, family: str, supports_stream: bool) ->
     if category == "Visual Action":
         return f"{family} pipeline for latent-action or video-action artifacts.{stream_hint}"
     if category == "Video-to-Video":
-        return f"{family} pipeline for video-to-video rerendering, trajectory control, and camera-path edits.{stream_hint}"
+        return (
+            f"{family} pipeline for video-to-video rerendering, trajectory control, and camera-path edits.{stream_hint}"
+        )
     if category == "3D Scene":
         return f"{family} pipeline for reconstruction, camera control, and spatial outputs.{stream_hint}"
     if category == "Depth / Geometry":
@@ -427,10 +428,7 @@ def _checkpoint_model_ref(*repo_dir_names: str, fallback: str = "") -> str:
     for repo_dir_name in repo_dir_names:
         if not repo_dir_name:
             continue
-        candidates.extend(
-            str(path)
-            for path in checkpoint_root_candidates(*Path(repo_dir_name).parts)
-        )
+        candidates.extend(str(path) for path in checkpoint_root_candidates(*Path(repo_dir_name).parts))
         candidates.extend(_cache_candidates(repo_dir_name))
     for candidate in candidates:
         if candidate:
@@ -688,16 +686,8 @@ def _magicworld_default_load_kwargs() -> dict[str, str]:
     }
 
 
-
-
 def _vmem_default_load_kwargs() -> dict[str, Any]:
-    runtime_root = str(
-        _package_root()
-        / "synthesis"
-        / "visual_generation"
-        / "vmem"
-        / "vmem_runtime"
-    )
+    runtime_root = str(_package_root() / "synthesis" / "visual_generation" / "vmem" / "vmem_runtime")
     surfel_model_path = _checkpoint_model_ref(
         "cut3r",
         "CUT3R",
@@ -736,8 +726,6 @@ def _worldfoundry_unified_python_executable() -> str:
         return str(candidate)
     opt_candidate = Path("/opt/conda/bin/python3.11")
     return str(opt_candidate) if opt_candidate.is_file() else _current_python_executable()
-
-
 
 
 def _lingbot_world_default_ref() -> str:
@@ -1017,7 +1005,7 @@ def _giga_brain_0_default_call_kwargs() -> Dict[str, Any]:
             "embodiment_id": 0,
             "original_action_dim": 14,
             "action_chunk": 50,
-        }
+        },
     }
 
 
@@ -1484,31 +1472,17 @@ def _ltx25_default_load_kwargs() -> Dict[str, Any]:
             "source_root": _ltx25_source_root(),
             "python_executable": _ltx25_python_executable(),
             "transformer_path": str(
-                checkpoint_dir
-                / "diffusion_models"
-                / "ltx-2.5-22b-distilled-transformer-bf16.safetensors"
+                checkpoint_dir / "diffusion_models" / "ltx-2.5-22b-distilled-transformer-bf16.safetensors"
             ),
             "text_encoder_path": str(
-                checkpoint_dir
-                / "text_encoders"
-                / "gemma4-12b-with-proj-ltx-2.5-bf16.safetensors"
+                checkpoint_dir / "text_encoders" / "gemma4-12b-with-proj-ltx-2.5-bf16.safetensors"
             ),
-            "video_vae_path": str(
-                checkpoint_dir / "vae" / "ltx-2.5-video-vae-bf16.safetensors"
-            ),
-            "audio_vae_path": str(
-                checkpoint_dir / "vae" / "ltx-2.5-audio-vae-bf16.safetensors"
-            ),
+            "video_vae_path": str(checkpoint_dir / "vae" / "ltx-2.5-video-vae-bf16.safetensors"),
+            "audio_vae_path": str(checkpoint_dir / "vae" / "ltx-2.5-audio-vae-bf16.safetensors"),
             "spatial_upsampler_path": str(
-                checkpoint_dir
-                / "latent_upscale_models"
-                / "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"
+                checkpoint_dir / "latent_upscale_models" / "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"
             ),
-            "duration_head_path": str(
-                checkpoint_dir
-                / "model_patches"
-                / "ltx-2.5-duration-head-bf16.safetensors"
-            ),
+            "duration_head_path": str(checkpoint_dir / "model_patches" / "ltx-2.5-duration-head-bf16.safetensors"),
             "offload_mode": "cpu",
             "diffvae_optimization": "chunked_eager",
         }
@@ -1660,6 +1634,14 @@ def _native_diffusion_video_load_params() -> tuple[str, ...]:
         "rope_precision",
         "rms_norm_precision",
         "compile",
+        "compile_scope",
+        "compile_backend",
+        "compile_mode",
+        "compile_fullgraph",
+        "compile_dynamic",
+        "compile_options",
+        "cuda_graph",
+        "warmup_requests",
         "approximate_attention",
         "vae_tiling",
         *DISPATCH_LOAD_PARAMS,
@@ -1969,6 +1951,24 @@ def _lingbot_world_v2_default_ref() -> str:
     )
 
 
+def _lingbot_world_v2_small_default_ref() -> str:
+    return _checkpoint_model_ref(
+        "lingbot-world-v2-1.3b-causal-fast",
+        "robbyant--lingbot-world-v2-1.3b-causal-fast",
+        fallback="robbyant/lingbot-world-v2-1.3b-causal-fast",
+    )
+
+
+def _lingbot_world_v2_small_default_load_kwargs() -> Dict[str, Any]:
+    return {
+        "model_id": "lingbot-world-v2-1.3b",
+        "nproc_per_node": 1,
+        "t5_fsdp": False,
+        "dit_fsdp": False,
+        "shared_assets_path": str(checkpoint_root_path("Wan-AI--Wan2.1-T2V-1.3B")),
+    }
+
+
 def _sana_wm_default_ref() -> str:
     return _checkpoint_model_ref(
         "SANA-WM_bidirectional",
@@ -2038,25 +2038,14 @@ def _dreamdojo_default_ref() -> str:
     )
 
 
-def _dreamdojo_dataset_path() -> str:
-    return str(
-        checkpoint_root_path(
-            "nvidia--PhysicalAI-Robotics-GR00T-Teleop-GR1",
-            "GR1_robot",
-        )
-    )
-
-
 def _dreamdojo_default_load_kwargs() -> Dict[str, Any]:
     root = Path(_dreamdojo_default_ref())
     checkpoint_dir = root / "iter_000050000"
     return {
-        "dataset_path": _dreamdojo_dataset_path(),
-        # Matrix readiness audits these exact DCP members. The runtime ignores
-        # this audit-only option and consumes checkpoints_dir/latest_checkpoint.txt.
-        "checkpoint_shards": [
-            str(checkpoint_dir / "model" / f"__{index}_0.distcp") for index in range(8)
-        ],
+        "vae_path": str(checkpoint_root_path("nvidia--Cosmos-Predict2.5-2B", "tokenizer.pth")),
+        "text_encoder_path": str(checkpoint_root_path("nvidia--Cosmos-Reason1-7B")),
+        # Matrix readiness audits the distributed EMA inputs consumed by conversion.
+        "checkpoint_shards": [str(checkpoint_dir / "model" / f"__{index}_0.distcp") for index in range(8)],
     }
 
 
@@ -2445,11 +2434,7 @@ def _sana_streaming_default_load_kwargs(*, bidirectional: bool) -> Dict[str, Any
         fallback="Lightricks/LTX-2",
     )
     return {
-        "model_id": (
-            "sana-streaming-bidirectional-2b-720p"
-            if bidirectional
-            else "sana-streaming-2b-720p"
-        ),
+        "model_id": ("sana-streaming-bidirectional-2b-720p" if bidirectional else "sana-streaming-2b-720p"),
         "checkpoint_overrides": {
             "dit": dit_root,
             "text-encoder": gemma_root,
@@ -2602,12 +2587,7 @@ def _solaris_default_ref() -> str:
 
 def _solaris_default_load_kwargs() -> Dict[str, Any]:
     runtime_root = str(
-        _project_root()
-        / "worldfoundry"
-        / "synthesis"
-        / "visual_generation"
-        / "solaris"
-        / "solaris_runtime"
+        _project_root() / "worldfoundry" / "synthesis" / "visual_generation" / "solaris" / "solaris_runtime"
     )
     checkpoint_root = _solaris_default_ref()
     eval_data_root = _checkpoint_model_ref(
@@ -2938,7 +2918,9 @@ def _inspatio_world_default_load_kwargs() -> Dict[str, Any]:
             "Florence-2-large",
             fallback="microsoft/Florence-2-large",
         ),
-        "default_traj_txt_path": str(_data_path("models", "runtime", "configs", "inspatio_world", "traj", "x_y_circle_cycle.txt")),
+        "default_traj_txt_path": str(
+            _data_path("models", "runtime", "configs", "inspatio_world", "traj", "x_y_circle_cycle.txt")
+        ),
     }
 
 
@@ -3250,7 +3232,6 @@ _IN_TREE_REPO_PARTS: dict[str, tuple[str, ...]] = {
         "stable_virtual_camera_runtime",
     ),
     "WonderJourney": ("synthesis", "visual_generation", "wonderjourney", "wonderjourney_runtime"),
-    "WonderWorld": ("synthesis", "visual_generation", "wonderworld", "wonderworld_runtime"),
     "WorldGen": ("synthesis", "visual_generation", "worldgen", "worldgen_runtime"),
 }
 
@@ -3611,9 +3592,7 @@ def _lyra2_default_load_kwargs() -> Dict[str, Any]:
         required_components.update(
             {
                 "checkpoint_dir": str(checkpoint_root / "checkpoints" / "model"),
-                "negative_prompt_path": str(
-                    checkpoint_root / "checkpoints" / "text_encoder" / "negative_prompt.pt"
-                ),
+                "negative_prompt_path": str(checkpoint_root / "checkpoints" / "text_encoder" / "negative_prompt.pt"),
                 "da3_model_path_custom": str(checkpoint_root / "checkpoints" / "recon" / "model.pt"),
             }
         )
@@ -3678,13 +3657,7 @@ def _forcing_unified_python_executable() -> str:
 
 def _forcing_in_tree_runtime_root(model_id: str) -> Path:
     runtime_name = "causal_forcing_runtime" if model_id == "causal-forcing" else "self_forcing_runtime"
-    return (
-        _package_root()
-        / "synthesis"
-        / "visual_generation"
-        / "forcing"
-        / runtime_name
-    )
+    return _package_root() / "synthesis" / "visual_generation" / "forcing" / runtime_name
 
 
 def _self_forcing_default_ref() -> str:
@@ -3779,9 +3752,7 @@ def _oasis_500m_default_load_kwargs() -> Dict[str, str]:
         "checkpoint_path": str(checkpoint_root / "oasis500m.safetensors"),
         "vae_ckpt": str(checkpoint_root / "vit-l-20.safetensors"),
         "prompt_path": str(_data_path("test_cases", "oasis", "sample_image_0.png")),
-        "actions_path": str(
-            _data_path("test_cases", "oasis", "forward_4f.one_hot_actions.json")
-        ),
+        "actions_path": str(_data_path("test_cases", "oasis", "forward_4f.one_hot_actions.json")),
     }
 
 
@@ -3825,7 +3796,9 @@ def _multiworld_ittakestwo_default_load_kwargs() -> Dict[str, Any]:
                 "hfd/facebook--VGGT-1B",
                 fallback=str(checkpoint_root_path("facebook--VGGT-1B")),
             ),
-            "python_executable": str(unified_python) if unified_python.is_file() else _worldfoundry_unified_python_executable(),
+            "python_executable": str(unified_python)
+            if unified_python.is_file()
+            else _worldfoundry_unified_python_executable(),
             "derive_env_obv_from_image": True,
             "num_inference_steps": 35,
             "inference_seed": 0,
@@ -3873,10 +3846,7 @@ def _magi2_default_load_kwargs() -> Dict[str, Any]:
         "required_components": {
             "python_executable": _worldfoundry_unified_python_executable(),
             "transformers_overlay": str(
-                _project_root()
-                / "artifacts"
-                / "runtime_overlays"
-                / "magi2-transformers-5.5.0"
+                _project_root() / "artifacts" / "runtime_overlays" / "magi2-transformers-5.5.0"
             ),
         }
     }
@@ -3976,9 +3946,9 @@ class CatalogEntry:
             self.category,
             self.family,
             "yes" if self.supports_stream else "no",
-            "api" if self.supports_api_init and not self.supports_from_pretrained else (
-                "pretrained" if self.supports_from_pretrained and not self.supports_api_init else "both"
-            ),
+            "api"
+            if self.supports_api_init and not self.supports_from_pretrained
+            else ("pretrained" if self.supports_from_pretrained and not self.supports_api_init else "both"),
             ", ".join(self.tags[:4]),
         ]
 
@@ -4095,8 +4065,8 @@ def _xvla_workspace_variants() -> tuple[Dict[str, Any], ...]:
             notes=(
                 "The foundation checkpoint needs an embodiment domain ID; this Workspace preset uses domain 0."
                 if variant_id == "foundation-domain-0"
-                else f"Uses the released domain ID {domain_id} for this embodiment."
-            ,),
+                else f"Uses the released domain ID {domain_id} for this embodiment.",
+            ),
         )
         for variant_id, label, repo_id, domain_id in specs
     )
@@ -4115,19 +4085,31 @@ def _xiaomi_robotics_0_workspace_variants() -> tuple[Dict[str, Any], ...]:
             "libero",
             "LIBERO",
             "XiaomiRobotics/Xiaomi-Robotics-0-LIBERO",
-            {"variant": "libero", "state": [0.0] * 32, "wrist_image": str(_data_path("test_cases", "studio_demo", "00", "image.jpg"))},
+            {
+                "variant": "libero",
+                "state": [0.0] * 32,
+                "wrist_image": str(_data_path("test_cases", "studio_demo", "00", "image.jpg")),
+            },
         ),
         (
             "calvin-abcd",
             "CALVIN ABCD→D",
             "XiaomiRobotics/Xiaomi-Robotics-0-Calvin-ABCD_D",
-            {"variant": "calvin-abcd", "state": [0.0] * 32, "wrist_image": str(_data_path("test_cases", "studio_demo", "00", "image.jpg"))},
+            {
+                "variant": "calvin-abcd",
+                "state": [0.0] * 32,
+                "wrist_image": str(_data_path("test_cases", "studio_demo", "00", "image.jpg")),
+            },
         ),
         (
             "calvin-abc",
             "CALVIN ABC→D",
             "XiaomiRobotics/Xiaomi-Robotics-0-Calvin-ABC_D",
-            {"variant": "calvin-abc", "state": [0.0] * 32, "wrist_image": str(_data_path("test_cases", "studio_demo", "00", "image.jpg"))},
+            {
+                "variant": "calvin-abc",
+                "state": [0.0] * 32,
+                "wrist_image": str(_data_path("test_cases", "studio_demo", "00", "image.jpg")),
+            },
         ),
         (
             "simplerenv-google",
@@ -4169,9 +4151,27 @@ def _xiaomi_robotics_0_workspace_variants() -> tuple[Dict[str, Any], ...]:
 def _spatial_forcing_workspace_variants() -> tuple[Dict[str, Any], ...]:
     image = str(_data_path("test_cases", "studio_demo", "00", "image.jpg"))
     specs = (
-        ("libero-spatial", "LIBERO Spatial", "haofuly/spatial-forcing-7b-finetuned-libero-spatial", "libero_spatial", "libero_spatial_no_noops"),
-        ("libero-object", "LIBERO Object", "haofuly/spatial-forcing-7b-finetuned-libero-object", "libero_object", "libero_object_no_noops"),
-        ("libero-goal", "LIBERO Goal", "haofuly/spatial-forcing-7b-finetuned-libero-goal", "libero_goal", "libero_goal_no_noops"),
+        (
+            "libero-spatial",
+            "LIBERO Spatial",
+            "haofuly/spatial-forcing-7b-finetuned-libero-spatial",
+            "libero_spatial",
+            "libero_spatial_no_noops",
+        ),
+        (
+            "libero-object",
+            "LIBERO Object",
+            "haofuly/spatial-forcing-7b-finetuned-libero-object",
+            "libero_object",
+            "libero_object_no_noops",
+        ),
+        (
+            "libero-goal",
+            "LIBERO Goal",
+            "haofuly/spatial-forcing-7b-finetuned-libero-goal",
+            "libero_goal",
+            "libero_goal_no_noops",
+        ),
         ("libero-10", "LIBERO 10", "haofuly/spatial-forcing-7b-finetuned-libero-10", "libero_10", "libero_10_no_noops"),
     )
     return tuple(
@@ -4322,11 +4322,7 @@ def _ctrl_world_default_load_kwargs() -> Dict[str, Any]:
 def _genie_envisioner_default_load_kwargs() -> Dict[str, Any]:
     return {
         "model_id": "genie-envisioner",
-        "checkpoint_path": str(
-            checkpoint_root_path(
-                "agibot-world--Genie-Envisioner", "GE_base_fast_v0.1.safetensors"
-            )
-        ),
+        "checkpoint_path": str(checkpoint_root_path("agibot-world--Genie-Envisioner", "GE_base_fast_v0.1.safetensors")),
         "base_model_dir": str(checkpoint_root_path("Lightricks--LTX-Video")),
     }
 
@@ -4334,17 +4330,9 @@ def _genie_envisioner_default_load_kwargs() -> Dict[str, Any]:
 def _giga_world_0_default_load_kwargs() -> Dict[str, Any]:
     return {
         "model_id": "giga-world-0",
-        "transformer_model_dir": str(
-            checkpoint_root_path(
-                "open-gigaai--GigaWorld-0-Video-GR1-2b", "transformer"
-            )
-        ),
-        "text_encoder_model_dir": str(
-            checkpoint_root_path("google-t5--t5-11b-encoder")
-        ),
-        "vae_model_dir": str(
-            checkpoint_root_path("Wan-AI--Wan2.1-T2V-1.3B-Diffusers", "vae")
-        ),
+        "transformer_model_dir": str(checkpoint_root_path("open-gigaai--GigaWorld-0-Video-GR1-2b", "transformer")),
+        "text_encoder_model_dir": str(checkpoint_root_path("google-t5--t5-11b-encoder")),
+        "vae_model_dir": str(checkpoint_root_path("Wan-AI--Wan2.1-T2V-1.3B-Diffusers", "vae")),
     }
 
 
@@ -4371,9 +4359,7 @@ def _spatia_default_load_kwargs() -> Dict[str, Any]:
 
 def _spatia_default_call_kwargs() -> Dict[str, Any]:
     return {
-        "w2c_trajectory_file": str(
-            _data_path("test_cases", "spatia", "w2c_pan_right_121.jsonl")
-        ),
+        "w2c_trajectory_file": str(_data_path("test_cases", "spatia", "w2c_pan_right_121.jsonl")),
         "intrinsics": [[[768.0, 0.0, 624.0], [0.0, 768.0, 352.0], [0.0, 0.0, 1.0]]],
         "num_frames": 121,
         "fps": 24,
@@ -4804,9 +4790,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "Wayer2/LDA-robocasa",
         ),
         "default_prompt": "move the object to the target area",
-        "default_input_path": str(
-            _data_path("test_cases", "test_vla_case1", "libero", "main_view.png")
-        ),
+        "default_input_path": str(_data_path("test_cases", "test_vla_case1", "libero", "main_view.png")),
         "default_call_kwargs": lambda: {
             "official_policy_observation": {
                 "ego_view": [
@@ -4841,18 +4825,12 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         ),
         "default_call_kwargs": lambda: {
             "official_policy_observation": {
-                "cam_high": str(
-                    _data_path("test_cases", "test_vla_case1", "aloha", "observation_images_cam_high.png")
-                ),
+                "cam_high": str(_data_path("test_cases", "test_vla_case1", "aloha", "observation_images_cam_high.png")),
                 "cam_left_wrist": str(
-                    _data_path(
-                        "test_cases", "test_vla_case1", "aloha", "observation_images_cam_left_wrist.png"
-                    )
+                    _data_path("test_cases", "test_vla_case1", "aloha", "observation_images_cam_left_wrist.png")
                 ),
                 "cam_right_wrist": str(
-                    _data_path(
-                        "test_cases", "test_vla_case1", "aloha", "observation_images_cam_right_wrist.png"
-                    )
+                    _data_path("test_cases", "test_vla_case1", "aloha", "observation_images_cam_right_wrist.png")
                 ),
                 "state": [0.0] * 14,
                 "reset": True,
@@ -5084,12 +5062,9 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "default_model_ref": _stable_video_infinity_default_ref,
         "default_load_kwargs": _stable_video_infinity_default_load_kwargs,
         "default_prompt": (
-            "The water shimmers with dancing caustics as gentle bubbles rise; "
-            "the camera dolly-ins through a blue haze."
+            "The water shimmers with dancing caustics as gentle bubbles rise; the camera dolly-ins through a blue haze."
         ),
-        "default_input_path": str(
-            _data_path("test_cases", "stable-video-infinity", "svi-2.0", "frame.jpg")
-        ),
+        "default_input_path": str(_data_path("test_cases", "stable-video-infinity", "svi-2.0", "frame.jpg")),
         "default_task_type": "i2v",
         "default_call_kwargs": {
             "num_clips": 999,
@@ -5151,9 +5126,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "default_backend": "from_pretrained",
         "aliases": ("svi", "svi-2.0", "stable_video_infinity", "stable-video-infinity-2.0"),
         "tags": ("video", "i2v", "long-video", "prompt-stream", "in-tree-runtime"),
-        "notes": (
-            "Uses the in-tree SVI 2.0 continuation runtime; Wan2.1 and SVI weights remain in local HFD staging."
-        ),
+        "notes": ("Uses the in-tree SVI 2.0 continuation runtime; Wan2.1 and SVI weights remain in local HFD staging."),
     },
     "openvla-oft": {
         "display_name": "OpenVLA-OFT",
@@ -5265,17 +5238,11 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "HuggingFaceVLA/smolvla_libero",
         ),
         "default_prompt": "put the object on the target area",
-        "default_input_path": str(
-            _data_path("test_cases", "test_vla_case1", "libero", "main_view.png")
-        ),
+        "default_input_path": str(_data_path("test_cases", "test_vla_case1", "libero", "main_view.png")),
         "default_call_kwargs": lambda: {
             "official_policy_observation": {
-                "image": str(
-                    _data_path("test_cases", "test_vla_case1", "libero", "main_view.png")
-                ),
-                "image2": str(
-                    _data_path("test_cases", "test_vla_case1", "libero", "wrist_view.png")
-                ),
+                "image": str(_data_path("test_cases", "test_vla_case1", "libero", "main_view.png")),
+                "image2": str(_data_path("test_cases", "test_vla_case1", "libero", "wrist_view.png")),
                 "state": [0.0] * 8,
             },
         },
@@ -5620,7 +5587,12 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "default_prompt": "put both the alphabet soup and the tomato sauce in the basket",
         "default_interactions": ("robot_action", "video_action"),
         "default_call_kwargs": _lingbot_va_default_call_kwargs,
-        "aliases": ("lingbot_va", "lingbot-va-base", "lingbot-va-posttrain-robotwin", "lingbot-va-posttrain-libero-long"),
+        "aliases": (
+            "lingbot_va",
+            "lingbot-va-base",
+            "lingbot-va-posttrain-robotwin",
+            "lingbot-va-posttrain-libero-long",
+        ),
         "tags": ("va", "vam", "wam", "robot-action", "video-action"),
         "notes": "LingBot-VA is a video-action world model for LIBERO/RoboTwin-style action traces; official execution remains checkpoint and CUDA-12.6 profile gated.",
     },
@@ -5839,14 +5811,8 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "display_name": "GigaWorld-0",
         "category": "Video Generation",
         "summary": "Released GR1 robot-world image-to-video generation with local T5 and Wan components.",
-        "default_model_ref": lambda: str(
-            checkpoint_root_path(
-                "open-gigaai--GigaWorld-0-Video-GR1-2b", "transformer"
-            )
-        ),
-        "default_input_path": str(
-            _data_path("test_cases", "test_vla_case1", "droid", "exterior_image_1_left.png")
-        ),
+        "default_model_ref": lambda: str(checkpoint_root_path("open-gigaai--GigaWorld-0-Video-GR1-2b", "transformer")),
+        "default_input_path": str(_data_path("test_cases", "test_vla_case1", "droid", "exterior_image_1_left.png")),
         "default_prompt": "A robot arm moves toward the objects on the workbench.",
         "default_task_type": "robot-image-to-video",
         "default_load_kwargs": _giga_world_0_default_load_kwargs,
@@ -5922,7 +5888,9 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         ),
         "default_input_path": lambda: str(
             official_runtime_repo_path("UniWorld-View", specific_env="UNIWORLD_VIEW_REPO")
-            / "test" / "images" / "fruit.jpg"
+            / "test"
+            / "images"
+            / "fruit.jpg"
         ),
         "default_prompt": "",
         "default_task_type": "image-to-video",
@@ -5948,17 +5916,50 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         },
         "input_params": ("image_path", "video_path"),
         "call_params": (
-            "prompt", "images", "video", "image_path", "video_path", "mode",
-            "geometry_backend", "render_method", "mosca_ws", "height", "width", "keep_aspect_ratio",
-            "num_frames", "num_inference_steps", "guidance_scale", "fps", "seed",
-            "stride", "traj_type", "d_phi", "d_theta", "x_offset", "y_offset",
-            "z_offset", "radius_scale", "low_gpu_memory_mode", "output_path",
-            "timeout_seconds", "plan_only", "return_dict",
+            "prompt",
+            "images",
+            "video",
+            "image_path",
+            "video_path",
+            "mode",
+            "geometry_backend",
+            "render_method",
+            "mosca_ws",
+            "height",
+            "width",
+            "keep_aspect_ratio",
+            "num_frames",
+            "num_inference_steps",
+            "guidance_scale",
+            "fps",
+            "seed",
+            "stride",
+            "traj_type",
+            "d_phi",
+            "d_theta",
+            "x_offset",
+            "y_offset",
+            "z_offset",
+            "radius_scale",
+            "low_gpu_memory_mode",
+            "output_path",
+            "timeout_seconds",
+            "plan_only",
+            "return_dict",
         ),
         "load_params": (
-            "repo_root", "python_executable", "checkpoint_root", "transformer_path",
-            "model_name", "blip_path", "moge_path", "sam2_checkpoint",
-            "segnet_path", "stream3r_path", "lora_path", "device",
+            "repo_root",
+            "python_executable",
+            "checkpoint_root",
+            "transformer_path",
+            "model_name",
+            "blip_path",
+            "moge_path",
+            "sam2_checkpoint",
+            "segnet_path",
+            "stream3r_path",
+            "lora_path",
+            "device",
         ),
         "tags": ("novel-view", "camera-control", "image-to-video", "video-to-video", "official-runtime"),
     },
@@ -5967,9 +5968,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "category": "Video Generation",
         "summary": "Official GE-base multiview robot world-video generation with local LTX components.",
         "default_model_ref": lambda: str(
-            checkpoint_root_path(
-                "agibot-world--Genie-Envisioner", "GE_base_fast_v0.1.safetensors"
-            )
+            checkpoint_root_path("agibot-world--Genie-Envisioner", "GE_base_fast_v0.1.safetensors")
         ),
         "default_input_path": str(
             _data_path("test_cases", "test_vla_case1", "aloha", "observation_images_cam_high.png")
@@ -6058,9 +6057,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "display_name": "Ctrl-World",
         "category": "Video Generation",
         "summary": "Official DROID action-conditioned three-camera robot world-video generation.",
-        "default_model_ref": lambda: str(
-            checkpoint_root_path("yjguo--Ctrl-World", "checkpoint-10000.pt")
-        ),
+        "default_model_ref": lambda: str(checkpoint_root_path("yjguo--Ctrl-World", "checkpoint-10000.pt")),
         "default_input_path": str(
             _data_path("test_cases", "test_vla_case1", "aloha", "observation_images_cam_high.png")
         ),
@@ -6153,12 +6150,8 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "display_name": "TesserAct",
         "category": "Video Generation",
         "summary": "Official RGB-depth-normal robot world-video generation with local CogVideoX components.",
-        "default_model_ref": lambda: str(
-            checkpoint_root_path("anyeZHY--tesseract", "tesseract_v01e_rgbdn_sft")
-        ),
-        "default_input_path": str(
-            _data_path("test_cases", "test_vla_case1", "droid", "exterior_image_1_left.png")
-        ),
+        "default_model_ref": lambda: str(checkpoint_root_path("anyeZHY--tesseract", "tesseract_v01e_rgbdn_sft")),
+        "default_input_path": str(_data_path("test_cases", "test_vla_case1", "droid", "exterior_image_1_left.png")),
         "default_prompt": "The robot moves its gripper toward the object on the table.",
         "default_task_type": "robot-action-video",
         "default_load_kwargs": _tesseract_default_load_kwargs,
@@ -7313,9 +7306,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "stream",
             "camera-control",
         ),
-        "notes": (
-            "GEN3C supports camera trajectories and RGBD-conditioned video generation."
-        ),
+        "notes": ("GEN3C supports camera trajectories and RGBD-conditioned video generation."),
     },
     "ac3d": {
         "display_name": "AC3D",
@@ -7414,9 +7405,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "A close-up of a wet white cat wearing oversized amber sunglasses in a sunlit swimming pool, "
             "while the camera smoothly pushes forward toward the cat."
         ),
-        "default_input_path": str(
-            _data_path("test_cases", "uni3c", "synthetic-forward-9f-768x480", "reference.jpg")
-        ),
+        "default_input_path": str(_data_path("test_cases", "uni3c", "synthetic-forward-9f-768x480", "reference.jpg")),
         "default_call_kwargs": {
             "render_path": str(_data_path("test_cases", "uni3c", "synthetic-forward-9f-768x480")),
             "mode": "camera",
@@ -7866,7 +7855,9 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "unconditional_guidance_scale": 7.5,
             "ddim_steps": 50,
             "condtype": "camera_motion",
-            "camera_pose_path": str(_data_path("test_cases", "motionctrl_conditions", "camera_poses", "test_camera_Round-ZoomIn.json")),
+            "camera_pose_path": str(
+                _data_path("test_cases", "motionctrl_conditions", "camera_poses", "test_camera_Round-ZoomIn.json")
+            ),
             "seed": 42,
         },
         "call_params": (
@@ -8321,6 +8312,9 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "num_inference_steps",
             "seed",
             "use_refiner",
+            "refiner_height",
+            "refiner_width",
+            "refiner_num_inference_steps",
             "output_path",
         ),
         "load_params": (
@@ -8333,7 +8327,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         ),
         "aliases": ("magi2", "magi2_preview", "magi-2-preview", "sand-ai/MAGI-2-preview"),
         "tags": ("text-to-video", "audio-video", "moe", "in-tree-runtime", "local-checkpoint"),
-        "notes": "114B MoE preview-only text-to-video with audio and per-layer GPU offload; refiner and image conditioning are not implemented.",
+        "notes": "114B MoE text-to-video with audio, per-layer GPU offload, and optional video refinement; image conditioning is unsupported.",
     },
     "mochi-1-preview-t2v": {
         "display_name": "Mochi-1 Preview T2V",
@@ -8394,7 +8388,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "She wears sunglasses and red lipstick. She walks confidently and casually. The street is damp and "
             "reflective, creating a mirror effect of the colorful lights. Many pedestrians walk about."
         ),
-        "default_call_kwargs": {
+        "default_call_kwargs": lambda: {
             "version": "v1_3",
             "model_subdir": "any93x640x640",
             "vae_subdir": "vae",
@@ -8409,9 +8403,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "seed": 1234,
             "nproc_per_node": 1,
             "ae": "WFVAEModel_D8_4x8x8",
-            "text_encoder_name_1": _checkpoint_model_ref(
-                "mt5-xxl", fallback=str(checkpoint_root_path("mt5-xxl"))
-            ),
+            "text_encoder_name_1": _checkpoint_model_ref("mt5-xxl", fallback=str(checkpoint_root_path("mt5-xxl"))),
         },
         "call_params": _official_video_call_params(),
         "load_params": _official_video_load_params(),
@@ -8558,7 +8550,15 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "default_prompt": "Replace the spotted baby seal on the sand with a red crab.",
         "call_params": _official_video_call_params(),
         "load_params": _official_video_load_params(),
-        "default_call_kwargs": {"max_frames": 49, "height": 480, "width": 832, "fps": 16, "seed": 1, "tiled": True, "prompt_prefix": True},
+        "default_call_kwargs": {
+            "max_frames": 49,
+            "height": 480,
+            "width": 832,
+            "fps": 16,
+            "seed": 1,
+            "tiled": True,
+            "prompt_prefix": True,
+        },
         "aliases": ("sama", "sama-video"),
         "tags": ("video-to-video", "official-runtime", "local-checkpoint"),
     },
@@ -9202,9 +9202,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "display_name": "Cosmos Transfer2.5",
         "default_model_ref": _cosmos_transfer2p5_default_ref,
         "default_load_kwargs": _cosmos_transfer2p5_default_load_kwargs,
-        "default_input_path": str(
-            _data_path("test_cases", "longcat_video", "motorcycle.mp4")
-        ),
+        "default_input_path": str(_data_path("test_cases", "longcat_video", "motorcycle.mp4")),
         "default_prompt": (
             "A cinematic night scene follows the control video edges with stable geometry, "
             "realistic lighting, and smooth coherent motion."
@@ -9503,10 +9501,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "2B T2V, 5B T2V, and 5B I2V share this Studio card. "
             "Pick a variant for size and text-to-video vs image-to-video."
         ),
-        "summary": (
-            "CogVideoX text-to-video and image-to-video family. "
-            "Select 2B T2V, 5B T2V, or 5B I2V."
-        ),
+        "summary": ("CogVideoX text-to-video and image-to-video family. Select 2B T2V, 5B T2V, or 5B I2V."),
     },
     "sana-video-2b-480p": {
         "display_name": "Sana Video 2B 480p",
@@ -9912,11 +9907,25 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "seed": 42,
         },
         "call_params": (
-            "prompt", "video", "video_path", "camera_json", "output_path", "num_frames",
-            "fps", "width", "height", "num_inference_steps", "seed", "return_dict",
+            "prompt",
+            "video",
+            "video_path",
+            "camera_json",
+            "output_path",
+            "num_frames",
+            "fps",
+            "width",
+            "height",
+            "num_inference_steps",
+            "seed",
+            "return_dict",
         ),
         "load_params": (
-            "model_path", "checkpoint_path", "base_model_path", "python_executable", "device",
+            "model_path",
+            "checkpoint_path",
+            "base_model_path",
+            "python_executable",
+            "device",
             *DISPATCH_LOAD_PARAMS,
         ),
         "tags": ("video-to-video", "camera-control", "official-runtime"),
@@ -9940,11 +9949,25 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "seed": 0,
         },
         "call_params": (
-            "prompt", "images", "image_path", "trajectory", "output_path", "num_frames",
-            "num_inference_steps", "fps", "width", "height", "seed", "return_dict",
+            "prompt",
+            "images",
+            "image_path",
+            "trajectory",
+            "output_path",
+            "num_frames",
+            "num_inference_steps",
+            "fps",
+            "width",
+            "height",
+            "seed",
+            "return_dict",
         ),
         "load_params": (
-            "model_path", "checkpoint_path", "base_model_path", "python_executable", "device",
+            "model_path",
+            "checkpoint_path",
+            "base_model_path",
+            "python_executable",
+            "device",
             *DISPATCH_LOAD_PARAMS,
         ),
         "tags": ("world-model", "action-conditioned-video", "camera-control"),
@@ -9960,11 +9983,21 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "seed": 0,
         },
         "call_params": (
-            "prompt", "trajectory", "output_path", "num_output_frames", "seed", "sp_size",
-            "master_port", "return_dict",
+            "prompt",
+            "trajectory",
+            "output_path",
+            "num_output_frames",
+            "seed",
+            "sp_size",
+            "master_port",
+            "return_dict",
         ),
         "load_params": (
-            "model_path", "checkpoint_path", "base_model_path", "python_executable", "device",
+            "model_path",
+            "checkpoint_path",
+            "base_model_path",
+            "python_executable",
+            "device",
             *DISPATCH_LOAD_PARAMS,
         ),
         "tags": ("world-model", "action-conditioned-video", "camera-control"),
@@ -9981,19 +10014,33 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "default_call_kwargs": lambda: {
             "native_rows": str(
                 _data_path(
-                    "benchmarks", "assets", "iworld-bench", "camera_trajectories",
-                    "inference_txt", "camera_1_1_0.txt",
+                    "benchmarks",
+                    "assets",
+                    "iworld-bench",
+                    "camera_trajectories",
+                    "inference_txt",
+                    "camera_1_1_0.txt",
                 )
             ),
             "num_frames": 81,
             "seed": 42,
         },
         "call_params": (
-            "prompt", "images", "image_path", "native_rows", "output_path", "num_frames", "seed",
+            "prompt",
+            "images",
+            "image_path",
+            "native_rows",
+            "output_path",
+            "num_frames",
+            "seed",
             "return_dict",
         ),
         "load_params": (
-            "model_path", "checkpoint_path", "base_model_path", "python_executable", "device",
+            "model_path",
+            "checkpoint_path",
+            "base_model_path",
+            "python_executable",
+            "device",
             *DISPATCH_LOAD_PARAMS,
         ),
         "tags": ("world-model", "image-to-video", "camera-control"),
@@ -10021,9 +10068,25 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "seed": 123,
         },
         "call_params": (
-            "prompt", "images", "output_path", "fps", "return_dict", "frames", "num_frames",
-            "frame_num", "ddim_steps", "num_inference_steps", "steps", "sample_steps", "infer_steps",
-            "sampling_steps", "ddim_eta", "height", "width", "seed", "unconditional_guidance_scale",
+            "prompt",
+            "images",
+            "output_path",
+            "fps",
+            "return_dict",
+            "frames",
+            "num_frames",
+            "frame_num",
+            "ddim_steps",
+            "num_inference_steps",
+            "steps",
+            "sample_steps",
+            "infer_steps",
+            "sampling_steps",
+            "ddim_eta",
+            "height",
+            "width",
+            "seed",
+            "unconditional_guidance_scale",
         ),
         "load_params": ("model_path", "required_components", "device", "lazy"),
         "aliases": ("videocrafter1_i2v",),
@@ -10051,9 +10114,24 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "seed": 123,
         },
         "call_params": (
-            "prompt", "output_path", "fps", "return_dict", "frames", "num_frames", "frame_num",
-            "ddim_steps", "num_inference_steps", "steps", "sample_steps", "infer_steps", "sampling_steps",
-            "ddim_eta", "height", "width", "seed", "unconditional_guidance_scale",
+            "prompt",
+            "output_path",
+            "fps",
+            "return_dict",
+            "frames",
+            "num_frames",
+            "frame_num",
+            "ddim_steps",
+            "num_inference_steps",
+            "steps",
+            "sample_steps",
+            "infer_steps",
+            "sampling_steps",
+            "ddim_eta",
+            "height",
+            "width",
+            "seed",
+            "unconditional_guidance_scale",
         ),
         "load_params": ("model_path", "required_components", "device", "lazy"),
         "aliases": ("videocrafter1_t2v",),
@@ -10081,9 +10159,24 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "seed": 123,
         },
         "call_params": (
-            "prompt", "output_path", "fps", "return_dict", "frames", "num_frames", "frame_num",
-            "ddim_steps", "num_inference_steps", "steps", "sample_steps", "infer_steps", "sampling_steps",
-            "ddim_eta", "height", "width", "seed", "unconditional_guidance_scale",
+            "prompt",
+            "output_path",
+            "fps",
+            "return_dict",
+            "frames",
+            "num_frames",
+            "frame_num",
+            "ddim_steps",
+            "num_inference_steps",
+            "steps",
+            "sample_steps",
+            "infer_steps",
+            "sampling_steps",
+            "ddim_eta",
+            "height",
+            "width",
+            "seed",
+            "unconditional_guidance_scale",
         ),
         "load_params": ("model_path", "required_components", "device", "lazy"),
         "aliases": ("videocrafter", "videocrafter2_t2v"),
@@ -10091,9 +10184,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
     },
     "gamma-world": {
         "display_name": "Gamma-World",
-        "default_input_path": str(
-            _data_path("test_cases", "gamma_world", "buildTower_normal")
-        ),
+        "default_input_path": str(_data_path("test_cases", "gamma_world", "buildTower_normal")),
         "default_prompt": "Two Minecraft players buildTower in normal world",
         "default_load_kwargs": _gamma_world_default_load_kwargs,
         "default_call_kwargs": {
@@ -10107,14 +10198,41 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "fps": 16,
         },
         "call_params": (
-            "prompt", "images", "video", "interactions", "guidance", "guidance_scale",
-            "actions", "action_paths", "eval_dir", "n_players", "num_frames", "frames",
-            "num_conditional_frames", "height", "width", "num_inference_steps", "infer_steps",
-            "negative_prompt", "seed", "fps", "output_path", "return_dict",
+            "prompt",
+            "images",
+            "video",
+            "interactions",
+            "guidance",
+            "guidance_scale",
+            "actions",
+            "action_paths",
+            "eval_dir",
+            "n_players",
+            "num_frames",
+            "frames",
+            "num_conditional_frames",
+            "height",
+            "width",
+            "num_inference_steps",
+            "infer_steps",
+            "negative_prompt",
+            "seed",
+            "fps",
+            "output_path",
+            "return_dict",
         ),
         "load_params": (
-            "model_path", "required_components", "device", "mode", "checkpoint_overrides",
-            "text_encoder_path", "reason1_path", "torch_dtype", "weight_dtype", "dtype", "offload_mode",
+            "model_path",
+            "required_components",
+            "device",
+            "mode",
+            "checkpoint_overrides",
+            "text_encoder_path",
+            "reason1_path",
+            "torch_dtype",
+            "weight_dtype",
+            "dtype",
+            "offload_mode",
         ),
         "tags": ("multi-agent-world-model", "action-conditioned-video", "official-runtime"),
     },
@@ -10194,9 +10312,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "supports_from_pretrained": True,
         "default_model_ref": _joyai_echo_longvideo_default_ref,
         "default_load_kwargs": _joyai_echo_longvideo_default_load_kwargs,
-        "default_input_path": lambda: str(
-            Path(_joyai_echo_longvideo_default_ref()) / "assets" / "image.png"
-        ),
+        "default_input_path": lambda: str(Path(_joyai_echo_longvideo_default_ref()) / "assets" / "image.png"),
         "default_prompt": (
             "A cinematic live-action traveler crosses a windswept coastal platform at golden hour while the "
             "camera tracks smoothly; preserve identity, clothing, environmental sound, and temporal continuity."
@@ -10338,10 +10454,27 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "suggested_task_types": ("image-to-video", "video-to-video"),
         "default_model_ref": "inspatio/world-1.5",
         "default_call_kwargs": {"seed": 0, "return_dict": True},
-        "call_params": ("images", "videos", "scene_dir", "prompt", "traj_txt_path",
-                        "output_dir", "output_path", "seed", "return_dict", "return_frames"),
-        "load_params": ("model_path", "required_components", "wan_model_path",
-                        "da3_model_path", "device", "weight_dtype", "compile_dit"),
+        "call_params": (
+            "images",
+            "videos",
+            "scene_dir",
+            "prompt",
+            "traj_txt_path",
+            "output_dir",
+            "output_path",
+            "seed",
+            "return_dict",
+            "return_frames",
+        ),
+        "load_params": (
+            "model_path",
+            "required_components",
+            "wan_model_path",
+            "da3_model_path",
+            "device",
+            "weight_dtype",
+            "compile_dit",
+        ),
         "tags": ("world-model", "novel-view", "camera-control", "multi-image", "native-runtime"),
         "notes": "One image, four images or video with OpenCV target Tcw; released resolution is 832x480.",
     },
@@ -10435,9 +10568,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "Move forward along an empty Route 66 highway at sunset while preserving the road, "
             "horizon, and desert geometry."
         ),
-        "default_input_path": str(
-            _data_path("test_cases", "dualcamctrl", "demo_pic", "route66.jpg")
-        ),
+        "default_input_path": str(_data_path("test_cases", "dualcamctrl", "demo_pic", "route66.jpg")),
         "default_interactions": ("forward",),
         "tags": ("stream", "memory"),
     },
@@ -10449,9 +10580,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "default_model_ref": _neoverse_default_ref,
         "default_load_kwargs": _neoverse_default_load_kwargs,
         "default_prompt": NEOVERSE_OFFICIAL_PROMPT,
-        "default_input_path": str(
-            _data_path("test_cases", "neoverse", "videos", "robot.mp4")
-        ),
+        "default_input_path": str(_data_path("test_cases", "neoverse", "videos", "robot.mp4")),
         "default_interactions": ("forward", "left", "camera_r"),
         "default_call_kwargs": _neoverse_default_call_kwargs,
         "call_params": (
@@ -10503,6 +10632,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "save_mode": "video",
             "meta_path": _worldfm_demo_meta_path(),
             "panorama_path": _worldfm_demo_panorama_path(),
+            "return_dict": True,
         },
         "tags": ("novel-view", "poses", "scene-context"),
         "notes": "Supports pose-matrix JSON directly. Navigation tokens can also be converted into pose trajectories.",
@@ -10645,7 +10775,9 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "seed": 0,
             "return_dict": True,
         },
-        "default_load_kwargs": lambda: {"model_dir": _checkpoint_model_ref("SCOPE", "zizhaotong--SCOPE", "custom--SCOPE")},
+        "default_load_kwargs": lambda: {
+            "model_dir": _checkpoint_model_ref("SCOPE", "zizhaotong--SCOPE", "custom--SCOPE")
+        },
         "call_params": (
             "prompt",
             "images",
@@ -10662,8 +10794,25 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
             "num_inference_steps",
             "seed",
         ),
-        "input_params": ("prompt", "input_path", "action_path", "max_frames", "height", "width", "num_inference_steps", "seed"),
-        "load_params": ("model_path", "model_dir", "checkpoint_root", "checkpoint_dir", "python_executable", "device", *DISPATCH_LOAD_PARAMS),
+        "input_params": (
+            "prompt",
+            "input_path",
+            "action_path",
+            "max_frames",
+            "height",
+            "width",
+            "num_inference_steps",
+            "seed",
+        ),
+        "load_params": (
+            "model_path",
+            "model_dir",
+            "checkpoint_root",
+            "checkpoint_dir",
+            "python_executable",
+            "device",
+            *DISPATCH_LOAD_PARAMS,
+        ),
         "aliases": ("scope-world-model", "zizhaotong/scope"),
         "tags": ("world-model", "action-conditioned-video", "official-demo", "in-tree-runtime"),
         "notes": "Defaults use the official SCOPE example_0 image/action parquet and run execute=True against Hugging Face checkpoint assets.",
@@ -10941,7 +11090,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "default_task_type": "novel_view_synthesis",
         "suggested_task_types": ("novel_view_synthesis",),
         "default_interactions": ("camera_path",),
-        "default_call_kwargs": _three_d_four_d_runtime_call_kwargs(
+        "default_call_kwargs": lambda: _three_d_four_d_runtime_call_kwargs(
             video_length=16,
             fps=25,
             model_repo=_lagernvs_default_ref(),
@@ -11034,9 +11183,7 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "supports_from_pretrained": True,
         "supports_stream": False,
         "default_task_type": "stable_virtual_camera_demo",
-        "default_input_path": str(
-            _data_path("test_cases", "stable_virtual_camera", "basic", "blue-car.jpg")
-        ),
+        "default_input_path": str(_data_path("test_cases", "stable_virtual_camera", "basic", "blue-car.jpg")),
         "default_call_kwargs": _three_d_four_d_runtime_call_kwargs(
             version="1.1",
             task="img2trajvid_s-prob",
@@ -11073,7 +11220,9 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "supports_stream": False,
         "default_prompt": "a village landscape",
         "default_task_type": "wonderjourney_run",
-        "default_call_kwargs": _three_d_four_d_runtime_call_kwargs(config=str(_data_path("models", "runtime", "configs", "wonderjourney", "village.yaml"))),
+        "default_call_kwargs": _three_d_four_d_runtime_call_kwargs(
+            config=str(_data_path("models", "runtime", "configs", "wonderjourney", "village.yaml"))
+        ),
         "call_params": _three_d_four_d_runtime_call_params(
             "prompt",
             "config",
@@ -11092,29 +11241,46 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "display_name": "WonderWorld",
         "category": "3D Scene",
         "default_backend": "from_pretrained",
-        "default_model_ref": lambda: _in_tree_repo_ref("WonderWorld"),
+        "default_model_ref": lambda: str(checkpoint_root_path()),
         "supports_from_pretrained": True,
         "supports_stream": False,
         "default_prompt": "a village landscape",
-        "default_task_type": "wonderworld_run",
-        "default_call_kwargs": _three_d_four_d_runtime_call_kwargs(config=str(_data_path("models", "runtime", "configs", "wonderworld", "inference.yaml"))),
-        "call_params": _three_d_four_d_runtime_call_params(
+        "default_task_type": "image-to-3d-world",
+        "default_call_kwargs": {
+            "seed": 42,
+            "depth_steps": 30,
+            "inpaint_steps": 50,
+            "normal_steps": 10,
+            "refinement_steps": 100,
+            "focal_length": 500,
+            "gen_layer": True,
+        },
+        "call_params": (
             "prompt",
-            "config",
-            "frames",
-            "num_scenes",
-            "rotation_path",
-            "gen_sky_image",
-            "gen_sky",
+            "images",
+            "input_path",
+            "camera_path",
+            "interactions",
+            "seed",
+            "depth_steps",
+            "inpaint_steps",
+            "normal_steps",
+            "refinement_steps",
+            "focal_length",
             "gen_layer",
-            "load_gen",
-            "worldfoundry_batch",
-            "worldfoundry_gs_iterations",
-            "worldfoundry_sky_iterations",
+            "negative_prompt",
         ),
-        "load_params": _three_d_four_d_runtime_load_params(),
+        "load_params": (
+            "checkpoint_root",
+            "inpainting_path",
+            "depth_path",
+            "normals_path",
+            "oneformer_path",
+            "repvit_checkpoint",
+            "dtype",
+        ),
         "tags": ("world-generation", "3dgs", "camera-navigation"),
-        "notes": "Runs the official WonderWorld run.py entrypoint from the local official repo.",
+        "notes": "Native offline layered Gaussian generation; explicit image and local shared component weights are required.",
     },
     "worldgen": {
         "display_name": "WorldGen",
@@ -11675,9 +11841,25 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "default_load_kwargs": {"gpus": 1},
         "default_call_kwargs": {"num_frames": 124, "seed": 42, "return_dict": True},
         "call_params": (
-            "prompt", "images", "image", "last_image", "references", "workflow", "output_path",
-            "return_dict", "num_frames", "height", "width", "seed", "fps", "num_inference_steps",
-            "memory_reserve_margin", "offload", "attention_backend", "sol_attn", "timeout_seconds",
+            "prompt",
+            "images",
+            "image",
+            "last_image",
+            "references",
+            "workflow",
+            "output_path",
+            "return_dict",
+            "num_frames",
+            "height",
+            "width",
+            "seed",
+            "fps",
+            "num_inference_steps",
+            "memory_reserve_margin",
+            "offload",
+            "attention_backend",
+            "sol_attn",
+            "timeout_seconds",
         ),
         "load_params": ("model_path", "weights_path", "python_executable", "device", "gpus"),
         "aliases": ("hyperflow-h3", "minimax-h3-hyperflow"),
@@ -11760,6 +11942,29 @@ CURATED_OVERRIDES: Dict[str, Dict[str, Any]] = {
     },
 }
 
+CURATED_OVERRIDES["lingbot-world-v2-1.3b"] = {
+    **CURATED_OVERRIDES["lingbot-world-v2"],
+    "display_name": "LingBot-World-V2 1.3B",
+    "default_model_ref": _lingbot_world_v2_small_default_ref,
+    "default_load_kwargs": _lingbot_world_v2_small_default_load_kwargs,
+    "default_call_kwargs": {
+        **CURATED_OVERRIDES["lingbot-world-v2"]["default_call_kwargs"],
+        "frame_num": 317,
+        "sample_shift": 5.0,
+        "nproc_per_node": 1,
+        "t5_fsdp": False,
+        "dit_fsdp": False,
+    },
+    "load_params": (
+        *CURATED_OVERRIDES["lingbot-world-v2"]["load_params"],
+        "shared_assets_path",
+        "attention_backend",
+        "vae_streaming_compile",
+    ),
+    "aliases": ("lingbot-v2-1.3b",),
+    "notes": "Independent 1.3B causal-fast runtime with shared Wan T5/VAE assets and a four-latent resident rollout.",
+}
+
 CURATED_OVERRIDES.update(
     {
         "dreamdojo": {
@@ -11771,15 +11976,23 @@ CURATED_OVERRIDES.update(
             "default_load_kwargs": _dreamdojo_default_load_kwargs,
             "default_task_type": "robot-world-generation",
             "default_prompt": "Predict the next GR-1 robot-view sequence from the recorded action trajectory.",
-            "default_call_kwargs": {"num_samples": 1, "return_dict": True},
+            "default_call_kwargs": {
+                "height": 480,
+                "width": 640,
+                "num_inference_steps": 35,
+                "guidance_scale": 7.0,
+                "seed": 42,
+                "return_dict": True,
+            },
             "load_params": (
                 "model_path",
                 "required_components",
                 "device",
                 "checkpoints_dir",
-                "dataset_path",
-                "experiment",
-                "checkpoint_interval",
+                "vae_path",
+                "text_encoder_path",
+                "text_embeddings_path",
+                "offload_mode",
                 "checkpoint_shards",
                 *DISPATCH_LOAD_PARAMS,
             ),
@@ -11788,11 +12001,78 @@ CURATED_OVERRIDES.update(
                 "images",
                 "video",
                 "interactions",
+                "action_file",
                 "output_path",
-                "num_samples",
+                "height",
+                "width",
+                "num_inference_steps",
+                "guidance_scale",
+                "seed",
                 "return_dict",
             ),
             "tags": ("robot-world-model", "action-conditioned-video", "in-tree-runtime"),
+        },
+        "dreamdojo-student": {
+            "display_name": "DreamDojo Student",
+            "category": "Video Generation",
+            "default_backend": "from_pretrained",
+            "supports_from_pretrained": True,
+            "supports_stream": True,
+            "default_load_kwargs": lambda: {
+                "vae_path": str(checkpoint_root_path("nvidia--Cosmos-Predict2.5-2B", "tokenizer.pth")),
+                "text_encoder_path": str(checkpoint_root_path("nvidia--Cosmos-Reason1-7B")),
+            },
+            "default_task_type": "robot-world-generation",
+            "default_prompt": "Predict the GR-1 robot-view sequence from normalized robot actions.",
+            "default_call_kwargs": {
+                "height": 480,
+                "width": 640,
+                "fps": 10,
+                "num_inference_steps": 4,
+                "guidance_scale": 1.0,
+                "seed": 42,
+                "return_dict": True,
+            },
+            "load_params": (
+                "model_path",
+                "required_components",
+                "device",
+                "student_checkpoint_path",
+                "vae_path",
+                "text_encoder_path",
+                "text_embeddings_path",
+                "offload_mode",
+                *DISPATCH_LOAD_PARAMS,
+            ),
+            "call_params": (
+                "prompt",
+                "images",
+                "interactions",
+                "action_file",
+                "output_path",
+                "height",
+                "width",
+                "fps",
+                "num_inference_steps",
+                "guidance_scale",
+                "seed",
+                "return_dict",
+            ),
+            "stream_params": (
+                "prompt",
+                "images",
+                "interactions",
+                "actions",
+                "action_file",
+                "height",
+                "width",
+                "fps",
+                "num_inference_steps",
+                "guidance_scale",
+                "seed",
+            ),
+            "tags": ("robot-world-model", "action-conditioned-video", "streaming", "distilled", "in-tree-runtime"),
+            "notes": "Explicit distilled student weights are required. Resident streaming consumes normalized 384-D arrays, not browser WASD controls; 10 fps is the playback clock, not measured generation throughput.",
         },
         "moverse": {
             "display_name": "MoVerse",
@@ -11840,9 +12120,7 @@ CURATED_OVERRIDES.update(
             "default_load_kwargs": _sana_wm_streaming_default_load_kwargs,
             "default_task_type": "image-camera-video",
             "default_input_path": str(_data_path("test_cases", "sana_wm", "example_image.png")),
-            "default_prompt": (
-                "Move forward through a coherent scene with stable geometry and natural camera motion."
-            ),
+            "default_prompt": ("Move forward through a coherent scene with stable geometry and natural camera motion."),
             "default_interactions": ("forward",),
             "default_call_kwargs": {
                 "window_frames": 241,
@@ -12174,15 +12452,14 @@ def _normalize_model_id(model_id: str) -> str:
     return model_id
 
 
-def _canonical_runtime_entries() -> Iterable[CatalogEntry]:
+def _canonical_runtime_entries(model_id: str | None = None) -> Iterable[CatalogEntry]:
+    """Resolve canonical defaults, optionally for just one id or alias."""
     runtime_specs = {
         "allegro_ti2v": {
             "generation_type": "i2v",
             "aliases": ("allegro", "allegro-ti2v"),
             "default_prompt": "The car drives along the road",
-            "default_input_path": str(
-                _data_path("test_cases", "stable_virtual_camera", "basic", "blue-car.jpg")
-            ),
+            "default_input_path": str(_data_path("test_cases", "stable_virtual_camera", "basic", "blue-car.jpg")),
             "load_params": (
                 *DISPATCH_LOAD_PARAMS,
                 "model_path",
@@ -12514,14 +12791,22 @@ def _canonical_runtime_entries() -> Iterable[CatalogEntry]:
     runtime_specs[COGVIDEOX_STUDIO_PARENT_ID] = {
         **runtime_specs[COGVIDEOX_STUDIO_PARENT_ID],
         "display_name": "CogVideoX",
-        "summary": (
-            "CogVideoX text-to-video and image-to-video family. "
-            "Select 2B T2V, 5B T2V, or 5B I2V."
-        ),
+        "summary": ("CogVideoX text-to-video and image-to-video family. Select 2B T2V, 5B T2V, or 5B I2V."),
         "aliases": _cogvideox_aliases(),
         "extra_variants": _cogvideox_workspace_variants,
         "tags": ("video", "t2v", "i2v"),
     }
+
+    if model_id is not None:
+        requested = _catalog_id_key(model_id)
+        exact_specs = {name: spec for name, spec in runtime_specs.items() if _catalog_id_key(name) == requested}
+        runtime_specs = exact_specs or {
+            name: spec
+            for name, spec in runtime_specs.items()
+            if any(_catalog_id_key(candidate) == requested for candidate in spec.get("aliases", ()))
+        }
+        if not runtime_specs:
+            return
 
     ast_by_slug: Dict[str, _AstPipelineInfo] = {}
     for info in _discover_ast_pipelines():
@@ -12593,7 +12878,7 @@ def _canonical_runtime_entries() -> Iterable[CatalogEntry]:
                     spec.get(
                         "load_params",
                         matched.load_params
-                        if matched is not None
+                        if matched is not None and matched.load_params
                         else ("model_path", "required_components", "device", "lazy"),
                     )
                 )
@@ -12604,7 +12889,9 @@ def _canonical_runtime_entries() -> Iterable[CatalogEntry]:
             supports_api_init=matched.supports_api_init if matched is not None else False,
             runtime_kind="default",
             default_backend="from_pretrained",
-            default_model_ref=str(_resolve_override_value(spec.get("default_model_ref", "")) or ""),
+            default_model_ref=_resolve_default_model_ref(
+                slug, str(_resolve_override_value(spec.get("default_model_ref", "")) or "")
+            ),
             default_prompt=str(_resolve_override_value(spec.get("default_prompt", "")) or ""),
             default_input_path=str(_resolve_override_value(spec.get("default_input_path", "")) or ""),
             default_task_type=str(_resolve_override_value(spec.get("default_task_type", "")) or ""),
@@ -12735,7 +13022,9 @@ def _pipeline_file_candidates() -> tuple[Path, ...]:
         nested_dir = PIPELINES_ROOT / relative_dir
         if nested_dir.is_dir():
             candidates.extend(
-                sorted(path for path in nested_dir.iterdir() if path.name.startswith("pipeline_") and path.suffix == ".py")
+                sorted(
+                    path for path in nested_dir.iterdir() if path.name.startswith("pipeline_") and path.suffix == ".py"
+                )
             )
     return tuple(dict.fromkeys(candidates))
 
@@ -12747,9 +13036,7 @@ def _action_synthesis_file_candidates() -> tuple[Path, ...]:
         return tuple()
     return tuple(
         sorted(
-            path
-            for path in ACTION_SYNTHESIS_ROOT.glob("*/*_synthesis.py")
-            if path.name != "base_action_synthesis.py"
+            path for path in ACTION_SYNTHESIS_ROOT.glob("*/*_synthesis.py") if path.name != "base_action_synthesis.py"
         )
     )
 
@@ -12828,13 +13115,11 @@ def _discover_action_syntheses() -> tuple[_AstPipelineInfo, ...]:
             if not node.name.endswith("Synthesis"):
                 continue
             base_names = tuple(
-                base.id if isinstance(base, ast.Name) else getattr(base, "attr", "")
-                for base in node.bases
+                base.id if isinstance(base, ast.Name) else getattr(base, "attr", "") for base in node.bases
             )
             model_id = _class_string_constant(node, "MODEL_ID")
             inherits_action_synthesis = any(
-                base_name == "ActionModelSynthesis" or base_name.endswith("Synthesis")
-                for base_name in base_names
+                base_name == "ActionModelSynthesis" or base_name.endswith("Synthesis") for base_name in base_names
             )
             if not model_id or not inherits_action_synthesis:
                 continue
@@ -12888,8 +13173,7 @@ def _discover_ast_pipelines() -> tuple[_AstPipelineInfo, ...]:
             slug = _normalize_model_id(_class_string_constant(node, "MODEL_ID") or _slug_from_filename(path))
             display_name = _display_name_from_slug(slug)
             base_names = tuple(
-                base.id if isinstance(base, ast.Name) else getattr(base, "attr", "")
-                for base in node.bases
+                base.id if isinstance(base, ast.Name) else getattr(base, "attr", "") for base in node.bases
             )
             inherits_official_video = "OfficialVideoPipeline" in base_names
             inherits_native_diffusion = _class_inherits_any(
@@ -12899,12 +13183,8 @@ def _discover_ast_pipelines() -> tuple[_AstPipelineInfo, ...]:
             )
             inherited_official_call = _official_video_call_params() if inherits_official_video else tuple()
             inherited_official_load = _official_video_load_params() if inherits_official_video else tuple()
-            inherited_native_call = (
-                _native_diffusion_video_call_params() if inherits_native_diffusion else tuple()
-            )
-            inherited_native_load = (
-                _native_diffusion_video_load_params() if inherits_native_diffusion else tuple()
-            )
+            inherited_native_call = _native_diffusion_video_call_params() if inherits_native_diffusion else tuple()
+            inherited_native_load = _native_diffusion_video_load_params() if inherits_native_diffusion else tuple()
             discovered.append(
                 _AstPipelineInfo(
                     model_id=slug,
@@ -13114,18 +13394,19 @@ def catalog_stats(entries: Sequence[CatalogEntry] | None = None) -> Dict[str, in
 
 
 def _find_exact_entry_without_full_catalog(model_id: str) -> CatalogEntry | None:
-    """Build one AST-discovered entry when the caller supplied its exact id.
+    """Build one canonical or AST entry without resolving unrelated checkpoints.
 
-    Native single-model frontends should not pay the full catalog's checkpoint
-    fallback resolution cost before opening their HTTP port. Alias matching still
-    falls back to ``discover_catalog()`` below because aliases live in curated
-    metadata and may require canonical entry merging.
+    Canonical runtime defaults take precedence, as in the full catalog. Other
+    aliases fall back to ``discover_catalog()`` for curated entry merging.
     """
 
     normalized = _normalize_model_id(model_id)
     if not normalized:
         return None
     parent_id = _sana_studio_parent_id(normalized) or _cogvideox_studio_parent_id(normalized)
+    for entry in _canonical_runtime_entries(parent_id or normalized):
+        if entry.model_id not in ABSTRACT_RUNTIME_MODEL_IDS | STUDIO_HIDDEN_CATALOG_MODEL_IDS:
+            return entry
     ast_model_id = FAST_CANONICAL_AST_ALIASES.get(parent_id or normalized, parent_id or normalized)
     for info in _discover_catalog_infos():
         if info.model_id in ABSTRACT_RUNTIME_MODEL_IDS:
@@ -13156,6 +13437,9 @@ def find_runtime_entry(model_id: str) -> CatalogEntry:
     requested = _cogvideox_variant_id(model_id) or _catalog_id_key(model_id)
     if not requested:
         raise KeyError(f"Unknown Studio model id: {model_id}")
+    canonical = next(iter(_canonical_runtime_entries(requested)), None)
+    if canonical is not None:
+        return canonical
     ast_model_id = FAST_CANONICAL_AST_ALIASES.get(requested, requested)
     for info in _discover_catalog_infos():
         if _catalog_id_key(info.model_id) == _catalog_id_key(ast_model_id):
@@ -13198,3 +13482,59 @@ def filter_catalog(
             continue
         filtered.append(entry)
     return tuple(filtered)
+
+
+LIVE_CONTROL_TAGS = frozenset(
+    {
+        "navigation",
+        "camera-control",
+        "interaction-heavy",
+        "egocentric",
+        "scene-context",
+        "render-view",
+        "trajectory",
+    }
+)
+
+
+def template_id_hint(entry: CatalogEntry) -> str:
+    """Classify the Studio template from catalog fields."""
+    task_type = entry.default_task_type.strip().lower().replace("_", "-")
+    if entry.category == "Remote API":
+        return "hosted-api"
+    if entry.category == "Video-to-Video":
+        return "video-to-video"
+    if entry.category == "Depth / Geometry":
+        return "depth-geometry"
+    if entry.category == "3D Scene":
+        return "scene-3d"
+    if entry.category == "Visual Action":
+        return "visual-action"
+    if entry.category == "Embodied Action":
+        return "embodied-policy"
+    if task_type in {"t2v", "text-video", "text-to-video", "video-generation"}:
+        return "text-video"
+    if task_type in {"t2i", "text-to-image", "image-generation", "class-conditional-image-generation"}:
+        return "text-video"
+    if task_type in {"i2v", "image-video", "image-to-video", "video-to-video", "v2v"}:
+        return "conditioned-video"
+    if "interactive-world" in entry.tags:
+        return "interactive-world"
+    if entry.family == "world_model":
+        return "interactive-world"
+    if "image-to-world" in entry.tags or "video-to-world" in entry.tags:
+        return "interactive-world"
+    if entry.supports_stream and (entry.default_interactions or set(entry.tags) & LIVE_CONTROL_TAGS):
+        return "interactive-world"
+    model_id = entry.model_id.lower().replace("_", "-")
+    if "text-to-video" in entry.tags or "-t2v" in model_id or model_id.endswith("t2v"):
+        return "text-video"
+    if entry.category == "Video Generation":
+        if "i2v" in entry.tags or "image-to-video" in entry.tags:
+            return "conditioned-video"
+        if "video-to-video" in entry.tags or "v2v" in entry.tags:
+            return "conditioned-video"
+        if "images" in entry.call_params:
+            return "conditioned-video"
+        return "text-video"
+    return "text-video"

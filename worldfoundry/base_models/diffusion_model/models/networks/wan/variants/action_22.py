@@ -16,6 +16,10 @@ from worldfoundry.core.model_loading.model_configuration import NativeConfigMixi
 from einops import rearrange
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.action_attention_22 import flash_attention
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.action_conditioning_22 import ActionModule
+from worldfoundry.base_models.diffusion_model.optimizations.camera_condition import (
+    apply_camera_modulation, camera_condition_for_block, embed_wan_camera_condition,
+    prepare_action22_camera_condition,
+)
 
 # --- Int8 Quantization Support ---
 _CACHED_TRITON_KERNELS = None
@@ -697,13 +701,8 @@ class WanAttentionBlock(nn.Module):
             x = x + y * e[2].squeeze(2)
 
         if plucker_emb is not None:
-            c2ws_hidden_states = self.cam_injector_layer2(
-                torch_F.silu(self.cam_injector_layer1(plucker_emb))
-            )
-            c2ws_hidden_states = c2ws_hidden_states + plucker_emb
-            cam_scale = self.cam_scale_layer(c2ws_hidden_states)
-            cam_shift = self.cam_shift_layer(c2ws_hidden_states)
-            x = (1.0 + cam_scale) * x + cam_shift
+            condition = plucker_emb if isinstance(plucker_emb, dict) else {"c2ws_plucker_emb": plucker_emb}
+            x = apply_camera_modulation(self, x, condition)
 
         def cross_attn_ffn(x, context, context_lens, e, mouse_cond=None, keyboard_cond=None, mouse_cond_memory=None, keyboard_cond_memory=None, fa_version=None):
             """Cross attn ffn.
@@ -850,6 +849,7 @@ class WanModel(nn.Module, NativeConfigMixin):
         'patch_size', 'cross_attn_norm', 'qk_norm', 'text_dim', 'window_size'
     ]
     _no_split_modules = ['WanAttentionBlock']
+    prepare_camera_condition = prepare_action22_camera_condition
 
     @register_to_config
     def __init__(self,
@@ -1093,32 +1093,11 @@ class WanModel(nn.Module, NativeConfigMixin):
 
         context_lens = None
         # plucker embeddings
-        if plucker_emb is not None:
-            # Accept batched tensor [B, C, F, H, W] or list of [1, C, F, H, W].
-            if torch.is_tensor(plucker_emb):
-                plucker_items = [u.unsqueeze(0) for u in plucker_emb]
-            else:
-                plucker_items = [u.unsqueeze(0) if u.dim() == 4 else u for u in plucker_emb]
-            plucker_emb = [
-                rearrange(
-                    i,
-                    '1 c (f c1) (h c2) (w c3) -> 1 (f h w) (c c1 c2 c3)',
-                    c1=self.patch_size[0],
-                    c2=self.patch_size[1],
-                    c3=self.patch_size[2],
-                ) for i in plucker_items
+        if plucker_emb is not None and not isinstance(plucker_emb, dict):
+            plucker_items = [u.unsqueeze(0) for u in plucker_emb] if torch.is_tensor(plucker_emb) else [
+                u.unsqueeze(0) if u.dim() == 4 else u for u in plucker_emb
             ]
-            plucker_emb = torch.cat(plucker_emb, dim=1)
-            if plucker_emb.size(1) < seq_len:
-                plucker_emb = torch.cat([
-                    plucker_emb, 
-                    plucker_emb.new_zeros(plucker_emb.size(0), seq_len - plucker_emb.size(1), plucker_emb.size(2))
-                ], dim=1)
-            plucker_emb = self.patch_embedding_wancamctrl(plucker_emb)
-            plucker_hidden = self.c2ws_hidden_states_layer2(
-                torch_F.silu(self.c2ws_hidden_states_layer1(plucker_emb))
-            )
-            plucker_emb = plucker_emb + plucker_hidden
+            plucker_emb = embed_wan_camera_condition(self, plucker_items, token_length=seq_len, pad_before_embedding=True)
 
         if self.use_memory:
             kwargs = dict(
@@ -1151,7 +1130,9 @@ class WanModel(nn.Module, NativeConfigMixin):
                 fa_version=fa_version,
                 )
 
-        for block in self.blocks:
+        for block_index, block in enumerate(self.blocks):
+            if isinstance(plucker_emb, dict):
+                kwargs["plucker_emb"] = camera_condition_for_block(plucker_emb, block_index)
             x = block(x, **kwargs)
 
         x = self.head(x, e)

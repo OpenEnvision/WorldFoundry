@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import io
 import math
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import replace
 from enum import Enum
 from typing import Any
 
@@ -13,13 +14,16 @@ import numpy as np
 from PIL import Image
 
 from worldfoundry.core.execution.realtime.frame_prefetch import LazyCudaFrame, prefetch_to_numpy
+from worldfoundry.core.media.processing.postprocess import VideoChunk, video_chunk_as_thwc
 from worldfoundry.studio.inference.execution import _normalize_frame_list, _to_uint8_rgb
+from worldfoundry.studio.serving.realtime.telemetry import PresentationFrame, frame_pixels
 
 MIN_OUTPUT_WIDTH = 160
 MIN_OUTPUT_HEIGHT = 90
 MAX_OUTPUT_WIDTH = 1920
 MAX_OUTPUT_HEIGHT = 1920
 MAX_OUTPUT_PIXELS = 1920 * 1080
+QueuedFrame = np.ndarray | LazyCudaFrame | PresentationFrame
 
 
 class FrameQueuePolicy(str, Enum):
@@ -102,6 +106,12 @@ class WebSocketPacingMode(str, Enum):
             raise ValueError(f"Unknown WebSocket pacing mode {value!r}; expected one of: {supported}.") from exc
 
 
+def _prepare_queued_frame(frame: QueuedFrame, *, preserve_cuda: bool) -> QueuedFrame:
+    pixels = frame_pixels(frame)
+    pixels = pixels if preserve_cuda and isinstance(pixels, LazyCudaFrame) else np.ascontiguousarray(pixels)
+    return replace(frame, pixels=pixels) if isinstance(frame, PresentationFrame) else pixels
+
+
 class LatestFrameBuffer:
     """Bounded frame queue with selectable latency/quality congestion policy.
 
@@ -123,7 +133,7 @@ class LatestFrameBuffer:
         self.maxsize = int(maxsize)
         self.backpressure_s = max(float(backpressure_ms), 0.0) / 1000.0
         self.policy = FrameQueuePolicy.from_value(policy)
-        self._queue: asyncio.Queue[np.ndarray | None] = asyncio.Queue(maxsize=maxsize)
+        self._queue: asyncio.Queue[QueuedFrame | None] = asyncio.Queue(maxsize=maxsize)
         self._closed_event = asyncio.Event()
         self.dropped_frames = 0
         self.last_enqueue_ms = 0.0
@@ -133,7 +143,7 @@ class LatestFrameBuffer:
     def qsize(self) -> int:
         return self._queue.qsize()
 
-    async def _put_ordered(self, frame: np.ndarray) -> bool:
+    async def _put_ordered(self, frame: QueuedFrame) -> bool:
         while not self.closed:
             try:
                 self._queue.put_nowait(frame)
@@ -145,7 +155,7 @@ class LatestFrameBuffer:
                     continue
         return False
 
-    async def put_chunk(self, frames: list[np.ndarray]) -> int:
+    async def put_chunk(self, frames: Sequence[QueuedFrame]) -> int:
         if self.closed:
             return 0
         loop = asyncio.get_running_loop()
@@ -153,7 +163,7 @@ class LatestFrameBuffer:
         deadline = started + self.backpressure_s
         accepted = 0
         for frame in frames:
-            rgb = frame if self.preserve_cuda_frames and isinstance(frame, LazyCudaFrame) else np.ascontiguousarray(frame)
+            rgb = _prepare_queued_frame(frame, preserve_cuda=self.preserve_cuda_frames)
             if self.policy is FrameQueuePolicy.ORDERED_QUALITY:
                 if not await self._put_ordered(rgb):
                     break
@@ -181,13 +191,13 @@ class LatestFrameBuffer:
         self.last_enqueue_ms = (loop.time() - started) * 1000.0
         return accepted
 
-    async def get(self) -> np.ndarray:
+    async def get(self) -> QueuedFrame:
         frame = await self._queue.get()
         if frame is None:
             raise EOFError("frame buffer closed")
         return frame
 
-    def get_nowait(self) -> np.ndarray:
+    def get_nowait(self) -> QueuedFrame:
         frame = self._queue.get_nowait()
         if frame is None:
             raise EOFError("frame buffer closed")
@@ -235,15 +245,15 @@ class ChunkPresentationBuffer:
         self.policy = FrameQueuePolicy.from_value(policy)
         self._frame_interval = 1.0 / fps
         self._backlog_interval = 1.0 / maximum_fps
-        self._mailbox: asyncio.Queue[np.ndarray | None] = asyncio.Queue(maxsize=self.maxsize)
+        self._mailbox: asyncio.Queue[QueuedFrame | None] = asyncio.Queue(maxsize=self.maxsize)
         self._pending_available = asyncio.Event()
         self._pending_available.set()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._scheduled: asyncio.Handle | None = None
         self._next_frame_at: float | None = None
-        self._active_chunk: list[np.ndarray] | None = None
+        self._active_chunk: list[QueuedFrame] | None = None
         self._active_index = 0
-        self._pending_chunk: list[np.ndarray] | None = None
+        self._pending_chunk: list[QueuedFrame] | None = None
         self._blocked_on_mailbox = False
         self.dropped_frames = 0
         self.dropped_chunks = 0
@@ -265,15 +275,12 @@ class ChunkPresentationBuffer:
         pending = 0 if self._pending_chunk is None else len(self._pending_chunk)
         return self._mailbox.qsize() + active + pending
 
-    async def put_chunk(self, frames: list[np.ndarray]) -> int:
+    async def put_chunk(self, frames: Sequence[QueuedFrame]) -> int:
         if self.closed:
             return 0
         loop = self._bind_loop()
         started = loop.time()
-        prepared = [
-            frame if self.preserve_cuda_frames and isinstance(frame, LazyCudaFrame) else np.ascontiguousarray(frame)
-            for frame in frames
-        ]
+        prepared = [_prepare_queued_frame(frame, preserve_cuda=self.preserve_cuda_frames) for frame in frames]
         if not prepared:
             self.last_enqueue_ms = (loop.time() - started) * 1000.0
             return 0
@@ -301,14 +308,14 @@ class ChunkPresentationBuffer:
         self.last_enqueue_ms = (loop.time() - started) * 1000.0
         return 0 if self.closed else len(prepared)
 
-    async def get(self) -> np.ndarray:
+    async def get(self) -> QueuedFrame:
         frame = await self._mailbox.get()
         if frame is None:
             raise EOFError("presentation buffer closed")
         self._resume_after_mailbox_read()
         return frame
 
-    def get_nowait(self) -> np.ndarray:
+    def get_nowait(self) -> QueuedFrame:
         frame = self._mailbox.get_nowait()
         if frame is None:
             raise EOFError("presentation buffer closed")
@@ -409,12 +416,21 @@ class ChunkPresentationBuffer:
 
 def _cuda_transport_frames(candidate: Any) -> list[LazyCudaFrame] | None:
     """Snapshot supported byte frames on device, retaining producer ordering."""
-    if isinstance(candidate, (list, tuple)) and candidate and all(isinstance(frame, LazyCudaFrame) for frame in candidate):
+    if isinstance(candidate, VideoChunk):
+        candidate = video_chunk_as_thwc(candidate)
+    if (
+        isinstance(candidate, (list, tuple))
+        and candidate
+        and all(isinstance(frame, LazyCudaFrame) for frame in candidate)
+    ):
         try:
             device_sources = [frame.to_cuda_tensor() for frame in candidate]
         except RuntimeError:
             return None
-        if all(source.is_cuda and str(source.dtype) == "torch.uint8" and source.ndim == 3 and source.shape[-1] == 3 for source in device_sources):
+        if all(
+            source.is_cuda and str(source.dtype) == "torch.uint8" and source.ndim == 3 and source.shape[-1] == 3
+            for source in device_sources
+        ):
             return [frame.snapshot_cuda() for frame in candidate]
         return None
     try:
@@ -447,29 +463,55 @@ def realtime_frames_from_result(result: Any, *, preserve_cuda: bool = False) -> 
             if callable(close):
                 close()
 
+    if isinstance(result, Mapping) and "sensor_frames" in result:
+        from .sensors import compose_sensor_frames
+
+        return compose_sensor_frames(result)
+
+    if (
+        isinstance(result, (list, tuple))
+        and result
+        and all(isinstance(chunk, (VideoChunk, Mapping)) for chunk in result)
+    ):
+        return [frame for chunk in result for frame in realtime_frames_from_result(chunk, preserve_cuda=preserve_cuda)]
+
     candidates: list[Any] = []
     if isinstance(result, Mapping):
-        for key in ("sr_videos", "videos", "frames", "video", "output", "images"):
+        keys = (
+            ("video_chunk",)
+            if "video_chunk" in result
+            else ("sr_videos", "videos", "frames", "video", "output", "images")
+        )
+        for key in keys:
             if key in result:
                 candidates.append(result[key])
     else:
         candidates.append(result)
 
     for candidate in candidates:
+        if isinstance(candidate, VideoChunk) and candidate.frame_count == 0:
+            return []
         if preserve_cuda:
             device_frames = _cuda_transport_frames(candidate)
             if device_frames:
                 return device_frames
         if isinstance(candidate, Image.Image):
             return [_to_uint8_rgb(candidate)]
-        if isinstance(candidate, (list, tuple)):
+        frame_list = (
+            candidate.frames if isinstance(candidate, VideoChunk) and candidate.layout == "frame-list" else candidate
+        )
+        if isinstance(frame_list, (list, tuple)):
             # Start every eligible device-to-host copy before waiting on the
             # first frame. Plain NumPy/PIL/tensor lists remain a no-op here.
-            for frame in candidate:
+            for frame in frame_list:
                 prefetch_to_numpy(frame)
-            materializers = [getattr(frame, "to_numpy", None) for frame in candidate]
-            if candidate and all(callable(materialize) for materialize in materializers):
-                return [_to_uint8_rgb(materialize()) for materialize in materializers if callable(materialize)]
+            materializers = [getattr(frame, "to_numpy", None) for frame in frame_list]
+            if frame_list and all(callable(materialize) for materialize in materializers):
+                materialized = [materialize() for materialize in materializers if callable(materialize)]
+                if isinstance(candidate, VideoChunk):
+                    candidate = replace(candidate, frames=materialized)
+                else:
+                    return [_to_uint8_rgb(frame) for frame in materialized]
         frames = _normalize_frame_list(candidate)
         if frames:
             return [np.ascontiguousarray(frame) for frame in frames]

@@ -17,6 +17,7 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
     parse_torch_dtype,
 )
 from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 
 from ..pipeline_utils import PipelineABC
 from .reason1_options import reason1_component_options
@@ -115,7 +116,7 @@ class CosmosTransfer2p5Pipeline(PipelineABC):
                     "tiled": bool(options.get("vae_tiling", False)),
                     "tile_size": tuple(options.get("vae_tile_size", (34, 34))),
                     "tile_stride": tuple(options.get("vae_tile_stride", (18, 16))),
-                }
+                },
             },
         )
         return cls(native_pipeline=native, device=device)
@@ -212,11 +213,20 @@ class CosmosTransfer2p5Pipeline(PipelineABC):
             inputs=inputs,
         )
         output = self.native_pipeline(request)
+        video_chunk = None
+        if output_type != "latent":
+            video_chunk = VideoChunk(
+                frames=output.sample, layout="bcthw", value_range="-1,1", metadata={"fps": int(fps)}
+            )
         artifact_path = None
-        if output_path is not None and output_type != "latent":
-            artifact_path = save_image_or_video_tensor(output.sample, output_path, fps=int(fps))
+        if output_path is not None and video_chunk is not None:
+            artifact_path = save_image_or_video_tensor(
+                output.sample, output_path, fps=int(fps), layout=video_chunk.layout, value_range=video_chunk.value_range
+            )
         result = {
             "video": output.sample,
+            "video_chunk": video_chunk,
+            "fps": int(fps),
             "latents": output.latents,
             "artifact_path": artifact_path,
             "metadata": dict(output.metadata),

@@ -78,11 +78,7 @@ class SanaWMPipeline(NativeVisualDiffusionPipeline):
             else sana_root.parent / "Efficient-Large-Model--gemma-2-2b-it"
         )
         codec_source = options.get("codec_path") or options.get("vae_path")
-        codec_root = (
-            Path(codec_source).expanduser()
-            if isinstance(codec_source, (str, Path))
-            else sana_root
-        )
+        codec_root = Path(codec_source).expanduser() if isinstance(codec_source, (str, Path)) else sana_root
         return {
             "dit": str(sana_root),
             "text-encoder": str(gemma_root),
@@ -180,8 +176,8 @@ class SanaWMPipeline(NativeVisualDiffusionPipeline):
             interactions=interactions,
             fps=fps,
             num_frames=int(kwargs.pop("window_frames", num_frames)),
-            num_inference_steps=step,
-            guidance_scale=cfg_scale,
+            num_inference_steps=kwargs.pop("num_inference_steps", step),
+            guidance_scale=kwargs.pop("guidance_scale", cfg_scale),
             seed=seed,
             return_dict=return_dict,
             **kwargs,
@@ -230,9 +226,7 @@ class SanaWMStreamingPipeline(SanaWMPipeline):
             ),
         )
         if not isinstance(source, (str, Path)):
-            checkpoint_root = os.getenv("WORLDFOUNDRY_CKPT_DIR") or os.getenv(
-                "WORLDEVALS_CKPT_DIR"
-            )
+            checkpoint_root = os.getenv("WORLDFOUNDRY_CKPT_DIR") or os.getenv("WORLDEVALS_CKPT_DIR")
             if not checkpoint_root:
                 return None
             source = Path(checkpoint_root).expanduser() / "Efficient-Large-Model--SANA-WM_streaming"

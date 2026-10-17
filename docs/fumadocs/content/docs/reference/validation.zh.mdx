@@ -21,8 +21,12 @@ description: 代码、文档、runner 和 benchmark facade 的发布门禁。
 
 一方测试源码统一存放在 `tests/`，随仓库和 sdist 发布，采用仓库的 Apache-2.0 许可证。wheel 只包含运行时包。
 
+在统一 GPU 环境中，从仓库根目录运行不加载权重的快速门禁：
+
 ```bash
-python -m pip install -e ".[test]"
+source tmp/worldfoundry_unified_env.sh
+conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
+python -m pip install -e ".[dev,test]"
 make test
 # 开发时可以单独运行某项测试：
 python -m pytest -q tests/runtime/test_geometry_regression_impact.py
@@ -34,20 +38,26 @@ python -m pytest -q tests/runtime/test_geometry_regression_impact.py
 
 | 路径 | 内容与环境要求 |
 | --- | --- |
-| `tests/test_*.py` | 从旧 `test/` 迁入的模型集成与 infra 回归 |
-| `tests/core/`、`tests/runtime/`、`tests/studio/` | 共享基础设施的单元与集成测试 |
+| `tests/base_models/` | 模型组件与 checkpoint 契约 |
+| `tests/synthesis/` | 模型运行时与编排测试 |
+| `tests/pipelines/`、`tests/operators/` | Pipeline 与 operator 集成测试 |
+| `tests/core/`、`tests/runtime/` | 共享基础设施的单元与集成测试 |
+| `tests/cli/`、`tests/scripts/` | CLI、MCP 与开发工具契约 |
+| `tests/studio/`、`tests/studio_visualization/` | 工作区、worker、streaming 与可视化测试 |
+| `tests/evaluation/` | 评测服务、runner、metric 与 artifact 测试 |
 | `tests/eval_core/` | 扩展 evaluation 契约，使用 `make test-eval-core` |
-| 其他模块目录 | 对应运行时模块的测试 |
-| `tests/base_models/diffusion_model/test_build_purpose.py` | 组件 build-purpose 与选择性实例化契约 |
+| `tests/integration/` | 跨层仓库契约 |
+| `tests/benchmarks/` | 推理性能测试工具契约 |
 | `tests/manual/` | 手动模型推理与托管 API smoke 脚本 |
 | `tests/stream/` | 手动 streaming / incremental inference 脚本 |
 
-扩展测试可能依赖 `eval_core`、`ui`、模型专用环境、本地 assets 或 CUDA。部分历史断言还涉及私有 training / benchmark 实现或旧布局；公开 CPU 门禁是当前支持的 CI 基线，安装 `test` extra 不会准备这些额外资源。
+按当前集成入口选择测试。模型组件与 pipeline 测试需要模型环境中的依赖，包括 Torch；PEFT adapter 测试还需要 `peft`。UI 测试需要 `ui` extra，声明本地 assets 或 CUDA 的测试需要准备对应资源。`test` extra 不包含全部模型依赖。
 
 ```bash
-python -m pytest -q tests/eval_core/test_evaluate_runner.py
+python -m pytest -q tests/pipelines/test_sana_integration.py
+python -m pytest -q tests/pipelines/test_wan_peft_loading.py
 python -m pytest -q tests/studio/test_conda_dispatch.py
-python -m pytest --collect-only tests
+python -m pytest -q tests/evaluation/execution/test_result_integrity.py
 PYTHONPATH=. python tests/manual/test_wan_2p2.py
 PYTHONPATH=. python tests/stream/test_wan2p2_stream.py
 WORLDFOUNDRY_DOCKER_GPUS=none tests/run_tests_docker.sh
@@ -56,26 +66,119 @@ WORLDFOUNDRY_DOCKER_EXTRAS=test,eval_core tests/run_tests_docker.sh make:test-ev
 
 `manual/` 和 `stream/` 不参加递归 pytest collection。直接运行前需要准备模型环境；脚本可能下载 weights、占用 GPU、调用真实 API 并写出产物。凭据使用 provider 的环境变量。MiniMax H3 的真实权重测试使用 `MINIMAX_H3_CKPT_DIR`，默认 `~/.cache/worldfoundry/checkpoints/minimax-h3-components`。
 
-新增确定性回归放在对应模块目录，小型文本 fixture 放在该 suite 内。导入时直接执行推理的脚本放入 `manual/` 或 `stream/`。checkpoint 路径使用环境变量，资源不可用时跳过真实权重测试；缓存、日志、输出、凭据和 weights 不进入 Git 或源码发行物。
+### 框架派发与媒体覆盖
+
+`tests/studio/test_dispatch_lifecycle.py` 检查所有发现的 catalog 条目能否路由到
+所属 runtime driver，并通过 frame memory、模型自管状态、原生实时、无状态、
+action 与几何契约覆盖共享的普通、实时、torchrun 状态转换。API client/cache
+隔离仍由 `tests/studio/test_pipeline_cache.py` 验证。
+
+CPU Torch 门禁纳入 `tests/pipelines/test_native_output_contracts.py`，检查所有
+发现的 native visual 子类；`tests/core/test_video_chunk_transport.py` 验证显式
+layout、像素值域、chunk 顺序与帧数。Codec 测试覆盖成功/失败路径的 reader
+释放、有限帧解码、ImageIO 编码一致性和后端 fallback。这些 CPU 测试需要
+Torch/torchvision、PyAV、ImageIO/FFmpeg 与 OpenCV；托管张量 CI 单独安装
+这些依赖，不改变无 Torch 公共门禁。RTX adapter 测试使用 fake effect，不能
+证明专有 runtime 已执行。Bridge 和实时集成测试与这些共享契约一并进入门禁。`tests/core/execution/test_cuda_nvenc_transport.py` 属于 CUDA 门禁；
+其设备所有权/event 检查与 checkpoint 回放、编码吞吐证据分开。Catalog 覆盖不
+代表列出的每个模型均已成功生成。
+
+非 native 输出契约使用替代生成调用和真实小型像素数组，覆盖
+`RuntimeVideoSynthesis`、ABot-World、仅返回 artifact 的 pipeline，以及普通/实时
+请求转发。它们比较声明式像素经过产物规范化与 transport 后的结果，保留原始返回值，
+并检查 A/B/A 图片条件。驻留 session 测试覆盖 Matrix-Game 2/3、DreamX camera/AR、
+LingBot 变体和 Helios，包含原生 chunk 帧数与非输出 rank 结果。Batch/续段契约
+进一步通过 pipeline/synthesis 边界覆盖 WorldFM、LingBot 与 LongVie，精确比较像素，
+验证 PIL 帧列表后处理、原始返回、history/noise 连续性，以及 Studio 的帧数/帧率
+传递。WorldFM PNG 实际写入并读回；LongVie 与 LingBot 编码接线使用 recording
+writer。LingBot V2 在替代子进程和已有进程组路径上保留编码产物，并声明解码后的帧。
+Matrix-Game batch 测试实际执行 MG2 小型 CPU 解码转换与操作可视化规范化，比较
+声明、传输和导出的像素，并验证滚动帧 memory 与 Studio 派发。MG3 测试保留产物
+字节、检查 rank-local 产物归属，并保持非输出 rank 无帧、不尝试复制产物。
+模型、decoder、子进程执行和分布式计时/通信调用使用替代实现，因此不证明 checkpoint、CUDA
+或多 rank 已执行。
+`make test-infer-tensors` 将它们与共享 transport 契约一并选入。
+
+轨迹输出契约通过真实小型 CPU 像素转换、frame memory 和共享派发覆盖 GEN3C、
+Lyra-1/2 与 Astra，保留原始视频、相机、latent 和重建字段，检查全为正数的 signed
+像素、易混淆轴、非均匀 RGB/时间顺序、FP16/BF16 和裁剪后的帧数，并区分
+planned/blocked、latent 与已生成 RGB。Lyra-1 的相机及 latent 文件实际序列化；
+Astra 执行解码转换和 latent-memory 编排，去噪调用使用替代实现。Lyra-2 的深度、
+采样调用以及重建模型和视频 writer 使用替代实现。CPU 张量门禁同时选入这些
+契约和既有 catalog、workspace、runtime-path 测试。小型替代输出验证边界帧数，
+不代表增加原生采样长度，也不代表真实 checkpoint 已生成。
+
+`tests/synthesis/test_astra_state.py` 与
+`tests/pipelines/test_astra_request_isolation.py` 检查历史逐出后的绝对相机进度、
+chunk-local FramePack 索引、共享权重的 A/B/A 和交错请求，以及 reset 后复用。
+它们用精确解析预测验证 FP32/FP16/BF16 下的真实 FlowMatch Euler scheduler，
+保持权重对象与全局 RNG，并检查 VAE 缓存清理。公共请求案例使用替代编码、去噪与解码
+forward；另用真实小型 BF16 Wan VAE 精确对比规范组件的分块编码/解码，覆盖 A/B/A
+请求及时间缓存释放。中断检查在计算/导出边界抛出 `CancelledError`。CPU tensor 门禁将这两个文件与既有
+Astra 输出及 Studio 派发契约一并选入。
+
+`tests/synthesis/test_lingbot_decoder_contracts.py` 与 realtime policy 测试检查
+归一化/原始 TAE 输入、显式覆盖、实际读取小型 PyTorch 和 safetensors checkpoint，
+以及源 latent 保持不变。真实随机初始化 BF16 TAE 将 streaming 像素与直接顺序解码
+精确对比；独立 stream wrapper 共享权重、不共享时间记忆，同时覆盖 LingBot 的
+9/12 帧和 V2 的 13/16 帧节奏。
+
+`tests/synthesis/test_hunyuan_worldplay_state.py` 与公共 realtime 测试执行既有 AR
+缓存操作和规范 Euler scheduler，以 FP32/FP16/BF16 解析 forward 检查精确更新、
+A/B/A、chunk 边界交错、owner 锁准入、请求局部几何 RNG、reset、非输出 rank，
+以及失败和注入 `CancelledError` 后恢复。真实小型随机权重 Hunyuan 1.5 VAE 用
+FP32/BF16 将前缀/后缀像素转换与直接规范解码精确对比。Text/image/vision 条件及
+公共 denoiser forward 使用替代实现。这些文件与受影响的 LingBot V2 测试纳入 CPU
+tensor 门禁，不代表 checkpoint、CUDA 并发、实际服务取消或有界解码成本验收。
+
+`tests/pipelines/test_independent_native_outputs.py` 与
+`tests/studio/test_independent_output_dispatch.py` 覆盖 Cosmos Predict2/2.5、
+Transfer2.5、Cosmos3、HunyuanVideo/1.5、T2V-Turbo 和 Vchitect。它们在预览、传输和
+导出之间比较纯正值 signed 与单位值域像素，检查 FP32/FP16/BF16、1/3/4/5 帧，实际写入
+单帧 PNG，并保留 raw/latent/audio/action 引用。Stream 派发检查 FPS、帧数，以及 worker
+和 realtime 路径的显式 A/B/A 条件图片传递。Latent 结果不导出 RGB、不替换产物历史；
+显式无 RGB 或缓冲声明阻止回退读取原始别名。Codec 编排使用替代 VAE，执行 Hunyuan
+现有单位值域转换、Cosmos 裁剪和 Turbo 逐帧解码。采样、视频编码和并行通信使用替代实现；
+公共 loader 委托与 rank-local 产物归属属于连线证据，不代表 checkpoint 或实际多 rank
+验收。这些测试与受影响的既有 loading/catalog 测试纳入 CPU tensor 门禁。
+
+`tests/core/execution/test_compile_numerics_registration.py` 验证归一化算子注册、
+可选 affine 张量、shape 列表、FP32/FP16/BF16 CPU 算术的精确一致性，以及 fake-tensor
+的 shape/dtype 派发。既有 CUDA regional compile 选集通过真实编译 kernel 和 CUDA
+图检查原生舍入行为，与传输、checkpoint 和吞吐证据保持独立。
+
+### 测试结果能证明什么
+
+| 证据 | 已验证的效果 |
+| --- | --- |
+| Catalog 与 binding 测试 | 模型 ID 能解析到当前 pipeline 和 runtime profile，就绪状态与实际实现一致 |
+| Mock pipeline 与 runner 测试 | 加载选项、输入规范化、请求传递和结果/产物契约正确连接 |
+| CPU 张量测试 | 真实小型组件产生预期数值输出，并保持请求状态隔离 |
+| CUDA 契约 | 选中的 kernel、stream、cache 与精度路径在测试 GPU 上正确执行 |
+| 真实 checkpoint 回放 | 指定模型、权重、输入和环境保持已验收的数值输出与导出产物 |
+| Benchmark 执行 | 配置的 evaluator 为实际执行的样本生成有效指标与 scorecard |
+
+导入成功、mock 或 `plan_only` 不能证明加载权重后的生成质量或性能。缺少运行源码的 adapter 必须在启动前报告阻塞或失败，不能计为推理成功。必需门禁拒绝资源缺失与 skip；真实权重和 benchmark 证据应对应实际测试的模型 variant 与输出。
+
+新增确定性回归放在对应模块目录，小型文本 fixture 放在该 suite 内。`tests/` 根目录只保留共享 pytest 配置和 Docker helper。文件使用 `test_<behavior>.py` 命名，必要时包含模型名，而不是 issue 编号或 review 轮次；跨层契约放入 `tests/integration/`。测试当前公开 binding、支持的输入与可观察输出；删除已移除实现的测试，将过期内部路径断言替换为当前契约。揭示受支持集成缺陷的失败测试仍须保留。导入时直接执行推理的脚本放入 `manual/` 或 `stream/`。checkpoint 路径使用环境变量；可选开发测试可以跳过缺失资源，必需发布门禁必须执行全部选中案例。缓存、日志、输出、凭据和 weights 不进入 Git 或源码发行物。
 
 ## 推理契约与 CUDA 快速检查
 
-仅安装公开测试依赖、CPU Torch、safetensors 和 einops，即可运行张量测试，不需要 checkpoint、渲染器或 GPU：
+在 GPU 开发环境中补充 safetensors 和 einops 后即可运行张量测试。该目标在 CPU 上执行小张量检查，不加载 checkpoint 或渲染器，并保留环境中已有的 CUDA PyTorch：
 
 ```bash
-python -m pip install "torch==2.7.1" --index-url https://download.pytorch.org/whl/cpu
-python -m pip install -e ".[test]" "safetensors>=0.4" "einops>=0.7,<0.9"
+python -m pip install "safetensors>=0.4" "einops>=0.7,<0.9"
 make test-infer-tensors
 ```
 
-在已准备的 3D 模型环境中继续运行结果导出和 CUDA 测试。结果导出会导入该环境的模型和渲染依赖，包括 plyfile 和 gsplat：
+在已准备的模型环境中继续运行 pipeline 集成、结果导出和 CUDA 测试。这些测试需要模型依赖，包括 adapter 加载使用的 PEFT，以及结果导出使用的 plyfile 和 gsplat：
 
 ```bash
 make test-infer-contracts PYTHON=/path/to/model-env/bin/python
 make test-infer-cuda-contracts PYTHON=/path/to/model-env/bin/python
 ```
 
-第一个目标使用小张量和已知几何，不加载模型权重，覆盖 checkpoint 往返与 meta 参数赋值、加载失败前的原子校验、键重命名冲突、相机坐标约定、带 mask 的 PLY 和原始数组导出、跨进程结果序列化、异常恢复和并发提交。CUDA 目标检查 producer event 的先后顺序、pinned-memory 拷贝、失败 fallback，以及回调报错后已入队工作的同步。CUDA 不可用时该目标直接失败，不能用整个 suite 都被 skip 来表示通过。
+第一个目标使用小张量和已知几何，不下载 checkpoint，覆盖 Warp-as-History 输入规划、标准 Wan PEFT adapter 加载与前向执行、checkpoint 往返与 meta 参数赋值、加载失败前的原子校验、键重命名冲突、相机坐标约定、带 mask 的 PLY 和原始数组导出、跨进程结果序列化、异常恢复和并发提交。CUDA 目标检查 producer event 的先后顺序、pinned-memory 拷贝、失败 fallback，以及回调报错后已入队工作的同步。CUDA 不可用时该目标直接失败，不能用整个 suite 都被 skip 来表示通过。
 
 设置下文的 checkpoint 和输入目录后，还可以运行短的真实 Pi3X 测试，比较复用模型和新加载模型，覆盖换输入、失败请求和重复推理：
 
@@ -107,6 +210,15 @@ LTX 的 timestep-conditioned VAE 在解码时也会注入噪声。视频、音�
 
 只返回视频路径的生成器可以用 `output_arrays` 选择运行目录内的 MP4、WebM、MOV 或 MKV。回归工具完整解码后，将 `artifact.<相对路径>.frames` 和 `.fps` 保存到 `arrays.npz`，因此路径或计划本身不能满足必需数值输出。还应在 `export_artifacts` 中声明视频，比较导出文件解码后的像素及帧率。Oasis 的子进程只返回 MP4，没有内存张量，因此使用此入口；生成器的随机种子固定为 0。
 
+Kandinsky6 Lite/Pro 及各自的蒸馏、预训练变体均有独立的
+`kandinsky6-<variant>-video-short` 用例。将匹配的 Diffusers 发布权重放在
+`WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT` 下的用例 `assets.checkpoint` 路径。
+每个纯视频用例固定 seed 42、121 帧、480×864、24 FPS，比较完整解码的 RGB
+帧及帧率。蒸馏变体使用 10 步、guidance 1，其余变体使用 50 步、guidance 5。
+音频需要独立回放证据。CPU 张量门禁包含
+`tests/pipelines/test_kandinsky6_replay_recipes.py`，检查具体加载入口、权重路由
+和请求接线；该测试不执行这些真实权重。
+
 ```bash
 make coverage-inference PYTHON=python3
 make plan-inference PYTHON=python3 INFERENCE_BASE=<comparison-commit>
@@ -118,6 +230,14 @@ make verify-inference PYTHON=python3 \
 ```
 
 覆盖报告按 catalog 的 native binding 和同一 pipeline class 下注册的 variant 列出缺口。相同 class、模型家族、alias 或历史 `verified` 状态都不会自动给另一个 model ID 分配案例。`case_defined` 只表示有测试配方；报告不会将其提升成 reference 已验收或 GPU 已通过。固定基线保留既有缺口，同时 CI 拒绝新增未覆盖身份、既有配方退化，以及实际受影响却没有可执行数值回放的 native 变体。需要完整覆盖的发布可添加 `--require-complete`，存在缺口时退出码为 2。
+
+2026-10-16 的计划下线策略将 BiWM Wan2.1（`biwm-wan21@biwm-wan21`）、
+BiWM Wan2.2（`biwm-wan22@biwm-wan22`）、IRASim（`irasim@irasim`）和
+Pandora（`pandora@pandora`）移出支持范围。冻结基线中的历史记录保持不变；
+`tests/manual/native_coverage_policy.py` 显式列出这四个完整身份，允许其按计划移除，
+并通过 `retired_native_variants` 报告，不计为回放覆盖或 GPU 成功。删除其他冻结变体
+仍会失败。重新引入已下线身份时，需要像新增变体一样提供独立的 checkpoint 回放配方，
+不能沿用历史未覆盖缺口的豁免。
 
 Runtime profile 按声明的 model ID 和 pipeline binding 识别归属，并纳入 `source_repos[].in_tree_path`，覆盖静态 import 图无法发现的子进程代码。这些声明补充静态依赖；未知路径仍保守扩大选择，受影响的 native 变体没有真实权重回放时仍失败。
 
@@ -265,17 +385,38 @@ python3 tests/manual/geometry_regression_schedule.py remove \
 
 短案例覆盖的是已声明输入和能力。Lyra-2 案例仍关闭 3D 重建；接受新 backend、更新集成状态或发布时，仍需要完整 demo 和质量 benchmark。
 
-## 准备可选 CPU eval-core 测试环境
+### 新增模型短回放资产
 
-先从 PyTorch 官方 CPU wheel index 安装 Torch/Torchvision，再从正常 package index 安装已声明的测试 extra：
+短矩阵为 Kandinsky 6 的六种 checkpoint、DreamDojo 学生的两个具体身份、
+LingBot-World-V2 1.3B、Matrix-Game 4 Egypt 和原生 WonderWorld 分别声明回放配方。
+这些配方要求真实权重及数值产物，不代表已完成 GPU 或已验收参考回放。
+Kandinsky 案例显式指定各自的模型 ID 与权重根目录，比较 121 帧、480×864、24 FPS
+的纯视频输出；音频需要独立验收。
+
+DreamDojo 通过 `WORLDFOUNDRY_REGRESSION_DREAMDOJO_STUDENT_CHECKPOINT` 指定操作者
+提供的蒸馏学生权重。在 `WORLDFOUNDRY_REGRESSION_INPUT_ROOT` 下准备
+`dreamdojo/text-embeddings.pt`（真实 `[1,S,100352]` Reason1 特征），以及两组不同的
+归一化 `[16,384]` 动作文件 `dreamdojo/actions-a.npy` 和 `dreamdojo/actions-b.npy`。
+视频 tokenizer 位于 checkpoint 根目录下的
+`nvidia--Cosmos-Predict2.5-2B/tokenizer.pth`。每次 A/B/A 独立回放输出 17 帧、10 FPS，
+不会用教师权重替代学生权重。LingBot 小模型案例使用其独立的六分片 1.3B 权重、
+共享 Wan 1.3B 文本/VAE 资产及既有的 21 帧 `WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS`。
+
+Matrix-Game 4 在输入根目录下使用两个不同的 17 帧、480×864 低多边形视频：
+`matrix-game4/low-poly-a.mp4` 和 `matrix-game4/low-poly-b.mp4`。Transformer 与 sink
+来自 `Skywork--Matrix-Game-4.0/fps-egypt`，文本/tokenizer/VAE 来自
+`alibaba-pai--Wan2.2-Fun-5B-Control`。WonderWorld 使用案例声明的组件目录及第二幅
+已验收图像 `wonderworld/image-b.png`；其 A/B/A 初始场景比较深度、渲染预览及完整
+`.splat` 导出字节，而非仅比较元数据或点数。新视角与官方光栅器一致性仍需独立验收。
+
+## 准备扩展 eval-core 测试
+
+使用已激活的 GPU 开发环境及其已有 Torch/Torchvision，补充评测测试依赖：
 
 ```bash
-python -m pip install --index-url https://download.pytorch.org/whl/cpu \
-  "torch>=2.7,<2.12.0" "torchvision>=0.22,<0.27.0"
 python -m pip install -e ".[eval_core]"
+make test-eval-core
 ```
-
-拆成两条命令是有意为之：Python package metadata 不能指定 CPU 专用 wheel index；如果把整个 extra 都指向 PyTorch index，pytest、NumPy 等包反而可能不可见。
 
 ## 几何、视频和世界模型的数值回归
 
@@ -325,7 +466,7 @@ make test-geometry PYTHON=/path/to/model-env/bin/python \
 
 ## 发布门禁
 
-轻量 editable checkout 在运行 core 门禁前，先安装声明的测试依赖：
+在已激活的 GPU 开发环境中，运行 core 门禁前先安装声明的测试依赖：
 
 ```bash
 python -m pip install -e ".[dev,test]"

@@ -18,6 +18,7 @@ def _load_target(target: str) -> type[Any]:
 
 class _ComponentPipelineMeta(type):
     """Metaclass for ComponentPipeline that dynamically resolves and loads target components on access."""
+
     _COMPONENT_ATTRIBUTES = {"OPERATOR_CLS", "MEMORY_CLS", "SYNTHESIS_CLS"}
     _TARGET_ATTRIBUTES = {
         "OPERATOR_CLS": "OPERATOR_TARGET",
@@ -248,7 +249,9 @@ StarVLAPipeline = _component_pipeline_class(
 StarVLAPipeline.MODEL_PATH_OPTION = "checkpoint_dir"
 
 
-def _official_policy_pipeline(name: str, *, model_id: str, doc: str, generation_type: str = "vla_policy") -> type[ComponentPipeline]:
+def _official_policy_pipeline(
+    name: str, *, model_id: str, doc: str, generation_type: str = "vla_policy"
+) -> type[ComponentPipeline]:
     """Official policy pipeline helper function."""
     return _component_pipeline_class(
         name,
@@ -421,6 +424,8 @@ DreamDojoPipeline = _component_pipeline_class(
     memory_target="worldfoundry.synthesis.visual_generation.memory.runtime:RuntimeMemory",
     synthesis_target="worldfoundry.synthesis.action_generation.dreamdojo:DreamDojoSynthesis",
 )
+
+
 DVLTPipeline = _component_pipeline_class(
     "DVLTPipeline",
     doc="WorldFoundry pipeline for the in-tree DVLT multi-view 3D reconstruction runtime.",
@@ -430,14 +435,6 @@ DVLTPipeline = _component_pipeline_class(
     synthesis_target="worldfoundry.base_models.three_dimensions.depth.dvlt:DVLTSynthesis",
 )
 DVLTPipeline.MODEL_PATH_OPTION = "checkpoint_path"
-IRASimPipeline = _component_pipeline_class(
-    "IRASimPipeline",
-    doc="WorldFoundry robotics world-model pipeline for IRASim.",
-    model_id="irasim",
-    operator_target="worldfoundry.operators.irasim_operator:IRASimOperator",
-    memory_target="worldfoundry.synthesis.visual_generation.memory.runtime:RuntimeMemory",
-    synthesis_target="worldfoundry.synthesis.visual_generation.irasim:IRASimSynthesis",
-)
 OpenMAGVIT2Pipeline = _component_pipeline_class(
     "OpenMAGVIT2Pipeline",
     doc="WorldFoundry video/token-generation pipeline for Open-MAGVIT2.",
@@ -445,14 +442,6 @@ OpenMAGVIT2Pipeline = _component_pipeline_class(
     operator_target="worldfoundry.operators.open_magvit2_operator:OpenMAGVIT2Operator",
     memory_target="worldfoundry.synthesis.visual_generation.memory.runtime:RuntimeMemory",
     synthesis_target="worldfoundry.synthesis.visual_generation.open_magvit2:OpenMAGVIT2Synthesis",
-)
-PandoraPipeline = _component_pipeline_class(
-    "PandoraPipeline",
-    doc="WorldFoundry diffusion world-model pipeline for Pandora.",
-    model_id="pandora",
-    operator_target="worldfoundry.operators.pandora_operator:PandoraOperator",
-    memory_target="worldfoundry.synthesis.visual_generation.memory.runtime:RuntimeMemory",
-    synthesis_target="worldfoundry.synthesis.visual_generation.pandora:PandoraSynthesis",
 )
 PixelSplatPipeline = _component_pipeline_class(
     "PixelSplatPipeline",
@@ -505,10 +494,8 @@ __all__ = [
     "DreamZeroPipeline",
     "DualCamCtrlPipeline",
     "FastWAMPipeline",
-    "GaussianActorPipeline",
     "GigaBrain0Pipeline",
     "GR00TPipeline",
-    "IRASimPipeline",
     "LAPAPipeline",
     "LastR1Pipeline",
     "LingBotVAPipeline",
@@ -518,13 +505,11 @@ __all__ = [
     "MolmoAct2Pipeline",
     "MolmoBotPipeline",
     "MotionCtrlPipeline",
-    "MultiTaskDiTPipeline",
     "OctoPipeline",
     "OpenMAGVIT2Pipeline",
     "OpenPIPipeline",
     "OpenVLAOFTPipeline",
     "OpenVLAPipeline",
-    "PandoraPipeline",
     "PixelSplatPipeline",
     "RoboFlamingoPipeline",
     "ShowOPipeline",
@@ -532,8 +517,6 @@ __all__ = [
     "Splatt3RPipeline",
     "SpiritV15Pipeline",
     "StarVLAPipeline",
-    "TDMPCPipeline",
-    "VQBeTPipeline",
     "VLANeXtPipeline",
     "XVLAPipeline",
     "ZeroScopePipeline",

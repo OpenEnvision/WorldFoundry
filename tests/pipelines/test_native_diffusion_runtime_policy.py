@@ -58,7 +58,8 @@ def test_public_native_pipeline_forwards_runtime_optimizations(monkeypatch) -> N
         vae_temporal_chunk_size=4,
         torch_compile=True,
         compile_backend="inductor",
-        compile_mode="max-autotune-no-cudagraphs",
+        compile_mode="default",
+        compile_scope="regional",
         compile_fullgraph=True,
         compile_dynamic=False,
         runtime_options={"request_tag": "release-ab"},
@@ -77,7 +78,8 @@ def test_public_native_pipeline_forwards_runtime_optimizations(monkeypatch) -> N
         "compile_backend": "inductor",
         "compile_dynamic": False,
         "compile_fullgraph": True,
-        "compile_mode": "max-autotune-no-cudagraphs",
+        "compile_mode": "default",
+        "compile_scope": "regional",
         "dit_weight_dtype": "bf16",
         "fused_rope": True,
         "fuse_qkv": True,
@@ -95,6 +97,52 @@ def test_public_native_pipeline_forwards_runtime_optimizations(monkeypatch) -> N
         "vae_tile_stride": (18, 26),
         "vae_weight_dtype": "bf16",
     }
+
+
+def test_public_native_pipeline_warms_json_requests_before_return(monkeypatch) -> None:
+    from worldfoundry.base_models.diffusion_model.contracts import DiffusionRequest
+
+    seen = []
+
+    def warmup(requests):
+        seen.extend(requests)
+        assert isinstance(requests[0], DiffusionRequest)
+        return ({"seconds": 1.0},)
+
+    def load(cls, model_id, **kwargs):
+        assert "warmup_requests" not in kwargs["policy"].options
+        return SimpleNamespace(model_id=model_id, warmup=warmup)
+
+    monkeypatch.setattr(NativeDiffusionPipeline, "from_pretrained", classmethod(load))
+    pipe = Wan2p2Pipeline.from_pretrained(
+        model_path="/unused",
+        device="cpu",
+        warmup_requests=[
+            {
+                "prompt": "first",
+                "height": 32,
+                "width": 64,
+                "num_frames": 5,
+                "sampling": {"num_inference_steps": 4, "guidance_scale": 5.0, "seed": 19},
+            }
+        ],
+    )
+    assert seen[0].sampling.seed == 19
+    assert seen[0].sampling.num_inference_steps == 4
+    assert pipe.warmup_reports == ({"seconds": 1.0},)
+
+
+def test_public_native_pipeline_warmup_failure_prevents_loaded_pipeline(monkeypatch) -> None:
+    def fail(requests):
+        raise RuntimeError("warmup failed")
+
+    monkeypatch.setattr(
+        NativeDiffusionPipeline,
+        "from_pretrained",
+        classmethod(lambda cls, model_id, **kwargs: SimpleNamespace(model_id=model_id, warmup=fail)),
+    )
+    with pytest.raises(RuntimeError, match="warmup failed"):
+        Wan2p2Pipeline.from_pretrained(model_path="/unused", device="cpu", warmup_requests=[{"prompt": "a"}])
 
 
 def test_public_native_pipeline_forwards_custom_compile_options(monkeypatch) -> None:
@@ -145,7 +193,8 @@ def test_public_native_pipeline_rejects_unimplemented_residual_adaln(monkeypatch
 def test_direct_native_policy_rejects_unimplemented_residual_adaln(purpose) -> None:
     with pytest.raises(ValueError, match="fused_residual_adaln.*not implemented"):
         validate_runtime_policy_for_purpose(
-            RuntimePolicy(options={"fused_residual_adaln": True}), purpose=purpose,
+            RuntimePolicy(options={"fused_residual_adaln": True}),
+            purpose=purpose,
         )
 
 
@@ -161,7 +210,8 @@ def test_disabled_residual_adaln_is_allowed(monkeypatch) -> None:
     assert "fused_residual_adaln" not in captured["policy"].options
     for disabled in (False, None):
         validate_runtime_policy_for_purpose(
-            RuntimePolicy(options={"fused_residual_adaln": disabled}), purpose=BuildPurpose.TRAINING,
+            RuntimePolicy(options={"fused_residual_adaln": disabled}),
+            purpose=BuildPurpose.TRAINING,
         )
 
 

@@ -5,14 +5,14 @@ from __future__ import annotations
 import os
 import secrets
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import torch
 
 from worldfoundry.base_models.diffusion_model import NativeDiffusionPipeline
-from worldfoundry.base_models.diffusion_model.contracts import DiffusionRequest, SamplingConfig
+from worldfoundry.base_models.diffusion_model.contracts import DiffusionOutput, DiffusionRequest, SamplingConfig
 from worldfoundry.base_models.diffusion_model.optimizations import (
     RuntimePolicy,
     parse_attention_backend,
@@ -21,6 +21,7 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
     parse_torch_dtype,
 )
 from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 from worldfoundry.operators.runtime_video_operator import RuntimeVideoOperator
 from worldfoundry.synthesis.visual_generation.memory.video import VideoArtifactMemory
 
@@ -53,7 +54,7 @@ class NativeVisualDiffusionPipeline(PipelineABC):
     DEFAULT_GUIDANCE_SCALE: ClassVar[float] = 7.5
     DEFAULT_NEGATIVE_PROMPT: ClassVar[str | None] = None
     DEFAULT_FPS: ClassVar[int] = 24
-    OUTPUT_VALUE_RANGE: ClassVar[str | tuple[float, float]] = "auto"
+    OUTPUT_VALUE_RANGE: ClassVar[str | tuple[float, float]] = "-1,1"
     OUTPUT_LAYOUT: ClassVar[str] = "BCTHW"
     DEFAULT_SCHEDULER_OPTIONS: ClassVar[Mapping[str, object]] = {}
     SCHEDULER_OPTION_ALIASES: ClassVar[Mapping[str, str]] = {}
@@ -72,6 +73,7 @@ class NativeVisualDiffusionPipeline(PipelineABC):
         "compile_fullgraph",
         "compile_mode",
         "compile_options",
+        "compile_scope",
         "cfg_gate_fraction",
         "cfg_gate_step",
         "cfg_parallel",
@@ -125,9 +127,10 @@ class NativeVisualDiffusionPipeline(PipelineABC):
             device=device,
         )
         self.native_pipeline = native_pipeline
+        self.warmup_reports: tuple[Mapping[str, object], ...] = ()
         self.synthesis_model = native_pipeline
         self.generation_type = self.GENERATION_TYPE
-        self.model_id = native_pipeline.model_id
+        self.model_id: str = native_pipeline.model_id
         self.model_name = native_pipeline.model_id
 
     @classmethod
@@ -211,15 +214,13 @@ class NativeVisualDiffusionPipeline(PipelineABC):
         normalized_path = str(Path(adapter_path).expanduser())
         component_options = dict(resolved.get(cls.PEFT_ADAPTER_COMPONENT, {}))
         if "peft_adapter_path" in component_options:
-            raise ValueError(
-                "peft_adapter_path must be configured once at the native pipeline boundary"
-            )
+            raise ValueError("peft_adapter_path must be configured once at the native pipeline boundary")
         component_options["peft_adapter_path"] = normalized_path
         resolved[cls.PEFT_ADAPTER_COMPONENT] = component_options
         return resolved
 
     @classmethod
-    def _runtime_policy_options(cls, options: Mapping[str, Any]) -> dict[str, object]:
+    def _runtime_policy_options(cls, options: Mapping[str, Any]) -> dict[str, Any]:
         """Forward public optimization flags to the native module loader.
 
         These flags used to be accepted by ``from_pretrained`` but dropped
@@ -231,7 +232,7 @@ class NativeVisualDiffusionPipeline(PipelineABC):
 
         explicit = options.get("runtime_options")
         if explicit is None:
-            resolved: dict[str, object] = {}
+            resolved: dict[str, Any] = {}
         elif isinstance(explicit, Mapping):
             resolved = {str(name): value for name, value in explicit.items()}
         else:
@@ -260,12 +261,37 @@ class NativeVisualDiffusionPipeline(PipelineABC):
         **kwargs: Any,
     ) -> "NativeVisualDiffusionPipeline":
         options = cls._options(model_path, required_components, kwargs)
+        raw_warmup = options.pop("warmup_requests", None)
+        warmup_requests: list[DiffusionRequest | tuple[DiffusionRequest, ...]] | None = None
+        if raw_warmup is not None:
+            if not isinstance(raw_warmup, (list, tuple)) or not raw_warmup:
+                raise ValueError("warmup_requests must be a nonempty list of native requests or batches")
+
+            def normalize_request(value: Any) -> DiffusionRequest:
+                if isinstance(value, DiffusionRequest):
+                    return value
+                if not isinstance(value, Mapping):
+                    raise TypeError("warmup_requests entries must be DiffusionRequest values or mappings")
+                case = dict(value)
+                sampling = case.pop("sampling", {})
+                if isinstance(sampling, Mapping):
+                    sampling = SamplingConfig(**sampling)
+                if not isinstance(sampling, SamplingConfig):
+                    raise TypeError("warmup request sampling must be a SamplingConfig or mapping")
+                return DiffusionRequest(**case, sampling=sampling)
+
+            warmup_requests = []
+            for value in raw_warmup:
+                if isinstance(value, (list, tuple)):
+                    if not value:
+                        raise ValueError("warmup request batches must be nonempty")
+                    warmup_requests.append(tuple(normalize_request(member) for member in value))
+                else:
+                    warmup_requests.append(normalize_request(value))
         if model_id is not None:
             configured_model_id = options.get("model_id")
             if configured_model_id is not None and str(configured_model_id) != str(model_id):
-                raise ValueError(
-                    "native pipeline model_id differs between the runner and loading options"
-                )
+                raise ValueError("native pipeline model_id differs between the runner and loading options")
             options["model_id"] = model_id
         requested_model_id = cls._requested_model_id(options)
         runtime_policy_options = cls._runtime_policy_options(options)
@@ -282,13 +308,9 @@ class NativeVisualDiffusionPipeline(PipelineABC):
             runtime_policy_options.get("vae_parallel_degree", False),
         )
         if isinstance(raw_vae_parallel, bool):
-            vae_parallel_degree = (
-                int(os.getenv("WORLD_SIZE", "1")) if raw_vae_parallel else 1
-            )
+            vae_parallel_degree = int(os.getenv("WORLD_SIZE", "1")) if raw_vae_parallel else 1
             if raw_vae_parallel and vae_parallel_degree <= 1:
-                raise RuntimeError(
-                    "vae_parallel=True requires torchrun WORLD_SIZE>1 or an explicit degree"
-                )
+                raise RuntimeError("vae_parallel=True requires torchrun WORLD_SIZE>1 or an explicit degree")
         else:
             vae_parallel_degree = int(raw_vae_parallel or 1)
         if vae_parallel_degree <= 0:
@@ -296,8 +318,7 @@ class NativeVisualDiffusionPipeline(PipelineABC):
         if (
             "vae_parallel" in runtime_policy_options
             and "vae_parallel_degree" in runtime_policy_options
-            and int(runtime_policy_options["vae_parallel_degree"])
-            != vae_parallel_degree
+            and int(runtime_policy_options["vae_parallel_degree"]) != vae_parallel_degree
         ):
             raise ValueError("vae_parallel and vae_parallel_degree must match")
 
@@ -367,7 +388,10 @@ class NativeVisualDiffusionPipeline(PipelineABC):
             checkpoint_overrides=cls._checkpoint_overrides(model_path, options),
             component_options=cls._component_options(options),
         )
-        return cls(native_pipeline=native, device=device, model_id=requested_model_id)
+        pipeline = cls(native_pipeline=native, device=device, model_id=requested_model_id)
+        if warmup_requests is not None:
+            pipeline.warmup(warmup_requests)
+        return pipeline
 
     @classmethod
     def plan(
@@ -440,7 +464,7 @@ class NativeVisualDiffusionPipeline(PipelineABC):
         negative_prompt: str | list[str] | None = None,
         output_path: str | Path | None = None,
         output_dir: str | Path | None = None,
-        fps: int | None = None,
+        fps: float | None = None,
         return_dict: bool = False,
         height: int | None = None,
         width: int | None = None,
@@ -452,6 +476,57 @@ class NativeVisualDiffusionPipeline(PipelineABC):
         operator_kwargs: Mapping[str, Any] | None = None,
         **kwargs: Any,
     ) -> Any:
+        request, output_options = self._prepare_call(
+            prompt=prompt,
+            images=images,
+            image_path=image_path,
+            video=video,
+            video_path=video_path,
+            input_path=input_path,
+            ref_image_path=ref_image_path,
+            interactions=interactions,
+            negative_prompt=negative_prompt,
+            output_path=output_path,
+            output_dir=output_dir,
+            fps=fps,
+            return_dict=return_dict,
+            height=height,
+            width=width,
+            num_frames=num_frames,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            seed=seed,
+            output_type=output_type,
+            operator_kwargs=operator_kwargs,
+            **kwargs,
+        )
+        return self._format_output(self.native_pipeline(request), **output_options)
+
+    def _prepare_call(
+        self,
+        prompt: str | list[str] = "",
+        images: Any = None,
+        image_path: str | Path | None = None,
+        video: Any = None,
+        video_path: str | Path | None = None,
+        input_path: str | Path | None = None,
+        ref_image_path: str | Path | None = None,
+        interactions: Any = None,
+        negative_prompt: str | list[str] | None = None,
+        output_path: str | Path | None = None,
+        output_dir: str | Path | None = None,
+        fps: float | None = None,
+        return_dict: bool = False,
+        height: int | None = None,
+        width: int | None = None,
+        num_frames: int | None = None,
+        num_inference_steps: int | None = None,
+        guidance_scale: float | None = None,
+        seed: int = 0,
+        output_type: str = "auto",
+        operator_kwargs: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> tuple[DiffusionRequest, dict[str, Any]]:
         # Evaluation attaches sample/task metadata as operator kwargs for
         # action-policy pipelines.  Native diffusion recipes do not consume
         # that routing metadata, so keep it outside the strict model option
@@ -504,7 +579,7 @@ class NativeVisualDiffusionPipeline(PipelineABC):
                 if value is not None:
                     scheduler_options[key] = value
 
-        request_inputs = dict(self.REQUEST_INPUT_DEFAULTS)
+        request_inputs: dict[str, Any] = dict(self.REQUEST_INPUT_DEFAULTS)
         for alias, canonical in self.REQUEST_INPUT_ALIASES.items():
             if alias in options and canonical not in options:
                 options[canonical] = options.pop(alias)
@@ -529,28 +604,38 @@ class NativeVisualDiffusionPipeline(PipelineABC):
             request_inputs["video"] = processed["video"]
         if self.ACCEPTS_INTERACTIONS and interactions is not None:
             request_inputs["interactions"] = interactions
-        output = self.native_pipeline(
-            DiffusionRequest(
-                prompt=processed["prompt"],
-                negative_prompt=(
-                    self.DEFAULT_NEGATIVE_PROMPT if negative_prompt is None else negative_prompt
+        request = DiffusionRequest(
+            prompt=processed["prompt"],
+            negative_prompt=(self.DEFAULT_NEGATIVE_PROMPT if negative_prompt is None else negative_prompt),
+            height=int(self.DEFAULT_HEIGHT if height is None else height),
+            width=int(self.DEFAULT_WIDTH if width is None else width),
+            num_frames=int(self.DEFAULT_NUM_FRAMES if num_frames is None else num_frames),
+            sampling=SamplingConfig(
+                num_inference_steps=int(
+                    self.DEFAULT_NUM_INFERENCE_STEPS if num_inference_steps is None else num_inference_steps
                 ),
-                height=int(self.DEFAULT_HEIGHT if height is None else height),
-                width=int(self.DEFAULT_WIDTH if width is None else width),
-                num_frames=int(self.DEFAULT_NUM_FRAMES if num_frames is None else num_frames),
-                sampling=SamplingConfig(
-                    num_inference_steps=int(
-                        self.DEFAULT_NUM_INFERENCE_STEPS if num_inference_steps is None else num_inference_steps
-                    ),
-                    guidance_scale=float(
-                        guidance_scale if guidance_scale is not None else self.DEFAULT_GUIDANCE_SCALE
-                    ),
-                    seed=secrets.randbits(63) if int(seed) < 0 else int(seed),
-                    scheduler_options=scheduler_options,
-                ),
-                inputs=request_inputs,
-            )
+                guidance_scale=float(guidance_scale if guidance_scale is not None else self.DEFAULT_GUIDANCE_SCALE),
+                seed=secrets.randbits(63) if int(seed) < 0 else int(seed),
+                scheduler_options=scheduler_options,
+            ),
+            inputs=request_inputs,
         )
+        return request, {
+            "actual_fps": actual_fps,
+            "output_path": output_path,
+            "output_type": output_type,
+            "return_dict": return_dict,
+        }
+
+    def _format_output(
+        self,
+        output: DiffusionOutput,
+        *,
+        actual_fps: float,
+        output_path: str | Path | None,
+        output_type: str,
+        return_dict: bool,
+    ) -> Any:
         sample = output.sample
         if self.OUTPUT_LAYOUT == "FHWC" and output_type != "latent":
             sample = sample.permute(3, 0, 1, 2).unsqueeze(0)
@@ -562,6 +647,7 @@ class NativeVisualDiffusionPipeline(PipelineABC):
                 output_path,
                 fps=actual_fps,
                 value_range=self.OUTPUT_VALUE_RANGE,
+                layout="bcthw",
             )
             audio = output.artifacts.get("audio")
             if artifact_path is not None and audio is not None:
@@ -569,8 +655,9 @@ class NativeVisualDiffusionPipeline(PipelineABC):
 
                 with tempfile.TemporaryDirectory(prefix="worldfoundry-audio-") as directory:
                     audio_path = write_audio(
-                        audio, Path(directory) / "audio.wav",
-                        sample_rate=int(output.artifacts["audio_sampling_rate"]),
+                        audio,
+                        Path(directory) / "audio.wav",
+                        sample_rate=int(cast(int, output.artifacts["audio_sampling_rate"])),
                     )
                     artifact_path = mux_audio_video(artifact_path, audio_path, shortest=False)
         is_image = sample.ndim == 4
@@ -585,6 +672,12 @@ class NativeVisualDiffusionPipeline(PipelineABC):
             "generation_type": self.GENERATION_TYPE,
             "metadata": dict(output.metadata),
         }
+        if output_type != "latent":
+            result["video_chunk"] = VideoChunk(
+                frames=sample.unsqueeze(2) if is_image else sample,
+                layout="bcthw",
+                value_range=self.OUTPUT_VALUE_RANGE,
+            )
         for key in ("audio", "audio_sampling_rate"):
             if key in output.artifacts:
                 result[key] = output.artifacts[key]
@@ -594,17 +687,85 @@ class NativeVisualDiffusionPipeline(PipelineABC):
             result.update(video=sample, generated_video=sample)
         return result if return_dict else (artifact_path or sample)
 
+    def stream_state_ready(self) -> bool:
+        """Artifact history does not replace conditioning for the next request."""
+        return False
+
     def stream(
         self,
         prompt: str = "",
         images: Any = None,
         video: Any = None,
+        return_dict: bool = False,
         **kwargs: Any,
     ) -> Any:
         result = self(prompt=prompt, images=images, video=video, return_dict=True, **kwargs)
         value = result.get("artifact_path") or result["sample"]
-        self.memory_module.record(value, metadata={"prompt": prompt, "model_name": self.model_id})
-        return value
+        self.memory_module.record(
+            value,
+            metadata={"prompt": prompt, "model_name": self.model_id},
+            video_chunk=None if result.get("artifact_path") else result.get("video_chunk"),
+        )
+        return result if return_dict else value
+
+    def batch_call(self, calls: Sequence[Mapping[str, Any]]) -> tuple[Any, ...]:
+        """Batch compatible product calls with normal defaults and separate exports.
+
+        Each mapping uses the keyword arguments of __call__. Calls are normalized
+        before sampling and destinations are checked before export. Native
+        execution errors fail the batch without singleton retries.
+        """
+        if not calls:
+            raise ValueError("batch_call requires one or more calls")
+        prepared = [self._prepare_call(**call) for call in calls]
+        self._validate_batch_export_paths(prepared)
+        outputs = self.run_batch(tuple(request for request, _ in prepared))
+        if len(outputs) != len(prepared):
+            raise RuntimeError("batch_call must return one output per request")
+        self._validate_batch_export_paths(prepared, outputs)
+        return tuple(
+            self._format_output(output, **options) for output, (_, options) in zip(outputs, prepared, strict=True)
+        )
+
+    def _validate_batch_export_paths(
+        self,
+        prepared: Sequence[tuple[DiffusionRequest, dict[str, Any]]],
+        outputs: Sequence[DiffusionOutput] | None = None,
+    ) -> None:
+        from worldfoundry.core.io.filesystem.storage import parse_uri_scheme, uri_to_local_path
+
+        paths: set[str] = set()
+        for index, (_, options) in enumerate(prepared):
+            if options["output_path"] is None or options["output_type"] == "latent":
+                continue
+            path = str(options["output_path"])
+            if outputs is not None and not Path(path).suffix:
+                sample = outputs[index].sample
+                frames = (
+                    sample.shape[0] if self.OUTPUT_LAYOUT == "FHWC" else (1 if sample.ndim == 4 else sample.shape[2])
+                )
+                path += ".jpg" if frames == 1 else ".mp4"
+            if parse_uri_scheme(path) == "file":
+                path = os.path.abspath(uri_to_local_path(path))
+            if path in paths:
+                raise ValueError("batch_call requires distinct output paths")
+            paths.add(path)
+
+    def run_batch(self, requests: Iterable[DiffusionRequest]) -> tuple[DiffusionOutput, ...]:
+        """Run explicitly normalized native requests without media export.
+
+        Request fields are used as supplied; product defaults and aliases from
+        __call__ are not applied. Supported native Wan batches preserve independent
+        seeds and return outputs in input order. Serialize calls on this owner.
+        """
+        return self.native_pipeline.run_batch(requests)
+
+    def warmup(
+        self, requests: Iterable[DiffusionRequest | Sequence[DiffusionRequest]]
+    ) -> tuple[Mapping[str, object], ...]:
+        """Prepare singleton and batched native shapes without exporting warmup media."""
+        self.warmup_reports = self.native_pipeline.warmup(requests)
+        return self.warmup_reports
 
     def get_synthesis_model(self) -> NativeDiffusionPipeline:
         return self.native_pipeline

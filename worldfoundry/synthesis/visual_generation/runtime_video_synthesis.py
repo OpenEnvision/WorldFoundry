@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import inspect
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
@@ -19,22 +20,24 @@ import torch
 
 from worldfoundry.core.io import load_serialized, resolve_data_path
 from worldfoundry.core.media.codecs.image import load_pil_image, materialize_image_input
+from worldfoundry.core.media.codecs.video import video_chunk_to_uint8_frames
+from worldfoundry.core.media.processing.postprocess import VideoChunk, video_chunk_as_thwc
 from worldfoundry.runtime.assets import expand_worldfoundry_path
 
 from ..base_synthesis import BaseSynthesis
 
 
-def _frames_to_uint8_array(frames) -> np.ndarray:
+def _frames_to_uint8_array(frames: Any) -> np.ndarray:
     """Convert generated frames into a uint8 video array.
 
     This function accepts various input types for video frames (PyTorch tensors,
-    NumPy arrays, lists of PIL images or NumPy arrays) and converts them into
+    NumPy arrays, lists of PIL images or NumPy arrays, and declared VideoChunks) and converts them into
     a standardized 4D NumPy array of shape (N, H, W, C) with `uint8` data type,
     where N is the number of frames, H and W are height and width, and C is
     the number of channels (3 for RGB).
 
     Args:
-        frames: Tensor, array, PIL frame list, or numpy-compatible frame sequence.
+        frames: Declared VideoChunk, tensor, array, or RGB frame sequence.
 
     Returns:
         A 4D NumPy array representing the video frames, with `uint8` data type.
@@ -43,6 +46,12 @@ def _frames_to_uint8_array(frames) -> np.ndarray:
         ValueError: If the input frames have an unsupported shape or contain NaN/infinite values.
         TypeError: If the input frames type is not supported.
     """
+    if isinstance(frames, VideoChunk):
+        pixels = video_chunk_as_thwc(frames)
+        finite = torch.isfinite(pixels).all() if torch.is_tensor(pixels) else np.isfinite(np.asarray(pixels)).all()
+        if not finite:
+            raise ValueError("Generated video contains NaN or infinite values.")
+        frames = video_chunk_to_uint8_frames(frames)
     if torch.is_tensor(frames):
         # Detach tensor from graph, move to CPU, and convert to NumPy array.
         tensor = frames.detach().cpu()
@@ -607,6 +616,11 @@ class RuntimeVideoSynthesis(BaseSynthesis):
         # Prepare the result dictionary.
         result = {
             "video": video,
+            "video_chunk": (
+                replace(frames, frames=video, layout="thwc", value_range="0,255")
+                if isinstance(frames, VideoChunk)
+                else VideoChunk(frames=video, layout="thwc", value_range="0,255")
+            ),
             "generated_video_path": str(save_path) if save_path is not None else None,
             "prompt": prompt,
             "generation_type": self.generation_type,

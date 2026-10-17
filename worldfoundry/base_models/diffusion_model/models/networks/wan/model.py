@@ -27,6 +27,8 @@ VACE, causal attention, and linear attention are *not* in this file;
 they live in :mod:`.vace` and :mod:`.variants`.
 """
 
+from __future__ import annotations
+
 import math
 from typing import Any, Optional, Tuple
 
@@ -34,6 +36,12 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 
+from worldfoundry.base_models.diffusion_model.optimizations.camera_condition import camera_features
+from worldfoundry.base_models.diffusion_model.optimizations.static_cross_kv import (
+    StaticConditionCache,
+    StaticCrossKVProcessor,
+    reuse_cross_kv,
+)
 from worldfoundry.core.attention import (
     apply_complex_rotary_embedding as rope_apply,
 )
@@ -89,7 +97,7 @@ class AttentionModule(nn.Module):
 
         self.attention_backend = None if backend is None else str(backend)
 
-    def forward(self, q, k, v):
+    def forward(self, q, k, v, *, request_batch_sizes: tuple[int, ...] = ()):
         """Attend ``q`` to ``k``/``v`` and return the packed output tokens.
 
         Args:
@@ -97,6 +105,17 @@ class AttentionModule(nn.Module):
             k: Key tokens, same layout as ``q``.
             v: Value tokens, same layout as ``q``.
         """
+        if request_batch_sizes:
+            # SDPA may select split-KV or a different tile from the batch size.
+            # Preserve each request's native attention reduction and rounding.
+            return torch.cat(
+                [
+                    self.forward(query, key, value)
+                    for query, key, value in zip(
+                        q.split(request_batch_sizes), k.split(request_batch_sizes), v.split(request_batch_sizes)
+                    )
+                ]
+            )
         options = getattr(self, "_worldfoundry_attention_options", None)
         x = flash_attention(
             q=q,
@@ -120,6 +139,16 @@ class SelfAttentionProcessor:
         freqs: torch.Tensor,
         **kwargs: Any,
     ) -> torch.Tensor:
+        return SelfAttentionProcessor.compute(attention, x, freqs, **kwargs)
+
+    @staticmethod
+    def compute(
+        attention: SelfAttention,
+        x: torch.Tensor,
+        freqs: torch.Tensor,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Canonical tensor compute shared by every repeated Wan block."""
         q = attention.q(x)
         k = attention.k(x)
         v = attention.v(x)
@@ -134,7 +163,8 @@ class SelfAttentionProcessor:
             fused_grid=fused_grid,
             precision=kwargs.pop("_worldfoundry_rope_precision", "fp64"),
         )
-        output = attention.attn(q, k, v)
+        sizes = kwargs.pop("_worldfoundry_request_batch_sizes", ())
+        output = attention.attn(q, k, v, **({"request_batch_sizes": sizes} if sizes else {}))
         return attention.o(output)
 
 
@@ -242,6 +272,8 @@ class SelfAttention(nn.Module):
             freqs: 3D RoPE frequencies aligned with the patch grid.
             **kwargs: Forwarded to research processors (action, camera, KV cache).
         """
+        if type(self.processor) is SelfAttentionProcessor:
+            return SelfAttentionProcessor.compute(self, x, freqs, **kwargs)
         return self.processor(self, x, freqs, **kwargs)
 
 
@@ -268,18 +300,42 @@ class CrossAttentionProcessor:
         context: torch.Tensor,
         **kwargs: Any,
     ) -> torch.Tensor:
-        del kwargs
+        return CrossAttentionProcessor.compute(attention, x, context, **kwargs)
+
+    @staticmethod
+    def compute(
+        attention: CrossAttention,
+        x: torch.Tensor,
+        context: torch.Tensor,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Canonical tensor compute without per-instance processor guards."""
+        store = kwargs.pop("_worldfoundry_condition_store", None)
         if attention.has_image_input:
             image_context = context[:, :257]
             text_context = context[:, 257:]
         else:
             text_context = context
         query = attention.norm_q(attention.q(x))
-        key, value = project_wan_cross_kv(attention, text_context)
-        output = attention.attn(query, key, value)
+
+        def project() -> tuple[torch.Tensor, ...]:
+            projected = project_wan_cross_kv(attention, text_context)
+            if attention.has_image_input:
+                projected += project_wan_cross_kv(attention, image_context, image=True)
+            return projected
+
+        prepared = kwargs.pop("_worldfoundry_cross_kv", None)
+        if prepared is not None and len(prepared) != (4 if attention.has_image_input else 2):
+            raise ValueError("Wan prepared cross-KV must contain text K/V and, for I2V, image K/V")
+        key, value, *image_kv = (
+            reuse_cross_kv(attention, context, store, project) if prepared is None else prepared
+        )
+        sizes = kwargs.pop("_worldfoundry_request_batch_sizes", ())
+        attention_options = {"request_batch_sizes": sizes} if sizes else {}
+        output = attention.attn(query, key, value, **attention_options)
         if attention.has_image_input:
-            image_key, image_value = project_wan_cross_kv(attention, image_context, image=True)
-            output = output + attention.attn(query, image_key, image_value)
+            image_key, image_value = image_kv
+            output = output + attention.attn(query, image_key, image_value, **attention_options)
         return attention.o(output)
 
 
@@ -332,7 +388,14 @@ class CrossAttention(nn.Module):
             y: Condition tokens (text, or CLIP-image + text when I2V).
             **kwargs: Forwarded to research processors.
         """
-        return self.processor(self, x, y, **kwargs)
+        processor = self.processor
+        if type(processor) is CrossAttentionProcessor or (
+            "_worldfoundry_cross_kv" in kwargs
+            and type(processor) is StaticCrossKVProcessor
+            and type(processor._inner) is CrossAttentionProcessor
+        ):
+            return CrossAttentionProcessor.compute(self, x, y, **kwargs)
+        return processor(self, x, y, **kwargs)
 
 
 class GateModule(nn.Module):
@@ -350,12 +413,14 @@ class GateModule(nn.Module):
             x: Residual stream.
             gate: Broadcastable AdaLN gate (MSA or MLP).
             residual: Attention or FFN output.
-            inplace: Reuse ``x`` storage during inference.  Autograd always
-                keeps the functional path even if an internal caller requests
-                in-place execution.
+            inplace: Reuse ``x`` storage during inference when the functional
+                result has the same dtype. Autograd and dtype promotion keep
+                the functional path.
         """
         if inplace and not torch.is_grad_enabled():
-            return residual_gate_add_(x, residual, gate)
+            result_dtype = torch.promote_types(x.dtype, torch.promote_types(residual.dtype, gate.dtype))
+            if result_dtype == x.dtype:
+                return residual_gate_add_(x, residual, gate)
         return residual_gate_add(x, residual, gate)
 
 
@@ -475,6 +540,8 @@ class DiTBlock(nn.Module):
             eps=self.norm1.eps,
         )
         self_attention_kwargs = {}
+        if "_worldfoundry_request_batch_sizes" in kwargs:
+            self_attention_kwargs["_worldfoundry_request_batch_sizes"] = kwargs["_worldfoundry_request_batch_sizes"]
         for key in _SELF_ATTENTION_INTERNAL_KWARGS:
             if key in kwargs:
                 self_attention_kwargs[key] = kwargs.pop(key)
@@ -572,6 +639,8 @@ class DiTBlock(nn.Module):
                 eps=self.norm1.eps,
             )
             self_attention_kwargs = {}
+            if "_worldfoundry_request_batch_sizes" in kwargs:
+                self_attention_kwargs["_worldfoundry_request_batch_sizes"] = kwargs["_worldfoundry_request_batch_sizes"]
             for key in _SELF_ATTENTION_INTERNAL_KWARGS:
                 if key in kwargs:
                     self_attention_kwargs[key] = kwargs.pop(key)
@@ -713,7 +782,7 @@ class Head(nn.Module):
             else:
                 shift, scale = (
                     self.modulation.to(device=t_mod.device, dtype=torch.float32)
-                    + t_mod.float()
+                    + t_mod.float().unsqueeze(1)
                 ).chunk(2, dim=1)
                 x = self.head(
                     (self.norm(x.float()) * (1 + scale) + shift).to(dtype=head_dtype)
@@ -915,9 +984,8 @@ class WanModel(torch.nn.Module):
         """
         x = self.patch_embedding(x)
         if self.control_adapter is not None and control_camera_latents_input is not None:
-            y_camera = self.control_adapter(control_camera_latents_input)
-            x = [u + v for u, v in zip(x, y_camera)]
-            x = x[0].unsqueeze(0)
+            y_camera = camera_features(self.control_adapter, control_camera_latents_input)
+            x = x + y_camera
         grid_size = x.shape[2:]
         x = rearrange(x, "b c f h w -> b (f h w) c").contiguous()
         return x, grid_size
@@ -956,9 +1024,10 @@ class WanModel(torch.nn.Module):
 
     def prepare_condition_context(
         self,
-        context: torch.Tensor | None,
+        context: torch.Tensor | StaticConditionCache | None,
         *,
         clip_feature: torch.Tensor | None = None,
+        request_batch_sizes: tuple[int, ...] = (),
         **kwargs: Any,
     ) -> torch.Tensor:
         """Project the cross-attention condition used by the shared Wan blocks.
@@ -972,6 +1041,28 @@ class WanModel(torch.nn.Module):
         del kwargs
         if context is None:
             raise ValueError("Wan text-conditioned inference requires a context tensor")
+        def project_single(source: torch.Tensor, clip: torch.Tensor | None) -> torch.Tensor:
+            projected = self.text_embedding(source)
+            if self.has_image_input:
+                if clip is None:
+                    raise ValueError("Wan image-conditioned inference requires clip_feature")
+                projected = torch.cat([self.img_emb(clip), projected], dim=1)
+            return projected
+
+        def project(source: torch.Tensor, clip: torch.Tensor | None) -> torch.Tensor:
+            if request_batch_sizes and self.has_image_input:
+                if clip is None:
+                    raise ValueError("Wan image-conditioned inference requires clip_feature")
+                return torch.cat(
+                    [
+                        project_single(part, image)
+                        for part, image in zip(source.split(request_batch_sizes), clip.split(request_batch_sizes))
+                    ]
+                )
+            return project_single(source, clip)
+
+        if isinstance(context, StaticConditionCache):
+            return context.project_context(self, project)
         cross_kv_cache = getattr(self, "_worldfoundry_static_cross_kv", None)
         if cross_kv_cache is not None:
             cached_context = cross_kv_cache.get_condition_context(context, clip_feature)
@@ -979,11 +1070,7 @@ class WanModel(torch.nn.Module):
                 return cached_context
 
         raw_context = context
-        context = self.text_embedding(raw_context)
-        if self.has_image_input:
-            if clip_feature is None:
-                raise ValueError("Wan image-conditioned inference requires clip_feature")
-            context = torch.cat([self.img_emb(clip_feature), context], dim=1)
+        context = project(raw_context, clip_feature)
         if cross_kv_cache is not None:
             cross_kv_cache.put_condition_context(raw_context, clip_feature, context)
         return context
@@ -1122,6 +1209,8 @@ class WanModel(torch.nn.Module):
         feature_cache: Any = None,
         feature_cache_step: int = 0,
         feature_cache_total_steps: int | None = None,
+        cross_attention_kv: tuple[tuple[torch.Tensor, ...], ...] | None = None,
+        request_batch_sizes: tuple[int, ...] = (),
         **kwargs,
     ):
         """Denoise packed latents: timestep → condition → patchify → blocks → head.
@@ -1148,8 +1237,19 @@ class WanModel(torch.nn.Module):
             memory_context: Optional native memory-adapter state.
             fps: Optional 2-way FPS ids when ``inject_sample_info`` is set.
             control_camera_latents_input: Optional :class:`SimpleAdapter` input.
+            cross_attention_kv: Preprojected per-block text/image K/V. When
+                provided, ``context`` is already projected to the model width.
+                Only eval/no-grad execution consumes this tensor-only path.
+            request_batch_sizes: Original request row counts for merged requests.
+                Preserve each request's time-MLP, attention and output-head
+                shapes while block projections and FFNs use the combined batch.
             **kwargs: Forwarded to variant hooks and block processors.
         """
+        if cross_attention_kv is not None:
+            if self.training or torch.is_grad_enabled():
+                raise RuntimeError("prepared cross-KV requires eval no-grad inference")
+            if len(cross_attention_kv) != len(self.blocks):
+                raise ValueError("prepared cross-KV must contain one entry per Wan block")
         inplace_residual = kwargs.pop("_worldfoundry_inplace_residual", False)
         if not isinstance(inplace_residual, bool):
             raise TypeError("Wan internal inplace-residual flag must be a bool")
@@ -1171,16 +1271,28 @@ class WanModel(torch.nn.Module):
             # loading remain valid.
             time_dtype = next(self.time_embedding.parameters()).dtype
             if timestep.ndim == 1:
-                t = self.time_embedding(
-                    sinusoidal_embedding_1d(self.freq_dim, timestep).to(time_dtype)
-                )
-                t_mod = self.time_projection(t).unflatten(1, (6, self.dim))
+                features = sinusoidal_embedding_1d(self.freq_dim, timestep).to(time_dtype)
+                if request_batch_sizes:
+                    time_parts = [self.time_embedding(part) for part in features.split(request_batch_sizes)]
+                    t = torch.cat(time_parts)
+                    t_mod = torch.cat([self.time_projection(part) for part in time_parts]).unflatten(1, (6, self.dim))
+                else:
+                    t = self.time_embedding(features)
+                    t_mod = self.time_projection(t).unflatten(1, (6, self.dim))
             elif timestep.ndim == 2 and self.per_token_timestep:
                 batch, sequence = timestep.shape
-                t = self.time_embedding(
-                    sinusoidal_embedding_1d(self.freq_dim, timestep.flatten()).to(time_dtype)
-                ).unflatten(0, (batch, sequence))
-                t_mod = self.time_projection(t).unflatten(2, (6, self.dim))
+                features = sinusoidal_embedding_1d(self.freq_dim, timestep.flatten()).to(time_dtype)
+                if request_batch_sizes:
+                    token_sizes = tuple(size * sequence for size in request_batch_sizes)
+                    time_parts = [
+                        self.time_embedding(part).unflatten(0, (size, sequence))
+                        for part, size in zip(features.split(token_sizes), request_batch_sizes)
+                    ]
+                    t = torch.cat(time_parts)
+                    t_mod = torch.cat([self.time_projection(part) for part in time_parts]).unflatten(2, (6, self.dim))
+                else:
+                    t = self.time_embedding(features).unflatten(0, (batch, sequence))
+                    t_mod = self.time_projection(t).unflatten(2, (6, self.dim))
             else:
                 raise ValueError(
                     "Wan timestep must be [B], or [B,L] when per-token timesteps are enabled"
@@ -1197,11 +1309,13 @@ class WanModel(torch.nn.Module):
             fps_dtype = next(self.fps_projection.parameters()).dtype
             fps_mod = self.fps_projection(fps_features.to(fps_dtype)).unflatten(1, (6, self.dim))
             t_mod = t_mod + fps_mod
-        context = self.prepare_condition_context(
-            context,
-            clip_feature=clip_feature,
-            **kwargs,
-        )
+        if cross_attention_kv is None:
+            context = self.prepare_condition_context(
+                context,
+                clip_feature=clip_feature,
+                **({"request_batch_sizes": request_batch_sizes} if request_batch_sizes else {}),
+                **kwargs,
+            )
 
         # Wan2.1 I2V uses both CLIP and VAE conditions, while Wan2.2 Fun I2V
         # keeps only the VAE branch.  Treat those roles independently so a
@@ -1282,6 +1396,8 @@ class WanModel(torch.nn.Module):
             **kwargs,
         )
         block_kwargs["_worldfoundry_rope_precision"] = rope_precision
+        if request_batch_sizes:
+            block_kwargs["_worldfoundry_request_batch_sizes"] = request_batch_sizes
         if inplace_residual:
             block_kwargs["_worldfoundry_inplace_residual"] = True
         if getattr(self, "_worldfoundry_approximate_attention", None) is not None:
@@ -1307,16 +1423,19 @@ class WanModel(torch.nn.Module):
             previous_hidden = hidden
             block = self.blocks[block_id]
             block_inputs = (hidden, context, t_mod, freqs)
+            call_kwargs = block_kwargs
+            if cross_attention_kv is not None:
+                call_kwargs = dict(block_kwargs, _worldfoundry_cross_kv=cross_attention_kv[block_id])
             if self.training:
                 hidden = gradient_checkpoint_forward(
                     block,
                     use_gradient_checkpointing,
                     use_gradient_checkpointing_offload,
                     *block_inputs,
-                    **block_kwargs,
+                    **call_kwargs,
                 )
             else:
-                hidden = block(*block_inputs, **block_kwargs)
+                hidden = block(*block_inputs, **call_kwargs)
             hidden = self.after_transformer_block(
                 hidden,
                 block_id,
@@ -1411,7 +1530,13 @@ class WanModel(torch.nn.Module):
             x = x[:, :sequence_parallel_length]
 
         x, auxiliary = self.finalize_token_sequence(x, token_state, **kwargs)
-        x = self.project_output(x, t, **kwargs)
+        if request_batch_sizes:
+            x = torch.cat([
+                self.project_output(part, time_part, **kwargs)
+                for part, time_part in zip(x.split(request_batch_sizes), t.split(request_batch_sizes))
+            ])
+        else:
+            x = self.project_output(x, t, **kwargs)
         x = self.unpatchify(x, (f, h, w))
         return (x, auxiliary) if auxiliary is not None else x
 

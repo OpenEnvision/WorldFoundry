@@ -14,7 +14,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Mapping
 
-from worldfoundry.core.io import file_sha256, load_serialized, resolve_data_path
+from worldfoundry.core.io import load_serialized, resolve_data_path
 from worldfoundry.runtime.assets import expand_worldfoundry_path
 
 
@@ -603,7 +603,6 @@ class OfficialVideoRuntime:
             "runtime": self.runtime.get("kind"),
             "backend_quality": self.runtime.get("backend_quality", "official_runtime_bridge"),
             "artifact_path": str(output),
-            "artifact_sha256": file_sha256(output) if output.is_file() else None,
             "metadata": dict(metadata),
         }
 
@@ -1252,7 +1251,6 @@ class OfficialVideoRuntime:
     def _sample_qwen_video(video_path: str | Path, max_frames: int) -> tuple[Any, dict[str, Any]]:
         """Decode a bounded, evenly spaced set of RGB frames for Qwen2.5-VL."""
         import cv2
-        import hashlib
         import numpy as np
 
         path = Path(video_path).expanduser().resolve()
@@ -1290,13 +1288,11 @@ class OfficialVideoRuntime:
             sampled_fps = source_fps * (len(indices) - 1) / (indices[-1] - indices[0])
         return np.stack(frames), {
             "video_path": str(path),
-            "source_sha256": file_sha256(path),
             "source_frame_count": frame_count,
             "source_fps": source_fps,
             "sampled_frame_indices": indices,
             "sampled_fps": sampled_fps,
             "sampled_frame_shape": list(frames[0].shape),
-            "sampled_rgb_frame_sha256": [hashlib.sha256(frame.tobytes()).hexdigest() for frame in frames],
         }
 
     def _run_qwen25_vl(

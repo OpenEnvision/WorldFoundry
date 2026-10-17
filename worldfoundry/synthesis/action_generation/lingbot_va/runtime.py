@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path, worldfoundry_path_tokens
 from worldfoundry.synthesis.action_generation.wan_va import RUNTIME_ROOT, WAN_VA_PACKAGE, WAN_VA_ROOT
 
@@ -337,7 +336,7 @@ def write_action_trace(
 
     Returns:
         A dictionary containing status and metadata about the written artifact,
-        including its path and SHA256 hash.
+        including its path.
     """
     target = Path(output_path).expanduser().resolve()
     # Ensure the parent directory for the output file exists.
@@ -368,7 +367,6 @@ def write_action_trace(
         "model_id": "lingbot-va",
         "artifact_kind": "action_trace",
         "artifact_path": str(target),
-        "artifact_sha256": file_sha256(target),
         "backend": payload["backend"],
         "backend_quality": payload["backend_quality"],
     }

@@ -174,18 +174,18 @@ def _field_kind(name: str, default: Any = None) -> str:
         lowered = default.strip().lower()
         if lowered in {"true", "false"}:
             return "boolean"
-        integer_name = normalized in {"frames", "steps", "fps", "seed", "height", "width"} or normalized.startswith(
-            ("num-", "max-", "min-")
-        ) or normalized.endswith(("-frames", "-steps", "-fps", "-seed", "-height", "-width", "-num"))
+        integer_name = (
+            normalized in {"frames", "steps", "fps", "seed", "height", "width"}
+            or normalized.startswith(("num-", "max-", "min-"))
+            or normalized.endswith(("-frames", "-steps", "-fps", "-seed", "-height", "-width", "-num"))
+        )
         if integer_name:
             try:
                 int(default)
             except ValueError:
                 return "string"
             return "integer"
-        number_name = any(
-            token in normalized for token in ("scale", "guidance", "threshold", "ratio", "distance")
-        )
+        number_name = any(token in normalized for token in ("scale", "guidance", "threshold", "ratio", "distance"))
         if number_name:
             try:
                 float(default)
@@ -348,6 +348,7 @@ def _runtime_profile_id(value: Any) -> str:
 @lru_cache(maxsize=1)
 def _runtime_profile_paths_by_stem() -> Mapping[str, tuple[Any, ...]]:
     from worldfoundry.evaluation.models.runtime.profiles import DEFAULT_RUNTIME_PROFILES_ROOT
+
     paths: dict[str, list[Any]] = {}
     for path in DEFAULT_RUNTIME_PROFILES_ROOT.rglob("*.y*ml"):
         if path.is_file():
@@ -366,6 +367,7 @@ def _load_catalog_runtime_profile(entry: Any, variant: Any | None) -> tuple[Any 
         )
     )
     from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profile_manifests
+
     paths_by_stem = _runtime_profile_paths_by_stem()
     for candidate in candidates:
         for path in paths_by_stem.get(_normalise(candidate), ()):
@@ -375,8 +377,7 @@ def _load_catalog_runtime_profile(entry: Any, variant: Any | None) -> tuple[Any 
                     profile
                     for profile in profiles
                     if _normalise(profile.model_id) == _normalise(candidate)
-                    or _normalise(getattr(profile, "execution", {}).get("profile_id", ""))
-                    == _normalise(candidate)
+                    or _normalise(getattr(profile, "execution", {}).get("profile_id", "")) == _normalise(candidate)
                 ),
                 None,
             )
@@ -535,9 +536,7 @@ def _fallback_input_fields(entry: Any, profile: Any | None, display_name: str) -
                 choices = tuple(raw_contract)
             else:
                 kind = "json"
-        required = explicit_required or (
-            option_name == singleton_modality and raw_contract is True
-        )
+        required = explicit_required or (option_name == singleton_modality and raw_contract is True)
         label = option_name.replace("-", " ").title()
         fields.append(
             ModelRunField(
@@ -797,8 +796,7 @@ def load_model_run_schema(
             compact_matches = [
                 item
                 for item in catalog_registry.list()
-                if "".join(character for character in item.model_id if character.isalnum()).lower()
-                == compact_studio_id
+                if "".join(character for character in item.model_id if character.isalnum()).lower() == compact_studio_id
             ]
             if len(compact_matches) == 1:
                 catalog_entry = compact_matches[0]
@@ -814,8 +812,7 @@ def load_model_run_schema(
                 model_id if _normalise(model_id) != _normalise(catalog_entry.model_id) else "",
                 *(
                     tuple(entry.aliases)
-                    if entry is not None
-                    and _normalise(model_id) != _normalise(catalog_entry.model_id)
+                    if entry is not None and _normalise(model_id) != _normalise(catalog_entry.model_id)
                     else ()
                 ),
             )
@@ -831,6 +828,11 @@ def load_model_run_schema(
         )
         if selected_catalog_variant is not None:
             catalog_variant_id = selected_catalog_variant.variant_id
+            if selected_catalog_variant.pipeline_binding:
+                try:
+                    entry = find_entry(selected_catalog_variant.pipeline_binding)
+                except KeyError:
+                    pass
         elif variant_id is None and not catalog_entry.runner_target:
             selected_catalog_variant = select_default_variant(
                 catalog_entry,
@@ -845,9 +847,7 @@ def load_model_run_schema(
         if variant_id and selected_catalog_variant is None:
             choices = tuple(item.variant_id for item in catalog_entry.variants)
             suffix = f"; choose one of: {', '.join(choices)}" if choices else ""
-            raise ModelRunSchemaError(
-                f"unknown model variant {variant_id!r} for {catalog_entry.model_id!r}{suffix}"
-            )
+            raise ModelRunSchemaError(f"unknown model variant {variant_id!r} for {catalog_entry.model_id!r}{suffix}")
         return _fallback_model_run_schema(
             requested_model_id=model_id,
             entry=catalog_entry,
@@ -908,10 +908,7 @@ def load_model_run_schema(
         field_id = _normalise(input_field.field_id)
         if field_id in _SKIPPED_CALL_FIELDS:
             continue
-        if (
-            field_id == "input-path"
-            and text_to_video_entry
-        ):
+        if field_id == "input-path" and text_to_video_entry:
             continue
         target = _normalise(input_field.target)
         scope = "input" if target in {"prompt", "input-path"} else "load" if target == "load-kwargs" else "call"
@@ -985,11 +982,7 @@ def load_model_run_schema(
     flattened_load_leaves = {path[-1] for path, _ in _flatten_mapping(load_defaults)}
     call_parameter_names = {str(item) for item in entry.call_params}
     for raw_name in entry.load_params:
-        if (
-            raw_name in _SKIPPED_LOAD_FIELDS
-            or raw_name in flattened_load_leaves
-            or raw_name in call_parameter_names
-        ):
+        if raw_name in _SKIPPED_LOAD_FIELDS or raw_name in flattened_load_leaves or raw_name in call_parameter_names:
             continue
         option_name = _normalise(raw_name)
         option = f"--pipeline.load.{option_name}"
@@ -1034,7 +1027,11 @@ def load_model_run_schema(
             *_text_items(spec.notes),
             *_text_items(entry.notes),
             *(_text_items(getattr(catalog_entry, "notes", ())) if catalog_entry is not None else ()),
-            *(_text_items(getattr(selected_catalog_variant, "notes", ())) if selected_catalog_variant is not None else ()),
+            *(
+                _text_items(getattr(selected_catalog_variant, "notes", ()))
+                if selected_catalog_variant is not None
+                else ()
+            ),
         )
     )
     return ModelRunSchema(
@@ -1102,11 +1099,7 @@ def _metavar(kind: str) -> str:
 
 def register_model_run_arguments(parser: argparse.ArgumentParser, schema: ModelRunSchema) -> None:
     """Register typed model fields on the existing ``run`` subparser."""
-    existing_options = {
-        option
-        for action in parser._actions
-        for option in action.option_strings
-    }
+    existing_options = {option for action in parser._actions for option in action.option_strings}
     status_parts = [
         schema.runner_entry_kind,
         f"integration={schema.integration_status}",

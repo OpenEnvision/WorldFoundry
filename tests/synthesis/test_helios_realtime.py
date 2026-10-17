@@ -49,9 +49,7 @@ def _checkpoint(tmp_path: Path, *, distilled: bool = True) -> Path:
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("{}", encoding="utf-8")
-    (root / "model_index.json").write_text(
-        json.dumps({"is_distilled": distilled}), encoding="utf-8"
-    )
+    (root / "model_index.json").write_text(json.dumps({"is_distilled": distilled}), encoding="utf-8")
     return root
 
 
@@ -59,9 +57,7 @@ def test_checkpoint_gate_accepts_only_distilled(tmp_path: Path) -> None:
     distilled = _checkpoint(tmp_path)
     assert realtime._resolve_checkpoint(distilled) == distilled.resolve()
 
-    (distilled / "model_index.json").write_text(
-        json.dumps({"is_distilled": False}), encoding="utf-8"
-    )
+    (distilled / "model_index.json").write_text(json.dumps({"is_distilled": False}), encoding="utf-8")
     with pytest.raises(ValueError, match="Helios-Distilled"):
         realtime._resolve_checkpoint(distilled)
 
@@ -203,9 +199,7 @@ def test_torchrun_bridge_configures_prompt_only_helios_without_an_image(tmp_path
         interactions=[],
     )
 
-    handled, result = StudioManager(
-        workspace_root=str(tmp_path / "studio")
-    )._run_native_realtime_pipeline_action(
+    handled, result = StudioManager(workspace_root=str(tmp_path / "studio"))._run_native_realtime_pipeline_action(
         driver=BaseRuntimeDriver(),
         ctx=context,
         request=request,  # type: ignore[arg-type]
@@ -236,9 +230,7 @@ def test_user_can_select_true_context_parallel_gpu_count(
     assert _requested_torchrun_nproc("helios", run_kwargs) == 8
 
     monkeypatch.setenv("WORLD_SIZE", "8")
-    assert launch_uses_lingbot_torchrun_rollout(
-        StudioLaunchConfig(model_id="helios", frontend="world")
-    )
+    assert launch_uses_lingbot_torchrun_rollout(StudioLaunchConfig(model_id="helios", frontend="world"))
     monkeypatch.setenv(TORCHRUN_LINGBOT_FAST_ENV, "1")
     manager = StudioManager(workspace_root=str(tmp_path / "studio"))
     assert manager._should_use_torchrun_lingbot_fast(
@@ -256,18 +248,24 @@ def test_context_parallel_auto_uses_uneven_sharding_only_when_needed() -> None:
     )
 
     assert lengths == (540, 2940, 2160, 4560, 8640, 11040)
-    assert realtime._resolve_context_parallel_backend(
-        "auto",
-        4,
-        attention_heads=40,
-        sequence_lengths=lengths,
-    ) == "ulysses"
-    assert realtime._resolve_context_parallel_backend(
-        "auto",
-        8,
-        attention_heads=40,
-        sequence_lengths=lengths,
-    ) == "ulysses_anything"
+    assert (
+        realtime._resolve_context_parallel_backend(
+            "auto",
+            4,
+            attention_heads=40,
+            sequence_lengths=lengths,
+        )
+        == "ulysses"
+    )
+    assert (
+        realtime._resolve_context_parallel_backend(
+            "auto",
+            8,
+            attention_heads=40,
+            sequence_lengths=lengths,
+        )
+        == "ulysses_anything"
+    )
 
 
 def test_context_parallel_rejects_incompatible_equipartition_before_generation() -> None:
@@ -500,6 +498,12 @@ def test_generate_next_retains_native_ar_state_across_calls() -> None:
 
     assert first["frames"].shape == (33, 2, 2, 3)
     assert second["frames"].shape == (33, 2, 2, 3)
+    for result in (first, second):
+        chunk = result["video_chunk"]
+        assert chunk.frames is result["frames"]
+        assert chunk.layout == "thwc"
+        assert chunk.value_range == "0,255"
+        assert chunk.frame_count == 33
     assert session.pipe.stage_calls == [True, False]
     assert session._state.chunk_index == 2
     assert session._state.history_latents.shape[2] == 19

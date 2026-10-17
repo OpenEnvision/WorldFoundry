@@ -35,6 +35,8 @@ Optional `prompt`, `input_path`, `interactions`, `fps`, and `timeout_seconds`; a
 
 CLI task profiles: `default`. WorldFoundry binds `DBCogACTPipeline`.
 
+The native runtime reuses checkpoint-backed model and tokenizer resources. Each request receives its own policy wrapper and resolved action normalization: `norm_stats`, `norm_stats_path` / `normalization_stats_path`, checkpoint `norm_stats.json`, then the `[-1, 1]` default. Updating a statistics file at the same path takes effect on the next request without reloading model weights. The DDIM schedule is rebuilt when a request changes `num_steps`; requests with the same step count reuse it.
+
 Family status: **Runner parity pending**.
 
 Pick the checkpoint matching your benchmark: libero-db-cogact, calvin-db-cogact, or simpler-db-cogact; SArm/HArm foundations serve fine-tuning. Integration status is Runner parity pending.

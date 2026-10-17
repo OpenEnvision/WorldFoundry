@@ -5,6 +5,7 @@ import os
 import re
 from contextlib import nullcontext
 from dataclasses import dataclass
+from threading import Lock
 from typing import Any, Dict, List, Optional, Union
 
 import loguru
@@ -102,6 +103,7 @@ class HunyuanWorldPlayRuntime:
         enable_offloading: bool = False,
     ):
         self.model = model
+        self._realtime_lock = Lock()
 
         self.vae = vae
         self.text_encoder = text_encoder

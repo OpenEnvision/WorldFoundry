@@ -1,0 +1,92 @@
+---
+title: "Matrix-Game 4 Ancient Egypt"
+description: "Native offline low-poly video rendering, with an optional upstream game submodule."
+modelId: "matrix-game-4-egypt"
+pageSource: authored
+---
+
+Matrix-Game 4 re-renders low-poly RGB gameplay rather than predicting a game from keyboard actions. `matrix-game-4-egypt` binds the released Ancient Egypt checkpoint to WorldFoundry's native Wan graph and autoregressive runner. The game engine is optional and maintained upstream.
+
+<ModelCommandBuilder modelId="matrix-game-4-egypt" locale="en" />
+
+## Native offline rendering
+
+Use the [unified GPU environment](/docs/quickstart). The Python renderer needs no game checkout, SDL, EGL or upstream Python inference package.
+
+```python
+from worldfoundry.pipelines.matrix_game.pipeline_matrix_game4 import MatrixGame4EgyptPipeline
+
+pipeline = MatrixGame4EgyptPipeline.from_pretrained(
+    device="cuda",
+    torch_dtype="bfloat16",
+    attention_backend="sdpa",
+)
+result = pipeline(
+    input_path="lowpoly.mp4",
+    output_path="outputs/egypt.mp4",
+    seed=42,
+    return_dict=True,
+)
+print(result["artifact_path"], result["metadata"])
+```
+
+```bash
+worldfoundry-eval run matrix-game-4-egypt \
+  --pipeline.task-profile low-poly-rendering \
+  --pipeline.input-path lowpoly.mp4 --json
+```
+
+The public route uses two denoising steps, guidance scale 1, scheduler shift 5, Wan2.2 VAE and a fixed prompt per clip. An empty prompt selects the released Egypt description. Files and PIL/uint8 THWC frames are resized to cover and center-cropped to **864×480**. Floating-point tensor inputs must already be signed `[1,3,T,480,864]` RGB in `[-1,1]`.
+
+File input retains source FPS unless `fps` is supplied; in-memory inputs default to 20 FPS. No temporal resampling is performed. Internally, the first RGB chunk has one frame and each following chunk has four. The final frame is repeated when necessary and padding is removed from the output. A separately encoded identity sink primes the 21-latent KV window; it is neither an output frame nor part of control-video codec history. Each call starts fresh. The limit is 8,192 generated latent chunks per request.
+
+The pipeline returns the shared native video mapping; the evaluation runner normalizes it to `GenerationResult`. MP4 output and metadata retain the seed, scene, step count and playback clock. Playback FPS is not measured rendering throughput.
+
+## Checkpoints
+
+The recipe pins `Skywork/Matrix-Game-4.0` to `4419accdb7bb7881234c5914de8cd915266e0325` and `alibaba-pai/Wan2.2-Fun-5B-Control` to `b8bc1a65ab71d054ba4636dc0dac104aa4df2686`. Required roles are `dit`, `sink`, `vae`, `text-encoder` and `tokenizer`; weights and assets are downloaded separately.
+
+Use `model_path="/path/to/fps-egypt/model.safetensors"` to replace only the DiT. For a fully local run, pass `checkpoint_overrides` with all five roles. The tokenizer role points to the directory containing the recipe's `google/umt5-xxl/` files. Other roles point to their individual files. Missing files use the shared checkpoint resolver, not an engine checkout.
+
+## Optional upstream game
+
+The submodule fixes the complete upstream repository at `5446525c80da2a4a2f87801addbbc7faa8d2486e`; Git cannot mount only its `game/` subdirectory. Python distributions exclude this checkout.
+
+```bash
+git submodule update --init thirdparty/matrix-game
+cd thirdparty/matrix-game/Matrix-Game-4
+export MATRIX_GAME4_RESOURCES="$HOME/.cache/worldfoundry/matrix-game4"
+PYTHONPATH=. python -m matrix_game.cli download \
+  --manifest releases/game-assets.json --scene ancient-egypt \
+  --repo-id Skywork/Matrix-Game-4.0 --repo-type model \
+  --revision 4419accdb7bb7881234c5914de8cd915266e0325 \
+  --resources "$MATRIX_GAME4_RESOURCES"
+bash scripts/build_game.sh
+MATRIX_GAME_DATA_DIR="$MATRIX_GAME4_RESOURCES/game" \
+  bash scripts/play.sh --scene ancient-egypt
+```
+
+Follow the pinned [installation guide](https://github.com/SkyworkAI/Matrix-Game/blob/5446525c80da2a4a2f87801addbbc7faa8d2486e/Matrix-Game-4/docs/installation.md) for CMake, SDL2, OpenGL/EGL and FFmpeg dependencies, and the [offline recording guide](https://github.com/SkyworkAI/Matrix-Game/blob/5446525c80da2a4a2f87801addbbc7faa8d2486e/Matrix-Game-4/docs/offline.md) to capture clean RGB. HUD and audio remain outside the model input. Game source and released model assets use Apache-2.0; nested game dependencies retain their own terms. Attribution is recorded in `THIRD-PARTY-NOTICES` and `thirdparty/UPSTREAM_PROVENANCE.md`.
+
+## Validation
+
+Released-weight comparisons through the public loader match pinned upstream latent and decoded RGB values exactly for **5-frame and 100-frame** inputs at 864×480 on H100, using BF16, SDPA and no offload. Inputs are repeated sink imagery and synthetic image panning. The 100-frame case crosses the 21-latent KV window, removes one padded frame and exports a 100-frame, 20 FPS MP4. A/B/A request reuse, recovery after interrupted denoising and unchanged global RNG also pass on resident weights.
+
+Reproduce with an explicit local input and checkpoint directories:
+
+```bash
+python tests/manual/matrix_game4_checkpoint_parity.py \
+  --reference-root thirdparty/matrix-game/Matrix-Game-4 \
+  --egypt-root /path/to/Skywork--Matrix-Game-4.0 \
+  --base-root /path/to/alibaba-pai--Wan2.2-Fun-5B-Control \
+  --input testcase/matrix_game4/control.mp4 \
+  --output-dir tmp/matrix-game4-checkpoint-parity
+```
+
+The comparison shares decoded RGB input with the public route and runs upstream's quality preset independently. Reports, numerical tensors and the native MP4 are written to the output directory. Component comparisons remain available through `tests/manual/matrix_game4_component_parity.py`; its small graph matches 81 forwards and KV tensors exactly, and the real Wan2.2 VAE matches five-frame encoding and decoding exactly.
+
+## Limitations
+
+Accepted-reference release replay, gameplay-quality validation and measured throughput remain pending. Castle, Racing, TAEHV one-step rendering, live game interaction and optimized throughput are separate integration work.
+
+<ModelRelatedRecipes modelId="matrix-game-4-egypt" locale="en" />

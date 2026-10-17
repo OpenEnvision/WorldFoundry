@@ -74,7 +74,7 @@ def test_open_sora_runtime_requires_local_vae_and_text_encoder(tmp_path: Path, m
     hfd_root = tmp_path / "hfd"
     stdit = hfd_root / "hpcai-tech--OpenSora-STDiT-v3"
     vae = hfd_root / "hpcai-tech--OpenSora-VAE-v1.2"
-    text_encoder = hfd_root / "DeepFloyd--t5-v1_1-xxl"
+    text_encoder = hfd_root / "DeepFloyd--t5-v1_1-xxl-safetensors"
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(hfd_root))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(hfd_root))
 
@@ -95,9 +95,9 @@ def test_open_sora_runtime_requires_local_vae_and_text_encoder(tmp_path: Path, m
     text_encoder.mkdir()
     for filename in (
         "config.json",
-        "pytorch_model.bin.index.json",
-        "pytorch_model-00001-of-00002.bin",
-        "pytorch_model-00002-of-00002.bin",
+        "model.safetensors.index.json",
+        "model-00001-of-00002.safetensors",
+        "model-00002-of-00002.safetensors",
         "spiece.model",
     ):
         (text_encoder / filename).touch()
@@ -174,9 +174,7 @@ def test_official_cli_resolves_prefixed_wan_flat_mirror(tmp_path: Path) -> None:
     expected = tmp_path / "Wan-AI--Wan2.1-T2V-14B"
     expected.mkdir()
 
-    normalized = _normalize_cli_path_variables(
-        {"wan_model_root": str(tmp_path / "Wan2.1-T2V-14B")}
-    )
+    normalized = _normalize_cli_path_variables({"wan_model_root": str(tmp_path / "Wan2.1-T2V-14B")})
 
     assert normalized["wan_model_root"] == expected.resolve()
 

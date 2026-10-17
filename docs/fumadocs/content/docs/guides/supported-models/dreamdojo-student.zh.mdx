@@ -1,0 +1,108 @@
+---
+title: "DreamDojo Student"
+description: "DreamDojo 学生的原生低步数推理与常驻机器人动作流式入口。"
+modelId: "dreamdojo-student"
+pageSource: authored
+---
+
+WorldFoundry 已接入 DreamDojo 的 **2B GR-1 self-forcing 学生**，支持因果动作条件、**1–4 步 TrigFlow 采样**、独立离线回放与常驻流式 API。DiT、Reason1 文本条件与 Wan 视频编解码复用规范 Cosmos 组件。[Teacher 入口](./dreamdojo) 保持独立。
+
+源码：[NVIDIA/DreamDojo](https://github.com/NVIDIA/DreamDojo/tree/02f119b759d5c7f84a399fdeea3c6e82e7ed6cff)，包括[蒸馏流程](https://github.com/NVIDIA/DreamDojo/blob/02f119b759d5c7f84a399fdeea3c6e82e7ed6cff/docs/DISTILL.md)。集成状态：**已集成**。
+
+## 输入与帧节奏
+
+提供一幅初始图像与有限、由调用方归一化的机器人动作，形状为 `[N,384]` 或 `[1,N,384]`。
+
+- 首次 STEP：**12 步新动作 → 13 帧 RGB**。
+- 后续 STEP：**4 步新动作 → 4 帧新 RGB**。
+- 播放时钟：**10 fps**，使用配置的原生分辨率，默认 **480×640**。
+- 采样步数：整数 **1–4**，默认 **4**。Guidance 已蒸馏，使用 `guidance_scale=1`。
+- 离线序列：`N >= 12` 且为 4 的倍数。24 步动作返回 25 帧。
+
+续接保存九帧 RGB 与八步历史动作，重新编码观测窗口，并将新动作对齐到新潜帧转换。每个窗口独立维护每层最多三潜帧的干净 KV 历史，噪声采样只读缓存。文本条件保持常驻直到重置。`reset_realtime()` 丢弃回放状态，不卸载权重。
+
+## 资产与环境
+
+使用[贡献指南](/zh/docs/maintainers/contributing)中的统一 CUDA 环境：
+
+```bash
+bash scripts/setup/bootstrap_worldfoundry.sh
+source tmp/worldfoundry_unified_env.sh
+conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
+```
+
+通过 `student_checkpoint_path` 显式提供**蒸馏学生** checkpoint，同时准备 Cosmos-Predict2.5 的 `tokenizer.pth` 与 Cosmos-Reason1-7B 文本资产。支持导出的 EMA 文件、含 `model/.metadata` 的迭代目录，或 DCP model 目录。分布式 EMA 转换使用包内工具。如已有文本特征，可使用形状为 `[1,S,100352]` 的 `text_embeddings_path` 替代 `text_encoder_path`。
+
+## 公开社区 checkpoint
+
+[PencilHu/DreamDojo-Jokeru-2B-SelfForcing](https://huggingface.co/PencilHu/DreamDojo-Jokeru-2B-SelfForcing/tree/c99e38c158c853113e1148078f4730aabde7b4ed) 发布了 `checkpoints/iter_000000700` 社区 **Jokeru** 学生。训练配置使用 2B 因果架构、384 维动作、四个已发布 TrigFlow 时间点与 480×640 分辨率。EMA 元数据映射后与规范模型的 **577** 个参数键完整匹配，没有缺失键或形状差异。这不是 NVIDIA 官方 GR-1 学生。
+
+```bash
+hf download PencilHu/DreamDojo-Jokeru-2B-SelfForcing \
+  --revision c99e38c158c853113e1148078f4730aabde7b4ed \
+  --include 'checkpoints/iter_000000700/model/*' \
+            'checkpoints/iter_000000700/training_config.yaml' README.md \
+  --local-dir /weights/DreamDojo-Jokeru-2B-SelfForcing
+```
+
+model 分片合计约 **17.2 GB**，包含训练侧网络。将 `/weights/DreamDojo-Jokeru-2B-SelfForcing/checkpoints/iter_000000700` 传给 `student_checkpoint_path`，包内转换器会提取 EMA 推理权重。除上传者声明的 Apache-2.0 许可外，还需保留上游 NVIDIA 模型条款。完整下载与真实权重回放尚未完成；元数据兼容不能证明输出质量或吞吐。
+
+## 常驻流式推理
+
+```python
+import numpy as np
+from worldfoundry.pipelines.dreamdojo.pipeline_dreamdojo_student import DreamDojoStudentPipeline
+
+pipeline = DreamDojoStudentPipeline.from_pretrained(
+    {
+        "student_checkpoint_path": "/weights/DreamDojo/student/iter_000003000",
+        "vae_path": "/weights/Cosmos-Predict2.5-2B/tokenizer.pth",
+        "text_embeddings_path": "/inputs/robot-text.pt",
+    },
+    device="cuda",
+)
+# 已准备的归一化控制，不是原始关节读数或键盘命令。
+actions = np.load("/inputs/normalized-actions.npy")  # [N,384], N >= 16
+pipeline.configure_realtime(
+    images="/inputs/robot.png",
+    height=480,
+    width=640,
+    num_inference_steps=4,
+    seed=42,
+)
+try:
+    first = pipeline.stream_realtime(actions=actions[:12])
+    next_chunk = pipeline.stream_realtime(actions=actions[12:16])
+    pixels = next_chunk["video_chunk"].frames  # [1,3,4,480,640], [-1,1]
+finally:
+    pipeline.reset_realtime()
+```
+
+如需独立离线导出，对同一 pipeline 传入 `images`、`interactions=[action_file]` 与 `output_path`。离线调用不修改已有常驻回放。Studio 提供独立的 **DreamDojo Student** 条目，包含学生权重控制与四步默认配置。
+
+真实权重公共流式入口命令：
+
+```bash
+python tests/manual/dreamdojo_inference.py \
+  --variant student --stream \
+  --student-checkpoint /weights/DreamDojo/student/iter_000003000 \
+  --vae /weights/Cosmos-Predict2.5-2B/tokenizer.pth \
+  --text-embeddings /inputs/robot-text.pt \
+  --image /inputs/robot.png --actions /inputs/normalized-actions.npy \
+  --output /outputs/dreamdojo-student.mp4 --steps 4 --seed 42
+```
+
+## 验证
+
+无权重小型 DiT 契约覆盖缓存因果输出与稠密时间掩码参考的数值比较、TrigFlow 系数与加噪、动作和历史对齐、A/B/A 可重复性、会话交错、请求失败/取消、重置复用、独立离线导出与公共加载。CUDA 契约覆盖同一 MATH 后端下的 FP32/BF16 缓存注意力，以及 BF16 动作条件可重复性。
+
+H100 上的共享 tokenizer 真实权重回放在 480×640 下检查了单帧初始窗口和九帧续接窗口。两种编码均与直接调用规范 Wan 编码完全一致，解码输出为有限的 `[1,3,13,480,640]` tensor。这是共享编解码证据，不是学生 DiT 的 checkpoint 回放。
+
+## 限制
+
+- 固定的 DreamDojo Hub 快照 `89d029e10816d2995d700cb8ba06f171e0504203` 不包含蒸馏学生 checkpoint。需自行提供学生权重，加载器不会替换为后训练 teacher 权重。
+- 尚未验证学生真实权重输出质量、官方数值/视觉一致性、机器人闭环成功率或实测 **10 fps 生成吞吐**。上文 10 fps 是播放节奏。
+- 无权重 pipeline 测试使用简化编解码器，不构成 Wan 或学生真实权重输出质量的证据。
+- 数据集归一化与遥操作映射由调用方负责。API 消费归一化机器人动作数组，默认 WASD 浏览器控制未映射到该动作空间。尚未执行学生 WebRTC 端到端回放。
+
+<ModelRelatedRecipes modelId="dreamdojo-student" locale="zh" />

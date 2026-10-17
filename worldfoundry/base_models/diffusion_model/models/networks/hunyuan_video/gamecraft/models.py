@@ -52,6 +52,8 @@ from worldfoundry.core.nn import (
     normalization_layer as get_norm_layer,
 )
 
+from worldfoundry.base_models.diffusion_model.optimizations.camera_condition import camera_features
+
 from ..layers.token_refiner import SingleTokenRefiner
 from .cameranet import CameraNet
 from .patch import PatchEmbed
@@ -513,6 +515,19 @@ class HYVideoDiffusionTransformer(ModelMixin, ConfigMixin):
             hidden_size=self.hidden_size,
         )
 
+    def _encode_camera_condition(self, condition, latent_frames):
+        if latent_frames == 18:
+            return torch.cat(
+                [self.camera_net(torch.zeros_like(condition)), self.camera_net(condition)], dim=1
+            )
+        if latent_frames == 9:
+            return self.camera_net(condition)
+        if latent_frames == 10:
+            return torch.cat(
+                [self.camera_net(torch.zeros_like(condition)[:, :4]), self.camera_net(condition)], dim=1
+            )
+        raise ValueError("GameCraft camera conditioning requires 9, 10 or 18 latent frames")
+
     def enable_deterministic(self):
         for block in self.double_blocks:
             block.enable_deterministic()
@@ -577,22 +592,11 @@ class HYVideoDiffusionTransformer(ModelMixin, ConfigMixin):
         else:
             raise NotImplementedError(f"Unsupported text_projection: {self.text_projection}")
 
-        if camera_condition is not None:
-            if latent_len == 18:
-                camera_latents = torch.cat(
-                    [self.camera_net(torch.zeros_like(camera_condition)), self.camera_net(camera_condition)], dim=1
-                )
-            elif latent_len == 9:
-                camera_latents = self.camera_net(camera_condition)
-            elif latent_len == 10:
-                camera_latents = torch.cat(
-                    [
-                        self.camera_net(torch.zeros_like(camera_condition)[:, 0:4, :, :, :]),
-                        self.camera_net(camera_condition),
-                    ],
-                    dim=1,
-                )
-            img = img + camera_latents
+        camera_latents = camera_features(
+            self.camera_net, camera_condition,
+            encode=lambda condition: self._encode_camera_condition(condition, latent_len),
+        )
+        img = img + camera_latents
 
         if CPU_OFFLOAD:
             torch.cuda.empty_cache()

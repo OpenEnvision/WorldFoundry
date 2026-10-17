@@ -19,7 +19,7 @@ class DreamDojoOperator(BaseOperator):
         "prompt": True,
         "instruction": True,
         "image": True,
-        "video": True,
+        "video": False,
         "actions": [
             "robot_action",
             "unified_384d_action",
@@ -55,8 +55,10 @@ class DreamDojoOperator(BaseOperator):
     @classmethod
     def _is_numeric_vector(cls, value: Any) -> bool:
         """Is numeric vector implementation."""
-        return isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)) and all(
-            cls._is_number(item) for item in value
+        return (
+            isinstance(value, Sequence)
+            and not isinstance(value, (str, bytes, bytearray))
+            and all(cls._is_number(item) for item in value)
         )
 
     @classmethod
@@ -64,6 +66,9 @@ class DreamDojoOperator(BaseOperator):
         """Normalise action item implementation."""
         if isinstance(item, Path):
             return str(item)
+        tolist = getattr(item, "tolist", None)
+        if callable(tolist):
+            return cls._normalise_action_item(tolist())
         if isinstance(item, Mapping):
             return {str(key): value for key, value in item.items()}
         if cls._is_numeric_vector(item):
@@ -112,7 +117,9 @@ class DreamDojoOperator(BaseOperator):
                     continue
                 actions.append(normalised)
             return actions
-        raise TypeError(f"DreamDojo interaction must be robot actions, action-file paths, or controls; got {type(interaction).__name__}.")
+        raise TypeError(
+            f"DreamDojo interaction must be robot actions, action-file paths, or controls; got {type(interaction).__name__}."
+        )
 
     @staticmethod
     def _controls(interaction: Any) -> dict[str, Any]:

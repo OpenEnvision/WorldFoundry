@@ -1,17 +1,21 @@
 """Matrix Game 2 visual generation pipeline module."""
 
-from ..pipeline_utils import PipelineABC
-import torch
-import os
 import inspect
+import logging
+import os
+from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Sequence, Union, cast
+
+import torch
 from PIL import Image
-from typing import Optional, Any, List, Mapping, Sequence, Union, TYPE_CHECKING
+
 from worldfoundry.core.io import write_video
+from worldfoundry.core.media.codecs.video import video_chunk_to_uint8_frames
+from worldfoundry.core.media.processing.postprocess import VideoChunk
+from worldfoundry.runtime.env import resolve_ckpt_dir
+
 from ...operators.matrix_game_2_operator import MatrixGame2Operator
 from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
-import logging
-
-from worldfoundry.runtime.env import resolve_ckpt_dir
+from ..pipeline_utils import PipelineABC
 
 if TYPE_CHECKING:
     from ...synthesis.visual_generation.matrix_game.matrix_game_2_synthesis import MatrixGame2Synthesis
@@ -21,32 +25,39 @@ logger = logging.getLogger(__name__)
 
 class MatrixGame2Pipeline(PipelineABC):
     """Pipeline implementation for MatrixGame2 visual generation."""
-    def __init__(self,
-                 operators: Optional[MatrixGame2Operator] = None,
-                 synthesis_model: Optional["MatrixGame2Synthesis"] = None,
-                 memory_module: Optional[Any] = None,
-                 device: str = "cuda",
-                 # Use bfloat16 precision to balance memory efficiency and numeric range
-                 weight_dtype = torch.bfloat16,
-                 ):
+
+    def __init__(
+        self,
+        operators: Optional[MatrixGame2Operator] = None,
+        synthesis_model: Optional["MatrixGame2Synthesis"] = None,
+        memory_module: Optional[Any] = None,
+        device: str = "cuda",
+        # Use bfloat16 precision to balance memory efficiency and numeric range
+        weight_dtype=torch.bfloat16,
+    ):
         """Initialize the pipeline and configure runtime components."""
         self.synthesis_model = synthesis_model
-        self.operators = operators
-        self.memory_module = memory_module
+        self.operators = operators if operators is not None else MatrixGame2Operator()
+        self.memory_module: Any = (
+            memory_module if memory_module is not None else VisualFrameMemory(model_id="matrix-game-2")
+        )
         self.device = device
         self.weight_dtype = weight_dtype
         self.current_image = None
         self._realtime_session: Any = None
 
     @classmethod
-    def from_pretrained(cls,
-                        model_path: Any = None,
-                        required_components: Optional[Mapping[str, Any]] = None,
-                        device: str = "cuda",
-                        # Use bfloat16 precision to balance memory efficiency and numeric range
-                        weight_dtype = torch.bfloat16,
-                        mode = "universal",
-                        **kwargs) -> "MatrixGame2Pipeline":
+    # The public loader retains positional weight_dtype and mode options.
+    def from_pretrained(  # ty: ignore[invalid-method-override]
+        cls,
+        model_path: Any = None,
+        required_components: Optional[Mapping[str, Any]] = None,
+        device: str = "cuda",
+        # Use bfloat16 precision to balance memory efficiency and numeric range
+        weight_dtype=torch.bfloat16,
+        mode="universal",
+        **kwargs,
+    ) -> "MatrixGame2Pipeline":
         """Load the pipeline from pretrained checkpoints and configurations."""
         runtime_kwargs = dict(model_path) if isinstance(model_path, Mapping) else {}
         if isinstance(model_path, Mapping):
@@ -68,7 +79,7 @@ class MatrixGame2Pipeline(PipelineABC):
         mode = runtime_kwargs.pop("mode", mode)
         if synthesis_model_path in {None, ""}:
             synthesis_model_path = str(resolve_ckpt_dir() / "Matrix-Game-2.0")
-        
+
         logger.info("Loading MatrixGame2 synthesis model from %s...", synthesis_model_path)
         from ...synthesis.visual_generation.matrix_game.matrix_game_2_synthesis import MatrixGame2Synthesis
 
@@ -77,7 +88,7 @@ class MatrixGame2Pipeline(PipelineABC):
             device=device,
             mode=mode,
             weight_dtype=weight_dtype,
-            **runtime_kwargs
+            **runtime_kwargs,
         )
         operators = MatrixGame2Operator(mode=mode)
         memory_module = VisualFrameMemory(model_id="matrix-game-2")
@@ -87,41 +98,48 @@ class MatrixGame2Pipeline(PipelineABC):
             synthesis_model=synthesis_model,
             memory_module=memory_module,
             device=device,
-            weight_dtype=weight_dtype
+            weight_dtype=weight_dtype,
         )
         return pipeline
-    
-    def process(self,
-                input_image,
-                num_output_frames,
-                resize_H=352,
-                resize_W=640,
-                interaction_signal=None,
-                official_bench_actions: bool = False,
-                seed: Optional[int] = None):
+
+    def process(
+        self,
+        input_image,
+        num_output_frames,
+        resize_H=352,
+        resize_W=640,
+        interaction_signal=None,
+        official_bench_actions: bool = False,
+        seed: Optional[int] = None,
+    ):
         """
         the input_image is PIL image
         """
+        if self.synthesis_model is None:
+            raise RuntimeError("Matrix-Game 2 synthesis model is not loaded. Use from_pretrained() first.")
         if interaction_signal is None:
             interaction_signal = [
-                "forward", "left", "right",
-                "forward_left", "forward_right",
-                "camera_l", "camera_r",
+                "forward",
+                "left",
+                "right",
+                "forward_left",
+                "forward_right",
+                "camera_l",
+                "camera_r",
             ]
-        preception_dict = self.operators.process_perception(input_image, num_output_frames, resize_H, resize_W,
-                                                            device=self.device, weight_dtype=self.weight_dtype)
+        preception_dict = self.operators.process_perception(
+            input_image, num_output_frames, resize_H, resize_W, device=self.device, weight_dtype=self.weight_dtype
+        )
 
-        img_cond = self.synthesis_model.vae.encode(preception_dict["img_cond"], device=self.device,
-                                                   **preception_dict["tiler_kwargs"]).to(self.device)
+        img_cond = self.synthesis_model.vae.encode(
+            preception_dict["img_cond"], device=self.device, **preception_dict["tiler_kwargs"]
+        ).to(self.device)
         mask_cond = torch.ones_like(img_cond)
         mask_cond[:, :, 1:] = 0
-        cond_concat = torch.cat([mask_cond[:, :4], img_cond], dim=1) 
+        cond_concat = torch.cat([mask_cond[:, :4], img_cond], dim=1)
         visual_context = self.synthesis_model.vae.clip.encode_video(preception_dict["image"])
 
-        output_dict = {
-            "cond_concat": cond_concat,
-            "visual_context": visual_context
-        }
+        output_dict = {"cond_concat": cond_concat, "visual_context": visual_context}
 
         num_frames = (num_output_frames - 1) * 4 + 1
         if official_bench_actions:
@@ -132,24 +150,28 @@ class MatrixGame2Pipeline(PipelineABC):
             operator_condition = self.operators.process_interaction(num_frames=num_frames)
             self.operators.delete_last_interaction()
 
-        output_dict['operator_condition'] = operator_condition
+        output_dict["operator_condition"] = operator_condition
 
         return output_dict
 
-    def __call__(self,
-                 images,
-                 interactions=None,
-                 num_frames=None,
-                 size = (352, 640),
-                 seed: Optional[int] = None,
-                 visualize_ops=True,
-                 visualize_warning=False,
-                 official_bench_actions: bool = False,
-                 return_dict: bool = False,
-                 output_path: Optional[Union[str, os.PathLike]] = None,
-                 fps: Optional[int] = None,
-                 **kwds):
-        """Execute the complete pipeline generation flow."""
+    def __call__(
+        self,
+        images,
+        interactions=None,
+        num_frames=None,
+        size=(352, 640),
+        seed: Optional[int] = None,
+        visualize_ops=True,
+        visualize_warning=False,
+        official_bench_actions: bool = False,
+        return_dict: bool = False,
+        output_path: Optional[Union[str, os.PathLike]] = None,
+        fps: Optional[int] = None,
+        **kwds: Any,
+    ) -> Any:
+        """Generate raw unit-range frame lists or an explicitly declared result."""
+        if self.synthesis_model is None:
+            raise RuntimeError("Matrix-Game 2 synthesis model is not loaded. Use from_pretrained() first.")
         if not visualize_warning:
             logging.getLogger("torch._dynamo").setLevel(logging.ERROR)
             logging.getLogger("torch._inductor.autotune_process").setLevel(logging.WARNING)
@@ -162,12 +184,16 @@ class MatrixGame2Pipeline(PipelineABC):
             raise ValueError("Unsupported image type. Expected PIL.Image or image path.")
         if interactions is None and not official_bench_actions:
             interactions = [
-                "forward", "left", "right",
-                "forward_left", "forward_right",
-                "camera_l", "camera_r",
+                "forward",
+                "left",
+                "right",
+                "forward_left",
+                "forward_right",
+                "camera_l",
+                "camera_r",
             ]
         if num_frames is None:
-            num_output_frames = 150 if official_bench_actions else len(interactions) * 12
+            num_output_frames = 150 if official_bench_actions else len(cast(Sequence[str], interactions)) * 12
         else:
             num_output_frames = num_frames
         runtime = getattr(self.synthesis_model, "runtime", None)
@@ -193,28 +219,26 @@ class MatrixGame2Pipeline(PipelineABC):
         except (TypeError, ValueError):
             predict_signature = None
         if predict_signature is not None and not any(
-            param.kind == inspect.Parameter.VAR_KEYWORD
-            for param in predict_signature.parameters.values()
+            param.kind == inspect.Parameter.VAR_KEYWORD for param in predict_signature.parameters.values()
         ):
             predict_kwargs = {
-                key: value
-                for key, value in predict_kwargs.items()
-                if key in predict_signature.parameters
+                key: value for key, value in predict_kwargs.items() if key in predict_signature.parameters
             }
 
         output_video = self.synthesis_model.predict(
-            cond_concat=output_dict['cond_concat'],
-            visual_context=output_dict['visual_context'],
-            operator_condition=output_dict['operator_condition'],
+            cond_concat=output_dict["cond_concat"],
+            visual_context=output_dict["visual_context"],
+            operator_condition=output_dict["operator_condition"],
             num_output_frames=num_output_frames,
             seed=seed,
             operation_visualization=visualize_ops,
-            **predict_kwargs
+            **predict_kwargs,
         )
+        video_chunk = VideoChunk(frames=output_video, layout="frame-list", value_range="0,1")
         if output_path is not None:
             output_path = os.fspath(output_path)
             os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-            write_video(output_video, output_path, fps=fps if fps is not None else 12)
+            write_video(video_chunk_to_uint8_frames(video_chunk), output_path, fps=fps if fps is not None else 12)
         if return_dict:
             return {
                 "status": "ok",
@@ -227,25 +251,30 @@ class MatrixGame2Pipeline(PipelineABC):
                 "official_bench_actions": bool(official_bench_actions),
                 "backend_quality": "in_tree_runtime",
                 "video": output_video,
+                "video_chunk": video_chunk,
             }
         return output_video
-    
-    def stream(self,
-               images: Optional[Image.Image],
-               interactions: List[str],
-               num_frames: int = 15,
-               size = (352, 640),
-               seed: Optional[int] = None,
-               visualize_ops: bool = False,
-               visualize_warning=False,
-               **kwds) -> torch.Tensor:
+
+    def stream(
+        self,
+        images: Optional[Image.Image],
+        interactions: List[str],
+        num_frames: int = 15,
+        size=(352, 640),
+        seed: Optional[int] = None,
+        visualize_ops: bool = False,
+        visualize_warning=False,
+        return_dict: bool = False,
+        fps: Optional[int] = None,
+        **kwds: Any,
+    ) -> Any:
         """Stream visual generation outputs chunk by chunk."""
         if not visualize_warning:
             logging.getLogger("torch._dynamo").setLevel(logging.ERROR)
         if images is not None:
             logger.info("--- Stream Started ---")
             self.memory_module.record(images)
-        
+
         current_image = self.memory_module.select()
         if current_image is None:
             raise ValueError("No image in storage. Provide 'images' first.")
@@ -257,10 +286,13 @@ class MatrixGame2Pipeline(PipelineABC):
             size=size,
             seed=seed,
             visualize_ops=visualize_ops,
-            **kwds
+            return_dict=return_dict,
+            fps=fps,
+            **kwds,
         )
 
-        self.memory_module.record(video_output)
+        frames = video_output["video"] if return_dict else video_output
+        self.memory_module.record(frames)
 
         return video_output
 

@@ -209,6 +209,7 @@
     ],
     "lingbot-world-v2": [
       "worldfoundry/pipelines/lingbot_world_v2/**",
+      "worldfoundry/pipelines/lingbot_world/distributed.py",
       "worldfoundry/synthesis/visual_generation/lingbot_world_v2/**",
       "worldfoundry/operators/lingbot_world_operator.py",
       "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_runtime/utils/taehv.py"
@@ -229,13 +230,78 @@
       "worldfoundry/synthesis/visual_generation/diamond/**",
       "worldfoundry/pipelines/world_model/pipeline_runtime_manifest.py"
     ],
-    "helixworld-synthesis": [
-      "worldfoundry/pipelines/helixworld/**",
-      "worldfoundry/synthesis/visual_generation/helixworld/**"
+    "kandinsky6": [
+      "worldfoundry/pipelines/kandinsky6/**",
+      "worldfoundry/operators/kandinsky6_operator.py",
+      "worldfoundry/base_models/diffusion_model/**"
     ],
-    "worldplay2-synthesis": [
+    "dreamdojo-student": [
+      "worldfoundry/pipelines/dreamdojo/**",
+      "worldfoundry/synthesis/action_generation/dreamdojo/**",
+      "worldfoundry/operators/dreamdojo_operator.py",
+      "worldfoundry/base_models/diffusion_model/**"
+    ],
+    "matrix-game4-egypt": [
+      "worldfoundry/pipelines/matrix_game/pipeline_matrix_game4.py",
+      "worldfoundry/operators/matrix_game4_operator.py",
+      "worldfoundry/base_models/diffusion_model/**"
+    ],
+    "wonderworld": [
+      "worldfoundry/pipelines/three_d_four_d/pipeline_wonderworld.py",
+      "worldfoundry/synthesis/visual_generation/wonderworld/**",
+      "worldfoundry/operators/wonderworld_operator.py",
+      "worldfoundry/base_models/perception_core/segment/scene_segmentation.py",
+      "worldfoundry/base_models/diffusion_model/**"
+    ],
+    "helixworld": [
+      "worldfoundry/pipelines/helixworld/**",
+      "worldfoundry/base_models/diffusion_model/__init__.py",
+      "worldfoundry/base_models/diffusion_model/assembly.py",
+      "worldfoundry/base_models/diffusion_model/components.py",
+      "worldfoundry/base_models/diffusion_model/contracts.py",
+      "worldfoundry/base_models/diffusion_model/pipeline.py",
+      "worldfoundry/base_models/diffusion_model/registry.py",
+      "worldfoundry/base_models/diffusion_model/loaders/**",
+      "worldfoundry/base_models/diffusion_model/optimizations/**",
+      "worldfoundry/base_models/diffusion_model/extensions/**",
+      "worldfoundry/base_models/diffusion_model/models/denoisers/helixworld.py",
+      "worldfoundry/base_models/diffusion_model/models/denoisers/ltx*.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/ltx/**",
+      "worldfoundry/base_models/diffusion_model/models/encoders/ltx/**",
+      "worldfoundry/base_models/diffusion_model/models/autoencoders/ltx/**",
+      "worldfoundry/base_models/diffusion_model/models/initializers/ltx.py",
+      "worldfoundry/base_models/diffusion_model/models/representations/ltx/**",
+      "worldfoundry/base_models/diffusion_model/recipes/helixworld.py",
+      "worldfoundry/base_models/diffusion_model/recipes/registry.py",
+      "worldfoundry/base_models/diffusion_model/runners/base.py",
+      "worldfoundry/base_models/diffusion_model/runners/multistage.py",
+      "worldfoundry/base_models/diffusion_model/runners/joint_chunked.py",
+      "worldfoundry/base_models/diffusion_model/runners/strategies.py",
+      "worldfoundry/base_models/diffusion_model/schedulers/**"
+    ],
+    "worldplay2": [
       "worldfoundry/pipelines/worldplay2/**",
-      "worldfoundry/synthesis/visual_generation/worldplay2/**"
+      "worldfoundry/base_models/diffusion_model/__init__.py",
+      "worldfoundry/base_models/diffusion_model/assembly.py",
+      "worldfoundry/base_models/diffusion_model/components.py",
+      "worldfoundry/base_models/diffusion_model/contracts.py",
+      "worldfoundry/base_models/diffusion_model/pipeline.py",
+      "worldfoundry/base_models/diffusion_model/registry.py",
+      "worldfoundry/base_models/diffusion_model/loaders/**",
+      "worldfoundry/base_models/diffusion_model/optimizations/**",
+      "worldfoundry/base_models/diffusion_model/extensions/**",
+      "worldfoundry/base_models/diffusion_model/models/denoisers/worldplay2.py",
+      "worldfoundry/base_models/diffusion_model/models/denoisers/wan*.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/wan/**",
+      "worldfoundry/base_models/diffusion_model/models/encoders/wan/**",
+      "worldfoundry/base_models/diffusion_model/models/autoencoders/wan/**",
+      "worldfoundry/base_models/diffusion_model/models/initializers/wan/**",
+      "worldfoundry/base_models/diffusion_model/recipes/worldplay2.py",
+      "worldfoundry/base_models/diffusion_model/recipes/registry.py",
+      "worldfoundry/base_models/diffusion_model/runners/base.py",
+      "worldfoundry/base_models/diffusion_model/runners/compressed_memory.py",
+      "worldfoundry/base_models/diffusion_model/runners/strategies.py",
+      "worldfoundry/base_models/diffusion_model/schedulers/**"
     ]
   },
   "cases": {
@@ -385,19 +451,52 @@
       "diamond"
     ],
     "helixworld-controls-short": [
-      "helixworld-synthesis"
+      "helixworld"
     ],
     "worldplay2-controls-short": [
-      "worldplay2-synthesis"
+      "worldplay2"
     ],
     "worldplay2-fast-controls-short": [
-      "worldplay2-synthesis"
+      "worldplay2"
     ],
     "worldplay2-ar-controls-short": [
-      "worldplay2-synthesis"
+      "worldplay2"
     ],
     "worldplay2-bi-controls-short": [
-      "worldplay2-synthesis"
+      "worldplay2"
+    ],
+    "kandinsky6-lite-video-short": [
+      "kandinsky6"
+    ],
+    "kandinsky6-lite-distill-video-short": [
+      "kandinsky6"
+    ],
+    "kandinsky6-lite-pretrain-video-short": [
+      "kandinsky6"
+    ],
+    "kandinsky6-pro-video-short": [
+      "kandinsky6"
+    ],
+    "kandinsky6-pro-distill-video-short": [
+      "kandinsky6"
+    ],
+    "kandinsky6-pro-pretrain-video-short": [
+      "kandinsky6"
+    ],
+    "dreamdojo-student-controls-short": [
+      "dreamdojo-student"
+    ],
+    "dreamdojo-2b-gr1-distilled-controls-short": [
+      "dreamdojo-student"
+    ],
+    "lingbot-world-v2-1p3b-causal-short": [
+      "lingbot-world-v2"
+    ],
+    "matrix-game4-egypt-video-short": [
+      "matrix-game4-egypt"
+    ],
+    "wonderworld-scene-short": [
+      "wonderworld"
     ]
   },
   "coverage_scope": "Declared short 3D, video generation and world-model cases; variants and unlisted integrations are not implied covered.",

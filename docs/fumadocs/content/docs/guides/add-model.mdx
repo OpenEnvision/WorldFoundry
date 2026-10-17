@@ -13,13 +13,19 @@ The first pull request should prove one route end to end. Pick one model family,
 
 Do not wait until every checkpoint variant, every task alias, and every benchmark cell is green. Those can follow once the spine exists. A wide first PR that also rewrites shared loaders, invents a second binding parser, or vendors a training tree is harder to review and easier to regress.
 
+## Native diffusion integration
+
+Local diffusion models use the [canonical native roles](/docs/maintainers/architecture/native-diffusion), not a copied upstream runtime. Verify recipe → assembler → request → output through the public loader using the affected model's integration tests.
+
+For an existing graph, add configuration and checkpoint bindings. Add only necessary checkpoint-visible network, denoiser, encoder or initializer variants under `base_models/diffusion_model/models/`. Recipes remain declarative; new shared sampling algorithms belong in `runners/`. Model components and runners do not depend on `synthesis`, public pipelines, Studio or evaluation. Verify checkpoint conversion and component numerics before public loading and accepted-reference pipeline replay. Serving behavior is accepted separately from model parity.
+
 ## What an integration actually touches
 
 A WorldFoundry model is a stack of five surfaces. The pipeline is the public entrypoint: a class under `worldfoundry/pipelines/<family>/` that exposes `from_pretrained()` and a deterministic `process()` or `__call__()`. That class owns checkpoint construction and the native generate call. It should not parse prompts, decode camera trajectories, or decide which image tensor is “the first frame.” That work belongs to the operator.
 
 The operator lives under `worldfoundry/operators/`. Every runnable method needs one, even when the first version is thin. Its job is to validate the request, load media, parse camera or action controls, and shape interaction state so the pipeline sees a stable, typed input. If you skip the operator and stuff that logic into the pipeline, the next benchmark or Studio form will have nowhere clean to attach.
 
-Backend-specific inference code — the vendor `inference.py`, the transformer block, the tokenizer wrapper — belongs in `worldfoundry/synthesis/`, `worldfoundry/base_models/`, following the layout already used by that family. Those packages are runtime primitives. They are not a place for training loops, dataset builders, dataloaders, augmentation pipelines, or Lightning callbacks.
+Checkpoint-shaped network math, tokenizer wrappers and component adapters belong in `worldfoundry/base_models/`. Infer-only orchestration that is not already owned by the native diffusion framework belongs in `worldfoundry/synthesis/` and consumes those components. These packages are not a place for training loops, dataset builders, dataloaders, augmentation pipelines or Lightning callbacks.
 
 The evaluation binding is how CLI, TUI, and the generic benchmark runner find the method. Resolution always goes through catalog `pipeline_target` or `pipeline_binding`, then through `worldfoundry/evaluation/models/pipelines/bindings.py`. That file is the only place that should normalize route strings. Do not add a second parser in catalog loading, in the resolver, or in a check helper.
 
@@ -39,7 +45,7 @@ Start with the pipeline. Put it under `worldfoundry/pipelines/<family>/` so the 
 
 Add the operator in the same change set. Even a first-pass operator that only checks “prompt is a string” and “image path exists” is better than a pipeline that silently accepts a dict of unknown keys. As the model grows — multi-view, action chunks, camera rigs — keep that growth in the operator so the pipeline stays a checkpoint runner.
 
-Place the vendor or in-house inference implementation according to the existing tree. Video synthesis usually lands under `synthesis/visual_generation/`. Interactive world models often sit next to a sibling that already vendors an official infer-only runtime. Perception and 3D helpers go under `base_models/`. Do not commit a second copy of the architecture under `cache/` and then import it from there. If the runner needs Python modules, those modules live under `worldfoundry/` and get reviewed with the rest of the PR.
+Place the inference implementation according to its owner. Native diffusion components, recipes and sampling strategies go under their canonical roles in `base_models/diffusion_model/`; product orchestration goes under `synthesis/visual_generation/`. Perception and 3D helpers go under their corresponding `base_models/` families. Do not commit a second copy of the architecture under `cache/` and then import it from there. If the runner needs Python modules, those modules live under `worldfoundry/` and get reviewed with the rest of the PR.
 
 Register the route. The simplest form is a `pipeline_target` on the catalog YAML. If several aliases or a runtime profile should share one class, add or update a binding under `worldfoundry/data/models/bindings/pipelines/` and let `bindings.py` resolve it. The generic benchmark runner adapts pipeline calls in `worldfoundry/evaluation/models/pipelines/invocation.py`. Update that adapter only when the new pipeline needs an invocation form it does not already support. A working `worldfoundry-eval run <model-id>` path is the milestone.
 

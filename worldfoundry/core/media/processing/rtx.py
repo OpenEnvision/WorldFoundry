@@ -276,7 +276,8 @@ def inspect_rtx_vfx_capability(*, device: int = 0) -> RTXVFXCapability:
             reason=f"CUDA device {device} is unavailable; PyTorch exposes {device_count} device(s).",
             package_version=package_version,
         )
-    capability = tuple(int(value) for value in torch.cuda.get_device_capability(device))
+    major, minor = torch.cuda.get_device_capability(device)
+    capability = (int(major), int(minor))
     gpu_name = str(torch.cuda.get_device_name(device))
     if capability < (7, 5):
         return RTXVFXCapability(
@@ -502,7 +503,7 @@ class _RTXVideoSuperResolutionSession(VideoPostProcessorSession):
                 "rtx_output_size": [self._output_spec.width, self._output_spec.height],
             }
         )
-        return [VideoChunk(frames=output, layout=chunk.layout, metadata=metadata)]
+        return [VideoChunk(frames=output, layout=chunk.layout, value_range=chunk.value_range, metadata=metadata)]
 
     def flush(self) -> list[VideoChunk]:
         """Close the native effect; VFX does not buffer a tail."""
@@ -751,7 +752,7 @@ def _load_video_super_res_class() -> Any:
     """Import ``VideoSuperRes`` only when a session or probe actually needs it."""
 
     try:
-        from nvvfx import VideoSuperRes  # type: ignore[import-not-found]  # noqa: PLC0415
+        from nvvfx import VideoSuperRes  # ty: ignore[unresolved-import]  # noqa: PLC0415
     except Exception as exc:
         raise RuntimeError(
             "RTX video post-processing requires the optional proprietary `nvidia-vfx` package. "
@@ -782,7 +783,7 @@ def _load_quality_level_enum() -> Any:
     """
 
     try:
-        from nvvfx.effects.video_super_res import QualityLevel  # type: ignore[import-not-found]  # noqa: PLC0415
+        from nvvfx.effects.video_super_res import QualityLevel  # ty: ignore[unresolved-import]  # noqa: PLC0415
     except Exception as exc:
         raise RuntimeError("The installed nvidia-vfx package does not expose VideoSuperRes QualityLevel.") from exc
     return QualityLevel

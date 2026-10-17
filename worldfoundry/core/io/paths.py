@@ -117,9 +117,7 @@ def worldfoundry_path_tokens(env: Mapping[str, str] | None = None) -> dict[str, 
         or environ.get("WORLDFOUNDRY_BENCHMARK_DATA_ROOT")
         or (home / "data" if explicit_home else cache / "data")
     ).expanduser()
-    default_hfd_dataset_root = (
-        data_dir if data_dir.name in {"datasets", "hfd_datasets"} else data_dir / "datasets"
-    )
+    default_hfd_dataset_root = data_dir if data_dir.name in {"datasets", "hfd_datasets"} else data_dir / "datasets"
     hfd_dataset_root = Path(
         environ.get("WORLDFOUNDRY_HFD_DATASET_ROOT")
         or environ.get("WORLDFOUNDRY_LOCAL_DATA_ROOT")
@@ -137,9 +135,7 @@ def worldfoundry_path_tokens(env: Mapping[str, str] | None = None) -> dict[str, 
     default_model_source = cache / "official_runtime_repos"
     model_source = Path(environ.get("WORLDFOUNDRY_MODEL_SOURCE_DIR") or default_model_source).expanduser()
     default_ckpt_dir = (
-        home / "checkpoints"
-        if explicit_home
-        else (adjacent_ckpt if adjacent_ckpt.is_dir() else cache / "checkpoints")
+        home / "checkpoints" if explicit_home else (adjacent_ckpt if adjacent_ckpt.is_dir() else cache / "checkpoints")
     )
     ckpt_dir = Path(environ.get("WORLDFOUNDRY_CKPT_DIR") or default_ckpt_dir).expanduser()
     hfd_root = Path(environ.get("WORLDFOUNDRY_HFD_ROOT") or ckpt_dir / "hfd").expanduser()
@@ -149,9 +145,7 @@ def worldfoundry_path_tokens(env: Mapping[str, str] | None = None) -> dict[str, 
         else ckpt_dir
     )
     default_conda_root = (
-        home / "conda"
-        if explicit_home
-        else (adjacent_conda if adjacent_conda.is_dir() else cache / "conda")
+        home / "conda" if explicit_home else (adjacent_conda if adjacent_conda.is_dir() else cache / "conda")
     )
     conda_root = Path(environ.get("WORLDFOUNDRY_CONDA_ROOT") or default_conda_root).expanduser()
     default_conda_envs_root = (
@@ -323,9 +317,7 @@ def hfd_root_path(*parts: str | Path, env: Mapping[str, str] | None = None) -> P
 def hfd_dataset_root_path(*parts: str | Path, env: Mapping[str, str] | None = None) -> Path:
     """Resolve the canonical local root for Hugging Face benchmark datasets."""
 
-    return resolve_worldfoundry_path("${WORLDFOUNDRY_HFD_DATASET_ROOT}", env).joinpath(
-        *(Path(part) for part in parts)
-    )
+    return resolve_worldfoundry_path("${WORLDFOUNDRY_HFD_DATASET_ROOT}", env).joinpath(*(Path(part) for part in parts))
 
 
 def resolve_local_hf_model_path(
@@ -384,16 +376,10 @@ def resolve_local_hf_model_path(
     environ = dict(os.environ if env is None else env)
     ckpt_roots = checkpoint_root_candidates(env=environ)
     injected_home = Path(environ.get("HOME") or Path.home()).expanduser()
-    xdg_cache_home = Path(
-        environ.get("XDG_CACHE_HOME") or injected_home / ".cache"
-    ).expanduser()
-    hf_home = Path(
-        environ.get("HF_HOME") or xdg_cache_home / "huggingface"
-    ).expanduser()
+    xdg_cache_home = Path(environ.get("XDG_CACHE_HOME") or injected_home / ".cache").expanduser()
+    hf_home = Path(environ.get("HF_HOME") or xdg_cache_home / "huggingface").expanduser()
     hf_hub_cache = Path(
-        environ.get("HF_HUB_CACHE")
-        or environ.get("HUGGINGFACE_HUB_CACHE")
-        or hf_home / "hub"
+        environ.get("HF_HUB_CACHE") or environ.get("HUGGINGFACE_HUB_CACHE") or hf_home / "hub"
     ).expanduser()
     roots = [hfd_root_path(env=environ)]
     for local_root in ckpt_roots:
@@ -453,18 +439,20 @@ def resolve_local_hf_model_path(
 
     checked: list[Path] = []
     for root in dict.fromkeys(path.expanduser() for path in roots):
+        if not root.is_dir():
+            checked.extend(root / name for name in names)
+            continue
         for name in names:
             candidate = root / name
             checked.append(candidate)
             resolved = usable(candidate)
             if resolved is not None:
                 return resolved
-        if root.is_dir():
-            for candidate in sorted(root.glob(f"*--{leaf}")):
-                checked.append(candidate)
-                resolved = usable(candidate)
-                if resolved is not None:
-                    return resolved
+        for candidate in sorted(root.glob(f"*--{leaf}")):
+            checked.append(candidate)
+            resolved = usable(candidate)
+            if resolved is not None:
+                return resolved
 
     locations = "\n".join(f"  - {path}" for path in checked)
     raise FileNotFoundError(f"Local Hugging Face assets for {value!r} are missing. Checked:\n{locations}")

@@ -7,9 +7,9 @@ from .pipeline_runtime import (
     StableVirtualCameraPipeline,
     ThreeDFourDRuntimePipeline,
     WonderJourneyPipeline,
-    WonderWorldPipeline,
     WorldGenPipeline,
 )
+from .pipeline_wonderworld import WonderWorldPipeline
 
 __all__ = [
     "LagrNVSPipeline",

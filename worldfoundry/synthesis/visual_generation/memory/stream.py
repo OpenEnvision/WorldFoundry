@@ -103,7 +103,7 @@ class VisualFrameMemory(BaseMemory):
             return record["content"] if record is not None else None
         if mode is not None and str(mode).lower() == "dynamic":
             # In "dynamic" mode, prioritize video over image.
-            return self.current_video or self.current_image
+            return self.current_video if self.current_video is not None else self.current_image
         # Default selection: prioritize image, then general state, then video.
         return self.current_image or self.current_state or self.current_video
 
@@ -219,6 +219,21 @@ class VisualFrameMemory(BaseMemory):
         if "pose_history" in data:
             # Update pose history if present.
             self.pose_history = list(data.get("pose_history") or [])
+
+        from worldfoundry.core.media.processing.postprocess import VideoChunk
+
+        chunk = data.get("video_chunk")
+        if isinstance(chunk, VideoChunk):
+            from worldfoundry.core.media.codecs.video import video_chunk_to_uint8_frames
+
+            self.latest_result = data
+            content = next(
+                (data[key] for key in ("frames", "video", "video_tensor") if data.get(key) is not None),
+                chunk.frames,
+            )
+            return self._record_frames(
+                list(video_chunk_to_uint8_frames(chunk)), content=content, record_frames=record_frames
+            )
 
         for key in ("frames", "video"):
             value = data.get(key)

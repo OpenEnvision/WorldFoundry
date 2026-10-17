@@ -13,13 +13,19 @@ description: 如何把一个模型接到 WorldFoundry：pipeline、operator、ru
 
 不必等所有 checkpoint variant、所有 task 别名、所有 benchmark cell 都绿了再合入。骨架先落地，其余可以跟着加。若第一份 PR 同时还改公共 loader、再写一套 binding parser、或把训练树一并 vendoring 进来，review 成本高，也更容易回退。
 
+## 原生 Diffusion 集成
+
+本地 diffusion model 使用 [canonical native role](/zh/docs/maintainers/architecture/native-diffusion)，而不是复制上游 runtime。使用受影响模型的集成测试，通过公开 loader 验证 recipe → assembler → request → output。
+
+已有 graph 只增加配置与 checkpoint binding；必要的 checkpoint-visible network、denoiser、encoder 或 initializer variant 放在 `base_models/diffusion_model/models/`。Recipe 保持 declarative，新共享采样算法进入 `runners/`。Model component 与 runner 不依赖 `synthesis`、public pipeline、Studio 或 evaluation。先验证 checkpoint conversion 与 component 数值，再验证公开 loading 与 accepted-reference pipeline replay。Serving 行为与模型 parity 分开验收。
+
 ## 一次集成会改到哪里
 
 WorldFoundry 里的模型是五层叠在一起的。Pipeline 是公开入口：放在 `worldfoundry/pipelines/<family>/` 下的类，必须暴露 `from_pretrained()`，以及确定性的 `process()` 或 `__call__()`。这个类拥有 checkpoint 构造和原生 generate 调用。它不应该解析 prompt、解码 camera 轨迹、或自行判断哪张图是「第一帧」。那些事属于 operator。
 
 Operator 放在 `worldfoundry/operators/`。每个 runnable method 都要有，哪怕第一版很薄。它负责校验请求、加载媒体、解析 camera / action、整理 interaction state，让 pipeline 只看见稳定、有类型的输入。若跳过 operator、把这些逻辑塞进 pipeline，后面的 benchmark 或 Studio 表单就没有干净的挂载点。
 
-Backend 相关的推理实现——官方 `inference.py`、transformer block、tokenizer 封装——按现有布局放进 `worldfoundry/synthesis/`、`worldfoundry/base_models/`。这些包是 runtime primitive，不是训练循环、dataset builder、dataloader、augmentation pipeline 或 Lightning callback 的落点。
+Checkpoint-shaped network math、tokenizer 封装与 component adapter 放在 `worldfoundry/base_models/`。不属于原生 diffusion 框架的仅推理 orchestration 放在 `worldfoundry/synthesis/`，并消费这些 component。这些包不是训练循环、dataset builder、dataloader、augmentation pipeline 或 Lightning callback 的落点。
 
 Evaluation binding 决定 CLI、TUI 和通用 benchmark runner 如何找到该方法。解析路径永远是 catalog 上的 `pipeline_target` 或 `pipeline_binding`，再经过 `worldfoundry/evaluation/models/pipelines/bindings.py`。Route 字符串的归一化只应出现在这个文件里，不要在 catalog 加载、resolver 或 check helper 里再写一套 parser。
 
@@ -39,7 +45,7 @@ Runtime profile 不能替代这条 route。Profile 描述 conda / Docker 环境�
 
 Operator 和 pipeline 放在同一次改动里。哪怕第一版只检查「prompt 是字符串」「图像路径存在」，也比 pipeline 默默吃下一个未知 key 的 dict 要好。模型以后变复杂——多视角、action chunk、camera rig——把增长留在 operator，pipeline 继续只做 checkpoint runner。
 
-Vendor 或自研推理实现跟现有树对齐。视频合成多半在 `synthesis/visual_generation/`；交互式 world model 往往挨着已经 vendoring 了官方仅推理 runtime 的兄弟目录；感知与 3D helper 在 `base_models/`。不要在 `cache/` 再放一份架构代码再从那里 import。Runner 需要的 Python 模块必须在 `worldfoundry/` 下，并和这次集成一起被 review。
+推理实现按 ownership 放置。原生 diffusion component、recipe 与 sampling strategy 进入 `base_models/diffusion_model/` 对应 canonical role，产品 orchestration 进入 `synthesis/visual_generation/`，感知与 3D helper 进入对应 `base_models/` family。不要在 `cache/` 再放一份架构代码再从那里 import。Runner 需要的 Python 模块必须在 `worldfoundry/` 下，并和这次集成一起被 review。
 
 然后注册 route。最简单的是在 catalog YAML 上写 `pipeline_target`。若多个 alias 或某个 runtime profile 要共用一个类，在 `worldfoundry/data/models/bindings/pipelines/` 增加或更新 binding，交给 `bindings.py` 解析。通用 benchmark runner 的 pipeline 调用契约在 `worldfoundry/evaluation/models/pipelines/invocation.py`。多数第一份 PR 只需接入现有调用契约；能跑通 `worldfoundry-eval run <model-id>` 就是里程碑。
 

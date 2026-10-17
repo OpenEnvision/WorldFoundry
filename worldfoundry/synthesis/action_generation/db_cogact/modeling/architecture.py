@@ -156,7 +156,10 @@ class CogACTForCausalLM(DexboticForCausalLM, ActionOutputForCausalLM):
             model_kwargs = dict(z=cognition_features)
             sample_fn = self.model.action_head.net.forward
 
-        if self.model.action_head.ddim_diffusion is None:
+        if (
+            self.model.action_head.ddim_diffusion is None
+            or self.model.action_head.ddim_diffusion.num_timesteps != num_ddim_steps
+        ):
             self.model.action_head.create_ddim(ddim_step=num_ddim_steps)
 
         samples = self.model.action_head.ddim_diffusion.ddim_sample_loop(

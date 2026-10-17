@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_game_craft.runtime import (
+from worldfoundry.synthesis.visual_generation.hunyuan_world.gamecraft_inference.runtime import (
     HunyuanGameCraftRuntime,
 )
 

@@ -65,14 +65,8 @@ from .spec import NativeDiffusionRecipe
 
 SANA_GEMMA_REPO_ID = "Efficient-Large-Model/gemma-2-2b-it"
 SANA_GEMMA_REVISION = "569d9809d0c8b6722d4d31b5a77a2ec7a400650a"
-SANA_GEMMA_WEIGHT_SHA256 = "bf06a1e6cfe1610beb98a2975e5602e7fc108d902b3ff9dd62282d749c7a2394"
-SANA_GEMMA_WEIGHT_SIZE_BYTES = 5228717512
-SANA_GEMMA_CONFIG_SHA256 = "b3195cba8e4a8e637f15bc0bab6b48fd0f4e02967fac72925e2dfb02c4d5b8d7"
-SANA_GEMMA_CONFIG_SIZE_BYTES = 881
 SANA_DCAE_REPO_ID = "mit-han-lab/dc-ae-f32c32-sana-1.1"
 SANA_DCAE_REVISION = "64547fd6e83db7bec338319d05ac9fe26d449ec2"
-SANA_DCAE_WEIGHT_SHA256 = "01a99a6d08b8e1d54bf9af28cab521432cdeee372720e84c38bac8b8abe27ba6"
-SANA_DCAE_WEIGHT_SIZE_BYTES = 1249046372
 SANA_LTX_REPO_ID = "Lightricks/LTX-2"
 SANA_LTX_REVISION = "47da56e2ad66ce4125a9922b4a8826bf407f9d0a"
 SANA_WAN_REPO_ID = "Wan-AI/Wan2.1-T2V-1.3B"
@@ -87,23 +81,11 @@ SANA_SPRINT_TEACHER_CHECKPOINTS = {
         repo_id="Efficient-Large-Model/Sana_Sprint_0.6B_1024px_teacher",
         revision="141411fcb8360dc1e6ae91e7c7ed69371adb058c",
         files=("checkpoints/Sana_Sprint_0.6B_1024px_teacher.pth",),
-        file_sha256={
-            "checkpoints/Sana_Sprint_0.6B_1024px_teacher.pth": (
-                "1afe15602c9a60d32510aed0a83e3d75b9c289aa41d202f6444e1892fc14cc1b"
-            )
-        },
-        file_size_bytes={"checkpoints/Sana_Sprint_0.6B_1024px_teacher.pth": 2375214166},
     ),
     "sana-sprint-1600m-1024px": CheckpointSpec(
         repo_id="Efficient-Large-Model/Sana_Sprint_1.6B_1024px_teacher",
         revision="f111cf761e05a1ad460cd5fb528c1a107327b459",
         files=("checkpoints/Sana_Sprint_1.6B_1024px_teacher.pth",),
-        file_sha256={
-            "checkpoints/Sana_Sprint_1.6B_1024px_teacher.pth": (
-                "9829ee64eb6ae3cb372e0f7bd2b62372fe6f106ddf0bafcafa99356247d6a548"
-            )
-        },
-        file_size_bytes={"checkpoints/Sana_Sprint_1.6B_1024px_teacher.pth": 6430670590},
     ),
 }
 
@@ -113,18 +95,6 @@ SANA_TOKENIZER_FILES = (
     "tokenizer.model",
     "tokenizer_config.json",
 )
-SANA_TOKENIZER_SHA256 = {
-    "special_tokens_map.json": "baec30ea10906f16adb8c18af7a34023002c1746542612b8b41c9f09e1351351",
-    "tokenizer.json": "3f289bc05132635a8bc7aca7aa21255efd5e18f3710f43e3cdb96bcd41be4922",
-    "tokenizer.model": "61a7b147390c64585d6c3543dd6fc636906c9af3865a5548f27f31aee1d4c8e2",
-    "tokenizer_config.json": "cb32b7929c62608d46572e813112b3ad8a841fb98fdd6a4da8559e368a951c89",
-}
-SANA_TOKENIZER_SIZE_BYTES = {
-    "special_tokens_map.json": 636,
-    "tokenizer.json": 17525357,
-    "tokenizer.model": 4241003,
-    "tokenizer_config.json": 46996,
-}
 
 
 def _aliases(model_id: str) -> tuple[str, ...]:
@@ -145,34 +115,19 @@ def _shared_checkpoints(variant: SanaVariant) -> dict[str, CheckpointSpec]:
             repo_id=variant.repo_id,
             revision=variant.checkpoint_revision,
             files=(dit_file,),
-            file_sha256=(
-                {dit_file: variant.checkpoint_sha256}
-                if variant.checkpoint_sha256 is not None
-                else {}
-            ),
-            file_size_bytes=(
-                {dit_file: variant.checkpoint_size_bytes}
-                if variant.checkpoint_size_bytes is not None
-                else {}
-            ),
         ),
         "text-encoder": CheckpointSpec(
             repo_id=SANA_GEMMA_REPO_ID,
             revision=SANA_GEMMA_REVISION,
             files=("gemma-2-2b-it.safetensors",),
+            resources=("config.json",),
             allow_patterns=("config.json", "gemma-2-2b-it.safetensors"),
-            file_sha256={"gemma-2-2b-it.safetensors": SANA_GEMMA_WEIGHT_SHA256},
-            file_size_bytes={"gemma-2-2b-it.safetensors": SANA_GEMMA_WEIGHT_SIZE_BYTES},
-            resource_sha256={"config.json": SANA_GEMMA_CONFIG_SHA256},
-            resource_size_bytes={"config.json": SANA_GEMMA_CONFIG_SIZE_BYTES},
         ),
         "tokenizer": CheckpointSpec(
             repo_id=SANA_GEMMA_REPO_ID,
             revision=SANA_GEMMA_REVISION,
             files=SANA_TOKENIZER_FILES,
             allow_patterns=SANA_TOKENIZER_FILES,
-            file_sha256=SANA_TOKENIZER_SHA256,
-            file_size_bytes=SANA_TOKENIZER_SIZE_BYTES,
         ),
     }
 
@@ -227,8 +182,6 @@ def _image_recipe(variant: SanaVariant) -> NativeDiffusionRecipe:
         repo_id=SANA_DCAE_REPO_ID,
         revision=SANA_DCAE_REVISION,
         files=("model.safetensors",),
-        file_sha256={"model.safetensors": SANA_DCAE_WEIGHT_SHA256},
-        file_size_bytes={"model.safetensors": SANA_DCAE_WEIGHT_SIZE_BYTES},
         metadata={"license": "Apache-2.0"},
     )
     sprint = variant.runner == "sprint"

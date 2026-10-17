@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import threading
 import time
@@ -61,9 +60,7 @@ def _checkpoint(
         if layout == "fastvideo_diffusers":
             prefix = f"blocks.{layer_index}.attn1.attn_impl.proj_l"
         elif layout == "turbodiffusion_original":
-            prefix = (
-                f"blocks.{layer_index}.self_attn.attn_op.local_attn.proj_l"
-            )
+            prefix = f"blocks.{layer_index}.self_attn.attn_op.local_attn.proj_l"
         else:
             raise AssertionError(layout)
         values[f"{prefix}.weight"] = weight
@@ -77,11 +74,9 @@ def _source_identity(
     commit: str = PINNED_FASTVIDEO_COMMIT,
     clean: bool = True,
 ) -> FastVideoSLASourceIdentity:
-    fingerprint = hashlib.sha256(f"{commit}:{clean}".encode()).hexdigest()
     return FastVideoSLASourceIdentity(
         commit=commit,
         clean=clean,
-        fingerprint=fingerprint,
         root="/pinned/FastVideo",
         source_file="/pinned/FastVideo/fastvideo/attention/backends/sla.py",
     )
@@ -111,9 +106,7 @@ class _FakeProvider(nn.Module):
         try:
             if self.delay:
                 time.sleep(self.delay)
-            self.calls.append(
-                {"q": q, "k": k, "v": v, "metadata": metadata}
-            )
+            self.calls.append({"q": q, "k": k, "v": v, "metadata": metadata})
             if self.output_mode == "wrong_shape":
                 return q[:, :-1]
             if self.output_mode == "wrong_dtype":
@@ -191,11 +184,14 @@ def test_config_rejects_lightx2v_or_ambiguous_sla_names(ambiguous: str) -> None:
 
 
 def test_config_validates_topk_and_feature_map() -> None:
-    assert FastVideoSLAConfig(
-        kind="fastvideo_sla",
-        topk_ratio=0.25,
-        feature_map="ELU",
-    ).feature_map == "elu"
+    assert (
+        FastVideoSLAConfig(
+            kind="fastvideo_sla",
+            topk_ratio=0.25,
+            feature_map="ELU",
+        ).feature_map
+        == "elu"
+    )
     with pytest.raises(ValueError, match="topk_ratio"):
         FastVideoSLAConfig(kind="fastvideo_sla", topk_ratio=0.0)
     with pytest.raises(ValueError, match="feature_map"):
@@ -234,12 +230,9 @@ def test_runtime_expectation_freezes_canonical_provider_identity(
 
     assert expectation == {
         "kind": kind,
-        "provider_path": (
-            "fastvideo.attention.backends.sla." + provider_class
-        ),
+        "provider_path": ("fastvideo.attention.backends.sla." + provider_class),
         "provider_family": family,
         "commit": PINNED_FASTVIDEO_COMMIT,
-        "source_fingerprint": identity.fingerprint,
         "source_root": identity.root,
         "source_file": identity.source_file,
     }
@@ -266,29 +259,21 @@ def test_resolver_accepts_both_audited_checkpoint_layouts(layout: str) -> None:
 
 def test_checkpoint_key_patterns_document_fastvideo_and_turbo_layouts() -> None:
     assert fastvideo_sla_checkpoint_key_patterns() == {
-        "fastvideo_diffusers": (
-            "blocks.<layer>.attn1.attn_impl.proj_l.{weight,bias}"
-        ),
-        "turbodiffusion_original": (
-            "blocks.<layer>.self_attn.attn_op.local_attn.proj_l.{weight,bias}"
-        ),
+        "fastvideo_diffusers": ("blocks.<layer>.attn1.attn_impl.proj_l.{weight,bias}"),
+        "turbodiffusion_original": ("blocks.<layer>.self_attn.attn_op.local_attn.proj_l.{weight,bias}"),
     }
 
 
 def test_splitter_preserves_dense_weights_and_exact_projection_keys() -> None:
     checkpoint = _checkpoint(count=1)
-    model_state, projection_state = split_fastvideo_sla_projection_weights(
-        checkpoint
-    )
+    model_state, projection_state = split_fastvideo_sla_projection_weights(checkpoint)
     assert set(model_state) == {"blocks.0.to_q.weight"}
     assert set(projection_state) == {
         "blocks.0.attn1.attn_impl.proj_l.weight",
         "blocks.0.attn1.attn_impl.proj_l.bias",
     }
     with pytest.raises(FastVideoSLAContractError, match="unsupported"):
-        split_fastvideo_sla_projection_weights(
-            {"blocks.0.self_attn.proj_l.weight": torch.ones(64, 64)}
-        )
+        split_fastvideo_sla_projection_weights({"blocks.0.self_attn.proj_l.weight": torch.ones(64, 64)})
 
 
 def test_projection_checkpoint_rejects_non_string_keys() -> None:
@@ -432,16 +417,11 @@ def test_sagesla_is_a_distinct_fastvideo_provider_family() -> None:
     metadata = providers[0].calls[0]["metadata"]
     assert metadata.topk_ratio == 0.5
     assert result.receipt["algorithm"] == "fastvideo_sagesla"
-    assert (
-        result.receipt["provider_family"]
-        == "fastvideo/sage-sparse-linear-attention"
-    )
-    assert result.receipt["reference_provider_path"].endswith(
-        ".SageSLAAttentionImpl"
-    )
+    assert result.receipt["provider_family"] == "fastvideo/sage-sparse-linear-attention"
+    assert result.receipt["reference_provider_path"].endswith(".SageSLAAttentionImpl")
 
 
-def test_injected_provider_seam_is_explicit_and_still_requires_pinned_source() -> None:
+def test_injected_provider_seam_is_explicit_and_records_source_metadata() -> None:
     def factory(spec, _config):
         return _FakeProvider(spec)
 
@@ -461,18 +441,17 @@ def test_injected_provider_seam_is_explicit_and_still_requires_pinned_source() -
             **kwargs,
             allow_non_cuda_for_tests=True,
         )
-    with pytest.raises(FastVideoSLAUnavailableError, match="expected"):
-        FastVideoSLAAdapter(
-            **kwargs,
-            source_identity=_source_identity(commit="0" * 40),
-            allow_non_cuda_for_tests=True,
-        )
-    with pytest.raises(FastVideoSLAUnavailableError, match="clean=False"):
-        FastVideoSLAAdapter(
-            **kwargs,
-            source_identity=_source_identity(clean=False),
-            allow_non_cuda_for_tests=True,
-        )
+    identity = _source_identity(commit="0" * 40, clean=False)
+    adapter = FastVideoSLAAdapter(
+        **kwargs,
+        source_identity=identity,
+        allow_non_cuda_for_tests=True,
+    )
+    q, k, v = _values(batch=1)
+    receipt = adapter(0, q, k, v, current_timestep=0).receipt
+    assert receipt["provider_source_commit"] == identity.commit
+    assert receipt["provider_source_clean"] is False
+    assert receipt["reference_parity_verified"] is False
 
 
 @pytest.mark.parametrize(
@@ -545,10 +524,7 @@ def test_projection_fingerprint_changes_with_learned_weights() -> None:
     changed["blocks.0.attn1.attn_impl.proj_l.weight"][0, 0] += 1.0
     second = resolve_fastvideo_sla_projection_weights(changed, _specs(1))
     assert first.fingerprint != second.fingerprint
-    assert (
-        first.projections[0].fingerprint
-        != second.projections[0].fingerprint
-    )
+    assert first.projections[0].fingerprint != second.projections[0].fingerprint
 
 
 def test_source_identity_is_cached_and_forward_never_runs_subprocess(
@@ -575,6 +551,11 @@ def test_source_identity_is_cached_and_forward_never_runs_subprocess(
         raise AssertionError(args)
 
     monkeypatch.setattr(sla_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        type(source_file),
+        "read_bytes",
+        lambda _path: pytest.fail("source identity scanned file bytes"),
+    )
     sla_module._SOURCE_IDENTITIES.clear()
     first = sla_module._provider_source_identity(module)
     second = sla_module._provider_source_identity(module)
@@ -587,9 +568,7 @@ def test_source_identity_is_cached_and_forward_never_runs_subprocess(
     monkeypatch.setattr(
         sla_module.subprocess,
         "run",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("subprocess reached attention hot path")
-        ),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("subprocess reached attention hot path")),
     )
     q, k, v = _values(batch=1)
     adapter(0, q, k, v, current_timestep=0)
@@ -635,9 +614,7 @@ def test_production_loader_selects_exact_upstream_class(
     monkeypatch.setattr(
         sla_module.importlib,
         "import_module",
-        lambda name: fake_module
-        if name == "fastvideo.attention.backends.sla"
-        else pytest.fail(name),
+        lambda name: fake_module if name == "fastvideo.attention.backends.sla" else pytest.fail(name),
     )
     monkeypatch.setattr(
         sla_module,
@@ -672,12 +649,8 @@ def test_runtime_counters_are_safe_under_parallel_forwards() -> None:
             )
         )
 
-    assert sorted(result.receipt["call_index"] for result in results) == list(
-        range(1, 9)
-    )
-    assert sorted(
-        result.receipt["layer_call_index"] for result in results
-    ) == list(range(1, 9))
+    assert sorted(result.receipt["call_index"] for result in results) == list(range(1, 9))
+    assert sorted(result.receipt["layer_call_index"] for result in results) == list(range(1, 9))
     assert providers[0].max_active > 1
     assert adapter.runtime_report() == {
         "kind": "fastvideo_sla",

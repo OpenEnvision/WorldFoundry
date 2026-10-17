@@ -17,6 +17,16 @@ Studio 现在有多前端入口：
 - **`rerun`** — Rerun recording 与时间线查看。
 - **`auto`** — 默认。按模型类型自动路由：交互世界 -> `world`，3D scene -> `spark`，点云/深度 -> `points`，具身策略 -> `embodied`。
 
+打开 Spark viewer 前，安装其版本固定的浏览器模块：
+
+```bash
+python -m worldfoundry.studio.ui.vendor_assets
+python -m worldfoundry.studio.ui.vendor_assets --check
+```
+
+安装命令下载缺失、空内容或无法读取的文件，并复用可读且非空的本地模块。
+先单独安装模块，再启动 Studio；`--check` 离线检查本地可用性。
+
 ## 可视化内容
 
 - **World 控制台** — 实时画面、键盘和摇杆、沉浸式全屏与运行日志。
@@ -453,6 +463,92 @@ Linux 上的 `VideoSuperRes` 还需要 `libnvidia-ngx.so.1`。即使 CUDA 与 `n
 transport 像素量和 `postprocess_ms`，因此应按下方门禁做 A/B trace。低延迟交互建议
 从 1.5x `HIGH` 起步；只有实测 GPU 仍有余量时再启用 `ULTRA` 或 2–4x。
 `rtx-deblur-ultra` 保持原分辨率，不会增加传输带宽。
+
+### 浏览器呈现计时与编码器反馈
+
+WebRTC 状态栏中的 **E2E** 是浏览器提交控制，到呈现消费该控制的 chunk 中某一帧
+之间的延迟中位数。悬停可查看 p90、服务端控制到入队时间、RTT、抖动缓冲延迟与
+解码时间。分布保留最近 256 个已测控制，并排除配置的 warmup chunk。
+键盘/摇杆边沿、STEP 和实时文本更新携带控制 ID；合并的输入以及从未呈现对应帧的
+控制不会产生虚假的延迟样本。
+
+帧回执通过现有 DataChannel 传输实际 RTP 时间戳、chunk 索引和帧索引。浏览器与
+`requestVideoFrameCallback().rtpTimestamp` 匹配，即使视频先于回执到达也能关联。
+重复的保持帧对每个控制只计一次。两端的计时历史均按会话隔离且容量有界；浏览器
+耗时不会用浏览器时钟减去服务器时钟。
+
+设置 `WORLDFOUNDRY_REALTIME_PERF_JSONL` 后，trace 还会记录
+`realtime.frame_presented`（控制 ID、chunk/帧标识、`control_to_display_ms`、
+`queue_ms`、`encode_ms`）与 `realtime.browser_transport`（每两秒一次 WebRTC
+统计）。它们与 `realtime.chunk_timing` 分开；下方 chunk 回归 manifest 仍检查
+服务端生成指标。浏览器码率、平均抖动缓冲延迟和解码时间使用区间增量计算。
+DataChannel 拥塞时，计时回执让位于控制消息。
+
+现有可选 NVENC 路径（`WORLDFOUNDRY_REALTIME_NVENC=1`）将接收端 PLI/FIR 请求
+传给下一次原生编码，并用 REMB 带宽估计更新编码器的 CBR 配置。重配置在编码工作
+线程执行，保留 RTP 时钟与 CUDA 帧存储。目标码率受显式配置或分辨率推导的上限
+约束，下限为 100 kbit/s（显式上限更低时服从该上限）。降码率在下一次编码生效；
+不足 10% 的升码率更新会合并。模型生成节奏、推理分辨率和帧队列策略保持不变。
+
+**限制：** E2E 表示关联 chunk 帧到达浏览器呈现回调，不是像素响应检测或物理屏幕
+扫描时间。浏览器帧回调不提供 RTP 时间戳、使用 WebSocket 播放或会话没有匹配回执时，E2E
+显示不可用，不以服务端耗时代替。NVENC 反馈需要 PyNvVideoCodec 和具有 NVENC
+引擎的 GPU；仅有 CUDA 不够。动态码率改变传输压缩质量，不改变模型生成像素。
+
+### 真实 checkpoint 网络回放
+
+`tests/manual/realtime_replay.py` 使用本地权重启动公开的 Studio CLI，并驱动真实
+Chromium 客户端。每次重复都会重置会话、复用固定 seed 和输入图，每个原生模型
+chunk 发送一次 STEP，等该 chunk 的最后一个源帧呈现后再发下一次 STEP。示例采用
+Matrix-Game 2 原生的 640×352、12 FPS、9/12 帧节奏，每种网络条件重复三次，
+每次预热一个 chunk、测量六个 chunk。
+
+准备统一 Python 环境、Node.js、Playwright/Chromium 及其系统库。浏览器依赖可
+安装在仓库外：
+
+```bash
+npm install --prefix /private/replay-browser playwright
+/private/replay-browser/node_modules/.bin/playwright install chromium
+export NODE_PATH=/private/replay-browser/node_modules
+cp tests/manual/realtime_replay.example.json /private/realtime-profile.json
+# 在私有 profile 中设置 model_ref、image 和物理 GPU 编号。
+source tmp/worldfoundry_unified_env.sh
+PYTHONPATH=. "$WORLDFOUNDRY_UNIFIED_ENV_PREFIX/bin/python" \
+  tests/manual/realtime_replay.py \
+  --profile /private/realtime-profile.json \
+  --output outputs/realtime-mg2-run
+```
+
+输出目录必须尚不存在。`CHROMIUM_EXECUTABLE` 可指定已有 Chromium 可执行文件。
+浏览器与服务器进程位于同一 Linux 主机，Studio 和 UDP 中继均绑定 loopback；
+不需要 root，也不修改宿主机网卡或网络配置。
+
+干净链路、限速丢包和短时中断三种情况均经过同一个隔离 UDP 中继。两端 SDP 的候选
+地址都被替换，并检查实际选中的远端 ICE 候选确实指向中继。因此延迟、抖动、串行
+发送速率和固定随机种子的丢包会作用于 WebRTC 媒体、反馈与 DataChannel，而不只是
+HTTP 信令。`delay_ms` 为单向延迟，`rate_bps: 0` 表示不限速。超过有限
+`queue_ms` 排队预算的数据报会丢弃。中断场景在测量 STEP 请求期间双向断流
+1.5 秒；链路计数分别记录随机丢包、队列丢包和中断丢包。
+
+产物包含 `report.json`、`report.md`、原始 `timing.jsonl`、`browser.json`、
+逐次截图、每秒采样的 Studio 进程 CPU/RSS/GPU 显存，以及记录源码状态、依赖
+版本、执行命令和 GPU 共用情况的 `environment.json`。报告保留每次重复的
+E2E p50/p90、缺失控制、已呈现的唯一生成帧、呈现间隔和 WebRTC 统计。
+CPU 百分比只覆盖 Studio 进程，100% 表示一个 CPU 核；显存是采样的进程占用，
+不是 CUDA allocator 的精确峰值。
+
+漏跑、浏览器/服务器回执无法关联、浏览器错误、chunk 不完整以及重置或退出清理
+失败都会使回放失败。服务端阈值复用 `RealtimeRegressionThresholds`；私有
+profile 的 `delivery_thresholds` 还可设置 `max_e2e_p90_ms`、
+`max_stall_fraction` 和 `max_reset_ms`。延迟阈值应来自已接受的同栈基线；示例
+检查完整性与生命周期，不预设性能目标。对比时保留 profile 和所有逐次结果。
+
+**证据范围：** 这是实际 checkpoint 的传输与生命周期证据，不代替推理改动要求
+的已接受数值回放。呈现间隔可能包含模型生成和主动节奏控制；共享 GPU 的测量必须
+保留共用背景。默认 profile 使用软件编码；仅协商到 H.264 不代表执行了 NVENC。
+
+无权重脚本及报告契约纳入 `make test-infer-tensors` 和
+`make test-realtime-client`；checkpoint/浏览器回放仍需手动运行。
 
 ### 实时性能回归门禁
 
@@ -1101,7 +1197,9 @@ Studio 的实现各自只有一个 canonical import path，根目录仅保留 CL
 
 推理模块不导入 UI、serving 或 visualization。`StudioManager` 默认保存原始 artifact；需要预览的前端显式安装 `visualization.studio.prepare_run_record` 为 `record_processor`。原 `studio/native` 的 CUDA/C++/ImGui 前端已删除。
 
-`visualization/plugins` 保留实际调用的实现：`perception/render.py` 用于 CLI 和 Grounding DINO；`perception/human_pose.py` 生成 Wan Animate conditioning；`scene3d/projection.py` 服务 VIPE；`scene3d/depth_anything_v3/export_vis.py` 服务 DA3 导出；`styles/colormaps.py` 提供 depth / normal 着色。未使用的 media、robotics、pixelSplat training 可视化、重复 DVLT、HED 和 sky-segmentation/GLB 链已删除。
+`visualization/plugins` 保留实际调用的实现：`perception/render.py` 用于 CLI 和 Grounding DINO；`scene3d/projection.py` 服务 VIPE；`scene3d/depth_anything_v3/export_vis.py` 服务 DA3 导出；`styles/colormaps.py` 提供 depth / normal 着色。未使用的 media、robotics、pixelSplat training 可视化、重复 DVLT、HED 和 sky-segmentation/GLB 链已删除。
+
+Wan Animate conditioning image 是模型输入，由 `base_models/diffusion_model/models/encoders/wan/variants/animate/render.py` 持有；`AAPoseMeta.draw_aapose` 不依赖 Studio。
 
 `worldfoundry/representations` 已删除。Depth Anything、VGGT、Pi3、WorldFM、Lyra 等几何 pipeline 直接从 `worldfoundry/base_models/three_dimensions` 对应模型目录导入 runtime；checkpoint 加载、预处理与几何后处理和模型代码放在一起。空基类、marker class 和旧路径转发模块不再保留。Artifact 展示仍由 Studio visualization 负责。
 

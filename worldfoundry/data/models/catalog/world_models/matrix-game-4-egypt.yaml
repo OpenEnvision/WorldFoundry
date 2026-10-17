@@ -1,0 +1,79 @@
+id: matrix-game-4-egypt
+name: Matrix-Game 4 Ancient Egypt
+family: Matrix-Game
+aliases: [matrix-game-4-ancient-egypt]
+provider: Skywork AI
+tasks: [video-to-video, low-poly-rendering]
+output_artifacts: [generated_video]
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: matrix-game-4-egypt
+runtime_profile: runtime-profile:matrix-game-4-egypt
+catalog_category: world_models
+source:
+  status: open_source
+  official_repo_url: https://github.com/SkyworkAI/Matrix-Game
+  hf_repo_id: Skywork/Matrix-Game-4.0
+  license: apache-2.0
+official_sources:
+  github:
+    url: https://github.com/SkyworkAI/Matrix-Game
+    head_sha: 5446525c80da2a4a2f87801addbbc7faa8d2486e
+  huggingface:
+  - repo_id: Skywork/Matrix-Game-4.0
+    revision: 4419accdb7bb7881234c5914de8cd915266e0325
+    type: model
+    status: confirmed
+  - repo_id: alibaba-pai/Wan2.2-Fun-5B-Control
+    revision: b8bc1a65ab71d054ba4636dc0dac104aa4df2686
+    type: model
+    status: confirmed
+checkpoint_refs:
+- repo_id: Skywork/Matrix-Game-4.0
+  revision: 4419accdb7bb7881234c5914de8cd915266e0325
+  filename: fps-egypt/model.safetensors
+  license: apache-2.0
+  notes: [Ancient Egypt DiT; the same revision supplies fps-egypt/sink.png.]
+- repo_id: alibaba-pai/Wan2.2-Fun-5B-Control
+  revision: b8bc1a65ab71d054ba4636dc0dac104aa4df2686
+  license: apache-2.0
+  notes: [Shared Wan2.2 VAE, UMT5 encoder and google/umt5-xxl tokenizer files.]
+checkpoints:
+- {repo_id: Skywork/Matrix-Game-4.0, filename: fps-egypt/sink.png}
+- {repo_id: alibaba-pai/Wan2.2-Fun-5B-Control, filename: Wan2.2_VAE.pth}
+- {repo_id: alibaba-pai/Wan2.2-Fun-5B-Control, filename: models_t5_umt5-xxl-enc-bf16.pth}
+- {repo_id: alibaba-pai/Wan2.2-Fun-5B-Control, filename: google/umt5-xxl/special_tokens_map.json}
+- {repo_id: alibaba-pai/Wan2.2-Fun-5B-Control, filename: google/umt5-xxl/spiece.model}
+- {repo_id: alibaba-pai/Wan2.2-Fun-5B-Control, filename: google/umt5-xxl/tokenizer.json}
+- {repo_id: alibaba-pai/Wan2.2-Fun-5B-Control, filename: google/umt5-xxl/tokenizer_config.json}
+integration:
+  status: integrated
+native_diffusion:
+  recipe_id: matrix-game-4-egypt
+  strategy: autoregressive-window
+  status: checkpoint_short_case_verified
+demo_parity:
+  status: pending
+runner_parity:
+  status: pending
+  notes:
+  - Public-loader 5-frame and 100-frame BF16/SDPA checkpoint cases on H100 match pinned upstream latent and decoded RGB values exactly.
+  - The 100-frame synthetic-pan case covers KV eviction, tail trimming, A/B/A request reuse, interrupted denoising recovery and unchanged global RNG.
+  - Accepted-reference release replay and gameplay-quality evidence remain pending.
+docs:
+  publisher: Skywork AI
+  publisher_kind: company
+  overview: A low-poly game video is re-rendered as an Ancient Egypt scene by a causal video diffusion model. The native model can run without the optional upstream game engine.
+  overview_zh: 因果视频扩散模型把低模游戏视频重渲染为古埃及场景。原生模型可以独立于可选的上游游戏引擎运行。
+  modalities:
+    inputs: [video, text]
+    outputs: [video]
+  limitations:
+  - Accepted-reference replay, gameplay-quality validation and measured throughput remain pending.
+  limitations_zh:
+  - accepted-reference 回放、游戏画面质量及实测吞吐量仍待验证。
+notes:
+- Native two-step offline Wan VAE route; fixed 864x480, guidance scale 1, one prompt per clip.
+- A separately encoded KV-only sink is not an output frame and does not initialize the control VAE history.
+- Input FPS is retained; the last frame is repeated to 4n+1 internally, then cropped from the exported output.
+- The optional pinned game submodule is not imported by Python inference and is not packaged in the wheel.
+- Released-weight public-loader comparisons on H100 match upstream exactly for 5-frame repeated-sink and 100-frame synthetic-pan inputs at 864x480.

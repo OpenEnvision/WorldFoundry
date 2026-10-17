@@ -35,7 +35,7 @@ availability:
   license: CC-BY-NC-SA-4.0
 integration:
   kind: pipeline_runner
-  status: implemented_checkpoint_manifest_validated
+  status: integrated
   notes:
   - Only the released causal-fast inference route is integrated in-tree.
   - Common Wan, T5, VAE, scheduler, FSDP, collective, geometry and media code is reused from WorldFoundry.

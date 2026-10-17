@@ -97,6 +97,7 @@ class MemoryStore:
         """Seed the store; seed rows go through :meth:`append_record` so capacity applies."""
         self.capacity = capacity
         self.records: list[dict[str, Any]] = []
+        self._next_timestamp: int | float = 0
         for record in records:
             self.append_record(record)
 
@@ -117,22 +118,23 @@ class MemoryStore:
         metadata: Mapping[str, Any] | None = None,
         score: float | None = None,
     ) -> dict[str, Any]:
-        """Append a new record; *timestamp* defaults to the current length."""
+        """Append a new record; default timestamps advance independently of eviction."""
         record = MemoryRecord(
             content=content,
             kind=str(kind),
-            timestamp=len(self.records) if timestamp is None else timestamp,
+            timestamp=self._next_timestamp if timestamp is None else timestamp,
             metadata=dict(metadata or {}),
             score=score,
-        ).to_dict()
-        self.records.append(record)
-        self.evict()
-        return record
+        )
+        return self.append_record(record)
 
     def append_record(self, record: Mapping[str, Any] | MemoryRecord) -> dict[str, Any]:
         """Normalize *record* to a dict, append it, and evict if over capacity."""
         row = record.to_dict() if isinstance(record, MemoryRecord) else MemoryRecord.from_dict(record).to_dict()
         self.records.append(row)
+        self._next_timestamp += 1
+        if isinstance(row["timestamp"], (int, float)):
+            self._next_timestamp = max(self._next_timestamp, row["timestamp"] + 1)
         self.evict()
         return row
 
@@ -175,10 +177,12 @@ class MemoryStore:
     def reset(self) -> None:
         """Remove every stored record."""
         self.records.clear()
+        self._next_timestamp = 0
 
     def replace(self, records: Iterable[Mapping[str, Any] | MemoryRecord]) -> None:
         """Clear the store and append *records* in order."""
         self.records = []
+        self._next_timestamp = 0
         for record in records:
             self.append_record(record)
 

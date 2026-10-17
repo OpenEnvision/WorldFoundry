@@ -29,6 +29,7 @@ from worldfoundry.base_models.diffusion_model.models.autoencoders.hunyuan_video.
     HunyuanVideoCausal3DAutoencoder as AutoencoderKLCausal3D,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.hunyuan_video.gamecraft import HYVideoDiffusionTransformer
+from worldfoundry.base_models.diffusion_model.optimizations.camera_condition import CameraConditionCache
 from worldfoundry.base_models.diffusion_model.schedulers.flow_dpm import retrieve_timesteps
 from worldfoundry.base_models.diffusion_model.schedulers.lvdm.schedule_math import rescale_noise_cfg
 
@@ -691,6 +692,16 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
         vae_dtype = PRECISION_TO_TYPE[self.args.vae_precision]
         vae_autocast_enabled = (vae_dtype != torch.float32) and not self.args.val_disable_autocast
 
+        camera_input = (
+            torch.cat([uncond_cam_latents, cam_latents], dim=0)
+            if self.do_classifier_free_guidance else cam_latents
+        )
+        split_camera_cfg = latents.shape[-1] * latents.shape[-2] > 64 * 112 and cpu_offload
+        camera_condition = CameraConditionCache(camera_input)
+        if split_camera_cfg:
+            camera_uncond = CameraConditionCache(camera_input[:1])
+            camera_text = CameraConditionCache(camera_input[1:])
+
         # 7. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
@@ -723,12 +734,6 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
                 t_expand = t.repeat(latent_model_input.shape[0])
                 guidance_expand = None
 
-                cam_latents_ = (
-                    torch.cat([uncond_cam_latents, cam_latents], dim=0)
-                    if self.do_classifier_free_guidance
-                    else cam_latents
-                )
-
                 # predict the noise residual
                 with torch.autocast(device_type="cuda", dtype=target_dtype, enabled=autocast_enabled):
                     is_cache = False
@@ -738,7 +743,7 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
                             is_cache = False
                         else:
                             is_cache = True
-                    if latent_model_input.shape[-1] * latent_model_input.shape[-2] > 64 * 112 and cpu_offload:
+                    if split_camera_cfg:
                         if i == 0:
                             print(
                                 f"cpu_offload={cpu_offload} and \
@@ -755,7 +760,7 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
                             guidance=guidance_expand,
                             return_dict=True,
                             is_cache=is_cache,
-                            cam_latents=cam_latents_[:1],
+                            cam_latents=camera_uncond,
                         )["x"]
                         torch.cuda.empty_cache()
                         noise_pred_text = self.transformer(
@@ -769,7 +774,7 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
                             guidance=guidance_expand,
                             return_dict=True,
                             is_cache=is_cache,
-                            cam_latents=cam_latents_[1:],
+                            cam_latents=camera_text,
                         )["x"]
                         noise_pred = torch.cat([noise_pred_uncond, noise_pred_text], dim=0)
                         torch.cuda.empty_cache()
@@ -785,7 +790,7 @@ class HunyuanVideoGamePipeline(DiffusionPipeline, TextualInversionLoaderMixin, L
                             guidance=guidance_expand,
                             return_dict=True,
                             is_cache=is_cache,
-                            cam_latents=cam_latents_,
+                            cam_latents=camera_condition,
                             use_sage=use_sage,
                         )["x"]
 

@@ -2655,16 +2655,6 @@ def _fastvideo_sla_report_view(
             if isinstance((commit := event.get("provider_source_commit")), str)
         }
     )
-    source_fingerprints = sorted(
-        {
-            str(fingerprint)
-            for event in sparse_events
-            if isinstance(
-                (fingerprint := event.get("provider_source_fingerprint")),
-                str,
-            )
-        }
-    )
     provider_fingerprints = sorted(
         {
             str(fingerprint)
@@ -2786,7 +2776,6 @@ def _fastvideo_sla_report_view(
             source_commits[0] if len(source_commits) == 1 else None
         ),
         "provider_source_commits": source_commits,
-        "provider_source_fingerprints": source_fingerprints,
         "provider_fingerprints": provider_fingerprints,
         "provider_source_root": (
             source_roots[0] if len(source_roots) == 1 else None

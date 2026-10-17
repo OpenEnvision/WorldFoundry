@@ -7,10 +7,7 @@ conv, CLIP, and TeaCache skip logic (``process_teacache_skip_logic``).
 Adds control channels and TeaCache hooks.  Not a causal or linear-attn fork.
 """
 
-import glob
-import json
 import math
-import os
 import types
 from typing import Optional, Union
 
@@ -30,6 +27,11 @@ from worldfoundry.core.distributed.sequence_parallel.runtime import (
     get_sp_group,
 )
 from worldfoundry.core.attention.sequence.varlen import attention
+from worldfoundry.base_models.diffusion_model.optimizations.camera_condition import camera_features
+from worldfoundry.base_models.diffusion_model.optimizations.static_cross_kv import (
+    StaticConditionCache,
+    reuse_cross_kv,
+)
 from worldfoundry.base_models.diffusion_model.optimizations.wan.cfg_skip import cfg_skip
 from worldfoundry.base_models.diffusion_model.optimizations.wan.teacache import TeaCache
 from worldfoundry.base_models.diffusion_model.models.networks.wan.adapter import (
@@ -357,38 +359,27 @@ class WanSelfAttention(nn.Module):
 
 
 class WanT2VCrossAttention(WanSelfAttention):
-    """Text-to-video cross-attention layer."""
+    """Text-to-video cross-attention with optional request-owned condition K/V."""
 
-    def forward(self, x, context, context_lens, dtype=torch.bfloat16, t=0):
-        r"""
-        Args:
-            x(Tensor): Shape [B, L1, C]
-            context(Tensor): Shape [B, L2, C]
-            context_lens(Tensor): Shape [B]
-        """
-        b, n, d = x.size(0), self.num_heads, self.head_dim
-
-        # Compute query, key, value
-        q = self.norm_q(self.q(x)).view(b, -1, n, d)
-        k = self.norm_k(self.k(context)).view(b, -1, n, d)
-        v = self.v(context).view(b, -1, n, d)
-
-        # Compute attention
-        x = attention(
-            q.to(dtype),
-            k.to(dtype),
-            v.to(dtype),
-            k_lens=context_lens
+    def project_context_kv(self, context: torch.Tensor) -> tuple[torch.Tensor, ...]:
+        b, n, d = context.size(0), self.num_heads, self.head_dim
+        return (
+            self.norm_k(self.k(context)).view(b, -1, n, d),
+            self.v(context).view(b, -1, n, d),
         )
 
-        # Output
-        x = x.flatten(2)
-        x = self.o(x)
-        return x
+    def forward(self, x, context, context_lens, dtype=torch.bfloat16, t=0, condition_store=None):
+        b, n, d = x.size(0), self.num_heads, self.head_dim
+        q = self.norm_q(self.q(x)).view(b, -1, n, d)
+        k, v = reuse_cross_kv(
+            self, context, condition_store, lambda: self.project_context_kv(context)
+        )
+        x = attention(q.to(dtype), k.to(dtype), v.to(dtype), k_lens=context_lens)
+        return self.o(x.flatten(2))
 
 
-class WanI2VCrossAttention(WanSelfAttention):
-    """Image-to-video cross-attention layer with separate image context processing."""
+class WanI2VCrossAttention(WanT2VCrossAttention):
+    """Image-to-video cross-attention with separate image context processing."""
 
     def __init__(self,
                  dim,
@@ -397,81 +388,30 @@ class WanI2VCrossAttention(WanSelfAttention):
                  qk_norm=True,
                  eps=1e-6):
         super().__init__(dim, num_heads, window_size, qk_norm, eps)
-
         self.k_img = nn.Linear(dim, dim)
         self.v_img = nn.Linear(dim, dim)
-        # self.alpha = nn.Parameter(torch.zeros((1, )))
         self.norm_k_img = WanRMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
 
-    def forward(self, x, context, context_lens, dtype=torch.bfloat16, t=0):
-        r"""
-        Args:
-            x(Tensor): Shape [B, L1, C]
-            context(Tensor): Shape [B, L2, C]
-            context_lens(Tensor): Shape [B]
-        """
-        context_img = context[:, :257]
-        context = context[:, 257:]
+    def project_context_kv(self, context: torch.Tensor) -> tuple[torch.Tensor, ...]:
+        b, n, d = context.size(0), self.num_heads, self.head_dim
+        return super().project_context_kv(context[:, 257:]) + (
+            self.norm_k_img(self.k_img(context[:, :257])).view(b, -1, n, d),
+            self.v_img(context[:, :257]).view(b, -1, n, d),
+        )
+
+    def forward(self, x, context, context_lens, dtype=torch.bfloat16, t=0, condition_store=None):
         b, n, d = x.size(0), self.num_heads, self.head_dim
-
-        # Compute query, key, value
         q = self.norm_q(self.q(x)).view(b, -1, n, d)
-        k = self.norm_k(self.k(context)).view(b, -1, n, d)
-        v = self.v(context).view(b, -1, n, d)
-        k_img = self.norm_k_img(self.k_img(context_img)).view(b, -1, n, d)
-        v_img = self.v_img(context_img).view(b, -1, n, d)
-
-        img_x = attention(
-            q.to(dtype),
-            k_img.to(dtype),
-            v_img.to(dtype),
-            k_lens=None
+        k, v, k_img, v_img = reuse_cross_kv(
+            self, context, condition_store, lambda: self.project_context_kv(context)
         )
-        # Compute text cross-attention
-        x = attention(
-            q.to(dtype),
-            k.to(dtype),
-            v.to(dtype),
-            k_lens=context_lens
-        )
-
-        # Output
-        x = x.flatten(2)
-        img_x = img_x.flatten(2)
-        x = x + img_x
-        x = self.o(x)
-        return x
+        img_x = attention(q.to(dtype), k_img.to(dtype), v_img.to(dtype), k_lens=None)
+        x = attention(q.to(dtype), k.to(dtype), v.to(dtype), k_lens=context_lens)
+        return self.o(x.flatten(2) + img_x.flatten(2))
 
 
-class WanCrossAttention(WanSelfAttention):
-    """Generic cross-attention layer."""
-
-    def forward(self, x, context, context_lens, dtype=torch.bfloat16, t=0):
-        r"""
-        Args:
-            x(Tensor): Shape [B, L1, C]
-            context(Tensor): Shape [B, L2, C]
-            context_lens(Tensor): Shape [B]
-        """
-        b, n, d = x.size(0), self.num_heads, self.head_dim
-
-        # Compute query, key, value
-        q = self.norm_q(self.q(x)).view(b, -1, n, d)
-        k = self.norm_k(self.k(context)).view(b, -1, n, d)
-        v = self.v(context).view(b, -1, n, d)
-
-        # Compute attention
-        x = attention(
-            q.to(dtype),
-            k.to(dtype),
-            v.to(dtype),
-            k_lens=context_lens
-        )
-
-        # Output
-        x = x.flatten(2)
-        x = self.o(x)
-        return x
+class WanCrossAttention(WanT2VCrossAttention):
+    """Generic cross-attention using the shared text projection path."""
 
 
 WAN_CROSSATTENTION_CLASSES = {
@@ -533,6 +473,7 @@ class WanAttentionBlock(nn.Module):
         context_lens,
         dtype=torch.bfloat16,
         t=0,
+        condition_store=None,
     ):
         r"""
         Args:
@@ -560,7 +501,10 @@ class WanAttentionBlock(nn.Module):
         # Cross-attention and FFN with modulation
         def cross_attn_ffn(x, context, context_lens, e):
             # Cross-attention: attend to text context
-            x = x + self.cross_attn(self.norm3(x).to(x.dtype), context, context_lens, dtype, t=t)
+            x = x + self.cross_attn(
+                self.norm3(x).to(x.dtype), context, context_lens, dtype, t=t,
+                condition_store=condition_store,
+            )
 
             # FFN with modulation
             temp_x = self.norm2(x) * (1 + e[4]) + e[3]
@@ -898,6 +842,18 @@ class WanTransformer3DModel(WanTransformerMethodsMixin, nn.Module, NativeConfigM
                 block.self_attn.forward = types.MethodType(
                     usp_attn_forward, block.self_attn)
 
+    def project_condition_context(
+        self, source: torch.Tensor, clip_feature: torch.Tensor | None,
+    ) -> torch.Tensor:
+        """Retain native text padding and optional CLIP projection arithmetic."""
+        context = self.text_embedding(torch.stack([
+            torch.cat([u, u.new_zeros(self.text_len - u.size(0), u.size(1))])
+            for u in source
+        ]))
+        if clip_feature is not None:
+            context = torch.concat([self.img_emb(clip_feature), context], dim=1)
+        return context
+
     @cfg_skip()
     def forward(
         self,
@@ -957,7 +913,7 @@ class WanTransformer3DModel(WanTransformerMethodsMixin, nn.Module, NativeConfigM
 
         # Add control adapter features (for camera control)
         if self.control_adapter is not None and y_camera is not None:
-            y_camera = self.control_adapter(y_camera)
+            y_camera = camera_features(self.control_adapter, y_camera)
             x = [u + v for u, v in zip(x, y_camera)]
 
         # Get grid_sizes
@@ -1021,16 +977,11 @@ class WanTransformer3DModel(WanTransformerMethodsMixin, nn.Module, NativeConfigM
 
         # Context: text embeddings (padded to fixed length)
         context_lens = None
-        context = self.text_embedding(
-            torch.stack([
-                torch.cat(
-                    [u, u.new_zeros(self.text_len - u.size(0), u.size(1))])
-                for u in context
-            ]))
-
-        if clip_fea is not None:
-            context_clip = self.img_emb(clip_fea)  # Shape: [B, 257, dim]
-            context = torch.concat([context_clip, context], dim=1)
+        condition_store = context.store if isinstance(context, StaticConditionCache) else None
+        if isinstance(context, StaticConditionCache):
+            context = context.project_context(self, self.project_condition_context)
+        else:
+            context = self.project_condition_context(context, clip_fea)
 
         # Context Parallel: split input across GPUs
         if self.sp_world_size > 1:
@@ -1048,6 +999,7 @@ class WanTransformer3DModel(WanTransformerMethodsMixin, nn.Module, NativeConfigM
             context_lens=context_lens,
             dtype=dtype,
             t=t,
+            condition_store=condition_store,
         )
 
         # TeaCache: skip computation when change is small

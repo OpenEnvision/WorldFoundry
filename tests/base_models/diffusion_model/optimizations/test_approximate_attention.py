@@ -597,9 +597,7 @@ class _ApproxReceiptBlock(torch.nn.Module):
 class _ApproxReceiptStack(torch.nn.Module):
     def __init__(self, layers: int) -> None:
         super().__init__()
-        self.blocks = torch.nn.ModuleList(
-            [_ApproxReceiptBlock() for _ in range(layers)]
-        )
+        self.blocks = torch.nn.ModuleList([_ApproxReceiptBlock() for _ in range(layers)])
 
 
 class _ReferenceLightX2VProvider:
@@ -619,9 +617,7 @@ class _FakeFastVideoSLAAdapter(torch.nn.Module):
         super().__init__()
         assert checkpoint_state_dict
         self.config = config
-        self.providers = torch.nn.ModuleDict(
-            {str(spec.layer_index): torch.nn.Identity() for spec in layer_specs}
-        )
+        self.providers = torch.nn.ModuleDict({str(spec.layer_index): torch.nn.Identity() for spec in layer_specs})
         self.calls: list[int] = []
 
     def forward(
@@ -638,14 +634,8 @@ class _FakeFastVideoSLAAdapter(torch.nn.Module):
         if on_provider_attempt is not None:
             on_provider_attempt()
         self.calls.append(layer_index)
-        provider_name = (
-            "SLAAttentionImpl"
-            if self.config.kind == "fastvideo_sla"
-            else "SageSLAAttentionImpl"
-        )
-        provider_path = (
-            "fastvideo.attention.backends.sla." + provider_name
-        )
+        provider_name = "SLAAttentionImpl" if self.config.kind == "fastvideo_sla" else "SageSLAAttentionImpl"
+        provider_path = "fastvideo.attention.backends.sla." + provider_name
         provider_family = (
             "fastvideo/sparse-linear-attention"
             if self.config.kind == "fastvideo_sla"
@@ -669,7 +659,6 @@ class _FakeFastVideoSLAAdapter(torch.nn.Module):
                 "reference_fastvideo_commit": PINNED_FASTVIDEO_COMMIT,
                 "provider_source_commit": PINNED_FASTVIDEO_COMMIT,
                 "provider_source_clean": True,
-                "provider_source_fingerprint": "2" * 64,
                 "provider_source_root": "/test/FastVideo",
                 "provider_source_file": "/test/FastVideo/sla.py",
                 "reference_parity_verified": True,
@@ -824,9 +813,7 @@ def test_load_preparation_materializes_without_runtime_credit(monkeypatch) -> No
     report = approximate_attention_report(state)
     assert report["runtime_effective"] is False
     assert report["kernel_attempts"] == report["sparse_calls"] == 0
-    assert report["lightx2v"]["load_preparation"] == (
-        state.lightx2v_load_preparation
-    )
+    assert report["lightx2v"]["load_preparation"] == (state.lightx2v_load_preparation)
 
 
 def test_lightx2v_install_does_not_depend_on_fastvideo_kernel(monkeypatch) -> None:
@@ -944,29 +931,17 @@ def test_lightx2v_processor_reconciles_provider_dense_events(
             )
 
     report = approximate_attention_report(state, request_id)
-    sparse_path = lightx2v_module.lightx2v_kernel_symbol(
-        lightx2v_module.LightX2VSparseConfig(kind=kind)
-    )
+    sparse_path = lightx2v_module.lightx2v_kernel_symbol(lightx2v_module.LightX2VSparseConfig(kind=kind))
     assert report["coverage"]["complete"] is True
     assert report["provider_dense_calls"] == expected_dense_calls
-    assert report["kernel_attempts"] == (
-        report["sparse_calls"] + report["provider_dense_calls"]
-    )
-    assert report["event_count"] == (
-        report["sparse_calls"] + report["provider_dense_calls"]
-    )
+    assert report["kernel_attempts"] == (report["sparse_calls"] + report["provider_dense_calls"])
+    assert report["event_count"] == (report["sparse_calls"] + report["provider_dense_calls"])
     assert report["provider_path"] == sparse_path
     assert report["provider_paths"] == [sparse_path]
     assert report["provider_dense_path"] == dense_path
     assert report["provider_dense_paths"] == [dense_path]
-    provider_dense_events = [
-        event
-        for event in report["events"]
-        if event["execution"] == "provider_dense"
-    ]
-    sparse_events = [
-        event for event in report["events"] if event["execution"] == "sparse"
-    ]
+    provider_dense_events = [event for event in report["events"] if event["execution"] == "provider_dense"]
+    sparse_events = [event for event in report["events"] if event["execution"] == "sparse"]
     assert len(provider_dense_events) == expected_dense_calls
     assert len(sparse_events) == report["sparse_calls"]
     assert all(
@@ -994,9 +969,7 @@ def test_lightx2v_processor_reconciles_provider_dense_events(
 def test_lightx2v_provider_error_fails_closed_and_finalizes_request(
     monkeypatch,
 ) -> None:
-    provider = _ReferenceLightX2VProvider(
-        error=LightX2VSparseUnavailableError("provider unavailable")
-    )
+    provider = _ReferenceLightX2VProvider(error=LightX2VSparseUnavailableError("provider unavailable"))
     model, state, values, _ = _install_fake_lightx2v(
         monkeypatch,
         layers=1,
@@ -1136,9 +1109,7 @@ def test_request_receipts_isolate_interleaved_requests_and_finalize(monkeypatch)
     assert report_b["coverage"]["complete"] is True
     assert report_a["expected_layers"] == [0, 1]
     assert report_a["expected_calls"] == report_a["event_count"] == 4
-    assert {event["request_id"] for event in report_a["events"]} == {
-        "request-a"
-    }
+    assert {event["request_id"] for event in report_a["events"]} == {"request-a"}
     assert {event["branch"] for event in report_b["events"]} == {"negative"}
     assert all(
         event["provider_path"] == "fastvideo_kernel.video_sparse_attn"
@@ -1177,14 +1148,17 @@ def test_finalize_releases_invocation_ledger_and_selects_frozen_receipt(
         request_id="released-request",
         branch="positive",
     )
-    assert processor._sparse_attention(
-        attention,
-        values,
-        values,
-        values,
-        values,
-        _worldfoundry_sparse_grid=grid,
-    ) is not None
+    assert (
+        processor._sparse_attention(
+            attention,
+            values,
+            values,
+            values,
+            values,
+            _worldfoundry_sparse_grid=grid,
+        )
+        is not None
+    )
     invocation = state.current_invocation()
     assert invocation is not None
     request_state = invocation.request_state
@@ -1196,10 +1170,7 @@ def test_finalize_releases_invocation_ledger_and_selects_frozen_receipt(
     assert "released-request" not in state._requests
     assert state._last_finalized_request_id.get() == "released-request"
     assert isinstance(state._receipt_snapshots["released-request"], str)
-    assert all(
-        value is not request_state
-        for value in copy_context().values()
-    )
+    assert all(value is not request_state for value in copy_context().values())
     frozen = approximate_attention_report(state)
     assert frozen["request_id"] == "released-request"
     assert frozen["finalized"] is True
@@ -1237,14 +1208,17 @@ def test_request_context_isolation_survives_parallel_forwards(monkeypatch) -> No
             barrier.wait()
             for block in model.blocks:
                 processor = block.self_attn.get_processor()
-                assert processor._sparse_attention(
-                    block.self_attn,
-                    values,
-                    values,
-                    values,
-                    values,
-                    _worldfoundry_sparse_grid=(2, 4, 4),
-                ) is not None
+                assert (
+                    processor._sparse_attention(
+                        block.self_attn,
+                        values,
+                        values,
+                        values,
+                        values,
+                        _worldfoundry_sparse_grid=(2, 4, 4),
+                    )
+                    is not None
+                )
             barrier.wait()
 
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -1261,9 +1235,7 @@ def test_request_context_isolation_survives_parallel_forwards(monkeypatch) -> No
     ):
         report = approximate_attention_report(state, request_id)
         assert report["coverage"]["complete"] is True
-        assert {event["request_id"] for event in report["events"]} == {
-            request_id
-        }
+        assert {event["request_id"] for event in report["events"]} == {request_id}
         assert {event["branch"] for event in report["events"]} == {branch}
 
 
@@ -1281,13 +1253,16 @@ def test_failed_request_does_not_pollute_later_sparse_success(monkeypatch) -> No
         request_id="fallback-request",
         branch="positive",
     )
-    assert processor._sparse_attention(
-        attention,
-        values,
-        values,
-        values,
-        values,
-    ) is None
+    assert (
+        processor._sparse_attention(
+            attention,
+            values,
+            values,
+            values,
+            values,
+        )
+        is None
+    )
     fallback = approximate_attention_report(state, "fallback-request")
     assert fallback["kernel_fallbacks"] == 1
     assert fallback["runtime_effective"] is False
@@ -1300,14 +1275,17 @@ def test_failed_request_does_not_pollute_later_sparse_success(monkeypatch) -> No
         request_id="successful-request",
         branch="positive",
     )
-    assert processor._sparse_attention(
-        attention,
-        values,
-        values,
-        values,
-        values,
-        _worldfoundry_sparse_grid=grid,
-    ) is not None
+    assert (
+        processor._sparse_attention(
+            attention,
+            values,
+            values,
+            values,
+            values,
+            _worldfoundry_sparse_grid=grid,
+        )
+        is not None
+    )
     success = approximate_attention_report(state, "successful-request")
     assert success["runtime_effective"] is True
     assert success["effective_kernel"] == "vsa"
@@ -1330,14 +1308,17 @@ def test_routed_expert_receipt_accepts_unique_global_step_subset(monkeypatch) ->
             branch="positive",
             routed_steps=True,
         )
-        assert processor._sparse_attention(
-            attention,
-            values,
-            values,
-            values,
-            values,
-            _worldfoundry_sparse_grid=grid,
-        ) is not None
+        assert (
+            processor._sparse_attention(
+                attention,
+                values,
+                values,
+                values,
+                values,
+                _worldfoundry_sparse_grid=grid,
+            )
+            is not None
+        )
 
     report = approximate_attention_report(state, "dual-expert-request")
     assert report["routed_steps"] is True
@@ -1370,14 +1351,17 @@ def test_request_receipt_snapshots_are_bounded(monkeypatch) -> None:
             request_id=request_id,
             branch="positive",
         )
-        assert processor._sparse_attention(
-            attention,
-            values,
-            values,
-            values,
-            values,
-            _worldfoundry_sparse_grid=grid,
-        ) is not None
+        assert (
+            processor._sparse_attention(
+                attention,
+                values,
+                values,
+                values,
+                values,
+                _worldfoundry_sparse_grid=grid,
+            )
+            is not None
+        )
         finalize_approximate_attention_request(state, request_id)
 
     assert approximate_attention_lifecycle_report(state) == {
@@ -1490,7 +1474,6 @@ def test_lightx2v_processor_composes_with_one_fused_qkv_projection(
     report = approximate_attention_report(state)
     assert report["sparse_calls"] == 1
     assert report["lightx2v"]["canonical_provider_executed"] is True
-
 
 
 class _CaptureSelfProcessor:

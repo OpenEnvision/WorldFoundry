@@ -1,0 +1,63 @@
+id: lingbot-world-v2-1.3b
+name: LingBot-World-V2 1.3B
+aliases:
+- lingbot-v2-1.3b
+tasks:
+- image-to-world-video
+- camera-controlled-video
+- interactive-world-model
+provider: official_repo
+source:
+  status: source_available
+  official_repo_url: https://github.com/Robbyant/lingbot-world-v2
+  license: CC-BY-NC-SA-4.0
+official_sources:
+  github:
+    url: https://github.com/Robbyant/lingbot-world-v2
+    revision: 94f43115de8d4a4f9f282126528c300a0b232c5f
+  huggingface:
+  - repo_id: robbyant/lingbot-world-v2-1.3b-causal-fast
+    revision: 7e36a5f919f86cb4255cc9bfc30adb44963fbde1
+    status: public_checkpoint
+    license: CC-BY-NC-SA-4.0
+checkpoint_refs:
+- repo_id: robbyant/lingbot-world-v2-1.3b-causal-fast
+  role: causal_fast_1p3b_checkpoint
+- repo_id: Wan-AI/Wan2.1-T2V-1.3B
+  role: shared_text_and_vae_assets
+availability:
+  status: source_available
+  open_source: false
+  code: public
+  weights: public_huggingface
+  license: CC-BY-NC-SA-4.0
+integration:
+  kind: pipeline_runner
+  status: integrated
+  notes:
+  - Independent 1536-wide, 30-layer, 12-head architecture; the 14B entry remains unchanged.
+  - Root-level indexed transformer shards use shared Wan T5, tokenizer and VAE assets.
+  - Four-latent causal sampling uses shift 5, integer timesteps and a request-owned FP32 noise bank.
+runtime_profile: runtime-profile:lingbot-world-v2-1.3b
+pipeline_binding: lingbot-world-v2-1.3b
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+output_artifacts:
+- generated_world_video
+catalog_category: world_models
+catalog_scope: World-model catalog entries with in-tree inference runtimes.
+docs:
+  publisher: Robbyant (Ant Group)
+  publisher_kind: company
+  publisher_zh: 蚂蚁灵波科技（Robbyant，蚂蚁集团）
+  overview: A separately selectable 1.3B causal-fast LingBot-World-V2 camera-controlled world model.
+  overview_zh: 可独立选择的 LingBot-World-V2 1.3B causal-fast 相机控制世界模型。
+  architecture: 30 transformer layers, hidden width 1536, FFN width 8960 and 12 attention heads; shared Wan2.1 VAE and UMT5 text encoding.
+  architecture_zh: 30 层 Transformer、1536 隐藏宽度、8960 FFN 宽度、12 个注意力头，复用 Wan2.1 VAE 与 UMT5 文本编码。
+  usage_notes: Offline-first. Supply shared_assets_path pointing to the Wan2.1 T5/tokenizer/VAE assets. Non-commercial, share-alike license.
+  usage_notes_zh: 离线优先；shared_assets_path 指向 Wan2.1 的 T5、tokenizer 和 VAE 资产目录。许可为非商用、相同方式共享。
+  limitations:
+  - CC BY-NC-SA 4.0 non-commercial license.
+  - Scaled INT8/FP8 attention is an explicit approximate option, not the default.
+  limitations_zh:
+  - CC BY-NC-SA 4.0 非商用许可。
+  - Scaled INT8/FP8 attention 为显式近似选项，非默认行为。

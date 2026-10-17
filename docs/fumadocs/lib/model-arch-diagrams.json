@@ -2502,12 +2502,6 @@
       "caption": "Method overview: a bidirectional action-conditioned teacher is distilled into a causal LongForcing student for low-latency rollout.",
       "captionZh": "论文方法总览：先把双向动作条件教师蒸馏成因果 LongForcing 学生，再做低延迟滚动。"
     },
-    "biwm-wan21": {
-      "modelId": "biwm-wan21"
-    },
-    "biwm-wan22": {
-      "modelId": "biwm-wan22"
-    },
     "fastwam": {
       "modelId": "fastwam",
       "teaserSrc": "/models/fastwam/teaser.png",
@@ -2625,14 +2619,6 @@
       "caption": "Method overview: DreamDojo overview. DreamDojo acquires comprehensive physical knowledge from large-scale human datasets by utilizing latent actions as unified labels. After post-training and distillation on the target robots, our.",
       "captionZh": "论文方法总览：DreamDojo 的机器人操作架构。"
     },
-    "irasim": {
-      "modelId": "irasim",
-      "src": "/models/irasim/overview.png",
-      "alt": "Method overview: Network Architecture of IRASim . (a) shows the general diffusion transformer architecture of IRASim. The input to IRASim includes the historical frames and the given trajectory. (b) Video-level adaptation.",
-      "altZh": "论文方法总览：IRASim 的视频生成架构。",
-      "caption": "Method overview: Network Architecture of IRASim . (a) shows the general diffusion transformer architecture of IRASim. The input to IRASim includes the historical frames and the given trajectory. (b) Video-level adaptation.",
-      "captionZh": "论文方法总览：IRASim 的视频生成架构。"
-    },
     "last-r1": {
       "modelId": "last-r1",
       "paperSrc": "/models/last-r1/paper.png",
@@ -2647,14 +2633,6 @@
     },
     "minimax-h3": {
       "modelId": "minimax-h3"
-    },
-    "pandora": {
-      "modelId": "pandora",
-      "src": "/models/pandora/overview.png",
-      "alt": "Method overview: a pretrained LLM backbone consumes vision-encoded states and language actions, then a video generator rolls out the next world state.",
-      "altZh": "论文方法总览：预训练 LLM 骨干接收视觉编码状态与语言动作，再由视频生成器滚动出下一世界状态。",
-      "caption": "Method overview: a pretrained LLM backbone consumes vision-encoded states and language actions, then a video generator rolls out the next world state.",
-      "captionZh": "论文方法总览：预训练 LLM 骨干接收视觉编码状态与语言动作，再由视频生成器滚动出下一世界状态。"
     },
     "worldlabs-marble-1.1": {
       "modelId": "worldlabs-marble-1.1"

@@ -23,12 +23,14 @@ All first-party test sources live under `tests/` and are published with the
 repository and source distribution. Tests use the repository's Apache-2.0
 license. The wheel contains the runtime packages.
 
-### Public CPU gate
+### Fast weight-free gate
 
-From the repository root, with Python 3.10 or newer:
+Activate the unified GPU environment and run from the repository root:
 
 ```bash
-python -m pip install -e ".[test]"
+source tmp/worldfoundry_unified_env.sh
+conda activate "${WORLDFOUNDRY_UNIFIED_ENV_PREFIX}"
+python -m pip install -e ".[dev,test]"
 make test
 # Individual development tests can be selected with pytest:
 python -m pytest -q tests/runtime/test_geometry_regression_impact.py
@@ -53,29 +55,155 @@ library subtests keep their parent node; failed or skipped subtests still fail.
 
 | Path | Contents / requirements |
 | --- | --- |
-| `tests/test_*.py` | Model integration and infrastructure regressions moved from `test/` |
-| `tests/eval_core/` | Evaluation contracts; `make test-eval-core` runs this suite |
-| `tests/core/`, `tests/runtime/`, `tests/studio/` | Unit and integration tests for shared infrastructure |
-| Other module directories | Tests mirroring the corresponding runtime modules |
-| `tests/base_models/diffusion_model/test_build_purpose.py` | Component build-purpose and selective materialization contracts |
+| `tests/base_models/` | Model component and checkpoint contracts |
+| `tests/synthesis/` | Model runtime and orchestration tests |
+| `tests/pipelines/`, `tests/operators/` | Pipeline and operator integration tests |
+| `tests/core/`, `tests/runtime/` | Shared infrastructure unit and integration tests |
+| `tests/cli/`, `tests/scripts/` | CLI, MCP and development tooling contracts |
+| `tests/studio/`, `tests/studio_visualization/` | Workspace, worker, streaming and visualization tests |
+| `tests/evaluation/` | Evaluation services, runners, metrics and artifacts |
+| `tests/eval_core/` | Extended evaluation contracts; `make test-eval-core` runs this suite |
+| `tests/integration/` | Cross-layer repository contracts |
+| `tests/benchmarks/` | Inference performance harness contracts |
 | `tests/manual/` | Manual model inference and provider API smoke scripts |
 | `tests/stream/` | Manual streaming inference scripts |
 
-Select an extended suite or a single test explicitly:
+Select tests for the current integration surface:
 
 ```bash
-python -m pytest -q tests/eval_core/test_evaluate_runner.py
+python -m pytest -q tests/pipelines/test_sana_integration.py
+python -m pytest -q tests/pipelines/test_wan_peft_loading.py
 python -m pytest -q tests/studio/test_conda_dispatch.py
-# Collect the extended automated suites with their dependencies installed:
-python -m pytest --collect-only tests
+python -m pytest -q tests/evaluation/execution/test_result_integrity.py
 ```
 
-Extended tests can require additional extras (for example `eval_core`, `ui`,
-or a model's runtime environment), local benchmark helpers, assets, or CUDA.
-Some historical regression tests refer to private training/benchmark code or
-earlier repository layouts. Their sources remain available here; the public
-CPU gate is the supported CI baseline. Installing the `test` extra alone does
-not provision those resources.
+Model component and pipeline tests require the model environment's dependencies,
+including Torch; PEFT adapter tests also require `peft`. UI tests require the
+`ui` extra. Prepare local assets and CUDA for tests that declare those resources.
+The `test` extra does not install every model's dependencies.
+
+### Framework dispatch and media coverage
+
+`tests/studio/test_dispatch_lifecycle.py` checks every discovered catalog entry's
+runtime-driver routing and exercises shared ordinary, realtime and torchrun
+transitions with frame memory, model-owned state, native realtime, stateless,
+action and geometry contracts. API client/cache isolation remains in
+`tests/studio/test_pipeline_cache.py`.
+
+The CPU Torch gate includes `tests/pipelines/test_native_output_contracts.py`
+for all discovered native visual subclasses and `tests/core/test_video_chunk_transport.py`
+for declared layouts, pixel ranges, chunk order and frame counts. Codec tests
+check reader cleanup on success and failure, bounded decoding, ImageIO encoding
+parity, and backend fallbacks. These CPU tests require Torch/torchvision, PyAV,
+ImageIO/FFmpeg and OpenCV; hosted tensor CI installs them separately from the
+Torch-free public gate. RTX adapter tests use a fake effect and do not establish
+proprietary-runtime execution. Bridge and realtime integration tests remain
+selected alongside these shared contracts.
+`tests/core/execution/test_cuda_nvenc_transport.py` belongs to the CUDA gate;
+its device ownership/event checks are separate from checkpoint replay and
+encoder throughput evidence. Catalog coverage does not establish generation
+success for every listed model.
+
+The non-native output contracts exercise `RuntimeVideoSynthesis`, ABot-World and
+artifact-only pipelines with substituted generation, real small pixel arrays,
+and ordinary/realtime request forwarding. They compare declared pixels through
+artifact normalization and transport, retain raw returns, and check A/B/A image
+conditioning. Resident-session tests cover Matrix-Game 2/3, DreamX camera/AR,
+LingBot variants and Helios, including native chunk cadence and non-output rank
+results. Batch/continuation contracts additionally cover WorldFM, LingBot and
+LongVie through their pipeline/synthesis boundaries, with exact pixel comparisons,
+PIL frame-list post-processing, raw-return preservation, history/noise continuity,
+and Studio frame-count/rate forwarding. WorldFM PNGs are written and read back;
+LongVie and LingBot encoder wiring uses recording writers. LingBot V2 tests retain
+encoded artifacts and declare their decoded frames on subprocess and existing-group
+routes. Matrix-Game batch tests execute MG2's small CPU decode conversion and
+control-visualization normalization, compare declaration/transport/export pixels,
+and check rolling-frame memory and Studio dispatch. MG3 tests retain artifact bytes,
+check rank-local artifact ownership, and keep non-output ranks free of frames and
+copy attempts. Model/decoder calls, subprocess execution and distributed timing/communication are substituted;
+these tests do not establish checkpoint, CUDA or multi-rank execution. They are
+selected by `make test-infer-tensors` alongside the shared transport contracts.
+
+Trajectory output contracts cover GEN3C, Lyra-1/2 and Astra through real small CPU
+pixel conversion, frame memory and shared dispatch. They retain raw video, camera,
+latent and reconstruction fields; check positive-only signed pixels, ambiguous
+axes, nonuniform RGB/time order, FP16/BF16, and cropped frame counts; and keep
+planned/blocked or latent results separate from generated RGB. Lyra-1 camera and
+latent files are actually serialized. Astra's decoder conversion and latent-memory
+orchestration execute with substituted denoising; Lyra-2 depth and sampling calls,
+reconstruction models and video writers are substituted. These contracts and the
+existing catalog, workspace and runtime-path tests are selected by the CPU tensor
+gate. Small substituted outputs test boundary frame counts, not additional native
+sampling lengths or checkpoint-backed generation.
+
+`tests/synthesis/test_astra_state.py` and
+`tests/pipelines/test_astra_request_isolation.py` check absolute camera progression
+through history eviction, local FramePack indices, shared-weight A/B/A and
+interleaved requests, reset and reuse. They execute the real FlowMatch Euler
+scheduler in FP32/FP16/BF16 against exact analytic predictions, retain weight
+identity and global RNG, and check VAE cache cleanup. Public request cases use
+substitute encoder, denoiser and decoder forwards. A small real BF16 Wan VAE
+additionally matches canonical tiled encode/decode exactly across A/B/A requests
+and releases temporal buffers. Interruption checks raise `CancelledError` at
+compute/export boundaries. The CPU tensor gate includes both files alongside the
+existing Astra output and Studio dispatch contracts.
+
+`tests/synthesis/test_lingbot_decoder_contracts.py` and the realtime policy tests
+check normalized/raw TAE inputs, explicit overrides, actual small PyTorch and
+safetensors checkpoint loading, and unchanged source latents. A real randomly
+initialized BF16 TAE compares streaming pixels with direct sequential decode;
+separate stream wrappers share weights without sharing temporal memory. Both
+LingBot's 9/12 and V2's 13/16 frame cadence are exercised.
+
+`tests/synthesis/test_hunyuan_worldplay_state.py` and the public realtime tests
+execute the existing AR cache operations and canonical Euler scheduler against
+analytic forwards in FP32/FP16/BF16. They check exact updates, A/B/A and chunk-boundary
+interleaving, owner-lock admission, request-local geometry RNG, reset, non-output
+ranks, and recovery after failures or injected `CancelledError`. A real small
+random-weight Hunyuan 1.5 VAE checks FP32/BF16 prefix/suffix pixel conversion against
+direct canonical decode. Text/image/vision conditions and the public denoiser
+forwards are substituted. These files and the affected LingBot V2 tests belong to
+the CPU tensor gate. They do not establish checkpoint, CUDA concurrency, actual
+service cancellation or bounded decode cost.
+
+`tests/pipelines/test_independent_native_outputs.py` and
+`tests/studio/test_independent_output_dispatch.py` cover Cosmos Predict2/2.5,
+Transfer2.5, Cosmos3, HunyuanVideo/1.5, T2V-Turbo and Vchitect. They compare
+positive-only signed and unit-range pixels across preview, transport and export,
+check FP32/FP16/BF16 and frame counts 1/3/4/5, write real single-frame PNGs,
+and retain raw/latent/audio/action references. Stream dispatch checks FPS,
+frame count and explicit A/B/A image conditioning through worker and realtime
+routes. Latent results neither export RGB nor replace artifact history; explicit
+no-RGB and buffering declarations prevent fallback to raw aliases. The codec
+orchestration executes Hunyuan's existing unit-range conversion, Cosmos cropping
+and Turbo's frame-wise decode with substituted VAEs. Sampling, video encoding and
+parallel communication are substituted; public-loader delegation and rank-local
+artifact ownership are wiring evidence, not checkpoint or multi-rank acceptance.
+These tests and the affected existing loading/catalog tests belong to the CPU
+tensor gate.
+
+`tests/core/execution/test_compile_numerics_registration.py` checks normalization
+operator registration, optional affine tensors, shape lists, exact FP32/FP16/BF16
+CPU arithmetic, and fake-tensor shape/dtype dispatch. The existing CUDA regional
+compile selection checks native rounding with real compiled kernels and CUDA graphs;
+it remains separate from transport, checkpoint and throughput evidence.
+
+### What test results prove
+
+| Evidence | Verified effect |
+| --- | --- |
+| Catalog and binding tests | The model ID resolves to the current pipeline and runtime profile; readiness matches the registered implementation |
+| Mocked pipeline and runner tests | Loading options, input normalization, request forwarding and result/artifact contracts are connected correctly |
+| CPU tensor tests | Real small components produce the expected numerical outputs and preserve request state |
+| CUDA contracts | The selected kernels, streams, caches and precision paths execute correctly on the tested GPU |
+| Real-checkpoint replay | The declared model, weights, inputs and environment preserve accepted numerical outputs and exported artifacts |
+| Benchmark execution | The configured evaluator produces valid metrics and a scorecard for the executed samples |
+
+Import success, mocks and `plan_only` do not establish checkpoint-backed generation
+quality or performance. A missing-runtime adapter must report its blocked or failed
+state before launch; it must not be counted as successful inference. Required gates
+reject missing resources and skipped cases. Keep real-checkpoint and benchmark
+evidence tied to the model variant and outputs actually tested.
 
 `manual/` and `stream/` are excluded from recursive pytest collection. Run
 their scripts directly after preparing the relevant model environment:
@@ -93,26 +221,27 @@ environment variables. Real-weight MiniMax H3 tests use
 
 ### Fast inference contracts and CUDA checks
 
-The tensor suite needs only the public test dependencies, CPU Torch,
-safetensors and einops. It runs without checkpoints, renderers or a GPU:
+Run the tensor suite in the GPU development environment with safetensors and
+einops. The target selects CPU tensor execution without loading checkpoints
+or renderers and keeps the environment's CUDA PyTorch installation:
 
 ```bash
-python -m pip install "torch==2.7.1" --index-url https://download.pytorch.org/whl/cpu
-python -m pip install -e ".[test]" "safetensors>=0.4" "einops>=0.7,<0.9"
+python -m pip install "safetensors>=0.4" "einops>=0.7,<0.9"
 make test-infer-tensors
 ```
 
-In a prepared 3D model environment, also run the result serializers and CUDA
-contracts. The serializer imports use that environment's model and rendering
-dependencies, including plyfile and gsplat:
+In a prepared model environment, also run pipeline integrations, result
+serializers and CUDA contracts. These tests need the model dependencies,
+including PEFT for adapter loading and plyfile and gsplat for serializers:
 
 ```bash
 make test-infer-contracts PYTHON=/path/to/model-env/bin/python
 make test-infer-cuda-contracts PYTHON=/path/to/model-env/bin/python
 ```
 
-The first target uses small tensors and synthetic geometry without model weights.
-It covers real checkpoint round trips and meta-device assignment, rejection before
+The first target uses small tensors and synthetic geometry without checkpoint
+downloads. It covers Warp-as-History input planning, standard Wan PEFT adapter
+loading and forward execution, real checkpoint round trips and meta-device assignment, rejection before
 partial mutation, remap collisions, camera conventions, masked PLY and array
 exports, fresh-process result serialization, request recovery, and concurrent
 submission. The CUDA target checks producer-event ordering, pinned-memory copies,
@@ -209,6 +338,16 @@ pixels and frame rate against the reference. Oasis uses this route because
 its subprocess returns an MP4 without in-memory tensors; its generator fixes
 the random seed to 0.
 
+Kandinsky6 Lite/Pro, including each distilled and pretraining variant, has its
+own `kandinsky6-<variant>-video-short` case. Stage the matching Diffusers release
+under `WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT` at the case's `assets.checkpoint`
+path. Each video-only case uses seed 42, 121 frames, 480×864 and 24 FPS, and
+compares every decoded RGB frame and the frame rate. Distilled variants use
+ten steps and guidance 1; the other variants use fifty steps and guidance 5.
+Audio requires separate replay evidence. The CPU tensor gate includes
+`tests/pipelines/test_kandinsky6_replay_recipes.py` for concrete loading,
+checkpoint routing and request wiring; it does not execute these checkpoints.
+
 ```bash
 make coverage-inference PYTHON=python3
 make plan-inference PYTHON=python3 INFERENCE_BASE=<comparison-commit>
@@ -227,6 +366,44 @@ inference. A frozen baseline preserves existing gaps while CI rejects new
 uncovered identities, loss of an existing recipe and affected native variants
 without a runnable numerical replay. Releases requiring complete coverage
 can invoke the coverage script with `--require-complete`; gaps return exit 2.
+
+The planned retirement policy dated 2026-10-16 removes BiWM Wan2.1
+(`biwm-wan21@biwm-wan21`), BiWM Wan2.2 (`biwm-wan22@biwm-wan22`),
+IRASim (`irasim@irasim`) and Pandora (`pandora@pandora`) from active support.
+Their frozen baseline records remain unchanged. The exact identity set in
+`tests/manual/native_coverage_policy.py` permits these planned removals and
+reports them as `retired_native_variants`, not replay coverage or GPU success.
+Other frozen variant removals still fail. Reintroducing a retired identity
+requires its own checkpoint replay recipe, like a new variant; its historical
+uncovered-gap exception no longer applies.
+
+The short matrix also declares separate recipes for all six Kandinsky 6
+checkpoints, both DreamDojo student identities, LingBot-World-V2 1.3B,
+Matrix-Game 4 Egypt and native WonderWorld. These definitions require real
+weights and numerical exports; they are not completed GPU or accepted-reference
+results. Kandinsky's cases cover video-only 121-frame 480×864 output at 24 FPS,
+with explicit per-variant model IDs and checkpoint roots. Audio requires its own
+acceptance cohort.
+
+For DreamDojo, set `WORLDFOUNDRY_REGRESSION_DREAMDOJO_STUDENT_CHECKPOINT` to
+operator-supplied distilled weights. Stage `dreamdojo/text-embeddings.pt` with
+actual `[1,S,100352]` Reason1 features and two different normalized `[16,384]`
+action arrays as `dreamdojo/actions-a.npy` and `dreamdojo/actions-b.npy` under
+`WORLDFOUNDRY_REGRESSION_INPUT_ROOT`. The tokenizer comes from
+`nvidia--Cosmos-Predict2.5-2B/tokenizer.pth` under the checkpoint root. Each A/B/A
+rollout emits 17 frames at 10 FPS; teacher weights are not substituted. LingBot's
+small-model case uses its own six-shard 1.3B release, shared Wan 1.3B text/VAE
+assets and the existing 21-frame `WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS` input.
+
+Matrix-Game 4 requires two distinct 17-frame 480×864 low-poly videos at
+`matrix-game4/low-poly-a.mp4` and `matrix-game4/low-poly-b.mp4` under the input
+root. Transformer and sink assets come from `Skywork--Matrix-Game-4.0/fps-egypt`;
+text/tokenizer/VAE assets come from `alibaba-pai--Wan2.2-Fun-5B-Control`.
+WonderWorld uses the component directories declared in its case and a second
+accepted image at `wonderworld/image-b.png`. Its A/B/A seed scenes compare depth,
+rendered previews and every byte of the exported `.splat`, independently of
+metadata and point counts. Novel-view and official rasterizer acceptance remain
+separate scopes.
 
 Runtime profile ownership uses the declared model ID and pipeline binding,
 including `source_repos[].in_tree_path` for code executed in subprocesses.
@@ -518,24 +695,29 @@ and runs the requested target. Its default target is the public CPU gate.
 
 ### Adding tests
 
-Place deterministic regressions beside the relevant module tests and store
-small text fixtures under that suite. Move scripts that run inference at
-import time into `manual/` or `stream/`. Use environment variables for local
-checkpoints and skip real-weight tests when their resources are unavailable.
+Place deterministic regressions in the corresponding module directory and store
+small text fixtures under that suite. Keep the `tests/` root for shared pytest
+setup and the Docker helper. Name files `test_<behavior>.py`, using the model
+name where relevant rather than issue IDs or review-round numbers. Cross-layer
+contracts belong in `tests/integration/`. Test current public bindings, supported
+inputs and observable outputs; remove tests for deleted implementations and replace
+superseded internal-path assertions with the current contract. Preserve a failing
+test when it exposes a defect in a supported integration. Move scripts that run
+inference at import time into `manual/` or `stream/`. Use environment variables for
+local checkpoints. Optional development tests may skip unavailable resources;
+required release gates must execute every selected case.
 Bytecode, caches, logs, generated output directories, secrets, and weights
 remain excluded from version control and source releases.
 
-## Preparing the optional CPU eval-core suite
+## Preparing the extended eval-core suite
 
-Install Torch and Torchvision from the official CPU wheel index first, then install the declared test extra from the normal package index:
+Use the activated GPU development environment with its existing Torch and
+Torchvision installation, then add the evaluation test dependencies:
 
 ```bash
-python -m pip install --index-url https://download.pytorch.org/whl/cpu \
-  "torch>=2.7,<2.12.0" "torchvision>=0.22,<0.27.0"
 python -m pip install -e ".[eval_core]"
+make test-eval-core
 ```
-
-The separate first command is intentional: Python package metadata cannot select a CPU-specific wheel index, while pointing the whole extra at the PyTorch index would hide packages such as pytest and NumPy.
 
 ## Numerical regression for geometry, video and world models
 
@@ -584,8 +766,8 @@ Validation applies to specific code, weights, inputs, and environments. Changes 
 
 ## Release gate
 
-From a lightweight editable checkout, install the declared gate dependencies
-before running the core commands:
+From the activated GPU development environment, install the declared gate
+dependencies before running the core commands:
 
 ```bash
 python -m pip install -e ".[dev,test]"

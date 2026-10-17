@@ -5,7 +5,9 @@ import numpy as np
 import torch
 
 
-def generate_points_in_sphere(n_points: int, radius: float) -> torch.Tensor:
+def generate_points_in_sphere(
+    n_points: int, radius: float, *, generator: torch.Generator | None = None
+) -> torch.Tensor:
     """
     Uniformly sample points within a sphere of a specified radius.
 
@@ -13,9 +15,9 @@ def generate_points_in_sphere(n_points: int, radius: float) -> torch.Tensor:
     :param radius: The radius of the sphere.
     :return: A tensor of shape (n_points, 3), representing the (x, y, z) coordinates of the points.
     """
-    samples_r = torch.rand(n_points)
-    samples_phi = torch.rand(n_points)
-    samples_u = torch.rand(n_points)
+    samples_r = torch.rand(n_points, generator=generator)
+    samples_phi = torch.rand(n_points, generator=generator)
+    samples_u = torch.rand(n_points, generator=generator)
 
     r = radius * torch.pow(samples_r, 1 / 3)
     phi = 2 * math.pi * samples_phi

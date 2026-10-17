@@ -3,6 +3,49 @@
 WORLD_REALTIME_CLIENT_JS = r"""
 const studioAuthToken = new URLSearchParams(window.location.search).get("token") || "";
 
+// Correlate the DataChannel receipt with the exact frame presented by WebRTC.
+// Both control submission and presentation times come from this browser clock.
+class PresentationMetrics {
+  constructor(report) {
+    this.report = report;
+    this.reset();
+  }
+  reset() {
+    this.controls = new Map();
+    this.sent = new Map();
+    this.displayed = new Map();
+  }
+  remember(map, key, value) {
+    map.set(key, value);
+    while (map.size > 256) map.delete(map.keys().next().value);
+  }
+  submitted(id, now) { this.remember(this.controls, id, now); }
+  frameSent(message) {
+    if (!Number.isInteger(message.rtp_timestamp)) return;
+    this.remember(this.sent, message.rtp_timestamp, message);
+    this.match(message.rtp_timestamp);
+  }
+  presented(timestamp, now) {
+    if (!Number.isInteger(timestamp)) return;
+    if (!this.displayed.has(timestamp)) this.remember(this.displayed, timestamp, now);
+    this.match(timestamp);
+  }
+  match(timestamp) {
+    const frame = this.sent.get(timestamp);
+    const now = this.displayed.get(timestamp);
+    if (!frame || now === undefined) return;
+    for (const id of frame.control_ids || []) {
+      const started = this.controls.get(id);
+      if (started === undefined || now < started) continue;
+      this.controls.delete(id);
+      this.report({type: "frame_presented", rtp_timestamp: timestamp,
+        control_id: id, control_to_display_ms: now - started});
+    }
+    this.sent.delete(timestamp);
+    this.displayed.delete(timestamp);
+  }
+}
+
 const state = {
   modelLoaded: false,
   mode: "image",
@@ -34,6 +77,12 @@ const state = {
   fallbackStarted: false,
   sessionStartedAt: 0,
   heartbeatTimer: null,
+  transportStatsTimer: null,
+  transportStatsPending: false,
+  previousTransportStats: new Map(),
+  transportStats: {},
+  presentation: new PresentationMetrics((sample) => send(sample)),
+  presentationSummary: null,
   connectionTimer: null,
   stats: { fps: 0, generationMs: 0, enqueueMs: 0, latencyMs: 0, queueDepth: 0, dropped: 0 },
   lastVideoFrameAt: 0,
@@ -69,6 +118,10 @@ const state = {
   outputResolution: { mode: "native" },
   outputResolutionOptions: [],
   panelZ: 70,
+  sensorLayout: [],
+  hiddenSensors: new Set(),
+  focusedSensor: "",
+  sensorCanvases: new Map(),
   logBeforeImmersive: false,
 };
 
@@ -103,6 +156,8 @@ const el = {
   image: document.getElementById("frameImage"),
   video: document.getElementById("frameVideo"),
   canvas: document.getElementById("frameCanvas"),
+  sensorGrid: document.getElementById("sensorGrid"),
+  sensorControls: document.getElementById("sensorControls"),
   startButton: document.getElementById("startButton"),
   resetButton: document.getElementById("resetButton"),
   livePill: document.getElementById("livePill"),
@@ -732,6 +787,9 @@ function showImage(src) {
 }
 
 function resetSocketPlayback() {
+  setSensorLayout([]);
+  state.hiddenSensors.clear();
+  state.focusedSensor = "";
   state.socketPlaybackEpoch += 1;
   state.socketFrameQueue.length = 0;
   state.nextPresentationAt = 0;
@@ -739,6 +797,67 @@ function resetSocketPlayback() {
   state.pendingChunkDone = null;
   state.lastVideoFrameAt = 0;
   state.stats.fps = 0;
+}
+
+function setSensorLayout(layout) {
+  state.sensorLayout = Array.isArray(layout) ? layout : [];
+  if (!state.sensorLayout.some((view) => view.key === state.focusedSensor)) state.focusedSensor = "";
+  state.sensorCanvases.clear();
+  el.sensorGrid.replaceChildren();
+  el.sensorControls.replaceChildren();
+  el.sensorGrid.classList.toggle("is-visible", state.sensorLayout.length > 0);
+  if (!state.sensorLayout.length) return;
+  const focus = document.createElement("select");
+  focus.setAttribute("aria-label", "Focus sensor");
+  focus.add(new Option("All sensors", ""));
+  for (const view of state.sensorLayout) {
+    focus.add(new Option(view.label, view.key));
+    const tile = document.createElement("div");
+    tile.className = "sensor-tile";
+    const canvas = document.createElement("canvas");
+    const label = document.createElement("span");
+    label.textContent = view.label;
+    tile.append(canvas, label);
+    el.sensorGrid.append(tile);
+    state.sensorCanvases.set(view.key, { canvas, tile });
+    const control = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = !state.hiddenSensors.has(view.key);
+    checkbox.onchange = () => {
+      if (checkbox.checked) state.hiddenSensors.delete(view.key);
+      else state.hiddenSensors.add(view.key);
+      drawSensorViews(el.video.srcObject ? el.video : el.canvas);
+    };
+    control.append(checkbox, document.createTextNode(view.label));
+    el.sensorControls.append(control);
+  }
+  focus.value = state.focusedSensor;
+  focus.onchange = () => {
+    state.focusedSensor = focus.value;
+    drawSensorViews(el.video.srcObject ? el.video : el.canvas);
+  };
+  el.sensorControls.prepend(focus);
+  drawSensorViews(el.video.srcObject ? el.video : el.canvas);
+}
+
+function drawSensorViews(source) {
+  const width = source.videoWidth || source.width;
+  const height = source.videoHeight || source.height;
+  const visible = state.sensorLayout.filter((view) =>
+    !state.hiddenSensors.has(view.key) && (!state.focusedSensor || state.focusedSensor === view.key));
+  el.sensorGrid.style.gridTemplateColumns = `repeat(${Math.max(1, Math.ceil(Math.sqrt(visible.length)))}, minmax(0, 1fr))`;
+  for (const view of state.sensorLayout) {
+    const { canvas, tile } = state.sensorCanvases.get(view.key);
+    tile.style.display = visible.includes(view) ? "block" : "none";
+    if (!width || !height || !visible.includes(view)) continue;
+    const w = Math.max(1, Math.round(view.width * width));
+    const h = Math.max(1, Math.round(view.height * height));
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+    canvas.getContext("2d", { alpha: false }).drawImage(source,
+      view.x * width, view.y * height, view.width * width, view.height * height, 0, 0, w, h);
+  }
 }
 
 function waitForAnimationFrame() {
@@ -800,6 +919,7 @@ async function pumpSocketFrames(epoch) {
       if (el.canvas.height !== bitmap.height) el.canvas.height = bitmap.height;
       const context = el.canvas.getContext("2d", { alpha: false });
       context.drawImage(bitmap, 0, 0);
+      drawSensorViews(el.canvas);
       bitmap.close();
       el.video.pause();
       el.video.srcObject = null;
@@ -886,8 +1006,12 @@ function attachRemoteStream(stream) {
 
 function watchVideoFrames() {
   if (typeof el.video.requestVideoFrameCallback !== "function") return;
-  const onFrame = (now) => {
+  const stream = el.video.srcObject;
+  const onFrame = (now, metadata) => {
+    if (el.video.srcObject !== stream) return;
+    state.presentation.presented(metadata.rtpTimestamp, now);
     revealRemoteVideo();
+    drawSensorViews(el.video);
     if (state.lastVideoFrameAt > 0) {
       const instant = 1000 / Math.max(now - state.lastVideoFrameAt, 1);
       state.stats.fps = state.stats.fps ? state.stats.fps * 0.82 + instant * 0.18 : instant;
@@ -908,14 +1032,18 @@ function renderStats() {
       ? `${(state.stats.generationMs / 1000).toFixed(1)}s GEN`
       : `${Math.round(state.stats.generationMs)}ms GEN`
     : "-- GEN";
-  const latency = state.stats.latencyMs ? `${Math.round(state.stats.latencyMs)}ms CTRL` : "-- CTRL";
+  const latency = state.presentationSummary
+    ? `${Math.round(state.presentationSummary.p50_ms)}ms E2E`
+    : "-- E2E";
   const resolution = resolutionValue(state.outputResolution) === "native"
     ? "NATIVE"
     : resolutionValue(state.outputResolution).replace("x", "×");
   el.streamStats.textContent = state.queuedSegments || state.promptScheduled
     ? `${transport} / ${fps} / ${gen} / SEG ${state.segmentIndex} / ${resolution}`
     : `${transport} / ${fps} / ${gen} / ${latency} / ${resolution}`;
-  el.streamStats.title = `transport output=${resolution} · enqueue=${Math.round(state.stats.enqueueMs)}ms queue=${state.stats.queueDepth} dropped=${state.stats.dropped}`;
+  const p90 = state.presentationSummary ? `${Math.round(state.presentationSummary.p90_ms)}ms` : "unavailable";
+  const net = state.transportStats;
+  el.streamStats.title = `control→present p90=${p90} · server control→queue=${Math.round(state.stats.latencyMs)}ms · output=${resolution} · enqueue=${Math.round(state.stats.enqueueMs)}ms queue=${state.stats.queueDepth} dropped=${state.stats.dropped} · RTT=${net.rtt_ms?.toFixed(1) ?? "--"}ms jitter-buffer=${net.jitter_buffer_ms?.toFixed(1) ?? "--"}ms decode=${net.decode_ms?.toFixed(1) ?? "--"}ms`;
   el.streamStats.classList.toggle("is-live", state.connected);
 }
 
@@ -930,6 +1058,11 @@ function send(payload) {
     ? state.channel.readyState === WebSocket.OPEN
     : state.channel.readyState === "open";
   if (!isOpen) return false;
+  const measured = state.transport === "RTC" && ["action", "step", "event", "prompt_update"].includes(payload.type);
+  if (measured) {
+    payload = {...payload, control_id: nextRequestId("control")};
+    state.presentation.submitted(payload.control_id, performance.now());
+  }
   try {
     state.channel.send(JSON.stringify(payload));
     return true;
@@ -1078,11 +1211,65 @@ async function waitForIce(pc) {
   ]);
 }
 
+function resetPresentationMetrics() {
+  window.clearInterval(state.transportStatsTimer);
+  state.transportStatsTimer = null;
+  state.previousTransportStats.clear();
+  state.transportStats = {};
+  state.presentation.reset();
+  state.presentationSummary = null;
+  state.lastVideoFrameAt = 0;
+}
+
+async function pollTransportStats() {
+  const peer = state.peer;
+  if (!peer || !state.connected || state.transportStatsPending) return;
+  state.transportStatsPending = true;
+  try {
+    const reports = await peer.getStats();
+    if (state.peer !== peer || !state.connected) return;
+    const metrics = {};
+    for (const report of reports.values()) {
+      if (report.type === "transport" && report.selectedCandidatePairId) {
+        const pair = reports.get(report.selectedCandidatePairId);
+        if (Number.isFinite(pair?.currentRoundTripTime)) metrics.rtt_ms = pair.currentRoundTripTime * 1000;
+      }
+      if (report.type !== "inbound-rtp" || (report.kind || report.mediaType) !== "video") continue;
+      const previous = state.previousTransportStats.get(report.id);
+      for (const [source, target] of [["packetsLost", "packets_lost"], ["framesDropped", "frames_dropped"], ["framesDecoded", "frames_decoded"]]) {
+        if (Number.isFinite(report[source])) metrics[target] = report[source];
+      }
+      if (Number.isFinite(report.jitter)) metrics.jitter_ms = report.jitter * 1000;
+      if (previous) {
+        const elapsed = report.timestamp - previous.timestamp;
+        const bytes = report.bytesReceived - previous.bytesReceived;
+        if (elapsed > 0 && bytes >= 0) metrics.bitrate_bps = bytes * 8000 / elapsed;
+        const emitted = report.jitterBufferEmittedCount - previous.jitterBufferEmittedCount;
+        const buffered = report.jitterBufferDelay - previous.jitterBufferDelay;
+        if (emitted > 0 && buffered >= 0) metrics.jitter_buffer_ms = buffered * 1000 / emitted;
+        const decoded = report.framesDecoded - previous.framesDecoded;
+        const decodeTime = report.totalDecodeTime - previous.totalDecodeTime;
+        if (decoded > 0 && decodeTime >= 0) metrics.decode_ms = decodeTime * 1000 / decoded;
+      }
+      state.previousTransportStats.set(report.id, report);
+    }
+    state.transportStats = metrics;
+    send({type: "browser_transport", ...metrics});
+    renderStats();
+  } catch (error) {
+    if (state.peer === peer) console.debug("WebRTC stats unavailable", error);
+  } finally {
+    state.transportStatsPending = false;
+  }
+}
+
 function markConnected(transport) {
   window.clearTimeout(state.connectionTimer);
   state.connectionTimer = null;
+  resetPresentationMetrics();
   state.transport = transport;
   state.connected = true;
+  if (transport === "RTC") state.transportStatsTimer = window.setInterval(pollTransportStats, 2000);
   state.connecting = false;
   state.sessionStartedAt = Date.now();
   appendRuntimeLog(`${transport} channel connected`, "live", `Playback target ${state.playbackFps} FPS`);
@@ -1118,6 +1305,7 @@ function markDisconnected(message = "DISCONNECTED · START A NEW SESSION") {
   state.segmentBusy = false;
   state.sessionStartedAt = 0;
   state.segmentIndex = 0;
+  resetPresentationMetrics();
   resetSocketPlayback();
   clearAllPending();
   for (const sources of state.keySources.values()) sources.clear();
@@ -1142,7 +1330,12 @@ function handleServerMessage(raw) {
   } catch {
     return;
   }
-  if (message.type === "log") {
+  if (message.type === "frame_sent") {
+    state.presentation.frameSent(message);
+  } else if (message.type === "presentation_timing") {
+    state.presentationSummary = message.control_to_display;
+    renderStats();
+  } else if (message.type === "log") {
     appendRuntimeLog(message.message || message.event || "Runtime event", message.level, message.detail);
   } else if (message.type === "configuring") {
     setStatus("PREPARING SESSION", true);
@@ -1245,6 +1438,7 @@ function handleServerMessage(raw) {
       true,
     );
   } else if (message.type === "chunk_done") {
+    setSensorLayout(message.sensor_layout);
     state.stats.generationMs = Number(message.generation_ms || 0);
     state.stats.enqueueMs = Number(message.enqueue_ms || 0);
     state.stats.latencyMs = Number(message.control_latency_ms || 0);
@@ -1613,6 +1807,7 @@ async function closePeer(notify = true) {
   state.channel = null;
   state.connected = false;
   state.connecting = false;
+  resetPresentationMetrics();
   resetSocketPlayback();
   clearAllPending();
   updateControlAvailability();

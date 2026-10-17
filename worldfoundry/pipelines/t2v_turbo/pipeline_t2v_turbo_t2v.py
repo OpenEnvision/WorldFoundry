@@ -17,6 +17,7 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
     parse_torch_dtype,
 )
 from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 from worldfoundry.operators.runtime_video_operator import RuntimeVideoOperator
 from worldfoundry.synthesis.visual_generation.memory.video import VideoArtifactMemory
 
@@ -63,7 +64,7 @@ class T2VTurboT2VPipeline(PipelineABC):
         return overrides or None
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]
         cls,
         model_path: str | Mapping[str, Any] | None = None,
         required_components: Mapping[str, Any] | None = None,
@@ -152,9 +153,7 @@ class T2VTurboT2VPipeline(PipelineABC):
                 num_frames=int(num_frames or self.DEFAULT_NUM_FRAMES),
                 sampling=SamplingConfig(
                     num_inference_steps=int(num_inference_steps or self.DEFAULT_NUM_INFERENCE_STEPS),
-                    guidance_scale=float(
-                        guidance_scale if guidance_scale is not None else self.DEFAULT_GUIDANCE_SCALE
-                    ),
+                    guidance_scale=float(guidance_scale if guidance_scale is not None else self.DEFAULT_GUIDANCE_SCALE),
                     seed=actual_seed,
                     scheduler_options={"lcm_origin_steps": int(lcm_origin_steps)},
                 ),
@@ -164,15 +163,24 @@ class T2VTurboT2VPipeline(PipelineABC):
                 },
             )
         )
+        video_chunk = None
+        if output_type != "latent":
+            video_chunk = VideoChunk(
+                frames=output.sample, layout="bcthw", value_range="-1,1", metadata={"fps": int(fps or self.DEFAULT_FPS)}
+            )
         artifact_path = None
-        if output_path is not None and output_type != "latent":
+        if output_path is not None and video_chunk is not None:
             artifact_path = save_image_or_video_tensor(
                 output.sample,
                 output_path,
                 fps=int(fps or self.DEFAULT_FPS),
+                layout=video_chunk.layout,
+                value_range=video_chunk.value_range,
             )
         result = {
             "video": output.sample,
+            "video_chunk": video_chunk,
+            "fps": int(fps or self.DEFAULT_FPS),
             "latents": output.latents,
             "artifact_path": artifact_path,
             "generated_video_path": artifact_path,
@@ -182,11 +190,30 @@ class T2VTurboT2VPipeline(PipelineABC):
         }
         return result if return_dict else (artifact_path or output.sample)
 
-    def stream(self, prompt: str = "", images: Any = None, **kwargs: Any) -> Any:
-        result = self(prompt=prompt, images=images, return_dict=True, **kwargs)
+    def stream_state_ready(self) -> bool:
+        """Artifact history is not conditioning state for another generation."""
+        return False
+
+    def stream(
+        self,
+        prompt: str = "",
+        images: Any = None,
+        *,
+        return_dict: bool = False,
+        fps: int | None = None,
+        num_frames: int | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Generate from explicit inputs, retaining decoded artifact history."""
+        result = self(prompt=prompt, images=images, return_dict=True, fps=fps, num_frames=num_frames, **kwargs)
         value = result.get("artifact_path") or result["video"]
-        self.memory_module.record(value, metadata={"prompt": prompt, "model_name": self.MODEL_ID})
-        return value
+        if result["video_chunk"] is not None:
+            self.memory_module.record(
+                value,
+                metadata={"prompt": prompt, "model_name": self.MODEL_ID},
+                video_chunk=None if result.get("artifact_path") else result["video_chunk"],
+            )
+        return result if return_dict else value
 
     def get_synthesis_model(self) -> NativeDiffusionPipeline:
         return self.native_pipeline

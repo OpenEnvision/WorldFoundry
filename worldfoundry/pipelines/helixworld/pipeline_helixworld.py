@@ -1,6 +1,11 @@
+# SPDX-FileCopyrightText: 2026 WorldFoundry contributors
+# SPDX-License-Identifier: Apache-2.0
 """Public HelixWorld adapter over the shared native visual pipeline."""
 
 from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
 
 from ..native_diffusion import NativeVisualDiffusionPipeline
 
@@ -22,13 +27,19 @@ class HelixWorldPipeline(NativeVisualDiffusionPipeline):
     OUTPUT_LAYOUT = "FHWC"
     OUTPUT_VALUE_RANGE = "0,1"
     REQUEST_INPUT_DEFAULTS = {
-        "actions": "W", "perspective": "first_person", "audio_prompt": None,
-        "av_prompt": None, "control_path": None, "frame_rate": 24.0,
+        "actions": "W",
+        "perspective": "first_person",
+        "audio_prompt": None,
+        "av_prompt": None,
+        "control_path": None,
+        "frame_rate": 24.0,
     }
     REQUEST_INPUT_ALIASES = {"action_plan": "actions"}
 
     @classmethod
-    def _checkpoint_overrides(cls, model_path, options):
+    def _checkpoint_overrides(
+        cls, model_path: str | Mapping[str, Any] | None, options: Mapping[str, Any]
+    ) -> dict[str, Any] | None:
         overrides = super()._checkpoint_overrides(model_path, options) or {}
         text_encoder_path = options.get("text_encoder_path")
         if text_encoder_path is not None:

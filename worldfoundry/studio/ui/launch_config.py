@@ -13,6 +13,7 @@ from worldfoundry.studio.inference.config import (
     LINGBOT_VARIANT_FAST,
     LINGBOT_WORLD_MODEL_ID,
     LINGBOT_WORLD_V2_MODEL_ID,
+    LINGBOT_WORLD_V2_SMALL_MODEL_ID,
     LONGVIE2_MODEL_ID,
     MATRIX_GAME3_MODEL_ID,
     _torchrun_world_size,
@@ -170,21 +171,20 @@ def launch_uses_lingbot_torchrun_rollout(launch_config: StudioLaunchConfig) -> b
         return world_size == 4
     if world_size <= 1:
         return False
+    if launch_config.model_id == LINGBOT_WORLD_V2_SMALL_MODEL_ID:
+        if world_size not in {2, 3, 4, 6, 12}:
+            raise ValueError("LingBot-World-V2 1.3B torchrun ranks must divide its 12 heads")
+        return True
     if launch_config.model_id == LINGBOT_WORLD_V2_MODEL_ID:
         if world_size not in {4, 8}:
             raise ValueError(
-                "LingBot-World-V2 Workspace supports four or eight torchrun ranks; "
-                f"got WORLD_SIZE={world_size}."
+                f"LingBot-World-V2 Workspace supports four or eight torchrun ranks; got WORLD_SIZE={world_size}."
             )
         return True
-    if (
-        launch_config.model_id == LINGBOT_WORLD_MODEL_ID
-        and launch_config.variant_id == LINGBOT_VARIANT_FAST
-    ):
+    if launch_config.model_id == LINGBOT_WORLD_MODEL_ID and launch_config.variant_id == LINGBOT_VARIANT_FAST:
         if world_size not in {4, 8}:
             raise ValueError(
-                "LingBot-World Fast Workspace supports four or eight torchrun ranks; "
-                f"got WORLD_SIZE={world_size}."
+                f"LingBot-World Fast Workspace supports four or eight torchrun ranks; got WORLD_SIZE={world_size}."
             )
         return True
     if launch_config.model_id in {
@@ -227,11 +227,7 @@ def parse_launch_config(
     if raw_model_flag and raw_model_positional and raw_model_flag.lower() != raw_model_positional.lower():
         parser.error("Use either the positional model argument or `--model`, not two different model ids.")
 
-    raw_model = (
-        raw_model_flag
-        or raw_model_positional
-        or env_first("WORLDFOUNDRY_STUDIO_MODEL").strip()
-    )
+    raw_model = raw_model_flag or raw_model_positional or env_first("WORLDFOUNDRY_STUDIO_MODEL").strip()
     if not raw_model:
         catalog = tuple(entries) if entries is not None else studio_catalog()
         fallback_model_id = catalog[0].model_id if catalog else ""
@@ -247,44 +243,20 @@ def parse_launch_config(
     try:
         variant_id = resolve_cli_variant_id(
             entry,
-            (
-                args.variant
-                or env_first("WORLDFOUNDRY_STUDIO_VARIANT")
-            ).strip()
-            or None,
+            (args.variant or env_first("WORLDFOUNDRY_STUDIO_VARIANT")).strip() or None,
         )
     except Exception as exc:
         parser.error(str(exc))
 
-    backend = (
-        (
-            args.backend
-            or env_first("WORLDFOUNDRY_STUDIO_BACKEND")
-        ).strip()
-        or entry.default_backend
-        or "auto"
-    )
+    backend = (args.backend or env_first("WORLDFOUNDRY_STUDIO_BACKEND")).strip() or entry.default_backend or "auto"
     if backend not in CLI_BACKEND_CHOICES:
-        parser.error(
-            f"Unsupported backend `{backend}`. Use one of: {', '.join(sorted(CLI_BACKEND_CHOICES))}."
-        )
+        parser.error(f"Unsupported backend `{backend}`. Use one of: {', '.join(sorted(CLI_BACKEND_CHOICES))}.")
 
-    frontend = (
-        args.frontend
-        or env_first("WORLDFOUNDRY_STUDIO_FRONTEND")
-        or "auto"
-    ).strip().lower()
+    frontend = (args.frontend or env_first("WORLDFOUNDRY_STUDIO_FRONTEND") or "auto").strip().lower()
     if frontend not in CLI_FRONTEND_CHOICES:
-        parser.error(
-            f"Unsupported frontend `{frontend}`. Use one of: {', '.join(sorted(CLI_FRONTEND_CHOICES))}."
-        )
+        parser.error(f"Unsupported frontend `{frontend}`. Use one of: {', '.join(sorted(CLI_FRONTEND_CHOICES))}.")
 
-    port_text = (
-        str(args.port)
-        if args.port is not None
-        else env_first("WORLDFOUNDRY_STUDIO_PORT")
-        or ""
-    ).strip()
+    port_text = (str(args.port) if args.port is not None else env_first("WORLDFOUNDRY_STUDIO_PORT") or "").strip()
     try:
         port = int(port_text) if port_text else None
     except ValueError:
@@ -293,35 +265,13 @@ def parse_launch_config(
     return StudioLaunchConfig(
         model_id=entry.model_id,
         variant_id=variant_id,
-        model_ref=(
-            args.model_ref
-            or env_first("WORLDFOUNDRY_STUDIO_FIXED_MODEL_REF")
-        ).strip(),
-        device=(
-            args.device
-            or env_first("WORLDFOUNDRY_STUDIO_DEVICE")
-        ).strip()
-        or "cuda",
+        model_ref=(args.model_ref or env_first("WORLDFOUNDRY_STUDIO_FIXED_MODEL_REF")).strip(),
+        device=(args.device or env_first("WORLDFOUNDRY_STUDIO_DEVICE")).strip() or "cuda",
         backend=backend,
-        endpoint=(
-            args.endpoint
-            or env_first("WORLDFOUNDRY_STUDIO_ENDPOINT")
-        ).strip()
-        or entry.default_endpoint
-        or "",
+        endpoint=(args.endpoint or env_first("WORLDFOUNDRY_STUDIO_ENDPOINT")).strip() or entry.default_endpoint or "",
         frontend=frontend,
-        asset_path=(
-            args.asset_path
-            or env_first("WORLDFOUNDRY_STUDIO_ASSET")
-        ).strip(),
-        simulator_url=(
-            args.simulator_url
-            or env_first("WORLDFOUNDRY_STUDIO_SIMULATOR_URL")
-        ).strip(),
-        host=(
-            args.host
-            or env_first("WORLDFOUNDRY_STUDIO_HOST")
-            or ""
-        ).strip(),
+        asset_path=(args.asset_path or env_first("WORLDFOUNDRY_STUDIO_ASSET")).strip(),
+        simulator_url=(args.simulator_url or env_first("WORLDFOUNDRY_STUDIO_SIMULATOR_URL")).strip(),
+        host=(args.host or env_first("WORLDFOUNDRY_STUDIO_HOST") or "").strip(),
         port=port,
     )

@@ -8,15 +8,12 @@ pipeline, and handling input/output for video generation.
 
 from __future__ import annotations
 
-import hashlib
 import os
 import sys
 from pathlib import Path
 from typing import Any, Sequence
 
-import numpy as np
 
-from worldfoundry.core.io import file_sha256
 from worldfoundry.evaluation.utils import REPO_ROOT, worldfoundry_data_path
 from worldfoundry.runtime.env import resolve_hfd_root
 
@@ -122,81 +119,6 @@ class AnimateDiffRuntime:
             negative_prompt=synthesis.negative_prompt,
         )
 
-    @staticmethod
-    def file_sha256(path: Path) -> str:
-        """
-        Calculates the SHA256 hash of a file's contents.
-
-        Args:
-            path: The path to the file.
-
-        Returns:
-            A hexadecimal string representing the SHA256 hash.
-        """
-        return file_sha256(path)
-
-    @staticmethod
-    def frames_sha256(frames: Sequence[Any] | np.ndarray) -> str:
-        """
-        Calculates the SHA256 hash of a sequence of video frames.
-
-        The hash is computed based on the shape and byte content of each frame,
-        ensuring consistent hashing across different frame representations.
-
-        Args:
-            frames: A sequence of image frames (e.g., list of NumPy arrays or a single 4D NumPy array).
-
-        Returns:
-            A hexadecimal string representing the SHA256 hash of the frames.
-        """
-        digest = hashlib.sha256()
-        for frame in frames:
-            array = np.asarray(frame)
-            if array.dtype != np.uint8:
-                # Normalize float arrays to [0, 255] range and convert to uint8
-                if np.issubdtype(array.dtype, np.floating):
-                    if array.max(initial=0) <= 1.0:
-                        array = np.clip(array * 255.0, 0, 255)
-                    else:
-                        array = np.clip(array, 0, 255)
-                array = array.astype(np.uint8)
-            # Ensure array is contiguous for tobytes() and update digest with shape and data
-            array = np.ascontiguousarray(array)
-            digest.update(str(array.shape).encode("ascii"))
-            digest.update(array.tobytes())
-        return digest.hexdigest()
-
-    @staticmethod
-    def video_tensor_to_frames(video: Any) -> list[np.ndarray]:
-        """
-        Converts an AnimateDiff video tensor into a list of NumPy array frames.
-
-        Expected tensor format is (batch, channels, time, height, width).
-
-        Args:
-            video: The video tensor from the AnimateDiff pipeline output.
-
-        Returns:
-            A list of NumPy arrays, where each array represents a frame in `uint8` format.
-
-        Raises:
-            ValueError: If the input tensor does not match the expected 5 dimensions
-                        or has an incorrect channel count.
-        """
-        # Convert tensor to NumPy array, handling potential detach/cpu operations
-        array = video.detach().cpu().float().numpy() if hasattr(video, "detach") else np.asarray(video)
-        if array.ndim != 5:
-            raise ValueError(f"expected official AnimateDiff video tensor with 5 dims, got {array.shape}")
-        if array.shape[1] != 3:  # Check for (B, C, T, H, W) where C should be 3 (RGB)
-            raise ValueError(f"expected b,c,t,h,w tensor with c=3, got {array.shape}")
-
-        frames = []
-        # Transpose to (time, batch, channels, height, width) and iterate over frames
-        # Then, extract the first batch item, transpose to (H, W, C), and normalize to [0, 255] uint8
-        for frame in np.transpose(array, (2, 0, 1, 3, 4)):
-            frame = frame[0].transpose(1, 2, 0)  # Extract batch 0 and convert from (C, H, W) to (H, W, C)
-            frames.append((np.clip(frame, 0.0, 1.0) * 255).astype(np.uint8))
-        return frames
 
     def ensure_pipe(self):
         """
@@ -465,8 +387,6 @@ class AnimateDiffRuntime:
 
         # Save the generated video tensor to a file
         save_videos_grid(sample, str(target), fps=fps or int(kwargs.get("fps", 8)))
-        # Convert the video tensor to a list of frames for SHA256 hashing
-        frames = self.video_tensor_to_frames(sample)
 
         return {
             "status": "success",
@@ -474,8 +394,6 @@ class AnimateDiffRuntime:
             "artifact_kind": self.profile.artifact_kind,
             "artifact_path": str(target),
             "artifact_size": target.stat().st_size,
-            "frames_sha256": self.frames_sha256(frames),
-            "video_sha256": file_sha256(target),
             "profile": self.profile.to_dict(),
             "runtime": "official_repo.AnimateDiff.AnimationPipeline",
             "motion_module_path": self.motion_module_path,

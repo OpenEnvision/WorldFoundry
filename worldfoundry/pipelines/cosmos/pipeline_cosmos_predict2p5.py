@@ -17,6 +17,7 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
     parse_torch_dtype,
 )
 from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 
 from ..pipeline_utils import PipelineABC
 from .parallel_options import agree_cosmos_request, build_cosmos_parallel_context
@@ -59,7 +60,12 @@ class CosmosPredict2p5Pipeline(PipelineABC):
     MODEL_ID = "cosmos-predict2.5"
 
     def __init__(
-        self, *, native_pipeline: NativeDiffusionPipeline, device: str, model_id: str, parallel_context=None,
+        self,
+        *,
+        native_pipeline: NativeDiffusionPipeline,
+        device: str,
+        model_id: str,
+        parallel_context=None,
     ) -> None:
         super().__init__(model_id=model_id, synthesis_model=None, device=device)
         self.native_pipeline = native_pipeline
@@ -134,7 +140,9 @@ class CosmosPredict2p5Pipeline(PipelineABC):
             offload=parse_offload_policy(options.get("offload_mode", "block"), owner="Cosmos2.5"),
         )
         parallel = build_cosmos_parallel_context(
-            options, policy, attention_heads=40 if resolved_model_id.endswith("14b") else 16,
+            options,
+            policy,
+            attention_heads=40 if resolved_model_id.endswith("14b") else 16,
         )
         component_options = {
             "conditioner:main": encoder_options,
@@ -142,20 +150,32 @@ class CosmosPredict2p5Pipeline(PipelineABC):
                 "tiled": bool(options.get("vae_tiling", False)),
                 "tile_size": tuple(options.get("vae_tile_size", (34, 34))),
                 "tile_stride": tuple(options.get("vae_tile_stride", (18, 16))),
-            }
+            },
         }
         if parallel is not None:
             component_options["denoiser:main"] = {
-                "tensor_parallel": parallel.tp_size, "context_parallel": parallel.cp_size,
+                "tensor_parallel": parallel.tp_size,
+                "context_parallel": parallel.cp_size,
                 "parallel_context": parallel,
             }
         try:
             if parallel is not None:
-                parallel.agree(("cosmos25-pipeline", resolved_model_id, overrides, str(policy.dtype),
-                                encoder_options, component_options["latent_initializer:main"]))
+                parallel.agree(
+                    (
+                        "cosmos25-pipeline",
+                        resolved_model_id,
+                        overrides,
+                        str(policy.dtype),
+                        encoder_options,
+                        component_options["latent_initializer:main"],
+                    )
+                )
             native = NativeDiffusionPipeline.from_pretrained(
-                resolved_model_id, policy=policy, checkpoint_overrides=overrides or None,
-                extensions=options.get("extensions", ()), component_options=component_options,
+                resolved_model_id,
+                policy=policy,
+                checkpoint_overrides=overrides or None,
+                extensions=options.get("extensions", ()),
+                component_options=component_options,
             )
         except BaseException:
             if parallel is not None:
@@ -236,9 +256,17 @@ class CosmosPredict2p5Pipeline(PipelineABC):
             inputs["video"] = video_value
         if self.parallel_context is not None:
             agree_cosmos_request(
-                self.parallel_context, prompt=prompt, negative_prompt=negative_prompt or DEFAULT_NEGATIVE_PROMPT,
-                inputs=inputs, seed=int(seed), height=int(height), width=int(width), num_frames=int(num_frames),
-                steps=int(num_inference_steps), guidance_scale=float(guidance_scale), output_type=output_type,
+                self.parallel_context,
+                prompt=prompt,
+                negative_prompt=negative_prompt or DEFAULT_NEGATIVE_PROMPT,
+                inputs=inputs,
+                seed=int(seed),
+                height=int(height),
+                width=int(width),
+                num_frames=int(num_frames),
+                steps=int(num_inference_steps),
+                guidance_scale=float(guidance_scale),
+                output_type=output_type,
             )
             actual_seed = self.parallel_context.broadcast_seed(int(seed))
         else:
@@ -257,12 +285,24 @@ class CosmosPredict2p5Pipeline(PipelineABC):
             inputs=inputs,
         )
         output = self.native_pipeline(request)
+        video_chunk = None
+        if output_type != "latent":
+            video_chunk = VideoChunk(
+                frames=output.sample, layout="bcthw", value_range="-1,1", metadata={"fps": int(fps)}
+            )
         artifact_path = None
-        if (output_path is not None and output_type != "latent"
-                and (self.parallel_context is None or self.parallel_context.is_main)):
-            artifact_path = save_image_or_video_tensor(output.sample, output_path, fps=int(fps))
+        if (
+            output_path is not None
+            and video_chunk is not None
+            and (self.parallel_context is None or self.parallel_context.is_main)
+        ):
+            artifact_path = save_image_or_video_tensor(
+                output.sample, output_path, fps=int(fps), layout=video_chunk.layout, value_range=video_chunk.value_range
+            )
         result = {
             "video": output.sample,
+            "video_chunk": video_chunk,
+            "fps": int(fps),
             "latents": output.latents,
             "artifact_path": artifact_path,
             "metadata": dict(output.metadata),

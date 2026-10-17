@@ -8,6 +8,7 @@ from typing import Any, Mapping
 
 LINGBOT_WORLD_MODEL_ID = "lingbot-world"
 LINGBOT_WORLD_V2_MODEL_ID = "lingbot-world-v2"
+LINGBOT_WORLD_V2_SMALL_MODEL_ID = "lingbot-world-v2-1.3b"
 MATRIX_GAME3_MODEL_ID = "matrix-game-3"
 LONGVIE2_MODEL_ID = "longvie-2"
 HELIOS_MODEL_ID = "helios"
@@ -20,6 +21,8 @@ LINGBOT_FAST_NUM_PROCS_ENV_KEYS = (
     "WM_LINGBOTWORLDFAST_NUM_PROCS",
 )
 LINGBOT_FAST_USE_SP_ENV = "WORLDFOUNDRY_LINGBOT_FAST_USE_SP"
+
+
 def _torchrun_world_size() -> int:
     try:
         return max(int(os.getenv("WORLD_SIZE", "1") or "1"), 1)
@@ -130,6 +133,13 @@ WMFACTORY_INTERACTIVE_MODEL_SPECS: tuple[WMFactoryInteractiveModelSpec, ...] = (
         "LINGBOTWORLDV2",
         preferred_visible_devices=8,
         supported_process_counts=(1, 4, 8),
+    ),
+    WMFactoryInteractiveModelSpec(
+        "lingbot-world-v2-1.3b",
+        "lingbot-world-v2-1.3b",
+        "LINGBOTWORLDV2SMALL",
+        preferred_visible_devices=1,
+        supported_process_counts=(1, 2, 3, 4, 6, 12),
     ),
 )
 

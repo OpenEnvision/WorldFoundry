@@ -425,9 +425,6 @@ class WorldCrafter:
             "image_noise_sigma_max": image_noise_sigma_max,
             "camera_x_fov": camera_x_fov,
             "camera_xi": camera_xi,
-            "repencoder_model_sha256": self.memory_provider.runtime.report[
-                "model_sha256"
-            ],
         }
         if is_fast:
             run_contract["model_type"] = "fast"
@@ -558,9 +555,6 @@ class WorldCrafter:
             "guidance_scale": guidance_scale,
             "attention_backend": self.attention_backend,
             "adapter": self.adapter_load,
-            "repencoder_model_sha256": self.memory_provider.runtime.report[
-                "model_sha256"
-            ],
             "resumed_from": str(resume_from) if resume_from is not None else None,
             "history_selection": history_selection,
         }

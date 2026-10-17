@@ -1,8 +1,12 @@
+# SPDX-FileCopyrightText: 2026 WorldFoundry contributors
+# SPDX-License-Identifier: Apache-2.0
 """WorldPlay2 public boundary reuses the common native visual adapter."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from ..native_diffusion import NativeVisualDiffusionPipeline
 
@@ -31,13 +35,19 @@ class WorldPlay2Pipeline(NativeVisualDiffusionPipeline):
     DEFAULT_SCHEDULER_OPTIONS = {"shift": 7.0}
     SCHEDULER_OPTION_ALIASES = {"sample_shift": "shift"}
     REQUEST_INPUT_DEFAULTS = {
-        "actions": None, "perspective": "tps", "prompts": None, "prompt_event": None,
-        "chunk_length": 4, "sink_size": 1, "temporal_size": 1,
-        "yaw_rotation_speed_deg": 3.0, "pitch_rotation_speed_deg": 1.0,
+        "actions": None,
+        "perspective": "tps",
+        "prompts": None,
+        "prompt_event": None,
+        "chunk_length": 4,
+        "sink_size": 1,
+        "temporal_size": 1,
+        "yaw_rotation_speed_deg": 3.0,
+        "pitch_rotation_speed_deg": 1.0,
     }
     REQUEST_INPUT_ALIASES = {"action": "actions"}
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         if self.model_id in {"worldplay2-ar", "worldplay2-bi"}:
             self.DEFAULT_NUM_INFERENCE_STEPS = 40
@@ -50,7 +60,7 @@ class WorldPlay2Pipeline(NativeVisualDiffusionPipeline):
             }
 
     @classmethod
-    def _requested_model_id(cls, options):
+    def _requested_model_id(cls, options: Mapping[str, Any]) -> str:
         modes = {"few_step": "worldplay2", "fast": "worldplay2", "ar": "worldplay2-ar", "bi": "worldplay2-bi"}
         mode = options.get("mode")
         if mode is not None:
@@ -58,16 +68,22 @@ class WorldPlay2Pipeline(NativeVisualDiffusionPipeline):
                 raise ValueError("WorldPlay2 mode must be 'few_step', 'ar', or 'bi'")
             return modes[str(mode)]
         selected = str(options.get("variant", options.get("variant_id", options.get("model_id", cls.MODEL_ID))))
-        aliases = {"worldplay2-fast": "worldplay2", **modes,
-                   "aejion/WorldPlay2-Fast": "worldplay2", "aejion/WorldPlay2-AR": "worldplay2-ar",
-                   "aejion/WorldPlay2-BI": "worldplay2-bi"}
+        aliases = {
+            "worldplay2-fast": "worldplay2",
+            **modes,
+            "aejion/WorldPlay2-Fast": "worldplay2",
+            "aejion/WorldPlay2-AR": "worldplay2-ar",
+            "aejion/WorldPlay2-BI": "worldplay2-bi",
+        }
         selected = aliases.get(selected, selected)
         if selected not in {"worldplay2", "worldplay2-ar", "worldplay2-bi"}:
             raise ValueError(f"unsupported WorldPlay2 variant: {selected!r}")
         return selected
 
     @classmethod
-    def _checkpoint_overrides(cls, model_path, options):
+    def _checkpoint_overrides(
+        cls, model_path: str | Mapping[str, Any] | None, options: Mapping[str, Any]
+    ) -> dict[str, Any] | None:
         explicit = options.get("checkpoint_overrides")
         if explicit is not None:
             return super()._checkpoint_overrides(model_path, options)
@@ -78,8 +94,13 @@ class WorldPlay2Pipeline(NativeVisualDiffusionPipeline):
         base = options.get("base_model_path")
         if base is not None:
             overrides.update(t5=str(base), tokenizer=str(base), vae=str(base))
-        for option, role in (("high_noise_ckpt", "high"), ("low_noise_ckpt", "low"),
-                             ("vae_path", "vae"), ("text_encoder_path", "t5"), ("tokenizer_path", "tokenizer")):
+        for option, role in (
+            ("high_noise_ckpt", "high"),
+            ("low_noise_ckpt", "low"),
+            ("vae_path", "vae"),
+            ("text_encoder_path", "t5"),
+            ("tokenizer_path", "tokenizer"),
+        ):
             if options.get(option) is not None:
                 overrides[role] = str(options[option])
         return overrides or None

@@ -108,11 +108,18 @@ class Lyra1Runtime:
     @staticmethod
     def _dynamic_reference(visual_input: Any) -> Any:
         from worldfoundry.core.io import coerce_video_frames
+        from worldfoundry.core.media.codecs.video import video_chunk_to_uint8_frames
+        from worldfoundry.core.media.processing.postprocess import VideoChunk
+        from worldfoundry.core.memory.media import to_pil_image
 
-        frames = coerce_video_frames(visual_input)
-        if not frames:
+        frames = (
+            video_chunk_to_uint8_frames(visual_input)
+            if isinstance(visual_input, VideoChunk)
+            else coerce_video_frames(visual_input)
+        )
+        if len(frames) == 0:
             raise ValueError("Lyra-1 dynamic input contains no frames")
-        return frames[0]
+        return to_pil_image(frames[0])
 
     @staticmethod
     def _save_reconstruction_inputs(
@@ -368,6 +375,7 @@ class Lyra1Runtime:
             "generated_root": str(output_path),
             "generated_video_path": primary["generated_video_path"],
             "video": primary["video"],
+            "video_chunk": primary.get("video_chunk"),
             "fps": run_options["fps"],
             "input_path": str(visual_input) if isinstance(visual_input, (str, Path)) else "<in-memory>",
             "trajectories": generated,

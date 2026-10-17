@@ -7,6 +7,9 @@ from typing import Any, Dict, Optional, Union
 import numpy as np
 from PIL import Image
 
+from worldfoundry.core.media.codecs.video import video_chunk_to_uint8_frames
+from worldfoundry.core.media.processing.postprocess import VideoChunk
+
 from ...operators.lingbot_world_operator import LingBotOperator
 from ...synthesis.visual_generation.lingbot_world.lingbot_world_runtime.utils.wasd_ijkl_to_c2ws import (
     generate_and_save_trajectory,
@@ -77,28 +80,33 @@ def _wmfactory_trajectory_from_interactions(
 
 class LingBotPipeline(PipelineABC):
     """Pipeline implementation for LingBot visual generation."""
-    def __init__(self,
-                 operators: Optional[LingBotOperator] = None,
-                 synthesis_model: Optional[LingBotSynthesis] = None,
-                 memory_module: Optional[Any] = None,
-                 device: str = "cuda",
-                 model_id: str = "lingbot-world",
-                 ):
+
+    def __init__(
+        self,
+        operators: Optional[LingBotOperator] = None,
+        synthesis_model: Optional[LingBotSynthesis] = None,
+        memory_module: Optional[Any] = None,
+        device: str = "cuda",
+        model_id: str = "lingbot-world",
+    ):
         """Initialize the pipeline and configure runtime components."""
         self.synthesis_model = synthesis_model
-        self.operators = operators
-        self.memory_module = memory_module
+        self.operators = operators if operators is not None else LingBotOperator()
+        self.memory_module: Any = memory_module if memory_module is not None else VisualFrameMemory(model_id=model_id)
         self.device = device
         self.model_id = model_id
         self._realtime_session = None
 
     @classmethod
-    def from_pretrained(cls,
-                        model_path: Union[str, Dict[str, Any], None] = None,
-                        required_components: Optional[Dict[str, Any]] = None,
-                        mode: str = "i2v-A14B",
-                        device: str = "cuda",
-                        **kwargs) -> "LingBotPipeline":
+    # LingBot's public loader retains its positional mode argument.
+    def from_pretrained(  # ty: ignore[invalid-method-override]
+        cls,
+        model_path: Union[str, Dict[str, Any], None] = None,
+        required_components: Optional[Dict[str, Any]] = None,
+        mode: str = "i2v-A14B",
+        device: str = "cuda",
+        **kwargs,
+    ) -> "LingBotPipeline":
         """Load the pipeline from pretrained checkpoints and configurations."""
         component_options = dict(required_components or {})
         if isinstance(model_path, dict):
@@ -123,7 +131,7 @@ class LingBotPipeline(PipelineABC):
             task=mode,
             device=device,
             control_type="act" if resolved_model_id == "lingbot-world-act" else "cam",
-            **kwargs
+            **kwargs,
         )
 
         operators = LingBotOperator()
@@ -138,18 +146,19 @@ class LingBotPipeline(PipelineABC):
         )
         return pipeline
 
-    def process(self,
-                images: Any = None,
-                prompt: Optional[str] = None,
-                interactions: Optional[list[str]] = None,
-                action_path: Optional[str] = None,
-                resize_H: int = 480,
-                resize_W: int = 832,
-                num_frames: Optional[int] = 81,
-                wmfactory_action_controls: bool = False,
-                poses_c2ws: Any = None,
-                poses_Ks: Any = None):
-
+    def process(
+        self,
+        images: Any = None,
+        prompt: Optional[str] = None,
+        interactions: Optional[list[str]] = None,
+        action_path: Optional[str] = None,
+        resize_H: int = 480,
+        resize_W: int = 832,
+        num_frames: Optional[int] = 81,
+        wmfactory_action_controls: bool = False,
+        poses_c2ws: Any = None,
+        poses_Ks: Any = None,
+    ):
         """Process and normalize input arguments and conditions for inference."""
         if isinstance(images, str):
             images = Image.open(images).convert("RGB")
@@ -175,7 +184,7 @@ class LingBotPipeline(PipelineABC):
             else:
                 c2ws, Ks = self.operators.traj_generator.generate(
                     interactions,
-                    num_frames,
+                    num_frames if num_frames is not None else 81,
                     resize_H,
                     resize_W,
                 )
@@ -184,30 +193,34 @@ class LingBotPipeline(PipelineABC):
 
         return output_dict
 
-    def __call__(self,
-                  images: Any = None,
-                  num_frames: Optional[int] = 81,
-                  prompt: Optional[str] = None,
-                  interactions: Optional[list[str]] = None,
-                  action_path: Optional[str] = None,
-                  resize_H: int = 480,
-                  resize_W: int = 832,
-                  max_area: int = 720 * 1280,
-                  vis_ui: bool = False,
-                  allow_act2cam: bool = False,
-                  action_string: Optional[str] = None,
-                  wmfactory_action_controls: bool = False,
-                  poses_c2ws: Any = None,
-                  poses_Ks: Any = None,
-                  action_matrix: Any = None,
-                  output_path: str | Path | None = None,
-                  fps: int = 16,
-                  return_dict: bool = False,
-                  operator_kwargs: Any = None,
-                  seed: int = 42,
-                  **kwds):
-
-        """Execute the complete pipeline generation flow."""
+    def __call__(
+        self,
+        images: Any = None,
+        num_frames: Optional[int] = 81,
+        prompt: Optional[str] = None,
+        interactions: Optional[list[str]] = None,
+        action_path: Optional[str] = None,
+        resize_H: int = 480,
+        resize_W: int = 832,
+        max_area: int = 720 * 1280,
+        vis_ui: bool = False,
+        allow_act2cam: bool = False,
+        action_string: Optional[str] = None,
+        wmfactory_action_controls: bool = False,
+        poses_c2ws: Any = None,
+        poses_Ks: Any = None,
+        action_matrix: Any = None,
+        output_path: str | Path | None = None,
+        fps: int = 16,
+        return_dict: bool = False,
+        operator_kwargs: Any = None,
+        seed: int = 42,
+        **kwds,
+    ) -> np.ndarray | dict[str, Any] | None:
+        """Execute one request; structured video declares THWC unit-range pixels."""
+        if self.synthesis_model is None:
+            raise RuntimeError("LingBot synthesis model is not loaded. Use from_pretrained() first.")
+        num_frames = 81 if num_frames is None else num_frames
         # PipelineInvocation carries model-specific inputs separately from the
         # common image/prompt/action fields. Keep direct-call arguments as the
         # priority, while accepting the same pose and action payload through
@@ -247,7 +260,7 @@ class LingBotPipeline(PipelineABC):
             action_string=action_string,
             action_matrix=action_matrix,
             seed=seed,
-            **kwds
+            **kwds,
         )
 
         if output_video is None:
@@ -260,21 +273,17 @@ class LingBotPipeline(PipelineABC):
             # no video was produced.
             import torch.distributed as dist
 
-            if (
-                dist.is_available()
-                and dist.is_initialized()
-                and dist.get_world_size() > 1
-                and dist.get_rank() != 0
-            ):
+            if dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1 and dist.get_rank() != 0:
                 return None
             raise RuntimeError("LingBot did not return video frames on the current rank.")
+        video_chunk = VideoChunk(frames=output_video, layout="thwc", value_range="0,1")
         artifact_path = None
         if output_path is not None:
             from worldfoundry.core.io import save_video_frames
 
             output = Path(output_path).expanduser().resolve()
             output.parent.mkdir(parents=True, exist_ok=True)
-            save_video_frames(output_video, output, fps=int(fps))
+            save_video_frames(video_chunk_to_uint8_frames(video_chunk), output, fps=int(fps))
             artifact_path = str(output)
         if return_dict:
             return {
@@ -284,30 +293,35 @@ class LingBotPipeline(PipelineABC):
                 "artifact_path": artifact_path,
                 "generated_video_path": artifact_path,
                 "video": output_video,
+                "video_chunk": video_chunk,
+                "fps": int(fps),
             }
         return output_video
 
-    def stream(self,
-                prompt: Optional[str] = None,
-                interactions: Optional[list[str]] = None,
-                images: Any = None,
-                action_path: Optional[str] = None,
-                num_frames: Optional[int] = 81,
-                resize_H: int = 480,
-                resize_W: int = 832,
-                max_area: int = 720 * 1280,
-                vis_ui: bool = False,
-                allow_act2cam: bool = False,
-                action_string: Optional[str] = None,
-                wmfactory_action_controls: bool = False,
-                seed: int = 42,
-                **kwds) -> np.ndarray:
-
+    def stream(
+        self,
+        prompt: Optional[str] = None,
+        interactions: Optional[list[str]] = None,
+        images: Any = None,
+        action_path: Optional[str] = None,
+        num_frames: Optional[int] = 81,
+        resize_H: int = 480,
+        resize_W: int = 832,
+        max_area: int = 720 * 1280,
+        vis_ui: bool = False,
+        allow_act2cam: bool = False,
+        action_string: Optional[str] = None,
+        wmfactory_action_controls: bool = False,
+        seed: int = 42,
+        return_dict: bool = False,
+        fps: int = 16,
+        **kwds,
+    ) -> np.ndarray | dict[str, Any] | None:
         # 1. Initialize Memory if images provided (First Turn)
         """Stream visual generation outputs chunk by chunk."""
         if images is not None:
             logger.info("--- Stream Started ---")
-            self.memory_module.manage(action="reset") # Clear old memory
+            self.memory_module.manage(action="reset")  # Clear old memory
             self.memory_module.record(images, type="image")
 
         # 2. Retrieve Context (Input for this turn)
@@ -330,12 +344,15 @@ class LingBotPipeline(PipelineABC):
             action_string=action_string,
             wmfactory_action_controls=wmfactory_action_controls,
             seed=seed,
-            **kwds
-        ) # Returns numpy array [T, H, W, C]
+            return_dict=return_dict,
+            fps=fps,
+            **kwds,
+        )
 
         # 4. Record Result (Updates context for next turn)
         if video_output is not None:
-            self.memory_module.record(video_output, type="video_chunk")
+            frames = video_output["video"] if return_dict else video_output
+            self.memory_module.record(frames, type="video_chunk")
 
         return video_output
 
