@@ -30,6 +30,7 @@ PUBLIC_GATE_CONTRACTS = \
 	tests/scripts/test_pr_checks.py \
 	tests/core/test_docs_toolchain.py \
 	tests/core/test_agent_skills.py \
+	tests/core/test_inference_validation_guidance.py \
 	tests/cli/test_mcp_content_conversion.py \
 	tests/runtime/test_inference_actions_evidence.py \
 	tests/synthesis/test_matrix_game_2_historical_reference.py \
@@ -378,6 +379,10 @@ test-docs-contracts:
 	PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest "$(DOCS_TEST_MANIFEST)" --junit "$(DOCS_TEST_JUNIT)" --test tests/core/test_model_docs_codegen.py --test tests/eval_core/test_docs_quickstart.py --test tests/eval_core/test_benchmark_hub_docs.py -- $(TEST_ARGS)
 
 # This suite needs CPU Torch, safetensors and einops, with no weights or renderer.
+.PHONY: test-realtime-client
+test-realtime-client:
+	node --test tests/studio_visualization/realtime_client.test.mjs tests/studio_visualization/realtime_udp.test.mjs
+
 test-infer-tensors:
 	CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest "$(INFER_TENSOR_MANIFEST)" --junit "$(INFER_TENSOR_JUNIT)" --marker 'not gpu' $(foreach test,$(INFER_TENSOR_CONTRACTS),--test $(test)) -- $(TEST_ARGS)
 
