@@ -8,11 +8,7 @@ from worldfoundry.evaluation.runner import ExistingResultsRunRequest, execute_ex
 
 
 def _read_jsonl(path: Path) -> list[dict]:
-    return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def test_existing_results_runner_allows_dataclass_request_overrides(tmp_path: Path) -> None:
@@ -119,8 +115,8 @@ def test_existing_results_runner_loads_jsonl_and_isolates_metric_failures(tmp_pa
     output_dir = tmp_path / "run"
     results_path = tmp_path / "existing_results.jsonl"
     rows = [
-        {"sample_id": "sample-ok", "model_id": "cached-model", "outputs": {"text": "ok"}},
-        {"sample_id": "sample-bad-metric", "model_id": "cached-model"},
+        {"sample_id": "sample-ok", "model_id": "cached-model", "status": "succeeded", "outputs": {"text": "ok"}},
+        {"sample_id": "sample-bad-metric", "model_id": "cached-model", "status": "succeeded"},
         {"sample_id": "sample-generation-failed", "status": "failed", "error": "cached generation failed"},
     ]
     results_path.write_text(
@@ -172,7 +168,7 @@ def test_existing_results_runner_without_metric_writes_generation_summary_only(t
         GenerationRequest(sample_id="sample-b", task_name="sample_static_i2v"),
     ]
     results = [
-        {"sample_id": "sample-a", "model_id": "cached-model"},
+        {"sample_id": "sample-a", "model_id": "cached-model", "status": "succeeded"},
         {"sample_id": "sample-b", "status": "failed", "error": "cached failure"},
     ]
 

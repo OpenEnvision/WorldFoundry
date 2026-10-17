@@ -19,10 +19,18 @@ from worldfoundry.evaluation.utils import BENCHMARK_ASSETS_ROOT
 _TARGET_PREFIX = "worldfoundry.evaluation.tasks.execution.runners"
 
 
-def materialize_vbench_generation_requests(*, limit: int | None = None) -> tuple[GenerationRequest, ...]:
-    """Materialize the checked-in VBench standard prompt suite for generation."""
-
-    source = BENCHMARK_ASSETS_ROOT / "vbench" / "VBench_full_info.json"
+def materialize_vbench_generation_requests(
+    *,
+    limit: int | None = None,
+    dataset_root: Path | None = None,
+    split: str = "standard",
+) -> tuple[GenerationRequest, ...]:
+    """Materialize five seeded videos per official prompt; limit counts videos."""
+    if split != "standard":
+        raise ValueError("VBench generation supports the standard split")
+    if limit is not None and limit <= 0:
+        return ()
+    source = (dataset_root or BENCHMARK_ASSETS_ROOT / "vbench") / "VBench_full_info.json"
     payload = json.loads(source.read_text(encoding="utf-8"))
     if not isinstance(payload, list):
         raise TypeError(f"VBench prompt suite must be a list: {source}")
@@ -35,22 +43,25 @@ def materialize_vbench_generation_requests(*, limit: int | None = None) -> tuple
         dimensions.extend(str(item) for item in row.get("dimension") or () if str(item) not in dimensions)
     requests = []
     for index, (prompt, dimensions) in enumerate(prompt_dimensions.items()):
-        requests.append(
-            GenerationRequest(
-                sample_id=f"vbench-{index:04d}",
-                task_name="vbench_t2v_standard",
-                split="standard",
-                inputs={
-                    "prompt": prompt,
-                    "prompt_id": index,
-                    "dimensions": tuple(dimensions),
-                    "official_video_name": f"{prompt}-0.mp4",
-                },
-                output_schema={"generated_video": {"kind": "generated_video"}},
+        for replicate in range(5):
+            requests.append(
+                GenerationRequest(
+                    sample_id=f"vbench-{index:04d}-{replicate}",
+                    task_name="vbench_t2v_standard",
+                    split=split,
+                    inputs={
+                        "prompt": prompt,
+                        "prompt_id": index,
+                        "sample_index": replicate,
+                        "dimensions": tuple(dimensions),
+                        "official_video_name": f"{prompt}-{replicate}.mp4",
+                    },
+                    generation_kwargs={"seed": replicate},
+                    output_schema={"generated_video": {"kind": "generated_video"}},
+                )
             )
-        )
-        if limit is not None and len(requests) >= limit:
-            break
+            if limit is not None and len(requests) >= limit:
+                return tuple(requests)
     return tuple(requests)
 
 
@@ -83,9 +94,15 @@ class BenchmarkGenerationAdapter:
         split: str | None = None,
     ) -> tuple[GenerationRequest, ...]:
         kwargs: dict[str, Any] = {"limit": limit}
-        if self.dataset_root_parameter is not None and dataset_root is not None:
+        if dataset_root is not None:
+            if self.dataset_root_parameter is None:
+                raise ValueError(
+                    f"{self.benchmark_id} generation does not accept dataset_root; provide materialized requests"
+                )
             kwargs[self.dataset_root_parameter] = Path(dataset_root)
-        if self.split_parameter is not None and split is not None:
+        if split not in (None, "default"):
+            if self.split_parameter is None:
+                raise ValueError(f"{self.benchmark_id} generation does not accept a split override")
             kwargs[self.split_parameter] = split
         requests = _load_target(self.request_provider)(**kwargs)
         return tuple(requests)
@@ -117,18 +134,24 @@ _ADAPTER_ROWS: dict[str, tuple[Any, ...]] = {
         "aigcbench",
         "set WORLDFOUNDRY_AIGCBENCH_DATASET_ROOT or WORLDFOUNDRY_AIGCBENCH_PROMPT_MANIFEST",
         True,
+        "dataset_root",
+        "split",
     ),
     "evalcrafter": (
         "evalcrafter.evalcrafter_prompts",
         "evalcrafter",
         "restore the bundled EvalCrafter prompt700.txt asset",
         True,
+        None,
+        "split",
     ),
     "ewmbench": (
         "ewmbench.ewmbench_prompts",
         "ewmbench",
         "restore the bundled EWMBench task_manifest.json asset",
         True,
+        None,
+        "split",
     ),
     "fetv": (
         "fetv.fetv_prompts",
@@ -155,30 +178,40 @@ _ADAPTER_ROWS: dict[str, tuple[Any, ...]] = {
         "mirabench",
         "set WORLDFOUNDRY_MIRABENCH_ROOT or WORLDFOUNDRY_MIRABENCH_META_CSV",
         True,
+        None,
+        "split",
     ),
     "phyeduvideo": (
         "phyeduvideo.phyeduvideo_prompts",
         "phyeduvideo",
         "set WORLDFOUNDRY_PHYEDUVIDEO_ROOT or WORLDFOUNDRY_PHYEDUVIDEO_PROMPTS_FILE",
         True,
+        None,
+        "split",
     ),
     "phyfps-bench-gen": (
         "phyfps_bench_gen.phyfps_prompts",
         "phyfps",
         "set WORLDFOUNDRY_PHYFPS_BENCH_GEN_ROOT or WORLDFOUNDRY_PHYFPS_BENCH_GEN_PROMPT_MANIFEST",
         True,
+        None,
+        "split",
     ),
     "phygenbench": (
         "phygenbench.phygenbench_prompts",
         "phygenbench",
         "set WORLDFOUNDRY_PHYGENBENCH_ROOT or WORLDFOUNDRY_PHYGENBENCH_PROMPT_MANIFEST",
         True,
+        None,
+        "split",
     ),
     "phyground": (
         "phyground.phyground_prompts",
         "phyground",
         "set WORLDFOUNDRY_PHYGROUND_DATA_ROOT or WORLDFOUNDRY_PHYGROUND_PROMPT_MANIFEST",
         True,
+        None,
+        "split",
     ),
     "sana-wm-bench": (
         "sana_wm_bench.sana_wm_bench_prompts",
@@ -194,6 +227,7 @@ _ADAPTER_ROWS: dict[str, tuple[Any, ...]] = {
         "set WORLDFOUNDRY_PHYSICS_IQ_ROOT or WORLDFOUNDRY_PHYSICS_IQ_DESCRIPTIONS",
         True,
         "dataset_root",
+        "split",
     ),
     "physics-iq-verified": (
         "physics_iq.physics_iq_prompts",
@@ -207,6 +241,8 @@ _ADAPTER_ROWS: dict[str, tuple[Any, ...]] = {
         "physvidbench",
         "set WORLDFOUNDRY_PHYSVIDBENCH_ROOT or WORLDFOUNDRY_PHYSVIDBENCH_PROMPT_MANIFEST",
         True,
+        None,
+        "split",
     ),
     "t2v-safety-bench": (
         "t2v_safety_bench.t2v_safety_bench_prompts",
@@ -225,18 +261,24 @@ _ADAPTER_ROWS: dict[str, tuple[Any, ...]] = {
         "videophy",
         "restore the bundled VideoPhy prompt assets",
         True,
+        None,
+        "split",
     ),
     "videophy2": (
         "videophy2.videophy2_prompts",
         "videophy2",
         "restore the bundled VideoPhy2 prompt assets",
         True,
+        None,
+        "split",
     ),
     "videoverse": (
         "videoverse.videoverse_prompts",
         "videoverse",
         "set WORLDFOUNDRY_VIDEOVERSE_ROOT or WORLDFOUNDRY_VIDEOVERSE_PROMPT_MANIFEST",
         True,
+        None,
+        "split",
     ),
     "vmbench": (
         "vmbench.vmbench_prompts",
@@ -267,8 +309,8 @@ def _adapter_from_row(benchmark_id: str, row: Sequence[Any]) -> BenchmarkGenerat
         request_provider=f"{module}:materialize_{function_prefix}_generation_requests",
         artifact_materializer=(f"{module}:copy_{function_prefix}_generated_videos" if custom_layout else None),
         missing_requests_hint=str(hint),
-        dataset_root_parameter=str(options[0]) if options else None,
-        split_parameter=str(options[1]) if len(options) > 1 else None,
+        dataset_root_parameter=options[0] if options else None,
+        split_parameter=options[1] if len(options) > 1 else None,
     )
 
 
@@ -282,6 +324,8 @@ BENCHMARK_GENERATION_ADAPTERS["vbench"] = BenchmarkGenerationAdapter(
         "materialize_vbench_generation_requests"
     ),
     missing_requests_hint="restore the bundled VBench_full_info.json prompt suite",
+    dataset_root_parameter="dataset_root",
+    split_parameter="split",
 )
 
 

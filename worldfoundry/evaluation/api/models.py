@@ -62,17 +62,19 @@ class WorldModelConfig(JsonContract):
 
 @runtime_checkable
 class WorldModelRunner(Protocol):
-    """Minimum runner surface shared by local and remote world models."""
+    """Minimum runner surface shared by local and remote world models.
+
+    A runner may additionally expose ``generate_iter(requests)`` to yield
+    complete, keyed GenerationResults for incremental persistence. Each yield
+    finishes a sample/rollout; the orchestrator retains the whole request batch.
+    """
 
     model_id: str
     capabilities: Collection[str]
 
     @classmethod
-    def from_config(cls, config: WorldModelConfig) -> "WorldModelRunner":
-        ...
+    def from_config(cls, config: WorldModelConfig) -> "WorldModelRunner": ...
 
-    def generate(self, requests: Sequence[GenerationRequest]) -> Sequence[GenerationResult]:
-        ...
+    def generate(self, requests: Sequence[GenerationRequest]) -> Sequence[GenerationResult]: ...
 
-    def cleanup(self) -> None:
-        ...
+    def cleanup(self) -> None: ...

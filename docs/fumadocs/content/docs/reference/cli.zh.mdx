@@ -445,6 +445,13 @@ worldfoundry-eval score \
   --json
 ```
 
+进程内 `score --results`、`generate-score`、`reproduce`、`evaluate` 和 `run`
+支持 `--resume` 与 `--metric-batch-size`（默认 `32`）。生成结果与 metric 批次分别
+持久化；resume 复用请求、模型配置及已有 artifact 均匹配的生成结果，metric 实现、
+版本和声明参数决定是否复用分数。中断后 `metrics/checkpoint.jsonl` 保留已完成批次。
+修改 metric 时只重算相应分数，不重跑仍匹配的生成。
+`score --benchmark --artifacts` 使用官方 evaluator 协议，拒绝这些进程内评分参数。
+
 `evaluate` 会进一步暴露底层 requests、task、runner、cache 与 model-mode 字段：
 
 ```bash

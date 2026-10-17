@@ -9,15 +9,8 @@ from argparse import Namespace
 from pathlib import Path
 from unittest import mock
 
-from worldfoundry.evaluation.tasks.embodied.simulators.calvin.benchmark import (
-    CALVINBenchmark,
-    _configure_calvin_import_path,
-)
-from worldfoundry.evaluation.tasks.embodied.simulators.robotwin.benchmark import (
-    RoboTwinBenchmark,
-    _configured_robotwin_root,
-)
-
+from worldfoundry.evaluation.tasks.embodied.simulators.calvin.benchmark import CALVINBenchmark
+from worldfoundry.evaluation.tasks.embodied.simulators.robotwin.benchmark import RoboTwinBenchmark
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -94,7 +87,9 @@ class EmbodiedInfraRound6Tests(unittest.TestCase):
             env = prepare_assets.target_env(root / "data", root / "ckpt", root / "hfd", root / "datasets")
             items = prepare_assets.discover_benchmark_items(env, {"libero-plus", "maniskill2", "robotwin"})
         by_owner = {item.owner_id: item for item in items if item.kind == "git_repo"}
-        self.assertEqual(by_owner["libero-plus"].revision, expected["https://github.com/Lifelong-Robot-Learning/LIBERO"])
+        self.assertEqual(
+            by_owner["libero-plus"].revision, expected["https://github.com/Lifelong-Robot-Learning/LIBERO"]
+        )
         self.assertEqual(by_owner["maniskill2"].revision, expected["https://github.com/haosulab/ManiSkill"])
         self.assertEqual(by_owner["robotwin"].revision, expected["https://github.com/RoboTwin-Platform/RoboTwin"])
 
@@ -143,12 +138,13 @@ class EmbodiedInfraRound6Tests(unittest.TestCase):
                 benchmark = RoboTwinBenchmark("grab_roller", skip_expert_check=True)
                 with self.assertRaises(FileNotFoundError):
                     benchmark._init_robotwin()
-                self.assertEqual(_configured_robotwin_root(), str(root))
+                self.assertEqual(benchmark.robotwin_root, root)
                 self.assertEqual(Path.cwd(), original_cwd)
 
     def test_calvin_roots_are_environment_configurable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
+            (root / "dataset" / "validation").mkdir(parents=True)
             with (
                 mock.patch.dict(
                     os.environ,
@@ -160,10 +156,9 @@ class EmbodiedInfraRound6Tests(unittest.TestCase):
                 mock.patch.object(sys, "path", list(sys.path)),
             ):
                 benchmark = CALVINBenchmark()
-                configured_root = _configure_calvin_import_path()
 
             self.assertEqual(benchmark.dataset_path, str(root / "dataset" / "validation"))
-            self.assertEqual(configured_root, str((root / "source").resolve()))
+            self.assertEqual(benchmark.calvin_root, root / "source")
 
 
 if __name__ == "__main__":

@@ -7,12 +7,16 @@ from pathlib import Path
 from typing import Any
 
 from worldfoundry.core.io.filesystem.file_utils import materialize_file
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
+from worldfoundry.evaluation.api import GenerationRequest
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
-    first_existing_dir,
-    resolve_env_path,
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
+    first_existing_dir,
+    resolve_env_path,
+)
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    iter_generation_video_artifacts,
+    reset_generation_artifact_staging,
 )
 from worldfoundry.evaluation.utils import write_jsonl
 
@@ -23,8 +27,6 @@ PROMPTS_JSON_ALT_REL = Path("prompts/phyground.json")
 FIRST_IMAGES_REL = Path("data/first_images")
 FIRST_IMAGES_ALT_REL = Path("first_images")
 CANONICAL_PROMPT_COUNT = 250
-
-
 
 
 def resolve_phyground_root(explicit: Path | None = None) -> Path | None:
@@ -221,50 +223,19 @@ def copy_phyground_generated_videos(
     artifact_manifest_path: Path,
     output_artifact: str = "generated_video",
 ) -> tuple[int, int]:
-    generated_artifact_dir.mkdir(parents=True, exist_ok=True)
+    reset_generation_artifact_staging(generation_output_dir, generated_artifact_dir)
     materialized = 0
     placeholders = 0
     manifest_rows: list[dict[str, Any]] = []
-    for sample_dir in sorted(path for path in generation_output_dir.iterdir() if path.is_dir()):
-        result_path = sample_dir / "result.json"
-        if not result_path.is_file():
+    for result, _, source_path in iter_generation_video_artifacts(generation_output_dir, output_artifact):
+        if source_path is None or not source_path.is_file():
             continue
-        payload = json.loads(result_path.read_text(encoding="utf-8"))
-        sample_id = str(payload.get("sample_id") or sample_dir.name)
-        outputs = payload.get("outputs") if isinstance(payload.get("outputs"), dict) else {}
-        source = outputs.get(output_artifact) or outputs.get("generated_video")
-        if not source:
+        target_path = generated_artifact_dir / video_filename_for_record({"prompt_id": result.sample_id})
+        if target_path.is_file():
             continue
-        source_path = Path(str(source))
-        if not source_path.is_file():
-            continue
-        target_path = generated_artifact_dir / video_filename_for_record({"prompt_id": sample_id})
         materialize_file(source_path, target_path, writable=False)
         materialized += 1
-        manifest_rows.append({"sample_id": sample_id, "artifact": output_artifact, "path": str(target_path)})
-
-    results_path = generation_output_dir / "results.jsonl"
-    if results_path.is_file():
-        for line in results_path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            result = GenerationResult.from_dict(json.loads(line))
-            artifact = result.artifacts.get(output_artifact) or result.artifacts.get("generated_video")
-            if artifact is None:
-                continue
-            from worldfoundry.evaluation.utils import local_path_for_uri
-
-            source_path = local_path_for_uri(str(artifact))
-            if source_path is None or not source_path.is_file():
-                continue
-            target_path = generated_artifact_dir / video_filename_for_record({"prompt_id": result.sample_id})
-            if target_path.is_file():
-                continue
-            materialize_file(source_path, target_path, writable=False)
-            materialized += 1
-            manifest_rows.append(
-                {"sample_id": result.sample_id, "artifact": output_artifact, "path": str(target_path)}
-            )
+        manifest_rows.append({"sample_id": result.sample_id, "artifact": output_artifact, "path": str(target_path)})
 
     write_jsonl(artifact_manifest_path, manifest_rows)
     return materialized, placeholders

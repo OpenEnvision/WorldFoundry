@@ -1,12 +1,13 @@
 from typing import List
+
 import torch
-from ..model import ScoreModel
-from ...constants import HF_CACHE_DIR
 
 from worldfoundry.base_models.llm_mllm_core.mllm.internvideo2 import (
     download_internvideo2,
     evaluation,
 )
+from worldfoundry.base_models.perception_core.video_text.vqa_score.constants import HF_CACHE_DIR
+from worldfoundry.base_models.perception_core.video_text.vqa_score.models.model import ScoreModel
 
 INTERNVIDEO2_ITM_MODELS = ["internvideo2-1b-stage2-itm"]
 
@@ -20,10 +21,10 @@ INTERNVIDEO2_ITM_PRETRAINED = {
 
 class InternVideo2ITMScoreModel(ScoreModel):
     "A wrapper for InternVideo2 ITM models"
+
     video_mode = "direct"
-    def __init__(
-        self, model_name="internvideo2-1b-stage2-itm", device="cuda", cache_dir=HF_CACHE_DIR
-    ):
+
+    def __init__(self, model_name="internvideo2-1b-stage2-itm", device="cuda", cache_dir=HF_CACHE_DIR):
         assert model_name in INTERNVIDEO2_ITM_MODELS
         super().__init__(model_name=model_name, device=device, cache_dir=cache_dir)
 
@@ -51,16 +52,12 @@ class InternVideo2ITMScoreModel(ScoreModel):
         return image
 
     @torch.no_grad()
-    def forward(
-        self, images: List[str], texts: List[str], num_frames: int = 4
-    ) -> torch.Tensor:
+    def forward(self, images: List[str], texts: List[str], num_frames: int = 4) -> torch.Tensor:
         """Forward pass of the model to return n scores for n (image, text) pairs (in PyTorch Tensor)"""
         images = self.load_images(images)
         assert len(images) == len(texts)
         if num_frames != self.config.num_frames:
-            raise ValueError(
-                f"num_frames must be {self.config.num_frames} for this model"
-            )
+            raise ValueError(f"num_frames must be {self.config.num_frames} for this model")
 
         itm_scores, _ = evaluation(
             texts,

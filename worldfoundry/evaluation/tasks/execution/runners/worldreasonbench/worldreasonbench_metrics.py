@@ -69,14 +69,6 @@ def _dedupe(rows: Iterable[Mapping[str, Any]], *keys: str) -> list[dict[str, Any
     return [*indexed.values(), *anonymous]
 
 
-def _mean_field(rows: Iterable[Mapping[str, Any]], *keys: str) -> float | None:
-    values: list[float | None] = []
-    for row in rows:
-        value = next((row[key] for key in keys if row.get(key) not in (None, "")), None)
-        values.append(scalar_number(value))
-    return mean_numeric(values)
-
-
 def _summary_mapping(value: Mapping[str, Any]) -> Mapping[str, Any]:
     summary = value.get("summary")
     return summary if isinstance(summary, Mapping) else value

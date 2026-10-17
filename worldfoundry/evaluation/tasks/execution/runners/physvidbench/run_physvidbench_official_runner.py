@@ -11,7 +11,11 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
-from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path, SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    SCORECARD_SCHEMA_VERSION,
+    VIDEO_SUFFIXES,
+    resolve_env_path,
+)
 from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_captions import (
     resolve_caption_base,
     resolve_captions_dir,
@@ -31,7 +35,6 @@ from worldfoundry.evaluation.tasks.execution.runners.physvidbench.physvidbench_p
     resolve_prompt_manifest_path,
     unique_prompt_records,
 )
-
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -54,8 +57,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--json", action="store_true")
     return parser.parse_args(argv)
-
-
 
 
 def _load_qa_rows(results_path: Path) -> list[dict[str, Any]]:
@@ -97,9 +98,7 @@ def _metric_rows(
                 "higher_is_better": spec["higher_is_better"],
                 "group": spec["group"],
                 "source": (
-                    "physvidbench_official_caption_qa"
-                    if official_component_executed
-                    else "physvidbench_results_csv"
+                    "physvidbench_official_caption_qa" if official_component_executed else "physvidbench_results_csv"
                 ),
                 "source_path": str(source_path),
                 "components": components,
@@ -109,36 +108,15 @@ def _metric_rows(
     return rows
 
 
-def _video_index(generated_dir: Path | None) -> dict[str, Any]:
-    if generated_dir is None:
-        return {
-            "provided": False,
-            "generated_artifact_dir": None,
-            "video_count": 0,
-            "by_stem": {},
-            "duplicate_stems": [],
-        }
-    by_stem: dict[str, list[str]] = {}
-    if generated_dir.exists():
-        for path in sorted(generated_dir.iterdir()):
-            if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES:
-                by_stem.setdefault(path.stem, []).append(str(path))
-    return {
-        "provided": True,
-        "generated_artifact_dir": str(generated_dir),
-        "video_count": sum(len(paths) for paths in by_stem.values()),
-        "by_stem": dict(by_stem),
-        "duplicate_stems": sorted(stem for stem, paths in by_stem.items() if len(paths) > 1),
-    }
-
-
 def _coverage(expected_prompt_ids: set[str], generated_dir: Path | None) -> dict[str, Any]:
     actual_names: set[str] = set()
     if generated_dir is not None and generated_dir.exists():
         for path in generated_dir.iterdir():
             if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES:
                 actual_names.add(path.stem.lstrip("0") if path.stem.isdigit() else path.stem)
-    expected_normalized = {prompt_id.lstrip("0") if prompt_id.isdigit() else prompt_id for prompt_id in expected_prompt_ids}
+    expected_normalized = {
+        prompt_id.lstrip("0") if prompt_id.isdigit() else prompt_id for prompt_id in expected_prompt_ids
+    }
     actual_normalized = actual_names
     missing = sorted(expected_normalized - actual_normalized)
     unexpected = sorted(actual_normalized - expected_normalized)
@@ -183,26 +161,15 @@ def _scorecard(
         for row in available_rows
         if row.get("normalized_score") is not None
     }
-    video_complete = (
-        video_coverage.get("expected_count", 0) > 0
-        and video_coverage.get("complete") is True
-    )
-    input_coverage_complete = (
-        prompt_count > 0
-        and video_complete
-        and len(available_rows) == len(METRIC_ORDER)
-    )
+    video_complete = video_coverage.get("expected_count", 0) > 0 and video_coverage.get("complete") is True
+    input_coverage_complete = prompt_count > 0 and video_complete and len(available_rows) == len(METRIC_ORDER)
     normalization_ok = bool(available_rows)
     component_executed = _caption_qa_component_executed(
         official_runtime_executed=official_runtime_executed,
         qa_summary=qa_summary,
     )
     integration_evidence = component_executed and normalization_ok
-    evidence_scope = (
-        "official_caption_qa_component"
-        if integration_evidence
-        else "mock_or_result_import"
-    )
+    evidence_scope = "official_caption_qa_component" if integration_evidence else "mock_or_result_import"
     return {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "official_benchmark_verified": False,
@@ -245,9 +212,7 @@ def _scorecard(
             "per_metric": per_metric,
             "summary": {
                 "available_metric_count": len(available_rows),
-                "official_component_available_count": (
-                    len(available_rows) if integration_evidence else 0
-                ),
+                "official_component_available_count": (len(available_rows) if integration_evidence else 0),
                 "declared_metric_count": len(METRIC_ORDER),
             },
         },

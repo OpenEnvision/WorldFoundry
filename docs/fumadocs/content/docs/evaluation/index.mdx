@@ -143,6 +143,26 @@ Benchmark-specific layouts and flags belong on each Benchmark Hub page.
 - **`results.jsonl`** — Per-sample status, artifacts, errors
 - **`run_manifest.json`** — Run identity, paths, fingerprint
 
+## Resume and result integrity
+
+`run`, `evaluate`, `generate-score`, `reproduce`, and `score --results` accept `--resume` and `--metric-batch-size` (default: 32). Reuse the same output directory to resume matching completed generation and per-sample metric checkpoints. Workspace exposes the same controls. The pipeline runner flushes each complete sample/rollout to `results.jsonl`; custom runners can implement `generate_iter(requests)` for incremental persistence without splitting a batch.
+
+Each request and keyed result needs a unique `sample_id`. For multiple seeds, use distinct sample IDs and keep the shared prompt identity in metadata. Imported results need an explicit successful `status`; an absent status is `unknown`. Nonfinite metric outputs are invalid, with their reasons retained in diagnostics and finite metrics preserved.
+
+Shared video artifact staging reads successful artifacts from `generation/results.jsonl` and retains each benchmark's official file naming. Relative artifact URIs resolve against the generation directory; failed or unknown results are not staged for quality scoring. Run-owned staging is rebuilt for each attempt; directories supplied as existing input are left intact.
+
+Suite resume checks materialized requests, resolved model configuration, benchmark configuration, and required reports/media before reusing a completed cell. Changing request contents at the same path or removing a scorecard triggers execution. Generation checkpoints remain reusable independently of scoring. A failed attempt records a failed/interrupted manifest and removes its root success report; an official subprocess must produce a current scorecard.
+
+Root summaries and suite comparison retain benchmark metric values, directions, and definitions. Generation counts remain diagnostics. Operational success, valid imported scores, bounded integration evidence, and full official verification are distinct: the outer summary can only narrow the child scorecard's leaderboard eligibility. Workspace's explicit `existing-results` mode remains in-process scoring even with a benchmark ID.
+
+VBench's standard cohort contains five separately seeded videos per prompt: 944 unique prompts, 4,720 requests. A sample limit counts videos, not prompts, and denotes a bounded run. Generation adapters consume supported dataset roots and splits and reject unsupported explicit overrides.
+
+FVD preprocesses each feature-extraction batch separately while computing the final distance over all features. WorldScore averages normalized values across instances per metric, then across metrics per aspect, and reports aspect percentages. Its evaluator retains one metric's models across a batch and releases them before loading the next metric. Embodied cancellation waits for the active rollout worker before cleaning up simulator/model resources.
+
+### Limitations
+
+Batch-only custom runners persist results after `generate()` returns. Resume covers completed generation units and in-process per-sample scoring, not partial state inside a rollout or dimension-level official runtime checkpoints. `score --benchmark --artifacts` uses the official protocol and does not accept these scoring controls.
+
 ## Modes
 
 - **`existing-results`** — Score materialized results; no model inference

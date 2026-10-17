@@ -49,6 +49,10 @@ def _handle_score(args: argparse.Namespace) -> int:
     if args.benchmark:
         if args.artifacts is None:
             raise CliUsageError("score --benchmark requires --artifacts")
+        if args.resume or args.metric_batch_size is not None:
+            raise CliUsageError(
+                "score --resume/--metric-batch-size apply to --results, not an official artifact protocol"
+            )
     elif args.results is None or not args.metric:
         raise CliUsageError("score without --benchmark requires --results and at least one --metric")
 
@@ -81,6 +85,8 @@ def _handle_score(args: argparse.Namespace) -> int:
             dataset_id=args.dataset_id,
             required_artifacts=tuple(args.required_artifact or ()),
             run_id=args.run_id,
+            resume=args.resume,
+            metric_batch_size=32 if args.metric_batch_size is None else args.metric_batch_size,
         )
     return _finish(prepare_evaluation(intent), args)
 
@@ -95,6 +101,8 @@ def _handle_reproduce(args: argparse.Namespace) -> int:
         ReproduceIntent(
             output_dir=args.output_dir,
             recipe_path=args.recipe,
+            resume=args.resume,
+            metric_batch_size=args.metric_batch_size,
         )
     )
     return _finish(prepared, args)
@@ -125,6 +133,8 @@ def _handle_generate_score(args: argparse.Namespace) -> int:
         generation_cache_dir=args.generation_cache_dir,
         generation_cache_mode=args.generation_cache_mode,
         run_id=args.run_id,
+        resume=args.resume,
+        metric_batch_size=args.metric_batch_size,
     )
     return _finish(prepare_evaluation(intent), args)
 
@@ -196,6 +206,19 @@ def register_evaluation_intent_subparsers(
     reproduce.add_argument("--plan-only", action="store_true")
     reproduce.add_argument("--json", action="store_true")
     reproduce.set_defaults(func=_handle_reproduce)
+
+    for parser in (score, generate_score, reproduce):
+        parser.add_argument(
+            "--resume",
+            action="store_true",
+            help="Reuse matching generation/per-sample metric checkpoints; score requires --results.",
+        )
+        parser.add_argument(
+            "--metric-batch-size",
+            type=int,
+            default=None if parser is score else 32,
+            help="Batch size for in-process per-sample scoring (default: 32).",
+        )
 
 
 __all__ = ["register_evaluation_intent_subparsers"]

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import platform
 import subprocess
 import sys
@@ -20,11 +19,45 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.core.io.formats.serialization import (
+    append_jsonl as append_jsonl,
+)
+from worldfoundry.core.io.formats.serialization import (
+    jsonable,
+    write_text_file,
+)
+from worldfoundry.core.io.formats.serialization import (
+    read_json as read_json,
+)
+from worldfoundry.core.io.formats.serialization import (
+    read_json_object as read_json_object,
+)
+from worldfoundry.core.io.formats.serialization import (
+    read_json_or_jsonl as read_json_or_jsonl,
+)
+from worldfoundry.core.io.formats.serialization import (
+    read_jsonl_objects as read_jsonl_objects,
+)
+from worldfoundry.core.io.formats.serialization import (
+    reset_jsonl as reset_jsonl,
+)
+from worldfoundry.core.io.formats.serialization import (
+    write_json as write_json,
+)
+from worldfoundry.core.io.formats.serialization import (
+    write_jsonl as write_jsonl,
+)
 from worldfoundry.core.io.manifests import (
-    MANIFEST_SUFFIXES,
-    load_manifest,
-    load_manifest_collection,
-    manifest_paths,
+    MANIFEST_SUFFIXES as MANIFEST_SUFFIXES,
+)
+from worldfoundry.core.io.manifests import (
+    load_manifest as load_manifest,
+)
+from worldfoundry.core.io.manifests import (
+    load_manifest_collection as load_manifest_collection,
+)
+from worldfoundry.core.io.manifests import (
+    manifest_paths as manifest_paths,
 )
 from worldfoundry.core.io.paths import (
     BENCHMARKS_DATA_ROOT,
@@ -35,19 +68,9 @@ from worldfoundry.core.io.paths import (
     package_data_root,
     package_root,
     project_root,
-    resolve_worldfoundry_path,
 )
-from worldfoundry.core.io.formats.serialization import (
-    append_jsonl,
-    jsonable,
-    read_json,
-    read_json_object,
-    read_json_or_jsonl,
-    read_jsonl_objects,
-    reset_jsonl,
-    write_json,
-    write_jsonl,
-    write_text_file,
+from worldfoundry.core.io.paths import (
+    resolve_worldfoundry_path as resolve_worldfoundry_path,
 )
 from worldfoundry.evaluation.api import (
     AGGREGATE_RESULT_SCHEMA_VERSION,
@@ -174,12 +197,11 @@ def ensure_repo_root_on_sys_path() -> Path:
 # ── Version / fingerprint capture ──────────────────────────────────────
 
 VERSION_CONTEXT_SCHEMA_VERSION = "worldfoundry-version-context-v2"
-RUN_FINGERPRINT_SCHEMA_VERSION = "worldfoundry-run-fingerprint"
 # Explicit engine revision: bump the numeric suffix when evaluation-engine
 # behavior changes in a way that affects results, so run manifests written by
 # different engine revisions are distinguishable (the package version alone is
 # "unknown" in source checkouts).
-EVALUATION_ENGINE_VERSION = "worldfoundry-eval-engine/1"
+EVALUATION_ENGINE_VERSION = "worldfoundry-eval-engine/2"
 
 
 def _repo_root() -> Path:
@@ -416,27 +438,4 @@ def build_version_context(
         "metrics": [metric_fingerprint(item) for item in metrics],
         "metric_callable": metric_callable_fingerprint(metric),
         "extra": jsonable(extra or {}),
-    }
-
-
-def build_run_fingerprint(
-    *,
-    version_context: Mapping[str, Any],
-    requests: Sequence[Any] = (),
-    results: Sequence[Any] = (),
-    extra: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Build a unique run fingerprint dictionary with stable hashes of context, requests, and results."""
-    payload = {
-        "version_context": version_context,
-        "requests": [jsonable(item) for item in requests],
-        "results": [jsonable(item) for item in results],
-        "extra": jsonable(extra or {}),
-    }
-    return {
-        "schema_version": RUN_FINGERPRINT_SCHEMA_VERSION,
-        "hash": stable_hash(payload),
-        "version_context_hash": stable_hash(version_context),
-        "request_count": len(requests),
-        "result_count": len(results),
     }

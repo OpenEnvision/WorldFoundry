@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from worldfoundry.evaluation.api import GenerationRequest
+from worldfoundry.evaluation.api.json_contract import tuple_of_str as _coerce_str_tuple
 from worldfoundry.evaluation.tasks.catalog.benchmark_id import normalize_benchmark_id
 from worldfoundry.evaluation.tasks.catalog.registry import TaskRegistryEntry, load_task_registry_from_paths
 from worldfoundry.evaluation.tasks.datasets import (
@@ -41,15 +42,6 @@ def _task_payload(entry: TaskRegistryEntry | None) -> dict[str, Any] | None:
     payload = entry.to_dict()
     payload["task_config"] = entry.task.to_dict()
     return payload
-
-
-def _coerce_str_tuple(value: Any) -> tuple[str, ...]:
-    """Coerces various collection types or single strings into a tuple of clean strings."""
-    if value is None:
-        return ()
-    if isinstance(value, str):
-        return (value,)
-    return tuple(str(item) for item in value)
 
 
 def _materialize_requests_from_task(plan: "RunPlan") -> tuple[GenerationRequest, ...] | None:
@@ -136,6 +128,7 @@ class RunPlan:
         metadata: Arbitrary user-defined context dictionary.
         schema_version: Standard schema identification string.
     """
+
     runner: str
     mode: str
     output_dir: str
@@ -352,9 +345,7 @@ def build_run_plan(
         generation_cache_namespace=generation_cache_namespace,
         metadata=dict(metadata or {}),
     )
-    if materialize_requests and task_entry is not None and (
-        dataset_root is not None or dataset_manifest is not None
-    ):
+    if materialize_requests and task_entry is not None and (dataset_root is not None or dataset_manifest is not None):
         requests = tuple(request.to_dict() for request in (_materialize_requests_from_task(plan) or ()))
         plan = replace(plan, requests=requests)
     return plan
@@ -442,7 +433,9 @@ def validate_run_plan(plan: RunPlan | Mapping[str, Any]) -> dict[str, Any]:
             issues.append(f"unsupported runner: {run_plan.runner}")
         if run_plan.mode in {"existing-results", "existing", "results"} and not run_plan.results_path:
             issues.append("existing-results mode requires results_path")
-        if run_plan.mode in {"model", "generate"} and not (run_plan.requests or run_plan.requests_path or run_plan.task):
+        if run_plan.mode in {"model", "generate"} and not (
+            run_plan.requests or run_plan.requests_path or run_plan.task
+        ):
             issues.append("model mode requires requests, requests_path, or task materialization")
         if run_plan.task and run_plan.materialization.get("source") == "task_yaml" and not run_plan.dataset.get("root"):
             issues.append("task materialization from YAML requires dataset.root")
@@ -456,7 +449,11 @@ def validate_run_plan(plan: RunPlan | Mapping[str, Any]) -> dict[str, Any]:
         task_config = run_plan.task.get("task_config") if isinstance(run_plan.task, Mapping) else {}
         benchmark_id = None
         if isinstance(task_config, Mapping):
-            item = task_config.get("metadata", {}).get("benchmark_id") if isinstance(task_config.get("metadata"), Mapping) else None
+            item = (
+                task_config.get("metadata", {}).get("benchmark_id")
+                if isinstance(task_config.get("metadata"), Mapping)
+                else None
+            )
             benchmark_id = item or task_config.get("benchmark_name")
         if benchmark_id is None and isinstance(run_plan.task, Mapping):
             benchmark_id = run_plan.task.get("benchmark_name")

@@ -49,15 +49,6 @@ def _clamp(value: Any, default: float = 0.0) -> float:
     return max(0.0, min(1.0, value))
 
 
-def _score_value(value: Any) -> float:
-    """Parse a rubric score while preserving the paper's -1 sentinel."""
-    try:
-        value = float(value)
-    except (TypeError, ValueError):
-        return 0.0
-    return -1.0 if value < 0.0 else _clamp(value)
-
-
 def _parse_json(text: str) -> dict[str, Any] | None:
     if not text:
         return None
@@ -95,16 +86,29 @@ class ApplePIScores:
         return float(np.mean(valid)) if valid else 0.0
 
     def perception_text_score(self) -> float:
-        content = self._mean(self.get(k, -1.0) for k in (
-            "text_content_match", "text_readability", "no_extra_annotations"))
-        layout = self._mean(self.get(k, -1.0) for k in (
-            "text_position_match", "axes_position_match", "axes_angle_match",
-            "velocity_position_match"))
-        style = self._mean(self.get(k, -1.0) for k in (
-            "text_font_match", "text_style_match", "text_size_match",
-            "text_color_match", "axes_color_match", "axes_style_match",
-            "axes_size_match", "velocity_color_match", "velocity_style_match",
-            "velocity_size_match", "white_background"))
+        content = self._mean(
+            self.get(k, -1.0) for k in ("text_content_match", "text_readability", "no_extra_annotations")
+        )
+        layout = self._mean(
+            self.get(k, -1.0)
+            for k in ("text_position_match", "axes_position_match", "axes_angle_match", "velocity_position_match")
+        )
+        style = self._mean(
+            self.get(k, -1.0)
+            for k in (
+                "text_font_match",
+                "text_style_match",
+                "text_size_match",
+                "text_color_match",
+                "axes_color_match",
+                "axes_style_match",
+                "axes_size_match",
+                "velocity_color_match",
+                "velocity_style_match",
+                "velocity_size_match",
+                "white_background",
+            )
+        )
         return 0.5 * content + 0.3 * layout + 0.2 * style
 
     def _weighted(self, groups: Mapping[str, tuple[float, float]]) -> float:
@@ -113,64 +117,114 @@ class ApplePIScores:
         return float(sum(score * weight for score, weight in valid) / denom) if denom else 0.0
 
     def perception_graphic_score(self) -> float:
-        return self._weighted({
-            "background": (self._mean([self.get("white_background", -1.0)]), 0.10),
-            "annotation": (self._mean(self.get(k, -1.0) for k in (
-                "coord_axes", "velocity_arrows", "text_annotations")), 0.30),
-            "objects": (self._mean(self.get(k, -1.0) for k in (
-                "objects_only_from_gt", "object_completeness", "object_visual_match")), 0.30),
-            "spatial": (self._mean(self.get(k, -1.0) for k in (
-                "object_position_match", "segmentation_iou")), 0.30),
-        })
+        return self._weighted(
+            {
+                "background": (self._mean([self.get("white_background", -1.0)]), 0.10),
+                "annotation": (
+                    self._mean(self.get(k, -1.0) for k in ("coord_axes", "velocity_arrows", "text_annotations")),
+                    0.30,
+                ),
+                "objects": (
+                    self._mean(
+                        self.get(k, -1.0)
+                        for k in ("objects_only_from_gt", "object_completeness", "object_visual_match")
+                    ),
+                    0.30,
+                ),
+                "spatial": (self._mean(self.get(k, -1.0) for k in ("object_position_match", "segmentation_iou")), 0.30),
+            }
+        )
 
     def formulation_text_score(self) -> float:
-        return self._weighted({
-            "option": (self._mean([self.get("option_correct", -1.0)]), 0.20),
-            "formula": (self._mean(self.get(k, -1.0) for k in (
-                "formula_variables_correct", "formula_constants_correct",
-                "formula_operators_correct")), 0.30),
-            "substitution": (self._mean(self.get(k, -1.0) for k in (
-                "substitution_all_replaced", "substitution_values_correct",
-                "substitution_unreplaced_correct", "substitution_constants_correct",
-                "substitution_operators_correct")), 0.40),
-            "presentation": (self._mean(self.get(k, -1.0) for k in (
-                "format_3_lines", "background_pure_white")), 0.10),
-        })
+        return self._weighted(
+            {
+                "option": (self._mean([self.get("option_correct", -1.0)]), 0.20),
+                "formula": (
+                    self._mean(
+                        self.get(k, -1.0)
+                        for k in ("formula_variables_correct", "formula_constants_correct", "formula_operators_correct")
+                    ),
+                    0.30,
+                ),
+                "substitution": (
+                    self._mean(
+                        self.get(k, -1.0)
+                        for k in (
+                            "substitution_all_replaced",
+                            "substitution_values_correct",
+                            "substitution_unreplaced_correct",
+                            "substitution_constants_correct",
+                            "substitution_operators_correct",
+                        )
+                    ),
+                    0.40,
+                ),
+                "presentation": (
+                    self._mean(self.get(k, -1.0) for k in ("format_3_lines", "background_pure_white")),
+                    0.10,
+                ),
+            }
+        )
 
     def formulation_graphic_score(self) -> float:
-        return self._weighted({
-            "annotation": (self._mean([self.get("annotations_removed", -1.0)]), 0.10),
-            "objects": (self._mean(self.get(k, -1.0) for k in (
-                "object_position_match", "object_appearance_match",
-                "formulation_graphic_segmentation_iou")), 0.30),
-            "arrow": (self._mean(self.get(k, -1.0) for k in (
-                "arrow_is_borderless_orange", "arrow_from_center",
-                "arrow_direction_match")), 0.30),
-            "velocity": (self._mean(self.get(k, -1.0) for k in (
-                "velocity_label_present_and_format", "velocity_value_match",
-                "velocity_label_no_unit")), 0.30),
-        })
+        return self._weighted(
+            {
+                "annotation": (self._mean([self.get("annotations_removed", -1.0)]), 0.10),
+                "objects": (
+                    self._mean(
+                        self.get(k, -1.0)
+                        for k in (
+                            "object_position_match",
+                            "object_appearance_match",
+                            "formulation_graphic_segmentation_iou",
+                        )
+                    ),
+                    0.30,
+                ),
+                "arrow": (
+                    self._mean(
+                        self.get(k, -1.0)
+                        for k in ("arrow_is_borderless_orange", "arrow_from_center", "arrow_direction_match")
+                    ),
+                    0.30,
+                ),
+                "velocity": (
+                    self._mean(
+                        self.get(k, -1.0)
+                        for k in ("velocity_label_present_and_format", "velocity_value_match", "velocity_label_no_unit")
+                    ),
+                    0.30,
+                ),
+            }
+        )
 
     def deduction_score(self) -> float:
         psnr = self.programmatic.get("psnr", -1.0)
         masked_psnr = self.programmatic.get("masked_psnr", -1.0)
         velocity = self.programmatic.get("velocity_error", -1.0)
-        fidelity = self._mean([
-            self.get("visual_quality", -1.0), self.get("motion_smoothness", -1.0),
-            min(max(psnr / 40.0, 0.0), 1.0) if psnr >= 0 else -1.0,
-            min(max(masked_psnr / 40.0, 0.0), 1.0) if masked_psnr >= 0 else -1.0,
-        ])
-        physics = self._mean([
-            self.get("physics_accuracy", -1.0),
-            self.programmatic.get("spatial_iou", -1.0),
-            self.programmatic.get("spatiotemporal_iou", -1.0),
-            self.programmatic.get("weighted_spatial_iou", -1.0),
-            1.0 / (1.0 + velocity) if velocity >= 0 else -1.0,
-        ])
-        integrity = self._mean([
-            self.get("gen_annotations_removed", -1.0),
-            self.get("object_consistency", -1.0),
-        ])
+        fidelity = self._mean(
+            [
+                self.get("visual_quality", -1.0),
+                self.get("motion_smoothness", -1.0),
+                min(max(psnr / 40.0, 0.0), 1.0) if psnr >= 0 else -1.0,
+                min(max(masked_psnr / 40.0, 0.0), 1.0) if masked_psnr >= 0 else -1.0,
+            ]
+        )
+        physics = self._mean(
+            [
+                self.get("physics_accuracy", -1.0),
+                self.programmatic.get("spatial_iou", -1.0),
+                self.programmatic.get("spatiotemporal_iou", -1.0),
+                self.programmatic.get("weighted_spatial_iou", -1.0),
+                1.0 / (1.0 + velocity) if velocity >= 0 else -1.0,
+            ]
+        )
+        integrity = self._mean(
+            [
+                self.get("gen_annotations_removed", -1.0),
+                self.get("object_consistency", -1.0),
+            ]
+        )
         return 0.20 * integrity + 0.20 * fidelity + 0.60 * physics
 
     def score(self, subtrack: str) -> float:
@@ -242,7 +296,9 @@ class ApplePIGeminiJudge:
     @staticmethod
     def _mock_values(subtrack: str) -> dict[str, float]:
         fields = {
-            "perception_text": ("text_font_match text_style_match text_size_match text_color_match text_position_match text_content_match text_readability axes_color_match axes_style_match axes_size_match axes_position_match axes_angle_match velocity_color_match velocity_style_match velocity_size_match velocity_position_match no_extra_annotations white_background"),
+            "perception_text": (
+                "text_font_match text_style_match text_size_match text_color_match text_position_match text_content_match text_readability axes_color_match axes_style_match axes_size_match axes_position_match axes_angle_match velocity_color_match velocity_style_match velocity_size_match velocity_position_match no_extra_annotations white_background"
+            ),
             "perception_graphic": "white_background coord_axes velocity_arrows text_annotations objects_only_from_gt object_completeness object_visual_match object_position_match",
             "formulation_text": "option_correct formula_variables_correct formula_constants_correct formula_operators_correct substitution_all_replaced substitution_values_correct substitution_unreplaced_correct substitution_constants_correct substitution_operators_correct format_3_lines background_pure_white",
             "formulation_graphic": "annotations_removed object_position_match object_appearance_match arrow_is_borderless_orange arrow_from_center arrow_direction_match velocity_label_present_and_format velocity_value_match velocity_label_no_unit",
@@ -267,6 +323,7 @@ class ApplePIGeminiJudge:
         uploaded = []
         try:
             from PIL import Image
+
             for asset in assets:
                 if asset.suffix.lower() in {".mp4", ".mov", ".mkv", ".webm", ".avi"}:
                     item = client.files.upload(file=str(asset))
@@ -297,8 +354,8 @@ def _prompt_for(subtrack: str, case: ApplePICase) -> str:
         "deduction": "visual_quality motion_smoothness physics_accuracy gen_annotations_removed object_consistency",
     }[subtrack]
     return f"""You are the official Apple-PI evaluator. Compare the generated output with the supplied reference assets.
-Subtrack: {subtrack}. Physics type: {case.metadata.get('physics_type', 'unknown')}.
-For formulation text, the correct answer choices are {formula.get('choices', [])}, correct letter={formula.get('correct_letter', '')}, formula={formula.get('correct_formula', '')}.
+Subtrack: {subtrack}. Physics type: {case.metadata.get("physics_type", "unknown")}.
+For formulation text, the correct answer choices are {formula.get("choices", [])}, correct letter={formula.get("correct_letter", "")}, formula={formula.get("correct_formula", "")}.
 Return ONLY a JSON object. Score every requested criterion from 0 to 1; use -1 only when the criterion is not applicable.
 Criteria for {subtrack}: {fields}.
 Be strict about annotations, object identity, spatial placement, and physical correctness."""
@@ -327,6 +384,7 @@ def _last_frame(path: Path) -> np.ndarray:
     if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
         if cv2 is None:
             from PIL import Image
+
             return np.asarray(Image.open(path).convert("RGB"))[:, :, ::-1].copy()
         frame = cv2.imread(str(path), cv2.IMREAD_COLOR)
         if frame is None:
@@ -414,8 +472,10 @@ class NativeApplePIModelStack:
         try:
             import torch
             from PIL import Image
+
             from worldfoundry.base_models.perception_core.segment.sam3.model.sam3_image_processor import Sam3Processor
             from worldfoundry.base_models.perception_core.segment.sam3.model_builder import build_sam3_image_model
+
             if self._sam3_image is None:
                 device = "cuda" if torch.cuda.is_available() else "cpu"
                 self._sam3_image = build_sam3_image_model(checkpoint_path=self._sam3_checkpoint(), device=device)
@@ -426,8 +486,12 @@ class NativeApplePIModelStack:
             combined = np.zeros((height, width), dtype=bool)
             for x, y in points:
                 size = max(8, int(min(height, width) * 0.02))
-                box = [max(0, x - size) / width, max(0, y - size) / height,
-                       min(width, 2 * size) / width, min(height, 2 * size) / height]
+                box = [
+                    max(0, x - size) / width,
+                    max(0, y - size) / height,
+                    min(width, 2 * size) / width,
+                    min(height, 2 * size) / height,
+                ]
                 state = self._sam3_processor.set_image(pil)
                 state = self._sam3_processor.add_geometric_prompt(box, True, state)
                 masks = state.get("masks")
@@ -441,14 +505,20 @@ class NativeApplePIModelStack:
             LOGGER.warning("Native SAM3 image segmentation unavailable: %s", exc)
             return None
 
-    def segmentation_iou(self, image: np.ndarray, case: ApplePICase, mask_subdir: str = "initial_state") -> float | None:
+    def segmentation_iou(
+        self, image: np.ndarray, case: ApplePICase, mask_subdir: str = "initial_state"
+    ) -> float | None:
         gt_path = case.case_dir / mask_subdir / ("mask_0000.npy" if mask_subdir == "initial_state" else "mask.npy")
         if not gt_path.is_file():
             return None
         gt = np.load(gt_path)
         gt = gt > 0
         points = []
-        instance = case.case_dir / mask_subdir / ("instance_segmentation_0000.npy" if mask_subdir == "initial_state" else "mask.npy")
+        instance = (
+            case.case_dir
+            / mask_subdir
+            / ("instance_segmentation_0000.npy" if mask_subdir == "initial_state" else "mask.npy")
+        )
         if instance.is_file():
             ids = np.unique(np.load(instance))
             for value in ids:
@@ -471,7 +541,9 @@ class NativeApplePIModelStack:
             return None
         if self._moge is None:
             import torch
+
             from worldfoundry.base_models.three_dimensions.depth.moge.model.v2 import MoGeModel
+
             device = "cuda" if torch.cuda.is_available() else "cpu"
             model_path = (
                 os.environ.get("WORLDFOUNDRY_APPLE_PI_MOGE_CHECKPOINT")
@@ -488,14 +560,20 @@ class NativeApplePIModelStack:
         result: dict[str, float] = {}
         try:
             import torch
+
             from worldfoundry.base_models.perception_core.segment.sam3.video_segmenter import Sam3VideoSegmenter
+
             gt_masks = _load_maps(case, "mask/maps.npz")
             if gt_masks is not None and pred_path.suffix.lower() in {".mp4", ".mov", ".mkv", ".webm", ".avi"}:
                 mapping_path = case.case_dir / "initial_state" / "instance_segmentation_mapping_0000.json"
                 prompts = ["physical object"]
                 if mapping_path.is_file():
                     mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
-                    prompts = [str(label).split("/")[-1].replace("_", " ") for label in mapping.values() if "ground" not in str(label).lower() and "invalid" not in str(label).lower()]
+                    prompts = [
+                        str(label).split("/")[-1].replace("_", " ")
+                        for label in mapping.values()
+                        if "ground" not in str(label).lower() and "invalid" not in str(label).lower()
+                    ]
                     prompts = prompts or ["physical object"]
                 tracker = Sam3VideoSegmenter(checkpoint_path=self._sam3_checkpoint())
                 segments = tracker.segment_per_category(str(pred_path), prompts, expected_frames=len(gt_masks))
@@ -510,7 +588,9 @@ class NativeApplePIModelStack:
                 gt_mask = gt_masks[:count] > 0
                 spatial_pred, spatial_gt = pred_mask.max(axis=0), gt_mask.max(axis=0)
                 union = np.logical_or(spatial_pred, spatial_gt).sum()
-                result["spatial_iou"] = 1.0 if union == 0 else float(np.logical_and(spatial_pred, spatial_gt).sum() / union)
+                result["spatial_iou"] = (
+                    1.0 if union == 0 else float(np.logical_and(spatial_pred, spatial_gt).sum() / union)
+                )
                 frame_ious = []
                 for pred_frame, gt_frame in zip(pred_mask, gt_mask):
                     union = np.logical_or(pred_frame, gt_frame).sum()
@@ -519,12 +599,15 @@ class NativeApplePIModelStack:
                 pred_weight = pred_mask.astype(np.float32).mean(axis=0)
                 gt_weight = gt_mask.astype(np.float32).mean(axis=0)
                 denom = np.maximum(pred_weight, gt_weight).sum()
-                result["weighted_spatial_iou"] = 1.0 if denom == 0 else float(np.minimum(pred_weight, gt_weight).sum() / denom)
+                result["weighted_spatial_iou"] = (
+                    1.0 if denom == 0 else float(np.minimum(pred_weight, gt_weight).sum() / denom)
+                )
         except Exception as exc:
             LOGGER.warning("Native SAM3 tracking metrics unavailable: %s", exc)
 
         try:
             import torch
+
             moge = self._moge_model()
             depth_maps = _load_maps(case, "depth/maps.npz")
             velocity_maps = _load_maps(case, "velocity/maps.npz")
@@ -533,25 +616,36 @@ class NativeApplePIModelStack:
                 n = min(len(frames), len(depth_maps))
                 estimated = []
                 for index in range(n):
-                    frame = cv2.resize(frames[index], (depth_maps.shape[2], depth_maps.shape[1]), interpolation=cv2.INTER_LANCZOS4)
+                    frame = cv2.resize(
+                        frames[index], (depth_maps.shape[2], depth_maps.shape[1]), interpolation=cv2.INTER_LANCZOS4
+                    )
                     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     tensor = torch.from_numpy(rgb.astype(np.float32) / 255.0).permute(2, 0, 1).to(moge.device)
-                    estimated.append(moge.infer(tensor, use_fp16=torch.cuda.is_available())["depth"].detach().cpu().numpy())
+                    estimated.append(
+                        moge.infer(tensor, use_fp16=torch.cuda.is_available())["depth"].detach().cpu().numpy()
+                    )
                 aligned = []
                 for index, depth in enumerate(estimated):
                     target = depth_maps[index]
                     valid = np.isfinite(depth) & np.isfinite(target) & (target != 0)
                     if valid.sum() > 100:
-                        scale, shift = np.linalg.lstsq(np.stack([depth[valid], np.ones(valid.sum())], axis=1), target[valid], rcond=None)[0]
+                        scale, shift = np.linalg.lstsq(
+                            np.stack([depth[valid], np.ones(valid.sum())], axis=1), target[valid], rcond=None
+                        )[0]
                         depth = depth * scale + shift
                     aligned.append(depth)
                 errors = []
                 foreground = _load_maps(case, "mask/maps.npz")
                 for index in range(1, min(len(aligned), len(velocity_maps))):
-                    mask = foreground[index] > 0 if foreground is not None and index < len(foreground) else np.isfinite(aligned[index])
+                    mask = (
+                        foreground[index] > 0
+                        if foreground is not None and index < len(foreground)
+                        else np.isfinite(aligned[index])
+                    )
                     if mask.sum() < 10:
                         continue
                     yy, xx = np.where(mask)
+
                     def center(depth):
                         z = depth[mask]
                         valid = np.isfinite(z) & (z > 0)
@@ -559,6 +653,7 @@ class NativeApplePIModelStack:
                             return None
                         z, x, y = z[valid], xx[valid], yy[valid]
                         return np.array([float((x * z).mean()), float((y * z).mean()), float(z.mean())])
+
                     current, previous = center(aligned[index]), center(aligned[index - 1])
                     if current is not None and previous is not None:
                         estimate = (current - previous) * case.fps
@@ -598,7 +693,9 @@ def _dataset_cases(gt_root: Path) -> tuple[str, str, list[tuple[str, Path]]]:
 def _judge_scores(judge: ApplePIGeminiJudge, subtrack: str, case: ApplePICase, output: Path) -> ApplePIScores:
     assets = [case.first_frame]
     if subtrack in {"perception_text", "perception_graphic"}:
-        assets.extend(path for path in (case.path("annotations_only_reference"), case.path("objects_only_reference")) if path)
+        assets.extend(
+            path for path in (case.path("annotations_only_reference"), case.path("objects_only_reference")) if path
+        )
     if subtrack == "formulation_graphic" and case.path("future_state_reference"):
         assets.append(case.path("future_state_reference"))
     if subtrack == "deduction" and output.is_dir():
@@ -607,7 +704,9 @@ def _judge_scores(judge: ApplePIGeminiJudge, subtrack: str, case: ApplePICase, o
     raw = judge.complete(prompt, assets + ([output] if output.is_file() else []), subtrack=subtrack)
     data = _parse_json(raw) or {}
     return ApplePIScores(
-        values={key: _clamp(value, -1.0) if value is not None else -1.0 for key, value in data.items() if key != "feedback"},
+        values={
+            key: _clamp(value, -1.0) if value is not None else -1.0 for key, value in data.items() if key != "feedback"
+        },
         feedback=str(data.get("feedback", "")),
     )
 
@@ -637,9 +736,16 @@ def evaluate_native_apple_pi(
     judge = ApplePIGeminiJudge(judge_model, judge_backend)
     models = NativeApplePIModelStack(enable=enable_foundation_models)
     result: dict[str, Any] = {
-        "benchmark": "Apple-PI", "benchmark_version": "1.0", "dataset_version": dataset_version,
-        "prompt_version": "1.0", "num_rollouts": NUM_ROLLOUTS, "model": submission.get("model", "unknown"),
-        "protocol": protocol, "judge": judge_model, "evaluator": "worldfoundry.apple_pi.in_tree", "cases": {},
+        "benchmark": "Apple-PI",
+        "benchmark_version": "1.0",
+        "dataset_version": dataset_version,
+        "prompt_version": "1.0",
+        "num_rollouts": NUM_ROLLOUTS,
+        "model": submission.get("model", "unknown"),
+        "protocol": protocol,
+        "judge": judge_model,
+        "evaluator": "worldfoundry.apple_pi.in_tree",
+        "cases": {},
     }
     for case_id, case_dir in entries:
         case = ApplePICase.load(case_id, case_dir)
@@ -657,27 +763,47 @@ def evaluate_native_apple_pi(
                         scores.programmatic.update(_simple_programmatic_metrics(path, case))
                         scores.programmatic.update(models.model_backed_video_metrics(path, case))
                     elif protocol == "video" and subtrack in {"perception_graphic", "formulation_graphic"}:
-                        iou = models.segmentation_iou(_last_frame(path), case, "initial_state" if subtrack == "perception_graphic" else "instantaneous_velocity")
+                        iou = models.segmentation_iou(
+                            _last_frame(path),
+                            case,
+                            "initial_state" if subtrack == "perception_graphic" else "instantaneous_velocity",
+                        )
                         if iou is not None:
-                            scores.values["segmentation_iou" if subtrack == "perception_graphic" else "formulation_graphic_segmentation_iou"] = iou
-                    record.update({"score": round(scores.score(subtrack), 3), "details": scores.as_details(subtrack), "status": "ok"})
+                            scores.values[
+                                "segmentation_iou"
+                                if subtrack == "perception_graphic"
+                                else "formulation_graphic_segmentation_iou"
+                            ] = iou
+                    record.update(
+                        {
+                            "score": round(scores.score(subtrack), 3),
+                            "details": scores.as_details(subtrack),
+                            "status": "ok",
+                        }
+                    )
                 except Exception as exc:
                     LOGGER.exception("Apple-PI evaluation failed for %s/%s/%d", case_id, subtrack, rollout)
                     record["error"] = str(exc)
                 rollouts.append(record)
             valid = [float(item["score"]) for item in rollouts if item.get("status") == "ok" and "score" in item]
             aggregate = {
-                "num_expected": NUM_ROLLOUTS, "num_successful": len(valid),
+                "num_expected": NUM_ROLLOUTS,
+                "num_successful": len(valid),
                 "mean": round(statistics.mean(valid), 4) if len(valid) == NUM_ROLLOUTS else None,
                 "partial_mean": round(statistics.mean(valid), 4) if valid and len(valid) != NUM_ROLLOUTS else None,
                 "std": round(statistics.pstdev(valid), 4) if len(valid) > 1 else (0.0 if valid else None),
-                "min": min(valid) if valid else None, "max": max(valid) if valid else None,
+                "min": min(valid) if valid else None,
+                "max": max(valid) if valid else None,
             }
             result_case[subtrack] = {"rollouts": rollouts, "aggregate": aggregate}
         result["cases"][case_id] = result_case
     summary = {}
     for subtrack in subtracks:
-        values = [entry[subtrack]["aggregate"]["mean"] for entry in result["cases"].values() if entry[subtrack]["aggregate"]["mean"] is not None]
+        values = [
+            entry[subtrack]["aggregate"]["mean"]
+            for entry in result["cases"].values()
+            if entry[subtrack]["aggregate"]["mean"] is not None
+        ]
         summary[subtrack] = {"num_cases": len(values), "mean": round(statistics.mean(values), 4) if values else None}
     result["summary"] = summary
     output_path.parent.mkdir(parents=True, exist_ok=True)

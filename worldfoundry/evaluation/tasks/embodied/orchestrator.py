@@ -122,7 +122,9 @@ class EmbodiedEvalOrchestrator:
             )
             all_requests.extend(requests)
             benchmark_requests.append((benchmark_id, benchmark_params, requests))
-            benchmark_contexts.append({"benchmark_id": benchmark_id, "params": benchmark_params, "request_count": len(requests)})
+            benchmark_contexts.append(
+                {"benchmark_id": benchmark_id, "params": benchmark_params, "request_count": len(requests)}
+            )
         run_metadata = {
             "schema_version": "worldfoundry-embodied-orchestrator-run",
             "delegate_runner": "worldfoundry.embodied-orchestrator",
@@ -135,10 +137,18 @@ class EmbodiedEvalOrchestrator:
             writer = None
             if not self.no_save:
                 paths = session_paths(self.output_dir)
-                stack.enter_context(run_stage(paths, "generate", manifest={
-                    **run_metadata, "run_id": self.eval_id, "sample_count": len(all_requests),
-                    "model": {"model_id": model_id},
-                }))
+                stack.enter_context(
+                    run_stage(
+                        paths,
+                        "generate",
+                        manifest={
+                            **run_metadata,
+                            "run_id": self.eval_id,
+                            "sample_count": len(all_requests),
+                            "model": {"model_id": model_id},
+                        },
+                    )
+                )
                 prepare_generation(paths, all_requests, {})
                 writer = stack.enter_context(JsonlWriter(paths["results"], mode="a"))
             self._update_progress(0, len(all_requests), 0)
@@ -152,7 +162,19 @@ class EmbodiedEvalOrchestrator:
                 )
                 try:
                     for request in requests:
-                        result_batch = await asyncio.to_thread(runner.generate, [request])
+                        worker = asyncio.create_task(asyncio.to_thread(runner.generate, [request]))
+                        try:
+                            result_batch = await asyncio.shield(worker)
+                        except asyncio.CancelledError:
+                            # Thread cancellation cannot stop an active simulator call.
+                            # Its resources remain owned until that call has returned.
+                            finished = asyncio.gather(worker, return_exceptions=True)
+                            while not finished.done():
+                                try:
+                                    await asyncio.shield(finished)
+                                except asyncio.CancelledError:
+                                    continue
+                            raise
                         result = tuple(result_batch)[0]
                         all_results.append(result)
                         if writer is not None:

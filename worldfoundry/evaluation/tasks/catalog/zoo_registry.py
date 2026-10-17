@@ -417,26 +417,6 @@ def default_benchmark_zoo_dir() -> Path:
     return BENCHMARK_ZOO_DIR
 
 
-def _is_default_catalog_root(root: Path) -> bool:
-    """Checks whether the specified directory is equivalent to the default catalog root.
-
-    This comparison handles path resolution to account for symbolic links or different
-    absolute paths pointing to the same location.
-
-    Args:
-        root: The directory path to check.
-
-    Returns:
-        True if `root` is equivalent to the default benchmark zoo directory, False otherwise.
-    """
-    try:
-        return root.resolve() == default_benchmark_zoo_dir().resolve()
-    except OSError:
-        # Fallback for paths that might not exist or be resolvable,
-        # comparing directly as a string might still work in some cases.
-        return root == default_benchmark_zoo_dir()
-
-
 def _manifest_paths(root: Path) -> tuple[Path, ...]:
     """Resolves all manifest paths under the given directory or a specific file."""
     return iter_benchmark_catalog_manifest_paths(root)

@@ -94,16 +94,21 @@ def resolve_i3d_checkpoint(
         os.environ.get("WORLDFOUNDRY_FVD_I3D_CKPT"),
         os.environ.get("WORLDFOUNDRY_MIRABENCH_FVD_I3D_CKPT"),
         *(str(candidate) for candidate in extra_candidates),
-        str(Path(os.environ.get("WORLDFOUNDRY_CKPT_DIR", "~/.cache/huggingface/hub")).expanduser() / "i3d_pretrained_400.pt"),
-        str(Path(os.environ.get("WORLDFOUNDRY_CKPT_DIR", "~/.cache/huggingface/hub")).expanduser() / "MiraBench/fvd/i3d_pretrained_400.pt"),
+        str(
+            Path(os.environ.get("WORLDFOUNDRY_CKPT_DIR", "~/.cache/huggingface/hub")).expanduser()
+            / "i3d_pretrained_400.pt"
+        ),
+        str(
+            Path(os.environ.get("WORLDFOUNDRY_CKPT_DIR", "~/.cache/huggingface/hub")).expanduser()
+            / "MiraBench/fvd/i3d_pretrained_400.pt"
+        ),
     ]
     for candidate in candidates:
         if candidate and Path(candidate).is_file():
             return candidate
     searched = "\n".join(f"  - {path}" for path in candidates if path)
     raise FileNotFoundError(
-        "FVD requires i3d_pretrained_400.pt. Set WORLDFOUNDRY_FVD_I3D_CKPT.\n"
-        f"Searched:\n{searched}"
+        f"FVD requires i3d_pretrained_400.pt. Set WORLDFOUNDRY_FVD_I3D_CKPT.\nSearched:\n{searched}"
     )
 
 
@@ -125,11 +130,12 @@ def extract_i3d_features(
     device: torch.device,
     batch_size: int = MAX_BATCH,
 ) -> torch.Tensor:
-    """Extract I3D features from uint8 videos ``(N, T, H, W, C)``."""
-    videos_t = preprocess_videos_uint8(videos)
+    """Extract features with bounded host preprocessing and device batches."""
+    if batch_size < 1:
+        raise ValueError("batch_size must be positive")
     logits: list[torch.Tensor] = []
-    for start in range(0, videos_t.shape[0], batch_size):
-        batch = videos_t[start : start + batch_size].to(device)
+    for start in range(0, len(videos), batch_size):
+        batch = preprocess_videos_uint8(videos[start : start + batch_size]).to(device)
         logits.append(i3d(batch))
     return torch.cat(logits, dim=0)
 

@@ -28,7 +28,6 @@ from worldfoundry.evaluation.api.registry import (
 )
 from worldfoundry.evaluation.api.world_model_manifest import WorldModelManifest
 
-
 # ── EF-01: duplicate MetricSpec must raise the documented error ──────────
 
 
@@ -165,9 +164,7 @@ def test_unknown_zoo_model_raises_resolution_error_with_suggestions(tmp_path: Pa
 
     manifest = tmp_path / "zoo.yaml"
     manifest.write_text(
-        "models:\n"
-        "  - model_id: cosmos-predict-2\n"
-        "  - model_id: cosmos-transfer-1\n",
+        "models:\n  - model_id: cosmos-predict-2\n  - model_id: cosmos-transfer-1\n",
         encoding="utf-8",
     )
     with pytest.raises(ModelResolutionError, match="cosmos-predict-2"):

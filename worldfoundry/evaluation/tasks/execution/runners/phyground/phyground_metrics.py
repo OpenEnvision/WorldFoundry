@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.evaluation.tasks.execution.framework.io import try_float as _to_float
 from worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_official_scoring import (
     official_scores_from_records,
 )
@@ -66,15 +67,6 @@ METRIC_SPECS: dict[str, dict[str, Any]] = {
         "primary": True,
     },
 }
-
-
-def _to_float(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _is_summary_rows(rows: Sequence[Mapping[str, Any]]) -> bool:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.evaluation.utils import mapping_or_empty as _mapping
 from worldfoundry.evaluation.utils import stable_hash
 
 COMPARISON_IDENTITY_SCHEMA_VERSION = "worldfoundry-comparison-identity-v1"
@@ -23,10 +24,6 @@ _STRICT_FIELDS = (
     "metric_revision",
     "metric_config_hash",
 )
-
-
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
 
 
 def _first(payload: Mapping[str, Any], *keys: str) -> Any:
@@ -125,9 +122,7 @@ def build_comparison_identity(
         ),
         "data_fidelity": _text(fidelity.get("data") or dataset_payload.get("data_fidelity")),
         "dataset_id": _text(_first(dataset_payload, "dataset_id", "id", "name")),
-        "dataset_revision": _text(
-            _first(dataset_payload, "dataset_revision", "revision", "version", "repo_revision")
-        ),
+        "dataset_revision": _text(_first(dataset_payload, "dataset_revision", "revision", "version", "repo_revision")),
         "dataset_hash": _text(
             _first(
                 dataset_payload,
@@ -210,7 +205,9 @@ def comparison_identity_from_summary(summary: Mapping[str, Any]) -> dict[str, An
 
 
 def compare_identities(
-    identities: Sequence[Mapping[str, Any]], *, metric_ids: Sequence[str] | None = None,
+    identities: Sequence[Mapping[str, Any]],
+    *,
+    metric_ids: Sequence[str] | None = None,
 ) -> tuple[list[str], list[str]]:
     """Return hard incompatibilities and non-blocking identity warnings."""
 
@@ -237,14 +234,12 @@ def compare_identities(
                 if left in (None, "") or right in (None, ""):
                     if left != right:
                         warnings.append(
-                            f"runs {left_index} and {right_index} cannot verify {field}: "
-                            f"left={left!r}, right={right!r}"
+                            f"runs {left_index} and {right_index} cannot verify {field}: left={left!r}, right={right!r}"
                         )
                     continue
                 if left != right:
                     errors.append(
-                        f"runs {left_index} and {right_index} differ on {field}: "
-                        f"left={left!r}, right={right!r}"
+                        f"runs {left_index} and {right_index} differ on {field}: left={left!r}, right={right!r}"
                     )
     for index, identity in enumerate(identities):
         missing = [*identity.get("missing_required", ()), *identity.get("missing_recommended", ())]

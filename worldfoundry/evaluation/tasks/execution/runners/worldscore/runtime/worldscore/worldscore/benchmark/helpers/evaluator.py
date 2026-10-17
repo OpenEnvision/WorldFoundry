@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import json
 import os
 from collections import defaultdict
 from pathlib import Path
+from typing import Any, Mapping, Sequence
 import numpy as np
 from functools import partial
 from datetime import datetime
@@ -36,199 +39,76 @@ logger = structlog.getLogger()
 
 
 def process_batch(
-    config,
-    instance_batch,
-    aspect_list,
-    visual_movement,
-):
+    config: Mapping[str, Any],
+    instance_batch: Sequence[tuple[Any, ...]],
+    aspect_list: Sequence[str],
+    visual_movement: str,
+) -> dict[str, Any]:
+    """Evaluate one metric across a batch before releasing its resident models."""
     evaluator = Evaluator(config)
     logger.info("Processing batch", model_name=evaluator.config["model"])
-    for instance_attributes in instance_batch:
+    instances = []
+    for attributes in instance_batch:
+        instance_dir = attributes[-1]
+        result = evaluator.metrics_results
+        for key in attributes[:-1]:
+            result = result[key]
+        result_path = instance_dir / "evaluation.json"
+        if result_path.is_file():
+            with result_path.open(encoding="utf-8") as stream:
+                result.update(json.load(stream))
+        with (instance_dir / "image_data.json").open(encoding="utf-8") as stream:
+            image_data = json.load(stream)
+        inputs = {
+            "num_scenes": image_data["num_scenes"],
+            "total_frames": image_data["total_frames"],
+            "image_list": sorted(
+                str(path.absolute()) for path in (instance_dir / "frames").iterdir()
+                if path.suffix in (".jpg", ".png")
+            ),
+            "reference_image": instance_dir / "input_image.png",
+        }
+        intra = False
         if visual_movement == "static":
-            visual_style, scene_type, category, instance, instance_dir = instance_attributes
-            
-            if (instance_dir / "evaluation.json").exists():
-                try:
-                    with open(
-                        instance_dir / "evaluation.json", encoding="utf-8"
-                    ) as f:
-                        evaluation_data = json.load(f)
-                    for aspect in evaluation_data.keys():
-                        for metric_name in evaluation_data[aspect].keys():
-                            evaluator.metrics_results[visual_style][scene_type][category][
-                                instance
-                            ][aspect][metric_name]["score"] = evaluation_data[aspect][metric_name]["score"]
-                            evaluator.metrics_results[visual_style][scene_type][category][
-                                instance
-                            ][aspect][metric_name]["score_normalized"] = evaluation_data[aspect][metric_name]["score_normalized"]
-                except Exception as e:
-                    pass
-                
-            for aspect in aspect_list:
-                metric_list = aspect_info[aspect]["metrics"]
-                metric_type = aspect_info[aspect]["type"]
-                for metric, metric_attribute in metric_list.items():
-                    evaluator.aspect_evaluator = get_aspect_evaluator(metric, metric_type, metric_attribute, aspect, evaluator.generate_type)
-                    
-                    print("-- Aspect (metric):", f"{aspect} ({metric})")
-
-                    with open(
-                        instance_dir / "camera_data.json", encoding="utf-8"
-                    ) as f:
-                        camera_data = json.load(f)
-
-                    with open(
-                        instance_dir / "image_data.json", encoding="utf-8"
-                    ) as f:
-                        image_data = json.load(f)
-                    
-                    camera_movement =image_data["camera_path"][0]
-                    camera_movement_type = layout_info[camera_movement]["layout_type"]
-                    if camera_movement_type == "intra" and aspect in ["content_alignment", "content_control"]:
-                        print(f"Skipping {aspect} for {camera_movement}({camera_movement_type}) layout")
-                        continue
-                    
-                    total_frames = image_data["total_frames"]
-                    text_prompt_list = image_data["prompt_list"]
-                    num_scenes = image_data["num_scenes"]
-                    anchor_frame_idx = image_data["anchor_frame_idx"]
-                    content_list = image_data["content_list"]
-                    
-                    frames_dir = instance_dir / "frames"
-                    # Sorting is crucial! Video frames must be evaluated in
-                    # order.
-                    image_list = sorted(
-                        [
-                            str(image_path.absolute())
-                            for image_path in frames_dir.iterdir()
-                            if image_path.suffix in [".jpg", ".png"]
-                        ]
-                    )
-                    
-                    reference_image = instance_dir / "input_image.png"
-                    
-                    
-                    score, score_normalized = evaluator.calculate_metrics(
-                            camera_data = camera_data,
-                            num_scenes = num_scenes,
-                            total_frames = total_frames,
-                            anchor_frame_idx = anchor_frame_idx,
-                            text_prompt_list = text_prompt_list,
-                            image_list = image_list,
-                            reference_image = reference_image,
-                            masked_images_all = None,
-                            content_list=content_list,
-                            objects_list = None,
-                        )
-                    
-                    evaluator.metrics_results[visual_style][scene_type][category][
-                        instance
-                    ][aspect][evaluator.aspect_evaluator.name]["score"] = score
-                    evaluator.metrics_results[visual_style][scene_type][category][
-                        instance
-                    ][aspect][evaluator.aspect_evaluator.name]["score_normalized"] = score_normalized
-
-                    empty_cache()
-                    
-            # save results
-            instance_result_dict = evaluator.metrics_results[visual_style][scene_type][category][instance]
-            result_file_name = (
-                "evaluation.json"
+            with (instance_dir / "camera_data.json").open(encoding="utf-8") as stream:
+                camera_data = json.load(stream)
+            intra = layout_info[image_data["camera_path"][0]]["layout_type"] == "intra"
+            inputs.update(
+                camera_data=camera_data, anchor_frame_idx=image_data["anchor_frame_idx"],
+                text_prompt_list=image_data["prompt_list"], content_list=image_data["content_list"],
+                masked_images_all=None, objects_list=None,
             )
-            result_path = (
-                instance_dir
-                / result_file_name
-            )
-            with open(result_path, mode="w", encoding="utf-8") as f:
-                json.dump(instance_result_dict, f, indent=4)
-                
         elif visual_movement == "dynamic":
-            visual_style, motion_type, instance, instance_dir = instance_attributes
-            
-            if (instance_dir / "evaluation.json").exists():
-                try:
-                    with open(
-                        instance_dir / "evaluation.json", encoding="utf-8"
-                    ) as f:
-                        evaluation_data = json.load(f)
-                    for aspect in evaluation_data.keys():
-                        for metric_name in evaluation_data[aspect].keys():
-                            evaluator.metrics_results[visual_style][motion_type][instance][
-                                aspect
-                            ][metric_name]["score"] = evaluation_data[aspect][metric_name]["score"]
-                            evaluator.metrics_results[visual_style][motion_type][instance][
-                                aspect
-                            ][metric_name]["score_normalized"] = evaluation_data[aspect][metric_name]["score_normalized"]
-                except Exception as e:
-                    pass
-
-            for aspect in aspect_list:
-                metric_list = aspect_info[aspect]["metrics"]
-                metric_type = aspect_info[aspect]["type"]
-                for metric, metric_attribute in metric_list.items():
-                    evaluator.aspect_evaluator = get_aspect_evaluator(metric, metric_type, metric_attribute, aspect, evaluator.generate_type)
-            
-                    print("-- Aspect (metric):", f"{aspect} ({metric})")
-
-                    with open(
-                        instance_dir / "image_data.json", encoding="utf-8"
-                    ) as f:
-                        image_data = json.load(f)
-
-                    total_frames = image_data["total_frames"]
-                    text_prompt_list = [image_data["prompt"]]
-                    num_scenes = image_data["num_scenes"]
-                    masked_images_all = [os.path.join(evaluator.dataset_root_path, masked_image) for masked_image in image_data["masks"]]
-                    objects_list = image_data["objects"]
-                    
-                    frames_dir = instance_dir / "frames"
-                    # Sorting is crucial! Video frames must be evaluated in
-                    # order.
-                    image_list = sorted(
-                        [
-                            str(image_path.absolute())
-                            for image_path in frames_dir.iterdir()
-                            if image_path.suffix in [".jpg", ".png"]
-                        ]
-                    )
-                    
-                    reference_image = instance_dir / "input_image.png"
-                    
-                    
-                    score, score_normalized = evaluator.calculate_metrics(
-                        camera_data = None,
-                        num_scenes = num_scenes,
-                        total_frames = total_frames,
-                        anchor_frame_idx = None,
-                        text_prompt_list = text_prompt_list,
-                        image_list = image_list,
-                        reference_image = reference_image,
-                        masked_images_all = masked_images_all,
-                        content_list = None,
-                        objects_list = objects_list,
-                    )
-                    
-                    evaluator.metrics_results[visual_style][motion_type][
-                        instance
-                    ][aspect][evaluator.aspect_evaluator.name]["score"] = score
-                    evaluator.metrics_results[visual_style][motion_type][
-                        instance
-                    ][aspect][evaluator.aspect_evaluator.name]["score_normalized"] = score_normalized
-                    
-                    empty_cache()
-            
-            # save results
-            instance_result_dict = evaluator.metrics_results[visual_style][motion_type][instance]
-            result_file_name = (
-                "evaluation.json"
+            inputs.update(
+                camera_data=None, anchor_frame_idx=None, text_prompt_list=[image_data["prompt"]],
+                content_list=None, objects_list=image_data["objects"],
+                masked_images_all=[os.path.join(evaluator.dataset_root_path, mask) for mask in image_data["masks"]],
             )
-            result_path = (
-                instance_dir
-                / result_file_name
-            )
-            with open(result_path, mode="w", encoding="utf-8") as f:
-                json.dump(instance_result_dict, f, indent=4)
-    
+        else:
+            raise ValueError(f"unsupported visual movement: {visual_movement}")
+        instances.append((result_path, result, inputs, intra))
+
+    for aspect in aspect_list:
+        spec = aspect_info[aspect]
+        for metric, attributes in spec["metrics"].items():
+            evaluator.aspect_evaluator = None
+            try:
+                for result_path, result, inputs, intra in instances:
+                    if intra and aspect in ("content_alignment", "content_control"):
+                        continue
+                    if evaluator.aspect_evaluator is None:
+                        evaluator.aspect_evaluator = get_aspect_evaluator(
+                            metric, spec["type"], attributes, aspect, evaluator.generate_type,
+                        )
+                    score, normalized = evaluator.calculate_metrics(**inputs)
+                    result.setdefault(aspect, {})[evaluator.aspect_evaluator.name] = {
+                        "score": score, "score_normalized": normalized,
+                    }
+                    with result_path.open("w", encoding="utf-8") as stream:
+                        json.dump(result, stream, indent=4)
+            finally:
+                evaluator.aspect_evaluator = None
+                empty_cache()
     return evaluator.metrics_results
     
 
