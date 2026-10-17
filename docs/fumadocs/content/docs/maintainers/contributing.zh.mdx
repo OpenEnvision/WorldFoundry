@@ -138,6 +138,43 @@ Fumadocs 是唯一维护的文档面。新增或修改页面时，在 `docs/fuma
 `cli:screenshots`）统一经 `docs/fumadocs/scripts/run-python.sh` 调用解释器。需要覆盖时，
 解析顺序为 `WF_DOCS_PYTHON`、`PYTHON`、`python3`、`python`。
 
+## 文档启动与发布
+
+文档应用使用 Next.js 16、React 19、Fumadocs 和 Tailwind CSS 4。
+准备 Node.js 22（见 `docs/fumadocs/.nvmrc`）、npm 和统一 Python 环境。
+在仓库根目录执行：
+
+```bash
+npm --prefix docs/fumadocs ci
+npm --prefix docs/fumadocs run dev
+bash scripts/docs/build.sh
+npm --prefix docs/fumadocs start
+```
+
+开发与静态预览地址均为 `http://localhost:3000`，包含 `/docs` 和 `/zh/docs`。
+依赖已安装时可给构建命令添加 `--skip-install`。构建先检查类型与生成数据，
+再导出至 `docs/fumadocs/out/`。
+
+`docs/fumadocs/` 内，`app/` 管理路由，`components/` 管理共享 UI，
+`content/docs/` 保存双语页面，`content/blog/` 保存文章，`mdx/partials/`
+保存共享正文，`lib/` 保存工具与目录数据，`public/` 保存资源，`scripts/`
+保存工具脚本。`source.config.ts` 配置集合，`next.config.mjs` 配置静态导出与缓存。
+`.source/`、`generated/`、`tmp/`、`.next/` 和 `out/` 为生成目录。
+输入变化后运行 `api:generate`、`models:generate`、`benchmarks:generate` 或
+`coverage:generate`，再运行对应的 `*:check`。`models:homes:check` 检查模型页；
+`types:check` 生成 MDX/类型并检查 TypeScript。
+
+`.github/workflows/deploy-docs.yml` 在匹配的 `main` 变更或手动触发时发布静态站点。
+部署构建前设置：
+
+| 变量 | 官方部署值 |
+| --- | --- |
+| `NEXT_PUBLIC_BASE_PATH` | `/WorldFoundry`；本地开发留空。 |
+| `NEXT_PUBLIC_SITE_URL` | `https://openenvision.github.io`。 |
+| `NEXT_PUBLIC_DEMO_ASSET_BASE_URL` | `docs/fumadocs/public` 对应的 GitHub media CDN。 |
+
+演示视频保留在 CDN，不放入 Pages 产物。
+
 ## 快速站点迭代
 
 模型演示视频由 GitHub CDN 提供，文档开发不需要执行 `git lfs pull`。

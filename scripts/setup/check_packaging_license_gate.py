@@ -17,12 +17,12 @@ import sys
 import tarfile
 import zipfile
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import IO, Any, Iterable, Mapping, Sequence, cast
 
-try:
+if sys.version_info >= (3, 11):
     import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10 only
-    import tomli as tomllib  # type: ignore[no-redef]
+else:  # pragma: no cover - Python 3.10 only
+    import tomli as tomllib
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -30,7 +30,12 @@ PYPROJECT_PATH = REPO_ROOT / "pyproject.toml"
 MANIFEST_PATH = REPO_ROOT / "MANIFEST.in"
 LICENSE_GATE_MARKER = "License-gated upstream runtimes"
 NOTICE_NAME = "THIRD-PARTY-NOTICES"
+LICENSE_NAME = "LICENSE"
 NATIVE_LICENSE_LINK = "thirdparty/fastvideo-kernel/LICENSE"
+RETAINED_UPSTREAM_LICENSES = (
+    "worldfoundry/base_models/diffusion_model/models/autoencoders/kandinsky6/mmaudio/ext/bigvgan_v2/LICENSE",
+    "worldfoundry/base_models/diffusion_model/models/autoencoders/kandinsky6/mmaudio/ext/bigvgan_v2/incl_licenses/LICENSE_*",
+)
 REQUIRED_RUNTIME_RESOURCES = (
     "worldfoundry/synthesis/visual_generation/dino_wm/datasets/UPSTREAM.md",
     "worldfoundry/synthesis/visual_generation/egowm/nav_25dof_stats.json",
@@ -52,7 +57,7 @@ def license_bundle_errors(data: bytes) -> list[str]:
     for index, record in enumerate(records, start=1):
         start = record.end()
         end = start + int(record.group(2))
-        if data[end:end + len(LICENSE_TEXT_END)] != LICENSE_TEXT_END:
+        if data[end : end + len(LICENSE_TEXT_END)] != LICENSE_TEXT_END:
             errors.append(f"retained license text {index} has an invalid byte boundary")
         if hashlib.sha256(data[start:end]).hexdigest().encode() != record.group(1):
             errors.append(f"retained license text {index} has changed")
@@ -60,14 +65,17 @@ def license_bundle_errors(data: bytes) -> list[str]:
 
 
 def misplaced_license_files(paths: Sequence[str], *, repo_root: Path = REPO_ROOT) -> list[str]:
-    """Reject separate tracked license texts, allowing the native build link."""
+    """Allow the project license, reviewed upstream notices, and native link."""
     misplaced = []
     for name in paths:
         path = repo_root / name
         if not (path.is_file() or path.is_symlink()) or not re.match(
             r"(?:LICEN[CS]E|COPYING|LEGAL|NOTICE)(?:[._-]|$)|THIRD.PARTY.LICENSES|CHECKPOINTS_NOTICE",
-            path.name, re.IGNORECASE,
+            path.name,
+            re.IGNORECASE,
         ):
+            continue
+        if name == LICENSE_NAME or any(fnmatch.fnmatchcase(name, pattern) for pattern in RETAINED_UPSTREAM_LICENSES):
             continue
         if name == NATIVE_LICENSE_LINK and path.is_symlink() and path.resolve() == (repo_root / NOTICE_NAME).resolve():
             continue
@@ -75,39 +83,62 @@ def misplaced_license_files(paths: Sequence[str], *, repo_root: Path = REPO_ROOT
     return sorted(misplaced)
 
 
-def audit_license_bundle(artifact_path: Path, expected: bytes) -> list[str]:
-    """Require the complete central license text in both distribution formats."""
+def audit_license_bundle(artifact_path: Path, expected: bytes, *, name: str = NOTICE_NAME) -> list[str]:
+    """Require the source license file verbatim in either distribution format."""
     if artifact_path.suffix == ".whl":
         with zipfile.ZipFile(artifact_path) as archive:
-            entries = {name: archive.read(name) for name in archive.namelist()
-                       if name.endswith("/" + NOTICE_NAME)}
-        entries = {name: data for name, data in entries.items()
-                   if name.endswith(".dist-info/licenses/" + NOTICE_NAME)}
+            entries = {
+                entry: archive.read(entry)
+                for entry in archive.namelist()
+                if entry.endswith(".dist-info/licenses/" + name)
+            }
     else:
         with tarfile.open(artifact_path, "r:gz") as archive:
-            entries = {member.name.partition("/")[2]: archive.extractfile(member).read()
-                       for member in archive.getmembers()
-                       if member.isfile() and member.name.partition("/")[2] == NOTICE_NAME}
+            entries = {
+                member.name.partition("/")[2]: cast(IO[bytes], archive.extractfile(member)).read()
+                for member in archive.getmembers()
+                if member.isfile() and member.name.partition("/")[2] == name
+            }
     if len(entries) != 1:
-        return [f"{artifact_path.name}: missing or ambiguous central license bundle"]
+        return [f"{artifact_path.name}: missing or ambiguous {name}"]
     if next(iter(entries.values())) != expected:
-        return [f"{artifact_path.name}: central license bundle differs from source"]
+        return [f"{artifact_path.name}: {name} differs from source"]
     return []
+
 
 # These boundaries deliberately remain configured after the private source has
 # been removed, so a later sync cannot silently add it back to an artifact.
-PUBLIC_PACKAGE_EXCLUDES = frozenset({
-    "worldfoundry.training", "worldfoundry.training.*",
-    "worldfoundry.cli.training_commands", "worldfoundry.cli.training_commands.*",
-    "*.tests", "*.tests.*", "*.test", "*.test.*", "*.testing", "*.testing.*",
-})
+PUBLIC_PACKAGE_EXCLUDES = frozenset(
+    {
+        "tmp",
+        "tmp.*",
+        "docs",
+        "docs.*",
+        "worldfoundry.training",
+        "worldfoundry.training.*",
+        "worldfoundry.cli.training_commands",
+        "worldfoundry.cli.training_commands.*",
+        "*.tests",
+        "*.tests.*",
+        "*.test",
+        "*.test.*",
+        "*.testing",
+        "*.testing.*",
+    }
+)
 PRIVATE_SOURCE_PATHS = (
-    "worldfoundry/training", "worldfoundry/cli/training.py",
-    "worldfoundry/cli/training_commands", "scripts/training",
-    "configs/training", "configs/post_training",
+    "worldfoundry/training",
+    "worldfoundry/cli/training.py",
+    "worldfoundry/cli/training_commands",
+    "scripts/training",
+    "configs/training",
+    "configs/post_training",
     "docs/fumadocs/content/docs/guides/training.mdx",
     "docs/fumadocs/content/docs/guides/training.zh.mdx",
-    "worldfoundry/data/test_cases", "testcase", "test", "test_stream",
+    "worldfoundry/data/test_cases",
+    "testcase",
+    "test",
+    "test_stream",
     "worldfoundry/synthesis/visual_generation/evoke/evoke_runtime/train_evoke.py",
     "worldfoundry/synthesis/visual_generation/evoke/evoke_runtime/evoke/dataset",
     "worldfoundry/synthesis/visual_generation/evoke/evoke_runtime/evoke/utils/utils_evoke_post.py",
@@ -119,11 +150,13 @@ def public_test_file(path: str) -> bool:
     parts = Path(path).parts
     if not parts or parts[0] != "tests":
         return False
-    if any(part in {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
-                    "tmp", "temp", "logs", "outputs"} or part.startswith(".env")
-           for part in parts):
+    if any(
+        part in {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "tmp", "temp", "logs", "outputs"}
+        or part.startswith(".env")
+        for part in parts
+    ):
         return False
-    return Path(path).suffix.lower() in {".py", ".md", ".sh", ".yaml", ".yml", ".json", ".jsonl"}
+    return Path(path).suffix.lower() in {".py", ".mjs", ".md", ".sh", ".yaml", ".yml", ".json", ".jsonl"}
 
 
 def private_file(path: str) -> bool:
@@ -131,8 +164,11 @@ def private_file(path: str) -> bool:
     if public_test_file(path):
         return False
     parts = Path(path).parts
-    if any(part in {"training", "training_commands", "tests", "test", "testing",
-                    "testcase", "test_cases", "tmp", "__pycache__"} for part in parts):
+    if any(
+        part
+        in {"training", "training_commands", "tests", "test", "testing", "testcase", "test_cases", "tmp", "__pycache__"}
+        for part in parts
+    ):
         return True
     name = Path(path).name
     if name in {"conftest.py", "pytest.ini"}:
@@ -142,16 +178,26 @@ def private_file(path: str) -> bool:
     if name.startswith(".env") and name not in {".env.example", ".env.template"}:
         return True
     return Path(path).suffix.lower() in {
-        ".pem", ".key", ".p12", ".pfx", ".pkl", ".pickle", ".ckpt", ".pt",
-        ".pth", ".safetensors", ".gguf", ".log", ".pyc",
+        ".pem",
+        ".key",
+        ".p12",
+        ".pfx",
+        ".pkl",
+        ".pickle",
+        ".ckpt",
+        ".pt",
+        ".pth",
+        ".safetensors",
+        ".gguf",
+        ".log",
+        ".pyc",
     }
+
 
 # These first-party integration packages sit above gated upstream code and
 # must remain installable.  In particular, excluding hunyuan_world wholesale
 # silently removed its checkpoint/config/wrapper modules from the wheel.
-REQUIRED_WHEEL_PACKAGES = (
-    "worldfoundry.synthesis.visual_generation.hunyuan_world",
-)
+REQUIRED_WHEEL_PACKAGES = ("worldfoundry.synthesis.visual_generation.hunyuan_world",)
 
 
 def load_pyproject(path: Path = PYPROJECT_PATH) -> dict:
@@ -168,7 +214,7 @@ def _matches_any(value: str, patterns: Iterable[str]) -> bool:
     return any(fnmatch.fnmatchcase(value, pattern) for pattern in patterns)
 
 
-def discover_packages(find_config: Mapping[str, object], *, repo_root: Path = REPO_ROOT) -> list[str]:
+def discover_packages(find_config: Mapping[str, Any], *, repo_root: Path = REPO_ROOT) -> list[str]:
     """Discover the pre-exclude namespace package set used by setuptools.
 
     The project includes only ``worldfoundry*`` from the repository root.  On
@@ -208,8 +254,10 @@ def selected_packages(all_packages: Sequence[str], exclude: Sequence[str]) -> li
 def dead_exclude_patterns(all_packages: Sequence[str], exclude: Sequence[str]) -> list[str]:
     """Return exclude patterns that match no discoverable package."""
     return [
-        pattern for pattern in exclude
-        if pattern not in PUBLIC_PACKAGE_EXCLUDES and not _matches_any_package(all_packages, pattern)
+        pattern
+        for pattern in exclude
+        if pattern not in PUBLIC_PACKAGE_EXCLUDES
+        and not _matches_any_package(all_packages, pattern)
         and not any(pattern in {prefix, prefix + ".*"} for prefix in license_gated_prefixes())
     ]
 
@@ -232,9 +280,7 @@ def license_gated_paths(manifest_path: Path = MANIFEST_PATH) -> list[str]:
         if in_block and stripped.startswith("prune worldfoundry/"):
             paths.append(stripped.removeprefix("prune ").rstrip("/"))
     if not paths:
-        raise RuntimeError(
-            f"no gated paths found below the '{LICENSE_GATE_MARKER}' marker in {manifest_path}"
-        )
+        raise RuntimeError(f"no gated paths found below the '{LICENSE_GATE_MARKER}' marker in {manifest_path}")
     return paths
 
 
@@ -245,9 +291,7 @@ def license_gated_prefixes(manifest_path: Path = MANIFEST_PATH) -> list[str]:
 def leaked_packages(kept_packages: Sequence[str], prefixes: Sequence[str]) -> list[str]:
     """Return retained packages located at or below a gated prefix."""
     return sorted(
-        name
-        for name in kept_packages
-        if any(name == prefix or name.startswith(prefix + ".") for prefix in prefixes)
+        name for name in kept_packages if any(name == prefix or name.startswith(prefix + ".") for prefix in prefixes)
     )
 
 
@@ -262,9 +306,7 @@ def _nearest_kept_parent(path: str, kept_packages: set[str]) -> tuple[str, str] 
 
 def _pattern_covers_relative_path(pattern: str, relative_path: str) -> bool:
     literal_prefix = pattern.split("*", 1)[0].rstrip("/")
-    return bool(literal_prefix) and (
-        relative_path == literal_prefix or relative_path.startswith(literal_prefix + "/")
-    )
+    return bool(literal_prefix) and (relative_path == literal_prefix or relative_path.startswith(literal_prefix + "/"))
 
 
 def package_data_exclusion_gaps(
@@ -291,9 +333,11 @@ def audit_wheel(wheel_path: Path, gated_paths: Sequence[str]) -> list[str]:
     """Return files inside a wheel located at or below a gated path."""
     prefixes = tuple(path.rstrip("/") + "/" for path in gated_paths)
     with zipfile.ZipFile(wheel_path) as wheel:
-        return sorted(name for name in wheel.namelist()
-                      if name in gated_paths or name.startswith(prefixes) or private_file(name)
-                      or name.startswith("tests/"))
+        return sorted(
+            name
+            for name in wheel.namelist()
+            if name in gated_paths or name.startswith(prefixes) or private_file(name) or name.startswith("tests/")
+        )
 
 
 def audit_sdist(sdist_path: Path, gated_paths: Sequence[str]) -> list[str]:
@@ -301,9 +345,11 @@ def audit_sdist(sdist_path: Path, gated_paths: Sequence[str]) -> list[str]:
     with tarfile.open(sdist_path, "r:gz") as archive:
         names = [member.name.partition("/")[2] for member in archive.getmembers() if member.isfile()]
     boundaries = [*gated_paths, *PRIVATE_SOURCE_PATHS]
-    return sorted(name for name in names if private_file(name) or any(
-        name == prefix or name.startswith(prefix + "/") for prefix in boundaries
-    ))
+    return sorted(
+        name
+        for name in names
+        if private_file(name) or any(name == prefix or name.startswith(prefix + "/") for prefix in boundaries)
+    )
 
 
 def missing_required_wheel_packages(
@@ -313,11 +359,7 @@ def missing_required_wheel_packages(
     """Return first-party wrapper packages absent from a built wheel."""
     with zipfile.ZipFile(wheel_path) as wheel:
         entries = set(wheel.namelist())
-    return sorted(
-        package
-        for package in required_packages
-        if f"{package.replace('.', '/')}/__init__.py" not in entries
-    )
+    return sorted(package for package in required_packages if f"{package.replace('.', '/')}/__init__.py" not in entries)
 
 
 def missing_core_sources(artifact_path: Path, *, repo_root: Path = REPO_ROOT) -> list[str]:
@@ -340,13 +382,14 @@ def audit_runtime_resources(artifact_path: Path, *, repo_root: Path = REPO_ROOT)
     """Retain the exact normalization, split and provenance files used by models."""
     if artifact_path.suffix == ".whl":
         with zipfile.ZipFile(artifact_path) as archive:
-            entries = {name: archive.read(name) for name in archive.namelist()
-                       if name in REQUIRED_RUNTIME_RESOURCES}
+            entries = {name: archive.read(name) for name in archive.namelist() if name in REQUIRED_RUNTIME_RESOURCES}
     else:
         with tarfile.open(artifact_path, "r:gz") as archive:
-            entries = {member.name.partition("/")[2]: archive.extractfile(member).read()
-                       for member in archive.getmembers()
-                       if member.isfile() and member.name.partition("/")[2] in REQUIRED_RUNTIME_RESOURCES}
+            entries = {
+                member.name.partition("/")[2]: cast(IO[bytes], archive.extractfile(member)).read()
+                for member in archive.getmembers()
+                if member.isfile() and member.name.partition("/")[2] in REQUIRED_RUNTIME_RESOURCES
+            }
     errors = []
     for name in REQUIRED_RUNTIME_RESOURCES:
         if name not in entries:
@@ -366,7 +409,7 @@ def _print_items(header: str, items: Sequence[str], *, limit: int | None = None)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wheel", type=Path, help="also audit one freshly built .whl artifact")
     parser.add_argument("--sdist", type=Path, help="also audit one freshly built .tar.gz source artifact")
     args = parser.parse_args(argv)
@@ -387,9 +430,15 @@ def main(argv: list[str] | None = None) -> int:
     if notice_errors:
         failures += 1
         _print_items("FAIL: incomplete or altered central license bundle:", notice_errors)
-    if pyproject["project"].get("license-files") != [NOTICE_NAME]:
+    license_path = REPO_ROOT / LICENSE_NAME
+    license_text = license_path.read_bytes() if license_path.is_file() else b""
+    retained_license = notice.partition(LICENSE_TEXT_BEGIN)[2].partition(LICENSE_TEXT_END)[0]
+    if not license_text or license_text != retained_license:
         failures += 1
-        print("FAIL: project.license-files must name only THIRD-PARTY-NOTICES")
+        print("FAIL: root LICENSE must contain the complete retained Apache-2.0 text")
+    if pyproject["project"].get("license-files") != [LICENSE_NAME, NOTICE_NAME]:
+        failures += 1
+        print("FAIL: project.license-files must name LICENSE and THIRD-PARTY-NOTICES")
     is_git_checkout = (REPO_ROOT / ".git").exists()
     # Git's index bounds this check: ignored local checkouts and build outputs are
     # permitted, but must never become part of a public commit.
@@ -398,13 +447,14 @@ def main(argv: list[str] | None = None) -> int:
         misplaced = misplaced_license_files([name for name in tracked if name])
         if misplaced:
             failures += 1
-            _print_items("FAIL: separate license texts must be consolidated:", misplaced)
+            _print_items("FAIL: unreviewed colocated license files:", misplaced)
         source_leaks = [name for name in tracked if name and (REPO_ROOT / name).is_file() and private_file(name)]
         if source_leaks:
             failures += 1
             _print_items("FAIL: private files tracked in public source:", source_leaks, limit=50)
         private_sources = [
-            path for path in PRIVATE_SOURCE_PATHS
+            path
+            for path in PRIVATE_SOURCE_PATHS
             if any(name == path or name.startswith(path + "/") for name in tracked)
         ]
     else:
@@ -413,8 +463,7 @@ def main(argv: list[str] | None = None) -> int:
         failures += 1
         _print_items("FAIL: private training sources present in public checkout:", private_sources)
     private_extras = [
-        name for name in pyproject["project"].get("optional-dependencies", {})
-        if name.startswith(("train_", "train-"))
+        name for name in pyproject["project"].get("optional-dependencies", {}) if name.startswith(("train_", "train-"))
     ]
     if private_extras:
         failures += 1
@@ -470,7 +519,10 @@ def main(argv: list[str] | None = None) -> int:
     for artifact_path in (args.wheel, args.sdist):
         if artifact_path is None:
             continue
-        bundle_errors = audit_license_bundle(artifact_path, notice)
+        bundle_errors = [
+            *audit_license_bundle(artifact_path, notice),
+            *audit_license_bundle(artifact_path, license_text, name=LICENSE_NAME),
+        ]
         if bundle_errors:
             failures += 1
             _print_items("FAIL: distribution omitted or changed license terms:", bundle_errors)

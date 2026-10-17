@@ -8,7 +8,6 @@
     "interactive-inference",
     "inference-optimization",
     "diffusion-acceleration",
-    "run-status",
     "supported-models",
     "studio",
     "add-model",

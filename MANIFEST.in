@@ -1,4 +1,9 @@
 include .pre-commit-config.yaml
+include LICENSE
+include CODE_OF_CONDUCT.md
+include CONTRIBUTING.md
+recursive-include skills *.md
+include SECURITY.md
 include THIRD-PARTY-NOTICES
 include worldfoundry/synthesis/visual_generation/dino_wm/datasets/UPSTREAM.md
 include worldfoundry/synthesis/visual_generation/egowm/nav_25dof_stats.json
@@ -86,13 +91,10 @@ prune worldfoundry/synthesis/visual_generation/wonderworld/wonderworld_runtime
 prune thirdparty/diff-gaussian-rasterization
 prune thirdparty/SageAttention
 prune thirdparty/simple-knn
+prune thirdparty/matrix-game
 
 # Upstream runtime mirrors should ship source code, not demo galleries, notebooks,
 # eval question dumps, or bundled sample media.
-prune worldfoundry/synthesis/visual_generation/pandora/pandora_runtime/ChatUniVi/eval
-prune worldfoundry/synthesis/visual_generation/pandora/pandora_runtime/ChatUniVi/train
-prune worldfoundry/synthesis/visual_generation/dynamicrafter_pandora/DynamiCrafter/assets
-prune worldfoundry/synthesis/visual_generation/dynamicrafter_pandora/DynamiCrafter/prompts
 global-exclude __pycache__
 global-exclude *.py[cod]
 global-exclude .DS_Store
@@ -121,11 +123,13 @@ global-exclude test_*.py *_test.py test_*.cpp *_test.cpp
 
 # Publish first-party test sources and fixtures in sdists, after the upstream
 # QA exclusions above. Wheels continue to contain only worldfoundry packages.
-recursive-include tests *.py *.md *.sh *.yaml *.yml *.json *.jsonl
+recursive-include tests *.py *.mjs *.md *.sh *.yaml *.yml *.json *.jsonl
 include docs/fumadocs/public/measurements/mg2-conditioned-trajectory-2026-10-03.json
 # First-party packaging helper exercised by the published license tests.
 include thirdparty/fastvideo-kernel/build_backend.py
 include .github/workflows/ci.yml
+include .github/workflows/pr-checks.yml
+recursive-include scripts/dev *.py
 include Makefile scripts/setup/check_packaging_license_gate.py
 global-exclude */__pycache__/* */.pytest_cache/* */.mypy_cache/* */.ruff_cache/*
 global-exclude */tmp/* */temp/* */logs/* */outputs/* .env* *.py[cod]

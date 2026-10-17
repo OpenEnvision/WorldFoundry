@@ -15,7 +15,7 @@ description: 配置环境、准备资产、使用 TUI 或 CLI，然后运行推�
 换了模型或 benchmark，大多数 run 的形状仍然一样：先让 Python 环境可 import，再发现稳定 ID，只准备必要的 checkpoint 与 benchmark 资产，生成并检查 artifact，最后才对 artifact 打分。
 
 <Callout type="idea" title="提示">
-  浏览 catalog 和检查 readiness 不需要 GPU 或模型权重。如果你只是判断 WorldFoundry 是否覆盖目标系统，可以完成环境与 discovery 检查、阅读 blocker，然后在下载资产之前停止。
+  下载模型权重前，先检查环境和 catalog，阅读报告中的 blocker，只准备第一次 GPU 运行需要的资产。
 </Callout>
 
 ## 使用流程
@@ -37,10 +37,12 @@ description: 配置环境、准备资产、使用 TUI 或 CLI，然后运行推�
 
 ## 前置条件
 
-- **操作系统：** 推荐 Linux，用于 GPU 推理和大多数 benchmark runner
-- **安装路径：** 轻量 CPU catalog/CLI/TUI 工作使用 `python -m pip install -e ".[tui]"`；CUDA conda runtime 使用 `bash scripts/setup/bootstrap_worldfoundry.sh`。这是文档用户的官方首次 clone 脚本；它已经会调用 `scripts/setup/unified_install.sh` 创建统一 GPU 环境，因此不要从 `unified_install.sh` 起步，除非你只是在刷新该环境。可选 extras 不会自动选择 CUDA PyTorch wheel index。
-- **Python：** 3.10+；GPU 路径由 WorldFoundry 统一 conda 环境管理
-- **可选：** 支持 CUDA 的 GPU、用于 gated checkpoint 的 Hugging Face token
+- **操作系统：** 默认 GPU runtime 和大多数 benchmark runner 使用 Linux
+- **GPU：** 支持 CUDA 的 NVIDIA GPU；具体架构和显存要求见模型页
+- **驱动：** 统一环境需要支持 CUDA 12.8+ 的 NVIDIA 驱动
+- **安装：** `bash scripts/setup/bootstrap_worldfoundry.sh` 创建 CUDA conda runtime，已包含对 `scripts/setup/unified_install.sh` 的调用。可选 extras 不会自动选择 CUDA PyTorch wheel index。
+- **Python：** 3.10–3.13；bootstrap 管理统一环境的解释器
+- **认证：** 仅 gated checkpoint 需要 Hugging Face token
 
 <Callout type="info" title="说明">
   没有权重也可以浏览 catalog 和检查 readiness。只有在你选定具体模型 run 并开始下载资产后，才会进入昂贵路径。
@@ -145,7 +147,6 @@ export HF_TOKEN=<your-huggingface-token>
 不想记 model ID、benchmark ID 和命令参数时，用 TUI。它读取的就是 CLI 使用的同一套 manifest，会展示可选项，并且可以在真正启动昂贵任务前打印最终命令。
 
 ```bash
-python -m pip install -e ".[tui]"
 worldfoundry-eval tui
 ```
 
@@ -192,7 +193,7 @@ python -m worldfoundry.studio.workspace_job infer \
   --device cuda
 ```
 
-完整命令说明见 [CLI](/zh/docs/reference/cli)。状态用词见 [运行状态](/zh/docs/guides/run-status)。
+完整命令说明见 [CLI](/zh/docs/reference/cli)。
 
 ## 5. 推理
 
@@ -283,6 +284,5 @@ worldfoundry-eval run \
   <Card title="本地资产" description="Checkpoint 来源、Hugging Face cache 路径和 readiness 检查。" href="/zh/docs/guides/local-assets" />
   <Card title="TUI" description="交互式选择模型和 benchmark，并打印可运行命令。" href="/zh/docs/guides/tui" />
   <Card title="CLI" description="发现、推理、评分和报告的完整命令参考。" href="/zh/docs/reference/cli" />
-  <Card title="运行状态" description="Verified、Runner parity pending、Static load only、Planned 的读者标签。" href="/zh/docs/guides/run-status" />
   <Card title="Benchmark Hub" description="每个 benchmark 的数据布局、metric assets 和运行命令。" href="/zh/docs/evaluation/benchmark-hub" />
 </Cards>

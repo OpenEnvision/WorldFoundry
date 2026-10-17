@@ -129,7 +129,25 @@ if ! command -v "$CONDA_EXE_PATH" >/dev/null 2>&1 && [[ "$LIST_ONLY" != "1" ]]; 
   exit 1
 fi
 
-CUDA_REPORT="$(PYTHONPATH="$WORLDFOUNDRY_SOURCE_ROOT" "$PYTHON_BIN" -m worldfoundry.runtime.cuda_tiers --requested "$CUDA_TIER_REQUEST" --field json)"
+CUDA_REPORT="$(PYTHONPATH="$WORLDFOUNDRY_SOURCE_ROOT" "$PYTHON_BIN" - "$CUDA_TIER_REQUEST" <<'PY'
+import json
+import sys
+
+from worldfoundry.runtime.cuda_tiers import (
+    SUPPORTED_CUDA_TIERS,
+    best_cuda_tier_for_driver,
+    detect_nvidia_driver_cuda,
+    resolve_cuda_tier,
+)
+
+requested = sys.argv[1]
+if requested not in {"auto", *SUPPORTED_CUDA_TIERS}:
+    raise SystemExit(f"Unsupported CUDA tier: {requested}; use auto, cu128, cu124, or cu121.")
+driver = detect_nvidia_driver_cuda()
+tier = best_cuda_tier_for_driver(driver) if requested == "auto" else resolve_cuda_tier(requested, driver_cuda=driver)
+print(json.dumps({"tier": tier, "driver_cuda": driver}, sort_keys=True))
+PY
+)"
 CUDA_TIER="$(printf '%s' "$CUDA_REPORT" | "$PYTHON_BIN" -c 'import json, sys; print(json.load(sys.stdin)["tier"])')"
 DETECTED_DRIVER_CUDA="$(printf '%s' "$CUDA_REPORT" | "$PYTHON_BIN" -c 'import json, sys; print(json.load(sys.stdin).get("driver_cuda") or "")')"
 if [[ -z "$ENV_ROOT" ]]; then
@@ -191,13 +209,13 @@ import json
 import sys
 
 from worldfoundry.runtime.conda import load_runtime_conda_env_spec
-from worldfoundry.runtime.cuda_tiers import resolve_install_tier, unified_env_name
+from worldfoundry.runtime.cuda_tiers import DEFAULT_CUDA_TIER, unified_env_name
 from worldfoundry.core.io.paths import conda_envs_root_path
 
 model_id = sys.argv[1]
 spec = load_runtime_conda_env_spec(model_id)
 if spec is None:
-    tier = resolve_install_tier()
+    tier = DEFAULT_CUDA_TIER
     root = conda_envs_root_path()
     print(json.dumps({
         "model_id": model_id,
@@ -226,13 +244,13 @@ PY
 print_mapping() {
   PYTHONPATH="$WORLDFOUNDRY_SOURCE_ROOT" "$PYTHON_BIN" <<'PY'
 from worldfoundry.runtime.conda import load_runtime_conda_env_specs_with_overrides
-from worldfoundry.runtime.cuda_tiers import resolve_install_tier, unified_env_name
+from worldfoundry.runtime.cuda_tiers import DEFAULT_CUDA_TIER, unified_env_name
 from worldfoundry.core.io.paths import conda_envs_root_path
 from worldfoundry.evaluation.models.runtime.profiles import load_runtime_profiles
 
 specs = load_runtime_conda_env_specs_with_overrides()
 profiles = load_runtime_profiles(check_conda_env_exists=False)
-tier = resolve_install_tier()
+tier = DEFAULT_CUDA_TIER
 unified = unified_env_name(tier)
 root = conda_envs_root_path()
 rows = {}
