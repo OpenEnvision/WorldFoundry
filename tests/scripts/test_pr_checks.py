@@ -5,9 +5,15 @@
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 import sys
 from pathlib import Path
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 import pytest
 import yaml
@@ -30,12 +36,37 @@ def test_ruff_hooks_do_not_repeat_the_upstream_entry_exclusion_flag() -> None:
     assert imports["args"] == ["--fix", "--select", "I"]
 
 
-def test_ci_installs_declared_quality_and_protocol_extras() -> None:
-    workflow = (REPO_ROOT / ".github/workflows/pr-checks.yml").read_text()
-    assert 'python -m pip install -e ".[lint,test,mcp]" imageio' in workflow
-    assert '"torch==2.9.0+cpu" "torchvision==0.24.0+cpu" --index-url https://download.pytorch.org/whl/cpu' in workflow
-    assert "opencv-python-headless" in workflow
-    assert '"einops>=0.7,<0.9"' in workflow
+def test_ci_installs_declared_quality_group_and_protocol_extra() -> None:
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/pr-checks.yml").read_text())
+    install = next(
+        step["run"]
+        for step in workflow["jobs"]["python-quality"]["steps"]
+        if step.get("name") == "Install quality tools"
+    )
+    with (REPO_ROOT / "pyproject.toml").open("rb") as handle:
+        project = tomllib.load(handle)
+    assert "python -m pip install --group lint" in install
+    assert 'python -m pip install -e ".[test,mcp]"' in install
+    assert ".[lint" not in install
+    requirements = project["dependency-groups"]["lint"]
+    assert "ruff==0.12.7" in requirements
+    assert any(requirement.startswith("ty>=") for requirement in requirements)
+    assert {"test", "mcp"} <= project["project"]["optional-dependencies"].keys()
+    assert '"torch==2.9.0+cpu" "torchvision==0.24.0+cpu" --index-url https://download.pytorch.org/whl/cpu' in install
+    assert "opencv-python-headless" in install
+    assert '"einops>=0.7,<0.9"' in install
+
+
+def test_tensor_ci_installs_its_own_torchvision_and_media_backends() -> None:
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    install = next(
+        step["run"]
+        for step in workflow["jobs"]["inference-tensors"]["steps"]
+        if step.get("name") == "Install CPU Torch and tensor test dependencies"
+    )
+    requirements = shlex.split(install.replace("\\\n", " "))
+    assert {"torch==2.9.0+cpu", "torchvision==0.24.0+cpu", "av", "imageio", "imageio-ffmpeg"} <= set(requirements)
+    assert "https://download.pytorch.org/whl/cpu" in requirements
 
 
 def git(repo: Path, *args: str) -> str:

@@ -34,6 +34,19 @@ maintainer/code-owner review. Use squash merge, a descriptive PR title, and
 retain DCO trailers. Administrators configure `main` rulesets as described in
 CONTRIBUTING.md.
 
+### Hosted CI dependencies
+
+The `lint` requirements in `pyproject.toml` are a dependency group, installed
+with `python -m pip install --group lint` after upgrading pip. They are not a
+package extra; install the public test and MCP extras separately with
+`python -m pip install -e ".[test,mcp]"`.
+
+Each CI job installs its own dependencies. The CPU tensor job installs matching
+Torch/Torchvision CPU wheels and the PyAV, ImageIO and ImageIO-FFmpeg backends
+used by the codec contracts. Packages installed by the Python quality job are
+not available to the tensor job. Required selections and numerical budgets
+remain unchanged.
+
 ## Agent Skills
 
 Repository-authored [Agent Skills](https://agentskills.io/specification) live in

@@ -78,10 +78,18 @@ CPU Torch 门禁纳入 `tests/pipelines/test_native_output_contracts.py`，检�
 layout、像素值域、chunk 顺序与帧数。Codec 测试覆盖成功/失败路径的 reader
 释放、有限帧解码、ImageIO 编码一致性和后端 fallback。这些 CPU 测试需要
 Torch/torchvision、PyAV、ImageIO/FFmpeg 与 OpenCV；托管张量 CI 单独安装
-这些依赖，不改变无 Torch 公共门禁。RTX adapter 测试使用 fake effect，不能
+这些依赖，不改变无 Torch 公共门禁。扩展组件选择另行安装 Diffusers 0.39、
+EasyDict、Loguru、Matplotlib、dm-tree、timm 和 aiortc，用于 scheduler、
+日志、姿态渲染、tensor tree、感知和 WebRTC 契约。
+RTX adapter 测试使用 fake effect，不能
 证明专有 runtime 已执行。Bridge 和实时集成测试与这些共享契约一并进入门禁。`tests/core/execution/test_cuda_nvenc_transport.py` 属于 CUDA 门禁；
 其设备所有权/event 检查与 checkpoint 回放、编码吞吐证据分开。Catalog 覆盖不
 代表列出的每个模型均已成功生成。
+
+Workspace evaluation 的准备流程将 `resume` 和 `metric_batch_size` 传入普通生成与
+任务 registry 生成，默认值分别为 `false` 和 `32`；非正数 metric batch size 在准备和
+执行阶段均会于生成前被拒绝。POSIX `PWD` 保持目录上下文语义，不被当成密码，
+使图片 warmup 仍可进入驻留批处理；`pwd` 字段和 `SERVICE_PWD` 凭据继续脱敏。
 
 非 native 输出契约使用替代生成调用和真实小型像素数组，覆盖
 `RuntimeVideoSynthesis`、ABot-World、仅返回 artifact 的 pipeline，以及普通/实时

@@ -7,6 +7,7 @@ independently verified.
 
 from __future__ import annotations
 
+import importlib
 import os
 import platform
 import re
@@ -71,9 +72,7 @@ _KEY_VALUE_PATTERN = re.compile(
     r"(?P=key_quote)[ \t]*(?:=|:)[ \t]*)"
     r"(?P<value>\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s,}\]]+)"
 )
-_URL_USERINFO_PATTERN = re.compile(
-    r"(?P<scheme>\b[A-Za-z][A-Za-z0-9+.-]*://)(?P<userinfo>[^/@\s]+)@"
-)
+_URL_USERINFO_PATTERN = re.compile(r"(?P<scheme>\b[A-Za-z][A-Za-z0-9+.-]*://)(?P<userinfo>[^/@\s]+)@")
 _BEARER_TOKEN_PATTERN = re.compile(r"(?i)(\bbearer\s+)([^\s,;]+)")
 _KNOWN_TOKEN_PATTERN = re.compile(r"\b(?:sk|hf)[_-][A-Za-z0-9_-]{8,}\b")
 
@@ -86,9 +85,7 @@ def is_sensitive_key(key: str) -> bool:
     ``api_key``, ``hf_token``, and ``authToken`` are still redacted.
     """
     segments = tuple(
-        segment
-        for segment in _KEY_SEGMENT_SEPARATOR.split(_CAMEL_BOUNDARY.sub("_", key).lower())
-        if segment
+        segment for segment in _KEY_SEGMENT_SEPARATOR.split(_CAMEL_BOUNDARY.sub("_", key).lower()) if segment
     )
     if any(segment in _SENSITIVE_KEY_SEGMENTS for segment in segments):
         return True
@@ -115,7 +112,8 @@ def redact_secret_text(value: str, environ: Mapping[str, str] | None = None) -> 
     secrets = {
         str(secret)
         for name, secret in env.items()
-        if secret not in (None, "") and is_sensitive_key(str(name))
+        # POSIX PWD is a directory, not the password field named ``pwd``.
+        if name != "PWD" and secret not in (None, "") and is_sensitive_key(str(name))
     }
     for secret in sorted(secrets, key=len, reverse=True):
         redacted = redacted.replace(secret, "<redacted>")
@@ -221,7 +219,7 @@ def _installed_packages_filtered(package_names: tuple[str, ...]) -> tuple[tuple[
             distribution = metadata.distribution(requested_name)
         except metadata.PackageNotFoundError:
             continue
-        canonical_name = str(distribution.metadata.get("Name") or requested_name)
+        canonical_name = str(distribution.metadata["Name"] or requested_name)
         packages[canonical_name] = str(distribution.version)
     if not any(name.lower().replace("_", "-") == "worldfoundry" for name in packages):
         packages["worldfoundry"] = package_version()
@@ -236,7 +234,7 @@ def _installed_packages(package_names: Sequence[str] | None) -> dict[str, str]:
 
     packages: dict[str, str] = {}
     for distribution in metadata.distributions():
-        name = str(distribution.metadata.get("Name") or "")
+        name = str(distribution.metadata["Name"] or "")
         if not name:
             continue
         packages[name] = str(distribution.version)
@@ -254,7 +252,7 @@ def _torch_environment() -> dict[str, Any]:
         "cudnn_version": None,
     }
     try:
-        import torch
+        torch = importlib.import_module("torch")
     except Exception:  # noqa: BLE001 - optional runtime probing must not fail a run.
         return {"torch": torch_payload, "cuda": cuda_payload}
 
@@ -295,20 +293,14 @@ def build_env_requirements(
 
     env = os.environ if environ is None else environ
     env_names = [
-        str(item.get("name") or item.get("env") or item.get("key"))
-        if isinstance(item, Mapping)
-        else str(item)
+        str(item.get("name") or item.get("env") or item.get("key")) if isinstance(item, Mapping) else str(item)
         for item in required_env
     ]
     required_env_rows = [_environment_row(env, name) for name in env_names if name]
     required_path_rows = [_path_requirement_row(item) for item in required_paths]
     env_report = check_required_env(tuple(row["name"] for row in required_env_rows), env)
     missing_env = list(env_report.missing)
-    missing_paths = [
-        {"name": row["name"], "path": row["path"]}
-        for row in required_path_rows
-        if not row["exists"]
-    ]
+    missing_paths = [{"name": row["name"], "path": row["path"]} for row in required_path_rows if not row["exists"]]
     return {
         "schema_version": ENV_REQUIREMENTS_SCHEMA_VERSION,
         "required_env": required_env_rows,
@@ -386,9 +378,15 @@ def build_run_manifest(
     manifest["model_revision"] = _revision_from(model)
     manifest["dataset_revision"] = _revision_from(dataset)
     manifest["reproducibility"] = {
-        "git_commit": dict(environment or {}).get("git", {}).get("commit") if isinstance(environment, Mapping) else None,
-        "python_version": dict(environment or {}).get("python", {}).get("version") if isinstance(environment, Mapping) else None,
-        "package_count": len(dict(dict(environment or {}).get("packages") or {})) if isinstance(environment, Mapping) else 0,
+        "git_commit": dict(environment or {}).get("git", {}).get("commit")
+        if isinstance(environment, Mapping)
+        else None,
+        "python_version": dict(environment or {}).get("python", {}).get("version")
+        if isinstance(environment, Mapping)
+        else None,
+        "package_count": len(dict(dict(environment or {}).get("packages") or {}))
+        if isinstance(environment, Mapping)
+        else 0,
     }
     manifest["artifacts"] = dict(manifest.get("artifacts") or {})
     if environment_path is not None:

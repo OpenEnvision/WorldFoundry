@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 from worldfoundry.evaluation.reporting import (
-    ENVIRONMENT_SCHEMA_VERSION,
     ENV_REQUIREMENTS_SCHEMA_VERSION,
+    ENVIRONMENT_SCHEMA_VERSION,
     REPRODUCIBILITY_PACKAGES,
     RUN_MANIFEST_SCHEMA_VERSION,
     is_sensitive_key,
@@ -145,6 +145,13 @@ def test_sensitive_key_matching_uses_exact_segments() -> None:
     assert is_sensitive_key("service-password") is True
     assert is_sensitive_key("TOKENIZERS_PARALLELISM") is False
     assert is_sensitive_key("MAX_NEW_TOKENS") is False
+
+
+def test_pwd_environment_keeps_paths_without_exposing_password_fields() -> None:
+    path = "/workspace/project/inputs/frame.png"
+    assert redact_secret_text(path, {"PWD": "/workspace/project"}) == path
+    assert redact_secret_text("pwd=private-value", {}) == "pwd=<redacted>"
+    assert redact_secret_text("private-value", {"SERVICE_PWD": "private-value"}) == "<redacted>"
 
 
 def test_redact_secret_text_handles_env_argv_assignments_and_url_userinfo() -> None:

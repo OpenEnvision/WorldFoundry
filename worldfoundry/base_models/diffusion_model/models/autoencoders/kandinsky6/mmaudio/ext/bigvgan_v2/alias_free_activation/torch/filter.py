@@ -1,5 +1,5 @@
 # Adapted from https://github.com/junjun3518/alias-free-torch under the Apache License 2.0
-#   LICENSE is in incl_licenses directory.
+# License text: THIRD-PARTY-NOTICES, BigVGAN alias-free-torch LICENSE_3.
 
 import torch
 import torch.nn as nn
@@ -11,7 +11,7 @@ if "sinc" in dir(torch):
 else:
     # This code is adopted from adefossez's julius.core.sinc under the MIT License
     # https://adefossez.github.io/julius/julius/core.html
-    #   LICENSE is in incl_licenses directory.
+    # License text: THIRD-PARTY-NOTICES, BigVGAN Julius LICENSE_5.
     def sinc(x: torch.Tensor):
         """
         Implementation of sinc, i.e. sin(pi * x) / (pi * x)
@@ -26,7 +26,7 @@ else:
 
 # This code is adopted from adefossez's julius.lowpass.LowPassFilters under the MIT License
 # https://adefossez.github.io/julius/julius/lowpass.html
-#   LICENSE is in incl_licenses directory.
+# License text: THIRD-PARTY-NOTICES, BigVGAN Julius LICENSE_5.
 def kaiser_sinc_filter1d(
     cutoff, half_width, kernel_size
 ):  # return filter [1,1,kernel_size]

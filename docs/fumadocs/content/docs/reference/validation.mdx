@@ -96,13 +96,22 @@ for declared layouts, pixel ranges, chunk order and frame counts. Codec tests
 check reader cleanup on success and failure, bounded decoding, ImageIO encoding
 parity, and backend fallbacks. These CPU tests require Torch/torchvision, PyAV,
 ImageIO/FFmpeg and OpenCV; hosted tensor CI installs them separately from the
-Torch-free public gate. RTX adapter tests use a fake effect and do not establish
+Torch-free public gate. The extended component selection also installs Diffusers
+0.39, EasyDict, Loguru, Matplotlib, dm-tree, timm and aiortc for scheduler,
+logging, pose-rendering, tensor-tree, perception and WebRTC contracts. RTX adapter tests use a fake effect and do not establish
 proprietary-runtime execution. Bridge and realtime integration tests remain
 selected alongside these shared contracts.
 `tests/core/execution/test_cuda_nvenc_transport.py` belongs to the CUDA gate;
 its device ownership/event checks are separate from checkpoint replay and
 encoder throughput evidence. Catalog coverage does not establish generation
 success for every listed model.
+
+Workspace evaluation preparation preserves `resume` and `metric_batch_size`
+through direct and task-registry generation. Defaults are `false` and `32`;
+nonpositive metric batch sizes fail preparation and execution before generation.
+POSIX `PWD` remains path context rather than a password, preserving resident
+admission for image warmups; `pwd` fields and `SERVICE_PWD` credentials remain
+redacted.
 
 The non-native output contracts exercise `RuntimeVideoSynthesis`, ABot-World and
 artifact-only pipelines with substituted generation, real small pixel arrays,

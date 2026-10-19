@@ -95,6 +95,8 @@ class ModelBenchmarkRunRequest:
         generation_cache_mode: Caching mode.
         generation_cache_namespace: Caching namespace partition.
         run_id: Unique trace ID.
+        resume: Reuse matching generation and per-sample metric checkpoints.
+        metric_batch_size: Batch size for in-process per-sample scoring.
         benchmark_timeout_seconds: Bounded timeout for running official benchmarks.
         benchmark_workdir: Target working directory for benchmark runners.
         benchmark_env: Custom environment overrides for benchmark runners.
@@ -133,6 +135,8 @@ class ModelBenchmarkRunRequest:
     generation_cache_mode: str = "off"
     generation_cache_namespace: str = "model_benchmark"
     run_id: str | None = None
+    resume: bool = False
+    metric_batch_size: int = 32
     benchmark_timeout_seconds: float | None = None
     benchmark_workdir: str | Path | None = None
     benchmark_env: Mapping[str, Any] | None = None
@@ -261,11 +265,7 @@ def _run_official_runtime_preflight(
         return None
     environ = dict(os.environ)
     environ.update(
-        {
-            str(name): str(value)
-            for name, value in dict(request.benchmark_env or {}).items()
-            if value is not None
-        }
+        {str(name): str(value) for name, value in dict(request.benchmark_env or {}).items() if value is not None}
     )
     if environ.get("WORLDFOUNDRY_SKIP_PREFLIGHT") == "1":
         return None
@@ -433,7 +433,11 @@ def _run_generation_from_task_registry(
             "split, and num_samples"
         )
     write_run_plan(plan, _task_plan_path(root))
-    evaluate_request = evaluate_request_from_run_plan(plan)
+    evaluate_request = replace(
+        evaluate_request_from_run_plan(plan),
+        resume=request.resume,
+        metric_batch_size=request.metric_batch_size,
+    )
     if resolved_runner is not None or runner_factory is not None or not cleanup_runner:
         evaluate_request = replace(
             evaluate_request,
@@ -573,9 +577,7 @@ def _run_generation(
         if request.contract_fixture:
             return None
         if request.benchmark_mode == "contract":
-            raise ValueError(
-                "model-benchmark contract runs require generated inputs or contract_fixture=True"
-            )
+            raise ValueError("model-benchmark contract runs require generated inputs or contract_fixture=True")
         adapter = get_benchmark_generation_adapter(request.benchmark_id)
         if adapter is not None:
             requests = adapter.materialize_requests(
@@ -624,6 +626,8 @@ def _run_generation(
             generation_cache_namespace=request.generation_cache_namespace,
             dataset_id=f"{request.benchmark_id}:generated",
             run_id=None if request.run_id is None else f"{request.run_id}:generation",
+            resume=request.resume,
+            metric_batch_size=request.metric_batch_size,
             fail_on_sample_error=request.fail_on_generation_error,
         )
     )
@@ -661,9 +665,7 @@ def _model_benchmark_run_summary(
     provenance_claim = provenance.get("claim")
     provenance_claim = provenance_claim if isinstance(provenance_claim, Mapping) else {}
     provenance_candidate = (
-        provenance_claim.get("leaderboard_candidate") is True
-        if provenance
-        else request.leaderboard_candidate
+        provenance_claim.get("leaderboard_candidate") is True if provenance else request.leaderboard_candidate
     )
     effective_candidate = request.leaderboard_candidate and provenance_candidate
     leaderboard_valid = (
@@ -704,9 +706,7 @@ def _model_benchmark_run_summary(
     }
     benchmark_parameters = dict(request.benchmark_parameters or {})
     benchmark_revision = benchmark_parameters.get("revision")
-    protocol_parameters = {
-        key: value for key, value in benchmark_parameters.items() if key != "revision"
-    }
+    protocol_parameters = {key: value for key, value in benchmark_parameters.items() if key != "revision"}
     benchmark_summary = {
         "benchmark_id": request.benchmark_id,
         "benchmark_name": request.benchmark_id,
@@ -857,6 +857,9 @@ def run_model_benchmark(
             payload = {**dict(request), **payload}
         request = ModelBenchmarkRunRequest(**payload)
 
+    if request.metric_batch_size < 1:
+        raise ValueError("metric_batch_size must be positive")
+
     mode = normalize_benchmark_run_mode(request.benchmark_mode)
     if mode != "contract" and request.evaluation_provenance is None:
         fidelity = model_benchmark_fidelity(
@@ -873,11 +876,7 @@ def run_model_benchmark(
             ),
             sample_limited=request.num_samples is not None,
             benchmark_parameters=request.benchmark_parameters,
-            producer=(
-                "catalog_model"
-                if request.model_zoo_manifest_dir is not None
-                else "custom_model"
-            ),
+            producer=("catalog_model" if request.model_zoo_manifest_dir is not None else "custom_model"),
         )
         request = replace(
             request,

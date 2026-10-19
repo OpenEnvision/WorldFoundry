@@ -518,6 +518,7 @@ testpaths = [
     "tests/studio/test_execution_pipeline_cleanup.py",
     "tests/studio/test_job_store_shutdown.py",
     "tests/eval_core/test_packaging_license_gate.py",
+    "tests/eval_core/test_kandinsky6_license_bundle.py",
     "tests/eval_core/test_native_license_sdist.py",
     "tests/synthesis/test_visual_generation_layout.py",
     "tests/synthesis/test_base_synthesis_lazy_import.py",
@@ -588,6 +589,11 @@ ignore = [
 # `make packaging-check` rejects dead excludes and any license-gated package
 # that reaches the final wheel set.
 packages = { find = { where = ["."], namespaces = true, include = ["worldfoundry*"], exclude = [
+    # Prune non-package trees before namespace discovery descends into them.
+    "tmp",
+    "tmp.*",
+    "docs",
+    "docs.*",
 
     # Reserved public-distribution boundaries; these stay excluded even when absent.
     "worldfoundry.training",
