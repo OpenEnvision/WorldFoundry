@@ -78,15 +78,15 @@ def _official_summary(*, run_id: str, model_id: str, quality: float, generation:
             "protocol_config_hash": "official-config",
         }
     )
-    payload["dataset"].update(
-        {"dataset_revision": "dataset-rev", "dataset_hash": "dataset-hash", "split": "test"}
-    )
-    payload["metrics"].update(
-        {"metric_revision": "metric-rev", "metric_config_hash": "metric-config"}
-    )
-    payload["provenance"] = {
-        "fidelity": {"generation": generation, "data": "official", "evaluation": "official"}
+    payload["dataset"].update({"dataset_revision": "dataset-rev", "dataset_hash": "dataset-hash", "split": "test"})
+    payload["metrics"].update({"metric_revision": "metric-rev", "metric_config_hash": "metric-config"})
+    payload["metrics"]["per_metric"]["quality"]["definition"] = {
+        "name": "quality",
+        "version": "1",
+        "parameters": {},
+        "higher_is_better": True,
     }
+    payload["provenance"] = {"fidelity": {"generation": generation, "data": "official", "evaluation": "official"}}
     payload["evaluation"] = {"kind": "benchmark_model"}
     payload["comparison_identity"] = build_comparison_identity(
         benchmark=payload["benchmark"],
@@ -154,12 +154,8 @@ def test_build_run_comparison_accepts_reproduction_and_new_model_under_same_offi
 def test_build_run_comparison_rejects_different_data_or_protocol(tmp_path: Path) -> None:
     official = tmp_path / "official"
     adapted = tmp_path / "adapted"
-    official_payload = _official_summary(
-        run_id="official", model_id="model-a", quality=0.7, generation="custom"
-    )
-    adapted_payload = _official_summary(
-        run_id="adapted", model_id="model-b", quality=0.8, generation="custom"
-    )
+    official_payload = _official_summary(run_id="official", model_id="model-a", quality=0.7, generation="custom")
+    adapted_payload = _official_summary(run_id="adapted", model_id="model-b", quality=0.8, generation="custom")
     adapted_payload["dataset"]["dataset_hash"] = "different-data"
     adapted_payload["provenance"]["fidelity"]["evaluation"] = "modified"
     adapted_payload["comparison_identity"] = build_comparison_identity(
@@ -220,4 +216,7 @@ def test_build_markdown_comparison_handles_no_metrics(tmp_path: Path) -> None:
     markdown = build_markdown_comparison(comparison)
 
     assert comparison["metric_ids"] == []
-    assert "| Run | Status | Benchmark | Model | Backend | Samples | Failed | Score Valid | Leaderboard Valid |" in markdown
+    assert (
+        "| Run | Status | Benchmark | Model | Backend | Samples | Failed | Score Valid | Leaderboard Valid |"
+        in markdown
+    )

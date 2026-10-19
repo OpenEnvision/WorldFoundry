@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.api.json_contract import JsonContract, require_mapping, to_plain
+from worldfoundry.evaluation.api.json_contract import tuple_of_str as _tuple_of_str
 from worldfoundry.evaluation.utils import load_manifest
 
 from .runner_kinds import (
@@ -30,6 +31,7 @@ def _warn_unrecognized_status(kind: str, value: str, fallback: str) -> None:
         value,
         fallback,
     )
+
 
 SOURCE_STATUSES = frozenset({"open_source", "api", "closed", "unknown"})
 OPEN_SOURCE_STATUSES = frozenset(
@@ -96,19 +98,25 @@ _PENDING_VERIFICATION_ALIASES = frozenset({"pending_runner", "pending_validation
 # importer/scorer family only normalizes results, so it maps to the
 # ``in_tree_result_normalizer`` bucket; the remaining ``in_tree_*`` states
 # assert an in-tree runtime surface and map to ``in_tree_runtime``.
-_IN_TREE_NORMALIZER_OPEN_SOURCE_ALIASES = frozenset(
-    {
-        "in_tree_result_importer_and_bounded_aggregator",
-        "in_tree_result_importer_and_bounded_caption_qa",
-        "in_tree_scorer_with_external_probe_checkout",
-    }
-) | IN_TREE_RESULT_NORMALIZER_KINDS
-_IN_TREE_RUNTIME_OPEN_SOURCE_ALIASES = frozenset(
-    {
-        "in_tree_clean_reimplementation",
-        "in_tree_runtime_bounded_official_component_verified",
-    }
-) | IN_TREE_EXECUTION_KINDS
+_IN_TREE_NORMALIZER_OPEN_SOURCE_ALIASES = (
+    frozenset(
+        {
+            "in_tree_result_importer_and_bounded_aggregator",
+            "in_tree_result_importer_and_bounded_caption_qa",
+            "in_tree_scorer_with_external_probe_checkout",
+        }
+    )
+    | IN_TREE_RESULT_NORMALIZER_KINDS
+)
+_IN_TREE_RUNTIME_OPEN_SOURCE_ALIASES = (
+    frozenset(
+        {
+            "in_tree_clean_reimplementation",
+            "in_tree_runtime_bounded_official_component_verified",
+        }
+    )
+    | IN_TREE_EXECUTION_KINDS
+)
 # Maturity states describing an implemented-but-not-fully-verified runner
 # surface.  Bounded/component verification intentionally does NOT promote to
 # ``verified_runner`` (partial evidence must not claim full verification).
@@ -158,22 +166,6 @@ def _optional_command(value: Any) -> str | tuple[str, ...] | None:
     if isinstance(value, (list, tuple)):
         return tuple(str(item) for item in value)
     return str(value)
-
-
-def _tuple_of_str(value: Any) -> tuple[str, ...]:
-    """Coerces any input into a tuple of strings.
-
-    Args:
-        value: Input sequence, single string, or None.
-
-    Returns:
-        A tuple of string items.
-    """
-    if value is None:
-        return ()
-    if isinstance(value, str):
-        return (value,)
-    return tuple(str(item) for item in value)
 
 
 def _tuple_of_artifacts(value: Any) -> tuple[JsonValue, ...]:
@@ -292,10 +284,7 @@ def _default_ready_now_command(benchmark_id: str) -> str:
     Returns:
         The execution command string.
     """
-    return (
-        f"worldfoundry-eval run --benchmark {benchmark_id} "
-        f"--output-dir tmp/benchmark_eval/{benchmark_id} --json"
-    )
+    return f"worldfoundry-eval run --benchmark {benchmark_id} --output-dir tmp/benchmark_eval/{benchmark_id} --json"
 
 
 def _normalize_source_status(value: Any) -> str:
@@ -692,7 +681,9 @@ class BenchmarkSource(JsonSerializable):
     notes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "status", _validate_status(str(self.status), SOURCE_STATUSES, "BenchmarkSource.status"))
+        object.__setattr__(
+            self, "status", _validate_status(str(self.status), SOURCE_STATUSES, "BenchmarkSource.status")
+        )
         object.__setattr__(self, "official_repo_url", _optional_str(self.official_repo_url))
         object.__setattr__(self, "paper_url", _optional_str(self.paper_url))
         object.__setattr__(self, "requires_auth", _bool(self.requires_auth))
@@ -792,7 +783,9 @@ def _dedupe_dataset_refs(refs: list[BenchmarkDatasetRef]) -> tuple[BenchmarkData
     return tuple(deduped)
 
 
-def _dataset_refs_from_entry(entry: Mapping[str, Any], dataset_data: Mapping[str, Any]) -> tuple[BenchmarkDatasetRef, ...]:
+def _dataset_refs_from_entry(
+    entry: Mapping[str, Any], dataset_data: Mapping[str, Any]
+) -> tuple[BenchmarkDatasetRef, ...]:
     """Extracts and compiles all unique dataset references declared within a catalog entry mapping.
 
     Args:
@@ -822,8 +815,7 @@ def _dataset_refs_from_entry(entry: Mapping[str, Any], dataset_data: Mapping[str
     official_sources = entry.get("official_sources")
     if isinstance(official_sources, Mapping):
         has_official_dataset_sources = any(
-            official_sources.get(key) is not None
-            for key in _OFFICIAL_DATASET_SOURCE_KEYS
+            official_sources.get(key) is not None for key in _OFFICIAL_DATASET_SOURCE_KEYS
         )
 
     if dataset_data.get("hf_dataset_id") and not has_official_dataset_sources:
@@ -860,6 +852,7 @@ class BenchmarkMetricSpec(JsonSerializable):
         official_results: Optional baseline results of reference models.
         notes: Explanatory annotations.
     """
+
     metric_id: str
     name: str | None = None
     description: str | None = None
@@ -948,6 +941,7 @@ class BenchmarkRunnerSpec(JsonSerializable):
         verification_status: Local validation and deployment status code.
         notes: Explanatory annotations.
     """
+
     install_profile: str | None = None
     runner_target: str | None = None
     run_command: str | tuple[str, ...] | None = None
@@ -984,7 +978,9 @@ class BenchmarkRunnerSpec(JsonSerializable):
         object.__setattr__(
             self,
             "verification_status",
-            _validate_status(str(self.verification_status), VERIFICATION_STATUSES, "BenchmarkRunnerSpec.verification_status"),
+            _validate_status(
+                str(self.verification_status), VERIFICATION_STATUSES, "BenchmarkRunnerSpec.verification_status"
+            ),
         )
         object.__setattr__(self, "notes", _tuple_of_str(self.notes))
 
@@ -1061,6 +1057,7 @@ class BenchmarkZooEntry(JsonSerializable):
         runner_availability: Dynamic verification evidence markers.
         notes: General developer annotations.
     """
+
     benchmark_id: str
     name: str | None = None
     aliases: tuple[str, ...] = ()
@@ -1121,7 +1118,9 @@ class BenchmarkZooEntry(JsonSerializable):
         object.__setattr__(
             self,
             "integration_status",
-            _validate_status(str(self.integration_status), INTEGRATION_STATUSES, "BenchmarkZooEntry.integration_status"),
+            _validate_status(
+                str(self.integration_status), INTEGRATION_STATUSES, "BenchmarkZooEntry.integration_status"
+            ),
         )
         object.__setattr__(self, "metrics", tuple(_metric_spec(item) for item in self.metrics))
         object.__setattr__(
@@ -1212,7 +1211,11 @@ class BenchmarkZooEntry(JsonSerializable):
     @property
     def requires_auth(self) -> bool:
         """Returns whether access to the codebase or datasets requires credentials."""
-        return self.source.requires_auth or self.dataset.requires_auth or any(ref.requires_auth for ref in self.dataset_refs)
+        return (
+            self.source.requires_auth
+            or self.dataset.requires_auth
+            or any(ref.requires_auth for ref in self.dataset_refs)
+        )
 
     @property
     def install_profile(self) -> str | None:
@@ -1292,7 +1295,14 @@ class BenchmarkZooEntry(JsonSerializable):
             dataset_data.setdefault("requires_auth", first_ref.requires_auth)
 
         runner_data = dict(_require_mapping(entry.get("runner", {}), "BenchmarkZooEntry.runner"))
-        for key in ("install_profile", "runner_target", "run_command", "validation_command", "runtime", "expected_artifacts"):
+        for key in (
+            "install_profile",
+            "runner_target",
+            "run_command",
+            "validation_command",
+            "runtime",
+            "expected_artifacts",
+        ):
             if key in entry and key not in runner_data:
                 runner_data[key] = entry[key]
         if "verification_status" in entry and "verification_status" not in runner_data:
@@ -1322,7 +1332,9 @@ class BenchmarkZooEntry(JsonSerializable):
             source=BenchmarkSource.from_dict(source_data),
             dataset=BenchmarkDatasetRef.from_dict(dataset_data),
             dataset_refs=dataset_refs,
-            integration_status=_normalize_integration_status(entry.get("integration", entry.get("integration_status", "planned"))),
+            integration_status=_normalize_integration_status(
+                entry.get("integration", entry.get("integration_status", "planned"))
+            ),
             runner=BenchmarkRunnerSpec.from_dict(runner_data),
             metrics=metrics,
             open_source_status=_normalize_open_source_status(entry.get("open_source_status", release_status)),

@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-
-
-from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
-
 import argparse
 import json
+import math
 import os
 import shutil
 import subprocess
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +22,7 @@ from worldfoundry.evaluation.tasks.execution.framework.io import (
     write_json,
     write_jsonl,
 )
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION
 from worldfoundry.evaluation.utils import HFD_DATASET_CACHE_ROOT, REPO_ROOT, worldfoundry_hfd_dataset_root
 from worldfoundry.runtime.env import (  # type: ignore[reportMissingImports]  # noqa: E402
     first_env_value,
@@ -82,7 +81,9 @@ def latest_hf_dataset_snapshot(cache_dir: Path) -> Path | None:
     snapshots_dir = dataset_dir / "snapshots"
     if not snapshots_dir.is_dir():
         return None
-    snapshots = sorted((path for path in snapshots_dir.iterdir() if path.is_dir()), key=lambda path: path.stat().st_mtime)
+    snapshots = sorted(
+        (path for path in snapshots_dir.iterdir() if path.is_dir()), key=lambda path: path.stat().st_mtime
+    )
     return snapshots[-1] if snapshots else None
 
 
@@ -158,7 +159,9 @@ def derive_worldscore_output_dir(args: argparse.Namespace) -> Path | None:
     runs_root = read_simple_yaml_scalar(model_config_path, "runs_root")
     if not runs_root:
         return None
-    output_dir = read_simple_yaml_scalar(model_config_path, "output_dir") or read_simple_yaml_scalar(base_config_path, "output_dir")
+    output_dir = read_simple_yaml_scalar(model_config_path, "output_dir") or read_simple_yaml_scalar(
+        base_config_path, "output_dir"
+    )
     if not output_dir:
         return None
     return Path(render_worldscore_path_template(runs_root, args)) / render_worldscore_path_template(output_dir, args)
@@ -335,7 +338,9 @@ def stage_dynamic_worldscore_output(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("--data-path, DATA_PATH, or local WorldScore-Dataset is required for dynamic staging")
     output_root = args.worldscore_output_dir or derive_worldscore_output_dir(args)
     if output_root is None:
-        raise ValueError("--worldscore-output-dir or resolvable --model-name/--model-path is required for dynamic staging")
+        raise ValueError(
+            "--worldscore-output-dir or resolvable --model-name/--model-path is required for dynamic staging"
+        )
     records = load_worldscore_records(args.data_path, "dynamic")
     image_data = dict(records[args.stage_sample_index])
     target_frames = args.stage_target_frames or read_worldscore_config_int(args, "frames", 50)
@@ -441,9 +446,13 @@ def validate_worldscore_output_tree(generated_root: Path | None, data_path: Path
                 cameras = camera_data.get("cameras_interp")
                 camera_count = len(cameras) if isinstance(cameras, list) else None
                 if isinstance(total_frames, int) and camera_count is not None and camera_count != total_frames:
-                    issues.append(f"camera_data.cameras_interp has {camera_count} cameras but image_data.total_frames is {total_frames}")
+                    issues.append(
+                        f"camera_data.cameras_interp has {camera_count} cameras but image_data.total_frames is {total_frames}"
+                    )
                 if camera_count is not None and frame_count != camera_count:
-                    issues.append(f"frames directory has {frame_count} frames but camera_data.cameras_interp has {camera_count} cameras")
+                    issues.append(
+                        f"frames directory has {frame_count} frames but camera_data.cameras_interp has {camera_count} cameras"
+                    )
 
         missing_masks: list[str] = []
         if split == "dynamic":
@@ -497,31 +506,10 @@ def scalar(value: Any) -> float | None:
     return None
 
 
-def iter_numeric_values(value: Any) -> list[float]:
-    if isinstance(value, bool):
-        return []
-    if isinstance(value, (int, float)):
-        return [float(value)]
-    if isinstance(value, str):
-        number = scalar(value)
-        return [] if number is None else [number]
-    if isinstance(value, list) or isinstance(value, tuple):
-        values: list[float] = []
-        for item in value:
-            values.extend(iter_numeric_values(item))
-        return values
-    if isinstance(value, dict):
-        values: list[float] = []
-        for item in value.values():
-            values.extend(iter_numeric_values(item))
-        return values
-    return []
-
-
-def normalize_worldscore_value(raw_score: float | None) -> float | None:
-    if raw_score is None:
+def normalize_worldscore_value(raw_score: float | None, *, percentage: bool = False) -> float | None:
+    if raw_score is None or not math.isfinite(raw_score):
         return None
-    if raw_score > 1.5:
+    if percentage or raw_score > 1.5:
         return raw_score / 100.0
     return raw_score
 
@@ -587,17 +575,27 @@ def extract_scores(raw_results: dict[str, Any]) -> dict[str, dict[str, Any]]:
                 break
 
     if "worldscore_average" not in extracted:
-        component_scores = [
-            item["raw_score"]
-            for metric_id, item in extracted.items()
-            if metric_id in {"controllability", "quality", "dynamics"} and item["raw_score"] is not None
-        ]
-        if component_scores:
+        aspects = (*CONTROLLABILITY_ASPECTS, *QUALITY_ASPECTS)
+        if any(aspect in payload for aspect in DYNAMICS_ASPECTS):
+            aspects += DYNAMICS_ASPECTS
+        if all(scalar(payload.get(aspect)) is not None for aspect in aspects):
+            mean, sub_scores = score_from_aspects(payload, aspects)
             extracted["worldscore_average"] = {
-                "raw_score": sum(component_scores) / len(component_scores),
-                "sub_scores": {},
-                "source": "computed_from_worldscore_metric_families",
+                "raw_score": round(mean, 2),
+                "sub_scores": sub_scores,
+                "source": "computed_from_worldscore_aspects",
             }
+        elif not any(aspect in payload for aspect in aspects) and all(
+            extracted.get(key, {}).get("raw_score") is not None for key in ("controllability", "quality")
+        ):
+            families = {key: len(value) for key, value in grouped.items() if key in extracted}
+            if all(extracted[key]["raw_score"] is not None for key in families):
+                extracted["worldscore_average"] = {
+                    "raw_score": sum(extracted[key]["raw_score"] * count for key, count in families.items())
+                    / sum(families.values()),
+                    "sub_scores": {},
+                    "source": "aspect_weighted_worldscore_metric_families",
+                }
     return extracted
 
 
@@ -624,29 +622,33 @@ def iter_per_sample_rows(raw_results: dict[str, Any], generated_root: Path | Non
     return rows
 
 
-def sample_scores_from_evaluation_payload(payload: dict[str, Any]) -> dict[str, float]:
-    scores: dict[str, float] = {}
+def _normalized_metric_scores(payload: dict[str, Any]) -> dict[str, dict[str, float]]:
+    """Read only the normalized metric field from official evaluation.json rows."""
+    scores: dict[str, dict[str, float]] = {}
     for aspect in (*CONTROLLABILITY_ASPECTS, *QUALITY_ASPECTS, *DYNAMICS_ASPECTS):
-        if aspect in payload:
-            number = scalar(payload[aspect])
-            if number is not None:
-                scores[aspect] = number
-    for key, value in payload.items():
-        if not isinstance(key, str):
+        metrics = payload.get(aspect)
+        if not isinstance(metrics, dict):
             continue
-        if key in scores:
-            continue
-        nested_values = iter_numeric_values(value)
-        if nested_values:
-            scores[key] = sum(nested_values) / len(nested_values)
+        for metric_id, metric in metrics.items():
+            value = metric.get("score_normalized") if isinstance(metric, dict) else None
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+                scores.setdefault(aspect, {})[metric_id] = float(value)
     return scores
+
+
+def sample_scores_from_evaluation_payload(payload: dict[str, Any]) -> dict[str, float]:
+    """Expose aspect percentages without mixing raw units or diagnostic numbers."""
+    return {
+        aspect: round(sum(metrics.values()) / len(metrics) * 100, 2)
+        for aspect, metrics in _normalized_metric_scores(payload).items()
+    }
 
 
 def aggregate_worldscore_evaluation_tree(generated_root: Path | None) -> dict[str, Any] | None:
     if generated_root is None or not generated_root.exists():
         return None
     per_sample_metrics: list[dict[str, Any]] = []
-    aspect_values: dict[str, list[float]] = {}
+    metric_values: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     for path in sorted(generated_root.rglob("evaluation.json")):
         payload = load_json(path)
         if not isinstance(payload, dict):
@@ -654,8 +656,9 @@ def aggregate_worldscore_evaluation_tree(generated_root: Path | None) -> dict[st
         sample_scores = sample_scores_from_evaluation_payload(payload)
         if not sample_scores:
             continue
-        for key, value in sample_scores.items():
-            aspect_values.setdefault(key, []).append(value)
+        for aspect, metrics in _normalized_metric_scores(payload).items():
+            for metric_id, value in metrics.items():
+                metric_values[aspect][metric_id].append(value)
         per_sample_metrics.append(
             {
                 "evaluation_path": str(path),
@@ -667,7 +670,12 @@ def aggregate_worldscore_evaluation_tree(generated_root: Path | None) -> dict[st
     if not per_sample_metrics:
         return None
 
-    summary = {key: sum(values) / len(values) for key, values in sorted(aspect_values.items()) if values}
+    # Official order: mean instances for each metric, then equal-weight metrics
+    # within each aspect, then convert to a percentage and round once.
+    summary = {
+        aspect: round(sum(sum(values) / len(values) for values in metrics.values()) / len(metrics) * 100, 2)
+        for aspect, metrics in sorted(metric_values.items())
+    }
     raw_results: dict[str, Any] = {
         **summary,
         "per_sample_metrics": per_sample_metrics,
@@ -785,7 +793,22 @@ def normalize_worldscore_results(
     for metric_id in METRIC_ORDER:
         item = extracted_scores.get(metric_id, {})
         raw_score = item.get("raw_score")
-        normalized_score = normalize_worldscore_value(raw_score)
+        normalized_score = normalize_worldscore_value(
+            raw_score,
+            percentage=(
+                raw_results.get("normalization_source") == "generated_evaluation_tree"
+                or any(
+                    key in metric_source_payload(raw_results)
+                    for key in (
+                        *CONTROLLABILITY_ASPECTS,
+                        *QUALITY_ASPECTS,
+                        *DYNAMICS_ASPECTS,
+                        "WorldScore-Static",
+                        "WorldScore-Dynamic",
+                    )
+                )
+            ),
+        )
         row = {
             "metric_id": metric_id,
             "available": raw_score is not None,
@@ -812,9 +835,7 @@ def normalize_worldscore_results(
     normalization_ok = returncode == 0 and available_count > 0
     official_verified = not normalizer_only and normalization_ok
     run_status = (
-        "official_verified" if official_verified
-        else "official_results_imported" if normalization_ok
-        else "failed"
+        "official_verified" if official_verified else "official_results_imported" if normalization_ok else "failed"
     )
     if contract_blockers and available_count == 0:
         run_status = "blocked"
@@ -901,8 +922,7 @@ def normalize_worldscore_results(
         "integration_evidence": official_verified,
         "normalization_ok": normalization_ok,
         "official_results_imported": normalizer_only and normalization_ok,
-        "worldfoundry_contract_validation_evidence": contract_validation_import
-        and normalization_ok,
+        "worldfoundry_contract_validation_evidence": contract_validation_import and normalization_ok,
     }
     write_json(scorecard_path, scorecard)
     return scorecard
@@ -1086,11 +1106,17 @@ def run_official_worldscore(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     if args.model_name is None:
-        raise ValueError("--model-name or WORLDFOUNDRY_WORLDSCORE_MODEL_NAME is required unless --official-results-path is used")
+        raise ValueError(
+            "--model-name or WORLDFOUNDRY_WORLDSCORE_MODEL_NAME is required unless --official-results-path is used"
+        )
     if args.model_path is None:
-        raise ValueError("--model-path, MODEL_PATH, or WORLDFOUNDRY_WORLDSCORE_MODEL_PATH is required unless --official-results-path is used")
+        raise ValueError(
+            "--model-path, MODEL_PATH, or WORLDFOUNDRY_WORLDSCORE_MODEL_PATH is required unless --official-results-path is used"
+        )
     if args.data_path is None:
-        raise ValueError("--data-path, DATA_PATH, or WORLDFOUNDRY_WORLDSCORE_DATA_PATH is required unless --official-results-path is used")
+        raise ValueError(
+            "--data-path, DATA_PATH, or WORLDFOUNDRY_WORLDSCORE_DATA_PATH is required unless --official-results-path is used"
+        )
     if not (args.worldscore_root / "worldscore" / "run_evaluate.py").is_file():
         raise FileNotFoundError(f"WorldScore run_evaluate.py not found under: {args.worldscore_root}")
 
@@ -1110,7 +1136,9 @@ def run_official_worldscore(args: argparse.Namespace) -> dict[str, Any]:
     stdout_path.write_text(completed["stdout"], encoding="utf-8")
     stderr_path.write_text(completed["stderr"], encoding="utf-8")
 
-    results_path, evaluation_output_dir = resolve_worldscore_results_path(args, fallback_output_dir=output_dir, strict_explicit=False)
+    results_path, evaluation_output_dir = resolve_worldscore_results_path(
+        args, fallback_output_dir=output_dir, strict_explicit=False
+    )
     generated_root = args.generated_root or evaluation_output_dir or args.model_path
     raw_results, resolved_results_path, normalization_source = load_or_aggregate_worldscore_results(
         results_path,
@@ -1138,15 +1166,23 @@ def run_official_worldscore(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run official WorldScore and normalize its output to a WorldFoundry scorecard.")
+    parser = argparse.ArgumentParser(
+        description="Run official WorldScore and normalize its output to a WorldFoundry scorecard."
+    )
     parser.add_argument("--benchmark-id", default=os.environ.get("WORLDFOUNDRY_BENCHMARK_ID", "worldscore"))
-    parser.add_argument("--worldscore-root", type=Path, default=env_path("WORLDFOUNDRY_WORLDSCORE_ROOT", default=DEFAULT_WORLDSCORE_ROOT))
+    parser.add_argument(
+        "--worldscore-root",
+        type=Path,
+        default=env_path("WORLDFOUNDRY_WORLDSCORE_ROOT", default=DEFAULT_WORLDSCORE_ROOT),
+    )
     parser.add_argument(
         "--worldscore-config-root",
         type=Path,
         default=env_path("WORLDFOUNDRY_WORLDSCORE_CONFIG_ROOT", default=DEFAULT_WORLDSCORE_CONFIG_ROOT),
     )
-    parser.add_argument("--model-name", default=env_value("WORLDFOUNDRY_WORLDSCORE_MODEL_NAME", "WORLDFOUNDRY_MODEL_NAME"))
+    parser.add_argument(
+        "--model-name", default=env_value("WORLDFOUNDRY_WORLDSCORE_MODEL_NAME", "WORLDFOUNDRY_MODEL_NAME")
+    )
     parser.add_argument("--model-path", type=Path, default=env_path("WORLDFOUNDRY_WORLDSCORE_MODEL_PATH", "MODEL_PATH"))
     parser.add_argument(
         "--data-path",
@@ -1181,7 +1217,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=env_path("WORLDFOUNDRY_WORLDSCORE_STAGE_DYNAMIC_SOURCE", "WORLDFOUNDRY_GENERATED_ARTIFACT_DIR"),
         help="Generated video or frames directory to stage into the official dynamic WorldScore layout.",
     )
-    parser.add_argument("--stage-sample-index", type=int, default=int(os.environ.get("WORLDFOUNDRY_WORLDSCORE_STAGE_SAMPLE_INDEX", "0")))
+    parser.add_argument(
+        "--stage-sample-index", type=int, default=int(os.environ.get("WORLDFOUNDRY_WORLDSCORE_STAGE_SAMPLE_INDEX", "0"))
+    )
     parser.add_argument(
         "--stage-target-frames",
         type=int,
@@ -1189,7 +1227,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Bounded frame count to stage; defaults to the official model config frame count.",
     )
     parser.add_argument("--stage-overwrite", action="store_true")
-    parser.add_argument("--stage-only", action="store_true", help="Stage and validate/import without running official metrics.")
+    parser.add_argument(
+        "--stage-only", action="store_true", help="Stage and validate/import without running official metrics."
+    )
     parser.add_argument("--json", action="store_true")
     return parser
 

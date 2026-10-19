@@ -1,24 +1,14 @@
-"""CPU-only regression tests for the ET-05 workspace subprocess timeout fix.
-
-The workspace dispatch layer (`_run_cli_command`) used to launch delegated
-benchmark runners through ``subprocess.run`` without any timeout, so a hung
-runner blocked the workspace forever. It now goes through
-``run_logged_subprocess`` with an optional parent-side backstop timeout and
-kills the child's process group on expiry.
-"""
+"""Workspace benchmark subprocess deadlines, scorecard parsing, and failure logs."""
 
 from __future__ import annotations
 
-import json
 import sys
 import time
 from pathlib import Path
 
 import pytest
 
-# The package __init__ re-exports only public names (``from .dispatch import *``),
-# so the private helpers under test must be imported from the dispatch module.
-from worldfoundry.evaluation.tasks.execution.runners.workspace_registry.dispatch import (
+from worldfoundry.evaluation.tasks.catalog.workspace_registry.dispatch import (
     _run_cli_command,
     _workspace_subprocess_timeout,
 )

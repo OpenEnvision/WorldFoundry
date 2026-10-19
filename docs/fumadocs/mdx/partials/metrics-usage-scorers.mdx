@@ -101,16 +101,24 @@ print(score)
 
 **Reference:** Neural network estimating artness (fine-art vs photorealistic appearance). Paper: [ArtScore](https://arxiv.org/abs/2305.04923) Repo: [jchen175/ArtScore](https://github.com/jchen175/ArtScore)
 
-**Assets:** Explicit ArtScore `.pt` checkpoint plus torchvision ResNet/VGG backbones. Stage under `WORLDFOUNDRY_CKPT_DIR` and pass `checkpoint_path=...`.
+**Assets:** A complete ArtScore `.pt` state dictionary and torchvision. Stage the checkpoint under `WORLDFOUNDRY_CKPT_DIR` and pass `checkpoint_path=...`. The default backbone is ResNet50; use `backbone_config="resnet101"` for a ResNet101 checkpoint.
 
 ```python
+import torch
 from PIL import Image
+from torchvision import transforms
 from worldfoundry.evaluation.tasks.metrics import load_artscore_model
 
-model = load_artscore_model(device="cuda")
-image = Image.open("sample.png").convert("RGB")
-score = model(image)
-print(float(score))
+model = load_artscore_model("checkpoints/artscore.pt", device="cuda")
+preprocess = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+])
+image = preprocess(Image.open("sample.png").convert("RGB")).unsqueeze(0).to("cuda")
+with torch.inference_mode():
+    score = model(image)
+print(score.item())
 ```
 
 **Returns**: Artness score; higher = more art-like.
@@ -203,4 +211,3 @@ print(gme, nexus, natural)
 **Returns**: Dict payloads per video; see OpenS2V eval JSON schema.
 
 Manifest entry example: `{"video_001": {"img_paths": [...], "class_label": [...]}}`.
-

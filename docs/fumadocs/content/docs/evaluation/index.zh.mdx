@@ -143,6 +143,26 @@ reference:
 - **`results.jsonl`** — 逐样本状态、产物、错误
 - **`run_manifest.json`** — run 身份、路径、fingerprint
 
+## 恢复与结果完整性
+
+`run`、`evaluate`、`generate-score`、`reproduce` 和 `score --results` 支持 `--resume` 与 `--metric-batch-size`（默认 32）。使用同一输出目录恢复身份匹配的已完成生成结果与逐样本 metric checkpoint。Workspace 提供相同控件。Pipeline runner 每完成一个样本或 rollout 就刷新到 `results.jsonl`；自定义 runner 可实现 `generate_iter(requests)`，在不拆分 batch 的情况下逐项持久化。
+
+Request 与带 ID 的 result 必须具有唯一的 `sample_id`。多 seed 输出使用不同样本 ID，在 metadata 中保留共同的 prompt 标识。导入结果需要显式的成功 `status`；缺失状态记为 `unknown`。非有限 metric 输出记为无效，diagnostics 保留原因，其他有限分数仍会写出。
+
+共用的视频产物物化逻辑从 `generation/results.jsonl` 读取成功样本的产物，保留各 benchmark 的官方文件命名。相对 artifact URI 以生成目录为基准解析；失败或状态未知的结果不会被物化为质量打分输入。每次执行重建 run 自有的 staging；用户提供的已有输入目录保持不变。
+
+Suite 恢复会核对实际物化的请求、解析后的模型配置、benchmark 配置以及必要报告和媒体产物。同一路径下的请求内容变化、scorecard 缺失均会触发执行；生成 checkpoint 可独立于打分继续复用。失败执行会记录 failed/interrupted manifest，并移除根目录成功报告；官方子进程必须生成本轮 scorecard。
+
+根摘要和 suite comparison 保留 benchmark 的真实指标值、方向及定义，生成计数仅作为诊断信息。执行成功、导入分数有效、有界集成证据和完整官方验证是不同概念：外层摘要只能收紧子 scorecard 的榜单资格。Workspace 显式选择 `existing-results` 时，即使带 benchmark ID，也仍走进程内结果打分。
+
+VBench 标准集合为每条提示生成五个独立 seed 的视频：944 条唯一提示，共 4,720 个请求。样本限制按视频而非提示计数，属于有界执行。生成 adapter 会使用其支持的数据根目录和 split；不支持的显式覆盖参数会报错。
+
+FVD 按 feature batch 分别预处理，最终距离仍使用整个数据集的特征。WorldScore 先按 metric 对实例的归一化值求均值，再按 aspect 对 metric 求均值，并输出百分制 aspect 分数；同一 metric 的模型在 batch 内复用，切换 metric 前释放。具身评测取消时，会等待当前 rollout worker 返回，再清理模拟器与模型资源。
+
+### 限制
+
+仅实现 batch 接口的自定义 runner 在 `generate()` 返回后持久化结果。恢复覆盖完整生成单元和进程内逐样本打分，不恢复 rollout 内部状态或官方 runtime 的维度级 checkpoint。`score --benchmark --artifacts` 使用官方 protocol，不接受这些打分控件。
+
 ## 模式
 
 - **`existing-results`** — 对已物化结果打分，不跑推理

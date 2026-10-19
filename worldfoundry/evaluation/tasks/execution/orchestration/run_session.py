@@ -22,6 +22,7 @@ from worldfoundry.evaluation.api import (
     is_generation_result_successful,
 )
 from worldfoundry.evaluation.api.artifacts import local_path_for_uri
+from worldfoundry.evaluation.api.generation import GENERATION_UNKNOWN_STATUS, validate_sample_ids
 from worldfoundry.evaluation.reporting.run_manifest import redact_secrets
 from worldfoundry.evaluation.utils import jsonable, read_json_or_jsonl, reset_jsonl, write_json, write_jsonl
 
@@ -40,7 +41,9 @@ def artifacts_available(result: GenerationResult, base_dir: Path) -> bool:
 
 
 def resume_generation(
-    paths: Mapping[str, Path], requests: Sequence[GenerationRequest], identity: Mapping[str, Any],
+    paths: Mapping[str, Path],
+    requests: Sequence[GenerationRequest],
+    identity: Mapping[str, Any],
 ) -> dict[str, GenerationResult]:
     """Reuse completed generation when model configuration and requests match."""
     if not all(paths[key].exists() for key in ("manifest", "requests", "results")):
@@ -61,7 +64,9 @@ def resume_generation(
 
 
 def prepare_generation(
-    paths: Mapping[str, Path], requests: Sequence[GenerationRequest], cached: Mapping[str, GenerationResult],
+    paths: Mapping[str, Path],
+    requests: Sequence[GenerationRequest],
+    cached: Mapping[str, GenerationResult],
 ) -> None:
     """Record this attempt's inputs and discard scores for samples that need generation."""
     reset_session_jsonl(paths)
@@ -81,7 +86,10 @@ def _clear_reports(paths: Mapping[str, Path]) -> None:
 
 @contextmanager
 def run_stage(
-    paths: Mapping[str, Path], stage: str, *, manifest: Mapping[str, Any] | None = None,
+    paths: Mapping[str, Path],
+    stage: str,
+    *,
+    manifest: Mapping[str, Any] | None = None,
 ) -> Iterator[None]:
     """Keep stage failures and current report availability consistent across executors."""
     if manifest is not None:
@@ -91,7 +99,10 @@ def run_stage(
             "schema_version": "worldfoundry-run-manifest",
             "output_dir": str(paths["manifest"].parent),
             "started_at": utcnow_iso(),
-            "artifacts": {}, "config": {}, "environment": {}, "env_requirements": {},
+            "artifacts": {},
+            "config": {},
+            "environment": {},
+            "env_requirements": {},
             **dict(manifest),
         }
     else:
@@ -104,7 +115,9 @@ def run_stage(
         payload = read_json_or_jsonl(paths["manifest"])
         payload.update(
             status="interrupted" if isinstance(exc, (KeyboardInterrupt, SystemExit, CancelledError)) else "failed",
-            stage=stage, finished_at=utcnow_iso(), error=f"{type(exc).__name__}: {exc}",
+            stage=stage,
+            finished_at=utcnow_iso(),
+            error=f"{type(exc).__name__}: {exc}",
         )
         write_json(paths["manifest"], redact_secrets(payload))
         _clear_reports(paths)
@@ -123,8 +136,13 @@ def coerce_mapping(value: Any) -> JsonRow:
     return {"value": payload}
 
 
-def coerce_generation_result(item: Any, sample_id: str) -> GenerationResult:
-    """Normalize online and offline results, retaining external fields in metadata.extra."""
+def coerce_generation_result(
+    item: Any,
+    sample_id: str,
+    *,
+    default_status: str = GENERATION_UNKNOWN_STATUS,
+) -> GenerationResult:
+    """Normalize results; only an in-process runner may supply a success default."""
     if isinstance(item, GenerationResult):
         if item.sample_id == sample_id:
             return item
@@ -132,7 +150,17 @@ def coerce_generation_result(item: Any, sample_id: str) -> GenerationResult:
 
     row = coerce_mapping(item)
     row.setdefault("sample_id", sample_id)
-    known_keys = {"sample_id", "request_id", "model_id", "artifacts", "status", "error", "timings", "metadata", "schema_version"}
+    known_keys = {
+        "sample_id",
+        "request_id",
+        "model_id",
+        "artifacts",
+        "status",
+        "error",
+        "timings",
+        "metadata",
+        "schema_version",
+    }
     metadata = dict(row.get("metadata") or {}) if isinstance(row.get("metadata"), Mapping) else {}
     extras = {key: value for key, value in row.items() if key not in known_keys}
     if extras:
@@ -156,11 +184,133 @@ def coerce_generation_result(item: Any, sample_id: str) -> GenerationResult:
         request_id=row.get("request_id"),
         model_id=str(row.get("model_id") or ""),
         artifacts=artifacts,
-        status=str(row.get("status") or ("failed" if row.get("error") else "succeeded")),
+        status=str(row.get("status") or default_status),
         error=row.get("error"),
         timings=row.get("timings") or {},
         metadata=metadata,
     )
+
+
+def _result_sample_id(item: Any) -> str | None:
+    value = item.get("sample_id") if isinstance(item, Mapping) else getattr(item, "sample_id", None)
+    return None if value is None else str(value)
+
+
+def _runner_result(item: Any, request: GenerationRequest, model_id: str) -> GenerationResult:
+    if isinstance(item, GenerationResult):
+        return coerce_generation_result(item, request.sample_id)
+    if isinstance(item, Mapping):
+        row = dict(item)
+        row.setdefault("sample_id", request.sample_id)
+        row.setdefault("request_id", request.request_id)
+        row.setdefault("model_id", model_id)
+        return coerce_generation_result(
+            row,
+            request.sample_id,
+            default_status="failed" if row.get("error") else "succeeded",
+        )
+    return GenerationResult(
+        sample_id=request.sample_id,
+        request_id=request.request_id,
+        model_id=model_id,
+        status="failed",
+        error=f"runner returned unsupported result type: {type(item).__name__}",
+    )
+
+
+def align_generation_results(
+    requests: Sequence[GenerationRequest],
+    raw_results: Sequence[Any],
+    *,
+    model_id: str,
+) -> list[GenerationResult]:
+    """Align batch runner outputs by id, then position for unkeyed outputs."""
+    validate_sample_ids((row.sample_id for row in requests), source="requests")
+    validate_sample_ids((_result_sample_id(row) for row in raw_results), source="runner results")
+    keyed = {_result_sample_id(row): row for row in raw_results if _result_sample_id(row) is not None}
+    sequential = iter(row for row in raw_results if _result_sample_id(row) is None)
+    results = []
+    for request in requests:
+        item = keyed[request.sample_id] if request.sample_id in keyed else next(sequential, None)
+        results.append(
+            _runner_result(item, request, model_id)
+            if item is not None
+            else GenerationResult(
+                sample_id=request.sample_id,
+                request_id=request.request_id,
+                model_id=model_id,
+                status="failed",
+                error="runner did not return a result for sample",
+            )
+        )
+    return results
+
+
+def iter_generation_results(
+    runner: Any,
+    requests: Sequence[GenerationRequest],
+    *,
+    model_id: str,
+) -> Iterator[GenerationResult]:
+    """Yield complete samples from streaming runners without splitting request batches.
+
+    Runners with ``generate_iter`` emit keyed results as they finish. Batch-only
+    runners retain ordered/keyed alignment. Runner errors retain completed work;
+    interrupts and output-validation errors propagate to the run stage.
+    """
+    validate_sample_ids((row.sample_id for row in requests), source="requests")
+    stream = getattr(runner, "generate_iter", None)
+    if not callable(stream):
+        try:
+            raw_results = list(runner.generate(requests))
+        except Exception as exc:
+            raw_results = [
+                GenerationResult(
+                    sample_id=row.sample_id,
+                    request_id=row.request_id,
+                    model_id=model_id,
+                    status="failed",
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+                for row in requests
+            ]
+        yield from align_generation_results(requests, raw_results, model_id=model_id)
+        return
+
+    pending = {row.sample_id: row for row in requests}
+    seen: dict[str, int] = {}
+    failure = "runner did not return a result for sample"
+    try:
+        outputs = iter(stream(requests))
+    except Exception as exc:
+        outputs = iter(())
+        failure = f"{type(exc).__name__}: {exc}"
+    while True:
+        try:
+            item = next(outputs)
+        except StopIteration:
+            break
+        except Exception as exc:
+            failure = f"{type(exc).__name__}: {exc}"
+            break
+        sample_id = _result_sample_id(item)
+        if sample_id is None:
+            raise ValueError("streaming runner results must include sample_id")
+        index = len(seen) + 1
+        if sample_id in seen:
+            raise ValueError(f"duplicate sample_id {sample_id!r} in runner results: rows {seen[sample_id]} and {index}")
+        if sample_id not in pending:
+            raise ValueError(f"streaming runner returned unknown sample_id: {sample_id!r}")
+        seen[sample_id] = index
+        yield _runner_result(item, pending.pop(sample_id), model_id)
+    for request in pending.values():
+        yield GenerationResult(
+            sample_id=request.sample_id,
+            request_id=request.request_id,
+            model_id=model_id,
+            status="failed",
+            error=failure,
+        )
 
 
 def coerce_optional_mapping(value: Mapping[str, Any] | Any | None, default: Mapping[str, Any]) -> JsonRow:

@@ -16,7 +16,6 @@ from worldfoundry.evaluation.api import (
 from worldfoundry.evaluation.models.pipelines.results import pipeline_result_status
 from worldfoundry.evaluation.reporting.run_manifest import redact_secrets
 
-
 # ── EF-35: redact_secrets ───────────────────────────────────────────────
 
 

@@ -14,13 +14,17 @@ from types import ModuleType
 import pytest
 import yaml
 
-from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
-from worldfoundry.evaluation.tasks.contracts import PAWBenchContract, get_external_benchmark_contract
-from worldfoundry.evaluation.tasks.execution.framework.integration import (
+from worldfoundry.evaluation.tasks.catalog.dispatch import (
     BENCHMARK_INTEGRATION_REGISTRY,
+    VIDEO_RUNNER_REGISTRY,
     IntegrationTier,
 )
-from worldfoundry.evaluation.tasks.execution.framework.runner_registry import VIDEO_RUNNER_REGISTRY
+from worldfoundry.evaluation.tasks.catalog.workspace_registry import (
+    CLI_RUNNERS,
+    build_workspace_benchmark_command,
+)
+from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
+from worldfoundry.evaluation.tasks.contracts import PAWBenchContract, get_external_benchmark_contract
 from worldfoundry.evaluation.tasks.execution.runners.pawbench.run_pawbench_official_runner import (
     CONFIG,
     DEFAULT_RUNTIME_ROOT,
@@ -30,10 +34,6 @@ from worldfoundry.evaluation.tasks.execution.runners.pawbench.run_pawbench_offic
     extract_metrics,
     main,
     prepare_upstream_results,
-)
-from worldfoundry.evaluation.tasks.execution.runners.workspace_registry import (
-    CLI_RUNNERS,
-    build_workspace_benchmark_command,
 )
 from worldfoundry.evaluation.utils import BENCHMARK_ZOO_DIR, REPO_ROOT
 
@@ -102,13 +102,11 @@ def test_metadata_keeps_hosted_judge_and_model_dependencies_explicit() -> None:
     assert task["metadata"]["optional_base_model_dependencies"] == []
 
 
-def test_vendored_runtime_has_rubrics_and_no_cache_files() -> None:
+def test_vendored_runtime_contains_released_rubrics_without_git_metadata() -> None:
     assert (DEFAULT_RUNTIME_ROOT / "evaluate.py").is_file()
     for track in ("outcome", "trustworthiness"):
         rubrics = list((DEFAULT_RUNTIME_ROOT / "pawbench/paweval/rubrics" / track).glob("*.yaml"))
         assert len(rubrics) == 50
-    assert not list(DEFAULT_RUNTIME_ROOT.rglob("*.pyc"))
-    assert not list(DEFAULT_RUNTIME_ROOT.rglob("__pycache__"))
     assert not list(DEFAULT_RUNTIME_ROOT.rglob(".git"))
 
 

@@ -7,6 +7,9 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.evaluation.tasks.execution.framework.io import mean_numeric as _mean
+from worldfoundry.evaluation.tasks.execution.framework.io import try_float as _to_float
+
 METRIC_ORDER = (
     "dynamic_degree",
     "tracking_strength",
@@ -169,57 +172,36 @@ UPSTREAM_METRIC_ALIASES = {
 }
 
 
-def _to_float(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def _canonical_metric_id(raw: str) -> str | None:
     key = str(raw or "").strip().lower().replace("-", "_")
     key = " ".join(key.split())
     return UPSTREAM_METRIC_ALIASES.get(key) or UPSTREAM_METRIC_ALIASES.get(key.replace(" ", "_"))
 
 
-def _mean(values: Sequence[float]) -> float | None:
-    clean = [float(value) for value in values]
-    return sum(clean) / len(clean) if clean else None
-
-
 def _is_summary_rows(rows: Sequence[Mapping[str, Any]]) -> bool:
     return bool(rows) and any(
-        _canonical_metric_id(str(row.get("metric_id") or row.get("Metric") or row.get("metric") or ""))
-        for row in rows
+        _canonical_metric_id(str(row.get("metric_id") or row.get("Metric") or row.get("metric") or "")) for row in rows
     )
 
 
 def _summary_metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
     buckets: dict[str, list[float]] = {}
     for row in rows:
-        metric_id = _canonical_metric_id(
-            str(row.get("metric_id") or row.get("Metric") or row.get("metric") or "")
-        )
+        metric_id = _canonical_metric_id(str(row.get("metric_id") or row.get("Metric") or row.get("metric") or ""))
         score = _to_float(row.get("score") if "score" in row else row.get("value"))
         if metric_id is None or score is None:
             continue
         buckets.setdefault(metric_id, []).append(score)
     metrics = {metric_id: _mean(values) for metric_id, values in buckets.items() if values}
     if metrics.get("mirabench_average") is None:
-        component_values = [
-            value for key, value in metrics.items() if key != "mirabench_average" and value is not None
-        ]
+        component_values = [value for key, value in metrics.items() if key != "mirabench_average" and value is not None]
         if component_values:
             metrics["mirabench_average"] = sum(component_values) / len(component_values)
     return metrics
 
 
 def _aggregate_sample_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
-    buckets: dict[str, list[float]] = {
-        metric_id: [] for metric_id in METRIC_ORDER if metric_id != "mirabench_average"
-    }
+    buckets: dict[str, list[float]] = {metric_id: [] for metric_id in METRIC_ORDER if metric_id != "mirabench_average"}
     for row in rows:
         for raw_key, raw_value in row.items():
             metric_id = _canonical_metric_id(str(raw_key))
@@ -260,9 +242,7 @@ def compute_mirabench_metrics(
         if direct_metrics:
             if direct_metrics.get("mirabench_average") is None:
                 component_values = [
-                    value
-                    for key, value in direct_metrics.items()
-                    if key != "mirabench_average" and value is not None
+                    value for key, value in direct_metrics.items() if key != "mirabench_average" and value is not None
                 ]
                 if component_values:
                     direct_metrics["mirabench_average"] = sum(component_values) / len(component_values)

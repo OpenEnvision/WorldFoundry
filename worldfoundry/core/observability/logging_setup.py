@@ -73,9 +73,7 @@ _SP_CONFIGURE_ENV = "TRAINER_CONFIGURE_LOGGING"
 # Unified record layout, mirrored across the loguru format string and the
 # stdlib Formatter so both pipelines emit byte-for-byte identical prefixes.
 _LOGURU_FORMAT = (
-    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> "
-    "<level>{level:<7}</level> "
-    "<cyan>[{name}]</cyan> {message}"
+    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> <level>{level:<7}</level> <cyan>[{name}]</cyan> {message}"
 )
 _STDLIB_FORMAT = "%(asctime)s %(levelname)-7s [%(name)s] %(message)s"
 _DATEFMT = "%Y-%m-%d %H:%M:%S"
@@ -181,8 +179,10 @@ def log_context(**fields: Any) -> Iterator[None]:
     finally:
         _LOG_CONTEXT.reset(token)
 
+
 try:  # loguru is an optional dependency; the stdlib path is fully supported.
     from loguru import logger as _loguru_logger
+
     _LOGURU_AVAILABLE = True
 except ImportError:  # pragma: no cover - exercised in minimal environments.
     _loguru_logger = None
@@ -276,7 +276,9 @@ def _json_event_payload(
     resolved_timestamp = timestamp or datetime.now(timezone.utc)
     return {
         "schema_version": _SCHEMA_VERSION,
-        "timestamp": resolved_timestamp.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "timestamp": resolved_timestamp.astimezone(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z"),
         "level": str(level),
         "logger": str(logger_name),
         "event": event,
@@ -479,9 +481,7 @@ def _resolve_level(level: str | int | None, default: int = logging.INFO) -> int:
     resolved = logging.getLevelName(upper)
     if isinstance(resolved, int) and 0 <= resolved <= logging.CRITICAL:
         return resolved
-    raise ValueError(
-        f"Unknown log level {level!r}. Expected one of DEBUG/INFO/WARNING/ERROR/CRITICAL."
-    )
+    raise ValueError(f"Unknown log level {level!r}. Expected one of DEBUG/INFO/WARNING/ERROR/CRITICAL.")
 
 
 # --------------------------------------------------------------------------- #
@@ -645,6 +645,19 @@ def _apply_distributed_logger(level: int) -> None:
     distributed_logger.setLevel(level)
 
 
+class _ConsoleHandler(logging.StreamHandler):
+    """Write console records to the active process stderr."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.stream = sys.stderr
+        super().emit(record)
+
+
+def _write_console(message: str) -> None:
+    """Resolve stderr when emitting, including repeated in-process CLI calls."""
+    sys.stderr.write(message)
+
+
 def _configure_stdlib(
     *,
     level: int,
@@ -661,7 +674,7 @@ def _configure_stdlib(
     text_formatter = _make_text_formatter()
     file_formatter: logging.Formatter = _JsonFormatter() if json_file else text_formatter
 
-    console = logging.StreamHandler(stream=sys.stderr)
+    console = _ConsoleHandler()
     console.setLevel(level)
     console.setFormatter(text_formatter)
     root.addHandler(console)
@@ -705,7 +718,7 @@ def _configure_loguru(
 
     console_color = True if colorize is None else colorize
     _loguru_logger.add(  # type: ignore[union-attr]
-        sys.stderr,
+        _write_console,
         level=level_name,
         format=_loguru_text_format,
         colorize=console_color,

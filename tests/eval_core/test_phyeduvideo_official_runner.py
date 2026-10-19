@@ -9,11 +9,10 @@ from pathlib import Path
 from worldfoundry.evaluation.tasks.execution.runners.phyeduvideo.phyeduvideo_metrics import compute_phyeduvideo_metrics
 from worldfoundry.evaluation.tasks.execution.runners.phyeduvideo.phyeduvideo_prompts import (
     CANONICAL_PROMPT_COUNT,
+    load_prompt_records,
     materialize_phyeduvideo_generation_requests,
     unique_prompt_records,
-    load_prompt_records,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -58,13 +57,16 @@ def test_phyeduvideo_prompt_materialization_uses_official_video_names(tmp_path: 
 
 
 def test_phyeduvideo_metrics_from_summary_csv() -> None:
-    rows = [{"metric_id": metric_id, "score": 0.75} for metric_id in (
-        "semantic_adherence",
-        "physics_commonsense",
-        "motion_smoothness",
-        "temporal_flickering",
-        "phyeduvideo_average",
-    )]
+    rows = [
+        {"metric_id": metric_id, "score": 0.75}
+        for metric_id in (
+            "semantic_adherence",
+            "physics_commonsense",
+            "motion_smoothness",
+            "temporal_flickering",
+            "phyeduvideo_average",
+        )
+    ]
     metrics = compute_phyeduvideo_metrics(rows=rows)["metrics"]
     assert metrics["semantic_adherence"] == 0.75
     assert metrics["phyeduvideo_average"] == 0.75
@@ -137,8 +139,10 @@ def test_phyeduvideo_official_run_with_artifact_results_writes_scorecard(tmp_pat
     assert completed.returncode == 0, completed.stderr
     scorecard = json.loads((output_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert (output_dir / "phyeduvideo_results.csv").is_file()
-    assert scorecard["evaluation"]["kind"] == "phyeduvideo_official_in_tree"
-    assert scorecard["normalizer_only"] is False
+    assert scorecard["evaluation"]["kind"] == "phyeduvideo_result_importer"
+    assert scorecard["normalizer_only"] is True
+    assert scorecard["official_benchmark_verified"] is False
+    assert scorecard["integration_evidence"] is False
     assert scorecard["metrics"]["summary"]["available_metric_count"] == 5
 
 

@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.evaluation.tasks.execution.framework.io import try_float as _to_float
 from worldfoundry.evaluation.tasks.execution.runners.phygenbench.phygenbench_official_scoring import (
     official_scores_from_records,
 )
@@ -49,15 +50,6 @@ METRIC_SPECS: dict[str, dict[str, Any]] = {
 
 _STAGE_SCALE_MAX = 3.0
 _AVERAGE_SUFFIX = re.compile(r"^(?P<prefix>.+)_(average|closed|open)$")
-
-
-def _to_float(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _normalize_unit(value: float, *, scale_max: float | None = None) -> float:
@@ -126,9 +118,7 @@ def _derive_per_sample_metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, f
         if single is not None and multi is not None:
             law_values.append(_normalize_unit((single + multi) / 2.0, scale_max=_STAGE_SCALE_MAX))
         if single is not None and multi is not None and video is not None:
-            commonsense_values.append(
-                _normalize_unit((single + multi + video) / 3.0, scale_max=_STAGE_SCALE_MAX)
-            )
+            commonsense_values.append(_normalize_unit((single + multi + video) / 3.0, scale_max=_STAGE_SCALE_MAX))
         if semantic is not None:
             semantic_values.append(_normalize_unit(semantic, scale_max=5.0 if semantic > 1.0 else None))
         elif video is not None:

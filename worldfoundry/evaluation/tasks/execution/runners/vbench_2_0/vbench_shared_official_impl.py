@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-
-
-from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
-
 import argparse
 import json
 import math
@@ -16,10 +12,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.core.io.paths import cache_root_path
 from worldfoundry.core.execution.process import read_text_tail, run_logged_subprocess
+from worldfoundry.core.io.paths import cache_root_path
+from worldfoundry.evaluation.api.metrics import _sanitize_nonfinite
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import bundled_benchmark_asset
 from worldfoundry.evaluation.tasks.execution.framework.io import env_path, utc_now_iso, write_json, write_jsonl
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import SCORECARD_SCHEMA_VERSION
 from worldfoundry.evaluation.utils import REPO_ROOT
 from worldfoundry.runtime.env import resolve_hf_cache_dir  # type: ignore[reportMissingImports]
 
@@ -81,9 +79,7 @@ PLUS_VARIANT_AVERAGE = {
 CANONICAL_FULL_INFO_ASSETS = {
     "i2v": bundled_benchmark_asset("vbench-plus-plus", "i2v", "vbench2_i2v_full_info.json"),
     "long": bundled_benchmark_asset("vbench-plus-plus", "long", "VBench_full_info.json"),
-    "trustworthiness": bundled_benchmark_asset(
-        "vbench-plus-plus", "trustworthiness", "vbench2_trustworthy.json"
-    ),
+    "trustworthiness": bundled_benchmark_asset("vbench-plus-plus", "trustworthiness", "vbench2_trustworthy.json"),
     "vbench2": bundled_benchmark_asset("vbench-2.0", "VBench2_full_info.json"),
 }
 AGGREGATE_METRIC_IDS = frozenset(
@@ -248,7 +244,9 @@ def vbench2_annotation_rows(annotation_root: Path) -> tuple[list[dict[str, Any]]
     return rows, reference_video_names
 
 
-def select_vbench2_root(candidates: list[Path], expected_files: tuple[str, ...], *, allow_videos: bool = False) -> Path | None:
+def select_vbench2_root(
+    candidates: list[Path], expected_files: tuple[str, ...], *, allow_videos: bool = False
+) -> Path | None:
     """Pick the first candidate root containing expected VBench-2.0 material.
 
     Args:
@@ -447,11 +445,7 @@ def canonical_declared_dimensions(variant: str) -> set[str]:
         raw_dimensions = item.get("dimension", item.get("dimensions", []))
         if isinstance(raw_dimensions, str):
             raw_dimensions = [raw_dimensions]
-        dimensions.update(
-            canonical_metric_id(str(dimension))
-            for dimension in raw_dimensions
-            if str(dimension).strip()
-        )
+        dimensions.update(canonical_metric_id(str(dimension)) for dimension in raw_dimensions if str(dimension).strip())
     return dimensions
 
 
@@ -612,7 +606,9 @@ def ensure_long_custom_input_split(videos_path: Path | None) -> dict[str, Any]:
                 "method": method,
             }
         )
-    ready_folder_count = sum(1 for child in split_root.iterdir() if child.is_dir() and child.name.rsplit("-", 1)[-1].isdigit())
+    ready_folder_count = sum(
+        1 for child in split_root.iterdir() if child.is_dir() and child.name.rsplit("-", 1)[-1].isdigit()
+    )
     return {
         "schema_version": "worldfoundry-vbench-plus-plus-long-presplit-v1",
         "videos_path": str(videos_path),
@@ -647,6 +643,8 @@ def raw_dimension_rows(raw_results: dict[str, Any]) -> tuple[list[dict[str, Any]
     for raw_name in sorted(raw_results):
         metric_id = canonical_metric_id(raw_name)
         raw_score = scalar(raw_results[raw_name])
+        nonfinite: dict[str, str] = {}
+        raw_value = _sanitize_nonfinite(raw_results[raw_name], "raw_value", nonfinite)
         normalized_score = normalize_score(raw_score)
         is_aggregate = metric_id in AGGREGATE_METRIC_IDS
         row = {
@@ -655,13 +653,15 @@ def raw_dimension_rows(raw_results: dict[str, Any]) -> tuple[list[dict[str, Any]
             "available": raw_score is not None and not is_aggregate,
             "raw_score": None if is_aggregate else raw_score,
             "normalized_score": None if is_aggregate else normalized_score,
-            "raw_value": raw_results[raw_name],
+            "raw_value": raw_value,
             "source": "official_vbench_series_results",
         }
+        if nonfinite:
+            row["diagnostics"] = {"nonfinite_values": nonfinite}
         if is_aggregate:
             row["reason"] = "aggregate_recomputed_only_from_complete_declared_dimensions"
         elif raw_score is None:
-            row["reason"] = "score_not_found_in_vbench_series_results"
+            row["reason"] = "nonfinite_metric_output" if nonfinite else "score_not_found_in_vbench_series_results"
         else:
             scores[metric_id] = raw_score
         rows.append(row)
@@ -716,9 +716,7 @@ def aggregate_rows(
 
     variant_complete = bool(expected_dimensions) and expected_dimensions.issubset(dimension_scores)
     raw_score = (
-        mean([dimension_scores[metric_id] for metric_id in sorted(expected_dimensions)])
-        if variant_complete
-        else None
+        mean([dimension_scores[metric_id] for metric_id in sorted(expected_dimensions)]) if variant_complete else None
     )
     variant_average = PLUS_VARIANT_AVERAGE[variant]
     rows.append(
@@ -774,7 +772,9 @@ def normalize_results(
     video_coverage_path = output_dir / "vbench2_video_coverage.json"
     benchmark_contract_path = output_dir / "vbench2_benchmark_contract.json"
     long_presplit_path = output_dir / "vbenchpp_long_presplit_manifest.json"
-    video_files = list_video_files(videos_path, limit=1000, exclude_dirs={"split_clip"} if long_presplit is not None else None)
+    video_files = list_video_files(
+        videos_path, limit=1000, exclude_dirs={"split_clip"} if long_presplit is not None else None
+    )
     video_coverage = video_coverage or build_vbench2_video_coverage(videos_path, dataset_manifest, limit=1000)
 
     suite_coverage = suite_coverage or {
@@ -782,17 +782,11 @@ def normalize_results(
         "expected_dimensions": [],
         "reasons": ["canonical suite coverage was not evaluated"],
     }
-    coverage_dimensions = {
-        canonical_metric_id(str(item))
-        for item in suite_coverage.get("expected_dimensions", [])
-    }
+    coverage_dimensions = {canonical_metric_id(str(item)) for item in suite_coverage.get("expected_dimensions", [])}
     expected_dimensions = canonical_declared_dimensions(variant) or coverage_dimensions
 
     dimension_rows, dimension_scores = raw_dimension_rows(raw_results)
-    metric_rows = [
-        {key: value for key, value in row.items() if key != "raw_value"}
-        for row in dimension_rows
-    ]
+    metric_rows = [{key: value for key, value in row.items() if key != "raw_value"} for row in dimension_rows]
     metric_rows.extend(
         aggregate_rows(
             variant,
@@ -803,9 +797,7 @@ def normalize_results(
 
     per_metric = {row["metric_id"]: row for row in metric_rows}
     leaderboard = {
-        row["metric_id"]: row["raw_score"]
-        for row in metric_rows
-        if row["available"] and row["raw_score"] is not None
+        row["metric_id"]: row["raw_score"] for row in metric_rows if row["available"] and row["raw_score"] is not None
     }
     available_count = sum(1 for row in metric_rows if row["available"])
 
@@ -823,9 +815,7 @@ def normalize_results(
     integration_evidence = command is not None and normalization_ok
     full_metric_coverage = bool(expected_dimensions) and expected_dimensions.issubset(dimension_scores)
     official_verified = (
-        integration_evidence
-        and full_metric_coverage
-        and bool(suite_coverage.get("full_suite_complete", False))
+        integration_evidence and full_metric_coverage and bool(suite_coverage.get("full_suite_complete", False))
     )
     normalized = normalizer_only and normalization_ok
     if variant == "vbench2":
@@ -1019,8 +1009,7 @@ def canonical_suite_coverage(args: argparse.Namespace) -> dict[str, Any]:
     """Prove canonical prompt, sample, and dimension coverage conservatively."""
     full_json_path = args.full_json_dir or default_full_json(args)
     requested_dimensions = {
-        canonical_metric_id(item)
-        for item in split_values(args.dimension, "WORLDFOUNDRY_VBENCH_SERIES_DIMENSIONS")
+        canonical_metric_id(item) for item in split_values(args.dimension, "WORLDFOUNDRY_VBENCH_SERIES_DIMENSIONS")
     }
     canonical_mode = (
         not args.custom_input
@@ -1065,9 +1054,7 @@ def canonical_suite_coverage(args: argparse.Namespace) -> dict[str, Any]:
         if isinstance(raw_dimensions, str):
             raw_dimensions = [raw_dimensions]
         item_dimensions = {
-            canonical_metric_id(str(dimension))
-            for dimension in raw_dimensions
-            if str(dimension).strip()
+            canonical_metric_id(str(dimension)) for dimension in raw_dimensions if str(dimension).strip()
         }
         expected_dimensions.update(item_dimensions)
         prompt = item.get("prompt_en") or item.get("prompt")
@@ -1083,9 +1070,7 @@ def canonical_suite_coverage(args: argparse.Namespace) -> dict[str, Any]:
         prompt_sample_counts[prompt] = max(prompt_sample_counts.get(prompt, 0), samples)
 
     expected_stems = {
-        f"{prompt}-{index}"
-        for prompt, samples in prompt_sample_counts.items()
-        for index in range(samples)
+        f"{prompt}-{index}" for prompt, samples in prompt_sample_counts.items() for index in range(samples)
     }
     video_files = direct_video_files(args.videos_path)
     actual_stems = {path.stem for path in video_files}
@@ -1109,9 +1094,7 @@ def canonical_suite_coverage(args: argparse.Namespace) -> dict[str, Any]:
     if not report["complete_sample_coverage"]:
         report["reasons"].append("generated videos do not cover every canonical prompt/sample pair")
     report["full_suite_complete"] = (
-        canonical_mode
-        and report["complete_dimension_coverage"]
-        and report["complete_sample_coverage"]
+        canonical_mode and report["complete_dimension_coverage"] and report["complete_sample_coverage"]
     )
     return report
 
@@ -1152,9 +1135,13 @@ def build_official_command(args: argparse.Namespace, upstream_output_dir: Path) 
     }
     dimensions = split_values(args.dimension, "WORLDFOUNDRY_VBENCH_SERIES_DIMENSIONS")
     if not dimensions:
-        raise ValueError("--dimension or WORLDFOUNDRY_VBENCH_SERIES_DIMENSIONS is required unless --official-results-path is used")
+        raise ValueError(
+            "--dimension or WORLDFOUNDRY_VBENCH_SERIES_DIMENSIONS is required unless --official-results-path is used"
+        )
     if args.videos_path is None:
-        raise ValueError("--videos-path or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required unless --official-results-path is used")
+        raise ValueError(
+            "--videos-path or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required unless --official-results-path is used"
+        )
 
     command = [
         args.python,
@@ -1307,7 +1294,9 @@ def build_parser(
     parser.add_argument("--custom-input", action="store_true")
     parser.add_argument("--python", default=os.environ.get("WORLDFOUNDRY_UPSTREAM_PYTHON", sys.executable))
     parser.add_argument("--output-dir", type=Path, default=env_path("WORLDFOUNDRY_BENCHMARK_OUTPUT_DIR"))
-    parser.add_argument("--timeout", type=int, default=int(os.environ.get("WORLDFOUNDRY_VBENCH_SERIES_TIMEOUT", "7200")))
+    parser.add_argument(
+        "--timeout", type=int, default=int(os.environ.get("WORLDFOUNDRY_VBENCH_SERIES_TIMEOUT", "7200"))
+    )
     parser.add_argument(
         "--discovery-video-limit",
         type=int,

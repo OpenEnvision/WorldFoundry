@@ -10,7 +10,6 @@ import pytest
 
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 PHYSICS_VIDEO_BENCHMARK_RUNNERS = (
@@ -53,7 +52,13 @@ def test_physics_video_benchmark_runner_normalizes_sample_results(
     scorecard = json.loads((output_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert scorecard["benchmark"]["benchmark_id"] == benchmark_id
     assert scorecard["normalization_ok"] is True
-    assert scorecard["metrics"]["summary"]["official_available_count"] >= 1
+    assert scorecard["metrics"]["summary"]["available_metric_count"] >= 1
+    assert scorecard["normalizer_only"] is True
+    assert scorecard["official_benchmark_verified"] is False
+    assert scorecard["integration_evidence"] is False
+    if benchmark_id == "phygenbench":
+        assert scorecard["metrics"]["summary"]["official_available_count"] == 0
+        assert scorecard["metrics"]["leaderboard"]["phygenbench_average"] == 0.75
 
 
 @pytest.mark.parametrize(("benchmark_id", "runner_script"), PHYSICS_VIDEO_BENCHMARK_RUNNERS)

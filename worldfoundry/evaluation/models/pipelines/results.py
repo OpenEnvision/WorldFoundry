@@ -20,8 +20,8 @@ from worldfoundry.evaluation.api import (
 
 from .invocation import PipelineInvocation
 
-
 # ── Result context dataclass ────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class PipelineResultContext:
@@ -42,6 +42,7 @@ class PipelineResultContext:
 
 # ── Metadata & status helpers ───────────────────────────────────────
 
+
 def pipeline_metadata(
     *,
     result: Mapping[str, Any],
@@ -60,7 +61,6 @@ def pipeline_metadata(
         "plan_path": result.get("plan_path"),
         "run_dir": result.get("run_dir"),
         "metadata_path": result.get("metadata_path"),
-        "artifact_sha256": result.get("artifact_sha256"),
         "blocked_reason": result.get("blocked_reason"),
         "error": result.get("error"),
         "pipeline_metadata": result.get("metadata"),
@@ -115,6 +115,7 @@ def pipeline_result_error(result: Mapping[str, Any], status: str) -> str | None:
 
 
 # ── Generation result construction ──────────────────────────────────
+
 
 def generation_result_from_pipeline(
     *,

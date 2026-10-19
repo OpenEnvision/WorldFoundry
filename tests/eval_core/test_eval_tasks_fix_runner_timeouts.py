@@ -12,12 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.evaluation.tasks.execution.framework.official_runner import (
-    default_benchmark_timeout,
-)
-from worldfoundry.evaluation.tasks.execution.framework.runner_registry import (
+from worldfoundry.evaluation.tasks.catalog.dispatch import (
     VIDEO_RUNNER_REGISTRY,
     VideoRunnerSpec,
+)
+from worldfoundry.evaluation.tasks.execution.framework.official_runner import (
+    default_benchmark_timeout,
 )
 from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import _timeout_seconds
 
@@ -48,9 +48,7 @@ def test_orchestration_timeout_uses_shared_environment_default(monkeypatch: pyte
     assert _timeout_seconds(None) is None
 
 
-def test_phygenbench_upstream_overall_times_out_on_hung_child(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_phygenbench_upstream_overall_times_out_on_hung_child(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """ET-06: a hung upstream process must raise TimeoutExpired, not block forever."""
     from worldfoundry.evaluation.tasks.execution.runners.phygenbench import phygenbench_runtime
 
@@ -72,9 +70,7 @@ def test_phygenbench_upstream_overall_times_out_on_hung_child(
         phygenbench_runtime._run_upstream_overall(repo_root=repo_root, model_name="dummy-model")
 
 
-def test_phygenbench_upstream_overall_unbounded_when_env_unset(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_phygenbench_upstream_overall_unbounded_when_env_unset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Without the env var the historical behavior (no timeout) is preserved."""
     from worldfoundry.evaluation.tasks.execution.runners.phygenbench import phygenbench_runtime
 
@@ -102,16 +98,14 @@ def test_phygenbench_upstream_overall_unbounded_when_env_unset(
     )
 
     monkeypatch.delenv("WORLDFOUNDRY_BENCHMARK_TIMEOUT", raising=False)
-    result_path = phygenbench_runtime._run_upstream_overall(
-        repo_root=repo_root, model_name="dummy-model"
-    )
+    result_path = phygenbench_runtime._run_upstream_overall(repo_root=repo_root, model_name="dummy-model")
     assert result_path == result_dir / "dummy-model.json"
     assert result_path.is_file()
 
 
 def test_video_runner_spec_results_flag_default() -> None:
     """ET-03: results_flag has a shared default; existing entries keep the same value."""
-    spec = VideoRunnerSpec("some/script.py")
+    spec = VideoRunnerSpec(benchmark_id="fixture", script="some/script.py")
     assert spec.results_flag == "--official-results-path"
 
     # Every registered entry still resolves to the shared flag.

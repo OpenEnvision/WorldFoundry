@@ -7,6 +7,9 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.evaluation.tasks.execution.framework.io import mean_numeric as _mean
+from worldfoundry.evaluation.tasks.execution.framework.io import try_float as _to_float
+
 METRIC_ORDER = (
     "semantic_adherence",
     "physics_commonsense",
@@ -65,22 +68,8 @@ METRIC_ALIASES = {
 }
 
 
-def _to_float(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def _normalize_unit_score(value: float) -> float:
     return value / 100.0 if value > 1.0 else value
-
-
-def _mean(values: Sequence[float]) -> float | None:
-    clean = [float(value) for value in values]
-    return sum(clean) / len(clean) if clean else None
 
 
 def _canonical_metric_id(raw: str) -> str | None:
@@ -91,17 +80,13 @@ def _canonical_metric_id(raw: str) -> str | None:
 def _summary_metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
     metrics: dict[str, float] = {}
     for row in rows:
-        metric_id = _canonical_metric_id(
-            str(row.get("metric_id") or row.get("Metric") or row.get("metric") or "")
-        )
+        metric_id = _canonical_metric_id(str(row.get("metric_id") or row.get("Metric") or row.get("metric") or ""))
         score = _to_float(row.get("score") if "score" in row else row.get("value"))
         if metric_id is None or score is None:
             continue
         metrics[metric_id] = _normalize_unit_score(score)
     component_values = [
-        value
-        for key, value in metrics.items()
-        if key not in {"phyeduvideo_average"} and value is not None
+        value for key, value in metrics.items() if key not in {"phyeduvideo_average"} and value is not None
     ]
     if metrics.get("phyeduvideo_average") is None and component_values:
         metrics["phyeduvideo_average"] = sum(component_values) / len(component_values)
@@ -110,8 +95,7 @@ def _summary_metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
 
 def _is_summary_rows(rows: Sequence[Mapping[str, Any]]) -> bool:
     return bool(rows) and any(
-        _canonical_metric_id(str(row.get("metric_id") or row.get("Metric") or row.get("metric") or ""))
-        for row in rows
+        _canonical_metric_id(str(row.get("metric_id") or row.get("Metric") or row.get("metric") or "")) for row in rows
     )
 
 
@@ -183,9 +167,7 @@ def compute_phyeduvideo_metrics(*, rows: Sequence[Mapping[str, Any]]) -> dict[st
         }
         if direct_metrics:
             component_values = [
-                value
-                for key, value in direct_metrics.items()
-                if key != "phyeduvideo_average" and value is not None
+                value for key, value in direct_metrics.items() if key != "phyeduvideo_average" and value is not None
             ]
             if direct_metrics.get("phyeduvideo_average") is None and component_values:
                 direct_metrics["phyeduvideo_average"] = sum(component_values) / len(component_values)

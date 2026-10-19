@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from worldfoundry.evaluation.api import MetricResult
+from worldfoundry.evaluation.api.metrics import aggregate_mean
 from worldfoundry.evaluation.reporting.scorecard import build_scorecard
 
 
@@ -91,3 +93,28 @@ def test_generic_scorecard_blocks_failed_samples_even_with_evidence_gate() -> No
     assert scorecard["eligibility"]["leaderboard_valid"] is False
     assert scorecard["eligibility"]["evidence_gate"]["present"] is True
     assert "1 sample(s) failed" in scorecard["eligibility"]["reasons"]
+
+
+def test_scorecard_keeps_partial_scores_without_leaderboard_eligibility() -> None:
+    aggregate = aggregate_mean(
+        "quality",
+        [
+            MetricResult(sample_id="sample-a", metric_id="quality", raw_value=0.8),
+            MetricResult(sample_id="sample-b", metric_id="quality", valid=False, skip_reason="missing_output"),
+        ],
+    )
+    scorecard = _successful_scorecard(
+        metrics_summary={
+            "sample_count": 2,
+            "failed_samples": 0,
+            "leaderboard": {"quality": aggregate.raw_stats["mean"]},
+            "per_metric": {"quality": aggregate.to_dict()},
+        },
+        leaderboard_evidence={"official": True, "full_suite": True},
+    )
+
+    assert scorecard["metrics"]["leaderboard"]["quality"] == 0.8
+    assert scorecard["eligibility"]["score_valid"] is True
+    assert scorecard["eligibility"]["leaderboard_valid"] is False
+    assert scorecard["eligibility"]["leaderboard_eligible"] is False
+    assert "incomplete metric coverage: quality" in scorecard["eligibility"]["reasons"]

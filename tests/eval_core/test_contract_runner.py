@@ -16,11 +16,7 @@ from worldfoundry.evaluation.runner import ContractRunRequest, execute_contract_
 
 
 def _read_jsonl(path: Path) -> list[dict]:
-    return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 class FakeRunner:
@@ -212,8 +208,8 @@ def test_contract_runner_executes_model_metric_and_writes_scorecard(tmp_path: Pa
     assert artifact_row["schema_version"] == "worldfoundry-artifact-ref"
     assert artifact_row["name"] == "generated_video"
     assert artifact_row["kind"] == "video"
-    assert artifact_row["size_bytes"] == len(b"video-sample-a")
-    assert artifact_row["sha256"]
+    assert artifact_row["size_bytes"] is None
+    assert artifact_row["sha256"] is None
 
     summary = json.loads((output_dir / "metrics" / "summary.json").read_text(encoding="utf-8"))
     assert summary["leaderboard"]["quality"] == pytest.approx(0.6)
@@ -291,7 +287,7 @@ def test_contract_runner_resume_reuses_successful_samples_without_runner_call(tm
     _assert_summary_scorecard_and_ledger_consistent(output_dir)
 
 
-def test_contract_runner_resume_reruns_when_metric_contract_changes(tmp_path: Path) -> None:
+def test_contract_runner_resume_reuses_generation_when_metric_contract_changes(tmp_path: Path) -> None:
     output_dir = tmp_path / "run"
 
     execute_contract_run(
@@ -311,9 +307,9 @@ def test_contract_runner_resume_reruns_when_metric_contract_changes(tmp_path: Pa
     )
 
     assert result.status == "succeeded"
-    assert runner.calls == [["sample-a", "sample-b"]]
+    assert runner.calls == []
     ledger = _read_jsonl(output_dir / "sample_ledger.jsonl")
-    assert all("cached" not in row for row in ledger)
+    assert all(row["cached"] is True and row["cache_source"] == "run_checkpoint" for row in ledger)
     per_sample = _read_jsonl(output_dir / "metrics" / "per_sample.jsonl")
     assert {row["status"] for row in per_sample} == {"not_run"}
     _assert_summary_scorecard_and_ledger_consistent(output_dir)

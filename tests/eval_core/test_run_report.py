@@ -19,7 +19,6 @@ def _scorecard() -> dict:
             "started_at": "2026-01-01T00:00:00Z",
             "finished_at": "2026-01-01T00:00:01Z",
             "worldfoundry_version": "0.0.test",
-            "run_fingerprint": "abc123",
         },
         "benchmark": {
             "suite": "unit",
@@ -43,7 +42,13 @@ def _scorecard() -> dict:
         "generation": {"num_requests": 2, "successful": 2, "failed": 0, "error_sample_ids": []},
         "metrics": {
             "leaderboard": {"quality": 0.75},
-            "per_metric": {"quality": {"mean": 0.75, "sample_count": 2}},
+            "per_metric": {
+                "quality": {
+                    "mean": 0.75,
+                    "sample_count": 2,
+                    "definition": {"name": "quality", "version": "1", "higher_is_better": True},
+                }
+            },
             "summary": {
                 "sample_count": 2,
                 "successful_samples": 2,

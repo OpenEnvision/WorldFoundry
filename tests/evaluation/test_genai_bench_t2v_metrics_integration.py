@@ -14,7 +14,9 @@ RUNNERS = REPO_ROOT / "worldfoundry" / "evaluation" / "tasks" / "execution" / "r
 
 
 class GenAIBenchT2VMetricsSmokeTests(unittest.TestCase):
-    def _run_runner(self, script: Path, *extra: str, env_overrides: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    def _run_runner(
+        self, script: Path, *extra: str, env_overrides: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
         for key in list(env):
             if key.startswith("WORLDFOUNDRY_") and "BACKEND" not in key:
@@ -103,7 +105,7 @@ class GenAIBenchT2VMetricsSmokeTests(unittest.TestCase):
         )
 
         self.assertIn("clip-flant5-xxl", list_all_vqascore_models())
-        self.assertTrue((package_root() / "score.py").is_file())
+        self.assertTrue((package_root() / "vqascore.py").is_file())
 
     def _temporary_output_dir(self):
         import tempfile
