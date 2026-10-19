@@ -7,6 +7,7 @@ import threading
 import weakref
 from fractions import Fraction
 from types import ModuleType, SimpleNamespace
+from typing import Any, Callable
 
 import numpy as np
 import pytest
@@ -494,3 +495,96 @@ def test_native_track_surfaces_encoder_failure_to_consumer(monkeypatch):
         frames.close()
 
     asyncio.run(exercise())
+
+
+@pytest.mark.unit
+def test_bitrate_reconfigure_uses_sdk_params_without_resetting_clock() -> None:
+    params = SimpleNamespace(averageBitrate=1_000_000, vbvBufferSize=0, vbvInitialDelay=0)
+    calls = []
+    encoder = object.__new__(nvenc.NVENCFrameEncoder)
+    encoder._encoder = SimpleNamespace(GetEncodeReconfigureParams=lambda: params, Reconfigure=calls.append)
+    encoder._closed = False
+    encoder.fps = 20
+    encoder.bitrate = 1_000_000
+    encoder._pts_counter = 42
+    encoder.set_bitrate(400_000)
+    encoder.set_bitrate(400_000)
+    assert calls == [params]
+    assert params.averageBitrate == 400_000
+    assert params.vbvBufferSize == params.vbvInitialDelay == 20_000
+    assert encoder._pts_counter == 42
+    with pytest.raises(ValueError, match="positive"):
+        encoder.set_bitrate(0)
+
+
+@pytest.mark.unit
+def test_feedback_is_applied_on_encoder_worker_and_retains_frame_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    from worldfoundry.studio.serving.realtime.media import LatestFrameBuffer
+    from worldfoundry.studio.serving.realtime.telemetry import FrameContext, PresentationFrame
+
+    Packet, _ = _install_media_stubs(monkeypatch)
+    calls = []
+    entered, release = threading.Event(), threading.Event()
+
+    class Encoder:
+        def __init__(self, **kwargs: Any) -> None:
+            self.bitrate = kwargs["bitrate"]
+            calls.append(("create", self.bitrate, threading.get_ident()))
+
+        def set_bitrate(self, bitrate: int) -> None:
+            self.bitrate = bitrate
+            calls.append(("bitrate", bitrate, threading.get_ident()))
+
+        def encode_frame(
+            self,
+            frame: Any,
+            *,
+            force_keyframe: bool,
+            on_packet: Callable[[Any], None],
+            pts: int,
+        ) -> None:
+            if not entered.is_set():
+                entered.set()
+                assert release.wait(3)
+            calls.append(("encode", force_keyframe, threading.get_ident()))
+            packet = Packet(b"packet")
+            packet.pts = pts
+            on_packet(packet)
+
+        def close(self) -> None:
+            calls.append(("close", None, threading.get_ident()))
+
+    monkeypatch.setattr(nvenc, "NVENCFrameEncoder", Encoder)
+
+    async def exercise() -> None:
+        frames = LatestFrameBuffer(maxsize=2)
+        track = nvenc.build_nvenc_track(frames=frames, fps=16, presentation_mode="real-frames", bitrate=1_000_000)
+        context = FrameContext(1, 0, ("first",), asyncio.get_running_loop().time())
+        try:
+            await frames.put_chunk([PresentationFrame(np.zeros((4, 4, 3), np.uint8), context)])
+
+            async def wait_entered() -> None:
+                while not entered.is_set():
+                    await asyncio.sleep(0.001)
+
+            await asyncio.wait_for(wait_entered(), 1)
+            track.request_keyframe()  # Arrives while native Encode still owns the first frame.
+            track.set_target_bitrate(400_000)
+            release.set()
+            first = await asyncio.wait_for(track.recv(), 1)
+            assert track.delivery_context is context
+            for target in (400_000, 420_000, 100_000_000):
+                track.set_target_bitrate(target)
+                await frames.put_chunk([np.zeros((4, 4, 3), np.uint8)])
+                packet = await asyncio.wait_for(track.recv(), 1)
+                assert packet.pts > first.pts
+                assert track.delivery_context is None
+        finally:
+            release.set()
+            await track.close()
+            frames.close()
+
+    asyncio.run(exercise())
+    assert [call[1] for call in calls if call[0] == "encode"] == [True, True, False, False]
+    assert [call[1] for call in calls if call[0] == "bitrate"] == [400_000, 1_000_000]
+    assert len({call[2] for call in calls}) == 1

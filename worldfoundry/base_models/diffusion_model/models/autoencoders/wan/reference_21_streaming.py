@@ -161,22 +161,20 @@ class Resample(nn.Module):
                 else:
 
                     cache_x = x[:, :, -CACHE_T:, :, :].clone()
-                    if cache_x.shape[2] < 2 and feat_cache[
-                            idx] is not None and feat_cache[idx] != 'Rep':
+                    if cache_x.shape[2] < 2 and feat_cache[idx] is not None and not isinstance(feat_cache[idx], str):
                         # cache last frame of last two chunk
                         cache_x = torch.cat([
                             feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(
                                 cache_x.device), cache_x
                         ],
                                             dim=2)
-                    if cache_x.shape[2] < 2 and feat_cache[
-                            idx] is not None and feat_cache[idx] == 'Rep':
+                    if cache_x.shape[2] < 2 and isinstance(feat_cache[idx], str):
                         cache_x = torch.cat([
                             torch.zeros_like(cache_x).to(cache_x.device),
                             cache_x
                         ],
                                             dim=2)
-                    if feat_cache[idx] == 'Rep':
+                    if isinstance(feat_cache[idx], str):
                         x = self.time_conv(x)
                     else:
                         x = self.time_conv(x, feat_cache[idx])
@@ -732,17 +730,15 @@ class WanVAE_(nn.Module):
             chunks = [x[:, :, :1]]
             chunks.extend(x[:, :, 1:].split(4, dim=2))
 
+        from worldfoundry.core.execution.realtime.feature_cache import commit_feature_cache
+
         outputs = []
         feature_map = state["feat_map"]
         for chunk in chunks:
             feature_index = [0]
-            outputs.append(
-                self.encoder(
-                    chunk,
-                    feat_cache=feature_map,
-                    feat_idx=feature_index,
-                )
-            )
+            updated = list(feature_map)
+            outputs.append(self.encoder(chunk, feat_cache=updated, feat_idx=feature_index))
+            commit_feature_cache(feature_map, updated)
         out = torch.cat(outputs, dim=2)
         mu, _ = self.conv1(out).chunk(2, dim=1)
         if isinstance(scale[0], torch.Tensor):
@@ -909,6 +905,21 @@ class Wan2_1_VAE:
                 self.scale,
                 state,
             ).float().squeeze(0)
+
+    def prepare_streaming_decode(self):
+        """Create request-owned decoder history, independent of encoder state."""
+        from .streaming import new_decode_cache
+
+        return new_decode_cache(self.model)
+
+    @torch.no_grad()
+    def decode_streaming(self, latents, state, *, channels_last_3d=False):
+        """Continue normalized CTHW decoding with explicit causal history."""
+        from .streaming import decode_wan_chunk
+
+        with torch.amp.autocast("cuda", dtype=self.dtype):
+            return decode_wan_chunk(self.model, self.scale, latents.unsqueeze(0), state,
+                                    channels_last_3d=channels_last_3d).squeeze(0)
 
     def decode(self, zs):
         """Decode.

@@ -7,7 +7,7 @@ Studio is a catalog-driven shell over the same pipeline and artifact contracts u
 
 <ArchDiagram id="studio" />
 
-Keep inference semantics in `studio/inference/execution.py` and catalog discovery in `studio/inference/catalog.py`. `studio/ui/launcher.py` routes standalone frontends, and `studio/ui/launch_config.py` parses launch options. Page layout, fullscreen, and keyboard controls live in `studio/visualization/backends/world.py` and `world_realtime_client.py`; inference semantics belong in the shared execution core.
+Keep session orchestration in `studio/inference/execution.py` and catalog discovery in `studio/inference/catalog.py`. Model input semantics and generation state belong to the public pipeline and its operator. `studio/ui/launcher.py` routes standalone frontends, and `studio/ui/launch_config.py` parses launch options. Page layout, fullscreen, and keyboard controls live in `studio/visualization/backends/world.py` and `world_realtime_client.py`.
 
 ## Files
 
@@ -104,6 +104,8 @@ Keep inference semantics in `studio/inference/execution.py` and catalog discover
 
 Catalog build is intentionally static. `discover_catalog()` walks pipeline modules with AST helpers so Studio can list models without importing heavy CUDA stacks or optional dependencies. It merges three sources: `pipeline_*.py` classes, component-pipeline factories, and action-synthesis classes, then overlays curated overrides and canonical runtime entries (aliases, default kwargs, checkpoints, `runtime_kind`). Dedup keys are `(module_path, class_name)`. Hidden or abstract ids stay out of the UI list.
 
+Single-model `find_entry()` uses the same canonical runtime defaults as the full list, including aliases, prompt/reference pairs, checkpoint overrides, and call/load options. It filters canonical entries before resolving checkpoint paths, so direct lookup does not inspect unrelated model checkpoints. Sana and CogVideoX checkpoint variants still resolve to their shared Studio cards; concrete execution uses `find_runtime_entry()`.
+
 Import happens later, only when a run needs a concrete class: `StudioManager.import_pipeline_class()` loads `module_path` / `class_name` from the selected `CatalogEntry`. That split is why a model can appear in the catalog yet still fail at LOAD if the current environment lacks its runtime imports or local checkpoint.
 
 - **Find project root** (`_project_root()` / `_project_root_candidates()`) — Allows Studio to run from repo root or package context.
@@ -114,7 +116,7 @@ Import happens later, only when a run needs a concrete class: `StudioManager.imp
 
 ## Execution core
 
-`StudioManager` is the orchestration hub. A typical `run` / `stream` / `init` / `reset` path prepares a request, stages inputs into a run directory, selects a driver from `entry.runtime_kind`, loads the pipeline (LRU-cached), invokes the driver, then materializes a `RunRecord`. Drivers exist because not every family is a single `__call__`: two-stage 3DGS reconstructs then orbits, point-cloud nav reconstructs then renders views, WorldFM needs custom camera and panorama handling. Everything else uses `BaseRuntimeDriver`.
+`StudioManager` is the orchestration hub. A typical `run` / `stream` / `init` / `reset` path prepares a request, stages inputs into a run directory, selects a driver from `entry.runtime_kind`, loads the pipeline (LRU-cached), invokes the driver, then materializes a `RunRecord`. Drivers exist because not every family is a single `__call__`: two-stage 3DGS reconstructs then orbits, and point-cloud nav reconstructs then renders views. WorldFM uses `BaseRuntimeDriver`; its operator owns camera controls and calibration, and its pipeline owns scene reconstruction and streaming state.
 
 `PreparedInputs` is the normalized payload after staging prompts, images, videos, interactions, and runtime kwargs. `PipelineContext` holds the loaded class, device, variant, and output root. `RunRecord` is the durable unit the UI reloads: ids, inputs, outputs, artifact paths, preview picks, status, and manifest JSON. Workspace inference may also pass an `infer_metadata` contract so materialization can enforce required output kinds (video, image, splat, and so on).
 
@@ -124,12 +126,23 @@ Import happens later, only when a run needs a concrete class: `StudioManager.imp
 - `BaseRuntimeDriver` — Default driver: load pipeline, run fresh request, optionally initialize/continue streaming, reset state.
 - `TwoStage3DGSRuntimeDriver` — Specialized driver for two-stage 3DGS flows.
 - `PointCloudNavRuntimeDriver` — Specialized driver for point-cloud/navigation previews.
-- `WorldFMRuntimeDriver` — Specialized driver for WorldFM camera pose and panorama workflow.
 - `StudioManager` — Orchestrates import, driver selection, input preparation, run execution, recent-run storage, unload/reset.
+
+## Pipeline-owned interactive state
+
+A pipeline exposing `stream_state_ready()` owns its interactive state. The shared driver forwards inputs without seeding its memory with a raw image or replacing its context with generated frames. Optional `init_stream(...)` prepares that state through the pipeline's input contract without generating a chunk. Pipelines using frame memory without these methods retain the shared image-seeding path. The native visual adapter keeps artifact history, not a reusable rollout state: `stream_state_ready()` remains false and each stream request retains its explicit conditioning. Stored in-memory keyframes use the same declared layout and pixel range as transport.
+
+Ordinary actions, realtime fallback, and torchrun ranks share `BaseRuntimeDriver.initialize_stream()` and `continue_stream()`. Realtime and worker initialization do not materialize previews; rank zero owns distributed artifact export. Native realtime pipelines retain `prepare_realtime()` / `configure_realtime()` / `stream_realtime()`. Both session reset and cached-model reset invoke `reset_realtime()`, otherwise `reset_memory()`, otherwise frame-memory reset. Geometry drivers retain reconstruction/render transitions, and stateless/API calls do not acquire streaming state.
+
+`WorldFMPipeline.init_stream()` reconstructs and records a scene, then `stream()` reuses it. Failed reconstruction preserves the prior scene; reset clears the instance's scene memory. `WorldFMOperator` accepts explicit poses or navigation tokens, applies world-coordinate translation and local Rx/Rz rotation, and resolves calibration in the order explicit `K`, meta-file `K`, source-image defaults. Studio stages these inputs but does not implement their model mathematics.
+
+The torchrun command bridge owns rank/device mapping, collective ordering, and process teardown. `PreparedInputs.explicit_load_params` records user override names through worker transport so launch defaults do not masquerade as explicit loader choices. LingBot's replication/FSDP, offload, sequence-parallel defaults, and active process-count policy live in `pipelines/lingbot_world/distributed.py`. Matrix-Game 3, LongVie 2, Helios, and DreamX retain their own topology and loading contracts.
+
+Regression coverage includes pipeline-owned INIT/STREAM/RESET, failed initialization and retry, A/B/A instance isolation, public-loader delegation, frame-memory seeding, cache leases, and torchrun policy isolation. Weight-free contracts are distinct from accepted-reference checkpoint replay and realtime performance gates.
 
 ## Preview and artifact helpers
 
-After the driver returns, `materialize_run()` turns a heterogeneous result into files under the run directory: metadata JSON, known artifact keys, optional frame-to-video export, mesh conversion, and optional Rerun recordings. When previews are still empty, Studio may scan the output directory depending on `WORLDFOUNDRY_STUDIO_ARTIFACT_SCAN_MODE`. `pick_preview_assets()` then ranks artifacts for the UI—preferring generated videos and named previews over staged inputs—and returns the primary video, image, splat/model, gallery, and optional `.rrd`.
+After the driver returns, `materialize_run()` turns a heterogeneous result into files under the run directory: metadata JSON, known artifact keys, optional frame-to-video export, mesh conversion, and optional Rerun recordings. When previews are still empty, Studio may scan the output directory depending on `WORLDFOUNDRY_STUDIO_ARTIFACT_SCAN_MODE`. `pick_preview_assets()` then ranks generated artifacts for the UI and returns the primary video, image, splat/model, gallery, and optional `.rrd`. Fresh and streaming materialization excludes staged inputs and explicit conditioning paths from preview selection. State-only INIT may display its seed image, but input attachments never satisfy required generated-output kinds. Inputs remain available in their run-owned staging directory.
 
 Blank previews usually mean the pipeline wrote files outside expected keys, returned an in-memory object without `save()`, or produced a video the decoder rejects. Fix the pipeline contract first; only then widen scan mode or conversion helpers.
 
@@ -149,7 +162,7 @@ Standalone browser frontends own launch and presentation. Shared inference modul
 - **Frontend routing** — `ui/launcher.py` and `visualization/backends/frontends.py` select `world`, Viser, Spark, or another frontend from model or artifact metadata.
 - **Browser UI** — `visualization/backends/world.py` and `world_realtime_client.py` own layout, fullscreen, keyboard, and joystick controls.
 - **Realtime transport** — `visualization/backends/world_realtime.py` owns resident sessions, calls `StudioManager.run_realtime()`, and transports frames and controls over WebRTC/WebSocket.
-- **Shared execution** — `inference/execution.py` owns models and drivers; realtime interaction transports frames in memory without exporting an MP4 for each control event.
+- **Shared execution** — `inference/execution.py` owns session orchestration, pipeline cache leases, and driver invocation; pipelines own model execution and state. Realtime interaction transports frames in memory without exporting an MP4 for each control event.
 
 ## Realtime serving boundaries
 
@@ -162,6 +175,8 @@ latent strides or silently change exact segment counts. `latest-interactive`
 may evict stale frames after bounded backpressure to protect control latency.
 `ordered-quality` never drops and is mandatory for prompt-scheduled or queued
 segments whose `chunk_done` frame count is a playback contract.
+
+Decoded native visual results carry a `video_chunk` using the existing core `VideoChunk`: declared layout, pixel value range, and layout-derived frame count. Image outputs use a singleton time axis. Native `return_dict=True` preserves these semantics for both fresh and streaming calls while raw returns remain tensors or artifact paths. Studio prefers this chunk over untyped aliases and uses `core/media/codecs/video.py` for conversion; positive-only `[-1,1]` output is still interpreted as signed pixels. Batched and multi-view layouts require singleton batch/view axes for single-video transport; sensor composition handles multiple views. CUDA byte chunks retain the existing device snapshot/event transport.
 
 Post-processors live after decoded RGB extraction, own isolated per-session
 state, may buffer a chunk, and flush tails in chain order. The default identity

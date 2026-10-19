@@ -37,11 +37,13 @@ checkpoint-facing parameter name are preserved.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 import torch
 import torch.nn as nn
+
+from worldfoundry.core.attention.sparse.ranges import AttentionRanges, attention_range_plan, range_attention
 
 from .config import (
     MAGI2_MODALITY_AUDIO,
@@ -109,9 +111,7 @@ def calc_local_qk_range(
     q_range_list = []
     k_range_list = []
     for i in range(num_frames):
-        q_range_list.append(
-            torch.tensor([i * token_per_frame, (i + 1) * token_per_frame])
-        )
+        q_range_list.append(torch.tensor([i * token_per_frame, (i + 1) * token_per_frame]))
         k_range_list.append(
             torch.tensor(
                 [
@@ -127,18 +127,12 @@ def calc_local_qk_range(
     local_k_range[local_k_range > num_video_tokens] = num_video_tokens
 
     video_q_range = torch.tensor([[0, num_video_tokens]])
-    video_k_range = torch.tensor(
-        [[num_video_tokens, num_video_tokens + num_audio_and_txt_tokens]]
-    )
+    video_k_range = torch.tensor([[num_video_tokens, num_video_tokens + num_audio_and_txt_tokens]])
     at_q_ranges = torch.tensor([[num_video_tokens, total_tokens]])
     at_k_ranges = torch.tensor([[0, total_tokens]])
 
-    q_ranges = torch.cat([local_q_range, video_q_range, at_q_ranges], dim=0).to(
-        device=device, dtype=torch.int32
-    )
-    k_ranges = torch.cat([local_k_range, video_k_range, at_k_ranges], dim=0).to(
-        device=device, dtype=torch.int32
-    )
+    q_ranges = torch.cat([local_q_range, video_q_range, at_q_ranges], dim=0).to(device=device, dtype=torch.int32)
+    k_ranges = torch.cat([local_k_range, video_k_range, at_k_ranges], dim=0).to(device=device, dtype=torch.int32)
     return q_ranges, k_ranges
 
 
@@ -198,7 +192,7 @@ def attention_varlen(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
-    attn_mask: torch.Tensor,
+    attn_mask: torch.Tensor | AttentionRanges,
     softmax_scale: Optional[float] = None,
 ) -> torch.Tensor:
     """Plain non-causal masked attention with GQA kv-head broadcast (fp32 math).
@@ -209,6 +203,8 @@ def attention_varlen(
     ``h // group``), matching flash-attn's native GQA. Returns ``[T, num_heads_q,
     head_dim]`` in bf16 (mirrors the upstream FA3 bf16 output).
     """
+    if isinstance(attn_mask, AttentionRanges):
+        return range_attention(q, k, v, attn_mask, scale=softmax_scale).to(_BF16)
     _, num_heads_q, head_dim = q.shape
     num_heads_kv = k.shape[1]
     scale = softmax_scale if softmax_scale is not None else head_dim**-0.5
@@ -253,9 +249,7 @@ class Attention(nn.Module):
     def __init__(self, config: AttentionConfig) -> None:
         super().__init__()
         self.config = config
-        self.pre_norm = MultiModalityRMSNorm(
-            config.hidden_size, eps=1e-6, num_modality=config.num_modality
-        )
+        self.pre_norm = MultiModalityRMSNorm(config.hidden_size, eps=1e-6, num_modality=config.num_modality)
         self.q_size = config.num_heads_q * config.head_dim
         self.kv_size = config.num_heads_kv * config.head_dim
 
@@ -292,13 +286,11 @@ class Attention(nn.Module):
         hidden_states: torch.Tensor,
         rope: torch.Tensor,
         modality_dispatcher: ModalityDispatcher,
-        local_mask: torch.Tensor,
-        full_mask: torch.Tensor,
+        local_mask: torch.Tensor | AttentionRanges,
+        full_mask: torch.Tensor | AttentionRanges,
     ) -> torch.Tensor:
         cfg = self.config
-        hidden_states = self.pre_norm(
-            hidden_states, modality_dispatcher=modality_dispatcher
-        ).to(_BF16)
+        hidden_states = self.pre_norm(hidden_states, modality_dispatcher=modality_dispatcher).to(_BF16)
         qkv = self.linear_qkv(hidden_states, modality_dispatcher=modality_dispatcher).to(_FP32)
 
         q, k, v = torch.split(qkv, [self.q_size, self.kv_size, self.kv_size], dim=1)
@@ -357,12 +349,8 @@ class MLP(nn.Module):
     def __init__(self, config: MLPConfig) -> None:
         super().__init__()
         self.config = config
-        self.pre_norm = MultiModalityRMSNorm(
-            config.hidden_size, num_modality=config.num_modality
-        )
-        intermediate_size_up = (
-            config.intermediate_size * 2 if config.gated_act else config.intermediate_size
-        )
+        self.pre_norm = MultiModalityRMSNorm(config.hidden_size, num_modality=config.num_modality)
+        intermediate_size_up = config.intermediate_size * 2 if config.gated_act else config.intermediate_size
         self.up_gate_proj = create_linear(
             config.hidden_size,
             intermediate_size_up,
@@ -381,14 +369,21 @@ class MLP(nn.Module):
         )
         self.activation_func = create_activation_func(config.activation_type)
 
-    def forward(
-        self, x: torch.Tensor, modality_dispatcher: ModalityDispatcher
-    ) -> torch.Tensor:
-        x = self.pre_norm(x, modality_dispatcher=modality_dispatcher).to(_BF16)
-        x = self.up_gate_proj(x, modality_dispatcher=modality_dispatcher).to(_FP32)
-        x = self.activation_func(x).to(_BF16)
-        x = self.down_proj(x, modality_dispatcher=modality_dispatcher).to(_FP32)
-        return x
+    def forward(self, x: torch.Tensor, modality_dispatcher: ModalityDispatcher) -> torch.Tensor:
+        """Bound expanded activation storage without changing per-token math."""
+        output = torch.empty_like(x, dtype=_FP32)
+        for start in range(0, x.shape[0], 4096):
+            stop = min(start + 4096, x.shape[0])
+            dispatcher = modality_dispatcher
+            if self.config.num_modality > 1:
+                dispatcher = ModalityDispatcher(
+                    modality_dispatcher.modality_mapping[start:stop], self.config.num_modality
+                )
+            value = self.pre_norm(x[start:stop], modality_dispatcher=dispatcher).to(_BF16)
+            value = self.up_gate_proj(value, modality_dispatcher=dispatcher).to(_FP32)
+            value = self.activation_func(value).to(_BF16)
+            output[start:stop] = self.down_proj(value, modality_dispatcher=dispatcher).to(_FP32)
+        return output
 
 
 # ============================================================
@@ -412,15 +407,9 @@ class Adapter(nn.Module):
     def __init__(self, config: AdapterConfig) -> None:
         super().__init__()
         self.config = config
-        self.video_embedder = nn.Linear(
-            config.video_in_channels, config.hidden_size, bias=True, dtype=_FP32
-        )
-        self.text_embedder = nn.Linear(
-            config.text_in_channels, config.hidden_size, bias=True, dtype=_FP32
-        )
-        self.audio_embedder = nn.Linear(
-            config.audio_in_channels, config.hidden_size, bias=True, dtype=_FP32
-        )
+        self.video_embedder = nn.Linear(config.video_in_channels, config.hidden_size, bias=True, dtype=_FP32)
+        self.text_embedder = nn.Linear(config.text_in_channels, config.hidden_size, bias=True, dtype=_FP32)
+        self.audio_embedder = nn.Linear(config.audio_in_channels, config.hidden_size, bias=True, dtype=_FP32)
         self.rope = ElementWiseFourierEmbed(
             config.hidden_size // config.num_attention_heads,
             in_pixels=False,
@@ -436,18 +425,10 @@ class Adapter(nn.Module):
         text_mask: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         rope = self.rope(coords_mapping)
-        output_x = torch.zeros(
-            x.shape[0], self.config.hidden_size, device=x.device, dtype=x.dtype
-        )
-        output_x[text_mask] = self.text_embedder(
-            x[text_mask, : self.config.text_in_channels]
-        )
-        output_x[audio_mask] = self.audio_embedder(
-            x[audio_mask, : self.config.audio_in_channels]
-        )
-        output_x[video_mask] = self.video_embedder(
-            x[video_mask, : self.config.video_in_channels]
-        )
+        output_x = torch.zeros(x.shape[0], self.config.hidden_size, device=x.device, dtype=x.dtype)
+        output_x[text_mask] = self.text_embedder(x[text_mask, : self.config.text_in_channels])
+        output_x[audio_mask] = self.audio_embedder(x[audio_mask, : self.config.audio_in_channels])
+        output_x[video_mask] = self.video_embedder(x[video_mask, : self.config.video_in_channels])
         return output_x, rope
 
 
@@ -469,16 +450,10 @@ class PostAdapter(nn.Module):
         self.config = config
         self.final_norm_video = MultiModalityRMSNorm(config.hidden_size)
         self.final_norm_audio = MultiModalityRMSNorm(config.hidden_size)
-        self.final_linear_video = nn.Linear(
-            config.hidden_size, config.video_in_channels, bias=False, dtype=_FP32
-        )
-        self.final_linear_audio = nn.Linear(
-            config.hidden_size, config.audio_in_channels, bias=False, dtype=_FP32
-        )
+        self.final_linear_video = nn.Linear(config.hidden_size, config.video_in_channels, bias=False, dtype=_FP32)
+        self.final_linear_audio = nn.Linear(config.hidden_size, config.audio_in_channels, bias=False, dtype=_FP32)
 
-    def forward(
-        self, x: torch.Tensor, video_mask: torch.Tensor, audio_mask: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, video_mask: torch.Tensor, audio_mask: torch.Tensor) -> torch.Tensor:
         x_video = x[video_mask].to(self.final_norm_video.weight.dtype)
         x_video = self.final_norm_video(x_video)
         x_video = self.final_linear_video(x_video)
@@ -507,8 +482,8 @@ class TransformerLayer(nn.Module):
     """One refiner layer: plain residual attention then dense SwiGLU7 MLP.
 
     Unlike the preview DiT there is no MHC widening and no MoE.  Layers listed
-    in ``local_attn_layers`` use the frame-local window mask; the rest use a
-    per-document block-diagonal full mask.
+    in ``local_attn_layers`` use the packed block-window range union; the rest
+    use per-document full attention.
     """
 
     def __init__(self, model_config: Magi2RefinerConfig, layer_idx: int) -> None:
@@ -549,24 +524,18 @@ class TransformerLayer(nn.Module):
             )
         )
         if self.post_norm:
-            self.attn_post_norm = MultiModalityRMSNorm(
-                model_config.hidden_size, num_modality=num_modality
-            )
-            self.mlp_post_norm = MultiModalityRMSNorm(
-                model_config.hidden_size, num_modality=num_modality
-            )
+            self.attn_post_norm = MultiModalityRMSNorm(model_config.hidden_size, num_modality=num_modality)
+            self.mlp_post_norm = MultiModalityRMSNorm(model_config.hidden_size, num_modality=num_modality)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         rope: torch.Tensor,
         modality_dispatcher: ModalityDispatcher,
-        local_mask: torch.Tensor,
-        full_mask: torch.Tensor,
+        local_mask: torch.Tensor | AttentionRanges,
+        full_mask: torch.Tensor | AttentionRanges,
     ) -> torch.Tensor:
-        attn_out = self.attention(
-            hidden_states, rope, modality_dispatcher, local_mask, full_mask
-        )
+        attn_out = self.attention(hidden_states, rope, modality_dispatcher, local_mask, full_mask)
         if self.post_norm:
             attn_out = self.attn_post_norm(attn_out, modality_dispatcher=modality_dispatcher)
         hidden_states = hidden_states + attn_out
@@ -583,17 +552,15 @@ class TransformerBlock(nn.Module):
 
     def __init__(self, model_config: Magi2RefinerConfig) -> None:
         super().__init__()
-        self.layers = nn.ModuleList(
-            [TransformerLayer(model_config, i) for i in range(model_config.num_layers)]
-        )
+        self.layers = nn.ModuleList([TransformerLayer(model_config, i) for i in range(model_config.num_layers)])
 
     def forward(
         self,
         x: torch.Tensor,
         rope: torch.Tensor,
         modality_dispatcher: ModalityDispatcher,
-        local_mask: torch.Tensor,
-        full_mask: torch.Tensor,
+        local_mask: torch.Tensor | AttentionRanges,
+        full_mask: torch.Tensor | AttentionRanges,
     ) -> torch.Tensor:
         for layer in self.layers:
             x = layer(x, rope, modality_dispatcher, local_mask, full_mask)
@@ -608,8 +575,8 @@ class TransformerBlock(nn.Module):
 class Transformer(nn.Module):
     """MAGI-2 refiner DiT: Adapter -> 30 x TransformerLayer -> PostAdapter.
 
-    Single-GPU: cp = ep = dp = 1. Ulysses dispatch/undispatch removed; local
-    windowed attention becomes one masked attention over the full packed stream.
+    Single-GPU: cp = ep = dp = 1. Local attention evaluates exact key-range
+    unions; dense feed-forward activations are processed in token chunks.
     """
 
     config: TransformerConfig
@@ -645,23 +612,16 @@ class Transformer(nn.Module):
         varlen_handler: VarlenHandler,
         local_attn_handler: LocalAttnHandler,
     ) -> torch.Tensor:
-        total_tokens = x.shape[0]
-        device = x.device
-
         modality_dispatcher = ModalityDispatcher(modality_mapping, 3)
         video_mask = modality_mapping == MAGI2_MODALITY_VIDEO
         audio_mask = modality_mapping == MAGI2_MODALITY_AUDIO
         text_mask = modality_mapping == MAGI2_MODALITY_TEXT
 
-        # Frame-local windowed mask (in original packing order) + a plain
-        # per-doc block-diagonal mask for any non-local layer.
-        local_mask = build_range_mask(
-            local_attn_handler.q_ranges,
-            local_attn_handler.k_ranges,
-            total_tokens,
-            device,
-        )
-        full_mask = build_block_diag_mask(varlen_handler.cu_seqlens_q, device)
+        # Range unions preserve the released window without a quadratic mask.
+        local_mask = attention_range_plan(local_attn_handler.q_ranges, local_attn_handler.k_ranges)
+        bounds = varlen_handler.cu_seqlens_q
+        ranges = torch.stack((bounds[:-1], bounds[1:]), dim=1)
+        full_mask = attention_range_plan(ranges, ranges)
 
         x, rope = self.pre_adapter(x, coords_mapping, video_mask, audio_mask, text_mask)
 
@@ -704,8 +664,8 @@ def _smoke() -> None:
     cfg = Magi2RefinerConfig(
         num_layers=4,
         hidden_size=256,
-        head_dim=128,          # -> num_heads_q = 2
-        num_query_groups=1,    # -> num_heads_kv = 1  (GQA 2:1)
+        head_dim=128,  # -> num_heads_q = 2
+        num_query_groups=1,  # -> num_heads_kv = 1  (GQA 2:1)
         mm_layers=(0, 1, 2, 3),
         local_attn_layers=tuple(range(4)),
         frame_receptive_field=1,
@@ -723,9 +683,7 @@ def _smoke() -> None:
     x = torch.randn(total, in_ch, dtype=_FP32)
 
     modality = torch.tensor(
-        [MAGI2_MODALITY_VIDEO] * n_video
-        + [MAGI2_MODALITY_AUDIO] * n_audio
-        + [MAGI2_MODALITY_TEXT] * n_text,
+        [MAGI2_MODALITY_VIDEO] * n_video + [MAGI2_MODALITY_AUDIO] * n_audio + [MAGI2_MODALITY_TEXT] * n_text,
         dtype=torch.long,
     )
 

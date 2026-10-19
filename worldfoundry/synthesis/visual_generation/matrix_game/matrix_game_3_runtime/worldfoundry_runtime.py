@@ -10,19 +10,21 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Optional, Sequence
 
+import numpy as np
+import torch
+
 from worldfoundry.core import cuda_visible_devices_from_device, load_pil_image, load_video_frames
 from worldfoundry.core.io.paths import (
     checkpoint_root_path,
     hfd_root_path,
-    package_module_root as package_root,
     project_root,
 )
+from worldfoundry.core.io.paths import (
+    package_module_root as package_root,
+)
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 from worldfoundry.evaluation.utils import worldfoundry_data_path
-
-import numpy as np
-import torch
 from worldfoundry.runtime.env import resolve_hfd_root
-
 
 DEFAULT_MATRIX_GAME3_ALIASES = {
     "",
@@ -355,6 +357,11 @@ class MatrixGame3Runtime:
             video = None
         return {
             "video": video,
+            "video_chunk": (
+                VideoChunk(frames=video, layout="thwc", value_range="0,255", metadata={"fps": int(fps)})
+                if video is not None
+                else None
+            ),
             "generated_video_path": str(video_path),
             "output_dir": str(output_dir_path),
             "fps": int(fps),
@@ -397,10 +404,11 @@ class MatrixGame3Runtime:
         from .worldfoundry_runner import patch_torch_dynamo_config_aliases
 
         patch_torch_dynamo_config_aliases()
+        import pipeline.inference_interactive_pipeline as native_runtime
+
         from worldfoundry.base_models.diffusion_model.recipes.wan_configs.action_22 import (
             WAN_CONFIGS,
         )
-        import pipeline.inference_interactive_pipeline as native_runtime
 
         device = torch.device(self.device)
         device_id = (

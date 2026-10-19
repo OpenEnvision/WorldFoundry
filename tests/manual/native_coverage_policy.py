@@ -6,12 +6,25 @@ import hashlib
 import importlib.util
 import json
 import re
+from collections.abc import Sequence
 from pathlib import Path
+from types import ModuleType
 
 import yaml
 
 _IDENTITY = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*")
 _BASELINE_SHA256 = "b4aaf03f6698aa451c67d608b5d100b4373462f8e4259cb6f4de4c8449d5e146"
+
+# Planned retirements retain their frozen records, not their uncovered-gap exception.
+# See the validation guide's planned model retirements policy (2026-10-16).
+_RETIRED_NATIVE_VARIANTS = frozenset(
+    {
+        "biwm-wan21@biwm-wan21",
+        "biwm-wan22@biwm-wan22",
+        "irasim@irasim",
+        "pandora@pandora",
+    }
+)
 
 
 def load_frozen_baseline(path: Path) -> dict:
@@ -37,13 +50,20 @@ def has_replay_recipe(case: dict) -> bool:
     if isinstance(case.get("seed"), bool) or not isinstance(case.get("seed"), int):
         return False
     load, assets, outputs = case.get("load"), case.get("assets"), case.get("required_outputs")
-    if (not isinstance(load, dict) or not isinstance(assets, dict) or not assets
-            or not isinstance(outputs, list) or not outputs
-            or not all(isinstance(value, str) and value.strip() for value in outputs)
-            or len(outputs) != len(set(outputs))):
+    if (
+        not isinstance(load, dict)
+        or not isinstance(assets, dict)
+        or not assets
+        or not isinstance(outputs, list)
+        or not outputs
+        or not all(isinstance(value, str) and value.strip() for value in outputs)
+        or len(outputs) != len(set(outputs))
+    ):
         return False
-    if not any(isinstance(load.get(name), str) and load[name].strip()
-               for name in ("model_path", "pretrained_model_path", "checkpoint_path")):
+    if not any(
+        isinstance(load.get(name), str) and load[name].strip()
+        for name in ("model_path", "pretrained_model_path", "checkpoint_path")
+    ):
         return False
     runtime_manifest = str(case.get("target", "")).startswith(
         "worldfoundry.pipelines.world_model.pipeline_runtime_manifest:"
@@ -76,9 +96,14 @@ def has_replay_recipe(case: dict) -> bool:
 def recipe_cases(row: dict, cases: dict) -> list[str]:
     if row.get("binding_status", "ready") != "ready":
         return []
-    return sorted(name for name, case in cases.items()
-                  if case.get("model_id", name) == row["model_id"] and case.get("target") == row["target"]
-                  and case.get("id") == name and has_replay_recipe(case))
+    return sorted(
+        name
+        for name, case in cases.items()
+        if case.get("model_id", name) == row["model_id"]
+        and case.get("target") == row["target"]
+        and case.get("id") == name
+        and has_replay_recipe(case)
+    )
 
 
 def outside_bindings(root: Path, rows: list[dict]) -> list[dict]:
@@ -89,26 +114,46 @@ def outside_bindings(root: Path, rows: list[dict]) -> list[dict]:
         binding_id = config.get("binding_id", path.stem)
         if binding_id not in native:
             target = config.get("pipeline", {}).get("target")
-            valid_target = isinstance(target, str) and re.fullmatch(r"worldfoundry(?:\.[a-zA-Z_]\w*)+:[a-zA-Z_]\w*", target)
+            valid_target = isinstance(target, str) and re.fullmatch(
+                r"worldfoundry(?:\.[a-zA-Z_]\w*)+:[a-zA-Z_]\w*", target
+            )
             module = root / (target.partition(":")[0].replace(".", "/") + ".py") if valid_target else None
-            result.append({"binding_id": binding_id, "model_id": config.get("model_id", binding_id),
-                           "target": target, "binding_status": "ready" if module and module.is_file() else "missing_implementation",
-                           "binding_path": path.relative_to(root).as_posix()})
+            result.append(
+                {
+                    "binding_id": binding_id,
+                    "model_id": config.get("model_id", binding_id),
+                    "target": target,
+                    "binding_status": "ready" if module and module.is_file() else "missing_implementation",
+                    "binding_path": path.relative_to(root).as_posix(),
+                }
+            )
     return result
 
 
 def make_baseline(report: dict, cases: dict, root: Path, source_revision: str) -> dict:
-    return {"schema_version": 1, "source_revision": source_revision,
-            "scope": "Frozen native identities and replay definitions; existing uncovered variants remain uncovered.",
-            "models": [{**{name: row.get(name) for name in
-                            ("model_id", "binding_id", "target", "binding_status", "catalog_path", "binding_path")},
-                        "required_case_ids": recipe_cases(row, cases)} for row in report["models"]],
-            "outside_scope_bindings": outside_bindings(root, report["models"])}
+    return {
+        "schema_version": 1,
+        "source_revision": source_revision,
+        "scope": "Frozen native identities and replay definitions; existing uncovered variants remain uncovered.",
+        "models": [
+            {
+                **{
+                    name: row.get(name)
+                    for name in ("model_id", "binding_id", "target", "binding_status", "catalog_path", "binding_path")
+                },
+                "required_case_ids": recipe_cases(row, cases),
+            }
+            for row in report["models"]
+        ],
+        "outside_scope_bindings": outside_bindings(root, report["models"]),
+    }
 
 
-def _load_impact_module():
-    spec = importlib.util.spec_from_file_location("coverage_policy_import_graph",
-                                                Path(__file__).with_name("geometry_regression_impact.py"))
+def _load_impact_module() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "coverage_policy_import_graph", Path(__file__).with_name("geometry_regression_impact.py")
+    )
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -130,8 +175,7 @@ def runtime_dependencies(rows: list[dict], root: Path) -> dict[str, set[str]]:
         if not isinstance(profile, dict):
             raise ValueError("Runtime profile must contain a mapping")
         binding = profile.get("execution", {}).get("pipeline_binding")
-        owners = [row for row in rows if row["model_id"] == profile.get("model_id")
-                  or row["binding_id"] == binding]
+        owners = [row for row in rows if row["model_id"] == profile.get("model_id") or row["binding_id"] == binding]
         if not owners:
             continue
         paths = {path.relative_to(root).as_posix()}
@@ -142,8 +186,12 @@ def runtime_dependencies(rows: list[dict], root: Path) -> dict[str, set[str]]:
             if not isinstance(declared, str):
                 raise ValueError("Runtime source root must be a canonical in-tree path")
             pure = Path(declared)
-            if (pure.is_absolute() or ".." in pure.parts
-                    or pure.as_posix() != declared or not declared.startswith("worldfoundry/")):
+            if (
+                pure.is_absolute()
+                or ".." in pure.parts
+                or pure.as_posix() != declared
+                or not declared.startswith("worldfoundry/")
+            ):
                 raise ValueError("Runtime source root must be a canonical in-tree path")
             target = root / declared
             if target.is_symlink() or not target.resolve().is_relative_to(root.resolve()):
@@ -154,7 +202,9 @@ def runtime_dependencies(rows: list[dict], root: Path) -> dict[str, set[str]]:
     return dependencies
 
 
-def affected_variants(rows: list[dict], root: Path, changed_paths: list[str], requested: list[str]) -> tuple[set[str], list[str]]:
+def affected_variants(
+    rows: list[dict], root: Path, changed_paths: list[str], requested: list[str]
+) -> tuple[set[str], list[str]]:
     affected, unknown = set(), []
     for identity in requested:
         matched = [row for row in rows if identity in {row["model_id"], variant_key(row)}]
@@ -171,12 +221,20 @@ def affected_variants(rows: list[dict], root: Path, changed_paths: list[str], re
         if direct:
             affected.update(variant_key(row) for row in direct)
         elif path.startswith(("worldfoundry/core/", "worldfoundry/runtime/")) or path in {
-            "worldfoundry/pipelines/pipeline_utils.py", "worldfoundry/operators/base_operator.py",
+            "worldfoundry/pipelines/pipeline_utils.py",
+            "worldfoundry/operators/base_operator.py",
             "worldfoundry/synthesis/base_synthesis.py",
         }:
             affected.update(variant_key(row) for row in rows)
-        elif path.startswith(("worldfoundry/pipelines/", "worldfoundry/operators/", "worldfoundry/base_models/",
-                              "worldfoundry/synthesis/", "worldfoundry/data/models/runtime/")):
+        elif path.startswith(
+            (
+                "worldfoundry/pipelines/",
+                "worldfoundry/operators/",
+                "worldfoundry/base_models/",
+                "worldfoundry/synthesis/",
+                "worldfoundry/data/models/runtime/",
+            )
+        ):
             source_changes.append(path)
     if source_changes:
         graph = _load_impact_module().ImportGraph(root)
@@ -189,12 +247,15 @@ def affected_variants(rows: list[dict], root: Path, changed_paths: list[str], re
                 except (ValueError, OSError, SyntaxError, UnicodeError):
                     closures[target] = None
         for path in source_changes:
-            matched = [row for row in rows if closures[row.get("target")] is not None
-                       and path in closures[row.get("target")]]
-            matched.extend(row for row in rows if any(
-                path.startswith(dependency) if dependency.endswith("/") else path == dependency
-                for dependency in declared_dependencies.get(variant_key(row), ())
-            ))
+            matched = [row for row in rows if (closure := closures[row.get("target")]) is not None and path in closure]
+            matched.extend(
+                row
+                for row in rows
+                if any(
+                    path.startswith(dependency) if dependency.endswith("/") else path == dependency
+                    for dependency in declared_dependencies.get(variant_key(row), ())
+                )
+            )
             if matched:
                 affected.update(variant_key(row) for row in matched)
             else:
@@ -206,18 +267,31 @@ def affected_variants(rows: list[dict], root: Path, changed_paths: list[str], re
     return affected, unknown
 
 
-def evaluate_policy(report: dict, cases: dict, baseline: dict, root: Path,
-                    changed_paths: list[str] = (), affected_models: list[str] = ()) -> dict:
+def evaluate_policy(
+    report: dict,
+    cases: dict,
+    baseline: dict,
+    root: Path,
+    changed_paths: Sequence[str] = (),
+    affected_models: Sequence[str] = (),
+) -> dict:
     if baseline.get("schema_version") != 1 or not isinstance(baseline.get("models"), list) or not baseline["models"]:
         raise ValueError("A nonempty frozen native coverage baseline is required")
-    if not isinstance(baseline.get("source_revision"), str) or not re.fullmatch(r"[0-9a-f]{40}", baseline["source_revision"]):
+    if not isinstance(baseline.get("source_revision"), str) or not re.fullmatch(
+        r"[0-9a-f]{40}", baseline["source_revision"]
+    ):
         raise ValueError("Frozen native coverage baseline must name its source revision")
     before = {}
     for row in baseline["models"]:
-        if (not isinstance(row, dict) or any(not isinstance(row.get(name), str) or not _IDENTITY.fullmatch(row[name])
-                                            for name in ("model_id", "binding_id"))
-                or not isinstance(row.get("required_case_ids"), list)
-                or not all(isinstance(case, str) for case in row["required_case_ids"])):
+        if (
+            not isinstance(row, dict)
+            or any(
+                not isinstance(row.get(name), str) or not _IDENTITY.fullmatch(row[name])
+                for name in ("model_id", "binding_id")
+            )
+            or not isinstance(row.get("required_case_ids"), list)
+            or not all(isinstance(case, str) for case in row["required_case_ids"])
+        ):
             raise ValueError("Frozen native coverage baseline contains an invalid variant")
         key = variant_key(row)
         if key in before:
@@ -229,18 +303,23 @@ def evaluate_policy(report: dict, cases: dict, baseline: dict, root: Path,
     affected, unknown = affected_variants(report["models"], root, list(changed_paths), list(affected_models))
     violations, recipes = [], {key: recipe_cases(row, cases) for key, row in current.items()}
     for key, row in current.items():
-        previous = before.get(key)
+        previous = before.get(key) if key not in _RETIRED_NATIVE_VARIANTS else None
         if previous is None and not recipes[key]:
             violations.append({"variant": key, "reason": "new_native_variant_without_replay_recipe"})
         if previous is not None:
             missing = set(previous["required_case_ids"]) - set(recipes[key])
             if missing:
-                violations.append({"variant": key, "reason": "required_case_coverage_regressed", "case_ids": sorted(missing)})
-            if previous.get("target") != row.get("target") or previous.get("binding_status") != row.get("binding_status"):
+                violations.append(
+                    {"variant": key, "reason": "required_case_coverage_regressed", "case_ids": sorted(missing)}
+                )
+            if previous.get("target") != row.get("target") or previous.get("binding_status") != row.get(
+                "binding_status"
+            ):
                 affected.add(key)
         if key in affected and not recipes[key]:
             violations.append({"variant": key, "reason": "affected_native_variant_without_replay_recipe"})
-    for key in sorted(set(before) - set(current)):
+    removed = set(before) - set(current)
+    for key in sorted(removed - _RETIRED_NATIVE_VARIANTS):
         violations.append({"variant": key, "reason": "frozen_native_variant_disappeared"})
     outside_before = baseline.get("outside_scope_bindings", [])
     if not isinstance(outside_before, list):
@@ -250,9 +329,20 @@ def evaluate_policy(report: dict, cases: dict, baseline: dict, root: Path,
         previous = outside_index.get(row["binding_id"])
         if previous is None or any(previous.get(field) != row.get(field) for field in ("model_id", "target")):
             if not recipe_cases(row, cases):
-                violations.append({"variant": variant_key(row), "reason": "new_or_changed_unclassified_binding_without_recipe"})
-    return {"status": "failed" if violations else "passed", "violations": violations,
-            "affected_variants": sorted(affected), "unknown_inference_paths": sorted(unknown),
-            "frozen_native_variants": len(before), "native_variants_with_replay_recipes": sum(bool(value) for value in recipes.values()),
-            "existing_uncovered_variants": sorted(key for key in set(before) & set(current) if not recipes[key]),
-            "accepted_reference_verified": False, "gpu_inference_verified": False}
+                violations.append(
+                    {"variant": variant_key(row), "reason": "new_or_changed_unclassified_binding_without_recipe"}
+                )
+    return {
+        "status": "failed" if violations else "passed",
+        "violations": violations,
+        "affected_variants": sorted(affected),
+        "unknown_inference_paths": sorted(unknown),
+        "frozen_native_variants": len(before),
+        "native_variants_with_replay_recipes": sum(bool(value) for value in recipes.values()),
+        "retired_native_variants": sorted(removed & _RETIRED_NATIVE_VARIANTS),
+        "existing_uncovered_variants": sorted(
+            key for key in set(before) & set(current) if key not in _RETIRED_NATIVE_VARIANTS and not recipes[key]
+        ),
+        "accepted_reference_verified": False,
+        "gpu_inference_verified": False,
+    }

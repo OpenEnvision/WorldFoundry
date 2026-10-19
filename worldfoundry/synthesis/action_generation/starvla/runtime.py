@@ -13,7 +13,6 @@ from worldfoundry.core.action_normalization import (
     select_modality_statistics,
     unnormalize_action_values,
 )
-from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import (
     project_root,
     resolve_local_hf_model_path,
@@ -319,7 +318,6 @@ class StarVLAPlanRuntime:
             "model_id": "starvla",
             "artifact_kind": "action_trace",
             "artifact_path": str(target),
-            "artifact_sha256": file_sha256(target),
             "backend": payload["backend"],
             "backend_quality": payload["backend_quality"],
             "action_shape": payload["action_shape"],

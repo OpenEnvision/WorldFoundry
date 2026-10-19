@@ -1,11 +1,5 @@
-
-import pytest
-
-# This test module imports worldfoundry code that requires the optional
-# "colorspacious" dependency at import time; skip when it is unavailable.
-pytest.importorskip("colorspacious")
 from worldfoundry.studio.inference.catalog import find_entry
-from worldfoundry.studio.serving.workspace import (
+from worldfoundry.studio.inference.requests import (
     JobCreateRequest,
     _resolve_inference_contract,
     _validate_explicit_kwargs,

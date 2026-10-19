@@ -1,11 +1,11 @@
 ---
 title: "LaST-R1"
-description: "LaST-R1: vla and reinforcement learning; Planned."
+description: "LaST-R1: vla and reinforcement learning; Runner parity pending."
 modelId: "last-r1"
 pageSource: generated
 ---
 
-LaST-R1 is an MIT-licensed VLA policy trained with reinforcement learning. The libero_10 RL checkpoint is staged locally, but WorldFoundry does not yet provide the model-specific rollout adapter needed for inference.
+LaST-R1 is an MIT-licensed VLA policy. WorldFoundry integrates offline image-and-instruction inference through its model-specific latent/action-token adapter.
 
 <ModelPaperFigures modelId="last-r1" locale="en" />
 
@@ -31,11 +31,11 @@ Optional `prompt`, `input_path`, `interactions`, and `fps`; artifacts `action_tr
 
 CLI task profiles: `interactive-video`. WorldFoundry binds `LastR1Pipeline`.
 
-Family status: **Planned**.
+Family status: **Runner parity pending**.
 
-The local libero_10 checkpoint has both weight shards; libero_goal is incomplete. Inference remains unavailable until the official latent/action-token rollout is adapted and validated.
+Prepare the libero_10 checkpoint and pinned official source declared by the runtime profile. The adapter returns eight finite seven-dimensional actions from one image and instruction.
 
-The local libero_10 RL checkpoint is staged, but the public policy runner is not ready.
+The model-specific adapter executes offline image-and-instruction inference with the libero_10 RL checkpoint and pinned official source.
 
 ## Running in WorldFoundry
 
@@ -45,6 +45,6 @@ It runs in the unified environment `worldfoundry-unified-cu128` (Python 3.11, CU
 
 Recorded weight repositories include `chenhao01/LaST-R1`. Prepare the environment and check local assets with `bash scripts/inference/prepare_model_infer.sh last-r1`. Add `--download` to fetch missing public checkpoints.
 
-Status: **Planned**.
+Status: **Runner parity pending**.
 
 <ModelRelatedRecipes modelId="last-r1" locale="en" />

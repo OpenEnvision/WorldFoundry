@@ -236,11 +236,11 @@ def unified_env_enabled() -> bool:
     """Return whether the unified env routing policy is active.
 
     When ``WORLDFOUNDRY_USE_UNIFIED_ENV`` is ``auto`` (default), the policy is
-    enabled if any unified-tier environment directory exists on disk.
+    enabled if the unified cu128 environment exists on disk.
     """
     value = os.environ.get("WORLDFOUNDRY_USE_UNIFIED_ENV", "auto").strip().lower()
     if value in {"", "auto"}:
-        return any(unified_env_exists(tier) for tier in SUPPORTED_CUDA_TIERS)
+        return unified_env_exists(DEFAULT_CUDA_TIER)
     return value not in {"0", "false", "no", "off"}
 
 
@@ -250,27 +250,33 @@ def preferred_unified_tier() -> str | None:
     if not value:
         return None
     normalized = normalize_cuda_profile(value)
-    return normalized if normalized in SUPPORTED_CUDA_TIERS else None
+    return normalized if normalized == DEFAULT_CUDA_TIER else None
 
 
 def resolve_install_tier(requested: str | None = None, *, driver_cuda: str | None = None) -> str:
-    """Resolve user-facing installer input to one supported CUDA wheel tier."""
+    """Resolve the unified Torch 2.7+ environment's CUDA 12.8 wheel tier."""
 
     value = normalize_cuda_profile(
-        requested
-        or os.environ.get("WORLDFOUNDRY_CUDA_PROFILE")
-        or os.environ.get("WORLDFOUNDRY_CUDA_TIER")
-        or "auto"
+        requested or os.environ.get("WORLDFOUNDRY_CUDA_PROFILE") or os.environ.get("WORLDFOUNDRY_CUDA_TIER") or "auto"
     )
-    if value in {"", "auto"}:
-        return best_cuda_tier_for_driver(driver_cuda, allow_missing_driver=False)
-    value = _LEGACY_PROFILE_TO_TIER.get(value, value)
-    if value not in SUPPORTED_CUDA_TIERS:
+    if value not in {"auto", DEFAULT_CUDA_TIER}:
         raise ValueError(
-            f"Unsupported CUDA tier {requested!r}; use auto, "
-            + ", ".join(SUPPORTED_CUDA_TIERS)
+            f"The unified environment requires Torch >=2.7 and --cuda cu128; "
+            f"got {value!r}. Use a model-specific environment for older CUDA stacks."
         )
-    return cap_tier_to_driver(value, driver_cuda)
+    detected = driver_cuda if driver_cuda is not None else detect_nvidia_driver_cuda()
+    driver = cuda_version_tuple(detected)
+    if driver == (0, 0) and value == "auto":
+        raise ValueError(
+            "No NVIDIA driver CUDA version detected. On CPU-only hosts use "
+            "--cuda cu128 --allow-no-cuda --skip-flash-attn."
+        )
+    if driver != (0, 0) and driver < TIER_MINIMUM_DRIVER[DEFAULT_CUDA_TIER]:
+        raise ValueError(
+            f"The unified environment requires a CUDA 12.8+ NVIDIA driver; detected {detected}. "
+            "Update the driver or use a model-specific environment."
+        )
+    return DEFAULT_CUDA_TIER
 
 
 def cuda_tier_report(requested: str | None = None, *, driver_cuda: str | None = None) -> dict[str, object]:
@@ -290,18 +296,21 @@ def cuda_tier_report(requested: str | None = None, *, driver_cuda: str | None = 
         "env_name": unified_env_name(tier),
         "torch_index_url": torch_wheel_index_url(tier),
         "torch_specs": torch_specs_for_tier(tier),
-        "supported_tiers": list(SUPPORTED_CUDA_TIERS),
+        "supported_tiers": [DEFAULT_CUDA_TIER],
     }
 
 
 def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Resolve a WorldFoundry CUDA wheel tier.")
-    parser.add_argument("--requested", default=None, help="auto, cu128, cu124, or cu121.")
+    parser.add_argument("--requested", default=None, help="auto or cu128 for the unified environment.")
     parser.add_argument("--driver-cuda", default=None, help="Override detected nvidia-smi CUDA version.")
     parser.add_argument("--field", choices=("json", "tier", "env_name", "torch_index_url"), default="json")
     args = parser.parse_args(argv)
 
-    payload = cuda_tier_report(args.requested, driver_cuda=args.driver_cuda)
+    try:
+        payload = cuda_tier_report(args.requested, driver_cuda=args.driver_cuda)
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.field == "json":
         print(json.dumps(payload, sort_keys=True))
     else:

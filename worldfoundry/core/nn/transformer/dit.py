@@ -45,10 +45,22 @@ from math import prod
 import torch
 from torch import nn
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # Checkpoint-stable norms — float RMS, then optional affine / AdaLN
 # ──────────────────────────────────────────────────────────────────────────
+
+
+def _rms_norm_reference(
+    value: torch.Tensor,
+    weight: torch.Tensor | None,
+    eps: float,
+    compute_mode: str,
+) -> torch.Tensor:
+    """Checkpoint RMS arithmetic, including the input-dtype affine boundary."""
+    reduction = value.float() if compute_mode == "fp32" else value
+    normalized = value * torch.rsqrt(reduction.square().mean(-1, keepdim=True) + eps)
+    normalized = normalized.to(value.dtype)
+    return normalized if weight is None else normalized * weight
 
 
 class RMSNorm(nn.Module):
@@ -92,13 +104,7 @@ class RMSNorm(nn.Module):
     def forward(self, value: torch.Tensor) -> torch.Tensor:
         """Normalize the last dim in float32, then cast back (AMP-stable)."""
 
-        input_dtype = value.dtype
-        reduction = value.float() if self.compute_mode == "fp32" else value
-        normalized = value * torch.rsqrt(
-            reduction.square().mean(-1, keepdim=True) + self.eps
-        )
-        normalized = normalized.to(input_dtype)
-        return normalized if self.weight is None else normalized * self.weight
+        return _rms_norm_reference(value, self.weight, self.eps, self.compute_mode)
 
 
 class AdaLayerNorm(nn.Module):

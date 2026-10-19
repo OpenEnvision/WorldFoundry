@@ -5,21 +5,21 @@ from pathlib import Path
 import pytest
 
 from worldfoundry.runtime import cuda_tiers
-from worldfoundry.runtime.cuda_tiers import (
-    DEFAULT_CUDA_TIER,
-    best_cuda_tier_for_driver,
-    cuda_tier_report,
-    normalize_cuda_profile,
-    resolve_install_tier,
-    resolve_cuda_tier,
-    torch_specs_for_tier,
-    unified_env_name,
-)
 from worldfoundry.runtime.conda import (
     RuntimeCondaEnvSpec,
     apply_unified_env_override,
     load_runtime_conda_env_spec,
     unified_env_blocker,
+)
+from worldfoundry.runtime.cuda_tiers import (
+    DEFAULT_CUDA_TIER,
+    best_cuda_tier_for_driver,
+    cuda_tier_report,
+    normalize_cuda_profile,
+    resolve_cuda_tier,
+    resolve_install_tier,
+    torch_specs_for_tier,
+    unified_env_name,
 )
 
 
@@ -48,11 +48,15 @@ def test_best_cuda_tier_for_driver() -> None:
         best_cuda_tier_for_driver("", allow_missing_driver=False)
 
 
-def test_resolve_install_tier_supports_auto_and_driver_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_install_tier_requires_unified_cu128(monkeypatch: pytest.MonkeyPatch) -> None:
     assert resolve_install_tier("auto", driver_cuda="12.9") == "cu128"
-    assert resolve_install_tier("auto", driver_cuda="12.5") == "cu124"
-    assert resolve_install_tier("cu128", driver_cuda="12.5") == "cu124"
-    assert resolve_install_tier("cu129", driver_cuda="13.0") == "cu128"
+    assert resolve_install_tier("cu128", driver_cuda="13.0") == "cu128"
+    for tier in ("cu121", "cu124"):
+        with pytest.raises(ValueError, match="requires Torch >=2.7 and --cuda cu128"):
+            resolve_install_tier(tier, driver_cuda="13.0")
+    for tier in ("auto", "cu128"):
+        with pytest.raises(ValueError, match="requires a CUDA 12.8\\+ NVIDIA driver"):
+            resolve_install_tier(tier, driver_cuda="12.5")
     monkeypatch.setattr(cuda_tiers, "detect_nvidia_driver_cuda", lambda: None)
     assert resolve_install_tier("cu128", driver_cuda=None) == "cu128"
     with pytest.raises(ValueError, match="No NVIDIA driver CUDA version detected"):
@@ -65,6 +69,7 @@ def test_cuda_tier_report_is_user_facing() -> None:
     assert report["env_name"] == "worldfoundry-unified-cu128"
     assert report["torch_index_url"] == "https://download.pytorch.org/whl/cu128"
     assert report["torch_specs"] == torch_specs_for_tier("cu128")
+    assert report["supported_tiers"] == ["cu128"]
 
 
 def test_cpu_bootstrap_selects_explicit_wheel_tier_and_skips_flash_attn() -> None:
@@ -147,6 +152,21 @@ def test_apply_unified_env_override_keeps_hard_abi_conflicts(tmp_path: Path, mon
     assert apply_unified_env_override(torch_pinned).env_name == "worldfoundry-legacy-torch"
     assert unified_env_blocker(jax_runtime) == "jax_runtime_requires_isolated_env"
     assert apply_unified_env_override(jax_runtime).env_name == "worldfoundry-jax-action"
+
+
+def test_apply_unified_env_override_preserves_older_cuda_environments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("WORLDFOUNDRY_USE_UNIFIED_ENV", "1")
+    monkeypatch.setenv("WORLDFOUNDRY_DETECTED_DRIVER_CUDA", "12.4")
+    spec = RuntimeCondaEnvSpec(
+        model_id="legacy-video",
+        env_name="worldfoundry-legacy-video",
+        cuda_profile="cu124",
+        driver_status="compatible",
+        env_root=tmp_path,
+    )
+    assert apply_unified_env_override(spec) is spec
 
 
 def test_load_runtime_conda_env_spec_can_route_scope_to_unified(

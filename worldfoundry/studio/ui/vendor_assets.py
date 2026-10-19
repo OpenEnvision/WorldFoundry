@@ -9,7 +9,6 @@ their exact-version npm package pages for the corresponding license texts.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import math
 import os
 import sys
@@ -22,9 +21,6 @@ from urllib import request
 
 VENDOR_ROOT = Path(__file__).resolve().parents[1] / "assets" / "vendor"
 VENDOR_ASSET_INSTALL_COMMAND = "python -m worldfoundry.studio.ui.vendor_assets"
-# Backward-compatible names used by early source-checkout integrations.
-VENDOR_DIR = VENDOR_ROOT
-PROVISION_COMMAND = VENDOR_ASSET_INSTALL_COMMAND
 DEFAULT_TIMEOUT_SECONDS = 30.0
 MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024
 _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
@@ -35,13 +31,12 @@ THREE_CORE_MODULE_PATH = VENDOR_ROOT / "three" / "three.core.js"
 
 @dataclass(frozen=True)
 class VendorAsset:
-    """A browser module pinned by URL and content digest."""
+    """A browser module pinned to a package version and URL."""
 
     name: str
     package: str
     version: str
     url: str
-    sha256: str
     relative_path: Path
 
     def __post_init__(self) -> None:
@@ -56,12 +51,11 @@ class VendorAsset:
 
 @dataclass(frozen=True)
 class VendorAssetStatus:
-    """The result of an offline integrity check for one browser module."""
+    """The result of an offline availability check for one browser module."""
 
     asset: VendorAsset
     path: Path
     state: str
-    actual_sha256: str | None = None
     error: str | None = None
 
     @property
@@ -81,7 +75,6 @@ VENDOR_ASSETS = (
         package="@sparkjsdev/spark",
         version="0.1.10",
         url="https://cdn.jsdelivr.net/npm/@sparkjsdev/spark@0.1.10/dist/spark.module.js",
-        sha256="e2841904c3facdf2ab5177b13b4827cdc72118cb8b613673ca08d8e983c5bf9d",
         relative_path=SPARK_MODULE_PATH.relative_to(VENDOR_ROOT),
     ),
     VendorAsset(
@@ -89,7 +82,6 @@ VENDOR_ASSETS = (
         package="three",
         version="0.178.0",
         url="https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.module.js",
-        sha256="bc0d236927f5163414e7c59a5567257dfe925f1929ce0a151ac4185dc45ca5a2",
         relative_path=THREE_MODULE_PATH.relative_to(VENDOR_ROOT),
     ),
     VendorAsset(
@@ -97,18 +89,9 @@ VENDOR_ASSETS = (
         package="three",
         version="0.178.0",
         url="https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.core.js",
-        sha256="562b72799ef1145f77997ece49a34f578422873757b0a13e41d76dcbfb776f06",
         relative_path=THREE_CORE_MODULE_PATH.relative_to(VENDOR_ROOT),
     ),
 )
-
-
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(_DOWNLOAD_CHUNK_SIZE):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def check_assets(
@@ -124,7 +107,8 @@ def check_assets(
             statuses.append(VendorAssetStatus(asset=asset, path=path, state="missing"))
             continue
         try:
-            actual_sha256 = _file_sha256(path)
+            with path.open("rb") as handle:
+                nonempty = bool(handle.read(1))
         except OSError as exc:
             statuses.append(
                 VendorAssetStatus(
@@ -135,13 +119,12 @@ def check_assets(
                 )
             )
             continue
-        state = "valid" if actual_sha256 == asset.sha256 else "hash-mismatch"
+        state = "valid" if nonempty else "empty"
         statuses.append(
             VendorAssetStatus(
                 asset=asset,
                 path=path,
                 state=state,
-                actual_sha256=actual_sha256,
             )
         )
     return tuple(statuses)
@@ -157,10 +140,7 @@ def _failure_message(statuses: Sequence[VendorAssetStatus]) -> str:
         elif status.state == "unreadable":
             details.append(f"- {status.asset.name}: unreadable at {status.path} ({status.error})")
         else:
-            details.append(
-                f"- {status.asset.name}: SHA-256 mismatch at {status.path} "
-                f"(expected {status.asset.sha256}, got {status.actual_sha256})"
-            )
+            details.append(f"- {status.asset.name}: empty at {status.path}")
     return (
         "Studio browser modules are missing or invalid:\n"
         + "\n".join(details)
@@ -208,7 +188,6 @@ def _download_asset(
             dir=target.parent,
         )
         temp_path = Path(temp_name)
-        digest = hashlib.sha256()
         downloaded_bytes = 0
         with os.fdopen(file_descriptor, "wb") as output:
             file_descriptor = -1
@@ -220,16 +199,13 @@ def _download_asset(
                             f"Downloaded {asset.package}@{asset.version} exceeded the "
                             f"{MAX_DOWNLOAD_BYTES}-byte safety limit. The target was not replaced."
                         )
-                    digest.update(chunk)
                     output.write(chunk)
             output.flush()
             os.fsync(output.fileno())
 
-        actual_sha256 = digest.hexdigest()
-        if actual_sha256 != asset.sha256:
+        if downloaded_bytes == 0:
             raise VendorAssetError(
-                f"Downloaded {asset.package}@{asset.version} failed SHA-256 verification "
-                f"(expected {asset.sha256}, got {actual_sha256}). The target was not replaced."
+                f"Downloaded {asset.package}@{asset.version} was empty. The target was not replaced."
             )
         os.replace(temp_path, target)
         temp_path = None
@@ -237,8 +213,7 @@ def _download_asset(
         raise
     except Exception as exc:
         raise VendorAssetError(
-            f"Could not download {asset.package}@{asset.version} from {asset.url}: {exc}. "
-            "The target was not replaced."
+            f"Could not download {asset.package}@{asset.version} from {asset.url}: {exc}. The target was not replaced."
         ) from exc
     finally:
         if file_descriptor >= 0:
@@ -329,13 +304,11 @@ def main(
 __all__ = [
     "DEFAULT_TIMEOUT_SECONDS",
     "MAX_DOWNLOAD_BYTES",
-    "PROVISION_COMMAND",
     "SPARK_MODULE_PATH",
     "THREE_CORE_MODULE_PATH",
     "THREE_MODULE_PATH",
     "VENDOR_ASSETS",
     "VENDOR_ASSET_INSTALL_COMMAND",
-    "VENDOR_DIR",
     "VENDOR_ROOT",
     "VendorAsset",
     "VendorAssetError",

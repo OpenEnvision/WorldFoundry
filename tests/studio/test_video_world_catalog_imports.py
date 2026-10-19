@@ -3,18 +3,18 @@ from __future__ import annotations
 import importlib
 
 import pytest
-import worldfoundry.synthesis.visual_generation.magic_world.worldfoundry_runtime as magicworld_runtime
 
+import worldfoundry.synthesis.visual_generation.magic_world.worldfoundry_runtime as magicworld_runtime
 from worldfoundry.studio.inference.catalog import (
     _animatediff_default_load_kwargs,
     _depth_anything_v2_default_ref,
     _discover_ast_pipelines,
+    _hf_checkpoint_model_ref,
     _hydra_default_load_kwargs,
     _hydra_default_ref,
-    _hf_checkpoint_model_ref,
+    _longsana_video_480p_default_ref,
     _magicworld_default_load_kwargs,
     _magicworld_default_ref,
-    _longsana_video_480p_default_ref,
     _minwm_default_ref,
     _minwm_hy_default_load_kwargs,
     _minwm_wan_default_load_kwargs,
@@ -23,6 +23,7 @@ from worldfoundry.studio.inference.catalog import (
     _sana_video_720p_default_ref,
     _wow_default_ref,
     find_entry,
+    find_runtime_entry,
 )
 from worldfoundry.synthesis.visual_generation.magic_world.worldfoundry_runtime import (
     _magicworld_latent_frames,
@@ -56,7 +57,7 @@ def test_matrix_game_1_uses_the_staged_in_domain_visual_qa_image() -> None:
 
 
 def test_cogvideox_i2v_demo_prompt_matches_its_person_input() -> None:
-    entry = find_entry("cogvideox_5b_i2v")
+    entry = find_runtime_entry("cogvideox_5b_i2v")
 
     assert entry.default_input_path.endswith("worldfoundry/data/test_cases/studio_demo/00/image.jpg")
     assert "sparkler" in entry.default_prompt.lower()

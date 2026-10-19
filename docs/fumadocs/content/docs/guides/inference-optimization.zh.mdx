@@ -22,7 +22,7 @@ WorldFoundry 只把「有公开开关、且主链会消费」的技术算作可�
 <Callout type="idea" title="首次运行 vs 吞吐">
 **首次运行 / 要接近官方观感。** 用目录默认值：`torch_dtype="bfloat16"`；显存够就 `offload_mode="resident"`（Studio 对 Wan2.2 TI2V-5B 的默认），不够再用 `async-block`。不要开 feature cache、近似 attention、量化、CUDA Graph、TAEW preview。官方 benchmark 不要减 steps 或改 CFG。
 
-**同一 checkpoint 追吞吐。** 继续常驻 BF16。按 GPU 把 `attention_backend` 设成真实的 Flash / Sage，再开 `fuse_qkv=True`、`fused_rope=True`、`static_cross_kv=True`。`compile=True` 只在 warmup 之后再开——第一次 compiled forward 会很慢。解码 OOM 或占比过高时，再开 Wan VAE 空间 tiling / 时间 chunk。只有在接受跳过 DiT step 时，才开**一种** feature cache。
+**同一 checkpoint 追吞吐。** 继续常驻 BF16。按 GPU 把 `attention_backend` 设成真实的 Flash / Sage，再开 `fuse_qkv=True`、`fused_rope=True`、`static_cross_kv=True`。加载时选择 `compile=True`，再用代表性请求预热后接流量——第一次 compiled forward 会很慢。解码 OOM 或占比过高时，再开 Wan VAE 空间 tiling / 时间 chunk。只有在接受跳过 DiT step 时，才开**一种** feature cache。
 </Callout>
 
 ## 可以做
@@ -37,7 +37,7 @@ WorldFoundry 只把「有公开开关、且主链会消费」的技术算作可�
   { name: "offload_mode=async-block", hintLabel: "别名", hint: "block / cpu / layer", description: "逐层 CPU master + pinned H2D 预取（最多两层常驻）。只在显存紧时用。Wan VAE 仍常驻，只有 DiT offload。", reads: [{ label: "注意", value: "不能和量化、device_map=balanced 一起用" }] },
   { name: "offload_mode=component", hintLabel: "怎么开", hint: "offload_mode=\"component\"", description: "整模块 CPU offload。该组件必须声明 vram_module_map。", reads: [{ label: "适用范围", value: "声明了 wrapper map 的组件" }] },
   { name: "device_map=balanced", hintLabel: "怎么开", hint: "device_map=\"balanced\"", description: "把 transformer 层切到可见 GPU。要求 offload_mode=none，权重留在显存。", reads: [{ label: "适用范围", value: "声明了 layer_container 的模块" }] },
-  { name: "inplace_residual", hintLabel: "怎么开", hint: "inplace_residual=True", description: "Wan DiT 原地 residual，降低激活显存。仅推理；autograd 下会关掉。", reads: [{ label: "适用范围", value: "仅原生 Wan DiT" }] }
+  { name: "inplace_residual", hintLabel: "怎么开", hint: "inplace_residual=True", description: "复用 dtype 相容的 Wan 残差存储。仅推理；类型提升和 autograd 保留 functional 路径。", reads: [{ label: "适用范围", value: "仅原生 Wan DiT" }] }
 ]} />
 
 ### Attention backend
@@ -52,15 +52,179 @@ WorldFoundry 只把「有公开开关、且主链会消费」的技术算作可�
 <KvCatalog heading="Kernel" vars rows={[
   { name: "fuse_qkv", hintLabel: "怎么开", hint: "fuse_qkv=True", description: "合并 Q/K/V 投影。可选 qkv_strategy=auto|packed|split 和 qkv_split_threshold（Studio 默认 8192）。", reads: [{ label: "适用范围", value: "原生 Wan DiT。forward 后确认 fused_blocks 和真实投影调用" }] },
   { name: "fused_rope", hintLabel: "怎么开", hint: "fused_rope=True", description: "融合 3D RoPE。可与 Ulysses SP 组合（kernel 接收 rank offset 与 padding）。rope_precision 为 fp32 或 fp64。", reads: [{ label: "适用范围", value: "原生 Wan DiT" }] },
-  { name: "static_cross_kv", hintLabel: "怎么开", hint: "static_cross_kv=True", description: "复用本次请求的文本 cross-attention K/V。Studio 对 Wan2.2 TI2V-5B 默认打开。不能和 CUDA Graph 一起用。", reads: [{ label: "适用范围", value: "原生 Wan DiT" }] }
+  { name: "static_cross_kv", hintLabel: "怎么开", hint: "static_cross_kv=True", description: "复用本次请求的文本 cross-attention K/V。Studio 对 Wan2.2 TI2V-5B 默认打开。常驻 canonical Wan 通过显式逐层 K/V 输入支持 CUDA Graph。", reads: [{ label: "适用范围", value: "原生 Wan DiT" }] }
 ]} />
 
 ### Compile 与 CUDA Graph
 
 <KvCatalog heading="Compile" vars rows={[
-  { name: "compile", hintLabel: "怎么开", hint: "compile=True 或 torch_compile=True", description: "对绑定的 forward 做 torch.compile。可选 compile_mode（default / reduce-overhead / max-autotune / max-autotune-no-cudagraphs）、compile_backend、compile_fullgraph、compile_dynamic。第一次请求要付 compile + autotune 成本。", reads: [{ label: "另外", value: "走 compile_module_if_enabled 的进程可用 WORLDFOUNDRY_TORCH_COMPILE=1" }] },
-  { name: "cuda_graph", hintLabel: "怎么开", hint: "cuda_graph=True", description: "捕获并 replay 形状稳定的 Wan DiT 内层调用。默认关。和 Inductor 一起用时，compile_mode 必须是 max-autotune-no-cudagraphs，避免套娃 Graph。", reads: [{ label: "会拒绝", value: "sequence parallel、feature cache、近似 attention、static_cross_kv、自定义 Inductor compile_options" }] }
+  { name: "compile", hintLabel: "怎么开", hint: "compile=True 或 torch_compile=True", description: "对绑定的 forward 做 torch.compile。compile_scope=full（默认）编译组件 forward；regional 编译声明的 Wan transformer blocks，文本编码器和 VAE 保持 eager。可选 compile_mode（default / reduce-overhead / max-autotune / max-autotune-no-cudagraphs）、compile_backend、compile_fullgraph、compile_dynamic。首次请求承担编译及适用的 autotuning 成本。", reads: [{ label: "另外", value: "走 compile_module_if_enabled 的进程可用 WORLDFOUNDRY_TORCH_COMPILE=1" }] },
+  { name: "cuda_graph", hintLabel: "怎么开", hint: "cuda_graph=True", description: "捕获并 replay 形状稳定的 Wan DiT 内层调用。默认关。和 Inductor 一起用时，full scope 使用 max-autotune-no-cudagraphs；regional 使用 default 和原生 GEMM 分派，两者均避免嵌套 Graph。", reads: [{ label: "会拒绝", value: "sequence parallel、feature cache、近似 attention、自定义 Inductor compile_options" }] }
 ]} />
+
+### 代表性请求预热
+
+`pipeline.warmup([DiffusionRequest(...)])` 执行完整原生请求：文本/图像条件、
+全部 sampler steps、活跃 CFG 分支、实际路由的 expert 和解码。它恢复 RNG 状态，
+成功或异常时都释放请求 cache，不保留输出 tensor。预热成功后冻结 CUDA Graph
+捕获；服务期间未知签名绕过 CUDA Graph，直到再次显式预热。开启 compile 时，
+PyTorch 仍可能为新 tensor shape 编译。没有调用预热时，普通推理保留按需捕获行为。
+
+Studio 常驻 worker 可通过 `from_pretrained` 或 `--load-json` 的加载选项
+`warmup_requests` 指定非空列表，元素为请求映射或显式嵌套的请求批次；`sampling`
+用 JSON 对象表达，Python 调用也可传入原生 `DiffusionRequest` 对象。
+加载和预热均成功后才缓存管线。公共管线的 `warmup_reports` 保存执行回执，
+不代表性能认证。
+
+```json
+{
+  "offload_mode": "resident",
+  "compile": true,
+  "compile_scope": "regional",
+  "cuda_graph": true,
+  "static_cross_kv": true,
+  "warmup_requests": [{
+    "prompt": "A boat crossing a calm lake.",
+    "negative_prompt": "",
+    "height": 256, "width": 256, "num_frames": 17,
+    "sampling": {
+      "num_inference_steps": 50, "guidance_scale": 5.0, "seed": 0,
+      "scheduler_options": {"shift": 5.0}
+    }
+  }]
+}
+```
+
+预热应匹配部署的 geometry、batch size、条件长度、输入、sampler、autocast 和 inference mode 配置；上面的
+小尺寸只是准备示例，不是生产 benchmark。预热支持原生 standard、masked-latent
+和 Wan dual-expert CFG 策略，包括内置 frozen-latent mask extension；自定义
+runner/extension 需要自己的生命周期。static-KV 与 Graph/regional compile 的组合要求常驻、未分片的
+canonical Wan 权重和 canonical cross-attention processor，拒绝 memory adapter
+以及 block/component offload。更换权重、LoRA 或 placement 时重建已编译/捕获的
+管线。Regional compile 保持模型类型和 state-dict keys，复用已有持久编译缓存。
+Regional Inductor 使用 `compile_mode="default"`、原生 GEMM 分派，以及保持
+原生 LayerNorm/RMSNorm reduction 的不透明算子边界，保留 module hooks 和 autograd。
+共享编译 AdaLN 和 residual gate 算子保留原生舍入，包括原地 gate 的别名契约。
+代价是放弃 reduction 融合和 GEMM autotuning，以保留 eager 数值边界。
+
+`emulate_precision_casts=True`、`triton.codegen_upcast_to_fp32=False`、
+`pattern_matcher=False` 和 `epilogue_fusion=False` 保留显式 dtype 往返、
+`addmm` 的单次舍入以及非线性运算前的 GEMM 输出。冲突的精度选项和 regional
+GEMM autotuning 会被拒绝。目标 checkpoint、精度、尺寸和 PyTorch 版本仍须通过
+完整生成质量门槛；compile 和 Graph 仍默认关闭。
+
+公共入口的 dense/static-Graph/regional-static-Graph A/B/A 回放命令为
+`python -m benchmarks.inference.wan_execution_preparation --checkpoint ...
+--output-dir ...`，5B 加 `--model-id wan2.2-ti2v-5b`；换图 masked-latent 回放加
+`--images IMAGE_A IMAGE_B`。双专家选择 `--model-id wan2.2-t2v-a14b` 或
+`wan2.2-i2v-a14b`，后者必须提供图片。`--dit-weight-dtype bfloat16` 对 dense
+和候选配置都使用 BF16 权重，compute 仍为 BF16；报告记录实测参数 dtype，并要求
+两个专家都提供当前请求的执行证据。`--configurations static-graph` 仅选择该候选配置，
+dense 仍是参照，报告记录所选配置。加 `--inplace-residual` 可验证开启原生原地 gate
+的候选，dense 参照保持不变。该工具复用已有原生质量门槛，
+对 static-Graph 额外要求 latent bitwise 一致，单独报告 RGB 是否相等，并检查冻结后实际 Graph replay。
+计时仅作诊断。
+
+### 兼容请求批处理
+
+`pipeline.run_batch(requests)` 接受显式 `DiffusionRequest`，按输入顺序为每个请求
+返回独立持有存储的 `DiffusionOutput`。支持常驻 canonical Wan T2V、I2V 与冻结
+首帧的 TI2V，使用普通或双专家 guidance，scheduler 为原生 Euler 或 Wan UniPC。
+geometry、采样策略、标量输入及是否启用图像条件必须一致；prompt、negative
+prompt、seed、图像和审计 metadata 可以不同。
+这些标准化请求不会自动应用 `pipeline(...)` 的产品默认值或参数别名。
+
+每个请求保留原始噪声生成形状、generator、conditioning、solver history、初始化
+产物和独立 decoder 调用。Block 的投影与 FFN 合并执行；时间 MLP、CLIP 条件
+投影、attention 归约及输出头保留原请求形状，包括 SDPA 随形状选择的 split-KV
+路径，以保持原生舍入。不改变 sampler 或计算精度。
+
+```python
+from dataclasses import replace
+from worldfoundry.base_models.diffusion_model.contracts import DiffusionRequest, SamplingConfig
+
+request_a = DiffusionRequest(
+    prompt="A small boat crossing a calm lake at sunrise.",
+    negative_prompt="", height=256, width=256, num_frames=17,
+    sampling=SamplingConfig(num_inference_steps=8, guidance_scale=5, seed=11,
+                            scheduler_options={"shift": 5.0}),
+)
+request_b = replace(request_a, prompt="A dog running through a green field.",
+                    sampling=replace(request_a.sampling, seed=29))
+pipeline.warmup([request_a, (request_a, request_b)])
+output_a, output_b = pipeline.run_batch((request_a, request_b))
+```
+
+图像条件 pipeline 的每个请求通过 `inputs={"images": "/path/to/image.jpg"}`
+指定独立图像。原生 TI2V 保留冻结首帧的 mask extension；也支持无图像的 TI2V
+批次，但不能与有图像请求混合。普通及双专家 I2V 的图像编码与采样状态均按请求独立。
+
+`warmup` 内的显式 tuple 表示合并批次。预热不仅要覆盖总 batch size，也要覆盖
+原请求的行分组；单个请求含多个 prompt 时保留其行数。CUDA Graph 捕获前预热
+实际静态缓冲区，包括 expanded/sliced 输入复制后的布局。每个输出的
+`metadata["request_batching"]` 记录行范围、共享 batch ID、请求/样本数量与实际
+denoiser 调用次数。优化回执属于整个批次，不是各请求的独立耗时。
+
+在 `benchmarks.inference.wan_execution_preparation` 加 `--request-batching`，可将
+Wan1.3B、5B TI2V 或 A14B T2V/I2V 的 A/B、B/A、A/B 批次与独立 dense 请求比较。
+图像条件回放需加 `--images IMAGE_A IMAGE_B`。批处理仍使用已有 latent/RGB 质量
+预算；报告保留逐输出质量、执行回执、预热耗时、allocated/reserved 显存峰值及
+诊断性批次耗时。`batch_comparison` 以各请求单独运行的中位耗时之和，对比同两个
+请求合批的中位耗时；共享 GPU 上的结果不认证性能收益。
+
+使用产品参数时，`pipeline.batch_call([call_a, call_b])` 接受关键字参数字典，
+应用与 `pipeline(...)` 相同的默认值和别名。每个字典可指定独立的 `output_dir`
+或 `output_path` 以及 `return_dict`，导出路径必须不同。采样仍调用原生
+`run_batch`，文件导出与返回结果保持请求独立。
+
+### Studio 常驻队列合批
+
+启动 Workspace 前启用兼容请求合并：
+
+```bash
+export WORLDFOUNDRY_STUDIO_BATCH_MAX_SIZE=2
+export WORLDFOUNDRY_STUDIO_BATCH_DELAY_MS=5
+```
+
+批大小默认 **1**，保持普通单请求调度。收集窗口默认 **5 ms**；达到上限或遇到
+下一个不兼容请求时提前结束。已有 Workspace 作业池接收并发任务，
+`WORLDFOUNDRY_WORKSPACE_MAX_JOBS` 默认 8，至少为 2 才能合批。常驻 worker
+仍只有一个执行所有者，保留请求锁；仅合并 FIFO 队首连续兼容请求，数量不超过上限。
+
+准入范围是 `wan2.1-t2v-1.3b`、`wan2.2-t2v-a14b` 与 `wan2.2-ti2v-5b` 的
+单 prompt、fresh `run` 任务。加载参数须选择 `offload_mode="resident"`
+（或 `"none"`）及 `attention_backend="torch"`；开启编译时须使用
+`compile_scope="regional"`。使用 `rope_precision="fp64"`、
+`rms_norm_precision="fp32"`、`fuse_qkv=False` 与 `fused_rope=False`，须显式覆盖
+5B Studio 的默认精度配置。模型、加载选项、geometry 和采样策略必须匹配；
+prompt、negative prompt、seed 与导出路径可不同。
+
+5B 图像任务通过 Workspace 输入选择器（`input_path`）指定单张 PNG/JPEG/BMP/WebP；
+图像路径可以不同，但有图像与纯文本任务不混合。Call JSON 中显式指定图像别名时
+保持单请求执行，其他不兼容请求也保持串行。调整队列限制后重启常驻 worker。
+
+加载时的 `warmup_requests` 支持标准化请求字典及显式嵌套请求列表：
+`[request_a, [request_a, request_b]]` 同时预热单请求与双请求签名。覆盖部署的
+geometry、sampler、CFG 和原请求行分组；这些是原生请求字典，不是产品调用参数。
+
+每个任务保留独立运行目录、`RunRecord`、产物和状态。
+`metadata.result.metadata.request_batching` 记录实际原生合批，
+`metadata.studio_request_batching` 将 Studio 记录映射到共享执行。
+`studio_performance.resident_queue_wait_ms` 仅包含常驻队列等待，不含 GPU 准入和
+worker 启动。`batch_load_ms`、`batch_execute_ms` 是整批 host wall time，后者包含
+导出；不是各请求的 GPU 耗时，不能跨成员相加。
+
+排队期间取消会移除尚未执行的工作。已开始执行的成员被取消或超时后不再交付结果，
+但不会打断同批或排队中的有效请求；计算可能完成，已生成的 manifest 会标为取消。
+整批均放弃且没有其他请求依赖该 worker 时，回收 worker。执行或导出失败会让所选
+整批失败，不重试单请求。worker 故障也会使其排队任务失败，后续提交使用新 worker。
+
+**限制：**同一 pipeline 的直接单请求、批处理与预热调用须串行。此批处理契约
+不覆盖自定义 attention processor、原生冻结 mask 之外的 extension、近似缓存、
+offload 或分布式执行。
+失败或取消的任务可能保留诊断产物；失败批次不返回部分结果。根据实测显存余量选择
+上限，OOM 后不会缩小批次重试。验收限定于具体 checkpoint、形状和精度，共享 GPU
+计时不能认证吞吐收益。
 
 ### 并行
 
@@ -132,7 +296,7 @@ STA / VSA / VMoBA 的 symbol 来自仓内 `thirdparty/fastvideo-kernel`（或已
 <KvCatalog heading="不要" rows={[
   { name: "把配置当成加速证据", hint: "不算数", description: "只有 requested 没有 effective、pending wrapper、dense_policy_calls / SDPA fallback，都不是加速。" },
   { name: "把 sequence parallel 和 cache、稀疏 attention、CUDA Graph 组合", hint: "构建期拒绝", description: "SP 需要跨 rank 同步 skip / 路由，当前没有。例外是 fused RoPE，它感知 SP。" },
-  { name: "把 CUDA Graph 和 feature cache、近似 attention、static_cross_kv 组合", hint: "构建期拒绝", description: "Graph replay 会冻住上一步或上一请求的 Python cache / 稀疏调度。" },
+  { name: "把 CUDA Graph 和 feature cache、近似 attention 组合", hint: "构建期拒绝", description: "Graph replay 会冻住上一步或上一请求的 Python cache / 稀疏调度。" },
   { name: "量化 + block 或 disk offload", hint: "构建期拒绝", description: "量化权重是 buffer；异步双层 offloader 只管理 Parameter。disk offload 也无法物化这次变换。" },
   { name: "device_map=balanced + 任何 offload", hint: "构建期拒绝", description: "balanced 分片要求权重量在显存。" },
   { name: "同时开两种 feature cache", hint: "构建期拒绝", description: "teacache、magcache、adacache、taylorseer、blocktaylorseer、custom 和 block cache 互斥。" },
@@ -250,6 +414,42 @@ print(vae["requested"], vae["effective"], vae["fallbacks"])
 - **CUDA Graph** — `replay > 0`，且 `eager = capture_failed = 0`。
 - **VAE tile / chunk** — 最后一次窗口 `> 1`，lifetime 总数不算。
 - **量化** — `low_precision_kernel_calls > 0`。`dense_policy_calls` 是 BF16。
+
+## 验证质量与耗时
+
+在仓库根目录的 GPU 环境中运行以下检查。保持 checkpoint、输入、seed 和采样参数一致，
+对比参考 latent 与解码视频，并检查 effective backend 和 fallback，再引用加速结果。
+
+```bash
+# 单 rank 参考，再运行 sequence-parallel 候选。
+torchrun --nproc_per_node=1 -m benchmarks.inference.wan22_multigpu_e2e \
+  --checkpoint /checkpoints/Wan2.2-TI2V-5B \
+  --output-dir benchmarks/results/wan22-sp1 \
+  --fused-rope --rope-precision fp64 \
+  --save-reference-latents \
+  --warmup-runs 1 --measured-runs 3
+
+torchrun --nproc_per_node=4 -m benchmarks.inference.wan22_multigpu_e2e \
+  --checkpoint /checkpoints/Wan2.2-TI2V-5B \
+  --output-dir benchmarks/results/wan22-sp4 \
+  --sp-degree 4 \
+  --fused-rope --rope-precision fp64 \
+  --warmup-runs 1 --measured-runs 3 \
+  --reference-latents benchmarks/results/wan22-sp1/final-latents.pt \
+  --reference-video benchmarks/results/wan22-sp1/output.mp4 \
+  --fail-on-fallback --profile-collectives
+```
+
+单独对比 attention adapter 与直接调用 provider 的开销。默认 strict gate 允许最多 3% 开销：
+
+```bash
+python -m benchmarks.operators.attention_adapter_parity \
+  --backend flash2 --strict --out benchmarks/results
+```
+
+Framework 对比使用 `benchmarks.inference.framework_ab_wan22` 的 v4 报告门禁：
+单张物理 GPU，且处于 `Exclusive_Process` 模式。共享 GPU 的 `Default` 模式不满足该门禁，
+其耗时只作为诊断信息，不作为 framework 加速证据。
 
 ## 下一步
 

@@ -21,7 +21,7 @@ from typing import Callable, Mapping, Protocol, runtime_checkable
 from ..components import ComponentKey
 from ..contracts import DiffusionOutput, DiffusionRequest
 from ..extensions import DiffusionExtension, FrozenContextSuffixExtension, FrozenLatentMaskExtension
-from ..optimizations import RuntimePolicy
+from ..optimizations import RuntimePolicy, parse_torch_dtype
 from ..recipes.spec import NativeDiffusionRecipe
 from .autoregressive import AutoregressiveWindowRunner
 from .base import (
@@ -199,7 +199,7 @@ def build_vchitect_strategy(context: ExecutionBuildContext) -> NativeDiffusionRu
 def build_compressed_memory_strategy(context: ExecutionBuildContext) -> NativeDiffusionRunner:
     """Run native dual experts with causal HR/LR memory between temporal chunks."""
 
-    from worldfoundry.synthesis.visual_generation.worldplay2.runner import CompressedMemoryRunner
+    from .compressed_memory import CompressedMemoryRunner
 
     return build_standard_strategy(context, runner_type=CompressedMemoryRunner)
 
@@ -379,7 +379,7 @@ def build_joint_multistage_strategy(
 
 def build_joint_chunked_strategy(context: ExecutionBuildContext) -> DiffusionExecutor:
     """Reuse joint component binding for chunked clean-context generation."""
-    from worldfoundry.synthesis.visual_generation.helixworld.runtime import JointChunkedDiffusionRunner
+    from .joint_chunked import JointChunkedDiffusionRunner
 
     bound = build_joint_multistage_strategy(context)
     options = context.recipe.execution.options
@@ -432,6 +432,7 @@ def build_autoregressive_window_strategy(
         prediction_mode=str(options.get("prediction_mode", "flow")),
         fixed_timesteps=tuple(int(value) for value in options.get("fixed_timesteps", ())),
         context_timestep=int(options.get("context_timestep", 0)),
+        renoise_dtype=(parse_torch_dtype(options["renoise_dtype"]) if "renoise_dtype" in options else None),
         guidance_mode=str(options.get("guidance_mode", "standard")),
     )
 
@@ -548,6 +549,8 @@ def default_execution_strategy_registry() -> ExecutionStrategyRegistry:
     registry.register("chunked-kv-cache", build_chunked_kv_cache_strategy)
     registry.register("chunked-additive-cache", build_chunked_kv_cache_strategy)
     registry.register("prefix-recompute", build_prefix_recompute_strategy)
+    from .causal_trigflow import build_causal_trigflow_strategy
+    registry.register("causal-trigflow", build_causal_trigflow_strategy)
     registry.freeze()
     return registry
 

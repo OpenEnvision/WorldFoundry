@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 WorldFoundry contributors
+# SPDX-License-Identifier: Apache-2.0
 """Request-local attention storage for replayed clean temporal context."""
 
 from __future__ import annotations

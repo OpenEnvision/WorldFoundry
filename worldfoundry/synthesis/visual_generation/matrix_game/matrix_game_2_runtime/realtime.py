@@ -17,6 +17,7 @@ import torch
 from PIL import Image
 
 from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 from worldfoundry.core.utils.tensors.torch import set_seed_everywhere as set_seed
 from worldfoundry.operators.matrix_game_2_operator import encode_actions
 
@@ -338,8 +339,10 @@ class MatrixGame2RealtimeSession:
             .permute(0, 1, 3, 4, 2)
             .numpy()[0]
         )
+        frames = np.ascontiguousarray(frames)
         return {
-            "video": np.ascontiguousarray(frames),
+            "video": frames,
+            "video_chunk": VideoChunk(frames=frames, layout="thwc", value_range="0,255"),
             "realtime_spec": self.realtime_spec().to_payload(),
             "realtime_metrics": {
                 "condition_ms": condition_ms,

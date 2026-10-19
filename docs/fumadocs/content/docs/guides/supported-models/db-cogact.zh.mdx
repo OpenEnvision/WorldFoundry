@@ -33,6 +33,8 @@ catalog 记录的任务包括 视觉-语言-动作（VLA）、VLA 动作预测�
 
 CLI task profile：`default`。绑定的 pipeline 类是 `DBCogACTPipeline`。
 
+Native runtime 复用 checkpoint 对应的模型与 tokenizer 资源。每个请求独立构造 policy wrapper 并解析动作归一化，优先使用 `norm_stats`，其次 `norm_stats_path` / `normalization_stats_path`、checkpoint 的 `norm_stats.json`，最后使用 `[-1, 1]` 默认值。同一路径的统计文件更新会在下一请求生效，无需重载模型权重。请求改变 `num_steps` 时会重建 DDIM 调度器，步数相同则复用。
+
 系列状态：**Runner 一致性待确认**。
 
 按基准选择 checkpoint：libero-db-cogact、calvin-db-cogact 或 simpler-db-cogact；SArm/HArm 基础模型用于微调。 集成状态为 Runner 一致性待确认。

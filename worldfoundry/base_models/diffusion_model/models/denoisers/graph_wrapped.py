@@ -37,15 +37,16 @@ runner-created ``model_input.request_id`` and then by ``model_input.branch``
 ``data_ptr`` key would also be unsafe: allocators routinely reuse tensor
 storage across branches and requests.
 
-Denoisers whose inner call has variable-length sequences, host synchronizations
-(``.item()``), Python list arguments, or data-dependent layout (e.g. the Cosmos3
+Denoisers whose inner call has host synchronizations (``.item()``),
+value-dependent Python control flow, or data-dependent layout (e.g. the Cosmos3
 omni transformer) are NOT graph-safe and must not use the graph mixin.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
+from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
 from threading import RLock
@@ -67,7 +68,6 @@ _CUDA_GRAPH_STATEFUL_CONFLICTS = (
     "feature_cache",
     "firstblock",
     "magcache",
-    "static_cross_kv",
     "taylorseer",
     "teacache",
     "teacache_thresh",
@@ -77,12 +77,10 @@ _CUDA_GRAPH_STATEFUL_CONFLICTS = (
 def validate_cuda_graph_options(context: Any) -> None:
     """Reject stateful options whose Python control flow cannot be captured.
 
-    CUDA Graph replay executes the captured CUDA work only; it does not rerun
-    Python cache invalidation, TeaCache skip decisions, or the per-step sparse
-    attention schedule. Capturing any of those paths could freeze a residual or
-    conditioning projection from a previous request. Rejecting the combination
-    at build time is therefore a correctness requirement, not a performance
-    preference.
+    CUDA Graph replay does not rerun Python cache invalidation, feature-cache
+    decisions, or sparse routing. Wan static cross-KV is resolved outside the
+    captured network and supplied as explicit tensor inputs; the remaining
+    stateful policies must stay outside this whole-network capture path.
     """
 
     if not resolve_cuda_graph_option(context):
@@ -537,6 +535,17 @@ class GraphWrappedDenoiserMixin:
             InferenceCUDAGraphRunner(model, extra_key=extra_key) if enabled else None
         )
         register_acceleration_runtime(model, self)
+
+    @contextmanager
+    def execution_warmup(self) -> Generator[None, None, None]:
+        """Capture real request signatures, then prohibit request-time capture."""
+        graph = self._graph_runner
+        if graph is None:
+            yield
+        else:
+            with graph.capture_scope():
+                yield
+            graph.freeze()
 
     def _run_network(self, *args: Any, **kwargs: Any) -> Any:
         if self._graph_runner is not None:

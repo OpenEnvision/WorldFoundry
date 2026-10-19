@@ -15,7 +15,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence, cast
 
 import numpy as np
 import torch
@@ -26,14 +26,23 @@ from einops import rearrange
 from PIL import Image
 
 from worldfoundry.core import autocast_context
-from worldfoundry.core.vram.encoder_lifecycle import offload_module_to_cpu
 from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
+from worldfoundry.core.execution.realtime.flow_sampling import reference_flow_schedule, reference_flow_to_clean
 from worldfoundry.core.io.paths import checkpoint_root_path
+from worldfoundry.core.media.processing.postprocess import VideoChunk
+from worldfoundry.core.model_loading.checkpoints.file import load_state_dict
+from worldfoundry.core.vram.encoder_lifecycle import offload_module_to_cpu
 from worldfoundry.runtime.compile_cache import CompilePolicy, compile_module_cached
 from worldfoundry.synthesis.visual_generation.inspatio_world.inspatio_world_runtime.utils.taehv import (
     TAEHV,
     StreamingTAEHV,
 )
+
+if TYPE_CHECKING:
+    from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.conditioning import WanZeroConditionCache
+    from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.streaming import StreamingWanDecoder
+    from worldfoundry.base_models.diffusion_model.optimizations.static_cross_kv import StaticConditionCache
+
 
 _TOKEN_TO_KEY = {
     "forward": "w",
@@ -205,6 +214,9 @@ class LingBotRealtimeSession:
     cache_frames = 18
     max_text_tokens = 512
     timestep_indices = (0, 179, 358, 679)
+    sample_shift = 10.0
+    reference_sampling = False
+    reference_noise_chunks = 0
     camera_move_speed_per_second = 0.8
     camera_rotate_speed_degrees_per_second = 32.0
     normalize_camera_translation = False
@@ -245,15 +257,19 @@ class LingBotRealtimeSession:
         )
         self._last_camera_pose: torch.Tensor | None = None
         self._camera_directions: torch.Tensor | None = None
-        self._decoder_model: TAEHV | None = None
-        self._decoder: StreamingTAEHV | None = None
+        self._decoder_needs_scaling = False
+        self._decoder_model: torch.nn.Module | None = None
+        self._decoder: StreamingTAEHV | StreamingWanDecoder | None = None
         self._context: list[torch.Tensor] | None = None
+        self._text_condition: StaticConditionCache | None = None
         self._vae_state: dict[str, Any] | None = None
+        self._condition_cache: WanZeroConditionCache | None = None
         self._pending_first_condition: torch.Tensor | None = None
         self._prefetched_conditions: list[torch.Tensor] = []
         self._self_cache: list[dict[str, Any]] | None = None
         self._cross_cache: list[dict[str, Any]] | None = None
         self._generator: torch.Generator | None = None
+        self._reference_noise_bank: torch.Tensor | None = None
         self._timesteps: torch.Tensor | None = None
         self._sigmas: torch.Tensor | None = None
         self._cross_attention_initialized = False
@@ -331,7 +347,9 @@ class LingBotRealtimeSession:
         if "FullyShardedDataParallel" in type(self.model).__name__:
             return
         try:
-            torch._dynamo.config.capture_scalar_outputs = True
+            from torch._dynamo import config as dynamo_config
+
+            dynamo_config.capture_scalar_outputs = True
             self.core.model = compile_module_cached(
                 self.model,
                 policy=CompilePolicy(
@@ -353,19 +371,41 @@ class LingBotRealtimeSession:
         configured = os.getenv("WORLDFOUNDRY_LINGBOT_LIGHTTAE_PATH", "").strip()
         return Path(configured).expanduser() if configured else checkpoint_root_path("taehv", "lighttaew2_1.pth")
 
+    @staticmethod
+    def _decoder_uses_raw_latents(checkpoint: Path) -> bool:
+        """Resolve the decoder input convention once when loading its weights."""
+
+        convention = os.getenv("WORLDFOUNDRY_LINGBOT_TAE_LATENT_FORMAT", "").strip().lower()
+        if convention:
+            if convention not in {"raw", "normalized"}:
+                raise ValueError("WORLDFOUNDRY_LINGBOT_TAE_LATENT_FORMAT must be raw or normalized.")
+            return convention == "raw"
+        if checkpoint.stem == "lighttaew2_1":
+            return True
+        if checkpoint.stem == "taew2_1":
+            return False
+        raise ValueError(
+            f"Unknown TAE latent convention for {checkpoint.name}. "
+            "Set WORLDFOUNDRY_LINGBOT_TAE_LATENT_FORMAT to raw or normalized."
+        )
+
     def _load_decoder(self) -> None:
         if self._decoder_model is not None:
             return
         checkpoint = self._decoder_checkpoint()
+        needs_scaling = self._decoder_uses_raw_latents(checkpoint)
         if not checkpoint.is_file():
             raise FileNotFoundError(
                 f"LingBot realtime LightTAE checkpoint is missing: {checkpoint}. "
                 "Set WORLDFOUNDRY_LINGBOT_LIGHTTAE_PATH to lighttaew2_1.pth."
             )
-        decoder = TAEHV(checkpoint_path=str(checkpoint)).eval().requires_grad_(False)
-        decoder = decoder.to(device=self.device, dtype=torch.bfloat16)
+        decoder = TAEHV(checkpoint_path=None)
+        decoder.load_state_dict(decoder.patch_tgrow_layers(load_state_dict(str(checkpoint))))
+        decoder = decoder.eval().requires_grad_(False).to(device=self.device, dtype=torch.bfloat16)
+        stream = StreamingTAEHV(decoder)
         self._decoder_model = decoder
-        self._decoder = StreamingTAEHV(decoder)
+        self._decoder = stream
+        self._decoder_needs_scaling = needs_scaling
 
     def next_output_frames(self) -> int:
         return self.first_output_frames if self.autoregressive_index == 0 else self.steady_output_frames
@@ -428,6 +468,11 @@ class LingBotRealtimeSession:
             dtype=self.pipe_dtype,
             device=self.device,
         )
+        if self.sp_size == 1 and not _is_fsdp_module(self.model) and not hasattr(self.model, "_orig_mod"):
+            # Python controls eager cursors; K/V remain on the video device.
+            for cache in self._self_cache:
+                for key in ("global_end_index", "local_end_index"):
+                    cache[key] = cache[key].cpu()
         self._cross_cache = self._new_cross_attention_cache()
 
     def _new_cross_attention_cache(self) -> list[dict[str, Any]]:
@@ -463,7 +508,9 @@ class LingBotRealtimeSession:
 
                 context = self._encode_prompt(normalized_prompt)
                 cross_cache = self._new_cross_attention_cache()
+                text_condition = self._new_text_condition(context)
                 self._context = context
+                self._text_condition = text_condition
                 self._cross_cache = cross_cache
                 self._cross_attention_initialized = False
                 self._prompt = normalized_prompt
@@ -497,6 +544,23 @@ class LingBotRealtimeSession:
             chunk[:, 0] = resized
         return chunk
 
+    def _new_text_condition(self, context: list[torch.Tensor]) -> StaticConditionCache | None:
+        """Select static text projection at the owning session boundary."""
+        return None
+
+    def _prepare_rotary_frequencies(
+        self,
+        latent: torch.Tensor,
+        *,
+        current_start: int,
+    ) -> tuple[torch.Tensor, ...] | None:
+        """Select chunk-local rotary preparation at the owning session boundary."""
+        return None
+
+    def _new_condition_cache(self) -> WanZeroConditionCache | None:
+        """Select condition reuse at the owning, validated session boundary."""
+        return None
+
     def _encode_i2v_condition(
         self,
         image: Image.Image | None,
@@ -506,6 +570,11 @@ class LingBotRealtimeSession:
     ) -> torch.Tensor:
         if self._vae_state is None:
             raise RuntimeError("LingBot streaming VAE state is not initialized.")
+        pixel_frames = self.first_output_frames if first else self.steady_output_frames * chunks
+        if not first and self._condition_cache is not None:
+            cached = self._condition_cache.get(pixel_frames)
+            if cached is not None:
+                return cached
         pixels = self._image_chunk(image, first=first, chunks=chunks)
         latent = self.core.vae.encode_streaming(pixels, self._vae_state)
         expected_latents = self.chunk_latent_frames * chunks
@@ -521,7 +590,10 @@ class LingBotRealtimeSession:
         )
         if first:
             mask[:, 0] = 1.0
-        return torch.cat((mask, latent), dim=0)
+        condition = torch.cat((mask, latent), dim=0)
+        if self._condition_cache is not None:
+            self._condition_cache.record(condition, pixel_frames, first=first)
+        return condition
 
     def _prefetch_steady_conditions(self, chunks: int) -> None:
         """Amortize deterministic zero-frame VAE conditioning outside key input."""
@@ -555,9 +627,11 @@ class LingBotRealtimeSession:
         started = time.perf_counter()
         normalized_prompt = str(prompt or "")
         self._context = self._encode_prompt(normalized_prompt)
+        self._text_condition = self._new_text_condition(self._context)
         self._prompt = normalized_prompt
         prompt_done = time.perf_counter()
         self._vae_state = self.core.vae.prepare_streaming_encode()
+        self._condition_cache = self._new_condition_cache()
         self._pending_first_condition = self._synchronize_condition(self._encode_i2v_condition(image, first=True))
         prefetch_chunks = _env_int(
             "WORLDFOUNDRY_REALTIME_CONDITION_PREFETCH_CHUNKS",
@@ -568,10 +642,14 @@ class LingBotRealtimeSession:
         condition_done = time.perf_counter()
         self._prepare_camera_grid()
         self._initialize_model_caches()
-        self.core.scheduler.set_timesteps(self.core.num_train_timesteps, shift=10.0)
+        self.core.scheduler.set_timesteps(self.core.num_train_timesteps, shift=self.sample_shift)
         indices = list(self.timestep_indices)
         self._timesteps = self.core.scheduler.timesteps[indices].to(self.device)
         self._sigmas = self.core.scheduler.sigmas[indices].to(self.device, dtype=torch.float32)
+        if self.reference_sampling:
+            self._timesteps, self._sigmas = reference_flow_schedule(
+                indices=indices, shift=self.sample_shift, device=self.device,
+            )
         self._generator = torch.Generator(device=self.device).manual_seed(max(int(seed), 0))
         self._cross_attention_initialized = False
         self.autoregressive_index = 0
@@ -651,15 +729,17 @@ class LingBotRealtimeSession:
             raise RuntimeError("Only rank zero decodes realtime frames.")
         if self._decoder is None:
             raise RuntimeError("LightTAE decoder is not initialized.")
-        mean = self.core.vae.mean.to(dtype=torch.bfloat16).view(1, 1, 16, 1, 1)
-        std = self.core.vae.std.to(dtype=torch.bfloat16).view(1, 1, 16, 1, 1)
+        decoder = cast(StreamingTAEHV, self._decoder)
         z = latent.permute(1, 0, 2, 3)[None].to(torch.bfloat16)
-        z = z * std + mean
+        if self._decoder_needs_scaling:
+            mean = self.core.vae.mean.to(device=z.device, dtype=z.dtype).view(1, 1, 16, 1, 1)
+            std = self.core.vae.std.to(device=z.device, dtype=z.dtype).view(1, 1, 16, 1, 1)
+            z = z * std + mean
         frames: list[torch.Tensor] = []
-        frame = self._decoder.decode(z)
+        frame = decoder.decode(z)
         while frame is not None:
             frames.append(frame)
-            frame = self._decoder.decode()
+            frame = decoder.decode()
         if not frames:
             raise RuntimeError("LightTAE produced no frames.")
         video = torch.cat(frames, dim=1)[0]
@@ -686,6 +766,18 @@ class LingBotRealtimeSession:
             finally:
                 self._record_state_stream()
 
+    def _draw_initial_noise(self) -> torch.Tensor:
+        shape = (16, self.chunk_latent_frames, self.latent_height, self.latent_width)
+        if not self.reference_noise_chunks:
+            return torch.randn(shape, dtype=torch.float32, generator=self._generator, device=self.device)
+        bank_index = self.autoregressive_index % self.reference_noise_chunks
+        if bank_index == 0:
+            bank_shape = (shape[0], shape[1] * self.reference_noise_chunks, *shape[2:])
+            self._reference_noise_bank = torch.randn(
+                bank_shape, dtype=torch.float32, generator=self._generator, device=self.device,
+            )
+        return cast(torch.Tensor, self._reference_noise_bank).narrow(1, bank_index * shape[1], shape[1])
+
     @torch.no_grad()
     def _generate_unlocked(
         self,
@@ -710,6 +802,9 @@ class LingBotRealtimeSession:
             )
         ):
             raise RuntimeError("LingBot realtime session state is incomplete.")
+        context = cast(list[torch.Tensor], self._context)
+        timesteps = cast(torch.Tensor, self._timesteps)
+        sigmas = cast(torch.Tensor, self._sigmas)
 
         wall_started = time.perf_counter()
         events = [torch.cuda.Event(enable_timing=True) for _ in range(4)]
@@ -726,18 +821,10 @@ class LingBotRealtimeSession:
         camera = self._camera_condition(interactions, control_segments)
         events[1].record()
 
-        latent = torch.randn(
-            16,
-            self.chunk_latent_frames,
-            self.latent_height,
-            self.latent_width,
-            dtype=torch.float32,
-            generator=self._generator,
-            device=self.device,
-        )
+        latent = self._draw_initial_noise()
         current_start = self.autoregressive_index * self.chunk_sequence_length
         model_kwargs = {
-            "context": [self._context[0]],
+            "context": [context[0]] if self._text_condition is None else self._text_condition,
             "seq_len": self.max_sequence_length,
             "y": [condition],
             "dit_cond_dict": {"c2ws_plucker_emb": camera.chunk(1, dim=0)},
@@ -753,12 +840,27 @@ class LingBotRealtimeSession:
             yield
 
         sync_context = getattr(self.model, "no_sync", no_sync)
+        camera_cache_bytes = 0
+        rotary_cache_bytes = 0
         with (
             autocast_context(self.device, dtype=self.param_dtype),
             sync_context(),
         ):
+            prepare_camera = getattr(self.raw_model, "prepare_camera_condition", None)
+            if prepare_camera is not None and self.sp_size == 1 and not _is_fsdp_module(self.model):
+                model_kwargs["dit_cond_dict"] = prepare_camera(
+                    model_kwargs["dit_cond_dict"], token_length=self.max_sequence_length,
+                )
+                camera_cache_bytes = sum(
+                    tensor.numel() * tensor.element_size()
+                    for pair in model_kwargs["dit_cond_dict"]["_camera_modulations"] for tensor in pair
+                )
+            rotary = self._prepare_rotary_frequencies(latent, current_start=current_start)
+            if rotary is not None:
+                model_kwargs["rotary_frequencies"] = rotary
+                rotary_cache_bytes = sum(value.numel() * value.element_size() for value in rotary)
             x0 = latent
-            for index, timestep in enumerate(self._timesteps):
+            for index, timestep in enumerate(timesteps):
                 flow = self.model(
                     x=[latent],
                     t=timestep[None],
@@ -766,12 +868,14 @@ class LingBotRealtimeSession:
                     **model_kwargs,
                 )[0]
                 self._cross_attention_initialized = True
-                sigma = self._sigmas[index].to(device=latent.device, dtype=latent.dtype)
-                x0 = latent - sigma * flow
-                if index + 1 < len(self._timesteps):
-                    next_sigma = self._sigmas[index + 1].to(
+                sigma = sigmas[index].to(
+                    device=latent.device, dtype=torch.float32 if self.reference_sampling else latent.dtype,
+                )
+                x0 = reference_flow_to_clean(latent, flow.to(self.param_dtype), sigma) if self.reference_sampling else latent - sigma * flow
+                if index + 1 < len(timesteps):
+                    next_sigma = sigmas[index + 1].to(
                         device=latent.device,
-                        dtype=latent.dtype,
+                        dtype=torch.float32 if self.reference_sampling else latent.dtype,
                     )
                     noise = torch.randn(
                         x0.shape,
@@ -803,12 +907,22 @@ class LingBotRealtimeSession:
             "total_ms": (time.perf_counter() - wall_started) * 1000.0,
             "cache_frames": self.cache_frames,
             "world_size": self.sp_size,
+            "text_condition_cache_bytes": self._text_condition.nbytes if self._text_condition is not None else 0,
+            "text_condition_reuse_calls": (
+                self._text_condition.store.condition_hits if self._text_condition is not None else 0
+            ),
+            "rotary_cache_bytes": rotary_cache_bytes,
+            "condition_cache_bytes": self._condition_cache.nbytes if self._condition_cache is not None else 0,
+            "condition_reuse_calls": self._condition_cache.reuse_calls if self._condition_cache is not None else 0,
+            "camera_cache_bytes": camera_cache_bytes,
+            "camera_condition_reuse_calls": len(timesteps) + 1 if camera_cache_bytes else 0,
         }
         self.autoregressive_index += 1
         if self.rank != 0:
             return None
         return {
             "video": video,
+            "video_chunk": VideoChunk(frames=video, layout="thwc", value_range="0,255"),
             "realtime_metrics": metrics,
             "realtime_spec": self.realtime_spec().to_payload(),
         }
@@ -824,13 +938,16 @@ class LingBotRealtimeSession:
     def _reset_unlocked(self, *, release_decoder: bool) -> None:
         self.configured = False
         self._context = None
+        self._text_condition = None
         self._prompt = None
         self._vae_state = None
+        self._condition_cache = None
         self._pending_first_condition = None
         self._prefetched_conditions.clear()
         self._self_cache = None
         self._cross_cache = None
         self._generator = None
+        self._reference_noise_bank = None
         self._timesteps = None
         self._sigmas = None
         self._cross_attention_initialized = False

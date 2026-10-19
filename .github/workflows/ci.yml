@@ -200,9 +200,15 @@ jobs:
           python -m pip install -e ".[test,mcp]" \
             "safetensors>=0.4" "einops>=0.7,<0.9" "omegaconf>=2.3,<3" "triton==3.5.0" \
             "transformers>=4.57,<4.58" ftfy regex opencv-python-headless "aiohttp>=3.10,<4" scikit-image \
-            av imageio imageio-ffmpeg
+            av imageio imageio-ffmpeg easydict loguru matplotlib dm-tree "timm>=0.9,<2" "aiortc>=1.9,<2" "diffusers>=0.39,<0.40"
       - name: Run inference tensors and streaming contracts without model weights
         run: make test-infer-tensors
+      - name: Set up Node for realtime client contracts
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Validate browser presentation correlation and WebRTC stats
+        run: make test-realtime-client
       - name: Publish inference contract results
         if: always()
         uses: actions/upload-artifact@v4

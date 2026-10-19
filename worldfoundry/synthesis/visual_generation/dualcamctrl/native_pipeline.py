@@ -29,6 +29,8 @@ from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants impor
     WanMotionControllerModel,
 )
 from worldfoundry.base_models.diffusion_model.models.networks.wan import WanModel
+from worldfoundry.base_models.diffusion_model.optimizations.camera_condition import CameraConditionCache
+from worldfoundry.base_models.diffusion_model.optimizations.static_cross_kv import StaticConditionCache
 from worldfoundry.base_models.diffusion_model.models.networks.wan.vace import VaceWanModel
 from worldfoundry.base_models.diffusion_model.runners.staged import (
     InferenceStage,
@@ -485,6 +487,13 @@ class WanVideoCameraPipeline(StagedDiffusionPipeline):
         self.load_models_to_device(self.in_iteration_models)
         models = {name: getattr(self, name)
                   for name in self.in_iteration_models}
+        camera = inputs_shared.get("control_camera_latents_input")
+        if camera is not None and self.dit.control_adapter is not None:
+            inputs_shared["control_camera_latents_input"] = CameraConditionCache(camera)
+        for inputs in (inputs_posi, inputs_nega):
+            inputs["context"] = StaticConditionCache(
+                inputs["context"], inputs_shared.get("clip_feature")
+            )
 
         for progress_id, timestep in enumerate(
             progress_bar_cmd(self.scheduler.timesteps)
@@ -1064,7 +1073,7 @@ def model_fn_wan_video(
     latents: torch.Tensor = None,
     control_latents: torch.Tensor = None,
     timestep: torch.Tensor = None,
-    context: torch.Tensor = None,
+    context: torch.Tensor | StaticConditionCache = None,
     clip_feature: Optional[torch.Tensor] = None,
     y: Optional[torch.Tensor] = None,
     control_y: Optional[torch.Tensor] = None,
@@ -1126,14 +1135,13 @@ def model_fn_wan_video(
     if motion_bucket_id is not None and motion_controller is not None:
         t_mod = t_mod + \
             motion_controller(motion_bucket_id).unflatten(1, (6, dit.dim))
-    context = dit.text_embedding(context)
+    condition_store = context.store if isinstance(context, StaticConditionCache) else None
+    context = dit.prepare_condition_context(context, clip_feature=clip_feature)
+    block_kwargs = {} if condition_store is None else {"_worldfoundry_condition_store": condition_store}
 
     if dit.has_image_input:
         x = torch.cat([x, y], dim=1)  # (b, c_x + c_y, f, h, w)
         control_latents = torch.cat([control_latents, control_y], dim=1)
-
-        clip_embdding = dit.img_emb(clip_feature)
-        context = torch.cat([clip_embdding, context], dim=1)
 
     x, (f, h, w) = dit.patchify(x, control_camera_latents_input)
     control_latents, (f_c, h_c, w_c) = dit.patchify(
@@ -1144,17 +1152,9 @@ def model_fn_wan_video(
     ), f"Patchified latent shape mismatch: {x.shape} vs {control_latents.shape}, f: {f}, h: {h}, w: {w}, f_c: {f_c}, h_c: {h_c}, w_c: {w_c}"
     # print(f"Patchified latent shape: {x.shape}, f: {f}, h: {h}, w: {w}")
 
-    freqs = (
-        torch.cat(
-            [
-                dit.freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
-                dit.freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
-                dit.freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1),
-            ],
-            dim=-1,
-        )
-        .reshape(f * h * w, 1, -1)
-        .to(x.device)
+    freqs = dit.rotary_frequencies(
+        (f, h, w), device=x.device,
+        precision="fp32" if dit.freqs[0].dtype == torch.complex64 else "fp64",
     )
 
     # TeaCache
@@ -1228,7 +1228,7 @@ def model_fn_wan_video(
                     )
                 else:
                     control_latents = dit.control_blocks[control_block_id](
-                        control_latents, context, t_mod, freqs
+                        control_latents, context, t_mod, freqs, **block_kwargs
                     )
                 if block_id in dit.depth_inject_blocks:
                     control_zero_linear_idx = dit.depth_inject_blocks.index(
@@ -1263,7 +1263,7 @@ def model_fn_wan_video(
                     use_reentrant=False,
                 )
             else:
-                x = block(x, context, t_mod, freqs)
+                x = block(x, context, t_mod, freqs, **block_kwargs)
 
             if vace_context is not None and block_id in vace.vace_layers_mapping:
                 current_vace_hint = vace_hints[vace.vace_layers_mapping[block_id]]

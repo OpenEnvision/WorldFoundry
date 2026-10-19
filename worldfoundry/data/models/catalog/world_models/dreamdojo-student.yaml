@@ -1,0 +1,48 @@
+id: dreamdojo-student
+name: DreamDojo Student
+family: NVIDIA DreamDojo
+availability: open_source
+license: other:nvidia-open-model-license
+provider: official_repo
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: dreamdojo-student
+runtime_profile: runtime-profile:dreamdojo-student
+release_type: code_only
+integration:
+  status: integrated
+  notes:
+  - Native low-step causal student inference and resident normalized-action streaming; explicit distilled weights are required.
+modalities:
+- robot-world-model
+- action-conditioned-video2world
+- realtime-student
+official_sources:
+  paper: https://arxiv.org/abs/2602.06949
+  project_page: https://dreamdojo-world.github.io/
+  github:
+    url: https://github.com/NVIDIA/DreamDojo
+    confirmed_ref: 02f119b759d5c7f84a399fdeea3c6e82e7ed6cff
+runner_parity:
+  status: implemented_pending_gpu_parity
+  notes:
+  - Student checkpoint-backed inference and official output parity are pending.
+catalog_category: world_models
+catalog_scope: Native distilled robot world-model inference and resident streaming.
+docs:
+  publisher: NVIDIA
+  publisher_kind: company
+  publisher_zh: 英伟达（NVIDIA）
+  overview: DreamDojo's self-forcing student predicts robot-view video with causal action conditioning and one to four TrigFlow sampling steps. WorldFoundry supports isolated offline rollouts and resident normalized-action streaming.
+  overview_zh: DreamDojo self-forcing 学生通过因果动作条件与一至四步 TrigFlow 采样预测机器人视角视频。WorldFoundry 支持独立离线回放与常驻归一化动作流式推理。
+  architecture: The causal student reuses the Cosmos action DiT, Reason1 encoder, and Wan codec. Clean prefill writes request-local three-frame KV history; noisy sampling only reads it. Window continuation retains nine RGB frames and eight aligned historical actions.
+  architecture_zh: 因果学生复用 Cosmos 动作 DiT、Reason1 编码器与 Wan 编解码。干净上下文预填充写入请求专属三潜帧 KV 历史，噪声采样只读取历史。窗口续接保存九帧 RGB 与八步对齐的历史动作。
+  usage_notes: Supply student_checkpoint_path, one initial image, normalized 384-D actions, and shared Cosmos tokenizer/Reason1 assets. First STEP consumes 12 actions and returns 13 frames; subsequent STEP consumes 4 actions and returns 4 new frames at a 10-fps playback clock. Reset retains weights.
+  usage_notes_zh: 提供 student_checkpoint_path、一幅初始图像、归一化 384 维动作与共享 Cosmos tokenizer/Reason1 资产。首次 STEP 消费 12 步动作并返回 13 帧，后续每次消费 4 步新动作并按 10 fps 播放时钟返回 4 帧新像素。重置保留权重。
+  limitations:
+  - The pinned DreamDojo Hub snapshot contains no distilled student checkpoint; explicit student assets are required.
+  - Student checkpoint-backed quality, official parity, closed-loop robot success, and 10-fps inference throughput are not yet validated.
+  - Dataset normalization and teleoperation mapping remain caller-owned; WASD controls are not robot actions.
+  limitations_zh:
+  - 固定的 DreamDojo Hub 快照不包含蒸馏学生 checkpoint，需要显式学生资产。
+  - 尚未验证学生真实权重输出质量、官方一致性、机器人闭环成功率或 10 fps 推理吞吐。
+  - 数据集归一化与遥操作映射由调用方负责；WASD 控制不等于机器人动作。

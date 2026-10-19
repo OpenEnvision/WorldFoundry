@@ -61,6 +61,32 @@ Studio 和一次性 action trace 仍走 pipeline 路径。`OpenVLAPipeline` 绑�
 
 一个典型 pipeline 文件会在 constructor 中保存 synthesis、operator、representation 和 runtime config；`from_pretrained()` 负责 checkpoint staging 或 API client 初始化；`process()` / `__call__()` 把用户输入转成 artifact；`stream()` 只在 Studio live control 或增量输出场景需要时实现。Helper 函数应只保留会影响 reproducibility、credential handling 或 artifact semantics 的部分，不要把训练脚本式的实验逻辑带进公开 pipeline。
 
+持有模型交互状态的 pipeline 提供 `stream_state_ready()`；可选的 `init_stream(...)` 只初始化状态，不生成 chunk。Studio 转发与直接调用相同的模型输入，不向这类 memory 填入或覆盖状态。输入转换属于 operator，状态转换属于 pipeline/memory，缓存租约与 transport 取消属于 Studio。共享 driver 在普通、实时与分布式 action 中统一执行这些状态转换。生命周期与验证边界见 [Studio 内部](/zh/docs/maintainers/architecture/studio-internals)。
+
+解码后的内存视频可以使用 `core.media.processing.postprocess.VideoChunk`，显式声明 `layout` 与 `value_range`；`frame_count` 由声明的时间轴推导。Native visual adapter 在 fresh/stream 结构化结果中以 `video_chunk` 返回它，默认采用有符号像素，由模型家族声明无符号值域覆盖。Latent 输出与 RGB 分开处理。传输与产物导出复用 canonical conversion，不根据观测到的最小值或尺寸猜测像素语义。
+
+模型侧 `RuntimeVideoSynthesis` adapter 将规范化 RGB 数组声明为 THWC 字节像素；它也接受 runtime 返回的声明式 chunk，优先使用其 layout 和值域，不再猜测。ABot-World 的 batch 与 realtime 调用声明单位值域的 TCHW 输出。Matrix-Game 2/3、LingBot 及其 V2 变体、DreamX camera/AR 和 Helios 的驻留实时 session 在原有解码转换后声明 THWC 字节 chunk。原始返回值和结果别名继续保留；添加声明不会复制或重新编码帧。分布式非输出 rank 保留无帧结果，不声明 RGB chunk。
+
+WorldFM 声明现有的字节帧列表，scene context、内参和相机位姿仍是独立字段。LingBot 普通 batch 与滚动帧续段声明 THWC 单位值域浮点输出；产物导出与预览、传输采用同一声明式像素。LingBot V2 batch 声明从保留的 MP4 解码出来的 THWC 字节帧，而不是编码前的模型张量。LongVie 声明 PIL RGB 帧列表，不替换 queued-segment 续段所用的帧、history 或 noise。帧列表后处理直接读取 PIL 几何信息，不物化像素。这些 adapter 显式提供结构化 stream 返回选项；LongVie 与 LingBot V2 还向共享派发声明帧数和帧率参数。
+
+Matrix-Game 2 的 batch/滚动帧续段在原有操作可视化转换后声明单位值域的帧列表；驻留 realtime 的字节 chunk 保留独立声明。Matrix-Game 3 的 batch 声明从保留的产物读回的 THWC 字节像素，stream 按请求保留结构化结果，memory 仍记录原始帧。非输出 rank 不声明 chunk，不复制不存在的 rank-local 产物，也不向 frame memory 添加空输出。Matrix-Game 1 与 3.5 保留仅返回产物的结果语义。
+
+GEN3C 声明已解码的 signed BCTHW 像素，导出采用同一声明；latent 结果不声明 RGB chunk，也不替换滚动帧 memory。Lyra-1 的主视频及 runtime 内各条轨迹保留 GEN3C 声明，同时保留重建输入与 camera/latent 产物；动态续段使用声明式 RGB 像素取得参考帧。Lyra-2 声明规范化后的 THWC 字节输出，保留已解码张量、相机轨迹和 zoom 字段。Astra 声明裁剪后的 PIL RGB 帧列表，不替换自回归 latent history。结构化结果包含 FPS，共享派发在受支持的 stream 路径上请求输出声明。
+
+Astra batch 请求共享已加载的 synthesis 权重，活跃 latent history、相机 embedding、prompt 条件、带 seed 的 RNG 和 scheduler 时间表归各请求所有。`AstraPipeline.memory` 暴露最近一次完成的 rollout，在解码及可选导出成功后发布。`AstraMemory.total_latent_frames` 独立于保留首帧及近期帧的有界历史持续递增，因此逐出旧帧后相机行仍正确对齐，FramePack 索引则保持 chunk-local。显式 direction 输入不修改 operator 交互历史。Synthesis owner 串行使用 Wan VAE 的临时缓存，并在成功或异常展开时调用规范组件清理时间缓存，保留已加载权重。
+
+LingBot realtime 在加载 decoder 时确定 TAE 输入约定。`taew2_1` 接收归一化 Wan latent；`lighttaew2_1` 接收经过逐通道 mean/std 转换的原始 latent。重命名 checkpoint 必须设置 `WORLDFOUNDRY_LINGBOT_TAE_LATENT_FORMAT=raw|normalized`。约定与已加载 decoder 一起保留，包括 LingBot V2 继承的 TAE 路径；完整 Wan decoder 路径保持自己的转换。
+
+HY-WorldPlay 原生 realtime adapter 共享已加载的 transformer、encoder 与规范 Hunyuan 1.5 VAE。每个会话独立持有 runtime 状态、scheduler、text/vision KV、几何采样 generator、相机历史和 latent 前缀。Runtime owner 的锁串行化 realtime 对共享 placement/offload 的访问；reset 和中断仅释放当前会话状态。既有 AR 操作每次推进四个 latent 帧，规范因果前缀解码首块输出 13 个 RGB 帧、后续输出 16 帧，声明为 THWC 字节像素。解码成本和保留历史随前缀增长，此路径不承诺有界延迟。
+
+独立的 Cosmos Predict2/2.5、Transfer2.5、Cosmos3、T2V-Turbo 与 Vchitect adapter 声明 signed BCTHW 像素；HunyuanVideo 及 1.5 声明 decoder 的单位值域 BCTHW 输出。导出使用同一声明，保留原始张量、latent 字段和元数据。Cosmos3 的 sound、音频采样率和 action 输出保持独立。HunyuanVideo、Turbo 与 Vchitect 显式提供结构化 stream 返回、FPS 和帧数；产物历史不替换显式条件输入，latent 调用不更新该历史。
+
+显式的 `video_chunk: None` 表示结果没有 RGB 输出，此时预览与实时传输不回退读取原始 video 别名。空的声明式 chunk 仍表示缓冲；只有没有声明的 producer 使用旧像素推断。
+
+`VisualFrameMemory` 按结构化结果的视频声明选择末尾 RGB 帧并记录帧历史，原始视频与结果引用仍保留。Lyra 的 planned/blocked 结果保留状态及相机/动作元数据，不声明 RGB 输出，不触发视频导出或重建，也不替换已经生成的帧记忆。
+
+只返回 artifact 的 runtime 保留路径与元数据。`OfficialVideoPipeline.stream(return_dict=True)` 保留结构化结果；其产物历史不是 rollout state，不能替换后续显式条件图片。几何、动作轨迹、provider job 和 latent 输出保留各自契约，不套用视频包装。尚未声明的 legacy producer 继续使用现有 fallback。
+
 ## 托管 API 路径
 
 Wan hosted family、Kling、Runway、Luma Ray、Hailuo hosted、Sora/Veo API 和 World Labs 等 provider 路径都保留在 `pipelines/` 下的独立 wrapper 中，与本地 checkpoint runtime 分开维护。Hosted wrapper 往往只需要 staging 本地图像、构造 provider payload，或等待 remote job 完成；它们不应偷偷复用本地 diffusion runtime 的 checkpoint loader。所有 provider credential 只通过环境变量注入，manifest、docs、tests 和 generated reports 中都不应出现 API key。

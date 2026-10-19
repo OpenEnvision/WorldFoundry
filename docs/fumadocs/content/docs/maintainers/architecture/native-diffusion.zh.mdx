@@ -55,7 +55,7 @@ Attention 与可复用 transformer mechanics 也遵守同一规则。Capability 
 
 ## 依赖规则
 
-Canonical files 可以依赖 PyTorch、可复用的 `diffusers` model/operator primitive，以及小而明确的 framework-core utility。`diffusers` 可以作为 library dependency，但它的 Pipeline 抽象不能成为第二套 runtime backend 或 ownership boundary。Canonical files 不能 import `diffsynth`、legacy `diffsynth/`、`image/`、`video/` 子目录、`worldfoundry.synthesis`、`worldfoundry.pipelines` 或 `worldfoundry.evaluation`。
+Canonical files 可以依赖 PyTorch、可复用的 `diffusers` model/operator primitive，以及小而明确的 framework-core utility。`diffusers` 可以作为 library dependency，但它的 Pipeline 抽象不能成为第二套 runtime backend 或 ownership boundary。Canonical files 不能 import `diffsynth`、legacy `diffsynth/`、`image/`、`video/` 子目录、`worldfoundry.synthesis`、`worldfoundry.pipelines`、`worldfoundry.studio`、`worldfoundry.operators` 或 `worldfoundry.evaluation`。边界门禁同时检查普通 import、lazy import 和字符串注册目标。
 
 迁移只有一个方向：
 
@@ -64,6 +64,8 @@ product compatibility boundary -> canonical diffusion_model root -> core / PyTor
 ```
 
 反向依赖被禁止。Legacy implementation 的所有调用方迁完后，应删除旧实现，而不是长期维护第二份副本。
+
+WorldPlay2 的 Wan network variant、HR/LR initialization、control、expert adapter 和 PDD scheduler 分别位于 canonical role，recipe 选择 `runners/compressed_memory.py`。HelixWorld 的 LTX variant 与 camera/action encoder 通过 `recipes/helixworld.py` 和 `runners/joint_chunked.py` 组合。Wan Animate 的 pose-conditioning renderer 与 encoder 同属 `models/encoders/wan/variants/animate/render.py`。Studio 消费模型输出；模型 conditioning 不依赖 Studio。
 
 ## 组件契约
 
@@ -97,6 +99,8 @@ Extension 安装在 runner instance 上，并具有唯一 `extension_id`。它�
 ## 新增或迁移模型
 
 只从官方仓库移植最小 inference slice：checkpoint-compatible network definition、必要 encoder 与 autoencoder、numerical schedule，以及会影响结果的 preprocessing/postprocessing。把这些部分映射到 native contracts，并为每个公开 model ID 创建独立 recipe。已有 canonical component 的 checkpoint semantics 一致时必须复用，不能复制到 family package。
+
+选择最小集成增量：已有 graph 只增加配置与 checkpoint binding；必要时增加 checkpoint-visible network 或 condition variant；只有执行算法确实不同时才增加可复用 framework strategy。共享 component 与 loader 保持 canonical ownership。Serving adaptation 独立验收：request/session isolation、取消、输出节奏、backpressure 与 cleanup 需要应用层证据。
 
 随后把 recipe 接入现有 public pipeline 和 catalog route，验证低分辨率 deterministic inference，并使用真实 checkpoint 对齐官方输出。所有 caller 都迁到 native path 之后，旧实现先变成单向 compatibility re-export，再被删除。只有 metadata recipe 或 toy test 不能证明真实模型已经迁移完成。
 

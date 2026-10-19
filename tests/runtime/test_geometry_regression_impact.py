@@ -16,19 +16,120 @@ impact = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(impact)
 
 
-@pytest.mark.parametrize("path", [
-    "tests/synthesis/test_matrix_game_2_checkpoint_conditioned_trajectory.py",
-    "tests/synthesis/mg2_historical_reference.py",
-])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "tests/synthesis/test_matrix_game_2_checkpoint_conditioned_trajectory.py",
+        "tests/synthesis/mg2_historical_reference.py",
+    ],
+)
 def test_mg2_numerical_contract_changes_require_real_model_replay(path):
     root = TOOLS.parents[1]
     plan = impact.select_cases(
         TOOLS / "geometry_regression_cases.json",
-        TOOLS / "geometry_regression_dependencies.json", root, [path],
+        TOOLS / "geometry_regression_dependencies.json",
+        root,
+        [path],
     )
     assert plan["status"] == "planned"
     assert plan["selected_cases"] == ["matrix-game2-controls-short"]
     assert not plan["uncovered_paths"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "component,paths,expected_cases",
+    [
+        (
+            "worldplay2",
+            (
+                "recipes/worldplay2.py",
+                "runners/compressed_memory.py",
+                "models/denoisers/worldplay2.py",
+                "models/networks/wan/variants/worldplay2/model.py",
+                "models/encoders/wan/variants/worldplay2.py",
+                "models/initializers/wan/worldplay2.py",
+                "schedulers/fixed_pdd.py",
+            ),
+            {
+                "worldplay2-controls-short",
+                "worldplay2-fast-controls-short",
+                "worldplay2-ar-controls-short",
+                "worldplay2-bi-controls-short",
+            },
+        ),
+        (
+            "helixworld",
+            (
+                "recipes/helixworld.py",
+                "runners/joint_chunked.py",
+                "models/denoisers/helixworld.py",
+                "models/networks/ltx/variants/helixworld.py",
+                "models/encoders/ltx/variants/helixworld/conditioning.py",
+                "models/encoders/ltx/variants/helixworld/controls.py",
+                "schedulers/clean_sample.py",
+            ),
+            {"helixworld-controls-short"},
+        ),
+    ],
+)
+def test_native_role_paths_keep_affected_checkpoint_replays(
+    component: str,
+    paths: tuple[str, ...],
+    expected_cases: set[str],
+) -> None:
+    """Canonical role ownership must retain the configured real-checkpoint gates."""
+    _, policy = impact.load_definitions(
+        TOOLS / "geometry_regression_cases.json",
+        TOOLS / "geometry_regression_dependencies.json",
+    )
+    root = TOOLS.parents[1]
+    for relative in paths:
+        path = "worldfoundry/base_models/diffusion_model/" + relative
+        assert (root / path).is_file()
+        assert impact.matches(path, policy["components"][component]), path
+    assert {case for case, owners in policy["cases"].items() if component in owners} == expected_cases
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "path,expected_components,expected_cases",
+    [
+        (
+            "worldfoundry/operators/worldfm_operator.py",
+            {"worldfm"},
+            {"worldfm"},
+        ),
+        (
+            "worldfoundry/pipelines/worldfm/pipeline_worldfm.py",
+            {"worldfm"},
+            {"worldfm"},
+        ),
+        (
+            "worldfoundry/pipelines/lingbot_world/distributed.py",
+            {"lingbot-world", "lingbot-world-v2"},
+            {
+                "lingbot-world-controls-short",
+                "lingbot-world-act-controls-short",
+                "lingbot-world-v2-causal-short",
+                "lingbot-world-v2-1p3b-causal-short",
+            },
+        ),
+    ],
+)
+def test_model_owned_input_and_loading_paths_keep_checkpoint_replays(
+    path: str,
+    expected_components: set[str],
+    expected_cases: set[str],
+) -> None:
+    _, policy = impact.load_definitions(
+        TOOLS / "geometry_regression_cases.json",
+        TOOLS / "geometry_regression_dependencies.json",
+    )
+    assert (TOOLS.parents[1] / path).is_file()
+    owners = {owner for owner, paths in policy["components"].items() if impact.matches(path, paths)}
+    assert expected_components <= owners
+    assert {case for case, components in policy["cases"].items() if owners.intersection(components)} == expected_cases
 
 
 def git(root, *args):
@@ -111,14 +212,17 @@ def test_shared_and_parent_package_initializers_select_every_case(project, path)
     assert impact.select_cases(matrix, policy, root, [path])["selected_cases"] == ["a", "b"]
 
 
-@pytest.mark.parametrize("field,value", [
-    ("load", {"checkpoint_path": "/weights/model.safetensors"}),
-    ("call", {"num_frames": 17}),
-    ("sequence", [{"name": "a", "call": {"seed": 42}, "outputs": ["video"]}]),
-    ("assets", {"input": "/inputs/image.png"}),
-    ("array_contracts", {"video": {"shape": [1, 3, 17, 256, 448]}}),
-    ("scope", "short real checkpoint replay"),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("load", {"checkpoint_path": "/weights/model.safetensors"}),
+        ("call", {"num_frames": 17}),
+        ("sequence", [{"name": "a", "call": {"seed": 42}, "outputs": ["video"]}]),
+        ("assets", {"input": "/inputs/image.png"}),
+        ("array_contracts", {"video": {"shape": [1, 3, 17, 256, 448]}}),
+        ("scope", "short real checkpoint replay"),
+    ],
+)
 def test_committed_case_edit_requires_its_replay_and_preserves_other_cases(project, field, value):
     root, matrix, policy = project
     base = git(root, "rev-parse", "HEAD")
@@ -283,11 +387,14 @@ def test_public_matrix_has_complete_declarations_and_known_hy2_path():
     assert "hyworldmirror-2" in plan["selected_cases"]
 
 
-@pytest.mark.parametrize("path,case_id", [
-    ("worldfoundry/pipelines/cosmos/pipeline_cosmos_transfer2p5.py", "cosmos-transfer25-2b-edge-short"),
-    ("worldfoundry/pipelines/gamma_world/pipeline_gamma_world.py", "gamma-world-causal-few-step-189f"),
-    ("worldfoundry/synthesis/visual_generation/open_oasis/utils.py", "oasis500m-video-short"),
-])
+@pytest.mark.parametrize(
+    "path,case_id",
+    [
+        ("worldfoundry/pipelines/cosmos/pipeline_cosmos_transfer2p5.py", "cosmos-transfer25-2b-edge-short"),
+        ("worldfoundry/pipelines/gamma_world/pipeline_gamma_world.py", "gamma-world-causal-few-step-189f"),
+        ("worldfoundry/synthesis/visual_generation/open_oasis/utils.py", "oasis500m-video-short"),
+    ],
+)
 def test_public_world_model_changes_have_their_own_replay_case(path, case_id):
     root = TOOLS.parents[1]
     plan = impact.select_cases(
@@ -353,15 +460,28 @@ def verification_project(project):
     cases[MG2_CASE] = {"id": MG2_CASE, "target": "worldfoundry.models.a:Model"}
     matrix.write_text(json.dumps(cases))
     dependencies = root / "tests/manual/geometry_regression_dependencies.json"
-    dependencies.write_text(json.dumps({
-        "schema_version": 1,
-        "shared_paths": ["worldfoundry/core/**", "tests/manual/geometry_regression*.py",
-                         str(matrix.relative_to(root)), str(dependencies.relative_to(root)),
-                         "MANIFEST.in", "requirements/**", "envs/**", "assets/**", "thirdparty/**", "LICENSE"],
-        "ignored_paths": ["tests/**", "docs/**", ".github/**", "Makefile"],
-        "components": {"a": ["worldfoundry/models/a.py"], "b": ["worldfoundry/models/b.py"]},
-        "cases": {"a": ["a"], "b": ["b"], MG2_CASE: ["a"]},
-    }))
+    dependencies.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "shared_paths": [
+                    "worldfoundry/core/**",
+                    "tests/manual/geometry_regression*.py",
+                    str(matrix.relative_to(root)),
+                    str(dependencies.relative_to(root)),
+                    "MANIFEST.in",
+                    "requirements/**",
+                    "envs/**",
+                    "assets/**",
+                    "thirdparty/**",
+                    "LICENSE",
+                ],
+                "ignored_paths": ["tests/**", "docs/**", ".github/**", "Makefile"],
+                "components": {"a": ["worldfoundry/models/a.py"], "b": ["worldfoundry/models/b.py"]},
+                "cases": {"a": ["a"], "b": ["b"], MG2_CASE: ["a"]},
+            }
+        )
+    )
     git(root, "add", ".")
     git(root, "commit", "-qm", "complete committed verification fixture")
     return root, matrix, dependencies, git(root, "rev-parse", "HEAD")
@@ -383,8 +503,9 @@ def commit_verification_change(project, *, tools=(VERIFICATION_SUITE,), extra=No
 
 def verification_proofs(project, *, head, changes, base=None):
     root, matrix, dependencies, original = project
-    return impact.verification_tooling_proofs(root, matrix, dependencies, changes,
-                                              base=original if base is None else base, head=head)
+    return impact.verification_tooling_proofs(
+        root, matrix, dependencies, changes, base=original if base is None else base, head=head
+    )
 
 
 def assert_conservative_verification_fallback(project, *, head, changes, base=None):
@@ -398,9 +519,12 @@ def assert_conservative_verification_fallback(project, *, head, changes, base=No
     return plan
 
 
-@pytest.mark.parametrize("tool,contract", [(VERIFICATION_SUITE, VERIFICATION_CONTRACTS[1]),
-                                          (VERIFICATION_IMPACT, VERIFICATION_CONTRACTS[0])])
-def test_committed_verification_tool_change_requires_cpu_contract_and_real_mg2_replay(verification_project, tool, contract):
+@pytest.mark.parametrize(
+    "tool,contract", [(VERIFICATION_SUITE, VERIFICATION_CONTRACTS[1]), (VERIFICATION_IMPACT, VERIFICATION_CONTRACTS[0])]
+)
+def test_committed_verification_tool_change_requires_cpu_contract_and_real_mg2_replay(
+    verification_project, tool, contract
+):
     root, matrix, dependencies, base = verification_project
     head, changes = commit_verification_change(verification_project, tools=(tool,))
     proofs = verification_proofs(verification_project, head=head, changes=changes)
@@ -438,18 +562,34 @@ def test_allowed_documentation_tests_workflow_and_make_edits_preserve_runtime_pr
     root, matrix, dependencies, base = verification_project
     head, changes = commit_verification_change(verification_project)
     original = verification_proofs(verification_project, head=head, changes=changes)[0]
-    extra = {"docs/orchestration.md": "updated guide\n", ".github/workflows/ci.yml": "name: changed validation\n",
-             "Makefile": "test:\n\tpython -m pytest -q\n", "tests/runtime/additional_contract.py": "# Additional checks\n"}
+    extra = {
+        "docs/orchestration.md": "updated guide\n",
+        ".github/workflows/ci.yml": "name: changed validation\n",
+        "Makefile": "test:\n\tpython -m pytest -q\n",
+        "tests/runtime/additional_contract.py": "# Additional checks\n",
+    }
     head, changes = commit_verification_change(verification_project, extra=extra)
     proof = verification_proofs(verification_project, head=head, changes=changes)[0]
     assert proof["immutable_runtime_tree_sha256"] == original["immutable_runtime_tree_sha256"]
     assert proof["source_sha256"] == original["source_sha256"]
     assert proof["head_revision"] == head and proof["base_revision"] == base
-    assert impact.select_cases(matrix, dependencies, root, changes, base=base, head=head)["selected_cases"] == [MG2_CASE]
+    assert impact.select_cases(matrix, dependencies, root, changes, base=base, head=head)["selected_cases"] == [
+        MG2_CASE
+    ]
 
 
-@pytest.mark.parametrize("path", ["worldfoundry/models/b.py", "MANIFEST.in", "requirements/model.txt",
-                                  "envs/model.yaml", "assets/reference.bin", "thirdparty/vendor/source.py", "LICENSE"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "worldfoundry/models/b.py",
+        "MANIFEST.in",
+        "requirements/model.txt",
+        "envs/model.yaml",
+        "assets/reference.bin",
+        "thirdparty/vendor/source.py",
+        "LICENSE",
+    ],
+)
 def test_mixed_code_environment_packaging_or_asset_changes_retain_full_replay_selection(verification_project, path):
     head, changes = commit_verification_change(verification_project, extra={path: "# Changed production bytes\n"})
     assert_conservative_verification_fallback(verification_project, head=head, changes=changes)
@@ -493,8 +633,12 @@ def test_committed_case_or_dependency_definition_change_cannot_be_exempted(verif
 def test_uncommitted_inspected_tool_definition_or_contract_cannot_authorize_proof(verification_project, path_kind):
     root, matrix, dependencies, _ = verification_project
     head, changes = commit_verification_change(verification_project)
-    path = {"tool": root / VERIFICATION_SUITE, "matrix": matrix, "dependencies": dependencies,
-            "contract": root / VERIFICATION_CONTRACTS[1]}[path_kind]
+    path = {
+        "tool": root / VERIFICATION_SUITE,
+        "matrix": matrix,
+        "dependencies": dependencies,
+        "contract": root / VERIFICATION_CONTRACTS[1],
+    }[path_kind]
     if path_kind in {"matrix", "dependencies"}:
         path.write_text(json.dumps(json.loads(path.read_text()), indent=2) + "\n")
     else:
@@ -536,7 +680,9 @@ def test_replay_exporter_is_not_in_the_exact_verification_tool_allowance(verific
 
 @pytest.mark.parametrize("path_kind", ["tool", "contract"])
 @pytest.mark.parametrize("operation", ["missing", "symlink"])
-def test_missing_or_symlinked_verification_implementation_cannot_be_exempted(verification_project, path_kind, operation):
+def test_missing_or_symlinked_verification_implementation_cannot_be_exempted(
+    verification_project, path_kind, operation
+):
     root, _, _, _ = verification_project
     head, changes = commit_verification_change(verification_project)
     path = root / (VERIFICATION_SUITE if path_kind == "tool" else VERIFICATION_CONTRACTS[1])
@@ -610,7 +756,9 @@ def test_runtime_symlink_to_changed_excluded_file_cannot_hide_runtime_bytes(veri
     git(root, "add", ".")
     git(root, "commit", "-qm", "runtime alias to excluded input")
     project = (root, matrix, dependencies, git(root, "rev-parse", "HEAD"))
-    head, changes = commit_verification_change(project, extra={str(target.relative_to(root)): "changed runtime input\n"})
+    head, changes = commit_verification_change(
+        project, extra={str(target.relative_to(root)): "changed runtime input\n"}
+    )
     assert alias.read_text() == "changed runtime input\n"
     assert_conservative_verification_fallback(project, head=head, changes=changes)
 
@@ -625,7 +773,9 @@ def test_runtime_symlink_to_an_immutable_tracked_license_is_validated(verificati
     head, changes = commit_verification_change(project)
     proofs = verification_proofs(project, head=head, changes=changes)
     assert len(proofs) == 1 and proofs[0]["path"] == VERIFICATION_SUITE
-    assert impact.select_cases(matrix, dependencies, root, changes, base=project[3], head=head)["selected_cases"] == [MG2_CASE]
+    assert impact.select_cases(matrix, dependencies, root, changes, base=project[3], head=head)["selected_cases"] == [
+        MG2_CASE
+    ]
 
 
 def test_excluded_intermediate_symlink_cannot_redirect_an_unchanged_runtime_alias(verification_project):
@@ -657,10 +807,22 @@ def test_immutable_symlink_chain_stays_inside_the_inspected_runtime_tree(verific
     assert verification_proofs(project, head=head, changes=changes)
 
 
-@pytest.mark.parametrize("relative", ["torch.py", "numpy/__init__.py", "thirdparty/untracked_code.py",
-                                      "shadow_extension.so", "shadow_types.pyi", "shadow_script.pyw",
-                                      "shadow_extension.pyd", "ignored_shadow.py"])
-def test_untracked_importable_code_outside_worldfoundry_cannot_shadow_a_verified_runtime(verification_project, relative):
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "torch.py",
+        "numpy/__init__.py",
+        "thirdparty/untracked_code.py",
+        "shadow_extension.so",
+        "shadow_types.pyi",
+        "shadow_script.pyw",
+        "shadow_extension.pyd",
+        "ignored_shadow.py",
+    ],
+)
+def test_untracked_importable_code_outside_worldfoundry_cannot_shadow_a_verified_runtime(
+    verification_project, relative
+):
     root, _, _, _ = verification_project
     head, changes = commit_verification_change(verification_project)
     shadow = root / relative
@@ -720,9 +882,12 @@ def test_append_only_case_and_component_select_new_case_and_real_tooling_replay(
     assert any(reason["kind"] == "committed_additional_case_dependency" for reason in plan["reasons"]["extra"])
 
 
-@pytest.mark.parametrize("mutation", ["recipe", "component", "case_owner", "global", "json_type", "unreferenced_component"])
+@pytest.mark.parametrize(
+    "mutation", ["recipe", "component", "case_owner", "global", "json_type", "unreferenced_component"]
+)
 def test_case_additions_cannot_exempt_changes_to_existing_definitions(verification_project, mutation):
     root, matrix, dependencies, base = verification_project
+
     def mutate(cases, policy):
         if mutation == "recipe":
             cases["a"]["call"] = {"seed": 1730}
@@ -736,6 +901,7 @@ def test_case_additions_cannot_exempt_changes_to_existing_definitions(verificati
             policy["schema_version"] = True
         else:
             policy["components"]["unused"] = ["worldfoundry/unexecuted.py"]
+
     head, changes = commit_additional_case(verification_project, mutate)
     assert impact.committed_additional_cases(root, matrix, dependencies, changes, base=base, head=head) is None
     plan = impact.select_cases(matrix, dependencies, root, changes, base=base, head=head)

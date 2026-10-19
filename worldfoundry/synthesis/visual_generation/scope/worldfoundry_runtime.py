@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from worldfoundry.core import jsonable
-from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import package_module_root as package_root
 
 DEFAULT_MODEL_DIR_CANDIDATES = (
@@ -251,9 +250,6 @@ class SCOPERuntime:
             str(int(seed)),
         ]
 
-    @staticmethod
-    def _sha256(path: Path) -> str:
-        return file_sha256(path)
 
     def predict(
         self,
@@ -335,7 +331,6 @@ class SCOPERuntime:
             "artifact_kind": "generated_video",
             "artifact_path": str(target),
             "generated_video_path": str(target),
-            "artifact_sha256": self._sha256(target),
             "runtime": "worldfoundry.synthesis.visual_generation.scope.scope_runtime.inference",
             "backend_quality": "in_tree_scope_runtime",
             "run_dir": str(work_dir),

@@ -1,48 +1,47 @@
-from PIL import Image
 import os
-
-import torch
-from transformers import AutoTokenizer
-from ...constants import HF_CACHE_DIR, IMAGE_TOKEN_INDEX
+from math import ceil, sqrt
 
 # from moviepy.editor import VideoFileClip
-
-
 import cv2
 import numpy as np
-from math import ceil, sqrt
+import torch
+from PIL import Image
+
+from ...constants import HF_CACHE_DIR, IMAGE_TOKEN_INDEX
+
 
 def extract_frames(video_path, num_frames, output_dir):
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # Open the video file
     video = cv2.VideoCapture(video_path)
-    
+
     # Get total number of frames in the video
     total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-    
+
     # Calculate the step size to get equally-spaced frames
     step = total_frames // num_frames
-    
+
     for i in range(num_frames):
         # Set the frame position
         video.set(cv2.CAP_PROP_POS_FRAMES, i * step)
-        
+
         # Read the frame
         ret, frame = video.read()
-        
+
         if ret:
             # Save the frame as an image
             output_path = os.path.join(output_dir, f"frame_{i:04d}.jpg")
             cv2.imwrite(output_path, frame)
         else:
             print(f"Failed to extract frame {i}")
-    
+
     # Release the video object
     video.release()
 
     print(f"Extracted {num_frames} frames from the video.")
+
 
 # Following functions adapted from: https://github.com/mapluisch/LLaVA-CLI-with-multiple-images/blob/main/llava-multi-images.py
 def concatenate_images_vertical(images, dist_images):
@@ -59,11 +58,12 @@ def concatenate_images_vertical(images, dist_images):
     for img in images:
         h, w = img.shape[:2]
         # paste img in new_img at current height
-        new_img[current_height:current_height+h, :w] = img
+        new_img[current_height : current_height + h, :w] = img
         # update current height for next img
         current_height += h + dist_images
 
     return new_img
+
 
 def concatenate_images_horizontal(images, dist_images):
     # calc total width of imgs + dist between them
@@ -79,11 +79,12 @@ def concatenate_images_horizontal(images, dist_images):
     for img in images:
         h, w = img.shape[:2]
         # paste img in new_img at current width
-        new_img[:h, current_width:current_width+w] = img
+        new_img[:h, current_width : current_width + w] = img
         # update current width for next img
         current_width += w + dist_images
 
     return new_img
+
 
 def concatenate_images_grid(images, dist_images, output_size):
     num_images = len(images)
@@ -121,9 +122,10 @@ def concatenate_images_grid(images, dist_images, output_size):
         y_offset = row * (cell_height + dist_images) + (cell_height - new_height) // 2
 
         # paste resized img in calc pos
-        new_img[y_offset:y_offset+new_height, x_offset:x_offset+new_width] = resized_img
+        new_img[y_offset : y_offset + new_height, x_offset : x_offset + new_width] = resized_img
 
     return new_img
+
 
 def expand2square(pil_img, background_color):
     width, height = pil_img.size
@@ -140,10 +142,10 @@ def expand2square(pil_img, background_color):
 
 
 def tokenizer_image_token(prompt, tokenizer, image_token_index=IMAGE_TOKEN_INDEX, return_tensors=None):
-    prompt_chunks = [tokenizer(chunk).input_ids for chunk in prompt.split('<image>')]
+    prompt_chunks = [tokenizer(chunk).input_ids for chunk in prompt.split("<image>")]
 
     def insert_separator(X, sep):
-        return [ele for sublist in zip(X, [sep]*len(X)) for ele in sublist][:-1]
+        return [ele for sublist in zip(X, [sep] * len(X)) for ele in sublist][:-1]
 
     input_ids = []
     offset = 0
@@ -155,17 +157,17 @@ def tokenizer_image_token(prompt, tokenizer, image_token_index=IMAGE_TOKEN_INDEX
         input_ids.extend(x[offset:])
 
     if return_tensors is not None:
-        if return_tensors == 'pt':
+        if return_tensors == "pt":
             return torch.tensor(input_ids, dtype=torch.long)
-        raise ValueError(f'Unsupported tensor type: {return_tensors}')
+        raise ValueError(f"Unsupported tensor type: {return_tensors}")
     return input_ids
 
 
 def t5_tokenizer_image_token(prompt, tokenizer, image_token_index=IMAGE_TOKEN_INDEX, return_tensors=None):
-    prompt_chunks = [tokenizer(chunk).input_ids for chunk in prompt.split('<image>')]
+    prompt_chunks = [tokenizer(chunk).input_ids for chunk in prompt.split("<image>")]
 
     def insert_separator(X, sep):
-        return [ele for sublist in zip(X, [sep]*len(X)) for ele in sublist][:-1]
+        return [ele for sublist in zip(X, [sep] * len(X)) for ele in sublist][:-1]
 
     input_ids = []
     # Since there's no bos_token_id, simply concatenate the tokenized prompt_chunks with the image_token_index
@@ -173,41 +175,46 @@ def t5_tokenizer_image_token(prompt, tokenizer, image_token_index=IMAGE_TOKEN_IN
         input_ids.extend(x)
 
     if return_tensors is not None:
-        if return_tensors == 'pt':
+        if return_tensors == "pt":
             return torch.tensor(input_ids, dtype=torch.long)
-        raise ValueError(f'Unsupported tensor type: {return_tensors}')
+        raise ValueError(f"Unsupported tensor type: {return_tensors}")
     return input_ids
 
 
-def load_pretrained_model(model_cls,
-                          model_args,
-                          model_path=None,
-                          tokenizer_path=None,
-                          model_max_length=None,
-                          padding_side=None,
-                          image_aspect_ratio='pad', # or 'square'
-                          mmprojector_repo=None,
-                          mmprojector_name=None,
-                          device='cuda',
-                          cache_dir=HF_CACHE_DIR):
+def load_pretrained_model(
+    model_cls,
+    model_args,
+    model_path=None,
+    tokenizer_path=None,
+    model_max_length=None,
+    padding_side=None,
+    image_aspect_ratio="pad",  # or 'square'
+    mmprojector_repo=None,
+    mmprojector_name=None,
+    device="cuda",
+    cache_dir=HF_CACHE_DIR,
+):
+    from transformers import AutoTokenizer
+
     tokenizer_dict = {}
     if model_max_length:
-        tokenizer_dict['model_max_length'] = model_max_length
+        tokenizer_dict["model_max_length"] = model_max_length
     if padding_side:
-        tokenizer_dict['padding_side'] = padding_side
+        tokenizer_dict["padding_side"] = padding_side
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_fast=False, **tokenizer_dict)
     # tokenizer.pad_token = tokenizer.unk_token # could be redundant
 
     model = model_cls.from_pretrained(model_path, cache_dir=cache_dir)
-    
+
     if mmprojector_repo:
         from huggingface_hub import hf_hub_download
-        model_base_name = mmprojector_repo.split('/')[-1]
-        
+
+        model_base_name = mmprojector_repo.split("/")[-1]
+
         if cache_dir is not None:
             local_dir = os.path.join(cache_dir, model_base_name)
-        elif os.environ.get('HF_HOME') is not None:
-            local_dir = os.path.join(os.environ.get('HF_HOME'), model_base_name)
+        elif os.environ.get("HF_HOME") is not None:
+            local_dir = os.path.join(os.environ.get("HF_HOME"), model_base_name)
         else:
             local_dir = os.path.join(os.path.expanduser("~"), model_base_name)
         print(f"Downloading projector weights to {local_dir}")
@@ -217,11 +224,13 @@ def load_pretrained_model(model_cls,
             local_dir=local_dir,
         )
         pretrain_mm_mlp_adapter = os.path.join(local_dir, mmprojector_name)
-        model_args.pretrain_mm_mlp_adapter = pretrain_mm_mlp_adapter # important to set to correct path
-        
-        model.get_model().initialize_vision_modules(model_args) # This will load the CLIP vision encoder and MLP projector
+        model_args.pretrain_mm_mlp_adapter = pretrain_mm_mlp_adapter  # important to set to correct path
+
+        model.get_model().initialize_vision_modules(
+            model_args
+        )  # This will load the CLIP vision encoder and MLP projector
     else:
-        model.resize_token_embeddings(len(tokenizer)) # perhaps not needed
+        model.resize_token_embeddings(len(tokenizer))  # perhaps not needed
 
     if not model.get_vision_tower().is_loaded:
         model.get_vision_tower().load_model()
@@ -229,8 +238,7 @@ def load_pretrained_model(model_cls,
     image_processor = model.get_vision_tower().image_processor
 
     model.requires_grad_(False)
-    
-    
+
     # below might be redundant
     model.config.image_aspect_ratio = image_aspect_ratio
     model.config.use_cache = False

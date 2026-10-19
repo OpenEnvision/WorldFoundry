@@ -10,7 +10,8 @@ import json
 
 from worldfoundry.runtime.inference_catalog import get_model_inference_spec
 from worldfoundry.studio.inference.catalog import find_entry
-from worldfoundry.studio.serving.workspace import JobCreateRequest, _inference_run_kwargs, _model_payload
+from worldfoundry.studio.inference.requests import JobCreateRequest, build_inference_run_kwargs
+from worldfoundry.studio.serving.workspace import _model_payload
 from worldfoundry.synthesis.visual_generation.official_video_runtime import OfficialVideoRuntime
 
 
@@ -38,7 +39,7 @@ def test_helios_workspace_routes_variants_to_the_official_runtime() -> None:
     }
 
     for variant_id, (checkpoint_name, runtime_variant) in expected.items():
-        _, run_kwargs = _inference_run_kwargs(
+        _, run_kwargs = build_inference_run_kwargs(
             JobCreateRequest(model_id="helios", variant_id=variant_id, prompt="Helios demo"),
             validate=True,
         )

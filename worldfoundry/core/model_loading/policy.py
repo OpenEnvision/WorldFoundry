@@ -56,6 +56,7 @@ class AttentionBackend(str, Enum):
     SAGE_ATTENTION_3 = "sage_attention_3"
     XFORMERS = "xformers"
     SOL_ATTN = "sol_attn"
+    SCALED_INT8_FP8 = "scaled_int8_fp8"
 
     @classmethod
     def _missing_(cls, value: object) -> "AttentionBackend | None":

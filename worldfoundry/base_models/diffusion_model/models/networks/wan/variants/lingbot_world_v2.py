@@ -7,10 +7,10 @@ import math
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as torch_F
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
-from einops import rearrange
 
+from worldfoundry.base_models.diffusion_model.optimizations.static_cross_kv import StaticConditionCache
+from worldfoundry.core.attention.rotary.complex_rope import assemble_complex_rotary_frequencies_3d
 from worldfoundry.core.attention.sequence.varlen import (
     attention,
     flash_attention,
@@ -23,14 +23,27 @@ from worldfoundry.base_models.diffusion_model.models.networks.wan.reference_22 i
     sinusoidal_embedding_1d,
 )
 
+from worldfoundry.base_models.diffusion_model.optimizations.camera_condition import (
+    apply_camera_modulation,
+    camera_condition_for_block,
+    embed_wan_camera_condition,
+    prepare_wan_camera_condition,
+)
+
 __all__ = ["LingBotWorldV2Model", "WanModelFast"]
 
 
-def causal_rope_apply(x, grid_sizes, freqs, start_frame=0):
+def causal_rope_apply(
+    x: torch.Tensor,
+    grid_sizes: torch.Tensor,
+    freqs: torch.Tensor | tuple[torch.Tensor, ...],
+    start_frame: int = 0,
+) -> torch.Tensor:
+    """Rotate live Q/K with a base table or prepared per-sample token tables."""
     n, c = x.size(2), x.size(3) // 2
 
-    # split freqs
-    freqs = freqs.split([c - 2 * (c // 3), c // 3, c // 3], dim=1)
+    # A prepared tuple holds one complete table per sample, not per axis.
+    tables = freqs.split([c - 2 * (c // 3), c // 3, c // 3], dim=1) if isinstance(freqs, torch.Tensor) else None
 
     # loop over samples
     output = []
@@ -40,14 +53,11 @@ def causal_rope_apply(x, grid_sizes, freqs, start_frame=0):
 
         # precompute multipliers
         x_i = torch.view_as_complex(x[i, :seq_len].to(torch.float64).reshape(seq_len, n, -1, 2))
-        freqs_i = torch.cat(
-            [
-                freqs[0][start_frame : start_frame + f].view(f, 1, 1, -1).expand(f, h, w, -1),
-                freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
-                freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1),
-            ],
-            dim=-1,
-        ).reshape(seq_len, 1, -1)
+        freqs_i = (
+            assemble_complex_rotary_frequencies_3d(tables, (f, h, w), start_frame=start_frame)
+            if tables is not None
+            else freqs[i]
+        )
 
         # apply rotary embedding
         x_i = torch.view_as_real(x_i * freqs_i).flatten(2)
@@ -164,7 +174,19 @@ class CausalWanSelfAttention(nn.Module):
 
         k_cache = kv_cache["k"][:, max(0, local_end_index - max_attention_size) : local_end_index]
         v_cache = kv_cache["v"][:, max(0, local_end_index - max_attention_size) : local_end_index]
-        x = attention(roped_query, k_cache, v_cache)
+        backend = getattr(self, "attention_backend", "auto")
+        if backend == "scaled_int8_fp8":
+            from worldfoundry.core.attention.sequence.key_centering import streaming_scaled_attention
+
+            x = streaming_scaled_attention(roped_query, k_cache, v_cache, kv_cache, current_start=current_start,
+                                           local_start=local_start_index, local_end=local_end_index, maximum=max_attention_size)
+        elif backend == "torch":
+            from worldfoundry.core.attention.backends.dispatch import attention_forward
+
+            x = attention_forward(roped_query, k_cache, v_cache, q_pattern="b s n d", k_pattern="b s n d",
+                                  v_pattern="b s n d", out_pattern="b s n d", backend="torch")
+        else:
+            x = attention(roped_query, k_cache, v_cache)
 
         kv_cache["global_end_index"].fill_(current_end)
         kv_cache["local_end_index"].fill_(local_end_index)
@@ -294,14 +316,7 @@ class CausalWanAttentionBlock(nn.Module):
         with torch.amp.autocast("cuda", dtype=torch.float32):
             x = x + y * e[2].squeeze(2)
 
-        # cam injection (only if dit_cond_dict is provided and contains c2ws_plucker_emb)
-        if dit_cond_dict is not None and "c2ws_plucker_emb" in dit_cond_dict:
-            c2ws_plucker_emb = dit_cond_dict["c2ws_plucker_emb"]
-            c2ws_hidden_states = self.cam_injector_layer2(torch_F.silu(self.cam_injector_layer1(c2ws_plucker_emb)))
-            c2ws_hidden_states = c2ws_hidden_states + c2ws_plucker_emb
-            cam_scale = self.cam_scale_layer(c2ws_hidden_states)
-            cam_shift = self.cam_shift_layer(c2ws_hidden_states)
-            x = (1.0 + cam_scale) * x + cam_shift
+        x = apply_camera_modulation(self, x, dit_cond_dict)
 
         # cross-attention & ffn function
         def cross_attn_ffn(x, context, context_lens, e, crossattn_cache=None, cross_attn_first_call=None):
@@ -355,6 +370,7 @@ class WanModelFast(nn.Module, NativeConfigMixin):
 
     ignore_for_config = ["patch_size", "cross_attn_norm", "qk_norm", "text_dim"]
     _no_split_modules = ["WanAttentionBlock"]
+    prepare_camera_condition = prepare_wan_camera_condition
 
     @register_to_config
     def __init__(
@@ -474,6 +490,45 @@ class WanModelFast(nn.Module, NativeConfigMixin):
         # initialize weights
         self.init_weights()
 
+    def _project_text_context(
+        self,
+        context: list[torch.Tensor] | torch.Tensor,
+        clip_feature: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Retain the original padded batch geometry and forward autocast."""
+        del clip_feature
+        return self.text_embedding(
+            torch.stack([torch.cat([u, u.new_zeros(self.text_len - u.size(0), u.size(1))]) for u in context])
+        )
+
+    def prepare_rotary_frequencies(
+        self,
+        latents: list[torch.Tensor],
+        *,
+        current_start: int,
+        frame_seqlen: int,
+    ) -> tuple[torch.Tensor, ...]:
+        """Prepare request-owned FP64 RoPE tables for one autoregressive chunk."""
+        if self.training or torch.is_grad_enabled():
+            raise RuntimeError("rotary preparation requires eval no-grad inference")
+        device = self.patch_embedding.weight.device
+        if self.freqs.device != device:
+            self.freqs = self.freqs.to(device)
+        pairs = self.freqs.shape[1]
+        tables = self.freqs.split([pairs - 2 * (pairs // 3), pairs // 3, pairs // 3], dim=1)
+        return tuple(
+            assemble_complex_rotary_frequencies_3d(
+                tables,
+                (
+                    latent.shape[1] // self.patch_size[0],
+                    latent.shape[2] // self.patch_size[1],
+                    latent.shape[3] // self.patch_size[2],
+                ),
+                start_frame=current_start // frame_seqlen,
+            )
+            for latent in latents
+        )
+
     def forward(
         self,
         x,
@@ -488,6 +543,7 @@ class WanModelFast(nn.Module, NativeConfigMixin):
         max_attention_size=1_000_000,
         frame_seqlen=None,
         cross_attn_first_call=None,
+        rotary_frequencies: tuple[torch.Tensor, ...] | None = None,
     ):
         r"""
         Run the diffusion model with kv caching.
@@ -500,8 +556,12 @@ class WanModelFast(nn.Module, NativeConfigMixin):
                 List of input video tensors, each with shape [C_in, F, H, W]
             t (Tensor):
                 Diffusion timesteps tensor of shape [B]
-            context (List[Tensor]):
-                List of text embeddings each with shape [L, C]
+            context (List[Tensor] or StaticConditionCache):
+                Text embeddings [L, C], or a request-owned batched source whose
+                projection runs lazily in this forward.
+            rotary_frequencies (tuple[Tensor], optional):
+                Request-owned tables from prepare_rotary_frequencies for this
+                chunk's absolute frame offset.
             seq_len (`int`):
                 Maximum sequence length for positional encoding
             y (List[Tensor], *optional*):
@@ -530,6 +590,8 @@ class WanModelFast(nn.Module, NativeConfigMixin):
 
         if self.model_type == "i2v":
             assert y is not None
+        if rotary_frequencies is not None and (self.training or torch.is_grad_enabled()):
+            raise RuntimeError("prepared rotary reuse requires eval no-grad inference")
 
         # params
         device = self.patch_embedding.weight.device
@@ -559,37 +621,23 @@ class WanModelFast(nn.Module, NativeConfigMixin):
 
         # context
         context_lens = None
-        context = self.text_embedding(
-            torch.stack([torch.cat([u, u.new_zeros(self.text_len - u.size(0), u.size(1))]) for u in context])
+        context = (
+            context.project_context(self, self._project_text_context)
+            if isinstance(context, StaticConditionCache)
+            else self._project_text_context(context)
         )
 
-        # cam
-        if dit_cond_dict is not None and "c2ws_plucker_emb" in dit_cond_dict:
-            c2ws_plucker_emb = dit_cond_dict["c2ws_plucker_emb"]
-            c2ws_plucker_emb = [
-                rearrange(
-                    i,
-                    "1 c (f c1) (h c2) (w c3) -> 1 (f h w) (c c1 c2 c3)",
-                    c1=self.patch_size[0],
-                    c2=self.patch_size[1],
-                    c3=self.patch_size[2],
-                )
-                for i in c2ws_plucker_emb
-            ]
-            c2ws_plucker_emb = torch.cat(c2ws_plucker_emb, dim=1)  # [1, (L1+...+Ln), C]
-            c2ws_plucker_emb = self.patch_embedding_wancamctrl(c2ws_plucker_emb)
-            c2ws_hidden_states = self.c2ws_hidden_states_layer2(
-                torch_F.silu(self.c2ws_hidden_states_layer1(c2ws_plucker_emb))
-            )
+        # Prepared camera tensors belong to this chunk, not to the model.
+        if dit_cond_dict is not None and "c2ws_plucker_emb" in dit_cond_dict and "_camera_modulations" not in dit_cond_dict:
             dit_cond_dict = dict(dit_cond_dict)
-            dit_cond_dict["c2ws_plucker_emb"] = c2ws_plucker_emb + c2ws_hidden_states
+            dit_cond_dict["c2ws_plucker_emb"] = embed_wan_camera_condition(self, dit_cond_dict["c2ws_plucker_emb"])
 
         # arguments
         kwargs = dict(
             e=e0,
             seq_lens=seq_lens,
             grid_sizes=grid_sizes,
-            freqs=self.freqs,
+            freqs=self.freqs if rotary_frequencies is None else rotary_frequencies,
             context=context,
             context_lens=context_lens,
             dit_cond_dict=dit_cond_dict,
@@ -599,6 +647,7 @@ class WanModelFast(nn.Module, NativeConfigMixin):
         )
 
         for block_index, block in enumerate(self.blocks):
+            kwargs["dit_cond_dict"] = camera_condition_for_block(dit_cond_dict, block_index)
             kwargs.update(
                 {
                     "kv_cache": kv_cache[block_index],

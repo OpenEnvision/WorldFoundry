@@ -3,80 +3,69 @@ name: WonderWorld
 aliases:
 - 'WonderWorld: Interactive 3D Scene Generation from a Single Image'
 area: 3d
-task: interactive 3D scene generation from a single image
+task: single-image layered Gaussian world generation
 tasks:
 - image-to-3d-world
 - 3d-scene-generation
-- interactive-3d-generation
+- camera-controlled-world-extension
 developer: Stanford University and MIT authors
 user_starred: true
 source:
   status: source_available
   official_repo_url: https://github.com/KovenYu/WonderWorld
+  confirmed_ref: 5cf11467ad21a9d7bca269f961855a235c7d352e
   notes:
-  - WorldFoundry records the upstream source but does not ship its runtime
-    entrypoint in the public tree.
+  - The official release includes run.py and inference code. WorldFoundry implements the offline generation path in-tree.
+  - No root software license was identified at the pinned revision; public source is not recorded as OSI-licensed software.
 official_sources:
   project_page: https://kovenyu.com/wonderworld/
   paper: https://arxiv.org/abs/2406.09394
   github:
     url: https://github.com/KovenYu/WonderWorld
+    confirmed_ref: 5cf11467ad21a9d7bca269f961855a235c7d352e
 availability:
   status: source_available
   open_source: false
   code: public
-  weights: not_found
-  license: not_found
+  weights: public_components
+  license: component_specific
 integration:
   kind: pipeline_runner
-  status: blocked
+  status: integrated
   notes:
-  - The shared 3D/4D subprocess adapter is registered, but its expected
-    WonderWorld run.py is absent from the public tree.
-  - An authorized runtime checkout and checkpoint/runtime assets are required
-    before checkpoint-backed inference can be verified.
+  - Native SD2 inpainting and Marigold recipes, canonical OneFormer/RepViT-SAM perception, guided depth, occlusion layers, and gsplat Gaussian reconstruction.
+  - Finite offline image/camera-path requests export standard .splat artifacts without an external checkout or upstream server.
 runtime_profile: runtime-profile:wonderworld
 runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
 pipeline_binding: wonderworld
 runner_parity:
-  status: pending
+  status: implemented_pending_gpu_parity
   notes:
-  - Pipeline target imports, but real inference is blocked by the missing
-    runtime entrypoint and assets.
-confirmation: Upstream project page, paper, and public GitHub repo are recorded;
-  real WorldFoundry inference remains blocked by missing runtime source and assets.
+  - Full official FLAGS rasterizer/panorama parity and interactive browser acceptance remain separate validation scopes.
+confirmation: Public inference source and shared component weights are available; there is no separate trained WonderWorld generator checkpoint.
 catalog_category: three_d_four_d
-catalog_scope: Official-source manifest for 3D, 4D, and camera-controlled world/model generation projects.
-catalog_policy:
-  open_source_true_requires: An upstream GitHub or Hugging Face source with an explicit OSI-style software license or otherwise
-    clearly open source/open weights metadata. Public code without a license is source-available, not open_source.
-  weights_policy: Weights were not downloaded. Entries record only upstream repository, Hugging Face, project page, paper,
-    and license metadata.
-  status_values:
-  - open_source
-  - source_available
-  - open_weights_restricted
-  - api_or_closed
-  - unknown
+catalog_scope: In-tree single-image and camera-path layered Gaussian world generation.
 output_artifacts:
 - generated_world
 docs:
   publisher: Stanford University / MIT
   publisher_kind: university
   publisher_zh: 斯坦福大学 / 麻省理工学院
-  overview: WonderWorld generates interactive 3D scenes from a single image. WorldFoundry registers a subprocess adapter, but the public tree lacks the required run.py; real inference is blocked pending authorized runtime source and assets.
-  overview_zh: WonderWorld 从单张图像生成可交互的 3D 场景。WorldFoundry 已注册子进程适配器，但公开树缺少所需的 run.py；真实推理仍受运行源码与资产缺失阻塞。
-  architecture: Per the paper (arXiv 2406.09394), the key representation is FLAGS (Fast LAyered Gaussian Surfels), generated from a single view with a guided depth-diffusion scheme — under 10 seconds per scene on the reported hardware. Direct execution requires WonderWorld checkpoints plus local PyTorch3D-compatible extensions.
-  architecture_zh: 按论文（arXiv 2406.09394），核心表示是 FLAGS（快速分层高斯面元），配合引导式深度扩散从单视图生成——在论文硬件上每场景不足 10 秒。直接运行需要 WonderWorld checkpoint 与本地兼容 PyTorch3D 的扩展。
-  usage_notes: The public tree does not contain WonderWorld run.py. Provide an authorized upstream runtime checkout plus the checkpoint assets and compatible extensions before attempting real inference.
-  usage_notes_zh: 公开树不包含 WonderWorld run.py。尝试真实推理前，需提供获授权的上游运行源码、权重资产及兼容扩展。
+  overview: WonderWorld creates a layered Gaussian world from one image and expands it at requested camera views. WorldFoundry runs native diffusion recipes and in-tree scene reconstruction, exporting a standard .splat scene and view previews.
+  overview_zh: WonderWorld 从单张图像创建分层高斯世界，并在指定相机视角扩展场景。WorldFoundry 使用原生扩散配方与树内场景重建，导出标准 .splat 场景和视角预览。
+  architecture: Guided Marigold depth diffusion aligns generated views to existing geometry and a ground plane. RepViT-SAM refines region disparity, OneFormer identifies sky and occluders, SD2 completes hidden/new regions, and normal-oriented Gaussians are reconstructed and fitted with gsplat.
+  architecture_zh: 引导式 Marigold 深度扩散将新视角对齐已有几何与地面。RepViT-SAM 细化区域视差，OneFormer 识别天空与遮挡物，SD2 补全隐藏和新出现区域，再通过 gsplat 重建并拟合法线定向的高斯。
+  usage_notes: Supply an RGB image and local SD2 Inpainting, Marigold depth/normals, OneFormer, and RepViT-SAM assets. Optional camera_path contains OpenCV world-to-camera matrices in exported scene units. Default image size is 512x512; calls own independent scenes while retaining weights.
+  usage_notes_zh: 提供 RGB 图像以及本地 SD2 Inpainting、Marigold 深度/法线、OneFormer 和 RepViT-SAM 资产。可选 camera_path 使用导出场景单位下的 OpenCV 世界到相机矩阵。默认图像为 512x512；每次调用独立生成场景并复用常驻权重。
   limitations:
-  - Checkpoint-backed inference is blocked by missing runtime source and assets.
-  - 'Single-image origin: scene fidelity beyond the visible content is generative guesswork.'
+  - Offline seed and finite camera-path generation; upstream interactive server, GPT prompts, cached panorama workflow, and full official numerical/quality parity are not validated.
+  - SD2 uses CreativeML Open RAIL++-M terms; other component terms also apply. The pinned WonderWorld root license is unspecified.
+  - Single-image geometry and newly revealed content are generative estimates, not metric reconstruction guarantees.
   limitations_zh:
-  - 运行源码与资产缺失，尚无法验证加载权重后的推理。
-  - 以单图为源：可见内容之外的场景保真度依赖生成式推测。
+  - 支持离线种子场景与有限相机路径生成；上游交互服务器、GPT 提示词、缓存全景流程及完整官方数值/质量一致性尚未验证。
+  - SD2 受 CreativeML Open RAIL++-M 条款约束，其他组件也有各自条款；固定版本的 WonderWorld 根许可证未明确。
+  - 单图几何及新显露区域是生成式估计，不保证度量重建精度。
   recommended_benchmarks:
   - id: worldscore
-    reason: Standard scoring for interactive generated 3D worlds.
-    reason_zh: 交互式生成 3D 世界的标准评分。
+    reason: Camera-controlled generated-world evaluation.
+    reason_zh: 相机可控生成世界评估。

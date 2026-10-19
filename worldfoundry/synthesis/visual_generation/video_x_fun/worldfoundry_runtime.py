@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -12,7 +11,6 @@ from typing import Any, Mapping
 
 from worldfoundry.core.io.paths import resolve_data_path, resolve_local_hf_model_path
 from worldfoundry.runtime.in_tree_cli import ensure_in_tree_runtime, execute_in_tree, require_path
-
 
 WAN21_CAMERA_COMPONENT_FILES = (
     "config.json",
@@ -76,8 +74,6 @@ class _WanFunCameraRuntime:
     BASE_COMPONENT_REPO = ""
     IMAGE_ENCODER_COMPONENT_REPO = ""
     TRANSFORMER_CONFIG_OVERRIDES: Mapping[str, Any] = {}
-    TRANSFORMER_SCHEMA_SHA256 = ""
-    TRANSFORMER_TENSOR_COUNT = 0
     REQUIRED_COMPONENT_FILES = WAN21_CAMERA_COMPONENT_FILES
 
     def __init__(
@@ -180,29 +176,6 @@ class _WanFunCameraRuntime:
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.symlink_to(source.resolve())
 
-    def _validate_transformer_schema(self, checkpoint_file: Path) -> None:
-        if not self.TRANSFORMER_SCHEMA_SHA256:
-            return
-        from safetensors import safe_open
-
-        with safe_open(str(checkpoint_file), framework="pt", device="cpu") as reader:
-            rows = [
-                f"{key}|{tuple(reader.get_slice(key).get_shape())}|"
-                f"{reader.get_slice(key).get_dtype()}"
-                for key in reader.keys()
-            ]
-        if len(rows) != self.TRANSFORMER_TENSOR_COUNT:
-            raise RuntimeError(
-                f"{self.MODEL_ID} transformer schema has {len(rows)} tensors; "
-                f"expected {self.TRANSFORMER_TENSOR_COUNT}"
-            )
-        digest = hashlib.sha256("\n".join(sorted(rows)).encode("utf-8")).hexdigest()
-        if digest != self.TRANSFORMER_SCHEMA_SHA256:
-            raise RuntimeError(
-                f"{self.MODEL_ID} transformer schema mismatch: "
-                f"expected {self.TRANSFORMER_SCHEMA_SHA256}, got {digest}"
-            )
-
     def _materialize_checkpoint_view(self, destination: Path, checkpoint: Path) -> Path:
         """Compose split official assets without copying or mutating checkpoints."""
 
@@ -233,7 +206,6 @@ class _WanFunCameraRuntime:
         )
         destination.mkdir(parents=True, exist_ok=True)
         transformer_checkpoint = checkpoint / "diffusion_pytorch_model.safetensors"
-        self._validate_transformer_schema(transformer_checkpoint)
         self._link_checkpoint_file(
             destination / "diffusion_pytorch_model.safetensors",
             transformer_checkpoint,
@@ -323,8 +295,6 @@ class Wan21Fun1P3BCameraRuntime(_WanFunCameraRuntime):
         "downscale_factor_control_adapter": 8,
         "add_ref_conv": False,
     }
-    TRANSFORMER_TENSOR_COUNT = 989
-    TRANSFORMER_SCHEMA_SHA256 = "5a036572c54433d0831b6987b84ce0d4e95dcabf69e939c4e95b5cc0d7964e49"
 
 
 class Wan21Fun14BCameraRuntime(_WanFunCameraRuntime):

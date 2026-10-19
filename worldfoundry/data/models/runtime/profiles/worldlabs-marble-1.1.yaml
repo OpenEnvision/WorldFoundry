@@ -19,10 +19,10 @@ artifact_filename: worldlabs-marble-1.1.zip
 execution:
   backend_stage: api_pipeline
   runtime_status: api_runtime_requires_credentials
-  integration_status: planned
+  integration_status: integrated
   pipeline_binding: worldlabs-marble-1.1
 integration:
-  status: planned
+  status: integrated
 notes:
 - API model is retained per project policy; execution requires caller-provided World
   Labs credentials.

@@ -37,9 +37,7 @@ class _FakeVae:
         assert img_cond.shape == (1, 3, 57, 4, 5)
         assert kwargs["device"] == "cpu"
         assert kwargs["tile_size"] == (4, 5)
-        return torch.arange(15, dtype=torch.float32).view(1, 1, 15, 1, 1).expand(
-            1, 16, 15, 4, 5
-        )
+        return torch.arange(15, dtype=torch.float32).view(1, 1, 15, 1, 1).expand(1, 16, 15, 4, 5)
 
 
 class _FakeOperator:
@@ -113,8 +111,7 @@ class _FakeRuntime:
 
 def test_vae_zero_cache_template_import_is_allocation_free(monkeypatch: pytest.MonkeyPatch) -> None:
     constant = importlib.import_module(
-        "worldfoundry.synthesis.visual_generation.matrix_game."
-        "matrix_game_2_runtime.pipeline.causal_inference"
+        "worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_2_runtime.pipeline.causal_inference"
     )
     allocations: list[tuple[Any, ...]] = []
 
@@ -128,10 +125,7 @@ def test_vae_zero_cache_template_import_is_allocation_free(monkeypatch: pytest.M
     assert constant.VAE_CACHE_SLOTS == 32
     assert allocations == []
     assert not hasattr(constant, "ZERO_VAE_CACHE")
-    assert not any(
-        isinstance(value, torch.Tensor)
-        for value in vars(constant).values()
-    )
+    assert not any(isinstance(value, torch.Tensor) for value in vars(constant).values())
 
 
 def test_realtime_session_keeps_causal_state_and_native_cadence(
@@ -142,12 +136,8 @@ def test_realtime_session_keeps_causal_state_and_native_cadence(
     def fake_encode_actions(actions: list[str], mode: str) -> tuple[torch.Tensor, torch.Tensor]:
         assert mode == "universal"
         encoded_actions.append(tuple(actions))
-        keyboard = torch.tensor(
-            [float("forward" in actions), float("back" in actions), 0.0, 0.0]
-        )
-        mouse = torch.tensor(
-            [0.0, -0.1 if "camera_l" in actions else 0.0], dtype=torch.float32
-        )
+        keyboard = torch.tensor([float("forward" in actions), float("back" in actions), 0.0, 0.0])
+        mouse = torch.tensor([0.0, -0.1 if "camera_l" in actions else 0.0], dtype=torch.float32)
         return keyboard, mouse
 
     monkeypatch.setattr(realtime_module, "encode_actions", fake_encode_actions)
@@ -203,6 +193,12 @@ def test_realtime_session_keeps_causal_state_and_native_cadence(
     assert first["video"].dtype == np.uint8
     assert first["video"].flags.c_contiguous
     assert np.all(first["video"] == 127)
+    for result, count in ((first, 9), (second, 12)):
+        chunk = result["video_chunk"]
+        assert chunk.frames is result["video"]
+        assert chunk.layout == "thwc"
+        assert chunk.value_range == "0,255"
+        assert chunk.frame_count == count
     assert first["realtime_metrics"]["model_ms"] == 12.5
     assert first["realtime_metrics"]["decode_ms"] == 3.25
     assert first["realtime_metrics"]["condition_ms"] >= 0.0
@@ -215,12 +211,8 @@ def test_realtime_session_keeps_causal_state_and_native_cadence(
     assert core.step_conditions[1]["mouse_cond"].shape == (1, 21, 2)
     assert core.step_conditions[0]["cond_concat"].shape == (1, 20, 3, 4, 5)
     assert core.step_conditions[1]["cond_concat"].shape == (1, 20, 3, 4, 5)
-    assert torch.equal(
-        core.step_conditions[0]["cond_concat"], session._condition_concat[:, :, 0:3]
-    )
-    assert torch.equal(
-        core.step_conditions[1]["cond_concat"], session._condition_concat[:, :, 3:6]
-    )
+    assert torch.equal(core.step_conditions[0]["cond_concat"], session._condition_concat[:, :, 0:3])
+    assert torch.equal(core.step_conditions[1]["cond_concat"], session._condition_concat[:, :, 3:6])
     assert encoded_actions[:9] == [("forward", "camera_l")] * 9
     assert encoded_actions[9:] == [("back",)] * 12
     assert session.next_output_frames() == 12

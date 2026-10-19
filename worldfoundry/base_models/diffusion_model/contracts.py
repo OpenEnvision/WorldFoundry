@@ -211,7 +211,8 @@ class DenoiserInput:
     """Complete input for one conditional denoiser evaluation.
 
     ``request_id`` owns one inference lifecycle and ``branch`` distinguishes
-    its CFG arms (``positive`` / ``negative`` / ``unconditional``). Stateful
+    its CFG arms (``positive`` / ``negative`` / ``unconditional``), or a
+    negative-then-positive ``cfg-pair`` batch. Stateful
     caches such as TeaCache key by both values so interleaved requests cannot
     exchange residuals. ``with_updates`` is the immutable replacement used by
     ``before_denoiser`` extensions.
@@ -225,6 +226,9 @@ class DenoiserInput:
     total_steps: int
     branch: str = "positive"
     request_id: str | None = None
+    # Original request row counts when several requests share one denoiser call.
+    # Components use these boundaries for batch-shape-sensitive arithmetic.
+    request_batch_sizes: tuple[int, ...] = ()
 
     def with_updates(self, **changes: object) -> "DenoiserInput":
         """Return a new instance with selected fields replaced (frozen dataclass)."""
@@ -282,6 +286,16 @@ class Denoiser(Protocol):
 
     def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
         """Evaluate one positive, negative, or unconditional branch."""
+
+
+@runtime_checkable
+class BatchedCFGDenoiser(Denoiser, Protocol):
+    """Network adapter that packs both CFG arms into one model evaluation."""
+
+    def batch_cfg_conditioning(
+        self, positive: Mapping[str, object], negative: Mapping[str, object]
+    ) -> Mapping[str, object]:
+        """Pack negative then positive conditions along the model batch axis."""
 
 
 @runtime_checkable

@@ -28,7 +28,6 @@ from .timestep_grid import (
 class DmdInferenceTrace:
     """The immutable contract trace selected for one denoised chunk."""
 
-    fingerprint: str
     empty_history: bool
     stages: tuple[tuple[DmdTimestepStep, ...], ...]
 
@@ -41,9 +40,8 @@ def load_dmd_inference_contract(
     checkpoint_path: str | Path,
     *,
     expected_latent_shape: Sequence[int] | None = None,
-    expected_fingerprint: str | None = None,
 ) -> DmdTimestepContract:
-    """Load and authenticate the sidecar next to ``checkpoint_path``.
+    """Load and validate the sidecar next to ``checkpoint_path``.
 
     A DMD checkpoint without its sidecar is intentionally unusable.  Rebuilding
     schedule from inference flags could silently change the checkpoint
@@ -54,7 +52,6 @@ def load_dmd_inference_contract(
     return DmdTimestepContract.load_json(
         sidecar,
         expected_latent_shape=expected_latent_shape,
-        expected_fingerprint=expected_fingerprint,
     )
 
 
@@ -141,7 +138,6 @@ def resolve_dmd_inference_trace(
         for stage_index in range(int(num_stages))
     )
     return DmdInferenceTrace(
-        fingerprint=contract.fingerprint,
         empty_history=empty_history,
         stages=stages,
     )

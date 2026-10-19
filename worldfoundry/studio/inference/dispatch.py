@@ -32,7 +32,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from worldfoundry.core.execution.process import terminate_process_group
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path, worldfoundry_path_tokens
@@ -62,6 +62,11 @@ from worldfoundry.studio.inference.config import (
 )
 from worldfoundry.studio.inference.execution import TORCHRUN_DISTRIBUTED_ENV, RunRecord
 
+if TYPE_CHECKING:
+    from worldfoundry.core.execution.queued_batch import QueuedBatchExecutor
+
+    from .resident_batching import ResidentRequest
+
 # Environment variable set in child processes to prevent recursive dispatch.
 STUDIO_CONDA_CHILD_ENV = "WORLDFOUNDRY_STUDIO_CONDA_CHILD"
 # Comma-separated model IDs (or "all"/"*") that always run in a subprocess.
@@ -87,6 +92,7 @@ DEFAULT_FORCE_SUBPROCESS_MODELS = frozenset(
         "hunyuan-world-voyager",
         "lingbot-world",
         "lingbot-world-v2",
+        "lingbot-world-v2-1.3b",
         "longvie-2",
         "hunyuan-worldplay",
         "wan-2p2",
@@ -99,12 +105,14 @@ DEFAULT_FORCE_SUBPROCESS_MODELS = frozenset(
 )
 LINGBOT_WORLD_MODEL_ID = "lingbot-world"
 LINGBOT_WORLD_V2_MODEL_ID = "lingbot-world-v2"
+LINGBOT_WORLD_V2_SMALL_MODEL_ID = "lingbot-world-v2-1.3b"
 TORCHRUN_LINGBOT_ENV = "WORLDFOUNDRY_STUDIO_TORCHRUN_LINGBOT_FAST"
 TORCHRUN_MODEL_NPROC_KEYS: Mapping[str, tuple[str, ...]] = {
     "dreamx-world-5b-cam": ("torchrun_nproc_per_node", "torchrun_nproc", "nproc_per_node"),
     "helios": ("torchrun_nproc_per_node", "torchrun_nproc", "nproc_per_node"),
     "longvie-2": ("torchrun_nproc_per_node", "torchrun_nproc", "nproc_per_node"),
     "lingbot-world-v2": ("torchrun_nproc_per_node", "torchrun_nproc", "nproc_per_node"),
+    "lingbot-world-v2-1.3b": ("torchrun_nproc_per_node", "torchrun_nproc", "nproc_per_node"),
     MATRIX_GAME3_MODEL_ID: (
         "torchrun_nproc_per_node",
         "torchrun_nproc",
@@ -179,6 +187,7 @@ class _ResidentWorker:
     device_lease: CudaDeviceLease | None = None
     shutdown_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     shutdown_complete: bool = False
+    batch_executor: QueuedBatchExecutor[ResidentRequest, RunRecord] | None = field(default=None, repr=False)
 
 
 class _ResidentWorkerUnavailable(RuntimeError):
@@ -240,7 +249,10 @@ def _automatic_gpu_pool() -> CudaDeviceLeasePool:
             try:
                 result = subprocess.run(
                     ["nvidia-smi", "--query-gpu=index,uuid", "--format=csv,noheader,nounits"],
-                    capture_output=True, text=True, timeout=3, check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                    check=False,
                 )
                 if result.returncode == 0:
                     for row in result.stdout.splitlines():
@@ -256,8 +268,10 @@ def _automatic_gpu_pool() -> CudaDeviceLeasePool:
                     matches = {value for value in lock_keys.values() if value.startswith(token)}
                     if len(matches) == 1:
                         lock_keys[token] = matches.pop()
-            lock_dir = Path(os.getenv("WORLDFOUNDRY_GPU_LEASE_DIR") or
-                            str(Path(tempfile.gettempdir()) / f"worldfoundry-gpu-leases-{getattr(os, 'getuid', lambda: 0)()}"))
+            lock_dir = Path(
+                os.getenv("WORLDFOUNDRY_GPU_LEASE_DIR")
+                or str(Path(tempfile.gettempdir()) / f"worldfoundry-gpu-leases-{getattr(os, 'getuid', lambda: 0)()}")
+            )
             _AUTO_GPU_POOL = CudaDeviceLeasePool(devices, lock_dir=lock_dir, lock_keys=lock_keys)
             _AUTO_GPU_POOL_DEVICES = devices
         return _AUTO_GPU_POOL
@@ -482,7 +496,10 @@ class _LocalRuntimeSpec(RuntimeCondaEnvSpec):
 
 
 def dispatch_spec_for_inference(
-    model_id: str, *, backend: str = "auto", force_subprocess: bool = False,
+    model_id: str,
+    *,
+    backend: str = "auto",
+    force_subprocess: bool = False,
 ) -> RuntimeCondaEnvSpec | None:
     """Return a Conda spec when inference should run in a separate env, else None.
 
@@ -500,8 +517,11 @@ def dispatch_spec_for_inference(
             return None
         prefix = Path(sys.prefix)
         return _LocalRuntimeSpec(model_id=model_id, env_name=prefix.name, env_root=prefix.parent)
-    if (not force_subprocess and _same_executable(sys.executable, spec.python_executable)
-            and not _force_subprocess_for_model(model_id)):
+    if (
+        not force_subprocess
+        and _same_executable(sys.executable, spec.python_executable)
+        and not _force_subprocess_for_model(model_id)
+    ):
         return None
     return spec
 
@@ -648,13 +668,13 @@ def _with_lingbot_world_parallelism(
     """
 
     updated = dict(run_kwargs)
-    if model_id not in {LINGBOT_WORLD_MODEL_ID, LINGBOT_WORLD_V2_MODEL_ID}:
+    if model_id not in {LINGBOT_WORLD_MODEL_ID, LINGBOT_WORLD_V2_MODEL_ID, LINGBOT_WORLD_V2_SMALL_MODEL_ID}:
         return updated
     normalized_world_size = _validate_model_torchrun_nproc(
         model_id,
         max(int(world_size or 1), 1),
     )
-    if model_id == LINGBOT_WORLD_V2_MODEL_ID:
+    if model_id in {LINGBOT_WORLD_V2_MODEL_ID, LINGBOT_WORLD_V2_SMALL_MODEL_ID}:
         call_kwargs = _json_object_from_text(updated.get("call_kwargs_text"))
         call_kwargs["nproc_per_node"] = normalized_world_size
         for key in ("torchrun_nproc_per_node", "torchrun_nproc", "world_size"):
@@ -754,13 +774,10 @@ def _with_wan_vace_parallelism(
     try:
         ring_size = int(raw_ring_size or 1)
     except (TypeError, ValueError) as exc:
-        raise ValueError(
-            f"wan2.1-vace ring_size must be an integer, got {raw_ring_size!r}."
-        ) from exc
+        raise ValueError(f"wan2.1-vace ring_size must be an integer, got {raw_ring_size!r}.") from exc
     if ring_size != 1:
         raise ValueError(
-            "wan2.1-vace native sequence parallelism currently requires "
-            f"ring_size=1; got ring_size={ring_size}."
+            f"wan2.1-vace native sequence parallelism currently requires ring_size=1; got ring_size={ring_size}."
         )
     ulysses_size = normalized_world_size
     if 40 % ulysses_size:
@@ -900,9 +917,7 @@ def _requested_torchrun_nproc(model_id: str, run_kwargs: Mapping[str, Any]) -> i
                 requested = int(source.get(key) or 0)
             except Exception as exc:
                 if model_id in {MATRIX_GAME3_MODEL_ID, "dreamx-world-5b-cam"}:
-                    raise ValueError(
-                        f"{model_id} {key} must be an integer, got {source.get(key)!r}."
-                    ) from exc
+                    raise ValueError(f"{model_id} {key} must be an integer, got {source.get(key)!r}.") from exc
                 return None
             return _validate_model_torchrun_nproc(model_id, requested)
     return None
@@ -911,6 +926,10 @@ def _requested_torchrun_nproc(model_id: str, run_kwargs: Mapping[str, Any]) -> i
 def _validate_model_torchrun_nproc(model_id: str, requested: int) -> int:
     """Validate model-specific distributed process-count constraints."""
 
+    if model_id == LINGBOT_WORLD_V2_SMALL_MODEL_ID:
+        if requested not in {1, 2, 3, 4, 6, 12}:
+            raise ValueError("lingbot-world-v2-1.3b requires nproc to divide its 12 heads")
+        return requested
     if model_id in {LINGBOT_WORLD_MODEL_ID, LINGBOT_WORLD_V2_MODEL_ID}:
         supported = (1, 2, 4, 8)
         if requested not in supported:
@@ -922,18 +941,13 @@ def _validate_model_torchrun_nproc(model_id: str, requested: int) -> int:
         return requested
     if model_id == "longvie-2":
         if requested not in {1, 4}:
-            raise ValueError(
-                "longvie-2 supports nproc values 1 or 4 (official USP topology); "
-                f"got {requested}."
-            )
+            raise ValueError(f"longvie-2 supports nproc values 1 or 4 (official USP topology); got {requested}.")
         return requested
     if model_id == "dreamx-world-5b-cam":
         supported = (1, 2, 3, 4, 6, 8)
         if requested not in supported:
             choices = ", ".join(str(value) for value in supported)
-            raise ValueError(
-                f"dreamx-world-5b-cam supports nproc values {choices}; got {requested}."
-            )
+            raise ValueError(f"dreamx-world-5b-cam supports nproc values {choices}; got {requested}.")
         return requested
     if model_id in {"hunyuan-game-craft", "hunyuan-gamecraft"}:
         supported = (1, 2, 3, 4, 6, 8)
@@ -959,9 +973,7 @@ def _validate_model_torchrun_nproc(model_id: str, requested: int) -> int:
     supported = tuple(spec.supported_process_counts) if spec is not None else (1, 2, 4, 8)
     if requested not in supported:
         choices = ", ".join(str(value) for value in supported)
-        raise ValueError(
-            f"{MATRIX_GAME3_MODEL_ID} supports nproc/ulysses_size values {choices}; got {requested}."
-        )
+        raise ValueError(f"{MATRIX_GAME3_MODEL_ID} supports nproc/ulysses_size values {choices}; got {requested}.")
     return requested
 
 
@@ -970,13 +982,9 @@ def _matrix_game3_default_torchrun_nproc(run_kwargs: Mapping[str, Any]) -> int:
 
     if str(run_kwargs.get("device") or "").startswith("cuda:"):
         return 1
-    wmfactory_override = (
-        getenv_registered("WORLDFOUNDRY_MATRIXGAME3_CUDA_VISIBLE_DEVICES", "") or ""
-    ).strip()
+    wmfactory_override = (getenv_registered("WORLDFOUNDRY_MATRIXGAME3_CUDA_VISIBLE_DEVICES", "") or "").strip()
     explicit_visible = _cuda_visible_devices_from_kwargs(run_kwargs) or wmfactory_override
-    visible_count = _cuda_visible_device_count(
-        explicit_visible or os.getenv("CUDA_VISIBLE_DEVICES")
-    )
+    visible_count = _cuda_visible_device_count(explicit_visible or os.getenv("CUDA_VISIBLE_DEVICES"))
     if not visible_count:
         try:
             visible_count = len(_parse_nvidia_smi_rows())
@@ -1014,9 +1022,7 @@ def _default_torchrun_nproc(model_id: str, run_kwargs: Mapping[str, Any]) -> int
         if str(run_kwargs.get("device") or "").startswith("cuda:"):
             return 1
         explicit_visible = _cuda_visible_devices_from_kwargs(run_kwargs)
-        visible_count = _cuda_visible_device_count(
-            explicit_visible or os.getenv("CUDA_VISIBLE_DEVICES")
-        )
+        visible_count = _cuda_visible_device_count(explicit_visible or os.getenv("CUDA_VISIBLE_DEVICES"))
         if not visible_count:
             try:
                 visible_count = len(_parse_nvidia_smi_rows())
@@ -1044,9 +1050,7 @@ def _default_torchrun_nproc(model_id: str, run_kwargs: Mapping[str, Any]) -> int
     preferred = int(wm_spec.preferred_visible_devices or 8) if wm_spec is not None else 8
     supported = tuple(wm_spec.supported_process_counts) if wm_spec is not None else (1, 2, 3, 4, 6, 8)
     explicit_visible = _cuda_visible_devices_from_kwargs(run_kwargs)
-    visible_count = _cuda_visible_device_count(
-        explicit_visible or os.getenv("CUDA_VISIBLE_DEVICES")
-    )
+    visible_count = _cuda_visible_device_count(explicit_visible or os.getenv("CUDA_VISIBLE_DEVICES"))
     if not visible_count:
         try:
             visible_count = len(_parse_nvidia_smi_rows())
@@ -1102,8 +1106,7 @@ def _internal_torchrun_nproc(model_id: str, run_kwargs: Mapping[str, Any]) -> in
     if model_id == "kairos-sensenova":
         if nproc < 1 or nproc > 20:
             raise ValueError(
-                "kairos-sensenova nproc_per_node must be between 1 and its 20 attention heads; "
-                f"got {nproc}."
+                f"kairos-sensenova nproc_per_node must be between 1 and its 20 attention heads; got {nproc}."
             )
         height = int(call_kwargs.get("height", 480) or 480)
         width = int(call_kwargs.get("width", 640) or 640)
@@ -1148,15 +1151,22 @@ def _automatic_cuda_device_count(model_id: str, run_kwargs: Mapping[str, Any]) -
 
 
 def _cuda_lease_request(
-    model_id: str, run_kwargs: Mapping[str, Any],
+    model_id: str,
+    run_kwargs: Mapping[str, Any],
 ) -> tuple[int, tuple[str, ...] | None]:
     """Apply admission to explicitly pinned GPUs as well as automatic requests."""
     if in_conda_child_process():
         return 0, None
-    visible = (_cuda_visible_devices_from_kwargs(run_kwargs) or _cuda_visible_devices_from_device(run_kwargs)
-               or ",".join(_model_cuda_device_indices(run_kwargs)))
-    if (not visible and str(run_kwargs.get("device") or "").strip().lower() == "cuda"
-            and not _automatic_gpu_placement_enabled()):
+    visible = (
+        _cuda_visible_devices_from_kwargs(run_kwargs)
+        or _cuda_visible_devices_from_device(run_kwargs)
+        or ",".join(_model_cuda_device_indices(run_kwargs))
+    )
+    if (
+        not visible
+        and str(run_kwargs.get("device") or "").strip().lower() == "cuda"
+        and not _automatic_gpu_placement_enabled()
+    ):
         # Disabling automatic placement preserves visibility, not an admission
         # bypass. Reserve the whole visible set before launching an unpinned job.
         visible = ",".join(discover_cuda_device_tokens())
@@ -1165,10 +1175,13 @@ def _cuda_lease_request(
     if visible:
         visible = _expand_visible_devices_for_model_devices(visible, run_kwargs)
         tokens = tuple(_visible_device_items(visible))
-        requested = max(_lingbot_torchrun_nproc(model_id, run_kwargs),
-                        _explicit_torchrun_nproc(model_id, run_kwargs),
-                        _default_torchrun_nproc(model_id, run_kwargs),
-                        _internal_torchrun_nproc(model_id, run_kwargs), 1)
+        requested = max(
+            _lingbot_torchrun_nproc(model_id, run_kwargs),
+            _explicit_torchrun_nproc(model_id, run_kwargs),
+            _default_torchrun_nproc(model_id, run_kwargs),
+            _internal_torchrun_nproc(model_id, run_kwargs),
+            1,
+        )
         if len(tokens) < requested:
             raise ValueError(f"{model_id} needs {requested} CUDA devices but only {len(tokens)} were pinned")
         return len(tokens), tokens
@@ -1219,12 +1232,8 @@ def _select_wmfactory_visible_devices(num_devices: int | None = None) -> str:
         return ""
 
     try:
-        max_mem_fraction = float(
-            getenv_registered("WORLDFOUNDRY_AUTO_GPU_MAX_MEMORY_FRACTION", "0.5") or "0.5"
-        )
-        max_util_fraction = float(
-            getenv_registered("WORLDFOUNDRY_AUTO_GPU_MAX_UTILIZATION_FRACTION", "0.5") or "0.5"
-        )
+        max_mem_fraction = float(getenv_registered("WORLDFOUNDRY_AUTO_GPU_MAX_MEMORY_FRACTION", "0.5") or "0.5")
+        max_util_fraction = float(getenv_registered("WORLDFOUNDRY_AUTO_GPU_MAX_UTILIZATION_FRACTION", "0.5") or "0.5")
     except ValueError:
         max_mem_fraction = 0.5
         max_util_fraction = 0.5
@@ -1234,6 +1243,7 @@ def _select_wmfactory_visible_devices(num_devices: int | None = None) -> str:
     except Exception:
         rows = []
     if rows:
+
         def _rank_key(row: Mapping[str, float]) -> tuple[float, float, float]:
             return (
                 0.0 if row["memory_total"] <= 0 else row["memory_used"] / row["memory_total"],
@@ -1343,12 +1353,6 @@ def _cuda_visible_devices_from_device(run_kwargs: Mapping[str, Any]) -> str:
     return gpu_idx
 
 
-
-
-
-
-
-
 def _shutdown_resident_worker(worker: _ResidentWorker, *, force: bool = False) -> None:
     with worker.shutdown_lock:
         if worker.shutdown_complete:
@@ -1377,6 +1381,8 @@ def _shutdown_resident_worker(worker: _ResidentWorker, *, force: bool = False) -
             worker.device_lease = None
 
         worker.shutdown_complete = True
+        if worker.batch_executor is not None:
+            worker.batch_executor.close(wait=False)
 
 
 def _reap_resident_workers_once(*, now: float | None = None) -> int:
@@ -1391,9 +1397,7 @@ def _reap_resident_workers_once(*, now: float | None = None) -> int:
             for key, candidate in list(_RESIDENT_WORKERS.items()):
                 is_dead = candidate.process.poll() is not None
                 is_expired = (
-                    candidate.in_use == 0
-                    and idle_ttl > 0
-                    and current_time - candidate.last_used_at >= idle_ttl
+                    candidate.in_use == 0 and idle_ttl > 0 and current_time - candidate.last_used_at >= idle_ttl
                 )
                 if candidate.in_use == 0 and (is_dead or is_expired):
                     _RESIDENT_WORKERS.pop(key, None)
@@ -1560,9 +1564,7 @@ def _payload_run_kwargs_with_secret_refs(run_kwargs: Mapping[str, Any]) -> tuple
             )
         if isinstance(value, (list, tuple)):
             return any(contains_secret(item, sensitive_context=sensitive_context) for item in value)
-        return isinstance(value, str) and bool(value) and (
-            sensitive_context or redact_secret_text(value) != value
-        )
+        return isinstance(value, str) and bool(value) and (sensitive_context or redact_secret_text(value) != value)
 
     def replace_secret_values(value: Any, *, sensitive_context: bool = False) -> Any:
         if isinstance(value, Mapping):
@@ -1589,9 +1591,7 @@ def _payload_run_kwargs_with_secret_refs(run_kwargs: Mapping[str, Any]) -> tuple
             return [replace_secret_values(item, sensitive_context=sensitive_context) for item in value]
         if isinstance(value, tuple):
             return tuple(replace_secret_values(item, sensitive_context=sensitive_context) for item in value)
-        if isinstance(value, str) and value and (
-            sensitive_context or redact_secret_text(value) != value
-        ):
+        if isinstance(value, str) and value and (sensitive_context or redact_secret_text(value) != value):
             return secret_ref(value)
         return value
 
@@ -1906,9 +1906,7 @@ def _start_resident_worker(
             **({"pass_fds": device_lease.file_descriptors} if os.name == "posix" and device_lease else {}),
         )
     except OSError as exc:
-        raise _ResidentWorkerUnavailable(
-            f"could not start resident worker for {model_id}: {exc}"
-        ) from exc
+        raise _ResidentWorkerUnavailable(f"could not start resident worker for {model_id}: {exc}") from exc
     try:
         if device_lease is not None:
             device_lease.process_group_id = process.pid
@@ -1947,9 +1945,15 @@ def _resident_worker_for(
     cancel_requested: CancelCallback | None = None,
     deadline: float | None = None,
 ) -> _ResidentWorker:
-    options = dict(model_id=model_id, spec=spec, workspace_root=workspace_root,
-                   context=context, log_callback=log_callback,
-                   cancel_requested=cancel_requested, deadline=deadline)
+    options = dict(
+        model_id=model_id,
+        spec=spec,
+        workspace_root=workspace_root,
+        context=context,
+        log_callback=log_callback,
+        cancel_requested=cancel_requested,
+        deadline=deadline,
+    )
     worker = _resident_worker_for_locked(**options, allow_start=False)
     if worker is not None:
         return worker
@@ -1958,9 +1962,12 @@ def _resident_worker_for(
     try:
         if count:
             _retire_idle_resident_workers_for_cuda_request(
-                count, tokens=context.requested_cuda_tokens,
-                cancel_requested=cancel_requested, deadline=deadline,
+                count,
+                tokens=context.requested_cuda_tokens,
+                cancel_requested=cancel_requested,
+                deadline=deadline,
             )
+
             # Never wait for a GPU while holding the lifecycle lock: a finishing
             # request must be able to retire its worker and return its lease.
             def allocation_interrupt() -> bool:
@@ -1970,8 +1977,10 @@ def _resident_worker_for(
                 ready = False
                 if _RESIDENT_WORKERS_LOCK.acquire(blocking=False):
                     try:
-                        ready = any(candidate.base_key == context.key and candidate.process.poll() is None
-                                    for candidate in _RESIDENT_WORKERS.values())
+                        ready = any(
+                            candidate.base_key == context.key and candidate.process.poll() is None
+                            for candidate in _RESIDENT_WORKERS.values()
+                        )
                     finally:
                         _RESIDENT_WORKERS_LOCK.release()
                 if ready:
@@ -1981,8 +1990,10 @@ def _resident_worker_for(
             while True:
                 try:
                     lease = _automatic_gpu_pool().acquire(
-                        count, tokens=context.requested_cuda_tokens,
-                        cancel_requested=allocation_interrupt, deadline=deadline,
+                        count,
+                        tokens=context.requested_cuda_tokens,
+                        cancel_requested=allocation_interrupt,
+                        deadline=deadline,
                     )
                     break
                 except _ResidentWorkerReady:
@@ -2067,9 +2078,7 @@ def _resident_worker_for_locked(
                         break
                     idle_workers = [candidate for candidate in _RESIDENT_WORKERS.values() if candidate.in_use == 0]
                     if not idle_workers:
-                        raise _ResidentWorkerUnavailable(
-                            f"all {max_workers} resident worker slots are busy"
-                        )
+                        raise _ResidentWorkerUnavailable(f"all {max_workers} resident worker slots are busy")
                     victim = min(idle_workers, key=lambda candidate: candidate.last_used_at)
                     _RESIDENT_WORKERS.pop(victim.key, None)
                     retired_workers.append(victim)
@@ -2093,13 +2102,13 @@ def _resident_worker_for_locked(
                     key=(*base_key, f"auto-cuda:{device_lease.visible_devices}"),
                 )
             worker = _start_resident_worker(
-                    model_id=model_id,
-                    spec=spec,
-                    workspace_root=workspace_root,
-                    context=context,
-                    log_callback=log_callback,
-                    base_key=base_key,
-                    device_lease=device_lease,
+                model_id=model_id,
+                spec=spec,
+                workspace_root=workspace_root,
+                context=context,
+                log_callback=log_callback,
+                base_key=base_key,
+                device_lease=device_lease,
             )
             started_worker = True
             with _RESIDENT_WORKERS_LOCK:
@@ -2137,16 +2146,17 @@ def _release_resident_worker(worker: _ResidentWorker) -> None:
             worker.in_use -= 1
         if worker.in_use == 0:
             worker.last_used_at = time.monotonic()
-            retire_for_waiter = bool(
-                worker.device_lease is not None and worker.device_lease.allocation_waiting
-            )
+            retire_for_waiter = bool(worker.device_lease is not None and worker.device_lease.allocation_waiting)
     if retire_for_waiter:
         _drop_resident_worker(worker, force=False, only_if_idle=True)
 
 
 def _retire_idle_resident_workers_for_cuda_request(
-    requested_count: int, *, tokens: tuple[str, ...] | None = None,
-    cancel_requested: CancelCallback | None = None, deadline: float | None = None,
+    requested_count: int,
+    *,
+    tokens: tuple[str, ...] | None = None,
+    cancel_requested: CancelCallback | None = None,
+    deadline: float | None = None,
 ) -> int:
     """Release enough idle resident leases for a larger queued CUDA request.
 
@@ -2173,7 +2183,8 @@ def _retire_idle_resident_workers_for_cuda_request(
                 (
                     worker
                     for worker in _RESIDENT_WORKERS.values()
-                    if worker.in_use == 0 and worker.device_lease is not None
+                    if worker.in_use == 0
+                    and worker.device_lease is not None
                     and (tokens is None or set(tokens).intersection(worker.device_lease.tokens))
                 ),
                 key=lambda worker: worker.last_used_at,
@@ -2199,8 +2210,7 @@ def _retire_idle_resident_workers_for_new_resident_key(
 
     with _RESIDENT_WORKERS_LOCK:
         has_reusable_worker = any(
-            worker.base_key == base_key and worker.process.poll() is None
-            for worker in _RESIDENT_WORKERS.values()
+            worker.base_key == base_key and worker.process.poll() is None for worker in _RESIDENT_WORKERS.values()
         )
     if has_reusable_worker:
         return 0
@@ -2275,6 +2285,29 @@ def _wait_for_resident_worker_result(
     deadline: float | None = None,
     request_timeout: float | None = None,
 ) -> RunRecord:
+    return run_record_from_manifest(
+        _wait_for_resident_worker_payload(
+            worker,
+            result_path=result_path,
+            error_path=error_path,
+            log_callback=log_callback,
+            cancel_requested=cancel_requested,
+            deadline=deadline,
+            request_timeout=request_timeout,
+        )
+    )
+
+
+def _wait_for_resident_worker_payload(
+    worker: _ResidentWorker,
+    *,
+    result_path: Path,
+    error_path: Path,
+    log_callback: LogCallback | None,
+    cancel_requested: CancelCallback | None,
+    deadline: float | None = None,
+    request_timeout: float | None = None,
+) -> dict[str, Any]:
     timeout = _resident_worker_request_timeout() if request_timeout is None else max(request_timeout, 0.0)
     if deadline is None and timeout > 0:
         deadline = time.monotonic() + timeout
@@ -2300,7 +2333,7 @@ def _wait_for_resident_worker_result(
         if result_path.is_file():
             worker.last_used_at = time.monotonic()
             _drain_process_output(process=process, decoder=worker.decoder, log_callback=log_callback)
-            return run_record_from_manifest(json.loads(result_path.read_text(encoding="utf-8")))
+            return json.loads(result_path.read_text(encoding="utf-8"))
 
         if error_path.is_file():
             worker.last_used_at = time.monotonic()
@@ -2358,6 +2391,9 @@ def _run_manager_payload_in_resident_conda(
     if deadline is None and request_timeout > 0:
         deadline = dispatch_started_at + request_timeout
     _check_dispatch_interrupt(cancel_requested, deadline)
+    from .resident_batching import ResidentRequest, resident_batch_options, run_queued_resident_request
+
+    batch_size, batch_delay = resident_batch_options()
     context = _prepare_resident_run_context(
         model_id=model_id,
         spec=spec,
@@ -2402,6 +2438,25 @@ def _run_manager_payload_in_resident_conda(
         cancel_requested=cancel_requested,
         deadline=deadline,
     )
+    if batch_size > 1:
+        return run_queued_resident_request(
+            worker,
+            ResidentRequest(
+                payload={
+                    "request_id": request_id,
+                    "run_kwargs": _json_safe(context.payload_run_kwargs),
+                    "result_path": str(result_path),
+                    "error_path": str(error_path),
+                },
+                result_path=result_path,
+                error_path=error_path,
+                deadline=deadline,
+                log_callback=log_callback,
+                cancel_requested=cancel_requested,
+            ),
+            max_batch_size=batch_size,
+            max_delay_seconds=batch_delay,
+        )
     lock_acquired = False
     try:
         _acquire_resident_worker_request_lock(
@@ -2487,9 +2542,7 @@ def _run_manager_payload_one_shot(
     device_cuda_visible_devices = _cuda_visible_devices_from_device(run_kwargs)
     parent_cuda_visible_devices = _normalize_cuda_visible_devices(os.getenv("CUDA_VISIBLE_DEVICES", ""))
     explicit_cuda_visible_devices = _expand_visible_devices_for_model_devices(
-        kwargs_cuda_visible_devices
-        or device_cuda_visible_devices
-        or parent_cuda_visible_devices,
+        kwargs_cuda_visible_devices or device_cuda_visible_devices or parent_cuda_visible_devices,
         run_kwargs,
     )
     torchrun_nproc = _lingbot_torchrun_nproc(model_id, run_kwargs)
@@ -2540,7 +2593,9 @@ def _run_manager_payload_one_shot(
         result_path.unlink()
 
     internal_torchrun_nproc = _internal_torchrun_nproc(model_id, child_run_kwargs)
-    wmfactory_visible_devices = "" if explicit_cuda_visible_devices else _wmfactory_visible_devices_for_run(model_id, run_kwargs)
+    wmfactory_visible_devices = (
+        "" if explicit_cuda_visible_devices else _wmfactory_visible_devices_for_run(model_id, run_kwargs)
+    )
     runtime_args = [
         "-m",
         "worldfoundry.studio.runtime_job",
@@ -2591,7 +2646,7 @@ def _run_manager_payload_one_shot(
     env.update(secret_env)
     _apply_wmfactory_env_hints(model_id, run_kwargs, env)
     if torchrun_nproc > 1:
-        if model_id in {LINGBOT_WORLD_MODEL_ID, LINGBOT_WORLD_V2_MODEL_ID}:
+        if model_id in {LINGBOT_WORLD_MODEL_ID, LINGBOT_WORLD_V2_MODEL_ID, LINGBOT_WORLD_V2_SMALL_MODEL_ID}:
             env[TORCHRUN_LINGBOT_ENV] = "1"
         if model_id in TORCHRUN_DISTRIBUTED_MODELS:
             env[TORCHRUN_DISTRIBUTED_ENV] = "1"
@@ -2599,9 +2654,7 @@ def _run_manager_payload_one_shot(
         requested_nproc = max(torchrun_nproc, internal_torchrun_nproc)
         visible_count = _cuda_visible_device_count(env.get("CUDA_VISIBLE_DEVICES"))
         if (
-            explicit_cuda_visible_devices
-            or wmfactory_visible_devices
-            or model_id == MATRIX_GAME3_MODEL_ID
+            explicit_cuda_visible_devices or wmfactory_visible_devices or model_id == MATRIX_GAME3_MODEL_ID
         ) and visible_count < requested_nproc:
             selected_devices = explicit_cuda_visible_devices or env.get("CUDA_VISIBLE_DEVICES", "")
             raise RuntimeError(
@@ -2644,7 +2697,9 @@ def _run_manager_payload_one_shot(
                 readable, _, _ = select.select([stdout_fd], [], [], wait)
                 if readable:
                     stdout_eof = _drain_process_output(
-                        process=process, decoder=decoder, log_callback=log_callback,
+                        process=process,
+                        decoder=decoder,
+                        log_callback=log_callback,
                     )
             elif not group_cleaned:
                 time.sleep(0.05)
@@ -2684,13 +2739,20 @@ def _run_manager_payload_in_conda_impl(
     _check_dispatch_interrupt(cancel_requested, deadline)
     try:
         record = _run_manager_payload_in_resident_conda(
-            model_id=model_id, spec=spec, workspace_root=workspace_root,
-            run_kwargs=run_kwargs, dispatch_root=dispatch_root,
-            log_callback=log_callback, cancel_requested=cancel_requested,
-            deadline=deadline, request_timeout=request_timeout,
+            model_id=model_id,
+            spec=spec,
+            workspace_root=workspace_root,
+            run_kwargs=run_kwargs,
+            dispatch_root=dispatch_root,
+            log_callback=log_callback,
+            cancel_requested=cancel_requested,
+            deadline=deadline,
+            request_timeout=request_timeout,
         )
     except _ResidentWorkerUnavailable as exc:
-        _append_log(log_callback, "system", f"resident worker unavailable; falling back to one-shot subprocess: {exc}\n")
+        _append_log(
+            log_callback, "system", f"resident worker unavailable; falling back to one-shot subprocess: {exc}\n"
+        )
         record = None
     if record is not None:
         return record
@@ -2700,18 +2762,31 @@ def _run_manager_payload_in_conda_impl(
     try:
         if count:
             _retire_idle_resident_workers_for_cuda_request(
-                count, tokens=tokens, cancel_requested=cancel_requested, deadline=deadline,
+                count,
+                tokens=tokens,
+                cancel_requested=cancel_requested,
+                deadline=deadline,
             )
             lease = _automatic_gpu_pool().acquire(
-                count, tokens=tokens, cancel_requested=cancel_requested, deadline=deadline,
+                count,
+                tokens=tokens,
+                cancel_requested=cancel_requested,
+                deadline=deadline,
             )
-            _append_log(log_callback, "system", f"assigned CUDA_VISIBLE_DEVICES={lease.visible_devices} for {model_id}\n")
+            _append_log(
+                log_callback, "system", f"assigned CUDA_VISIBLE_DEVICES={lease.visible_devices} for {model_id}\n"
+            )
             run_kwargs = _run_kwargs_with_cuda_lease(run_kwargs, lease)
         return _run_manager_payload_one_shot(
-            model_id=model_id, spec=spec, workspace_root=workspace_root,
-            run_kwargs=run_kwargs, dispatch_root=dispatch_root,
-            log_callback=log_callback, cancel_requested=cancel_requested,
-            deadline=deadline, device_lease=lease,
+            model_id=model_id,
+            spec=spec,
+            workspace_root=workspace_root,
+            run_kwargs=run_kwargs,
+            dispatch_root=dispatch_root,
+            log_callback=log_callback,
+            cancel_requested=cancel_requested,
+            deadline=deadline,
+            device_lease=lease,
         )
     finally:
         if lease is not None:
@@ -2732,8 +2807,13 @@ def run_manager_payload_in_conda(
     timeout = _inference_request_timeout()
     deadline = time.monotonic() + timeout if timeout > 0 else None
     return _run_manager_payload_in_conda_impl(
-        model_id=model_id, spec=spec, workspace_root=workspace_root,
-        run_kwargs=run_kwargs, dispatch_root=dispatch_root,
-        log_callback=log_callback, cancel_requested=cancel_requested,
-        deadline=deadline, request_timeout=timeout,
+        model_id=model_id,
+        spec=spec,
+        workspace_root=workspace_root,
+        run_kwargs=run_kwargs,
+        dispatch_root=dispatch_root,
+        log_callback=log_callback,
+        cancel_requested=cancel_requested,
+        deadline=deadline,
+        request_timeout=timeout,
     )

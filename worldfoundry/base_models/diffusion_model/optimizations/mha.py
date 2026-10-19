@@ -122,6 +122,13 @@ def prepare_optimized_mha(model, options, policy):
                 from worldfoundry.core.attention.backends.triton_fa2 import flash_attention_2
 
                 del flash_attention_2  # Import validates optional provider availability before activation.
+        if schedule.sdpa_backend == "scaled_int8_fp8":
+            from worldfoundry.core.attention.backends.probe import resolve_attention_backend
+
+            resolve_attention_backend("scaled_int8_fp8", device)
+            for block in model.blocks:
+                if block.self_attn.q.out_features // block.self_attn.num_heads not in {64, 128, 256}:
+                    raise ValueError("scaled INT8/FP8 requires head dimensions 64, 128 or 256")
         if schedule.sdpa_backend == "cudnn":
             if not torch.backends.cudnn.is_available():
                 raise ValueError("cuDNN schedule requires an available cuDNN provider")

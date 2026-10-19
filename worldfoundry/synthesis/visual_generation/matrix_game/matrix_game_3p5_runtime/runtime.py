@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from worldfoundry.core.io.filesystem.file_utils import file_sha256
 from worldfoundry.core.io.paths import (
     resolve_local_checkpoint_file,
     resolve_local_hf_model_path,
@@ -713,7 +712,6 @@ class MatrixGame35Runtime:
                 "artifact_kind": "generated_world",
                 "artifact_path": str(persistent_output),
                 "generated_video_path": str(persistent_output),
-                "artifact_sha256": file_sha256(persistent_output),
                 "model_id": self.model_id,
                 "runtime": "matrix_game_3p5_native_infer",
                 "backend_quality": (

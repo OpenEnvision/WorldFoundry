@@ -7,6 +7,7 @@ independently verified.
 
 from __future__ import annotations
 
+import importlib
 import os
 import platform
 import re
@@ -251,7 +252,7 @@ def _torch_environment() -> dict[str, Any]:
         "cudnn_version": None,
     }
     try:
-        import torch
+        torch = importlib.import_module("torch")
     except Exception:  # noqa: BLE001 - optional runtime probing must not fail a run.
         return {"torch": torch_payload, "cuda": cuda_payload}
 

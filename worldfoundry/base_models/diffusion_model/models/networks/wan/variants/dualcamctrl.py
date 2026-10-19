@@ -192,24 +192,8 @@ class WanControlNet(WanModel):
     def patchify(
         self, x: torch.Tensor, control_camera_latents_input: torch.Tensor = None
     ):
-        """Patchify latents and optionally add the camera-adapter residual."""
-        x = self.patch_embedding(x)
-
-        if (
-            self.control_adapter is not None
-            and control_camera_latents_input is not None
-        ):
-            # print(
-            #     f"Camera control input shape: {control_camera_latents_input.shape}")
-
-            y_camera = self.control_adapter(control_camera_latents_input)
-            x = [u + v for u, v in zip(x, y_camera)]
-            x = torch.stack(x, dim=0)
-        grid_size = x.shape[2:]
-        # print(f"Grid size after patch embedding: {grid_size}")
-
-        x = rearrange(x, "b c f h w -> b (f h w) c").contiguous()
-        return x, grid_size  # x, grid_size: (f, h, w)
+        """Use shared Wan camera-adapter projection and residual arithmetic."""
+        return super().patchify(x, control_camera_latents_input)
 
     def unpatchify(self, x: torch.Tensor, grid_size: torch.Tensor):
         return rearrange(
@@ -312,7 +296,7 @@ class WanControlNet(WanModel):
                             context,
                             t_mod,
                             freqs,
-                            camera_pose_embedding=_pose_embeddings,
+                            camera_pose_embedding=camera_pose_embedding,
                             use_reentrant=False,
                         )
                 else:
@@ -322,12 +306,12 @@ class WanControlNet(WanModel):
                         context,
                         t_mod,
                         freqs,
-                        camera_pose_embedding=_pose_embeddings,
+                        camera_pose_embedding=camera_pose_embedding,
                         use_reentrant=False,
                     )
             else:
                 x = block(
-                    x, context, t_mod, freqs, camera_pose_embedding=_pose_embeddings
+                    x, context, t_mod, freqs, camera_pose_embedding=camera_pose_embedding
                 )
 
         x = self.head(x, t)

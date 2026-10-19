@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 
 from ..pipeline_utils import PipelineABC
 
@@ -67,9 +68,7 @@ class ABotWorldPipeline(PipelineABC):
         resolved_model_id = cls._resolve_model_id(options, model_id=model_id)
         cls._strip_framework_loading_options(options)
         parameters = inspect.signature(ABotWorldInference).parameters
-        runtime_options = {
-            key: value for key, value in options.items() if key in parameters
-        }
+        runtime_options = {key: value for key, value in options.items() if key in parameters}
         runtime = ABotWorldInference(
             checkpoint,
             device=device,
@@ -107,13 +106,15 @@ class ABotWorldPipeline(PipelineABC):
         artifact_path = None
         if output_path is not None:
             artifact_path = save_image_or_video_tensor(
-                video.permute(1, 0, 2, 3),
+                video,
                 output_path,
                 fps=int(fps),
                 value_range=(0.0, 1.0),
+                layout="tchw",
             )
         result = {
             "video": video,
+            "video_chunk": VideoChunk(frames=video, layout="tchw", value_range="0,1"),
             "artifact_path": artifact_path,
             "fps": int(fps),
             "model_id": self.model_id,
@@ -143,7 +144,12 @@ class ABotWorldPipeline(PipelineABC):
         **_: Any,
     ) -> dict[str, Any]:
         frames = self.runtime.step(interactions)
-        return {"frames": frames, "fps": 16, "model_id": self.model_id}
+        return {
+            "frames": frames,
+            "video_chunk": VideoChunk(frames=frames, layout="tchw", value_range="0,1"),
+            "fps": 16,
+            "model_id": self.model_id,
+        }
 
     def reset_realtime(self) -> None:
         self.runtime.reset()

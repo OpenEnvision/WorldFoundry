@@ -1,0 +1,17 @@
+---
+title: "LingBot-World-V2 1.3B"
+description: "Independent 1.3B causal-fast camera-controlled world model with reusable camera conditions and streaming Wan VAE."
+modelId: "lingbot-world-v2-1.3b"
+pageSource: authored
+---
+
+`lingbot-world-v2-1.3b`, alias `lingbot-v2-1.3b`, is Robbyant's 30-layer, width-1536, 12-head causal-fast model. Its checkpoint and distributed defaults are independent of the 14B `lingbot-world-v2` entry.
+
+- Weights: [robbyant/lingbot-world-v2-1.3b-causal-fast](https://huggingface.co/robbyant/lingbot-world-v2-1.3b-causal-fast), revision `7e36a5f919f86cb4255cc9bfc30adb44963fbde1`.
+- Source: [Robbyant/lingbot-world-v2](https://github.com/Robbyant/lingbot-world-v2), revision `94f43115de8d4a4f9f282126528c300a0b232c5f`.
+- Load root-level indexed DiT shards separately; `shared_assets_path` supplies Wan2.1 UMT5, tokenizer, and VAE assets.
+- Defaults: one GPU, 317 frames, chunk_size=4, shift=5, 16 FPS, no T5/DiT FSDP. The first chunk emits 13 frames and steady chunks emit 16.
+- Camera conditions are reused within each chunk, reducing projections while preserving pixels. Streaming VAE histories remain independently owned.
+- License: **CC-BY-NC-SA-4.0, non-commercial, attribution, share-alike**.
+
+See [Causal Wan streaming inference](/docs/guides/causal-wan-streaming) for loading, shared acceleration effects, and the Studio sensor contract.

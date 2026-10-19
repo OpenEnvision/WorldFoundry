@@ -1,0 +1,144 @@
+---
+title: "Causal Wan 流式推理"
+description: "请求级相机与文本/图像条件复用、小 chunk VAE 编译、独立 LingBot-V2 1.3B 和 Studio 多传感器展示。"
+---
+
+## 相机条件复用
+
+同一视频 chunk 的相机条件不随去噪 timestep 改变。将 camera embedding 和每层 scale/shift 提前计算一次，在四次去噪和一次 KV commit 中复用，避免重复执行相机 MLP。
+
+- 相机 embedding 和 affine 投影调用减少 **80%**。
+- LingBot-V2 1.3B 路径的稳态模型延迟约降低 **2.6%**，输出像素完全一致。
+- 缓存由请求持有，不写入模型全局状态，不改变 checkpoint keys；原始训练路径保留。
+- 代价是额外保存每层 affine tensors，增加显存占用。
+
+`optimizations/camera_condition.py` 共享 preparation/application arithmetic，覆盖 LingBot 原版、Fast、V2 与 Action-22；Matrix-Game-3 的单卡 batch、interactive 和 resident realtime loops 在同一 chunk 复用 prepared 输入。带 memory 的 full 条件与不带 memory 的 CFG null 条件分别准备，下一 chunk 重新计算。
+
+### 静态相机特征
+
+Wan-Fun camera-control 与 DualCamCtrl 复用 `SimpleAdapter` 的固定输出；GameCraft 复用 `CameraNet` 的固定输出，包括零条件前缀。缓存使用同一个请求级 `CameraConditionCache`，首次投影在模型 forward 内执行，保持原来的 autocast 与 offload hooks。GameCraft 的合并 CFG 和拆分 CFG 分别保留各自条件的缓存，每次生成新 clip 都重新创建。
+
+Wan-Fun 的 CFG 条件切分保留原始 batch 边界，各分支分别投影和复用，避免改变卷积计算形状。
+
+| 路径 | 相机投影调用 | 稳态模型延迟降低 | 特征缓存 | RGB 像素 |
+| --- | --- | --- | --- | --- |
+| Wan-Fun camera-control 1.3B | 100 → 2（98%） | 约 1.3% | 56 MiB | 完全一致 |
+| DualCamCtrl | 200 → 1（99.5%） | 约 1.3% | 28 MiB | 完全一致 |
+
+Wan-Fun 的最终 latents 也完全一致；DualCamCtrl 的生成控制视频像素完全一致。投影调用减少并不等于整体模型同比加速，Transformer blocks 仍占主要计算量。
+
+复用边界仅限不依赖当前 latent 或 timestep 的相机 stem。GameCraft 的 timestep-dependent text refiner、DualCamCtrl 的 ControlNet blocks 和动态控制 latents 仍在每个去噪 step 重新计算。
+
+## 静态文本/图像条件与 cross-KV
+
+Wan-Fun camera-control 和 DualCamCtrl 使用共享 `optimizations/static_cross_kv.py`，在每个请求内复用文本/CLIP 投影及各层静态 cross-attention K/V。正负 CFG 条件分别保存，Wan-Fun 的后期 CFG 切片保留独立的原始 batch 形状。首次投影仍在 forward 内执行，不改变 autocast、offload hooks 或 checkpoint keys。
+
+Query、attention、输出投影和动态 ControlNet 主干仍逐 step 计算；只有固定条件的投影与 K/V 被复用。DualCamCtrl 同时接入已有 `WanModel.rotary_frequencies`，按 grid、设备和原始复数精度复用 RoPE 表。
+
+| 路径 | 文本与 CLIP 投影（各自） | 稳态模型延迟降低 | 条件/KV 缓存 | RGB 像素 |
+| --- | --- | --- | --- | --- |
+| Wan-Fun camera-control 1.3B | 100 → 2（98%） | 约 2.2% | 279 MiB | 完全一致 |
+| DualCamCtrl（含 RoPE 复用） | 100 → 2（98%） | 约 2.2% | 545 MiB | 完全一致 |
+
+各层 K/V 投影调用也减少 98%。这些收益以已经启用相机特征缓存的路径为基线，不是整体端到端加速。Wan-Fun 最终 latents、DualCamCtrl 生成控制视频像素均完全一致。DualCamCtrl 的 RoPE 表另占约 9.4 MiB。
+
+## LingBot-V2 静态文本与 chunk RoPE
+
+单卡 eager LingBot-V2 1.3B 会话通过 `StaticConditionCache` 复用 padding 后的文本投影。首次投影仍在 forward 内执行，保留原始 512-token batch 形状与 autocast；已有的因果 cross-attention K/V 存储保持不变。
+
+每个 chunk 还通过共享 complex-RoPE assembler 准备一份 T/H/W 频率表，各层与去噪 step 共同使用。时间位置始终采用该 chunk 的绝对 frame offset，包括 KV eviction 之后。Q/K 转换、FP64 复数乘法、attention 与输出投影仍动态执行。
+
+| 静态计算 | 原调用数 | 复用后调用数 | 准备数据占用 |
+| --- | --- | --- | --- |
+| 333 帧内 prompt 不变时的文本投影 | 105 | 1 | 每个 prompt 1.5 MiB |
+| 每个 chunk 的 RoPE 表拼装 | 300 | 1 | 每个 chunk 约 5.9 MiB |
+
+保留相机复用、host KV 游标、稳态 I2V 复用与 eager 解码时，333 帧 warm 常驻请求平均耗时为：**不启用这两项缓存 31.78 秒，同时启用 31.86 秒**（+0.24%）。调用次数减少并未带来整体提速。
+
+条件、投影文本、去噪 latents 与 RGB 像素均完全一致。`update_prompt()` 同时替换文本投影与 cross-KV，保留视频 KV、VAE history、相机状态和 RNG。reset/reconfigure 清除请求的文本投影，RoPE 表在每个 chunk 边界重新准备。
+
+通过 `WORLDFOUNDRY_LINGBOT_V2_REALTIME_COMPILE=0` 选择 eager 路径。`realtime_metrics` 提供 `text_condition_cache_bytes`、`text_condition_reuse_calls` 与 `rotary_cache_bytes`。文本命中次数从最近一次 prompt 配置或更新起累计，RoPE 占用对应当前 chunk。
+
+## KV 游标的 host 管理
+
+单卡 DiT eager 常驻会话将 `global_end_index` 和 `local_end_index` 留在 host，K/V buffer 仍在视频设备上。Python 可直接读写这些请求级游标，避免逐 block 的 GPU scalar 同步。重复去噪写入、sink 保留、eviction、tensor 形状和 checkpoint keys 均保持不变。
+
+LingBot-V2 1.3B 路径的稳态模型延迟降低约 **2.7%**，常驻 chunk 延迟降低约 **1.7%**；去噪 latents 与 RGB 像素完全一致。这是相机条件复用、eager 解码基线上的增量收益，不能与 decoder 加速比例直接相加。
+
+## 稳态 I2V 条件复用
+
+在 DiT 与完整 VAE 均使用 eager 的路径上，条件完全稳定后的常驻 chunk 平均延迟降低约 **15.2%**，p90 从约 **2.42 秒降至 1.41 秒**。条件、去噪 latents 与 RGB 像素完全一致，分组条件缓存约 **7.4 MiB**。
+
+单卡 LingBot-V2 1.3B 会话在全零后续输入不再依赖首图时，自动复用完整 VAE 条件。`wan/conditioning.py` 从 canonical encoder 的卷积结构推导时间历史范围；只有整个编码分组都越过该范围，才保存其输出。不同分组大小分别缓存，保留原有投影计算形状。
+
+条件 tensor（包括 mask）由请求持有，复用实际编码结果，而不是将 latent 替换为零。reset/reconfigure 会清除缓存，不改变 encoder 原有算术或 checkpoint keys。`realtime_metrics` 中的 `condition_cache_bytes` 与 `condition_reuse_calls` 分别报告缓存大小和复用编码分组次数。
+
+## 小 chunk VAE
+
+`wan/streaming.py` 共享 native/reference Wan2.1 decoder。逐 latent 解码保留因果卷积 history，避免反复解码增长中的整段视频。
+
+`feature_cache.py` 将 history 保存为紧凑 storage，在当前 step 完成后提交更新；shape、dtype、device 相同时复用原有地址，减少缓存分配和大 tensor 切片持有。
+
+LingBot-V2 1.3B 长视频路径的独立 decoder 编译提供约 **1.75×** 的 warm 解码速度，稳态实时 chunk 延迟降低约 **10.6%**。去噪 latents 完全一致；解码 RGB 的最大像素误差为 **1/255**，PSNR 为 **71.77 dB**，不是逐像素一致。请求重置与 A/B/A 复用保持各自路径的输出一致性。
+
+canonical checkpoint modules 保持不变，decoder CUDA Graph capture 关闭。默认保留 eager 解码，编译适合常驻会话预热。
+
+通过 1.3B pipeline 的加载选项 `vae_streaming_compile=True`，或 runner 的 `--vae-streaming-compile` 选择独立 decoder compile。
+
+## 独立 LingBot-V2 1.3B
+
+`lingbot-world-v2-1.3b` 是独立的 30 层、1536 hidden width、8960 FFN width、12-head 模型，不是 `lingbot-world-v2` 14B 的权重别名。默认单 GPU、317 帧、chunk_size=4、shift=5、16 FPS，T5/DiT FSDP 均关闭。首 chunk 输出 13 帧，之后每 chunk 输出 16 帧。
+
+公开 checkpoint 只有 root-level indexed transformer shards，T5、tokenizer 和 VAE 通过独立 `shared_assets_path` 加载：
+
+```python
+from worldfoundry.pipelines.lingbot_world_v2 import LingBotWorldV2SmallPipeline
+
+pipeline = LingBotWorldV2SmallPipeline.from_pretrained(
+    model_path={
+        "checkpoint_source": "../ckpts/lingbot-world-v2-1.3b-causal-fast",
+        "shared_assets_path": "../ckpts/Wan-AI--Wan2.1-T2V-1.3B",
+    },
+    device="cuda",
+)
+result = pipeline(image="testcase/012_abandoned-room.png", interactions=["forward"], frame_num=317)
+```
+
+采样保留 FP32 sigma、整数 timestep 和 network-dtype clean state。初始噪声使用 channel-first FP32 bank，每 20 chunks 补充下一 bank，支持持续 rollout。相机条件、KV reductions、VAE history 和 generator 均由请求/会话持有。
+
+## Scaled attention
+
+`scaled_int8_fp8` 使用带 scale 的 INT8 Q/K 和 FP8 V，保留 FP32 softmax 与累加；请求级 finalized-key reduction 可以复用同一 chunk 的固定历史。
+
+该 provider 接入通用 attention dispatch 和 `MHASchedule(sdpa_backend="scaled_int8_fp8", quantized_sdpa=True)`，必须显式选择，不会静默回退 dense attention。**默认仍为原生 PyTorch SDPA。**
+
+## Studio 多传感器
+
+模型通过 `RealtimeSpec.sensors` 声明通道身份、类型和顺序，并返回同一 chunk 的 `sensor_frames`。RGB 为帧序列，depth 为以米计的 [H,W]，LiDAR 为逐帧 [N,3] XYZ 或 [N,4] XYZ/intensity。
+
+```python
+from worldfoundry.core.execution.realtime.contracts import RealtimeSensor, RealtimeSpec
+
+spec = RealtimeSpec(sensors=(
+    RealtimeSensor("front", kind="rgb", channel_index=0),
+    RealtimeSensor("depth", kind="depth", channel_index=1, range_m=50),
+    RealtimeSensor("lidar", kind="lidar", channel_index=2, range_m=50),
+))
+result = {"realtime_spec": spec.to_payload(), "sensor_frames": sensor_chunks}
+```
+
+所有声明通道必须存在、帧数一致。transport 按声明顺序生成同步 atlas，WS/RTC 浏览器从同一 atlas 展示 sensor grid；focus/hide 只改变本地展示，不重排模型通道。单 RGB 模型保留原有 payload，不增加空 sensors 字段。
+
+切换到不同尺寸的 atlas 或恢复单 RGB 来源时，先重置并重新配置会话。视频后处理流在重置前保持已配置的几何尺寸。
+
+## 限制
+
+- 当前 scaled INT8/FP8 实现比原生 SDPA 慢，长视频存在明显质量损失，**不建议作为默认生成后端**。它只支持无 mask、非 GQA inference，不支持 backward、CUDA Graph 或 LingBot sequence-parallel 接入。
+- LingBot / Matrix-Game-3 的相机 affine preparation 在单卡、非 FSDP inference loops 启用；分布式路径保留原始计算。
+- LingBot-V2 文本/chunk-RoPE 复用仅在单卡、非 FSDP 的 eager Small 会话中启用。DiT compiled、SP 和 14B 会话保留原有输入。请求内权重和精度需保持不变，变化时应 reset/reconfigure。缓存大小对应 832×464、每 chunk 四个 latent frames 的路径，不等于峰值显存增量。精确复用保留给定的 I2V 条件，不代表完整 VAE 编码的跨进程逐位复现保证。
+- KV 游标的 host 管理仅用于单卡、非 FSDP 的 DiT eager 会话。DiT compiled、SP 和 FSDP 路径保留原有游标位置，不作这些路径的加速承诺。
+- 稳态 I2V 复用仅用于单卡 LingBot-V2 1.3B 的固定首图与全零后续输入；其他会话及 sequence-parallel 路径保留原有编码。图像、几何尺寸、权重或精度变化时需 reset/reconfigure。初始过渡阶段仍需编码，收益随 rollout 长度和分组方式变化。I2V 延迟收益以已启用相机复用与 host KV 游标的路径为基线，不能与 decoder 或其他优化比例直接相加。
+- VAE decoder 编译有启动开销和小幅数值差异，长视频路径的峰值已分配显存增加约 2.3 GiB。实时 chunk 延迟收益不包含模型加载、编译冷启动、视频编码或 transport，也不代表每种 VAE 架构与部署配置。
+- 相机与条件/KV 缓存要求同一 clip 内源条件、模型权重（含 LoRA）和计算精度保持不变，不能跨请求或跨模型共享；改变这些输入时需新建缓存。缓存占用随条件长度、层数和 CFG 分支数量增长。文本/图像复用收益对应原生 SDPA 路径，不代表所有精度、分布式和 offload 配置的端到端收益。Matrix-Game-3 resident realtime 与 GameCraft 尚无完整视频的质量和端到端收益结论。
+- 多传感器能力提供声明与同步展示契约，需要模型 producer 返回对应通道；单 RGB checkpoint 不会因此生成 depth/LiDAR。
+- LingBot 源码及权重为 **CC-BY-NC-SA-4.0，非商用、相同方式共享**。归属信息见 `THIRD-PARTY-NOTICES`。

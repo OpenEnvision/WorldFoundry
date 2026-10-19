@@ -1,5 +1,5 @@
 {
-  "modelsTotal": 220,
+  "modelsTotal": 222,
   "benchmarksTotal": 74,
   "infrastructure": [
     {
@@ -26,7 +26,7 @@
       "id": "video",
       "label": "Video",
       "labelZh": "视频",
-      "count": 44,
+      "count": 45,
       "entries": [
         {
           "name": "Allegro",
@@ -83,6 +83,10 @@
         {
           "name": "JoyAI-Echo 1.5 / Echo-LongVideo",
           "url": "https://github.com/jd-opensource/JoyAI-Echo"
+        },
+        {
+          "name": "Kandinsky 6.0 pro",
+          "url": "https://github.com/kandinskylab/kandinsky-6"
         },
         {
           "name": "Krea Realtime Video 14B",
@@ -210,7 +214,7 @@
       "id": "world_models",
       "label": "World models",
       "labelZh": "世界模型",
-      "count": 94,
+      "count": 95,
       "entries": [
         {
           "name": "ABot-World-0-5B-LF",
@@ -239,10 +243,6 @@
         {
           "name": "ATI-Wan2.1-14B",
           "url": "https://github.com/bytedance/ATI"
-        },
-        {
-          "name": "BiWM Wan2.1",
-          "url": "https://github.com/LynnReal-AI/BiWM"
         },
         {
           "name": "CameraCtrl",
@@ -333,6 +333,10 @@
           "url": "https://github.com/open-gigaai/giga-world-0"
         },
         {
+          "name": "HelixWorld Preview v1",
+          "url": "https://github.com/NoizAI/HelixWorld"
+        },
+        {
           "name": "HMA",
           "url": "https://github.com/liruiw/HMA"
         },
@@ -369,16 +373,16 @@
           "url": "https://github.com/MeiGen-AI/Infinite-World"
         },
         {
+          "name": "InSpatio World 1.5",
+          "url": "https://github.com/inspatio/inspatio-world-v1.5"
+        },
+        {
           "name": "InSpatio-World",
           "url": "https://github.com/inspatio/inspatio-world"
         },
         {
           "name": "InSpatio-WorldFM",
           "url": "https://github.com/inspatio/worldfm"
-        },
-        {
-          "name": "IRASim",
-          "url": "https://github.com/bytedance/IRASim"
         },
         {
           "name": "Kairos Sensenova",
@@ -463,10 +467,6 @@
         {
           "name": "Open Dreamer",
           "url": "https://github.com/reactor-team/open-dreamer"
-        },
-        {
-          "name": "Pandora",
-          "url": "https://github.com/maitrix-org/Pandora"
         },
         {
           "name": "PointWorld",
@@ -557,6 +557,10 @@
           "url": "https://github.com/ShandaAI/WildWorld"
         },
         {
+          "name": "World Observer",
+          "url": "https://github.com/cvlab-kaist/world-observer"
+        },
+        {
           "name": "WorldCam",
           "url": "https://github.com/cvlab-kaist/WorldCam"
         },
@@ -571,6 +575,10 @@
         {
           "name": "WorldMem",
           "url": "https://github.com/xizaoqu/WorldMem"
+        },
+        {
+          "name": "WorldPlay2",
+          "url": "https://github.com/WorldPlay2/WorldPlay2"
         },
         {
           "name": "WoW",

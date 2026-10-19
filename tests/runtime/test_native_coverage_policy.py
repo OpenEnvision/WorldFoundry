@@ -6,15 +6,25 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+from types import ModuleType
+from typing import Any
 
 import pytest
 import yaml
 
+pytestmark = pytest.mark.unit
 _ROOT = Path(__file__).resolve().parents[2]
+_RETIRED_VARIANTS = (
+    "biwm-wan21@biwm-wan21",
+    "biwm-wan22@biwm-wan22",
+    "irasim@irasim",
+    "pandora@pandora",
+)
 
 
-def _module(name, path):
+def _module(name: str, path: Path) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -25,10 +35,17 @@ inventory = _module("native_coverage_inventory_contract", _ROOT / "tests/manual/
 
 
 def _recipe(name="small"):
-    return {"id": name + "-short", "model_id": name,
-            "target": "worldfoundry.pipelines.example:Pipeline", "seed": 42, "deterministic": True,
-            "load": {"model_path": "${CHECKPOINT_ROOT}/" + name}, "assets": {"input": "${INPUT_IMAGE}"},
-            "call": {"prompt": "A slowly moving camera", "seed": 42}, "required_outputs": ["result.video"]}
+    return {
+        "id": name + "-short",
+        "model_id": name,
+        "target": "worldfoundry.pipelines.example:Pipeline",
+        "seed": 42,
+        "deterministic": True,
+        "load": {"model_path": "${CHECKPOINT_ROOT}/" + name},
+        "assets": {"input": "${INPUT_IMAGE}"},
+        "call": {"prompt": "A slowly moving camera", "seed": 42},
+        "required_outputs": ["result.video"],
+    }
 
 
 @pytest.fixture
@@ -43,13 +60,15 @@ def project(tmp_path):
     helper = tmp_path / "worldfoundry/operators/helper.py"
     helper.parent.mkdir()
     helper.write_text("class Operation: pass\n")
-    (catalog / "video/example.yaml").write_text(yaml.safe_dump(
-        {"id": "small", "pipeline_binding": "small", "variants": [{"id": "large", "pipeline_binding": "large"}]}
-    ))
+    (catalog / "video/example.yaml").write_text(
+        yaml.safe_dump(
+            {"id": "small", "pipeline_binding": "small", "variants": [{"id": "large", "pipeline_binding": "large"}]}
+        )
+    )
     for name in ("small", "large"):
-        (bindings / (name + ".yaml")).write_text(yaml.safe_dump(
-            {"binding_id": name, "model_id": name, "pipeline": {"target": _recipe()["target"]}}
-        ))
+        (bindings / (name + ".yaml")).write_text(
+            yaml.safe_dump({"binding_id": name, "model_id": name, "pipeline": {"target": _recipe()["target"]}})
+        )
     matrix = tmp_path / "cases.json"
     matrix.write_text(json.dumps({"small-short": _recipe()}))
     report = inventory.coverage(tmp_path, matrix)
@@ -96,14 +115,22 @@ def test_new_variant_needs_its_own_recipe_not_a_shared_pipeline_case(project):
     assert policy.evaluate_policy(report, cases, baseline, root)["status"] == "passed"
 
 
-@pytest.mark.parametrize("changes", [["worldfoundry/operators/helper.py"], ["worldfoundry/core/clock.py"],
-                                     ["worldfoundry/data/models/bindings/pipelines/large.yaml"]])
+@pytest.mark.parametrize(
+    "changes",
+    [
+        ["worldfoundry/operators/helper.py"],
+        ["worldfoundry/core/clock.py"],
+        ["worldfoundry/data/models/bindings/pipelines/large.yaml"],
+    ],
+)
 def test_affected_uncovered_variant_cannot_use_the_frozen_gap_exception(project, changes):
     root, _, cases, report, baseline = project
     result = policy.evaluate_policy(report, cases, baseline, root, changes)
     assert "large@large" in result["affected_variants"]
-    assert any(item == {"variant": "large@large", "reason": "affected_native_variant_without_replay_recipe"}
-               for item in result["violations"])
+    assert any(
+        item == {"variant": "large@large", "reason": "affected_native_variant_without_replay_recipe"}
+        for item in result["violations"]
+    )
 
 
 def test_unknown_inference_dependency_expands_conservatively(project):
@@ -128,11 +155,58 @@ def test_removing_an_uncovered_catalog_variant_cannot_hide_the_inventory_gap(pro
     assert any(item["reason"] == "frozen_native_variant_disappeared" for item in result["violations"])
 
 
+@pytest.mark.parametrize("identity", _RETIRED_VARIANTS)
+def test_planned_retirement_preserves_frozen_records_and_reports_no_replay_success(project: Any, identity: str) -> None:
+    root, _, cases, report, baseline = project
+    model_id, binding_id = identity.split("@")
+    baseline["models"].append(
+        {**baseline["models"][0], "model_id": model_id, "binding_id": binding_id, "required_case_ids": []}
+    )
+    original = copy.deepcopy(baseline)
+    result = policy.evaluate_policy(report, cases, baseline, root)
+    assert result["status"] == "passed"
+    assert result["retired_native_variants"] == [identity]
+    assert result["existing_uncovered_variants"] == ["large@large"]
+    assert result["native_variants_with_replay_recipes"] == 1
+    assert result["frozen_native_variants"] == len(baseline["models"])
+    assert result["accepted_reference_verified"] is result["gpu_inference_verified"] is False
+    assert baseline == original
+
+
+def test_retirement_does_not_allow_removing_another_binding(project: Any) -> None:
+    root, _, cases, report, baseline = project
+    baseline["models"].append(
+        {**baseline["models"][0], "model_id": "biwm-wan21", "binding_id": "other", "required_case_ids": []}
+    )
+    result = policy.evaluate_policy(report, cases, baseline, root)
+    assert result["status"] == "failed"
+    assert result["retired_native_variants"] == []
+    assert result["violations"] == [{"variant": "biwm-wan21@other", "reason": "frozen_native_variant_disappeared"}]
+
+
+@pytest.mark.parametrize("identity", _RETIRED_VARIANTS)
+def test_reintroducing_a_retired_variant_requires_its_own_recipe(project: Any, identity: str) -> None:
+    root, _, cases, report, baseline = project
+    model_id, binding_id = identity.split("@")
+    frozen = {**baseline["models"][0], "model_id": model_id, "binding_id": binding_id, "required_case_ids": []}
+    baseline["models"].append(frozen)
+    report["models"].append({**report["models"][0], "model_id": model_id, "binding_id": binding_id})
+    result = policy.evaluate_policy(report, cases, baseline, root)
+    assert result["status"] == "failed"
+    assert result["retired_native_variants"] == []
+    assert identity not in result["existing_uncovered_variants"]
+    assert {"variant": identity, "reason": "new_native_variant_without_replay_recipe"} in result["violations"]
+    recipe = _recipe(model_id)
+    cases[recipe["id"]] = recipe
+    assert policy.evaluate_policy(report, cases, baseline, root)["status"] == "passed"
+
+
 def test_new_binding_outside_catalog_cannot_evade_inventory_requirements(project):
     root, _, cases, report, baseline = project
     path = root / "worldfoundry/data/models/bindings/pipelines/unknown.yaml"
-    path.write_text(yaml.safe_dump({"binding_id": "unknown", "model_id": "unknown",
-                                   "pipeline": {"target": _recipe()["target"]}}))
+    path.write_text(
+        yaml.safe_dump({"binding_id": "unknown", "model_id": "unknown", "pipeline": {"target": _recipe()["target"]}})
+    )
     result = policy.evaluate_policy(report, cases, baseline, root)
     assert any(item["reason"] == "new_or_changed_unclassified_binding_without_recipe" for item in result["violations"])
 
@@ -169,7 +243,57 @@ def test_committed_baseline_preserves_real_repository_gaps():
     result = policy.evaluate_policy(inventory.coverage(_ROOT, matrix), json.loads(matrix.read_text()), baseline, _ROOT)
     assert result["status"] == "passed"
     assert result["existing_uncovered_variants"]
-    assert result["native_variants_with_replay_recipes"] >= sum(bool(row["required_case_ids"]) for row in baseline["models"])
+    assert result["retired_native_variants"] == sorted(_RETIRED_VARIANTS)
+    assert result["native_variants_with_replay_recipes"] >= sum(
+        bool(row["required_case_ids"]) for row in baseline["models"]
+    )
+
+
+@pytest.mark.parametrize(
+    "model_id,case_id",
+    [
+        *(
+            ("kandinsky6-" + variant, "kandinsky6-" + variant + "-video-short")
+            for variant in ("lite", "lite-distill", "lite-pretrain", "pro", "pro-distill", "pro-pretrain")
+        ),
+        ("dreamdojo-student", "dreamdojo-student-controls-short"),
+        ("dreamdojo-2b-gr1-distilled", "dreamdojo-2b-gr1-distilled-controls-short"),
+        ("lingbot-world-v2-1.3b", "lingbot-world-v2-1p3b-causal-short"),
+        ("matrix-game-4-egypt", "matrix-game4-egypt-video-short"),
+        ("wonderworld", "wonderworld-scene-short"),
+    ],
+)
+def test_new_variant_has_its_own_checkpoint_and_numerical_replay(model_id: str, case_id: str) -> None:
+    cases = json.loads((_ROOT / "tests/manual/geometry_regression_cases.json").read_text())
+    case = cases[case_id]
+    assert case["id"] == case_id and case["model_id"] == model_id
+    assert policy.has_replay_recipe(case)
+    binding_id = "dreamdojo-student" if model_id == "dreamdojo-2b-gr1-distilled" else model_id
+    binding_path = _ROOT / "worldfoundry/data/models/bindings/pipelines" / (binding_id + ".yaml")
+    binding = yaml.safe_load(binding_path.read_text())
+    assert case["target"] == binding["pipeline"]["target"]
+    if model_id != "wonderworld":
+        assert case["load"]["model_id"] == model_id
+    assert case["export_artifacts"]
+    assert all("metadata" not in output for output in case["required_outputs"])
+    if model_id.startswith("kandinsky6-"):
+        profile = yaml.safe_load(
+            (_ROOT / "worldfoundry/data/models/runtime/profiles" / (model_id + ".yaml")).read_text()
+        )
+        repo = profile["checkpoints"][0]["repo_id"]
+        assert case["load"]["model_path"].endswith(repo.replace("/", "--"))
+        assert case["call"]["seed"] == case["seed"]
+        assert case["call"]["sample_audio"] is False
+        assert "artifact.video.mp4.frames" in case["required_outputs"]
+        assert case["array_contracts"]["artifact.video.mp4.fps"]["values"] == [24, 1]
+    else:
+        a, b, repeat = case["sequence"]
+        assert (a["name"], b["name"], repeat["name"]) == ("a", "b", "repeat")
+        assert a["call"]["seed"] == b["call"]["seed"] == repeat["call"]["seed"] == case["seed"]
+        assert {k: v for k, v in a["call"].items() if k not in {"run_dir", "output_path"}} == {
+            k: v for k, v in repeat["call"].items() if k not in {"run_dir", "output_path"}
+        }
+        assert any(comparison["relation"] == "different" for comparison in case["comparisons"])
 
 
 def test_oasis_replay_checkpoint_reaches_the_runtime_asset_gate():
@@ -180,8 +304,10 @@ def test_oasis_replay_checkpoint_reaches_the_runtime_asset_gate():
     load = dict(case["load"])
     options = Oasis500MPipeline._runtime_options(model_path=load.pop("model_path", None), kwargs=load)
     missing = worldfoundry_runtime.missing_requirements(
-        options=options, runtime_root=worldfoundry_runtime.RUNTIME_DIR,
-        entrypoint=worldfoundry_runtime.OFFICIAL_ENTRYPOINT, profile=None,
+        options=options,
+        runtime_root=worldfoundry_runtime.RUNTIME_DIR,
+        entrypoint=worldfoundry_runtime.OFFICIAL_ENTRYPOINT,
+        profile=None,
     )
     assert not any(item["kind"] == "option" and item["path"] == "oasis_ckpt" for item in missing)
 
@@ -199,10 +325,15 @@ def _runtime_profile(root, source="worldfoundry/synthesis/subprocess_model"):
     profiles = root / "worldfoundry/data/models/runtime/profiles"
     profiles.mkdir(parents=True, exist_ok=True)
     path = profiles / "arbitrary-profile-name.yaml"
-    path.write_text(yaml.safe_dump({
-        "model_id": "small", "execution": {"pipeline_binding": "small"},
-        "source_repos": [{"in_tree_path": source}],
-    }))
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "model_id": "small",
+                "execution": {"pipeline_binding": "small"},
+                "source_repos": [{"in_tree_path": source}],
+            }
+        )
+    )
     if isinstance(source, str) and source.startswith("worldfoundry/") and ".." not in source:
         (root / source).mkdir(parents=True, exist_ok=True)
     return path
@@ -234,8 +365,9 @@ def test_subprocess_sources_supplement_imports_without_hiding_unknown_paths(proj
 def test_subprocess_ownership_still_requires_a_real_affected_model_recipe(project):
     root, _, cases, report, baseline = project
     _runtime_profile(root)
-    result = policy.evaluate_policy(report, {}, baseline, root,
-                                    ["worldfoundry/synthesis/subprocess_model/inference.py"])
+    result = policy.evaluate_policy(
+        report, {}, baseline, root, ["worldfoundry/synthesis/subprocess_model/inference.py"]
+    )
     assert result["status"] == "failed"
     assert {"variant": "small@small", "reason": "affected_native_variant_without_replay_recipe"} in result["violations"]
 
@@ -257,5 +389,4 @@ def test_runtime_source_ownership_rejects_symlink_escapes(project, tmp_path):
     external.mkdir()
     vendor.symlink_to(external, target_is_directory=True)
     with pytest.raises(ValueError, match="escapes"):
-        policy.evaluate_policy(report, cases, baseline, root,
-                               ["worldfoundry/synthesis/subprocess_model/inference.py"])
+        policy.evaluate_policy(report, cases, baseline, root, ["worldfoundry/synthesis/subprocess_model/inference.py"])

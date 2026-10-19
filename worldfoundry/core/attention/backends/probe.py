@@ -49,6 +49,7 @@ def _triton_tma_version_supported(installed: str | None) -> bool:
     except InvalidVersion:
         return False
 
+
 # ──────────────────────────────────────────────────────────────────────────
 # Capability record — installed vs usable are separate bits on purpose
 # ──────────────────────────────────────────────────────────────────────────
@@ -91,6 +92,7 @@ _BACKEND_ALIASES: Mapping[str, str] = {
     "cudnn": _TORCH,
     "cudnn_fp8": "cudnn_fp8",
     "triton_tma": "triton_tma",
+    "scaled_int8_fp8": "scaled_int8_fp8",
     "sol": "sol_attn",
     "sol_attn": "sol_attn",
     "sol_attention": "sol_attn",
@@ -141,7 +143,7 @@ _REPORT_PRIORITY = (
     "xformers",
     _TORCH,
 )
-_EXPLICIT_PRIORITY = ("sage_attention_3", "cudnn_fp8", "triton_tma", "sol_attn")
+_EXPLICIT_PRIORITY = ("sage_attention_3", "cudnn_fp8", "triton_tma", "scaled_int8_fp8", "sol_attn")
 _EXPERIMENTAL_PRIORITY = (
     "flex_block_attention",
     "video_sparse_attention",
@@ -160,19 +162,15 @@ _MODEL_SPECIFIC_BACKEND_REQUIREMENTS: Mapping[str, str] = {
         "variable block sizes, timestep/sparsity schedule, and compatible VSA/QAT weights)"
     ),
     "flex_block_attention": (
-        "an explicit block mask plus query/key block sizes prepared by the model-specific "
-        "sparse-attention planner"
+        "an explicit block mask plus query/key block sizes prepared by the model-specific sparse-attention planner"
     ),
     "vmoba_attention": (
         "per-layer V-MoBA routing metadata (layer index, patch resolution, chunk policy, "
         "top-k, and threshold configuration)"
     ),
-    "sla_attention": (
-        "SLA metadata and checkpoint-trained sparse/linear blending projections"
-    ),
+    "sla_attention": ("SLA metadata and checkpoint-trained sparse/linear blending projections"),
     "sage_sla_attention": (
-        "SLA metadata, checkpoint-trained blending projections, and the spas_sage_attn "
-        "quantized sparse kernel stack"
+        "SLA metadata, checkpoint-trained blending projections, and the spas_sage_attn quantized sparse kernel stack"
     ),
 }
 
@@ -288,7 +286,10 @@ def _probe_attention_backends_cached(
             supported = False
         if not supported:
             sol = AttentionKernelCapability(
-                "sol_attn", "sol-attn", True, False,
+                "sol_attn",
+                "sol-attn",
+                True,
+                False,
                 "Sol-Attn requires sol-attn >=0.5, PyTorch >=2.10, CUDA >=12.8 and Triton >=3.6",
             )
     flash_gpu = capability is not None and capability[0] in {8, 9}
@@ -304,22 +305,34 @@ def _probe_attention_backends_cached(
     # accepted merely because they share the Blackwell generation name.
     sage3_gpu = capability in {(10, 0), (12, 0), (12, 1)}
     cudnn_fp8 = _package_capability(
-        name="cudnn_fp8", package="cudnn", usable_if=nvidia_cuda and capability[0] >= 9,
+        name="cudnn_fp8",
+        package="cudnn",
+        usable_if=nvidia_cuda and capability[0] >= 9,
         unavailable_reason="nvidia-cudnn-frontend is not installed",
         unusable_reason="cuDNN FP8 SDPA requires NVIDIA Hopper or newer",
     )
     cuda_bindings = _package_capability(
-        name="cuda_bindings", package="cuda-bindings", import_name="cuda.bindings.runtime", usable_if=True,
-        unavailable_reason="cuda-bindings is not installed", unusable_reason="",
+        name="cuda_bindings",
+        package="cuda-bindings",
+        import_name="cuda.bindings.runtime",
+        usable_if=True,
+        unavailable_reason="cuda-bindings is not installed",
+        unusable_reason="",
     )
     if cudnn_fp8.available and not cuda_bindings.available:
         cudnn_fp8 = AttentionKernelCapability(
-            name="cudnn_fp8", package="cudnn", available=False, usable=False,
+            name="cudnn_fp8",
+            package="cudnn",
+            available=False,
+            usable=False,
             reason="cuDNN FP8 SDPA requires cuda-bindings",
         )
     triton_tma = _package_capability(
-        name="triton_tma", package="triton", usable_if=nvidia_cuda and capability[0] >= 9,
-        unavailable_reason="Triton is not installed", unusable_reason="TMA attention requires NVIDIA Hopper or newer",
+        name="triton_tma",
+        package="triton",
+        usable_if=nvidia_cuda and capability[0] >= 9,
+        unavailable_reason="Triton is not installed",
+        unusable_reason="TMA attention requires NVIDIA Hopper or newer",
     )
     if triton_tma.available:
         try:
@@ -328,7 +341,10 @@ def _probe_attention_backends_cached(
             installed_triton = None
         if not _triton_tma_version_supported(installed_triton):
             triton_tma = AttentionKernelCapability(
-                name="triton_tma", package="triton", available=True, usable=False,
+                name="triton_tma",
+                package="triton",
+                available=True,
+                usable=False,
                 reason=(
                     "TMA attention requires Triton >=3.5.0 with tensor descriptors and a context-local allocator; "
                     f"found {installed_triton or 'unknown version'}"
@@ -338,6 +354,13 @@ def _probe_attention_backends_cached(
         "sol_attn": sol,
         "cudnn_fp8": cudnn_fp8,
         "triton_tma": triton_tma,
+        "scaled_int8_fp8": _package_capability(
+            name="scaled_int8_fp8",
+            package="triton",
+            usable_if=nvidia_cuda and capability[0] >= 9,
+            unavailable_reason="Triton is not installed",
+            unusable_reason="scaled INT8/FP8 attention requires NVIDIA SM90 or newer",
+        ),
         "flash_attention_4": _package_capability(
             name="flash_attention_4",
             package="flash_attn.cute",
@@ -518,7 +541,7 @@ def resolve_attention_backend(
     dense fallback for that explicit request.
     """
     requested = attention_backend_from_env() if preferred is None else normalize_attention_backend(preferred)
-    if requested in {"cudnn_fp8", "triton_tma", "sol_attn"}:
+    if requested in {"cudnn_fp8", "triton_tma", "scaled_int8_fp8", "sol_attn"}:
         capability = probe_attention_backends(device)[requested]
         if not capability.usable:
             raise RuntimeError(f"Explicit {requested} backend is unavailable: {capability.reason}")
@@ -700,7 +723,7 @@ def _package_capability(
         if spec is None or spec.submodule_search_locations is None:
             spec = None
             break
-        spec = PathFinder.find_spec(".".join(parts[:index + 1]), spec.submodule_search_locations)
+        spec = PathFinder.find_spec(".".join(parts[: index + 1]), spec.submodule_search_locations)
     available = spec is not None
     if not available:
         return AttentionKernelCapability(

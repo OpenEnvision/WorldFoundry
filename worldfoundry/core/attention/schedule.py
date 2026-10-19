@@ -27,12 +27,14 @@ class MHASchedule:
         allowed = {"native", "fp8_e4m3", "fp8_e5m2", "int8"}
         if self.projection_precision not in allowed or self.output_precision not in allowed:
             raise ValueError("invalid MHA projection precision")
-        if self.sdpa_backend not in {"torch", "cudnn", "fa2"}:
-            raise ValueError("MHA SDPA backend must be torch, cudnn or fa2")
+        if self.sdpa_backend not in {"torch", "cudnn", "fa2", "scaled_int8_fp8"}:
+            raise ValueError("MHA SDPA backend must be torch, cudnn, fa2 or scaled_int8_fp8")
         if type(self.quantized_sdpa) is not bool or type(self.use_tma) is not bool:
             raise TypeError("MHA quantized_sdpa and use_tma must be booleans")
         if self.quantized_sdpa and self.sdpa_backend == "torch":
-            raise ValueError("FP8 SDPA requires the explicit cudnn or fa2 provider")
+            raise ValueError("quantized SDPA requires an explicit low-precision provider")
+        if self.sdpa_backend == "scaled_int8_fp8" and not self.quantized_sdpa:
+            raise ValueError("scaled_int8_fp8 requires quantized_sdpa=True")
         if self.use_tma and (self.sdpa_backend != "fa2" or self.quantized_sdpa):
             raise ValueError("TMA schedule requires native-precision fa2; FP8 uses pointer FA2 or cuDNN")
 
@@ -126,6 +128,11 @@ def scheduled_sdpa(q, k, v, *, num_heads, schedule):
         raise ValueError("MHA requires floating-point projections")
     original_dtype = q.dtype
     projected = [tensor.reshape(tensor.shape[0], tensor.shape[1], num_heads, -1) for tensor in (q, k, v)]
+    if schedule.sdpa_backend == "scaled_int8_fp8":
+        from .backends.scaled_int8_fp8 import scaled_int8_fp8_attention
+
+        result = scaled_int8_fp8_attention(*projected)
+        return result.reshape(result.shape[0], result.shape[1], -1)
     if schedule.quantized_sdpa:
         # Explicit upstream precision contract: raw FP8 Q/K/V, no calibration.
         projected = [tensor.to(torch.float8_e4m3fn) for tensor in projected]

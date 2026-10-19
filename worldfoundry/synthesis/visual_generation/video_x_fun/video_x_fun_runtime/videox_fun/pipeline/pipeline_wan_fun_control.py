@@ -24,6 +24,8 @@ from worldfoundry.synthesis.visual_generation.shared.wan_diffusers import (
 )
 from transformers import AutoTokenizer
 
+from worldfoundry.base_models.diffusion_model.optimizations.camera_condition import CameraConditionCache
+from worldfoundry.base_models.diffusion_model.optimizations.static_cross_kv import StaticConditionCache
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.variants.video_x_fun import AutoencoderKLWan
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.video_x_fun import CLIPModel
 from worldfoundry.base_models.diffusion_model.models.encoders.wan.variants.dreamx_world.text_encoder import WanT5EncoderModel
@@ -351,6 +353,18 @@ class WanFunControlPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
 
         target_shape = (self.vae.latent_channels, (num_frames - 1) // self.vae.temporal_compression_ratio + 1, width // self.vae.spatial_compression_ratio, height // self.vae.spatial_compression_ratio)
         seq_len = math.ceil((target_shape[2] * target_shape[3]) / (self.transformer.config.patch_size[1] * self.transformer.config.patch_size[2]) * target_shape[1])
+        camera_condition = None
+        if control_camera_video is not None:
+            camera = (
+                torch.cat([control_camera_latents] * 2) if do_classifier_free_guidance
+                else control_camera_latents
+            ).to(device, weight_dtype)
+            camera_condition = CameraConditionCache(camera)
+        clip_context_input = (
+            torch.cat([clip_context] * 2) if do_classifier_free_guidance else clip_context
+        )
+        condition_context = StaticConditionCache(in_prompt_embeds, clip_context_input)
+
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
         self.transformer.num_inference_steps = num_inference_steps
@@ -368,9 +382,7 @@ class WanFunControlPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
                 # Prepare mask latent variables
                 if control_camera_video is not None:
                     control_latents_input = None
-                    control_camera_latents_input = (
-                        torch.cat([control_camera_latents] * 2) if do_classifier_free_guidance else control_camera_latents
-                    ).to(device, weight_dtype)
+                    control_camera_latents_input = camera_condition
                 else:
                     control_latents_input = (
                         torch.cat([control_video_latents] * 2) if do_classifier_free_guidance else control_video_latents
@@ -382,10 +394,6 @@ class WanFunControlPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
                 ).to(device, weight_dtype)
                 control_latents_input = start_image_latentes_conv_in_input if control_latents_input is None else \
                     torch.cat([control_latents_input, start_image_latentes_conv_in_input], dim = 1)
-
-                clip_context_input = (
-                    torch.cat([clip_context] * 2) if do_classifier_free_guidance else clip_context
-                )
 
                 if ref_image_latentes is not None:
                     full_ref = (
@@ -401,7 +409,7 @@ class WanFunControlPipeline(WanDiffusersInferenceMixin, DiffusionPipeline):
                 with torch.cuda.amp.autocast(dtype=weight_dtype), torch.cuda.device(device=device):
                     noise_pred = self.transformer(
                         x=latent_model_input,
-                        context=in_prompt_embeds,
+                        context=condition_context,
                         t=timestep,
                         seq_len=seq_len,
                         y=control_latents_input,

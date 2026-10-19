@@ -16,7 +16,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import (
     project_root,
     resolve_local_hf_model_path,
@@ -578,7 +577,7 @@ class MolmoAct2Runtime:
 
         Returns:
             A dictionary containing metadata about the prediction, including
-            status, model ID, artifact path, and SHA256 hash.
+            status, model ID, and artifact path.
 
         Raises:
             ValueError: If `state` is None or has an incorrect shape, or if
@@ -683,7 +682,6 @@ class MolmoAct2Runtime:
             "model_id": "molmoact2",
             "artifact_kind": "action_trace",
             "artifact_path": str(target),
-            "artifact_sha256": file_sha256(target),
             "backend": payload["backend"],
             "backend_quality": payload["backend_quality"],
             "duration_seconds": payload["duration_seconds"],

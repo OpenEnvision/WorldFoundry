@@ -14,10 +14,17 @@ from typing import Any, Mapping, Sequence
 
 from worldfoundry.core.io.paths import checkpoint_root_path, hfd_root_path
 from worldfoundry.core.media.codecs.video import load_video_frames, save_image_or_video_tensor
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 
 MODEL_ID = "lingbot-world-v2"
 DISPLAY_NAME = "LingBot-World-V2"
 DEFAULT_CHECKPOINT = "robbyant/lingbot-world-v2-14b-causal-fast"
+SMALL_MODEL_ID = "lingbot-world-v2-1.3b"
+SMALL_CHECKPOINT = "robbyant/lingbot-world-v2-1.3b-causal-fast"
+SHARED_ASSET_PATHS = ("models_t5_umt5-xxl-enc-bf16.pth", "google/umt5-xxl", "Wan2.1_VAE.pth")
+SMALL_CHECKPOINT_PATHS = ("model.safetensors.index.json",) + tuple(
+    f"model-{index:05d}-of-00006.safetensors" for index in range(1, 7)
+)
 SOURCE_COMMIT = "94f43115de8d4a4f9f282126528c300a0b232c5f"
 RUNNER_MODULE = "worldfoundry.synthesis.visual_generation.lingbot_world_v2.runner"
 SOURCE_ROOT = Path(__file__).resolve().parents[4]
@@ -37,8 +44,8 @@ def _first_image(images: Any) -> Any:
     return images
 
 
-def _checkpoint_missing(root: Path) -> tuple[str, ...]:
-    return tuple(relative for relative in REQUIRED_CHECKPOINT_PATHS if not (root / relative).exists())
+def _checkpoint_missing(root: Path, required_paths=REQUIRED_CHECKPOINT_PATHS) -> tuple[str, ...]:
+    return tuple(relative for relative in required_paths if not (root / relative).exists())
 
 
 class LingBotWorldV2Runtime:
@@ -49,16 +56,19 @@ class LingBotWorldV2Runtime:
 
     def __init__(
         self,
-        checkpoint_source: str | Path = DEFAULT_CHECKPOINT,
+        checkpoint_source: str | Path | None = None,
         *,
         device: str = "cuda",
         python_executable: str | Path | None = None,
         defaults: Mapping[str, Any] | None = None,
+        model_id: str = MODEL_ID,
     ) -> None:
-        self.model_id = MODEL_ID
-        self.model_name = DISPLAY_NAME
+        if model_id not in {MODEL_ID, SMALL_MODEL_ID}:
+            raise ValueError(f"Unsupported LingBot-World-V2 model id: {model_id}")
+        self.model_id = model_id
+        self.model_name = DISPLAY_NAME + (" 1.3B" if model_id == SMALL_MODEL_ID else "")
         self.generation_type = "image_and_camera_to_world_video"
-        self.checkpoint_source = str(checkpoint_source)
+        self.checkpoint_source = str(checkpoint_source or (SMALL_CHECKPOINT if model_id == SMALL_MODEL_ID else DEFAULT_CHECKPOINT))
         self.device = str(device)
         self.python_executable = str(Path(python_executable or sys.executable).expanduser().resolve())
         self._distributed_core: Any = None
@@ -78,7 +88,37 @@ class LingBotWorldV2Runtime:
             "fps": 16,
             "timeout_seconds": 7200,
         }
+        if self.model_id == SMALL_MODEL_ID:
+            self.defaults.update(sample_shift=5.0, frame_num=317, nproc_per_node=1, t5_fsdp=False, dit_fsdp=False)
         self.defaults.update(dict(defaults or {}))
+
+    @property
+    def num_heads(self) -> int:
+        return 12 if self.model_id == SMALL_MODEL_ID else 40
+
+    @property
+    def required_checkpoint_paths(self) -> tuple[str, ...]:
+        return SMALL_CHECKPOINT_PATHS if self.model_id == SMALL_MODEL_ID else REQUIRED_CHECKPOINT_PATHS
+
+    def _resolve_shared_assets(self, *, required: bool) -> Path | None:
+        source = self.defaults.get("shared_assets_path")
+        root = Path(os.path.expandvars(str(source))).expanduser() if source else checkpoint_root_path("Wan-AI--Wan2.1-T2V-1.3B")
+        if root.is_dir() and not _checkpoint_missing(root, SHARED_ASSET_PATHS):
+            return root.resolve()
+        if required:
+            raise FileNotFoundError(f"Wan T5/tokenizer/VAE assets missing under {root}; set shared_assets_path. Expected: {SHARED_ASSET_PATHS}")
+        return None
+
+    def inference_options(self, resolved: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        settings = self.defaults if resolved is None else resolved
+        options = {}
+        if self.model_id == SMALL_MODEL_ID:
+            options.update(model_id=self.model_id, shared_assets_path=self._resolve_shared_assets(required=True))
+        if settings.get("attention_backend"):
+            options["attention_backend"] = settings["attention_backend"]
+        if "vae_streaming_compile" in settings:
+            options["vae_streaming_compile"] = bool(settings["vae_streaming_compile"])
+        return options
 
     @classmethod
     def from_pretrained(
@@ -94,11 +134,14 @@ class LingBotWorldV2Runtime:
             options["checkpoint_source"] = pretrained_model_path
         options.update(kwargs)
         resolved_model_id = str(options.pop("model_id", model_id or MODEL_ID))
-        if resolved_model_id not in {MODEL_ID, "lingbot-world-infinity"}:
+        aliases = {"lingbot-world-infinity": MODEL_ID, "lingbot-v2": MODEL_ID, "lingbot-v2-1.3b": SMALL_MODEL_ID}
+        resolved_model_id = aliases.get(resolved_model_id, resolved_model_id)
+        if resolved_model_id not in {MODEL_ID, SMALL_MODEL_ID}:
             raise ValueError(f"Unsupported LingBot-World-V2 model id: {resolved_model_id}")
+        default_checkpoint = SMALL_CHECKPOINT if resolved_model_id == SMALL_MODEL_ID else DEFAULT_CHECKPOINT
         checkpoint_source = options.pop(
             "checkpoint_source",
-            options.pop("checkpoint_dir", options.pop("pretrained_model_path", DEFAULT_CHECKPOINT)),
+            options.pop("checkpoint_dir", options.pop("pretrained_model_path", default_checkpoint)),
         )
         python_executable = options.pop("python_executable", None)
         options.pop("profile_id", None)
@@ -107,14 +150,15 @@ class LingBotWorldV2Runtime:
             device=device,
             python_executable=python_executable,
             defaults=options,
+            model_id=resolved_model_id,
         )
 
     def _resolve_checkpoint(self, *, required: bool) -> Path | None:
         direct = Path(os.path.expandvars(self.checkpoint_source)).expanduser()
         candidates = [
             direct,
-            checkpoint_root_path("lingbot-world-v2-14b-causal-fast"),
-            hfd_root_path("robbyant--lingbot-world-v2-14b-causal-fast"),
+            checkpoint_root_path((SMALL_CHECKPOINT if self.model_id == SMALL_MODEL_ID else DEFAULT_CHECKPOINT).split("/", 1)[1]),
+            hfd_root_path((SMALL_CHECKPOINT if self.model_id == SMALL_MODEL_ID else DEFAULT_CHECKPOINT).replace("/", "--")),
         ]
         if "/" in self.checkpoint_source and not direct.exists():
             owner, repo = self.checkpoint_source.split("/", 1)
@@ -131,20 +175,20 @@ class LingBotWorldV2Runtime:
                     0,
                     resolve_hf_snapshot_path(
                         self.checkpoint_source,
-                        required_files=REQUIRED_CHECKPOINT_PATHS,
+                        required_files=self.required_checkpoint_paths,
                         local_files_only=True,
                     ),
                 )
             except Exception:
                 pass
         for candidate in candidates:
-            if candidate.is_dir() and not _checkpoint_missing(candidate):
+            if candidate.is_dir() and not _checkpoint_missing(candidate, self.required_checkpoint_paths):
                 return candidate.resolve()
         if required:
             searched = ", ".join(str(path) for path in candidates)
             raise FileNotFoundError(
                 f"LingBot-World-V2 checkpoint is missing or incomplete. Searched: {searched}. "
-                f"Expected: {', '.join(REQUIRED_CHECKPOINT_PATHS)}."
+                f"Expected: {', '.join(self.required_checkpoint_paths)}."
             )
         return None
 
@@ -152,15 +196,17 @@ class LingBotWorldV2Runtime:
         options = self._validated_options({**self.defaults, **overrides})
         checkpoint = self._resolve_checkpoint(required=False)
         nproc = int(options["nproc_per_node"])
+        assets = self._resolve_shared_assets(required=False) if self.model_id == SMALL_MODEL_ID else checkpoint
         return {
-            "status": "ready" if checkpoint is not None else "checkpoint_missing",
+            "status": "ready" if checkpoint is not None and assets is not None else "checkpoint_missing",
             "backend": "worldfoundry.lingbot_world_v2.in_tree_causal_fast",
             "backend_quality": "official_in_tree_runtime",
             "model_id": self.model_id,
             "checkpoint_source": self.checkpoint_source,
             "checkpoint_dir": str(checkpoint) if checkpoint else None,
             "checkpoint_exists": checkpoint is not None,
-            "variant": "14b-causal-fast",
+            "variant": "1.3b-causal-fast" if self.model_id == SMALL_MODEL_ID else "14b-causal-fast",
+            "shared_assets_dir": str(assets) if assets else None,
             "nproc_per_node": nproc,
             "sequence_parallel": nproc > 1,
             "source_commit": SOURCE_COMMIT,
@@ -175,8 +221,8 @@ class LingBotWorldV2Runtime:
         chunk_size = int(resolved["chunk_size"])
         local_attn_size = int(resolved["local_attn_size"])
         sink_size = int(resolved["sink_size"])
-        if nproc < 1 or 40 % nproc:
-            raise ValueError("nproc_per_node must be a positive divisor of the model's 40 attention heads.")
+        if nproc < 1 or self.num_heads % nproc:
+            raise ValueError(f"nproc_per_node must be a positive divisor of the model's {self.num_heads} attention heads.")
         if str(resolved["size"]) not in SUPPORTED_SIZES:
             raise ValueError(f"Unsupported size {resolved['size']!r}; choose one of {sorted(SUPPORTED_SIZES)}.")
         if frame_num < 5 or (frame_num - 1) % 4:
@@ -341,6 +387,10 @@ class LingBotWorldV2Runtime:
             "--sink-size",
             str(int(options["sink_size"])),
         ]
+        if self.model_id == SMALL_MODEL_ID:
+            command.extend(("--model-id", self.model_id, "--shared-assets-path", str(self._resolve_shared_assets(required=True))))
+        if options.get("attention_backend"):
+            command.extend(("--attention-backend", str(options["attention_backend"])))
         if options.get("max_attention_size") is not None:
             command.extend(("--max-attention-size", str(int(options["max_attention_size"]))))
         if options.get("t5_fsdp"):
@@ -351,6 +401,8 @@ class LingBotWorldV2Runtime:
             command.append("--t5-cpu")
         if options.get("convert_model_dtype"):
             command.append("--convert-model-dtype")
+        if options.get("vae_streaming_compile"):
+            command.append("--vae-streaming-compile")
         command.append("--offload-model" if options.get("offload_model") else "--no-offload-model")
         return command
 
@@ -391,6 +443,7 @@ class LingBotWorldV2Runtime:
             bool(options.get("convert_model_dtype")),
             int(options["local_attn_size"]),
             int(options["sink_size"]),
+            tuple(sorted((key, str(value)) for key, value in self.inference_options(options).items())),
         )
         if self._distributed_core is not None and self._distributed_core_signature == signature:
             return self._distributed_core
@@ -411,6 +464,7 @@ class LingBotWorldV2Runtime:
             convert_model_dtype=bool(options.get("convert_model_dtype", False)),
             local_attn_size=int(options["local_attn_size"]),
             sink_size=int(options["sink_size"]),
+            **self.inference_options(options),
         )
         self._distributed_core_signature = signature
         return self._distributed_core
@@ -498,15 +552,18 @@ class LingBotWorldV2Runtime:
         if rank != 0:
             return None
         save_image_or_video_tensor(
-            video,
+            video.unsqueeze(0),
             target,
             fps=16,
             value_range=(-1.0, 1.0),
+            layout="bcthw",
         )
         duration = time.monotonic() - started
+        frames = load_video_frames(target)
         return {
             "artifact_path": str(target),
-            "video": load_video_frames(target),
+            "video": frames,
+            "video_chunk": VideoChunk(frames=frames, layout="thwc", value_range="0,255"),
             "prompt": str(prompt),
             "model_id": self.model_id,
             "duration_seconds": round(duration, 3),
@@ -620,9 +677,11 @@ class LingBotWorldV2Runtime:
             shutil.copy2(generated, target)
             duration = time.monotonic() - started
 
+        frames = load_video_frames(target)
         return {
             "artifact_path": str(target),
-            "video": load_video_frames(target),
+            "video": frames,
+            "video_chunk": VideoChunk(frames=frames, layout="thwc", value_range="0,255"),
             "prompt": str(prompt),
             "model_id": self.model_id,
             "duration_seconds": round(duration, 3),

@@ -174,14 +174,14 @@ class Resample(nn.Module):
                     feat_idx[0] += 1
                 else:
                     cache_x = x[:, :, -CACHE_T:, :, :].clone()
-                    if cache_x.shape[2] < 2 and feat_cache[idx] is not None and feat_cache[idx] != "Rep":
+                    if cache_x.shape[2] < 2 and feat_cache[idx] is not None and not isinstance(feat_cache[idx], str):
                         # cache last frame of last two chunk
                         cache_x = torch.cat(
                             [feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(cache_x.device), cache_x], dim=2
                         )
-                    if cache_x.shape[2] < 2 and feat_cache[idx] is not None and feat_cache[idx] == "Rep":
+                    if cache_x.shape[2] < 2 and isinstance(feat_cache[idx], str):
                         cache_x = torch.cat([torch.zeros_like(cache_x).to(cache_x.device), cache_x], dim=2)
-                    if feat_cache[idx] == "Rep":
+                    if isinstance(feat_cache[idx], str):
                         x = self.time_conv(x)
                     else:
                         x = self.time_conv(x, feat_cache[idx])

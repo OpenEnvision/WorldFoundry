@@ -17,7 +17,6 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 
-from worldfoundry.core.io import file_sha256
 from worldfoundry.evaluation.utils import worldfoundry_data_path
 from worldfoundry.runtime.env import resolve_hfd_root
 
@@ -310,7 +309,7 @@ class CameraCtrlRuntime:
 
         Returns:
             A dictionary containing metadata about the generated video, including
-            its path, SHA256 hash, and parameters used.
+            its path and parameters used.
 
         Raises:
             ValueError: If an input video is provided or no trajectory file is specified.
@@ -370,7 +369,6 @@ class CameraCtrlRuntime:
             "model_id": self.model_id,
             "artifact_kind": "generated_video",
             "artifact_path": str(target),
-            "video_sha256": file_sha256(target),
             "runtime": "worldfoundry.cameractrl.in_tree_runtime",
             "backend_quality": "in_tree_runtime",
             "trajectory_file": str(trajectory_file),

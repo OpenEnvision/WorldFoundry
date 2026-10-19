@@ -57,6 +57,30 @@ def complex_rotary_frequencies_3d(
     )
 
 
+def assemble_complex_rotary_frequencies_3d(
+    frequency_tables: tuple[torch.Tensor, ...],
+    grid_size: tuple[int, int, int],
+    *,
+    start_frame: int = 0,
+) -> torch.Tensor:
+    """Expand existing T/H/W tables into ``[T*H*W,1,D/2]`` token order.
+
+    Temporal positions are absolute frame positions, including after KV
+    eviction. The input tables' complex precision and multiply convention
+    are preserved; no trigonometry or precision conversion is performed.
+    """
+    frames, height, width = grid_size
+    temporal, vertical, horizontal = frequency_tables
+    return torch.cat(
+        [
+            temporal[start_frame : start_frame + frames].view(frames, 1, 1, -1).expand(frames, height, width, -1),
+            vertical[:height].view(1, height, 1, -1).expand(frames, height, width, -1),
+            horizontal[:width].view(1, 1, width, -1).expand(frames, height, width, -1),
+        ],
+        dim=-1,
+    ).reshape(frames * height * width, 1, -1)
+
+
 def apply_complex_rotary_embedding(
     value: torch.Tensor,
     frequencies: torch.Tensor,
@@ -77,14 +101,8 @@ def apply_complex_rotary_embedding(
         raise ValueError("complex RoPE compute_dtype must be float32 or float64")
 
     value = rearrange(value, "b s (h d) -> b s h d", h=int(num_heads))
-    complex_value = torch.view_as_complex(
-        value.to(compute_dtype)
-        .reshape(*value.shape[:-1], -1, 2)
-        .contiguous()
-    )
-    complex_dtype = (
-        torch.complex64 if compute_dtype is torch.float32 else torch.complex128
-    )
+    complex_value = torch.view_as_complex(value.to(compute_dtype).reshape(*value.shape[:-1], -1, 2).contiguous())
+    complex_dtype = torch.complex64 if compute_dtype is torch.float32 else torch.complex128
     if frequencies.device.type == "npu":
         complex_dtype = torch.complex64
     frequencies = frequencies.to(complex_dtype)
@@ -94,6 +112,7 @@ def apply_complex_rotary_embedding(
 
 __all__ = [
     "apply_complex_rotary_embedding",
+    "assemble_complex_rotary_frequencies_3d",
     "complex_rotary_frequencies",
     "complex_rotary_frequencies_3d",
 ]

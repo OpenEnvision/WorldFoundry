@@ -1,0 +1,51 @@
+schema_version: 2
+model_id: matrix-game-4-egypt
+display_name: Matrix-Game 4 Ancient Egypt
+task_family: world_model
+groups: [world, video, low_poly_control]
+source_repos:
+- url: https://github.com/SkyworkAI/Matrix-Game
+  revision: 5446525c80da2a4a2f87801addbbc7faa8d2486e
+checkpoints:
+- repo_id: Skywork/Matrix-Game-4.0
+  revision: 4419accdb7bb7881234c5914de8cd915266e0325
+  role: egypt_dit_and_identity_sink
+  files: [fps-egypt/model.safetensors, fps-egypt/sink.png]
+- repo_id: alibaba-pai/Wan2.2-Fun-5B-Control
+  revision: b8bc1a65ab71d054ba4636dc0dac104aa4df2686
+  role: wan_vae_and_umt5
+  files:
+  - Wan2.2_VAE.pth
+  - models_t5_umt5-xxl-enc-bf16.pth
+  - google/umt5-xxl/special_tokens_map.json
+  - google/umt5-xxl/spiece.model
+  - google/umt5-xxl/tokenizer.json
+  - google/umt5-xxl/tokenizer_config.json
+input_schema:
+  prompt: true
+  image: false
+  video: true
+  actions: [seed]
+artifact_kind: generated_video
+artifact_filename: matrix-game-4-egypt.mp4
+execution:
+  backend_stage: native_diffusion
+  runtime_status: implemented
+  integration_status: integrated
+  pipeline_binding: matrix-game-4-egypt
+  defaults:
+    width: 864
+    height: 480
+    num_inference_steps: 2
+    guidance_scale: 1.0
+    seed: 42
+integration:
+  status: integrated
+notes:
+- Offline low-poly rendering uses the shared autoregressive-window runner and canonical Wan2.2 VAE and UMT5.
+- The first control chunk has one RGB frame; subsequent chunks have four. A separate sink only primes KV history.
+- Each request owns its KV state. A session supports at most 8192 generated latent chunks without position wrapping.
+- File input preserves source FPS unless explicitly overridden. Tensor input defaults to 20 FPS.
+- Public-loader 5-frame and 100-frame BF16/SDPA checkpoint cases on H100 match pinned upstream latent and decoded RGB values exactly.
+- The 100-frame synthetic-pan case verifies KV eviction, tail trimming, A/B/A reuse, interrupted-request recovery and unchanged global RNG.
+- Accepted-reference release replay, gameplay quality and throughput remain pending.

@@ -19,8 +19,10 @@ import numpy as np
 import torch
 import torch.nn.functional as torch_F
 from PIL import Image
+from torch.distributed.fsdp import FullyShardedDataParallel
 
 from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 
 _KEY_TO_ACTION = {
     "w": "forward",
@@ -613,6 +615,20 @@ class MatrixGame3RealtimeSession:
         }
 
         model_started = time.perf_counter()
+        prepare_camera = getattr(self.core.model, "prepare_camera_condition", None)
+        if (
+            self.world_size == 1
+            and not isinstance(self.core.model, FullyShardedDataParallel)
+            and prepare_camera is not None
+        ):
+            conditions_full["plucker_emb"] = prepare_camera(
+                plucker, token_length=self._max_seq_len
+            )
+            if self._use_base_model:
+                conditions_null["plucker_emb"] = prepare_camera(
+                    plucker_without_memory, token_length=self._max_seq_len
+                )
+
         for timestep_value in timesteps:
             timestep = latents.new_full(
                 (latents.shape[2], latents.shape[3] * latents.shape[4] // 4),
@@ -690,8 +706,13 @@ class MatrixGame3RealtimeSession:
                     "Matrix-Game 3 VAE cadence mismatch: "
                     f"expected {output_frames} RGB frames, decoded {frames.shape[0]}."
                 )
+        if frames is not None:
+            frames = np.ascontiguousarray(frames)
         return {
-            "video": np.ascontiguousarray(frames) if frames is not None else None,
+            "video": frames,
+            "video_chunk": (
+                VideoChunk(frames=frames, layout="thwc", value_range="0,255") if frames is not None else None
+            ),
             "realtime_spec": self.realtime_spec().to_payload(),
             "realtime_metrics": {
                 "condition_ms": condition_ms,

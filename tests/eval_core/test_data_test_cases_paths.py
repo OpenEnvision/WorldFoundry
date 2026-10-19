@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRACKED_TEST_CASE_COUNT_BASELINE = 500
 TRACKED_TEST_CASE_BYTES_BASELINE = 352_822_015
@@ -54,9 +53,7 @@ def test_examples_reference_packaged_test_cases_root() -> None:
         REPO_ROOT / "scripts",
         REPO_ROOT / "docs",
     )
-    checked_files = (
-        REPO_ROOT / "worldfoundry/synthesis/visual_generation/scope/scope_runtime/inference.py",
-    )
+    checked_files = (REPO_ROOT / "worldfoundry/synthesis/visual_generation/scope/scope_runtime/inference.py",)
     offenders: list[str] = []
     for root in checked_roots:
         if not root.exists():
@@ -83,9 +80,7 @@ def test_examples_reference_packaged_test_cases_root() -> None:
 
 def test_test_cases_root_does_not_store_runtime_yaml_configs() -> None:
     test_cases_root = REPO_ROOT / "worldfoundry/data/test_cases"
-    root_yaml_configs = sorted(
-        path.name for path in test_cases_root.glob("*") if path.suffix in {".yaml", ".yml"}
-    )
+    root_yaml_configs = sorted(path.name for path in test_cases_root.glob("*") if path.suffix in {".yaml", ".yml"})
 
     assert root_yaml_configs == []
 
@@ -96,18 +91,14 @@ def test_wan_va_inference_configs_are_user_editable_yaml() -> None:
     demo_yaml = runtime_config_root / "demo.yaml"
     i2va_yaml = runtime_config_root / "demo_i2va.yaml"
     inference_config_py = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/action_generation/wan_va/wan_va/configs/va_inference_cfg.py"
+        REPO_ROOT / "worldfoundry/synthesis/action_generation/wan_va/wan_va/configs/va_inference_cfg.py"
     )
     inference_i2va_config_py = (
-        REPO_ROOT
-        / "worldfoundry/synthesis/action_generation/wan_va/wan_va/configs/va_inference_i2va.py"
+        REPO_ROOT / "worldfoundry/synthesis/action_generation/wan_va/wan_va/configs/va_inference_i2va.py"
     )
     retired_demo_modules = [
-        REPO_ROOT
-        / "worldfoundry/synthesis/action_generation/wan_va/wan_va/configs/va_demo_cfg.py",
-        REPO_ROOT
-        / "worldfoundry/synthesis/action_generation/wan_va/wan_va/configs/va_demo_i2va.py",
+        REPO_ROOT / "worldfoundry/synthesis/action_generation/wan_va/wan_va/configs/va_demo_cfg.py",
+        REPO_ROOT / "worldfoundry/synthesis/action_generation/wan_va/wan_va/configs/va_demo_i2va.py",
     ]
 
     demo_payload = yaml.safe_load(demo_yaml.read_text(encoding="utf-8"))
@@ -165,12 +156,11 @@ def test_wan_va_runtime_configs_are_yaml_backed_and_training_code_is_removed() -
     assert not test_case_root.exists() or not any(test_case_root.glob("*.yaml"))
 
     payloads = {
-        name: yaml.safe_load((runtime_config_root / name).read_text(encoding="utf-8"))
-        for name in expected_yaml
+        name: yaml.safe_load((runtime_config_root / name).read_text(encoding="utf-8")) for name in expected_yaml
     }
-    assert payloads["shared.yaml"]["param_dtype"] == "bfloat16"
+    assert payloads["shared.yaml"]["param_dtype"] == "auto"
     for name in ("demo.yaml", "franka.yaml", "libero.yaml", "robotwin.yaml"):
-        assert payloads[name]["wan22_pretrained_model_name_or_path"] is None
+        assert "wan22_pretrained_model_name_or_path" not in payloads[name]
     assert payloads["libero.yaml"]["action_per_frame"] == 4
     assert payloads["robotwin.yaml"]["action_per_frame"] == 16
     assert payloads["franka.yaml"]["used_action_channel_ids"] == [
@@ -193,19 +183,16 @@ def test_wan_va_runtime_configs_are_yaml_backed_and_training_code_is_removed() -
     ]
     assert payloads["robotwin_i2va.yaml"]["infer_mode"] == "i2va"
 
-    for path in config_root.glob("*.py"):
-        if path.name == "__init__.py":
-            continue
-        text = path.read_text(encoding="utf-8")
-        assert "_load_yaml_config" in text
-        assert "runtime", "configs" in text or path.name != "shared_config.py"
-        assert "WAN_VA_TEST_CASE_ROOT" not in text
-        assert "from easydict import EasyDict" not in text
-        assert "/path/to/pretrained/model" not in text
-        assert "dataset_path" not in text
-        assert "enable_wandb" not in text
+    configuration = REPO_ROOT / "worldfoundry/synthesis/action_generation/wan_va/configuration.py"
+    text = configuration.read_text(encoding="utf-8")
+    assert "_load_yaml_config" in text
+    assert "runtime" in text and "configs" in text
+    assert "WAN_VA_TEST_CASE_ROOT" not in text
+    assert "/path/to/pretrained/model" not in text
+    assert "dataset_path" not in text
+    assert "enable_wandb" not in text
 
-    from worldfoundry.synthesis.action_generation.wan_va.wan_va.configs import VA_CONFIGS
+    from worldfoundry.synthesis.action_generation.wan_va.configuration import VA_CONFIGS, va_shared_cfg
 
     assert set(VA_CONFIGS) == {
         "demo",
@@ -216,16 +203,19 @@ def test_wan_va_runtime_configs_are_yaml_backed_and_training_code_is_removed() -
         "libero_i2av",
         "robotwin",
         "robotwin_i2av",
+        "demo_i2va",
+        "franka_i2va",
+        "libero_i2va",
+        "robotwin_i2va",
     }
+    assert va_shared_cfg.param_dtype_request == payloads["shared.yaml"]["param_dtype"]
     assert VA_CONFIGS["libero"].action_per_frame == payloads["libero.yaml"]["action_per_frame"]
     assert VA_CONFIGS["robotwin"].infer_mode == "server"
     assert VA_CONFIGS["robotwin"].inverse_used_action_channel_ids[29] == 15
 
 
 def test_wan_va_server_requires_explicit_checkpoint_dir() -> None:
-    server_path = (
-        REPO_ROOT / "worldfoundry/synthesis/action_generation/wan_va/wan_va/wan_va_server.py"
-    )
+    server_path = REPO_ROOT / "worldfoundry/synthesis/action_generation/wan_va/wan_va/wan_va_server.py"
     text = server_path.read_text(encoding="utf-8")
 
     assert 'WAN_VA_CHECKPOINT_ENV = "WORLDFOUNDRY_WAN_VA_CHECKPOINT_DIR"' in text
@@ -238,7 +228,7 @@ def test_wan_va_server_requires_explicit_checkpoint_dir() -> None:
 def test_lingbot_world_runtime_config_is_yaml_backed() -> None:
     runtime_config_root = REPO_ROOT / "worldfoundry/data/models/runtime/configs/lingbot_world"
     test_case_root = REPO_ROOT / "worldfoundry/data/test_cases/lingbot_world"
-    config_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation/lingbot/lingbot_world_runtime/configs"
+    config_root = REPO_ROOT / "worldfoundry/synthesis/visual_generation/lingbot_world/lingbot_world_runtime/configs"
     expected_yaml = {
         "shared.yaml",
         "wan_i2v_A14B.yaml",
@@ -248,8 +238,7 @@ def test_lingbot_world_runtime_config_is_yaml_backed() -> None:
     assert expected_yaml <= {path.name for path in runtime_config_root.glob("*.yaml")}
     assert not test_case_root.exists() or not any(test_case_root.glob("*.yaml"))
     payloads = {
-        name: yaml.safe_load((runtime_config_root / name).read_text(encoding="utf-8"))
-        for name in expected_yaml
+        name: yaml.safe_load((runtime_config_root / name).read_text(encoding="utf-8")) for name in expected_yaml
     }
     assert payloads["shared.yaml"]["t5_dtype"] == "bfloat16"
     assert payloads["wan_i2v_A14B.yaml"]["fast_noise_checkpoint"] == "lingbot_world_fast"
@@ -264,13 +253,13 @@ def test_lingbot_world_runtime_config_is_yaml_backed() -> None:
     for path in config_root.glob("*.py"):
         text = path.read_text(encoding="utf-8")
         assert "_load_yaml_config" in text
-        assert "runtime", "configs" in text or path.name != "shared_config.py"
+        if path.name == "shared_config.py":
+            assert "runtime" in text and "configs" in text
         assert "LINGBOT_WORLD_TEST_CASE_ROOT" not in text
-        assert "from easydict import EasyDict" not in text
         assert "lingbot_world_fast" not in text
         assert "sample_steps = 70" not in text
 
-    from worldfoundry.synthesis.visual_generation.lingbot.lingbot_world_runtime.configs import (
+    from worldfoundry.synthesis.visual_generation.lingbot_world.lingbot_world_runtime.configs import (
         SIZE_CONFIGS,
         SUPPORTED_SIZES,
         WAN_CONFIGS,

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from worldfoundry.core.memory.media import extract_last_frame, infer_content_type
+from worldfoundry.core.memory.media import extract_last_frame, infer_content_type, to_pil_image
+
+if TYPE_CHECKING:
+    from worldfoundry.core.media.processing.postprocess import VideoChunk
 
 from ._model_scoped import ModelScopedMemory
 
@@ -16,21 +19,44 @@ class VideoArtifactMemory(ModelScopedMemory):
     for an image can be served from a video without decoding it again.
     """
 
-    def record(self, data: Any, metadata: Optional[Dict[str, Any]] = None, **kwargs: Any):
+    def record(
+        self,
+        data: Any,
+        metadata: Optional[Dict[str, Any]] = None,
+        *,
+        video_chunk: VideoChunk | None = None,
+        **kwargs: Any,
+    ) -> None:
         """Store an artifact, inferring its content type and keyframe.
 
         Args:
             data: Artifact content, e.g. image bytes or a video object.
             metadata: Extra metadata; its ``type`` overrides the inferred kind.
+            video_chunk: Declared in-memory pixels for layout/range-aware keyframe extraction.
             kwargs: Further metadata entries, overridden by ``metadata``.
         """
         entry_metadata = {**kwargs, **dict(metadata or {})}
         if self.model_id is not None:
             entry_metadata = {"model_id": self.model_id, **entry_metadata}
 
-        content_type = infer_content_type(data)
+        content_type = "video" if video_chunk is not None else infer_content_type(data)
         if content_type == "video":
-            last_frame = extract_last_frame(data)
+            if video_chunk is None:
+                last_frame = extract_last_frame(data)
+            elif video_chunk.frame_count:
+                from dataclasses import replace
+
+                from worldfoundry.core.media.codecs.video import video_chunk_to_uint8_frames
+                from worldfoundry.core.media.processing.postprocess import video_chunk_as_thwc
+
+                tail = replace(
+                    video_chunk,
+                    frames=video_chunk_as_thwc(video_chunk)[-1:],
+                    layout="frame-list" if video_chunk.layout == "frame-list" else "thwc",
+                )
+                last_frame = to_pil_image(video_chunk_to_uint8_frames(tail)[0])
+            else:
+                last_frame = None
             if last_frame is not None:
                 entry_metadata["last_frame"] = last_frame
 

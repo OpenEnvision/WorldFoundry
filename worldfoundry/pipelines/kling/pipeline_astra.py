@@ -1,18 +1,19 @@
 """Astra visual generation pipeline module."""
 
-from ..pipeline_utils import PipelineABC
 import logging
-import torch
-import os
-import numpy as np
-from PIL import Image
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence
+
+import torch
+from PIL import Image
+
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 
 from ...operators.astra_operator import AstraOperator
 from ...synthesis.visual_generation.kling.astra_synthesis import AstraSynthesis
 from ...synthesis.visual_generation.memory.kling.astra import AstraMemory
+from ..pipeline_utils import PipelineABC
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 class AstraConfig:
     # pretrained model paths
     """AstraConfig implementation for WorldFoundry pipelines."""
+
     astra_path: str = ""
     wan_model_path: str = ""
     # default generation parameters
@@ -28,7 +30,7 @@ class AstraConfig:
     initial_condition_frames: int = 1
     frames_per_generation: int = 8
     total_frames_to_generate: int = 24  # frames per direction step; actual total = this * num_directions
-    max_history_frames: int = 100       # sliding window size for memory
+    max_history_frames: int = 100  # sliding window size for memory
     num_inference_steps: int = 50
     # guidance parameters
     use_camera_cfg: bool = False
@@ -50,6 +52,7 @@ class AstraConfig:
 
 class AstraPipeline(PipelineABC):
     """Pipeline implementation for Astra visual generation."""
+
     def __init__(self, operator, synthesis, memory, config):
         """Initialize the pipeline and configure runtime components."""
         self.operator = operator
@@ -59,11 +62,9 @@ class AstraPipeline(PipelineABC):
         self.device = synthesis.device
 
     @classmethod
-    def from_pretrained(cls,
-                        model_path: str,
-                        required_components: dict,
-                        device: str = "cuda",
-                        **kwargs):
+    def from_pretrained(  # ty: ignore[invalid-method-override]
+        cls, model_path: str, required_components: dict, device: str = "cuda", **kwargs: Any
+    ) -> "AstraPipeline":
         """
         Load pretrained models and initialize the pipeline.
         """
@@ -71,11 +72,7 @@ class AstraPipeline(PipelineABC):
             wan_model_path = required_components.get("wan_model_path", "Wan-AI/Wan2.1-T2V-1.3B")
         else:
             wan_model_path = "Wan-AI/Wan2.1-T2V-1.3B"
-        config = AstraConfig(
-            astra_path=model_path,
-            wan_model_path=wan_model_path,
-            device=device
-        )
+        config = AstraConfig(astra_path=model_path, wan_model_path=wan_model_path, device=device)
         for k, v in kwargs.items():
             if hasattr(config, k):
                 setattr(config, k, v)
@@ -92,14 +89,14 @@ class AstraPipeline(PipelineABC):
         direction_embeddings: List[torch.Tensor],
         initial_condition_frames: int,
         per_direction_frames: int,
-        total_frames: int
+        total_frames: int,
     ) -> torch.Tensor:
         """
         Stitch per-direction camera embeddings into a single continuous embedding
         that supports absolute-position indexing used by the memory module.
 
         The memory's select() method reads camera_embedding_full[T : T + n] where
-        T is the current history length. After the first direction's frames are
+        T is the absolute number of latents recorded in the request. After the first direction's frames are
         generated, T advances past them and the next direction's poses must be
         at the correct absolute positions. This method achieves that by extracting
         each direction's motion portion and placing them sequentially.
@@ -142,7 +139,7 @@ class AstraPipeline(PipelineABC):
             src_start = initial_condition_frames
             src_end = min(initial_condition_frames + per_direction_frames, emb.shape[0])
             n_motion = src_end - src_start
-            combined[dst_offset:dst_offset + n_motion, :] = emb[src_start:src_end, :]
+            combined[dst_offset : dst_offset + n_motion, :] = emb[src_start:src_end, :]
             dst_offset += n_motion
 
         if dst_offset > 0:
@@ -187,10 +184,10 @@ class AstraPipeline(PipelineABC):
         if H > target_height or W > target_width:
             h_start = (H - target_height) // 2
             w_start = (W - target_width) // 2
-            latents = latents[:, :, h_start:h_start+target_height, w_start:w_start+target_width]
+            latents = latents[:, :, h_start : h_start + target_height, w_start : w_start + target_width]
 
         model_dtype = next(self.synthesis.pipe.dit.parameters()).dtype
-        history_latents = latents[:, :args.initial_condition_frames, :, :].to(self.device, dtype=model_dtype)
+        history_latents = latents[:, : args.initial_condition_frames, :, :].to(self.device, dtype=model_dtype)
         initial_latents = history_latents  # backup for final concatenation
 
         # 2. Encode the text prompt (Interaction -> Representation)
@@ -200,40 +197,33 @@ class AstraPipeline(PipelineABC):
         if args.text_guidance_scale > 1.0:
             prompt_emb_neg = self.synthesis.pipe.encode_prompt("")
 
-        # 3. Generate camera embeddings for each direction separately, then stitch.
-        #
-        #    Why separate calls: operator.process_interaction() only reads the LAST
-        #    entry of self.current_interaction as the direction. So we must call it
-        #    once per direction to obtain each direction's camera embedding.
-        #
-        #    Why stitch: memory.select() indexes into camera_embedding_full using the
-        #    absolute history length T. After direction 0's frames are generated, T
-        #    has advanced, so direction 1's poses must sit at the correct offset.
+        # Each direction contributes motion poses at its absolute request offset.
+        # Passing directions explicitly leaves the operator's interaction history
+        # independent of requests sharing this pipeline.
         logger.info(
             "Generating camera embeddings for directions: %s (%s step(s) x %s frames = %s total frames)...",
-            directions, num_directions, per_direction_frames, total_frames,
+            directions,
+            num_directions,
+            per_direction_frames,
+            total_frames,
         )
 
         direction_embeddings = []
         for direction in directions:
-            # Set operator to target a single direction for this call
-            self.operator.current_interaction = [direction]
             cam_emb = self.operator.process_interaction(
+                direction=direction,
                 modality_type=args.modality_type,
                 start_frame=args.start_frame,
                 initial_condition_frames=args.initial_condition_frames,
                 total_frames_to_generate=per_direction_frames,
                 use_real_poses=args.use_real_poses,
-                scene_info_path=args.scene_info_path
+                scene_info_path=args.scene_info_path,
             )
             direction_embeddings.append(cam_emb)
 
         # Stitch into one continuous embedding aligned with absolute frame positions
         camera_embedding_full = self._stitch_camera_embeddings(
-            direction_embeddings,
-            args.initial_condition_frames,
-            per_direction_frames,
-            total_frames
+            direction_embeddings, args.initial_condition_frames, per_direction_frames, total_frames
         )
 
         camera_embedding_uncond = None
@@ -269,23 +259,24 @@ class AstraPipeline(PipelineABC):
             direction = "forward"
         return {"prompt": prompt, "direction": direction}
 
-    def __call__(self,
-                 image_path: str = "",
-                 interactions: Dict[str, Any] | Sequence[Any] | str | None = None,
-                 images: Optional[List[Image.Image]] = None,
-                 prompt: str = "",
-                 output_path: str | Path | None = None,
-                 fps: int | None = None,
-                 return_dict: bool = False,
-                 num_frames: int | None = None,
-                 frames_per_generation: int | None = None,
-                 total_frames_to_generate: int | None = None,
-                 num_inference_steps: int | None = None,
-                 seed: int | None = None,
-                 height: int | None = None,
-                 width: int | None = None,
-                 **kwargs: Any,
-                ) -> List[Image.Image] | Dict[str, Any]:
+    def __call__(
+        self,
+        image_path: str = "",
+        interactions: Dict[str, Any] | Sequence[Any] | str | None = None,
+        images: Optional[List[Image.Image]] = None,
+        prompt: str = "",
+        output_path: str | Path | None = None,
+        fps: int | None = None,
+        return_dict: bool = False,
+        num_frames: int | None = None,
+        frames_per_generation: int | None = None,
+        total_frames_to_generate: int | None = None,
+        num_inference_steps: int | None = None,
+        seed: int | None = None,
+        height: int | None = None,
+        width: int | None = None,
+        **kwargs: Any,
+    ) -> List[Image.Image] | Dict[str, Any]:
         """
         Main entry point. Supports multi-step direction interaction.
 
@@ -364,9 +355,9 @@ class AstraPipeline(PipelineABC):
         camera_embedding_uncond = processed_data["camera_embedding_uncond"]
         total_frames = processed_data["total_frames"]
 
-        # Initialize memory with the condition frame
-        self.memory.history_latents = None
-        self.memory.record(initial_latents)
+        # Active history belongs to this request, not the loaded synthesis owner.
+        memory = AstraMemory(capacity=self.memory.capacity)
+        memory.record(initial_latents)
 
         total_generated = 0
         all_generated_frames = []
@@ -378,11 +369,8 @@ class AstraPipeline(PipelineABC):
             current_generation = args.frames_per_generation
             logger.info("Generation step: %s/%s", total_generated, total_frames)
 
-            framepack_data = self.memory.select(
-                current_generation,
-                camera_embedding_full,
-                args.start_frame,
-                args.modality_type
+            framepack_data = memory.select(
+                current_generation, camera_embedding_full, args.start_frame, args.modality_type
             )
 
             new_latents = self.synthesis.predict(
@@ -396,16 +384,14 @@ class AstraPipeline(PipelineABC):
             )
 
             new_latents_squeezed = new_latents.squeeze(0)
-            self.memory.record(new_latents_squeezed)
+            memory.record(new_latents_squeezed)
 
             all_generated_frames.append(new_latents_squeezed)
             total_generated += current_generation
 
         # Concatenate all generated frames and prepend the initial condition frame
         all_generated = torch.cat(all_generated_frames, dim=1)[:, :total_frames]
-        final_video_latents = torch.cat(
-            [initial_latents.to(all_generated.device), all_generated], dim=1
-        ).unsqueeze(0)
+        final_video_latents = torch.cat([initial_latents.to(all_generated.device), all_generated], dim=1).unsqueeze(0)
 
         logger.info("Decoding video...")
         video_np = self.synthesis.decode_video(final_video_latents)
@@ -416,12 +402,20 @@ class AstraPipeline(PipelineABC):
             from worldfoundry.core.io import write_video
 
             write_video(pil_frames, output_path, fps=16 if fps is None else fps)
+        self.memory = memory
         if return_dict:
             return {
                 "status": "success",
                 "model_id": "astra",
                 "artifact_kind": "generated_video",
                 "frames": pil_frames,
+                "video_chunk": VideoChunk(
+                    frames=pil_frames,
+                    layout="frame-list",
+                    value_range="0,255",
+                    metadata={"fps": 16 if fps is None else fps},
+                ),
+                "fps": 16 if fps is None else fps,
                 "num_frames": len(pil_frames),
                 "output_path": str(output_path) if output_path is not None else None,
             }

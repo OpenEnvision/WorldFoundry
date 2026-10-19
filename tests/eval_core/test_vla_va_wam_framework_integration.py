@@ -3,24 +3,25 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_RUNNER_TARGET, ContractFixtureRunner
 from worldfoundry.evaluation.api import GenerationRequest
-from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
 from worldfoundry.evaluation.models import (
     ModelResolutionError,
     WorldFoundryPipelineRunner,
     resolve_model_zoo_runner,
     resolve_world_model_runner,
 )
-from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_RUNNER_TARGET, ContractFixtureRunner
+from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
+from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
 from worldfoundry.evaluation.tasks.embodied import (
     EmbodiedGenerationSpec,
     run_vla_va_wam,
 )
-from worldfoundry.evaluation.models.catalog import load_model_zoo_registry
 from worldfoundry.pipelines.component_pipelines import OpenVLAPipeline
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 def _vla_spec() -> EmbodiedGenerationSpec:
     return EmbodiedGenerationSpec.from_dict(
         {
@@ -89,7 +90,7 @@ def test_model_resolver_rejects_source_specific_runtime_alias() -> None:
             "contract-vla",
             runner="vla-va-wam:contract",
             parameters={"track": "vla"},
-    )
+        )
     except ModelResolutionError as exc:
         assert "vla-va-wam" in str(exc)
     else:  # pragma: no cover - explicit assertion keeps no-alias policy visible.
@@ -157,7 +158,7 @@ def test_embodied_benchmark_zoo_manifest_is_discoverable_as_tasks() -> None:
 
     expected = {
         "libero",
-        "libero-para",
+        "libero-plus",
         "simpler-env",
         "robocasa",
         "calvin",
@@ -169,6 +170,7 @@ def test_embodied_benchmark_zoo_manifest_is_discoverable_as_tasks() -> None:
     }
     discovered = {item["task_type"] for item in list_benchmark_zoo_cli_tasks(source_kind="benchmark_zoo")}
     assert expected <= discovered
+    assert "libero-para" not in discovered
 
     libero = get_benchmark_zoo_cli_task("libero", "libero")
     assert libero["source_kind"] == "benchmark_zoo"
@@ -270,7 +272,7 @@ def test_external_benchmark_contracts_include_embodied_suites() -> None:
     assert contract.display_name == "LIBERO"
     assert "policy_results_path" in contract.input_keys
     assert "success_rate" in contract.metric_ids
-    for benchmark_id in ("libero-para", "rlbench", "metaworld", "bridgedata-v2"):
+    for benchmark_id in ("libero-plus", "rlbench", "metaworld", "bridgedata-v2"):
         embodied_contract = get_external_benchmark_contract(benchmark_id)
         assert "policy_results_path" in embodied_contract.input_keys
         assert "success_rate" in embodied_contract.metric_ids

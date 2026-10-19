@@ -9,13 +9,14 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 import torch
 from PIL import Image
 
+from worldfoundry.core.io.paths import scratch_directory
+
 from ...operators.matrix_game_3_operator import MatrixGame3Operator
 from ...synthesis.visual_generation.matrix_game.matrix_game_3_synthesis import MatrixGame3Synthesis
 from ...synthesis.visual_generation.memory.stream import VisualFrameMemory
 from ..pipeline_utils import PipelineABC
-from worldfoundry.core.io.paths import scratch_directory
 
-DEFAULT_MATRIX_GAME3_COMPONENTS = {
+DEFAULT_MATRIX_GAME3_COMPONENTS: dict[str, Any] = {
     # Mirrors the upstream lightweight inference recipe while staying single-GPU friendly.
     "compile_vae": True,
     "lightvae_pruning_rate": 0.5,
@@ -38,6 +39,7 @@ def _looks_like_matrix_game3_code_path(path_value: Optional[str]) -> bool:
 
 class MatrixGame3Pipeline(PipelineABC):
     """Pipeline implementation for MatrixGame3 visual generation."""
+
     def __init__(
         self,
         operators: Optional[MatrixGame3Operator] = None,
@@ -56,7 +58,8 @@ class MatrixGame3Pipeline(PipelineABC):
         self._realtime_session: Any = None
 
     @classmethod
-    def from_pretrained(
+    # The public loader retains its positional weight_dtype option.
+    def from_pretrained(  # ty: ignore[invalid-method-override]
         cls,
         model_path: Optional[str] = None,
         required_components: Optional[dict] = None,
@@ -124,9 +127,11 @@ class MatrixGame3Pipeline(PipelineABC):
         show_progress: bool = True,
         seed: int = 42,
         return_dict: bool = False,
-        **kwargs,
-    ):
-        """Execute the complete pipeline generation flow."""
+        **kwargs: Any,
+    ) -> Any:
+        """Generate artifact-backed frames, retaining the producer's output declaration."""
+        if self.synthesis_model is None:
+            raise RuntimeError("Matrix-Game 3 synthesis model is not loaded. Use from_pretrained() first.")
         if isinstance(images, (str, Path)):
             images = Image.open(str(images)).convert("RGB")
         if not isinstance(images, Image.Image):
@@ -159,7 +164,7 @@ class MatrixGame3Pipeline(PipelineABC):
         )
         generated_path = Path(synthesis_result["generated_video_path"]).expanduser().resolve()
         artifact_path = generated_path
-        if output_path is not None:
+        if output_path is not None and synthesis_result["video"] is not None:
             artifact_path = Path(output_path).expanduser().resolve()
             artifact_path.parent.mkdir(parents=True, exist_ok=True)
             if artifact_path != generated_path:
@@ -167,7 +172,7 @@ class MatrixGame3Pipeline(PipelineABC):
 
         result = {
             **synthesis_result,
-            "artifact_path": str(artifact_path),
+            "artifact_path": str(artifact_path) if synthesis_result["video"] is not None else None,
             "status": "succeeded",
         }
         if return_dict or output_path is not None:
@@ -189,8 +194,9 @@ class MatrixGame3Pipeline(PipelineABC):
         show_progress: bool = True,
         reset_memory: bool = False,
         seed: int = 42,
-        **kwargs,
-    ):
+        return_dict: bool = False,
+        **kwargs: Any,
+    ) -> Any:
         """Stream visual generation outputs chunk by chunk."""
         if isinstance(images, (str, Path)):
             images = Image.open(str(images)).convert("RGB")
@@ -217,9 +223,12 @@ class MatrixGame3Pipeline(PipelineABC):
             visualize_ops=visualize_ops,
             show_progress=show_progress,
             seed=seed,
+            return_dict=return_dict,
             **kwargs,
         )
-        self.memory_module.record(video_output)
+        frames = video_output["video"] if isinstance(video_output, dict) else video_output
+        if frames is not None:
+            self.memory_module.record(frames)
         return video_output
 
     def _ensure_realtime_session(self) -> Any:

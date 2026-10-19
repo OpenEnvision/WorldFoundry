@@ -63,7 +63,7 @@ Vid2World dataset adapter 属于其 synthesis 包 `synthesis/visual_generation/v
 
 - **T2V-Turbo** — 共享 role-based component。其 VideoCrafter2 base 解析公共 network、codec、encoder 与 scheduler role，只保留自己的 LoRA 与 consistency-sampling 行为。
 - **VideoCrafter** — 共享 role-based component。所有打包 config 直接指向 canonical role package，不再复制 framework tree。
-- **Dynamicrafter、MotionCtrl、Pandora** — 共享 role-based component。现有 synthesis adapter 保留各自产品行为，同时 import 同一组 LVDM component。
+- **Dynamicrafter、MotionCtrl** — 共享 role-based component。现有 synthesis adapter 保留各自产品行为，同时 import 同一组 LVDM component。
 - **Vid2World** — 共享 component + 显式扩展。其改造的 latent diffusion network、UNet、attention、DDIM sampler 与 KV cache 作为命名 role component；dataset 仍归 synthesis。
 
 ### Guard rails

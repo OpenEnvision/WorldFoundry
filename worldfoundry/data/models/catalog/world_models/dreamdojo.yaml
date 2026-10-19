@@ -1,121 +1,91 @@
-runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
-availability: open_source
-checkpoints:
-- nvidia/DreamDojo
-family: NVIDIA DreamDojo
 id: dreamdojo
-integration:
-  notes:
-  - Runtime code is vendored in-tree; checkpoints and datasets remain external assets
-    under the normal hfd/ckpt/data cache.
-  status: planned
+name: DreamDojo
+family: NVIDIA DreamDojo
+availability: open_source
 license: other:nvidia-open-model-license
+provider: official_repo
+runner_target: worldfoundry.evaluation.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: dreamdojo
+runtime_profile: runtime-profile:dreamdojo
+release_type: code_and_weights
+starred: true
+integration:
+  status: integrated
+  notes:
+  - Native 2B GR-1 teacher inference and the dreamdojo-student distilled route reuse canonical Cosmos components and accept normalized robot actions.
 modalities:
-- interactive-world-model
 - robot-world-model
 - action-conditioned-video2world
-- long-horizon
-name: DreamDojo
+checkpoints:
+- nvidia/DreamDojo
 official_sources:
   paper: https://arxiv.org/abs/2602.06949
+  project_page: https://dreamdojo-world.github.io/
   github:
-    confirmed_by: local git rev-parse HEAD
-    confirmed_ref: 02f119b759d5c7f84a399fdeea3c6e82e7ed6cff
     url: https://github.com/NVIDIA/DreamDojo
+    confirmed_ref: 02f119b759d5c7f84a399fdeea3c6e82e7ed6cff
   huggingface:
-  - confirmed_by: https://huggingface.co/api/models/nvidia/DreamDojo
-    repo_id: nvidia/DreamDojo
+  - repo_id: nvidia/DreamDojo
     revision: 89d029e10816d2995d700cb8ba06f171e0504203
     status: confirmed
     type: model
-  - confirmed_by: https://huggingface.co/api/datasets/nvidia/PhysicalAI-Robotics-GR00T-Teleop-GR1
-    repo_id: nvidia/PhysicalAI-Robotics-GR00T-Teleop-GR1
+  - repo_id: nvidia/PhysicalAI-Robotics-GR00T-Teleop-GR1
     revision: 9f68429ad12535d30d1aae33b7945c79c830c8c4
     status: confirmed
     type: dataset
-  project_page: https://dreamdojo-world.github.io/
-pipeline_binding: dreamdojo
-release_type: code_and_weights
-runtime_profile: runtime-profile:dreamdojo
-starred: true
 variants:
-- runner_parity:
-    blocked_reasons:
-    - nvidia/DreamDojo checkpoints are retained as provenance/staging references only.
-    - No WorldFoundry runner or pipeline target is registered for this metadata-only
-      entry.
-    status: pending
-  checkpoint_refs:
-  - gated: false
-    license: other:nvidia-open-model-license
-    notes:
-    - 'Expected official subset: DreamDojo 2B GR-1 action-conditioned/post-trained
-      checkpoint.'
-    private: false
-    repo_id: nvidia/DreamDojo
-    requires_auth: false
-    revision: 89d029e10816d2995d700cb8ba06f171e0504203
-  demo_parity:
-    status: pending_demo
-  id: dreamdojo-2b-gr1-action-conditioned
+- id: dreamdojo-2b-gr1-action-conditioned
   provider: official_repo
-  runtime_profile: runtime-profile:dreamdojo
   task: robot-world-generation
-- runner_parity:
-    blocked_reasons:
-    - DreamDojo distilled checkpoint references are retained as provenance/staging
-      references only.
-    - No WorldFoundry runner or pipeline target is registered for this metadata-only
-      entry.
-    status: pending
+  runtime_profile: runtime-profile:dreamdojo
+  integration:
+    status: integrated
   checkpoint_refs:
-  - gated: false
-    license: other:nvidia-open-model-license
-    notes:
-    - 'Expected official subset: distilled GR-1 student checkpoint used by launch_student_inference.sh.'
-    private: false
-    repo_id: nvidia/DreamDojo
-    requires_auth: false
+  - repo_id: nvidia/DreamDojo
     revision: 89d029e10816d2995d700cb8ba06f171e0504203
+    license: other:nvidia-open-model-license
+    gated: false
+    private: false
+    requires_auth: false
+  runner_parity:
+    status: implemented_pending_gpu_parity
   demo_parity:
     status: pending_demo
-  id: dreamdojo-distilled-gr1-realtime
+- id: dreamdojo-2b-gr1-distilled
   provider: official_repo
-  runtime_profile: runtime-profile:dreamdojo
-  task: interactive-robot-world-generation
+  task: robot-world-generation
+  pipeline_binding: dreamdojo-student
+  runtime_profile: runtime-profile:dreamdojo-student
+  integration:
+    status: integrated
+  checkpoint_refs: []
+  runner_parity:
+    status: implemented_pending_gpu_parity
+  demo_parity:
+    status: pending_demo
 runner_parity:
-  notes:
-  - WorldFoundry now provides an in-tree DreamDojo runtime wrapper under worldfoundry/synthesis/action_generation/dreamdojo/dreamdojo_runtime.
-    Full GPU parity still requires converted checkpoint artifacts and the official
-    GR-1 evaluation dataset.
   status: implemented_pending_gpu_parity
+  notes:
+  - Official numerical and robot-task parity are not yet validated.
 catalog_category: world_models
-catalog_scope: world-model/interactive starred models
-catalog_policy:
-  checkpoint_rule: Only list checkpoints that were confirmed on official Hugging Face
-    model pages. Do not download weights.
-  integration_rule: Closed, API-only, or unknown releases stay blocked or planned
-    until an official integration surface is available.
-  open_source_rule: Only mark open_source when an official GitHub repository or official
-    Hugging Face model page was confirmed. Do not infer checkpoint availability from
-    papers, demos, or third-party mirrors.
+catalog_scope: Native robot world-model inference.
 docs:
   publisher: NVIDIA
   publisher_kind: company
   publisher_zh: 英伟达（NVIDIA）
-  overview: 'DreamDojo is NVIDIA''s action-conditioned robot world model: given robot actions in a unified 384-dimensional action space (spanning GR-1, G1, YAM, AgiBot, MANO hand, and latent actions), it dreams the resulting robot-view video. In this catalog the runtime wrapper is in-tree with 2B GR-1 action-conditioned and distilled realtime variants recorded; GPU parity is pending converted checkpoints and the GR-1 evaluation dataset.'
-  overview_zh: DreamDojo 是英伟达的动作条件机器人世界模型：给定统一 384 维动作空间中的机器人动作（覆盖 GR-1、G1、YAM、AgiBot、MANO 手部与潜在动作），它「梦出」相应的机器人视角视频。本 catalog 中运行时封装已在树内，记录 2B GR-1 动作条件与蒸馏实时两个 variant；GPU 一致性待转换后的 checkpoint 与 GR-1 评估数据集就位。
-  architecture: DreamDojo builds on an action-conditioned Cosmos Predict runtime with the Groot Dreams dataloader and LAM modules, vendored under synthesis/action_generation/dreamdojo/dreamdojo_runtime. The recorded action contract maps GR-1 [0,58), G1 [58,101), YAM [101,147), AgiBot [147,169), MANO [220,352), latent actions [352,384).
-  architecture_zh: DreamDojo 基于动作条件的 Cosmos Predict 运行时，配 Groot Dreams 数据加载器与 LAM 模块，内置于 synthesis/action_generation/dreamdojo/dreamdojo_runtime。记录的动作契约映射为 GR-1 [0,58)、G1 [58,101)、YAM [101,147)、AgiBot [147,169)、MANO [220,352)、潜在动作 [352,384)。
-  usage_notes: nvidia/DreamDojo checkpoints are staged locally including the 2B_GR1_post-train directory, but full parity still requires the converted model_ema_bf16.pt, the official GR-1 evaluation dataset, and a CUDA 12.8-class host. It is intentionally not classified as a VLA policy or plain video generation.
-  usage_notes_zh: nvidia/DreamDojo checkpoint 已本地就位（含 2B_GR1_post-train 目录），但完整一致性仍需转换后的 model_ema_bf16.pt、官方 GR-1 评估数据集与 CUDA 12.8 级主机。它有意不被归类为 VLA 策略或普通视频生成模型。
+  overview: DreamDojo predicts robot-view video from an initial image and normalized robot actions. WorldFoundry integrates the offline 2B GR-1 post-trained teacher and a separate low-step causal student route through native Cosmos components.
+  overview_zh: DreamDojo 从初始图像与归一化机器人动作预测机器人视角视频。WorldFoundry 通过原生 Cosmos 组件接入离线 2B GR-1 后训练 teacher 与独立低步数因果学生入口。
+  architecture: The action-conditioned Cosmos DiT groups four 384-dimensional actions per future latent frame and adds their projections to timestep and AdaLN embeddings. Reason1 text conditioning and the Wan codec are shared. The teacher uses UniPC; the causal student uses clean KV prefill and one to four TrigFlow steps.
+  architecture_zh: 动作条件 Cosmos DiT 为每个后续潜帧组合四个 384 维动作，将投影注入时间步与 AdaLN embedding。Reason1 文本条件与 Wan 编解码共享。Teacher 使用 UniPC，因果学生使用干净 KV 预填充与一至四步 TrigFlow 采样。
+  usage_notes: Supply one initial image, complete 12-action chunks in the normalized 384-dimensional space, the converted EMA checkpoint, Cosmos video tokenizer, and Reason1 text weights or explicit precomputed embeddings. Each chunk generates 13 frames; longer sequences reuse the final generated frame.
+  usage_notes_zh: 提供一幅初始图像、归一化 384 维空间中的完整 12 步动作块、转换后的 EMA 权重、Cosmos 视频 tokenizer，以及 Reason1 文本权重或显式预计算 embedding。每块生成 13 帧，较长序列复用上一块的最终生成帧。
   limitations:
-  - GPU parity is pending converted checkpoint artifacts and the GR-1 evaluation dataset.
-  - Requires a CUDA 12.8-class host.
+  - Official numerical parity and robot-task quality are pending validation.
+  - Distilled inference uses dreamdojo-student with explicit student weights; the teacher checkpoint is not interchangeable. Other model scales are not supported.
   limitations_zh:
-  - GPU 一致性待转换后的 checkpoint 产物与 GR-1 评估数据集。
-  - 需要 CUDA 12.8 级主机。
+  - 官方数值一致性与机器人任务质量尚待验证。
+  - 蒸馏推理通过 dreamdojo-student 使用显式学生权重，不能与 teacher 权重互换。暂不支持其他模型规模。
   recommended_benchmarks:
   - id: ewmbench
-    reason: Embodied world-model evaluation for robot video prediction.
-    reason_zh: 机器人视频预测的具身世界模型评测。
+    reason: Robot-video prediction with explicit action conditioning.
+    reason_zh: 显式动作条件下的机器人视频预测。

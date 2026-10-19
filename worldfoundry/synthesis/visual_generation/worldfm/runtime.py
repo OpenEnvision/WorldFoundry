@@ -17,6 +17,8 @@ import imageio.v2 as imageio
 import numpy as np
 import torch
 
+from worldfoundry.core.media.processing.postprocess import VideoChunk
+
 from .worldfm_runtime import DEFAULT_WORLDFM_REPO, resolve_worldfm_assets
 
 
@@ -511,6 +513,7 @@ class WorldFMRuntime:
         result = {
             "frames": frames,  # All generated frames as a list of NumPy arrays
             "video": frames,  # Alias for frames, for compatibility
+            "video_chunk": VideoChunk(frames=frames, layout="frame-list", value_range="0,255"),
             "scene_name": scene_name,
             "save_mode": save_mode,
             **saved_outputs,  # Include paths from _save_outputs

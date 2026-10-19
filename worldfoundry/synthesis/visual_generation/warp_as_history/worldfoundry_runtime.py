@@ -12,7 +12,6 @@ from worldfoundry.base_models.three_dimensions.point_clouds.pi3_source import (
     SOURCE_ROOT as PI3_SOURCE_ROOT,
     ensure_import_paths as ensure_pi3_import_paths,
 )
-from worldfoundry.core.io import file_sha256
 
 from .variants import (
     WARP_AS_HISTORY_VARIANTS,
@@ -154,9 +153,6 @@ class WarpAsHistoryRuntime:
                 target = target / f"{self.model_id}.json"
         return target.resolve()
 
-    @staticmethod
-    def _sha256(path: Path) -> str:
-        return file_sha256(path)
 
     @staticmethod
     def _copy_artifact(source: Path, target: Path) -> Path:
@@ -514,7 +510,6 @@ class WarpAsHistoryRuntime:
             "display_name": self.model_name,
             "artifact_kind": self.variant.artifact_kind,
             "artifact_path": str(target),
-            "artifact_sha256": self._sha256(target),
             "generated_video_path": str(target),
             "backend_quality": "official_in_tree_runtime",
             "runtime": "worldfoundry.synthesis.visual_generation.warp_as_history.in_tree_runtime",

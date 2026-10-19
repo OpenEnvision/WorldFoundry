@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io import file_sha256
 from worldfoundry.runtime.env import resolve_ckpt_dir, resolve_hfd_root
 from worldfoundry.synthesis.action_generation.gr00t.architecture import (
     load_checkpoint_architecture,
@@ -510,15 +509,12 @@ class GR00TRuntime:
         }
         # Write the action trace to the specified output path
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        # Calculate SHA256 hash of the generated artifact
-        artifact_sha256 = file_sha256(target)
         # Return a summary of the action trace artifact
         return {
             "status": "success",
             "model_id": "gr00t",
             "artifact_kind": "action_trace",
             "artifact_path": str(target),
-            "artifact_sha256": artifact_sha256,
             "backend": payload["backend"],
             "backend_quality": payload["backend_quality"],
             "duration_seconds": payload["duration_seconds"],

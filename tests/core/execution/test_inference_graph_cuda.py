@@ -170,3 +170,110 @@ def test_inductor_and_cuda_graph_match_eager_with_changing_inputs(cuda_device: t
     assert report["capture"] == report["graphs"] == 1
     assert report["replay"] == 3
     assert report["eager"] == report["capture_failed"] == 0
+
+
+def test_compiled_capture_preserves_modes_and_generator_lifecycle(cuda_device: torch.device) -> None:
+    def compute(value: torch.Tensor) -> torch.Tensor:
+        return value.square()
+
+    compiled = torch.compile(compute, backend="inductor", fullgraph=True, options={"triton.cudagraphs": False})
+
+    def transform(value: torch.Tensor) -> torch.Tensor:
+        assert not torch.is_grad_enabled()
+        mode = torch.is_inference_mode_enabled()
+        # A plain no-grad capture must work after inference-mode compilation,
+        # without another compilation restoring the shared generator state.
+        return (compiled(value) if mode else compute(value)) + (2 if mode else 1)
+
+    runner = InferenceCUDAGraphRunner(transform, warmup=1)
+    for mode in (True, False, True):
+        with torch.inference_mode(mode), torch.no_grad():
+            value = torch.ones(8, device=cuda_device)
+            torch.testing.assert_close(runner(value), value.square() + (2 if mode else 1), rtol=0, atol=0)
+    assert runner.report()["capture"] == 2
+    assert runner.report()["replay"] == 3
+    assert runner.report()["capture_failed"] == 0
+    assert torch.isfinite(torch.randn(8, device=cuda_device)).all()
+
+
+@pytest.mark.parametrize("layout", ("sliced", "expanded"))
+@torch.no_grad()
+def test_compiled_capture_warms_static_input_layout(cuda_device: torch.device, layout: str) -> None:
+    def compute(value: torch.Tensor) -> torch.Tensor:
+        return value + 1
+
+    storage = torch.arange(24, device=cuda_device, dtype=torch.float32).reshape(3, 8)
+    value = storage[:, ::2] if layout == "sliced" else storage[:1, :4].expand(3, 4)
+    compiled = torch.compile(compute, backend="inductor", fullgraph=True, options={"triton.cudagraphs": False})
+    runner = InferenceCUDAGraphRunner(compiled, warmup=1)
+    assert runner.capture(value)
+    runner.freeze()
+    storage.add_(7)
+    torch.testing.assert_close(runner(value), compute(value), rtol=0, atol=0)
+    report = runner.report()
+    assert report["capture"] == report["replay"] == 1
+    assert report["capture_failed"] == report["eager"] == 0
+
+
+@torch.no_grad()
+def test_reordered_keyword_arguments_preserve_tensor_binding(cuda_device: torch.device) -> None:
+    runner = InferenceCUDAGraphRunner(lambda *, left, right: left - right, warmup=1)
+    left = torch.ones(3, device=cuda_device)
+    right = torch.full_like(left, 5)
+    runner(left=left, right=right)
+    actual = runner(right=right, left=left)
+    torch.testing.assert_close(actual, left - right, rtol=0, atol=0)
+    assert runner.report()["graphs"] == 1
+
+
+@torch.no_grad()
+def test_autocast_capture_outlives_temporary_weight_cache(cuda_device: torch.device) -> None:
+    model = torch.nn.Linear(128, 128, device=cuda_device).eval()
+    value = torch.randn(4, 128, device=cuda_device)
+    runner = InferenceCUDAGraphRunner(model, warmup=1)
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        expected = model(value).clone()
+        assert runner.capture(value)
+    # Free cached casts before replay. A graph must own or reproduce all casts,
+    # not depend on an enclosing request's autocast-cache lifetime.
+    torch.cuda.empty_cache()
+    runner.freeze()
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        actual = runner(value)
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    assert runner.report()["replay"] == 1
+
+
+@torch.inference_mode()
+def test_nested_kv_inputs_and_explicit_capture_freeze(cuda_device: torch.device) -> None:
+    def transform(value: torch.Tensor, *, state: dict) -> torch.Tensor:
+        key, val = state["kv"][0]
+        return value * key + val * state["scale"]
+
+    runner = InferenceCUDAGraphRunner(transform, warmup=1)
+    value = torch.ones((3, 4), device=cuda_device)
+    state = {"kv": [(value * 2, value * 3)], "scale": 2}
+    assert runner.capture(value, state=state)
+    assert runner.report()["replay"] == 0
+    runner.freeze()
+    runner.begin_request_window()
+    retained = []
+    for index in range(3):
+        # In-place edits of inference tensors have no version counter. Every
+        # nested leaf must still be copied, not just pointer-compared.
+        state["kv"][0][0].add_(1)
+        state["kv"][0][1].fill_(index)
+        actual = runner(value, state=state)
+        expected = transform(value, state=state)
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+        retained.append((actual, expected.clone()))
+    for actual, expected in retained:
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    state["scale"] = 3
+    torch.testing.assert_close(runner(value, state=state), transform(value, state=state), rtol=0, atol=0)
+    report = runner.report()
+    assert report["graphs"] == 1
+    assert report["capture"] == report["capture_failed"] == 0
+    assert report["replay"] == 3 and report["eager"] == 1
+    assert runner.capture(value, state=state)
+    assert not runner.capture_on_miss

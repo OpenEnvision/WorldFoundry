@@ -130,7 +130,22 @@ class LongViePipeline(PipelineABC):
             return result
         return result.get("video") or result.get("artifact_path") or result
 
-    def stream(self, *args: Any, reset_memory: bool = False, **kwargs: Any) -> Any:
+    def stream(
+        self,
+        prompt: str = "",
+        images: Any = None,
+        video: Any = None,
+        interactions: Any = None,
+        output_path: str | Path | None = None,
+        fps: int | None = 16,
+        return_dict: bool = False,
+        ref_image_path: str | Path | None = None,
+        operator_kwargs: Mapping[str, Any] | None = None,
+        *,
+        reset_memory: bool = False,
+        num_frames: int | None = None,
+        **kwargs: Any,
+    ) -> Any:
         """Generate the next queued 81-frame segment using resident state.
 
         LongVie is a full diffusion segment generator, not a low-latency key
@@ -149,7 +164,19 @@ class LongViePipeline(PipelineABC):
                 "reconstruct the official eight-frame/noise continuation state."
             )
         kwargs["continue_from_memory"] = not reset_memory
-        return self(*args, **kwargs)
+        return self(
+            prompt=prompt,
+            images=images,
+            video=video,
+            interactions=interactions,
+            output_path=output_path,
+            fps=fps,
+            return_dict=return_dict,
+            ref_image_path=ref_image_path,
+            operator_kwargs=operator_kwargs,
+            num_frames=num_frames,
+            **kwargs,
+        )
 
     def reset_memory(self) -> None:
         """Reset memory for LongViePipeline."""
@@ -164,6 +191,7 @@ class LongViePipeline(PipelineABC):
 
 class LongVie1Pipeline(LongViePipeline):
     """Pipeline implementation for LongVie1 visual generation."""
+
     MODEL_ID = "longvie-1"
 
 

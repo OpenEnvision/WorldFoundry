@@ -16,9 +16,10 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
     parse_torch_dtype,
 )
 from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 
-from .cosmos3_runtime import resolve_cosmos3_runtime_options
 from ..pipeline_utils import PipelineABC
+from .cosmos3_runtime import resolve_cosmos3_runtime_options
 
 
 def _model_id(requested: str | None, source: object) -> str:
@@ -188,14 +189,27 @@ class Cosmos3Pipeline(PipelineABC):
             inputs=inputs,
         )
         output = self.native_pipeline(request)
+        video_chunk = None
+        if output_type != "latent":
+            video_chunk = VideoChunk(
+                frames=output.sample, layout="bcthw", value_range="-1,1", metadata={"fps": float(fps or 24.0)}
+            )
         artifact_path = None
-        if output_path is not None:
-            artifact_path = save_image_or_video_tensor(output.sample, output_path, fps=int(fps or 24))
+        if output_path is not None and video_chunk is not None:
+            artifact_path = save_image_or_video_tensor(
+                output.sample,
+                output_path,
+                fps=int(fps or 24),
+                layout=video_chunk.layout,
+                value_range=video_chunk.value_range,
+            )
         result = {
             "video": output.sample,
             "artifact_path": artifact_path,
             "latents": output.latents,
             **dict(output.artifacts),
+            "video_chunk": video_chunk,
+            "fps": float(fps or 24.0),
             "metadata": dict(output.metadata),
         }
         return result if return_dict else (artifact_path or output.sample)

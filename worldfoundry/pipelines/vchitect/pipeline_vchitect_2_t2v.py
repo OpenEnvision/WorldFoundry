@@ -11,8 +11,13 @@ import torch
 
 from worldfoundry.base_models.diffusion_model import NativeDiffusionPipeline
 from worldfoundry.base_models.diffusion_model.contracts import DiffusionRequest, SamplingConfig
-from worldfoundry.base_models.diffusion_model.optimizations import RuntimePolicy, parse_offload_policy, parse_torch_dtype
+from worldfoundry.base_models.diffusion_model.optimizations import (
+    RuntimePolicy,
+    parse_offload_policy,
+    parse_torch_dtype,
+)
 from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 from worldfoundry.operators.runtime_video_operator import RuntimeVideoOperator
 from worldfoundry.synthesis.visual_generation.memory.video import VideoArtifactMemory
 
@@ -41,7 +46,7 @@ class Vchitect2T2VPipeline(PipelineABC):
         self.model_name = self.MODEL_ID
 
     @classmethod
-    def from_pretrained(
+    def from_pretrained(  # ty: ignore[invalid-method-override]
         cls,
         model_path: str | Mapping[str, Any] | None = None,
         required_components: Mapping[str, Any] | None = None,
@@ -51,6 +56,8 @@ class Vchitect2T2VPipeline(PipelineABC):
         options = dict(model_path) if isinstance(model_path, Mapping) else {}
         options.update(required_components or {})
         options.update(kwargs)
+        if options.get("plan_only"):
+            raise ValueError("Vchitect-2 no longer supports plan_only; use Vchitect2T2VPipeline.plan()")
         source = options.get("checkpoint_path", options.get("model_path", model_path))
         overrides = None
         if isinstance(source, (str, Path)):
@@ -118,6 +125,8 @@ class Vchitect2T2VPipeline(PipelineABC):
         output_type: str = "video",
         **kwargs: Any,
     ) -> Any:
+        if kwargs.get("plan_only"):
+            raise ValueError("Vchitect-2 no longer supports plan_only; use Vchitect2T2VPipeline.plan()")
         del kwargs
         processed = self.process(prompt=prompt, images=images)
         output = self.native_pipeline(
@@ -135,11 +144,24 @@ class Vchitect2T2VPipeline(PipelineABC):
                 inputs={"return_latent": output_type == "latent", "fps": int(fps or self.DEFAULT_FPS)},
             )
         )
+        video_chunk = None
+        if output_type != "latent":
+            video_chunk = VideoChunk(
+                frames=output.sample, layout="bcthw", value_range="-1,1", metadata={"fps": int(fps or self.DEFAULT_FPS)}
+            )
         artifact_path = None
-        if output_path is not None and output_type != "latent":
-            artifact_path = save_image_or_video_tensor(output.sample, output_path, fps=int(fps or self.DEFAULT_FPS))
+        if output_path is not None and video_chunk is not None:
+            artifact_path = save_image_or_video_tensor(
+                output.sample,
+                output_path,
+                fps=int(fps or self.DEFAULT_FPS),
+                layout=video_chunk.layout,
+                value_range=video_chunk.value_range,
+            )
         result = {
             "video": output.sample,
+            "video_chunk": video_chunk,
+            "fps": int(fps or self.DEFAULT_FPS),
             "generated_video": output.sample,
             "latents": output.latents,
             "artifact_path": artifact_path,
@@ -150,11 +172,30 @@ class Vchitect2T2VPipeline(PipelineABC):
         }
         return result if return_dict else (artifact_path or output.sample)
 
-    def stream(self, prompt: str = "", images: Any = None, **kwargs: Any) -> Any:
-        result = self(prompt=prompt, images=images, return_dict=True, **kwargs)
+    def stream_state_ready(self) -> bool:
+        """Artifact history is not conditioning state for another generation."""
+        return False
+
+    def stream(
+        self,
+        prompt: str = "",
+        images: Any = None,
+        *,
+        return_dict: bool = False,
+        fps: int | None = None,
+        num_frames: int | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Generate from explicit inputs, retaining decoded artifact history."""
+        result = self(prompt=prompt, images=images, return_dict=True, fps=fps, num_frames=num_frames, **kwargs)
         value = result.get("artifact_path") or result["video"]
-        self.memory_module.record(value, metadata={"prompt": prompt, "model_name": self.MODEL_ID})
-        return value
+        if result["video_chunk"] is not None:
+            self.memory_module.record(
+                value,
+                metadata={"prompt": prompt, "model_name": self.MODEL_ID},
+                video_chunk=None if result.get("artifact_path") else result["video_chunk"],
+            )
+        return result if return_dict else value
 
     def get_synthesis_model(self) -> NativeDiffusionPipeline:
         return self.native_pipeline

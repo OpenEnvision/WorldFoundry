@@ -15,16 +15,19 @@ import time
 import traceback
 import warnings
 from collections import OrderedDict
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Sequence, TypeGuard, cast
 
 import numpy as np
 from packaging.requirements import InvalidRequirement, Requirement
 from PIL import Image
+
+if TYPE_CHECKING:
+    from numpy.typing import ArrayLike
 
 from worldfoundry.core.io.formats.serialization import write_json as _core_write_json
 from worldfoundry.core.utils.python.import_guard import third_party_lazy_import_guard
@@ -41,28 +44,6 @@ except Exception:  # pragma: no cover - imageio is optional for JSON-only action
 
 torch: Any | None = None
 
-NAVIGATION_DELTAS: Dict[str, list[float]] = {
-    "forward": [0.0, 0.0, -0.5, 0.0, 0.0],
-    "backward": [0.0, 0.0, 0.5, 0.0, 0.0],
-    "left": [-0.5, 0.0, 0.0, 0.0, 0.0],
-    "right": [0.5, 0.0, 0.0, 0.0, 0.0],
-    "forward_left": [-0.35, 0.0, -0.35, 0.0, 0.0],
-    "forward_right": [0.35, 0.0, -0.35, 0.0, 0.0],
-    "backward_left": [-0.35, 0.0, 0.35, 0.0, 0.0],
-    "backward_right": [0.35, 0.0, 0.35, 0.0, 0.0],
-    "camera_up": [0.0, 0.0, 0.0, -0.15, 0.0],
-    "camera_down": [0.0, 0.0, 0.0, 0.15, 0.0],
-    "camera_l": [0.0, 0.0, 0.0, 0.0, -0.15],
-    "camera_r": [0.0, 0.0, 0.0, 0.0, 0.15],
-    "camera_ul": [0.0, 0.0, 0.0, -0.1, -0.1],
-    "camera_ur": [0.0, 0.0, 0.0, -0.1, 0.1],
-    "camera_dl": [0.0, 0.0, 0.0, 0.1, -0.1],
-    "camera_dr": [0.0, 0.0, 0.0, 0.1, 0.1],
-    "camera_zoom_in": [0.0, 0.0, -0.3, 0.0, 0.0],
-    "camera_zoom_out": [0.0, 0.0, 0.3, 0.0, 0.0],
-}
-
-
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".webm", ".mkv"}
 SPLAT_EXTS = {".spz", ".splat", ".ksplat", ".sog"}
@@ -70,6 +51,7 @@ MESH_EXTS = {".obj", ".glb", ".gltf", ".stl"}
 MODEL_EXTS = {".ply", *MESH_EXTS}
 LINGBOT_WORLD_MODEL_ID = "lingbot-world"
 LINGBOT_WORLD_V2_MODEL_ID = "lingbot-world-v2"
+LINGBOT_WORLD_V2_SMALL_MODEL_ID = "lingbot-world-v2-1.3b"
 MATRIX_GAME3_MODEL_ID = "matrix-game-3"
 LONGVIE2_MODEL_ID = "longvie-2"
 HELIOS_MODEL_ID = "helios"
@@ -165,6 +147,8 @@ def _input_path_should_bind_as_video(input_path: str | None, names: set[str]) ->
     image_like_params = {"images", "image_path", "input_data"}
     video_like_params = {"videos", "video", "video_path"}
     return not (names & image_like_params) and bool(names & video_like_params)
+
+
 MODEL_RUNTIME_EXTRA_HINTS = {
     "vggt": "repair the resolved VGGT conda env from its runtime manifest",
     "vggt-omega": "repair the resolved VGGT-Omega conda env from runtime/environments/three_d/vggt-omega.yaml",
@@ -244,8 +228,6 @@ def _torchrun_rank() -> int:
         return 0
 
 
-
-
 def _torchrun_cuda_device_index(torch_module: Any) -> int:
     """Map LOCAL_RANK without silently collapsing several ranks onto one GPU."""
 
@@ -281,10 +263,7 @@ def _torchrun_cuda_device_index(torch_module: Any) -> int:
 
 
 def _torchrun_lingbot_fast_enabled() -> bool:
-    return (
-        _env_flag(TORCHRUN_LINGBOT_FAST_ENV)
-        and _torchrun_world_size() > 1
-    )
+    return _env_flag(TORCHRUN_LINGBOT_FAST_ENV) and _torchrun_world_size() > 1
 
 
 @lru_cache(maxsize=1)
@@ -303,7 +282,9 @@ def _same_executable(left: str | Path, right: str | Path) -> bool:
         return str(left) == str(right)
 
 
-def _should_check_runtime_imports_in_current_process(spec: RuntimeCondaEnvSpec | None) -> bool:
+def _should_check_runtime_imports_in_current_process(
+    spec: RuntimeCondaEnvSpec | None,
+) -> TypeGuard[RuntimeCondaEnvSpec]:
     if spec is None:
         return False
     if _env_flag(STUDIO_CONDA_CHILD_ENV):
@@ -386,14 +367,12 @@ def _runtime_dependency_error(entry: CatalogEntry, missing: Sequence[str]) -> Ru
         "repair the resolved per-model conda env from its runtime manifest",
     )
     details = [
-        f"{entry.display_name} runtime is missing Python modules in the active runtime process: "
-        f"{', '.join(missing)}.",
+        f"{entry.display_name} runtime is missing Python modules in the active runtime process: {', '.join(missing)}.",
         f"Configure the model conda environment instead of bypassing imports: {install_hint}.",
     ]
     if spec is not None:
         details.append(
-            "Configured runtime env: "
-            f"{spec.env_name} ({spec.python_executable}, exists={str(spec.exists).lower()})."
+            f"Configured runtime env: {spec.env_name} ({spec.python_executable}, exists={str(spec.exists).lower()})."
         )
     return RuntimeError(" ".join(details))
 
@@ -413,8 +392,7 @@ def _is_explicit_local_ref(value: str) -> bool:
 
 def _missing_local_model_ref_error(entry: CatalogEntry, model_ref: str) -> RuntimeError:
     env_key = "WORLDFOUNDRY_STUDIO_MODEL_REF_" + "".join(
-        char if char.isalnum() else "_"
-        for char in entry.model_id.upper()
+        char if char.isalnum() else "_" for char in entry.model_id.upper()
     ).strip("_")
     return RuntimeError(
         f"{entry.display_name} default model_ref points to a missing local path: {model_ref}. "
@@ -482,11 +460,7 @@ def _torchrun_control_group() -> Any:
         # Re-check after claiming creation. Shutdown waits for this claim to be
         # released, while no lifecycle lock is held around PyTorch callbacks.
         dist = _torch_dist()
-        if (
-            dist is None
-            or not dist.is_available()
-            or not dist.is_initialized()
-        ):
+        if dist is None or not dist.is_available() or not dist.is_initialized():
             return None
         created_group = dist.new_group(
             ranks=list(range(_torchrun_world_size())),
@@ -533,12 +507,7 @@ def _torchrun_min_gpu_vram_gib() -> float | None:
         local_bytes = 0
     dist = _torch_dist()
     control_group = _torchrun_control_group()
-    if (
-        dist is not None
-        and dist.is_initialized()
-        and control_group is not None
-        and _torchrun_world_size() > 1
-    ):
+    if dist is not None and dist.is_initialized() and control_group is not None and _torchrun_world_size() > 1:
         memory = torch.tensor(local_bytes, dtype=torch.int64, device="cpu")
         dist.all_reduce(memory, op=dist.ReduceOp.MIN, group=control_group)
         local_bytes = int(memory.item())
@@ -563,9 +532,7 @@ def shutdown_torchrun_lingbot_fast_runtime() -> None:
         _TORCHRUN_CONTROL_GROUP_STATE = "closing"
         _TORCHRUN_CONTROL_GROUP_GENERATION += 1
         _TORCHRUN_CONTROL_GROUP_CONDITION.notify_all()
-        _TORCHRUN_CONTROL_GROUP_CONDITION.wait_for(
-            lambda: not _TORCHRUN_CONTROL_GROUP_CREATING
-        )
+        _TORCHRUN_CONTROL_GROUP_CONDITION.wait_for(lambda: not _TORCHRUN_CONTROL_GROUP_CREATING)
         control_group = _TORCHRUN_CONTROL_GROUP
         _TORCHRUN_CONTROL_GROUP = None
     try:
@@ -675,6 +642,16 @@ def _interaction_tokens_summary(interactions: Any, *, max_tokens: int = 14) -> s
 
 
 def _safe_json(value: Any) -> Any:
+    from worldfoundry.core.media.processing.postprocess import VideoChunk
+
+    if isinstance(value, VideoChunk):
+        return {
+            "frames": _safe_json(value.frames),
+            "layout": value.layout,
+            "value_range": value.value_range,
+            "frame_count": value.frame_count,
+            "metadata": _safe_json(value.metadata),
+        }
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     if isinstance(value, Path):
@@ -775,52 +752,6 @@ def _extract_multi_paths(values: Any) -> list[str]:
     return paths
 
 
-def build_worldfm_pose_sequence(interactions: Sequence[str]) -> list[list[list[float]]]:
-    current = np.eye(4, dtype=np.float64)
-    poses = [current.copy()]
-    for token in interactions:
-        delta = NAVIGATION_DELTAS.get(str(token))
-        if delta is None:
-            raise ValueError(
-                f"WorldFM can convert only navigation tokens into poses. Unsupported token: {token}"
-            )
-        current = apply_camera_delta(current, delta)
-        poses.append(current.copy())
-    return [pose.tolist() for pose in poses]
-
-
-def apply_camera_delta(c2w: np.ndarray, delta: Sequence[float]) -> np.ndarray:
-    dx, dy, dz, theta_x, theta_z = [float(item) for item in delta]
-    result = np.array(c2w, dtype=np.float64).copy()
-
-    rx = np.eye(4, dtype=np.float64)
-    cx, sx = math.cos(theta_x), math.sin(theta_x)
-    rx[1, 1], rx[1, 2] = cx, -sx
-    rx[2, 1], rx[2, 2] = sx, cx
-
-    rz = np.eye(4, dtype=np.float64)
-    cz, sz = math.cos(theta_z), math.sin(theta_z)
-    rz[0, 0], rz[0, 1] = cz, -sz
-    rz[1, 0], rz[1, 1] = sz, cz
-
-    result = result @ rx @ rz
-    result[0, 3] += dx
-    result[1, 3] += dy
-    result[2, 3] += dz
-    return result
-
-
-def guess_intrinsics(image_path: str) -> list[list[float]]:
-    with Image.open(image_path) as image:
-        width, height = image.size
-    focal = float(max(width, height))
-    return [
-        [focal, 0.0, width / 2.0],
-        [0.0, focal, height / 2.0],
-        [0.0, 0.0, 1.0],
-    ]
-
-
 def _tensor_to_numpy(tensor: Any) -> np.ndarray:
     """Move a tensor to CPU and bridge dtypes unsupported by NumPy."""
     tensor = tensor.detach().cpu()
@@ -864,8 +795,16 @@ def _to_uint8_rgb(frame: Any) -> np.ndarray:
 
 
 def _normalize_frame_list(value: Any) -> Optional[list[np.ndarray]]:
+    from worldfoundry.core.media.processing.postprocess import VideoChunk
+
     if value is None:
         return None
+    if isinstance(value, VideoChunk):
+        if value.frame_count == 0:
+            return []
+        from worldfoundry.core.media.codecs.video import video_chunk_to_uint8_frames
+
+        return [_to_uint8_rgb(frame) for frame in video_chunk_to_uint8_frames(value)]
     if hasattr(value, "videos"):
         sr_videos = getattr(value, "sr_videos", None)
         return _normalize_frame_list(sr_videos if sr_videos is not None else getattr(value, "videos"))
@@ -882,7 +821,9 @@ def _normalize_frame_list(value: Any) -> Optional[list[np.ndarray]]:
             if (
                 len(value) in {1, 3, 4}
                 and len(shapes) == 1
-                and all(arr.ndim == 3 and arr.shape[0] not in {1, 3, 4} and arr.shape[-1] not in {1, 3, 4} for arr in arrays)
+                and all(
+                    arr.ndim == 3 and arr.shape[0] not in {1, 3, 4} and arr.shape[-1] not in {1, 3, 4} for arr in arrays
+                )
             ):
                 stacked = np.stack(arrays, axis=-1)
                 return [_to_uint8_rgb(frame) for frame in stacked]
@@ -974,7 +915,8 @@ def _supports_memory_stream(pipeline: Any) -> bool:
     memory = getattr(pipeline, "memory_module", None)
     stream = getattr(pipeline, "stream", None)
     return (
-        memory is not None
+        not callable(getattr(pipeline, "stream_state_ready", None))
+        and memory is not None
         and stream is not None
         and hasattr(memory, "manage")
         and hasattr(memory, "record")
@@ -995,7 +937,7 @@ def _pipeline_stream_state_ready(pipeline: Any) -> bool:
 def export_frames_to_video(frames: Sequence[Any], output_path: str, fps: int = 16) -> str:
     if imageio is None:
         raise RuntimeError("imageio is required to export video previews.")
-    frame_list = [_to_uint8_rgb(frame) for frame in frames]
+    frame_list: list[ArrayLike] = [_to_uint8_rgb(frame) for frame in frames]
     if not frame_list:
         raise RuntimeError("No frames available for video export.")
     output = Path(output_path)
@@ -1091,11 +1033,7 @@ def _should_scan_artifacts(
         return False
     if _missing_required_inference_outputs(request, previews):
         return True
-    meaningful = [
-        path
-        for path in saved_artifacts
-        if Path(path).name not in {"result_metadata.json", "manifest.json"}
-    ]
+    meaningful = [path for path in saved_artifacts if Path(path).name not in {"result_metadata.json", "manifest.json"}]
     return not meaningful
 
 
@@ -1183,11 +1121,7 @@ def _ordered_artifacts_for_preview(artifacts: Sequence[str]) -> list[str]:
 
 
 def _viewport_artifact_paths(artifacts: Sequence[str]) -> list[str]:
-    return [
-        path
-        for path in artifacts
-        if os.path.splitext(path)[1].lower() in VIEWPORT_ARTIFACT_EXTS
-    ]
+    return [path for path in artifacts if os.path.splitext(path)[1].lower() in VIEWPORT_ARTIFACT_EXTS]
 
 
 def _is_decodable_video(path: str) -> bool:
@@ -1263,7 +1197,7 @@ def maybe_extract_video_preview_image(
                 frame = None
                 frame_count = None
                 try:
-                    frame_count = int(reader.count_frames())
+                    frame_count = int(getattr(reader, "count_frames")())
                 except Exception:
                     try:
                         length = reader.get_length()
@@ -1274,7 +1208,8 @@ def maybe_extract_video_preview_image(
                 if frame_count and frame_count > 0:
                     frame = reader.get_data(frame_count - 1)
                 else:
-                    for candidate in reader:
+                    # Reader.__iter__ is incorrectly stubbed as a frame in ImageIO v2.
+                    for candidate in cast(Iterable[np.ndarray], reader):
                         frame = candidate
                 if frame is None:
                     return None
@@ -1395,6 +1330,8 @@ class PreparedInputs:
     api_key: str
     device: str
     infer_metadata: Dict[str, Any] = field(default_factory=dict)
+    # None makes all supplied load options authoritative; staging records override names.
+    explicit_load_params: tuple[str, ...] | None = None
 
 
 def _infer_metadata_variant_id(infer_metadata: Mapping[str, Any] | None) -> str:
@@ -1431,6 +1368,9 @@ def _prepared_inputs_payload(request: PreparedInputs) -> Dict[str, Any]:
         "output_path": request.output_path,
         "call_kwargs": _safe_json(request.call_kwargs),
         "load_kwargs": _safe_json(request.load_kwargs),
+        "explicit_load_params": list(request.explicit_load_params)
+        if request.explicit_load_params is not None
+        else None,
         "model_ref": request.model_ref,
         "backend": request.backend,
         "endpoint": request.endpoint,
@@ -1464,6 +1404,9 @@ def _prepared_inputs_from_payload(payload: Dict[str, Any]) -> PreparedInputs:
         output_path=str(payload.get("output_path", "")),
         call_kwargs=dict(payload.get("call_kwargs", {}) or {}),
         load_kwargs=dict(payload.get("load_kwargs", {}) or {}),
+        explicit_load_params=tuple(payload["explicit_load_params"])
+        if payload.get("explicit_load_params") is not None
+        else None,
         model_ref=str(payload.get("model_ref", "")),
         backend=str(payload.get("backend", "auto")),
         endpoint=str(payload.get("endpoint", "")),
@@ -1490,6 +1433,26 @@ def _required_inference_output_kinds(infer_metadata: Mapping[str, Any]) -> list[
     return required
 
 
+def _is_generated_inference_artifact(request: PreparedInputs, path: str | Path | None) -> bool:
+    """Distinguish model outputs from staged or explicitly supplied conditioning files."""
+    if not path:
+        return False
+    candidate = Path(path).expanduser().resolve()
+    inputs_dir = Path(request.output_dir).expanduser().resolve() / "inputs"
+    if candidate.is_relative_to(inputs_dir):
+        return False
+    input_paths = (
+        request.input_path,
+        request.image_path,
+        request.video_path,
+        request.last_frame_path,
+        request.meta_path,
+        request.panorama_path,
+        *request.reference_image_paths,
+    )
+    return all(candidate != Path(source).expanduser().resolve() for source in input_paths if source)
+
+
 def _missing_required_inference_outputs(
     request: PreparedInputs,
     previews: Mapping[str, Any],
@@ -1499,11 +1462,24 @@ def _missing_required_inference_outputs(
         if kind in {"manifest", "metadata", "camera_controls"}:
             continue
         if kind in {"video", "generated_video"}:
-            ok = bool(previews.get("preview_video"))
+            ok = _is_generated_inference_artifact(request, previews.get("preview_video"))
         elif kind in {"image", "generated_image"}:
-            ok = bool(previews.get("preview_image"))
-        elif kind in {"model", "mesh", "point_cloud", "pointcloud", "splat", "gaussian_splat", "3d", "3d_asset", "generated_3d_asset"}:
-            ok = bool(previews.get("preview_model") or previews.get("preview_splat"))
+            ok = _is_generated_inference_artifact(request, previews.get("preview_image"))
+        elif kind in {
+            "model",
+            "mesh",
+            "point_cloud",
+            "pointcloud",
+            "splat",
+            "gaussian_splat",
+            "3d",
+            "3d_asset",
+            "generated_3d_asset",
+        }:
+            ok = any(
+                _is_generated_inference_artifact(request, previews.get(key))
+                for key in ("preview_model", "preview_splat")
+            )
         else:
             continue
         if not ok:
@@ -1636,8 +1612,8 @@ class _LeasedPipelineIterator:
     """Pin and serialize a pipeline for the lifetime of a lazy result."""
 
     def __init__(self, manager: "StudioManager", context: PipelineContext, iterator: Iterator[Any]) -> None:
-        self._manager = manager
-        self._context = context
+        self._manager: StudioManager | None = manager
+        self._context: PipelineContext | None = context
         self._iterator: Iterator[Any] = iterator
         self._state_lock = threading.Lock()
         self._next_active = False
@@ -1696,6 +1672,7 @@ class _LeasedPipelineIterator:
     def _finalize(self, *, suppress_errors: bool) -> None:
         context = self._context
         manager = self._manager
+        assert context is not None and manager is not None, "pipeline lease must be finalized exactly once"
         iterator = self._iterator
         # Drop our reference before releasing the eviction pin. A closed
         # custom iterator may itself own the pipeline or CUDA tensors.
@@ -1716,8 +1693,8 @@ class _LeasedPipelineIterator:
             manager._release_pipeline_lease(context)
             # A caller may keep an exhausted wrapper around indefinitely; it
             # must not retain an otherwise uncached PipelineContext.
-            self._context = None  # type: ignore[assignment]
-            self._manager = None  # type: ignore[assignment]
+            self._context = None
+            self._manager = None
         if close_error is not None and not suppress_errors:
             raise close_error
 
@@ -1833,6 +1810,21 @@ class BaseRuntimeDriver:
         return manager.materialize_run(ctx, request, result=result, mode="run")
 
     def run_init(self, manager: "StudioManager", ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
+        result = self.initialize_stream(ctx, request)
+        return manager.materialize_run(ctx, request, result=result, mode="init")
+
+    def initialize_stream(
+        self,
+        ctx: PipelineContext,
+        request: PreparedInputs,
+        *,
+        materialize_outputs: bool = True,
+    ) -> Any:
+        """Initialize model-owned or frame-memory state for every dispatch route."""
+        if callable(getattr(ctx.pipeline, "init_stream", None)):
+            result = self._invoke(ctx, request, mode="init", materialize_outputs=materialize_outputs)
+            ctx.state["studio_stream_initialized"] = _pipeline_stream_state_ready(ctx.pipeline)
+            return result
         if not _supports_memory_stream(ctx.pipeline):
             raise RuntimeError(
                 f"{ctx.entry.display_name} does not support state-only INIT in Studio. "
@@ -1843,50 +1835,67 @@ class BaseRuntimeDriver:
         if seed_image is None:
             raise ValueError(f"{ctx.entry.display_name} expects an image or tray selection before INIT.")
 
+        if not materialize_outputs:
+            return seed_image
         preview_image = request.image_path
         if not preview_image:
             preview_path = Path(request.output_dir) / "preview.png"
             preview_image = _save_pil(seed_image, preview_path)
-
-        return manager.materialize_run(
-            ctx,
-            request,
-            result={
-                "preview_image": preview_image,
-                "message": f"Interactive state initialized for {ctx.entry.display_name}.",
-            },
-            mode="init",
-            extra_metadata={"message": "interactive state initialized"},
-        )
+        return {
+            "preview_image": preview_image,
+            "message": f"Interactive state initialized for {ctx.entry.display_name}.",
+        }
 
     def run_continue(self, manager: "StudioManager", ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
+        result = self.continue_stream(ctx, request)
+        return manager.materialize_run(ctx, request, result=result, mode="stream")
+
+    def continue_stream(
+        self,
+        ctx: PipelineContext,
+        request: PreparedInputs,
+        *,
+        materialize_outputs: bool = True,
+    ) -> Any:
+        """Advance the resident pipeline without replacing model-owned state."""
         if not ctx.entry.supports_stream or not hasattr(ctx.pipeline, "stream"):
             if ctx.entry.category in {"Embodied Action", "Visual Action"}:
-                result = self._invoke(ctx, request, mode="run")
-                return manager.materialize_run(ctx, request, result=result, mode="stream")
+                return self._invoke(ctx, request, mode="run", materialize_outputs=materialize_outputs)
             if not ctx.entry.supports_stream:
                 raise RuntimeError(f"{ctx.entry.display_name} does not expose stream().")
-            raise RuntimeError(f"{ctx.entry.display_name} is stream-capable but the loaded pipeline does not expose stream().")
+            raise RuntimeError(
+                f"{ctx.entry.display_name} is stream-capable but the loaded pipeline does not expose stream()."
+            )
         self._seed_stream_state(ctx, request, force_reset=False)
         stream_request = self._prepare_stream_request(ctx, request)
-        result = self._invoke(ctx, stream_request, mode="stream")
+        result = self._invoke(ctx, stream_request, mode="stream", materialize_outputs=materialize_outputs)
         if _supports_memory_stream(ctx.pipeline) or _pipeline_stream_state_ready(ctx.pipeline):
             ctx.state["studio_stream_initialized"] = True
-        return manager.materialize_run(ctx, request, result=result, mode="stream")
+        return result
 
     def reset(self, manager: "StudioManager", ctx: PipelineContext) -> str:
         pipeline = ctx.pipeline
+        reset_realtime = getattr(pipeline, "reset_realtime", None)
+        reset_memory = getattr(pipeline, "reset_memory", None)
         memory = getattr(pipeline, "memory_module", None)
-        if memory is not None and hasattr(memory, "manage"):
+        if callable(reset_realtime):
+            reset_realtime()
+        elif callable(reset_memory):
+            reset_memory()
+        elif memory is not None and hasattr(memory, "manage"):
             memory.manage(action="reset")
-        else:
-            reset_memory = getattr(pipeline, "reset_memory", None)
-            if callable(reset_memory):
-                reset_memory()
         ctx.state.clear()
         return f"Reset interactive state for {ctx.entry.display_name}."
 
     def can_init(self, ctx: PipelineContext, request: PreparedInputs) -> bool:
+        if callable(getattr(ctx.pipeline, "init_stream", None)):
+            return bool(
+                request.image is not None
+                or request.image_path
+                or request.input_path
+                or request.meta_path
+                or request.panorama_path
+            )
         return _supports_memory_stream(ctx.pipeline) and self._resolve_init_image(request) is not None
 
     def _resolve_init_image(self, request: PreparedInputs) -> Optional[Image.Image]:
@@ -1963,7 +1972,22 @@ class BaseRuntimeDriver:
         *,
         materialize_outputs: bool = True,
     ) -> Any:
-        method = getattr(ctx.pipeline, "stream" if mode == "stream" else "__call__")
+        method = getattr(ctx.pipeline, {"stream": "stream", "init": "init_stream"}.get(mode, "__call__"))
+        kwargs = self._invoke_kwargs(ctx, request, mode, materialize_outputs=materialize_outputs)
+        result = _call_with_supported_kwargs(method, kwargs)
+        if materialize_outputs and isinstance(result, Iterator):
+            result = list(result)
+        return result
+
+    def _invoke_kwargs(
+        self,
+        ctx: PipelineContext,
+        request: PreparedInputs,
+        mode: str,
+        *,
+        materialize_outputs: bool = True,
+    ) -> dict[str, Any]:
+        method = getattr(ctx.pipeline, {"stream": "stream", "init": "init_stream"}.get(mode, "__call__"))
         base_kwargs = dict(request.call_kwargs)
         names = _signature_names(method)
         accepts_var_kwargs = _accepts_var_kwargs(method)
@@ -1974,9 +1998,7 @@ class BaseRuntimeDriver:
         if ctx.entry.model_id in INTERACTIVE_INFERENCE_SPECS:
             names = set(ctx.entry.call_params)
             accepts_var_kwargs = False
-        declares_visual_modalities = hasattr(ctx.pipeline, "ACCEPTS_IMAGES") or hasattr(
-            ctx.pipeline, "ACCEPTS_VIDEO"
-        )
+        declares_visual_modalities = hasattr(ctx.pipeline, "ACCEPTS_IMAGES") or hasattr(ctx.pipeline, "ACCEPTS_VIDEO")
         accepts_images = getattr(ctx.pipeline, "ACCEPTS_IMAGES", True) is not False
         accepts_video = getattr(ctx.pipeline, "ACCEPTS_VIDEO", True) is not False
         accepts_generic_input = not declares_visual_modalities or accepts_images or accepts_video
@@ -1988,23 +2010,38 @@ class BaseRuntimeDriver:
             base_kwargs.setdefault("prompt", request.prompt)
         if accepts_images and request.image is not None and ("images" in names or accepts_var_kwargs):
             base_kwargs.setdefault("images", request.image)
-        elif accepts_images and request.image_path and ("images" in names or accepts_var_kwargs) and request.image is None:
+        elif (
+            accepts_images
+            and request.image_path
+            and ("images" in names or accepts_var_kwargs)
+            and request.image is None
+        ):
             base_kwargs.setdefault("images", request.image_path)
         elif (
             accepts_images
-            and
-            request.video_path
+            and request.video_path
             and "images" in names
             and request.image is None
             and not accepts_var_kwargs
             and not ({"video", "videos", "video_path"} & names)
         ):
             base_kwargs.setdefault("images", request.video_path)
-        elif accepts_images and request.input_path and not input_path_as_video and ("images" in names or accepts_var_kwargs) and request.image is None:
+        elif (
+            accepts_images
+            and request.input_path
+            and not input_path_as_video
+            and ("images" in names or accepts_var_kwargs)
+            and request.image is None
+        ):
             base_kwargs.setdefault("images", request.input_path)
         if accepts_images and request.image_path and ("image_path" in names or accepts_var_kwargs):
             base_kwargs.setdefault("image_path", request.image_path)
-        elif accepts_images and request.input_path and not input_path_as_video and ("image_path" in names or accepts_var_kwargs):
+        elif (
+            accepts_images
+            and request.input_path
+            and not input_path_as_video
+            and ("image_path" in names or accepts_var_kwargs)
+        ):
             base_kwargs.setdefault("image_path", request.input_path)
         if accepts_video and request.video_path and ("videos" in names or accepts_var_kwargs):
             base_kwargs.setdefault("videos", request.video_path)
@@ -2016,7 +2053,12 @@ class BaseRuntimeDriver:
             base_kwargs.setdefault("video", request.input_path)
         if accepts_video and request.video_path and ("video_path" in names or accepts_var_kwargs):
             base_kwargs.setdefault("video_path", request.video_path)
-        elif accepts_video and request.input_path and input_path_as_video and ("video_path" in names or accepts_var_kwargs):
+        elif (
+            accepts_video
+            and request.input_path
+            and input_path_as_video
+            and ("video_path" in names or accepts_var_kwargs)
+        ):
             base_kwargs.setdefault("video_path", request.input_path)
         if accepts_generic_input and request.input_path and ("input_path" in names or accepts_var_kwargs):
             base_kwargs.setdefault("input_path", request.input_path)
@@ -2049,15 +2091,11 @@ class BaseRuntimeDriver:
         # Studio's generic fallback silently override an explicit native
         # value that is already present in ``call_kwargs``.
         frame_aliases = ("num_frames", "frame_num", "frames", "video_length")
-        if (
-            request.num_frames
-            and "num_frames" in names
-            and not any(alias in base_kwargs for alias in frame_aliases)
-        ):
+        if request.num_frames and "num_frames" in names and not any(alias in base_kwargs for alias in frame_aliases):
             base_kwargs.setdefault("num_frames", request.num_frames)
         if request.fps and "fps" in names:
             base_kwargs.setdefault("fps", request.fps)
-        if mode == "run" and ("return_dict" in names or accepts_var_kwargs):
+        if (mode == "run" and accepts_var_kwargs) or (mode in {"run", "stream"} and "return_dict" in names):
             base_kwargs.setdefault("return_dict", True)
         if mode == "stream" and "images" in names and "images" not in base_kwargs:
             # Some stream() entry points require the images argument even after
@@ -2068,13 +2106,7 @@ class BaseRuntimeDriver:
         if materialize_outputs and ("output_path" in names or accepts_var_kwargs):
             base_kwargs.setdefault("output_path", request.output_path)
 
-        result = _call_with_supported_kwargs(method, base_kwargs)
-        if materialize_outputs and hasattr(result, "__iter__") and not isinstance(
-            result,
-            (dict, list, tuple, str, bytes, Image.Image, np.ndarray),
-        ):
-            result = list(result)
-        return result
+        return base_kwargs
 
 
 class TwoStage3DGSRuntimeDriver(BaseRuntimeDriver):
@@ -2136,7 +2168,11 @@ class TwoStage3DGSRuntimeDriver(BaseRuntimeDriver):
         return manager.materialize_run(
             ctx,
             request,
-            result={"preview_video": preview_video, "recon_info": ctx.state["recon_info"], "first_frame": first_frame_path},
+            result={
+                "preview_video": preview_video,
+                "recon_info": ctx.state["recon_info"],
+                "first_frame": first_frame_path,
+            },
             mode="stream",
         )
 
@@ -2161,9 +2197,11 @@ class TwoStage3DGSRuntimeDriver(BaseRuntimeDriver):
         if interactions:
             repeats = max(int(request.call_kwargs.get("frames_per_interaction", 10)), 1)
             supports_interpolated_actions = ctx.entry.model_id in {"vggt", "vggt-omega"}
-            sequence = list(interactions) if supports_interpolated_actions else [
-                token for token in interactions for _ in range(repeats)
-            ]
+            sequence = (
+                list(interactions)
+                if supports_interpolated_actions
+                else [token for token in interactions for _ in range(repeats)]
+            )
             render_kwargs = {"frames_per_interaction": repeats} if supports_interpolated_actions else {}
             return pipeline.render_interaction_video_with_3dgs(
                 ply_path=recon_info["ply_path"],
@@ -2252,61 +2290,6 @@ class PointCloudNavRuntimeDriver(BaseRuntimeDriver):
         return manager.materialize_run(ctx, request, result=result, mode="stream")
 
 
-class WorldFMRuntimeDriver(BaseRuntimeDriver):
-    kind = "worldfm"
-
-    def _resolve_interactions(self, request: PreparedInputs, fallback: Any = None) -> Any:
-        interactions = request.interactions if request.interactions is not None else fallback
-        if isinstance(interactions, list) and interactions and isinstance(interactions[0], str):
-            return build_worldfm_pose_sequence(interactions)
-        return interactions
-
-    def _resolve_intrinsics(self, request: PreparedInputs) -> Any:
-        if request.intrinsics is not None:
-            return request.intrinsics
-        if request.image_path:
-            return guess_intrinsics(request.image_path)
-        return None
-
-    def run_fresh(self, manager: "StudioManager", ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
-        pipeline = ctx.pipeline
-        call_kwargs = dict(request.call_kwargs)
-        call_interactions = call_kwargs.pop("interactions", None)
-        panorama_path = request.panorama_path or call_kwargs.pop("panorama_path", None)
-        scene_name = request.scene_name or call_kwargs.pop("scene_name", None) or "worldfm_scene"
-        call_kwargs["return_dict"] = True
-        result = pipeline(
-            images=request.image,
-            panorama_path=panorama_path or None,
-            prompt=request.prompt,
-            K=self._resolve_intrinsics(request),
-            interactions=self._resolve_interactions(request, call_interactions),
-            scene_name=scene_name,
-            output_dir=request.output_dir,
-            **call_kwargs,
-        )
-        return manager.materialize_run(ctx, request, result=result, mode="run")
-
-    def run_continue(self, manager: "StudioManager", ctx: PipelineContext, request: PreparedInputs) -> RunRecord:
-        pipeline = ctx.pipeline
-        call_kwargs = dict(request.call_kwargs)
-        call_interactions = call_kwargs.pop("interactions", None)
-        panorama_path = request.panorama_path or call_kwargs.pop("panorama_path", None)
-        scene_name = request.scene_name or call_kwargs.pop("scene_name", None) or "worldfm_scene"
-        call_kwargs["return_dict"] = True
-        result = pipeline.stream(
-            images=request.image,
-            panorama_path=panorama_path or None,
-            prompt=request.prompt,
-            K=self._resolve_intrinsics(request),
-            interactions=self._resolve_interactions(request, call_interactions),
-            scene_name=scene_name,
-            output_dir=request.output_dir,
-            **call_kwargs,
-        )
-        return manager.materialize_run(ctx, request, result=result, mode="stream")
-
-
 def _signature_names(callable_obj: Any) -> set[str]:
     import inspect
 
@@ -2323,10 +2306,7 @@ def _accepts_var_kwargs(callable_obj: Any) -> bool:
         signature = inspect.signature(callable_obj)
     except (TypeError, ValueError):
         return True
-    return any(
-        param.kind == inspect.Parameter.VAR_KEYWORD
-        for param in signature.parameters.values()
-    )
+    return any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values())
 
 
 def _call_with_supported_kwargs(callable_obj: Any, kwargs: Dict[str, Any]) -> Any:
@@ -2337,10 +2317,7 @@ def _call_with_supported_kwargs(callable_obj: Any, kwargs: Dict[str, Any]) -> An
     except (TypeError, ValueError):
         return callable_obj(**kwargs)
 
-    accepts_var_kw = any(
-        param.kind == inspect.Parameter.VAR_KEYWORD
-        for param in signature.parameters.values()
-    )
+    accepts_var_kw = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values())
     if accepts_var_kw:
         cleaned = {}
         for key, value in kwargs.items():
@@ -2349,11 +2326,7 @@ def _call_with_supported_kwargs(callable_obj: Any, kwargs: Dict[str, Any]) -> An
             elif value is not None:
                 cleaned[key] = value
     else:
-        cleaned = {
-            key: value
-            for key, value in kwargs.items()
-            if key in signature.parameters
-        }
+        cleaned = {key: value for key, value in kwargs.items() if key in signature.parameters}
     return callable_obj(**cleaned)
 
 
@@ -2361,13 +2334,16 @@ RUNTIME_DRIVERS: Dict[str, BaseRuntimeDriver] = {
     "default": BaseRuntimeDriver(),
     "two_stage_3dgs": TwoStage3DGSRuntimeDriver(),
     "pointcloud_nav": PointCloudNavRuntimeDriver(),
-    "worldfm": WorldFMRuntimeDriver(),
+    "worldfm": BaseRuntimeDriver(),
 }
 
 
 class StudioManager:
     def __init__(
-        self, workspace_root: str | None = None, max_cached_pipelines: int = 2, *,
+        self,
+        workspace_root: str | None = None,
+        max_cached_pipelines: int = 2,
+        *,
         record_processor: Callable[[RunRecord, CatalogEntry], RunRecord] | None = None,
     ) -> None:
         # Optional presentation adapter supplied by a UI, never imported here.
@@ -2437,9 +2413,7 @@ class StudioManager:
             if entry.model_id == LONGVIE2_MODEL_ID:
                 world_size = _torchrun_world_size()
                 if world_size != 4:
-                    raise RuntimeError(
-                        "LongVie 2 distributed Studio requires exactly four torchrun ranks."
-                    )
+                    raise RuntimeError("LongVie 2 distributed Studio requires exactly four torchrun ranks.")
                 load_kwargs.update(
                     use_usp=True,
                     ring_degree=1,
@@ -2447,46 +2421,17 @@ class StudioManager:
                 )
             return replace(request, load_kwargs=load_kwargs, device=device)
 
-        replicate_model = False
-        total_gib = _torchrun_min_gpu_vram_gib()
-        if total_gib is not None:
-            try:
-                min_gib = float(os.getenv("WORLDFOUNDRY_LINGBOT_REPLICATED_MIN_VRAM_GB", "72") or "72")
-                replicate_model = total_gib >= max(min_gib, 0.0)
-            except ValueError:
-                replicate_model = False
-        # Replication avoids per-block FSDP all-gathers on 80GB-class GPUs.
-        # Lower-memory and unknown devices default to the conservative sharded
-        # path; explicit user choices always win.
-        load_kwargs.setdefault("t5_fsdp", not replicate_model)
-        load_kwargs.setdefault("dit_fsdp", not replicate_model)
-        load_kwargs.setdefault(
-            "ulysses_size",
-            _torchrun_world_size() if lingbot_fast_sequence_parallel_enabled() else 1
+        from worldfoundry.pipelines.lingbot_world.distributed import prepare_torchrun_kwargs
+
+        load_kwargs, call_kwargs = prepare_torchrun_kwargs(
+            model_id=entry.model_id,
+            load_kwargs=load_kwargs,
+            call_kwargs=request.call_kwargs,
+            world_size=_torchrun_world_size(),
+            minimum_gpu_vram_gib=_torchrun_min_gpu_vram_gib(),
+            sequence_parallel=lingbot_fast_sequence_parallel_enabled(),
+            explicit_load_params=request.explicit_load_params,
         )
-        load_kwargs.setdefault("t5_cpu", False)
-
-        # LingBot v1 keeps ``offload_model`` in call kwargs, while its runtime
-        # constructor also uses that value as the default prediction policy.
-        # Propagate the effective request policy into the loader so the
-        # catalog's distributed default (DiT FSDP + no offload) is not
-        # accidentally validated against the constructor's legacy
-        # ``offload_model=True`` default.  Call kwargs are authoritative for
-        # the actual prediction, so synchronize that effective policy before
-        # the loader performs its FSDP/offload preflight.
-        load_kwargs["offload_model"] = bool(
-            request.call_kwargs.get("offload_model", load_kwargs.get("offload_model", False))
-        )
-
-        call_kwargs = dict(request.call_kwargs)
-
-        if entry.model_id == LINGBOT_WORLD_V2_MODEL_ID:
-            # The active Workspace process group is authoritative.  Catalog
-            # defaults describe the official eight-rank recipe, but a valid
-            # compact four-rank launch must not carry a stale eight into the
-            # runtime's preflight validation.
-            call_kwargs["nproc_per_node"] = _torchrun_world_size()
-        call_kwargs.setdefault("offload_model", False)
 
         return replace(
             request,
@@ -2499,6 +2444,7 @@ class StudioManager:
         if entry.model_id not in {
             LINGBOT_WORLD_MODEL_ID,
             LINGBOT_WORLD_V2_MODEL_ID,
+            LINGBOT_WORLD_V2_SMALL_MODEL_ID,
             MATRIX_GAME3_MODEL_ID,
             LONGVIE2_MODEL_ID,
             HELIOS_MODEL_ID,
@@ -2513,13 +2459,12 @@ class StudioManager:
             world_size = _torchrun_world_size()
             if world_size not in {1, 4}:
                 raise RuntimeError(
-                    "LongVie 2 supports only one GPU or exactly four USP ranks; "
-                    f"got WORLD_SIZE={world_size}."
+                    f"LongVie 2 supports only one GPU or exactly four USP ranks; got WORLD_SIZE={world_size}."
                 )
             return world_size == 4
         if entry.model_id in {MATRIX_GAME3_MODEL_ID, HELIOS_MODEL_ID, DREAMX_WORLD_MODEL_ID}:
             return _torchrun_world_size() > 1
-        if entry.model_id == LINGBOT_WORLD_V2_MODEL_ID:
+        if entry.model_id in {LINGBOT_WORLD_V2_MODEL_ID, LINGBOT_WORLD_V2_SMALL_MODEL_ID}:
             return True
         runtime_variant = str(request.load_kwargs.get("runtime_variant", "") or "").strip().lower()
         if runtime_variant == "fast":
@@ -2607,9 +2552,7 @@ class StudioManager:
                     message = driver.reset(self, ctx)
                     record = self._make_message_record(entry, request, message)
                 elif not materialize:
-                    raise RuntimeError(
-                        "Non-materializing torchrun Studio execution only supports fresh run actions."
-                    )
+                    raise RuntimeError("Non-materializing torchrun Studio execution only supports fresh run actions.")
                 else:
                     raise ValueError(f"Unsupported Studio action: {action}")
                 if perf_segments is not None:
@@ -2648,12 +2591,10 @@ class StudioManager:
                 if action in {"configure", "init"}:
                     if action == "configure" and not driver.can_init(ctx, request):
                         return None
+                    result = driver.initialize_stream(ctx, request, materialize_outputs=False)
                     if materialize:
-                        return driver.run_init(self, ctx, request)
-                    seed_image = driver._seed_stream_state(ctx, request, force_reset=True)
-                    if seed_image is None:
-                        raise ValueError(f"{ctx.entry.display_name} expects an image or tray selection before INIT.")
-                    return seed_image
+                        return self.materialize_run(ctx, request, result=result, mode="init")
+                    return result
 
                 if action == "run":
                     result = driver._invoke(
@@ -2672,32 +2613,9 @@ class StudioManager:
                     return result
 
                 if action == "stream":
-                    if not ctx.entry.supports_stream:
-                        if ctx.entry.category in {"Embodied Action", "Visual Action"}:
-                            result = driver._invoke(
-                                ctx,
-                                request,
-                                mode="run",
-                                materialize_outputs=False,
-                            )
-                            if isinstance(result, Iterator):
-                                result = list(result)
-                            if materialize:
-                                return self.materialize_run(ctx, request, result=result, mode="stream")
-                            return result
-                        raise RuntimeError(f"{ctx.entry.display_name} does not expose stream().")
-                    driver._seed_stream_state(ctx, request, force_reset=False)
-                    stream_request = driver._prepare_stream_request(ctx, request)
-                    result = driver._invoke(
-                        ctx,
-                        stream_request,
-                        mode="stream",
-                        materialize_outputs=False,
-                    )
+                    result = driver.continue_stream(ctx, request, materialize_outputs=False)
                     if isinstance(result, Iterator):
                         result = list(result)
-                    if _supports_memory_stream(ctx.pipeline) or _pipeline_stream_state_ready(ctx.pipeline):
-                        ctx.state["studio_stream_initialized"] = True
                     if materialize:
                         return self.materialize_run(ctx, request, result=result, mode="stream")
                     return result
@@ -2730,9 +2648,7 @@ class StudioManager:
 
         if action in {"configure", "init"}:
             seed_image = driver._resolve_init_image(request)
-            prompt_only_configure = (
-                "prompt-scheduled" in ctx.entry.tags and bool(str(request.prompt or "").strip())
-            )
+            prompt_only_configure = "prompt-scheduled" in ctx.entry.tags and bool(str(request.prompt or "").strip())
             if seed_image is None and not prompt_only_configure:
                 prepare = getattr(pipeline, "prepare_realtime", None)
                 if callable(prepare):
@@ -2752,9 +2668,7 @@ class StudioManager:
 
         if action == "stream":
             if not ctx.state.get("studio_stream_initialized"):
-                raise RuntimeError(
-                    f"{ctx.entry.display_name} realtime stream has not been configured."
-                )
+                raise RuntimeError(f"{ctx.entry.display_name} realtime stream has not been configured.")
             kwargs = dict(request.call_kwargs)
             for key in ("images", "image", "prompt", "interactions"):
                 kwargs.pop(key, None)
@@ -2766,11 +2680,7 @@ class StudioManager:
             return True, result
 
         if action == "reset":
-            reset = getattr(pipeline, "reset_realtime", None)
-            if callable(reset):
-                reset()
-            ctx.state.clear()
-            return True, f"Reset realtime state for {ctx.entry.display_name}."
+            return True, driver.reset(self, ctx)
 
         return False, None
 
@@ -2820,10 +2730,7 @@ class StudioManager:
                 removed.append(context.entry.display_name)
                 self._dispose_pipeline_context(context)
             if removed and scheduled:
-                return (
-                    f"Unloaded: {', '.join(removed)}. "
-                    f"Scheduled after active stream: {', '.join(scheduled)}."
-                )
+                return f"Unloaded: {', '.join(removed)}. Scheduled after active stream: {', '.join(scheduled)}."
             if removed:
                 return f"Unloaded: {', '.join(removed)}."
             if scheduled:
@@ -2900,10 +2807,7 @@ class StudioManager:
         failures = [status for status in statuses if status and status.get("error")]
         if failures:
             if rank == 0:
-                joined = "; ".join(
-                    f"rank {status['rank']}: {status['error']}"
-                    for status in failures
-                )
+                joined = "; ".join(f"rank {status['rank']}: {status['error']}" for status in failures)
                 raise RuntimeError(f"Distributed Studio command failed: {joined}")
             return None
         return local_result if rank == 0 else None
@@ -2969,8 +2873,7 @@ class StudioManager:
             self._dispose_pipeline_context(context)
             return
         raise RuntimeError(
-            "All cached pipelines are serving active lazy streams; "
-            "cannot evict one safely for a new model load."
+            "All cached pipelines are serving active lazy streams; cannot evict one safely for a new model load."
         )
 
     def _lease_lazy_pipeline_result(
@@ -3141,8 +3044,9 @@ class StudioManager:
             )
             if supports_input_kwarg and (current_missing or current_is_default):
                 call_kwargs["input_path"] = raw_input_path
+        load_overrides = parse_jsonish(load_kwargs_text, default={}) or {}
         load_kwargs = entry.default_load_kwargs.copy()
-        load_kwargs.update(parse_jsonish(load_kwargs_text, default={}) or {})
+        load_kwargs.update(load_overrides)
 
         if entry.category in {"Embodied Action", "Visual Action"}:
             call_kwargs.setdefault("return_dict", True)
@@ -3181,6 +3085,7 @@ class StudioManager:
             api_key=(api_key or "").strip(),
             device=(device or "cuda").strip(),
             infer_metadata=dict(infer_metadata or {}),
+            explicit_load_params=tuple(load_overrides),
         )
 
     def _prepare_run_request(
@@ -3335,6 +3240,72 @@ class StudioManager:
         self._persist_performance_metadata(record, perf_segments)
         return record
 
+    def run_batch(self, calls: Sequence[Mapping[str, Any]]) -> tuple[RunRecord, ...]:
+        """Run compatible normalized fresh T2V jobs under one pipeline lease.
+
+        Each call uses the arguments of run(), without progress callbacks or
+        materialize overrides. All jobs retain separate directories and records.
+        Loading, native execution and export failures propagate without retries.
+        """
+        from .batching import native_batch_key
+
+        if not calls:
+            raise ValueError("Studio run_batch requires one or more calls")
+        key = native_batch_key(calls[0])
+        if key is None or any(native_batch_key(call) != key for call in calls[1:]):
+            raise ValueError("Studio batch requires compatible resident native Wan calls")
+        prepared = []
+        for call in calls:
+            kwargs = dict(call)
+            kwargs.pop("action")
+            prepared.append(self._prepare_run_request(**kwargs))
+        entry, first, _, _ = prepared[0]
+        driver = self.runtime_driver_for(entry)
+        if type(driver) is not BaseRuntimeDriver:
+            raise ValueError("Studio batch requires the native base runtime driver")
+        load_started = time.perf_counter()
+        with self.lock:
+            ctx = driver.load_pipeline(self, entry, first)
+            self._pin_pipeline_context(ctx)
+        load_ms = (time.perf_counter() - load_started) * 1000.0
+        try:
+            with ctx.lifecycle_lock:
+                execute = getattr(ctx.pipeline, "batch_call", None)
+                if not callable(execute):
+                    raise ValueError("pipeline does not support native product batches")
+                call_kwargs = [driver._invoke_kwargs(ctx, request, "run") for _, request, _, _ in prepared]
+                started = time.perf_counter()
+                results = execute(call_kwargs)
+                execute_ms = (time.perf_counter() - started) * 1000.0
+                if len(results) != len(prepared):
+                    raise RuntimeError("Studio batch must return one result per request")
+                records = []
+                for index, (result, (_, request, timings, wall_start)) in enumerate(zip(results, prepared)):
+                    driver._prime_memory_after_fresh(ctx, result)
+                    record = self.materialize_run(
+                        ctx,
+                        request,
+                        result=result,
+                        mode="run",
+                        extra_metadata={
+                            "studio_request_batching": {
+                                "request_count": len(calls),
+                                "request_index": index,
+                                "receipt_scope": "batch",
+                            },
+                        },
+                    )
+                    timings.update(
+                        batch_load_ms=load_ms,
+                        batch_execute_ms=execute_ms,
+                        total_client_ms=(time.perf_counter() - wall_start) * 1000.0,
+                    )
+                    self._persist_performance_metadata(record, timings)
+                    records.append(record)
+                return tuple(records)
+        finally:
+            self._release_pipeline_lease(ctx)
+
     def run_realtime(
         self,
         *,
@@ -3394,12 +3365,7 @@ class StudioManager:
             if action in {"configure", "init"}:
                 if action == "configure" and not driver.can_init(ctx, request):
                     return None
-                seed_image = driver._seed_stream_state(ctx, request, force_reset=True)
-                if seed_image is None:
-                    raise ValueError(
-                        f"{ctx.entry.display_name} expects an image before realtime INIT."
-                    )
-                return seed_image
+                return driver.initialize_stream(ctx, request, materialize_outputs=False)
             if action == "run":
                 result = driver._invoke(
                     ctx,
@@ -3411,19 +3377,8 @@ class StudioManager:
                 return finish_realtime_result(result)
             if action == "stream":
                 if not ctx.entry.supports_stream or not hasattr(ctx.pipeline, "stream"):
-                    raise RuntimeError(
-                        f"{ctx.entry.display_name} does not expose realtime stream controls."
-                    )
-                driver._seed_stream_state(ctx, request, force_reset=False)
-                stream_request = driver._prepare_stream_request(ctx, request)
-                result = driver._invoke(
-                    ctx,
-                    stream_request,
-                    mode="stream",
-                    materialize_outputs=False,
-                )
-                if _supports_memory_stream(ctx.pipeline) or _pipeline_stream_state_ready(ctx.pipeline):
-                    ctx.state["studio_stream_initialized"] = True
+                    raise RuntimeError(f"{ctx.entry.display_name} does not expose realtime stream controls.")
+                result = driver.continue_stream(ctx, request, materialize_outputs=False)
                 return finish_realtime_result(result)
             if action == "reset":
                 return driver.reset(self, ctx)
@@ -3493,6 +3448,7 @@ class StudioManager:
             LONGVIE2_MODEL_ID,
             HELIOS_MODEL_ID,
             DREAMX_WORLD_MODEL_ID,
+            LINGBOT_WORLD_V2_SMALL_MODEL_ID,
         }:
             command = {"kind": "reset_model", "model_id": model_id}
             result = self._run_torchrun_command(command)
@@ -3545,9 +3501,7 @@ class StudioManager:
                 )
                 if isinstance(exported, Mapping):
                     saved_artifacts.extend(
-                        str(path)
-                        for path in exported.values()
-                        if isinstance(path, str) and Path(path).exists()
+                        str(path) for path in exported.values() if isinstance(path, str) and Path(path).exists()
                     )
             preview_images = _save_preview_image_sequence(
                 result.get("depth_visualizations"),
@@ -3564,7 +3518,7 @@ class StudioManager:
             saved_artifacts.extend(preview_images)
             for key in ("generated_video_path", "output_path", "preview_video", "video_path"):
                 value = result.get(key)
-                if isinstance(value, str) and Path(value).exists():
+                if isinstance(value, str) and Path(value).exists() and _is_generated_inference_artifact(request, value):
                     value = _persist_video_artifact_in_run(
                         value,
                         output_dir=output_dir,
@@ -3587,7 +3541,7 @@ class StudioManager:
                 "visualization_artifact_path",
             ):
                 value = result.get(key)
-                if isinstance(value, str) and Path(value).exists():
+                if isinstance(value, str) and Path(value).exists() and _is_generated_inference_artifact(request, value):
                     value = _persist_video_artifact_in_run(
                         value,
                         output_dir=output_dir,
@@ -3610,18 +3564,19 @@ class StudioManager:
             # that tensor can overwrite the valid artifact at the same path, and
             # is especially unsafe for model-specific sample ranges/layouts.
             has_encoded_video = any(
-                Path(path).suffix.lower() in VIDEO_EXTS and Path(path).is_file()
+                Path(path).suffix.lower() in VIDEO_EXTS
+                and Path(path).is_file()
+                and _is_generated_inference_artifact(request, path)
                 for path in saved_artifacts
             )
             if not has_encoded_video:
-                for key in ("sr_videos", "videos", "frames", "video"):
+                video_keys = ("video_chunk",) if "video_chunk" in result else ("sr_videos", "videos", "frames", "video")
+                for key in video_keys:
                     if key not in result:
                         continue
                     frames = _normalize_frame_list(result[key])
                     if frames:
-                        saved_artifacts.append(
-                            export_frames_to_video(frames, request.output_path, fps=request.fps)
-                        )
+                        saved_artifacts.append(export_frames_to_video(frames, request.output_path, fps=request.fps))
                         break
             if "recon_info" in result:
                 recon_path = str(
@@ -3656,8 +3611,17 @@ class StudioManager:
 
         saved_artifacts = _existing_artifact_paths(saved_artifacts)
         validate_preview_videos = _env_flag(PREVIEW_VIDEO_VALIDATE_ENV)
+
+        def select_previews() -> Dict[str, Any]:
+            artifacts = (
+                saved_artifacts
+                if mode == "init"
+                else [path for path in saved_artifacts if _is_generated_inference_artifact(request, path)]
+            )
+            return pick_preview_assets(artifacts, validate_videos=validate_preview_videos)
+
         t_preview = time.perf_counter()
-        previews = pick_preview_assets(saved_artifacts, validate_videos=validate_preview_videos)
+        previews = select_previews()
         record_materialize_timing("materialize_preview_select_ms", t_preview)
 
         if _should_scan_artifacts(request=request, saved_artifacts=saved_artifacts, previews=previews):
@@ -3666,7 +3630,7 @@ class StudioManager:
             record_materialize_timing("materialize_artifact_scan_ms", t_scan)
             saved_artifacts = _existing_artifact_paths([*saved_artifacts, *artifacts], check_files=False)
             t_preview = time.perf_counter()
-            previews = pick_preview_assets(saved_artifacts, validate_videos=validate_preview_videos)
+            previews = select_previews()
             materialize_timings["materialize_preview_select_ms"] += (time.perf_counter() - t_preview) * 1000.0
         else:
             materialize_timings["materialize_artifact_scan_ms"] = 0.0
@@ -3674,10 +3638,15 @@ class StudioManager:
         t_video_frame = time.perf_counter()
         interactive_video_state = bool(ctx.entry.supports_stream and mode in {"run", "stream"})
         should_extract_video_frame = _env_flag(VIDEO_PREVIEW_IMAGE_ENV)
-        if should_extract_video_frame and previews["preview_video"] and (
-            interactive_video_state
-            or previews["preview_image"] is None
-            or _artifact_is_input(previews["preview_image"])
+        if (
+            should_extract_video_frame
+            and previews["preview_video"]
+            and _is_generated_inference_artifact(request, previews["preview_video"])
+            and (
+                interactive_video_state
+                or previews["preview_image"] is None
+                or _artifact_is_input(previews["preview_image"])
+            )
         ):
             frame_position = "last" if interactive_video_state else "first"
             preview_image = maybe_extract_video_preview_image(
@@ -3688,7 +3657,7 @@ class StudioManager:
             if preview_image and preview_image not in saved_artifacts:
                 saved_artifacts.append(preview_image)
                 saved_artifacts = _existing_artifact_paths(saved_artifacts)
-                previews = pick_preview_assets(saved_artifacts, validate_videos=validate_preview_videos)
+                previews = select_previews()
         record_materialize_timing("materialize_video_frame_extract_ms", t_video_frame)
 
         # Inference persists model outputs. Viewer conversion and viewport
@@ -3707,7 +3676,9 @@ class StudioManager:
             },
         )
         if missing_required and record_status in {"blocked", "failed"} and isinstance(result, Mapping):
-            manifest_path = result.get("plan_path") or result.get("artifact_path") or result.get("metadata", {}).get("log_path")
+            manifest_path = (
+                result.get("plan_path") or result.get("artifact_path") or result.get("metadata", {}).get("log_path")
+            )
             if isinstance(manifest_path, str) and manifest_path and Path(manifest_path).is_file():
                 saved_artifacts.append(manifest_path)
         if missing_required and record_status not in {"blocked", "cancelled", "failed"}:
@@ -3751,8 +3722,7 @@ class StudioManager:
         materialize_timings["materialize_viewports_ms"] = 0.0
         materialize_timings["materialize_total_ms"] = (time.perf_counter() - materialize_t0) * 1000.0
         metadata_payload["studio_performance"] = {
-            key: round(float(value), 3)
-            for key, value in materialize_timings.items()
+            key: round(float(value), 3) for key, value in materialize_timings.items()
         }
 
         record = RunRecord(
@@ -3834,18 +3804,13 @@ class StudioManager:
                     final_signature = (final_stat.st_dev, final_stat.st_ino, final_stat.st_mtime_ns)
                 except OSError:
                     final_signature = None
-                self._recent_runs_root_signature = (
-                    final_signature if final_signature == root_signature else None
-                )
+                self._recent_runs_root_signature = final_signature if final_signature == root_signature else None
                 self._recent_run_manifests = tuple(path for _, path in manifests)
                 self._recent_run_manifest_cursor = 0
                 self._recent_runs_cache = ()
 
             records = list(self._recent_runs_cache)
-            while (
-                len(records) < requested
-                and self._recent_run_manifest_cursor < len(self._recent_run_manifests)
-            ):
+            while len(records) < requested and self._recent_run_manifest_cursor < len(self._recent_run_manifests):
                 manifest_path = self._recent_run_manifests[self._recent_run_manifest_cursor]
                 self._recent_run_manifest_cursor += 1
                 try:
@@ -3903,6 +3868,7 @@ class StudioManager:
             LONGVIE2_MODEL_ID,
             HELIOS_MODEL_ID,
             DREAMX_WORLD_MODEL_ID,
+            LINGBOT_WORLD_V2_SMALL_MODEL_ID,
         }:
             command = {"kind": "unload_model", "model_id": model_id}
             result = self._run_torchrun_command(command)

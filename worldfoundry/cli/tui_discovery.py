@@ -1203,12 +1203,9 @@ def _studio_inference_spec(model_id: str):
     entry = _studio_entry_for_model(model_id)
     if entry is None:
         return get_model_inference_spec(model_id)
-    try:
-        from worldfoundry.studio.ui.catalog import _template_id_hint
-    except Exception:
-        template_id = ""
-    else:
-        template_id = _template_id_hint(entry)
+    from worldfoundry.studio.inference.catalog import template_id_hint
+
+    template_id = template_id_hint(entry)
     return model_inference_spec(
         model_family_id=entry.model_id,
         display_name=entry.display_name,
@@ -1661,12 +1658,9 @@ def _merge_script_infer_row(existing: ModelCatalogRow | None, script_row: ModelC
 
 def _studio_infer_model_row(entry: Any) -> ModelCatalogRow:
     """Build a :class:`ModelCatalogRow` from a studio catalog entry with runtime metadata."""
-    try:
-        from worldfoundry.studio.ui.catalog import _template_id_hint
-    except Exception:
-        template_id = ""
-    else:
-        template_id = _template_id_hint(entry)
+    from worldfoundry.studio.inference.catalog import template_id_hint
+
+    template_id = template_id_hint(entry)
     workload = _workload_from_template(template_id)
     group = _infer_group_from_workload(workload)
     spec = _studio_inference_spec(entry.model_id)

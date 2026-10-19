@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import secrets
 import os
+import secrets
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -19,6 +19,7 @@ from worldfoundry.base_models.diffusion_model.optimizations import (
     parse_torch_dtype,
 )
 from worldfoundry.core.media.codecs.video import save_image_or_video_tensor
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 from worldfoundry.operators.runtime_video_operator import RuntimeVideoOperator
 from worldfoundry.synthesis.visual_generation.memory.video import VideoArtifactMemory
 
@@ -151,11 +152,7 @@ class NativeHunyuanVideoPipeline(PipelineABC):
             if primary_source is not None:
                 overrides["primary"] = str(Path(primary_source).expanduser())
             elif source_root is not None:
-                primary_name = (
-                    "text_encoder_i2v"
-                    if resolved_model_id == "hunyuanvideo-i2v"
-                    else "text_encoder"
-                )
+                primary_name = "text_encoder_i2v" if resolved_model_id == "hunyuanvideo-i2v" else "text_encoder"
                 local_primary = source_root / primary_name
                 if (local_primary / "config.json").is_file():
                     overrides["primary"] = str(local_primary.resolve())
@@ -235,7 +232,11 @@ class NativeHunyuanVideoPipeline(PipelineABC):
             raise ValueError(f"{self.model_id} requires an input image")
         if self.GENERATION_TYPE == "t2v" and images is not None:
             raise ValueError(f"{self.model_id} is text-to-video and does not accept images")
-        processed = [self._process_prompt(value) for value in prompt] if isinstance(prompt, list) else self._process_prompt(prompt)
+        processed = (
+            [self._process_prompt(value) for value in prompt]
+            if isinstance(prompt, list)
+            else self._process_prompt(prompt)
+        )
         return {"prompt": processed, "images": images}
 
     def __call__(
@@ -289,11 +290,24 @@ class NativeHunyuanVideoPipeline(PipelineABC):
             inputs=inputs,
         )
         output = self.native_pipeline(request)
+        video_chunk = None
+        if output_type != "latent":
+            video_chunk = VideoChunk(
+                frames=output.sample, layout="bcthw", value_range="0,1", metadata={"fps": int(fps or self.DEFAULT_FPS)}
+            )
         artifact_path = None
-        if output_path is not None and output_type != "latent":
-            artifact_path = save_image_or_video_tensor(output.sample, output_path, fps=int(fps or self.DEFAULT_FPS))
+        if output_path is not None and video_chunk is not None:
+            artifact_path = save_image_or_video_tensor(
+                output.sample,
+                output_path,
+                fps=int(fps or self.DEFAULT_FPS),
+                layout=video_chunk.layout,
+                value_range=video_chunk.value_range,
+            )
         result = {
             "video": output.sample,
+            "video_chunk": video_chunk,
+            "fps": int(fps or self.DEFAULT_FPS),
             "latents": output.latents,
             "artifact_path": artifact_path,
             "generated_video_path": artifact_path,
@@ -303,11 +317,30 @@ class NativeHunyuanVideoPipeline(PipelineABC):
         }
         return result if return_dict else (artifact_path or output.sample)
 
-    def stream(self, prompt: str, images: Any = None, **kwargs: Any) -> Any:
-        result = self(prompt=prompt, images=images, return_dict=True, **kwargs)
+    def stream_state_ready(self) -> bool:
+        """Artifact history is not conditioning state for another generation."""
+        return False
+
+    def stream(
+        self,
+        prompt: str,
+        images: Any = None,
+        *,
+        return_dict: bool = False,
+        fps: int | None = None,
+        num_frames: int | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Generate from explicit inputs, retaining decoded artifact history."""
+        result = self(prompt=prompt, images=images, return_dict=True, fps=fps, num_frames=num_frames, **kwargs)
         value = result.get("artifact_path") or result["video"]
-        self.memory_module.record(value, metadata={"prompt": prompt, "model_name": self.model_id})
-        return value
+        if result["video_chunk"] is not None:
+            self.memory_module.record(
+                value,
+                metadata={"prompt": prompt, "model_name": self.model_id},
+                video_chunk=None if result.get("artifact_path") else result["video_chunk"],
+            )
+        return result if return_dict else value
 
     def get_synthesis_model(self) -> NativeDiffusionPipeline:
         return self.native_pipeline

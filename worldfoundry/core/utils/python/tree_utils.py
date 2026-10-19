@@ -21,13 +21,17 @@ from typing import Any, Iterable, List, Tuple, TypeVar
 
 import numpy as np
 
-from worldfoundry.core.utils.python.functional_utils import is_mapping, is_sequence  # noqa: F401 - compatibility exports
+from worldfoundry.core.utils.python.functional_utils import (  # noqa: F401 - compatibility exports
+    is_mapping,
+    is_sequence,
+)
 
 try:
     import tree as _tree
-except ImportError as exc:  # pragma: no cover - depends on optional environment
+except ImportError as exc:
     _tree = None
-    _TREE_IMPORT_ERROR = exc
+    # Cache a diagnostic cause without retaining the importing caller's frames.
+    _TREE_IMPORT_ERROR = ImportError(str(exc))
 else:
     _TREE_IMPORT_ERROR = None
 

@@ -63,7 +63,7 @@ Vid2World dataset adapters belong to its synthesis package under `synthesis/visu
 
 - **T2V-Turbo** — Shared role-based components. Its VideoCrafter2 base resolves the common network, codec, encoder, and scheduler roles; the model keeps only its LoRA and consistency-sampling behavior.
 - **VideoCrafter** — Shared role-based components. All packaged configs point directly to canonical role packages instead of a copied framework tree.
-- **Dynamicrafter, MotionCtrl, Pandora** — Shared role-based components. Existing synthesis adapters keep their product-specific behavior while importing the same LVDM components.
+- **Dynamicrafter, MotionCtrl** — Shared role-based components. Existing synthesis adapters keep their product-specific behavior while importing the same LVDM components.
 - **Vid2World** — Shared components plus explicit extensions. Its modified latent diffusion network, UNet, attention, DDIM sampler, and KV cache are named role components; datasets remain synthesis-owned.
 
 ### Guard rails
