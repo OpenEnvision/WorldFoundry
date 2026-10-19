@@ -12,6 +12,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Mapping
 
+from worldfoundry.evaluation.api.json_contract import require_mapping as _require_mapping
+from worldfoundry.evaluation.api.json_contract import tuple_of_str as _string_tuple
 from worldfoundry.evaluation.tasks.catalog import CATALOG_TASK_SCHEMA_VERSION, BenchmarkSpec, WorldTaskConfig
 
 # Define schema version identifiers for task and benchmark YAML files.
@@ -32,24 +34,6 @@ SUPPORTED_BENCHMARK_YAML_SCHEMA_VERSIONS = frozenset(
         "worldfoundry-catalog-benchmark",
     }
 )
-
-
-def _require_mapping(value: Any, context: str) -> Mapping[str, Any]:
-    """Validates and returns the input value as a Mapping, raising a TypeError if it is not.
-
-    Args:
-        value: The value to validate.
-        context: Context string used in compiling the error message.
-
-    Returns:
-        The validated Mapping.
-
-    Raises:
-        TypeError: If value is not a Mapping.
-    """
-    if not isinstance(value, Mapping):
-        raise TypeError(f"{context} must be a mapping, got {type(value).__name__}")
-    return value
 
 
 def _read_yaml_mapping(path: Path) -> dict[str, Any]:
@@ -94,7 +78,7 @@ def _safe_relative_path(value: str, *, source_path: Path, root_dir: Path) -> Pat
     raw_path = Path(value)
     if raw_path.is_absolute():
         raise ValueError(f"extends path must be relative, got: {value}")
-    
+
     # Resolve the candidate path relative to the source file's parent directory.
     candidate = (source_path.parent / raw_path).resolve()
     root = root_dir.resolve()
@@ -144,11 +128,7 @@ def _deep_merge(base: Mapping[str, Any], override: Mapping[str, Any]) -> dict[st
         key = str(key)
         # If both base and override values for the same key are mappings,
         # recursively merge them. Otherwise, override the base value.
-        if (
-            key in merged
-            and isinstance(merged[key], Mapping)
-            and isinstance(value, Mapping)
-        ):
+        if key in merged and isinstance(merged[key], Mapping) and isinstance(value, Mapping):
             merged[key] = _deep_merge(merged[key], value)
         else:
             merged[key] = value
@@ -214,7 +194,7 @@ def _load_yaml_mapping_with_extends(
 
     payload = _read_yaml_mapping(source_path)
     merged: dict[str, Any] = {}
-    
+
     # Process 'extends' property: recursively load and merge parent configurations.
     for extends_path in _extends_list(payload.get("extends")):
         parent_path = _safe_relative_path(extends_path, source_path=source_path, root_dir=root_dir)
@@ -228,22 +208,6 @@ def _load_yaml_mapping_with_extends(
     # Merge the current file's payload (excluding 'extends') over any inherited values.
     own_payload = {str(key): value for key, value in payload.items() if key != "extends"}
     return _deep_merge(merged, own_payload)
-
-
-def _string_tuple(value: Any) -> tuple[str, ...]:
-    """Coerces a raw sequence/string value into a tuple of string items.
-
-    Args:
-        value: Input sequence, string, or None.
-
-    Returns:
-        A tuple of string items.
-    """
-    if value is None:
-        return ()
-    if isinstance(value, str):
-        return (value,)
-    return tuple(str(item) for item in value)
 
 
 def _name_from(data: Mapping[str, Any], *keys: str) -> str | None:
@@ -305,7 +269,7 @@ def _output_keys(data: Mapping[str, Any], protocol: Any) -> tuple[str, ...]:
     explicit = data.get("output_keys")
     if explicit is not None:
         return _string_tuple(explicit)
-    
+
     if isinstance(protocol, Mapping):
         # Look for output artifacts under 'output_artifacts' or 'outputs' in the protocol.
         artifacts = protocol.get("output_artifacts") or protocol.get("outputs")
@@ -354,7 +318,7 @@ def _metric_ids(data: Mapping[str, Any]) -> tuple[str, ...]:
     explicit = data.get("metric_ids")
     if explicit is not None:
         return _string_tuple(explicit)
-    
+
     metric_ids = []
     # Iterate through individual metric definitions to extract their IDs.
     for metric in data.get("metrics") or ():
@@ -388,7 +352,7 @@ def _metric_mappings(value: Any) -> tuple[Mapping[str, Any], ...]:
             if isinstance(metric, Mapping):
                 metric_mapping = dict(metric)
             else:
-                metric_mapping = {"value": metric} # If metric is scalar, wrap it.
+                metric_mapping = {"value": metric}  # If metric is scalar, wrap it.
             metric_mapping.setdefault("id", str(name))
             metrics.append(metric_mapping)
         return tuple(metrics)
@@ -445,8 +409,8 @@ def _dataset_data(data: Mapping[str, Any]) -> dict[str, Any]:
     # If 'dataset' is not a mapping, fall back to the legacy 'data' field.
     if not isinstance(dataset, Mapping):
         return dict(data.get("data") or {})
-    
-    task_data = dict(data.get("data") or {}) # Start with legacy 'data' values.
+
+    task_data = dict(data.get("data") or {})  # Start with legacy 'data' values.
     # Map specific keys from the 'dataset' mapping to their equivalents in 'task_data'.
     if "manifest" in dataset:
         task_data.setdefault("metadata_path", dataset["manifest"])
@@ -564,7 +528,7 @@ def world_task_config_from_yaml_mapping(
         generation_defaults=_generation_defaults(data, protocol),
         metadata=metadata,
         # Force current catalog schema version for consistency in internal representation.
-        schema_version=CATALOG_TASK_SCHEMA_VERSION, 
+        schema_version=CATALOG_TASK_SCHEMA_VERSION,
     )
 
 
@@ -596,8 +560,7 @@ def benchmark_spec_from_yaml_mapping(
 
     # Convert raw task mappings into WorldTaskConfig objects.
     tasks = [
-        world_task_config_from_yaml_mapping(task, source_path=source_path)
-        for task in _task_mappings(data.get("tasks"))
+        world_task_config_from_yaml_mapping(task, source_path=source_path) for task in _task_mappings(data.get("tasks"))
     ]
     metadata = dict(data.get("metadata") or {})
     metadata["source_schema_version"] = schema_version

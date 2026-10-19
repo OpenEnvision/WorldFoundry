@@ -11,7 +11,13 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
-from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path, SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    SCORECARD_SCHEMA_VERSION,
+    resolve_env_path,
+)
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    build_video_coverage as _coverage,
+)
 from worldfoundry.evaluation.tasks.execution.runners.iworldbench.iworldbench_metrics import (
     METRIC_ORDER,
     METRIC_SPECS,
@@ -86,8 +92,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-
-
 def _metric_rows(
     *,
     computed: Mapping[str, Any],
@@ -119,27 +123,6 @@ def _metric_rows(
     return rows
 
 
-def _coverage(expected_ids: set[str], generated_dir: Path | None) -> dict[str, Any]:
-    actual_names: set[str] = set()
-    if generated_dir is not None and generated_dir.exists():
-        for path in generated_dir.iterdir():
-            if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES:
-                actual_names.add(path.stem)
-    missing = sorted(expected_ids - actual_names)
-    unexpected = sorted(actual_names - expected_ids)
-    matched = sorted(expected_ids & actual_names)
-    return {
-        "expected_count": len(expected_ids),
-        "actual_count": len(actual_names),
-        "matched_count": len(matched),
-        "missing_count": len(missing),
-        "unexpected_count": len(unexpected),
-        "complete": bool(expected_ids) and not missing,
-        "missing_ids": missing[:50],
-        "unexpected_ids": unexpected[:50],
-    }
-
-
 def _scorecard(
     *,
     benchmark_id: str,
@@ -166,9 +149,7 @@ def _scorecard(
     )
     normalization_ok = bool(available_rows)
     runtime_backend = str((runtime_summary or {}).get("backend") or "")
-    official_component_verified = (
-        official_runtime_executed and runtime_backend == "official" and normalization_ok
-    )
+    official_component_verified = official_runtime_executed and runtime_backend == "official" and normalization_ok
     official_verified = official_component_verified and full_suite_valid
     integration_evidence = official_component_verified
     normalizer_only = not official_runtime_executed and not integration_evidence

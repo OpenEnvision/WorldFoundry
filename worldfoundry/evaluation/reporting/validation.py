@@ -15,6 +15,7 @@ import math
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
+from worldfoundry.evaluation.utils import mapping_or_empty as _mapping
 from worldfoundry.evaluation.utils import read_json_object, read_jsonl_objects
 
 from .comparison_identity import COMPARISON_IDENTITY_SCHEMA_VERSION
@@ -39,11 +40,6 @@ _read_json = read_json_object
 _read_jsonl_rows = read_jsonl_objects
 
 
-def _mapping(value: Any) -> dict[str, Any]:
-    """Coerce *value* to ``dict`` if it is a ``Mapping``; otherwise return empty."""
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
 def _sequence(value: Any) -> list[Any]:
     """Coerce *value* to ``list`` if it is a non-string ``Sequence``; otherwise return empty."""
     return list(value) if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) else []
@@ -65,13 +61,6 @@ def _required_sequence(payload: Mapping[str, Any], key: str, errors: list[str]) 
         errors.append(f"missing or invalid list: {key}")
         return []
     return list(value)
-
-
-def _warn_empty_mapping(payload: Mapping[str, Any], key: str, warnings: list[str]) -> None:
-    """Append a warning if *payload[key]* is missing or an empty mapping."""
-    value = payload.get(key)
-    if not isinstance(value, Mapping) or not value:
-        warnings.append(f"missing or empty mapping: {key}")
 
 
 def _validate_finite_numbers(value: Any, *, path: str, errors: list[str]) -> None:
@@ -166,10 +155,7 @@ def _validate_comparison_identity(
         errors.append("invalid mapping: comparison_identity")
         return
     if identity.get("schema_version") != COMPARISON_IDENTITY_SCHEMA_VERSION:
-        errors.append(
-            "comparison_identity schema_version must be "
-            f"{COMPARISON_IDENTITY_SCHEMA_VERSION!r}"
-        )
+        errors.append(f"comparison_identity schema_version must be {COMPARISON_IDENTITY_SCHEMA_VERSION!r}")
     if not identity.get("comparison_key"):
         errors.append("comparison_identity missing comparison_key")
     if identity.get("status") not in {"complete", "incomplete"}:
@@ -201,7 +187,9 @@ def _validate_run_summary(
     _validate_finite_numbers(payload.get("metrics"), path="metrics", errors=errors)
     _validate_finite_numbers(payload.get("leaderboard"), path="leaderboard", errors=errors)
     _validate_comparison_identity(payload, warnings=warnings, errors=errors)
-    _validate_artifacts(payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors)
+    _validate_artifacts(
+        payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors
+    )
 
 
 def _validate_scorecard(
@@ -226,7 +214,9 @@ def _validate_scorecard(
         warnings.append("metrics missing optional leaderboard mapping")
     _validate_finite_numbers(metrics, path="metrics", errors=errors)
     _validate_comparison_identity(payload, warnings=warnings, errors=errors)
-    _validate_artifacts(payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors)
+    _validate_artifacts(
+        payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors
+    )
 
 
 def _validate_run_index(
@@ -254,7 +244,9 @@ def _validate_run_index(
         _validate_comparison_identity(row, warnings=warnings, errors=errors)
         if check_artifacts and isinstance(row.get("artifacts"), Mapping):
             _check_artifact_paths(dict(row["artifacts"]), source_path=source_path, errors=errors)
-    _validate_artifacts(payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors)
+    _validate_artifacts(
+        payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors
+    )
 
 
 def _validate_run_comparison(
@@ -291,7 +283,9 @@ def _validate_run_comparison(
             "compatible_with_incomplete_identity",
         }:
             errors.append("invalid compatibility status")
-    _validate_artifacts(payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors)
+    _validate_artifacts(
+        payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors
+    )
 
 
 def _validate_run_manifest(
@@ -315,7 +309,9 @@ def _validate_run_manifest(
     for key in ("python", "git", "packages", "cache_paths"):
         if environment and key not in environment:
             errors.append(f"environment missing required key: {key}")
-    _validate_artifacts(payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors)
+    _validate_artifacts(
+        payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors
+    )
 
 
 def _validate_model_benchmark_run(
@@ -331,7 +327,9 @@ def _validate_model_benchmark_run(
         if key not in payload:
             errors.append(f"missing required key: {key}")
     _required_mapping(payload, "benchmark", errors)
-    _validate_artifacts(payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors)
+    _validate_artifacts(
+        payload, source_path=source_path, check_artifacts=check_artifacts, warnings=warnings, errors=errors
+    )
 
 
 def _validate_suite_manifest(
@@ -409,10 +407,7 @@ _SCHEMA_VALIDATORS: dict[str, tuple[str, Validator]] = {
 }
 
 # ── Kind normalisation ──────────────────────────────────────
-_KIND_TO_SCHEMA = {
-    kind: schema_version
-    for schema_version, (kind, _validator) in _SCHEMA_VALIDATORS.items()
-}
+_KIND_TO_SCHEMA = {kind: schema_version for schema_version, (kind, _validator) in _SCHEMA_VALIDATORS.items()}
 CONTRACT_ARTIFACT_KIND_ALIASES = {
     # NOTE: Maps hyphenated, underscore, and short aliases to canonical kind names.
     "auto": "auto",
@@ -558,8 +553,7 @@ def validate_contract_paths(
         ``invalid_count``, and per-file ``results``.
     """
     results = [
-        validate_contract_file(path, kind=kind, check_artifacts=check_artifacts, strict=strict)
-        for path in paths
+        validate_contract_file(path, kind=kind, check_artifacts=check_artifacts, strict=strict) for path in paths
     ]
     ok = all(result["ok"] for result in results)
     return {

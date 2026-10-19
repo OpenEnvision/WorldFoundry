@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torchvision.io
 
 from worldfoundry.core.io import (
@@ -44,7 +45,9 @@ def test_local_video_helpers_are_shared_runtime_api() -> None:
     ):
         assert callable(helper)
 
-    lyra_text = (REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/lyra/runtime_v2.py").read_text(encoding="utf-8")
+    lyra_text = (REPO_ROOT / "worldfoundry/base_models/three_dimensions/point_clouds/lyra/runtime_v2.py").read_text(
+        encoding="utf-8"
+    )
     inspatio_synthesis_text = (
         REPO_ROOT / "worldfoundry/synthesis/visual_generation/inspatio_world/inspatio_world_synthesis.py"
     ).read_text(encoding="utf-8")
@@ -60,22 +63,26 @@ def test_local_video_helpers_are_shared_runtime_api() -> None:
     assert "def load_video_frames(" not in lyra_text
 
 
-def test_torchvision_writer_falls_back_for_newer_pyav_pict_type(monkeypatch, tmp_path) -> None:
-    frames = np.zeros((2, 4, 6, 3), dtype=np.uint8)
+@pytest.mark.parametrize("dtype", (np.uint8, np.float32))
+@pytest.mark.parametrize("options", ({}, {"crf": "21"}))
+def test_torchvision_writer_falls_back_for_newer_pyav_pict_type(monkeypatch, tmp_path, dtype, options) -> None:
+    frames = np.arange(2 * 4 * 6 * 3).reshape(2, 4, 6, 3).astype(dtype)
     encoded = {}
 
-    def incompatible_torchvision_writer(*args, **kwargs):
+    def incompatible_torchvision_writer(*args, **kwargs) -> None:
         raise TypeError("an integer is required")
 
-    def fallback_writer(video_frames, output_path, *, fps):
-        encoded["shape"] = video_frames.shape
+    def fallback_writer(video_frames, output_path, *, fps, crf) -> None:
+        encoded["frames"] = video_frames
         encoded["path"] = output_path
         encoded["fps"] = fps
+        encoded["crf"] = crf
 
     monkeypatch.setattr(torchvision.io, "write_video", incompatible_torchvision_writer)
     monkeypatch.setattr(video_io, "save_video_h264", fallback_writer)
     output_path = tmp_path / "output.mp4"
 
-    video_io.write_video_torchvision(output_path, frames, 16)
+    video_io.write_video_torchvision(output_path, frames, 16, options=options)
 
-    assert encoded == {"shape": (2, 4, 6, 3), "path": output_path, "fps": 16}
+    np.testing.assert_array_equal(encoded.pop("frames"), frames.astype(np.uint8))
+    assert encoded == {"path": output_path, "fps": 16, "crf": int(options.get("crf", 18))}

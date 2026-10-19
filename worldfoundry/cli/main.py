@@ -10,6 +10,7 @@ import sys
 import time
 import uuid
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -171,11 +172,7 @@ def _load_json_or_jsonl(path: Path | None):
     if path is None:
         return None
     if path.suffix.lower() == ".jsonl":
-        return [
-            json.loads(line)
-            for line in path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -200,9 +197,7 @@ def _samples_or_episodes_from_payload(payload, *, field_name: str) -> list:
         samples = payload.get("samples", payload.get("episodes", []))
         if isinstance(samples, dict):
             return [
-                {"sample_id": sample_id, **item}
-                if isinstance(item, dict)
-                else {"sample_id": sample_id, "value": item}
+                {"sample_id": sample_id, **item} if isinstance(item, dict) else {"sample_id": sample_id, "value": item}
                 for sample_id, item in samples.items()
             ]
         if isinstance(samples, list):
@@ -304,7 +299,12 @@ def _execute_run_plan_file(args: argparse.Namespace):
     from worldfoundry.evaluation.runner import evaluate_request_from_run_plan, execute_evaluate_run, load_run_plan
 
     plan = load_run_plan(args.plan)
-    return execute_evaluate_run(evaluate_request_from_run_plan(plan))
+    request = replace(
+        evaluate_request_from_run_plan(plan),
+        resume=args.resume,
+        metric_batch_size=args.metric_batch_size,
+    )
+    return execute_evaluate_run(request)
 
 
 def _handle_tui(args: argparse.Namespace) -> int:
@@ -408,9 +408,7 @@ def _validate_evaluate_usage(args: argparse.Namespace) -> None:
 
     task_args = (args.task_type, args.benchmark_name, args.data_path)
     if args.embodied_spec is not None and any(item is not None for item in task_args):
-        raise CliUsageError(
-            "--embodied-spec cannot be combined with --task-type/--benchmark-name/--data-path"
-        )
+        raise CliUsageError("--embodied-spec cannot be combined with --task-type/--benchmark-name/--data-path")
     if args.samples_path is not None and args.embodied_spec is None:
         raise CliUsageError("--samples-path requires --embodied-spec")
     if args.embodied_spec is not None and args.samples_path is not None and args.requests_path is not None:
@@ -545,6 +543,8 @@ def _handle_evaluate(args: argparse.Namespace) -> int:
             model_config=load_json_mapping(args.model_config),
             dataset_id=args.dataset_id,
             run_id=args.run_id,
+            resume=args.resume,
+            metric_batch_size=args.metric_batch_size,
             fail_on_sample_error=args.fail_on_sample_error,
             write_artifacts_index=not args.no_artifacts_index,
             generation_cache_dir=args.generation_cache_dir,
@@ -572,11 +572,7 @@ def _handle_evaluate(args: argparse.Namespace) -> int:
 def _accept_embodied_licenses(license_ids: list[str] | None) -> None:
     """Merge explicit CLI acknowledgements into the embodied license environment."""
 
-    accepted = [
-        item.strip()
-        for item in os.environ.get(_EMBODIED_ACCEPTED_LICENSES_ENV, "").split(",")
-        if item.strip()
-    ]
+    accepted = [item.strip() for item in os.environ.get(_EMBODIED_ACCEPTED_LICENSES_ENV, "").split(",") if item.strip()]
     for value in license_ids or ():
         for item in str(value).split(","):
             normalized = item.strip()
@@ -799,7 +795,7 @@ def _run_model_runtime(args: argparse.Namespace) -> dict[str, Any]:
 
 def _run_benchmark_ids(args: argparse.Namespace) -> tuple[str, ...]:
     """Collect benchmark ids from both ``--benchmark`` and singular ``--benchmark-id``."""
-    return tuple(args.benchmark_ids or ()) + (((args.benchmark_id,) if args.benchmark_id else ()))
+    return tuple(args.benchmark_ids or ()) + ((args.benchmark_id,) if args.benchmark_id else ())
 
 
 def _suite_presets_declare_models(args: argparse.Namespace) -> bool:
@@ -847,6 +843,7 @@ def _worldfoundry_run_request_from_args(args: argparse.Namespace):
         model_workers=getattr(args, "model_workers", 1),
         worker_cuda_devices=tuple(getattr(args, "model_worker_device", None) or ()),
         resume=args.resume,
+        metric_batch_size=args.metric_batch_size,
         skip_incompatible=args.skip_incompatible,
         fail_on_skipped=args.fail_on_skipped,
         model_runner=args.model_runner,
@@ -987,9 +984,7 @@ def _handle_direct_model_run(args: argparse.Namespace) -> int:
     missing.extend(
         field.option
         for field in schema.fields
-        if field.scope == "call"
-        and field.required
-        and getattr(args, field.dest, None) in (None, "")
+        if field.scope == "call" and field.required and getattr(args, field.dest, None) in (None, "")
     )
     if missing and args.requests_path is None:
         raise CliUsageError(f"direct {schema.model_id} inference requires {', '.join(missing)}")
@@ -1033,6 +1028,8 @@ def _handle_direct_model_run(args: argparse.Namespace) -> int:
             model_config=load_json_mapping(args.model_config),
             dataset_id=args.dataset_id or f"{schema.model_id}:direct",
             run_id=args.run_id,
+            resume=args.resume,
+            metric_batch_size=args.metric_batch_size,
             fail_on_sample_error=bool(args.fail_on_sample_error or args.fail_on_generation_error),
             write_artifacts_index=not args.no_artifacts_index,
             generation_cache_dir=args.generation_cache_dir,
@@ -1180,6 +1177,8 @@ def _handle_run_in_process(args: argparse.Namespace) -> int:
             model_config=load_json_mapping(args.model_config),
             dataset_id=args.dataset_id or args.benchmark_name,
             run_id=args.run_id,
+            resume=args.resume,
+            metric_batch_size=args.metric_batch_size,
             fail_on_sample_error=args.fail_on_sample_error,
             write_artifacts_index=not args.no_artifacts_index,
             generation_cache_dir=args.generation_cache_dir,
@@ -1548,6 +1547,12 @@ def _build_parser(model_run_schema: Any | None = None) -> argparse.ArgumentParse
         default=None,
         help="Artifact name that must be present for required_artifacts_present.",
     )
+    evaluate_parser.add_argument(
+        "--resume", action="store_true", help="Reuse matching completed generation and metric checkpoints."
+    )
+    evaluate_parser.add_argument(
+        "--metric-batch-size", type=int, default=32, help="Batch size for per-sample scoring (default: 32)."
+    )
     evaluate_parser.add_argument("--run-id", help="Stable run id to write into run_manifest.json and scorecard.json.")
     evaluate_parser.add_argument(
         "--fail-on-sample-error",
@@ -1651,7 +1656,14 @@ def _build_parser(model_run_schema: Any | None = None) -> argparse.ArgumentParse
         action="store_true",
         help="Print the resolved model-specific configuration and exit without loading the model.",
     )
-    run_parser.add_argument("--resume", action="store_true", help="Reuse completed generation, metric results, and suite cells when inputs match.")
+    run_parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Reuse completed generation, metric results, and suite cells when inputs match.",
+    )
+    run_parser.add_argument(
+        "--metric-batch-size", type=int, default=32, help="Batch size for per-sample scoring (default: 32)."
+    )
     run_parser.add_argument("--no-skip-incompatible", dest="skip_incompatible", action="store_false", default=True)
     run_parser.add_argument("--fail-on-skipped", action="store_true")
     _RETIRED_TASK_FLAG_HELP = (
@@ -1960,8 +1972,7 @@ def _logging_flags_requested(level: str | None, log_file: str | None, log_json: 
     if level is not None or log_file is not None or log_json is not None:
         return True
     return any(
-        os.environ.get(name)
-        for name in ("WORLDFOUNDRY_LOG_LEVEL", "WORLDFOUNDRY_LOG_FILE", "WORLDFOUNDRY_LOG_JSON")
+        os.environ.get(name) for name in ("WORLDFOUNDRY_LOG_LEVEL", "WORLDFOUNDRY_LOG_FILE", "WORLDFOUNDRY_LOG_JSON")
     )
 
 

@@ -7,6 +7,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from worldfoundry.evaluation.tasks.catalog.workspace_registry import (
+    build_workspace_benchmark_command,
+)
 from worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.physical_ai_bench_official_impl import (
     TRACKS,
     main,
@@ -26,9 +29,6 @@ from worldfoundry.evaluation.tasks.execution.runners.physical_ai_bench.runtime.p
     normalize_binary_answer,
     parse_option_answer,
     segmentation_scores,
-)
-from worldfoundry.evaluation.tasks.execution.runners.workspace_registry import (
-    build_workspace_benchmark_command,
 )
 
 

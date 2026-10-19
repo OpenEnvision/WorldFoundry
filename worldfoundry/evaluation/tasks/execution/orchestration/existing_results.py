@@ -26,6 +26,7 @@ from worldfoundry.evaluation.api import (
     GenerationResult,
     is_generation_result_successful,
 )
+from worldfoundry.evaluation.api.generation import validate_sample_ids
 from worldfoundry.evaluation.reporting import (
     REPRODUCIBILITY_PACKAGES,
     write_run_manifest_artifacts,
@@ -34,7 +35,6 @@ from worldfoundry.evaluation.reporting import (
 from worldfoundry.evaluation.reporting.scorecard import write_scorecard
 from worldfoundry.evaluation.tasks.metrics.registry import BuiltinExistingResultsMetric
 from worldfoundry.evaluation.utils import (
-    build_run_fingerprint,
     build_version_context,
     read_json_or_jsonl,
     write_json,
@@ -76,6 +76,7 @@ ExistingResultsMetric = Callable[[GenerationRequest, GenerationResult], Any]
 @dataclass(frozen=True)
 class ExistingResultsRunRequest:
     """Inputs for an offline existing-results evaluation run."""
+
     output_dir: str | Path
     requests: Sequence[Any]
     results: Any
@@ -96,6 +97,7 @@ class ExistingResultsRunRequest:
 @dataclass(frozen=True)
 class ExistingResultsRunResult:
     """Summary paths and counts after ``run_existing_results`` completes."""
+
     status: str
     exit_code: int
     output_dir: Path
@@ -167,7 +169,7 @@ def _looks_like_result_row(value: Mapping[str, Any]) -> bool:
 
 
 def _load_result_source(source: Any) -> list[Any]:
-    """Dynamically parses result source descriptors (raw payloads, JSON paths, nested structures)."""
+    """Read result rows from a file, JSON envelope, sequence, or sample-id mapping."""
     if isinstance(source, (str, Path)):
         text_source = str(source)
         stripped = text_source.lstrip()
@@ -184,8 +186,8 @@ def _load_result_source(source: Any) -> list[Any]:
         return [source]
 
     if isinstance(source, Mapping):
-        if "results" in source and isinstance(source["results"], Iterable):
-            return list(source["results"])
+        if "results" in source:
+            return _load_result_source(source["results"])
         if _looks_like_result_row(source):
             return [source]
         rows = []
@@ -208,6 +210,8 @@ def _align_results(requests: Sequence[GenerationRequest], source: Any) -> list[G
     If sample_id strings are missing, attempts a fallback positional zip.
     """
     raw_rows = _load_result_source(source)
+    validate_sample_ids((row.sample_id for row in requests), source="requests")
+    validate_sample_ids((_sample_id_from(row) for row in raw_rows), source="existing results")
     keyed: dict[str, Any] = {}
     sequential: list[Any] = []
     for item in raw_rows:
@@ -314,8 +318,7 @@ def run_existing_results(
     model = _coerce_optional_mapping(run_request.model, {"model_type": "existing", "model_name": "existing-results"})
     dataset = _coerce_optional_mapping(run_request.dataset, {"split": "existing"})
     dataset.setdefault("sample_count", len(requests))
-    
-    # Fingerprint from version context + aligned inputs (no GPU generation).
+
     version_context = build_version_context(
         runner=runner_name,
         benchmark=benchmark,
@@ -324,21 +327,19 @@ def run_existing_results(
         metrics=metrics,
         extra={"mode": "existing-results"},
     )
-    run_fingerprint = build_run_fingerprint(
-        version_context=version_context,
-        requests=requests,
-        results=results,
-    )
-
     plan = {
         "schema_version": "worldfoundry-execution-plan",
         "run_id": run_id,
         "created_at": started_at,
         "runner": runner_name,
         "version_context": version_context,
-        "run_fingerprint": run_fingerprint,
-        "stages": ["materialize", "generate" if (run_request.run_metadata or {}).get("generation_identity")
-                   else "normalize_existing_results", "evaluate", "aggregate", "report"],
+        "stages": [
+            "materialize",
+            "generate" if (run_request.run_metadata or {}).get("generation_identity") else "normalize_existing_results",
+            "evaluate",
+            "aggregate",
+            "report",
+        ],
         "sample_count": len(requests),
         "samples": [
             {"index": index, "sample_id": request.sample_id, "status": "planned"}
@@ -369,7 +370,6 @@ def run_existing_results(
         "model": model,
         "dataset": dataset,
         "version_context": version_context,
-        "run_fingerprint": run_fingerprint,
         "sample_count": len(requests),
         "execution_plan": str(paths["execution_plan"].resolve()),
         **dict(run_request.run_metadata or {}),
@@ -387,7 +387,10 @@ def run_existing_results(
                 "resume": run_request.resume,
                 "metric_batch_size": run_request.metric_batch_size,
             },
-            cache_paths={**dict(run_request.cache_paths or {}), "metric_checkpoint": str(output_dir / "metrics" / "checkpoint.jsonl")},
+            cache_paths={
+                **dict(run_request.cache_paths or {}),
+                "metric_checkpoint": str(output_dir / "metrics" / "checkpoint.jsonl"),
+            },
             package_names=REPRODUCIBILITY_PACKAGES,
             manifest_path=paths["manifest"],
             environment_path=paths["environment"],
@@ -401,11 +404,16 @@ def run_existing_results(
             write_jsonl(paths["artifacts"], artifact_rows, atomic=False)
 
         per_sample_rows: list[JsonRow] = []
+        resumed_sample_ids = set((run_request.run_metadata or {}).get("generation_resumed_sample_ids", ()))
         metric_batches = score_samples(
-            requests, results, metrics, checkpoint_path=output_dir / "metrics" / "checkpoint.jsonl",
-            resume=run_request.resume, batch_size=run_request.metric_batch_size,
+            requests,
+            results,
+            metrics,
+            checkpoint_path=output_dir / "metrics" / "checkpoint.jsonl",
+            resume=run_request.resume,
+            batch_size=run_request.metric_batch_size,
         )
-    
+
         # Per-sample metric loop (isolated failures unless fail_on_sample_error).
         # Periodic flushes retain resumable progress without reopening CPFS files
         # for every sample.
@@ -420,6 +428,16 @@ def run_existing_results(
                     result = results[index]
                     generation_status = "failed" if _is_failed(result) else "succeeded"
                     generation_cache_metadata = generation_cache_hit_metadata(result)
+                    cache_details = {}
+                    if request_row.sample_id in resumed_sample_ids:
+                        cache_details = {"cached": True, "cache_source": "run_checkpoint"}
+                    elif generation_cache_metadata:
+                        cache_details = {
+                            "cached": True,
+                            "cache_source": "generation_result_cache",
+                            "source_run_id": generation_cache_metadata.get("source_run_id"),
+                            "cache_key_hash": generation_cache_metadata.get("key_hash"),
+                        }
 
                     # Metric callable (skipped when generation result failed).
                     metric_status = str(metric_row.get("status") or "succeeded").lower()
@@ -427,7 +445,9 @@ def run_existing_results(
 
                     errors = []
                     if generation_status == "failed":
-                        errors.append({"stage": "normalize_existing_results", "message": result.error or "generation failed"})
+                        errors.append(
+                            {"stage": "normalize_existing_results", "message": result.error or "generation failed"}
+                        )
                     if metric_status == "failed":
                         errors.append({"stage": "evaluate", "message": str(metric_row.get("error") or "metric failed")})
 
@@ -442,16 +462,7 @@ def run_existing_results(
                             "metrics_status": metric_status,
                             "started_at": started_at,
                             "finished_at": _utcnow_iso(),
-                            **(
-                                {
-                                    "cached": True,
-                                    "cache_source": "generation_result_cache",
-                                    "source_run_id": generation_cache_metadata.get("source_run_id"),
-                                    "cache_key_hash": generation_cache_metadata.get("key_hash"),
-                                }
-                                if generation_cache_metadata
-                                else {}
-                            ),
+                            **cache_details,
                             **({"errors": errors} if errors else {}),
                         }
                     )
@@ -493,7 +504,6 @@ def run_existing_results(
                 "finished_at": finished_at,
                 "generation_cache": dict((run_request.run_metadata or {}).get("generation_cache") or {}),
                 "version_context": version_context,
-                "run_fingerprint": run_fingerprint,
             },
             benchmark=benchmark,
             model=model,
@@ -535,7 +545,10 @@ def run_existing_results(
                 "resume": run_request.resume,
                 "metric_batch_size": run_request.metric_batch_size,
             },
-            cache_paths={**dict(run_request.cache_paths or {}), "metric_checkpoint": str(output_dir / "metrics" / "checkpoint.jsonl")},
+            cache_paths={
+                **dict(run_request.cache_paths or {}),
+                "metric_checkpoint": str(output_dir / "metrics" / "checkpoint.jsonl"),
+            },
             package_names=REPRODUCIBILITY_PACKAGES,
             manifest_path=paths["manifest"],
             environment_path=paths["environment"],

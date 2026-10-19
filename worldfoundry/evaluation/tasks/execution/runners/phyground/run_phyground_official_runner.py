@@ -11,7 +11,13 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
-from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path, SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    SCORECARD_SCHEMA_VERSION,
+    resolve_env_path,
+)
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    build_video_coverage as _coverage,
+)
 from worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_metrics import (
     METRIC_ORDER,
     METRIC_SPECS,
@@ -29,7 +35,6 @@ from worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_runtime
     run_phyground_judge,
 )
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
-
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -55,8 +60,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--json", action="store_true")
     return parser.parse_args(argv)
-
-
 
 
 def _metric_rows(
@@ -92,27 +95,6 @@ def _metric_rows(
     return rows
 
 
-def _coverage(expected_ids: set[str], generated_dir: Path | None) -> dict[str, Any]:
-    actual_names: set[str] = set()
-    if generated_dir is not None and generated_dir.exists():
-        for path in generated_dir.iterdir():
-            if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES:
-                actual_names.add(path.stem)
-    missing = sorted(expected_ids - actual_names)
-    unexpected = sorted(actual_names - expected_ids)
-    matched = sorted(expected_ids & actual_names)
-    return {
-        "expected_count": len(expected_ids),
-        "actual_count": len(actual_names),
-        "matched_count": len(matched),
-        "missing_count": len(missing),
-        "unexpected_count": len(unexpected),
-        "complete": bool(expected_ids) and not missing,
-        "missing_ids": missing[:50],
-        "unexpected_ids": unexpected[:50],
-    }
-
-
 def _scorecard(
     *,
     benchmark_id: str,
@@ -132,14 +114,9 @@ def _scorecard(
         for row in available_rows
         if row.get("normalized_score") is not None
     }
-    video_complete = (
-        video_coverage.get("expected_count", 0) > 0
-        and video_coverage.get("complete") is True
-    )
+    video_complete = video_coverage.get("expected_count", 0) > 0 and video_coverage.get("complete") is True
     reported_artifact_coverage_complete = (
-        prompt_count >= CANONICAL_PROMPT_COUNT
-        and video_complete
-        and len(available_rows) == len(METRIC_ORDER)
+        prompt_count >= CANONICAL_PROMPT_COUNT and video_complete and len(available_rows) == len(METRIC_ORDER)
     )
     normalization_ok = bool(available_rows)
     evidence_scope = "result_artifact_import_only"
@@ -219,9 +196,7 @@ def normalize_phyground_results(
     generated_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
     official_results_path = args.official_results_path or resolve_env_path("WORLDFOUNDRY_PHYGROUND_RESULTS_PATH")
     if official_results_path is None:
-        raise ValueError(
-            "--official-results-path, WORLDFOUNDRY_PHYGROUND_RESULTS_PATH, or --run-official is required"
-        )
+        raise ValueError("--official-results-path, WORLDFOUNDRY_PHYGROUND_RESULTS_PATH, or --run-official is required")
     prompts_path: Path | None = None
     prompt_records: list[dict[str, Any]] = []
     try:
@@ -297,7 +272,9 @@ def run_official_phyground(args: argparse.Namespace) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     generated_dir = args.generated_artifact_dir or resolve_env_path("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR")
     if generated_dir is None:
-        raise ValueError("--generated-artifact-dir or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required for --run-official")
+        raise ValueError(
+            "--generated-artifact-dir or WORLDFOUNDRY_GENERATED_ARTIFACT_DIR is required for --run-official"
+        )
     prompts_path = resolve_prompts_json_path(
         explicit=args.prompt_manifest,
         repo_root=args.phyground_root,

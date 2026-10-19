@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
 from typing import Any
 
 from worldfoundry.core.io.filesystem.file_utils import materialize_file
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
+from worldfoundry.evaluation.api import GenerationRequest
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
-    first_existing_dir,
-    resolve_env_path,
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
+    first_existing_dir,
+    resolve_env_path,
+)
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    iter_generation_video_artifacts,
+    reset_generation_artifact_staging,
 )
 from worldfoundry.evaluation.tasks.execution.runners.physics_iq.protocols import (
     ORIGINAL,
@@ -28,7 +31,6 @@ BENCHMARK_DIR_NAME = "physics-IQ-benchmark"
 
 CANONICAL_PROMPT_COUNT = 198
 VIEWS = ("perspective-left", "perspective-center", "perspective-right")
-
 
 
 def resolve_switch_frames_dir(
@@ -188,9 +190,7 @@ def materialize_physics_iq_generation_requests(
     spec: PhysicsIQProtocolSpec = ORIGINAL,
     dataset_root: Path | None = None,
 ) -> tuple[GenerationRequest, ...]:
-    records = unique_generation_records(
-        load_description_rows(descriptions_path=descriptions_path, spec=spec)
-    )
+    records = unique_generation_records(load_description_rows(descriptions_path=descriptions_path, spec=spec))
     if limit is not None:
         records = records[: int(limit)]
     requests: list[GenerationRequest] = []
@@ -238,12 +238,6 @@ def materialize_physics_iq_verified_generation_requests(
     )
 
 
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    if not path.is_file():
-        return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-
-
 def copy_physics_iq_generated_videos(
     *,
     generation_output_dir: Path,
@@ -252,51 +246,20 @@ def copy_physics_iq_generated_videos(
     output_artifact: str = "generated_video",
 ) -> tuple[int, int]:
     """Copy model outputs into official ``generated_video_name`` filenames."""
-    generated_artifact_dir.mkdir(parents=True, exist_ok=True)
+    reset_generation_artifact_staging(generation_output_dir, generated_artifact_dir)
     materialized = 0
     placeholders = 0
     manifest_rows: list[dict[str, Any]] = []
-    for sample_dir in sorted(path for path in generation_output_dir.iterdir() if path.is_dir()):
-        result_path = sample_dir / "result.json"
-        if not result_path.is_file():
+    for result, _, source_path in iter_generation_video_artifacts(generation_output_dir, output_artifact):
+        if source_path is None or not source_path.is_file():
             continue
-        payload = json.loads(result_path.read_text(encoding="utf-8"))
-        sample_id = str(payload.get("sample_id") or sample_dir.name)
-        outputs = payload.get("outputs") if isinstance(payload.get("outputs"), dict) else {}
-        source = outputs.get(output_artifact) or outputs.get("generated_video")
-        if not source:
-            continue
-        source_path = Path(str(source))
-        if not source_path.is_file():
-            continue
-        target_name = sample_id if sample_id.endswith(".mp4") else f"{sample_id}.mp4"
+        target_name = result.sample_id if result.sample_id.endswith(".mp4") else f"{result.sample_id}.mp4"
         target_path = generated_artifact_dir / target_name
+        if target_path.is_file():
+            continue
         materialize_file(source_path, target_path, writable=False)
         materialized += 1
-        manifest_rows.append({"sample_id": sample_id, "artifact": output_artifact, "path": str(target_path)})
-
-    results_path = generation_output_dir / "results.jsonl"
-    if results_path.is_file():
-        for result in (GenerationResult.from_dict(row) for row in _read_jsonl(results_path)):
-            artifact = result.artifacts.get(output_artifact) or result.artifacts.get("generated_video")
-            if artifact is None:
-                continue
-            from worldfoundry.evaluation.utils import local_path_for_uri
-
-            source_path = local_path_for_uri(str(artifact))
-            if source_path is None or not source_path.is_file():
-                continue
-            target_name = (
-                result.sample_id if result.sample_id.endswith(".mp4") else f"{result.sample_id}.mp4"
-            )
-            target_path = generated_artifact_dir / target_name
-            if target_path.is_file():
-                continue
-            materialize_file(source_path, target_path, writable=False)
-            materialized += 1
-            manifest_rows.append(
-                {"sample_id": result.sample_id, "artifact": output_artifact, "path": str(target_path)}
-            )
+        manifest_rows.append({"sample_id": result.sample_id, "artifact": output_artifact, "path": str(target_path)})
 
     write_jsonl(artifact_manifest_path, manifest_rows)
     return materialized, placeholders

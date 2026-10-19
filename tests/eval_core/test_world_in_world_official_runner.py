@@ -17,7 +17,6 @@ from worldfoundry.evaluation.tasks.execution.runners.world_in_world.world_in_wor
 )
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -142,6 +141,8 @@ def test_world_in_world_official_run_with_artifact_backend_writes_scorecard(tmp_
     assert completed.returncode == 0, completed.stderr
     scorecard = json.loads((output_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert (output_dir / "world_in_world_metrics.json").is_file()
-    assert scorecard["evaluation"]["kind"] == "world_in_world_official_in_tree"
-    assert scorecard["normalizer_only"] is False
+    assert scorecard["evaluation"]["kind"] == "world_in_world_result_importer"
+    assert scorecard["normalizer_only"] is True
+    assert scorecard["official_benchmark_verified"] is False
+    assert scorecard["integration_evidence"] is False
     assert scorecard["metrics"]["summary"]["available_metric_count"] == 8

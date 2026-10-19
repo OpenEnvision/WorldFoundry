@@ -10,8 +10,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from worldfoundry.evaluation.tasks.catalog.dispatch import VIDEO_RUNNER_REGISTRY
 from worldfoundry.evaluation.tasks.contracts import get_external_benchmark_contract
-from worldfoundry.evaluation.tasks.execution.framework.runner_registry import VIDEO_RUNNER_REGISTRY
 from worldfoundry.evaluation.tasks.execution.runners.worldreasonbench.worldreasonbench_metrics import (
     normalize_pairwise,
     normalize_pointwise,

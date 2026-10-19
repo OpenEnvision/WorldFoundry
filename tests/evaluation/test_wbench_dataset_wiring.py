@@ -5,21 +5,19 @@ from pathlib import Path
 
 import pytest
 
+from worldfoundry.evaluation.tasks.catalog.dispatch import CLI_RUNNERS
 from worldfoundry.evaluation.tasks.execution.runners.wbench.run_wbench_official_runner import (
     METRIC_ORDER,
     build_parser,
     run_official_wbench,
     stage_generated_videos,
 )
-from worldfoundry.evaluation.tasks.execution.runners.workspace_registry import CLI_RUNNERS
 
 
 def test_wbench_dataset_root_reaches_runtime(tmp_path: Path, monkeypatch) -> None:
     dataset_root = tmp_path / "WBench"
     (dataset_root / "cases").mkdir(parents=True)
-    args = build_parser().parse_args(
-        ["--output-dir", str(tmp_path / "out"), "--dataset-root", str(dataset_root)]
-    )
+    args = build_parser().parse_args(["--output-dir", str(tmp_path / "out"), "--dataset-root", str(dataset_root)])
     monkeypatch.setenv("WBENCH_DATA_DIR", str(args.dataset_root))
     runtime = runpy.run_path(
         "worldfoundry/evaluation/tasks/execution/runners/wbench/runtime/wbench/main.py",

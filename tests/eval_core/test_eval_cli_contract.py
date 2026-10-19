@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
 import pytest
 
+from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_MODEL_ID, CONTRACT_FIXTURE_RUNNER_TARGET
 from worldfoundry import cli
 from worldfoundry.cli import main
-from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_MODEL_ID, CONTRACT_FIXTURE_RUNNER_TARGET
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCAL_TASK_TYPE = "worldfoundry_imagetext2video_gen"
@@ -110,8 +110,7 @@ def test_root_help_lists_eval_core_evaluate_entrypoint(capsys) -> None:
     assert "evaluate" in captured.out
     assert "metric" in captured.out
     assert "plan" in captured.out
-    assert "run                 Execute or score a WorldFoundry benchmark through the" in captured.out
-    assert "unified facade" in captured.out
+    assert re.search(r"\brun\b", captured.out)
     assert "run-benchmark" not in captured.out
     assert "run-suite" not in captured.out
     assert "suites" in captured.out
@@ -137,12 +136,14 @@ def test_evaluate_cli_scores_existing_results_jsonl(tmp_path, capsys) -> None:
         {
             "sample_id": "sample-a",
             "task_name": "offline_t2v",
+            "status": "succeeded",
             "artifacts": {"video": {"uri": "outputs/a.mp4", "kind": "video"}},
             "metrics": {"quality": 0.25},
         },
         {
             "sample_id": "sample-b",
             "task_name": "offline_t2v",
+            "status": "succeeded",
             "metrics": {"quality": 0.75},
         },
     ]
@@ -202,6 +203,7 @@ def test_unified_run_scores_existing_results_with_benchmark_metadata(tmp_path, c
             {
                 "sample_id": "sample-a",
                 "task_name": "offline_t2v",
+                "status": "succeeded",
                 "artifacts": {"video": {"uri": "memory://sample-a.mp4", "kind": "video"}},
             },
             sort_keys=True,
@@ -234,6 +236,9 @@ def test_unified_run_scores_existing_results_with_benchmark_metadata(tmp_path, c
     assert payload["delegate"]["sample_count"] == 1
     scorecard = json.loads((output_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert scorecard["benchmark"]["benchmark_name"] == "offline-benchmark"
+    assert scorecard["model"]["model_id"] == "offline-model"
+    assert scorecard["metrics"]["leaderboard"]["artifact_count"] == 1.0
+    assert scorecard["eligibility"]["leaderboard_valid"] is False
     assert (output_dir / "scorecard.json").is_file()
 
 
@@ -440,10 +445,8 @@ def test_zoo_benchmark_run_help_exposes_contract_mode(capsys) -> None:
 
     assert exc_info.value.code == 0
     assert "--mode {contract,normalizer,official-run,official-validation}" in output
-    assert "local schema" in output
-    assert "checks" in output
-
-
+    assert "Contract emits a non-official contract scorecard" in output
+    assert "official-validation imports results" in output
 
 
 def test_contract_runner_artifact_behavior_is_api_owned() -> None:
@@ -465,11 +468,11 @@ def test_zoo_help_exposes_benchmark_operations(capsys) -> None:
     assert "model-show" in captured.out
     assert "benchmark-show" in captured.out
     assert "model-download" in captured.out
-    assert "report" in captured.out
-    assert "env-check" in captured.out
+    assert "report" not in captured.out
+    assert "env-check" not in captured.out
 
 
-def test_zoo_models_list_prints_aliases(tmp_path, capsys) -> None:
+def test_zoo_models_list_serializes_aliases(tmp_path, capsys) -> None:
     manifest_dir = tmp_path / "model_zoo"
     manifest_dir.mkdir()
     (manifest_dir / "models.yaml").write_text(
@@ -489,14 +492,16 @@ def test_zoo_models_list_prints_aliases(tmp_path, capsys) -> None:
         encoding="utf-8",
     )
 
-    exit_code = main(["zoo", "models", "--manifest-dir", str(manifest_dir)])
-    output = capsys.readouterr().out
+    exit_code = main(["zoo", "models", "--manifest-dir", str(manifest_dir), "--json"])
+    payload = json.loads(capsys.readouterr().out)
 
     assert exit_code == 0
-    assert "demo-alias, Demo Model" in output
+    assert payload[0]["model_id"] == "demo-model"
+    assert payload[0]["aliases"] == ["demo-alias"]
+    assert payload[0]["name"] == "Demo Model"
 
 
-def test_zoo_benchmarks_list_prints_aliases(tmp_path, capsys) -> None:
+def test_zoo_benchmarks_list_serializes_aliases(tmp_path, capsys) -> None:
     manifest_dir = tmp_path / "benchmark_zoo"
     manifest_dir.mkdir()
     (manifest_dir / "benchmarks.yaml").write_text(
@@ -515,12 +520,13 @@ def test_zoo_benchmarks_list_prints_aliases(tmp_path, capsys) -> None:
         encoding="utf-8",
     )
 
-    exit_code = main(["zoo", "benchmarks", "--manifest-dir", str(manifest_dir)])
-    output = capsys.readouterr().out
+    exit_code = main(["zoo", "benchmarks", "--manifest-dir", str(manifest_dir), "--json"])
+    payload = json.loads(capsys.readouterr().out)
 
     assert exit_code == 0
-    assert "DemoBench, Demo Benchmark" in output
-    assert "benchmarks.yaml" not in output
+    assert payload[0]["benchmark_id"] == "demo-benchmark"
+    assert payload[0]["aliases"] == ["DemoBench"]
+    assert payload[0]["name"] == "Demo Benchmark"
 
 
 def test_zoo_benchmarks_list_filters_ready_and_needs(tmp_path, capsys) -> None:
@@ -624,8 +630,8 @@ def test_tasks_list_exposes_benchmark_zoo_contract_surfaces(capsys) -> None:
     assert by_task["vbench"]["benchmark_name"] == "vbench"
     assert by_task["vbench"]["name"] == "vbench"
     assert by_task["vbench"]["source_kind"] == "benchmark_zoo"
-    assert by_task["vbench"]["official_runtime_validated"] is True
-    assert by_task["vbench"]["contract_only_surface"] is False
+    assert by_task["vbench"]["official_runtime_validated"] is False
+    assert by_task["vbench"]["contract_only_surface"] is True
     assert by_task["worldmodelbench"]["requires_upstream_runtime"] is True
     assert by_task["worldscore"]["evaluation_protocol"] == "external_benchmark_contract"
     assert by_task["worldscore"]["official_runtime_validated"] is False
@@ -645,7 +651,7 @@ def test_tasks_list_text_is_grouped_without_compatibility_aliases(capsys) -> Non
 
     assert exit_code == 0
     assert "benchmark_zoo: external_benchmark_contract" in output
-    assert "  vbench" in output
+    assert "vbench" in output
     assert "vbench/external" not in output
     assert "raw alias" not in output
 
@@ -677,9 +683,9 @@ def test_tasks_catalog_exports_active_registry(capsys) -> None:
     by_name = {item["name"]: item for item in payload}
 
     assert exit_code == 0
-    assert by_name["vbench"]["schema_version"] == "worldfoundry-catalog-benchmark"
+    assert by_name["vbench"]["schema_version"] == "worldfoundry-benchmark"
     task = by_name["vbench"]["tasks"][0]
-    assert task["schema_version"] == "worldfoundry-catalog-task"
+    assert task["schema_version"] == "worldfoundry-task"
     assert task["name"] == "vbench"
     assert task["evaluation_protocol"][0]["name"] == "external_benchmark_contract"
     assert task["metadata"]["source_kind"] == "benchmark_zoo"
@@ -744,399 +750,13 @@ def test_cli_validation_writes_scorecard(tmp_path, capsys) -> None:
     assert "missing official/full-suite leaderboard evidence gate" in scorecard["eligibility"]["reasons"]
 
 
-def test_zoo_benchmark_validate_forwards_to_script(monkeypatch, tmp_path) -> None:
-    calls = []
+@pytest.mark.parametrize("command", ("benchmark-validate", "model-validate", "env-check", "report"))
+def test_zoo_rejects_retired_commands(command: str, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["zoo", command])
 
-    class FakeScript:
-        @staticmethod
-        def main(argv):
-            calls.append(argv)
-            return 7
-
-    def fake_load_repo_script(relative_path: str):
-        assert relative_path == "scripts/benchmark_zoo/validate_integration.py"
-        return FakeScript
-
-    monkeypatch.setattr(cli, "_load_repo_script", fake_load_repo_script)
-
-    exit_code = main(
-        [
-            "zoo",
-            "benchmark-validate",
-            "--manifest-dir",
-            str(tmp_path / "manifests"),
-            "--benchmark-id",
-            "vbench",
-            "--output-root",
-            str(tmp_path / "validation"),
-            "--clone-root",
-            str(tmp_path / "repos"),
-            "--cache-dir",
-            str(tmp_path / "hfd"),
-            "--timeout",
-            "11",
-            "--clone-timeout",
-            "22",
-            "--depth",
-            "2",
-            "--execute-clone",
-            "--fresh-clone",
-            "--execute-download",
-            "--execute-validation",
-            "--disable-xet",
-            "--allow-partial",
-            "--dataset-id",
-            "org/data",
-            "--env",
-            "FOO=bar",
-            "--json",
-        ]
-    )
-
-    assert exit_code == 7
-    assert calls == [
-        [
-            "--manifest-dir",
-            str(tmp_path / "manifests"),
-            "--benchmark-id",
-            "vbench",
-            "--output-root",
-            str(tmp_path / "validation"),
-            "--clone-root",
-            str(tmp_path / "repos"),
-            "--cache-dir",
-            str(tmp_path / "hfd"),
-            "--timeout",
-            "11",
-            "--clone-timeout",
-            "22",
-            "--depth",
-            "2",
-            "--execute-clone",
-            "--fresh-clone",
-            "--dataset-id",
-            "org/data",
-            "--execute-download",
-            "--disable-xet",
-            "--execute-validation",
-            "--env",
-            "FOO=bar",
-            "--allow-partial",
-            "--json",
-        ]
-    ]
-
-
-def test_zoo_model_env_check_forwards_to_script(monkeypatch, tmp_path) -> None:
-    calls = []
-
-    class FakeScript:
-        @staticmethod
-        def main(argv):
-            calls.append(argv)
-            return 5
-
-    def fake_load_repo_script(relative_path: str):
-        assert relative_path == "scripts/model_zoo/env_check.py"
-        return FakeScript
-
-    monkeypatch.setattr(cli, "_load_repo_script", fake_load_repo_script)
-
-    exit_code = main(
-        [
-            "zoo",
-            "env-check",
-            "--kind",
-            "model",
-            "--id",
-            "wan2.1",
-            "--manifest-dir",
-            str(tmp_path / "manifests"),
-            "--clone-root",
-            str(tmp_path / "repos"),
-            "--cache-dir",
-            str(tmp_path / "hfd"),
-            "--checkpoint-repo-id",
-            "Wan-AI/Wan2.1-T2V-1.3B",
-            "--require-repo",
-            "--require-checkpoint",
-            "--require-demo",
-            "--require-runner-demo",
-            "--json",
-        ]
-    )
-
-    assert exit_code == 5
-    assert calls == [
-        [
-            "--manifest-dir",
-            str(tmp_path / "manifests"),
-            "--model-id",
-            "wan2.1",
-            "--checkpoint-repo-id",
-            "Wan-AI/Wan2.1-T2V-1.3B",
-            "--clone-root",
-            str(tmp_path / "repos"),
-            "--cache-dir",
-            str(tmp_path / "hfd"),
-            "--require-repo",
-            "--require-checkpoint",
-            "--require-demo",
-            "--require-runner-demo",
-            "--json",
-        ]
-    ]
-
-
-def test_zoo_model_env_check_resolves_registry_alias(monkeypatch, tmp_path) -> None:
-    calls = []
-
-    class FakeScript:
-        @staticmethod
-        def main(argv):
-            calls.append(argv)
-            return 0
-
-    def fake_load_repo_script(relative_path: str):
-        assert relative_path == "scripts/model_zoo/env_check.py"
-        return FakeScript
-
-    monkeypatch.setattr(cli, "_load_repo_script", fake_load_repo_script)
-
-    exit_code = main(
-        [
-            "zoo",
-            "env-check",
-            "--kind",
-            "model",
-            "--id",
-            "Wan-AI/Wan2.1-T2V-1.3B",
-            "--json",
-        ]
-    )
-
-    assert exit_code == 0
-    assert "--model-id" in calls[0]
-    assert calls[0][calls[0].index("--model-id") + 1] == "wan2.1"
-
-
-def test_zoo_benchmark_env_check_forwards_to_script(monkeypatch, tmp_path) -> None:
-    calls = []
-
-    class FakeScript:
-        @staticmethod
-        def main(argv):
-            calls.append(argv)
-            return 6
-
-    def fake_load_repo_script(relative_path: str):
-        assert relative_path == "scripts/benchmark_zoo/env_check.py"
-        return FakeScript
-
-    monkeypatch.setattr(cli, "_load_repo_script", fake_load_repo_script)
-
-    exit_code = main(
-        [
-            "zoo",
-            "env-check",
-            "--kind",
-            "benchmark",
-            "--id",
-            "vbench",
-            "--manifest-dir",
-            str(tmp_path / "manifests"),
-            "--clone-root",
-            str(tmp_path / "repos"),
-            "--cache-dir",
-            str(tmp_path / "hfd"),
-            "--require-repo",
-            "--require-dataset",
-            "--require-validation",
-            "--json",
-        ]
-    )
-
-    assert exit_code == 6
-    assert calls == [
-        [
-            "--manifest-dir",
-            str(tmp_path / "manifests"),
-            "--benchmark-id",
-            "vbench",
-            "--clone-root",
-            str(tmp_path / "repos"),
-            "--cache-dir",
-            str(tmp_path / "hfd"),
-            "--require-repo",
-            "--require-dataset",
-            "--require-validation",
-            "--json",
-        ]
-    ]
-
-
-def test_zoo_benchmark_validate_resolves_registry_alias(monkeypatch, tmp_path) -> None:
-    calls = []
-    manifest_dir = tmp_path / "benchmark_zoo"
-    manifest_dir.mkdir()
-    (manifest_dir / "benchmarks.yaml").write_text(
-        json.dumps(
-            {
-                "benchmarks": [
-                    {
-                        "benchmark_id": "demo-benchmark",
-                        "aliases": ["DemoBench"],
-                        "source": {"status": "open_source"},
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    class FakeScript:
-        @staticmethod
-        def main(argv):
-            calls.append(argv)
-            return 0
-
-    def fake_load_repo_script(relative_path: str):
-        assert relative_path == "scripts/benchmark_zoo/validate_integration.py"
-        return FakeScript
-
-    monkeypatch.setattr(cli, "_load_repo_script", fake_load_repo_script)
-
-    exit_code = main(
-        [
-            "zoo",
-            "benchmark-validate",
-            "--manifest-dir",
-            str(manifest_dir),
-            "--benchmark-id",
-            "demobench",
-            "--json",
-        ]
-    )
-
-    assert exit_code == 0
-    assert "--benchmark-id" in calls[0]
-    assert calls[0][calls[0].index("--benchmark-id") + 1] == "demo-benchmark"
-
-
-
-
-def test_zoo_model_validate_forwards_to_script(monkeypatch, tmp_path) -> None:
-    calls = []
-
-    class FakeScript:
-        @staticmethod
-        def main(argv):
-            calls.append(argv)
-            return 9
-
-    def fake_load_repo_script(relative_path: str):
-        assert relative_path == "scripts/model_zoo/validate_integration.py"
-        return FakeScript
-
-    monkeypatch.setattr(cli, "_load_repo_script", fake_load_repo_script)
-
-    exit_code = main(
-        [
-            "zoo",
-            "model-validate",
-            "--manifest-dir",
-            str(tmp_path / "manifests"),
-            "--model-id",
-            "wan2.1",
-            "--output-root",
-            str(tmp_path / "validation"),
-            "--clone-root",
-            str(tmp_path / "repos"),
-            "--cache-dir",
-            str(tmp_path / "hfd"),
-            "--timeout",
-            "11",
-            "--clone-timeout",
-            "22",
-            "--depth",
-            "2",
-            "--execute-clone",
-            "--fresh-clone",
-            "--checkpoint-repo-id",
-            "Wan-AI/Wan2.1-T2V-1.3B",
-            "--execute-download",
-            "--check-local",
-            "--disable-xet",
-            "--execute-official-demo",
-            "--execute-runner-demo",
-            "--allow-partial",
-            "--json",
-        ]
-    )
-
-    assert exit_code == 9
-    assert calls == [
-        [
-            "--manifest-dir",
-            str(tmp_path / "manifests"),
-            "--model-id",
-            "wan2.1",
-            "--output-root",
-            str(tmp_path / "validation"),
-            "--clone-root",
-            str(tmp_path / "repos"),
-            "--cache-dir",
-            str(tmp_path / "hfd"),
-            "--timeout",
-            "11",
-            "--clone-timeout",
-            "22",
-            "--depth",
-            "2",
-            "--execute-clone",
-            "--fresh-clone",
-            "--checkpoint-repo-id",
-            "Wan-AI/Wan2.1-T2V-1.3B",
-            "--execute-download",
-            "--check-local",
-            "--disable-xet",
-            "--execute-official-demo",
-            "--execute-runner-demo",
-            "--allow-partial",
-            "--json",
-        ]
-    ]
-
-
-def test_zoo_model_validate_resolves_registry_alias(monkeypatch) -> None:
-    calls = []
-
-    class FakeScript:
-        @staticmethod
-        def main(argv):
-            calls.append(argv)
-            return 0
-
-    def fake_load_repo_script(relative_path: str):
-        assert relative_path == "scripts/model_zoo/validate_integration.py"
-        return FakeScript
-
-    monkeypatch.setattr(cli, "_load_repo_script", fake_load_repo_script)
-
-    exit_code = main(
-        [
-            "zoo",
-            "model-validate",
-            "--model-id",
-            "Wan-AI/Wan2.1-T2V-1.3B",
-            "--allow-partial",
-            "--json",
-        ]
-    )
-
-    assert exit_code == 0
-    assert "--model-id" in calls[0]
-    assert calls[0][calls[0].index("--model-id") + 1] == "wan2.1"
+    assert exc_info.value.code == 2
+    assert f"invalid choice: '{command}'" in capsys.readouterr().err
 
 
 def test_zoo_model_download_forwards_retry_options_to_script(monkeypatch, tmp_path) -> None:
@@ -1351,7 +971,7 @@ def test_zoo_benchmark_runner_writes_contract_scorecard(tmp_path, capsys) -> Non
 
     assert exit_code == 0
     assert payload["benchmark_id"] == "vbench"
-    assert payload["ok"] is False
+    assert payload["ok"] is True
     assert payload["official_benchmark_verified"] is False
     assert payload["integration_evidence"] is False
     assert scorecard["benchmark"]["contract_only"] is True
@@ -1487,8 +1107,21 @@ def test_zoo_benchmark_runner_requires_integration_evidence_for_success(tmp_path
 def test_zoo_benchmark_runner_normalizes_official_results_path(tmp_path, capsys) -> None:
     output_dir = tmp_path / "runner-official-results"
     manifest_path = tmp_path / "benchmarks.yaml"
-    official_results = tmp_path / "official_results.csv"
-    official_results.write_text("sample_id,metric_id,score\nsample-a,quality,1.0\nsample-b,quality,0.5\n", encoding="utf-8")
+    official_results = tmp_path / "official_results.json"
+    official_results.write_text(
+        json.dumps(
+            {
+                "aesthetic_quality": [
+                    0.75,
+                    [
+                        {"video_path": "sample-a.mp4", "video_results": 1.0},
+                        {"video_path": "sample-b.mp4", "video_results": 0.5},
+                    ],
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
     manifest_path.write_text(
         json.dumps(
             {
@@ -1498,7 +1131,7 @@ def test_zoo_benchmark_runner_normalizes_official_results_path(tmp_path, capsys)
                         "status": "confirmed_official_code",
                         "integration_status": "integrated",
                         "runner": {"verification_status": "verified"},
-                        "metrics": [{"id": "quality", "leaderboard_key": "quality"}],
+                        "metrics": [{"id": "aesthetic_quality", "leaderboard_key": "aesthetic_quality"}],
                     }
                 ]
             }
@@ -1527,10 +1160,12 @@ def test_zoo_benchmark_runner_normalizes_official_results_path(tmp_path, capsys)
     scorecard = json.loads((output_dir / "scorecard.json").read_text(encoding="utf-8"))
 
     assert exit_code == 0
-    assert payload["ok"] is False
+    assert payload["ok"] is True
     assert scorecard["normalizer_only"] is True
     assert scorecard["normalization_ok"] is True
-    assert scorecard["metrics"]["leaderboard"]["quality"] == 0.75
+    assert scorecard["metrics"]["per_metric"]["aesthetic_quality"]["raw_score"] == 0.75
+    assert scorecard["official_benchmark_verified"] is False
+    assert scorecard["integration_evidence"] is False
 
 
 def test_vbench_manifest_script_normalizes_existing_upstream_results(tmp_path, capsys) -> None:
@@ -1563,7 +1198,8 @@ def test_vbench_manifest_script_normalizes_existing_upstream_results(tmp_path, c
                             "verification_status": "verified",
                             "validation_command": [
                                 sys.executable,
-                                str(REPO_ROOT / "scripts" / "benchmark_zoo" / "run_vbench_official_runner.py"),
+                                "-m",
+                                "worldfoundry.evaluation.tasks.execution.runners.vbench.run_vbench_official_runner",
                                 "run",
                                 "--videos-path",
                                 str(videos_dir),
@@ -1602,7 +1238,7 @@ def test_vbench_manifest_script_normalizes_existing_upstream_results(tmp_path, c
 
     assert exit_code == 0
     assert payload["benchmark_id"] == "vbench"
-    assert payload["ok"] is False
+    assert payload["ok"] is True
     assert payload["official_benchmark_verified"] is False
     assert payload["integration_evidence"] is False
     assert scorecard["normalization_ok"] is True
@@ -1610,27 +1246,13 @@ def test_vbench_manifest_script_normalizes_existing_upstream_results(tmp_path, c
     assert scorecard["evaluation"]["kind"] == "official_vbench"
 
 
-def test_vbench_script_lists_dimensions_and_plan_onlys_external_setup(tmp_path, capsys) -> None:
-    module = cli._load_repo_script("worldfoundry/evaluation/tasks/execution/runners/vbench/run_vbench_official_runner.py")
+def test_vbench_entrypoint_lists_dimensions(capsys) -> None:
+    from worldfoundry.evaluation.tasks.execution.runners.vbench.run_vbench_official_runner import main as vbench_main
 
-    exit_code = module.dimensions_main(["--json"])
+    exit_code = vbench_main(["dimensions", "--json"])
     payload = json.loads(capsys.readouterr().out)
 
     assert exit_code == 0
     assert payload["benchmark_id"] == "vbench"
     assert payload["presets"]["validation"] == ["aesthetic_quality"]
     assert "full_16" in payload["presets"]
-
-    setup_exit_code = module.setup_main(
-        [
-            "--vbench-root",
-            str(tmp_path / "repos" / "vbench"),
-            "--plan-only",
-            "--json",
-        ]
-    )
-    setup_payload = json.loads(capsys.readouterr().out)
-
-    assert setup_exit_code == 0
-    assert setup_payload["status"] == "planned_clone"
-    assert setup_payload["commands"][0][:3] == ["git", "clone", "https://github.com/Vchitect/VBench.git"]

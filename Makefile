@@ -222,6 +222,24 @@ INFER_TENSOR_CONTRACTS = \
 	tests/synthesis/test_magi2_unified_runtime.py \
 	tests/eval_core/test_catalog_integration_status.py \
 	$(EVALUATION_CPU_CONTRACTS)
+EVALUATION_CPU_CONTRACTS = \
+	tests/evaluation/execution/test_resume_options.py \
+	tests/evaluation/execution/test_result_integrity.py \
+	tests/evaluation/execution/test_helper_reuse.py \
+	tests/evaluation/execution/test_pipeline_boundaries.py \
+	tests/evaluation/execution/test_generation_artifact_materialization.py \
+	tests/evaluation/execution/test_shared_scoring_backend.py \
+	tests/evaluation/execution/test_vbench_appearance_reduction.py \
+	tests/evaluation/execution/test_worldscore_evaluator_lifecycle.py \
+	tests/evaluation/metrics/test_scalar_aggregation.py \
+	tests/evaluation/metrics/test_worldscore_aggregation.py \
+	tests/evaluation/metrics/test_fvd_batch_preprocessing.py \
+	tests/evaluation/metrics/test_artscore_loader.py \
+	tests/cli/test_cli_mcp_contracts.py \
+	tests/cli/test_cli_mcp_usage_context.py \
+	tests/cli/test_mcp_content_conversion.py \
+	tests/core/test_logging_console_lifecycle.py
+
 # Select numerical CUDA nodes explicitly: older CUDA tests do not all carry the gpu marker.
 INFER_CUDA_CONTRACTS = \
 	tests/synthesis/test_inspatio_renderer_gpu.py::test_strict_renderer_matches_cpu_and_repeats \
@@ -380,10 +398,13 @@ test-infer: test
 test-docs-contracts:
 	PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest "$(DOCS_TEST_MANIFEST)" --junit "$(DOCS_TEST_JUNIT)" --test tests/core/test_model_docs_codegen.py --test tests/eval_core/test_docs_quickstart.py --test tests/eval_core/test_benchmark_hub_docs.py -- $(TEST_ARGS)
 
-# This suite needs CPU Torch, safetensors and einops, with no weights or renderer.
-.PHONY: test-realtime-client
+.PHONY: test-realtime-client test-evaluation
 test-realtime-client:
 	node --test tests/studio_visualization/realtime_client.test.mjs tests/studio_visualization/realtime_udp.test.mjs
+
+# This suite needs CPU Torch, safetensors and einops, with no weights or renderer.
+test-evaluation:
+	CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest tmp/evaluation-cpu-selection.json --junit tmp/evaluation-cpu-contracts.xml --marker 'not gpu' $(foreach test,$(EVALUATION_CPU_CONTRACTS),--test $(test)) -- $(TEST_ARGS)
 
 test-infer-tensors:
 	CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 PYTHONPATH=$(PYTHONPATH) $(STRICT_TEST_RUNNER) --manifest "$(INFER_TENSOR_MANIFEST)" --junit "$(INFER_TENSOR_JUNIT)" --marker 'not gpu' $(foreach test,$(INFER_TENSOR_CONTRACTS),--test $(test)) -- $(TEST_ARGS)

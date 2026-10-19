@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.evaluation.tasks.execution.framework.io import mean_numeric as _mean
+
 METRIC_ORDER = (
     "physical_commonsense_accuracy",
     "affordance_understanding",
@@ -85,11 +87,6 @@ def _parse_match(value: Any) -> bool | None:
     return None
 
 
-def _mean(values: Sequence[float]) -> float | None:
-    clean = [float(value) for value in values]
-    return sum(clean) / len(clean) if clean else None
-
-
 def _summary_metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
     metrics: dict[str, float] = {}
     for row in rows:
@@ -166,9 +163,7 @@ def compute_physvidbench_metrics(*, qa_rows: Sequence[Mapping[str, Any]]) -> dic
         "temporal_dynamics_consistency": _mean(buckets["temporal_dynamics_consistency"]),
     }
     component_values = [
-        value
-        for key, value in direct_metrics.items()
-        if key != "physical_commonsense_accuracy" and value is not None
+        value for key, value in direct_metrics.items() if key != "physical_commonsense_accuracy" and value is not None
     ]
     direct_metrics["physvidbench_average"] = _mean(component_values) if component_values else _mean(overall)
 

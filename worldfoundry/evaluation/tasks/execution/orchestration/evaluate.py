@@ -11,14 +11,16 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 from uuid import uuid4
 
+from worldfoundry.core.io.formats.serialization import JsonlWriter
 from worldfoundry.evaluation.api import (
     GenerationRequest,
     GenerationResult,
     Metric,
 )
+from worldfoundry.evaluation.api.generation import validate_sample_ids
 from worldfoundry.evaluation.tasks.catalog.benchmark_id import normalize_benchmark_id
 from worldfoundry.evaluation.tasks.execution.framework.in_tree_evaluator import BenchmarkZooInTreeEvaluator
 from worldfoundry.evaluation.tasks.execution.framework.scoring_registry import target_benchmark_metrics
@@ -38,7 +40,7 @@ from worldfoundry.evaluation.utils import (
 from .cache import cache_paths_from_stats, run_generation_with_cache
 from .existing_results import ExistingResultsRunRequest, execute_existing_results
 from .run_session import (
-    coerce_generation_result,
+    iter_generation_results,
     prepare_generation,
     prepare_run_output_dir,
     resume_generation,
@@ -108,6 +110,7 @@ class EvaluateRunResult:
     exit codes, paths to generated artifacts (manifest, execution plan, scorecard),
     and counts of processed samples and artifacts.
     """
+
     schema_version: str
     mode: str
     delegate_runner: str
@@ -153,6 +156,7 @@ class _ResolvedRunner:
     This dataclass stores an instantiated model runner along with its resolved model ID
     and other diagnostic information, used internally during 'model' evaluation mode.
     """
+
     runner: Any
     model_id: str
     source: str = "provided_runner"
@@ -330,19 +334,8 @@ def _task_name_from(value: Any) -> str:
     return "materialized_results"
 
 
-def _normalize_requests(source: Any) -> list[Any]:
-    """Expands ambiguous objects into standard GenerationRequest-capable payloads.
-
-    Takes a source of requests (e.g., list of dicts, GenerationRequest objects) and
-    normalizes them into a consistent list of dictionaries, ensuring each has
-    a `sample_id` and `task_name`.
-
-    Args:
-        source: The raw input source for generation requests.
-
-    Returns:
-        A list of dictionaries, each representing a normalized request.
-    """
+def _normalize_requests(source: Any) -> list[GenerationRequest | dict[str, Any]]:
+    """Extract request rows and fill missing sample and task identifiers."""
     rows = _rows_from_source(source, preferred_keys=("requests", "samples"))
     normalized = []
     for index, item in enumerate(rows):
@@ -360,18 +353,7 @@ def _normalize_requests(source: Any) -> list[Any]:
 
 
 def _derive_requests_from_results(results_source: Any) -> list[GenerationRequest]:
-    """Extracts original inputs and control boundaries when running directly from cached output JSONs.
-
-    This is used in 'existing-results' mode when no explicit `requests` are provided,
-    inferring them from the `results` by extracting 'request' sub-fields or creating
-    minimal requests.
-
-    Args:
-        results_source: The source of existing `GenerationResult` objects or raw result data.
-
-    Returns:
-        A list of `GenerationRequest` objects derived from the results.
-    """
+    """Use embedded requests or derive minimal requests for offline result rows."""
     rows = _rows_from_source(results_source, preferred_keys=("results",))
     requests: list[GenerationRequest] = []
     for index, item in enumerate(rows):
@@ -387,122 +369,13 @@ def _derive_requests_from_results(results_source: Any) -> list[GenerationRequest
 
 
 def _coerce_generation_requests(source: Any) -> list[GenerationRequest]:
-    """Force-casts payloads strictly to valid physical `GenerationRequest` instances.
-
-    Normalizes a source of requests and then converts each item into a `GenerationRequest` object.
-
-    Args:
-        source: The raw input source for generation requests.
-
-    Returns:
-        A list of `GenerationRequest` objects.
-    """
-    requests: list[GenerationRequest] = []
-    for index, item in enumerate(_normalize_requests(source)):
-        if isinstance(item, GenerationRequest):
-            requests.append(item)
-            continue
-        if isinstance(item, Mapping):
-            row = dict(item)
-        else:
-            row = {"inputs": {"value": item}}
-        row.setdefault("sample_id", _sample_id_from(item, index))
-        row.setdefault("task_name", _task_name_from(item))
-        requests.append(GenerationRequest.from_dict(row))
+    """Convert normalized request rows to generation contracts."""
+    requests = [
+        item if isinstance(item, GenerationRequest) else GenerationRequest.from_dict(item)
+        for item in _normalize_requests(source)
+    ]
+    validate_sample_ids((row.sample_id for row in requests), source="requests")
     return requests
-
-
-def _coerce_model_result(item: Any, request: GenerationRequest, model_id: str) -> GenerationResult:
-    """Coerces dictionaries or generic model responses securely into tracked `GenerationResult`s.
-
-    Ensures that the `GenerationResult` is correctly associated with its originating `GenerationRequest`
-    and contains necessary metadata like `model_id`.
-
-    Args:
-        item: The raw result object or dictionary from the model runner.
-        request: The original `GenerationRequest` for context.
-        model_id: The ID of the model that produced the result.
-
-    Returns:
-        A `GenerationResult` object.
-    """
-    if isinstance(item, GenerationResult):
-        if item.sample_id == request.sample_id:
-            return item
-        return replace(
-            coerce_generation_result(item, request.sample_id),
-            request_id=item.request_id or request.request_id,
-            model_id=item.model_id or model_id,
-        )
-    if isinstance(item, Mapping):
-        row = dict(item)
-        row.setdefault("sample_id", request.sample_id)
-        row.setdefault("request_id", request.request_id)
-        row.setdefault("model_id", model_id)
-        return coerce_generation_result(row, request.sample_id)
-    return GenerationResult(
-        sample_id=request.sample_id,
-        request_id=request.request_id,
-        model_id=model_id,
-        status="failed",
-        error=f"runner returned unsupported result type: {type(item).__name__}",
-    )
-
-
-def _align_model_results(
-    requests: Sequence[GenerationRequest],
-    raw_results: Sequence[Any],
-    *,
-    model_id: str,
-) -> list[GenerationResult]:
-    """Matches unordered runner outputs securely back to their originating requests.
-
-    Attempts key-based lookups (`sample_id`) first to survive shuffling or asynchronous
-    batch variations, falling back to positional zipping if no IDs were echoed.
-
-    Args:
-        requests: The sequence of original `GenerationRequest` objects.
-        raw_results: The sequence of raw results returned by the model runner.
-        model_id: The ID of the model that produced the results.
-
-    Returns:
-        A list of `GenerationResult` objects, aligned with the input requests.
-    """
-    keyed: dict[str, Any] = {}
-    sequential: list[Any] = []
-    # First pass: try to key results by sample_id
-    for item in raw_results:
-        sample_id = getattr(item, "sample_id", None)
-        if sample_id is None and isinstance(item, Mapping):
-            sample_id = item.get("sample_id")
-        if sample_id is None:
-            sequential.append(item)
-        else:
-            keyed[str(sample_id)] = item
-
-    results: list[GenerationResult] = []
-    sequential_index = 0
-    # Second pass: align requests with results
-    for request in requests:
-        if request.sample_id in keyed:
-            # Found a keyed result
-            results.append(_coerce_model_result(keyed[request.sample_id], request, model_id))
-        elif sequential_index < len(sequential):
-            # Fallback to positional matching for unkeyed results
-            results.append(_coerce_model_result(sequential[sequential_index], request, model_id))
-            sequential_index += 1
-        else:
-            # If no result found (keyed or sequential), generate a failed result
-            results.append(
-                GenerationResult(
-                    sample_id=request.sample_id,
-                    request_id=request.request_id,
-                    model_id=model_id,
-                    status="failed",
-                    error="runner did not return a result for sample",
-                )
-            )
-    return results
 
 
 def _generate_with_resolved_model(
@@ -510,44 +383,17 @@ def _generate_with_resolved_model(
     requests: Sequence[GenerationRequest],
     *,
     cleanup: bool,
-) -> list[GenerationResult]:
-    """Safe runner sandbox enforcing the Generation Protocol.
-
-    Invokes `runner.generate()` inside a fault-isolated try/except block. Ensures that
-    crashes or OOM exceptions return structured failed `GenerationResult`s rather than
-    crashing the evaluation loop. Reaps runner resources automatically if cleanup is requested.
-
-    Args:
-        resolved: The resolved model runner object.
-        requests: The sequence of `GenerationRequest` objects to process.
-        cleanup: Whether to call the runner's `cleanup` method after generation.
-
-    Returns:
-        A list of `GenerationResult` objects, corresponding to the input requests.
-    """
+) -> Iterator[GenerationResult]:
+    """Yield complete samples while isolating runner errors and releasing resources."""
     runner = resolved.runner
     model_id = str(getattr(runner, "model_id", resolved.model_id))
     try:
-        raw_results = list(runner.generate(requests))
-    except Exception as exc:  # noqa: BLE001 - evaluate isolates runner failures.
-        # If the runner itself fails, return a list of failed results for all requests.
-        return [
-            GenerationResult(
-                sample_id=request.sample_id,
-                request_id=request.request_id,
-                model_id=model_id,
-                status="failed",
-                error=f"{type(exc).__name__}: {exc}",
-            )
-            for request in requests
-        ]
+        yield from iter_generation_results(runner, requests, model_id=model_id)
     finally:
-        # Ensure cleanup is performed if requested, even if generation fails.
         if cleanup:
             cleanup_fn = getattr(runner, "cleanup", None)
             if callable(cleanup_fn):
                 cleanup_fn()
-    return _align_model_results(requests, raw_results, model_id=model_id)
 
 
 def _mode(value: str) -> str:
@@ -836,7 +682,9 @@ def _partition_metrics(metrics: Sequence[Any]) -> tuple[tuple[str, ...], tuple[M
 
 
 def _resolve_metrics(
-    metrics: Sequence[Any], required_artifacts: Sequence[str], benchmark_id: str | None = None,
+    metrics: Sequence[Any],
+    required_artifacts: Sequence[str],
+    benchmark_id: str | None = None,
 ) -> tuple[Any, ...]:
     """Resolve ids once and retain metric objects with their aggregation methods."""
     metric_ids, objects = _partition_metrics(metrics)
@@ -848,9 +696,13 @@ def _resolve_metrics(
     offline_ids = tuple(key for key in metric_ids if key not in supported)
     resolved = list(objects)
     if in_tree_ids:
-        resolved.append(BenchmarkZooInTreeEvaluator(
-            lookup_id, metric_ids=in_tree_ids, required_artifacts=required_artifacts or None,
-        ))
+        resolved.append(
+            BenchmarkZooInTreeEvaluator(
+                lookup_id,
+                metric_ids=in_tree_ids,
+                required_artifacts=required_artifacts or None,
+            )
+        )
     if offline_ids or (required_artifacts and not in_tree_ids):
         try:
             evaluator = create_existing_results_metric(metrics=offline_ids, required_artifacts=required_artifacts)
@@ -1010,7 +862,7 @@ def run_evaluate(
         )
         benchmark = _benchmark_metadata(run_request, mode)
         benchmark_id = _benchmark_id_from_metadata(run_request, benchmark)
-        
+
         # Route to the offline evaluation delegator
         delegate = execute_existing_results(
             ExistingResultsRunRequest(
@@ -1043,15 +895,14 @@ def run_evaluate(
         requests = _coerce_generation_requests(request_source)
         benchmark = _benchmark_metadata(run_request, mode)
         metrics = _resolve_metrics(
-            run_request.metrics, run_request.required_artifacts, _benchmark_id_from_metadata(run_request, benchmark),
+            run_request.metrics,
+            run_request.required_artifacts,
+            _benchmark_id_from_metadata(run_request, benchmark),
         )
         metric_owners(metrics)
-        
+
         resolved_zoo_config = None
-        if (
-            run_request.runner is None
-            and run_request.model_zoo_manifest_dir is not None
-        ):
+        if run_request.runner is None and run_request.model_zoo_manifest_dir is not None:
             if not run_request.model_id:
                 raise TypeError("model-zoo model mode requires model_id")
             # Catalog/config resolution is CPU-only and supplies the complete,
@@ -1067,9 +918,7 @@ def run_evaluate(
         resolved: Any | None = None
 
         def coerce_resolved(value: Any) -> Any:
-            if isinstance(value, ResolvedWorldModel) or (
-                hasattr(value, "runner") and hasattr(value, "model_id")
-            ):
+            if isinstance(value, ResolvedWorldModel) or (hasattr(value, "runner") and hasattr(value, "model_id")):
                 return value
             return _resolved_from_runner(value, run_request.model_id)
 
@@ -1119,7 +968,7 @@ def run_evaluate(
                 resolved_zoo_config=resolved_zoo_config,
             )
         )
-        
+
         version_context = build_version_context(
             runner="evaluate_model_generation",
             model=execution_identity,
@@ -1133,24 +982,41 @@ def run_evaluate(
         run_id = run_request.run_id or f"model-{uuid4().hex[:12]}"
         generation_metadata = {
             **dict(run_request.run_metadata or {}),
-            "generation_identity": execution_identity, "run_id": run_id, "started_at": utcnow_iso(),
+            "generation_identity": execution_identity,
+            "run_id": run_id,
+            "started_at": utcnow_iso(),
+            "generation_resumed_sample_ids": list(cached),
         }
-        with run_stage(paths, "generate", manifest={
-            **generation_metadata, "model": model, "benchmark": benchmark, "dataset": dataset,
-            "sample_count": len(requests),
-        }):
+        with run_stage(
+            paths,
+            "generate",
+            manifest={
+                **generation_metadata,
+                "model": model,
+                "benchmark": benchmark,
+                "dataset": dataset,
+                "sample_count": len(requests),
+            },
+        ):
             prepare_generation(paths, requests, cached)
             try:
-                results, generation_cache_stats = run_generation_with_cache(
-                    [row for row in requests if row.sample_id not in cached],
-                    lambda rows: _generate_with_resolved_model(resolve_once(), rows, cleanup=False),
-                    cache_dir=run_request.generation_cache_dir,
-                    cache_mode=run_request.generation_cache_mode,
-                    namespace=run_request.generation_cache_namespace,
-                    version_context=version_context,
-                    artifact_base_dir=output_dir,
-                    run_id=run_id,
-                )
+                with JsonlWriter(paths["results"], mode="a") as writer:
+
+                    def persist_result(result: GenerationResult) -> None:
+                        writer.write(result.to_dict())
+                        writer.flush()
+
+                    results, generation_cache_stats = run_generation_with_cache(
+                        [row for row in requests if row.sample_id not in cached],
+                        lambda rows: _generate_with_resolved_model(resolve_once(), rows, cleanup=False),
+                        cache_dir=run_request.generation_cache_dir,
+                        cache_mode=run_request.generation_cache_mode,
+                        namespace=run_request.generation_cache_namespace,
+                        version_context=version_context,
+                        artifact_base_dir=output_dir,
+                        run_id=run_id,
+                        on_result=persist_result,
+                    )
             finally:
                 if run_request.cleanup_runner and resolved is not None:
                     cleanup_fn = getattr(resolved.runner, "cleanup", None)
@@ -1188,7 +1054,7 @@ def run_evaluate(
     raise ValueError(f"unsupported evaluate mode after normalization: {mode!r}")
 
 
-execute_evaluate_run = run_evaluate # Alias for backward compatibility or convenience.
+execute_evaluate_run = run_evaluate  # Alias for backward compatibility or convenience.
 
 __all__ = [
     "EVALUATE_RUN_REQUEST_SCHEMA_VERSION",
