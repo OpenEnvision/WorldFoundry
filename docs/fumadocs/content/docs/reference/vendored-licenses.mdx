@@ -3,10 +3,17 @@ title: Third-party notices
 description: Where to find the authoritative license and provenance records for in-tree upstream code.
 ---
 
-WorldFoundry includes selected upstream inference code and optional native dependencies. Repository-level license texts, copyright statements, and component restrictions are collected in the root `THIRD-PARTY-NOTICES`. Required component-specific license files, including the vendored BigVGAN notices, remain with their sources and are declared as package data. This page provides links to the central records.
+WorldFoundry includes selected upstream inference code and optional native dependencies. Repository-level license texts, copyright statements, and component restrictions are collected in the root `THIRD-PARTY-NOTICES`. The complete BigVGAN license texts are retained in that central bundle; source comments identify their original records. This page provides links to the central records.
 
 - [Project license](https://github.com/OpenEnvision/WorldFoundry/blob/main/LICENSE) contains the Apache-2.0 terms for WorldFoundry-authored code.
 - [Licenses and third-party notices](https://github.com/OpenEnvision/WorldFoundry/blob/main/THIRD-PARTY-NOTICES) include WorldFoundry's Apache-2.0 license, upstream terms, model notices, and the consolidated `thirdparty/` license notes. `Original-File` labels identify where each retained text came from.
 - [Upstream provenance](https://github.com/OpenEnvision/WorldFoundry/blob/main/thirdparty/UPSTREAM_PROVENANCE.md) records source repositories and revisions for vendored components.
+
+The Kandinsky6 BigVGAN audio decoder retains all nine upstream license texts:
+NVIDIA, HiFi-GAN, Snake, alias-free-torch, Seungwon Park, Julius, Descript,
+Charactr and Amphion. Look up the `bigvgan_v2/LICENSE` and
+`bigvgan_v2/incl_licenses/LICENSE_1` through `LICENSE_8` records in
+`THIRD-PARTY-NOTICES`. Their complete texts are included in both distribution
+formats; the decoder's source comments identify the applicable records.
 
 Read the applicable license text and retained source-file notices before redistributing or using a component. Consolidation does not change any component's license or remove distribution restrictions. Model checkpoints and datasets may have separate terms; their catalog entries and upstream release pages identify those sources. Wheels and source distributions include both the project license and central notice bundle.

@@ -25,6 +25,17 @@ CODEOWNERS 覆盖整个仓库。PR 需要适用的 CI 结果和维护者/code ow
 使用 squash merge 和描述性 PR 标题，并保留 DCO trailers。管理员按 CONTRIBUTING.md
 配置 `main` 的 ruleset。
 
+### 托管 CI 的依赖
+
+`pyproject.toml` 中的 `lint` 是 dependency group，升级 pip 后使用
+`python -m pip install --group lint` 安装。它不是 package extra；公开测试与
+MCP extra 单独使用 `python -m pip install -e ".[test,mcp]"` 安装。
+
+各个 CI job 独立安装依赖。CPU 张量 job 安装匹配的 Torch/Torchvision CPU
+wheel，以及 codec 契约使用的 PyAV、ImageIO、ImageIO-FFmpeg 后端。
+Python quality job 已安装的包不会出现在张量 job 中。必需测试选择与数值预算
+保持不变。
+
 ## Agent Skills
 
 仓库维护的 [Agent Skills](https://agentskills.io/specification) 放在

@@ -1,5 +1,5 @@
 # Implementation adapted from https://github.com/EdwardDixon/snake under the MIT license.
-#   LICENSE is in incl_licenses directory.
+# License text: THIRD-PARTY-NOTICES, BigVGAN Snake LICENSE_2.
 
 import torch
 from torch import nn, sin, pow
