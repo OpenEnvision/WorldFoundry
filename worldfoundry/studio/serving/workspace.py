@@ -31,7 +31,6 @@ from worldfoundry.core.execution.inference import (
 )
 from worldfoundry.core.io.paths import project_root
 from worldfoundry.evaluation.tasks.catalog.workspace_registry import (
-    run_workspace_benchmark,
     validate_workspace_registry,
     workspace_benchmark_has_input,
     workspace_benchmark_runtime_hint,
@@ -269,6 +268,8 @@ class JobCreateRequest(BaseModel):
     model_zoo_manifest_dir: str = ""
     model_variant_id: str = ""
     metrics: list[str] = Field(default_factory=lambda: ["artifact_count"])
+    metric_batch_size: int = 32
+    resume: bool = False
     required_artifacts: list[str] = Field(default_factory=list)
     generation_cache_dir: str = ""
     generation_cache_mode: str = "off"
@@ -667,13 +668,13 @@ def _workspace_child_python() -> str:
     """Return the Python entrypoint child Studio frontends should reuse."""
 
     return (
-        os.getenv("WORLDFOUNDRY_STUDIO_CHILD_PYTHON", "").strip()
-        or os.getenv("PYTHON", "").strip()
-        or sys.executable
+        os.getenv("WORLDFOUNDRY_STUDIO_CHILD_PYTHON", "").strip() or os.getenv("PYTHON", "").strip() or sys.executable
     )
 
 
-def _visualizer_launch_command(mode: str, payload: VisualizerLaunchRequest, host: str, port: int) -> tuple[list[str], str, str]:
+def _visualizer_launch_command(
+    mode: str, payload: VisualizerLaunchRequest, host: str, port: int
+) -> tuple[list[str], str, str]:
     STUDIO_VISUALIZATIONS.backend_for(mode)
     model_id = (payload.model_id or DEFAULT_VISUALIZER_MODELS.get(mode) or "").strip()
     if not model_id:
@@ -768,14 +769,11 @@ def _launch_visualizer_locked(mode: str, payload: VisualizerLaunchRequest) -> di
     )
     _cleanup_finished_visualizer(mode)
     existing = VISUALIZER_MANAGED.get(mode)
-    if (
-        payload.reuse
-        and _visualizer_reusable(
-            existing,
-            model_id=requested_model_id,
-            asset_path=requested_asset_path,
-            params=params,
-        )
+    if payload.reuse and _visualizer_reusable(
+        existing,
+        model_id=requested_model_id,
+        asset_path=requested_asset_path,
+        params=params,
     ):
         return _visualizer_status(existing)
 
@@ -823,18 +821,11 @@ def _launch_visualizer_locked(mode: str, payload: VisualizerLaunchRequest) -> di
             raise HTTPException(status_code=409, detail=f"no free Rerun data ports found near {port + 1}")
         browser_host = "127.0.0.1" if host in {"", "0.0.0.0", "::", "localhost"} else host
         source_url = f"ws://{browser_host}:{rerun_ws_port}"
-        url = (
-            url.rstrip("/")
-            + "/?url="
-            + urllib.parse.quote(source_url, safe="")
-            + f"&renderer={_rerun_renderer()}"
-        )
+        url = url.rstrip("/") + "/?url=" + urllib.parse.quote(source_url, safe="") + f"&renderer={_rerun_renderer()}"
     health_url = _visualizer_health_url(mode, url)
     log_path = _workspace_visualizer_dir() / f"{mode}-{int(time.time())}.log"
     env = os.environ.copy()
-    env["PYTHONPATH"] = os.pathsep.join(
-        item for item in (str(REPO_ROOT), env.get("PYTHONPATH", "")) if item
-    )
+    env["PYTHONPATH"] = os.pathsep.join(item for item in (str(REPO_ROOT), env.get("PYTHONPATH", "")) if item)
     env.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
     env.setdefault("PYTHONFAULTHANDLER", "1")
     env.setdefault("PYTHONUNBUFFERED", "1")
@@ -1016,7 +1007,8 @@ def _entry_inference_spec(entry: CatalogEntry):
                     inputs=tuple(
                         replace(input_field, default=entry.default_interactions or ("forward",))
                         if input_field.target == "params"
-                        and _param_key(input_field.field_id) in {"interactions", "interaction", "interaction_signal", "action"}
+                        and _param_key(input_field.field_id)
+                        in {"interactions", "interaction", "interaction_signal", "action"}
                         else input_field
                         for input_field in task.inputs
                     ),
@@ -1160,7 +1152,8 @@ def _entry_inference_spec(entry: CatalogEntry):
             for input_field in task.inputs:
                 if (
                     input_field.target == "params"
-                    and _param_key(input_field.field_id) in {"interactions", "interaction", "interaction_signal", "action"}
+                    and _param_key(input_field.field_id)
+                    in {"interactions", "interaction", "interaction_signal", "action"}
                     and (input_field.default is None or input_field.default == "")
                 ):
                     inputs.append(replace(input_field, default=entry.default_interactions))
@@ -1233,11 +1226,7 @@ def _entry_runtime_options(entry: CatalogEntry) -> dict[str, dict[str, Any]]:
             supported = True
             matched.append("WORLDFOUNDRY_ENABLE_TORCH_COMPILE")
         default = next(
-            (
-                declared_defaults[alias]
-                for alias in aliases
-                if alias in declared_defaults
-            ),
+            (declared_defaults[alias] for alias in aliases if alias in declared_defaults),
             False,
         )
         options[key] = {
@@ -1541,15 +1530,16 @@ def _model_payload(entry: CatalogEntry) -> dict[str, Any]:
     infer_spec = _entry_inference_spec(entry)
     variant_payloads = []
     extra_by_id = {
-        str(raw_variant.get("variant_id") or "").strip(): raw_variant
-        for raw_variant in entry.extra_variants
+        str(raw_variant.get("variant_id") or "").strip(): raw_variant for raw_variant in entry.extra_variants
     }
     for variant in infer_spec.variants:
         row = variant.to_dict()
         row["model_ref"] = _variant_model_ref(entry, variant)
         row["load_kwargs"] = _variant_load_kwargs(entry, variant)
         if entry.model_id in INTERACTIVE_INFERENCE_SPECS:
-            row["tasks"] = [interactive_task_for_variant(infer_spec, variant, task).to_dict() for task in infer_spec.tasks]
+            row["tasks"] = [
+                interactive_task_for_variant(infer_spec, variant, task).to_dict() for task in infer_spec.tasks
+            ]
         extra = extra_by_id.get(variant.variant_id) or {}
         if extra.get("workload_type"):
             row["workload_type"] = extra["workload_type"]
@@ -1672,8 +1662,6 @@ def _preview_input_path_from_call_kwargs(call_kwargs: Mapping[str, Any]) -> str:
     if isinstance(operator_kwargs, Mapping):
         return _preview_input_path_from_call_kwargs(operator_kwargs)
     return ""
-
-
 
 
 @lru_cache(maxsize=1)
@@ -1853,9 +1841,8 @@ def _sync_input_path_to_call_kwargs(
         return
     video_input_task_types = {"v2v", "video-video", "video-to-video", "v2a", "video-to-audio"}
     if (
-        (workload in {"i2v", "image-video", "image-to-video"} and declared_task_type not in video_input_task_types)
-        or declared_task_type in {"i2v", "image-video", "image-to-video"}
-    ):
+        workload in {"i2v", "image-video", "image-to-video"} and declared_task_type not in video_input_task_types
+    ) or declared_task_type in {"i2v", "image-video", "image-to-video"}:
         target = _supported_call_param(entry, "image_path", "image", "images")
         if target:
             call_kwargs[target] = input_path if target != "images" else [input_path]
@@ -1927,11 +1914,7 @@ def _runtime_alias_names_for_supported_options(entry: CatalogEntry) -> set[str]:
 
 
 def _task_declared_kwargs(task: InferenceTaskProfile, target: str) -> set[str]:
-    return {
-        _param_key(input_field.field_id)
-        for input_field in task.inputs
-        if input_field.target == target
-    }
+    return {_param_key(input_field.field_id) for input_field in task.inputs if input_field.target == target}
 
 
 def _validate_explicit_kwargs(entry: CatalogEntry, task: InferenceTaskProfile, payload: JobCreateRequest) -> None:
@@ -2027,7 +2010,9 @@ def _validate_task_field_choices(entry: CatalogEntry, task: InferenceTaskProfile
     for input_field in task.inputs:
         if input_field.target not in direct_values:
             continue
-        _validate_field_choice(entry, task, input_field.field_id, input_field.choices, direct_values[input_field.target])
+        _validate_field_choice(
+            entry, task, input_field.field_id, input_field.choices, direct_values[input_field.target]
+        )
 
 
 def _validate_inference_payload(entry: CatalogEntry, task: InferenceTaskProfile, payload: JobCreateRequest) -> None:
@@ -2125,8 +2110,12 @@ def _merge_common_params(
     set_load_from_param("seed", "seed")
     set_call_from_param("fps", "fps")
     set_load_from_param("fps", "fps", "frame_rate")
-    set_call_from_param("num_inference_steps", "num_inference_steps", "steps", "sampling_steps", "infer_steps", "num_steps")
-    set_load_from_param("num_inference_steps", "num_inference_steps", "steps", "sampling_steps", "infer_steps", "num_steps")
+    set_call_from_param(
+        "num_inference_steps", "num_inference_steps", "steps", "sampling_steps", "infer_steps", "num_steps"
+    )
+    set_load_from_param(
+        "num_inference_steps", "num_inference_steps", "steps", "sampling_steps", "infer_steps", "num_steps"
+    )
     if payload.negative_prompt:
         negative_key = _supported_call_param(entry, "negative_prompt")
         if negative_key:
@@ -2272,7 +2261,9 @@ def _apply_runtime_options(
 
 def _inference_run_kwargs(payload: JobCreateRequest, *, validate: bool = True) -> tuple[CatalogEntry, dict[str, Any]]:
     entry = find_entry(payload.model_id)
-    variant, task, model_ref, variant_call_kwargs, variant_load_kwargs, contract = _resolve_inference_contract(entry, payload)
+    variant, task, model_ref, variant_call_kwargs, variant_load_kwargs, contract = _resolve_inference_contract(
+        entry, payload
+    )
     runtime_id = cogvideox_runtime_model_id(entry.model_id, variant.variant_id)
     if runtime_id:
         entry = find_runtime_entry(runtime_id)
@@ -2403,6 +2394,8 @@ def _prepared_evaluation_from_payload(payload: JobCreateRequest, output_dir: str
     model_parameters = dict(payload.call_kwargs or {})
     model_runtime = dict(payload.load_kwargs or {})
     if mode == "score-artifacts":
+        if payload.resume or payload.metric_batch_size != 32:
+            raise ValueError("resume/metric_batch_size apply to in-process scoring, not an official artifact protocol")
         intent = ScoreArtifactsIntent(
             output_dir=output_dir,
             benchmark_id=payload.benchmark_id,
@@ -2422,6 +2415,8 @@ def _prepared_evaluation_from_payload(payload: JobCreateRequest, output_dir: str
             dataset_root=_optional_path(payload.dataset_root),
             dataset_id=_optional_path(payload.dataset_id),
             num_samples=payload.limit,
+            resume=payload.resume,
+            metric_batch_size=payload.metric_batch_size,
             model_parameters=model_parameters,
             model_runtime=model_runtime,
             generation_cache_dir=_optional_path(payload.generation_cache_dir),
@@ -2442,6 +2437,8 @@ def _prepared_evaluation_from_payload(payload: JobCreateRequest, output_dir: str
             model_parameters=model_parameters,
             model_runtime=model_runtime,
             num_samples=payload.limit,
+            resume=payload.resume,
+            metric_batch_size=payload.metric_batch_size,
             generation_cache_dir=_optional_path(payload.generation_cache_dir),
             generation_cache_mode=payload.generation_cache_mode or "read-write",
         )
@@ -2458,7 +2455,9 @@ def _run_evaluation(payload: JobCreateRequest, job: StudioJob | None = None) -> 
         validate_run_plan,
     )
 
-    output_dir = _optional_path(payload.output_dir) or _workspace_job_output_dir("evaluations", job.job_id if job else None)
+    output_dir = _optional_path(payload.output_dir) or _workspace_job_output_dir(
+        "evaluations", job.job_id if job else None
+    )
     intent_mode = (payload.eval_mode or "existing-results").strip().lower().replace("_", "-")
     if intent_mode in _PREPARED_EVALUATION_MODES:
         from worldfoundry.evaluation.tasks.execution.orchestration.service import execute_prepared_evaluation
@@ -2485,16 +2484,14 @@ def _run_evaluation(payload: JobCreateRequest, job: StudioJob | None = None) -> 
         if not validation.get("ok"):
             issues = "; ".join(str(item) for item in validation.get("issues", ()))
             raise ValueError(f"Evaluation run plan is invalid: {issues}")
-        request = evaluate_request_from_run_plan(plan)
+        request = replace(
+            evaluate_request_from_run_plan(plan),
+            resume=payload.resume,
+            metric_batch_size=payload.metric_batch_size,
+        )
         if payload.output_dir:
             request = replace(request, output_dir=output_dir)
     else:
-        if workspace_benchmark_supported(payload.benchmark_id) and workspace_benchmark_has_input(payload):
-            return run_workspace_benchmark(
-                payload,
-                output_dir,
-                log_callback=job.append_log if job is not None else None,
-            )
         mode = (payload.eval_mode or "existing-results").strip().lower().replace("_", "-")
         request = EvaluateRunRequest(
             output_dir=output_dir,
@@ -2518,6 +2515,8 @@ def _run_evaluation(payload: JobCreateRequest, job: StudioJob | None = None) -> 
                     "manifest_path": _optional_path(payload.dataset_manifest),
                 }
             ),
+            resume=payload.resume,
+            metric_batch_size=payload.metric_batch_size,
             fail_on_sample_error=bool(payload.fail_on_sample_error),
             write_artifacts_index=bool(payload.write_artifacts_index),
             generation_cache_dir=_optional_path(payload.generation_cache_dir),
@@ -2568,6 +2567,7 @@ def _result_output_dir(result: Any) -> str:
 def _result_artifact_paths(result: Any) -> list[tuple[str, str]]:
     rows: list[tuple[str, str]] = []
     seen: set[str] = set()
+
     def add_path(name: str, path: Any) -> None:
         if not path:
             return
@@ -2724,29 +2724,15 @@ def _registered_artifact_paths() -> set[Path]:
     """Return the exact-path artifact allowlist, reusing an unchanged index."""
 
     jobs = JOBS.list()
-    active_run_ids = {
-        job.result.run_id
-        for job in jobs
-        if isinstance(job.result, RunRecord)
-    }
-    persisted_runs = [
-        record
-        for record in MANAGER.list_recent_runs(limit=100)
-        if record.run_id not in active_run_ids
-    ]
+    active_run_ids = {job.result.run_id for job in jobs if isinstance(job.result, RunRecord)}
+    persisted_runs = [record for record in MANAGER.list_recent_runs(limit=100) if record.run_id not in active_run_ids]
     job_rows = [(job, _result_artifact_paths(job.result)) for job in jobs]
     persisted_rows = [(record, _result_artifact_paths(record)) for record in persisted_runs]
     signature: tuple[Any, ...] = (
         id(JOBS),
         id(MANAGER),
-        tuple(
-            (job.job_id, job.status, id(job.result), tuple(path for _, path in rows))
-            for job, rows in job_rows
-        ),
-        tuple(
-            (record.run_id, id(record), tuple(path for _, path in rows))
-            for record, rows in persisted_rows
-        ),
+        tuple((job.job_id, job.status, id(job.result), tuple(path for _, path in rows)) for job, rows in job_rows),
+        tuple((record.run_id, id(record), tuple(path for _, path in rows)) for record, rows in persisted_rows),
     )
 
     global _REGISTERED_ARTIFACT_CACHE_PATHS, _REGISTERED_ARTIFACT_CACHE_SIGNATURE
@@ -3048,7 +3034,9 @@ def create_app(auth_token: str = "") -> FastAPI:
     def list_models(workload_type: str | None = None) -> list[dict[str, Any]]:
         models = [dict(model) for model in _workspace_models()]
         if workload_type and workload_type != "all":
-            models = [model for model in models if model["workload_type"] == workload_type or workload_type == "inference"]
+            models = [
+                model for model in models if model["workload_type"] == workload_type or workload_type == "inference"
+            ]
         return models
 
     @app.get("/api/evaluation/catalog")
@@ -3168,8 +3156,12 @@ def create_app(auth_token: str = "") -> FastAPI:
                     messages = "; ".join(issue.message for issue in prepared.issues if issue.severity == "error")
                     raise HTTPException(status_code=400, detail=messages or "evaluation preflight failed")
             elif not payload.run_plan_path:
-                if mode == "existing-results" and not payload.results_path and not (
-                    workspace_benchmark_supported(payload.benchmark_id) and workspace_benchmark_has_input(payload)
+                if (
+                    mode == "existing-results"
+                    and not payload.results_path
+                    and not (
+                        workspace_benchmark_supported(payload.benchmark_id) and workspace_benchmark_has_input(payload)
+                    )
                 ):
                     raise HTTPException(
                         status_code=400,
@@ -3355,11 +3347,12 @@ def create_app(auth_token: str = "") -> FastAPI:
     return app
 
 
-
 def main(argv: Sequence[str] | None = None) -> None:
     from worldfoundry.cli.help import WorldFoundryArgumentParser
 
-    parser = WorldFoundryArgumentParser(prog="worldfoundry-workspace", description="Launch the WorldFoundry Studio workspace.")
+    parser = WorldFoundryArgumentParser(
+        prog="worldfoundry-workspace", description="Launch the WorldFoundry Studio workspace."
+    )
     parser.add_argument("--host", default=os.getenv("WORLDFOUNDRY_WORKSPACE_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.getenv("WORLDFOUNDRY_WORKSPACE_PORT", "7870") or "7870"))
     args = parser.parse_args(list(argv) if argv is not None else None)

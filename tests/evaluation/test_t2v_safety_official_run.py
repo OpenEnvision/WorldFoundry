@@ -10,6 +10,9 @@ import pytest
 
 from worldfoundry.core.io.formats.serialization import write_jsonl
 from worldfoundry.evaluation.api import ArtifactRef, GenerationResult
+from worldfoundry.evaluation.tasks.catalog.workspace_registry import (
+    build_workspace_benchmark_command,
+)
 from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_generation import (
     get_benchmark_generation_adapter,
 )
@@ -18,9 +21,6 @@ from worldfoundry.evaluation.tasks.execution.orchestration.model_benchmark impor
 )
 from worldfoundry.evaluation.tasks.execution.runners.t2v_safety_bench import (
     run_t2v_safety_bench_official_runner as runner,
-)
-from worldfoundry.evaluation.tasks.execution.runners.workspace_registry import (
-    build_workspace_benchmark_command,
 )
 
 

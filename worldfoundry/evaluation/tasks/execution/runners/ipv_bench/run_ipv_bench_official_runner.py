@@ -11,7 +11,13 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.evaluation.tasks.execution.framework.io import utc_now_iso, write_json, write_jsonl
-from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path, SCORECARD_SCHEMA_VERSION, VIDEO_SUFFIXES
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    SCORECARD_SCHEMA_VERSION,
+    resolve_env_path,
+)
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    build_video_coverage as _coverage,
+)
 from worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_metrics import (
     METRIC_ORDER,
     METRIC_SPECS,
@@ -31,7 +37,6 @@ from worldfoundry.evaluation.tasks.execution.runners.ipv_bench.ipv_bench_runtime
     runtime_config_from_env,
 )
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
-
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -66,8 +71,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-
-
 def _metric_rows(
     *,
     computed: Mapping[str, Any],
@@ -99,27 +102,6 @@ def _metric_rows(
     return rows
 
 
-def _coverage(expected_ids: set[str], generated_dir: Path | None) -> dict[str, Any]:
-    actual_names: set[str] = set()
-    if generated_dir is not None and generated_dir.exists():
-        for path in generated_dir.iterdir():
-            if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES:
-                actual_names.add(path.stem)
-    missing = sorted(expected_ids - actual_names)
-    unexpected = sorted(actual_names - expected_ids)
-    matched = sorted(expected_ids & actual_names)
-    return {
-        "expected_count": len(expected_ids),
-        "actual_count": len(actual_names),
-        "matched_count": len(matched),
-        "missing_count": len(missing),
-        "unexpected_count": len(unexpected),
-        "complete": bool(expected_ids) and not missing,
-        "missing_ids": missing[:50],
-        "unexpected_ids": unexpected[:50],
-    }
-
-
 def _scorecard(
     *,
     benchmark_id: str,
@@ -139,14 +121,9 @@ def _scorecard(
         for row in available_rows
         if row.get("normalized_score") is not None
     }
-    video_complete = (
-        video_coverage.get("expected_count", 0) > 0
-        and video_coverage.get("complete") is True
-    )
+    video_complete = video_coverage.get("expected_count", 0) > 0 and video_coverage.get("complete") is True
     full_suite_valid = (
-        prompt_count >= CANONICAL_PROMPT_COUNT
-        and video_complete
-        and len(available_rows) == len(METRIC_ORDER)
+        prompt_count >= CANONICAL_PROMPT_COUNT and video_complete and len(available_rows) == len(METRIC_ORDER)
     )
     normalization_ok = bool(available_rows)
     # IPV-Bench generation evaluation currently imports/normalizes results;
@@ -217,9 +194,7 @@ def normalize_ipv_bench_results(
         discovered = discover_official_results([output_dir, repo_root] if repo_root else [output_dir])
         official_results_path = discovered
     if official_results_path is None:
-        raise ValueError(
-            "--official-results-path, WORLDFOUNDRY_IPV_BENCH_RESULTS_PATH, or --run-official is required"
-        )
+        raise ValueError("--official-results-path, WORLDFOUNDRY_IPV_BENCH_RESULTS_PATH, or --run-official is required")
 
     prompt_manifest_path: Path | None = None
     prompt_records: list[dict[str, Any]] = []

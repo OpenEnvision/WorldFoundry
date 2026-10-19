@@ -13,7 +13,6 @@ from worldfoundry.evaluation.tasks.execution.runners.phyground.phyground_prompts
 )
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -44,15 +43,18 @@ def test_phyground_prompt_materialization_uses_video_ids(tmp_path: Path) -> None
 
 
 def test_phyground_metrics_from_summary_csv() -> None:
-    rows = [{"metric_id": metric_id, "score": 0.75} for metric_id in (
-        "semantic_adherence",
-        "physical_temporal_validity",
-        "persistence",
-        "solid_body_score",
-        "fluid_dynamics_score",
-        "optics_score",
-        "phyground_overall",
-    )]
+    rows = [
+        {"metric_id": metric_id, "score": 0.75}
+        for metric_id in (
+            "semantic_adherence",
+            "physical_temporal_validity",
+            "persistence",
+            "solid_body_score",
+            "fluid_dynamics_score",
+            "optics_score",
+            "phyground_overall",
+        )
+    ]
     metrics = compute_phyground_metrics(rows=rows)["metrics"]
     assert metrics["semantic_adherence"] == 0.75
     assert metrics["phyground_overall"] == 0.75
@@ -179,8 +181,10 @@ def test_phyground_official_run_with_artifact_scores_writes_scorecard(tmp_path: 
     assert completed.returncode == 0, completed.stderr
     scorecard = json.loads((output_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert (output_dir / "scores.json").is_file()
-    assert scorecard["evaluation"]["kind"] == "phyground_official_in_tree"
-    assert scorecard["normalizer_only"] is False
+    assert scorecard["evaluation"]["kind"] == "phyground_result_importer"
+    assert scorecard["normalizer_only"] is True
+    assert scorecard["official_benchmark_verified"] is False
+    assert scorecard["integration_evidence"] is False
     assert scorecard["metrics"]["summary"]["available_metric_count"] == 7
 
 

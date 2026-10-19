@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ...api.json_contract import JsonContract, require_mapping, to_plain
+from ...api.json_contract import tuple_of_str as _tuple_of_str
 from ...utils import load_manifest
 
 LOGGER = logging.getLogger(__name__)
@@ -179,6 +180,7 @@ _require_mapping = require_mapping
 
 # ── Coercion helpers ─────────────────────────────────────────
 
+
 def _optional_str(value: Any) -> str | None:
     """Coerce a value to string or return None if None."""
     if value is None:
@@ -202,15 +204,6 @@ def _optional_float(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
-
-
-def _tuple_of_str(value: Any) -> tuple[str, ...]:
-    """Coerce any scalar or iterable value to a tuple of strings."""
-    if value is None:
-        return ()
-    if isinstance(value, str):
-        return (value,)
-    return tuple(str(item) for item in value)
 
 
 def _tuple_of_artifacts(value: Any) -> tuple[JsonValue, ...]:
@@ -240,6 +233,7 @@ def _validate_status(value: str, allowed: frozenset[str], context: str) -> str:
 
 
 # ── Status normalisation ─────────────────────────────────────
+
 
 def _normalize_source_status(value: Any) -> str:
     """Normalize and map varying source status strings/aliases to canonical states.
@@ -349,6 +343,7 @@ def _normalize_demo_status(value: Any) -> str:
 
 # ── Text and URL helpers ─────────────────────────────────────
 
+
 def _first_text(*values: Any) -> str | None:
     """Return the first non-empty string value found in the inputs."""
     for value in values:
@@ -391,6 +386,7 @@ def _repo_id_from_hf_url(value: Any) -> str | None:
 
 
 # ── Entry extraction helpers ─────────────────────────────────
+
 
 def _github_url_from_sources(entry: Mapping[str, Any]) -> str | None:
     """Resolve the official GitHub repository URL from various manifest metadata structures."""
@@ -549,6 +545,7 @@ def _entry_notes(entry: Mapping[str, Any]) -> tuple[str, ...]:
 
 # ── Dataclass definitions ────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class ModelSource(JsonSerializable):
     """Source availability and release metadata for a model.
@@ -661,6 +658,7 @@ class CheckpointRef(JsonSerializable):
 
 # ── Checkpoint assembly helpers ───────────────────────────────
 
+
 def _checkpoint_ref_from_repo_mapping(repo: Mapping[str, Any]) -> CheckpointRef:
     """Build a CheckpointRef from a repository sub-mapping structure."""
     return CheckpointRef.from_dict(
@@ -692,7 +690,9 @@ def _dedupe_checkpoint_refs(refs: list[CheckpointRef]) -> tuple[CheckpointRef, .
     return tuple(deduped)
 
 
-def _checkpoint_refs_from_entry(entry: Mapping[str, Any], checkpoint_data: Mapping[str, Any]) -> tuple[CheckpointRef, ...]:
+def _checkpoint_refs_from_entry(
+    entry: Mapping[str, Any], checkpoint_data: Mapping[str, Any]
+) -> tuple[CheckpointRef, ...]:
     """Assemble all checkpoint references defined under various fields in a model entry."""
     refs: list[CheckpointRef] = []
 
@@ -840,7 +840,10 @@ class ModelVariantSpec(JsonSerializable):
         object.__setattr__(
             self,
             "checkpoint_refs",
-            tuple(item if isinstance(item, CheckpointRef) else CheckpointRef.from_dict(item) for item in self.checkpoint_refs),
+            tuple(
+                item if isinstance(item, CheckpointRef) else CheckpointRef.from_dict(item)
+                for item in self.checkpoint_refs
+            ),
         )
         object.__setattr__(
             self,
@@ -908,9 +911,7 @@ class ModelVariantSpec(JsonSerializable):
         demo_data = demo_raw if isinstance(demo_raw, Mapping) else {"status": demo_raw}
         runner_data = runner_raw if isinstance(runner_raw, Mapping) else {"status": runner_raw}
         variant_id = (
-            _first_text(variant.get("variant_id"), variant.get("id"))
-            or _slug(variant.get("name"))
-            or _slug(checkpoint)
+            _first_text(variant.get("variant_id"), variant.get("id")) or _slug(variant.get("name")) or _slug(checkpoint)
         )
         return cls(
             variant_id=str(variant_id or ""),
@@ -993,12 +994,18 @@ class ModelZooEntry(JsonSerializable):
         object.__setattr__(
             self,
             "checkpoint_refs",
-            tuple(item if isinstance(item, CheckpointRef) else CheckpointRef.from_dict(item) for item in self.checkpoint_refs),
+            tuple(
+                item if isinstance(item, CheckpointRef) else CheckpointRef.from_dict(item)
+                for item in self.checkpoint_refs
+            ),
         )
         object.__setattr__(
             self,
             "variants",
-            tuple(item if isinstance(item, ModelVariantSpec) else ModelVariantSpec.from_dict(item) for item in self.variants),
+            tuple(
+                item if isinstance(item, ModelVariantSpec) else ModelVariantSpec.from_dict(item)
+                for item in self.variants
+            ),
         )
         object.__setattr__(
             self,
@@ -1198,7 +1205,9 @@ class ModelZooEntry(JsonSerializable):
                     *tuple(entry.get("modes") or ()),
                 )
             ),
-            integration_status=_normalize_integration_status(entry.get("integration", entry.get("integration_status", "planned"))),
+            integration_status=_normalize_integration_status(
+                entry.get("integration", entry.get("integration_status", "planned"))
+            ),
             install_profile=entry.get("install_profile"),
             runner_target=entry.get("runner_target") or integration.get("runner"),
             pipeline_target=entry.get("pipeline_target") or integration.get("pipeline_target"),
@@ -1212,6 +1221,7 @@ class ModelZooEntry(JsonSerializable):
 
 
 # ── Loading utilities ────────────────────────────────────────
+
 
 def iter_model_zoo_payloads(payload: Any) -> list[Mapping[str, Any]]:
     """Iterate over and validate varying styles of model-zoo payload structures, returning a flat list of dicts."""

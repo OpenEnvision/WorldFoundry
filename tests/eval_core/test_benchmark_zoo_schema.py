@@ -7,20 +7,20 @@ from pathlib import Path
 
 import pytest
 
+from worldfoundry.cli import zoo as zoo_cli
+from worldfoundry.evaluation.api import BenchmarkSpec
 from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import load_benchmark_catalog_shard_entries
 from worldfoundry.evaluation.tasks.catalog.schema import (
-    BenchmarkRunnerSpec,
+    OPEN_SOURCE_STATUSES,
     BenchmarkDatasetRef,
     BenchmarkMetricSpec,
+    BenchmarkRunnerSpec,
     BenchmarkSource,
     BenchmarkZooEntry,
-    OPEN_SOURCE_STATUSES,
-    load_entries,
 )
 from worldfoundry.evaluation.tasks.catalog.specs import (
     benchmark_zoo_entries_to_benchmark_specs,
     benchmark_zoo_entry_to_benchmark_spec,
-    load_benchmark_specs,
 )
 from worldfoundry.evaluation.tasks.catalog.zoo_registry import (
     BenchmarkZooRegistry,
@@ -28,9 +28,6 @@ from worldfoundry.evaluation.tasks.catalog.zoo_registry import (
     load_benchmark_zoo_registry,
 )
 from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
-from worldfoundry.evaluation.api import BenchmarkSpec
-from worldfoundry.cli import zoo as zoo_cli
-
 
 NEW_VIDEO_WORLD_NORMALIZER_IDS = (
     "aigcbench",
@@ -399,7 +396,10 @@ def test_benchmark_zoo_loads_video_world_manifest() -> None:
     assert worldscore_validation["metrics_available"] == 4
     assert worldscore_validation["full_suite_verified"] is False
     assert worldscore_validation["leaderboard_valid"] is False
-    assert by_id["worldscore"].runner.clone_dir == "worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore"
+    assert (
+        by_id["worldscore"].runner.clone_dir
+        == "worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore"
+    )
     assert by_id["worldscore"].run_command is not None
     assert "run_worldscore_official_runner.py" in _command_text(by_id["worldscore"].run_command)
     assert by_id["worldscore"].validation_command is not None
@@ -432,9 +432,7 @@ def test_benchmark_zoo_loads_video_world_manifest() -> None:
     assert chronomagic_validation["generated_video_count"] == 2
     assert chronomagic_validation["full_suite_verified"] is False
     assert chronomagic_validation["leaderboard_valid"] is False
-    assert "run_chronomagic_bench_official_runner.py" in _command_text(
-        by_id["chronomagic-bench"].validation_command
-    )
+    assert "run_chronomagic_bench_official_runner.py" in _command_text(by_id["chronomagic-bench"].validation_command)
     assert by_id["vmbench"].validation_command is not None
     assert "benchmark-run" in _command_text(by_id["vmbench"].validation_command)
     assert _command_contains(by_id["vmbench"].validation_command, "--official-results-path")
@@ -468,8 +466,6 @@ def test_new_video_world_normalizers_do_not_claim_leaderboard_verification() -> 
     assert set(NEW_VIDEO_WORLD_NORMALIZER_IDS) <= set(by_id)
     for benchmark_id in NEW_VIDEO_WORLD_NORMALIZER_IDS:
         entry = by_id[benchmark_id]
-        all_labels = (*entry.tags, *entry.domains, *entry.modalities)
-
         assert entry.integration_status in {"planned", "integrated"}
         assert entry.maturity in {"contract_ready", "verified_runner", "planned"}
         assert entry.verification_status != "verified"
@@ -483,19 +479,24 @@ def test_new_video_world_normalizers_do_not_claim_leaderboard_verification() -> 
         if surface is None:
             # Some manifests (e.g. physics-iq) do not declare a surface label.
             continue
-        assert surface in {
-            "official_result_normalizer",
-            "official_runner",
-            "in_tree_artifact_evaluator",
-            "aigcbench_in_tree_artifact_importer",
-            "in_tree_mock_and_normalizer",
-            "in_tree_mock_scorer_and_result_normalizer",
-            "phyeduvideo_official_in_tree",
-            "physvidbench_official_in_tree",
-            "in_tree_mock_judge_and_normalizer",
-            "physics_iq_official_in_tree",
-            "official_in_tree_runtime",
-        } or surface.endswith("_official_in_tree") or surface.startswith("in_tree_result_importer")
+        assert (
+            surface
+            in {
+                "official_result_normalizer",
+                "official_runner",
+                "in_tree_artifact_evaluator",
+                "aigcbench_in_tree_artifact_importer",
+                "in_tree_mock_and_normalizer",
+                "in_tree_mock_scorer_and_result_normalizer",
+                "phyeduvideo_official_in_tree",
+                "physvidbench_official_in_tree",
+                "in_tree_mock_judge_and_normalizer",
+                "physics_iq_official_in_tree",
+                "official_in_tree_runtime",
+            }
+            or surface.endswith("_official_in_tree")
+            or surface.startswith("in_tree_result_importer")
+        )
 
 
 def test_benchmark_zoo_loads_embodied_world_manifest() -> None:
@@ -506,7 +507,7 @@ def test_benchmark_zoo_loads_embodied_world_manifest() -> None:
     by_id = {entry.benchmark_id: entry for entry in entries}
     expected = {
         "libero",
-        "libero-para",
+        "libero-plus",
         "simpler-env",
         "robocasa",
         "calvin",
@@ -522,8 +523,9 @@ def test_benchmark_zoo_loads_embodied_world_manifest() -> None:
     assert by_id["metaworld"].paper_url == "https://arxiv.org/abs/1910.10897"
     assert by_id["bridgedata-v2"].dataset.path == "${WORLDFOUNDRY_DATA_DIR}/datasets/bridgedata-v2"
     assert by_id["bridgedata-v2"].runner_target.endswith("BridgeDataV2Contract")
-    assert by_id["libero-para"].runner_target.endswith("LIBEROParaContract")
-    assert by_id["libero-para"].dataset_refs[0].hf_dataset_id == "HAI-Lab/LIBERO-Para"
+    assert "libero-para" not in by_id
+    assert by_id["libero-plus"].runner_target.endswith("LIBEROPlusContract")
+    assert by_id["libero-plus"].runner_runtime["task_manifest"].endswith("libero-plus.yaml")
     assert by_id["robotwin"].name == "RoboTwin 2.0"
     assert by_id["robotwin"].paper_url == "https://arxiv.org/abs/2506.18088"
     assert by_id["robotwin"].runner_target.endswith("RoboTwinContract")
@@ -547,18 +549,22 @@ def test_benchmark_zoo_loads_embodied_world_manifest() -> None:
         assert by_id[benchmark_id].integration_evidence is True
         assert by_id[benchmark_id].leaderboard_valid is False
         assert by_id[benchmark_id].runner_availability["normalizer_verified"] is True
-    assert tuple(metric.metric_id for metric in by_id["rlbench"].metrics) == get_external_benchmark_contract(
-        "rlbench"
-    ).metric_ids
-    assert tuple(metric.metric_id for metric in by_id["metaworld"].metrics) == get_external_benchmark_contract(
-        "metaworld"
-    ).metric_ids
-    assert tuple(metric.metric_id for metric in by_id["bridgedata-v2"].metrics) == get_external_benchmark_contract(
-        "bridgedata-v2"
-    ).metric_ids
-    assert tuple(metric.metric_id for metric in by_id["robotwin"].metrics) == get_external_benchmark_contract(
-        "robotwin"
-    ).metric_ids
+    assert (
+        tuple(metric.metric_id for metric in by_id["rlbench"].metrics)
+        == get_external_benchmark_contract("rlbench").metric_ids
+    )
+    assert (
+        tuple(metric.metric_id for metric in by_id["metaworld"].metrics)
+        == get_external_benchmark_contract("metaworld").metric_ids
+    )
+    assert (
+        tuple(metric.metric_id for metric in by_id["bridgedata-v2"].metrics)
+        == get_external_benchmark_contract("bridgedata-v2").metric_ids
+    )
+    assert (
+        tuple(metric.metric_id for metric in by_id["robotwin"].metrics)
+        == get_external_benchmark_contract("robotwin").metric_ids
+    )
 
 
 def test_priority_external_benchmark_contract_targets_are_importable() -> None:
@@ -576,7 +582,7 @@ def test_priority_external_benchmark_contract_targets_are_importable() -> None:
         "bridgedata-v2",
         "calvin",
         "libero",
-        "libero-para",
+        "libero-plus",
         "maniskill",
         "metaworld",
         "rlbench",
@@ -699,29 +705,34 @@ def test_benchmark_zoo_video_world_manifest_converts_to_public_specs() -> None:
     assert by_id["vbench"].metadata["integration_status"] == "integrated"
     assert by_id["vbench"].tasks[0].input_keys == ("prompt_suite_json", "generated_video_dir")
     assert by_id["vbench"].metrics[0].metric_id == "overall_quality"
-    assert tuple(metric.metric_id for metric in by_id["vbench"].metrics) == get_external_benchmark_contract(
-        "vbench"
-    ).metric_ids
-    assert by_id["vbench-plus-plus"].tasks[0].metadata["runner"]["runner_target"].endswith(
-        "VBenchPlusPlusContract"
+    assert (
+        tuple(metric.metric_id for metric in by_id["vbench"].metrics)
+        == get_external_benchmark_contract("vbench").metric_ids
     )
+    assert by_id["vbench-plus-plus"].tasks[0].metadata["runner"]["runner_target"].endswith("VBenchPlusPlusContract")
     assert by_id["vbench-plus-plus"].tasks[0].metadata["dataset"]["not_applicable"] is True
     assert by_id["vbench-2.0"].tasks[0].metadata["runner"]["runner_target"].endswith("VBench2Contract")
     assert by_id["vbench-2.0"].metadata["open_source_status"] == "experimental"
     assert by_id["vbench-2.0"].metadata["official_runtime_validated"] is False
     assert by_id["vbench-2.0"].tasks[0].metadata["contract_only_surface"] is True
-    assert by_id["vbench-2.0"].tasks[0].metadata["runner"]["assets"]["official_gpu_validation"][
-        "scorecard"
-    ].endswith("gpu_vbench2_cu113_diversity_probe/scorecard.json")
+    assert (
+        by_id["vbench-2.0"]
+        .tasks[0]
+        .metadata["runner"]["assets"]["official_gpu_validation"]["scorecard"]
+        .endswith("gpu_vbench2_cu113_diversity_probe/scorecard.json")
+    )
     assert by_id["vbench-2.0"].metrics[-1].metric_id == "vbench2_total"
     assert by_id["worldmodelbench"].tasks[0].data["hf_dataset_id"] == "Efficient-Large-Model/worldmodelbench"
     assert "judge_responses" in by_id["worldmodelbench"].tasks[0].output_keys
     assert by_id["worldscore"].tasks[0].metadata["runner"]["runner_target"].endswith("WorldScoreContract")
     assert by_id["worldscore"].tasks[0].metadata["official_runtime_validated"] is False
     assert by_id["worldscore"].tasks[0].metadata["open_source_status"] == "experimental"
-    assert by_id["worldscore"].tasks[0].metadata["runner"]["assets"]["official_gpu_validation"][
-        "scorecard"
-    ].endswith("worldscore_bounded_gpu_validation_after_readiness_layers_20260525/scorecard.json")
+    assert (
+        by_id["worldscore"]
+        .tasks[0]
+        .metadata["runner"]["assets"]["official_gpu_validation"]["scorecard"]
+        .endswith("worldscore_bounded_gpu_validation_after_readiness_layers_20260525/scorecard.json")
+    )
     assert "per_sample_metrics" in by_id["worldscore"].tasks[0].output_keys
     assert by_id["video-bench"].tasks[0].metadata["runner"]["runner_target"].endswith("VideoBenchContract")
     assert by_id["video-bench"].metadata["integration_status"] == "integrated"
@@ -730,9 +741,7 @@ def test_benchmark_zoo_video_world_manifest_converts_to_public_specs() -> None:
     assert by_id["video-bench"].metrics[-1].metric_id == "videobench_average"
     assert by_id["worldbench"].tasks[0].metadata["runner"]["runner_target"].endswith("WorldBenchContract")
     assert by_id["worldbench"].metrics[0].metric_id == "foreground_miou"
-    assert by_id["t2v-compbench"].tasks[0].metadata["runner"]["runner_target"].endswith(
-        "T2VCompBenchContract"
-    )
+    assert by_id["t2v-compbench"].tasks[0].metadata["runner"]["runner_target"].endswith("T2VCompBenchContract")
     assert "leaderboard_csv_manifest" in by_id["t2v-compbench"].tasks[0].output_keys
     assert by_id["vmbench"].tasks[0].metadata["runner"]["runner_target"].endswith("VMBenchContract")
     assert by_id["vmbench"].tasks[0].metadata["dataset"]["not_applicable"] is True
@@ -801,9 +810,7 @@ def test_benchmark_user_commands_use_manifest_fields_only() -> None:
                 "worldfoundry-eval zoo benchmark-run --benchmark-id stable-release-planned-runner "
                 "--mode contract --output-dir tmp/benchmark_zoo/benchmark_contract/stable-release-planned-runner --json"
             ),
-            "runner": {
-                "runner_target": "worldfoundry.evaluation.tasks.contracts.external:VBenchContract"
-            },
+            "runner": {"runner_target": "worldfoundry.evaluation.tasks.contracts.external:VBenchContract"},
             "metrics": [{"id": "score"}],
             "dataset": {"not_applicable": True},
         }

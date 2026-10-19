@@ -7,20 +7,21 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 from uuid import uuid4
 
+from worldfoundry.core.io.formats.serialization import JsonlWriter
 from worldfoundry.evaluation.api import (
     GenerationRequest,
     GenerationResult,
     Metric,
     WorldModelRunner,
-    is_generation_result_successful,
 )
+from worldfoundry.evaluation.api.generation import validate_sample_ids
 from worldfoundry.evaluation.reporting.run_manifest import redact_secrets
 from worldfoundry.evaluation.utils import build_version_context, jsonable, model_runner_fingerprint, write_jsonl
 
 from .cache import cache_paths_from_stats, run_generation_with_cache
 from .existing_results import run_existing_results
 from .run_session import (
-    coerce_generation_result,
+    iter_generation_results,
     prepare_generation,
     prepare_run_output_dir,
     resume_generation,
@@ -93,71 +94,8 @@ def _normalize_requests(source: Sequence[GenerationRequest | Mapping[str, Any]])
         row.setdefault("sample_id", f"sample-{index:04d}")
         row.setdefault("task_name", "contract_runner")
         requests.append(GenerationRequest.from_dict(row))
+    validate_sample_ids((row.sample_id for row in requests), source="requests")
     return requests
-
-
-def _is_failed(result: GenerationResult) -> bool:
-    """Return whether generation failed."""
-    return not is_generation_result_successful(result)
-
-
-def _align_generation_results(
-    requests: Sequence[GenerationRequest], raw_results: Sequence[Any]
-) -> list[GenerationResult]:
-    """Align keyed or ordered outputs, retaining missing results as failures."""
-    keyed: dict[str, Any] = {}
-    sequential: list[Any] = []
-    # Separate raw results into keyed (by sample_id) and sequential (no sample_id)
-    for item in raw_results:
-        sample_id = getattr(item, "sample_id", None)
-        if sample_id is None and isinstance(item, Mapping):
-            sample_id = item.get("sample_id")
-        if sample_id is None:
-            sequential.append(item)
-        else:
-            keyed[str(sample_id)] = item
-
-    results: list[GenerationResult] = []
-    sequential_index = 0
-    # Iterate through requests to find or create corresponding results
-    for request in requests:
-        if request.sample_id in keyed:
-            results.append(coerce_generation_result(keyed[request.sample_id], request.sample_id))
-        elif sequential_index < len(sequential):
-            # Assign sequential results if no keyed match found
-            results.append(coerce_generation_result(sequential[sequential_index], request.sample_id))
-            sequential_index += 1
-        else:
-            # If no result found for a request, create a failed placeholder
-            results.append(
-                GenerationResult(
-                    sample_id=request.sample_id,
-                    request_id=request.request_id,
-                    status="failed",
-                    error="runner did not return a result for sample",
-                )
-            )
-    return results
-
-
-def _generate(runner: WorldModelRunner, requests: Sequence[GenerationRequest]) -> list[GenerationResult]:
-    """Run generation and retain model failures as sample results."""
-    try:
-        raw_results = runner.generate(requests)
-    except Exception as exc:  # noqa: BLE001 - runner isolates model failures.
-        # If the runner's generate method throws an exception,
-        # return failed results for all requests
-        return [
-            GenerationResult(
-                sample_id=request.sample_id,
-                request_id=request.request_id,
-                model_id=getattr(runner, "model_id", ""),
-                status="failed",
-                error=f"{type(exc).__name__}: {exc}",
-            )
-            for request in requests
-        ]
-    return _align_generation_results(requests, list(raw_results))
 
 
 def _coerce_request(
@@ -211,25 +149,43 @@ def run_contract(request: ContractRunRequest | Mapping[str, Any] | None = None, 
     cached = resume_generation(paths, requests, identity) if run_request.resume else {}
     run_id = run_request.run_id or f"contract-{uuid4().hex[:12]}"
     generation_metadata = {
-        "runner": "contract_runner", "generation_identity": identity, "run_id": run_id, "started_at": utcnow_iso(),
+        "runner": "contract_runner",
+        "generation_identity": identity,
+        "run_id": run_id,
+        "started_at": utcnow_iso(),
+        "generation_resumed_sample_ids": list(cached),
     }
     version_context = build_version_context(runner="contract_generation", model=model, model_runner=runner)
-    with run_stage(paths, "generate", manifest={
-        **generation_metadata, "model": model, "benchmark": jsonable(run_request.benchmark or {}),
-        "dataset": jsonable(run_request.dataset or {}), "sample_count": len(requests),
-    }):
+    with run_stage(
+        paths,
+        "generate",
+        manifest={
+            **generation_metadata,
+            "model": model,
+            "benchmark": jsonable(run_request.benchmark or {}),
+            "dataset": jsonable(run_request.dataset or {}),
+            "sample_count": len(requests),
+        },
+    ):
         prepare_generation(paths, requests, cached)
         try:
-            generated, stats = run_generation_with_cache(
-                [row for row in requests if row.sample_id not in cached],
-                lambda rows: _generate(runner, rows),
-                cache_dir=run_request.generation_cache_dir,
-                cache_mode=run_request.generation_cache_mode,
-                namespace=run_request.generation_cache_namespace,
-                version_context=version_context,
-                artifact_base_dir=output_dir,
-                run_id=run_id,
-            )
+            with JsonlWriter(paths["results"], mode="a") as writer:
+
+                def persist_result(result: GenerationResult) -> None:
+                    writer.write(result.to_dict())
+                    writer.flush()
+
+                generated, stats = run_generation_with_cache(
+                    [row for row in requests if row.sample_id not in cached],
+                    lambda rows: iter_generation_results(runner, rows, model_id=str(getattr(runner, "model_id", ""))),
+                    cache_dir=run_request.generation_cache_dir,
+                    cache_mode=run_request.generation_cache_mode,
+                    namespace=run_request.generation_cache_namespace,
+                    version_context=version_context,
+                    artifact_base_dir=output_dir,
+                    run_id=run_id,
+                    on_result=persist_result,
+                )
         finally:
             if run_request.cleanup_runner:
                 cleanup = getattr(runner, "cleanup", None)

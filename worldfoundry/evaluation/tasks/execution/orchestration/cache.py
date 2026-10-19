@@ -10,9 +10,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import cached_property
@@ -21,6 +20,7 @@ from typing import Any, Callable, Sequence
 
 from worldfoundry.evaluation.api import GenerationRequest, GenerationResult, is_generation_result_successful
 from worldfoundry.evaluation.api.artifacts import ArtifactRef, local_path_for_uri
+from worldfoundry.evaluation.api.generation import validate_sample_ids
 from worldfoundry.evaluation.api.json_contract import (
     canonical_json_bytes,
     canonical_json_dumps,
@@ -29,10 +29,7 @@ from worldfoundry.evaluation.api.json_contract import (
     sha256_hex,
 )
 
-# Standard constants for SHA256 length and file buffers
-SHA256_HEX_LENGTH = 64
 DEFAULT_FILE_CHUNK_SIZE = 1024 * 1024
-_SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 _SQLITE_IN_CHUNK_SIZE = 400
 _SQLITE_BUSY_TIMEOUT_MS = 30_000
 
@@ -61,39 +58,20 @@ def file_sha256(path: str | Path, *, chunk_size: int = DEFAULT_FILE_CHUNK_SIZE) 
     return digest.hexdigest()
 
 
-def _validate_sha256_field(name: str, value: str) -> str:
-    """Validates that a string is a standard 64-character lowercase hexadecimal SHA-256 hash."""
-    if not isinstance(value, str) or not _SHA256_HEX_RE.fullmatch(value):
-        raise ValueError(f"{name} must be a lowercase 64-character sha256 hex digest.")
-    return value
-
-
 @dataclass(frozen=True)
 class CacheKey:
-    """A globally unique composite key referencing a specific evaluation generation result.
+    """Identify a cached result by sample, generation inputs, and version context."""
 
-    It combines task identity (`sample_id`), generation instruction state (`payload_hash`),
-    and model/codebase versioning (`version_context_hash`) to ensure zero-collision cache lookups.
-
-    Attributes:
-        stage: The phase of execution (e.g., "generation").
-        sample_id: Unique identifier for the specific evaluation sample.
-        payload_hash: SHA-256 checksum representing the inputs and hyperparameter options.
-        version_context_hash: SHA-256 checksum of the codebase, model, and metric configurations.
-    """
     stage: str
     sample_id: str
     payload_hash: str
     version_context_hash: str
 
     def __post_init__(self) -> None:
-        """Validates that all composite hashes strictly conform to the expected length and regex bounds."""
         for name in ("stage", "sample_id"):
             value = getattr(self, name)
             if not isinstance(value, str) or not value:
                 raise ValueError(f"{name} must be a non-empty string.")
-        _validate_sha256_field("payload_hash", self.payload_hash)
-        _validate_sha256_field("version_context_hash", self.version_context_hash)
 
     @classmethod
     def from_payload(
@@ -235,7 +213,7 @@ def make_generation_cache_key(
             stage="generation",
             sample_id=request.sample_id,
             payload_hash=json_sha256(generation_cache_payload(request)),
-            version_context_hash=_validate_sha256_field("version_context_hash", version_context_hash),
+            version_context_hash=version_context_hash,
         )
     return make_cache_key(
         stage="generation",
@@ -291,7 +269,7 @@ def generation_request_cacheable(request: GenerationRequest) -> tuple[bool, str 
     """
     policy = dict(request.cache_policy or {})
     policy_mode = policy.get("mode", policy.get("cache"))
-    
+
     # Honor explicit cache directives
     if policy_mode is not None and (
         policy_mode is False or str(policy_mode).strip().lower() in {"off", "false", "disabled", "none"}
@@ -301,7 +279,7 @@ def generation_request_cacheable(request: GenerationRequest) -> tuple[bool, str 
         return True, None
 
     kwargs = dict(request.generation_kwargs or {})
-    
+
     # Non-deterministic configurations cannot be reliably cached unless forced
     if _float_gt_zero(kwargs.get("temperature")):
         return False, "temperature > 0"
@@ -310,7 +288,7 @@ def generation_request_cacheable(request: GenerationRequest) -> tuple[bool, str 
     for key in ("n", "best_of", "num_return_sequences"):
         if _int_gt_one(kwargs.get(key)):
             return False, f"{key} > 1"
-    
+
     return True, None
 
 
@@ -326,6 +304,7 @@ class GenerationCacheRecord:
         updated_at: ISO8601 update timestamp.
         hits: Number of times this cache entry has been retrieved.
     """
+
     key: CacheKey
     result: GenerationResult
     metadata: Mapping[str, Any]
@@ -348,6 +327,7 @@ class GenerationCacheRecord:
 @dataclass
 class GenerationCacheStats:
     """Tracks SQLite database telemetry, access patterns, and failure rates during a benchmark run."""
+
     enabled: bool
     mode: str
     namespace: str
@@ -698,7 +678,7 @@ def _restore_cached_result(record: GenerationCacheRecord) -> tuple[GenerationRes
 
 def run_generation_with_cache(
     requests: Sequence[GenerationRequest],
-    generate: Callable[[Sequence[GenerationRequest]], Sequence[GenerationResult]],
+    generate: Callable[[Sequence[GenerationRequest]], Iterable[GenerationResult]],
     *,
     cache_dir: str | Path | None = None,
     cache_mode: str | None = "off",
@@ -706,6 +686,7 @@ def run_generation_with_cache(
     version_context: Any | None = None,
     artifact_base_dir: str | Path | None = None,
     run_id: str | None = None,
+    on_result: Callable[[GenerationResult], None] | None = None,
 ) -> tuple[list[GenerationResult], GenerationCacheStats]:
     """Wraps a generation/runner execution block with a smart caching layer.
 
@@ -723,12 +704,14 @@ def run_generation_with_cache(
         version_context: Hashable dictionary describing model and codebase versions (prevents stale code from hitting old cache).
         artifact_base_dir: Physical disk location to resolve/validate attached media artifacts.
         run_id: Current tracing identifier attached to newly cached records.
+        on_result: Persist each completed result before advancing the generator.
 
     Returns:
         tuple containing:
         - A unified list of GenerationResults (mix of cached hits and newly computed outcomes).
         - A GenerationCacheStats object with hit/miss telemetry.
     """
+    validate_sample_ids((row.sample_id for row in requests), source="requests")
     mode = normalize_generation_cache_mode(cache_mode)
     cache_enabled = cache_dir is not None and mode != "off"
     stats = GenerationCacheStats(
@@ -740,14 +723,24 @@ def run_generation_with_cache(
     if not requests:
         return [], stats
 
-    def generate_pending(rows: Sequence[GenerationRequest]) -> list[GenerationResult]:
+    def generate_pending(rows: Sequence[GenerationRequest]) -> Iterator[GenerationResult]:
         from worldfoundry.core import worldfoundry_inference_context
 
+        seen: dict[str, int] = {}
         with worldfoundry_inference_context():
-            return list(generate(rows))
+            for index, result in enumerate(generate(rows), start=1):
+                if result.sample_id in seen:
+                    raise ValueError(
+                        f"duplicate sample_id {result.sample_id!r} in runner results: "
+                        f"rows {seen[result.sample_id]} and {index}"
+                    )
+                seen[result.sample_id] = index
+                if on_result is not None:
+                    on_result(result)
+                yield result
 
     if not cache_enabled:
-        return generate_pending(requests), stats
+        return list(generate_pending(requests)), stats
 
     cache = GenerationResultCache(cache_dir, namespace=stats.namespace)
     stats.cache_path = str(cache.cache_path)
@@ -785,10 +778,7 @@ def run_generation_with_cache(
                 try:
                     record = cache.get(key)
                 except Exception as item_exc:  # noqa: BLE001 - cache must not fail generation.
-                    stats.error(
-                        f"cache read failed for {request.sample_id}: "
-                        f"{type(item_exc).__name__}: {item_exc}"
-                    )
+                    stats.error(f"cache read failed for {request.sample_id}: {type(item_exc).__name__}: {item_exc}")
                     record = None
                 records_by_position[position] = record
         else:
@@ -806,6 +796,8 @@ def run_generation_with_cache(
                 if restored is not None:
                     cached[request.sample_id] = restored
                     stats.hits += 1
+                    if on_result is not None:
+                        on_result(restored)
                     continue
                 stats.stale += 1
                 cache._audit("stale", key=key, metadata={"reason": stale_reason or "stale"})
@@ -813,52 +805,54 @@ def run_generation_with_cache(
         pending.append(request)
         pending_keys[request.sample_id] = key
 
-    # Step 2: Execute physically required workload.
-    generated = generate_pending(pending) if pending else []
-    generated_by_sample_id = {result.sample_id: result for result in generated}
-
-    # Step 3: Opportunistically write successful results in one transaction.
-    if stats.writes_enabled:
-        write_entries: list[tuple[CacheKey, GenerationResult, Mapping[str, Any] | None]] = []
-        for request in pending:
-            result = generated_by_sample_id.get(request.sample_id)
-            key = pending_keys.get(request.sample_id)
-            if result is None or key is None:
-                continue
-            if not is_generation_result_successful(result):
-                stats.skip("generation failed")
-                continue
-            write_entries.append(
-                (
-                    key,
-                    result,
-                    {
-                        "schema_version": GENERATION_RESULT_CACHE_SCHEMA_VERSION,
-                        "namespace": stats.namespace,
-                        "cache_path": str(cache.cache_path),
-                        "run_id": run_id,
-                        "artifact_base_dir": str(base_dir) if base_dir is not None else None,
-                        "version_context_hash": key.version_context_hash,
-                    },
+    # Keep completed samples when generation is interrupted; retain batched SQLite writes.
+    generated: list[GenerationResult] = []
+    try:
+        if pending:
+            for result in generate_pending(pending):
+                generated.append(result)
+    finally:
+        generated_by_sample_id = {result.sample_id: result for result in generated}
+        if stats.writes_enabled:
+            write_entries: list[tuple[CacheKey, GenerationResult, Mapping[str, Any] | None]] = []
+            for request in pending:
+                result = generated_by_sample_id.get(request.sample_id)
+                key = pending_keys.get(request.sample_id)
+                if result is None or key is None:
+                    continue
+                if not is_generation_result_successful(result):
+                    stats.skip("generation failed")
+                    continue
+                write_entries.append(
+                    (
+                        key,
+                        result,
+                        {
+                            "schema_version": GENERATION_RESULT_CACHE_SCHEMA_VERSION,
+                            "namespace": stats.namespace,
+                            "cache_path": str(cache.cache_path),
+                            "run_id": run_id,
+                            "artifact_base_dir": str(base_dir) if base_dir is not None else None,
+                            "version_context_hash": key.version_context_hash,
+                        },
+                    )
                 )
-            )
-        if write_entries:
-            try:
-                cache.put_many(write_entries)
-            except Exception as exc:  # noqa: BLE001 - cache writes are opportunistic.
-                stats.error(f"batch cache write failed: {type(exc).__name__}: {exc}")
-                for key, result, metadata in write_entries:
-                    try:
-                        cache.put(key, result, metadata=metadata)
-                    except Exception as item_exc:  # noqa: BLE001 - preserve other cache writes.
-                        stats.error(
-                            f"cache write failed for {key.sample_id}: "
-                            f"{type(item_exc).__name__}: {item_exc}"
-                        )
-                    else:
-                        stats.writes += 1
-            else:
-                stats.writes += len(write_entries)
+            if write_entries:
+                try:
+                    cache.put_many(write_entries)
+                except Exception as exc:  # noqa: BLE001 - cache writes are opportunistic.
+                    stats.error(f"batch cache write failed: {type(exc).__name__}: {exc}")
+                    for key, result, metadata in write_entries:
+                        try:
+                            cache.put(key, result, metadata=metadata)
+                        except Exception as item_exc:  # noqa: BLE001 - preserve other cache writes.
+                            stats.error(
+                                f"cache write failed for {key.sample_id}: {type(item_exc).__name__}: {item_exc}"
+                            )
+                        else:
+                            stats.writes += 1
+                else:
+                    stats.writes += len(write_entries)
 
     # Step 4: Re-align merged results with original request ordering
     results: list[GenerationResult] = []
@@ -887,7 +881,6 @@ __all__ = [
     "GenerationCacheRecord",
     "GenerationCacheStats",
     "GenerationResultCache",
-    "SHA256_HEX_LENGTH",
     "cache_paths_from_stats",
     "canonical_json_bytes",
     "canonical_json_dumps",

@@ -16,6 +16,7 @@ from typing import Any, Mapping
 
 import yaml
 
+from worldfoundry.evaluation.api.json_contract import tuple_of_str as _str_tuple
 from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import (
     iter_benchmark_catalog_manifest_paths,
 )
@@ -48,14 +49,6 @@ def _nullable_str(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
-
-
-def _str_tuple(value: Any) -> tuple[str, ...]:
-    if value is None:
-        return ()
-    if isinstance(value, str):
-        return (value,)
-    return tuple(str(item) for item in value)
 
 
 def _bool(value: Any, default: bool = False) -> bool:
@@ -304,11 +297,7 @@ def workspace_runner_registry() -> dict[str, OfficialRunnerSpec]:
 
 
 def scoring_benchmark_ids(engine: str) -> tuple[str, ...]:
-    return tuple(
-        key
-        for key, spec in official_runner_registry().items()
-        if engine in spec.scoring_engines
-    )
+    return tuple(key for key, spec in official_runner_registry().items() if engine in spec.scoring_engines)
 
 
 def scoring_hook_table(engine: str) -> dict[str, str]:
@@ -356,8 +345,7 @@ def refresh_compat_views() -> None:
 def video_runner_overrides() -> dict[str, dict[str, Any]]:
     """Deprecated: catalog is the only source. Kept for existing callers."""
     return {
-        key: {"script": spec.script, "results_flag": spec.results_flag}
-        for key, spec in video_runner_registry().items()
+        key: {"script": spec.script, "results_flag": spec.results_flag} for key, spec in video_runner_registry().items()
     }
 
 

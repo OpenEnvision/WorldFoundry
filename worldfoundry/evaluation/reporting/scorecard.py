@@ -40,6 +40,7 @@ _DIRECT_EVIDENCE_KEYS = frozenset(
 
 # ── Internal helpers ─────────────────────────────────────────
 
+
 def _worldfoundry_version() -> str:
     """Return the installed ``worldfoundry`` package version, or ``"unknown"``."""
     try:
@@ -63,10 +64,7 @@ def _mapping_evidence_reason(value: Mapping[str, Any]) -> str | None:
         return "official_and_full_suite"
 
     gate_kind = _normalize_gate_kind(
-        value.get("gate")
-        or value.get("kind")
-        or value.get("evidence")
-        or value.get("evidence_kind")
+        value.get("gate") or value.get("kind") or value.get("evidence") or value.get("evidence_kind")
     )
     if gate_kind in {"official_full_suite", "official_leaderboard", "full_suite"} and (
         value.get("passed") is True
@@ -164,11 +162,7 @@ def build_scorecard(
     provenance_payload = dict(provenance or {})
     provenance_claim = provenance_payload.get("claim")
     provenance_claim = provenance_claim if isinstance(provenance_claim, Mapping) else {}
-    provenance_candidate = (
-        provenance_claim.get("leaderboard_candidate") is True
-        if provenance_payload
-        else True
-    )
+    provenance_candidate = provenance_claim.get("leaderboard_candidate") is True if provenance_payload else True
     evidence_gate = _leaderboard_evidence_gate(
         leaderboard_evidence=leaderboard_evidence,
         run=run_payload,
@@ -196,13 +190,21 @@ def build_scorecard(
     if backend_is_mock:
         eligibility_reasons.append(MOCK_BACKEND_BLOCKING_REASON)
     invalid_metrics = [key for key, value in per_metric.items() if value.get("valid") is False]
+    partial_metrics = [
+        key
+        for key, value in per_metric.items()
+        if value.get("n_total") is not None and value.get("n_valid") is not None and value["n_valid"] < value["n_total"]
+    ]
     if not leaderboard:
         eligibility_reasons.append("no valid metric scores")
     if invalid_metrics:
         eligibility_reasons.append(f"invalid metrics: {', '.join(sorted(invalid_metrics))}")
+    if partial_metrics:
+        eligibility_reasons.append(f"incomplete metric coverage: {', '.join(sorted(partial_metrics))}")
     score_valid = failed_samples == 0 and bool(leaderboard) and not invalid_metrics
     leaderboard_valid = (
         score_valid
+        and not partial_metrics
         and bool(evidence_gate["present"])
         and provenance_candidate
         and not backend_is_mock
@@ -237,9 +239,7 @@ def build_scorecard(
             "leaderboard_eligible": leaderboard_valid,
             "score_valid": score_valid,
             "leaderboard_reason": (
-                "official/full-suite evidence gate present"
-                if leaderboard_valid
-                else "; ".join(eligibility_reasons)
+                "official/full-suite evidence gate present" if leaderboard_valid else "; ".join(eligibility_reasons)
             ),
             "reasons": list(eligibility_reasons),
             "blocking_reasons": list(eligibility_reasons),

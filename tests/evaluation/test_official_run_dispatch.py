@@ -1,19 +1,19 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from worldfoundry.evaluation import framework
-from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
-from worldfoundry.evaluation.tasks.execution.framework.runner_registry import VIDEO_RUNNER_REGISTRY
-from worldfoundry.evaluation.tasks.execution.orchestration import model_benchmark
-from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import OfficialRunResult
-from worldfoundry.evaluation.tasks.execution.runners.workspace_registry import (
-    CLI_RUNNERS,
+from worldfoundry.evaluation.tasks.catalog.dispatch import CLI_RUNNERS, VIDEO_RUNNER_REGISTRY
+from worldfoundry.evaluation.tasks.catalog.workspace_registry import (
     build_workspace_benchmark_command,
     validate_workspace_registry,
 )
+from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
+from worldfoundry.evaluation.tasks.execution.orchestration import model_benchmark
+from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import OfficialRunResult
 from worldfoundry.evaluation.utils import BENCHMARK_ZOO_DIR
 
 
@@ -261,9 +261,7 @@ def test_model_benchmark_propagates_generation_subset_to_evaluator(
     assert captured["split"] == "test"
 
 
-def test_empty_generated_artifact_dir_does_not_start_evaluator(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_empty_generated_artifact_dir_does_not_start_evaluator(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     generated = tmp_path / "empty"
     generated.mkdir()
 
@@ -282,9 +280,7 @@ def test_empty_generated_artifact_dir_does_not_start_evaluator(
         )
 
 
-def test_public_run_forwards_custom_benchmark_parameters(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_public_run_forwards_custom_benchmark_parameters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
     class StopAfterDispatch(RuntimeError):
@@ -364,15 +360,16 @@ def test_single_video_vbench_runtime_is_bounded_evidence(tmp_path: Path) -> None
     assert scorecard["dataset"]["generated_file_count"] == 1
 
 
-def test_vbench_non_finite_results_fail_closed(tmp_path: Path) -> None:
+@pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf")))
+def test_vbench_non_finite_results_fail_closed(tmp_path: Path, value: float) -> None:
     from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import (
         normalize_vbench_results,
     )
 
     upstream = tmp_path / "upstream.json"
-    upstream.write_text('{"temporal_flickering": NaN}', encoding="utf-8")
+    upstream.write_text(json.dumps({"temporal_flickering": value}), encoding="utf-8")
     scorecard = normalize_vbench_results(
-        {"temporal_flickering": float("nan")},
+        {"temporal_flickering": value},
         benchmark_id="vbench",
         dimensions=["temporal_flickering"],
         output_dir=tmp_path / "output",
@@ -387,6 +384,34 @@ def test_vbench_non_finite_results_fail_closed(tmp_path: Path) -> None:
     assert scorecard["integration_evidence"] is False
     assert scorecard["metrics"]["leaderboard"] == {}
     assert scorecard["metrics"]["per_metric"]["temporal_flickering"]["available"] is False
+    rows = [json.loads(line) for line in (tmp_path / "output" / "raw_metric_table.jsonl").read_text().splitlines()]
+    assert rows[0]["raw_value"] is None
+    assert rows[0]["reason"] == "nonfinite_metric_output"
+    assert rows[0]["diagnostics"]["nonfinite_values"] == {"raw_value": str(value)}
+
+
+def test_vbench_invalid_dimension_does_not_discard_healthy_dimension(tmp_path: Path) -> None:
+    from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import normalize_vbench_results
+
+    scorecard = normalize_vbench_results(
+        {"temporal_flickering": [float("nan"), [{"video_results": float("nan")}]], "motion_smoothness": 0.75},
+        benchmark_id="vbench",
+        dimensions=["temporal_flickering", "motion_smoothness"],
+        output_dir=tmp_path / "output",
+        upstream_results_path=tmp_path / "upstream.json",
+        videos_path=None,
+        command=None,
+        duration_seconds=None,
+        returncode=0,
+    )
+
+    assert scorecard["normalization_ok"] is True
+    assert scorecard["metrics"]["leaderboard"] == {"motion_smoothness": 0.75}
+    assert scorecard["official_benchmark_verified"] is False
+    assert scorecard["integration_evidence"] is False
+    rows = [json.loads(line) for line in (tmp_path / "output" / "raw_metric_table.jsonl").read_text().splitlines()]
+    assert rows[0]["raw_value"] == [None, [{"video_results": None}]]
+    assert len(rows[0]["diagnostics"]["nonfinite_values"]) == 2
 
 
 def test_vbench_series_non_finite_results_fail_closed() -> None:
@@ -394,9 +419,9 @@ def test_vbench_series_non_finite_results_fail_closed() -> None:
         raw_dimension_rows,
     )
 
-    rows, scores = raw_dimension_rows(
-        {"temporal_flickering": float("nan"), "motion_smoothness": "inf"}
-    )
+    rows, scores = raw_dimension_rows({"temporal_flickering": float("nan"), "motion_smoothness": "inf"})
+    json.dumps(rows, allow_nan=False)
+    assert next(row for row in rows if row["metric_id"] == "temporal_flickering")["raw_value"] is None
 
     assert scores == {}
     assert all(row["available"] is False for row in rows)

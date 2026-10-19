@@ -7,17 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from worldfoundry.cli import main as eval_cli_main
+from worldfoundry.evaluation.tasks.catalog import workspace_registry
 from worldfoundry.evaluation.tasks.catalog.benchmark_catalog import formal_benchmark_ids
-from worldfoundry.evaluation.tasks.execution.orchestration import benchmark_runner as benchmark_runner_module
 from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner import (
     build_benchmark_runner_registry,
     run_benchmark_execution,
 )
 from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import BenchmarkRunner, OfficialBenchmarkRunner
-from worldfoundry.evaluation.tasks.execution.runners import workspace_registry
 from worldfoundry.evaluation.utils import benchmark_task_sample_path
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_ZOO_DIR = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "catalog"
@@ -69,27 +66,6 @@ def test_default_runner_registry_covers_formal_benchmark_inventory() -> None:
     assert registry.get_runner("robotwin").benchmark_id == "robotwin"
     assert registry.get_runner("libero").benchmark_id == "libero"
     assert len(registry) >= len(formal_ids)
-
-
-def test_public_cli_does_not_expose_internal_contract_mode(tmp_path: Path) -> None:
-    output_dir = tmp_path / "contract"
-    with pytest.raises(SystemExit) as exc_info:
-        eval_cli_main(
-            [
-                "zoo",
-                "benchmark-run",
-                "--benchmark-id",
-                "vbench",
-                "--output-dir",
-                str(output_dir),
-                "--mode",
-                "contract",
-                "--json",
-            ]
-        )
-
-    assert exc_info.value.code == 2
-    assert not output_dir.exists()
 
 
 def test_default_benchmark_execution_runs_embodied_contract(tmp_path: Path) -> None:
@@ -199,7 +175,7 @@ def test_robotwin_embodied_runner_treats_validation_fixture_as_normalizer_only(t
     assert result.integration_evidence is False
     assert result.metadata["manifest_integration_status"] == "integrated"
     assert result.metadata["manifest_verification_status"] == "normalizer_only"
-    assert result.metadata["runtime"]["clone_dir"].endswith("/thirdparty/RoboTwin")
+    assert result.metadata["runtime"]["results_path"] == str(results_path)
     assert runtime_report["benchmark_id"] == "robotwin"
     assert runtime_report["run_status"] == "official_results_normalized"
     assert runtime_report["official_benchmark_verified"] is False
@@ -375,9 +351,7 @@ def test_videoverse_manifest_runner_official_run_executes_in_tree_judge(tmp_path
                 "sample-a": {
                     "t2v_following_prompt": {"t2v_prompt": "prompt a"},
                     "verification_checks": [{"check_type": "Interaction", "question": "Q?", "check": True}],
-                    "t2v_eval_event_info": {
-                        "verification_plan": [{"event_id": 1, "event_description": "event a"}]
-                    },
+                    "t2v_eval_event_info": {"verification_plan": [{"event_id": 1, "event_description": "event a"}]},
                 }
             },
             sort_keys=True,
@@ -484,7 +458,7 @@ def test_physvidbench_manifest_runner_official_run_executes_in_tree_judge(tmp_pa
     assert result.metadata["run_status"] == "succeeded"
 
 
-def test_physics_iq_manifest_runner_rejects_metric_only_fixture_as_official_results(tmp_path: Path) -> None:
+def test_physics_iq_metric_result_import_is_not_official_runtime_evidence(tmp_path: Path) -> None:
     sample_path = benchmark_task_sample_path("physics-iq")
     assert sample_path is not None
     generated_dir = tmp_path / "generated"
@@ -501,12 +475,14 @@ def test_physics_iq_manifest_runner_rejects_metric_only_fixture_as_official_resu
     )
     scorecard = json.loads(result.scorecard_path.read_text(encoding="utf-8"))
 
-    assert result.ok is False
+    assert result.ok is True
     assert result.integration_evidence is False
-    assert result.metadata["normalization_ok"] is False
+    assert result.official_benchmark_verified is False
+    assert result.metadata["normalization_ok"] is True
     assert result.metadata["normalizer_only"] is True
-    assert scorecard.get("normalization_ok") is not True
-    assert result.metadata["run_status"] == "official_results_missing_scores"
+    assert scorecard["normalization_ok"] is True
+    assert scorecard["metrics"]["per_metric"]["physics_iq_score"]["raw_score"] == pytest.approx(0.75)
+    assert result.metadata["run_status"] == "official_results_normalized"
 
 
 def test_phyeduvideo_manifest_runner_rejects_generic_official_run(tmp_path: Path) -> None:
@@ -615,15 +591,15 @@ def test_camerabench_manifest_runner_uses_strict_specialized_normalizer(tmp_path
 
     assert result.ok is True
     assert result.metadata["specialized_normalizer"] is True
-    assert result.metadata["normalizer_only"] is False
+    assert result.metadata["normalizer_only"] is True
     assert result.official_benchmark_verified is False
-    assert result.integration_evidence is True
+    assert result.integration_evidence is False
     assert runtime_report["run_status"] == "official_results_normalized"
     assert runtime_report["returncode"] == 0
     assert scorecard["official_benchmark_verified"] is False
-    assert scorecard["integration_evidence"] is True
+    assert scorecard["integration_evidence"] is False
     assert scorecard["normalization_ok"] is True
-    assert scorecard["validation"]["normalizer_only"] is False
+    assert scorecard["validation"]["normalizer_only"] is True
     assert scorecard["eligibility"]["full_suite_valid"] is True
     assert scorecard["dataset"]["coverage"]["complete"] is True
     assert scorecard["metrics"]["leaderboard"]["camerabench_average"] == pytest.approx(0.72)
@@ -651,7 +627,9 @@ def test_run_benchmark_execution_contract_fixture_keeps_official_flags_false(tmp
     assert scorecard["integration_evidence"] is False
 
 
-def test_manifest_runner_official_verified_executes_manifest_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_manifest_runner_official_verified_executes_manifest_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     manifest_path = tmp_path / "benchmarks.yaml"
     external_cache = tmp_path / "external-cache"
     monkeypatch.setenv("WORLDFOUNDRY_EXTERNAL_REPO_CACHE", str(external_cache))
@@ -839,14 +817,23 @@ def test_manifest_runner_sets_results_path_runtime_env(tmp_path: Path) -> None:
     assert generated_scorecard["runtime"]["artifact_alias"] == str(generated_dir)
 
 
-def test_manifest_runner_normalizes_official_results_path(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delitem(benchmark_runner_module.SPECIALIZED_RESULT_NORMALIZER_SCRIPTS, "vbench", raising=False)
+def test_manifest_runner_normalizes_official_results_path(tmp_path: Path) -> None:
     manifest_path = tmp_path / "benchmarks.yaml"
-    results_path = tmp_path / "official_results.csv"
-    results_path.write_text("sample_id,quality\nsample-a,1.0\nsample-b,0.5\n", encoding="utf-8")
+    results_path = tmp_path / "official_results.json"
+    results_path.write_text(
+        json.dumps(
+            {
+                "aesthetic_quality": [
+                    0.75,
+                    [
+                        {"video_path": "sample-a.mp4", "video_results": 1.0},
+                        {"video_path": "sample-b.mp4", "video_results": 0.5},
+                    ],
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
     manifest_path.write_text(
         json.dumps(
             {
@@ -858,12 +845,8 @@ def test_manifest_runner_normalizes_official_results_path(
                         "runner": {"verification_status": "verified"},
                         "metrics": [
                             {
-                                "id": "quality",
-                                "leaderboard_key": "quality",
-                                "official_results": {
-                                    "source_fields": ["quality"],
-                                    "required_columns": ["sample_id", "quality"],
-                                },
+                                "id": "aesthetic_quality",
+                                "leaderboard_key": "aesthetic_quality",
                             }
                         ],
                     }
@@ -885,6 +868,10 @@ def test_manifest_runner_normalizes_official_results_path(
 
     assert result.ok is True
     assert result.raw_results_path.name == "raw_metric_table.jsonl"
+    assert scorecard["normalizer_only"] is True
+    assert scorecard["integration_evidence"] is False
+    assert scorecard["metrics"]["per_metric"]["aesthetic_quality"]["raw_score"] == 0.75
+    assert next(row for row in raw_rows if row["metric_id"] == "aesthetic_quality")["raw_score"] == 0.75
 
 
 def test_manifest_runner_normalizer_mode_normalizes_official_results_path(tmp_path: Path) -> None:
@@ -972,7 +959,7 @@ def test_manifest_runner_uses_videoscore_specialized_normalizer(tmp_path: Path) 
     )
     scorecard = json.loads(result.scorecard_path.read_text(encoding="utf-8"))
 
-    assert result.ok is False
+    assert result.ok is True
     assert result.metadata["specialized_normalizer"] is True
     assert result.metadata["normalizer_only"] is True
     assert scorecard["normalization_ok"] is True
@@ -999,15 +986,7 @@ def test_manifest_runner_normalizer_mode_requires_existing_results_path(tmp_path
     assert "official results path does not exist" in scorecard["run"]["error"]
 
 
-def test_manifest_runner_normalizes_long_form_official_results_path(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delitem(
-        benchmark_runner_module.SPECIALIZED_RESULT_NORMALIZER_SCRIPTS,
-        "devil-dynamics",
-        raising=False,
-    )
+def test_manifest_runner_normalizes_long_form_official_results_path(tmp_path: Path) -> None:
     manifest_path = tmp_path / "benchmarks.yaml"
     results_path = tmp_path / "official_results.csv"
     results_path.write_text(
@@ -1043,7 +1022,10 @@ def test_manifest_runner_normalizes_long_form_official_results_path(
     assert scorecard["normalizer_only"] is True
     assert scorecard["normalization_ok"] is True
     assert scorecard["metrics"]["leaderboard"]["dynamics_quality"] == 0.75
-    assert scorecard["metrics"]["summary"]["available_metric_count"] == 1
+    assert scorecard["metrics"]["summary"]["available_metrics"] == 1
+    assert result.ok is True
+    assert result.official_benchmark_verified is False
+    assert result.integration_evidence is False
 
 
 def test_manifest_runner_uses_physics_normalizer_for_official_results_path(tmp_path: Path) -> None:
@@ -1052,8 +1034,20 @@ def test_manifest_runner_uses_physics_normalizer_for_official_results_path(tmp_p
         json.dumps(
             {
                 "results": [
-                    {"id": "sample-1", "sa": 5, "pc": 4, "physics_rules_followed": ["gravity"], "physics_rules_unfollowed": []},
-                    {"id": "sample-2", "sa": 2, "pc": 5, "physics_rules_followed": [], "physics_rules_unfollowed": ["momentum"]},
+                    {
+                        "id": "sample-1",
+                        "sa": 5,
+                        "pc": 4,
+                        "physics_rules_followed": ["gravity"],
+                        "physics_rules_unfollowed": [],
+                    },
+                    {
+                        "id": "sample-2",
+                        "sa": 2,
+                        "pc": 5,
+                        "physics_rules_followed": [],
+                        "physics_rules_unfollowed": ["momentum"],
+                    },
                 ]
             },
             sort_keys=True,
@@ -1232,7 +1226,7 @@ def test_manifest_runner_uses_worldmodelbench_specialized_normalizer(tmp_path: P
                     "instruction": [3, 1],
                     "common_sense": [True, False, True, True],
                     "physical_laws": [True, True, False, True, True, True, False, True, True, True],
-                }
+                },
             },
             sort_keys=True,
         ),

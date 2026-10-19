@@ -31,8 +31,7 @@ def test_generation_adapters_are_declarative_and_include_wrbench() -> None:
     assert "wrbench" in BENCHMARK_GENERATION_ADAPTERS
     assert "ipv-bench" in BENCHMARK_GENERATION_ADAPTERS
     assert BENCHMARK_GENERATION_ADAPTERS["wrbench"].artifact_materializer == (
-        "worldfoundry.evaluation.tasks.execution.runners.wrbench.wrbench_prompts:"
-        "copy_wrbench_generated_videos"
+        "worldfoundry.evaluation.tasks.execution.runners.wrbench.wrbench_prompts:copy_wrbench_generated_videos"
     )
     assert BENCHMARK_GENERATION_ADAPTERS["videophy"].artifact_materializer is not None
     assert "vbench" in BENCHMARK_GENERATION_ADAPTERS
@@ -41,9 +40,19 @@ def test_generation_adapters_are_declarative_and_include_wrbench() -> None:
 def test_vbench_generation_provider_deduplicates_official_prompts() -> None:
     requests = materialize_vbench_generation_requests()
 
-    assert len(requests) == 944
-    assert len({request.inputs["official_video_name"] for request in requests}) == 944
-    assert requests[0].inputs["official_video_name"].endswith("-0.mp4")
+    from worldfoundry.evaluation.tasks.execution.runners.vbench.vbench_official_impl import (
+        _expected_standard_prompt_video_names,
+    )
+
+    names = {request.inputs["official_video_name"] for request in requests}
+    assert len(requests) == 944 * 5
+    assert len({request.sample_id for request in requests}) == len(requests)
+    assert len({request.inputs["prompt"] for request in requests}) == 944
+    assert names == _expected_standard_prompt_video_names(
+        [request.inputs["prompt"] for request in requests], list(names)
+    )
+    assert [request.generation_kwargs["seed"] for request in requests[:5]] == list(range(5))
+    assert len(materialize_vbench_generation_requests(limit=7)) == 7
 
 
 def test_generic_artifact_layout_uses_official_video_name(tmp_path: Path) -> None:
@@ -175,6 +184,16 @@ def test_exact_reproduction_claim_is_derived_from_all_pinned_axes() -> None:
 
 
 def test_diagnostic_score_validity_is_independent_from_leaderboard_eligibility(tmp_path: Path) -> None:
+    scorecard = tmp_path / "scorecard.json"
+    scorecard.write_text(
+        json.dumps(
+            {
+                "metrics": {"leaderboard": {"quality": 0.8}},
+                "normalization_ok": True,
+                "eligibility": {"score_valid": True, "leaderboard_valid": True},
+            }
+        )
+    )
     fidelity = EvaluationFidelity(
         producer="imported_artifacts",
         generation="not_applicable",
@@ -197,15 +216,18 @@ def test_diagnostic_score_validity_is_independent_from_leaderboard_eligibility(t
         materialized_count=1,
         placeholder_count=0,
         generation_result=None,
-        benchmark_payload={"ok": True},
+        benchmark_payload={
+            "ok": True,
+            "scorecard_path": str(scorecard),
+            "official_benchmark_verified": True,
+            "integration_evidence": True,
+        },
         artifacts={},
     )
 
     assert summary["eligibility"]["score_valid"] is True
     assert summary["eligibility"]["leaderboard_valid"] is False
-    assert summary["eligibility"]["blocking_reasons"] == [
-        "custom data is not leaderboard-comparable"
-    ]
+    assert summary["eligibility"]["blocking_reasons"] == ["custom data is not leaderboard-comparable"]
 
 
 def test_custom_artifact_scorecard_stays_out_of_leaderboard(tmp_path: Path) -> None:
@@ -342,11 +364,10 @@ reference:
 
 def test_reproduction_profile_resolves_model_and_config(tmp_path: Path) -> None:
     profile_root = tmp_path / "profiles"
-    _write_reproduction_profile(profile_root, profile_id="vbench-zeroscope-aesthetic")
+    recipe = _write_reproduction_profile(profile_root, profile_id="vbench-zeroscope-aesthetic")
     prepared = prepare_evaluation(
         ReproduceIntent(
-            profile_id="vbench-zeroscope-aesthetic",
-            profile_root=profile_root,
+            recipe_path=recipe,
             output_dir=tmp_path / "output",
         )
     )
@@ -360,17 +381,6 @@ def test_reproduction_profile_resolves_model_and_config(tmp_path: Path) -> None:
     assert payload["execution"]["request"]["model_parameters"]["num_frames"] == 8
     assert payload["leaderboard_candidate"] is False
     assert payload["execution"]["request"]["leaderboard_candidate"] is False
-
-
-def test_benchmark_reproduction_resolves_declared_default(tmp_path: Path) -> None:
-    profile_root = tmp_path / "profiles"
-    _write_reproduction_profile(profile_root, profile_id="vbench-zeroscope-aesthetic")
-    prepared = prepare_evaluation(
-        ReproduceIntent(benchmark_id="vbench", profile_root=profile_root, output_dir=tmp_path / "output")
-    )
-
-    assert prepared.ready
-    assert prepared.config_sources["recipe_id"] == "vbench-zeroscope-aesthetic"
 
 
 def test_score_cli_plan_only_returns_prepared_request(tmp_path: Path, capsys) -> None:

@@ -32,11 +32,6 @@ ROBOTWIN_ROOT = "/app/RoboTwin"
 ROBOTWIN_ROOT_ENV = "WORLDFOUNDRY_ROBOTWIN_ROOT"
 
 
-def _configured_robotwin_root() -> str:
-    value = os.environ.get(ROBOTWIN_ROOT_ENV, ROBOTWIN_ROOT)
-    return os.path.abspath(os.path.expanduser(value))
-
-
 @contextmanager
 def _working_directory(path: str | os.PathLike[str]):
     previous = os.getcwd()
@@ -207,6 +202,7 @@ def _make_fast_set_planner(robot_mod: Any):
     Returns:
         The fast `_set_planner_fast` function, designed to replace `Robot.set_planner`.
     """
+
     def _set_planner_fast(self: Any, scene: Any = None) -> None:
         """A mocked `set_planner` that uses `_EvalGripperPlanner` instead of CuRobo.
 
@@ -387,9 +383,7 @@ class RoboTwinBenchmark(BaseSimulator):
         self.skip_expert_check = skip_expert_check
         self.fast_init = fast_init
         self.fast_render = fast_render
-        self.robotwin_root = Path(
-            robotwin_root or os.getenv(ROBOTWIN_ROOT_ENV) or ROBOTWIN_ROOT
-        ).expanduser()
+        self.robotwin_root = Path(robotwin_root or os.getenv(ROBOTWIN_ROOT_ENV) or ROBOTWIN_ROOT).expanduser()
         self._env: Any = None
         self._env_class: Any = None
         self._args: dict[str, Any] | None = None

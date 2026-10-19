@@ -15,24 +15,11 @@ from worldfoundry.evaluation.api.json_contract import to_plain
 
 from ....contracts import ExternalBenchmarkContract, list_external_benchmark_contracts
 from .bindings import FORMULA_EVALUATOR_BINDINGS, success_metric_bindings
-from .local_evaluators import LOCAL_EVALUATORS
-
+from .local_evaluators import LOCAL_EVALUATORS, _failure_result, _metric_key, _tuple_of_str
 
 JsonValue = Any
 MetricEvaluationCallable = Callable[["ExternalMetricEvaluationRequest", "ExternalMetricEvaluatorEntry"], MetricResult]
 BLOCKED_EVALUATION_KINDS = frozenset({"blocked", "judge_required", "api_required", "external_runtime_required"})
-
-
-def _metric_key(value: str) -> str:
-    """Normalize a metric ID key to a lowercase hyphenated string.
-
-    Args:
-        value: Raw metric ID.
-
-    Returns:
-        Normalized key.
-    """
-    return value.strip().casefold().replace("_", "-")
 
 
 def _benchmark_key(value: str) -> str:
@@ -45,54 +32,6 @@ def _benchmark_key(value: str) -> str:
         Normalized lowercase key.
     """
     return value.strip().casefold()
-
-
-def _tuple_of_str(value: Any) -> tuple[str, ...]:
-    """Coerce any input to a tuple of strings safely.
-
-    Args:
-        value: Input value or sequence.
-
-    Returns:
-        Tuple of string items.
-    """
-    if value is None:
-        return ()
-    if isinstance(value, str):
-        return (value,)
-    # If it's a sequence but not a string or bytes, iterate and convert items
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        return tuple(str(item) for item in value if item is not None)
-    return (str(value),)
-
-
-def _failure_result(
-    request: "ExternalMetricEvaluationRequest",
-    *,
-    skip_reason: str,
-    message: str,
-    diagnostics: Mapping[str, Any] | None = None,
-) -> MetricResult:
-    """
-    Build a structured invalid metric result.
-
-    Args:
-        request: Current metric evaluation request.
-        skip_reason: Stable reason category for the failure.
-        message: Human-readable failure detail.
-        diagnostics: Additional structured failure metadata.
-
-    Returns:
-        A MetricResult indicating a failure or invalid state.
-    """
-    return MetricResult(
-        sample_id=request.sample_id,
-        metric_id=request.metric_id,
-        valid=False,
-        coverage=0.0,
-        skip_reason=skip_reason,
-        diagnostics={"message": message, **dict(diagnostics or {})},
-    )
 
 
 def _blocked_result(request: "ExternalMetricEvaluationRequest", entry: "ExternalMetricEvaluatorEntry") -> MetricResult:
@@ -330,7 +269,9 @@ class ExternalMetricEvaluatorRegistry:
         key = (_benchmark_key(evaluator.benchmark_id), _metric_key(evaluator.metric_id))
         # Prevent overwriting existing entries unless 'replace' is explicitly True
         if key in self._entries and not replace:
-            raise ValueError(f"external metric evaluator already exists: {evaluator.benchmark_id}:{evaluator.metric_id}")
+            raise ValueError(
+                f"external metric evaluator already exists: {evaluator.benchmark_id}:{evaluator.metric_id}"
+            )
         self._entries[key] = evaluator
         return evaluator
 
