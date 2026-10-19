@@ -3,7 +3,7 @@ binding_id: wonderworld
 model_id: wonderworld
 runner: worldfoundry.pipeline
 pipeline:
-  target: worldfoundry.pipelines.three_d_four_d.pipeline_runtime:WonderWorldPipeline
+  target: worldfoundry.pipelines.three_d_four_d.pipeline_wonderworld:WonderWorldPipeline
   loading:
     method: from_pretrained
     signature: unified

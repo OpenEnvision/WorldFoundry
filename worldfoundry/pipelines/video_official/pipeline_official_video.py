@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any, ClassVar, Mapping
 
 from worldfoundry.core.io import artifact_root_path
 from worldfoundry.core.media.codecs.image import load_pil_image, materialize_image_input
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 class OfficialVideoPipeline(PipelineABC):
     """WorldFoundry pipeline for data-backed official video model runtimes."""
 
-    MODEL_ID = ""
+    MODEL_ID: ClassVar[str] = ""
     GENERATION_TYPE = "t2v"
 
     def __init__(
@@ -34,7 +34,7 @@ class OfficialVideoPipeline(PipelineABC):
         device: str = "cuda",
     ) -> None:
         """Initialize the pipeline and configure runtime components."""
-        self.model_id = model_id or self.MODEL_ID
+        self.model_id: str = model_id or self.MODEL_ID
         self.runtime = runtime or OfficialVideoRuntime.from_model_id(self.model_id, device=device)
         self.operator = operator or RuntimeVideoOperator(generation_type=self.GENERATION_TYPE)
         self.memory_module = memory_module or VideoArtifactMemory(model_id=self.model_id)
@@ -50,7 +50,7 @@ class OfficialVideoPipeline(PipelineABC):
         **kwargs: Any,
     ) -> "OfficialVideoPipeline":
         """Load the pipeline from pretrained checkpoints and configurations."""
-        resolved_model_id = cls.MODEL_ID or model_id
+        resolved_model_id = cls._resolve_model_id({}, model_id=cls.MODEL_ID or model_id)
         runtime_kwargs: dict[str, Any] = {}
         if isinstance(model_path, Mapping):
             runtime_kwargs.update(model_path)
@@ -86,7 +86,7 @@ class OfficialVideoPipeline(PipelineABC):
         temp_dir = output_path.parent / f".{output_path.stem}_inputs"
         # Ensure target directory hierarchy exists before writing outputs
         temp_dir.mkdir(parents=True, exist_ok=True)
-        return materialize_image_input(load_pil_image(images), temp_dir, filename="input.png")
+        return materialize_image_input(load_pil_image(images), str(temp_dir), filename="input.png")
 
     def __call__(
         self,
@@ -138,14 +138,18 @@ class OfficialVideoPipeline(PipelineABC):
             **kwargs,
         )
 
-    def stream(self, prompt: str, images: Any = None, **kwargs: Any) -> Any:
-        """Stream visual generation outputs chunk by chunk."""
+    def stream_state_ready(self) -> bool:
+        """Artifact history is not conditioning for the next generation request."""
+        return False
+
+    def stream(self, prompt: str, images: Any = None, return_dict: bool = False, **kwargs: Any) -> Any:
+        """Run one request, preserving structured artifact results when requested."""
         result = self(prompt=prompt, images=images, return_dict=True, **kwargs)
         self.memory_module.record(
             result.get("artifact_path") or result,
             metadata={"prompt": prompt, "model_name": self.model_id, "generation_type": self.GENERATION_TYPE},
         )
-        return result.get("artifact_path") or result
+        return result if return_dict else result.get("artifact_path") or result
 
     def get_operator(self) -> RuntimeVideoOperator:
         """Get operator for OfficialVideoPipeline."""
@@ -158,72 +162,84 @@ class OfficialVideoPipeline(PipelineABC):
 
 class FramePackPipeline(OfficialVideoPipeline):
     """Pipeline implementation for FramePack visual generation."""
+
     MODEL_ID = "framepack"
     GENERATION_TYPE = "i2v"
 
 
 class I2VGenXLPipeline(OfficialVideoPipeline):
     """Pipeline implementation for I2VGenXL visual generation."""
+
     MODEL_ID = "i2vgen-xl"
     GENERATION_TYPE = "i2v"
 
 
 class MAGI1Pipeline(OfficialVideoPipeline):
     """Pipeline implementation for MAGI1 visual generation."""
+
     MODEL_ID = "magi-1"
     GENERATION_TYPE = "i2v"
 
 
 class Mochi1PreviewT2VPipeline(OfficialVideoPipeline):
     """Pipeline implementation for Mochi1PreviewT2V visual generation."""
+
     MODEL_ID = "mochi-1-preview-t2v"
     GENERATION_TYPE = "t2v"
 
 
 class ModelScopeT2VPipeline(OfficialVideoPipeline):
     """Pipeline implementation for ModelScopeT2V visual generation."""
+
     MODEL_ID = "modelscope-t2v"
     GENERATION_TYPE = "t2v"
 
 
 class OpenSoraPlanPipeline(OfficialVideoPipeline):
     """Pipeline implementation for OpenSoraPlan visual generation."""
+
     MODEL_ID = "open-sora-plan"
     GENERATION_TYPE = "t2v"
 
 
 class OpenSoraPipeline(OfficialVideoPipeline):
     """Pipeline implementation for OpenSora visual generation."""
+
     MODEL_ID = "open-sora"
     GENERATION_TYPE = "t2v"
 
 
 class KreaRealtimeVideoPipeline(OfficialVideoPipeline):
     """Pipeline implementation for KreaRealtimeVideo visual generation."""
+
     MODEL_ID = "krea-realtime-video"
     GENERATION_TYPE = "t2v"
 
 
 class MMAudioPipeline(OfficialVideoPipeline):
     """Pipeline implementation for MMAudio visual generation."""
+
     MODEL_ID = "mmaudio"
     GENERATION_TYPE = "v2a"
 
 
 class OmniVinciPipeline(OfficialVideoPipeline):
     """Pipeline implementation for OmniVinci visual generation."""
+
     MODEL_ID = "omnivinci"
     GENERATION_TYPE = "multimodal"
 
 
 class Qwen25OmniPipeline(OfficialVideoPipeline):
     """Pipeline implementation for Qwen25Omni visual generation."""
+
     MODEL_ID = "qwen2.5-omni"
     GENERATION_TYPE = "multimodal"
 
 
 class SAMA14BPipeline(OfficialVideoPipeline):
     """Pipeline implementation for SAMA14B visual generation."""
+
     MODEL_ID = "sama-14b"
     GENERATION_TYPE = "v2v"
 
@@ -254,9 +270,7 @@ class SAMA14BPipeline(OfficialVideoPipeline):
         operator_kwargs = kwargs.get("operator_kwargs")
         if isinstance(operator_kwargs, Mapping):
             unsupported.extend(
-                f"operator_kwargs.{name}"
-                for name in unsupported_conditions
-                if operator_kwargs.get(name) is not None
+                f"operator_kwargs.{name}" for name in unsupported_conditions if operator_kwargs.get(name) is not None
             )
         if images is not None:
             unsupported.append("images")
@@ -277,26 +291,27 @@ class SAMA14BPipeline(OfficialVideoPipeline):
 
     def run_pipeline_invocation(self, invocation: PipelineInvocation) -> Mapping[str, Any]:
         if invocation.ref_image_path not in (None, ""):
-            raise ValueError(
-                "SAMA-14B's released inference route does not accept a separate reference image."
-            )
+            raise ValueError("SAMA-14B's released inference route does not accept a separate reference image.")
         return super().run_pipeline_invocation(invocation)
 
 
 class SpatialLadderPipeline(OfficialVideoPipeline):
     """Pipeline implementation for SpatialLadder visual generation."""
+
     MODEL_ID = "spatial-ladder"
     GENERATION_TYPE = "multimodal"
 
 
 class SpatialReasonerPipeline(OfficialVideoPipeline):
     """Pipeline implementation for SpatialReasoner visual generation."""
+
     MODEL_ID = "spatial-reasoner"
     GENERATION_TYPE = "multimodal"
 
 
 class UniAnimateDiTPipeline(OfficialVideoPipeline):
     """Pipeline implementation for UniAnimateDiT visual generation."""
+
     MODEL_ID = "unianimate-dit"
     GENERATION_TYPE = "i2v"
 

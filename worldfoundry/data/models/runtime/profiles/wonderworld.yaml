@@ -6,26 +6,56 @@ groups:
 - 3d
 - world
 - camera_control
-- official_repo
 source_repos:
 - url: https://github.com/KovenYu/WonderWorld
+  revision: 5cf11467ad21a9d7bca269f961855a235c7d352e
+  in_tree_path: worldfoundry/synthesis/visual_generation/wonderworld
+checkpoints:
+- repo_id: sd2-community/stable-diffusion-2-inpainting
+  revision: 5f74973cbb64c8568780732c17f43eb269d63a0d
+  role: inpainting
+- repo_id: prs-eth/marigold-depth-v1-0
+  revision: f4fc453d7d217cbe30ddcad3eb311d1ad9a11c4c
+  role: guided_depth
+- repo_id: prs-eth/marigold-normals-v0-1
+  revision: b105f7cfa1972b57d8e9ed72a896b2768a52f8e9
+  role: surface_normals
+- repo_id: shi-labs/oneformer_ade20k_swin_large
+  revision: 4a5bac8e64f82681a12db2e151a4c2f4ce6092b2
+  role: semantic_segmentation
+- url: https://github.com/THU-MIG/RepViT/releases/download/v1.0/repvit_sam.pt
+  role: region_segmentation
 input_schema:
   prompt: true
   image: true
   video: false
   actions:
+  - camera_path
   - camera_view_matrix_sequence
 artifact_kind: generated_world
 artifact_filename: wonderworld.splat
 execution:
-  backend_stage: registered_subprocess_adapter_preflight_blocked
-  runtime_status: blocked_missing_runtime_source
-  integration_status: blocked
+  backend_stage: in_tree_runtime
+  runtime_status: native_offline_inference
+  integration_status: integrated
   pipeline_binding: wonderworld
+  defaults:
+    seed: 42
+    depth_steps: 30
+    inpaint_steps: 50
+    normal_steps: 10
+    refinement_steps: 100
+    focal_length: 500
+    gen_layer: true
 integration:
-  status: blocked
+  status: integrated
 notes:
-- The public tree has the subprocess adapter but no WonderWorld run.py at its
-  expected runtime path, so checkpoint-backed inference is blocked before launch.
-- An authorized runtime source checkout, checkpoints, and PyTorch3D-compatible
-  extensions are required before direct execution can be verified.
+- Native standard-runner recipes own SD2/Marigold diffusion; no upstream checkout, Diffusers pipeline, Flask server, or PyTorch3D extension is required.
+- The single RGB image is resized to 512x512. Each optional camera matrix requests one new world view, starting from an identity seed camera.
+- Camera paths use row-major OpenCV world-to-camera matrices; named upstream viewer matrices use column-major 16-vectors.
+- Exported scene depth equals Marigold scene depth times 1000; camera translations use these exported units.
+- Guided depth uses the final eight Euler steps and known scene/ground anchors; latent noise and U-Net input remain unscaled as in the pinned source.
+- gsplat RGB rendering, opacity-crossing median depth, and 0.8 L1 plus 0.2 DSSIM fitting are native implementations; full official rasterizer and quality parity remain pending.
+- New Gaussians precede the frozen scene at equal depth; only their bounded particle range is fitted and pruned.
+- Upstream reports 48 GB VRAM. Local component weights and a CUDA-compatible gsplat installation are required.
+- No separate WonderWorld generator checkpoint is needed. SD2 uses CreativeML Open RAIL++-M; retain all component licensing terms.

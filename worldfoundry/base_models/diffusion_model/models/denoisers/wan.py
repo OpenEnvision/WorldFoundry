@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Mapping
-from contextlib import nullcontext
+from collections.abc import Generator, Mapping
+from contextlib import ExitStack, contextmanager, nullcontext
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from pathlib import Path
 from threading import RLock
+from typing import Any
 
 import torch
 
@@ -119,6 +120,13 @@ _WAN_DENOISER_OPTION_KEYS = frozenset(
         "accelerations",
         "adacache",
         "blocktaylorseer",
+        "compile_scope",
+        "compile_backend",
+        "compile_mode",
+        "compile_fullgraph",
+        "compile_dynamic",
+        "compile_options",
+        "static_cross_kv",
         "cuda_graph",
         "custom",
         "dualblock",
@@ -508,6 +516,28 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         ):
             raise ValueError("EasyCache and existing feature-cache configurations are exclusive")
         self.model = model
+        self._prepare_cross_kv = bool(
+            getattr(model, "_worldfoundry_static_cross_kv", None) is not None
+            and (
+                enable_cuda_graph
+                or getattr(model, "_worldfoundry_compile_config", {}).get("scope") == "regional"
+            )
+        )
+        if self._prepare_cross_kv:
+            from ...optimizations.static_cross_kv import StaticCrossKVProcessor
+            from ..networks.wan.model import CrossAttentionProcessor
+
+            if type(model) is not WanModel or getattr(model, "memory_adapter", None) is not None:
+                raise ValueError("prepared cross-KV requires the canonical WanModel without a memory adapter")
+            if (
+                getattr(model, "_worldfoundry_layerwise_cpu_offload_handle", None) is not None
+                or getattr(model, "_worldfoundry_device_map_handle", None) is not None
+            ):
+                raise ValueError("prepared cross-KV requires resident unsharded weights")
+            for block in model.blocks:
+                processor = block.cross_attn.get_processor()
+                if not isinstance(processor, StaticCrossKVProcessor) or type(processor._inner) is not CrossAttentionProcessor:
+                    raise ValueError("prepared cross-KV requires the canonical Wan cross-attention processor")
         self.compute_dtype = compute_dtype
         self.reference_condition_key = reference_condition_key
         self.channel_condition_key = channel_condition_key
@@ -562,6 +592,45 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             enabled=enable_cuda_graph,
             extra_key=f"wan:{type(model).__module__}.{type(model).__qualname__}",
         )
+
+    def validate_request_batching(self) -> None:
+        """Validate resident canonical Wan compute before merging requests."""
+        if (
+            type(self) is not WanDenoiser
+            or type(self.model) is not WanModel
+            or self.model.training
+            or self.reference_condition_key is not None
+            or self.channel_condition_key not in (None, "condition_latents")
+            or self._teacache_threshold is not None
+            or self._feature_cache_config is not None
+            or any(
+                getattr(self.model, name, None) is not None
+                for name in (
+                    "memory_adapter",
+                    "_worldfoundry_easycache_config",
+                    "_worldfoundry_approximate_attention",
+                    "_worldfoundry_sequence_parallel",
+                    "_worldfoundry_layerwise_cpu_offload_handle",
+                    "_worldfoundry_device_map_handle",
+                )
+            )
+        ):
+            raise ValueError(
+                "Wan request batching requires resident unsharded T2V/I2V weights "
+                "without approximate caches or custom conditioning"
+            )
+        from ...optimizations.static_cross_kv import StaticCrossKVProcessor
+        from ..networks.wan.model import CrossAttentionProcessor, SelfAttentionProcessor
+
+        for block in self.model.blocks:
+            cross = block.cross_attn.get_processor()
+            if type(cross) is StaticCrossKVProcessor:
+                cross = cross._inner
+            if (
+                type(block.self_attn.get_processor()) is not SelfAttentionProcessor
+                or type(cross) is not CrossAttentionProcessor
+            ):
+                raise ValueError("Wan request batching requires canonical attention processors")
 
     def _inplace_residual_state(self) -> dict[str, object]:
         """Return lazy-compatible in-place dispatch telemetry.
@@ -932,6 +1001,11 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
                 timestep_state["per_token_calls"]
             ) + 1
         model_kwargs = {}
+        if model_input.request_batch_sizes:
+            self.validate_request_batching()
+            if any(size <= 0 for size in model_input.request_batch_sizes) or sum(model_input.request_batch_sizes) != latents.shape[0]:
+                raise ValueError("Wan request batch sizes must partition the latent batch")
+            model_kwargs["request_batch_sizes"] = model_input.request_batch_sizes
         use_gradient_checkpointing = model_input.conditioning.get(
             "use_gradient_checkpointing",
             False,
@@ -1089,6 +1163,17 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             else nullcontext()
         )
         with autocast_context:
+            if getattr(self, "_prepare_cross_kv", False):
+                # Condition projections and cache ownership execute on every
+                # host call; only explicit K/V tensors enter compile/capture.
+                context_kwargs: dict[str, Any] = {"clip_feature": model_kwargs.get("clip_feature")}
+                if model_input.request_batch_sizes:
+                    context_kwargs["request_batch_sizes"] = model_input.request_batch_sizes
+                context = self.model.prepare_condition_context(context, **context_kwargs)
+                model_kwargs["cross_attention_kv"] = tuple(
+                    block.cross_attn.get_processor().prepare(block.cross_attn, context)
+                    for block in self.model.blocks
+                )
             sample = self._run_network(
                 x=model_latents,
                 timestep=timestep,
@@ -1291,6 +1376,9 @@ class WanDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
                 compile_effective = "compile-wrapper-failed"
             elif int(runtime_compile.get("calls", 0)):
                 compile_effective = "compile-wrapper-executed"
+            elif graph is not None and int(graph["replay"]) and runtime_compile["lifetime_calls"]:
+                compile_effective = "compiled-cuda-graph-replayed"
+                runtime_compile["cuda_graph_replays"] = int(graph["replay"])
             else:
                 compile_effective = "compile-wrapper-installed (lazy)"
             effective["compile"] = compile_effective
@@ -1562,6 +1650,21 @@ class Wan22DualExpertDenoiser:
         self._route_calls = {"high-noise": 0, "low-noise": 0}
         self._last_expert: str | None = None
         self._validate_easycache_experts()
+
+    @contextmanager
+    def execution_warmup(self) -> Generator[None, None, None]:
+        """Warm both expert owners through the production routing schedule."""
+        with ExitStack() as stack:
+            stack.enter_context(self.high_noise.execution_warmup())
+            stack.enter_context(self.low_noise.execution_warmup())
+            yield
+
+    def validate_request_batching(self) -> None:
+        """Require both routed experts to support the merged T2V lifecycle."""
+        if type(self) is not Wan22DualExpertDenoiser:
+            raise ValueError("request batching requires the canonical Wan dual-expert denoiser")
+        self.high_noise.validate_request_batching()
+        self.low_noise.validate_request_batching()
 
     def _easycache_enabled(self) -> bool:
         return any(
@@ -2508,6 +2611,16 @@ def _build_wan_denoiser(
             converted = model_checkpoint_state
         return convert_wan_vsa_gate_state_dict(converted)
 
+    load_policy = acceleration_policy(context)
+    execution_options = dict(load_policy.options)
+    execution_options["cuda_graph"] = resolve_cuda_graph_option(context)
+    for name in (
+        "static_cross_kv", "compile_scope", "compile_backend", "compile_mode",
+        "compile_fullgraph", "compile_dynamic", "compile_options",
+    ):
+        if name in context.component_options:
+            execution_options[name] = context.component_options[name]
+    load_policy = replace(load_policy, dtype=weight_dtype, options=execution_options)
     model = NativeModuleLoader().load(
         ModuleLoadSpec(
             module_class=WanModel,
@@ -2528,10 +2641,11 @@ def _build_wan_denoiser(
                 RMSNorm: AutoWrappedModule,
             },
             layer_container="blocks",
+            compile_regions=("blocks",),
             post_load_hook=merge_training_adapter if adapter_path is not None else None,
         ),
         context.require_checkpoint("weights"),
-        replace(acceleration_policy(context), dtype=weight_dtype),
+        load_policy,
     )
     if not isinstance(model, WanModel):
         raise TypeError(f"expected WanModel, got {type(model).__name__}")

@@ -9,7 +9,7 @@ description: 为模型族、基准运行时和验证阶段选择依赖栈。
 
 仓库元数据里仍然使用 `runtime_profile` 这个字段，因为它指向 `worldfoundry/data/models/runtime/profiles/<model-id>.yaml` 中的一条具体环境记录。在面向读者的文档里，这个概念统一称为运行环境。
 
-WorldFoundry 统一使用 conda 路径。文档里的标准流程为主框架创建一个命名 conda 环境；只有上游 simulator 或 official runtime 需要隔离时，才创建单独 conda 环境。
+WorldFoundry 采用 GPU-first 的运行和开发路径，统一使用 conda。标准流程为主框架创建一个命名 CUDA 环境；只有上游 simulator 或 official runtime 需要隔离时，才创建单独环境。贡献代码时，在已激活的 GPU 环境中安装 `.[dev,test]`。
 
 1. 模型推理默认从 `bash scripts/setup/bootstrap_worldfoundry.sh` 开始。
 2. 用 `bash scripts/setup/model_env_install.sh --list` 查看所有 model-to-env 映射；需要某个模型的精确环境时使用 `--model <model-id>`。
@@ -51,15 +51,15 @@ WorldFoundry 统一使用 conda 路径。文档里的标准流程为主框架创
     { name: <><code>studio_rerun</code></>, description: "基于 Rerun 的 Studio 可视化。", reads: [{ label: "包含于 all", value: "是" }, { label: "安装", value: <><code>.[studio_rerun]</code></> }] },
     { name: <><code>studio_geometry</code></>, description: "Studio 几何与 Open3D 可视化。", reads: [{ label: "包含于 all", value: "是" }, { label: "安装", value: <><code>.[studio_geometry]</code></> }] },
     { name: <><code>studio_plot</code></>, description: "Studio 绘图与颜色工具。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[studio_plot]</code></> }] },
-    { name: <><code>dev</code></>, description: "构建、pre-commit 和仓库固定版本的 lint 工具。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[dev]</code></> }] },
-    { name: <><code>test</code></>, description: "公开的 CPU 推理和打包测试，无需 Torch 或下载模型。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[test]</code></> }] },
-    { name: <><code>eval_core</code></>, description: "可选的 CPU 评估依赖。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[eval_core]</code></> }] },
+    { name: <><code>dev</code></>, description: "构建、pre-commit、Ruff 和 ty 开发工具。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[dev]</code></> }] },
+    { name: <><code>test</code></>, description: "不加载权重的推理与打包快速测试。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[test]</code></> }] },
+    { name: <><code>eval_core</code></>, description: "扩展评测测试依赖。", reads: [{ label: "包含于 all", value: "否" }, { label: "安装", value: <><code>.[eval_core]</code></> }] },
     { name: <><code>all</code></>, description: "上述经过筛选的通用 runtime bundle。", reads: [{ label: "安装", value: <><code>.[all]</code></> }] }
   ]} />
 
 源码内的 dependency groups 是更窄的 resolver building blocks：
 
-- `lint` — 仓库固定版本的 pre-commit 与 Ruff 工具链。
+- `lint` — PR 质量检查使用的 pre-commit、Ruff、ty 和 pytest。
 - `flash_attn_fa25` — 面向 FA 2.5 兼容环境的 flash-attention 依赖桶。
 - `flash_attn_fa28` — 面向 FA 2.8 兼容环境的 flash-attention 依赖桶。
 - `runtime_clip_bundle` — 面向 CLIP 的 runtime 兼容依赖桶。
@@ -81,14 +81,13 @@ WorldFoundry 统一使用 conda 路径。文档里的标准流程为主框架创
 - **`scripts/inference/prepare_model_infer.sh`** — 逐模型准备 checkpoint/Hugging Face 资产。默认是 plan/check-local；确认 license、gated access 和存储后才加 `--download`。
 - **`scripts/workspace/run_workspace.sh`** — 从已激活 runtime 启动浏览器 Workspace。显式设置 `PYTHONPATH=.`、`WORLDFOUNDRY_WORKSPACE_MAX_JOBS` 和 `WORLDFOUNDRY_CKPT_DIR`。
 
-统一安装器会按解析出的 wheel index 选择真实存在的 Torch 范围：cu121 使用
-Torch 2.4–2.5，cu124 使用 2.4–2.6，cu128 使用 2.7 起且不超过仓库上界。
+统一安装器使用 cu128，以及 2.7 起且不超过仓库上界的 Torch。
+GPU 运行需要支持 CUDA 12.8+ 的 NVIDIA 驱动；旧驱动以及 cu121/cu124 请求会在
+安装开始前报错。模型专用环境保留各自文档中的旧 CUDA/Torch 栈。
 从 CUDA index 安装后，精确的 Torch/Torchvision/Torchaudio 版本会约束后续
 PyPI 安装，避免间接依赖替换已经选定的 CUDA build。主机没有 `nvidia-smi` 时，
 bootstrap 会显式使用 cu128 wheel index，同时启用 `--allow-no-cuda` 并跳过
-flash-attn；直接以 `--cuda auto` 调安装器则会 fail fast，要求选择显式 tier。
-如果其他已选 extra 要求的 Torch 新于该 tier 实际发布范围，依赖解析会显式失败，
-而不是退回 PyPI 的 CPU wheel 或其他 CUDA wheel。
+flash-attn；CPU 主机直接以 `--cuda auto` 调安装器时，需要显式选择 `--cuda cu128`。
 
 推荐 fresh-clone 路径：
 
@@ -485,9 +484,9 @@ server endpoint。
 
 ### 1. CUDA 版本不匹配
 **现象**：遇到 `CUDA error: no kernel image is available for execution on the device` 或者 PyTorch 找不到 GPU。
-**解决办法**：确保主机的 NVIDIA 驱动足够新，能支持 Conda 安装的 CUDA 版本。如果您使用的是旧版驱动，可以在安装时强制指定旧的 CUDA bucket：
+**解决办法**：将 NVIDIA 驱动更新到支持 CUDA 12.8 或更新版本后安装统一环境。模型专用环境使用其 profile 声明的 CUDA/Torch 版本：
 ```bash
-bash scripts/setup/unified_install.sh --cuda cu121
+bash scripts/setup/unified_install.sh --cuda cu128
 ```
 
 ### 2. 缺失系统级依赖（针对 OpenGL/3D）

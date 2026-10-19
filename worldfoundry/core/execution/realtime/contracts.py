@@ -25,6 +25,25 @@ DEFAULT_REALTIME_CONTROLS = (
 
 
 @dataclass(frozen=True, slots=True)
+class RealtimeSensor:
+    """One model-owned sensor channel; presentation never changes its index."""
+
+    key: str
+    kind: str = "rgb"
+    label: str = ""
+    channel_index: int | None = None
+    range_m: float = 50.0
+
+    def __post_init__(self):
+        if not self.key or self.kind not in {"rgb", "depth", "lidar"}:
+            raise ValueError("Realtime sensors require a key and rgb/depth/lidar kind")
+        if self.channel_index is not None and self.channel_index < 0:
+            raise ValueError("sensor channel_index must be nonnegative")
+        if self.range_m <= 0:
+            raise ValueError("sensor range_m must be positive")
+
+
+@dataclass(frozen=True, slots=True)
 class RealtimeSpec:
     """Model-owned playback and generation cadence for one resident session."""
 
@@ -37,6 +56,7 @@ class RealtimeSpec:
     input_fps: float | None = None
     first_input_frames: int | None = None
     steady_input_frames: int | None = None
+    sensors: tuple[RealtimeSensor, ...] = ()
 
     def __post_init__(self) -> None:
         """Reject non-positive clocks or empty control vocabularies before a session starts."""
@@ -52,6 +72,11 @@ class RealtimeSpec:
             raise ValueError("RealtimeSpec.steady_input_frames must be positive when provided.")
         if not self.controls:
             raise ValueError("RealtimeSpec.controls must not be empty.")
+        if len({sensor.key for sensor in self.sensors}) != len(self.sensors):
+            raise ValueError("RealtimeSpec sensor keys must be unique")
+        indices = [sensor.channel_index for sensor in self.sensors if sensor.channel_index is not None]
+        if len(set(indices)) != len(indices):
+            raise ValueError("RealtimeSpec sensor channel indices must be unique")
 
     @property
     def resolved_input_fps(self) -> float:
@@ -63,21 +88,13 @@ class RealtimeSpec:
     def resolved_first_input_frames(self) -> int:
         """First control chunk size, defaulting to first output frames."""
 
-        return int(
-            self.first_input_frames
-            if self.first_input_frames is not None
-            else self.first_chunk_frames
-        )
+        return int(self.first_input_frames if self.first_input_frames is not None else self.first_chunk_frames)
 
     @property
     def resolved_steady_input_frames(self) -> int:
         """Steady control chunk size, defaulting to steady output frames."""
 
-        return int(
-            self.steady_input_frames
-            if self.steady_input_frames is not None
-            else self.steady_chunk_frames
-        )
+        return int(self.steady_input_frames if self.steady_input_frames is not None else self.steady_chunk_frames)
 
     def to_payload(self) -> dict[str, Any]:
         """JSON-safe dict; omit unset optional input-clock fields so clients do not treat ``null`` as 0."""
@@ -90,6 +107,8 @@ class RealtimeSpec:
             if payload[optional_name] is None:
                 payload.pop(optional_name)
         payload["controls"] = list(self.controls)
+        if not self.sensors:
+            payload.pop("sensors")
         return payload
 
     @classmethod
@@ -123,26 +142,17 @@ class RealtimeSpec:
             )
             return cls(
                 fps=int(value.get("fps", default.fps)),
-                first_chunk_frames=int(
-                    value.get("first_chunk_frames", default.first_chunk_frames)
-                ),
-                steady_chunk_frames=int(
-                    value.get("steady_chunk_frames", default.steady_chunk_frames)
-                ),
+                first_chunk_frames=int(value.get("first_chunk_frames", default.first_chunk_frames)),
+                steady_chunk_frames=int(value.get("steady_chunk_frames", default.steady_chunk_frames)),
                 input_fps=float(input_fps) if input_fps is not None else None,
-                first_input_frames=(
-                    int(first_input_frames)
-                    if first_input_frames is not None
-                    else None
-                ),
-                steady_input_frames=(
-                    int(steady_input_frames)
-                    if steady_input_frames is not None
-                    else None
-                ),
+                first_input_frames=(int(first_input_frames) if first_input_frames is not None else None),
+                steady_input_frames=(int(steady_input_frames) if steady_input_frames is not None else None),
                 controls=controls or default.controls,
                 transport=str(value.get("transport", default.transport)),
                 stateful=bool(value.get("stateful", default.stateful)),
+                sensors=tuple(RealtimeSensor(**item) for item in value["sensors"])
+                if "sensors" in value
+                else default.sensors,
             )
         except (TypeError, ValueError):
             return default
@@ -173,4 +183,5 @@ __all__ = [
     "DEFAULT_REALTIME_CONTROLS",
     "InteractiveWorldPipeline",
     "RealtimeSpec",
+    "RealtimeSensor",
 ]

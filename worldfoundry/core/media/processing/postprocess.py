@@ -5,8 +5,8 @@
 
 Responsibility: per-stream session, ordered-chain, and layout-aware
 chunk types that a generator, processors, and a sink can exchange
-without copying frames. NumPy frame lists are accepted so Studio can
-use the same boundary without a tensor stack.
+without copying frames. NumPy and PIL RGB frame lists are accepted so
+Studio can use the same boundary without a tensor stack.
 
 Not this module: NVIDIA RTX VSR lives in
 :mod:`worldfoundry.core.media.processing.rtx` and is imported only
@@ -74,6 +74,7 @@ class VideoChunk:
 
     frames: Any
     layout: VideoTensorLayout = "frame-list"
+    value_range: str | tuple[float, float] = "auto"
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -207,7 +208,9 @@ class VideoPostprocessChain:
 
 
 def _close_sessions(
-    sessions: Iterable[VideoPostProcessorSession], *, primary_error: BaseException | None = None,
+    sessions: Iterable[VideoPostProcessorSession],
+    *,
+    primary_error: BaseException | None = None,
 ) -> None:
     """Attempt every close while retaining the original failure."""
 
@@ -444,8 +447,7 @@ class VideoPostprocessStream:
         frame_values = frames if isinstance(frames, (list, tuple)) else (frames,)
         requested = [value for value in declared if value is not None]
         requested.extend(
-            value.device for value in frame_values
-            if getattr(getattr(value, "device", None), "type", None) == "cuda"
+            value.device for value in frame_values if getattr(getattr(value, "device", None), "type", None) == "cuda"
         )
         if not requested:
             return None
@@ -522,6 +524,8 @@ def infer_video_spec(
     """Infer stream metadata from a declared layout without copying frames."""
 
     if layout == "frame-list":
+        from PIL import Image
+
         if not isinstance(frames, Sequence) or isinstance(frames, (str, bytes, bytearray)):
             raise TypeError("frame-list video must be a sequence of HWC frames")
         if not frames:
@@ -533,7 +537,11 @@ def infer_video_spec(
         for index, frame in enumerate(frames[1:], start=1):
             if _shape(frame, layout) != first_shape:
                 raise ValueError(f"frame-list shape changed at index {index}.")
-        dtype = str(getattr(frames[0], "dtype", "unknown"))
+        dtype = (
+            "uint8"
+            if isinstance(frames[0], Image.Image) and frames[0].mode == "RGB"
+            else str(getattr(frames[0], "dtype", "unknown"))
+        )
     else:
         shape = _shape(frames, layout)
         if layout == "thwc":
@@ -591,6 +599,32 @@ def video_frame_count(frames: Any, *, layout: VideoTensorLayout) -> int:
     return int(shape[time_dimension])
 
 
+def video_chunk_as_thwc(chunk: VideoChunk) -> Any:
+    """Expose one video in THWC order without copying or guessing axes.
+
+    Batched/multi-view chunks require singleton batch/view axes here; sensor
+    composition owns combining multiple views into one transport video.
+    """
+    frames = chunk.frames
+    layout: str = chunk.layout
+    if layout == "frame-list":
+        return frames
+    infer_video_spec(frames, layout=chunk.layout)
+    if layout.startswith("b"):
+        if frames.shape[0] != 1:
+            raise ValueError("single-video transport requires batch size 1")
+        frames, layout = frames[0], layout[1:]
+    if layout.startswith("v"):
+        if frames.shape[0] != 1:
+            raise ValueError("single-video transport requires view count 1; compose sensor views first")
+        frames, layout = frames[0], layout[1:]
+    if layout == "thwc":
+        return frames
+    axes = (0, 2, 3, 1) if layout == "tchw" else (1, 2, 3, 0)
+    permute = getattr(frames, "permute", None)
+    return permute(*axes) if callable(permute) else frames.transpose(axes)
+
+
 def frame_list_from_chunks(chunks: Iterable[VideoChunk]) -> list[Any]:
     """Flatten frame-list chunks while preserving frame objects and order."""
 
@@ -603,9 +637,14 @@ def frame_list_from_chunks(chunks: Iterable[VideoChunk]) -> list[Any]:
 
 
 def _shape(value: Any, layout: VideoTensorLayout) -> tuple[int, ...]:
-    """Read ``value.shape`` without importing torch/numpy; missing shape is a TypeError."""
+    """Read array/tensor shape or PIL frame geometry without materializing pixels."""
 
     shape = getattr(value, "shape", None)
+    if shape is None and layout == "frame-list":
+        from PIL import Image
+
+        if isinstance(value, Image.Image):
+            return value.height, value.width, len(value.getbands())
     if shape is None:
         raise TypeError(f"{layout} video value does not expose a shape")
     return tuple(int(dimension) for dimension in shape)
@@ -631,4 +670,5 @@ __all__ = [
     "frame_list_from_chunks",
     "infer_video_spec",
     "video_frame_count",
+    "video_chunk_as_thwc",
 ]

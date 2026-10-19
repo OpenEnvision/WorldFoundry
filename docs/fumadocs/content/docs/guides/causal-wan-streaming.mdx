@@ -1,0 +1,133 @@
+---
+title: "Causal Wan streaming inference"
+description: "Request-owned camera and text/image condition reuse, small-chunk VAE compilation, independent LingBot-V2 1.3B loading, and synchronized Studio sensors."
+---
+
+## Camera condition reuse
+
+Camera conditions remain unchanged across denoising timesteps within a video chunk. Prepare camera embedding and per-block scale/shift once, then reuse them across four denoising calls and one KV commit.
+
+- Camera embedding and affine projection calls decrease by **80%**.
+- The LingBot-V2 1.3B path reduces warm model latency by approximately **2.6%**, preserving RGB pixels exactly.
+- Prepared tensors belong to the request, without model-global condition state or additional checkpoint keys. The original training path remains intact.
+- The tradeoff is additional memory for per-layer affine tensors.
+
+`optimizations/camera_condition.py` shares preparation/application arithmetic across LingBot, Fast, V2, and Action-22. Matrix-Game-3 single-GPU batch, interactive, and resident realtime loops reuse prepared inputs within a chunk. Full conditions with memory and CFG null conditions without memory are prepared separately and refreshed for each chunk.
+
+### Static camera features
+
+Wan-Fun camera control and DualCamCtrl reuse fixed `SimpleAdapter` outputs. GameCraft reuses fixed `CameraNet` outputs, including zero-condition prefixes. All use the request-owned `CameraConditionCache`. The first projection runs inside the model forward, retaining its autocast policy and placement/offload hooks. GameCraft keeps separate conditions for merged or split CFG; each new clip creates fresh caches.
+
+Wan-Fun preserves the original CFG batch boundaries and projects each branch separately, retaining the convolution shapes used by the raw path.
+
+| Path | Camera projection calls | Warm model latency reduction | Feature cache | RGB pixels |
+| --- | --- | --- | --- | --- |
+| Wan-Fun camera control 1.3B | 100 → 2 (98%) | Approximately 1.3% | 56 MiB | Identical |
+| DualCamCtrl | 200 → 1 (99.5%) | Approximately 1.3% | 28 MiB | Identical |
+
+Wan-Fun's final latents are also identical; DualCamCtrl's generated control-video pixels are identical. Projection-call reduction does not imply the same overall speedup: Transformer blocks still dominate model computation.
+
+Only camera stems independent of the current latent and timestep are reused. GameCraft's timestep-dependent text refiner, DualCamCtrl ControlNet blocks, and dynamic control latents are recomputed at every denoising step.
+
+## Static text/image conditions and cross-KV
+
+Wan-Fun camera control and DualCamCtrl share `optimizations/static_cross_kv.py` to reuse text/CLIP projections and per-layer static cross-attention K/V within each request. Positive and negative CFG conditions have separate storage. Wan-Fun retains independent original batch shapes for late-step CFG slices. The first projection stays inside the forward, preserving autocast, offload hooks, and checkpoint keys.
+
+Queries, attention, output projections, and dynamic ControlNet blocks run at every step. Only fixed-condition projections and K/V are reused. DualCamCtrl also uses the existing `WanModel.rotary_frequencies` cache, keyed by grid, device, and original complex precision.
+
+| Path | Text and CLIP projections (each) | Warm model latency reduction | Condition/KV cache | RGB pixels |
+| --- | --- | --- | --- | --- |
+| Wan-Fun camera control 1.3B | 100 → 2 (98%) | Approximately 2.2% | 279 MiB | Identical |
+| DualCamCtrl (including RoPE reuse) | 100 → 2 (98%) | Approximately 2.2% | 545 MiB | Identical |
+
+Per-layer K/V projection calls also decrease by 98%. These gains use camera-feature reuse as the baseline, not total end-to-end latency. Wan-Fun's final latents and DualCamCtrl's generated control-video pixels are identical. DualCamCtrl's RoPE table uses approximately another 9.4 MiB.
+
+## LingBot-V2 static text and chunk RoPE
+
+Single-device eager LingBot-V2 1.3B sessions reuse the padded text projection through `StaticConditionCache`. The first projection remains inside the forward, retaining the original 512-token batch geometry and autocast. Existing causal cross-attention K/V storage remains unchanged.
+
+Each chunk also prepares one packed T/H/W frequency table through the shared complex-RoPE assembler. Every layer and denoising step uses that table with the chunk's absolute frame offset, including after KV eviction. Q/K conversion, FP64 complex multiplication, attention, and output projections remain live.
+
+| Static computation | Original calls | Reused calls | Prepared storage |
+| --- | --- | --- | --- |
+| Text projection, unchanged prompt over 333 frames | 105 | 1 | 1.5 MiB per prompt |
+| RoPE table assembly, per chunk | 300 | 1 | Approximately 5.9 MiB per chunk |
+
+With camera reuse, host KV cursors, settled I2V reuse, and eager decoding retained, mean warmed 333-frame resident request latency is **31.78 s without these two caches and 31.86 s with both** (+0.24%). The reduced call counts do not establish an overall speedup.
+
+Conditions, projected text, denoising latents, and RGB pixels remain identical. `update_prompt()` replaces the text projection and cross-KV together while retaining video KV, VAE history, camera state, and RNG. Reset/reconfigure discards the request's projection; RoPE tables are rebuilt at every chunk boundary.
+
+The eager path is selected with `WORLDFOUNDRY_LINGBOT_V2_REALTIME_COMPILE=0`. `realtime_metrics` exposes `text_condition_cache_bytes`, `text_condition_reuse_calls`, and `rotary_cache_bytes`. Text hits count from the latest prompt configuration or update; rotary storage refers to the current chunk.
+
+## Host-controlled KV cursors
+
+Single-device eager DiT resident sessions keep `global_end_index` and `local_end_index` on the host while K/V buffers remain on the video device. Python can read and update these request-owned cursors without per-block GPU scalar synchronization. Repeated denoising writes, sink retention, eviction, tensor shapes, and checkpoint keys remain unchanged.
+
+The LingBot-V2 1.3B path reduces steady model latency by approximately **2.7%** and resident chunk latency by approximately **1.7%**, with identical denoising latents and RGB pixels. These are incremental gains over camera-condition reuse with eager decoding, not gains to add directly to decoder speedups.
+
+## Settled I2V condition reuse
+
+With eager DiT and full-VAE decoding, mean resident chunk latency after conditioning settles decreases by approximately **15.2%**, with p90 falling from approximately **2.42 s to 1.41 s**. Conditions, denoising latents, and RGB pixels remain identical. The grouped condition cache retains approximately **7.4 MiB**.
+
+Single-device LingBot-V2 1.3B sessions automatically reuse the full-VAE condition once the zero-input tail no longer depends on the seed image. `wan/conditioning.py` derives the temporal history from the canonical encoder's convolutions. A complete grouped encode must lie beyond that history before its result is cached; each group size retains its original projection geometry.
+
+The request owns the encoded condition, including its mask. It reuses the actual encoder output rather than substituting zero latents. Reset/reconfigure discards the cache, and the encoder's original arithmetic and checkpoint keys remain unchanged. `condition_cache_bytes` and `condition_reuse_calls` in `realtime_metrics` report retained storage and reused encode groups.
+
+## Small-chunk VAE
+
+`wan/streaming.py` shares native/reference Wan2.1 decoding. Per-latent decoding preserves causal convolution history instead of repeatedly decoding a growing video.
+
+`feature_cache.py` stores compact history, commits updates after the current step, and reuses matching shape/dtype/device storage. This reduces allocation and avoids retaining large feature tensors through small views.
+
+Standalone decoder compilation on the long-rollout LingBot-V2 1.3B path provides approximately **1.75× warm decoding speed**, reducing steady realtime chunk latency by approximately **10.6%**. Denoising latents remain identical. Decoded RGB has maximum pixel error **1/255** and PSNR **71.77 dB**, rather than pixel-exact parity. Request resets and A/B/A reuse preserve repeatability within each path.
+
+Canonical checkpoint modules remain intact and decoder CUDA Graph capture is disabled. Eager decoding remains the default; compilation suits resident-session prewarming.
+
+Select it with the 1.3B pipeline load option `vae_streaming_compile=True` or runner argument `--vae-streaming-compile`.
+
+## Independent LingBot-V2 1.3B
+
+`lingbot-world-v2-1.3b` declares 30 layers, width 1536, FFN width 8960, and 12 heads. It is separate from the 14B `lingbot-world-v2` checkpoint and distributed defaults. Defaults are one GPU, 317 frames, chunk_size=4, shift=5, 16 FPS, and no T5/DiT FSDP. The first chunk emits 13 frames; steady chunks emit 16.
+
+The public checkpoint contains root-level indexed transformer shards. Supply T5, tokenizer, and VAE assets separately:
+
+```python
+from worldfoundry.pipelines.lingbot_world_v2 import LingBotWorldV2SmallPipeline
+
+pipeline = LingBotWorldV2SmallPipeline.from_pretrained(
+    model_path={
+        "checkpoint_source": "../ckpts/lingbot-world-v2-1.3b-causal-fast",
+        "shared_assets_path": "../ckpts/Wan-AI--Wan2.1-T2V-1.3B",
+    },
+    device="cuda",
+)
+result = pipeline(image="testcase/012_abandoned-room.png", interactions=["forward"], frame_num=317)
+```
+
+Sampling retains FP32 sigmas, integer timesteps, and network-dtype clean states. A channel-first FP32 noise bank is replenished every 20 chunks for continuous rollout. Camera terms, KV reductions, VAE histories, and generators belong to the request/session.
+
+## Scaled attention
+
+`scaled_int8_fp8` uses scaled INT8 Q/K and FP8 V, retaining FP32 softmax and accumulation. Request-owned finalized-key reductions reuse fixed history within a chunk.
+
+The provider integrates with audited dispatch and `MHASchedule(sdpa_backend="scaled_int8_fp8", quantized_sdpa=True)`. It requires explicit selection and never silently substitutes dense attention. **Native PyTorch SDPA remains the default.**
+
+## Studio sensors
+
+Models declare channel identities, types, and order through `RealtimeSpec.sensors`, then return synchronized `sensor_frames`. RGB contains frame sequences, metric depth contains [H,W] arrays, and LiDAR contains per-frame [N,3] XYZ or [N,4] XYZ/intensity arrays.
+
+Every declared key must be present and every channel must have the same frame count. Transport composes one atlas per timestep in declared order. WS and RTC clients crop the same atlas into a sensor grid. Focus/hide only changes presentation, never model channel order. Single-RGB payloads retain their original shape without an empty sensors field.
+
+Reset and reconfigure the session when switching to a differently sized atlas or back to a single-RGB source. The video postprocess stream keeps its configured geometry until reset.
+
+## Limitations
+
+- The current scaled INT8/FP8 implementation is slower than native SDPA and has substantial long-video quality loss. It is **not recommended for default generation**. Its contract is unmasked non-GQA inference, without backward, CUDA Graph capture, or LingBot sequence-parallel integration.
+- LingBot / Matrix-Game-3 camera affine preparation is enabled in single-GPU, non-FSDP loops; distributed paths retain their original arithmetic.
+- LingBot-V2 text/chunk-RoPE reuse is enabled only for single-device, non-FSDP eager Small sessions. Compiled DiT, SP, and 14B sessions retain their existing inputs. Weights and precision must remain fixed within a request; changes require reset/reconfigure. Storage figures refer to the 832×464 four-latent-frame path and are not peak-memory increases. Exact reuse preserves the supplied I2V conditions; it does not guarantee cross-process bitwise reproducibility of full-VAE encoding.
+- Host-controlled KV cursors apply to single-device, non-FSDP eager DiT sessions. Compiled DiT, SP, and FSDP paths retain their original cursor placement; no speedup is established for those paths.
+- Settled I2V reuse applies to single-device LingBot-V2 1.3B with one seed image followed by zero input frames. Other sessions and sequence-parallel execution retain their existing encoder calls. Image, geometry, weights, or precision changes require reset/reconfigure. The initial transient still requires encoding, so the benefit depends on rollout length and grouping. I2V latency gains use camera reuse and host KV cursors as the baseline and are not additive with decoder or other optimization percentages.
+- VAE decoder compilation has startup overhead and small numerical differences. Peak allocated memory grows by approximately 2.3 GiB on the long-rollout path. Realtime chunk gains exclude model loading, cold compilation, video encoding, and transport; they do not establish gains for every VAE architecture or deployment configuration.
+- Camera and condition/KV reuse requires fixed source conditions, model weights (including LoRA), and precision within a clip. Create fresh caches when these change; caches must not cross requests or models. Storage grows with condition length, layer count, and CFG branches. Text/image reuse gains cover native SDPA, not end-to-end gains for every precision, distributed, or offload configuration. Full-video quality and end-to-end gains remain unverified for Matrix-Game-3 resident realtime and GameCraft.
+- Multi-sensor support provides a declaration and synchronized presentation contract. Model producers must supply the channels; a single-RGB checkpoint does not gain depth/LiDAR generation.
+- LingBot source and weights use **CC-BY-NC-SA-4.0: non-commercial, attribution, share-alike**. Attribution is recorded in `THIRD-PARTY-NOTICES`.

@@ -98,7 +98,6 @@ def test_resolve_option_precedence() -> None:
         ("dualblock", {"residual_diff_threshold": 0.1}),
         ("dynamicblock", {"residual_diff_threshold": 0.1}),
         ("firstblock", {"residual_diff_threshold": 0.1}),
-        ("static_cross_kv", True),
         ("teacache", 0.15),
         ("teacache_thresh", 0.2),
     ),
@@ -108,14 +107,13 @@ def test_cuda_graph_rejects_stateful_runtime_options(name: str, value: object) -
         validate_cuda_graph_options(_Ctx({}, {"cuda_graph": True, name: value}))
 
 
+def test_cuda_graph_accepts_explicit_static_cross_kv_inputs() -> None:
+    validate_cuda_graph_options(_Ctx({"cuda_graph": True, "static_cross_kv": True}, {}))
+
+
 def test_cuda_graph_rejects_component_level_stateful_options() -> None:
-    with pytest.raises(ValueError, match="static_cross_kv"):
-        validate_cuda_graph_options(
-            _Ctx(
-                {"cuda_graph": True, "static_cross_kv": True},
-                {},
-            )
-        )
+    with pytest.raises(ValueError, match="teacache"):
+        validate_cuda_graph_options(_Ctx({"cuda_graph": True, "teacache": 0.15}, {}))
 
 
 def test_disabled_cuda_graph_does_not_reject_other_optimizations() -> None:

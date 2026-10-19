@@ -1,0 +1,34 @@
+id: world-observer
+name: World Observer
+aliases: [WorldObserver, worldobserver]
+tasks: [persistent-world-model, joint-actor-observer-generation]
+provider: official_repo
+source:
+  status: paper_only
+  official_repo_url: https://github.com/cvlab-kaist/world-observer
+release_type: paper_only
+official_sources:
+  paper: https://arxiv.org/abs/2610.02162
+  project_page: https://cvlab-kaist.github.io/world-observer/
+  github:
+    url: https://github.com/cvlab-kaist/world-observer
+    head_sha: 6efb6a4107f53e7e36031cfa00c880b075631fcf
+catalog_category: world_models
+integration:
+  status: blocked
+  notes:
+  - The official release plan lists checkpoint, inference code, training code and dataset as forthcoming.
+runner_parity:
+  status: pending
+docs:
+  publisher: KAIST AI
+  publisher_kind: university
+  publisher_zh: KAIST AI（韩国科学技术院）
+  overview: World Observer studies persistent world modeling through joint actor-observer generation. The official repository publishes the paper and release plan.
+  overview_zh: World Observer 通过联合生成 actor 与 observer 视角研究持久世界建模，官方仓库当前公布论文及发布计划。
+  usage_notes: Catalog metadata is available; execution awaits the official checkpoint and inference release.
+  usage_notes_zh: 可查看模型目录元数据，执行路径等待官方 checkpoint 与推理代码发布。
+  limitations:
+  - No model checkpoint or inference code has been released at the recorded upstream revision.
+  limitations_zh:
+  - 所记录的上游版本尚未发布模型 checkpoint 或推理代码。

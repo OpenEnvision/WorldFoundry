@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
 import torch
@@ -105,6 +106,51 @@ class WorldFMPipeline(PipelineABC):
             device=device,
             weight_dtype=weight_dtype,
         )
+
+    def stream_state_ready(self) -> bool:
+        """Report whether this pipeline instance owns a reconstructed scene."""
+        return self.memory_module.current_scene_context is not None
+
+    def init_stream(
+        self,
+        images: Any = None,
+        K: Any = None,
+        meta_path: str | None = None,
+        scene_name: str | None = None,
+        panorama_image: Any = None,
+        panorama_path: str | None = None,
+        output_dir: str | None = None,
+        reset_memory: bool = True,
+    ) -> Dict[str, Any]:
+        """Prepare scene state without generating frames; preserve prior state if preparation fails."""
+        if self.representation_model is None:
+            raise RuntimeError("WorldFM representation model is not loaded. Use from_pretrained() first.")
+        perception, scene_context = self._build_scene_context(
+            images=images,
+            K=K,
+            meta_path=meta_path,
+            scene_name=scene_name,
+            panorama_image=panorama_image,
+            panorama_path=panorama_path,
+            output_dir=output_dir,
+        )
+        if reset_memory:
+            self.memory_module.manage(action="reset")
+        self.memory_module.record(
+            {"scene_context": scene_context},
+            metadata={"type": "scene_context", "scene_name": scene_context["scene_name"]},
+        )
+        result = {
+            "scene_context": scene_context,
+            "default_interactions": perception["default_interactions"],
+            "message": "WorldFM scene initialized.",
+        }
+        image_path = perception["image_path"]
+        if image_path is None and isinstance(images, (str, Path)):
+            image_path = str(images)
+        if image_path is not None:
+            result["preview_image"] = image_path
+        return result
 
     def _resolve_interactions(self, interactions, default_interactions):
         """Resolve interactions for WorldFMPipeline."""
@@ -267,7 +313,7 @@ class WorldFMPipeline(PipelineABC):
         scene_context = self.memory_module.select()
 
         if images is not None or meta_path is not None or panorama_image is not None or panorama_path is not None:
-            perception, scene_context = self._build_scene_context(
+            initialized = self.init_stream(
                 images=images,
                 K=K,
                 meta_path=meta_path,
@@ -275,12 +321,10 @@ class WorldFMPipeline(PipelineABC):
                 panorama_image=panorama_image,
                 panorama_path=panorama_path,
                 output_dir=output_dir,
+                reset_memory=False,
             )
-            default_interactions = perception.get("default_interactions")
-            self.memory_module.record(
-                {"scene_context": scene_context},
-                metadata={"type": "scene_context", "scene_name": scene_context["scene_name"]},
-            )
+            scene_context = initialized["scene_context"]
+            default_interactions = initialized["default_interactions"]
 
         if scene_context is None:
             raise ValueError("No WorldFM scene context is cached. Provide `images`/`meta_path` on the first turn.")

@@ -20,8 +20,11 @@ from __future__ import annotations
 import os
 import random
 import time
+import warnings
+from collections.abc import Sequence, Sized
 from copy import deepcopy
-from typing import List, Optional, Tuple, Union
+from importlib import import_module
+from typing import Any, List, Optional, Tuple, Union, cast
 
 import numpy as np
 import torch
@@ -32,7 +35,6 @@ from worldfoundry.core.io.filesystem.file_utils import f_join
 from worldfoundry.core.observability.formatting import to_readable_count_str
 from worldfoundry.core.utils.python.functional_utils import assert_implements_method, implements_method
 from worldfoundry.core.utils.python.tree_utils import _require_tree, tree_value_at_path
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Init / seeds — process-wide; PYTHONHASHSEED only affects child processes
@@ -76,29 +78,27 @@ def get_seed(
             - "system": Automatically generate and return a scrambled system-time integer.
             - "raise": Raise a ValueError exception immediately.
     """
-    handle_invalid_seed = handle_invalid_seed.lower()
-    assert handle_invalid_seed in ["none", "system", "raise"]
+    strategy = handle_invalid_seed.lower()
+    assert strategy in ["none", "system", "raise"]
     if isinstance(seed, str):
-        assert seed in ["system"]
-        invalid = False
+        assert seed == "system"
+        generate = True
     else:
         assert seed is None or isinstance(seed, int)
-        invalid = seed is None or seed < 0
+        if seed is not None and seed >= 0:
+            return seed
+        generate = strategy == "system"
 
-    if seed == "system" or invalid and handle_invalid_seed == "system":
+    if generate:
         # Scramble timestamp bits to avoid adjacent seeds if multiple workers initialize concurrently.
         # https://stackoverflow.com/questions/27276135/python-random-system-time-seed
         t = int(time.time() * 100000)
         return ((t & 0xFF000000) >> 24) + ((t & 0x00FF0000) >> 8) + ((t & 0x0000FF00) << 8) + ((t & 0x000000FF) << 24)
-    elif invalid:
-        if handle_invalid_seed == "none":
-            return None
-        elif handle_invalid_seed == "raise":
-            raise ValueError(f'Invalid random seed: {seed}, must be a non-negative integer or "system"')
-        else:
-            raise NotImplementedError
-    else:
-        return seed
+    if strategy == "none":
+        return None
+    if strategy == "raise":
+        raise ValueError(f'Invalid random seed: {seed}, must be a non-negative integer or "system"')
+    raise NotImplementedError
 
 
 def _env_truthy(name: str) -> bool:
@@ -182,9 +182,8 @@ def set_seed_everywhere(
         torch.cuda.manual_seed_all(seed)
     if set_tensorflow:
         try:
-            import tensorflow as tf
-
-            tf.random.set_seed(seed)
+            tensorflow = import_module("tensorflow")
+            tensorflow.random.set_seed(seed)
         except ImportError:
             pass
     return seed
@@ -199,11 +198,7 @@ def set_random_seed(seed: int, by_rank: bool = False) -> int:
     """
 
     resolved_seed = int(seed)
-    if (
-        by_rank
-        and torch.distributed.is_available()
-        and torch.distributed.is_initialized()
-    ):
+    if by_rank and torch.distributed.is_available() and torch.distributed.is_initialized():
         resolved_seed += int(torch.distributed.get_rank())
     set_seed_everywhere(resolved_seed)
     return resolved_seed
@@ -285,11 +280,11 @@ def load_torch(*fpath: str, map_location="cpu") -> dict:
     """
     from worldfoundry.core.model_loading import load_torch_checkpoint
 
-    fpath = str(f_join(fpath))
+    path = str(f_join(fpath))
     try:
-        return load_torch_checkpoint(fpath, map_location=map_location)
+        return load_torch_checkpoint(path, map_location=map_location)
     except RuntimeError as e:
-        raise RuntimeError(f"{e}\n\n --- Error loading {fpath}")
+        raise RuntimeError(f"{e}\n\n --- Error loading {path}")
 
 
 def save_torch(D, *fpath):
@@ -336,7 +331,7 @@ def tensor_hash(x: torch.Tensor, mode: str = "mean"):
     return float(x)
 
 
-def torch_flatten_indices(indices: torch.Tensor, shape: Tuple[int]):
+def torch_flatten_indices(indices: torch.Tensor, shape: Sequence[int]) -> torch.Tensor:
     """
     Convert M dim indices to 1D indices with the given shape
 
@@ -452,9 +447,19 @@ class DDPMethodWrapper(nn.Module):
         """Dispatch to the wrapped method so DDP can allreduce that path."""
         return getattr(self.net, self._method_name)(*args, **kwargs)
 
-    def state_dict(self):
-        """Empty on purpose — the inner module owns the real weights."""
-        return {}
+    def state_dict(
+        self,
+        *args: Any,
+        destination: dict[str, Any] | None = None,
+        prefix: str = "",
+        keep_vars: bool = False,
+    ) -> dict[str, Any]:
+        """Leave the destination unchanged; the inner module owns the weights."""
+        if args:
+            warnings.warn("Positional args are being deprecated, use kwargs instead.", FutureWarning, stacklevel=2)
+            if destination is None:
+                destination = args[0]
+        return {} if destination is None else destination
 
 
 def to_state_dict(objects, to_cpu: bool = False, copy: bool = False, unwrap_ddp: bool = False):
@@ -781,17 +786,16 @@ def merge_dict_list(dict_list):
     return merged_dict
 
 
-def sequential_split_dataset(dataset: torch.utils.data.Dataset, split_portions: list[float]):
-    """
-    Split a dataset into multiple datasets, each with a different portion of the
-    original dataset. Uses torch.utils.data.Subset.
-    """
+def sequential_split_dataset(
+    dataset: torch.utils.data.Dataset, split_portions: list[float]
+) -> list[torch.utils.data.Subset]:
+    """Split a finite map-style dataset with ``__len__`` into ordered subsets."""
     from itertools import accumulate
 
     assert len(split_portions) > 0, "split_portions must be a non-empty list"
     assert all(0.0 <= p <= 1.0 for p in split_portions), f"{split_portions=}"
     assert abs(sum(split_portions) - 1.0) < 1e-6, f"{sum(split_portions)=} != 1.0"
-    L = len(dataset)
+    L = len(cast(Sized, dataset))
     assert L > 0, "dataset must be non-empty"
     # split the list with proportions
     lengths = [int(p * L) for p in split_portions]
@@ -830,12 +834,13 @@ class RunningMeanStd:
         return self._var
 
     @property
-    def std(self):
-        """``sqrt(var)`` on the same array/tensor type as the stream."""
-        if isinstance(self._var, np.ndarray):
+    def std(self) -> np.ndarray | np.number | torch.Tensor | None:
+        """Running standard deviation, or ``None`` before the first update."""
+        if self._var is None:
+            return None
+        if isinstance(self._var, (np.ndarray, np.number)):
             return np.sqrt(self._var)
-        else:
-            return self._var.sqrt()
+        return self._var.sqrt()
 
     @property
     def count(self):
@@ -854,18 +859,17 @@ class RunningMeanStd:
 
     def update_from_moments(
         self,
-        batch_mean: np.ndarray | torch.Tensor,
-        batch_var: np.ndarray | torch.Tensor,
+        batch_mean: np.ndarray | np.number | torch.Tensor,
+        batch_var: np.ndarray | np.number | torch.Tensor,
         batch_count: int,
     ) -> None:
         """Combine precomputed moments; ``batch_count`` must be positive after add."""
-
         is_tensor = torch.is_tensor(batch_mean)
         _zeros = batch_mean.new_zeros if is_tensor else np.zeros
         if self._mean is None:
-            self._mean = _zeros(any_get_shape(batch_mean))
+            self._mean = _zeros(batch_mean.shape)
         if self._var is None:
-            self._var = _zeros(any_get_shape(batch_var)) + 1.0
+            self._var = _zeros(batch_var.shape) + 1.0
 
         delta = batch_mean - self._mean
         tot_count = self._count + batch_count

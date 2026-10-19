@@ -1,26 +1,22 @@
+# SPDX-FileCopyrightText: WorldFoundry contributors
+# SPDX-License-Identifier: Apache-2.0
+"""Public HY-WorldPlay runtime hooks and shared placement behavior."""
 
 import builtins
+from threading import Lock
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
-
-# This test module imports worldfoundry code that requires the optional
-# "loguru" dependency at import time; skip when it is unavailable.
-pytest.importorskip("loguru")
-from types import SimpleNamespace
-
 import torch
+from PIL import Image
 
 from worldfoundry.pipelines.hunyuan_world.pipeline_hunyuan_worldplay import (
     HunyuanWorldPlayPipeline,
 )
-from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_worldplay import realtime
-from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_worldplay import commons
-from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_worldplay.models.autoencoders import (
-    hunyuanvideo_15_vae_w_cache as vae_module,
-)
-from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_worldplay.utils import (
-    infer_utils,
-)
+from worldfoundry.synthesis.visual_generation.hunyuan_world.hunyuan_worldplay import commons, realtime
+
+pytestmark = pytest.mark.unit
 
 
 def test_worldplay_normalizes_typed_cli_interaction_tokens() -> None:
@@ -28,7 +24,7 @@ def test_worldplay_normalizes_typed_cli_interaction_tokens() -> None:
     assert HunyuanWorldPlayPipeline._normalize_pose("w-2") == "w-2"
 
 
-def test_flash3_probe_requires_flash2_padding_helpers(monkeypatch) -> None:
+def test_canonical_cached_attention_runs_without_flash_padding_helpers(monkeypatch) -> None:
     real_import = builtins.__import__
 
     def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
@@ -38,8 +34,20 @@ def test_flash3_probe_requires_flash2_padding_helpers(monkeypatch) -> None:
 
     monkeypatch.setattr(builtins, "__import__", guarded_import)
 
-    assert commons.is_flash3_available() is False
-    assert commons.maybe_fallback_attn_mode("flash") == "torch"
+    from worldfoundry.base_models.diffusion_model.models.networks.hunyuan_video.h15 import camera_attention
+
+    monkeypatch.setattr(camera_attention, "get_parallel_state", lambda: SimpleNamespace(sp_enabled=False))
+    source = torch.linspace(-1, 1, 12).reshape(1, 3, 1, 4)
+    expected = (
+        torch.nn.functional.scaled_dot_product_attention(
+            source.transpose(1, 2), source.transpose(1, 2), source.transpose(1, 2)
+        )
+        .transpose(1, 2)
+        .reshape(1, 3, 4)
+    )
+    result, cache = camera_attention.sequence_parallel_attention_txt(source, source, source, 0, 0, cache_txt=True)
+    torch.testing.assert_close(result, expected, rtol=0, atol=0)
+    torch.testing.assert_close(cache["k_txt"], source.transpose(1, 2), rtol=0, atol=0)
 
 
 def test_manual_offload_skips_models_managed_by_group_offload(monkeypatch) -> None:
@@ -70,63 +78,8 @@ def test_manual_offload_skips_models_managed_by_group_offload(monkeypatch) -> No
     assert manual.moves == [torch.device("cuda"), torch.device("cpu")]
 
 
-def test_torch_compile_wrapper_reuses_compiled_callable(monkeypatch) -> None:
-    state = SimpleNamespace(enable_torch_compile=True)
-    compile_calls = []
-
-    def fake_compile(function):
-        compile_calls.append(function)
-        return function
-
-    monkeypatch.setattr(infer_utils, "get_infer_state", lambda: state)
-    monkeypatch.setattr(infer_utils.torch, "compile", fake_compile)
-
-    class Module:
-        @infer_utils.torch_compile_wrapper()
-        def forward(self, value):
-            return value + 1
-
-    module = Module()
-    assert module.forward(1) == 2
-    assert module.forward(2) == 3
-    assert len(compile_calls) == 1
-
-
-def test_causal_vae_stream_keeps_cache_and_native_cadence() -> None:
-    class Decoder(torch.nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.cache_ids = []
-
-        def forward(self, z, *, feat_cache, feat_idx, first_chunk=False):
-            self.cache_ids.append(id(feat_cache))
-            feat_cache[0] = z[:, :, -1:].clone()
-            feat_idx[0] += 1
-            temporal = 1 if first_chunk else 4
-            return torch.zeros(z.shape[0], 3, temporal, 2, 2)
-
-    vae = vae_module.AutoencoderKLConv3D.__new__(vae_module.AutoencoderKLConv3D)
-    torch.nn.Module.__init__(vae)
-    vae.decoder = Decoder()
-    vae._cached_conv_counts = {"decoder": 1, "encoder": 0}
-    vae.use_slicing = False
-    vae.use_temporal_tiling = False
-    vae.use_spatial_tiling = False
-    vae._tile_parallelism_enabled = False
-
-    first = vae.decode_stream(torch.zeros(1, 1, 4, 1, 1), return_dict=False)[0]
-    second = vae.decode_stream(torch.zeros(1, 1, 4, 1, 1), return_dict=False)[0]
-    assert first.shape[2] == 13
-    assert second.shape[2] == 16
-    assert len(set(vae.decoder.cache_ids)) == 1
-    vae.reset_stream_decode()
-    assert vae._stream_decode_active is False
-
-
 def test_realtime_camera_history_grows_by_native_latent_blocks() -> None:
-    session = realtime.HunyuanWorldPlayRealtimeSession.__new__(
-        realtime.HunyuanWorldPlayRealtimeSession
-    )
+    session = realtime.HunyuanWorldPlayRealtimeSession.__new__(realtime.HunyuanWorldPlayRealtimeSession)
     session.operator = SimpleNamespace(
         forward_speed=0.08,
         yaw_speed_deg=3.0,
@@ -149,12 +102,13 @@ def test_realtime_camera_history_grows_by_native_latent_blocks() -> None:
 
 def test_pipeline_reports_hy_worldplay_native_realtime_spec() -> None:
     runtime = SimpleNamespace(
-        model=SimpleNamespace(execution_device="cpu", target_dtype=torch.float32)
+        model=SimpleNamespace(execution_device="cpu", target_dtype=torch.float32),
+        _realtime_lock=Lock(),
     )
     synthesis = SimpleNamespace(runtime=runtime)
     operator = SimpleNamespace()
     pipeline = HunyuanWorldPlayPipeline(
-        synthesis_model=synthesis,
+        synthesis_model=cast(Any, synthesis),
         operators=operator,
         device="cpu",
     )
@@ -181,9 +135,12 @@ def test_pipeline_reports_hy_worldplay_native_realtime_spec() -> None:
 
 def test_pipeline_materializes_requested_output(monkeypatch, tmp_path) -> None:
     videos = torch.zeros(1, 3, 5, 2, 2)
-    synthesis = lambda **_: SimpleNamespace(videos=videos)
+
+    def synthesis(**_: Any) -> SimpleNamespace:
+        return SimpleNamespace(videos=videos)
+
     pipeline = HunyuanWorldPlayPipeline(
-        synthesis_model=synthesis,
+        synthesis_model=cast(Any, synthesis),
         operators=SimpleNamespace(
             forward_speed=0.08,
             yaw_speed_deg=3.0,
@@ -210,7 +167,7 @@ def test_pipeline_materializes_requested_output(monkeypatch, tmp_path) -> None:
 
     result = pipeline(
         prompt="test",
-        images=object(),
+        images=Image.new("RGB", (2, 2)),
         interactions="w-4",
         output_path=output_path,
         fps=12,

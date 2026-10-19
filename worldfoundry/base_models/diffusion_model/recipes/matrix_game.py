@@ -14,7 +14,7 @@ reference memory (2 refs first-person, 4 third-person).
 
 from __future__ import annotations
 
-from ..components import ComponentKey, ComponentKind, ComponentSpec
+from ..components import ComponentKey, ComponentKind, ComponentSpec, ExecutionSpec
 from ..loaders import CheckpointSpec
 from ..models.autoencoders.wan import build_wan_video_vae38_decoder
 from ..models.denoisers.matrix_game_3p5 import build_matrix_game_35_denoiser
@@ -23,6 +23,7 @@ from ..models.initializers.wan import build_wan_t2v_latent_initializer
 from ..schedulers import build_wan_flow_match_euler_scheduler
 from .spec import NativeDiffusionRecipe
 from .wan import WAN_TOKENIZER_FILES
+from .wan_configs.matrix_game4 import MATRIX_GAME4_EGYPT_PROMPT, MATRIX_GAME4_REPO, MATRIX_GAME4_REVISION
 
 MATRIX_GAME_35_CHECKPOINT_REPO = "RiemannDynamics/Matrix-Game-3.5-Base"
 MATRIX_GAME_35_CHECKPOINT_REVISION = "40c172355efa32d4e2a44076569e310807788f8a"
@@ -152,7 +153,65 @@ def matrix_game_35_third_person_recipe() -> NativeDiffusionRecipe:
     )
 
 
+def matrix_game4_egypt_recipe() -> NativeDiffusionRecipe:
+    """Bind the released Egypt causal renderer, Wan codecs and two-step x0 rollout."""
+    import torch
+
+    from ..models.denoisers.matrix_game4 import build_matrix_game4_denoiser
+    from ..models.initializers.wan.causal_control import build_wan_causal_control_initializer
+
+    denoiser = ComponentKey(ComponentKind.DENOISER)
+    conditioner = ComponentKey(ComponentKind.CONDITIONER)
+    initializer = ComponentKey(ComponentKind.LATENT_INITIALIZER)
+    scheduler = ComponentKey(ComponentKind.SCHEDULER)
+    codec = ComponentKey(ComponentKind.DECODER)
+    base_repo = "alibaba-pai/Wan2.2-Fun-5B-Control"
+    base_revision = "b8bc1a65ab71d054ba4636dc0dac104aa4df2686"
+    return NativeDiffusionRecipe(
+        model_id="matrix-game-4-egypt",
+        aliases=("matrix-game-4-ancient-egypt", "Skywork/Matrix-Game-4.0:fps-egypt"),
+        components=(
+            ComponentSpec(denoiser, build_matrix_game4_denoiser, {"weights": "dit"}),
+            ComponentSpec(
+                conditioner, build_wan_text_conditioner,
+                {"weights": "text-encoder", "tokenizer": "tokenizer"},
+            ),
+            ComponentSpec(initializer, build_wan_causal_control_initializer, {"sink": "sink"}),
+            ComponentSpec(scheduler, build_wan_flow_match_euler_scheduler, options={"shift": 5.0}),
+            ComponentSpec(codec, build_wan_video_vae38_decoder, {"weights": "vae"}, options={"dtype": torch.bfloat16}),
+        ),
+        checkpoints={
+            "dit": CheckpointSpec(repo_id=MATRIX_GAME4_REPO, revision=MATRIX_GAME4_REVISION,
+                                  files=("fps-egypt/model.safetensors",)),
+            "sink": CheckpointSpec(repo_id=MATRIX_GAME4_REPO, revision=MATRIX_GAME4_REVISION,
+                                   files=("fps-egypt/sink.png",)),
+            "text-encoder": CheckpointSpec(repo_id=base_repo, revision=base_revision,
+                                           files=("models_t5_umt5-xxl-enc-bf16.pth",)),
+            "tokenizer": CheckpointSpec(repo_id=base_repo, revision=base_revision, files=WAN_TOKENIZER_FILES),
+            "vae": CheckpointSpec(repo_id=base_repo, revision=base_revision, files=("Wan2.2_VAE.pth",)),
+        },
+        execution=ExecutionSpec(
+            strategy="autoregressive-window",
+            bindings={
+                "denoiser": denoiser, "conditioner": conditioner,
+                "latent_initializer": initializer, "latent_encoder": codec,
+                "scheduler": scheduler, "decoder": codec,
+            },
+            options={
+                "prediction_mode": "distilled-x0", "fixed_timesteps": (1000, 500),
+                "context_timestep": 0, "renoise_dtype": "float32",
+            },
+        ),
+        capabilities=frozenset({"video-to-video", "low-poly-control", "causal-kv-cache", "kv-only-prefix"}),
+        metadata={"architecture": "Wan2.2-Fun-5B-Control causal", "scene": "ancient-egypt"},
+    )
+
+
 __all__ = [
+    "MATRIX_GAME4_REPO",
+    "MATRIX_GAME4_REVISION",
+    "MATRIX_GAME4_EGYPT_PROMPT",
+    "matrix_game4_egypt_recipe",
     "MATRIX_GAME_35_CHECKPOINT_REPO",
     "MATRIX_GAME_35_CHECKPOINT_REVISION",
     "MATRIX_GAME_35_FIRST_PERSON_MODEL_ID",

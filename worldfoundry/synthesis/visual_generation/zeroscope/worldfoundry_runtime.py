@@ -8,21 +8,15 @@ based on text prompts.
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 from typing import Any, Sequence
-
-import numpy as np
-
-from worldfoundry.core.io import file_sha256
 
 
 class ZeroScopeRuntime:
     """Manages the ZeroScope diffusers pipeline for text-to-video generation.
 
     This class provides methods to initialize the ZeroScope model, ensure it's loaded
-    onto the correct device, and generate video frames from a text prompt. It also
-    includes utility methods for handling video frames and their checksums.
+    onto the correct device, and generate video frames from a text prompt.
     """
 
     def __init__(
@@ -67,42 +61,6 @@ class ZeroScopeRuntime:
             model_path=synthesis.model_path,
         )
 
-    @staticmethod
-    def frames_sha256(frames: Sequence[Any]) -> str:
-        """Calculates the SHA256 hash of a sequence of video frames.
-
-        This method normalizes frame data to `uint8` and then computes a hash
-        based on the contiguous byte representation of the frames and their shapes.
-
-        Args:
-            frames: A sequence of video frames, typically numpy arrays or PIL Images.
-
-        Returns:
-            The SHA256 hexadecimal digest of the processed frames.
-        """
-        arrays = []
-        for frame in frames:
-            array = np.asarray(frame)
-            # Ensure all frame data is of type uint8 for consistent hashing.
-            if array.dtype != np.uint8:
-                # If frame is floating point, scale to 0-255 if max is <= 1.0, otherwise clip.
-                if np.issubdtype(array.dtype, np.floating):
-                    if array.max(initial=0) <= 1.0:
-                        array = np.clip(array * 255.0, 0, 255)
-                    else:
-                        array = np.clip(array, 0, 255)
-                # Convert array to uint8.
-                array = array.astype(np.uint8)
-            # Ensure the array is contiguous for consistent tobytes() conversion.
-            arrays.append(np.ascontiguousarray(array))
-
-        digest = hashlib.sha256()
-        for array in arrays:
-            # Include shape in the hash to differentiate between different frame dimensions.
-            digest.update(str(array.shape).encode("ascii"))
-            # Update hash with the raw bytes of the array.
-            digest.update(array.tobytes())
-        return digest.hexdigest()
 
     def ensure_pipe(self):
         """Ensures the Diffusers pipeline is loaded and returns it.
@@ -169,7 +127,7 @@ class ZeroScopeRuntime:
 
         Returns:
             A dictionary containing generation status, model metadata, artifact path,
-            and checksums for frames and the final video.
+            and the saved video path.
         """
         del interactions  # ZeroScope is text-to-video, interactions are not applicable here.
         if images is not None or video is not None:
@@ -203,16 +161,12 @@ class ZeroScopeRuntime:
         # Export the generated frames to a video file.
         export_to_video(frames, str(target), fps=fps or int(kwargs.get("fps", 8)))
 
-        # Calculate SHA256 hash of the generated video file.
-        video_sha = file_sha256(target)
 
         return {
             "status": "success",
             "model_id": self.model_id,
             "artifact_kind": self.profile.artifact_kind,
             "artifact_path": str(target),
-            "frames_sha256": self.frames_sha256(frames),  # Hash of individual frames (normalized).
-            "video_sha256": video_sha,  # Hash of the final video file.
             "profile": self.profile.to_dict(),
             "runtime": "diffusers.TextToVideoSDPipeline",
             "device": self.device,

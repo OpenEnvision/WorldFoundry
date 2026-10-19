@@ -1,0 +1,59 @@
+schema_version: 2
+model_id: lingbot-world-v2-1.3b
+display_name: LingBot-World-V2 1.3B
+task_family: world_model
+groups: [world, camera_control, video]
+aliases: [lingbot-v2-1.3b]
+source_repos:
+- url: https://github.com/Robbyant/lingbot-world-v2
+  revision: 94f43115de8d4a4f9f282126528c300a0b232c5f
+checkpoints:
+- repo_id: robbyant/lingbot-world-v2-1.3b-causal-fast
+  revision: 7e36a5f919f86cb4255cc9bfc30adb44963fbde1
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/lingbot-world-v2-1.3b-causal-fast
+  role: causal_fast_1p3b_checkpoint
+  required_paths:
+  - model.safetensors.index.json
+  - model-00001-of-00006.safetensors
+  - model-00002-of-00006.safetensors
+  - model-00003-of-00006.safetensors
+  - model-00004-of-00006.safetensors
+  - model-00005-of-00006.safetensors
+  - model-00006-of-00006.safetensors
+- repo_id: Wan-AI/Wan2.1-T2V-1.3B
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Wan-AI--Wan2.1-T2V-1.3B
+  role: shared_text_and_vae_assets
+  required_paths:
+  - Wan2.1_VAE.pth
+  - models_t5_umt5-xxl-enc-bf16.pth
+  - google/umt5-xxl/tokenizer_config.json
+input_schema:
+  prompt: true
+  image: true
+  video: false
+  actions: [camera_path, navigation_action]
+artifact_kind: generated_world
+artifact_filename: lingbot-world-v2-1.3b.mp4
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: causal_fast_in_tree
+  integration_status: integrated
+  pipeline_binding: lingbot-world-v2-1.3b
+  defaults:
+    size: 480*832
+    frame_num: 317
+    chunk_size: 4
+    sample_shift: 5.0
+    local_attn_size: 18
+    sink_size: 6
+    nproc_per_node: 1
+    t5_fsdp: false
+    dit_fsdp: false
+    shared_assets_path: ${WORLDFOUNDRY_CKPT_DIR}/Wan-AI--Wan2.1-T2V-1.3B
+integration:
+  status: integrated
+notes:
+- Public transformer shards contain no config or T5/tokenizer/VAE assets; architecture is declared in-tree and shared assets are resolved separately.
+- Four latent frames produce 13 first-chunk and 16 steady-chunk pixel frames.
+- The 14B model id, checkpoints and distributed defaults remain independent.
+- CC BY-NC-SA 4.0, non-commercial use only.

@@ -1,19 +1,17 @@
 """Checkpoint materialization shared by modules and non-weight resources.
 
 Turns a frozen :class:`CheckpointSpec` into local paths the module loader can
-open.  Recipes and runners never call Hugging Face or hash files themselves;
+open.  Recipes and runners never call Hugging Face themselves;
 this resolver is the only I/O seam between a declarative spec and a
 :class:`MaterializedCheckpoint`.
 
 Local sources keep the user-facing symlink name (``model.safetensors``) so the
 lazy loader still sees the format.  Hub specs first try a cached snapshot, then
-download a filtered subset.  Integrity maps on the spec are verified after
-paths exist; missing maps skip the audit.
+download a filtered subset.
 """
 
 from __future__ import annotations
 
-import hashlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -68,75 +66,15 @@ class MaterializedCheckpoint:
 class NativeCheckpointResolver:
     """Resolve local paths or a filtered Hub snapshot through core I/O.
 
-    :meth:`materialize` picks local vs Hub from ``checkpoint.sources``, then
-    always runs :meth:`_verify_integrity` when any hash/size map is set.
-
     Raises:
-        FileNotFoundError: A local source, declared file, or audited sidecar
-            is missing.
-        ValueError: Local ``files`` without a single directory source; size
-            or SHA-256 mismatch after materialization.
-        RuntimeError: Declared ``files`` count no longer matches materialized
-            paths (identity lost).
+        FileNotFoundError: A local source or declared file is missing.
+        ValueError: Local ``files`` without a single directory source.
     """
 
     def materialize(self, checkpoint: CheckpointSpec) -> MaterializedCheckpoint:
         if checkpoint.sources:
-            materialized = self._materialize_local(checkpoint)
-        else:
-            materialized = self._materialize_hub(checkpoint)
-        self._verify_integrity(checkpoint, materialized)
-        return materialized
-
-    @staticmethod
-    def _verify_integrity(
-        checkpoint: CheckpointSpec,
-        materialized: MaterializedCheckpoint,
-    ) -> None:
-        if not any(
-            (
-                checkpoint.file_sha256,
-                checkpoint.file_size_bytes,
-                checkpoint.resource_sha256,
-                checkpoint.resource_size_bytes,
-            )
-        ):
-            return
-        if len(checkpoint.files) != len(materialized.paths):
-            raise RuntimeError("checkpoint materialization lost declared file identity")
-        paths = dict(zip(checkpoint.files, materialized.paths, strict=True))
-        resource_paths = {
-            name: materialized.root / name
-            for name in set(checkpoint.resource_sha256) | set(checkpoint.resource_size_bytes)
-        }
-        missing_resources = sorted(name for name, path in resource_paths.items() if not path.is_file())
-        if missing_resources:
-            raise FileNotFoundError(f"checkpoint audited resources do not exist: {missing_resources}")
-        audited_paths = {**paths, **resource_paths}
-        expected_sizes = {
-            **checkpoint.file_size_bytes,
-            **checkpoint.resource_size_bytes,
-        }
-        for name, expected_size in expected_sizes.items():
-            actual_size = audited_paths[name].stat().st_size
-            if actual_size != expected_size:
-                raise ValueError(
-                    f"checkpoint size audit failed for {name!r}: expected {expected_size}, got {actual_size}"
-                )
-        expected_digests = {
-            **checkpoint.file_sha256,
-            **checkpoint.resource_sha256,
-        }
-        for name, expected_digest in expected_digests.items():
-            digest = hashlib.sha256()
-            with audited_paths[name].open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
-            actual_digest = digest.hexdigest()
-            if actual_digest != expected_digest:
-                raise ValueError(
-                    f"checkpoint SHA-256 audit failed for {name!r}: expected {expected_digest}, got {actual_digest}"
-                )
+            return self._materialize_local(checkpoint)
+        return self._materialize_hub(checkpoint)
 
     @staticmethod
     def _materialize_local(checkpoint: CheckpointSpec) -> MaterializedCheckpoint:
@@ -167,6 +105,11 @@ class NativeCheckpointResolver:
         missing = tuple(path for path in paths if not path.exists())
         if missing:
             raise FileNotFoundError(f"checkpoint files do not exist: {[str(path) for path in missing]}")
+        missing_resources = tuple(root / name for name in checkpoint.resources if not (root / name).is_file())
+        if missing_resources:
+            raise FileNotFoundError(
+                f"checkpoint resources do not exist: {[str(path) for path in missing_resources]}"
+            )
         return MaterializedCheckpoint(root=root, paths=paths)
 
     @staticmethod
@@ -174,8 +117,7 @@ class NativeCheckpointResolver:
         if checkpoint.repo_id is None:
             raise ValueError("checkpoint requires a local source or Hub repository")
 
-        audited_resources = tuple(dict.fromkeys((*checkpoint.resource_sha256, *checkpoint.resource_size_bytes)))
-        required_files = tuple(dict.fromkeys((*checkpoint.files, *audited_resources)))
+        required_files = tuple(dict.fromkeys((*checkpoint.files, *checkpoint.resources)))
         from worldfoundry.core.io.paths import resolve_local_hf_model_path
 
         try:

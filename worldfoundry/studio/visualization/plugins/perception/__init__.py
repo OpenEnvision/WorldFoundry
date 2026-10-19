@@ -1,3 +1,3 @@
-"""Perception output rendering and Wan Animate pose conditioning."""
+"""Perception output rendering."""
 
-__all__ = ["human_pose", "render"]
+__all__ = ["render"]

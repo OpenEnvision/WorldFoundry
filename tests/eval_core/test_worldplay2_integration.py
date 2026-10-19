@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 WorldFoundry contributors
+# SPDX-License-Identifier: Apache-2.0
 from pathlib import Path
 
 import pytest
@@ -23,7 +25,9 @@ def test_worldplay2_catalog_resolves_released_variants_to_native_pipeline():
     assert entry.source.license == "cc-by-nc-4.0"
     assert entry.runner_parity.status == "pending"
     assert {variant.variant_id for variant in entry.variants} == {
-        "worldplay2-fast", "worldplay2-ar", "worldplay2-bi",
+        "worldplay2-fast",
+        "worldplay2-ar",
+        "worldplay2-bi",
     }
     for variant in entry.variants:
         assert variant.pipeline_target == PIPELINE_TARGET
@@ -42,7 +46,12 @@ def test_worldplay2_catalog_resolves_released_variants_to_native_pipeline():
     ],
 )
 def test_worldplay2_bindings_profiles_and_expert_recipes_match(
-    model_id, recipe_id, repo_id, mode, steps, chunk_length,
+    model_id,
+    recipe_id,
+    repo_id,
+    mode,
+    steps,
+    chunk_length,
 ):
     spec = build_pipeline_runner_spec(WorldModelConfig(model_id=model_id, runner="worldfoundry.pipeline"))
     assert spec.pipeline_target == PIPELINE_TARGET
@@ -51,7 +60,9 @@ def test_worldplay2_bindings_profiles_and_expert_recipes_match(
     assert not validate_runtime_profile_references(profile)
     defaults = profile.execution["defaults"]
     assert (defaults["mode"], defaults["num_inference_steps"], defaults["chunk_length"]) == (
-        mode, steps, chunk_length,
+        mode,
+        steps,
+        chunk_length,
     )
     assert defaults["num_frames"] == 125
     assert (defaults["width"], defaults["height"], defaults["fps"]) == (832, 448, 16)

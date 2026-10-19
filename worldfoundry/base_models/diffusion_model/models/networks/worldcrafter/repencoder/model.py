@@ -93,15 +93,12 @@ class RepEncoder(nn.Module):
         cls,
         path: str | Path,
         *,
-        expected_sha256: str | None = None,
         device: torch.device | str = "cpu",
         compute_dtype: str | torch.dtype = torch.bfloat16,
         target_microbatch: int = 4,
         near_zero_baseline_m: float = DEFAULT_NEAR_ZERO_BASELINE_M,
     ) -> "RepEncoder":
-        model_path, config, manifest, actual_sha256 = read_checkpoint_metadata(
-            path, expected_sha256=expected_sha256
-        )
+        model_path, config, manifest = read_checkpoint_metadata(path)
         model = cls(
             config,
             compute_dtype=compute_dtype,
@@ -115,7 +112,6 @@ class RepEncoder(nn.Module):
         model.report = {
             "format": "worldcrafter_repencoder_runtime_v1",
             "model_path": str(model_path),
-            "model_sha256": actual_sha256,
             "manifest": manifest,
             "compute_dtype": str(model.compute_dtype).removeprefix("torch."),
         }

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import shutil
@@ -108,19 +107,6 @@ THREE_D_FOUR_D_RUNTIME_SPECS: Mapping[str, ThreeDFourDRuntimeSpec] = {
         source_repo_url="https://github.com/KovenYu/WonderJourney",
         input_schema=_CAMERA_INPUT_SCHEMA,
     ),
-    "wonderworld": ThreeDFourDRuntimeSpec(
-        model_id="wonderworld",
-        display_name="WonderWorld",
-        repo_names=("WonderWorld", "wonderworld"),
-        entrypoint="run.py",
-        command_kind="wonderworld_run",
-        artifact_kind="generated_world",
-        artifact_filename="wonderworld.splat",
-        required_input="config",
-        default_config=str(package_data_path('models', 'runtime', 'configs', 'wonderworld', 'inference.yaml')),
-        source_repo_url="https://github.com/KovenYu/WonderWorld",
-        input_schema=_CAMERA_INPUT_SCHEMA,
-    ),
     "worldgen": ThreeDFourDRuntimeSpec(
         model_id="worldgen",
         display_name="WorldGen",
@@ -148,7 +134,6 @@ IN_TREE_RUNTIME_DIRS: Mapping[str, tuple[str, ...]] = {
         "stable_virtual_camera_runtime",
     ),
     "wonderjourney": ("synthesis", "visual_generation", "wonderjourney", "wonderjourney_runtime"),
-    "wonderworld": ("synthesis", "visual_generation", "wonderworld", "wonderworld_runtime"),
     "worldgen": ("synthesis", "visual_generation", "worldgen", "worldgen_runtime"),
 }
 
@@ -355,7 +340,6 @@ class ThreeDFourDRuntimeSynthesis(BaseSynthesis):
             "model_id": self.model_id,
             "artifact_kind": self.spec.artifact_kind,
             "artifact_path": str(artifact_path),
-            "artifact_sha256": _sha256(artifact_path) if artifact_path.is_file() else None,
             "run_dir": str(run_dir),
             "plan_path": str(plan_path),
             "command": command,
@@ -430,7 +414,7 @@ class ThreeDFourDRuntimeSynthesis(BaseSynthesis):
         if self.source_root is not None:
             existing = env.get("PYTHONPATH", "")
             paths = []
-            if self.spec.model_id not in {"wonderjourney", "wonderworld"}:
+            if self.spec.model_id != "wonderjourney":
                 paths.append(Path(__file__).resolve().parent / "shims")
             paths.append(self.source_root)
             for candidate in (
@@ -578,7 +562,7 @@ class ThreeDFourDRuntimeSynthesis(BaseSynthesis):
             if _bool_option(options, self.options, "low_vram"):
                 command.append("--low_vram")
             return command
-        if self.spec.command_kind in {"wonderjourney_run", "wonderworld_run"}:
+        if self.spec.command_kind == "wonderjourney_run":
             config = _prepare_wonder_config(
                 self.spec.command_kind,
                 self.source_root,
@@ -939,58 +923,25 @@ def _prepare_wonder_config(
                 return str(candidate)
         return str((REPO_ROOT / path).resolve())
 
-    if command_kind == "wonderjourney_run":
-        image_path = (
-            options.get("image_filepath")
-            or (images[0] if images else "")
-            or options.get("image_path")
-            or options.get("input_path")
-            or data.get("image_filepath")
-            or _default_wonderworld_image()
-        )
-        if image_path:
-            data["image_filepath"] = _runtime_image_path(image_path)
-        data["content_prompt"] = str(options.get("content_prompt") or prompt or data.get("content_prompt") or "village, cottages, trees")
-        data["style_prompt"] = str(options.get("style_prompt") or data.get("style_prompt") or "photorealistic")
-        data["negative_prompt"] = str(
-            options.get("negative_prompt")
-            or data.get("negative_prompt")
-            or "low quality, blurry, distorted"
-        )
-        data["num_scenes"] = int(options.get("num_scenes", 1))
-        data["num_keyframes"] = int(options.get("num_keyframes", 2))
-        data["frames"] = int(options.get("frames", 2))
-        data["save_fps"] = int(options.get("save_fps", 10))
-        data["skip_interp"] = bool(options.get("skip_interp", False))
-        data.setdefault("rotation_path", [0, 0, 0, 1])
-    else:
-        image_path = (
-            options.get("image_filepath")
-            or (images[0] if images else "")
-            or options.get("image_path")
-            or options.get("input_path")
-            or data.get("image_filepath")
-            or _default_wonderjourney_image()
-        )
-        if image_path:
-            data["image_filepath"] = _runtime_image_path(image_path)
-        data["content_prompt"] = str(options.get("content_prompt") or prompt or data.get("content_prompt") or "campus, buildings, trees")
-        data["style_prompt"] = str(options.get("style_prompt") or data.get("style_prompt") or "photorealistic")
-        data["negative_prompt"] = str(
-            options.get("negative_prompt")
-            or data.get("negative_prompt")
-            or "low quality, blurry, distorted"
-        )
-        data["num_scenes"] = int(options.get("num_scenes", 1))
-        data["frames"] = int(options.get("frames", 2))
-        data["gen_sky_image"] = bool(options.get("gen_sky_image", False))
-        data["gen_sky"] = bool(options.get("gen_sky", False))
-        data["gen_layer"] = bool(options.get("gen_layer", False))
-        data["load_gen"] = bool(options.get("load_gen", False))
-        data.setdefault("rotation_path", [2])
-        data["worldfoundry_batch"] = bool(options.get("worldfoundry_batch", True))
-        data["worldfoundry_gs_iterations"] = int(options.get("worldfoundry_gs_iterations", 30))
-        data["worldfoundry_sky_iterations"] = int(options.get("worldfoundry_sky_iterations", 30))
+    image_path = (
+        options.get("image_filepath")
+        or (images[0] if images else "")
+        or options.get("image_path")
+        or options.get("input_path")
+        or data.get("image_filepath")
+        or _default_wonderjourney_image()
+    )
+    if image_path:
+        data["image_filepath"] = _runtime_image_path(image_path)
+    data["content_prompt"] = str(options.get("content_prompt") or prompt or data.get("content_prompt") or "village, cottages, trees")
+    data["style_prompt"] = str(options.get("style_prompt") or data.get("style_prompt") or "photorealistic")
+    data["negative_prompt"] = str(options.get("negative_prompt") or data.get("negative_prompt") or "low quality, blurry, distorted")
+    data["num_scenes"] = int(options.get("num_scenes", 1))
+    data["num_keyframes"] = int(options.get("num_keyframes", 2))
+    data["frames"] = int(options.get("frames", 2))
+    data["save_fps"] = int(options.get("save_fps", 10))
+    data["skip_interp"] = bool(options.get("skip_interp", False))
+    data.setdefault("rotation_path", [0, 0, 0, 1])
 
     output_dir.mkdir(parents=True, exist_ok=True)
     generated_config = output_dir / f"{command_kind}_worldfoundry_demo.yaml"
@@ -1003,17 +954,6 @@ def _default_wonderjourney_image() -> str:
         REPO_ROOT / "worldfoundry" / "data" / "test_cases" / "hunyuan_game_craft" / "village.png",
         REPO_ROOT / "worldfoundry" / "data" / "test_cases" / "studio_demo" / "00" / "image.jpg",
         REPO_ROOT / "worldfoundry" / "data" / "test_cases" / "wonderjourney" / "assets" / "logo.png",
-    ):
-        if candidate.is_file():
-            return str(candidate)
-    return ""
-
-
-def _default_wonderworld_image() -> str:
-    for candidate in (
-        REPO_ROOT / "worldfoundry" / "data" / "test_cases" / "hunyuan_game_craft" / "village.png",
-        REPO_ROOT / "worldfoundry" / "data" / "test_cases" / "studio_demo" / "00" / "image.jpg",
-        REPO_ROOT / "worldfoundry" / "data" / "test_cases" / "wonderworld" / "assets" / "logo.png",
     ):
         if candidate.is_file():
             return str(candidate)
@@ -1225,14 +1165,6 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     return str(value)
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 __all__ = [

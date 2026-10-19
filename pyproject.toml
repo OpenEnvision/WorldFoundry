@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "WorldFoundry: unified world-model repository and WorldFoundry benchmark framework."
 readme = "README.md"
 license = "Apache-2.0"
-license-files = ["THIRD-PARTY-NOTICES"]
+license-files = ["LICENSE", "THIRD-PARTY-NOTICES"]
 requires-python = ">=3.10,<3.14"
 authors = [
     { name = "OpenEnvision" },
@@ -509,6 +509,8 @@ testpaths = [
     "tests/runtime/test_local_checkpoint_cache.py",
     "tests/runtime/test_jobs_store_persistence.py",
     "tests/runtime/test_jobs_logging.py",
+    "tests/runtime/test_in_tree_cli.py",
+    "tests/studio/test_runtime_catalog_defaults.py",
     "tests/studio/test_conda_dispatch.py",
     "tests/studio/test_inference_lifecycle.py",
     "tests/studio/test_module_boundaries.py",
@@ -587,6 +589,11 @@ ignore = [
 # `make packaging-check` rejects dead excludes and any license-gated package
 # that reaches the final wheel set.
 packages = { find = { where = ["."], namespaces = true, include = ["worldfoundry*"], exclude = [
+    # Prune non-package trees before namespace discovery descends into them.
+    "tmp",
+    "tmp.*",
+    "docs",
+    "docs.*",
 
     # Reserved public-distribution boundaries; these stay excluded even when absent.
     "worldfoundry.training",

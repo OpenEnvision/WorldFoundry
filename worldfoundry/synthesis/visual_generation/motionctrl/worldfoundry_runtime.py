@@ -14,7 +14,6 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io import file_sha256
 from worldfoundry.evaluation.models.runtime.profiles import DEFAULT_SHARED_HFD_ROOT
 from worldfoundry.evaluation.utils import worldfoundry_data_path
 
@@ -482,7 +481,7 @@ class MotionCtrlRuntime:
 
         Returns:
             A dictionary containing generation metadata, including status, model_id,
-            artifact path, SHA256 hash of the video, and used parameters.
+            artifact path and used parameters.
 
         Raises:
             ValueError: If `video` is not None, or if height/width are not multiples of 16.
@@ -574,7 +573,6 @@ class MotionCtrlRuntime:
             "model_id": self.model_id,
             "artifact_kind": "generated_video",
             "artifact_path": str(target),
-            "video_sha256": file_sha256(target),
             "runtime": "worldfoundry.motionctrl.in_tree_runtime",
             "backend_quality": "in_tree_runtime",
             "condtype": condtype,

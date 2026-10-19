@@ -330,7 +330,7 @@ class AAPoseMeta:
             draw_hand: The draw hand.
             draw_head: The draw head.
         """
-        from worldfoundry.studio.visualization.plugins.perception.human_pose import (
+        from .render import (
             draw_aapose_by_meta,
         )
         return draw_aapose_by_meta(img, self, threshold, stick_width_norm, draw_hand, draw_head)

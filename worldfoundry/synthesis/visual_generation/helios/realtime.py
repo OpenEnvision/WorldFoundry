@@ -27,6 +27,7 @@ import torch.distributed as dist
 from PIL import Image
 
 from worldfoundry.core.execution.realtime.contracts import RealtimeSpec
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 from worldfoundry.runtime.local_checkpoint_cache import stage_checkpoint_for_realtime
 
 NATIVE_LATENT_FRAMES = 9
@@ -727,6 +728,7 @@ class HeliosRealtimeSession:
         return {
             "status": "ok",
             "frames": frames,
+            "video_chunk": VideoChunk(frames=frames, layout="thwc", value_range="0,255"),
             "realtime_spec": self.realtime_spec().to_payload(),
             "runtime_info": self.runtime_info(),
             "realtime_metrics": {

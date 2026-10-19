@@ -12,9 +12,7 @@ from benchmarks.inference.approximate_attention_receipts import (
 )
 
 _LIGHTX2V_COMMIT = "6fb7c1362b89d4908a9ea197bac4fbd7482ee2d5"
-_LIGHTX2V_FINGERPRINT = hashlib.sha256(
-    f"{_LIGHTX2V_COMMIT}\0True\0".encode()
-).hexdigest()
+_LIGHTX2V_FINGERPRINT = hashlib.sha256(f"{_LIGHTX2V_COMMIT}\0True\0".encode()).hexdigest()
 _LIGHTX2V_PROVIDERS = {
     "dynamic_sparse": (
         "triton",
@@ -81,16 +79,11 @@ _LIGHTX2V_FAMILIES = {
 }
 _LIGHTX2V_PROVIDER_DENSE_PATHS = {
     "draft_attn": "flash_attn.flash_attn_interface.flash_attn_varlen_func",
-    "rainfusion_attn": (
-        "lightx2v.common.ops.attn.flash_attn.FlashAttn3Weight.apply"
-    ),
+    "rainfusion_attn": ("lightx2v.common.ops.attn.flash_attn.FlashAttn3Weight.apply"),
 }
 _FASTVIDEO_COMMIT = "1b2b2a0161bc6b3b80158d1fa6380a051c6530c7"
-_FASTVIDEO_SOURCE_FINGERPRINT = hashlib.sha256(b"pinned-fastvideo-sla").hexdigest()
 _FASTVIDEO_PROVIDER_FINGERPRINT = hashlib.sha256(b"fastvideo-sla-provider").hexdigest()
-_FASTVIDEO_GLOBAL_PROJECTION_FINGERPRINT = hashlib.sha256(
-    b"fastvideo-sla-projections"
-).hexdigest()
+_FASTVIDEO_GLOBAL_PROJECTION_FINGERPRINT = hashlib.sha256(b"fastvideo-sla-projections").hexdigest()
 _FASTVIDEO_SLA_PROVIDERS = {
     "fastvideo_sla": (
         "fastvideo.attention.backends.sla.SLAAttentionImpl",
@@ -124,9 +117,7 @@ def _profile(kind: str, *, dense_steps: int) -> dict[str, Any]:
         "svg_sample_mse_max_row": 10000,
         "svg_num_sampled_rows": 64,
         "svg_context_length": 0,
-        "fastvideo_topk_ratio": _FASTVIDEO_SLA_PROVIDERS.get(
-            kind, (None, None, None)
-        )[2],
+        "fastvideo_topk_ratio": _FASTVIDEO_SLA_PROVIDERS.get(kind, (None, None, None))[2],
         "fastvideo_feature_map": "softmax",
     }
 
@@ -171,23 +162,12 @@ def _receipt(
     for branch, steps in normalized_branch_steps.items():
         for step in steps:
             for layer in range(blocks):
-                scheduled_dense = (
-                    step < dense_steps or step >= total_steps - dense_steps
-                )
+                scheduled_dense = step < dense_steps or step >= total_steps - dense_steps
                 provider_dense = not scheduled_dense and (
                     (kind == "draft_attn" and layer == 0)
-                    or (
-                        kind == "rainfusion_attn"
-                        and step < lightx2v_skip_timesteps
-                    )
+                    or (kind == "rainfusion_attn" and step < lightx2v_skip_timesteps)
                 )
-                execution = (
-                    "scheduled_dense"
-                    if scheduled_dense
-                    else "provider_dense"
-                    if provider_dense
-                    else "sparse"
-                )
+                execution = "scheduled_dense" if scheduled_dense else "provider_dense" if provider_dense else "sparse"
                 provider_attempted = execution in {"sparse", "provider_dense"}
                 event_provider = (
                     _LIGHTX2V_PROVIDER_DENSE_PATHS[kind]
@@ -228,9 +208,7 @@ def _receipt(
                     provider_fields: dict[str, Any] = {
                         "provider_family": provider_family,
                         "operator": operator,
-                        "adapter_path": (
-                            "lightx2v.common.ops.attn.synthetic.Provider.apply"
-                        ),
+                        "adapter_path": ("lightx2v.common.ops.attn.synthetic.Provider.apply"),
                         "provider_calls": 1,
                         "reference_lightx2v_commit": _LIGHTX2V_COMMIT,
                         "provider_source_commit": _LIGHTX2V_COMMIT,
@@ -241,34 +219,20 @@ def _receipt(
                         "sparsity_ratio": profile["sparsity"],
                         "canonical_sparse_provider_path": canonical_provider,
                         "sparse_kernel_executed": execution == "sparse",
-                        "provider_dense_executed": execution
-                        == "provider_dense",
+                        "provider_dense_executed": execution == "provider_dense",
                         "provider_config": {
                             "sparsity_ratio": profile["sparsity"],
                             "operator": operator,
                             "nbhd_coefficient": profile["nbhd_coefficient"],
                             "nbhd_min_width": profile["nbhd_min_width"],
-                            "attnmap_frame_num": profile["attnmap_frame_num"]
-                            or grid[0],
-                            "per_block_mean": profile[
-                                "lightx2v_per_block_mean"
-                            ],
+                            "attnmap_frame_num": profile["attnmap_frame_num"] or grid[0],
+                            "per_block_mean": profile["lightx2v_per_block_mean"],
                             "pool_size": profile["lightx2v_pool_size"],
-                            "skip_timesteps": profile[
-                                "lightx2v_skip_timesteps"
-                            ],
-                            "dense_attn_type": profile[
-                                "lightx2v_dense_attn_type"
-                            ],
-                            "svg_sample_mse_max_row": profile[
-                                "svg_sample_mse_max_row"
-                            ],
-                            "svg_num_sampled_rows": profile[
-                                "svg_num_sampled_rows"
-                            ],
-                            "svg_context_length": profile[
-                                "svg_context_length"
-                            ],
+                            "skip_timesteps": profile["lightx2v_skip_timesteps"],
+                            "dense_attn_type": profile["lightx2v_dense_attn_type"],
+                            "svg_sample_mse_max_row": profile["svg_sample_mse_max_row"],
+                            "svg_num_sampled_rows": profile["svg_num_sampled_rows"],
+                            "svg_context_length": profile["svg_context_length"],
                         },
                         "runtime_effective": True,
                     }
@@ -276,9 +240,7 @@ def _receipt(
                         provider_fields.update(
                             {
                                 "attnmap_frame_num": grid[0],
-                                "nbhd_coefficient": profile[
-                                    "nbhd_coefficient"
-                                ],
+                                "nbhd_coefficient": profile["nbhd_coefficient"],
                                 "nbhd_min_width": profile["nbhd_min_width"],
                             }
                         )
@@ -297,25 +259,16 @@ def _receipt(
                             "reference_fastvideo_commit": _FASTVIDEO_COMMIT,
                             "provider_source_commit": _FASTVIDEO_COMMIT,
                             "provider_source_clean": True,
-                            "provider_source_fingerprint": (
-                                _FASTVIDEO_SOURCE_FINGERPRINT
-                            ),
                             "provider_source_root": "/opt/FastVideo",
-                            "provider_source_file": (
-                                "/opt/FastVideo/fastvideo/attention/backends/sla.py"
-                            ),
+                            "provider_source_file": ("/opt/FastVideo/fastvideo/attention/backends/sla.py"),
                             "reference_parity_verified": True,
                             "checkpoint_layout": "fastvideo_diffusers",
                             "projection_source_keys": [
                                 f"blocks.{layer}.attn1.attn_impl.proj_l.weight",
                                 f"blocks.{layer}.attn1.attn_impl.proj_l.bias",
                             ],
-                            "projection_weight_fingerprint": hashlib.sha256(
-                                f"projection:{layer}".encode()
-                            ).hexdigest(),
-                            "all_projection_weights_fingerprint": (
-                                _FASTVIDEO_GLOBAL_PROJECTION_FINGERPRINT
-                            ),
+                            "projection_weight_fingerprint": hashlib.sha256(f"projection:{layer}".encode()).hexdigest(),
+                            "all_projection_weights_fingerprint": (_FASTVIDEO_GLOBAL_PROJECTION_FINGERPRINT),
                             "layer_prefix": f"blocks.{layer}.attn1",
                             "call_index": fastvideo_call_index,
                             "layer_call_index": fastvideo_layer_calls[layer],
@@ -328,12 +281,8 @@ def _receipt(
                 events.append(event)
 
     sparse_events = [event for event in events if event["execution"] == "sparse"]
-    provider_dense_events = [
-        event for event in events if event["execution"] == "provider_dense"
-    ]
-    scheduled_events = [
-        event for event in events if event["execution"] == "scheduled_dense"
-    ]
+    provider_dense_events = [event for event in events if event["execution"] == "provider_dense"]
+    scheduled_events = [event for event in events if event["execution"] == "scheduled_dense"]
     branches = {
         branch: {
             "last_step": steps[-1],
@@ -390,16 +339,8 @@ def _receipt(
         "effective_kernel": kind,
         "provider_path": provider,
         "provider_paths": [provider],
-        "provider_dense_path": (
-            _LIGHTX2V_PROVIDER_DENSE_PATHS.get(kind)
-            if provider_dense_events
-            else None
-        ),
-        "provider_dense_paths": (
-            [_LIGHTX2V_PROVIDER_DENSE_PATHS[kind]]
-            if provider_dense_events
-            else []
-        ),
+        "provider_dense_path": (_LIGHTX2V_PROVIDER_DENSE_PATHS.get(kind) if provider_dense_events else None),
+        "provider_dense_paths": ([_LIGHTX2V_PROVIDER_DENSE_PATHS[kind]] if provider_dense_events else []),
         "grid_size": list(grid),
         "branches": branches,
         "events": events,
@@ -440,10 +381,7 @@ def _receipt(
     elif fastvideo_sla is not None:
         canonical_provider, provider_family, topk_ratio = fastvideo_sla
         layer_fingerprints = {
-            str(layer): hashlib.sha256(
-                f"projection:{layer}".encode()
-            ).hexdigest()
-            for layer in range(blocks)
+            str(layer): hashlib.sha256(f"projection:{layer}".encode()).hexdigest() for layer in range(blocks)
         }
         projection_source_keys = {
             str(layer): [
@@ -462,29 +400,18 @@ def _receipt(
             "reference_fastvideo_commit": _FASTVIDEO_COMMIT,
             "provider_source_commit": _FASTVIDEO_COMMIT,
             "provider_source_commits": [_FASTVIDEO_COMMIT],
-            "provider_source_fingerprints": [
-                _FASTVIDEO_SOURCE_FINGERPRINT
-            ],
             "provider_fingerprints": [_FASTVIDEO_PROVIDER_FINGERPRINT],
             "provider_source_root": "/opt/FastVideo",
             "provider_source_roots": ["/opt/FastVideo"],
-            "provider_source_file": (
-                "/opt/FastVideo/fastvideo/attention/backends/sla.py"
-            ),
-            "provider_source_files": [
-                "/opt/FastVideo/fastvideo/attention/backends/sla.py"
-            ],
+            "provider_source_file": ("/opt/FastVideo/fastvideo/attention/backends/sla.py"),
+            "provider_source_files": ["/opt/FastVideo/fastvideo/attention/backends/sla.py"],
             "provider_commit_complete": True,
             "provider_source_clean": True,
             "reference_parity_verified": True,
             "checkpoint_layout": "fastvideo_diffusers",
             "checkpoint_layouts": ["fastvideo_diffusers"],
-            "all_projection_weights_fingerprint": (
-                _FASTVIDEO_GLOBAL_PROJECTION_FINGERPRINT
-            ),
-            "projection_fingerprints": [
-                _FASTVIDEO_GLOBAL_PROJECTION_FINGERPRINT
-            ],
+            "all_projection_weights_fingerprint": (_FASTVIDEO_GLOBAL_PROJECTION_FINGERPRINT),
+            "projection_fingerprints": [_FASTVIDEO_GLOBAL_PROJECTION_FINGERPRINT],
             "layer_projection_fingerprints": layer_fingerprints,
             "projection_source_keys": projection_source_keys,
             "topk_ratio": topk_ratio,
@@ -542,11 +469,8 @@ def _audit(
                 "provider_path": fastvideo_sla[0],
                 "provider_family": fastvideo_sla[1],
                 "commit": _FASTVIDEO_COMMIT,
-                "source_fingerprint": _FASTVIDEO_SOURCE_FINGERPRINT,
                 "checkpoint_layout": "fastvideo_diffusers",
-                "projection_fingerprint": (
-                    _FASTVIDEO_GLOBAL_PROJECTION_FINGERPRINT
-                ),
+                "projection_fingerprint": (_FASTVIDEO_GLOBAL_PROJECTION_FINGERPRINT),
             }
             if fastvideo_sla is not None
             else None
@@ -602,7 +526,6 @@ def test_fastvideo_learned_sla_receipt_requires_checkpoint_and_provider_proof(
         "provider-class",
         "source-commit",
         "dirty-source",
-        "source-fingerprint",
         "test-provider",
         "checkpoint-layout",
         "projection-key",
@@ -622,9 +545,7 @@ def test_fastvideo_learned_sla_receipt_rejects_forged_evidence(
     grid = (31, 22, 40)
     report, profile = _receipt(kind=kind, provider=provider, grid=grid)
     report = copy.deepcopy(report)
-    sparse_events = [
-        event for event in report["events"] if event["execution"] == "sparse"
-    ]
+    sparse_events = [event for event in report["events"] if event["execution"] == "sparse"]
     event = sparse_events[0]
     if mutation == "provider-class":
         event["reference_provider_path"] = f"{provider}.Fake"
@@ -632,8 +553,6 @@ def test_fastvideo_learned_sla_receipt_rejects_forged_evidence(
         event["provider_source_commit"] = "0" * 40
     elif mutation == "dirty-source":
         event["provider_source_clean"] = False
-    elif mutation == "source-fingerprint":
-        event["provider_source_fingerprint"] = "0" * 64
     elif mutation == "test-provider":
         event["injected_test_provider"] = True
     elif mutation == "checkpoint-layout":
@@ -720,9 +639,7 @@ def test_vsa_receipt_rejects_mixed_allowed_providers() -> None:
     provider = "fastvideo_kernel.video_sparse_attn_bshd"
     grid = (31, 22, 40)
     report, profile = _receipt(kind="vsa", provider=provider, grid=grid)
-    sparse_event = next(
-        event for event in report["events"] if event["execution"] == "sparse"
-    )
+    sparse_event = next(event for event in report["events"] if event["execution"] == "sparse")
     sparse_event["provider_path"] = "fastvideo_kernel.video_sparse_attn"
 
     audit = audit_approximate_attention_receipt(
@@ -772,9 +689,7 @@ def test_lightx2v_receipt_rejects_unpinned_or_incomplete_evidence(
     grid = (31, 22, 40)
     report, profile = _receipt(kind=kind, provider=provider, grid=grid)
     report = copy.deepcopy(report)
-    sparse_event = next(
-        event for event in report["events"] if event["execution"] == "sparse"
-    )
+    sparse_event = next(event for event in report["events"] if event["execution"] == "sparse")
     if mutation == "event-commit":
         sparse_event["provider_source_commit"] = "0" * 40
     elif mutation == "event-dirty-source":

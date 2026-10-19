@@ -204,7 +204,7 @@ class NativeDiffusionAssembler:
         recipe: NativeDiffusionRecipe,
         overrides: Mapping[str, CheckpointSpec | str],
     ) -> dict[str, CheckpointSpec]:
-        """Resolve and audit recipe checkpoint overrides for training or inference.
+        """Resolve recipe checkpoint overrides for training or inference.
 
         Unknown override keys raise :exc:`KeyError`. Directory vs single-file
         semantics live in :meth:`_checkpoints`.
@@ -226,50 +226,17 @@ class NativeDiffusionAssembler:
                 checkpoints[key] = value
                 continue
             resolved = Path(value).expanduser()
-            # Directory override: replace only ``source``. Keep the recipe's files,
-            # hashes, and allow_patterns so a local cache dir still loads the audited list.
             if resolved.is_dir():
                 default = checkpoints[key]
                 checkpoints[key] = CheckpointSpec(
                     source=value,
                     files=default.files,
+                    resources=default.resources,
                     allow_patterns=default.allow_patterns,
                     metadata=default.metadata,
-                    file_sha256=default.file_sha256,
-                    file_size_bytes=default.file_size_bytes,
-                    resource_sha256=default.resource_sha256,
-                    resource_size_bytes=default.resource_size_bytes,
                 )
             else:
-                default = checkpoints[key]
-                # Single file + original spec has exactly one audited file: remap
-                # hash/size onto the new filename and point ``source`` at the parent
-                # directory so a bare path does not wipe the whole CheckpointSpec.
-                if len(default.files) == 1 and (
-                    default.file_sha256 or default.file_size_bytes
-                ):
-                    original_name = default.files[0]
-                    local_name = resolved.name
-                    checkpoints[key] = CheckpointSpec(
-                        source=resolved.parent,
-                        files=(local_name,),
-                        metadata=default.metadata,
-                        file_sha256=(
-                            {local_name: default.file_sha256[original_name]}
-                            if original_name in default.file_sha256
-                            else {}
-                        ),
-                        file_size_bytes=(
-                            {local_name: default.file_size_bytes[original_name]}
-                            if original_name in default.file_size_bytes
-                            else {}
-                        ),
-                        resource_sha256=default.resource_sha256,
-                        resource_size_bytes=default.resource_size_bytes,
-                    )
-                else:
-                    # Multi-file or unaudited spec: fall back to a source that is the path itself.
-                    checkpoints[key] = CheckpointSpec(value)
+                checkpoints[key] = CheckpointSpec(value)
         return checkpoints
 
     @staticmethod

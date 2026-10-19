@@ -14,7 +14,6 @@ from worldfoundry.core.model_loading.checkpoints import load_weights_only
 from worldfoundry.synthesis.visual_generation.dualcamctrl.native_pipeline import (
     WanVideoCameraPipeline,
 )
-from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import (
     checkpoint_root_path,
     local_model_root_path,
@@ -572,7 +571,6 @@ class DualCamCtrlRuntime:
             "model_id": self.model_id,
             "artifact_kind": "generated_video",
             "artifact_path": str(target),
-            "video_sha256": file_sha256(target),
             "runtime": "worldfoundry.dualcamctrl.in_tree_runtime",
             "backend_quality": "official_demo_contract",
             "image_path": str(image_path),

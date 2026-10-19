@@ -690,6 +690,7 @@ class Lyra2Runtime:
 
         from worldfoundry.core.io import video_tensor_to_uint8_frames
         from worldfoundry.core.media.codecs.image import load_pil_image
+        from worldfoundry.core.media.processing.postprocess import VideoChunk
 
         self._install_runtime_aliases()
         with torch.no_grad() if hasattr(torch, "no_grad") else contextlib.nullcontext():
@@ -768,8 +769,10 @@ class Lyra2Runtime:
             log_prefix="lyra2_custom_traj",
         )
         video_tensor = result["video"]
+        video = video_tensor_to_uint8_frames(video_tensor, layout="bcthw", value_range="-1,1")
         return {
-            "video": video_tensor_to_uint8_frames(video_tensor),
+            "video": video,
+            "video_chunk": VideoChunk(frames=video, layout="thwc", value_range="0,255", metadata={"fps": fps}),
             "video_tensor": video_tensor,
             "warp_video": result.get("warp_video"),
             "fps": fps,

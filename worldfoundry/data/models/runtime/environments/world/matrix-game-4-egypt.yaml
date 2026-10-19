@@ -1,0 +1,13 @@
+env_name: worldfoundry-unified-cu128
+env_root: ${WORLDFOUNDRY_CONDA_ENVS_ROOT}
+model_id: matrix-game-4-egypt
+python: '3.11'
+cuda_profile: cu128
+driver_status: compatible
+conda_packages: [python=3.11, pip, ffmpeg]
+pip_packages: [torch, torchvision, transformers, diffusers, accelerate, safetensors, sentencepiece, imageio, imageio-ffmpeg, numpy, pillow, einops]
+validation_imports: [torch, transformers, diffusers, safetensors, sentencepiece, imageio, numpy, PIL, einops]
+notes:
+- Use the shared GPU environment. Native SDPA inference does not require the upstream PyTorch 2.12 and CUDA 13.2 stack.
+- The game engine has a separate native build and is not a Python runtime dependency.
+- Full-checkpoint GPU parity and throughput remain pending.

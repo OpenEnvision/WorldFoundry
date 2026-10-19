@@ -30,6 +30,6 @@ execution:
     fps: 24
     sample_audio: true
 integration:
-  status: planned
+  status: integrated
 notes:
 - Native audio-video inference; checkpoint-backed CUDA parity is pending.

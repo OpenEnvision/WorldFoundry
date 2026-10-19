@@ -7,24 +7,25 @@ groups:
 - audio
 source_repos:
 - url: https://github.com/SandAI-org/MAGI-2-preview
+  revision: f68a0f9bbccbea56e0177a9bd912abc3b18ffe61
 checkpoints:
 - repo_id: sand-ai/MAGI-2-preview
-  revision: main
+  revision: 2dea51b64db47ee5b4402d36fd90829a0c58913b
   role: preview_transformer
 - repo_id: sand-ai/MAGI-2-preview
-  revision: main
+  revision: 2dea51b64db47ee5b4402d36fd90829a0c58913b
   role: refiner_transformer
 - repo_id: sand-ai/MAGI-2-preview
-  revision: main
+  revision: 2dea51b64db47ee5b4402d36fd90829a0c58913b
   role: video_vae
 - repo_id: sand-ai/MAGI-2-preview
-  revision: main
+  revision: 2dea51b64db47ee5b4402d36fd90829a0c58913b
   role: turbo_vae
 - repo_id: sand-ai/MAGI-2-preview
-  revision: main
+  revision: 2dea51b64db47ee5b4402d36fd90829a0c58913b
   role: audio_vae
 - repo_id: sand-ai/MAGI-2-preview
-  revision: main
+  revision: 2dea51b64db47ee5b4402d36fd90829a0c58913b
   role: text_encoder
 input_schema:
   prompt: true
@@ -34,18 +35,25 @@ input_schema:
   actions:
   - seed
   - task
+  - use_refiner
+  - refiner_height
+  - refiner_width
+  - refiner_num_inference_steps
 artifact_kind: generated_video
 artifact_filename: magi2-preview.mp4
 execution:
-  backend_stage: in_tree_runtime_plan
-  runtime_status: checkpoint_runtime_required
-  integration_status: planned
+  backend_stage: in_tree_runtime
+  runtime_status: checkpoint_backed_refiner_stage_smoke
+  integration_status: integrated
   pipeline_binding: magi2-preview
 integration:
-  status: planned
+  status: integrated
 notes:
 - MAGI-2-preview 114B MoE (256 experts, top-6, 6B active/token) audio+video DiT, ported from SandAI Apache-2.0.
-- This adapter supports preview-only T2V with joint audio. Image conditioning and the upstream refiner stage are not implemented and are rejected.
+- T2V supports joint preview audio and optional video-only refinement. Image conditioning is rejected.
+- Refiner defaults are five UniPC steps, shift 5, guidance 2, zero-SNR renoise index 220, and a 1920x1088 latent decode target. It doubles temporal resolution and exports at 25 fps while preserving preview audio.
+- H100 Refiner-stage replay used a checkpoint-generated Preview latent and real Qwen3.5, Refiner, and Turbo weights; five steps and seed 42 exported 249 frames at 128x128 and 25 fps with the original stereo 44.1 kHz audio.
+- Default-resolution Refiner replay and official numerical/visual parity are pending.
 - Preview video uses 12.5 fps and the released stride-8 latent geometry. The native preset uses 100 steps, shift 7, video guidance 5, audio guidance 7, and negative-prompt conditioning.
 - The released checkpoint supports 10-second clips only; other durations are rejected before loading weights. The default landscape preview is 896x512.
 - Upstream targets 8xHopper; this port collapses cp/ep/dp to single-GPU (sequential residency for the 114B MoE).

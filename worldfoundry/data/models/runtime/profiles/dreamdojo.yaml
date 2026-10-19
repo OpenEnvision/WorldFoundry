@@ -1,27 +1,54 @@
-artifact_filename: dreamdojo_world.mp4
-artifact_kind: generated_world
-backend_stage: in_tree_runtime
-id: dreamdojo
-input_schema:
-  actions:
-  - robot_action
-  - unified_384d_action
-  - action_file
-  - dataset_action_sequence
-  dataset_path: datasets/PhysicalAI-Robotics-GR00T-Teleop-GR1/GR1_robot
-  image: true
-  instruction: true
-  prompt: true
-  video: true
-integration_status: planned
-notes:
-- DreamDojo is retained as action-conditioned robot world model provenance. It is intentionally not classified as a VLA policy
-  or plain video generation model.
-- 'The metadata records DreamDojo''s 384-dimensional unified action contract: GR-1 [0,58), G1 [58,101), YAM [101,147), AgiBot
-  [147,169), MANO [220,352), latent actions [352,384).'
-- WorldFoundry vendors the DreamDojo action-conditioned Cosmos Predict runtime, Groot Dreams dataloader, cosmos_oss helpers,
-  and LAM modules under worldfoundry/synthesis/action_generation/dreamdojo/dreamdojo_runtime.
-- nvidia/DreamDojo checkpoints are staged at ${WORLDFOUNDRY_HFD_ROOT}/nvidia--DreamDojo, including the 2B_GR1_post-train iter_000050000
-  directory. Full parity still requires converted model_ema_bf16.pt, the GR-1 evaluation dataset, and a CUDA 12.8-class host.
-runtime_status: in_tree_dreamdojo_runtime_ported_dataset_and_gpu_parity_pending
+schema_version: 2
+model_id: dreamdojo
+display_name: DreamDojo 2B GR-1
 task_family: world_model
+groups:
+- world
+- robot
+source_repos:
+- url: https://github.com/NVIDIA/DreamDojo
+  revision: 02f119b759d5c7f84a399fdeea3c6e82e7ed6cff
+  in_tree_path: worldfoundry/synthesis/action_generation/dreamdojo
+checkpoints:
+- repo_id: nvidia/DreamDojo
+  revision: 89d029e10816d2995d700cb8ba06f171e0504203
+  local_dir: ${WORLDFOUNDRY_HFD_ROOT}/nvidia--DreamDojo/2B_GR1_post-train
+  role: action_conditioned_2b_gr1_ema
+- repo_id: nvidia/Cosmos-Predict2.5-2B
+  revision: f176dc95b4a70f53ce01c4b302851595e7322b00
+  role: video_tokenizer
+- repo_id: nvidia/Cosmos-Reason1-7B
+  revision: 375e24000b24baed78f4618d3dd779e47cd96323
+  role: text_encoder
+input_schema:
+  image: true
+  prompt: true
+  video: false
+  actions:
+  - normalized_unified_384d_action
+  - action_file
+artifact_kind: generated_world
+artifact_filename: dreamdojo_world.mp4
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: checkpoint_backed_inference_official_parity_pending
+  integration_status: integrated
+  pipeline_binding: dreamdojo
+  defaults:
+    height: 480
+    width: 640
+    num_frames: 13
+    fps: 5
+    num_inference_steps: 35
+    guidance_scale: 7.0
+integration:
+  status: integrated
+notes:
+- Native action-conditioned Cosmos DiT, shared Reason1 text encoder, Wan video codec, and positive-CFG UniPC.
+- Each 12-action chunk generates 13 frames; continuation observes the final generated frame and omits duplicate boundary frames.
+- Actions must already be normalized in the official 384-dimensional unified space; dataset-specific statistics remain caller-owned.
+- Distributed checkpoints are converted to model_ema_bf16.pt through the packaged conversion helper.
+- This profile covers offline 2B GR-1 post-trained inference. The separate dreamdojo-student profile supports distilled offline and resident streaming with explicit student weights. Other checkpoint scales remain unsupported.
+- H100 checkpoint-backed public-loader smoke generated 13 frames at 480x640 and 5 fps with neutral normalized actions, 35 steps, and seed 42.
+- Two-chunk A/B/A public-loader replay used 24 actions per request and exported 25 frames per request. Repeated A pixels matched exactly; changed actions changed generated pixels.
+- Official numerical and robot-task parity are pending.

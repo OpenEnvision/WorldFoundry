@@ -17,7 +17,7 @@ context_timestep a second time (see the cache-commit comment).
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 import torch
 from einops import rearrange
@@ -76,6 +76,7 @@ class AutoregressiveWindowRunner(NativeDiffusionRunner):
         prediction_mode: str = "flow",
         fixed_timesteps: Sequence[int] = (),
         context_timestep: int = 0,
+        renoise_dtype: torch.dtype | None = None,
         guidance_mode: str = "standard",
         **kwargs: object,
     ) -> None:
@@ -88,6 +89,7 @@ class AutoregressiveWindowRunner(NativeDiffusionRunner):
             raise ValueError(f"unsupported window prediction mode: {prediction_mode!r}")
         self.fixed_timesteps = tuple(int(value) for value in fixed_timesteps)
         self.context_timestep = int(context_timestep)
+        self.renoise_dtype = renoise_dtype
         if self.prediction_mode == "distilled-x0" and not self.fixed_timesteps:
             raise ValueError("distilled-x0 execution requires fixed_timesteps")
 
@@ -195,6 +197,7 @@ class AutoregressiveWindowRunner(NativeDiffusionRunner):
             "condition_video_input_mask_B_C_T_H_W",
             "view_indices_B_T",
             "initial_noise",
+            "control_latents",
         ):
             value = result.get(key)
             if isinstance(value, Tensor):
@@ -205,12 +208,13 @@ class AutoregressiveWindowRunner(NativeDiffusionRunner):
                     start=start,
                     end=end,
                 )
+        prefix_frames = cast(int, values.get("kv_prefix_frames", 0))
         result.update(
             {
                 "kv_cache": cache,
-                "current_start": start * frame_sequence_length * n_views,
-                "current_end": end * frame_sequence_length * n_views,
-                "start_frame_for_rope": start,
+                "current_start": (start + prefix_frames) * frame_sequence_length * n_views,
+                "current_end": (end + prefix_frames) * frame_sequence_length * n_views,
+                "start_frame_for_rope": start + prefix_frames,
                 "block_noise": block_noise,
             }
         )
@@ -361,7 +365,10 @@ class AutoregressiveWindowRunner(NativeDiffusionRunner):
                     torch.tensor(next_timestep / 1000.0, device=clean.device),
                     shift,
                 )
-                noisy = add_flow_noise(clean, self._noise_like(clean, context.generator), sigma)
+                reference = clean if self.renoise_dtype is None else clean.to(self.renoise_dtype)
+                noisy = add_flow_noise(
+                    reference, self._noise_like(reference, context.generator), sigma
+                ).to(block_noise.dtype)
         return clean
 
     @torch.no_grad()
@@ -388,11 +395,21 @@ class AutoregressiveWindowRunner(NativeDiffusionRunner):
                 raise ValueError(
                     f"latent frames per view ({frames_per_view}) must be divisible by block_size={block_size}"
                 )
+            prefix = context.conditioning.shared.get("kv_prefix_latents")
+            prefix_frames = 0
+            if prefix is not None:
+                if not isinstance(prefix, Tensor) or prefix.ndim != 5 or n_views != 1:
+                    raise ValueError("KV-only prefixes require a BCTHW tensor and one view")
+                if prefix.shape[:2] != initial_noise.shape[:2] or prefix.shape[-2:] != initial_noise.shape[-2:]:
+                    raise ValueError("KV-only prefix geometry must match the generated latents")
+                if first_frame_latent is not None:
+                    raise ValueError("KV-only and output first-frame prefixes cannot be combined")
+                prefix_frames = prefix.shape[2]
             frame_sequence_length = int(initial_noise.shape[-2] * initial_noise.shape[-1] // 4)
             cache_kwargs = {
                 "batch_size": initial_noise.shape[0],
                 "n_views": n_views,
-                "latent_frames_per_view": frames_per_view,
+                "latent_frames_per_view": frames_per_view + prefix_frames,
                 "frame_sequence_length": frame_sequence_length,
                 "device": initial_noise.device,
                 "dtype": self.dtype,
@@ -405,10 +422,34 @@ class AutoregressiveWindowRunner(NativeDiffusionRunner):
             noise_by_view = rearrange(initial_noise, "B C (V T) H W -> B C V T H W", V=n_views)
             output_by_view = rearrange(output, "B C (V T) H W -> B C V T H W", V=n_views)
             shared = dict(context.conditioning.shared)
+            shared["kv_prefix_frames"] = prefix_frames
             positive_base = {**shared, **context.conditioning.positive}
             negative_base = (
                 {**shared, **context.conditioning.negative} if use_negative else None
             )
+
+            if prefix is not None:
+                context.step = SchedulerStep(
+                    index=0,
+                    timestep=torch.tensor(0.0, device=self.device),
+                    next_timestep=torch.tensor(0.0, device=self.device),
+                )
+                for branch, base, cache in (
+                    ("positive-cache-commit", positive_base, positive_cache),
+                    ("negative-cache-commit", negative_base, negative_cache),
+                ):
+                    if base is None:
+                        continue
+                    conditioning = self._window_conditioning(
+                        base, n_views=1, frames_per_view=frames_per_view,
+                        start=0, end=prefix_frames, cache=cache,
+                        frame_sequence_length=frame_sequence_length, block_noise=prefix,
+                    )
+                    conditioning.update(current_start=0, current_end=prefix_frames * frame_sequence_length,
+                                        start_frame_for_rope=0)
+                    self._call_denoiser_with_conditioning(
+                        context, latents=prefix, branch=branch, conditioning=conditioning,
+                    )
 
             start_frame = 0
             if first_frame_latent is not None:
@@ -544,6 +585,11 @@ class AutoregressiveWindowRunner(NativeDiffusionRunner):
             latents = rearrange(output_by_view, "B C V T H W -> B C (V T) H W")
             self._notify_diffusion_complete(context, latents)
             sample = self.components.decoder.decode(latents, request)
+            output_frames = cast(int | None, shared.get("output_num_frames"))
+            if output_frames is not None and not request.inputs.get("return_latent", False):
+                if sample.ndim != 5 or not 0 < int(output_frames) <= sample.shape[2]:
+                    raise ValueError("output_num_frames must fit the decoded BCTHW video")
+                sample = sample[:, :, :int(output_frames)]
             for extension in self.extensions:
                 sample = extension.after_decode(context, sample)
             result = DiffusionOutput(
@@ -560,6 +606,7 @@ class AutoregressiveWindowRunner(NativeDiffusionRunner):
                     "block_size": block_size,
                     "n_views": n_views,
                     "first_frame_conditioned": first_frame_latent is not None,
+                    "kv_prefix_frames": prefix_frames,
                 },
             )
             for extension in reversed(self.extensions):

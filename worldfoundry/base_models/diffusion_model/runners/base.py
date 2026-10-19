@@ -18,7 +18,7 @@ to change the CFG formula while keeping the same extension lifecycle.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Mapping
+from typing import Any, Iterable, Mapping, cast
 
 import torch
 from torch import Tensor
@@ -26,6 +26,7 @@ from torch import Tensor
 from worldfoundry.core.observability.nvtx import nvtx_range
 
 from ..contracts import (
+    BatchedCFGDenoiser,
     ConditionEncoder,
     Conditioning,
     Denoiser,
@@ -163,10 +164,7 @@ class NativeDiffusionRunner:
                 raise
             add_note = getattr(error, "add_note", None)
             if callable(add_note):
-                add_note(
-                    "denoiser request cleanup failed: "
-                    f"{type(cleanup_error).__name__}: {cleanup_error}"
-                )
+                add_note(f"denoiser request cleanup failed: {type(cleanup_error).__name__}: {cleanup_error}")
 
     def _notify_diffusion_complete(self, context: DiffusionRunContext, latents: Tensor) -> None:
         """Publish one final decoder input without synchronizing or retaining it."""
@@ -327,14 +325,11 @@ class NativeDiffusionRunner:
             []
             if not requested or collective_calls > 0
             else [
-                "cfg_parallel: requested degree 2 but this request did not exercise "
-                "two-branch classifier-free guidance"
+                "cfg_parallel: requested degree 2 but this request did not exercise two-branch classifier-free guidance"
             ]
         )
         return {
-            "requested": {
-                "cfg_parallel": self.cfg_parallel_degree if requested else False
-            },
+            "requested": {"cfg_parallel": self.cfg_parallel_degree if requested else False},
             "effective": {"cfg_parallel": effective},
             "fallbacks": fallbacks,
             "quality_tier": "exact",
@@ -457,6 +452,22 @@ class NativeDiffusionRunner:
             )
         if self.cfg_parallel_degree == 2:
             positive, negative = self._parallel_cfg_pair(context, model_latents)
+        elif isinstance(self.components.denoiser, BatchedCFGDenoiser) and self.cfg_gate_step == 1.0:
+            conditioning = self.components.denoiser.batch_cfg_conditioning(
+                self._branch_conditioning(context.conditioning, "positive"),
+                self._branch_conditioning(context.conditioning, "negative"),
+            )
+            paired = self._call_denoiser_with_conditioning(
+                context,
+                latents=torch.cat((model_latents, model_latents)),
+                branch="cfg-pair",
+                conditioning=conditioning,
+            )
+            negative_sample, positive_sample = paired.sample.chunk(2)
+            positive = DenoiserOutput(positive_sample, paired.extras)
+            negative = DenoiserOutput(negative_sample, paired.extras)
+            self._cfg_gate_positive_branch_calls += 1
+            self._cfg_gate_negative_branch_calls += 1
         else:
             positive = self._call_denoiser(
                 context,
@@ -501,6 +512,17 @@ class NativeDiffusionRunner:
             )
             self._cfg_gate_negative_branch_calls += 1
         return self._guided_output(positive=positive, negative=negative, scale=scale)
+
+    def run_batch(self, requests: Iterable[DiffusionRequest]) -> tuple[DiffusionOutput, ...]:
+        """Merge compatible Wan denoiser work, preserving request RNG and solvers.
+
+        Call serially on this runner. Unsupported components or incompatible
+        requests raise ValueError before sampling; execution errors fail the
+        entire batch without automatic retries.
+        """
+        from .batching import run_request_batch
+
+        return run_request_batch(self, tuple(requests))
 
     @torch.no_grad()
     @nvtx_range("worldfoundry.run")
@@ -603,8 +625,7 @@ class NativeDiffusionRunner:
             )
             if len(schedule) != expected_steps:
                 raise ValueError(
-                    "scheduler returned an unexpected number of steps: "
-                    f"{len(schedule)} != {expected_steps}"
+                    f"scheduler returned an unexpected number of steps: {len(schedule)} != {expected_steps}"
                 )
             if expected_steps != request.sampling.num_inference_steps:
                 self._reset_cfg_gate_request(expected_steps)
@@ -729,7 +750,7 @@ class DualConditionGuidanceRunner(NativeDiffusionRunner):
         *,
         secondary_guidance_scale: float = 1.0,
         secondary_guidance_input: str = "secondary_guidance_scale",
-        **kwargs: object,
+        **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self.secondary_guidance_scale = float(secondary_guidance_scale)
@@ -756,10 +777,7 @@ class DualConditionGuidanceRunner(NativeDiffusionRunner):
             conditioning=unconditional_values,
         )
         secondary_scale = float(
-            context.request.inputs.get(
-                self.secondary_guidance_input,
-                self.secondary_guidance_scale,
-            )
+            cast(float, context.request.inputs.get(self.secondary_guidance_input, self.secondary_guidance_scale))
         )
         # ε = ε_uncond + s_sec*(ε_neg - ε_uncond) + s_text*(ε_pos - ε_neg)
         guided = (
@@ -793,7 +811,7 @@ class Wan22DualExpertGuidanceRunner(NativeDiffusionRunner):
         low_noise_guidance_scale: float,
         high_noise_guidance_scale: float,
         num_train_timesteps: int = 1000,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self.boundary_ratio = float(boundary_ratio)
@@ -817,17 +835,9 @@ class Wan22DualExpertGuidanceRunner(NativeDiffusionRunner):
             raise ValueError("Wan2.2 A14B scheduler timestep must be finite")
         if sigma >= self.boundary_ratio:
             return float(
-                context.request.inputs.get(
-                    "high_noise_guidance_scale",
-                    self.high_noise_guidance_scale,
-                )
+                cast(float, context.request.inputs.get("high_noise_guidance_scale", self.high_noise_guidance_scale))
             )
-        return float(
-            context.request.inputs.get(
-                "low_noise_guidance_scale",
-                self.low_noise_guidance_scale,
-            )
-        )
+        return float(cast(float, context.request.inputs.get("low_noise_guidance_scale", self.low_noise_guidance_scale)))
 
     def predict(
         self,

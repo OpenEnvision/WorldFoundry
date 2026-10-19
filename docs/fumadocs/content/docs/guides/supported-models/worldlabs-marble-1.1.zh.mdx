@@ -1,11 +1,11 @@
 ---
 title: "World Labs Marble 1.1"
-description: "World Labs Marble 1.1（World Labs）：世界生成、3D 世界生成；计划中。"
+description: "World Labs Marble 1.1（World Labs）：已集成的 3D 世界生成 API。"
 modelId: "worldlabs-marble-1.1"
 pageSource: authored
 ---
 
-World Labs Marble 1.1 是 3D 世界生成的商业 API：从提示生成可探索的 3D 世界，经 api.worldlabs.ai 访问。本 catalog 中通过既有的树内 WorldLabs API pipeline 以 marble-1.1 模型 id 暴露；集成状态为 planned，且不存在本地权重。
+World Labs Marble 1.1 是 3D 世界生成的商业 API：从提示生成可探索的 3D 世界，经 api.worldlabs.ai 访问。本 catalog 中通过既有的树内 WorldLabs API pipeline 以 marble-1.1 模型 id 暴露；API 接入已实现，不存在本地权重。
 
 <ModelPaperFigures modelId="worldlabs-marble-1.1" locale="zh" />
 
@@ -31,7 +31,7 @@ catalog 记录的任务包括 世界生成、3D 世界生成、api-world-model�
 
 CLI task profile：`default`。绑定的 pipeline 类是 `WorldLabsMarble11Pipeline`。
 
-系列状态：**计划中**。
+系列状态：**已集成**。
 
 需要 World Labs API 凭证；请求经树内 WorldLabs API pipeline 发出，模型 id 为 marble-1.1。 runner parity 仍为 pending。
 
@@ -45,6 +45,6 @@ catalog 启动命令是 `worldfoundry-eval run worldlabs-marble-1.1 --pipeline.t
 
 准备环境并检查本地资产：`bash scripts/inference/prepare_model_infer.sh worldlabs-marble-1.1`；下载缺失的公开权重时加 `--download`。
 
-状态：**计划中**。
+状态：**已集成**。带真实凭证的 API 验证尚待完成。
 
 <ModelRelatedRecipes modelId="worldlabs-marble-1.1" locale="zh" />

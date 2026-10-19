@@ -21,6 +21,7 @@ import sys
 import time
 import traceback
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -191,7 +192,27 @@ def run_sequence(pipeline, sequence: list[dict], arrays: dict) -> list[dict]:
                 selected = result
                 for attribute in path.split("."):
                     selected = selected[attribute] if isinstance(selected, dict) else getattr(selected, attribute)
-                collect_arrays(selected, step_arrays, name + "." + path)
+                key = name + "." + path
+                if isinstance(selected, (str, Path)) and Path(selected).suffix.lower() in {
+                    ".npy",
+                    ".npz",
+                    ".splat",
+                    ".ply",
+                    ".png",
+                    ".jpg",
+                    ".jpeg",
+                    ".json",
+                    ".mp4",
+                    ".webm",
+                    ".mov",
+                    ".mkv",
+                }:
+                    artifact = Path(selected)
+                    prefix = "export." + artifact.name
+                    for exported_key, value in exported_arrays(artifact.parent, [str(artifact)]).items():
+                        step_arrays[key + exported_key.removeprefix(prefix)] = value
+                else:
+                    collect_arrays(selected, step_arrays, key)
         # Some resident runtimes return views of reusable CPU buffers. Preserve
         # each response now so later requests cannot rewrite the earlier evidence.
         arrays.update({key: value.copy() for key, value in step_arrays.items()})
@@ -212,6 +233,8 @@ def exported_arrays(root: Path, files: list[str]) -> dict:
             with np.load(path, allow_pickle=False) as data:
                 for name in data.files:
                     collect_arrays(data[name], arrays, key + "." + name)
+        elif path.suffix == ".splat":
+            collect_arrays(np.fromfile(path, dtype=np.uint8), arrays, key + ".bytes")
         elif path.suffix == ".ply":
             from plyfile import PlyData
 
@@ -270,7 +293,7 @@ def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str 
     case = json.loads(case_file.read_text())
     if case_id is not None:
         case = case[case_id]
-    manifest = {"status": "failed", "case": case, "source_root": str(source_root)}
+    manifest: dict[str, Any] = {"status": "failed", "case": case, "source_root": str(source_root)}
     try:
         sys.path.insert(0, str(source_root))
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -296,7 +319,7 @@ def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str 
         manifest["assets"] = hash_assets(resolved["assets"])
         module_name, class_name = resolved["target"].split(":")
         module = importlib.import_module(module_name)
-        if not Path(module.__file__).resolve().is_relative_to(source_root):
+        if module.__file__ is None or not Path(module.__file__).resolve().is_relative_to(source_root):
             raise RuntimeError("The requested source tree was not imported")
         pipeline = getattr(module, class_name).from_pretrained(**resolved["load"])
         arrays = {}

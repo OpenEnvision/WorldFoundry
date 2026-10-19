@@ -8,7 +8,12 @@ import torch
 import torch.nn.functional as F
 
 import worldfoundry.core.media.processing.rtx as rtx_module
-from worldfoundry.core.media.processing.postprocess import VideoPostprocessChain, VideoPostprocessStream, VideoSpec
+from worldfoundry.core.media.processing.postprocess import (
+    VideoPostprocessChain,
+    VideoPostprocessStream,
+    VideoSpec,
+    VideoTensorLayout,
+)
 from worldfoundry.core.media.processing.rtx import (
     RTXVFXCapability,
     RTXVideoSuperResolutionConfig,
@@ -17,6 +22,8 @@ from worldfoundry.core.media.processing.rtx import (
     probe_rtx_vfx_runtime,
     rtx_postprocessor_from_preset,
 )
+
+pytestmark = pytest.mark.unit
 
 
 class _FakeVideoSuperRes:
@@ -125,14 +132,14 @@ def test_rtx_frame_list_preserves_numpy_uint8_contract_and_closes_effect() -> No
     ],
 )
 def test_rtx_preserves_tensor_layout_dtype_and_minus_one_one_range(
-    layout: str,
+    layout: VideoTensorLayout,
     shape: tuple[int, ...],
     expected_shape: tuple[int, ...],
 ) -> None:
     video = torch.linspace(-1.0, 1.0, int(np.prod(shape)), dtype=torch.float16).reshape(shape)
     stream = VideoPostprocessStream(chain=VideoPostprocessChain((RTXVideoSuperResolutionPostProcessor(scale=2.0),)))
 
-    [chunk] = stream.process(video, layout=layout)  # type: ignore[arg-type]
+    [chunk] = stream.process(video, layout=layout)
 
     assert torch.is_tensor(chunk.frames)
     assert tuple(chunk.frames.shape) == expected_shape
@@ -167,6 +174,28 @@ def test_rtx_capability_reports_missing_optional_package(monkeypatch: pytest.Mon
     assert "not installed" in capability.reason
     assert capability.to_payload()["compute_capability"] is None
     assert capability.to_payload()["probe_status"] == "not-run"
+
+
+@pytest.mark.parametrize("compute_capability,available", [((7, 0), False), ((7, 5), True), ((9, 0), True)])
+def test_rtx_capability_keeps_major_minor_pair_without_initializing_effect(
+    monkeypatch: pytest.MonkeyPatch,
+    compute_capability: tuple[int, int],
+    available: bool,
+) -> None:
+    monkeypatch.setattr(rtx_module.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(rtx_module, "_installed_nvidia_vfx_version", lambda: "0.1.0.1")
+    monkeypatch.setattr(rtx_module, "_inspect_required_driver_library", lambda: ("libnvidia-ngx.so.1", None))
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda device: compute_capability)
+    monkeypatch.setattr(torch.cuda, "get_device_name", lambda device: "test GPU")
+
+    capability = inspect_rtx_vfx_capability(device=0)
+    assert capability.available is available
+    assert capability.compute_capability == compute_capability
+    assert capability.to_payload()["compute_capability"] == list(compute_capability)
+    assert capability.probe_status == "not-run"
+    assert not _FakeVideoSuperRes.instances
 
 
 def test_rtx_quality_resolver_supports_published_wheel_enum_location(

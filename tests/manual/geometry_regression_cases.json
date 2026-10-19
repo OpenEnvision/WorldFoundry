@@ -4604,12 +4604,32 @@
     "assets": {
       "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Lite-5s-Diffusers"
     },
-    "required_outputs": ["artifact.video.mp4.frames", "artifact.video.mp4.fps"],
-    "output_arrays": ["video.mp4"],
-    "export_artifacts": ["video.mp4"],
+    "required_outputs": [
+      "artifact.video.mp4.frames",
+      "artifact.video.mp4.fps"
+    ],
+    "output_arrays": [
+      "video.mp4"
+    ],
+    "export_artifacts": [
+      "video.mp4"
+    ],
     "array_contracts": {
-      "artifact.video.mp4.frames": {"shape": [121, 480, 864, 3], "dtype": "uint8"},
-      "artifact.video.mp4.fps": {"values": [24, 1]}
+      "artifact.video.mp4.frames": {
+        "shape": [
+          121,
+          480,
+          864,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "artifact.video.mp4.fps": {
+        "values": [
+          24,
+          1
+        ]
+      }
     },
     "scope": "Own Lite checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
   },
@@ -4641,88 +4661,34 @@
     "assets": {
       "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Lite-distill-5s-Diffusers"
     },
-    "required_outputs": ["artifact.video.mp4.frames", "artifact.video.mp4.fps"],
-    "output_arrays": ["video.mp4"],
-    "export_artifacts": ["video.mp4"],
+    "required_outputs": [
+      "artifact.video.mp4.frames",
+      "artifact.video.mp4.fps"
+    ],
+    "output_arrays": [
+      "video.mp4"
+    ],
+    "export_artifacts": [
+      "video.mp4"
+    ],
     "array_contracts": {
-      "artifact.video.mp4.frames": {"shape": [121, 480, 864, 3], "dtype": "uint8"},
-      "artifact.video.mp4.fps": {"values": [24, 1]}
+      "artifact.video.mp4.frames": {
+        "shape": [
+          121,
+          480,
+          864,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "artifact.video.mp4.fps": {
+        "values": [
+          24,
+          1
+        ]
+      }
     },
     "scope": "Own distilled Lite checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
-  },
-  "kandinsky6-lite-pretrain-video-short": {
-    "id": "kandinsky6-lite-pretrain-video-short",
-    "model_id": "kandinsky6-lite-pretrain",
-    "seed": 42,
-    "deterministic": true,
-    "target": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
-    "load": {
-      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Lite-pretrain-5s-Diffusers",
-      "model_id": "kandinsky6-lite-pretrain",
-      "device": "cuda",
-      "attention_backend": "torch",
-      "offload_mode": "block"
-    },
-    "call": {
-      "prompt": "A small boat crossing a calm lake at sunrise.",
-      "width": 864,
-      "height": 480,
-      "num_frames": 121,
-      "num_inference_steps": 50,
-      "guidance_scale": 5.0,
-      "sample_audio": false,
-      "seed": 42,
-      "output_path": "${OUTPUT_DIR}/video.mp4",
-      "return_dict": true
-    },
-    "assets": {
-      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Lite-pretrain-5s-Diffusers"
-    },
-    "required_outputs": ["artifact.video.mp4.frames", "artifact.video.mp4.fps"],
-    "output_arrays": ["video.mp4"],
-    "export_artifacts": ["video.mp4"],
-    "array_contracts": {
-      "artifact.video.mp4.frames": {"shape": [121, 480, 864, 3], "dtype": "uint8"},
-      "artifact.video.mp4.fps": {"values": [24, 1]}
-    },
-    "scope": "Own pretrained Lite checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
-  },
-  "kandinsky6-pro-video-short": {
-    "id": "kandinsky6-pro-video-short",
-    "model_id": "kandinsky6-pro",
-    "seed": 42,
-    "deterministic": true,
-    "target": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
-    "load": {
-      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Pro-5s-Diffusers",
-      "model_id": "kandinsky6-pro",
-      "device": "cuda",
-      "attention_backend": "torch",
-      "offload_mode": "block"
-    },
-    "call": {
-      "prompt": "A small boat crossing a calm lake at sunrise.",
-      "width": 864,
-      "height": 480,
-      "num_frames": 121,
-      "num_inference_steps": 50,
-      "guidance_scale": 5.0,
-      "sample_audio": false,
-      "seed": 42,
-      "output_path": "${OUTPUT_DIR}/video.mp4",
-      "return_dict": true
-    },
-    "assets": {
-      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Pro-5s-Diffusers"
-    },
-    "required_outputs": ["artifact.video.mp4.frames", "artifact.video.mp4.fps"],
-    "output_arrays": ["video.mp4"],
-    "export_artifacts": ["video.mp4"],
-    "array_contracts": {
-      "artifact.video.mp4.frames": {"shape": [121, 480, 864, 3], "dtype": "uint8"},
-      "artifact.video.mp4.fps": {"values": [24, 1]}
-    },
-    "scope": "Own Pro checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
   },
   "kandinsky6-pro-distill-video-short": {
     "id": "kandinsky6-pro-distill-video-short",
@@ -4752,14 +4718,603 @@
     "assets": {
       "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Pro-distill-5s-Diffusers"
     },
-    "required_outputs": ["artifact.video.mp4.frames", "artifact.video.mp4.fps"],
-    "output_arrays": ["video.mp4"],
-    "export_artifacts": ["video.mp4"],
+    "required_outputs": [
+      "artifact.video.mp4.frames",
+      "artifact.video.mp4.fps"
+    ],
+    "output_arrays": [
+      "video.mp4"
+    ],
+    "export_artifacts": [
+      "video.mp4"
+    ],
     "array_contracts": {
-      "artifact.video.mp4.frames": {"shape": [121, 480, 864, 3], "dtype": "uint8"},
-      "artifact.video.mp4.fps": {"values": [24, 1]}
+      "artifact.video.mp4.frames": {
+        "shape": [
+          121,
+          480,
+          864,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "artifact.video.mp4.fps": {
+        "values": [
+          24,
+          1
+        ]
+      }
     },
     "scope": "Own distilled Pro checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
+  },
+  "wonderworld-scene-short": {
+    "id": "wonderworld-scene-short",
+    "model_id": "wonderworld",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.three_d_four_d.pipeline_wonderworld:WonderWorldPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}",
+      "device": "cuda",
+      "dtype": "bfloat16"
+    },
+    "assets": {
+      "inpaint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/stable-diffusion-2-inpainting",
+      "depth": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/prs-eth--marigold-depth-v1-0",
+      "normals": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/prs-eth--marigold-normals-v0-1",
+      "oneformer": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/oneformer_ade20k_swin_large",
+      "repvit": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/RepViT/repvit_sam.pt",
+      "image-a": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "image-b": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/wonderworld/image-b.png"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "A detailed photographic view of the scene.",
+          "seed": 42,
+          "depth_steps": 30,
+          "inpaint_steps": 50,
+          "normal_steps": 10,
+          "refinement_steps": 100,
+          "gen_layer": true,
+          "run_dir": "${OUTPUT_DIR}/a",
+          "output_path": "${OUTPUT_DIR}/a/scene.splat",
+          "return_dict": true
+        },
+        "outputs": [
+          "artifact_path",
+          "preview_path"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/wonderworld/image-b.png",
+          "prompt": "A detailed photographic view of the scene.",
+          "seed": 42,
+          "depth_steps": 30,
+          "inpaint_steps": 50,
+          "normal_steps": 10,
+          "refinement_steps": 100,
+          "gen_layer": true,
+          "run_dir": "${OUTPUT_DIR}/b",
+          "output_path": "${OUTPUT_DIR}/b/scene.splat",
+          "return_dict": true
+        },
+        "outputs": [
+          "artifact_path",
+          "preview_path"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "A detailed photographic view of the scene.",
+          "seed": 42,
+          "depth_steps": 30,
+          "inpaint_steps": 50,
+          "normal_steps": 10,
+          "refinement_steps": 100,
+          "gen_layer": true,
+          "run_dir": "${OUTPUT_DIR}/repeat",
+          "output_path": "${OUTPUT_DIR}/repeat/scene.splat",
+          "return_dict": true
+        },
+        "outputs": [
+          "artifact_path",
+          "preview_path"
+        ]
+      }
+    ],
+    "required_outputs": [
+      "a.artifact_path",
+      "b.artifact_path",
+      "repeat.artifact_path",
+      "a.preview_path",
+      "b.preview_path",
+      "repeat.preview_path"
+    ],
+    "output_arrays": [
+      "a/depth_000.npy",
+      "b/depth_000.npy",
+      "repeat/depth_000.npy"
+    ],
+    "export_artifacts": [
+      "a/scene.splat",
+      "b/scene.splat",
+      "repeat/scene.splat",
+      "a/view_000.png",
+      "b/view_000.png",
+      "repeat/view_000.png"
+    ],
+    "array_contracts": {
+      "artifact.a/depth_000.npy": {
+        "shape": [
+          512,
+          512
+        ]
+      },
+      "artifact.b/depth_000.npy": {
+        "shape": [
+          512,
+          512
+        ]
+      },
+      "artifact.repeat/depth_000.npy": {
+        "shape": [
+          512,
+          512
+        ]
+      }
+    },
+    "comparisons": [
+      {
+        "left": "export.a/scene.splat.bytes",
+        "right": "export.repeat/scene.splat.bytes",
+        "relation": "equal"
+      },
+      {
+        "left": "artifact.a/depth_000.npy",
+        "right": "artifact.repeat/depth_000.npy",
+        "relation": "equal"
+      },
+      {
+        "left": "export.a/view_000.png",
+        "right": "export.repeat/view_000.png",
+        "relation": "equal"
+      },
+      {
+        "left": "export.a/view_000.png",
+        "right": "export.b/view_000.png",
+        "relation": "different"
+      }
+    ],
+    "scope": "Native 512x512 seed scene with shared component weights, layered completion and surfel refinement. A/B/A compares full exported splat bytes, depth arrays and rendered previews; novel-view and official rasterizer quality require separate acceptance."
+  },
+  "matrix-game4-egypt-video-short": {
+    "id": "matrix-game4-egypt-video-short",
+    "model_id": "matrix-game-4-egypt",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.matrix_game.pipeline_matrix_game4:MatrixGame4EgyptPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Skywork--Matrix-Game-4.0",
+      "model_id": "matrix-game-4-egypt",
+      "device": "cuda",
+      "dtype": "bfloat16",
+      "offload_mode": "block",
+      "checkpoint_overrides": {
+        "dit": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Skywork--Matrix-Game-4.0/fps-egypt/model.safetensors",
+        "sink": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Skywork--Matrix-Game-4.0/fps-egypt/sink.png",
+        "text-encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/alibaba-pai--Wan2.2-Fun-5B-Control/models_t5_umt5-xxl-enc-bf16.pth",
+        "tokenizer": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/alibaba-pai--Wan2.2-Fun-5B-Control",
+        "vae": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/alibaba-pai--Wan2.2-Fun-5B-Control/Wan2.2_VAE.pth"
+      }
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Skywork--Matrix-Game-4.0/fps-egypt",
+      "shared-assets": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/alibaba-pai--Wan2.2-Fun-5B-Control",
+      "control-a": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/matrix-game4/low-poly-a.mp4",
+      "control-b": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/matrix-game4/low-poly-b.mp4"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "video_path": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/matrix-game4/low-poly-a.mp4",
+          "height": 480,
+          "width": 864,
+          "num_frames": 17,
+          "num_inference_steps": 2,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "output_path": "${OUTPUT_DIR}/a.mp4",
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "video_path": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/matrix-game4/low-poly-b.mp4",
+          "height": 480,
+          "width": 864,
+          "num_frames": 17,
+          "num_inference_steps": 2,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "output_path": "${OUTPUT_DIR}/b.mp4",
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "video_path": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/matrix-game4/low-poly-a.mp4",
+          "height": 480,
+          "width": 864,
+          "num_frames": 17,
+          "num_inference_steps": 2,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "output_path": "${OUTPUT_DIR}/repeat.mp4",
+          "return_dict": true
+        },
+        "outputs": [
+          "sample",
+          "latents"
+        ]
+      }
+    ],
+    "required_outputs": [
+      "a.sample",
+      "a.latents",
+      "b.sample",
+      "b.latents",
+      "repeat.sample",
+      "repeat.latents"
+    ],
+    "export_artifacts": [
+      "a.mp4",
+      "b.mp4",
+      "repeat.mp4"
+    ],
+    "array_contracts": {
+      "a.sample": {
+        "shape": [
+          1,
+          3,
+          17,
+          480,
+          864
+        ]
+      },
+      "b.sample": {
+        "shape": [
+          1,
+          3,
+          17,
+          480,
+          864
+        ]
+      },
+      "repeat.sample": {
+        "shape": [
+          1,
+          3,
+          17,
+          480,
+          864
+        ]
+      }
+    },
+    "comparisons": [
+      {
+        "left": "a.sample",
+        "right": "repeat.sample",
+        "relation": "equal"
+      },
+      {
+        "left": "a.latents",
+        "right": "repeat.latents",
+        "relation": "equal"
+      },
+      {
+        "left": "a.sample",
+        "right": "b.sample",
+        "relation": "different"
+      },
+      {
+        "left": "export.a.mp4.frames",
+        "right": "export.repeat.mp4.frames",
+        "relation": "equal"
+      }
+    ],
+    "scope": "Pinned Ancient Egypt transformer and sink with separate Wan2.2 VAE/text assets; two distinct 17-frame 480x864 low-poly clips, two-step rendering and independent A/B/A requests. Not game-engine or realtime acceptance."
+  },
+  "kandinsky6-lite-pretrain-video-short": {
+    "id": "kandinsky6-lite-pretrain-video-short",
+    "model_id": "kandinsky6-lite-pretrain",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Lite-pretrain-5s-Diffusers",
+      "model_id": "kandinsky6-lite-pretrain",
+      "device": "cuda",
+      "attention_backend": "torch",
+      "offload_mode": "block"
+    },
+    "call": {
+      "prompt": "A small boat crossing a calm lake at sunrise.",
+      "width": 864,
+      "height": 480,
+      "num_frames": 121,
+      "num_inference_steps": 50,
+      "guidance_scale": 5.0,
+      "sample_audio": false,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/video.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Lite-pretrain-5s-Diffusers"
+    },
+    "required_outputs": [
+      "artifact.video.mp4.frames",
+      "artifact.video.mp4.fps"
+    ],
+    "output_arrays": [
+      "video.mp4"
+    ],
+    "export_artifacts": [
+      "video.mp4"
+    ],
+    "array_contracts": {
+      "artifact.video.mp4.frames": {
+        "shape": [
+          121,
+          480,
+          864,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "artifact.video.mp4.fps": {
+        "values": [
+          24,
+          1
+        ]
+      }
+    },
+    "scope": "Own pretrained Lite checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
+  },
+  "dreamdojo-student-controls-short": {
+    "id": "dreamdojo-student-controls-short",
+    "model_id": "dreamdojo-student",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.dreamdojo.pipeline_dreamdojo_student:DreamDojoStudentPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_DREAMDOJO_STUDENT_CHECKPOINT}",
+      "model_id": "dreamdojo-student",
+      "vae_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/nvidia--Cosmos-Predict2.5-2B/tokenizer.pth",
+      "text_embeddings_path": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/text-embeddings.pt",
+      "device": "cuda",
+      "offload_mode": "none"
+    },
+    "assets": {
+      "student": "${WORLDFOUNDRY_REGRESSION_DREAMDOJO_STUDENT_CHECKPOINT}",
+      "vae": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/nvidia--Cosmos-Predict2.5-2B/tokenizer.pth",
+      "text": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/text-embeddings.pt",
+      "image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "actions-a": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/actions-a.npy",
+      "actions-b": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/actions-b.npy"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "action_file": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/actions-a.npy",
+          "height": 480,
+          "width": 640,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 10,
+          "seed": 42,
+          "output_path": "${OUTPUT_DIR}/a.mp4",
+          "return_dict": true
+        },
+        "outputs": [
+          "video_chunk.frames"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "action_file": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/actions-b.npy",
+          "height": 480,
+          "width": 640,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 10,
+          "seed": 42,
+          "output_path": "${OUTPUT_DIR}/b.mp4",
+          "return_dict": true
+        },
+        "outputs": [
+          "video_chunk.frames"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "action_file": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/actions-a.npy",
+          "height": 480,
+          "width": 640,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 10,
+          "seed": 42,
+          "output_path": "${OUTPUT_DIR}/repeat.mp4",
+          "return_dict": true
+        },
+        "outputs": [
+          "video_chunk.frames"
+        ]
+      }
+    ],
+    "required_outputs": [
+      "a.video_chunk.frames",
+      "b.video_chunk.frames",
+      "repeat.video_chunk.frames"
+    ],
+    "export_artifacts": [
+      "a.mp4",
+      "b.mp4",
+      "repeat.mp4"
+    ],
+    "array_contracts": {
+      "a.video_chunk.frames": {
+        "shape": [
+          1,
+          3,
+          17,
+          480,
+          640
+        ],
+        "min": -1,
+        "max": 1
+      },
+      "b.video_chunk.frames": {
+        "shape": [
+          1,
+          3,
+          17,
+          480,
+          640
+        ],
+        "min": -1,
+        "max": 1
+      },
+      "repeat.video_chunk.frames": {
+        "shape": [
+          1,
+          3,
+          17,
+          480,
+          640
+        ],
+        "min": -1,
+        "max": 1
+      },
+      "export.a.mp4.fps": {
+        "values": [
+          10,
+          1
+        ]
+      },
+      "export.b.mp4.fps": {
+        "values": [
+          10,
+          1
+        ]
+      },
+      "export.repeat.mp4.fps": {
+        "values": [
+          10,
+          1
+        ]
+      }
+    },
+    "comparisons": [
+      {
+        "left": "a.video_chunk.frames",
+        "right": "repeat.video_chunk.frames",
+        "relation": "equal"
+      },
+      {
+        "left": "a.video_chunk.frames",
+        "right": "b.video_chunk.frames",
+        "relation": "different"
+      },
+      {
+        "left": "export.a.mp4.frames",
+        "right": "export.repeat.mp4.frames",
+        "relation": "equal"
+      }
+    ],
+    "scope": "Operator-supplied distilled student weights, precomputed Reason1 features, two different normalized [16,384] action arrays and A/B/A isolated rollouts. First and continuation chunks and decoded exports are compared; no teacher fallback or throughput claim."
+  },
+  "kandinsky6-pro-video-short": {
+    "id": "kandinsky6-pro-video-short",
+    "model_id": "kandinsky6-pro",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Pro-5s-Diffusers",
+      "model_id": "kandinsky6-pro",
+      "device": "cuda",
+      "attention_backend": "torch",
+      "offload_mode": "block"
+    },
+    "call": {
+      "prompt": "A small boat crossing a calm lake at sunrise.",
+      "width": 864,
+      "height": 480,
+      "num_frames": 121,
+      "num_inference_steps": 50,
+      "guidance_scale": 5.0,
+      "sample_audio": false,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/video.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Pro-5s-Diffusers"
+    },
+    "required_outputs": [
+      "artifact.video.mp4.frames",
+      "artifact.video.mp4.fps"
+    ],
+    "output_arrays": [
+      "video.mp4"
+    ],
+    "export_artifacts": [
+      "video.mp4"
+    ],
+    "array_contracts": {
+      "artifact.video.mp4.frames": {
+        "shape": [
+          121,
+          480,
+          864,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "artifact.video.mp4.fps": {
+        "values": [
+          24,
+          1
+        ]
+      }
+    },
+    "scope": "Own Pro checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
   },
   "kandinsky6-pro-pretrain-video-short": {
     "id": "kandinsky6-pro-pretrain-video-short",
@@ -4789,13 +5344,292 @@
     "assets": {
       "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Pro-pretrain-5s-Diffusers"
     },
-    "required_outputs": ["artifact.video.mp4.frames", "artifact.video.mp4.fps"],
-    "output_arrays": ["video.mp4"],
-    "export_artifacts": ["video.mp4"],
+    "required_outputs": [
+      "artifact.video.mp4.frames",
+      "artifact.video.mp4.fps"
+    ],
+    "output_arrays": [
+      "video.mp4"
+    ],
+    "export_artifacts": [
+      "video.mp4"
+    ],
     "array_contracts": {
-      "artifact.video.mp4.frames": {"shape": [121, 480, 864, 3], "dtype": "uint8"},
-      "artifact.video.mp4.fps": {"values": [24, 1]}
+      "artifact.video.mp4.frames": {
+        "shape": [
+          121,
+          480,
+          864,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "artifact.video.mp4.fps": {
+        "values": [
+          24,
+          1
+        ]
+      }
     },
     "scope": "Own pretrained Pro checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
+  },
+  "dreamdojo-2b-gr1-distilled-controls-short": {
+    "id": "dreamdojo-2b-gr1-distilled-controls-short",
+    "model_id": "dreamdojo-2b-gr1-distilled",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.dreamdojo.pipeline_dreamdojo_student:DreamDojoStudentPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_DREAMDOJO_STUDENT_CHECKPOINT}",
+      "model_id": "dreamdojo-2b-gr1-distilled",
+      "vae_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/nvidia--Cosmos-Predict2.5-2B/tokenizer.pth",
+      "text_embeddings_path": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/text-embeddings.pt",
+      "device": "cuda",
+      "offload_mode": "none"
+    },
+    "assets": {
+      "student": "${WORLDFOUNDRY_REGRESSION_DREAMDOJO_STUDENT_CHECKPOINT}",
+      "vae": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/nvidia--Cosmos-Predict2.5-2B/tokenizer.pth",
+      "text": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/text-embeddings.pt",
+      "image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "actions-a": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/actions-a.npy",
+      "actions-b": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/actions-b.npy"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "action_file": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/actions-a.npy",
+          "height": 480,
+          "width": 640,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 10,
+          "seed": 42,
+          "output_path": "${OUTPUT_DIR}/a.mp4",
+          "return_dict": true
+        },
+        "outputs": [
+          "video_chunk.frames"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "action_file": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/actions-b.npy",
+          "height": 480,
+          "width": 640,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 10,
+          "seed": 42,
+          "output_path": "${OUTPUT_DIR}/b.mp4",
+          "return_dict": true
+        },
+        "outputs": [
+          "video_chunk.frames"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "action_file": "${WORLDFOUNDRY_REGRESSION_INPUT_ROOT}/dreamdojo/actions-a.npy",
+          "height": 480,
+          "width": 640,
+          "num_inference_steps": 4,
+          "guidance_scale": 1.0,
+          "fps": 10,
+          "seed": 42,
+          "output_path": "${OUTPUT_DIR}/repeat.mp4",
+          "return_dict": true
+        },
+        "outputs": [
+          "video_chunk.frames"
+        ]
+      }
+    ],
+    "required_outputs": [
+      "a.video_chunk.frames",
+      "b.video_chunk.frames",
+      "repeat.video_chunk.frames"
+    ],
+    "export_artifacts": [
+      "a.mp4",
+      "b.mp4",
+      "repeat.mp4"
+    ],
+    "array_contracts": {
+      "a.video_chunk.frames": {
+        "shape": [
+          1,
+          3,
+          17,
+          480,
+          640
+        ],
+        "min": -1,
+        "max": 1
+      },
+      "b.video_chunk.frames": {
+        "shape": [
+          1,
+          3,
+          17,
+          480,
+          640
+        ],
+        "min": -1,
+        "max": 1
+      },
+      "repeat.video_chunk.frames": {
+        "shape": [
+          1,
+          3,
+          17,
+          480,
+          640
+        ],
+        "min": -1,
+        "max": 1
+      },
+      "export.a.mp4.fps": {
+        "values": [
+          10,
+          1
+        ]
+      },
+      "export.b.mp4.fps": {
+        "values": [
+          10,
+          1
+        ]
+      },
+      "export.repeat.mp4.fps": {
+        "values": [
+          10,
+          1
+        ]
+      }
+    },
+    "comparisons": [
+      {
+        "left": "a.video_chunk.frames",
+        "right": "repeat.video_chunk.frames",
+        "relation": "equal"
+      },
+      {
+        "left": "a.video_chunk.frames",
+        "right": "b.video_chunk.frames",
+        "relation": "different"
+      },
+      {
+        "left": "export.a.mp4.frames",
+        "right": "export.repeat.mp4.frames",
+        "relation": "equal"
+      }
+    ],
+    "scope": "Concrete 2B GR-1 distilled identity uses its own declared replay, explicit student weights, normalized [16,384] actions and A/B/A output comparison. Playback FPS is not generation throughput; definition does not certify checkpoint acceptance."
+  },
+  "lingbot-world-v2-1p3b-causal-short": {
+    "id": "lingbot-world-v2-1p3b-causal-short",
+    "model_id": "lingbot-world-v2-1.3b",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.lingbot_world_v2.pipeline_lingbot_world_v2:LingBotWorldV2SmallPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lingbot-world-v2-1.3b-causal-fast",
+      "model_id": "lingbot-world-v2-1.3b",
+      "shared_assets_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "device": "cuda",
+      "nproc_per_node": 1,
+      "t5_fsdp": false,
+      "dit_fsdp": false,
+      "t5_cpu": true,
+      "convert_model_dtype": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/lingbot-world-v2-1.3b-causal-fast",
+      "shared-assets": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B",
+      "image": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+      "controls": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}"
+    },
+    "sequence": [
+      {
+        "name": "a",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "A slowly moving camera in a realistic scene.",
+          "action_path": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}",
+          "frame_num": 21,
+          "seed": 42,
+          "output_path": "${OUTPUT_DIR}/a.mp4",
+          "return_dict": true
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "b",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "A slowly moving camera through a snowy landscape.",
+          "action_path": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}",
+          "frame_num": 21,
+          "seed": 42,
+          "output_path": "${OUTPUT_DIR}/b.mp4",
+          "return_dict": true
+        },
+        "outputs": [
+          "video"
+        ]
+      },
+      {
+        "name": "repeat",
+        "call": {
+          "images": "${WORLDFOUNDRY_REGRESSION_INPUT_IMAGE}",
+          "prompt": "A slowly moving camera in a realistic scene.",
+          "action_path": "${WORLDFOUNDRY_REGRESSION_LINGBOT_CONTROLS}",
+          "frame_num": 21,
+          "seed": 42,
+          "output_path": "${OUTPUT_DIR}/repeat.mp4",
+          "return_dict": true
+        },
+        "outputs": [
+          "video"
+        ]
+      }
+    ],
+    "required_outputs": [
+      "a.video",
+      "b.video",
+      "repeat.video"
+    ],
+    "export_artifacts": [
+      "a.mp4",
+      "b.mp4",
+      "repeat.mp4"
+    ],
+    "comparisons": [
+      {
+        "left": "a.video",
+        "right": "repeat.video",
+        "relation": "equal"
+      },
+      {
+        "left": "a.video",
+        "right": "b.video",
+        "relation": "different"
+      },
+      {
+        "left": "export.a.mp4.frames",
+        "right": "export.repeat.mp4.frames",
+        "relation": "equal"
+      }
+    ],
+    "scope": "Own six-shard 1.3B causal-fast checkpoint, explicit shared Wan assets and 21-frame controls. Fixed-seed A/B/A pixels and decoded exports; separate from the 14B checkpoint, long-horizon quality and streaming throughput."
   }
 }

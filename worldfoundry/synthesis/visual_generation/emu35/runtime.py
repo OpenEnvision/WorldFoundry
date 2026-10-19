@@ -6,7 +6,6 @@ artifacts are bundled with WorldFoundry.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
@@ -239,11 +238,9 @@ class Emu35Runtime:
                 "artifact_path": str(output),
                 "metadata": metadata,
             }
-        digest = hashlib.sha256(output.read_bytes()).hexdigest()
         return {
             "status": "succeeded",
             "artifact_path": str(output),
-            "artifact_sha256": digest,
             "metadata": metadata,
         }
 

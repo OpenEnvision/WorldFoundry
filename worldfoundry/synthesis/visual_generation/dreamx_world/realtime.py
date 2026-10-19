@@ -9,8 +9,8 @@ broadcast to the other sequence-parallel ranks for the next iteration.
 
 from __future__ import annotations
 
-import os
 import inspect
+import os
 import time
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -20,11 +20,13 @@ import torch
 import torch.distributed as dist
 from PIL import Image
 
-from worldfoundry.core.io.paths import resolve_data_path
 from worldfoundry.core.execution.realtime.contracts import DEFAULT_REALTIME_CONTROLS, RealtimeSpec
+from worldfoundry.core.io.paths import resolve_data_path
+from worldfoundry.core.media.processing.postprocess import VideoChunk
 from worldfoundry.runtime.local_checkpoint_cache import stage_checkpoint_for_realtime
 
-from .checkpoints import enforce_offline_model_loading, resolve_checkpoint as _resolve_checkpoint
+from .checkpoints import enforce_offline_model_loading
+from .checkpoints import resolve_checkpoint as _resolve_checkpoint
 
 NATIVE_FPS = 16
 MIN_MODEL_FRAMES = 5
@@ -270,7 +272,6 @@ class DreamXWorldRealtimeSession:
     def _load_pipeline(self) -> tuple[Any, float]:
         from diffusers import FlowMatchEulerDiscreteScheduler
         from omegaconf import OmegaConf
-
         from transformers import AutoTokenizer
 
         from worldfoundry.base_models.diffusion_model.loaders.wan_variant import (
@@ -288,6 +289,7 @@ class DreamXWorldRealtimeSession:
         from worldfoundry.core.distributed.sequence_parallel.runtime import (
             set_multi_gpus_devices,
         )
+
         from .runtime.pipeline import Wan2_2_CameraPipeline
 
         # xFuser attaches its sequence-parallel collectives to the already
@@ -602,6 +604,9 @@ class DreamXWorldRealtimeSession:
         return {
             "frames": frames,
             "video": frames,
+            "video_chunk": (
+                VideoChunk(frames=frames, layout="thwc", value_range="0,255") if frames is not None else None
+            ),
             "fps": self.fps,
             "realtime_spec": self.realtime_spec().to_payload(),
             "realtime_metrics": dict(self.last_metrics),

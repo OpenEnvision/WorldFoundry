@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
 
+import worldfoundry.studio.inference.requests as inference_requests
+from worldfoundry.studio.inference.requests import InferenceRequestError
 from worldfoundry.studio.serving import workspace as workspace_app
 
 
 def test_wan22_studio_exposes_audited_acceleration_controls() -> None:
     entry = workspace_app.find_entry("wan2.2-ti2v-5b")
-    options = workspace_app._entry_runtime_options(entry)
+    options = inference_requests._entry_runtime_options(entry)
 
     expected_boolean_defaults = {
         "fuse_qkv": False,
@@ -36,9 +37,9 @@ def test_wan22_studio_exposes_audited_acceleration_controls() -> None:
 
 def test_wan22_studio_maps_acceleration_controls_to_loader_kwargs() -> None:
     entry = workspace_app.find_entry("wan2.2-ti2v-5b")
-    _, load_kwargs = workspace_app._merge_common_params(
+    _, load_kwargs = inference_requests._merge_common_params(
         entry,
-        workspace_app.JobCreateRequest(
+        inference_requests.JobCreateRequest(
             model_id=entry.model_id,
             params={
                 "fuse_qkv": True,
@@ -81,8 +82,8 @@ def test_wan22_studio_rejects_invalid_acceleration_values(
 ) -> None:
     entry = workspace_app.find_entry("wan2.2-ti2v-5b")
 
-    with pytest.raises(HTTPException, match=message):
-        workspace_app._validate_runtime_options(entry, {key: value})
+    with pytest.raises(InferenceRequestError, match=message):
+        inference_requests._validate_runtime_options(entry, {key: value})
 
 
 def test_workspace_html_wires_wan22_acceleration_controls() -> None:

@@ -1,0 +1,92 @@
+---
+title: "Matrix-Game 4 古埃及"
+description: "原生低模视频离线重渲染，游戏引擎通过可选的上游 submodule 引用。"
+modelId: "matrix-game-4-egypt"
+pageSource: authored
+---
+
+Matrix-Game 4 对低模 RGB 游戏画面进行重渲染，而不是根据键盘动作直接预测游戏。`matrix-game-4-egypt` 将发布的古埃及 checkpoint 接入 WorldFoundry 原生 Wan 网络和自回归 runner。游戏引擎为可选组件，由上游维护。
+
+<ModelCommandBuilder modelId="matrix-game-4-egypt" locale="zh" />
+
+## 原生离线渲染
+
+使用[统一 GPU 环境](/zh/docs/quickstart)。Python 渲染器不需要游戏源码、SDL、EGL 或上游 Python 推理包。
+
+```python
+from worldfoundry.pipelines.matrix_game.pipeline_matrix_game4 import MatrixGame4EgyptPipeline
+
+pipeline = MatrixGame4EgyptPipeline.from_pretrained(
+    device="cuda",
+    torch_dtype="bfloat16",
+    attention_backend="sdpa",
+)
+result = pipeline(
+    input_path="lowpoly.mp4",
+    output_path="outputs/egypt.mp4",
+    seed=42,
+    return_dict=True,
+)
+print(result["artifact_path"], result["metadata"])
+```
+
+```bash
+worldfoundry-eval run matrix-game-4-egypt \
+  --pipeline.task-profile low-poly-rendering \
+  --pipeline.input-path lowpoly.mp4 --json
+```
+
+公共入口使用两步去噪、guidance scale 1、scheduler shift 5、Wan2.2 VAE，每段视频使用固定 prompt。空 prompt 会选择发布的古埃及描述。文件、PIL 帧或 uint8 THWC 数组按等比覆盖缩放后中心裁剪为 **864×480**。浮点 tensor 输入必须已经是 `[-1,1]` 范围的 `[1,3,T,480,864]` RGB。
+
+文件输入保留原 FPS，显式传入 `fps` 时覆盖；内存输入默认 20 FPS。不进行时间重采样。内部首块为 1 个 RGB 帧，后续每块为 4 帧；不足时重复末帧补齐，输出时裁掉补帧。独立编码的身份 sink 仅初始化 21-latent KV 窗口，不作为输出帧，也不进入 control video 的 codec 历史。每次调用使用新的状态，每个请求最多生成 8,192 个 latent chunk。
+
+pipeline 返回共享的原生视频 mapping，评测 runner 再统一转换为 `GenerationResult`。MP4 及元数据保留 seed、场景、步数和播放时钟。播放 FPS 不代表实测渲染吞吐。
+
+## Checkpoint
+
+recipe 将 `Skywork/Matrix-Game-4.0` 固定到 `4419accdb7bb7881234c5914de8cd915266e0325`，将 `alibaba-pai/Wan2.2-Fun-5B-Control` 固定到 `b8bc1a65ab71d054ba4636dc0dac104aa4df2686`。需要 `dit`、`sink`、`vae`、`text-encoder` 和 `tokenizer` 五个角色；权重和资产单独下载。
+
+`model_path="/path/to/fps-egypt/model.safetensors"` 只替换 DiT。完全本地运行时，通过 `checkpoint_overrides` 指定全部五个角色。tokenizer 角色指向包含 recipe 所需 `google/umt5-xxl/` 文件的目录，其他角色指向单个文件。缺失文件由共享 checkpoint resolver 处理，不会从游戏 checkout 查找。
+
+## 可选的上游游戏
+
+submodule 将完整上游仓库固定到 `5446525c80da2a4a2f87801addbbc7faa8d2486e`；Git 不能只挂载其中的 `game/` 子目录。该 checkout 不进入 Python 发布包。
+
+```bash
+git submodule update --init thirdparty/matrix-game
+cd thirdparty/matrix-game/Matrix-Game-4
+export MATRIX_GAME4_RESOURCES="$HOME/.cache/worldfoundry/matrix-game4"
+PYTHONPATH=. python -m matrix_game.cli download \
+  --manifest releases/game-assets.json --scene ancient-egypt \
+  --repo-id Skywork/Matrix-Game-4.0 --repo-type model \
+  --revision 4419accdb7bb7881234c5914de8cd915266e0325 \
+  --resources "$MATRIX_GAME4_RESOURCES"
+bash scripts/build_game.sh
+MATRIX_GAME_DATA_DIR="$MATRIX_GAME4_RESOURCES/game" \
+  bash scripts/play.sh --scene ancient-egypt
+```
+
+按固定版本的[安装指南](https://github.com/SkyworkAI/Matrix-Game/blob/5446525c80da2a4a2f87801addbbc7faa8d2486e/Matrix-Game-4/docs/installation.md) 安装 CMake、SDL2、OpenGL/EGL 和 FFmpeg，按[离线录制指南](https://github.com/SkyworkAI/Matrix-Game/blob/5446525c80da2a4a2f87801addbbc7faa8d2486e/Matrix-Game-4/docs/offline.md) 采集干净 RGB。HUD 和音频不进入模型输入。游戏源码和发布模型资产采用 Apache-2.0，游戏内嵌依赖保留各自许可。归属记录见 `THIRD-PARTY-NOTICES` 和 `thirdparty/UPSTREAM_PROVENANCE.md`。
+
+## 验证
+
+通过公共加载入口运行发布权重，在 H100、BF16、SDPA、无 offload 条件下，**5 帧与 100 帧** 864×480 输入的 latent 和解码 RGB 数值均与固定版本上游完全一致。输入分别为重复的 sink 图像和合成的图像平移。100 帧用例跨越 21-latent KV 窗口，裁掉 1 个补帧，导出 100 帧、20 FPS 的 MP4；同一权重实例的 A/B/A 请求复用、中断去噪后的恢复及全局 RNG 不变检查也均通过。
+
+使用显式本地输入和 checkpoint 目录复现：
+
+```bash
+python tests/manual/matrix_game4_checkpoint_parity.py \
+  --reference-root thirdparty/matrix-game/Matrix-Game-4 \
+  --egypt-root /path/to/Skywork--Matrix-Game-4.0 \
+  --base-root /path/to/alibaba-pai--Wan2.2-Fun-5B-Control \
+  --input testcase/matrix_game4/control.mp4 \
+  --output-dir tmp/matrix-game4-checkpoint-parity
+```
+
+对照使用与公共入口相同的已解码 RGB 输入，独立执行上游 quality preset。报告、数值 tensor 和原生 MP4 写入输出目录。`tests/manual/matrix_game4_component_parity.py` 仍提供组件对照：小图 81 次前向及 KV tensor 逐位一致，真实 Wan2.2 VAE 的五帧编码和解码也逐位一致。
+
+## 限制
+
+accepted-reference 发布回放、游戏画面质量及实测吞吐量仍待验证。Castle、Racing、TAEHV 一步渲染、实时游戏交互及吞吐优化属于后续集成范围。
+
+<ModelRelatedRecipes modelId="matrix-game-4-egypt" locale="zh" />

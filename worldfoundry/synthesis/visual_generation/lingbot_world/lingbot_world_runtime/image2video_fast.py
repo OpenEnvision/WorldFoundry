@@ -11,6 +11,7 @@ from functools import partial
 import numpy as np
 import torch
 import torch.distributed as dist
+from torch.distributed.fsdp import FullyShardedDataParallel
 import torchvision.transforms.functional as TF
 from tqdm import tqdm
 
@@ -512,6 +513,9 @@ class WanI2VFast:
                     'current_start': chunk_id * chunk_size * frame_seqlen,
                     'max_attention_size': kv_size if max_attention_size is None else max_attention_size
                 }
+
+                if self.sp_size == 1 and not isinstance(self.model, FullyShardedDataParallel):
+                    kwargs["dit_cond_dict"] = self.model.prepare_camera_condition(dit_cond_dict, token_length=max_seq_len)
 
                 if offload_model:
                     torch.cuda.empty_cache()

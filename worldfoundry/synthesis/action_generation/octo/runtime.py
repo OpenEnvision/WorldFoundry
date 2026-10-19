@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from worldfoundry.core.io import file_sha256
 from worldfoundry.core.io.paths import project_root, resolve_worldfoundry_path
 
 from .compat import install_jax_compatibility
@@ -197,13 +196,11 @@ class OctoRuntime:
             "duration_seconds": round(time.monotonic() - started, 3),
         }
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        artifact_hash = file_sha256(target)
         return {
             "status": "success",
             "model_id": "octo",
             "artifact_kind": "action_trace",
             "artifact_path": str(target),
-            "artifact_sha256": artifact_hash,
             "backend": payload["backend"],
             "backend_quality": payload["backend_quality"],
             "duration_seconds": payload["duration_seconds"],

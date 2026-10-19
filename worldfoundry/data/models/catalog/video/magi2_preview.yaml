@@ -1,4 +1,6 @@
 id: magi2-preview
+integration:
+  status: integrated
 name: MAGI-2 Preview
 aliases:
   - magi2
@@ -15,11 +17,12 @@ source_status:
   status: ported_from_sandai
   github:
     url: https://github.com/SandAI-org/MAGI-2-preview
-    default_branch: main
+    confirmed_ref: f68a0f9bbccbea56e0177a9bd912abc3b18ffe61
 checkpoint:
   status: confirmed_public_hf
   repos:
     - id: sand-ai/MAGI-2-preview
+      revision: 2dea51b64db47ee5b4402d36fd90829a0c58913b
       license: apache-2.0
       private: false
       gated: false
@@ -36,8 +39,9 @@ variants:
       recipe_id: null
       strategy: bespoke_pipeline
       note: >-
-        MAGI-2 uses a bespoke PipelineABC subclass for preview-only text-to-video
-        with joint audio. Image conditioning and the refiner are not implemented.
+        MAGI-2 uses a PipelineABC subclass for text-to-video with joint audio
+        and optional video-only refinement. Image conditioning is not implemented.
 notes:
   - 114B-parameter MoE (256 experts, top-6), ~6B active per token; 10-second preview video at 12.5 fps with 44.1kHz audio.
+  - Optional refiner uses the released five-step, shift-5, guidance-2 preset and exports at 25 fps. Checkpoint-backed refiner parity is pending.
   - Ported faithfully from SandAI MAGI-2-preview (Apache-2.0), single-GPU PyTorch (cp/ep/dp collapsed).

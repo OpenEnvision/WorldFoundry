@@ -53,7 +53,7 @@ def load_fast(
     enable_compile,
     shared_model_path=None,
 ):
-    from .runtime import configure_attention, load_model_adapter, sha256
+    from .runtime import configure_attention, load_model_adapter
 
     if (height, width) != (384, 640):
         raise ValueError("Fast weights require height=384 and width=640")
@@ -83,40 +83,22 @@ def load_fast(
               else (root / config["shared_components"]).resolve())
     for row in manifest["files"]:
         path = root / row["path"]
-        if not path.is_file() or path.stat().st_size != row["bytes"]:
+        if not path.is_file():
             raise ValueError(f"Incomplete fast checkpoint: {path}")
-        if path.stat().st_size < 1024 * 1024 and sha256(path) != row["sha256"]:
-            raise ValueError(f"Fast checkpoint metadata mismatch: {path}")
     adapters = [root / "adapter_high_noise", root / "adapter_low_noise"]
     contracts = [
         load_dmd_inference_contract(p, expected_latent_shape=(16, 9, 48, 80))
         for p in adapters
     ]
     contract = contracts[0]
-    if contract.fingerprint != contracts[
-        1
-    ].fingerprint or contract.rollout_steps_per_stage != (2, 2, 2):
+    if contract != contracts[1] or contract.rollout_steps_per_stage != (2, 2, 2):
         raise ValueError(
             "Fast branches must have identical native 2/2/2 timestep contracts"
         )
-    for adapter in adapters:
-        frozen = json.loads((adapter / "repencoder_frozen.json").read_text())
-        if (
-            frozen["repencoder"]["model_sha256"]
-            != manifest["repencoder"]["reference_file_sha256"]
-        ):
-            raise ValueError("Fast adapter references an unexpected RepEncoder")
     enable_ucpe_inference_sdpa_attention()
     repencoder = RepEncoder.from_pretrained(
         shared / "repencoder", device=device, compute_dtype="bf16", target_microbatch=1
     )
-    if (
-        repencoder.report["model_sha256"]
-        != manifest["repencoder"]["shared_file_sha256"]
-    ):
-        raise ValueError(
-            "Shared RepEncoder differs from the verified renamed checkpoint"
-        )
     provider = RepEncoderInferenceMemoryProvider(
         repencoder,
         RepEncoderInferenceProviderConfig(
@@ -235,7 +217,6 @@ def load_fast(
     model.fast_report = dict(
         compile_enabled=bool(enable_compile),
         compile_scope="transformer_blocks" if enable_compile else None,
-        contract_fingerprint=contract.fingerprint,
         compact_ucpe=compact,
         resident=pipe.resident_branches.report,
     )

@@ -5,23 +5,20 @@ import pytest
 import torch
 from diffusers.configuration_utils import ConfigMixin
 from diffusers.models import ModelMixin
+
 from worldfoundry.synthesis.visual_generation.video_x_fun.worldfoundry_runtime import (
     Wan22Fun5BCameraRuntime,
     Wan22FunA14BCameraRuntime,
 )
 
 
-def test_official_video_runtime_resolves_repo_relative_checkout_from_tmp(
-    monkeypatch, tmp_path
-):
+def test_official_video_runtime_resolves_repo_relative_checkout_from_tmp(monkeypatch, tmp_path):
     from worldfoundry.synthesis.visual_generation.official_video_runtime import (
         _existing_path,
     )
 
     monkeypatch.chdir(tmp_path)
-    resolved = _existing_path(
-        "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime"
-    )
+    resolved = _existing_path("worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime")
 
     assert resolved is not None
     assert resolved.name == "krea_runtime"
@@ -60,23 +57,14 @@ def test_official_video_runtime_skips_incomplete_checkpoint_candidate(tmp_path):
 
 def test_worldgen_lora_resolves_normalized_hugging_face_directory(monkeypatch, tmp_path):
     runtime_src = (
-        Path(__file__).resolve().parents[2]
-        / "worldfoundry/synthesis/visual_generation/worldgen/worldgen_runtime/src"
+        Path(__file__).resolve().parents[2] / "worldfoundry/synthesis/visual_generation/worldgen/worldgen_runtime/src"
     )
-    shims = (
-        Path(__file__).resolve().parents[2]
-        / "worldfoundry/base_models/three_dimensions/three_d_four_d/shims"
-    )
+    shims = Path(__file__).resolve().parents[2] / "worldfoundry/base_models/three_dimensions/three_d_four_d/shims"
     monkeypatch.syspath_prepend(str(shims))
     monkeypatch.syspath_prepend(str(runtime_src))
     from worldgen import pano_gen
 
-    checkpoint = (
-        tmp_path
-        / "LeoXie--WorldGen"
-        / "models--WorldGen-Flux-Lora"
-        / "worldgen_text2scene.safetensors"
-    )
+    checkpoint = tmp_path / "LeoXie--WorldGen" / "models--WorldGen-Flux-Lora" / "worldgen_text2scene.safetensors"
     checkpoint.parent.mkdir(parents=True)
     checkpoint.write_bytes(b"worldgen lora")
     monkeypatch.setattr(pano_gen, "CKPT_ROOT", tmp_path)
@@ -86,13 +74,9 @@ def test_worldgen_lora_resolves_normalized_hugging_face_directory(monkeypatch, t
 
 def test_worldgen_direct_panorama_skips_flux_initialization(monkeypatch):
     runtime_src = (
-        Path(__file__).resolve().parents[2]
-        / "worldfoundry/synthesis/visual_generation/worldgen/worldgen_runtime/src"
+        Path(__file__).resolve().parents[2] / "worldfoundry/synthesis/visual_generation/worldgen/worldgen_runtime/src"
     )
-    shims = (
-        Path(__file__).resolve().parents[2]
-        / "worldfoundry/base_models/three_dimensions/three_d_four_d/shims"
-    )
+    shims = Path(__file__).resolve().parents[2] / "worldfoundry/base_models/three_dimensions/three_d_four_d/shims"
     monkeypatch.syspath_prepend(str(shims))
     monkeypatch.syspath_prepend(str(runtime_src))
     from worldgen import worldgen as worldgen_module
@@ -288,9 +272,7 @@ def test_vmem_trajectory_export_does_not_require_evo():
     assert trajectory.num_poses == 1
 
 
-def test_stable_virtual_camera_clip_conditioner_uses_local_checkpoint(
-    monkeypatch, tmp_path
-):
+def test_stable_virtual_camera_clip_conditioner_uses_local_checkpoint(monkeypatch, tmp_path):
     from worldfoundry.base_models.three_dimensions.general_3d.stable_virtual_camera.stable_virtual_camera_runtime.seva.modules import (
         conditioner,
     )
@@ -314,99 +296,6 @@ def test_stable_virtual_camera_clip_conditioner_uses_local_checkpoint(
 
     assert isinstance(module.module, torch.nn.Identity)
     assert captured == {"model_name": "ViT-H-14", "pretrained": str(checkpoint)}
-
-
-def test_wonderworld_oneformer_resolves_sibling_checkpoint_root(
-    monkeypatch, tmp_path
-):
-    from worldfoundry.synthesis.visual_generation.wonderworld.wonderworld_runtime.util import (
-        checkpoints,
-    )
-
-    primary = tmp_path / "ckpts"
-    fallback = tmp_path / "ckpt"
-    checkpoint = fallback / "oneformer_ade20k_swin_large"
-    checkpoint.mkdir(parents=True)
-    for filename in checkpoints.ONEFORMER_REQUIRED_FILES:
-        (checkpoint / filename).write_bytes(b"checkpoint")
-    monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(primary))
-    monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(fallback))
-
-    assert checkpoints.resolve_oneformer_checkpoint() == checkpoint.resolve()
-
-
-def test_wonderworld_oneformer_processor_uses_local_metadata(tmp_path):
-    from worldfoundry.synthesis.visual_generation.wonderworld.wonderworld_runtime.util.checkpoints import (
-        local_processor_config,
-    )
-
-    (tmp_path / "preprocessor_config.json").write_text(
-        '{"class_info_file":"ade20k_panoptic.json","repo_path":"remote/repo"}',
-        encoding="utf-8",
-    )
-    (tmp_path / "ade20k_panoptic.json").write_text("{}", encoding="utf-8")
-
-    config = local_processor_config(tmp_path)
-
-    assert config["repo_path"] == str(tmp_path.resolve())
-
-
-def test_wonderworld_inpainting_selects_local_fp16_safetensors(tmp_path):
-    from worldfoundry.synthesis.visual_generation.wonderworld.wonderworld_runtime.util.checkpoints import (
-        diffusers_local_load_kwargs,
-    )
-
-    for relative_path in (
-        "text_encoder/model.fp16.safetensors",
-        "unet/diffusion_pytorch_model.fp16.safetensors",
-        "vae/diffusion_pytorch_model.fp16.safetensors",
-    ):
-        checkpoint = tmp_path / relative_path
-        checkpoint.parent.mkdir(parents=True, exist_ok=True)
-        checkpoint.write_bytes(b"safetensors")
-
-    assert diffusers_local_load_kwargs(tmp_path) == {
-        "local_files_only": True,
-        "use_safetensors": True,
-        "variant": "fp16",
-    }
-
-
-def test_wonderworld_model_ref_resolves_hfd_root(monkeypatch, tmp_path):
-    from worldfoundry.synthesis.visual_generation.wonderworld.wonderworld_runtime.util.checkpoints import (
-        local_model_ref,
-    )
-
-    primary = tmp_path / "ckpts"
-    fallback = tmp_path / "ckpt"
-    model = fallback / "prs-eth--marigold-v1-0"
-    model.mkdir(parents=True)
-    monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(primary))
-    monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(fallback))
-
-    assert local_model_ref(
-        "prs-eth/marigold-v1-0", "prs-eth--marigold-v1-0"
-    ) == str(model)
-
-
-def test_wonderworld_repvit_sam_resolves_sibling_checkpoint_root(
-    monkeypatch, tmp_path
-):
-    from worldfoundry.synthesis.visual_generation.wonderworld.wonderworld_runtime.util import (
-        segment_utils,
-    )
-
-    primary = tmp_path / "ckpts"
-    fallback = tmp_path / "ckpt"
-    checkpoint = fallback / "WonderWorld" / "repvit_sam.pt"
-    checkpoint.parent.mkdir(parents=True)
-    checkpoint.write_bytes(b"repvit-sam")
-    monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(primary))
-    monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(fallback))
-
-    assert segment_utils._first_existing_ckpt("WonderWorld/repvit_sam.pt") == str(
-        checkpoint
-    )
 
 
 def test_step_video_loads_trusted_local_legacy_bert_checkpoint(monkeypatch, tmp_path):
@@ -469,13 +358,11 @@ video = pipe(
 
 
 def test_wan_vace_adapter_normalizes_standard_generation_kwargs(monkeypatch):
-    from worldfoundry.studio.inference.catalog import CURATED_OVERRIDES
     from worldfoundry.pipelines.native_diffusion_video import NativeTextToVideoPipeline
     from worldfoundry.pipelines.wan.pipeline_wan_vace import Wan2p1VACEPipeline
+    from worldfoundry.studio.inference.catalog import CURATED_OVERRIDES
 
-    assert CURATED_OVERRIDES["wan2.1-vace"]["default_load_kwargs"] == {
-        "torch_dtype": "bfloat16"
-    }
+    assert CURATED_OVERRIDES["wan2.1-vace"]["default_load_kwargs"] == {"torch_dtype": "bfloat16"}
 
     captured = {}
 
@@ -560,9 +447,7 @@ def test_mvdiffusion_resolves_hfd_layout_without_hub_access(monkeypatch, tmp_pat
     (model_root / "model_index.json").write_text("{}", encoding="utf-8")
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path))
 
-    assert _resolve_model_id("stabilityai/stable-diffusion-2-inpainting") == str(
-        model_root.resolve()
-    )
+    assert _resolve_model_id("stabilityai/stable-diffusion-2-inpainting") == str(model_root.resolve())
 
 
 def test_mvdiffusion_selects_local_fp16_only_diffusers_components(tmp_path):
@@ -582,16 +467,22 @@ def test_mvdiffusion_selects_local_fp16_only_diffusers_components(tmp_path):
     ) == {"variant": "fp16"}
 
     (component / "model.safetensors").write_bytes(b"weights")
-    assert _local_fp16_variant_kwargs(
-        str(tmp_path),
-        subfolder="text_encoder",
-        weight_stem="model",
-    ) == {}
-    assert _local_fp16_variant_kwargs(
-        "stabilityai/stable-diffusion-2-inpainting",
-        subfolder="text_encoder",
-        weight_stem="model",
-    ) == {}
+    assert (
+        _local_fp16_variant_kwargs(
+            str(tmp_path),
+            subfolder="text_encoder",
+            weight_stem="model",
+        )
+        == {}
+    )
+    assert (
+        _local_fp16_variant_kwargs(
+            "stabilityai/stable-diffusion-2-inpainting",
+            subfolder="text_encoder",
+            weight_stem="model",
+        )
+        == {}
+    )
 
 
 def test_mvdiffusion_checkpoint_resolves_alternate_plural_root(monkeypatch, tmp_path):
@@ -600,31 +491,24 @@ def test_mvdiffusion_checkpoint_resolves_alternate_plural_root(monkeypatch, tmp_
     )
 
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(tmp_path / "ckpt"))
-    checkpoint = (
-        tmp_path / "ckpts" / "MVDiffusion" / "weights" / "pano_outpaint.ckpt"
-    )
+    checkpoint = tmp_path / "ckpts" / "MVDiffusion" / "weights" / "pano_outpaint.ckpt"
     checkpoint.parent.mkdir(parents=True)
     checkpoint.write_bytes(b"checkpoint")
 
-    assert resolve_mvdiffusion_checkpoint(
-        "MVDiffusion", "weights", "pano_outpaint.ckpt"
-    ) == checkpoint.resolve()
+    assert resolve_mvdiffusion_checkpoint("MVDiffusion", "weights", "pano_outpaint.ckpt") == checkpoint.resolve()
 
 
 def test_mvdiffusion_plan_forwards_steps_and_skips_missing_prompt_file(tmp_path):
-    from worldfoundry.evaluation.utils import REPO_ROOT
-    from worldfoundry.studio.inference.catalog import CURATED_OVERRIDES
     from worldfoundry.base_models.three_dimensions.three_d_four_d.runtime import (
         ThreeDFourDRuntimeSynthesis,
         three_d_four_d_runtime_spec,
     )
+    from worldfoundry.evaluation.utils import REPO_ROOT
+    from worldfoundry.studio.inference.catalog import CURATED_OVERRIDES
 
     assert CURATED_OVERRIDES["mvdiffusion"]["default_call_kwargs"]["steps"] == 20
 
-    source_root = (
-        REPO_ROOT
-        / "worldfoundry/base_models/three_dimensions/general_3d/mvdiffusion/mvdiffusion_runtime"
-    )
+    source_root = REPO_ROOT / "worldfoundry/base_models/three_dimensions/general_3d/mvdiffusion/mvdiffusion_runtime"
     image = REPO_ROOT / "worldfoundry/data/test_cases/mvdiffusion/outpaint_example.png"
     runtime = ThreeDFourDRuntimeSynthesis(
         spec=three_d_four_d_runtime_spec("mvdiffusion"),
@@ -666,9 +550,7 @@ def test_wan22_fun_complete_checkpoint_layout_does_not_require_wan21_clip(
     runtime = runtime_class.__new__(runtime_class)
 
     assert runtime._materialize_checkpoint_view(tmp_path / "view", checkpoint) == checkpoint
-    assert "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth" not in (
-        runtime_class.REQUIRED_COMPONENT_FILES
-    )
+    assert "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth" not in (runtime_class.REQUIRED_COMPONENT_FILES)
 
 
 def test_hunyuan_ar_vision_attention_supports_plain_and_paired_prope_qkv(monkeypatch):

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
 import torch
 from PIL import Image
 
@@ -121,7 +122,7 @@ def test_session_accepts_matching_initialized_sequence_parallel_world(monkeypatc
 def test_pipeline_materializes_requested_artifact_path(monkeypatch, tmp_path) -> None:
     class Synthesis:
         def predict(self, **kwargs):
-            generated = Path(kwargs["output_dir"]) / f'{kwargs["save_name"]}.mp4'
+            generated = Path(kwargs["output_dir"]) / f"{kwargs['save_name']}.mp4"
             generated.write_bytes(b"matrix-game-3-video")
             return {
                 "video": torch.zeros(1, 3, 1, 2, 2),
@@ -150,3 +151,89 @@ def test_pipeline_materializes_requested_artifact_path(monkeypatch, tmp_path) ->
 
     assert result["artifact_path"] == str(output_path.resolve())
     assert output_path.read_bytes() == b"matrix-game-3-video"
+
+
+@pytest.mark.parametrize("use_base_model", [False, True])
+@pytest.mark.parametrize(("world_size", "rank"), [(1, 0), (2, 0), (2, 1)])
+def test_resident_camera_preparation_is_per_chunk_and_cfg_branch(monkeypatch, use_base_model, world_size, rank):
+    session = _session(monkeypatch)
+    session.world_size = world_size
+    session.rank = rank
+    prepared = []
+    received = []
+
+    class Model(torch.nn.Module):
+        def prepare_camera_condition(self, source, *, token_length):
+            condition = {"source": source, "token_length": token_length}
+            prepared.append(condition)
+            return condition
+
+        def forward(self, *, x, plucker_emb, x_memory, **kwargs):
+            received.append((plucker_emb, x_memory))
+            return torch.zeros_like(x)
+
+    class VAE:
+        dtype = torch.bfloat16
+
+        def stream_decode(self, latent, cache, *, first_chunk, **kwargs):
+            assert rank == 0
+            frames = 57 if first_chunk else 40
+            return torch.zeros(1, 3, frames, 2, 2), cache
+
+    session.core.model = Model().eval()
+    session.core.vae = VAE()
+    session.core.fa_version = 0
+    monkeypatch.setattr(session, "_append_actions", lambda *args, **kwargs: None)
+
+    def camera_conditions(**kwargs):
+        camera = torch.full((1, 6, 2, 2, 2), float(session._clip_index + 1))
+        memory = None if kwargs["first_clip"] else torch.zeros(1, 48, 5, 2, 2)
+        return camera, camera + 10, memory, None, None, None, None
+
+    monkeypatch.setattr(session, "_build_camera_conditions", camera_conditions)
+
+    def configure():
+        session._configured = True
+        session._generator = torch.Generator().manual_seed(42)
+        session._image_condition = torch.zeros(1, 48, 1, 2, 2, dtype=session.dtype)
+        session._keyboard_history = torch.zeros(1, 200, 6)
+        session._mouse_history = torch.zeros(1, 200, 2)
+        session._num_inference_steps = 3
+        session._max_seq_len = 60
+        session._use_base_model = use_base_model
+
+    configure()
+    for frames in (57, 40):
+        before = len(received)
+        result = session.generate(interactions=["forward"])
+        if rank == 0:
+            assert result["video"].shape[0] == frames
+            chunk = result["video_chunk"]
+            assert chunk.frames is result["video"]
+            assert chunk.layout == "thwc"
+            assert chunk.value_range == "0,255"
+            assert chunk.frame_count == frames
+        else:
+            assert result["video"] is None
+            assert result["video_chunk"] is None
+        chunk_calls = received[before:]
+        branches = 2 if use_base_model else 1
+        assert len(chunk_calls) == 3 * branches
+        for branch in range(branches):
+            assert all(call[0] is chunk_calls[branch][0] for call in chunk_calls[branch::branches])
+        if use_base_model:
+            assert chunk_calls[0][0] is not chunk_calls[1][0]
+            assert chunk_calls[1][1] is None
+        if frames == 40:
+            assert chunk_calls[0][1] is not None
+
+    expected_preparations = 2 * (2 if use_base_model else 1) if world_size == 1 else 0
+    assert len(prepared) == expected_preparations
+    if prepared:
+        assert all(condition["token_length"] == 60 for condition in prepared)
+        assert not torch.equal(prepared[0]["source"], prepared[-1]["source"])
+    session.reset()
+    configure()
+    session.generate(interactions=["right"])
+    if prepared:
+        assert len(prepared) == expected_preparations + (2 if use_base_model else 1)

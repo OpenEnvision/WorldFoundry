@@ -118,3 +118,46 @@ def test_materialize_exposes_static_outputs_only_when_requested() -> None:
     runner = InferenceCUDAGraphRunner(lambda: outputs, clone_outputs=False)
 
     assert runner._materialize(outputs) is outputs
+
+
+def test_nested_input_signatures_depend_on_structure_layout_not_values() -> None:
+    from worldfoundry.core.execution.graphs.inference_graph import _arg_signature, _flatten_tensors
+
+    first = {"kv": [(torch.ones(2, 3), torch.zeros(2, 3))], "scale": 2.0}
+    second = {"kv": [(torch.zeros(2, 3), torch.ones(2, 3))], "scale": 2.0}
+    assert _arg_signature(first) == _arg_signature(second)
+    assert len(_flatten_tensors((first,))) == 2
+    second["scale"] = 3.0
+    assert _arg_signature(first) != _arg_signature(second)
+    second["scale"] = 2.0
+    second["kv"] = [(torch.ones(3, 2).t(), torch.ones(2, 3))]
+    assert _arg_signature(first) != _arg_signature(second)
+
+
+def test_capture_scope_restores_frozen_policy_after_error() -> None:
+    import pytest
+
+    runner = InferenceCUDAGraphRunner(lambda x: x + 1)
+    runner.freeze()
+    with pytest.raises(RuntimeError, match="warmup"):
+        with runner.capture_scope():
+            assert runner.capture_on_miss
+            raise RuntimeError("warmup")
+    assert not runner.capture_on_miss
+    assert runner.capture(torch.ones(2)) is False
+    torch.testing.assert_close(runner(torch.ones(2)), torch.full((2,), 2.0))
+
+
+def test_capture_oom_propagates_without_eager_retry(monkeypatch) -> None:
+    import pytest
+
+    from worldfoundry.core.execution.graphs.inference_graph import _signature_key
+
+    def fail(*args, **kwargs):
+        raise torch.OutOfMemoryError("allocator out of memory")
+
+    runner = InferenceCUDAGraphRunner(lambda x: x + 1)
+    monkeypatch.setattr(torch.cuda, "Stream", fail)
+    with pytest.raises(torch.OutOfMemoryError):
+        runner._capture(_signature_key((torch.ones(1),), {}, None), (torch.ones(1),), {})
+    assert runner.report()["eager"] == runner.report()["capture_failed"] == 0

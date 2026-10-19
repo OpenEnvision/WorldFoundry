@@ -14,6 +14,7 @@ import pytest
 spec = importlib.util.spec_from_file_location(
     "geometry_regression", Path(__file__).resolve().parents[1] / "manual" / "geometry_regression.py"
 )
+assert spec is not None and spec.loader is not None
 replay = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(replay)
 
@@ -158,10 +159,12 @@ def artifact_pipeline(tmp_path, monkeypatch):
                 np.save(path, np.full((2, 3), self.pixel, dtype=np.uint8))
             return {"artifact": str(path)}
 
-    module.Pipeline = Pipeline
+    setattr(module, "Pipeline", Pipeline)
     monkeypatch.setitem(sys.modules, module.__name__, module)
     monkeypatch.setitem(
-        sys.modules, "torch", SimpleNamespace(manual_seed=lambda seed: None, cuda=SimpleNamespace(is_available=lambda: False))
+        sys.modules,
+        "torch",
+        SimpleNamespace(manual_seed=lambda seed: None, cuda=SimpleNamespace(is_available=lambda: False)),
     )
     monkeypatch.setattr(replay, "runtime_metadata", lambda torch: {"torch": "fixture"})
     monkeypatch.setattr(sys, "path", sys.path.copy())
@@ -170,15 +173,21 @@ def artifact_pipeline(tmp_path, monkeypatch):
     asset = source / "input.txt"
     asset.write_text("fixed input")
     case_file = tmp_path / "case.json"
-    case_file.write_text(json.dumps({
-        "id": "artifact-only", "seed": 42,
-        "assets": {"input": str(asset)},
-        "target": "artifact_replay_fixture:Pipeline", "load": {},
-        "call": {"output": "${OUTPUT_DIR}/export/frames.npy"},
-        "export_artifacts": ["export/frames.npy"],
-        "required_outputs": ["export.export/frames.npy"],
-        "array_contracts": {"export.export/frames.npy": {"shape": [2, 3], "dtype": "uint8"}},
-    }))
+    case_file.write_text(
+        json.dumps(
+            {
+                "id": "artifact-only",
+                "seed": 42,
+                "assets": {"input": str(asset)},
+                "target": "artifact_replay_fixture:Pipeline",
+                "load": {},
+                "call": {"output": "${OUTPUT_DIR}/export/frames.npy"},
+                "export_artifacts": ["export/frames.npy"],
+                "required_outputs": ["export.export/frames.npy"],
+                "array_contracts": {"export.export/frames.npy": {"shape": [2, 3], "dtype": "uint8"}},
+            }
+        )
+    )
     return case_file, source, Pipeline
 
 
@@ -196,12 +205,15 @@ def test_artifact_only_inference_is_validated_and_compared(tmp_path, artifact_pi
     assert report["outputs"]["export.export/frames.npy"]["passed"] is (not changed)
 
 
-@pytest.mark.parametrize("mode, error", [
-    ("missing", "Missing exported artifacts"),
-    ("empty", "Missing or empty exported artifact"),
-    ("nonnumeric", "Inference returned no numerical outputs"),
-    ("wrong_shape", "Contracted output shape changed"),
-])
+@pytest.mark.parametrize(
+    "mode, error",
+    [
+        ("missing", "Missing exported artifacts"),
+        ("empty", "Missing or empty exported artifact"),
+        ("nonnumeric", "Inference returned no numerical outputs"),
+        ("wrong_shape", "Contracted output shape changed"),
+    ],
+)
 def test_artifact_only_inference_rejects_invalid_exports(tmp_path, artifact_pipeline, mode, error):
     case_file, source, pipeline = artifact_pipeline
     pipeline.mode = mode
@@ -253,7 +265,7 @@ def test_matrix_gate_rejects_missing_cases_changed_cases_and_stale_code(tmp_path
     assert "stale" in report["cases"][case["id"]]["error"]
 
 
-@pytest.mark.parametrize("extension", ["npy", "npz", "png", "json"])
+@pytest.mark.parametrize("extension", ["npy", "npz", "png", "json", "splat"])
 @pytest.mark.parametrize("changed", [False, True])
 def test_export_values_are_compared_even_when_in_memory_outputs_match(tmp_path, extension, changed):
     """A serializer regression must fail independently of the model's raw arrays."""
@@ -270,6 +282,8 @@ def test_export_values_are_compared_even_when_in_memory_outputs_match(tmp_path, 
             from PIL import Image
 
             Image.fromarray(value).save(path)
+        elif extension == "splat":
+            np.full((2, 32), pixel, dtype=np.uint8).tofile(path)
         else:
             path.write_text(json.dumps({"intrinsics": value.tolist()}))
         manifest = json.loads((root / "manifest.json").read_text())
@@ -280,6 +294,37 @@ def test_export_values_are_compared_even_when_in_memory_outputs_match(tmp_path, 
     assert report["status"] == ("failed" if changed else "passed")
     exported = [result for key, result in report["outputs"].items() if key.startswith("export.")]
     assert exported and all(result["passed"] is (not changed) for result in exported)
+
+
+def test_sequence_reads_file_outputs_and_preserves_each_response(tmp_path: Path) -> None:
+    from PIL import Image
+
+    artifact = tmp_path / "scene.splat"
+    preview = tmp_path / "preview.png"
+
+    class Pipeline:
+        def __call__(self, value: int) -> dict[str, str]:
+            np.full(32, value, dtype=np.uint8).tofile(artifact)
+            Image.fromarray(np.full((2, 3, 3), value, dtype=np.uint8)).save(preview)
+            return {"artifact_path": str(artifact), "preview_path": str(preview)}
+
+    sequence = [
+        {"name": name, "call": {"value": value}, "outputs": ["artifact_path", "preview_path"]}
+        for name, value in (("a", 1), ("b", 2), ("repeat", 1))
+    ]
+    arrays: dict[str, np.ndarray] = {}
+    replay.run_sequence(Pipeline(), sequence, arrays)
+    replay.validate_arrays(arrays, [f"{name}.artifact_path" for name in ("a", "b", "repeat")])
+    for name, value in (("a", 1), ("b", 2), ("repeat", 1)):
+        np.testing.assert_array_equal(arrays[f"{name}.artifact_path.bytes"], np.full(32, value, dtype=np.uint8))
+        np.testing.assert_array_equal(arrays[f"{name}.preview_path"], np.full((2, 3, 3), value, dtype=np.uint8))
+
+
+def test_sequence_rejects_a_missing_selected_file_output(tmp_path: Path) -> None:
+    pipeline = SimpleNamespace(generate=lambda: {"artifact_path": str(tmp_path / "missing.splat")})
+    sequence = [{"name": "a", "method": "generate", "outputs": ["artifact_path"]}]
+    with pytest.raises(ValueError, match="Missing or empty exported artifact"):
+        replay.run_sequence(pipeline, sequence, {})
 
 
 def test_export_manifest_cannot_silently_drop_an_artifact(tmp_path):

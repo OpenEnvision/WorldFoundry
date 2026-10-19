@@ -3,9 +3,12 @@ from __future__ import annotations
 import pytest
 
 from worldfoundry.studio.inference import catalog as catalog
-from worldfoundry.studio.inference.catalog import STUDIO_HIDDEN_CATALOG_MODEL_IDS, discover_catalog, find_entry
-from worldfoundry.studio.ui.catalog import _template_id_hint
-
+from worldfoundry.studio.inference.catalog import (
+    STUDIO_HIDDEN_CATALOG_MODEL_IDS,
+    discover_catalog,
+    find_entry,
+    template_id_hint,
+)
 
 _TEMPLATE_TO_WORKLOAD = {
     "depth-geometry": "geometry",
@@ -34,7 +37,7 @@ _TEMPLATE_TO_WORKLOAD = {
 )
 def test_studio_catalog_model_taxonomy(model_id: str, category: str, template_id: str, workload: str) -> None:
     entry = find_entry(model_id)
-    resolved_template = _template_id_hint(entry)
+    resolved_template = template_id_hint(entry)
 
     assert entry.category == category
     assert resolved_template == template_id
@@ -176,7 +179,8 @@ def test_cameractrl_defaults_resolve_owner_prefixed_local_checkpoints(
     pose = camera_root / "CameraCtrl.ckpt"
     image_lora = camera_root / "RealEstate10K_LoRA.ckpt"
     motion = motion_root / "v3_sd15_mm.ckpt"
-    for weight in (pose, image_lora, motion):
+    adapter = motion_root / "v3_sd15_adapter.ckpt"
+    for weight in (pose, image_lora, motion, adapter):
         weight.touch()
     monkeypatch.setenv("WORLDFOUNDRY_CKPT_DIR", str(checkpoint_root))
     monkeypatch.setenv("WORLDFOUNDRY_HFD_ROOT", str(tmp_path / "hfd"))
@@ -187,5 +191,6 @@ def test_cameractrl_defaults_resolve_owner_prefixed_local_checkpoints(
         "pose_adaptor_ckpt": str(pose),
         "image_lora_ckpt": str(image_lora),
         "motion_module_ckpt": str(motion),
+        "motion_adapter_ckpt": str(adapter),
         "unet_subfolder": "unet",
     }

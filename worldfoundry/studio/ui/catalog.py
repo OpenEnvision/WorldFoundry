@@ -9,21 +9,10 @@ from typing import Any, Mapping, Sequence
 
 from worldfoundry.evaluation.utils import REPO_ROOT
 from worldfoundry.runtime.inference_catalog import ASSET_GATED_WORLD_RUNTIME_MODEL_IDS
-from worldfoundry.studio.inference.catalog import CatalogEntry, discover_catalog
+from worldfoundry.studio.inference.catalog import LIVE_CONTROL_TAGS, CatalogEntry, discover_catalog, template_id_hint
 
 CATALOG_RUNTIME_COMPLETENESS_CHECKS_ENV = "WORLDFOUNDRY_STUDIO_CHECK_RUNTIME_COMPLETENESS"
 
-LIVE_CONTROL_TAGS = frozenset(
-    {
-        "navigation",
-        "camera-control",
-        "interaction-heavy",
-        "egocentric",
-        "scene-context",
-        "render-view",
-        "trajectory",
-    }
-)
 
 LIVE_CONTROL_TEMPLATE_IDS = frozenset({"interactive-world"})
 NON_LIVE_CONTROL_TEMPLATE_IDS = frozenset(
@@ -82,60 +71,13 @@ def _has_complete_in_tree_runtime(entry: CatalogEntry) -> bool:
     return (REPO_ROOT / "worldfoundry" / Path(*in_tree_parts) / spec.entrypoint).is_file()
 
 
-def _template_id_hint(entry: CatalogEntry) -> str:
-    """Classify the Studio template from catalog fields only.
-
-    Args:
-        entry: Catalog row describing the runnable pipeline.
-    """
-    task_type = entry.default_task_type.strip().lower().replace("_", "-")
-    if entry.category == "Remote API":
-        return "hosted-api"
-    if entry.category == "Video-to-Video":
-        return "video-to-video"
-    if entry.category == "Depth / Geometry":
-        return "depth-geometry"
-    if entry.category == "3D Scene":
-        return "scene-3d"
-    if entry.category == "Visual Action":
-        return "visual-action"
-    if entry.category == "Embodied Action":
-        return "embodied-policy"
-    if task_type in {"t2v", "text-video", "text-to-video", "video-generation"}:
-        return "text-video"
-    if task_type in {"t2i", "text-to-image", "image-generation", "class-conditional-image-generation"}:
-        return "text-video"
-    if task_type in {"i2v", "image-video", "image-to-video", "video-to-video", "v2v"}:
-        return "conditioned-video"
-    if "interactive-world" in entry.tags:
-        return "interactive-world"
-    if entry.family == "world_model":
-        return "interactive-world"
-    if "image-to-world" in entry.tags or "video-to-world" in entry.tags:
-        return "interactive-world"
-    if entry.supports_stream and (entry.default_interactions or set(entry.tags) & LIVE_CONTROL_TAGS):
-        return "interactive-world"
-    model_id = entry.model_id.lower().replace("_", "-")
-    if "text-to-video" in entry.tags or "-t2v" in model_id or model_id.endswith("t2v"):
-        return "text-video"
-    if entry.category == "Video Generation":
-        if "i2v" in entry.tags or "image-to-video" in entry.tags:
-            return "conditioned-video"
-        if "video-to-video" in entry.tags or "v2v" in entry.tags:
-            return "conditioned-video"
-        if "images" in entry.call_params:
-            return "conditioned-video"
-        return "text-video"
-    return "text-video"
-
-
 def _supports_live_controls(entry: CatalogEntry) -> bool:
     """Return True when the entry exposes streamable token-driven live controls.
 
     Args:
         entry: Catalog row describing the runnable pipeline.
     """
-    template_id = _template_id_hint(entry)
+    template_id = template_id_hint(entry)
     if template_id in NON_LIVE_CONTROL_TEMPLATE_IDS:
         return False
     return (
@@ -161,8 +103,7 @@ def _studio_catalog(entries: Sequence[CatalogEntry] | None = None) -> tuple[Cata
     studio_entries = [
         entry
         for entry in active_entries
-        if entry.model_id not in ASSET_GATED_WORLD_RUNTIME_MODEL_IDS
-        and _has_complete_in_tree_runtime(entry)
+        if entry.model_id not in ASSET_GATED_WORLD_RUNTIME_MODEL_IDS and _has_complete_in_tree_runtime(entry)
     ]
     category_order = {
         "Video Generation": 0,

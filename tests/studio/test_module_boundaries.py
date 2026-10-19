@@ -29,9 +29,10 @@ def test_inference_materialization_and_unload_do_not_import_viewers(tmp_path):
                     raise AssertionError("inference imported a viewer: " + fullname)
 
         sys.meta_path.insert(0, BlockViewers())
-        for name in ("catalog", "config", "paths", "variants", "execution", "dispatch"):
+        for name in ("catalog", "config", "paths", "variants", "execution", "dispatch", "requests"):
             importlib.import_module("worldfoundry.studio.inference." + name)
         importlib.import_module("worldfoundry.studio.runtime_job")
+        importlib.import_module("worldfoundry.studio.workspace_job")
         from worldfoundry.studio.inference.catalog import CatalogEntry
         from worldfoundry.studio.inference.execution import PipelineContext, PreparedInputs, StudioManager
 
@@ -75,8 +76,9 @@ def test_workspace_page_is_a_packaged_asset():
     assert "<html" in packaged.lower()
 
 
-@pytest.mark.parametrize("module", ["worldfoundry.studio.cli", "worldfoundry.studio.runtime_job",
-                                    "worldfoundry.studio.workspace_job"])
+@pytest.mark.parametrize(
+    "module", ["worldfoundry.studio.cli", "worldfoundry.studio.runtime_job", "worldfoundry.studio.workspace_job"]
+)
 def test_studio_entrypoint_help_works_after_reorganization(module):
     result = subprocess.run([sys.executable, "-m", module, "--help"], capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr

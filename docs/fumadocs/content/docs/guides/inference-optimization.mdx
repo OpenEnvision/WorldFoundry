@@ -22,7 +22,7 @@ Missing kernels, calibration, process groups, or checkpoint weights fail at buil
 <Callout type="idea" title="First run vs throughput">
 **First run / official-looking output.** Keep the catalog defaults: `torch_dtype="bfloat16"`, `offload_mode="resident"` when VRAM fits (Studio default for Wan2.2 TI2V-5B), otherwise `async-block`. Leave feature cache, approximate attention, quantization, CUDA Graph, and TAEW preview off. Do not cut steps or CFG for an official benchmark.
 
-**Throughput on the same checkpoint.** Stay resident BF16. Set `attention_backend` to a real Flash / Sage provider for your GPU, then `fuse_qkv=True`, `fused_rope=True`, and `static_cross_kv=True`. Add `compile=True` only after a warmup request — the first compiled forward is slow. Turn on Wan VAE spatial tiling / temporal chunks if decode OOMs or dominates latency. Add **one** feature-cache algorithm only if you accept skipped DiT steps.
+**Throughput on the same checkpoint.** Stay resident BF16. Set `attention_backend` to a real Flash / Sage provider for your GPU, then `fuse_qkv=True`, `fused_rope=True`, and `static_cross_kv=True`. Select `compile=True` at load time, then warm the representative requests before serving — the first compiled forward is slow. Turn on Wan VAE spatial tiling / temporal chunks if decode OOMs or dominates latency. Add **one** feature-cache algorithm only if you accept skipped DiT steps.
 </Callout>
 
 ## What you can do
@@ -37,7 +37,7 @@ These controls are wired. Enable them from `from_pretrained(...)`, Workspace **l
   { name: "offload_mode=async-block", hintLabel: "Aliases", hint: "block / cpu / layer", description: "Layerwise CPU masters with pinned H2D prefetch (at most two resident layers). Use only when VRAM is tight. The Wan VAE stays resident; only the DiT offloads.", reads: [{ label: "Caveat", value: "Incompatible with quantization and with device_map=balanced" }] },
   { name: "offload_mode=component", hintLabel: "How", hint: "offload_mode=\"component\"", description: "Whole-module CPU offload. Requires a vram_module_map on that component.", reads: [{ label: "Applies to", value: "components that declare a wrapper map" }] },
   { name: "device_map=balanced", hintLabel: "How", hint: "device_map=\"balanced\"", description: "Shard transformer layers across visible GPUs. Requires offload_mode=none so weights stay in VRAM.", reads: [{ label: "Applies to", value: "modules that declare layer_container" }] },
-  { name: "inplace_residual", hintLabel: "How", hint: "inplace_residual=True", description: "In-place residual adds on the Wan DiT to cut activation memory. Inference-only; disabled under autograd.", reads: [{ label: "Applies to", value: "native Wan DiT only" }] }
+  { name: "inplace_residual", hintLabel: "How", hint: "inplace_residual=True", description: "Reuse dtype-compatible Wan residual storage. Inference-only; dtype promotion and autograd retain the functional path.", reads: [{ label: "Applies to", value: "native Wan DiT only" }] }
 ]} />
 
 ### Attention backends
@@ -52,15 +52,211 @@ These controls are wired. Enable them from `from_pretrained(...)`, Workspace **l
 <KvCatalog heading="Kernel" vars rows={[
   { name: "fuse_qkv", hintLabel: "How", hint: "fuse_qkv=True", description: "Merge Q/K/V projections. Optional qkv_strategy=auto|packed|split and qkv_split_threshold (Studio default 8192).", reads: [{ label: "Applies to", value: "native Wan DiT. Confirm fused_blocks and a real projection call after one forward" }] },
   { name: "fused_rope", hintLabel: "How", hint: "fused_rope=True", description: "Fused 3D RoPE. Safe to combine with Ulysses SP (the kernel takes the rank offset and padding). rope_precision is fp32 or fp64.", reads: [{ label: "Applies to", value: "native Wan DiT" }] },
-  { name: "static_cross_kv", hintLabel: "How", hint: "static_cross_kv=True", description: "Reuse text cross-attention K/V for the request. Studio default for Wan2.2 TI2V-5B. Not compatible with CUDA Graph.", reads: [{ label: "Applies to", value: "native Wan DiT" }] }
+  { name: "static_cross_kv", hintLabel: "How", hint: "static_cross_kv=True", description: "Reuse text cross-attention K/V for the request. Studio default for Wan2.2 TI2V-5B. Resident canonical Wan supports CUDA Graph through explicit per-layer K/V inputs.", reads: [{ label: "Applies to", value: "native Wan DiT" }] }
 ]} />
 
 ### Compile and CUDA Graph
 
 <KvCatalog heading="Compile" vars rows={[
-  { name: "compile", hintLabel: "How", hint: "compile=True or torch_compile=True", description: "torch.compile on the bound forward. Optional compile_mode (default / reduce-overhead / max-autotune / max-autotune-no-cudagraphs), compile_backend, compile_fullgraph, compile_dynamic. First request pays compile + autotune cost.", reads: [{ label: "Also", value: "WORLDFOUNDRY_TORCH_COMPILE=1 for processes that use compile_module_if_enabled" }] },
-  { name: "cuda_graph", hintLabel: "How", hint: "cuda_graph=True", description: "Capture and replay a stable-shape Wan DiT inner call. Off by default. With Inductor, compile_mode must be max-autotune-no-cudagraphs so graphs are not nested.", reads: [{ label: "Rejected with", value: "sequence parallel, feature cache, approximate attention, static_cross_kv, custom Inductor compile_options" }] }
+  { name: "compile", hintLabel: "How", hint: "compile=True or torch_compile=True", description: "torch.compile on bound forwards. compile_scope=full (default) compiles the component forward; regional compiles declared Wan transformer blocks and leaves text encoders/VAE eager. Optional compile_mode (default / reduce-overhead / max-autotune / max-autotune-no-cudagraphs), compile_backend, compile_fullgraph, compile_dynamic. First request pays compilation and any autotuning costs.", reads: [{ label: "Also", value: "WORLDFOUNDRY_TORCH_COMPILE=1 for processes that use compile_module_if_enabled" }] },
+  { name: "cuda_graph", hintLabel: "How", hint: "cuda_graph=True", description: "Capture and replay a stable-shape Wan DiT inner call. Off by default. With Inductor, full scope uses max-autotune-no-cudagraphs; regional scope uses default with native GEMM dispatch. Both avoid nested graphs.", reads: [{ label: "Rejected with", value: "sequence parallel, feature cache, approximate attention, custom Inductor compile_options" }] }
 ]} />
+
+### Representative request warmup
+
+`pipeline.warmup([DiffusionRequest(...)])` executes complete native requests:
+text/image conditioning, every sampler step, active CFG branches, routed experts,
+and decode. It restores RNG state, releases request caches on success or failure,
+and retains no output tensors. Successful warmup freezes CUDA Graph capture;
+unseen serving signatures bypass CUDA Graph until another explicit warmup.
+PyTorch may still compile new tensor shapes when compile is enabled. Calling the
+pipeline normally without warmup retains lazy capture behavior.
+
+For Studio resident workers, `warmup_requests` is a load option accepted by
+`from_pretrained` and `--load-json`. It accepts a nonempty list of request
+mappings or explicit nested batches of mappings, with `sampling` expressed as a
+JSON object. Python callers may also
+supply native `DiffusionRequest` objects. The pipeline is cached only after
+loading and warmup succeed. Returned public pipelines expose
+`warmup_reports`; these are execution receipts, not performance certification.
+
+```json
+{
+  "offload_mode": "resident",
+  "compile": true,
+  "compile_scope": "regional",
+  "cuda_graph": true,
+  "static_cross_kv": true,
+  "warmup_requests": [{
+    "prompt": "A boat crossing a calm lake.",
+    "negative_prompt": "",
+    "height": 256, "width": 256, "num_frames": 17,
+    "sampling": {
+      "num_inference_steps": 50, "guidance_scale": 5.0, "seed": 0,
+      "scheduler_options": {"shift": 5.0}
+    }
+  }]
+}
+```
+
+Match deployed geometry, batch size, condition lengths, inputs, sampler,
+autocast and inference-mode settings; the small shape above is a preparation example, not a production
+benchmark. Warmup supports native standard, masked-latent and Wan dual-expert
+CFG strategies, including the built-in frozen-latent mask extension. Custom
+runners/extensions require their own lifecycle. Static-KV with Graph/regional
+compile requires resident, unsharded
+canonical Wan weights and the canonical cross-attention processor; memory
+adapters and block/component offload are rejected. Change weights, LoRA or
+placement by rebuilding the compiled/captured pipeline. Regional compilation
+preserves model types and state-dict keys and reuses the persistent compile
+cache. Regional Inductor uses `compile_mode="default"`, native GEMM dispatch,
+and opaque native LayerNorm/RMSNorm reductions. Module hooks and autograd remain
+intact. Shared compiled AdaLN and residual-gate operators retain native rounding,
+including the mutating gate's alias contract. This trades reduction fusion and
+GEMM autotuning for eager numerical boundaries.
+
+`emulate_precision_casts=True`, `triton.codegen_upcast_to_fp32=False`,
+`pattern_matcher=False`, and `epilogue_fusion=False` retain explicit dtype round
+trips, `addmm`'s single rounding operation, and GEMM outputs before nonlinearities.
+Conflicting precision options and regional GEMM autotuning are rejected.
+Full-generation quality gates remain required for the target checkpoint,
+precision, shapes, and PyTorch version. Compilation and Graph remain opt-in.
+
+Use `python -m benchmarks.inference.wan_execution_preparation --checkpoint ...
+--output-dir ...` for public-path dense/static-Graph/regional-static-Graph A/B/A
+replays. Add `--model-id wan2.2-ti2v-5b` for 5B and `--images IMAGE_A IMAGE_B`
+for changed-image masked-latent replay. Dual-expert cases use
+`--model-id wan2.2-t2v-a14b` or `wan2.2-i2v-a14b` (the latter requires images).
+`--dit-weight-dtype bfloat16` uses BF16 weights for both dense and candidate
+configurations; compute remains BF16. Reports record observed parameter dtypes
+and require current-request execution evidence from both experts.
+`--configurations static-graph` selects that candidate alone; dense remains the reference and the report lists the
+requested configurations. Add `--inplace-residual` to exercise candidates with
+native mutating gates against the unchanged dense reference. This uses the existing native
+quality budget, additionally requires bitwise latent parity for static-Graph,
+reports RGB equality separately, and checks actual frozen-Graph replay. Its timings are diagnostic only.
+
+### Compatible request batches
+
+`pipeline.run_batch(requests)` accepts explicit `DiffusionRequest` values and
+returns one independently owned `DiffusionOutput` per request, in input order.
+It supports resident canonical Wan T2V, I2V and frozen-first-frame TI2V with
+standard or dual-expert guidance and native Euler or Wan UniPC. Geometry,
+sampling policy, scalar inputs and image-conditioning presence must match;
+prompts, negative prompts, seeds, images and audit metadata may differ. Product defaults
+and aliases from `pipeline(...)` are not applied to these normalized requests.
+
+Each request keeps its original noise draw shape, generator, conditioning,
+solver history, initializer artifacts and decoder call. Block projections and
+FFNs use the combined batch; time MLPs, CLIP condition projections, attention
+reductions and output heads retain original request shapes. This preserves
+native rounding, including SDPA's shape-dependent split-KV dispatch. No sampler
+or compute precision changes are made.
+
+```python
+from dataclasses import replace
+from worldfoundry.base_models.diffusion_model.contracts import DiffusionRequest, SamplingConfig
+
+request_a = DiffusionRequest(
+    prompt="A small boat crossing a calm lake at sunrise.",
+    negative_prompt="", height=256, width=256, num_frames=17,
+    sampling=SamplingConfig(num_inference_steps=8, guidance_scale=5, seed=11,
+                            scheduler_options={"shift": 5.0}),
+)
+request_b = replace(request_a, prompt="A dog running through a green field.",
+                    sampling=replace(request_a.sampling, seed=29))
+pipeline.warmup([request_a, (request_a, request_b)])
+output_a, output_b = pipeline.run_batch((request_a, request_b))
+```
+
+For an image-conditioned pipeline, give each request its own image through
+`inputs={"images": "/path/to/image.jpg"}`. Native TI2V retains the frozen-first-frame
+mask extension; an all-text TI2V batch remains valid, but cannot mix with
+image-conditioned requests. Both standard and dual-expert I2V retain request-local
+image encoding and sampling state.
+
+An explicit tuple inside `warmup` prepares a merged batch. Warm the deployed
+row partition as well as total batch size; requests containing multiple prompts
+retain their own row counts. Capture warms the actual static buffers, including
+normalized layouts of expanded or sliced inputs, before entering CUDA Graph.
+Each output's `metadata["request_batching"]` identifies its row range and the
+shared batch ID, sample/request counts and observed denoiser calls. Denoiser
+optimization receipts describe the whole batch, not independent request timings.
+
+Add `--request-batching` to `benchmarks.inference.wan_execution_preparation` for
+Wan1.3B, 5B TI2V or A14B T2V/I2V A/B, B/A, A/B batches against independent dense
+requests. Image-conditioned replays require `--images IMAGE_A IMAGE_B`. The
+existing latent/RGB quality budget also applies to batches. Reports retain
+per-output quality, dispatch receipts, warmup time/peak allocated and reserved
+memory, and diagnostic batch timings. `batch_comparison` compares the same two
+requests using per-case singleton medians versus median batch time; it does not
+certify performance on shared GPUs.
+
+For normal product arguments, `pipeline.batch_call([call_a, call_b])` accepts
+keyword mappings with the same defaults and aliases as `pipeline(...)`. Each
+mapping can specify its own `output_dir` or `output_path` and `return_dict`.
+Export paths must be distinct. Native sampling still uses `run_batch`; exports
+and returned results remain request-local.
+
+### Studio resident queue batching
+
+Enable compatible coalescing before starting Workspace:
+
+```bash
+export WORLDFOUNDRY_STUDIO_BATCH_MAX_SIZE=2
+export WORLDFOUNDRY_STUDIO_BATCH_DELAY_MS=5
+```
+
+The size defaults to **1** (ordinary singleton dispatch). The collection window
+defaults to **5 ms**; a full batch or incompatible next request ends it early.
+The existing Workspace job pool admits concurrent jobs (default 8 via
+`WORLDFOUNDRY_WORKSPACE_MAX_JOBS`); at least two are needed to coalesce requests.
+The resident worker still has one execution owner and keeps its request lock.
+Only a compatible FIFO prefix merges, up to the configured request cap.
+
+Admission covers single-prompt fresh `run` jobs for `wan2.1-t2v-1.3b`,
+`wan2.2-t2v-a14b` and `wan2.2-ti2v-5b`. Select `offload_mode="resident"` (or
+`"none"`) and `attention_backend="torch"`. Compilation, when selected, must use
+`compile_scope="regional"`. Use `rope_precision="fp64"`,
+`rms_norm_precision="fp32"`, `fuse_qkv=False` and `fused_rope=False`; explicitly
+override the 5B Studio precision defaults. Model/loading options, geometry and
+sampling policy must match; prompts, negative prompts, seeds and export paths
+may differ.
+
+For 5B image jobs, select one PNG/JPEG/BMP/WebP through Workspace's input picker
+(`input_path`). Image paths may differ; image and text-only jobs do not merge.
+Explicit image aliases in call JSON retain singleton dispatch. Other requests
+also use serial singleton dispatch. Reconfigure these limits by restarting
+resident workers.
+
+Load-time `warmup_requests` accepts normalized request mappings and explicit
+nested request lists: `[request_a, [request_a, request_b]]` warms both singleton
+and two-request signatures. Include deployed geometry, sampler, CFG and original
+row partitions. These are native request mappings, not product-call kwargs.
+
+Each job retains its own run directory, `RunRecord`, artifacts and status.
+`metadata.result.metadata.request_batching` records actual native batching;
+`metadata.studio_request_batching` maps Studio records to that shared execution.
+`studio_performance.resident_queue_wait_ms` covers the resident queue, excluding
+GPU admission and worker startup. `batch_load_ms` and `batch_execute_ms` are
+batch-wide host wall times; execution includes export. They are not per-request
+GPU timings and must not be summed across members.
+
+Queued cancellation removes work before execution. Cancelling or timing out an
+active member stops delivery of its result without interrupting live or queued
+peers; its computation may finish, and a produced manifest is marked cancelled.
+An abandoned active batch with no remaining peers retires the worker. Execution
+or export failure fails the selected batch without singleton retries. Worker
+failure also fails queued jobs; subsequent submissions acquire a new worker.
+
+**Limitations:** serialize direct singleton, batch and warmup calls on each
+pipeline. Custom attention processors and extensions other than the native
+frozen mask, approximate caches, offload and distributed batching are outside
+this batch contract. Failed/cancelled jobs may leave diagnostic artifacts; no partial
+results are returned for a failed batch. Choose the cap from measured VRAM
+headroom: there is no OOM retry at a smaller batch size. Qualification remains
+checkpoint/shape/precision specific; shared-GPU timings do not certify
+throughput gains.
 
 ### Parallelism
 
@@ -132,7 +328,7 @@ STA / VSA / VMoBA symbols come from the vendored `thirdparty/fastvideo-kernel` t
 <KvCatalog heading="Do not" rows={[
   { name: "Count configuration as a speedup", hint: "Not evidence", description: "requested without effective, or pending wrappers, or dense_policy_calls / SDPA fallback, is not acceleration." },
   { name: "Combine sequence parallel with caches, sparse attention, or CUDA Graph", hint: "Rejected at build", description: "SP needs rank-synchronized skip / route decisions that are not implemented. Fused RoPE is the exception — it is SP-aware." },
-  { name: "Combine CUDA Graph with feature cache, approximate attention, or static_cross_kv", hint: "Rejected at build", description: "Graph replay would freeze Python cache and sparse schedules from a previous step or request." },
+  { name: "Combine CUDA Graph with feature cache or approximate attention", hint: "Rejected at build", description: "Graph replay would freeze Python cache and sparse schedules from a previous step or request." },
   { name: "Quantization + block or disk offload", hint: "Rejected at build", description: "Quantized weights are buffers; the async two-layer offloader owns Parameters only. Disk offload also cannot materialize the transform." },
   { name: "device_map=balanced + any offload", hint: "Rejected at build", description: "Balanced sharding requires resident VRAM weights." },
   { name: "Two feature caches at once", hint: "Rejected at build", description: "teacache, magcache, adacache, taylorseer, blocktaylorseer, custom, and the block caches are mutually exclusive." },
@@ -250,6 +446,44 @@ After one forward:
 - **CUDA Graph** — `replay > 0`, and `eager = capture_failed = 0`.
 - **VAE tiles / chunks** — last window `> 1`, not lifetime totals.
 - **Quantization** — `low_precision_kernel_calls > 0`. `dense_policy_calls` is BF16.
+
+## Validate quality and timing
+
+Run these checks from the repository root in the GPU environment. Keep the checkpoint,
+inputs, seed, and sampling settings fixed. Compare reference latents and decoded video,
+and inspect effective backends and fallbacks before citing a speedup.
+
+```bash
+# Single-rank reference, then the sequence-parallel candidate.
+torchrun --nproc_per_node=1 -m benchmarks.inference.wan22_multigpu_e2e \
+  --checkpoint /checkpoints/Wan2.2-TI2V-5B \
+  --output-dir benchmarks/results/wan22-sp1 \
+  --fused-rope --rope-precision fp64 \
+  --save-reference-latents \
+  --warmup-runs 1 --measured-runs 3
+
+torchrun --nproc_per_node=4 -m benchmarks.inference.wan22_multigpu_e2e \
+  --checkpoint /checkpoints/Wan2.2-TI2V-5B \
+  --output-dir benchmarks/results/wan22-sp4 \
+  --sp-degree 4 \
+  --fused-rope --rope-precision fp64 \
+  --warmup-runs 1 --measured-runs 3 \
+  --reference-latents benchmarks/results/wan22-sp1/final-latents.pt \
+  --reference-video benchmarks/results/wan22-sp1/output.mp4 \
+  --fail-on-fallback --profile-collectives
+```
+
+Check attention adapter overhead separately against the direct provider. The default
+strict gate allows at most 3% overhead:
+
+```bash
+python -m benchmarks.operators.attention_adapter_parity \
+  --backend flash2 --strict --out benchmarks/results
+```
+
+Framework comparisons use `benchmarks.inference.framework_ab_wan22` and its v4 report
+gate: one physical GPU in `Exclusive_Process` mode. Shared GPUs in `Default` mode do
+not satisfy that gate; their timings are diagnostic rather than framework speedup evidence.
 
 ## Next steps
 

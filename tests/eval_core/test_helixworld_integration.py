@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 WorldFoundry contributors
+# SPDX-License-Identifier: Apache-2.0
 import json
 import shutil
 import subprocess
@@ -29,10 +31,21 @@ def test_helixworld_catalog_recipe_and_public_pipeline_resolve():
     recipe = default_native_diffusion_registry().resolve("NoizAI/HelixWorld-preview")
     assert recipe.execution.strategy == "joint-chunked"
     assert recipe.checkpoints["model"].files == ("weights/model.safetensors",)
-    assert HelixWorldPipeline._checkpoint_overrides("/weights/model.safetensors", {"text_encoder_path": "/weights/gemma"}) == {
-        "model": "/weights/model.safetensors", "gemma": "/weights/gemma", "tokenizer": "/weights/gemma",
+    assert HelixWorldPipeline._checkpoint_overrides(
+        "/weights/model.safetensors", {"text_encoder_path": "/weights/gemma"}
+    ) == {
+        "model": "/weights/model.safetensors",
+        "gemma": "/weights/gemma",
+        "tokenizer": "/weights/gemma",
     }
 
+
+def test_world_observer_is_cataloged_without_a_runtime():
+    entry = load_model_zoo_registry().get("WorldObserver")
+    assert entry.model_id == "world-observer"
+    assert entry.integration_status == "blocked"
+    assert not entry.pipeline_target and not entry.runner_target
+    assert entry.checkpoint.hf_repo_id is None and entry.checkpoint.path is None
 
 
 @pytest.mark.parametrize("audio_samples", [12000, 4000])
@@ -41,14 +54,15 @@ def test_helixworld_exports_fhwc_float_video_with_audio(tmp_path, audio_samples)
     if not ffprobe or not ffmpeg:
         pytest.skip("FFmpeg and ffprobe are required for the MP4 export contract")
     frames = torch.zeros(6, 32, 32, 3)
-    frames[..., 1] = .75
-    audio = torch.full((2, audio_samples), .1)
+    frames[..., 1] = 0.75
+    audio = torch.full((2, audio_samples), 0.1)
     requests = []
 
     def generate(request):
         requests.append(request)
-        return DiffusionOutput(sample=frames, latents=torch.zeros(1),
-                               artifacts={"audio": audio, "audio_sampling_rate": 24000})
+        return DiffusionOutput(
+            sample=frames, latents=torch.zeros(1), artifacts={"audio": audio, "audio_sampling_rate": 24000}
+        )
 
     pipeline = HelixWorldPipeline.__new__(HelixWorldPipeline)
     pipeline.model_id = "helixworld"
@@ -56,8 +70,16 @@ def test_helixworld_exports_fhwc_float_video_with_audio(tmp_path, audio_samples)
     pipeline.process = lambda **kwargs: {"prompt": kwargs["prompt"], "images": kwargs["images"]}
     pipeline.native_pipeline = generate
     path = tmp_path / "helixworld.mp4"
-    result = pipeline(prompt="Forest.", images="first.png", audio_prompt="Birds.", av_prompt="Birds in trees.",
-                      action_plan="W", fps=12, output_path=path, return_dict=True)
+    result = pipeline(
+        prompt="Forest.",
+        images="first.png",
+        audio_prompt="Birds.",
+        av_prompt="Birds in trees.",
+        action_plan="W",
+        fps=12,
+        output_path=path,
+        return_dict=True,
+    )
     assert requests[0].inputs["actions"] == "W"
     assert requests[0].inputs["frame_rate"] == 12
     assert requests[0].sampling.num_inference_steps == 4
@@ -68,7 +90,9 @@ def test_helixworld_exports_fhwc_float_video_with_audio(tmp_path, audio_samples)
     assert {stream["codec_type"] for stream in info["streams"]} == {"audio", "video"}
     video_stream = next(stream for stream in info["streams"] if stream["codec_type"] == "video")
     assert int(video_stream["nb_frames"]) == 6
-    rgb = subprocess.check_output([ffmpeg, "-v", "error", "-i", str(path), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+    rgb = subprocess.check_output(
+        [ffmpeg, "-v", "error", "-i", str(path), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
+    )
     assert 180 <= rgb[1] <= 200 and rgb[0] < 5 and rgb[2] < 5
     pipeline(prompt="Forest.", images="first.png", frame_rate=20, return_dict=True)
     assert requests[-1].inputs["frame_rate"] == requests[-1].inputs["fps"] == 20

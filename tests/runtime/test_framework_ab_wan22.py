@@ -33,11 +33,7 @@ def _live_wan_math_effective(
     rms_norm_precision: str = "input",
 ) -> dict[str, object]:
     return {
-        "rope_precision": (
-            f"fused-{rope_precision}"
-            if fused_rope
-            else f"complex-{rope_precision}"
-        ),
+        "rope_precision": (f"fused-{rope_precision}" if fused_rope else f"complex-{rope_precision}"),
         "rms_norm_precision": {
             "mode": rms_norm_precision,
             "configured_modules": 60,
@@ -65,9 +61,7 @@ def _live_qkv_static_runtime(*, compiled: bool = False) -> dict[str, object]:
             "lifetime_compiled_packed_graph_traces": 0,
             "lifetime_compiled_split_graph_traces": 2 if compiled else 0,
             "execution": (
-                "compiled-graph-traced (execution-pending-wrapper-receipt)"
-                if compiled
-                else "eager-projection-executed"
+                "compiled-graph-traced (execution-pending-wrapper-receipt)" if compiled else "eager-projection-executed"
             ),
         },
         "static_cross_kv": {
@@ -171,9 +165,7 @@ def _live_vmoba_optimization_report() -> dict[str, object]:
                     "output_dtype": tensor["dtype"],
                 }
                 if sparse:
-                    route, layout, provider_chunk_size, requested_topk = routes[
-                        layer % len(routes)
-                    ]
+                    route, layout, provider_chunk_size, requested_topk = routes[layer % len(routes)]
                     chunk_calls[route] += 1
                     event.update(
                         {
@@ -312,9 +304,7 @@ def _live_lightx2v_optimization_report() -> dict[str, object]:
     provider_family = "lightx2v/dynamic-sparse"
     provider = "lightx2v.common.ops.attn.kernels.sla_kernel._attention.apply"
     commit = "6fb7c1362b89d4908a9ea197bac4fbd7482ee2d5"
-    source_fingerprint = hashlib.sha256(
-        f"{commit}\0True\0".encode()
-    ).hexdigest()
+    source_fingerprint = hashlib.sha256(f"{commit}\0True\0".encode()).hexdigest()
     grid = [31, 22, 40]
     tokens = 31 * 22 * 40
     steps = 2
@@ -334,9 +324,7 @@ def _live_lightx2v_optimization_report() -> dict[str, object]:
                 provider_fields = {
                     "provider_family": provider_family,
                     "operator": operator,
-                    "adapter_path": (
-                        "lightx2v.common.ops.attn.synthetic.Provider.apply"
-                    ),
+                    "adapter_path": ("lightx2v.common.ops.attn.synthetic.Provider.apply"),
                     "provider_calls": 1,
                     "reference_lightx2v_commit": commit,
                     "provider_source_commit": commit,
@@ -555,9 +543,7 @@ def _live_block_feature_cache_runtime(
                 }
             )
         dense_calls = sum(event["dense_block_calls"] for event in event_receipts)
-        skipped_calls = sum(
-            event["skipped_block_calls"] for event in event_receipts
-        )
+        skipped_calls = sum(event["skipped_block_calls"] for event in event_receipts)
         hits = sum(int(event["hit"]) for event in event_receipts)
         receipt = {
             "algorithm": algorithm,
@@ -596,9 +582,7 @@ def _live_block_feature_cache_runtime(
         }
     total_hits = sum(branch["hits"] for branch in branches.values())
     total_dense = sum(branch["dense_block_calls"] for branch in branches.values())
-    total_skipped = sum(
-        branch["skipped_block_calls"] for branch in branches.values()
-    )
+    total_skipped = sum(branch["skipped_block_calls"] for branch in branches.values())
     return {
         "enabled": True,
         "algorithm": algorithm,
@@ -702,13 +686,11 @@ def _record(
 ) -> dict:
     digits = "".join(character for character in pair_id if character.isdigit())
     pair_index = int(digits or 0)
-    first_framework = "worldfoundry" if order == "AB" else (
-        "fastvideo" if framework in {"worldfoundry", "fastvideo"} else "lightx2v"
+    first_framework = (
+        "worldfoundry" if order == "AB" else ("fastvideo" if framework in {"worldfoundry", "fastvideo"} else "lightx2v")
     )
     lane_index = 0 if framework == first_framework else 1
-    started = datetime(2026, 8, 31, tzinfo=timezone.utc) + timedelta(
-        minutes=pair_index * 10 + lane_index * 2
-    )
+    started = datetime(2026, 8, 31, tzinfo=timezone.utc) + timedelta(minutes=pair_index * 10 + lane_index * 2)
     completed = started + timedelta(minutes=1)
     gpu_uuid = f"GPU-test-{gpu}"
     audit_started = 100.0 + pair_index * 10 + lane_index
@@ -871,8 +853,7 @@ def test_summary_uses_same_gpu_paired_ratios(tmp_path: Path) -> None:
     assert summary["certification"]["certifying"] is False
     assert summary["claim"] == "non_certifying_diagnostic"
     assert any(
-        "requires at least 6 complete pairs" in reason
-        for reason in summary["certification"]["noncertifying_reasons"]
+        "requires at least 6 complete pairs" in reason for reason in summary["certification"]["noncertifying_reasons"]
     )
     assert summary["video_quality_gate"]["enabled"] is False
     assert summary["video_quality_gate"]["certification_role"] == "diagnostic-only"
@@ -917,13 +898,9 @@ def test_formal_certification_requires_six_pairs_and_three_per_order(
 
     args.allow_insufficient = True
     assert framework_ab_wan22.summarize(args) == 0
-    diagnostic = json.loads(
-        (tmp_path / "summary.json").read_text(encoding="utf-8")
-    )
+    diagnostic = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert diagnostic["certification"]["certifying"] is False
-    assert "--allow-insufficient was enabled" in diagnostic["certification"][
-        "noncertifying_reasons"
-    ]
+    assert "--allow-insufficient was enabled" in diagnostic["certification"]["noncertifying_reasons"]
 
 
 def test_pairing_excludes_cross_gpu_samples() -> None:
@@ -1079,14 +1056,20 @@ def test_cuda_visibility_requires_live_runtime_uuid(monkeypatch) -> None:
 def test_gpu_uuid_normalizes_unprefixed_torch_2p9_value() -> None:
     bare_uuid = "aa5247c3-5298-d7e4-7a4d-903559cbe65b"
 
-    assert framework_ab_wan22._normalize_gpu_uuid(
-        bare_uuid,
-        source="torch.cuda device properties",
-    ) == f"GPU-{bare_uuid}"
-    assert framework_ab_wan22._normalize_gpu_uuid(
-        f"GPU-{bare_uuid}",
-        source="nvidia-smi",
-    ) == f"GPU-{bare_uuid}"
+    assert (
+        framework_ab_wan22._normalize_gpu_uuid(
+            bare_uuid,
+            source="torch.cuda device properties",
+        )
+        == f"GPU-{bare_uuid}"
+    )
+    assert (
+        framework_ab_wan22._normalize_gpu_uuid(
+            f"GPU-{bare_uuid}",
+            source="nvidia-smi",
+        )
+        == f"GPU-{bare_uuid}"
+    )
 
 
 def test_generation_isolation_detects_new_compute_app_and_enforces_policy() -> None:
@@ -1134,9 +1117,7 @@ def test_compute_app_monitor_retains_transient_pid(monkeypatch) -> None:
     monitor._sample()
     report = monitor.stop()
 
-    assert report["compute_apps_after"] == [
-        {"pid": 20, "used_memory_mib": 1024.0}
-    ]
+    assert report["compute_apps_after"] == [{"pid": 20, "used_memory_mib": 1024.0}]
     assert report["added_compute_apps"] == [
         {"pid": 20, "used_memory_mib": 1024.0},
         {"pid": 30, "used_memory_mib": 4096.0},
@@ -1245,9 +1226,7 @@ def test_compute_app_monitor_binds_descendant_across_pid_namespace(
 
     assert report["allowed_compute_pids"] == [10, 30]
     assert report["bound_host_compute_pids"] == [900]
-    assert report["added_compute_apps"] == [
-        {"pid": 901, "used_memory_mib": 2048.0}
-    ]
+    assert report["added_compute_apps"] == [{"pid": 901, "used_memory_mib": 2048.0}]
     assert report["contaminated"] is True
 
 
@@ -1307,9 +1286,7 @@ def test_compute_app_monitor_does_not_reuse_host_pid_binding_slot(
     report = monitor.stop()
 
     assert report["bound_host_compute_pids"] == [900]
-    assert report["added_compute_apps"] == [
-        {"pid": 901, "used_memory_mib": 2048.0}
-    ]
+    assert report["added_compute_apps"] == [{"pid": 901, "used_memory_mib": 2048.0}]
     assert report["contaminated"] is True
 
 
@@ -1360,9 +1337,7 @@ def test_compute_app_monitor_does_not_bind_a_stale_device_client(
     report = monitor.stop()
 
     assert report["bound_host_compute_pids"] == []
-    assert report["added_compute_apps"] == [
-        {"pid": 900, "used_memory_mib": 2048.0}
-    ]
+    assert report["added_compute_apps"] == [{"pid": 900, "used_memory_mib": 2048.0}]
     assert report["contaminated"] is True
 
 
@@ -1400,9 +1375,7 @@ def test_compute_app_monitor_does_not_trust_host_local_numeric_collision(
     report = monitor.stop()
 
     assert report["bound_host_compute_pids"] == []
-    assert report["added_compute_apps"] == [
-        {"pid": 30, "used_memory_mib": 1024.0}
-    ]
+    assert report["added_compute_apps"] == [{"pid": 30, "used_memory_mib": 1024.0}]
     assert report["identity_proof"] == "linux-nspid"
     assert report["contaminated"] is True
 
@@ -1513,10 +1486,7 @@ def test_run_one_fails_contaminated_release_but_allows_explicit_smoke(
     monkeypatch.setattr(
         framework_ab_wan22,
         "_runtime_source_fingerprints",
-        lambda **_kwargs: {
-            name: {"sha256": f"{name}-source"}
-            for name in ("worldfoundry", "fastvideo", "lightx2v")
-        },
+        lambda **_kwargs: {name: {"sha256": f"{name}-source"} for name in ("worldfoundry", "fastvideo", "lightx2v")},
     )
     monkeypatch.setattr(
         framework_ab_wan22,
@@ -1625,9 +1595,7 @@ def test_summary_filter_rejects_endpoint_only_pseudo_v4_audit() -> None:
         "contaminated": False,
     }
 
-    accepted, exclusions = framework_ab_wan22._filter_generation_isolation_records(
-        (record,)
-    )
+    accepted, exclusions = framework_ab_wan22._filter_generation_isolation_records((record,))
 
     assert accepted == []
     assert exclusions[0]["reason"] == "invalid_generation_isolation_audit"
@@ -1644,9 +1612,7 @@ def test_summary_filter_rejects_live_cuda_uuid_mismatch() -> None:
     )
     record["cuda_device_mapping"]["current_cuda_uuid"] = "GPU-other-card"
 
-    accepted, exclusions = framework_ab_wan22._filter_generation_isolation_records(
-        (record,)
-    )
+    accepted, exclusions = framework_ab_wan22._filter_generation_isolation_records((record,))
 
     assert accepted == []
     assert exclusions[0]["reason"] == "invalid_generation_isolation_audit"
@@ -1740,19 +1706,13 @@ def test_clean_smoke_record_is_accepted_only_as_noncertifying() -> None:
         order="AB",
         generation_s=5.0,
     )
-    record["semantic_config"]["isolation_policy"][
-        "fail_on_generation_contamination"
-    ] = False
+    record["semantic_config"]["isolation_policy"]["fail_on_generation_contamination"] = False
 
-    accepted, exclusions = framework_ab_wan22._filter_generation_isolation_records(
-        (record,)
-    )
+    accepted, exclusions = framework_ab_wan22._filter_generation_isolation_records((record,))
 
     assert accepted == [record]
     assert exclusions == []
-    assert "run used --no-fail-on-contamination" in record[
-        "_noncertifying_reasons"
-    ]
+    assert "run used --no-fail-on-contamination" in record["_noncertifying_reasons"]
 
 
 def test_summary_rejects_cross_card_repeats(tmp_path: Path) -> None:
@@ -1900,10 +1860,7 @@ def test_run_parser_maps_block_feature_cache_to_generic_validated_option(
             "--worldfoundry-feature-cache",
             algorithm,
             "--worldfoundry-feature-cache-options-json",
-            (
-                '{"residual_diff_threshold":0.1,"downsample_factor":2,'
-                '"dense_first":2,"dense_last":1}'
-            ),
+            ('{"residual_diff_threshold":0.1,"downsample_factor":2,"dense_first":2,"dense_last":1}'),
         ]
     )
 
@@ -2027,9 +1984,7 @@ def test_run_parser_maps_complete_inline_and_file_vmoba_profiles(
             json.dumps(profile),
         ]
     )
-    assert framework_ab_wan22._worldfoundry_approximate_attention_request(
-        inline
-    ) == {"kind": "vmoba", **profile}
+    assert framework_ab_wan22._worldfoundry_approximate_attention_request(inline) == {"kind": "vmoba", **profile}
 
     profile_path = tmp_path / "vmoba.json"
     profile_path.write_text(
@@ -2043,9 +1998,7 @@ def test_run_parser_maps_complete_inline_and_file_vmoba_profiles(
             str(profile_path),
         ]
     )
-    assert framework_ab_wan22._worldfoundry_approximate_attention_request(
-        from_file
-    ) == {"kind": "vmoba", **profile}
+    assert framework_ab_wan22._worldfoundry_approximate_attention_request(from_file) == {"kind": "vmoba", **profile}
 
 
 def test_vmoba_profile_boundary_rejects_defaults_conflicts_and_orphans(
@@ -2065,9 +2018,7 @@ def test_vmoba_profile_boundary_rejects_defaults_conflicts_and_orphans(
         "--physical-gpu",
         "0",
     ]
-    bare = parser.parse_args(
-        [*common, "--worldfoundry-approximate-attention", "vmoba"]
-    )
+    bare = parser.parse_args([*common, "--worldfoundry-approximate-attention", "vmoba"])
     with pytest.raises(ValueError, match="missing fields"):
         framework_ab_wan22._worldfoundry_approximate_attention_request(bare)
 
@@ -2224,13 +2175,9 @@ def test_worldfoundry_kernel_request_rejects_invalid_combinations() -> None:
     assert defaults.worldfoundry_rope_precision == "fp32"
     assert defaults.worldfoundry_rms_norm_precision == "input"
 
-    invalid_threshold = parser.parse_args(
-        [*common, "--worldfoundry-qkv-split-threshold", "0"]
-    )
+    invalid_threshold = parser.parse_args([*common, "--worldfoundry-qkv-split-threshold", "0"])
     with pytest.raises(ValueError, match="qkv-split-threshold"):
-        framework_ab_wan22._validate_worldfoundry_kernel_request(
-            invalid_threshold
-        )
+        framework_ab_wan22._validate_worldfoundry_kernel_request(invalid_threshold)
 
     fused_fp64 = parser.parse_args(
         [
@@ -2245,13 +2192,9 @@ def test_worldfoundry_kernel_request_rejects_invalid_combinations() -> None:
     with pytest.raises(ValueError, match="rope-precision=fp32"):
         framework_ab_wan22._validate_worldfoundry_kernel_request(fused_fp64)
 
-    fused_input_norm = parser.parse_args(
-        [*common, "--worldfoundry-fused-rope"]
-    )
+    fused_input_norm = parser.parse_args([*common, "--worldfoundry-fused-rope"])
     with pytest.raises(ValueError, match="rms-norm-precision=fp32"):
-        framework_ab_wan22._validate_worldfoundry_kernel_request(
-            fused_input_norm
-        )
+        framework_ab_wan22._validate_worldfoundry_kernel_request(fused_input_norm)
 
     valid_fused = parser.parse_args(
         [
@@ -2304,7 +2247,7 @@ def test_worldfoundry_effectiveness_gate_rejects_fallback_and_accepts_live_defau
                         "quarantined_skips": 0,
                     }
                 }
-            }
+            },
         },
     }
     verification = framework_ab_wan22._verify_worldfoundry_optimization_report(
@@ -2368,9 +2311,7 @@ def test_worldfoundry_qkv_gate_requires_the_configured_workload_path() -> None:
         args,
     )
     assert verification["passed"] is True
-    assert verification["checks"]["qkv_fusion.eager_path"]["expected"] == (
-        "split projection calls > 0"
-    )
+    assert verification["checks"]["qkv_fusion.eager_path"]["expected"] == ("split projection calls > 0")
 
     qkv = report["runtime"]["qkv_fusion"]
     qkv["eager_packed_projection_calls"] = 120
@@ -2554,9 +2495,7 @@ def test_vmoba_effectiveness_gate_rejects_false_or_incomplete_receipts(
 def test_parser_exposes_canonical_lightx2v_sparse_kinds(kind: str) -> None:
     args = _lightx2v_sparse_args(kind)
 
-    request = framework_ab_wan22._worldfoundry_approximate_attention_request(
-        args
-    )
+    request = framework_ab_wan22._worldfoundry_approximate_attention_request(args)
 
     assert request is not None
     assert request["kind"] == kind
@@ -2566,9 +2505,7 @@ def test_parser_exposes_canonical_lightx2v_sparse_kinds(kind: str) -> None:
 
     config = parse_approximate_attention(request)
     expectation = framework_ab_wan22._lightx2v_sparse_expectation(config)
-    assert expectation["commit"] == (
-        "6fb7c1362b89d4908a9ea197bac4fbd7482ee2d5"
-    )
+    assert expectation["commit"] == ("6fb7c1362b89d4908a9ea197bac4fbd7482ee2d5")
     assert expectation["operator"]
     assert expectation["provider_symbol"]
 
@@ -2576,26 +2513,20 @@ def test_parser_exposes_canonical_lightx2v_sparse_kinds(kind: str) -> None:
 def test_sta_default_grid_fails_fast_but_tuned_grid_is_accepted() -> None:
     default_args = _lightx2v_sparse_args("sta")
     with pytest.raises(ValueError, match="no tuned provider plan"):
-        framework_ab_wan22._worldfoundry_approximate_attention_request(
-            default_args
-        )
+        framework_ab_wan22._worldfoundry_approximate_attention_request(default_args)
 
     tuned = _lightx2v_sparse_args("sta")
     tuned.frames = 69
     tuned.height = 1536
     tuned.width = 2560
-    request = framework_ab_wan22._worldfoundry_approximate_attention_request(
-        tuned
-    )
+    request = framework_ab_wan22._worldfoundry_approximate_attention_request(tuned)
     assert request is not None
     assert request["kind"] == "sta"
 
 
 def test_nbhd_frame_profile_fails_before_cuda_on_grid_mismatch() -> None:
     args = _lightx2v_sparse_args("nbhd")
-    args.worldfoundry_approximate_attention_profile_json = json.dumps(
-        {"attnmap_frame_num": 30}
-    )
+    args.worldfoundry_approximate_attention_profile_json = json.dumps({"attnmap_frame_num": 30})
 
     with pytest.raises(ValueError, match="attnmap_frame_num"):
         framework_ab_wan22._worldfoundry_approximate_attention_request(args)
@@ -2697,9 +2628,7 @@ def test_block_feature_cache_effectiveness_gate_requires_live_per_branch_skips()
         )
 
     stack_hit_without_block_skip = json.loads(json.dumps(report))
-    stack_hit_without_block_skip["runtime"]["feature_cache"][
-        "skipped_block_calls"
-    ] = 0
+    stack_hit_without_block_skip["runtime"]["feature_cache"]["skipped_block_calls"] = 0
     with pytest.raises(RuntimeError, match="skipped_block_calls"):
         framework_ab_wan22._verify_worldfoundry_optimization_report(
             stack_hit_without_block_skip,
@@ -2707,9 +2636,7 @@ def test_block_feature_cache_effectiveness_gate_requires_live_per_branch_skips()
         )
 
     branch_without_skip = json.loads(json.dumps(report))
-    branch_without_skip["runtime"]["feature_cache"]["branches"]["negative"][
-        "skipped_block_calls"
-    ] = 0
+    branch_without_skip["runtime"]["feature_cache"]["branches"]["negative"]["skipped_block_calls"] = 0
     with pytest.raises(RuntimeError, match="negative.*skipped_block_calls"):
         framework_ab_wan22._verify_worldfoundry_optimization_report(
             branch_without_skip,
@@ -2725,9 +2652,9 @@ def test_block_feature_cache_effectiveness_gate_requires_live_per_branch_skips()
         )
 
     duplicate_block = json.loads(json.dumps(report))
-    duplicate_block["runtime"]["feature_cache"]["branches"]["positive"][
-        "receipt"
-    ]["event_receipts"][0]["dense_blocks"][1] = 0
+    duplicate_block["runtime"]["feature_cache"]["branches"]["positive"]["receipt"]["event_receipts"][0]["dense_blocks"][
+        1
+    ] = 0
     with pytest.raises(RuntimeError, match="event_consistency"):
         framework_ab_wan22._verify_worldfoundry_optimization_report(
             duplicate_block,
@@ -2735,9 +2662,7 @@ def test_block_feature_cache_effectiveness_gate_requires_live_per_branch_skips()
         )
 
     duplicate_step = json.loads(json.dumps(report))
-    duplicate_step["runtime"]["feature_cache"]["branches"]["positive"][
-        "receipt"
-    ]["event_receipts"][1]["step"] = 0
+    duplicate_step["runtime"]["feature_cache"]["branches"]["positive"]["receipt"]["event_receipts"][1]["step"] = 0
     with pytest.raises(RuntimeError, match="event_consistency"):
         framework_ab_wan22._verify_worldfoundry_optimization_report(
             duplicate_step,
@@ -2745,9 +2670,9 @@ def test_block_feature_cache_effectiveness_gate_requires_live_per_branch_skips()
         )
 
     non_seed_step_zero = json.loads(json.dumps(report))
-    non_seed_step_zero["runtime"]["feature_cache"]["branches"]["positive"][
-        "receipt"
-    ]["event_receipts"][0]["reason"] = "dense"
+    non_seed_step_zero["runtime"]["feature_cache"]["branches"]["positive"]["receipt"]["event_receipts"][0]["reason"] = (
+        "dense"
+    )
     with pytest.raises(RuntimeError, match="event_consistency"):
         framework_ab_wan22._verify_worldfoundry_optimization_report(
             non_seed_step_zero,
@@ -2799,9 +2724,7 @@ def test_block_taylor_effectiveness_gate_requires_phase_skip_receipts() -> None:
                     }
                 }
             },
-            "feature_cache": _live_block_feature_cache_runtime(
-                "blocktaylorseer"
-            ),
+            "feature_cache": _live_block_feature_cache_runtime("blocktaylorseer"),
         },
     }
 
@@ -2812,9 +2735,9 @@ def test_block_taylor_effectiveness_gate_requires_phase_skip_receipts() -> None:
     assert verification["passed"] is True
 
     no_real_phase_skip = json.loads(json.dumps(report))
-    no_real_phase_skip["runtime"]["feature_cache"]["branches"]["positive"][
-        "receipt"
-    ]["event_receipts"][1]["skipped_blocks"] = []
+    no_real_phase_skip["runtime"]["feature_cache"]["branches"]["positive"]["receipt"]["event_receipts"][1][
+        "skipped_blocks"
+    ] = []
     with pytest.raises(RuntimeError, match="event_consistency"):
         framework_ab_wan22._verify_worldfoundry_optimization_report(
             no_real_phase_skip,
@@ -2876,9 +2799,7 @@ def test_custom_cache_gate_requires_current_request_tea_taylor_receipts() -> Non
     assert verification["passed"] is True
 
     stale = json.loads(json.dumps(report))
-    stale["runtime"]["feature_cache"]["branches"]["negative"]["receipt"][
-        "request_id"
-    ] = "previous-request"
+    stale["runtime"]["feature_cache"]["branches"]["negative"]["receipt"]["request_id"] = "previous-request"
     with pytest.raises(RuntimeError, match="negative.*receipt"):
         framework_ab_wan22._verify_worldfoundry_optimization_report(stale, args)
 
@@ -3072,13 +2993,11 @@ def test_worldfoundry_compile_gate_requires_provider_graph_receipt_and_executed_
     for section, field, rejected_value in rejected_paths:
         rejected_report = json.loads(json.dumps(report))
         if section == "provider":
-            rejected_report["runtime"]["attention_dispatch"]["provider_calls"][
-                "flash_attention_3"
-            ][field] = rejected_value
+            rejected_report["runtime"]["attention_dispatch"]["provider_calls"]["flash_attention_3"][field] = (
+                rejected_value
+            )
         elif section == "scoped":
-            rejected_report["runtime"]["compile"][
-                "attention_provider_graph_traces"
-            ][field] = rejected_value
+            rejected_report["runtime"]["compile"]["attention_provider_graph_traces"][field] = rejected_value
         else:
             rejected_report["runtime"]["compile"][field] = rejected_value
         with pytest.raises(RuntimeError, match="effectiveness gate failed"):
@@ -3159,10 +3078,13 @@ def test_worldfoundry_cuda_graph_gate_requires_capture_and_replay() -> None:
     reused_report = json.loads(json.dumps(report))
     reused_report["runtime"]["cuda_graph"]["capture"] = 0
     reused_report["effective"]["cuda_graph"] = "replayed-existing-graph"
-    assert framework_ab_wan22._verify_worldfoundry_optimization_report(
-        reused_report,
-        args,
-    )["passed"] is True
+    assert (
+        framework_ab_wan22._verify_worldfoundry_optimization_report(
+            reused_report,
+            args,
+        )["passed"]
+        is True
+    )
 
     for section, field, rejected_value in (
         ("runtime", "replay", 0),
@@ -3249,10 +3171,13 @@ def test_worldfoundry_fused_rope_gate_requires_real_provider_calls() -> None:
         },
     }
 
-    assert framework_ab_wan22._verify_worldfoundry_optimization_report(
-        report,
-        args,
-    )["passed"] is True
+    assert (
+        framework_ab_wan22._verify_worldfoundry_optimization_report(
+            report,
+            args,
+        )["passed"]
+        is True
+    )
 
     rejected_values = {
         "provider_calls": 0,
@@ -3403,7 +3328,7 @@ def test_worldfoundry_runner_resets_attention_counters_before_generation(
                         "quarantined_skips": 0,
                     }
                 }
-            }
+            },
         },
     }
 
@@ -3414,9 +3339,7 @@ def test_worldfoundry_runner_resets_attention_counters_before_generation(
                 model=model,
                 runtime_optimization_report=lambda: runtime_report,
             )
-            decoder = SimpleNamespace(
-                vae=SimpleNamespace(decode_autocast_dtype=torch.bfloat16)
-            )
+            decoder = SimpleNamespace(vae=SimpleNamespace(decode_autocast_dtype=torch.bfloat16))
             self.native_pipeline = SimpleNamespace(
                 runner=SimpleNamespace(
                     components=SimpleNamespace(
@@ -3516,11 +3439,7 @@ def test_fastvideo_reference_probe_proves_one_shot_role_calls_and_rejects_fallba
                     attn2=SimpleNamespace(attn=FakeAttention(backend)),
                 )
             )
-        worker = SimpleNamespace(
-            pipeline=SimpleNamespace(
-                modules={"transformer": SimpleNamespace(blocks=blocks)}
-            )
-        )
+        worker = SimpleNamespace(pipeline=SimpleNamespace(modules={"transformer": SimpleNamespace(blocks=blocks)}))
         return worker, blocks
 
     worker, blocks = make_worker("FLASH_ATTN")
@@ -3546,9 +3465,7 @@ def test_fastvideo_reference_probe_proves_one_shot_role_calls_and_rejects_fallba
     assert collected["roles"]["cross1"]["hook_removed_after_success"] is True
 
     fallback_worker, _ = make_worker("TORCH_SDPA")
-    fallback_probe = framework_ab_wan22._install_fastvideo_reference_probe(
-        fallback_worker
-    )
+    fallback_probe = framework_ab_wan22._install_fastvideo_reference_probe(fallback_worker)
     with pytest.raises(RuntimeError, match="FastVideo runtime effectiveness gate failed"):
         framework_ab_wan22._verify_fastvideo_reference_probe(
             [fallback_probe],
@@ -3558,9 +3475,7 @@ def test_fastvideo_reference_probe_proves_one_shot_role_calls_and_rejects_fallba
     uncalled_worker, uncalled_blocks = make_worker("FLASH_ATTN")
     framework_ab_wan22._install_fastvideo_reference_probe(uncalled_worker)
     uncalled_blocks[0].attn1(torch.ones(1))
-    uncalled_probe = framework_ab_wan22._collect_fastvideo_reference_probe(
-        uncalled_worker
-    )
+    uncalled_probe = framework_ab_wan22._collect_fastvideo_reference_probe(uncalled_worker)
     with pytest.raises(RuntimeError, match="cross1.successful_calls"):
         framework_ab_wan22._verify_fastvideo_reference_probe(
             [uncalled_probe],
@@ -3618,16 +3533,10 @@ def _fake_fastvideo_flash_runtime(
     blocks = [
         SimpleNamespace(
             attn1=FakeAttention(default_module, "_fa_default"),
-            attn2=SimpleNamespace(
-                attn=FakeAttention(no_pad_module, "flash_attn_varlen_func_impl")
-            ),
+            attn2=SimpleNamespace(attn=FakeAttention(no_pad_module, "flash_attn_varlen_func_impl")),
         )
     ]
-    worker = SimpleNamespace(
-        pipeline=SimpleNamespace(
-            modules={"transformer": SimpleNamespace(blocks=blocks)}
-        )
-    )
+    worker = SimpleNamespace(pipeline=SimpleNamespace(modules={"transformer": SimpleNamespace(blocks=blocks)}))
     originals = {
         "default": default_fa3,
         "masked_self": masked_self_fa2,
@@ -3659,10 +3568,11 @@ def test_fastvideo_flash_probe_proves_real_self_and_cross_kernel_calls(
         "default": "3",
         "varlen": "3",
     }
-    assert {
-        candidate["entrypoint"]
-        for candidate in installed["flash_kernel_candidates"]
-    } == {"default", "masked_self_qkvpacked", "varlen_qkv"}
+    assert {candidate["entrypoint"] for candidate in installed["flash_kernel_candidates"]} == {
+        "default",
+        "masked_self_qkvpacked",
+        "varlen_qkv",
+    }
 
     blocks[0].attn1(torch.ones(1))
     blocks[0].attn2.attn(torch.ones(1))
@@ -3676,19 +3586,11 @@ def test_fastvideo_flash_probe_proves_real_self_and_cross_kernel_calls(
     assert collected["roles"]["self"]["kernel_calls"] == 1
     assert collected["roles"]["self"]["kernel_entrypoints"] == ["default"]
     assert collected["roles"]["cross1"]["kernel_calls"] == 1
-    assert collected["roles"]["cross1"]["kernel_entrypoints"] == [
-        "varlen_qkv"
-    ]
+    assert collected["roles"]["cross1"]["kernel_entrypoints"] == ["varlen_qkv"]
     assert collected["kernel_wrappers_restored"] is True
     assert originals["default_module"]._fa_default is originals["default"]
-    assert (
-        originals["no_pad_module"].flash_attn_varlen_qkvpacked_func
-        is originals["masked_self"]
-    )
-    assert (
-        originals["no_pad_module"].flash_attn_varlen_func_impl
-        is originals["varlen"]
-    )
+    assert originals["no_pad_module"].flash_attn_varlen_qkvpacked_func is originals["masked_self"]
+    assert originals["no_pad_module"].flash_attn_varlen_func_impl is originals["varlen"]
 
 
 def test_fastvideo_flash_probe_rejects_outer_forward_without_kernel_execution(
@@ -3713,10 +3615,7 @@ def test_fastvideo_flash_probe_rejects_outer_forward_without_kernel_execution(
     assert collected["roles"]["cross1"]["kernel_calls"] == 0
     assert collected["kernel_wrappers_restored"] is True
     assert originals["default_module"]._fa_default is originals["default"]
-    assert (
-        originals["no_pad_module"].flash_attn_varlen_func_impl
-        is originals["varlen"]
-    )
+    assert originals["no_pad_module"].flash_attn_varlen_func_impl is originals["varlen"]
     with pytest.raises(RuntimeError, match="concrete_kernel_calls"):
         framework_ab_wan22._verify_fastvideo_reference_probe(
             [collected],
@@ -3791,9 +3690,7 @@ def test_lightx2v_reference_probe_requires_kernel_symbols_and_both_t2v_roles(
         "flash_attn2",
     )
     uncalled_self.apply("self")
-    uncalled_probe = framework_ab_wan22._collect_lightx2v_reference_probe(
-        uncalled_pipeline
-    )
+    uncalled_probe = framework_ab_wan22._collect_lightx2v_reference_probe(uncalled_pipeline)
     with pytest.raises(RuntimeError, match="cross1.successful_calls"):
         framework_ab_wan22._verify_lightx2v_reference_probe(
             uncalled_probe,
@@ -3861,9 +3758,7 @@ def test_lightx2v_role_probe_proves_dynamic_sparse_self_and_dense_cross(
     DynamicSparseAttnWeight.__module__ = sparse_module_name
     DynamicSparseAttnWeight.__qualname__ = "DynamicSparseAttnWeight"
     DynamicSparseAttnWeight.apply_triton.__module__ = sparse_module_name
-    DynamicSparseAttnWeight.apply_triton.__qualname__ = (
-        "DynamicSparseAttnWeight.apply_triton"
-    )
+    DynamicSparseAttnWeight.apply_triton.__qualname__ = "DynamicSparseAttnWeight.apply_triton"
 
     dense_module_name = "lightx2v.common.ops.attn.flash_attn"
     dense_module = ModuleType(dense_module_name)
@@ -3964,9 +3859,7 @@ def test_lightx2v_role_probe_proves_dynamic_sparse_self_and_dense_cross(
     )
     no_kernel_self.apply("self")
     no_kernel_cross.apply("cross")
-    no_kernel_collected = framework_ab_wan22._collect_lightx2v_reference_probe(
-        no_kernel_pipeline
-    )
+    no_kernel_collected = framework_ab_wan22._collect_lightx2v_reference_probe(no_kernel_pipeline)
     with pytest.raises(RuntimeError, match="sparse_final_kernel_successful_calls"):
         framework_ab_wan22._verify_lightx2v_reference_probe(
             no_kernel_collected,
@@ -3980,29 +3873,22 @@ def test_lightx2v_role_probe_proves_dynamic_sparse_self_and_dense_cross(
         (
             "sm80",
             False,
-            "qattn."
-            "qk_int8_sv_f16_accum_f16_block_sparse_attn_inst_buf_"
-            "with_pv_threshold",
+            "qattn.qk_int8_sv_f16_accum_f16_block_sparse_attn_inst_buf_with_pv_threshold",
         ),
         (
             "sm90",
             False,
-            "qattn."
-            "qk_int8_sv_f8_accum_f32_block_sparse_attn_inst_buf_"
-            "fuse_v_scale_sm90",
+            "qattn.qk_int8_sv_f8_accum_f32_block_sparse_attn_inst_buf_fuse_v_scale_sm90",
         ),
         (
             "sm89",
             True,
-            "qk_int8_sv_f8_accum_f16_block_sparse_attn_inst_buf_"
-            "fuse_v_scale_with_pv_threshold",
+            "qk_int8_sv_f8_accum_f16_block_sparse_attn_inst_buf_fuse_v_scale_with_pv_threshold",
         ),
         (
             "sm120",
             False,
-            "qattn."
-            "qk_int8_sv_f8_accum_f32_block_sparse_attn_inst_buf_"
-            "fuse_v_scale_with_pv_threshold",
+            "qattn.qk_int8_sv_f8_accum_f32_block_sparse_attn_inst_buf_fuse_v_scale_with_pv_threshold",
         ),
     ],
 )
@@ -4045,11 +3931,9 @@ def test_lightx2v_dynamic_sage2_resolves_arch_specific_final_kernel(
     instance = DynamicSparseAttnWeight()
     instance.arch = arch
 
-    owner, attribute, path, resolved = (
-        framework_ab_wan22._lightx2v_dynamic_sparse_kernel_target(
-            instance,
-            "sage2",
-        )
+    owner, attribute, path, resolved = framework_ab_wan22._lightx2v_dynamic_sparse_kernel_target(
+        instance,
+        "sage2",
     )
 
     assert owner is kernel_owner
@@ -4067,9 +3951,7 @@ def test_lightx2v_role_probe_proves_sage2_final_cuda_kernel(
     sparge_module_name = "lightx2v.common.ops.attn.utils.sparge_util"
     sparse_module = ModuleType(sparse_module_name)
     sparge_module = ModuleType(sparge_module_name)
-    final_kernel_name = (
-        "qk_int8_sv_f8_accum_f32_block_sparse_attn_inst_buf_fuse_v_scale_sm90"
-    )
+    final_kernel_name = "qk_int8_sv_f8_accum_f32_block_sparse_attn_inst_buf_fuse_v_scale_sm90"
 
     def final_kernel(value=None, *_args, **_kwargs):
         return value
@@ -4113,9 +3995,7 @@ def test_lightx2v_role_probe_proves_sage2_final_cuda_kernel(
     DynamicSparseAttnWeight.__module__ = sparse_module_name
     DynamicSparseAttnWeight.__qualname__ = "DynamicSparseAttnWeight"
     DynamicSparseAttnWeight.apply_sage2.__module__ = sparse_module_name
-    DynamicSparseAttnWeight.apply_sage2.__qualname__ = (
-        "DynamicSparseAttnWeight.apply_sage2"
-    )
+    DynamicSparseAttnWeight.apply_sage2.__qualname__ = "DynamicSparseAttnWeight.apply_sage2"
 
     dense_module_name = "lightx2v.common.ops.attn.flash_attn"
     dense_module = ModuleType(dense_module_name)
@@ -4178,12 +4058,8 @@ def test_lightx2v_role_probe_proves_sage2_final_cuda_kernel(
     provider = sparse_role["sparse_provider"]
     assert verification["passed"] is True
     assert provider["dispatcher_available"] is True
-    assert provider["dispatcher_attribute"] == (
-        f"{sparse_module_name}.sage2_block_sparse_attn"
-    )
-    assert provider["kernel_attribute"] == (
-        f"{sparge_module_name}.qattn.{final_kernel_name}"
-    )
+    assert provider["dispatcher_attribute"] == (f"{sparse_module_name}.sage2_block_sparse_attn")
+    assert provider["kernel_attribute"] == (f"{sparge_module_name}.qattn.{final_kernel_name}")
     assert sparse_role["sparse_dispatch_successful_calls"] == 1
     assert sparse_role["sparse_final_kernel_successful_calls"] == 1
     assert sparse_role["sparse_mask"]["strictly_sparse"] is True
@@ -4232,9 +4108,7 @@ def test_lightx2v_role_probe_rejects_dense_mask_as_sparse(
     DynamicSparseAttnWeight.__module__ = sparse_module_name
     DynamicSparseAttnWeight.__qualname__ = "DynamicSparseAttnWeight"
     DynamicSparseAttnWeight.apply_triton.__module__ = sparse_module_name
-    DynamicSparseAttnWeight.apply_triton.__qualname__ = (
-        "DynamicSparseAttnWeight.apply_triton"
-    )
+    DynamicSparseAttnWeight.apply_triton.__qualname__ = "DynamicSparseAttnWeight.apply_triton"
 
     dense_module_name = "lightx2v.common.ops.attn.flash_attn"
     dense_module = ModuleType(dense_module_name)
@@ -4556,10 +4430,7 @@ def test_lightx2v_role_request_matches_upstream_sparse_self_dense_cross() -> Non
         },
         "self_setting_key": "dynamic_sparse_attn_setting",
     }
-    checkpoints = {
-        name: {"identity_sha256": name}
-        for name in ("worldfoundry", "fastvideo", "lightx2v")
-    }
+    checkpoints = {name: {"identity_sha256": name} for name in ("worldfoundry", "fastvideo", "lightx2v")}
     semantic_profile = framework_ab_wan22._semantic_config(
         args,
         checkpoints,
@@ -4847,9 +4718,7 @@ def test_lightx2v_runner_uses_public_pipeline_contract(
                                 compute_phases=[
                                     SimpleNamespace(
                                         self_attn_1=self_attention,
-                                        rope=SimpleNamespace(
-                                            compute_dtype=torch.float32
-                                        ),
+                                        rope=SimpleNamespace(compute_dtype=torch.float32),
                                         attn_rms_norm_type="sgl-kernel",
                                         self_attn_norm_q=SimpleNamespace(
                                             infer_dtype=torch.bfloat16,
@@ -4990,16 +4859,11 @@ def test_lightx2v_runner_uses_public_pipeline_contract(
     assert result["optimization_report"]["quality_tier"] == "numerically-approximate"
     assert result["optimization_report"]["fallbacks"] == []
     optimization_report = result["optimization_report"]
-    assert optimization_report["effective"][
-        "double_precision_rope_configured"
-    ] is True
+    assert optimization_report["effective"]["double_precision_rope_configured"] is True
     assert optimization_report["effective"]["double_precision_rope"] is False
     assert optimization_report["effective"]["rope_compute_dtype"] == "float32"
     assert optimization_report["effective"]["rms_norm_compute_mode"] == "input"
-    assert {
-        item["compute_mode"]
-        for item in optimization_report["wan_math_runtime"]["rms_norm"].values()
-    } == {"input"}
+    assert {item["compute_mode"] for item in optimization_report["wan_math_runtime"]["rms_norm"].values()} == {"input"}
     runtime_probe = optimization_report["runtime_probe"]
     assert runtime_probe["roles"]["self"]["successful_calls"] == 1
     assert runtime_probe["roles"]["cross1"]["successful_calls"] == 1
@@ -5051,9 +4915,7 @@ def test_lightx2v_runner_uses_sparse_self_and_dense_cross_contract(
     DynamicSparseAttnWeight.__module__ = sparse_module_name
     DynamicSparseAttnWeight.__qualname__ = "DynamicSparseAttnWeight"
     DynamicSparseAttnWeight.apply_triton.__module__ = sparse_module_name
-    DynamicSparseAttnWeight.apply_triton.__qualname__ = (
-        "DynamicSparseAttnWeight.apply_triton"
-    )
+    DynamicSparseAttnWeight.apply_triton.__qualname__ = "DynamicSparseAttnWeight.apply_triton"
 
     dense_module_name = "lightx2v.common.ops.attn.flash_attn"
     dense_module = ModuleType(dense_module_name)
@@ -5082,18 +4944,14 @@ def test_lightx2v_runner_uses_sparse_self_and_dense_cross_contract(
             calls["offload"] = kwargs
 
         def create_generator(self, **kwargs) -> None:
-            config = json.loads(
-                Path(kwargs["config_json"]).read_text(encoding="utf-8")
-            )
+            config = json.loads(Path(kwargs["config_json"]).read_text(encoding="utf-8"))
             calls["generator_config"] = config
             self.self_attn_1_type = config["self_attn_1_type"]
             self.cross_attn_1_type = config["cross_attn_1_type"]
             self.cross_attn_2_type = config["cross_attn_2_type"]
             self.rope_type = config["rope_type"]
             self.double_precision_rope = config["double_precision_rope"]
-            self_attention = DynamicSparseAttnWeight(
-                config["dynamic_sparse_attn_setting"]
-            )
+            self_attention = DynamicSparseAttnWeight(config["dynamic_sparse_attn_setting"])
             cross_attention = FlashAttn3Weight()
             calls["self_attention"] = self_attention
             calls["cross_attention"] = cross_attention
@@ -5105,9 +4963,7 @@ def test_lightx2v_runner_uses_sparse_self_and_dense_cross_contract(
                                 compute_phases=[
                                     SimpleNamespace(
                                         self_attn_1=self_attention,
-                                        rope=SimpleNamespace(
-                                            compute_dtype=torch.float32
-                                        ),
+                                        rope=SimpleNamespace(compute_dtype=torch.float32),
                                         attn_rms_norm_type="sgl-kernel",
                                         self_attn_norm_q=SimpleNamespace(
                                             infer_dtype=torch.bfloat16,
@@ -5210,12 +5066,8 @@ def test_lightx2v_runner_uses_sparse_self_and_dense_cross_contract(
     assert report["effective"]["double_precision_rope"] is False
     assert report["effective"]["rope_compute_dtype"] == "float32"
     assert report["effective"]["rms_norm_compute_mode"] == "input"
-    assert report["backend_capability"]["roles"]["self"][
-        "runtime_resolved_request"
-    ] is True
-    assert report["runtime_probe"]["roles"]["self"]["sparse_mask"][
-        "strictly_sparse"
-    ] is True
+    assert report["backend_capability"]["roles"]["self"]["runtime_resolved_request"] is True
+    assert report["runtime_probe"]["roles"]["self"]["sparse_mask"]["strictly_sparse"] is True
 
 
 def _fastvideo_sla_args(
@@ -5259,25 +5111,16 @@ def _fastvideo_sla_args(
 
 def _fastvideo_sla_contract(kind: str) -> dict[str, object]:
     configured = framework_ab_wan22.FASTVIDEO_SLA_REFERENCE_CONTRACTS[kind]
-    layer_fingerprints = {
-        str(layer): hashlib.sha256(f"projection:{layer}".encode()).hexdigest()
-        for layer in range(30)
-    }
-    source_fingerprint = hashlib.sha256(
-        b"pinned-fastvideo-sla-source"
-    ).hexdigest()
+    layer_fingerprints = {str(layer): hashlib.sha256(f"projection:{layer}".encode()).hexdigest() for layer in range(30)}
     return {
         "provider_path": configured["provider_path"],
         "provider_family": configured["provider_family"],
         "commit": framework_ab_wan22.WORLD_FOUNDRY_PINNED_FASTVIDEO_COMMIT,
-        "source_fingerprint": source_fingerprint,
         "checkpoint_layout": framework_ab_wan22.FASTVIDEO_SLA_CHECKPOINT_LAYOUT,
         "projection_fingerprint": (
             framework_ab_wan22._fastvideo_projection_set_fingerprint(
                 layer_fingerprints,
-                checkpoint_layout=(
-                    framework_ab_wan22.FASTVIDEO_SLA_CHECKPOINT_LAYOUT
-                ),
+                checkpoint_layout=(framework_ab_wan22.FASTVIDEO_SLA_CHECKPOINT_LAYOUT),
             )
         ),
         "layer_projection_fingerprints": layer_fingerprints,
@@ -5292,16 +5135,13 @@ def _live_fastvideo_sla_optimization_report(
     provider = str(contract["provider_path"])
     provider_family = str(contract["provider_family"])
     commit = str(contract["commit"])
-    source_fingerprint = str(contract["source_fingerprint"])
     checkpoint_layout = str(contract["checkpoint_layout"])
     projection_fingerprint = str(contract["projection_fingerprint"])
     layer_fingerprints = dict(contract["layer_projection_fingerprints"])
     topk_ratio = float(configured["topk_ratio"])
     source_root = "/opt/FastVideo"
     source_file = "/opt/FastVideo/fastvideo/attention/backends/sla.py"
-    provider_fingerprint = hashlib.sha256(
-        f"{provider}:runtime".encode()
-    ).hexdigest()
+    provider_fingerprint = hashlib.sha256(f"{provider}:runtime".encode()).hexdigest()
     request_id = f"{kind}-request-current"
     request_epoch = 13
     blocks = 30
@@ -5356,7 +5196,6 @@ def _live_fastvideo_sla_optimization_report(
                         "reference_fastvideo_commit": commit,
                         "provider_source_commit": commit,
                         "provider_source_clean": True,
-                        "provider_source_fingerprint": source_fingerprint,
                         "provider_source_root": source_root,
                         "provider_source_file": source_file,
                         "reference_parity_verified": True,
@@ -5365,12 +5204,8 @@ def _live_fastvideo_sla_optimization_report(
                             f"{prefix}.weight",
                             f"{prefix}.bias",
                         ],
-                        "projection_weight_fingerprint": layer_fingerprints[
-                            str(layer)
-                        ],
-                        "all_projection_weights_fingerprint": (
-                            projection_fingerprint
-                        ),
+                        "projection_weight_fingerprint": layer_fingerprints[str(layer)],
+                        "all_projection_weights_fingerprint": (projection_fingerprint),
                         "layer_prefix": f"blocks.{layer}.attn1",
                         "call_index": call_index,
                         "layer_call_index": layer_call_indices[layer],
@@ -5456,7 +5291,6 @@ def _live_fastvideo_sla_optimization_report(
             "reference_fastvideo_commit": commit,
             "provider_source_commit": commit,
             "provider_source_commits": [commit],
-            "provider_source_fingerprints": [source_fingerprint],
             "provider_fingerprints": [provider_fingerprint],
             "provider_source_root": source_root,
             "provider_source_roots": [source_root],
@@ -5525,9 +5359,7 @@ def _stub_framework_fastvideo_sla_expectation(
                 checkpoint_layout=None,
             )
         ),
-        "layer_projection_fingerprints": contract[
-            "layer_projection_fingerprints"
-        ],
+        "layer_projection_fingerprints": contract["layer_projection_fingerprints"],
     }
     monkeypatch.setattr(
         framework_ab_wan22,
@@ -5541,12 +5373,7 @@ def _stub_framework_fastvideo_sla_expectation(
             "provider_path": contract["provider_path"],
             "provider_family": contract["provider_family"],
             "commit": contract["commit"],
-            "source_fingerprint": contract["source_fingerprint"],
-            **(
-                checkpoint_expectation
-                if checkpoint_expectation is not None
-                else {}
-            ),
+            **(checkpoint_expectation if checkpoint_expectation is not None else {}),
         },
     )
 
@@ -5567,9 +5394,7 @@ def _write_fastvideo_sla_safetensors(
         if layout == "fastvideo_diffusers":
             prefix = f"blocks.{layer}.attn1.attn_impl.proj_l"
         else:
-            prefix = (
-                f"blocks.{layer}.self_attn.attn_op.local_attn.proj_l"
-            )
+            prefix = f"blocks.{layer}.self_attn.attn_op.local_attn.proj_l"
         weight = torch.full((128, 128), float(layer + 1))
         bias = torch.full((128,), float(layer) / 10.0)
         if layer == zero_weight_layer:
@@ -5596,9 +5421,7 @@ def test_fastvideo_sla_checkpoint_preflight_hashes_exact_diffusers_projections(
         for layer, (weight, bias) in tensors.items()
     }
 
-    expectation = framework_ab_wan22._fastvideo_sla_checkpoint_expectation(
-        checkpoint
-    )
+    expectation = framework_ab_wan22._fastvideo_sla_checkpoint_expectation(checkpoint)
 
     assert expectation["checkpoint_path"] == str(checkpoint.resolve())
     assert expectation["checkpoint_layout"] == "fastvideo_diffusers"
@@ -5632,11 +5455,7 @@ def test_fastvideo_sla_checkpoint_preflight_rejects_unusable_projection_sets(
 ) -> None:
     checkpoint, _ = _write_fastvideo_sla_safetensors(
         tmp_path,
-        layout=(
-            "turbodiffusion_original"
-            if mutation == "wrong-layout"
-            else "fastvideo_diffusers"
-        ),
+        layout=("turbodiffusion_original" if mutation == "wrong-layout" else "fastvideo_diffusers"),
         missing_bias_layer=17 if mutation == "missing" else None,
         zero_weight_layer=9 if mutation == "zero" else None,
     )
@@ -5680,9 +5499,7 @@ def test_fastvideo_sla_cli_freezes_fair_reference_profile_and_pairing(
         },
     )
 
-    request = framework_ab_wan22._worldfoundry_approximate_attention_request(
-        args
-    )
+    request = framework_ab_wan22._worldfoundry_approximate_attention_request(args)
     framework_ab_wan22._validate_fastvideo_sla_pairing_request(args)
 
     assert request == {
@@ -5710,9 +5527,7 @@ def test_fastvideo_sla_pairing_rejects_mismatched_backends(
     match: str,
 ) -> None:
     with pytest.raises(ValueError, match=match):
-        framework_ab_wan22._validate_fastvideo_sla_pairing_request(
-            _fastvideo_sla_args(kind, backend=backend)
-        )
+        framework_ab_wan22._validate_fastvideo_sla_pairing_request(_fastvideo_sla_args(kind, backend=backend))
 
 
 @pytest.mark.parametrize(
@@ -5727,9 +5542,7 @@ def test_fastvideo_sla_profile_rejects_reference_divergence(
     profile: dict[str, object],
 ) -> None:
     with pytest.raises(ValueError, match="pinned FastVideo runtime profile"):
-        framework_ab_wan22._worldfoundry_approximate_attention_request(
-            _fastvideo_sla_args(profile=profile)
-        )
+        framework_ab_wan22._worldfoundry_approximate_attention_request(_fastvideo_sla_args(profile=profile))
 
 
 def test_fastvideo_sla_backend_is_rejected_without_matching_worldfoundry_lane() -> None:
@@ -5814,11 +5627,7 @@ def _fake_fastvideo_sla_worker(
     import torch
 
     dtype = projection_dtype or torch.float32
-    expected_name = (
-        "SLAAttentionImpl"
-        if backend == "SLA_ATTN"
-        else "SageSLAAttentionImpl"
-    )
+    expected_name = "SLAAttentionImpl" if backend == "SLA_ATTN" else "SageSLAAttentionImpl"
     provider_name = "FakeSLAAttentionImpl" if wrong_provider else expected_name
     provider_type = type(
         provider_name,
@@ -5858,15 +5667,9 @@ def _fake_fastvideo_sla_worker(
         implementations.append(implementation)
         # Learned SLA is a self-attention optimization; intentionally expose no
         # attn2/cross-attention object so the probe cannot require one.
-        transformer_blocks.append(
-            SimpleNamespace(attn1=FakeAttention(implementation))
-        )
+        transformer_blocks.append(SimpleNamespace(attn1=FakeAttention(implementation)))
     worker = SimpleNamespace(
-        pipeline=SimpleNamespace(
-            modules={
-                "transformer": SimpleNamespace(blocks=transformer_blocks)
-            }
-        )
+        pipeline=SimpleNamespace(modules={"transformer": SimpleNamespace(blocks=transformer_blocks)})
     )
     return worker, implementations
 
@@ -5877,15 +5680,9 @@ def _checkpoint_expectation_from_probe_role(
     return {
         "checkpoint_path": "/checkpoint",
         "checkpoint_layout": role["checkpoint_layout"],
-        "projection_fingerprint": role[
-            "all_projection_weights_fingerprint"
-        ],
-        "canonical_projection_fingerprint": role[
-            "canonical_projection_fingerprint"
-        ],
-        "layer_projection_fingerprints": role[
-            "layer_projection_fingerprints"
-        ],
+        "projection_fingerprint": role["all_projection_weights_fingerprint"],
+        "canonical_projection_fingerprint": role["canonical_projection_fingerprint"],
+        "layer_projection_fingerprints": role["layer_projection_fingerprints"],
     }
 
 
@@ -5903,9 +5700,7 @@ def test_fastvideo_sla_probe_proves_all_self_attention_projections(
     worker, implementations = _fake_fastvideo_sla_worker(backend=backend)
 
     installed = framework_ab_wan22._install_fastvideo_reference_probe(worker)
-    checkpoint_expectation = _checkpoint_expectation_from_probe_role(
-        installed["roles"]["self"]
-    )
+    checkpoint_expectation = _checkpoint_expectation_from_probe_role(installed["roles"]["self"])
     preflight = framework_ab_wan22._verify_fastvideo_reference_probe(
         [installed],
         require_successful_calls=False,
@@ -5930,8 +5725,7 @@ def test_fastvideo_sla_probe_proves_all_self_attention_projections(
     assert role["successful_calls"] == 30
     assert role["projection_forward_complete"] is True
     assert all(
-        layer["projection_forward_calls"] == 1
-        and layer["projection_hook_removed_after_success"] is True
+        layer["projection_forward_calls"] == 1 and layer["projection_hook_removed_after_success"] is True
         for layer in role["layers"]
     )
 
@@ -5961,9 +5755,7 @@ def test_fastvideo_sla_probe_rejects_invalid_learned_projections(
         blocks=29 if mutation == "missing-layer" else 30,
     )
     if mutation == "wrong-shape":
-        worker.pipeline.modules["transformer"].blocks[0].attn1.attn_impl.proj_l = (
-            torch.nn.Linear(4, 4)
-        )
+        worker.pipeline.modules["transformer"].blocks[0].attn1.attn_impl.proj_l = torch.nn.Linear(4, 4)
 
     installed = framework_ab_wan22._install_fastvideo_reference_probe(worker)
 
@@ -5989,9 +5781,7 @@ def test_fastvideo_sla_probe_rejects_one_projection_without_forward_proof(
     collected = framework_ab_wan22._collect_fastvideo_reference_probe(worker)
 
     assert collected["roles"]["self"]["successful_calls"] == 29
-    assert collected["roles"]["self"]["layers"][-1][
-        "projection_cleanup_removed_uncalled_hook"
-    ] is True
+    assert collected["roles"]["self"]["layers"][-1]["projection_cleanup_removed_uncalled_hook"] is True
     with pytest.raises(RuntimeError, match="successful_calls"):
         framework_ab_wan22._verify_fastvideo_reference_probe(
             [collected],
@@ -6006,25 +5796,13 @@ def test_fastvideo_sla_projection_fingerprint_binds_each_layer_and_global_set(
     baseline_worker, _ = _fake_fastvideo_sla_worker()
     changed_worker, _ = _fake_fastvideo_sla_worker(changed_layer=7)
 
-    baseline = framework_ab_wan22._install_fastvideo_reference_probe(
-        baseline_worker
-    )["roles"]["self"]
-    changed = framework_ab_wan22._install_fastvideo_reference_probe(
-        changed_worker
-    )["roles"]["self"]
+    baseline = framework_ab_wan22._install_fastvideo_reference_probe(baseline_worker)["roles"]["self"]
+    changed = framework_ab_wan22._install_fastvideo_reference_probe(changed_worker)["roles"]["self"]
 
-    assert baseline["layer_projection_fingerprints"]["6"] == changed[
-        "layer_projection_fingerprints"
-    ]["6"]
-    assert baseline["layer_projection_fingerprints"]["7"] != changed[
-        "layer_projection_fingerprints"
-    ]["7"]
-    assert baseline["all_projection_weights_fingerprint"] != changed[
-        "all_projection_weights_fingerprint"
-    ]
-    assert baseline["canonical_projection_fingerprint"] != changed[
-        "canonical_projection_fingerprint"
-    ]
+    assert baseline["layer_projection_fingerprints"]["6"] == changed["layer_projection_fingerprints"]["6"]
+    assert baseline["layer_projection_fingerprints"]["7"] != changed["layer_projection_fingerprints"]["7"]
+    assert baseline["all_projection_weights_fingerprint"] != changed["all_projection_weights_fingerprint"]
+    assert baseline["canonical_projection_fingerprint"] != changed["canonical_projection_fingerprint"]
 
 
 def test_fastvideo_sla_probe_rejects_runtime_that_disagrees_with_checkpoint(
@@ -6033,15 +5811,9 @@ def test_fastvideo_sla_probe_rejects_runtime_that_disagrees_with_checkpoint(
     monkeypatch.setenv("FASTVIDEO_ATTENTION_BACKEND", "SLA_ATTN")
     runtime_worker, _ = _fake_fastvideo_sla_worker()
     checkpoint_worker, _ = _fake_fastvideo_sla_worker(changed_layer=11)
-    runtime_probe = framework_ab_wan22._install_fastvideo_reference_probe(
-        runtime_worker
-    )
-    checkpoint_probe = framework_ab_wan22._install_fastvideo_reference_probe(
-        checkpoint_worker
-    )
-    checkpoint_expectation = _checkpoint_expectation_from_probe_role(
-        checkpoint_probe["roles"]["self"]
-    )
+    runtime_probe = framework_ab_wan22._install_fastvideo_reference_probe(runtime_worker)
+    checkpoint_probe = framework_ab_wan22._install_fastvideo_reference_probe(checkpoint_worker)
+    checkpoint_expectation = _checkpoint_expectation_from_probe_role(checkpoint_probe["roles"]["self"])
 
     with pytest.raises(RuntimeError, match="checkpoint_preflight"):
         framework_ab_wan22._verify_fastvideo_reference_probe(
@@ -6072,10 +5844,7 @@ def test_fastvideo_sla_projection_geometry_fails_closed_without_index_error(
 
     assert target is projection
     assert report["projection_weight_fingerprint"] is None
-    assert issues == [
-        "proj_l geometry is malformed: "
-        f"weight={weight_shape}, bias={bias_shape}"
-    ]
+    assert issues == [f"proj_l geometry is malformed: weight={weight_shape}, bias={bias_shape}"]
 
 
 @pytest.mark.parametrize(
@@ -6101,7 +5870,6 @@ def test_worldfoundry_fastvideo_sla_gate_accepts_complete_strict_receipt(
     "mutation",
     (
         "provider",
-        "source-fingerprint",
         "global-projection",
         "layer-projection",
         "nested-receipt",
@@ -6114,15 +5882,11 @@ def test_worldfoundry_fastvideo_sla_gate_rejects_forged_receipts(
 ) -> None:
     kind = "fastvideo_sla"
     _stub_framework_fastvideo_sla_expectation(monkeypatch, kind)
-    report = json.loads(
-        json.dumps(_live_fastvideo_sla_optimization_report(kind))
-    )
+    report = json.loads(json.dumps(_live_fastvideo_sla_optimization_report(kind)))
     approximate = report["runtime"]["approximate_attention"]
     event = approximate["events"][0]
     if mutation == "provider":
         event["reference_provider_path"] += ".Fake"
-    elif mutation == "source-fingerprint":
-        event.pop("provider_source_fingerprint")
     elif mutation == "global-projection":
         event["all_projection_weights_fingerprint"] = "0" * 64
     elif mutation == "layer-projection":
@@ -6130,9 +5894,7 @@ def test_worldfoundry_fastvideo_sla_gate_rejects_forged_receipts(
     elif mutation == "nested-receipt":
         event["provider_receipt"] = {"synthetic": True}
     else:
-        approximate["fastvideo_sla"][
-            "layer_projection_fingerprints"
-        ].pop("29")
+        approximate["fastvideo_sla"]["layer_projection_fingerprints"].pop("29")
 
     with pytest.raises(RuntimeError, match="effectiveness gate failed"):
         framework_ab_wan22._verify_worldfoundry_optimization_report(
@@ -6168,14 +5930,10 @@ def _projection_runtime_evidence(
     contract = _projection_contract_from_layers(layers)
     evidence = {
         "layer_projection_fingerprints": dict(layers),
-        "all_projection_weights_fingerprint": contract[
-            "projection_fingerprint"
-        ],
+        "all_projection_weights_fingerprint": contract["projection_fingerprint"],
     }
     if framework == "fastvideo":
-        evidence["canonical_projection_fingerprint"] = contract[
-            "canonical_projection_fingerprint"
-        ]
+        evidence["canonical_projection_fingerprint"] = contract["canonical_projection_fingerprint"]
     return evidence
 
 
@@ -6185,10 +5943,7 @@ def _fastvideo_sla_pair_records(
     checkpoint_layers: dict[str, str] | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
     baseline_layers = {
-        str(layer): hashlib.sha256(
-            f"paired-projection:{layer}".encode()
-        ).hexdigest()
-        for layer in range(30)
+        str(layer): hashlib.sha256(f"paired-projection:{layer}".encode()).hexdigest() for layer in range(30)
     }
     runtime_layers = dict(runtime_layers or baseline_layers)
     checkpoint_layers = dict(checkpoint_layers or baseline_layers)
@@ -6209,13 +5964,9 @@ def _fastvideo_sla_pair_records(
     )
     for record in (worldfoundry, fastvideo):
         record["semantic_config"]["fastvideo_optimization_profile"] = {
-            "learned_sla_contract": json.loads(
-                json.dumps(checkpoint_contract)
-            )
+            "learned_sla_contract": json.loads(json.dumps(checkpoint_contract))
         }
-    worldfoundry["semantic_config"]["worldfoundry_optimization_profile"][
-        "approximate_attention"
-    ] = "fastvideo_sla"
+    worldfoundry["semantic_config"]["worldfoundry_optimization_profile"]["approximate_attention"] = "fastvideo_sla"
     worldfoundry["measurements"]["optimization_report"] = {
         "runtime": {
             "approximate_attention": {
@@ -6244,9 +5995,7 @@ def _fastvideo_sla_pair_records(
 def test_pairing_accepts_only_complete_runtime_and_checkpoint_projection_match() -> None:
     worldfoundry, fastvideo = _fastvideo_sla_pair_records()
 
-    pairs, exclusions = framework_ab_wan22._paired_records(
-        (worldfoundry, fastvideo)
-    )
+    pairs, exclusions = framework_ab_wan22._paired_records((worldfoundry, fastvideo))
 
     assert len(pairs) == 1
     assert pairs[0]["pair_id"] == "sla-pair"
@@ -6261,12 +6010,10 @@ def test_pairing_rejects_incomplete_or_mismatched_projection_evidence(
     mutation: str,
 ) -> None:
     worldfoundry, fastvideo = _fastvideo_sla_pair_records()
-    wf_projection = worldfoundry["measurements"]["optimization_report"][
-        "runtime"
-    ]["approximate_attention"]["fastvideo_sla"]
-    fv_projection = fastvideo["measurements"]["optimization_report"][
-        "runtime_probe"
-    ][0]["roles"]["self"]
+    wf_projection = worldfoundry["measurements"]["optimization_report"]["runtime"]["approximate_attention"][
+        "fastvideo_sla"
+    ]
+    fv_projection = fastvideo["measurements"]["optimization_report"]["runtime_probe"][0]["roles"]["self"]
     if mutation == "missing-layer":
         wf_projection["layer_projection_fingerprints"].pop("29")
     elif mutation == "reported-global":
@@ -6281,22 +6028,15 @@ def test_pairing_rejects_incomplete_or_mismatched_projection_evidence(
             )
         )
 
-    pairs, exclusions = framework_ab_wan22._paired_records(
-        (worldfoundry, fastvideo)
-    )
+    pairs, exclusions = framework_ab_wan22._paired_records((worldfoundry, fastvideo))
 
     assert pairs == []
-    assert [item["reason"] for item in exclusions] == [
-        "learned_sla_projection_fingerprint_mismatch"
-    ]
+    assert [item["reason"] for item in exclusions] == ["learned_sla_projection_fingerprint_mismatch"]
 
 
 def test_pairing_rejects_two_matching_runtimes_when_checkpoint_preflight_differs() -> None:
     checkpoint_layers = {
-        str(layer): hashlib.sha256(
-            f"paired-projection:{layer}".encode()
-        ).hexdigest()
-        for layer in range(30)
+        str(layer): hashlib.sha256(f"paired-projection:{layer}".encode()).hexdigest() for layer in range(30)
     }
     runtime_layers = dict(checkpoint_layers)
     runtime_layers["11"] = hashlib.sha256(b"wrong-but-shared").hexdigest()
@@ -6305,33 +6045,21 @@ def test_pairing_rejects_two_matching_runtimes_when_checkpoint_preflight_differs
         checkpoint_layers=checkpoint_layers,
     )
 
-    pairs, exclusions = framework_ab_wan22._paired_records(
-        (worldfoundry, fastvideo)
-    )
+    pairs, exclusions = framework_ab_wan22._paired_records((worldfoundry, fastvideo))
 
     assert pairs == []
-    assert exclusions[0]["reason"] == (
-        "learned_sla_projection_fingerprint_mismatch"
-    )
-    assert exclusions[0]["worldfoundry_projection"] == exclusions[0][
-        "fastvideo_projection"
-    ]
-    assert exclusions[0]["worldfoundry_projection"] != exclusions[0][
-        "worldfoundry_preflight"
-    ]
+    assert exclusions[0]["reason"] == ("learned_sla_projection_fingerprint_mismatch")
+    assert exclusions[0]["worldfoundry_projection"] == exclusions[0]["fastvideo_projection"]
+    assert exclusions[0]["worldfoundry_projection"] != exclusions[0]["worldfoundry_preflight"]
 
 
 def test_non_sla_pairing_does_not_require_projection_fingerprints() -> None:
     worldfoundry, fastvideo = _fastvideo_sla_pair_records()
-    worldfoundry["semantic_config"]["worldfoundry_optimization_profile"][
-        "approximate_attention"
-    ] = "vsa"
+    worldfoundry["semantic_config"]["worldfoundry_optimization_profile"]["approximate_attention"] = "vsa"
     worldfoundry["measurements"].pop("optimization_report")
     fastvideo["measurements"].pop("optimization_report")
 
-    pairs, exclusions = framework_ab_wan22._paired_records(
-        (worldfoundry, fastvideo)
-    )
+    pairs, exclusions = framework_ab_wan22._paired_records((worldfoundry, fastvideo))
 
     assert len(pairs) == 1
     assert exclusions == []
@@ -6390,10 +6118,7 @@ def test_shell_launcher_help_is_side_effect_free() -> None:
 
 
 def test_shell_launcher_uses_measured_production_kernel_defaults() -> None:
-    script = (
-        Path(__file__).resolve().parents[2]
-        / "benchmarks/inference/run_framework_ab_wan22.sh"
-    )
+    script = Path(__file__).resolve().parents[2] / "benchmarks/inference/run_framework_ab_wan22.sh"
     source = script.read_text(encoding="utf-8")
 
     for assignment in (
@@ -6410,10 +6135,7 @@ def test_shell_launcher_uses_measured_production_kernel_defaults() -> None:
 
 
 def test_shell_launcher_uses_active_python_and_rejects_stale_transformers() -> None:
-    script = (
-        Path(__file__).resolve().parents[2]
-        / "benchmarks/inference/run_framework_ab_wan22.sh"
-    )
+    script = Path(__file__).resolve().parents[2] / "benchmarks/inference/run_framework_ab_wan22.sh"
     source = script.read_text(encoding="utf-8")
 
     assert 'WF_PYTHON="${WAN22_AB_WF_PYTHON:-}"' in source
@@ -6444,37 +6166,23 @@ def test_shell_launcher_preserves_lightx2v_settings_json() -> None:
 
 
 def test_shell_launcher_exposes_pinned_fastvideo_provider_and_kernel_paths() -> None:
-    script = (
-        Path(__file__).resolve().parents[2]
-        / "benchmarks/inference/run_framework_ab_wan22.sh"
-    )
+    script = Path(__file__).resolve().parents[2] / "benchmarks/inference/run_framework_ab_wan22.sh"
     source = script.read_text(encoding="utf-8")
 
-    expected_path = (
-        'python_path="${FV_SOURCE}:${FV_SOURCE}/fastvideo-kernel/python:'
-        '${REPO_ROOT}"'
-    )
+    expected_path = 'python_path="${FV_SOURCE}:${FV_SOURCE}/fastvideo-kernel/python:${REPO_ROOT}"'
     # One assignment is for FastVideo itself and one is for the WorldFoundry
     # learned-SLA lane, which imports the exact same pinned provider/kernel.
     assert source.count(expected_path) == 2
 
 
 def test_shell_launcher_exposes_pinned_lightx2v_and_sparge_provider_paths() -> None:
-    script = (
-        Path(__file__).resolve().parents[2]
-        / "benchmarks/inference/run_framework_ab_wan22.sh"
-    )
+    script = Path(__file__).resolve().parents[2] / "benchmarks/inference/run_framework_ab_wan22.sh"
     source = script.read_text(encoding="utf-8")
 
-    assert (
-        'SPARGE_SOURCE="${WAN22_AB_SPARGE_SOURCE:-'
-        '${REPO_ROOT}/tmp/refs/SpargeAttn}"'
-    ) in source
+    assert ('SPARGE_SOURCE="${WAN22_AB_SPARGE_SOURCE:-${REPO_ROOT}/tmp/refs/SpargeAttn}"') in source
     # One assignment serves the LightX2V reference and one serves
     # WorldFoundry's LightX2V-provider sparse lanes.
-    assert source.count(
-        'python_path="${SPARGE_SOURCE}:${LX_SOURCE}:${REPO_ROOT}"'
-    ) == 2
+    assert source.count('python_path="${SPARGE_SOURCE}:${LX_SOURCE}:${REPO_ROOT}"') == 2
     for kind in (
         "dynamic_sparse",
         "sparge",
@@ -6493,11 +6201,7 @@ def test_shell_launcher_exposes_pinned_lightx2v_and_sparge_provider_paths() -> N
 
 
 def _clean_launcher_environment(**updates: str) -> dict[str, str]:
-    environment = {
-        key: value
-        for key, value in os.environ.items()
-        if not key.startswith("WAN22_AB_")
-    }
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("WAN22_AB_")}
     environment.update(updates)
     return environment
 
@@ -6513,10 +6217,7 @@ def test_shell_launcher_automatically_maps_fastvideo_sla_backend(
     kind: str,
     expected_backend: str,
 ) -> None:
-    script = (
-        Path(__file__).resolve().parents[2]
-        / "benchmarks/inference/run_framework_ab_wan22.sh"
-    )
+    script = Path(__file__).resolve().parents[2] / "benchmarks/inference/run_framework_ab_wan22.sh"
 
     completed = subprocess.run(
         ["bash", "-x", str(script)],
@@ -6551,10 +6252,7 @@ def test_shell_launcher_automatically_maps_fastvideo_sla_backend(
                 "WAN22_AB_WF_APPROXIMATE_ATTENTION": "fastvideo_sagesla",
                 "WAN22_AB_FV_ATTENTION_BACKEND": "SLA_ATTN",
             },
-            (
-                "fastvideo_sagesla requires "
-                "WAN22_AB_FV_ATTENTION_BACKEND=SAGE_SLA_ATTN"
-            ),
+            ("fastvideo_sagesla requires WAN22_AB_FV_ATTENTION_BACKEND=SAGE_SLA_ATTN"),
         ),
         (
             {"WAN22_AB_FV_ATTENTION_BACKEND": "SLA_ATTN"},
@@ -6566,10 +6264,7 @@ def test_shell_launcher_automatically_maps_fastvideo_sla_backend(
                 "WAN22_AB_FV_ATTENTION_BACKEND": "SLA_ATTN",
                 "WAN22_AB_REFERENCE_FRAMEWORK": "lightx2v",
             },
-            (
-                "FastVideo learned-SLA comparison requires "
-                "WAN22_AB_REFERENCE_FRAMEWORK=fastvideo"
-            ),
+            ("FastVideo learned-SLA comparison requires WAN22_AB_REFERENCE_FRAMEWORK=fastvideo"),
         ),
     ),
 )
@@ -6577,10 +6272,7 @@ def test_shell_launcher_rejects_fastvideo_sla_pairing_conflicts(
     environment: dict[str, str],
     message: str,
 ) -> None:
-    script = (
-        Path(__file__).resolve().parents[2]
-        / "benchmarks/inference/run_framework_ab_wan22.sh"
-    )
+    script = Path(__file__).resolve().parents[2] / "benchmarks/inference/run_framework_ab_wan22.sh"
 
     completed = subprocess.run(
         ["bash", str(script)],
@@ -6659,9 +6351,7 @@ def test_backend_capability_receipt_records_exact_imports_and_symbols(
     monkeypatch.setattr(
         framework_ab_wan22.importlib,
         "import_module",
-        lambda name: module
-        if name == "flash_attn_interface"
-        else pytest.fail(f"unexpected capability import: {name}"),
+        lambda name: module if name == "flash_attn_interface" else pytest.fail(f"unexpected capability import: {name}"),
     )
 
     receipt = framework_ab_wan22._require_backend_capability(
@@ -6681,9 +6371,7 @@ def test_backend_capability_receipt_records_exact_imports_and_symbols(
         "flash_attn_varlen_func",
     ]
     assert requirement["imported"] is True
-    assert requirement["module_file"] == (
-        "/opt/capabilities/flash_attn_interface.py"
-    )
+    assert requirement["module_file"] == ("/opt/capabilities/flash_attn_interface.py")
     assert requirement["module_version"] == "test"
     assert [symbol["name"] for symbol in requirement["symbols"]] == [
         "flash_attn_func",
@@ -6691,9 +6379,7 @@ def test_backend_capability_receipt_records_exact_imports_and_symbols(
     ]
     assert all(
         symbol["available"] is True
-        and symbol["callable_identity"].endswith(
-            "_fake_capability_module.<locals>.<lambda>"
-        )
+        and symbol["callable_identity"].endswith("_fake_capability_module.<locals>.<lambda>")
         for symbol in requirement["symbols"]
     )
     assert requirement["error"] is None
@@ -6717,12 +6403,9 @@ def test_backend_capability_gate_rejects_missing_acceleration_dependencies(
     backend: str,
     missing_module: str,
 ) -> None:
-    contract = framework_ab_wan22._BACKEND_CAPABILITY_CONTRACTS[
-        framework
-    ][backend.casefold()]
+    contract = framework_ab_wan22._BACKEND_CAPABILITY_CONTRACTS[framework][backend.casefold()]
     modules = {
-        module_name: _fake_capability_module(module_name, symbols)
-        for module_name, symbols in contract["requirements"]
+        module_name: _fake_capability_module(module_name, symbols) for module_name, symbols in contract["requirements"]
     }
 
     def import_module(name: str) -> ModuleType:
@@ -6773,12 +6456,9 @@ def test_backend_capability_gate_rejects_unsupported_gpu_architecture(
     backend: str,
     cuda_capability: tuple[int, int],
 ) -> None:
-    contract = framework_ab_wan22._BACKEND_CAPABILITY_CONTRACTS[
-        framework
-    ][backend.casefold()]
+    contract = framework_ab_wan22._BACKEND_CAPABILITY_CONTRACTS[framework][backend.casefold()]
     modules = {
-        module_name: _fake_capability_module(module_name, symbols)
-        for module_name, symbols in contract["requirements"]
+        module_name: _fake_capability_module(module_name, symbols) for module_name, symbols in contract["requirements"]
     }
     monkeypatch.setattr(
         framework_ab_wan22.importlib,
@@ -6807,9 +6487,7 @@ def test_lightx2v_fa3_capability_is_hopper_only(
     monkeypatch.setattr(
         framework_ab_wan22.importlib,
         "import_module",
-        lambda name: module
-        if name == "flash_attn_interface"
-        else pytest.fail(f"unexpected capability import: {name}"),
+        lambda name: module if name == "flash_attn_interface" else pytest.fail(f"unexpected capability import: {name}"),
     )
 
     receipt = framework_ab_wan22._backend_capability_receipt(
@@ -6841,9 +6519,7 @@ def test_lightx2v_sage2_capability_selects_architecture_specific_symbol(
     monkeypatch.setattr(
         framework_ab_wan22.importlib,
         "import_module",
-        lambda name: module
-        if name == "sageattention"
-        else pytest.fail(f"unexpected capability import: {name}"),
+        lambda name: module if name == "sageattention" else pytest.fail(f"unexpected capability import: {name}"),
     )
 
     receipt = framework_ab_wan22._require_backend_capability(
@@ -6853,11 +6529,7 @@ def test_lightx2v_sage2_capability_selects_architecture_specific_symbol(
     )
 
     assert receipt["passed"] is True
-    selected_symbols = [
-        symbol
-        for requirement in receipt["requirements"]
-        for symbol in requirement["required_symbols"]
-    ]
+    selected_symbols = [symbol for requirement in receipt["requirements"] for symbol in requirement["required_symbols"]]
     assert selected_symbols == [expected_symbol]
 
 
@@ -6871,9 +6543,7 @@ def test_fastvideo_sla_capability_resolves_nested_apply_entrypoint(
     monkeypatch.setattr(
         framework_ab_wan22.importlib,
         "import_module",
-        lambda name: module
-        if name == module.__name__
-        else pytest.fail(f"unexpected capability import: {name}"),
+        lambda name: module if name == module.__name__ else pytest.fail(f"unexpected capability import: {name}"),
     )
 
     receipt = framework_ab_wan22._require_backend_capability(
@@ -6887,10 +6557,7 @@ def test_fastvideo_sla_capability_resolves_nested_apply_entrypoint(
         {
             "name": "_attention.apply",
             "available": True,
-            "callable_identity": (
-                "test_framework_ab_wan22."
-                "_fake_capability_module.<locals>.<lambda>"
-            ),
+            "callable_identity": (f"{__name__}._fake_capability_module.<locals>.<lambda>"),
         }
     ]
 
@@ -6957,6 +6624,4 @@ def test_fastvideo_sagesla_capability_selects_architecture_kernel(
         assert receipt["requirements"][-1]["required_symbols"] == [qattn_symbol]
     else:
         assert len(receipt["one_of_requirements"]) == 1
-        assert receipt["one_of_requirements"][0]["selected_candidate"] == (
-            selected_candidate
-        )
+        assert receipt["one_of_requirements"][0]["selected_candidate"] == (selected_candidate)

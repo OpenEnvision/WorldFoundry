@@ -1,14 +1,15 @@
 """Module for the Astra operator implementation."""
 
-import logging
-
-import torch
-import numpy as np
-from PIL import Image
-from einops import rearrange
 import json
-import imageio
+import logging
 from pathlib import Path
+from typing import Any, Callable, cast
+
+import imageio
+import numpy as np
+import torch
+from einops import rearrange
+from PIL import Image
 from torchvision.transforms import v2
 
 from .base_operator import BaseOperator
@@ -32,6 +33,7 @@ SEKAI_SYNTHETIC_DIRECTIONS = {
 
 class AstraOperator(BaseOperator):
     """Operator class for the Astra model integration."""
+
     def __init__(self, device="cuda"):
         """Initialize the operator with specific configurations."""
         super().__init__(operation_types=["visual_instruction", "action_instruction"])
@@ -39,11 +41,13 @@ class AstraOperator(BaseOperator):
         self.interaction_template = sorted(SEKAI_SYNTHETIC_DIRECTIONS)
         self.interaction_template_init()
 
-        self.frame_process = v2.Compose([
-            v2.ToImage(),
-            v2.ToDtype(torch.float32, scale=True),
-            v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-        ])
+        self.frame_process = v2.Compose(
+            [
+                v2.ToImage(),
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            ]
+        )
 
     def check_interaction(self, interaction):
         """
@@ -58,13 +62,23 @@ class AstraOperator(BaseOperator):
         self.check_interaction(interaction)
         self.current_interaction.append(interaction)
 
-    def process_interaction(self, modality_type="sekai", start_frame=0, initial_condition_frames=1, total_frames_to_generate=8, use_real_poses=False, scene_info_path=None, encoded_data=None):
-        """
-        根据当前的 interaction (direction) 生成对应的 Camera Embedding。
-        """
-        direction = self.current_interaction[-1] if self.current_interaction else "forward"
-        model_dtype = torch.bfloat16 
-        
+    def process_interaction(
+        self,
+        modality_type: str = "sekai",
+        start_frame: int = 0,
+        initial_condition_frames: int = 1,
+        total_frames_to_generate: int = 8,
+        use_real_poses: bool = False,
+        scene_info_path: str | None = None,
+        encoded_data: dict[str, Any] | None = None,
+        *,
+        direction: str | None = None,
+    ) -> torch.Tensor:
+        """Build camera embeddings from an explicit direction or interaction history."""
+        if direction is None:
+            direction = self.current_interaction[-1] if self.current_interaction else "forward"
+        model_dtype = torch.bfloat16
+
         scene_info = None
         if modality_type == "nuscenes" and scene_info_path:
             scene_path = Path(scene_info_path).expanduser()
@@ -73,20 +87,17 @@ class AstraOperator(BaseOperator):
 
         if modality_type == "sekai":
             camera_embedding_full = self.generate_sekai_camera_embeddings_sliding(
-                encoded_data.get('cam_emb', None) if encoded_data else None,
+                encoded_data.get("cam_emb", None) if encoded_data else None,
                 start_frame,
                 initial_condition_frames,
                 total_frames_to_generate,
                 0,
                 use_real_poses=use_real_poses,
-                direction=direction
+                direction=direction,
             )
         elif modality_type == "nuscenes":
             camera_embedding_full = self.generate_nuscenes_camera_embeddings_sliding(
-                scene_info,
-                start_frame,
-                initial_condition_frames,
-                total_frames_to_generate
+                scene_info, start_frame, initial_condition_frames, total_frames_to_generate
             )
         elif modality_type == "openx":
             camera_embedding_full = self.generate_openx_camera_embeddings_sliding(
@@ -94,11 +105,11 @@ class AstraOperator(BaseOperator):
                 start_frame,
                 initial_condition_frames,
                 total_frames_to_generate,
-                use_real_poses=use_real_poses
+                use_real_poses=use_real_poses,
             )
         else:
             raise ValueError(f"Unsupported modality type: {modality_type}")
-            
+
         return camera_embedding_full.to(self.device, dtype=model_dtype)
 
     def process_perception(self, condition_video=None, condition_image=None):
@@ -106,60 +117,66 @@ class AstraOperator(BaseOperator):
         加载图像或视频文件，预处理为 Tensor Frames，供 Synthesis 编码使用。
         """
         frames = None
-        
+
         if condition_video:
             video_path = Path(condition_video).expanduser().resolve()
             if not video_path.exists():
                 raise FileNotFoundError(f"File not Found: {video_path}")
-                
+
             reader = imageio.get_reader(str(video_path))
             frame_list = []
-            for frame_data in reader:
+            for frame_data in reader.iter_data():
                 frame = Image.fromarray(frame_data)
                 # Crop and Resize
                 frame = self._crop_and_resize(frame)
                 frame_list.append(self.frame_process(frame))
             reader.close()
-            
+
             if frame_list:
                 frames = torch.stack(frame_list, dim=0)
                 frames = rearrange(frames, "T C H W -> C T H W")
-                
+
         elif condition_image:
             image_path = Path(condition_image).expanduser().resolve()
             if not image_path.exists():
                 raise FileNotFoundError(f"File not Found: {image_path}")
-            
+
             image = Image.open(str(image_path)).convert("RGB")
             image = self._crop_and_resize(image)
             frame = self.frame_process(image)
             frames = torch.stack([frame for _ in range(IMAGE_CONDITION_FRAME_COUNT)], dim=0)
             frames = rearrange(frames, "T C H W -> C T H W")
-        
+
         return frames
 
     @staticmethod
     def _crop_and_resize(image: Image.Image) -> Image.Image:
         """Crop and resize implementation."""
         target_w, target_h = 832, 480
-        return v2.functional.resize(
+        resize = cast(Callable[..., Image.Image], v2.functional.resize)
+        return resize(
             image,
-            (round(target_h), round(target_w)),
+            [round(target_h), round(target_w)],
             interpolation=v2.InterpolationMode.BILINEAR,
         )
 
-    def compute_relative_pose(self, pose_a, pose_b, use_torch=False):
+    @staticmethod
+    def compute_relative_pose(pose_a: Any, pose_b: Any, use_torch: bool = False) -> np.ndarray | torch.Tensor:
         """Compute relative pose matrix of camera B with respect to camera A"""
         assert pose_a.shape == (4, 4), f"Camera A extrinsic matrix should be (4,4), got {pose_a.shape}"
         assert pose_b.shape == (4, 4), f"Camera B extrinsic matrix should be (4,4), got {pose_b.shape}"
         if use_torch:
-            if not isinstance(pose_a, torch.Tensor): pose_a = torch.from_numpy(pose_a).float()
-            if not isinstance(pose_b, torch.Tensor): pose_b = torch.from_numpy(pose_b).float()
+            if not isinstance(pose_a, torch.Tensor):
+                pose_a = torch.from_numpy(pose_a).float()
+            if not isinstance(pose_b, torch.Tensor):
+                pose_b = torch.from_numpy(pose_b).float()
             pose_a_inv = torch.inverse(pose_a)
             relative_pose = torch.matmul(pose_b, pose_a_inv)
         else:
-            if not isinstance(pose_a, np.ndarray): pose_a = np.array(pose_a, dtype=np.float32)
-            if not isinstance(pose_b, np.ndarray): pose_b = np.array(pose_b, dtype=np.float32)
+            if not isinstance(pose_a, np.ndarray):
+                pose_a = np.array(pose_a, dtype=np.float32)
+            if not isinstance(pose_b, np.ndarray):
+                pose_b = np.array(pose_b, dtype=np.float32)
             pose_a_inv = np.linalg.inv(pose_a)
             relative_pose = np.matmul(pose_b, pose_a_inv)
         return relative_pose
@@ -177,7 +194,7 @@ class AstraOperator(BaseOperator):
         if pose_embedding.dim() == 3:
             pose_embedding = rearrange(pose_embedding, "b c d -> b (c d)")
         mask = torch.zeros(pose_embedding.shape[0], 1, dtype=torch.float32)
-        mask[start_frame:min(condition_end, pose_embedding.shape[0])] = 1.0
+        mask[start_frame : min(condition_end, pose_embedding.shape[0])] = 1.0
         camera_embedding = torch.cat([pose_embedding, mask], dim=1)
         return camera_embedding.to(torch.bfloat16)
 
@@ -268,14 +285,23 @@ class AstraOperator(BaseOperator):
         pose[2, 3] = -forward_speed
         return pose[:3, :]
 
-    def generate_sekai_camera_embeddings_sliding(self, cam_data, start_frame, initial_condition_frames, new_frames, total_generated, use_real_poses=True, direction="left"):
+    def generate_sekai_camera_embeddings_sliding(
+        self,
+        cam_data,
+        start_frame,
+        initial_condition_frames,
+        new_frames,
+        total_generated,
+        use_real_poses=True,
+        direction="left",
+    ):
         """Generate camera embeddings for Sekai dataset - sliding window version"""
         time_compression_ratio = 4
         max_needed_frames = self._needed_frame_count(start_frame, initial_condition_frames, new_frames)
-        
-        if use_real_poses and cam_data is not None and 'extrinsic' in cam_data:
+
+        if use_real_poses and cam_data is not None and "extrinsic" in cam_data:
             logger.info("Using real Sekai camera data")
-            cam_extrinsic = cam_data['extrinsic']
+            cam_extrinsic = cam_data["extrinsic"]
             relative_poses = self._relative_pose_rows_from_extrinsics(
                 cam_extrinsic,
                 max_needed_frames,
@@ -308,14 +334,21 @@ class AstraOperator(BaseOperator):
                 start_frame + initial_condition_frames + 1,
             )
 
-    def generate_openx_camera_embeddings_sliding(self, encoded_data, start_frame, initial_condition_frames, new_frames, use_real_poses):
+    def generate_openx_camera_embeddings_sliding(
+        self, encoded_data, start_frame, initial_condition_frames, new_frames, use_real_poses
+    ):
         """Generate camera embeddings for OpenX dataset"""
         time_compression_ratio = 4
         max_needed_frames = self._needed_frame_count(start_frame, initial_condition_frames, new_frames)
-        
-        if use_real_poses and encoded_data is not None and 'cam_emb' in encoded_data and 'extrinsic' in encoded_data['cam_emb']:
+
+        if (
+            use_real_poses
+            and encoded_data is not None
+            and "cam_emb" in encoded_data
+            and "extrinsic" in encoded_data["cam_emb"]
+        ):
             logger.info("Using OpenX real camera data")
-            cam_extrinsic = encoded_data['cam_emb']['extrinsic']
+            cam_extrinsic = encoded_data["cam_emb"]["extrinsic"]
             relative_poses = self._relative_pose_rows_from_extrinsics(
                 cam_extrinsic,
                 max_needed_frames,
@@ -328,23 +361,22 @@ class AstraOperator(BaseOperator):
             )
         else:
             logger.info("Using OpenX synthetic camera data")
-            relative_poses = [
-                torch.as_tensor(self._openx_synthetic_pose())
-                for _ in range(max_needed_frames)
-            ]
+            relative_poses = [torch.as_tensor(self._openx_synthetic_pose()) for _ in range(max_needed_frames)]
             return self._camera_embedding_from_rows(
                 relative_poses,
                 start_frame,
                 start_frame + initial_condition_frames,
             )
 
-    def generate_nuscenes_camera_embeddings_sliding(self, scene_info, start_frame, initial_condition_frames, new_frames):
+    def generate_nuscenes_camera_embeddings_sliding(
+        self, scene_info, start_frame, initial_condition_frames, new_frames
+    ):
         """Generate camera embeddings for NuScenes dataset"""
         max_needed_frames = max(FRAMEPACK_CONTEXT_FRAMES + new_frames, 30)
-        
-        if scene_info is not None and 'keyframe_poses' in scene_info:
+
+        if scene_info is not None and "keyframe_poses" in scene_info:
             logger.info("Using NuScenes real pose data")
-            keyframe_poses = scene_info['keyframe_poses']
+            keyframe_poses = scene_info["keyframe_poses"]
             if len(keyframe_poses) == 0:
                 pose_sequence = torch.zeros(max_needed_frames, 7, dtype=torch.float32)
                 return self._camera_embedding_from_rows(
@@ -352,17 +384,23 @@ class AstraOperator(BaseOperator):
                     start_frame,
                     start_frame + initial_condition_frames,
                 )
-            
+
             reference_pose = keyframe_poses[0]
             pose_vecs = []
             for i in range(max_needed_frames):
                 if i < len(keyframe_poses):
                     current_pose = keyframe_poses[i]
-                    translation = torch.tensor(np.array(current_pose['translation']) - np.array(reference_pose['translation']), dtype=torch.float32)
-                    rotation = torch.tensor(current_pose['rotation'], dtype=torch.float32)
+                    translation = torch.tensor(
+                        np.array(current_pose["translation"]) - np.array(reference_pose["translation"]),
+                        dtype=torch.float32,
+                    )
+                    rotation = torch.tensor(current_pose["rotation"], dtype=torch.float32)
                     pose_vec = torch.cat([translation, rotation], dim=0)
                 else:
-                    pose_vec = torch.cat([torch.zeros(3, dtype=torch.float32), torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=torch.float32)], dim=0)
+                    pose_vec = torch.cat(
+                        [torch.zeros(3, dtype=torch.float32), torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=torch.float32)],
+                        dim=0,
+                    )
                 pose_vecs.append(pose_vec)
             return self._camera_embedding_from_rows(
                 pose_vecs,
@@ -373,11 +411,14 @@ class AstraOperator(BaseOperator):
             logger.info("Using NuScenes synthetic pose data")
             pose_vecs = []
             for i in range(max_needed_frames):
-                angle = i * 0.04; radius = 15.0
-                x = radius * np.sin(angle); y = 0.0; z = radius * (1 - np.cos(angle))
+                angle = i * 0.04
+                radius = 15.0
+                x = radius * np.sin(angle)
+                y = 0.0
+                z = radius * (1 - np.cos(angle))
                 translation = torch.tensor([x, y, z], dtype=torch.float32)
-                yaw = angle + np.pi/2
-                rotation = torch.tensor([np.cos(yaw/2), 0.0, 0.0, np.sin(yaw/2)], dtype=torch.float32)
+                yaw = angle + np.pi / 2
+                rotation = torch.tensor([np.cos(yaw / 2), 0.0, 0.0, np.sin(yaw / 2)], dtype=torch.float32)
                 pose_vec = torch.cat([translation, rotation], dim=0)
                 pose_vecs.append(pose_vec)
             return self._camera_embedding_from_rows(

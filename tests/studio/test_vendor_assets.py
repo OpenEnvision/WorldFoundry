@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import math
 from pathlib import Path
 
@@ -35,13 +34,12 @@ class _ChunkedResponse:
         return chunk
 
 
-def _asset(payload: bytes, *, relative_path: str = "example/module.js") -> vendor_assets.VendorAsset:
+def _asset(*, relative_path: str = "example/module.js") -> vendor_assets.VendorAsset:
     return vendor_assets.VendorAsset(
         name="Test module",
         package="test-module",
         version="1.2.3",
         url="https://example.invalid/test-module.js",
-        sha256=hashlib.sha256(payload).hexdigest(),
         relative_path=Path(relative_path),
     )
 
@@ -53,7 +51,7 @@ def _part_files(directory: Path) -> list[Path]:
 @pytest.mark.parametrize("relative_path", ["/tmp/escape.js", "../escape.js", "nested/../../escape.js", "."])
 def test_vendor_asset_path_must_stay_below_vendor_root(relative_path: str) -> None:
     with pytest.raises(ValueError, match="must stay below"):
-        _asset(b"payload", relative_path=relative_path)
+        _asset(relative_path=relative_path)
 
 
 def test_pinned_vendor_asset_manifest_is_exact() -> None:
@@ -63,7 +61,6 @@ def test_pinned_vendor_asset_manifest_is_exact() -> None:
             asset.package,
             asset.version,
             asset.url,
-            asset.sha256,
             asset.relative_path.as_posix(),
         )
         for asset in vendor_assets.VENDOR_ASSETS
@@ -72,21 +69,18 @@ def test_pinned_vendor_asset_manifest_is_exact() -> None:
             "@sparkjsdev/spark",
             "0.1.10",
             "https://cdn.jsdelivr.net/npm/@sparkjsdev/spark@0.1.10/dist/spark.module.js",
-            "e2841904c3facdf2ab5177b13b4827cdc72118cb8b613673ca08d8e983c5bf9d",
             "spark/spark.module.min.js",
         ),
         (
             "three",
             "0.178.0",
             "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.module.js",
-            "bc0d236927f5163414e7c59a5567257dfe925f1929ce0a151ac4185dc45ca5a2",
             "three/three.module.js",
         ),
         (
             "three",
             "0.178.0",
             "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.core.js",
-            "562b72799ef1145f77997ece49a34f578422873757b0a13e41d76dcbfb776f06",
             "three/three.core.js",
         ),
     ]
@@ -102,9 +96,9 @@ def test_check_mode_is_offline_and_returns_nonzero_for_missing_assets(tmp_path: 
     assert INSTALL_COMMAND in captured.err
 
 
-def test_valid_asset_skips_network(tmp_path: Path) -> None:
-    payload = b"already valid"
-    asset = _asset(payload)
+def test_nonempty_local_asset_skips_network(tmp_path: Path) -> None:
+    payload = b"locally modified browser module"
+    asset = _asset()
     target = asset.path_under(tmp_path)
     target.parent.mkdir(parents=True)
     target.write_bytes(payload)
@@ -122,14 +116,24 @@ def test_valid_asset_skips_network(tmp_path: Path) -> None:
     assert target.read_bytes() == payload
 
 
-def test_chunked_download_is_verified_and_atomically_published(tmp_path: Path) -> None:
+def test_chunked_download_replaces_empty_asset_atomically(tmp_path: Path, monkeypatch) -> None:
     payload = b"a browser module delivered in several chunks"
-    asset = _asset(payload)
+    asset = _asset()
     target = asset.path_under(tmp_path)
     target.parent.mkdir(parents=True)
-    target.write_bytes(b"old invalid bytes")
+    target.write_bytes(b"")
     response = _ChunkedResponse(payload)
     calls = []
+    original_replace = vendor_assets.os.replace
+
+    def replace(source: Path, destination: Path) -> None:
+        assert destination == target
+        assert source != target
+        assert source.read_bytes() == payload
+        assert target.read_bytes() == b""
+        original_replace(source, destination)
+
+    monkeypatch.setattr(vendor_assets.os, "replace", replace)
 
     def opener(url: str, *, timeout: float):
         calls.append((url, timeout))
@@ -150,26 +154,50 @@ def test_chunked_download_is_verified_and_atomically_published(tmp_path: Path) -
     assert _part_files(target.parent) == []
 
 
-def test_download_hash_mismatch_preserves_target_and_cleans_temp_file(tmp_path: Path) -> None:
-    expected_payload = b"expected bytes"
-    old_payload = b"existing invalid bytes"
-    asset = _asset(expected_payload)
+def test_empty_download_preserves_target_and_cleans_temp_file(tmp_path: Path) -> None:
+    old_payload = b"existing browser module"
+    asset = _asset()
     target = asset.path_under(tmp_path)
     target.parent.mkdir(parents=True)
     target.write_bytes(old_payload)
 
     def opener(url: str, *, timeout: float):
-        return _ChunkedResponse(b"tampered download")
+        return _ChunkedResponse(b"")
 
-    with pytest.raises(vendor_assets.VendorAssetError, match="SHA-256 verification"):
-        vendor_assets.provision_assets(root=tmp_path, assets=(asset,), opener=opener)
+    with pytest.raises(vendor_assets.VendorAssetError, match="was empty"):
+        vendor_assets._download_asset(asset, root=tmp_path, timeout=7.5, opener=opener)
 
     assert target.read_bytes() == old_payload
     assert _part_files(target.parent) == []
 
 
+@pytest.mark.parametrize("failure", ["network", "read"])
+def test_failed_download_preserves_target_and_cleans_temp_file(tmp_path: Path, failure: str) -> None:
+    asset = _asset()
+    target = asset.path_under(tmp_path)
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"existing browser module")
+
+    class FailingResponse(_ChunkedResponse):
+        def read(self, size: int) -> bytes:
+            if self._offset:
+                raise OSError("response read failed")
+            return super().read(size)
+
+    def opener(url: str, *, timeout: float):
+        if failure == "network":
+            raise OSError("network unavailable")
+        return FailingResponse(b"partial download")
+
+    with pytest.raises(vendor_assets.VendorAssetError, match="Could not download"):
+        vendor_assets._download_asset(asset, root=tmp_path, timeout=7.5, opener=opener)
+
+    assert target.read_bytes() == b"existing browser module"
+    assert _part_files(target.parent) == []
+
+
 def test_download_size_limit_preserves_target_and_cleans_temp_file(tmp_path: Path, monkeypatch) -> None:
-    asset = _asset(b"expected")
+    asset = _asset()
     target = asset.path_under(tmp_path)
     target.parent.mkdir(parents=True)
     target.write_bytes(b"existing bytes")
@@ -179,22 +207,22 @@ def test_download_size_limit_preserves_target_and_cleans_temp_file(tmp_path: Pat
         return _ChunkedResponse(b"five!", chunk_size=5)
 
     with pytest.raises(vendor_assets.VendorAssetError, match="safety limit"):
-        vendor_assets.provision_assets(root=tmp_path, assets=(asset,), opener=opener)
+        vendor_assets._download_asset(asset, root=tmp_path, timeout=7.5, opener=opener)
 
     assert target.read_bytes() == b"existing bytes"
     assert _part_files(target.parent) == []
 
 
 def test_unreadable_asset_is_reported_with_install_command(tmp_path: Path, monkeypatch) -> None:
-    asset = _asset(b"expected")
+    asset = _asset()
     target = asset.path_under(tmp_path)
     target.parent.mkdir(parents=True)
     target.write_bytes(b"present")
 
-    def unreadable(path: Path) -> str:
+    def unreadable(path: Path, *args, **kwargs):
         raise OSError("permission denied")
 
-    monkeypatch.setattr(vendor_assets, "_file_sha256", unreadable)
+    monkeypatch.setattr(Path, "open", unreadable)
     statuses = vendor_assets.check_assets(root=tmp_path, assets=(asset,))
     assert statuses[0].state == "unreadable"
     assert statuses[0].error == "permission denied"
@@ -206,24 +234,24 @@ def test_unreadable_asset_is_reported_with_install_command(tmp_path: Path, monke
 
 def test_unreadable_asset_can_be_reprovisioned(tmp_path: Path, monkeypatch) -> None:
     payload = b"replacement bytes"
-    asset = _asset(payload)
+    asset = _asset()
     target = asset.path_under(tmp_path)
     target.parent.mkdir(parents=True)
     target.write_bytes(b"unreadable placeholder")
-    original_file_sha256 = vendor_assets._file_sha256
+    original_open = Path.open
     checks = 0
 
-    def initially_unreadable(path: Path) -> str:
+    def initially_unreadable(path: Path, *args, **kwargs):
         nonlocal checks
         checks += 1
         if checks == 1:
             raise OSError("transient read failure")
-        return original_file_sha256(path)
+        return original_open(path, *args, **kwargs)
 
     def opener(url: str, *, timeout: float):
         return _ChunkedResponse(payload)
 
-    monkeypatch.setattr(vendor_assets, "_file_sha256", initially_unreadable)
+    monkeypatch.setattr(Path, "open", initially_unreadable)
     statuses = vendor_assets.provision_assets(root=tmp_path, assets=(asset,), opener=opener)
     assert statuses[0].valid
     assert target.read_bytes() == payload
@@ -238,17 +266,17 @@ def test_timeout_must_be_positive_and_finite(tmp_path: Path, timeout: float) -> 
         vendor_assets.provision_assets(root=tmp_path, timeout=timeout, opener=unexpected_opener)
 
 
-def test_require_vendor_assets_reports_hash_mismatch_and_install_command(tmp_path: Path) -> None:
-    asset = _asset(b"expected")
+def test_require_vendor_assets_reports_empty_asset_and_install_command(tmp_path: Path) -> None:
+    asset = _asset()
     target = asset.path_under(tmp_path)
     target.parent.mkdir(parents=True)
-    target.write_bytes(b"wrong")
+    target.write_bytes(b"")
 
     with pytest.raises(vendor_assets.VendorAssetError) as exc_info:
         vendor_assets.require_vendor_assets(root=tmp_path, assets=(asset,))
 
     message = str(exc_info.value)
-    assert "SHA-256 mismatch" in message
+    assert "empty" in message
     assert INSTALL_COMMAND in message
 
 

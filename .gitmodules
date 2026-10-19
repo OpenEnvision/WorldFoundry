@@ -1,0 +1,3 @@
+[submodule "matrix-game"]
+	path = thirdparty/matrix-game
+	url = https://github.com/SkyworkAI/Matrix-Game.git

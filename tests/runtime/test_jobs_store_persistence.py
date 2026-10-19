@@ -123,24 +123,41 @@ def test_legacy_store_without_state_path_writes_nothing(tmp_path):
 @pytest.mark.parametrize("late", [False, True])
 def test_exit_receipt_is_reconciled_even_when_liveness_changes_between_reads(tmp_path, monkeypatch, late):
     store = AsyncCommandJobStore(state_path=tmp_path / "jobs.json")
-    job = CommandJob(job_id="race", command=("unused",), display_command=("unused",), pid=99999999, restored=True,
-                     completion_path=str(tmp_path / "receipt.json"), completion_token="race-token")
+    job = CommandJob(
+        job_id="race",
+        command=("unused",),
+        display_command=("unused",),
+        pid=99999999,
+        restored=True,
+        completion_path=str(tmp_path / "receipt.json"),
+        completion_token="race-token",
+    )
     job.status = "failed" if late else "running"
     store._jobs[job.job_id] = job
 
     def publish_receipt():
-        Path(job.completion_path).write_text(json.dumps({
-            "job_id": job.job_id, "pid": job.pid, "completion_token": job.completion_token,
-            "status": "failed", "returncode": 7, "error": "command exited with code 7",
-        }))
+        Path(job.completion_path).write_text(
+            json.dumps(
+                {
+                    "job_id": job.job_id,
+                    "pid": job.pid,
+                    "completion_token": job.completion_token,
+                    "status": "failed",
+                    "returncode": 7,
+                    "error": "command exited with code 7",
+                }
+            )
+        )
 
     if late:
         assert store.get(job.job_id).returncode is None
         publish_receipt()
     else:
+
         def exit_during_probe(_):
             publish_receipt()
             return False
+
         monkeypatch.setattr(store, "_verified_process", exit_during_probe)
     recovered = store.get(job.job_id)
     assert recovered.status == "failed"
@@ -164,8 +181,15 @@ def test_pruning_restored_metadata_cannot_delete_an_unrelated_file(tmp_path):
     store = AsyncCommandJobStore(state_path=tmp_path / "jobs.json")
     unrelated = tmp_path / "keep.json"
     unrelated.write_text("keep")
-    job = CommandJob(job_id="forged", command=("unused",), display_command=("unused",), status="completed", returncode=0,
-                     completion_path=str(unrelated), completion_token=uuid.uuid4().hex)
+    job = CommandJob(
+        job_id="forged",
+        command=("unused",),
+        display_command=("unused",),
+        status="completed",
+        returncode=0,
+        completion_path=str(unrelated),
+        completion_token=uuid.uuid4().hex,
+    )
     store._jobs[job.job_id] = job
     assert store.prune(max_jobs=0) == 1
     assert unrelated.read_text() == "keep"
@@ -197,8 +221,9 @@ def test_restart_keeps_live_pid_running_and_cancel_kills_it(tmp_path):
     )
     try:
         state_path = tmp_path / "jobs-index.json"
-        _write_index(state_path, [_job_row(pid=orphan.pid, status="running",
-                                          process_identity=process_identity(orphan.pid))])
+        _write_index(
+            state_path, [_job_row(pid=orphan.pid, status="running", process_identity=process_identity(orphan.pid))]
+        )
 
         store = AsyncCommandJobStore(state_path=state_path)
         job = store.get("job-1")
@@ -355,6 +380,47 @@ def test_completion_survives_the_controller_process_exiting(tmp_path):
             and process_group_alive(job.pid)
         ):
             terminate_owned_process_group(job.pid, grace_seconds=0)
+
+
+def test_timeout_reason_survives_controller_interruption_during_supervisor_cleanup(tmp_path, monkeypatch):
+    from worldfoundry.runtime import jobs
+
+    worker = Path(jobs.__file__).with_name("job_worker.py")
+    (tmp_path / "job_worker.py").write_text(
+        "import runpy,time\n"
+        f"scope=runpy.run_path({str(worker)!r})\n"
+        "stop=scope['_stop_children']\n"
+        "def delayed_stop(*args, **kwargs):\n"
+        " time.sleep(4.5)\n"
+        " return stop(*args, **kwargs)\n"
+        "scope['main'].__globals__['_stop_children']=delayed_stop\n"
+        "raise SystemExit(scope['main']())\n"
+    )
+    monkeypatch.setattr(jobs, "__file__", str(tmp_path / "jobs.py"))
+
+    async def scenario():
+        state_path = tmp_path / "jobs.json"
+        owner = AsyncCommandJobStore(state_path=state_path)
+        job = owner.submit([sys.executable, "-c", "import time; time.sleep(120)"], timeout=0.15)
+        try:
+            while job.pid is None:
+                assert not job._task.done()
+                await asyncio.sleep(0.01)
+            restored = AsyncCommandJobStore(state_path=state_path)
+            await asyncio.wait_for(job._task, timeout=15)
+            recovered = restored.get(job.job_id)
+            receipt = json.loads(Path(job.completion_path).read_text())
+            assert recovered.status == job.status == receipt["status"] == "failed"
+            assert recovered.error == job.error == receipt["error"] == "job timed out after 0.15s"
+            assert recovered.returncode == job.returncode == receipt["returncode"]
+            assert not process_group_alive(job.pid)
+        finally:
+            await owner._terminate_process(job)
+            if not job._task.done():
+                job._task.cancel()
+                await asyncio.gather(job._task, return_exceptions=True)
+
+    asyncio.run(scenario())
 
 
 def test_supervised_timeout_is_reported_to_a_restored_store(tmp_path):

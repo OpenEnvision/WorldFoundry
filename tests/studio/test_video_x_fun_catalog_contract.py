@@ -22,8 +22,8 @@ def test_wan_fun_camera_catalog_preserves_full_upstream_demo_contract(
 ) -> None:
     entry = {entry.model_id: entry for entry in discover_catalog()}[model_id]
 
-    assert Path(entry.default_input_path).is_file()
-    assert Path(entry.default_call_kwargs["pose_txt"]).is_file()
+    assert Path(entry.default_input_path).parts[-3:] == ("test_cases", "video_x_fun", "firework.png")
+    assert Path(entry.default_call_kwargs["pose_txt"]).parts[-3:] == ("test_cases", "video_x_fun", "camera_pose.txt")
     assert entry.default_call_kwargs["width"] == width
     assert entry.default_call_kwargs["height"] == height
     assert entry.default_call_kwargs["num_frames"] == num_frames

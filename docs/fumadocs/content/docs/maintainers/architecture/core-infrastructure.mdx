@@ -116,6 +116,12 @@ This keeps family packages thin: a model directory contains checkpoint-compatibl
 - **Memory** — `core/memory/base.py` defines the contract; streaming and long-context state in `synthesis/*/memory` and action-policy trace state in `synthesis/action_generation/memory.py` implement it.
 - **Distributed execution** — `core/distributed` is the only place model-parallel groups are initialized; no family package boots its own NCCL group.
 
+### Cache and memory identity
+
+Local sharded safetensors caches record the index and referenced shard paths, sizes, and nanosecond modification times in the merged file's metadata. Reuse requires matching source state; changed or missing source files cannot be hidden by a merged cache. Cache publication remains atomic.
+
+`MemoryStore` default timestamps advance independently of capacity eviction. Explicit and restored numeric timestamps advance the next default timestamp; `reset()` starts a new timeline, and `replace()` rebuilds it from the supplied records. Recency ranking uses these record timestamps rather than the bounded list length.
+
 ## What does not belong here
 
 Training entrypoints, training-only datasets and dataloaders, losses, callbacks, augmentation-only modules, and experiment scripts do not belong in `core`, nor in `base_models`. `core` is inference infrastructure; if a module only matters during training, it should not be added here.
