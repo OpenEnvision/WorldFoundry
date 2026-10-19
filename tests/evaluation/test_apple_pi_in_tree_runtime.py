@@ -4,8 +4,8 @@ import json
 
 from PIL import Image
 
+from worldfoundry.evaluation.tasks.catalog.dispatch import IntegrationTier, integration_spec
 from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
-from worldfoundry.evaluation.tasks.execution.framework.integration import IntegrationTier, integration_spec
 from worldfoundry.evaluation.tasks.execution.runners.apple_pi.run_apple_pi_official_runner import main
 
 
@@ -52,22 +52,25 @@ def test_apple_pi_native_mock_protocol(tmp_path):
     )
 
     output_dir = tmp_path / "output"
-    assert main(
-        [
-            "--run-official",
-            "--gt-dir",
-            str(gt_root),
-            "--pred-dir",
-            str(predictions),
-            "--subtrack",
-            "perception_text",
-            "--judge-backend",
-            "mock",
-            "--no-foundation-models",
-            "--output-dir",
-            str(output_dir),
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "--run-official",
+                "--gt-dir",
+                str(gt_root),
+                "--pred-dir",
+                str(predictions),
+                "--subtrack",
+                "perception_text",
+                "--judge-backend",
+                "mock",
+                "--no-foundation-models",
+                "--output-dir",
+                str(output_dir),
+            ]
+        )
+        == 0
+    )
     scorecard = json.loads((output_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert scorecard["normalization_ok"] is True
     assert scorecard["normalizer_only"] is False

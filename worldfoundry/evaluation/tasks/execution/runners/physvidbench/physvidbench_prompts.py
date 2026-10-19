@@ -7,20 +7,21 @@ from pathlib import Path
 from typing import Any
 
 from worldfoundry.core.io.filesystem.file_utils import materialize_file
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
+from worldfoundry.evaluation.api import GenerationRequest
 from worldfoundry.evaluation.tasks.execution.framework.benchmark_assets import (
-    first_existing_dir,
-    resolve_env_path,
     bundled_benchmark_asset,
     bundled_benchmark_assets_root,
+    first_existing_dir,
+    resolve_env_path,
 )
-from worldfoundry.evaluation.tasks.execution.framework.runner_common import VIDEO_SUFFIXES
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    iter_generation_video_artifacts,
+    reset_generation_artifact_staging,
+)
 from worldfoundry.evaluation.utils import write_jsonl
 
 BENCHMARK_ID = "physvidbench"
 PROMPT_MANIFEST_REL = Path("prompts_questions.csv")
-
-
 
 
 def resolve_physvidbench_root(explicit: Path | None = None) -> Path | None:
@@ -100,7 +101,9 @@ def unique_prompt_records(rows: list[dict[str, str]]) -> list[dict[str, str]]:
             continue
         seen.add(prompt_id)
         records.append(row)
-    return sorted(records, key=lambda item: int(item["prompt_id"]) if item["prompt_id"].isdigit() else item["prompt_id"])
+    return sorted(
+        records, key=lambda item: int(item["prompt_id"]) if item["prompt_id"].isdigit() else item["prompt_id"]
+    )
 
 
 def video_filename_for_prompt_id(prompt_id: str) -> str:
@@ -142,38 +145,17 @@ def copy_physvidbench_generated_videos(
     output_artifact: str = "generated_video",
     allow_placeholders: bool = False,
 ) -> tuple[int, int]:
-    import json
-
-    generated_artifact_dir.mkdir(parents=True, exist_ok=True)
+    reset_generation_artifact_staging(generation_output_dir, generated_artifact_dir)
     materialized = 0
     placeholders = 0
     manifest_rows: list[dict[str, Any]] = []
-    for sample_dir in sorted(path for path in generation_output_dir.iterdir() if path.is_dir()):
-        result_path = sample_dir / "result.json"
-        if not result_path.is_file():
+    for result, _, source_path in iter_generation_video_artifacts(generation_output_dir, output_artifact):
+        if source_path is None or not source_path.is_file():
             continue
-        payload = json.loads(result_path.read_text(encoding="utf-8"))
-        sample_id = str(payload.get("sample_id") or sample_dir.name)
-        outputs = payload.get("outputs") if isinstance(payload.get("outputs"), dict) else {}
-        source = outputs.get(output_artifact) or outputs.get("generated_video")
-        if not source:
-            continue
-        source_path = Path(str(source))
-        if not source_path.is_file():
-            continue
-        target_path = generated_artifact_dir / video_filename_for_prompt_id(sample_id)
+        target_path = generated_artifact_dir / video_filename_for_prompt_id(result.sample_id)
         materialize_file(source_path, target_path, writable=False)
         materialized += 1
-        manifest_rows.append({"sample_id": sample_id, "artifact": output_artifact, "path": str(target_path)})
-    if materialized == 0:
-        for path in sorted(generation_output_dir.rglob("*")):
-            if not path.is_file() or path.suffix.lower() not in VIDEO_SUFFIXES:
-                continue
-            sample_id = path.stem
-            target_path = generated_artifact_dir / video_filename_for_prompt_id(sample_id)
-            materialize_file(path, target_path, writable=False)
-            materialized += 1
-            manifest_rows.append({"sample_id": sample_id, "artifact": output_artifact, "path": str(target_path)})
+        manifest_rows.append({"sample_id": result.sample_id, "artifact": output_artifact, "path": str(target_path)})
     if materialized == 0 and allow_placeholders:
         for record in unique_prompt_records(load_prompt_rows())[:1]:
             target_path = generated_artifact_dir / video_filename_for_prompt_id(record["prompt_id"])
@@ -189,30 +171,3 @@ def copy_physvidbench_generated_videos(
             )
     write_jsonl(artifact_manifest_path, manifest_rows)
     return materialized, placeholders
-
-
-def attach_generation_results(
-    *,
-    requests: tuple[GenerationRequest, ...],
-    generation_output_dir: Path,
-) -> tuple[GenerationResult, ...]:
-    results: list[GenerationResult] = []
-    for request in requests:
-        sample_dir = generation_output_dir / request.sample_id
-        result_path = sample_dir / "result.json"
-        if result_path.is_file():
-            import json
-
-            payload = json.loads(result_path.read_text(encoding="utf-8"))
-            results.append(GenerationResult.from_dict(payload))
-            continue
-        results.append(
-            GenerationResult(
-                sample_id=request.sample_id,
-                task_name=request.task_name,
-                split=request.split,
-                status="missing",
-                outputs={},
-            )
-        )
-    return tuple(results)

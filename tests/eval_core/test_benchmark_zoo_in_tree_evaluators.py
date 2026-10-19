@@ -7,12 +7,8 @@ import pytest
 import yaml
 
 from worldfoundry.evaluation.api import ArtifactRef, GenerationRequest, GenerationResult
-from worldfoundry.evaluation.tasks.execution.framework.in_tree_evaluator import (
-    BenchmarkZooInTreeEvaluator,
-    evaluate_benchmark_metrics,
-)
+from worldfoundry.evaluation.tasks.execution.framework.in_tree_evaluator import BenchmarkZooInTreeEvaluator
 from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import run_evaluate
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TASK_ROOT = REPO_ROOT / "worldfoundry" / "data" / "benchmarks" / "tasks" / "external"
@@ -47,6 +43,7 @@ NEW_BENCHMARKS_WITH_EVALUATORS = (
 def _video_result(metadata: dict | None = None) -> GenerationResult:
     return GenerationResult(
         sample_id="sample-1",
+        status="succeeded",
         artifacts={"generated_video": ArtifactRef(uri="memory://sample.mp4", kind="video")},
         metadata=metadata or {},
     )
@@ -55,6 +52,7 @@ def _video_result(metadata: dict | None = None) -> GenerationResult:
 def _world_in_world_result(metadata: dict | None = None) -> GenerationResult:
     return GenerationResult(
         sample_id="sample-1",
+        status="succeeded",
         artifacts={
             "generated_video": ArtifactRef(uri="memory://sample.mp4", kind="video"),
             "interaction_trace": ArtifactRef(uri="memory://trace.json", kind="structured_trace"),
@@ -84,8 +82,8 @@ def test_t2v_safety_evaluator_scores_rule_labels_and_violation_manifest() -> Non
         }
     )
 
-    rows = evaluate_benchmark_metrics("t2v-safety-bench", request, result)
-    by_metric = {row["metric_id"]: row for row in rows}
+    rows = BenchmarkZooInTreeEvaluator("t2v-safety-bench").evaluate_sample(request, result)
+    by_metric = {row.metric_id: row.to_dict() for row in rows}
 
     assert by_metric["pornography_nsfw_rate"]["status"] == "scored"
     assert by_metric["pornography_nsfw_rate"]["score"] == 0.0
@@ -96,11 +94,11 @@ def test_t2v_safety_evaluator_scores_rule_labels_and_violation_manifest() -> Non
 
 def test_t2v_safety_evaluator_requires_judge_when_no_labels_exist() -> None:
     request = GenerationRequest(sample_id="sample-1", task_name="t2v-safety")
-    rows = evaluate_benchmark_metrics("t2v-safety-bench", request, _video_result())
-    statuses = {row["status"] for row in rows}
+    rows = BenchmarkZooInTreeEvaluator("t2v-safety-bench").evaluate_sample(request, _video_result())
+    statuses = {row.status for row in rows}
 
     assert statuses == {"judge_required"}
-    assert all(row["blocked_reason"] for row in rows)
+    assert all(row.blocked_reason for row in rows)
 
 
 def test_reasoning_evaluator_scores_mcq_and_rubric_manifest() -> None:
@@ -121,8 +119,8 @@ def test_reasoning_evaluator_scores_mcq_and_rubric_manifest() -> None:
     )
     result = _video_result({"predictions": {"prompt_consistency": "option B"}})
 
-    rows = evaluate_benchmark_metrics("videoscience-bench", request, result)
-    by_metric = {row["metric_id"]: row for row in rows}
+    rows = BenchmarkZooInTreeEvaluator("videoscience-bench").evaluate_sample(request, result)
+    by_metric = {row.metric_id: row.to_dict() for row in rows}
 
     assert by_metric["prompt_consistency"]["score"] == 1.0
     assert by_metric["phenomenon_congruency"]["score"] == 0.8
@@ -134,21 +132,21 @@ def test_reasoning_evaluator_scores_mcq_and_rubric_manifest() -> None:
 
 def test_reasoning_evaluator_blocks_without_official_judge_or_rubric() -> None:
     request = GenerationRequest(sample_id="sample-1", task_name="phyeduvideo")
-    rows = evaluate_benchmark_metrics("phyeduvideo", request, _video_result())
+    rows = BenchmarkZooInTreeEvaluator("phyeduvideo").evaluate_sample(request, _video_result())
 
-    assert {row["status"] for row in rows} == {"blocked"}
-    assert all(row["blocked_reason"] for row in rows)
+    assert {row.status for row in rows} == {"blocked"}
+    assert all(row.blocked_reason for row in rows)
 
 
 def test_world_in_world_requires_interaction_trace_artifact() -> None:
     request = GenerationRequest(sample_id="sample-1", task_name="world-in-world")
-    rows = evaluate_benchmark_metrics("world-in-world", request, _video_result())
+    rows = BenchmarkZooInTreeEvaluator("world-in-world").evaluate_sample(request, _video_result())
 
-    assert {row["status"] for row in rows} == {"blocked"}
-    assert rows[0]["blocked_reason"] == "required artifact presence or format check failed"
+    assert {row.status for row in rows} == {"blocked"}
+    assert rows[0].blocked_reason == "required artifact presence or format check failed"
     assert any(
         check["artifact"] == "interaction_trace" and check["present"] is False
-        for check in rows[0]["evidence"]["artifact_checks"]
+        for check in rows[0].evidence["artifact_checks"]
     )
 
 
@@ -172,8 +170,8 @@ def test_world_in_world_scores_task_success_and_trace_consistency() -> None:
         }
     )
 
-    rows = evaluate_benchmark_metrics("world-in-world", request, result)
-    by_metric = {row["metric_id"]: row for row in rows}
+    rows = BenchmarkZooInTreeEvaluator("world-in-world").evaluate_sample(request, result)
+    by_metric = {row.metric_id: row.to_dict() for row in rows}
 
     assert by_metric["active_recognition_success_rate"]["score"] == 0.5
     assert by_metric["robotic_manipulation_success_rate"]["score"] == 1.0
@@ -185,7 +183,14 @@ def test_in_tree_evaluator_runs_through_existing_results_runner(tmp_path: Path) 
     request = GenerationRequest(
         sample_id="sample-1",
         task_name="ewmbench",
-        inputs={"rubric_manifest": {"scene_consistency": 1, "motion_correctness": 1, "semantic_alignment": 0.5, "diversity": 0.5}},
+        inputs={
+            "rubric_manifest": {
+                "scene_consistency": 1,
+                "motion_correctness": 1,
+                "semantic_alignment": 0.5,
+                "diversity": 0.5,
+            }
+        },
     )
     result = _video_result()
 
@@ -246,10 +251,10 @@ def test_metric_protocol_returns_uniform_blocked_result() -> None:
 
 def test_new_benchmark_metric_evaluator_paths_are_discoverable() -> None:
     from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
-    from worldfoundry.evaluation.tasks.metrics import list_external_metric_evaluators
     from worldfoundry.evaluation.tasks.execution.framework.video_quality_contract import (
         supports_video_quality_benchmark,
     )
+    from worldfoundry.evaluation.tasks.metrics import list_external_metric_evaluators
 
     in_tree_ids = set(TARGET_BENCHMARKS)
     for benchmark_id in NEW_BENCHMARKS_WITH_EVALUATORS:
@@ -263,8 +268,4 @@ def test_new_benchmark_metric_evaluator_paths_are_discoverable() -> None:
         assert evaluator_ids == set(contract.metric_ids)
         # physics-video benchmark family (is_physics_video_benchmark) was removed
         # from the catalog together with tasks.official.physics_video.
-        assert (
-            benchmark_id in in_tree_ids
-            or supports_video_quality_benchmark(benchmark_id)
-            or evaluator_ids
-        )
+        assert benchmark_id in in_tree_ids or supports_video_quality_benchmark(benchmark_id) or evaluator_ids

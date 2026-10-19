@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import shutil
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -17,7 +18,7 @@ from typing import Any, Callable, Mapping, Sequence
 from worldfoundry.core.io.filesystem.file_utils import materialize_file
 from worldfoundry.core.io.formats.serialization import read_jsonl_objects
 from worldfoundry.core.observability.time import utc_now_iso
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
+from worldfoundry.evaluation.api import GenerationResult, is_generation_result_successful
 from worldfoundry.evaluation.api.artifacts import local_path_for_uri
 from worldfoundry.evaluation.reporting import (
     REPRODUCIBILITY_PACKAGES,
@@ -35,7 +36,6 @@ from worldfoundry.evaluation.tasks.execution.orchestration.benchmark_runner impo
 from worldfoundry.evaluation.tasks.execution.orchestration.interfaces import normalize_benchmark_run_mode
 from worldfoundry.evaluation.utils import (
     BENCHMARK_TASK_ROOT,
-    build_run_fingerprint,
     build_version_context,
     stable_hash,
     write_json,
@@ -46,6 +46,7 @@ from .benchmark_generation import get_benchmark_generation_adapter
 from .evaluate import EvaluateRunRequest, EvaluateRunResult, execute_evaluate_run
 from .fidelity import model_benchmark_fidelity
 from .plan import build_run_plan_from_task_registry, evaluate_request_from_run_plan, write_run_plan
+from .run_session import run_stage, session_paths
 from .runtime_preflight import DEFAULT_PROFILE_DIR, run_preflight
 
 MODEL_BENCHMARK_RUN_SCHEMA_VERSION = "worldfoundry-model-benchmark-run"
@@ -91,6 +92,8 @@ class ModelBenchmarkRunRequest:
         output_artifact: Override representing the expected generated asset type.
         required_artifacts: List of artifact kinds expected to be verified.
         metrics: Sequence of scorecard metrics computed.
+        resume: Reuse matching generation and per-sample metric checkpoints.
+        metric_batch_size: Batch size for in-process per-sample scoring.
         generation_cache_dir: Custom directory path for SQLite generation caching.
         generation_cache_mode: Caching mode.
         generation_cache_namespace: Caching namespace partition.
@@ -129,6 +132,8 @@ class ModelBenchmarkRunRequest:
     output_artifact: str = "generated_video"
     required_artifacts: Sequence[str] = ("generated_video",)
     metrics: Sequence[str] = ("artifact_count", "required_artifacts_present")
+    resume: bool = False
+    metric_batch_size: int = 32
     generation_cache_dir: str | Path | None = None
     generation_cache_mode: str = "off"
     generation_cache_namespace: str = "model_benchmark"
@@ -208,18 +213,6 @@ def _default_task_roots(benchmark_manifest_path: str | Path) -> tuple[Path, ...]
     return (DEFAULT_BENCHMARK_TASK_ROOT,)
 
 
-def _default_requests(benchmark_id: str, output_artifact: str) -> tuple[GenerationRequest, ...]:
-    """Generates a list containing one generic fallback GenerationRequest during contract runs."""
-    return (
-        GenerationRequest(
-            sample_id="sample-0000",
-            task_name=benchmark_id,
-            inputs={"prompt": "WorldFoundry contract fixture"},
-            output_schema={output_artifact: {"kind": output_artifact}},
-        ),
-    )
-
-
 def _safe_name(value: str) -> str:
     """Sanitizes strings for safe usage in file paths and manifest IDs."""
     cleaned = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in value.strip())
@@ -261,11 +254,7 @@ def _run_official_runtime_preflight(
         return None
     environ = dict(os.environ)
     environ.update(
-        {
-            str(name): str(value)
-            for name, value in dict(request.benchmark_env or {}).items()
-            if value is not None
-        }
+        {str(name): str(value) for name, value in dict(request.benchmark_env or {}).items() if value is not None}
     )
     if environ.get("WORLDFOUNDRY_SKIP_PREFLIGHT") == "1":
         return None
@@ -380,15 +369,8 @@ def _task_plan_path(root: Path) -> Path:
     return root / "task_run_plan.json"
 
 
-def _run_generation_from_task_registry(
-    request: ModelBenchmarkRunRequest,
-    root: Path,
-    *,
-    resolved_runner: Any | None = None,
-    runner_factory: Callable[[], Any] | None = None,
-    cleanup_runner: bool = True,
-) -> EvaluateRunResult:
-    """Materializes requests and runs model generations utilising the local task catalog registry."""
+def _prepare_task_generation(request: ModelBenchmarkRunRequest, root: Path) -> EvaluateRunRequest:
+    """Materialize the task catalog into the shared generation request contract."""
     if not request.task_name:
         raise ValueError("task_name is required for task-registry materialization")
     if request.dataset_root is None:
@@ -433,15 +415,11 @@ def _run_generation_from_task_registry(
             "split, and num_samples"
         )
     write_run_plan(plan, _task_plan_path(root))
-    evaluate_request = evaluate_request_from_run_plan(plan)
-    if resolved_runner is not None or runner_factory is not None or not cleanup_runner:
-        evaluate_request = replace(
-            evaluate_request,
-            runner=resolved_runner,
-            runner_factory=runner_factory,
-            cleanup_runner=cleanup_runner,
-        )
-    return execute_evaluate_run(evaluate_request)
+    return replace(
+        evaluate_request_from_run_plan(plan),
+        resume=request.resume,
+        metric_batch_size=request.metric_batch_size,
+    )
 
 
 def _materialize_generated_artifacts(
@@ -468,6 +446,8 @@ def _materialize_generated_artifacts(
     generated_artifact_dir.mkdir(parents=True, exist_ok=True)
 
     for result in results:
+        if not is_generation_result_successful(result):
+            continue
         for name, artifact in result.artifacts.items():
             if output_artifact and name != output_artifact:
                 continue
@@ -475,7 +455,7 @@ def _materialize_generated_artifacts(
             official_name = official_names.get(result.sample_id)
             destination_name = official_name or f"{_safe_name(result.sample_id)}__{_safe_name(name)}{suffix}"
             destination = generated_artifact_dir / destination_name
-            source_path = local_path_for_uri(artifact.uri)
+            source_path = local_path_for_uri(artifact.uri, base_dir=generation_output_dir)
             row = {
                 "sample_id": result.sample_id,
                 "artifact_name": name,
@@ -557,25 +537,32 @@ def _run_generation(
     cleanup_runner: bool = True,
 ) -> EvaluateRunResult | None:
     """Materialize benchmark requests and run the selected in-tree model."""
+    prepared = prepare_benchmark_generation(request, root)
+    if prepared is None:
+        return None
+    return execute_evaluate_run(
+        replace(
+            prepared,
+            runner=resolved_runner,
+            runner_factory=runner_factory,
+            cleanup_runner=cleanup_runner,
+        )
+    )
+
+
+def prepare_benchmark_generation(request: ModelBenchmarkRunRequest, root: Path) -> EvaluateRunRequest | None:
+    """Resolve actual generation inputs without loading the model or starting execution."""
     if request.generated_artifact_dir is not None:
         return None
 
     requests = request.requests
     if requests is None and request.requests_path is None:
         if request.task_name:
-            return _run_generation_from_task_registry(
-                request,
-                root,
-                resolved_runner=resolved_runner,
-                runner_factory=runner_factory,
-                cleanup_runner=cleanup_runner,
-            )
+            return _prepare_task_generation(request, root)
         if request.contract_fixture:
             return None
         if request.benchmark_mode == "contract":
-            raise ValueError(
-                "model-benchmark contract runs require generated inputs or contract_fixture=True"
-            )
+            raise ValueError("model-benchmark contract runs require generated inputs or contract_fixture=True")
         adapter = get_benchmark_generation_adapter(request.benchmark_id)
         if adapter is not None:
             requests = adapter.materialize_requests(
@@ -595,37 +582,34 @@ def _run_generation(
                 "generation adapter."
             )
 
-    return execute_evaluate_run(
-        EvaluateRunRequest(
-            output_dir=root / "generation",
-            mode="model",
-            requests=requests,
-            requests_path=request.requests_path,
-            metrics=tuple(request.metrics),
-            required_artifacts=tuple(request.required_artifacts),
-            benchmark={
-                "suite": "benchmark_zoo",
-                "benchmark_name": request.benchmark_id,
-                "task_type": request.task_name or request.benchmark_id,
-                "evaluation_protocol": "model_generation",
-            },
-            model_id=request.model_id,
-            model_runner=request.model_runner,
-            model_zoo_manifest_dir=request.model_zoo_manifest_dir,
-            model_variant_id=request.model_variant_id,
-            model_parameters=request.model_parameters,
-            model_runtime=request.model_runtime,
-            model_config=request.model_config,
-            runner=resolved_runner,
-            runner_factory=runner_factory,
-            cleanup_runner=cleanup_runner,
-            generation_cache_dir=request.generation_cache_dir,
-            generation_cache_mode=request.generation_cache_mode,
-            generation_cache_namespace=request.generation_cache_namespace,
-            dataset_id=f"{request.benchmark_id}:generated",
-            run_id=None if request.run_id is None else f"{request.run_id}:generation",
-            fail_on_sample_error=request.fail_on_generation_error,
-        )
+    return EvaluateRunRequest(
+        output_dir=root / "generation",
+        mode="model",
+        requests=requests,
+        requests_path=request.requests_path,
+        metrics=tuple(request.metrics),
+        required_artifacts=tuple(request.required_artifacts),
+        benchmark={
+            "suite": "benchmark_zoo",
+            "benchmark_name": request.benchmark_id,
+            "task_type": request.task_name or request.benchmark_id,
+            "evaluation_protocol": "model_generation",
+        },
+        model_id=request.model_id,
+        model_runner=request.model_runner,
+        model_zoo_manifest_dir=request.model_zoo_manifest_dir,
+        model_variant_id=request.model_variant_id,
+        model_parameters=request.model_parameters,
+        model_runtime=request.model_runtime,
+        model_config=request.model_config,
+        resume=request.resume,
+        metric_batch_size=request.metric_batch_size,
+        generation_cache_dir=request.generation_cache_dir,
+        generation_cache_mode=request.generation_cache_mode,
+        generation_cache_namespace=request.generation_cache_namespace,
+        dataset_id=f"{request.benchmark_id}:generated",
+        run_id=None if request.run_id is None else f"{request.run_id}:generation",
+        fail_on_sample_error=request.fail_on_generation_error,
     )
 
 
@@ -643,43 +627,50 @@ def _model_benchmark_run_summary(
     started_at: str | None = None,
     finished_at: str | None = None,
     version_context: Mapping[str, Any] | None = None,
-    run_fingerprint: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compiles the primary run summary record, detailing generation and benchmark execution metrics."""
     version_context = dict(version_context or {})
-    run_fingerprint = dict(run_fingerprint or {})
     sample_count = generation_result.sample_count if generation_result is not None else materialized_count
     successful_samples = (
         generation_result.successful_sample_count if generation_result is not None else materialized_count
     )
     failed_samples = generation_result.failed_sample_count if generation_result is not None else 0
     generation_success_rate = successful_samples / sample_count if sample_count else 0.0
-    # Contract execution can succeed operationally without producing a real
-    # benchmark score; do not publish that operation status as a leaderboard metric.
-    benchmark_ok = 1.0 if benchmark_payload.get("ok") is True and mode != "contract" else 0.0
+    scorecard_path = benchmark_payload.get("scorecard_path")
+    child = json.loads(Path(scorecard_path).read_text()) if scorecard_path and Path(scorecard_path).is_file() else {}
+    child_eligibility = dict(child.get("eligibility") or {})
+    metrics_summary = dict(child.get("metrics") or {})
+    leaderboard = dict(metrics_summary.get("leaderboard") or {})
     provenance = dict(request.evaluation_provenance or {})
     provenance_claim = provenance.get("claim")
     provenance_claim = provenance_claim if isinstance(provenance_claim, Mapping) else {}
     provenance_candidate = (
-        provenance_claim.get("leaderboard_candidate") is True
-        if provenance
-        else request.leaderboard_candidate
+        provenance_claim.get("leaderboard_candidate") is True if provenance else request.leaderboard_candidate
     )
     effective_candidate = request.leaderboard_candidate and provenance_candidate
-    leaderboard_valid = (
-        status == "succeeded"
-        and benchmark_payload.get("ok") is True
-        and not request.contract_fixture
-        and placeholder_count == 0
-        and effective_candidate
-    )
     score_valid = (
         status == "succeeded"
+        and mode != "contract"
         and benchmark_payload.get("ok") is True
+        and bool(leaderboard)
+        and child_eligibility.get("score_valid", child.get("normalization_ok")) is True
         and not request.contract_fixture
         and placeholder_count == 0
     )
     leaderboard_blockers = _model_benchmark_leaderboard_blockers(status, benchmark_payload)
+    for reason in (*child_eligibility.get("reasons", ()), *child_eligibility.get("blocking_reasons", ())):
+        if reason not in leaderboard_blockers:
+            leaderboard_blockers.append(str(reason))
+    if child_eligibility.get("leaderboard_valid") is not True and not leaderboard_blockers:
+        leaderboard_blockers.append("benchmark scorecard does not grant leaderboard validity")
+    leaderboard_valid = (
+        score_valid
+        and effective_candidate
+        and benchmark_payload.get("official_benchmark_verified") is True
+        and child_eligibility.get("leaderboard_valid") is True
+        and child_eligibility.get("leaderboard_eligible", True) is True
+        and not leaderboard_blockers
+    )
     if request.contract_fixture and "model-benchmark run used contract fixture" not in leaderboard_blockers:
         leaderboard_blockers.append("model-benchmark run used contract fixture")
     if placeholder_count and "generated artifacts include placeholders" not in leaderboard_blockers:
@@ -695,19 +686,11 @@ def _model_benchmark_run_summary(
             blocker = "evaluation provenance is not leaderboard-comparable"
         if blocker not in leaderboard_blockers:
             leaderboard_blockers.append(blocker)
-    leaderboard = {
-        "materialized_artifact_count": float(materialized_count),
-        "placeholder_artifact_count": float(placeholder_count),
-        "real_artifact_count": float(max(materialized_count - placeholder_count, 0)),
-        "generation_success_rate": float(generation_success_rate),
-        "benchmark_ok": benchmark_ok,
-    }
     benchmark_parameters = dict(request.benchmark_parameters or {})
     benchmark_revision = benchmark_parameters.get("revision")
-    protocol_parameters = {
-        key: value for key, value in benchmark_parameters.items() if key != "revision"
-    }
+    protocol_parameters = {key: value for key, value in benchmark_parameters.items() if key != "revision"}
     benchmark_summary = {
+        **dict(child.get("benchmark") or {}),
         "benchmark_id": request.benchmark_id,
         "benchmark_name": request.benchmark_id,
         "benchmark_revision": benchmark_revision,
@@ -723,18 +706,6 @@ def _model_benchmark_run_summary(
         "name": request.dataset_id or f"{request.benchmark_id}:generated",
         "split": request.split,
         "sample_count": sample_count,
-    }
-    metrics_summary = {
-        "leaderboard": leaderboard,
-        "per_metric": {
-            metric_id: {"mean": value, "higher_is_better": True} for metric_id, value in leaderboard.items()
-        },
-        "summary": {
-            "sample_count": sample_count,
-            "successful_samples": successful_samples,
-            "failed_samples": failed_samples,
-            "failed_sample_ids": [],
-        },
     }
     comparison_identity = build_comparison_identity(
         benchmark=benchmark_summary,
@@ -753,7 +724,6 @@ def _model_benchmark_run_summary(
             "finished_at": finished_at,
             "worldfoundry_version": version_context.get("worldfoundry_version"),
             "version_context": version_context,
-            "run_fingerprint": run_fingerprint or None,
         },
         "benchmark": benchmark_summary,
         "model": {
@@ -774,6 +744,7 @@ def _model_benchmark_run_summary(
             "materialized_artifact_count": materialized_count,
             "placeholder_artifact_count": placeholder_count,
             "real_artifact_count": max(materialized_count - placeholder_count, 0),
+            "success_rate": generation_success_rate,
         },
         "metrics": metrics_summary,
         "leaderboard": leaderboard,
@@ -811,15 +782,15 @@ def _model_benchmark_leaderboard_blockers(status: str, benchmark_payload: Mappin
     metadata = dict(metadata) if isinstance(metadata, Mapping) else {}
     if metadata.get("contract_only") is True:
         return ["benchmark runner ran in contract-only mode"]
-    if benchmark_payload.get("ok") is True:
-        return []
     if metadata.get("normalizer_only") is True:
         return ["benchmark runner produced normalizer-only evidence"]
     if benchmark_payload.get("official_benchmark_verified") is not True:
         return ["official benchmark verification missing"]
     if benchmark_payload.get("integration_evidence") is not True:
         return ["benchmark integration evidence missing"]
-    return ["benchmark runner did not produce leaderboard-valid evidence"]
+    if benchmark_payload.get("ok") is not True:
+        return ["benchmark runner did not produce leaderboard-valid evidence"]
+    return []
 
 
 def run_model_benchmark(
@@ -857,6 +828,8 @@ def run_model_benchmark(
             payload = {**dict(request), **payload}
         request = ModelBenchmarkRunRequest(**payload)
 
+    if request.metric_batch_size < 1:
+        raise ValueError("metric_batch_size must be positive")
     mode = normalize_benchmark_run_mode(request.benchmark_mode)
     if mode != "contract" and request.evaluation_provenance is None:
         fidelity = model_benchmark_fidelity(
@@ -873,11 +846,7 @@ def run_model_benchmark(
             ),
             sample_limited=request.num_samples is not None,
             benchmark_parameters=request.benchmark_parameters,
-            producer=(
-                "catalog_model"
-                if request.model_zoo_manifest_dir is not None
-                else "custom_model"
-            ),
+            producer=("catalog_model" if request.model_zoo_manifest_dir is not None else "custom_model"),
         )
         request = replace(
             request,
@@ -888,6 +857,32 @@ def run_model_benchmark(
         raise ValueError("model-benchmark runs require model_id unless contract_fixture=True is set.")
     root = Path(request.output_dir).resolve()
     root.mkdir(parents=True, exist_ok=True)
+    (root / "model_benchmark_run.json").unlink(missing_ok=True)
+    with run_stage(
+        session_paths(root),
+        "model_benchmark",
+        manifest={"run_id": request.run_id, "runner": "model_benchmark_runner"},
+    ):
+        return _execute_model_benchmark(
+            request,
+            root=root,
+            mode=mode,
+            resolved_runner=resolved_runner,
+            runner_factory=runner_factory,
+            cleanup_runner=cleanup_runner,
+        )
+
+
+def _execute_model_benchmark(
+    request: ModelBenchmarkRunRequest,
+    *,
+    root: Path,
+    mode: str,
+    resolved_runner: Any | None,
+    runner_factory: Callable[[], Any] | None,
+    cleanup_runner: bool,
+) -> ModelBenchmarkRunResult:
+    """Execute the current attempt inside the shared failure-report lifecycle."""
     started_at = utc_now_iso()
     manifest_path = root / "model_benchmark_run.json"
     run_manifest_path = root / "run_manifest.json"
@@ -937,6 +932,8 @@ def run_model_benchmark(
         write_jsonl(artifact_manifest_path, [], atomic=False)
     else:
         generated_artifact_dir = root / "generated_artifacts"
+        if generated_artifact_dir.exists():
+            shutil.rmtree(generated_artifact_dir)
         if request.contract_fixture and generation_result is None:
             materialized_count, placeholder_count = _materialize_contract_validation_artifacts(
                 generated_artifact_dir=generated_artifact_dir,
@@ -1054,7 +1051,6 @@ def run_model_benchmark(
         },
         git_context=environment.get("git"),
     )
-    run_fingerprint = build_run_fingerprint(version_context=version_context)
     artifacts = {
         "run_manifest": str(manifest_path),
         "standard_run_manifest": str(run_manifest_path),
@@ -1080,7 +1076,6 @@ def run_model_benchmark(
         "started_at": started_at,
         "finished_at": finished_at,
         "version_context": version_context,
-        "run_fingerprint": run_fingerprint,
         "benchmark_id": request.benchmark_id,
         "benchmark_mode": mode,
         "evaluation_kind": request.evaluation_kind,
@@ -1116,7 +1111,6 @@ def run_model_benchmark(
             "started_at": started_at,
             "finished_at": finished_at,
             "version_context": version_context,
-            "run_fingerprint": run_fingerprint,
             "exit_code": exit_code,
             "output_dir": str(root),
             "benchmark": {
@@ -1181,7 +1175,6 @@ def run_model_benchmark(
             started_at=started_at,
             finished_at=finished_at,
             version_context=version_context,
-            run_fingerprint=run_fingerprint,
         ),
     )
 

@@ -446,6 +446,16 @@ worldfoundry-eval score \
   --json
 ```
 
+In-process `score --results`, `generate-score`, `reproduce`, `evaluate`, and
+`run` accept `--resume` and `--metric-batch-size` (default `32`). Completed
+sample generation and metric batches are persisted separately. Resume reuses
+matching requests, model settings and existing artifacts; metric implementation,
+version and declared parameters determine whether scores can be reused.
+`metrics/checkpoint.jsonl` retains completed metric batches after interruption.
+A changed metric is recomputed without rerunning matching generation.
+`score --benchmark --artifacts` uses an official evaluator protocol and rejects
+these in-process scoring flags.
+
 `evaluate` exposes the same deterministic core with lower-level request, task, runner, cache, and model-mode fields:
 
 ```bash

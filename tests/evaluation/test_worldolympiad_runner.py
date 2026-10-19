@@ -3,9 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from worldfoundry.evaluation.tasks.catalog.dispatch import CLI_RUNNERS, VIDEO_RUNNER_REGISTRY
 from worldfoundry.evaluation.tasks.contracts.external import get_external_benchmark_contract
-from worldfoundry.evaluation.tasks.execution.framework.runner_registry import VIDEO_RUNNER_REGISTRY
-from worldfoundry.evaluation.tasks.execution.runners.workspace_registry import CLI_RUNNERS
 from worldfoundry.evaluation.tasks.execution.runners.worldolympiad import (
     run_worldolympiad_official_runner as runner,
 )
@@ -121,9 +120,7 @@ def test_missing_geometry_track_is_reported_and_strict_mode_fails(tmp_path: Path
     assert any("missing tracks: geometry" in blocker for blocker in scorecard["evaluation"]["comparability_blockers"])
 
     strict_dir = tmp_path / "strict"
-    exit_code = runner.main(
-        ["--official-results-path", str(case_root), "--output-dir", str(strict_dir), "--strict"]
-    )
+    exit_code = runner.main(["--official-results-path", str(case_root), "--output-dir", str(strict_dir), "--strict"])
     assert exit_code == 1
     strict_scorecard = json.loads((strict_dir / "scorecard.json").read_text(encoding="utf-8"))
     assert strict_scorecard["normalization_ok"] is False

@@ -70,14 +70,6 @@ def compute_attribute_pad(
     }
 
 
-def _compute_sad(hcs_real: Any, hcs_gen: Any, text_list: list[str], **kwargs: Any) -> dict[str, Any]:
-    return compute_attribute_sad(hcs_real, hcs_gen, text_list, **kwargs)
-
-
-def _compute_pad(hcs_real: Any, hcs_gen: Any, text_list: list[str], **kwargs: Any) -> dict[str, Any]:
-    return compute_attribute_pad(hcs_real, hcs_gen, text_list, **kwargs)
-
-
 METRIC_MODULES = (
     metric_module_from_globals(
         metric_id="attribute_sad",
@@ -107,7 +99,7 @@ METRIC_MODULES = (
 
 METRIC_MODULE = METRIC_MODULES[0]
 
-compute = _compute_sad
+compute = compute_attribute_sad
 
 __all__ = [
     "METRIC_MODULE",

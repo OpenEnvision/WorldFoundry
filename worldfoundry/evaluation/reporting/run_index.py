@@ -20,6 +20,8 @@ from worldfoundry.evaluation.utils import (
 )
 from worldfoundry.evaluation.utils import (
     mapping_or_empty as _mapping,
+)
+from worldfoundry.evaluation.utils import (
     read_json_object,
     write_json,
     write_jsonl,
@@ -27,17 +29,26 @@ from worldfoundry.evaluation.utils import (
 
 from .run_report import (
     MOCK_BACKEND_BLOCKING_REASON,
-    dedupe_labels as _dedupe_labels,
-    find_run_summary_candidate as _run_summary_candidate,
     is_mock_backend,
     load_run_summary,
+)
+from .run_report import (
+    dedupe_labels as _dedupe_labels,
+)
+from .run_report import (
+    find_run_summary_candidate as _run_summary_candidate,
+)
+from .run_report import (
     normalise_roots as _normalise_roots,
+)
+from .run_report import (
     row_from_summary as _row_from_summary,
 )
 
 RUN_INDEX_SCHEMA_VERSION = "worldfoundry-run-index"
 
 # ── Internal helpers ─────────────────────────────────────────
+
 
 def _rows_from_index_payload(payload: Mapping[str, Any], path: Path) -> list[dict[str, Any]]:
     """Extract and normalise the ``rows`` list from a loaded index payload."""
@@ -65,16 +76,13 @@ def _mock_backend_issues(rows: Sequence[Mapping[str, Any]]) -> list[str]:
         if is_mock_backend(row.get("backend"))
     ]
 
+
 def _index_summary_from_rows(path: Path, rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Build an index payload from a flat list of row dicts."""
     benchmarks = sorted({str(row["benchmark"]) for row in rows if row.get("benchmark")})
     datasets = sorted({str(row["dataset_id"]) for row in rows if row.get("dataset_id")})
     metric_ids = sorted(
-        {
-            str(metric_id)
-            for row in rows
-            for metric_id in (row.get("metric_ids") or _mapping(row.get("metrics")).keys())
-        }
+        {str(metric_id) for row in rows for metric_id in (row.get("metric_ids") or _mapping(row.get("metrics")).keys())}
     )
     comparison_keys = sorted({str(row["comparison_key"]) for row in rows if row.get("comparison_key")})
     comparison_identity_statuses = _comparison_identity_statuses(rows)
@@ -94,6 +102,7 @@ def _index_summary_from_rows(path: Path, rows: Sequence[Mapping[str, Any]]) -> d
         "issues": _mock_backend_issues(rows),
         "artifacts": {"index_source": str(path.resolve())},
     }
+
 
 def load_run_index(path: str | Path) -> dict[str, Any]:
     """Load a run index from index.json or index.jsonl."""
@@ -117,6 +126,7 @@ def load_run_index(path: str | Path) -> dict[str, Any]:
     index.setdefault("artifacts", {})
     return index
 
+
 def _filter_values(values: Sequence[str] | None) -> set[str] | None:
     """Normalise a filter sequence to a ``set`` of non-empty strings; ``None`` means no filter."""
     if values is None:
@@ -124,9 +134,11 @@ def _filter_values(values: Sequence[str] | None) -> set[str] | None:
     normalized = {str(value) for value in values if value not in (None, "")}
     return normalized or None
 
+
 def _matches_filter(value: Any, accepted: set[str] | None) -> bool:
     """Return whether *value* matches the *accepted* filter set (or all when ``None``)."""
     return accepted is None or str(value) in accepted
+
 
 def _matches_any_filter(values: Sequence[Any], accepted: set[str] | None) -> bool:
     """Return whether any item in *values* matches the *accepted* filter set."""
@@ -134,12 +146,14 @@ def _matches_any_filter(values: Sequence[Any], accepted: set[str] | None) -> boo
         return True
     return any(value not in (None, "") and str(value) in accepted for value in values)
 
+
 def _row_metric_ids(row: Mapping[str, Any]) -> set[str]:
     """Extract the set of metric IDs available in a single index row."""
     metric_ids = row.get("metric_ids")
     if isinstance(metric_ids, Sequence) and not isinstance(metric_ids, (str, bytes)):
         return {str(metric_id) for metric_id in metric_ids}
     return {str(metric_id) for metric_id in _mapping(row.get("metrics"))}
+
 
 def select_run_index_rows(
     index: Mapping[str, Any],
@@ -186,6 +200,7 @@ def select_run_index_rows(
             continue
         selected.append(dict(row))
     return selected
+
 
 def run_paths_from_index(
     path: str | Path,
@@ -245,6 +260,7 @@ def run_paths_from_index(
         raise ValueError(f"run index selection matched no comparable runs: {path}")
     return selected
 
+
 def discover_run_summaries(roots: str | Path | Sequence[str | Path]) -> list[Path]:
     """Find root-level run summary files below one or more roots.
 
@@ -275,6 +291,7 @@ def discover_run_summaries(roots: str | Path | Sequence[str | Path]) -> list[Pat
 
     return sorted(summary_paths, key=lambda path: str(path.resolve()))
 
+
 def _index_row_from_summary(
     *,
     index: int,
@@ -292,17 +309,19 @@ def _index_row_from_summary(
             "started_at": run.get("started_at"),
             "finished_at": run.get("finished_at"),
             "worldfoundry_version": run.get("worldfoundry_version"),
-            "run_fingerprint": run.get("run_fingerprint"),
             "metric_ids": sorted(str(metric_id) for metric_id in metrics),
         }
     )
     return row
 
+
 def _invalid_index_row(*, index: int, source_path: Path, error: str) -> dict[str, Any]:
     """Build a placeholder row for a run summary that failed to load."""
     return {
         "index": index,
-        "label": source_path.parent.name if source_path.name in {"summary.json", "scorecard.json"} else source_path.stem,
+        "label": source_path.parent.name
+        if source_path.name in {"summary.json", "scorecard.json"}
+        else source_path.stem,
         "source_path": str(source_path.resolve()),
         "run_dir": str(source_path.parent.resolve()),
         "source_file": source_path.name,
@@ -311,6 +330,7 @@ def _invalid_index_row(*, index: int, source_path: Path, error: str) -> dict[str
         "metric_ids": [],
         "issue": error,
     }
+
 
 def _duplicate_run_id_issues(rows: Sequence[Mapping[str, Any]]) -> list[str]:
     """Detect duplicate ``run_id`` values across rows and return issue strings."""
@@ -335,6 +355,7 @@ def _comparison_identity_statuses(rows: Sequence[Mapping[str, Any]]) -> dict[str
         status = str(row.get("comparison_identity_status") or "unavailable")
         counts[status] = counts.get(status, 0) + 1
     return dict(sorted(counts.items()))
+
 
 def build_run_index(
     roots: str | Path | Sequence[str | Path],
@@ -379,11 +400,7 @@ def build_run_index(
     benchmarks = sorted({str(row["benchmark"]) for row in rows if row.get("benchmark")})
     datasets = sorted({str(row["dataset_id"]) for row in rows if row.get("dataset_id")})
     metric_ids = sorted(
-        {
-            str(metric_id)
-            for row in rows
-            for metric_id in (row.get("metric_ids") or _mapping(row.get("metrics")).keys())
-        }
+        {str(metric_id) for row in rows for metric_id in (row.get("metric_ids") or _mapping(row.get("metrics")).keys())}
     )
     comparison_keys = sorted({str(row["comparison_key"]) for row in rows if row.get("comparison_key")})
     root_paths = [str(root.resolve()) for root in _normalise_roots(roots)]

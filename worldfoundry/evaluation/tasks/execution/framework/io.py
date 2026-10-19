@@ -8,13 +8,13 @@ scores or metrics emitted by official benchmark runtimes into canonical forms.
 from __future__ import annotations
 
 import os
+from math import isfinite
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from worldfoundry.core.io.formats.serialization import (
     append_jsonl,
     jsonable,
-    read_json as load_json,
     read_json,
     read_json_object,
     read_json_or_jsonl,
@@ -23,8 +23,10 @@ from worldfoundry.core.io.formats.serialization import (
     write_json,
     write_jsonl,
 )
+from worldfoundry.core.io.formats.serialization import (
+    read_json as load_json,
+)
 from worldfoundry.core.observability.time import utc_now_iso
-
 
 # Typed dictionary format for general JSON-like data mappings
 JsonMapping = Mapping[str, Any]
@@ -76,6 +78,14 @@ def mean_numeric(values: Iterable[float | int | None]) -> float | None:
 def optional_float(value: Any) -> float | None:
     """Convert an optional numeric value to ``float`` while preserving missing values."""
     return None if value in (None, "") else float(value)
+
+
+def try_float(value: Any) -> float | None:
+    """Parse an optional numeric cell, leaving missing or unparseable values unset."""
+    try:
+        return optional_float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def scalar_number(
@@ -168,8 +178,8 @@ def coerce_unit_score(
         if not allow_bool:
             return None
         return 1.0 if value else 0.0
-    numeric = optional_float(value)
-    if numeric is None or numeric < 0:
+    numeric = try_float(value)
+    if numeric is None or not isfinite(numeric) or numeric < 0:
         return None
     if scale_max is not None:
         return min(1.0, max(0.0, numeric / scale_max))
@@ -236,6 +246,7 @@ __all__ = [
     "reset_jsonl",
     "scalar_number",
     "score_item",
+    "try_float",
     "utc_now_iso",
     "write_json",
     "write_jsonl",

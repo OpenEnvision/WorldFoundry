@@ -7,6 +7,9 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.evaluation.tasks.execution.framework.io import mean_numeric as _mean
+from worldfoundry.evaluation.tasks.execution.framework.io import try_float as _to_float
+
 METRIC_ORDER = (
     "visual_quality",
     "prompt_following",
@@ -91,20 +94,6 @@ def _canonical_key(value: Any) -> str:
 def _metric_id_from_key(value: Any) -> str | None:
     key = _canonical_key(value)
     return UPSTREAM_METRIC_ALIASES.get(key)
-
-
-def _to_float(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _mean(values: Sequence[float]) -> float | None:
-    clean = [float(value) for value in values]
-    return sum(clean) / len(clean) if clean else None
 
 
 def _extract_generation_sample_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
@@ -195,9 +184,7 @@ def compute_ipv_bench_metrics(
                 metrics[metric_id] = score
 
     if metrics.get("ipv_bench_average") is None:
-        component_values = [
-            value for key, value in metrics.items() if key != "ipv_bench_average" and value is not None
-        ]
+        component_values = [value for key, value in metrics.items() if key != "ipv_bench_average" and value is not None]
         if component_values:
             metrics["ipv_bench_average"] = sum(component_values) / len(component_values)
 

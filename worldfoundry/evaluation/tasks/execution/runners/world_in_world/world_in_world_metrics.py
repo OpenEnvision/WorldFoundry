@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from worldfoundry.evaluation.tasks.execution.framework.io import mean_numeric as _mean
+
 METRIC_ORDER = (
     "active_recognition_success_rate",
     "image_goal_navigation_success_rate",
@@ -170,7 +172,11 @@ def _canonical_metric_id(raw: str) -> str | None:
 def _normalize_unit(value: float, metric_id: str) -> float:
     if metric_id in {"active_embodied_qa_score", "active_embodied_qa_spl"} and value > 1.0:
         return value / 100.0
-    if metric_id in {"image_goal_navigation_success_rate", "image_goal_navigation_spl", "active_recognition_success_rate"}:
+    if metric_id in {
+        "image_goal_navigation_success_rate",
+        "image_goal_navigation_spl",
+        "active_recognition_success_rate",
+    }:
         if value > 1.0:
             return value / 100.0
     if metric_id == "psnr" and value > 1.0:
@@ -178,11 +184,6 @@ def _normalize_unit(value: float, metric_id: str) -> float:
     if metric_id in {"fvd", "lpips", "ssim"} and value > 1.0 and metric_id != "psnr":
         return value
     return value
-
-
-def _mean(values: Sequence[float]) -> float | None:
-    clean = [float(value) for value in values]
-    return sum(clean) / len(clean) if clean else None
 
 
 def _compute_average(metrics: dict[str, float]) -> float | None:
@@ -232,9 +233,7 @@ def _summary_from_evaluator(payload: Mapping[str, Any], *, task: str | None = No
 def _summary_metrics(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
     buckets: dict[str, list[float]] = {}
     for row in rows:
-        metric_id = _canonical_metric_id(
-            str(row.get("metric_id") or row.get("Metric") or row.get("metric") or "")
-        )
+        metric_id = _canonical_metric_id(str(row.get("metric_id") or row.get("Metric") or row.get("metric") or ""))
         score = _to_float(row.get("score") if "score" in row else row.get("value"))
         if metric_id is None or score is None:
             continue
@@ -254,9 +253,7 @@ def compute_world_in_world_metrics(
 ) -> dict[str, Any]:
     if len(rows) == 1 and isinstance(rows[0], Mapping):
         payload = rows[0]
-        if isinstance(payload.get("summary"), Mapping) or any(
-            _canonical_metric_id(str(key)) for key in payload.keys()
-        ):
+        if isinstance(payload.get("summary"), Mapping) or any(_canonical_metric_id(str(key)) for key in payload.keys()):
             direct_metrics = _summary_from_evaluator(payload, task=task)
             video_quality = {
                 metric_id: direct_metrics[metric_id]

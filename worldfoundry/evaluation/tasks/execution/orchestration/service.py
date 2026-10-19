@@ -76,6 +76,8 @@ class ModelBenchmarkIntent:
     benchmark_manifest_dir: str | Path = BENCHMARK_ZOO_DIR
     model_manifest_dir: str | Path = MODEL_ZOO_DIR
     run_id: str | None = None
+    resume: bool = False
+    metric_batch_size: int = 32
 
 
 @dataclass(frozen=True)
@@ -116,6 +118,8 @@ class GenerateAndScoreIntent:
     generation_cache_dir: str | Path | None = None
     generation_cache_mode: str = "read-write"
     run_id: str | None = None
+    resume: bool = False
+    metric_batch_size: int = 32
 
 
 @dataclass(frozen=True)
@@ -130,6 +134,8 @@ class ScoreResultsIntent:
     dataset_id: str | None = None
     required_artifacts: Sequence[str] = ()
     run_id: str | None = None
+    resume: bool = False
+    metric_batch_size: int = 32
 
 
 @dataclass(frozen=True)
@@ -138,6 +144,8 @@ class ReproduceIntent:
 
     output_dir: str | Path
     recipe_path: str | Path
+    resume: bool = False
+    metric_batch_size: int = 32
 
 
 EvaluationIntent: TypeAlias = (
@@ -254,6 +262,8 @@ def _prepared(
     narrow that request.  Runner-specific evidence makes the final decision.
     """
 
+    if request is not None and request.metric_batch_size < 1:
+        issues = (*issues, PreparationIssue("error", "metric_batch_size_invalid", "metric_batch_size must be positive"))
     effective_candidate = bool(leaderboard_candidate and fidelity.leaderboard_candidate)
     provenance = fidelity.to_dict()
     resolved_request = request
@@ -481,6 +491,8 @@ def _prepare_model_benchmark(
             benchmark_env=dict(intent.benchmark_env),
             benchmark_parameters=dict(intent.benchmark_parameters),
             run_id=intent.run_id,
+            resume=intent.resume,
+            metric_batch_size=intent.metric_batch_size,
             evaluation_kind=classification,
             leaderboard_candidate=leaderboard_candidate,
         )
@@ -595,6 +607,8 @@ def _prepare_generate_and_score(intent: GenerateAndScoreIntent) -> PreparedEvalu
             generation_cache_dir=intent.generation_cache_dir,
             generation_cache_mode=intent.generation_cache_mode,
             run_id=intent.run_id,
+            resume=intent.resume,
+            metric_batch_size=intent.metric_batch_size,
         )
     return _prepared(
         intent_kind="generate_and_score",
@@ -629,6 +643,8 @@ def _prepare_score_results(intent: ScoreResultsIntent) -> PreparedEvaluation:
             benchmark_id=intent.benchmark_id,
             dataset_id=intent.dataset_id,
             run_id=intent.run_id,
+            resume=intent.resume,
+            metric_batch_size=intent.metric_batch_size,
         )
     return _prepared(
         intent_kind="score_results",
@@ -706,6 +722,8 @@ def _prepare_reproduction(intent: ReproduceIntent) -> PreparedEvaluation:
         benchmark_mode=str(recipe.evaluation.get("mode") or "official-run"),
         generation_cache_mode="read-write",
         run_id=recipe.recipe_id,
+        resume=intent.resume,
+        metric_batch_size=intent.metric_batch_size,
     )
     prepared = _prepare_model_benchmark(
         model_intent,

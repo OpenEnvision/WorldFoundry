@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _run_cli(args: list[str], *, timeout: float = 120.0) -> subprocess.CompletedProcess[str]:
@@ -400,9 +400,7 @@ def _default_context_guard():
         context_module.set_default_context(original)
 
 
-def test_set_default_context_is_observed_by_payload_functions(
-    tmp_path: Path, _default_context_guard
-) -> None:
+def test_set_default_context_is_observed_by_payload_functions(tmp_path: Path, _default_context_guard) -> None:
     from worldfoundry.mcp.tools.context import MCPToolContext, get_default_context, set_default_context
     from worldfoundry.mcp.tools.runs import list_runs_payload
 

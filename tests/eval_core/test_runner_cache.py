@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from worldfoundry.evaluation.api import ArtifactRef, GenerationRequest, GenerationResult
+from worldfoundry.evaluation.api.artifacts import local_path_for_uri
 from worldfoundry.evaluation.tasks.execution.orchestration.cache import (
     CacheKey,
     GenerationResultCache,
@@ -19,8 +21,6 @@ from worldfoundry.evaluation.tasks.execution.orchestration.cache import (
     run_generation_with_cache,
     sha256_hex,
 )
-from worldfoundry.evaluation.api import ArtifactRef, GenerationRequest, GenerationResult
-from worldfoundry.evaluation.api.artifacts import local_path_for_uri
 
 
 @dataclass(frozen=True)
@@ -55,9 +55,7 @@ def test_canonical_json_is_stable_for_key_order_and_compact_utf8() -> None:
 def test_canonical_json_accepts_stdlib_dataclasses() -> None:
     payload = _Payload(prompt="turn right", controls={"seed": 42, "camera": ["pan", "slow"]})
 
-    assert canonical_json_dumps(payload) == (
-        '{"controls":{"camera":["pan","slow"],"seed":42},"prompt":"turn right"}'
-    )
+    assert canonical_json_dumps(payload) == ('{"controls":{"camera":["pan","slow"],"seed":42},"prompt":"turn right"}')
 
 
 def test_canonical_json_rejects_unstable_or_non_json_values() -> None:
@@ -134,8 +132,17 @@ def test_cache_key_validates_required_fields() -> None:
     with pytest.raises(ValueError, match="stage"):
         CacheKey(stage="", sample_id="sample", payload_hash=digest, version_context_hash=digest)
 
-    with pytest.raises(ValueError, match="payload_hash"):
-        CacheKey(stage="request", sample_id="sample", payload_hash="not-a-digest", version_context_hash=digest)
+
+def test_generation_cache_accepts_opaque_key_components(tmp_path: Path) -> None:
+    cache = GenerationResultCache(tmp_path / "cache")
+    key = CacheKey(stage="generation", sample_id="sample", payload_hash="request-v1", version_context_hash="model-v1")
+    result = GenerationResult(sample_id="sample", model_id="cached-model")
+
+    cache.put(key, result)
+
+    record = cache.get(key)
+    assert record is not None
+    assert record.result == result
 
 
 def test_generation_cache_enables_wal_and_bounded_busy_wait(tmp_path: Path) -> None:

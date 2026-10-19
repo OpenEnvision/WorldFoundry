@@ -8,6 +8,7 @@ restore nested ArtifactRef objects after JSON deserialization.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
@@ -52,6 +53,18 @@ def is_generation_result_successful(result: "GenerationResult") -> bool:
         result: Generation result emitted by an runner or loaded from disk.
     """
     return is_generation_status_successful(result.status) and result.error in (None, "", False)
+
+
+def validate_sample_ids(sample_ids: Iterable[str | None], *, source: str) -> None:
+    """Reject duplicate keyed samples, identifying both 1-based source rows."""
+    seen: dict[str, int] = {}
+    for index, sample_id in enumerate(sample_ids, start=1):
+        if sample_id is None:
+            continue
+        key = str(sample_id)
+        if key in seen:
+            raise ValueError(f"duplicate sample_id {key!r} in {source}: rows {seen[key]} and {index}")
+        seen[key] = index
 
 
 @dataclass(frozen=True, init=False)

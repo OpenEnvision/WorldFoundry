@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -22,8 +23,7 @@ class EmbodiedExecutionTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.requests = [GenerationRequest(sample_id=str(i), task_name="embodied") for i in range(2)]
         self.results = [
-            GenerationResult(sample_id=str(i), status="succeeded", metadata={"task_success": i})
-            for i in range(2)
+            GenerationResult(sample_id=str(i), status="succeeded", metadata={"task_success": i}) for i in range(2)
         ]
 
     def write_shard(self, index, requests, results):
@@ -59,6 +59,57 @@ class EmbodiedExecutionTests(unittest.TestCase):
         self.assertEqual(merged.sample_count, 2)
         self.assertEqual(card["metrics"]["leaderboard"]["task_success"], 0.5)
 
+    def test_cancel_waits_for_worker_before_cleanup(self) -> None:
+        started, release, ended = threading.Event(), threading.Event(), threading.Event()
+        cleanup = Mock(side_effect=lambda: self.assertTrue(ended.is_set()))
+
+        def generate(requests):
+            started.set()
+            try:
+                self.assertTrue(release.wait(5))
+                return [GenerationResult(sample_id=requests[0].sample_id, status="succeeded")]
+            finally:
+                ended.set()
+
+        async def run() -> None:
+            runner = Mock(generate=generate, cleanup=cleanup)
+            orchestrator = EmbodiedEvalOrchestrator(
+                {
+                    "output_dir": str(self.root),
+                    "benchmarks": [{"benchmark_id": "libero"}],
+                }
+            )
+            with (
+                patch(
+                    "worldfoundry.evaluation.tasks.embodied.orchestrator.materialize_embodied_rollout_requests",
+                    return_value=self.requests,
+                ),
+                patch(
+                    "worldfoundry.evaluation.tasks.embodied.orchestrator.build_embodied_closed_loop_runner",
+                    return_value=runner,
+                ),
+            ):
+                task = asyncio.create_task(orchestrator.run())
+                try:
+                    self.assertTrue(await asyncio.to_thread(started.wait, 5))
+                    task.cancel()
+                    await asyncio.sleep(0)
+                    await asyncio.sleep(0)
+                    self.assertFalse(task.done())
+                    cleanup.assert_not_called()
+                    task.cancel()
+                    await asyncio.sleep(0)
+                    self.assertFalse(task.done())
+                    cleanup.assert_not_called()
+                finally:
+                    release.set()
+                with self.assertRaises(asyncio.CancelledError):
+                    await asyncio.wait_for(task, 5)
+                cleanup.assert_called_once()
+                self.assertTrue(ended.is_set())
+
+        asyncio.run(run())
+
     def test_interrupted_rollout_keeps_completed_results_and_planned_requests(self):
         for failure, status in ((asyncio.CancelledError, "interrupted"), (RuntimeError, "failed")):
             with self.subTest(failure=failure.__name__):
@@ -79,10 +130,14 @@ class EmbodiedExecutionTests(unittest.TestCase):
                     {"output_dir": str(root), "benchmarks": [{"benchmark_id": "libero"}]},
                 )
                 with (
-                    patch("worldfoundry.evaluation.tasks.embodied.orchestrator.materialize_embodied_rollout_requests",
-                          return_value=self.requests),
-                    patch("worldfoundry.evaluation.tasks.embodied.orchestrator.build_embodied_closed_loop_runner",
-                          return_value=runner),
+                    patch(
+                        "worldfoundry.evaluation.tasks.embodied.orchestrator.materialize_embodied_rollout_requests",
+                        return_value=self.requests,
+                    ),
+                    patch(
+                        "worldfoundry.evaluation.tasks.embodied.orchestrator.build_embodied_closed_loop_runner",
+                        return_value=runner,
+                    ),
                     self.assertRaises(failure),
                 ):
                     asyncio.run(orchestrator.run())
@@ -102,13 +157,18 @@ class EmbodiedExecutionTests(unittest.TestCase):
                 runner = Mock()
                 runner.generate.side_effect = lambda requests: [self.results[int(requests[0].sample_id)]]
                 orchestrator = EmbodiedEvalOrchestrator(
-                    {"output_dir": str(root), "benchmarks": [{"benchmark_id": "libero"}]}, no_save=no_save,
+                    {"output_dir": str(root), "benchmarks": [{"benchmark_id": "libero"}]},
+                    no_save=no_save,
                 )
                 with (
-                    patch("worldfoundry.evaluation.tasks.embodied.orchestrator.materialize_embodied_rollout_requests",
-                          return_value=self.requests),
-                    patch("worldfoundry.evaluation.tasks.embodied.orchestrator.build_embodied_closed_loop_runner",
-                          return_value=runner),
+                    patch(
+                        "worldfoundry.evaluation.tasks.embodied.orchestrator.materialize_embodied_rollout_requests",
+                        return_value=self.requests,
+                    ),
+                    patch(
+                        "worldfoundry.evaluation.tasks.embodied.orchestrator.build_embodied_closed_loop_runner",
+                        return_value=runner,
+                    ),
                 ):
                     result = asyncio.run(orchestrator.run())
                 self.assertEqual(result.raw_results, tuple(self.results))

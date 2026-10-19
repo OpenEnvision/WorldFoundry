@@ -8,9 +8,14 @@ the common imported-results metric-row builder.
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
+from worldfoundry.core.io.formats.serialization import iter_jsonl_objects
+from worldfoundry.evaluation.api import ArtifactRef, GenerationResult
+from worldfoundry.evaluation.api.artifacts import local_path_for_uri
+from worldfoundry.evaluation.api.generation import is_generation_result_successful
 from worldfoundry.evaluation.reporting.scorecard import SCORECARD_SCHEMA_VERSION
 
 VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
@@ -27,11 +32,7 @@ def iter_video_files(directory: Path) -> list[Path]:
     """Return sorted video files directly under ``directory``."""
     if not directory.is_dir():
         return []
-    return sorted(
-        path
-        for path in directory.iterdir()
-        if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES
-    )
+    return sorted(path for path in directory.iterdir() if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES)
 
 
 def video_stems_in_directory(directory: Path | None) -> set[str]:
@@ -39,6 +40,32 @@ def video_stems_in_directory(directory: Path | None) -> set[str]:
     if directory is None or not directory.exists():
         return set()
     return {path.stem for path in iter_video_files(directory)}
+
+
+def reset_generation_artifact_staging(generation_output_dir: Path, staging_dir: Path) -> None:
+    """Rebuild an owned adapter output directory, never the generation input root."""
+    if generation_output_dir.resolve().is_relative_to(staging_dir.resolve()):
+        raise ValueError("artifact staging must be separate from the generation input root")
+    if staging_dir.exists():
+        shutil.rmtree(staging_dir)
+    staging_dir.mkdir(parents=True, exist_ok=True)
+
+
+def iter_generation_video_artifacts(
+    generation_output_dir: Path,
+    output_artifact: str = "generated_video",
+) -> Iterator[tuple[GenerationResult, ArtifactRef, Path | None]]:
+    """Yield successful video artifacts and local paths from the generation ledger."""
+    results_path = generation_output_dir / "results.jsonl"
+    if not results_path.is_file():
+        return
+    for payload in iter_jsonl_objects(results_path):
+        result = GenerationResult.from_dict(payload)
+        if not is_generation_result_successful(result):
+            continue
+        artifact = result.artifacts.get(output_artifact) or result.artifacts.get("generated_video")
+        if artifact is not None:
+            yield result, artifact, local_path_for_uri(artifact.uri, base_dir=generation_output_dir)
 
 
 def build_import_metric_rows(
@@ -104,6 +131,8 @@ __all__ = [
     "VIDEO_SUFFIXES",
     "build_import_metric_rows",
     "build_video_coverage",
+    "iter_generation_video_artifacts",
+    "reset_generation_artifact_staging",
     "iter_video_files",
     "resolve_env_path",
     "video_stems_in_directory",

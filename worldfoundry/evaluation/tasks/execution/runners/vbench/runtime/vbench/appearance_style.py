@@ -70,7 +70,7 @@ def appearance_style(clip_model, video_dict, device, sample="rand"):
                     'video_results': video_sim, 
                     'frame_results': cur_video,
                     'cur_sim': cur_sim})
-    sim_per_frame = sim / cnt
+    sim_per_frame = sim / cnt if cnt else None
     return sim_per_frame, video_results
 
 def compute_appearance_style(json_dir, device, submodules_list, **kwargs):
@@ -80,5 +80,7 @@ def compute_appearance_style(json_dir, device, submodules_list, **kwargs):
     all_results, video_results = appearance_style(clip_model, video_dict, device)
     if get_world_size() > 1:
         video_results = gather_list_of_dict(video_results)
-        all_results = sum([d['cur_sim'] for d in video_results]) / len(video_results)
+        frame_count = sum(len(d['frame_results']) for d in video_results)
+        score_sum = sum(sum(d['frame_results']) for d in video_results)
+        all_results = score_sum / frame_count if frame_count else None
     return all_results, video_results

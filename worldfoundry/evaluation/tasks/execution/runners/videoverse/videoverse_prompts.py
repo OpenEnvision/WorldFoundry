@@ -7,20 +7,18 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from worldfoundry.core.io.filesystem.file_utils import materialize_file
-from worldfoundry.evaluation.api import GenerationRequest, GenerationResult
-from worldfoundry.evaluation.tasks.execution.framework.runner_common import resolve_env_path
+from worldfoundry.evaluation.api import GenerationRequest
+from worldfoundry.evaluation.tasks.execution.framework.runner_common import (
+    iter_generation_video_artifacts,
+    reset_generation_artifact_staging,
+    resolve_env_path,
+)
 from worldfoundry.evaluation.utils import write_jsonl
 
 from .run_videoverse_official_runner import (
     _default_prompt_manifest,
     _load_json,
 )
-
-
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    if not path.is_file():
-        return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def resolve_prompt_manifest_path(explicit: Path | None = None) -> Path:
@@ -102,23 +100,10 @@ def copy_videoverse_generated_videos(
 ) -> tuple[int, int]:
     """Copy model outputs into ``{prompt_id}.mp4`` files expected by VideoVerse."""
     rows: list[dict[str, Any]] = []
-    results = [
-        GenerationResult.from_dict(row)
-        for row in _read_jsonl(generation_output_dir / "results.jsonl")
-    ]
-    generated_artifact_dir.mkdir(parents=True, exist_ok=True)
+    reset_generation_artifact_staging(generation_output_dir, generated_artifact_dir)
     materialized = 0
-    for result in results:
-        artifact = result.artifacts.get(output_artifact) or result.artifacts.get("generated_video")
-        if artifact is None:
-            continue
+    for result, artifact, source_path in iter_generation_video_artifacts(generation_output_dir, output_artifact):
         destination = generated_artifact_dir / f"{result.sample_id}.mp4"
-        source_path = Path(artifact.uri.replace("file://", "")) if artifact.uri.startswith("file://") else Path(artifact.uri)
-        if not source_path.is_file():
-            from worldfoundry.evaluation.utils import local_path_for_uri
-
-            resolved = local_path_for_uri(artifact.uri)
-            source_path = resolved if resolved is not None else source_path
         row = {
             "sample_id": result.sample_id,
             "artifact_name": output_artifact,
@@ -127,7 +112,7 @@ def copy_videoverse_generated_videos(
             "status": "missing",
             "placeholder": False,
         }
-        if source_path.is_file():
+        if source_path is not None and source_path.is_file():
             if source_path.resolve() != destination.resolve():
                 materialize_file(source_path, destination, writable=False)
             row["status"] = "copied"

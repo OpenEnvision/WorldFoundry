@@ -70,16 +70,16 @@ def test_is_offline_computable_metric_id_matrix() -> None:
     assert not is_offline_computable_metric_id("cmmd")
 
 
-def test_evaluate_metric_callable_reports_benchmark_supported_metrics() -> None:
-    from worldfoundry.evaluation.tasks.execution.framework.in_tree_registry import target_benchmark_metrics
-    from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import _metric_callable
+def test_metric_resolution_reports_benchmark_supported_metrics() -> None:
+    from worldfoundry.evaluation.tasks.execution.framework.scoring_registry import target_benchmark_metrics
+    from worldfoundry.evaluation.tasks.execution.orchestration.evaluate import _resolve_metrics
 
     benchmarks = target_benchmark_metrics()
     assert benchmarks, "at least one in-tree benchmark is expected"
     benchmark_id = sorted(benchmarks)[0]
 
     with pytest.raises(MetricRegistryError) as excinfo:
-        _metric_callable(["fid"], (), benchmark_id)
+        _resolve_metrics(["fid"], (), benchmark_id)
     message = str(excinfo.value)
     assert benchmark_id in message
     assert benchmarks[benchmark_id][0] in message
