@@ -4575,5 +4575,227 @@
       }
     ],
     "scope": "Released-checkpoint fixed-seed A/B/A control replay, request isolation and decoded MP4 geometry; definition only, with accepted-reference and GPU replay evidence recorded separately."
+  },
+  "kandinsky6-lite-video-short": {
+    "id": "kandinsky6-lite-video-short",
+    "model_id": "kandinsky6-lite",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Lite-5s-Diffusers",
+      "model_id": "kandinsky6-lite",
+      "device": "cuda",
+      "attention_backend": "torch",
+      "offload_mode": "block"
+    },
+    "call": {
+      "prompt": "A small boat crossing a calm lake at sunrise.",
+      "width": 864,
+      "height": 480,
+      "num_frames": 121,
+      "num_inference_steps": 50,
+      "guidance_scale": 5.0,
+      "sample_audio": false,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/video.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Lite-5s-Diffusers"
+    },
+    "required_outputs": ["artifact.video.mp4.frames", "artifact.video.mp4.fps"],
+    "output_arrays": ["video.mp4"],
+    "export_artifacts": ["video.mp4"],
+    "array_contracts": {
+      "artifact.video.mp4.frames": {"shape": [121, 480, 864, 3], "dtype": "uint8"},
+      "artifact.video.mp4.fps": {"values": [24, 1]}
+    },
+    "scope": "Own Lite checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
+  },
+  "kandinsky6-lite-distill-video-short": {
+    "id": "kandinsky6-lite-distill-video-short",
+    "model_id": "kandinsky6-lite-distill",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Lite-distill-5s-Diffusers",
+      "model_id": "kandinsky6-lite-distill",
+      "device": "cuda",
+      "attention_backend": "torch",
+      "offload_mode": "block"
+    },
+    "call": {
+      "prompt": "A small boat crossing a calm lake at sunrise.",
+      "width": 864,
+      "height": 480,
+      "num_frames": 121,
+      "num_inference_steps": 10,
+      "guidance_scale": 1.0,
+      "sample_audio": false,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/video.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Lite-distill-5s-Diffusers"
+    },
+    "required_outputs": ["artifact.video.mp4.frames", "artifact.video.mp4.fps"],
+    "output_arrays": ["video.mp4"],
+    "export_artifacts": ["video.mp4"],
+    "array_contracts": {
+      "artifact.video.mp4.frames": {"shape": [121, 480, 864, 3], "dtype": "uint8"},
+      "artifact.video.mp4.fps": {"values": [24, 1]}
+    },
+    "scope": "Own distilled Lite checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
+  },
+  "kandinsky6-lite-pretrain-video-short": {
+    "id": "kandinsky6-lite-pretrain-video-short",
+    "model_id": "kandinsky6-lite-pretrain",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Lite-pretrain-5s-Diffusers",
+      "model_id": "kandinsky6-lite-pretrain",
+      "device": "cuda",
+      "attention_backend": "torch",
+      "offload_mode": "block"
+    },
+    "call": {
+      "prompt": "A small boat crossing a calm lake at sunrise.",
+      "width": 864,
+      "height": 480,
+      "num_frames": 121,
+      "num_inference_steps": 50,
+      "guidance_scale": 5.0,
+      "sample_audio": false,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/video.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Lite-pretrain-5s-Diffusers"
+    },
+    "required_outputs": ["artifact.video.mp4.frames", "artifact.video.mp4.fps"],
+    "output_arrays": ["video.mp4"],
+    "export_artifacts": ["video.mp4"],
+    "array_contracts": {
+      "artifact.video.mp4.frames": {"shape": [121, 480, 864, 3], "dtype": "uint8"},
+      "artifact.video.mp4.fps": {"values": [24, 1]}
+    },
+    "scope": "Own pretrained Lite checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
+  },
+  "kandinsky6-pro-video-short": {
+    "id": "kandinsky6-pro-video-short",
+    "model_id": "kandinsky6-pro",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Pro-5s-Diffusers",
+      "model_id": "kandinsky6-pro",
+      "device": "cuda",
+      "attention_backend": "torch",
+      "offload_mode": "block"
+    },
+    "call": {
+      "prompt": "A small boat crossing a calm lake at sunrise.",
+      "width": 864,
+      "height": 480,
+      "num_frames": 121,
+      "num_inference_steps": 50,
+      "guidance_scale": 5.0,
+      "sample_audio": false,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/video.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Pro-5s-Diffusers"
+    },
+    "required_outputs": ["artifact.video.mp4.frames", "artifact.video.mp4.fps"],
+    "output_arrays": ["video.mp4"],
+    "export_artifacts": ["video.mp4"],
+    "array_contracts": {
+      "artifact.video.mp4.frames": {"shape": [121, 480, 864, 3], "dtype": "uint8"},
+      "artifact.video.mp4.fps": {"values": [24, 1]}
+    },
+    "scope": "Own Pro checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
+  },
+  "kandinsky6-pro-distill-video-short": {
+    "id": "kandinsky6-pro-distill-video-short",
+    "model_id": "kandinsky6-pro-distill",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Pro-distill-5s-Diffusers",
+      "model_id": "kandinsky6-pro-distill",
+      "device": "cuda",
+      "attention_backend": "torch",
+      "offload_mode": "block"
+    },
+    "call": {
+      "prompt": "A small boat crossing a calm lake at sunrise.",
+      "width": 864,
+      "height": 480,
+      "num_frames": 121,
+      "num_inference_steps": 10,
+      "guidance_scale": 1.0,
+      "sample_audio": false,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/video.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Pro-distill-5s-Diffusers"
+    },
+    "required_outputs": ["artifact.video.mp4.frames", "artifact.video.mp4.fps"],
+    "output_arrays": ["video.mp4"],
+    "export_artifacts": ["video.mp4"],
+    "array_contracts": {
+      "artifact.video.mp4.frames": {"shape": [121, 480, 864, 3], "dtype": "uint8"},
+      "artifact.video.mp4.fps": {"values": [24, 1]}
+    },
+    "scope": "Own distilled Pro checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
+  },
+  "kandinsky6-pro-pretrain-video-short": {
+    "id": "kandinsky6-pro-pretrain-video-short",
+    "model_id": "kandinsky6-pro-pretrain",
+    "seed": 42,
+    "deterministic": true,
+    "target": "worldfoundry.pipelines.kandinsky6.pipeline_kandinsky6:Kandinsky6Pipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Pro-pretrain-5s-Diffusers",
+      "model_id": "kandinsky6-pro-pretrain",
+      "device": "cuda",
+      "attention_backend": "torch",
+      "offload_mode": "block"
+    },
+    "call": {
+      "prompt": "A small boat crossing a calm lake at sunrise.",
+      "width": 864,
+      "height": 480,
+      "num_frames": 121,
+      "num_inference_steps": 50,
+      "guidance_scale": 5.0,
+      "sample_audio": false,
+      "seed": 42,
+      "output_path": "${OUTPUT_DIR}/video.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "checkpoint": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/kandinskylab--Kandinsky-6.0-Pro-pretrain-5s-Diffusers"
+    },
+    "required_outputs": ["artifact.video.mp4.frames", "artifact.video.mp4.fps"],
+    "output_arrays": ["video.mp4"],
+    "export_artifacts": ["video.mp4"],
+    "array_contracts": {
+      "artifact.video.mp4.frames": {"shape": [121, 480, 864, 3], "dtype": "uint8"},
+      "artifact.video.mp4.fps": {"values": [24, 1]}
+    },
+    "scope": "Own pretrained Pro checkpoint and explicit model ID, fixed-seed video-only replay of fully decoded RGB and FPS; audio generation and release acceptance require separate evidence."
   }
 }
