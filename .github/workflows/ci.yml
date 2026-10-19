@@ -223,34 +223,29 @@ jobs:
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_json != '' && 'evidence-dispatch-idle-public-surface' || 'public-surface' }}
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.evidence_json == '' }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash -el {0}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Set up Miniconda
-        uses: conda-incubator/setup-miniconda@v3
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
-          auto-update-conda: true
-          activate-environment: worldfoundry-ci
-          auto-activate-base: false
+          python-version: "3.11"
 
       - name: Set up Node
         uses: actions/setup-node@v5
         with:
+          node-version-file: docs/fumadocs/.nvmrc
           cache: npm
           cache-dependency-path: docs/fumadocs/package-lock.json
-
-      - name: Build docs
-        run: bash scripts/docs/build.sh --skip-bootstrap
 
       - name: Install quality gate dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install PyYAML "ruff==0.12.7"
+          python -m pip install -e . "ruff==0.12.7"
+
+      - name: Build docs
+        run: bash scripts/docs/build.sh
 
       - name: Check generated docs
         run: make docs-check

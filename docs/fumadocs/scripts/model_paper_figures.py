@@ -620,12 +620,6 @@ CAPTIONS: dict[str, dict[str, tuple[str, str]]] = {
             "论文方法总览：InternVLA-A1-3B 的机器人操作架构。",
         ),
     },
-    "irasim": {
-        "overview": (
-            "Method overview: Network Architecture of IRASim . (a) shows the general diffusion transformer architecture of IRASim. The input to IRASim includes the historical frames and the given trajectory. (b) Video-level adaptation.",
-            "论文方法总览：IRASim 的视频生成架构。",
-        ),
-    },
     "kairos-sensenova": {
         "teaser": (
             "Official paper teaser: Motivation of Kairos. Existing world models have advanced along representational, generative, interactive, and unified world-action directions, providing useful capabilities such as abstract reasoning, high-fidelity.",
@@ -1602,12 +1596,6 @@ CAPTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "overview": (
             "Method overview: a Conditional Diffusion Transformer block with AdaLN action conditioning and cross-attention over context states.",
             "论文方法总览：条件扩散 Transformer 块用 AdaLN 注入动作，并对上下文状态做交叉注意力。",
-        ),
-    },
-    "pandora": {
-        "overview": (
-            "Method overview: a pretrained LLM backbone consumes vision-encoded states and language actions, then a video generator rolls out the next world state.",
-            "论文方法总览：预训练 LLM 骨干接收视觉编码状态与语言动作，再由视频生成器滚动出下一世界状态。",
         ),
     },
     "prior-depth-anything": {

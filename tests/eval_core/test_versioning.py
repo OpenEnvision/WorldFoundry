@@ -5,12 +5,9 @@ import json
 import subprocess
 from pathlib import Path
 
-from worldfoundry.evaluation.api import GenerationRequest
 from tests.eval_core.contract_fixture import CONTRACT_FIXTURE_MODEL_ID, CONTRACT_FIXTURE_RUNNER_TARGET
 from worldfoundry.evaluation.utils import (
-    RUN_FINGERPRINT_SCHEMA_VERSION,
     VERSION_CONTEXT_SCHEMA_VERSION,
-    build_run_fingerprint,
     build_version_context,
     git_metadata,
     stable_hash,
@@ -26,8 +23,7 @@ def test_stable_hash_is_order_independent_for_mappings() -> None:
     assert stable_hash(left) == stable_hash(right)
 
 
-def test_run_fingerprint_excludes_run_id_and_time_varying_fields() -> None:
-    request = GenerationRequest(sample_id="sample-a", task_name="unit")
+def test_version_context_records_runner_and_evaluation_metadata() -> None:
     context = build_version_context(
         runner="unit-runner",
         benchmark={"benchmark_name": "unit"},
@@ -36,13 +32,12 @@ def test_run_fingerprint_excludes_run_id_and_time_varying_fields() -> None:
         extra={"profile": "cpu"},
     )
 
-    first = build_run_fingerprint(version_context=context, requests=[request])
-    second = build_run_fingerprint(version_context=context, requests=[request])
-
     assert context["schema_version"] == VERSION_CONTEXT_SCHEMA_VERSION
-    assert first["schema_version"] == RUN_FINGERPRINT_SCHEMA_VERSION
-    assert first["hash"] == second["hash"]
-    assert first["version_context_hash"] == stable_hash(context)
+    assert context["runner"] == "unit-runner"
+    assert context["benchmark"] == {"benchmark_name": "unit"}
+    assert context["model"] == {"model_name": "fake"}
+    assert context["dataset"] == {"sample_count": 1}
+    assert context["extra"] == {"profile": "cpu"}
 
 
 def test_git_metadata_does_not_scan_untracked_files(monkeypatch) -> None:
@@ -133,7 +128,7 @@ def test_version_context_does_not_include_python_executable(monkeypatch) -> None
     assert context["python"] == {"version": versioning.platform.python_version()}
 
 
-def test_eval_runner_writes_version_context_and_fingerprint(tmp_path: Path) -> None:
+def test_eval_runner_writes_version_context(tmp_path: Path) -> None:
     output_dir = tmp_path / "run"
 
     from worldfoundry.evaluation.runner import EvaluateRunRequest, execute_evaluate_run
@@ -154,7 +149,6 @@ def test_eval_runner_writes_version_context_and_fingerprint(tmp_path: Path) -> N
     scorecard = json.loads((output_dir / "scorecard.json").read_text(encoding="utf-8"))
 
     assert manifest["version_context"]["schema_version"] == VERSION_CONTEXT_SCHEMA_VERSION
-    assert manifest["run_fingerprint"]["schema_version"] == RUN_FINGERPRINT_SCHEMA_VERSION
-    assert plan["run_fingerprint"]["hash"] == manifest["run_fingerprint"]["hash"]
-    assert scorecard["run"]["run_fingerprint"]["hash"] == manifest["run_fingerprint"]["hash"]
+    assert plan["version_context"] == manifest["version_context"]
+    assert scorecard["run"]["version_context"] == manifest["version_context"]
     assert scorecard["run"]["version_context"]["contract_versions"]["generation_request"]

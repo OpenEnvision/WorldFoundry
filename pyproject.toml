@@ -429,7 +429,7 @@ all = [
 
 [project.urls]
 Homepage = "https://github.com/OpenEnvision/WorldFoundry"
-Documentation = "https://github.com/OpenEnvision/WorldFoundry"
+Documentation = "https://openenvision.github.io/WorldFoundry/docs"
 Repository = "https://github.com/OpenEnvision/WorldFoundry"
 Issues = "https://github.com/OpenEnvision/WorldFoundry/issues"
 
@@ -535,7 +535,7 @@ markers = [
 
 [tool.ty.environment]
 python-version = "3.10"
-extra-paths = ["."]
+extra-paths = [".", "docs/fumadocs/scripts"]
 
 [tool.ty.src]
 exclude = [

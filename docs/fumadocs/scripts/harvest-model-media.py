@@ -24,6 +24,7 @@ import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import TypedDict
 
 from model_paper_figures import figure_records
 
@@ -294,9 +295,6 @@ CURATED_FIGURES: dict[str, dict[str, str]] = {
     "internvla-a1": {
         "teaser": "https://arxiv.org/html/2607.04988v1/teaser.png",
         "overview": "https://arxiv.org/html/2607.04988v1/Model-A1.5.png",
-    },
-    "irasim": {
-        "overview": "https://arxiv.org/html/2406.14540/x2.png",
     },
     "kairos-sensenova": {
         "teaser": "https://arxiv.org/html/2606.16533v3/figures/motivation_v2.png",
@@ -708,9 +706,6 @@ CURATED_FIGURES: dict[str, dict[str, str]] = {
         "teaser": "https://arxiv.org/html/2412.03572v2/figure_ood_v2.png",
         "overview": "https://arxiv.org/html/2412.03572v2/CDiTv6.png",
     },
-    "pandora": {
-        "overview": "https://arxiv.org/html/2406.09455v1/architecture_v2.png",
-    },
     "prior-depth-anything": {
         "teaser": "https://arxiv.org/html/2505.10565v1/motivation.png",
         "overview": "https://arxiv.org/html/2505.10565v1/model.png",
@@ -853,7 +848,20 @@ def compress_figure(src: Path, dest: Path) -> Path | None:
     cwebp = shutil.which("cwebp")
     webp_dest = dest.with_suffix(".webp")
     if cwebp:
-        cmd = [cwebp, "-quiet", "-q", "78", "-m", "6", "-resize", str(MAX_FIGURE_WIDTH), "0", str(src), "-o", str(webp_dest)]
+        cmd = [
+            cwebp,
+            "-quiet",
+            "-q",
+            "78",
+            "-m",
+            "6",
+            "-resize",
+            str(MAX_FIGURE_WIDTH),
+            "0",
+            str(src),
+            "-o",
+            str(webp_dest),
+        ]
         if subprocess.run(cmd, check=False, capture_output=True).returncode == 0 and webp_dest.is_file():
             if dest.exists() and dest != webp_dest:
                 dest.unlink()
@@ -995,7 +1003,7 @@ def fetch_arxiv(ids: list[str]) -> dict[str, dict[str, object]]:
             continue
         root = ET.fromstring(raw)
         for entry in root.findall("a:entry", ARXIV_NS):
-            entry_id = (entry.findtext("a:id", default="", namespaces=ARXIV_NS) or "")
+            entry_id = entry.findtext("a:id", default="", namespaces=ARXIV_NS) or ""
             match = re.search(r"(\d{4}\.\d{4,5})", entry_id)
             if not match:
                 continue
@@ -1041,7 +1049,14 @@ def teaser_src(figures: list[dict[str, str]]) -> str | None:
     return first.get("poster") or (first.get("src") if first.get("kind") != "video" else None)
 
 
-def apply_payload(media: dict[str, dict[str, object]]) -> None:
+class _ModelMedia(TypedDict, total=False):
+    """Paper metadata and figures stored for one model homepage."""
+
+    paper: dict[str, object]
+    figures: list[dict[str, str]]
+
+
+def apply_payload(media: dict[str, _ModelMedia]) -> None:
     recipes = json.loads(RECIPES.read_text(encoding="utf-8"))
     for recipe in recipes["recipes"]:
         extra = media.get(recipe["id"]) or {}
@@ -1079,7 +1094,8 @@ def main() -> None:
         else:
             media = {}
         for model_id in sorted({*CURATED_FIGURES, *saved}):
-            extra = media.get(model_id) if isinstance(media.get(model_id), dict) else {}
+            raw_extra = media.get(model_id)
+            extra = raw_extra if isinstance(raw_extra, dict) else {}
             figures = merge_official_figures(list(extra.get("figures") or []), model_id)
             extra = dict(extra)
             extra["figures"] = figures
@@ -1108,11 +1124,11 @@ def main() -> None:
     papers = fetch_arxiv(unique_ids)
     print(f"arxiv metadata: {len(papers)}", flush=True)
 
-    media: dict[str, dict[str, object]] = {}
+    media: dict[str, _ModelMedia] = {}
     downloaded = 0
     for recipe in recipes:
         model_id = recipe["id"]
-        entry: dict[str, object] = {}
+        entry: _ModelMedia = {}
         arxiv_id = arxiv_for.get(model_id)
         if arxiv_id and arxiv_id in papers:
             entry["paper"] = papers[arxiv_id]

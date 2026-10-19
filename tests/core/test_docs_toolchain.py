@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import stat
 import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FUMADOCS = REPO_ROOT / "docs" / "fumadocs"
@@ -92,6 +94,55 @@ def test_build_checks_all_generated_docs_data_before_next_build() -> None:
     build = source.index("npm run build")
     for command in ("api:check", "models:check", "coverage:check"):
         assert types_check < source.index(f"npm run {command}") < build
+
+
+@pytest.mark.unit
+def test_public_surface_builds_docs_with_installation_and_generated_data_checks(tmp_path: Path) -> None:
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    build = next(
+        step["run"] for step in workflow["jobs"]["public-surface"]["steps"] if step.get("name") == "Build docs"
+    )
+    npm_log = tmp_path / "npm.log"
+    npm = tmp_path / "npm"
+    npm.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$WF_DOCS_TEST_NPM_LOG"\n', encoding="utf-8")
+    npm.chmod(npm.stat().st_mode | stat.S_IXUSR)
+
+    completed = subprocess.run(
+        shlex.split(build),
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+        env={**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}", "WF_DOCS_TEST_NPM_LOG": str(npm_log)},
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert npm_log.read_text().splitlines() == [
+        "ci",
+        "run types:check",
+        "run api:check",
+        "run models:check",
+        "run models:homes:check",
+        "run benchmarks:check",
+        "run coverage:check",
+        "run build",
+    ]
+
+
+@pytest.mark.unit
+def test_public_surface_prepares_python_dependencies_and_pinned_node_before_docs() -> None:
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    steps = workflow["jobs"]["public-surface"]["steps"]
+    python = next(index for index, step in enumerate(steps) if step.get("uses", "").startswith("actions/setup-python@"))
+    node = next(index for index, step in enumerate(steps) if step.get("uses", "").startswith("actions/setup-node@"))
+    install = next(index for index, step in enumerate(steps) if step.get("name") == "Install quality gate dependencies")
+    build = next(index for index, step in enumerate(steps) if step.get("name") == "Build docs")
+    assert steps[python]["with"]["python-version"] == "3.11"
+    assert steps[node]["with"]["node-version-file"] == "docs/fumadocs/.nvmrc"
+    assert python < install < build
+    assert node < build
+    assert 'python -m pip install -e . "ruff==0.12.7"' in steps[install]["run"]
 
 
 def test_makefile_docs_and_bounded_shell_gates() -> None:

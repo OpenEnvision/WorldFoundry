@@ -15,7 +15,7 @@ This guide walks through the shortest complete path from a clone to a reviewable
 Most runs follow the same shape even when the model or benchmark changes: make the Python environment importable, discover stable IDs, prepare only the required checkpoints and benchmark assets, generate artifacts, inspect them, and only then score them.
 
 <Callout type="idea" title="Tip">
-  You do not need a GPU or model weights to browse catalogs and inspect readiness. Complete environment and discovery checks, read the reported blockers, and stop before asset download if you are only evaluating coverage.
+  Run environment and catalog checks before downloading model weights. Review the reported blockers and prepare only the assets needed for your first GPU run.
 </Callout>
 
 ## Workflow
@@ -37,10 +37,12 @@ Most runs follow the same shape even when the model or benchmark changes: make t
 
 ## Prerequisites
 
-- **OS:** Linux recommended for GPU inference and most benchmark runners
-- **Install track:** use `python -m pip install -e ".[tui]"` for lightweight CPU catalog/CLI/TUI work; use `bash scripts/setup/bootstrap_worldfoundry.sh` for the CUDA conda runtime. That bootstrap is the official first-clone script; it already calls `scripts/setup/unified_install.sh` to create the unified GPU env, so you do not start from `unified_install.sh` unless you are only refreshing that env. Optional extras do not select a CUDA PyTorch wheel index.
-- **Python:** 3.10+; the GPU path manages it through the WorldFoundry unified conda environment
-- **Optional:** CUDA-capable GPU, Hugging Face token for gated checkpoints
+- **OS:** Linux for the default GPU runtime and most benchmark runners
+- **GPU:** NVIDIA CUDA-capable GPU; model pages specify architecture and VRAM requirements
+- **Driver:** CUDA 12.8+ support for the unified environment
+- **Install:** `bash scripts/setup/bootstrap_worldfoundry.sh` creates the CUDA conda runtime and already calls `scripts/setup/unified_install.sh`. Optional extras do not select a CUDA PyTorch wheel index.
+- **Python:** 3.10–3.13; bootstrap manages the unified environment's interpreter
+- **Authentication:** Hugging Face token only for gated checkpoints
 
 <Callout type="info" title="Note">
   Catalog browsing and readiness inspection work without weights. The expensive path begins only when you choose a concrete model run and download assets.
@@ -145,7 +147,6 @@ Full cache and path conventions are in [Local assets](/docs/guides/local-assets)
 Use the TUI when you do not want to remember IDs and flags. It reads the same manifests as the CLI, shows the available choices, and can print the final command before anything expensive runs.
 
 ```bash
-python -m pip install -e ".[tui]"
 worldfoundry-eval tui
 ```
 
@@ -192,7 +193,7 @@ python -m worldfoundry.studio.workspace_job infer \
   --device cuda
 ```
 
-The full command map is in [CLI](/docs/reference/cli). Run-status labels are in [Run status](/docs/guides/run-status).
+The full command map is in [CLI](/docs/reference/cli).
 
 ## 5. Inference
 
@@ -283,6 +284,5 @@ worldfoundry-eval run \
   <Card title="Local assets" description="Checkpoint sources, Hugging Face cache paths, and readiness checks." href="/docs/guides/local-assets" />
   <Card title="TUI" description="Interactive model and benchmark picker that prints runnable commands." href="/docs/guides/tui" />
   <Card title="CLI" description="Full command reference for discovery, inference, scoring, and reporting." href="/docs/reference/cli" />
-  <Card title="Run status" description="Reader labels for Verified, Runner parity pending, Static load only, and Planned." href="/docs/guides/run-status" />
   <Card title="Benchmark Hub" description="Benchmark-specific data layouts, metric assets, and run commands." href="/docs/evaluation/benchmark-hub" />
 </Cards>
