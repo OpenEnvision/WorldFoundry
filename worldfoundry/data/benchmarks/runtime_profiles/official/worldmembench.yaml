@@ -9,7 +9,6 @@ pythonpath_roots:
 - .
 required_env: []
 optional_env:
-- WORLDFOUNDRY_WORLDMEMBENCH_ROOT
 - WORLDFOUNDRY_WORLDMEMBENCH_RESULTS_PATH
 - WORLDFOUNDRY_WORLDMEMBENCH_PYTHON
 - WORLDFOUNDRY_WORLDMEMBENCH_CONFIG
@@ -20,6 +19,10 @@ required_packages: []
 required_paths:
 - id: official_runner_script
   path: worldfoundry/evaluation/tasks/execution/runners/worldmembench/run_worldmembench_official_runner.py
+- id: in_tree_runtime
+  path: worldfoundry/evaluation/tasks/execution/runners/worldmembench/runtime/cli.py
+- id: metric_requirements
+  path: worldfoundry/data/benchmarks/requirements/worldmembench.txt
 - id: metrics_module
   path: worldfoundry/evaluation/tasks/execution/runners/worldmembench/worldmembench_metrics.py
 - id: task_yaml
@@ -32,10 +35,11 @@ requires_cuda_visibility: false
 status: official_runtime_ready_real_data_validation_pending
 notes:
 - Result import uses the unified environment without CUDA, metric checkpoints, or upstream Python dependencies.
-- Official execution uses an installed worldmembench package or WORLDFOUNDRY_WORLDMEMBENCH_ROOT/src.
-- WORLDFOUNDRY_WORLDMEMBENCH_PYTHON selects a provisioned upstream interpreter without changing the unified Torch/CUDA ABI.
-- DA3 and ViPE subprocess interpreters and metric checkpoint paths belong in the upstream YAML configuration.
-- Dynamic Memory uses the upstream VLM configuration and API-key environment variable; credentials are not runner arguments.
+- All twelve official metric protocols execute in tree without an installed worldmembench package or checkout.
+- CLIP, LAION heads and DINO checkpoint loading use shared components; masked human/object DINO inference has one implementation.
+- WORLDFOUNDRY_WORLDMEMBENCH_PYTHON selects the metric interpreter without changing the unified Torch/CUDA ABI.
+- DA3-Streaming and ViPE preparation reuse staged artifacts or explicitly configured model runtimes and interpreters.
+- Dynamic Memory uses the official VLM configuration and API-key environment variable; credentials are not runner arguments.
 - Official dataset/checkpoint replay and leaderboard parity remain pending.
 validation_command: &worldmembench_validation_command
 - worldfoundry-eval
@@ -56,8 +60,6 @@ full_runtime_command:
 - -m
 - worldfoundry.evaluation.tasks.execution.runners.worldmembench.run_worldmembench_official_runner
 - --run-official
-- --repo-root
-- <WorldMemBench>
 - --input-path
 - <manifest.jsonl>
 - --config

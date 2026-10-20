@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 WorldFoundry contributors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Run ZJU-REAL/WorldMemBench or import its official per-model results."""
+"""Run the in-tree WorldMemBench evaluator or import official per-model results."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from worldfoundry.evaluation.tasks.execution.runners.worldmembench.worldmembench
 CONFIG = BenchRunnerConfig(
     benchmark_id="worldmembench",
     display_name="WorldMemBench",
-    root_env="WORLDFOUNDRY_WORLDMEMBENCH_ROOT",
+    root_env="",
     results_path_env="WORLDFOUNDRY_WORLDMEMBENCH_RESULTS_PATH",
     default_repo_subdir="",
     metric_order=tuple(METRIC_SPECS),
@@ -43,7 +43,7 @@ CONFIG = BenchRunnerConfig(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Expose the standard benchmark runner flags and upstream runtime inputs."""
+    """Expose the standard benchmark runner flags and metric asset configuration."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--benchmark-id", choices=["worldmembench"], default="worldmembench")
     parser.add_argument(
@@ -59,12 +59,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--run-official", action="store_true")
-    parser.add_argument(
-        "--repo-root",
-        type=Path,
-        default=_env_path(CONFIG.root_env),
-        help="Optional official checkout; otherwise use the installed worldmembench package",
-    )
     parser.add_argument("--python", default=os.environ.get("WORLDFOUNDRY_WORLDMEMBENCH_PYTHON", sys.executable))
     parser.add_argument("--config", type=Path, default=_env_path("WORLDFOUNDRY_WORLDMEMBENCH_CONFIG"))
     parser.add_argument("--weights-dir", type=Path, default=_env_path("WORLDFOUNDRY_WORLDMEMBENCH_WEIGHTS_DIR"))
@@ -87,13 +81,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def build_official_command(args: argparse.Namespace, results: Path, metrics: tuple[str, ...]) -> list[str]:
-    """Delegate metric computation and native multi-GPU execution to upstream."""
+    """Run the in-tree official protocol, including its multi-GPU sharding."""
     if args.generated_video_dir is None or not args.generated_video_dir.exists():
         raise ValueError("--run-official requires an existing --generated-video-dir or JSONL --input-path")
     command = [
         args.python,
         "-m",
-        "worldmembench",
+        "worldfoundry.evaluation.tasks.execution.runners.worldmembench.runtime",
         "eval",
         str(args.generated_video_dir.resolve()),
         "--output",
@@ -137,21 +131,12 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                 raise ValueError(f"Use a fresh output directory; official results already exist: {results}")
             command = build_official_command(args, results, metrics)
             environment = dict(os.environ)
-            if args.repo_root is not None:
-                args.repo_root = args.repo_root.expanduser().resolve()
-                source = args.repo_root / "src"
-                if not (source / "worldmembench" / "__main__.py").is_file():
-                    raise ValueError(f"Not a WorldMemBench checkout: {args.repo_root}")
-                environment["PYTHONPATH"] = os.pathsep.join(
-                    filter(None, [str(source), environment.get("PYTHONPATH", "")])
-                )
             with (
-                (output / "upstream_stdout.log").open("w", encoding="utf-8") as stdout,
-                (output / "upstream_stderr.log").open("w", encoding="utf-8") as stderr,
+                (output / "runtime_stdout.log").open("w", encoding="utf-8") as stdout,
+                (output / "runtime_stderr.log").open("w", encoding="utf-8") as stderr,
             ):
                 completed = subprocess.run(
                     command,
-                    cwd=args.repo_root,
                     env=environment,
                     stdout=stdout,
                     stderr=stderr,
@@ -178,7 +163,6 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             command=command,
             duration_seconds=time.monotonic() - started,
             returncode=returncode,
-            repo_root=args.repo_root,
             generated_video_dir=args.generated_video_dir,
             run_status_override="failed" if returncode else None,
         )

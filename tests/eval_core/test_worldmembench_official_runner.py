@@ -239,15 +239,11 @@ def test_missing_inputs_write_standard_failed_artifacts(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("upstream_code", [0, 1])
-def test_official_execution_delegates_to_upstream_and_respects_exit_status(
+def test_official_execution_uses_in_tree_runtime_and_respects_exit_status(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     upstream_code: int,
 ) -> None:
-    root = tmp_path / "upstream"
-    module = root / "src/worldmembench/__main__.py"
-    module.parent.mkdir(parents=True)
-    module.touch()
     manifest = tmp_path / "inputs.jsonl"
     manifest.touch()
     config = tmp_path / "config.yaml"
@@ -256,8 +252,7 @@ def test_official_execution_delegates_to_upstream_and_respects_exit_status(
 
     def execute(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         calls.append(command)
-        assert kwargs["cwd"] == root
-        assert kwargs["env"]["PYTHONPATH"].split(":")[0] == str(root / "src")
+        assert "cwd" not in kwargs
         assert kwargs["timeout"] == 7200
         result_dir = Path(command[command.index("--output") + 1])
         _write_result(result_dir)
@@ -267,8 +262,6 @@ def test_official_execution_delegates_to_upstream_and_respects_exit_status(
     card, code = _run(
         tmp_path,
         "--run-official",
-        "--repo-root",
-        str(root),
         "--input-path",
         str(manifest),
         "--config",
@@ -282,7 +275,13 @@ def test_official_execution_delegates_to_upstream_and_respects_exit_status(
     )
     assert code == upstream_code
     command = calls[0]
-    assert command[:5] == [sys.executable, "-m", "worldmembench", "eval", str(manifest)]
+    assert command[:5] == [
+        sys.executable,
+        "-m",
+        "worldfoundry.evaluation.tasks.execution.runners.worldmembench.runtime",
+        "eval",
+        str(manifest),
+    ]
     assert command[command.index("--metrics") + 1] == "human_identity"
     assert "--gpus" in command and "--device" not in command
     assert command[command.index("--config") + 1] == str(config)
@@ -290,7 +289,7 @@ def test_official_execution_delegates_to_upstream_and_respects_exit_status(
     assert card["integration_evidence"] is (upstream_code == 0)
     assert card["evaluation"]["available"] is (upstream_code == 0)
     assert card["validation"]["full_suite_complete"] is False
-    assert (tmp_path / "out/upstream_stdout.log").is_file()
+    assert (tmp_path / "out/runtime_stdout.log").is_file()
 
 
 def test_official_execution_does_not_reuse_stale_outputs(tmp_path: Path) -> None:
@@ -334,19 +333,19 @@ def test_standard_benchmark_contract_and_result_import(tmp_path: Path) -> None:
 
 
 def test_standard_official_run_dispatches_generated_videos(tmp_path: Path) -> None:
-    upstream = tmp_path / "upstream/src/worldmembench"
-    upstream.mkdir(parents=True)
-    (upstream / "__init__.py").touch()
+    interpreter = tmp_path / "metric-python"
     payload = {"num_cases": 1, "results": {"all": {"num_cases": 1, "scores": {"score": 0.5}}}}
-    (upstream / "__main__.py").write_text(
+    interpreter.write_text(
+        f"#!{sys.executable}\n"
         "import json, pathlib, sys\n"
-        "assert sys.argv[1] == 'eval'\n"
+        "assert sys.argv[1:4] == ['-m', 'worldfoundry.evaluation.tasks.execution.runners.worldmembench.runtime', 'eval']\n"
         "output = pathlib.Path(sys.argv[sys.argv.index('--output') + 1])\n"
         "directory = output / 'metrics' / 'imaging_quality'\n"
         "directory.mkdir(parents=True)\n"
         f"(directory / 'summary.json').write_text({json.dumps(payload)!r})\n",
         encoding="utf-8",
     )
+    interpreter.chmod(0o755)
     videos = tmp_path / "videos"
     videos.mkdir()
     (videos / "case_001.mp4").touch()
@@ -355,7 +354,7 @@ def test_standard_official_run_dispatches_generated_videos(tmp_path: Path) -> No
         output_dir=tmp_path / "official-run",
         mode="official-run",
         generated_artifact_dir=videos,
-        env_overrides={"WORLDFOUNDRY_WORLDMEMBENCH_ROOT": str(upstream.parent.parent)},
+        env_overrides={"WORLDFOUNDRY_WORLDMEMBENCH_PYTHON": str(interpreter)},
     )
     assert result.ok, result.to_dict()
     card = json.loads(result.scorecard_path.read_text())

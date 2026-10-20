@@ -1826,9 +1826,9 @@
     ],
     "name": "WorldMemBench",
     "requiresApi": false,
-    "runtimeKind": "external_official_repo",
-    "summary": "Imports per-model memory metrics or invokes the official WorldMemBench runtime",
-    "summaryZh": "按模型导入记忆指标或调用官方 WorldMemBench 运行时",
+    "runtimeKind": "in_tree_official_runtime",
+    "summary": "Runs twelve in-tree memory and camera metrics with shared model components",
+    "summaryZh": "复用共享模型组件，在仓内执行十二项记忆与相机指标",
     "verificationStatus": "official_runtime_ready_real_data_validation_pending"
   },
   "worldmodelbench": {

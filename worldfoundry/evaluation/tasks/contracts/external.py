@@ -876,9 +876,9 @@ WorldMemBenchContract = ExternalBenchmarkContract(
     ),
     requires_upstream_runtime=True,
     notes=(
-        "Imports official per-model summaries or invokes the installed ZJU-REAL/WorldMemBench runtime.",
+        "Imports official per-model summaries or runs all twelve metric protocols in tree with shared model components.",
         "Scores retain official units, case statuses, and camera-error directions; no composite score is defined.",
-        "Full evaluation needs metric checkpoints, DA3/ViPE environments, and a Dynamic Memory VLM endpoint.",
+        "Full evaluation needs metric checkpoints, staged or configured DA3-Streaming/ViPE artifacts, and a Dynamic Memory VLM endpoint.",
     ),
 )
 

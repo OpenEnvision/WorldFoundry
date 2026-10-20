@@ -24,7 +24,7 @@ integration_evidence: false
 leaderboard_valid: false
 checkpoint_refs: []
 requires:
-- Official result summaries, or generated videos with a provisioned upstream runtime and selected metric assets.
+- Official result summaries, or generated videos with staged metric checkpoints and annotations.
 blockers:
 - Complete-dataset and checkpoint replay remain pending.
 source:
@@ -42,8 +42,8 @@ source_provenance:
     url: https://github.com/ZJU-REAL/WorldMemBench
     revision: 1b79840143a98e017891e893b5d3ef75b93078a3
     license: MIT
-    role: external_runtime_dependency
-    provenance: Official metric implementations are invoked without vendoring or reimplementation.
+    role: adapted_official_protocol
+    provenance: Official metric protocols run in tree with shared CLIP, LAION and DINO model components.
 metrics:
 - id: imaging_quality
   name: Imaging Quality
@@ -121,7 +121,7 @@ integration:
   status: integrated
   tier: in_tree
   evidence:
-    runtime_surface: external_official_runtime_with_result_normalizer
+    runtime_surface: in_tree_official_runtime_with_result_normalizer
     full_suite_verified: false
 runner:
   runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldMemBenchContract
@@ -137,11 +137,10 @@ runner:
     artifact_official_run: true
     pass_generated_artifact_dir: true
   runtime:
-    kind: external_official_repo
+    kind: in_tree_official_runtime
+    in_tree_path: worldfoundry/evaluation/tasks/execution/runners/worldmembench/runtime
     repo_url: https://github.com/ZJU-REAL/WorldMemBench
     repo_revision: 1b79840143a98e017891e893b5d3ef75b93078a3
-    root_env: WORLDFOUNDRY_WORLDMEMBENCH_ROOT
-    root_env_required: false
     results_path_env: WORLDFOUNDRY_WORLDMEMBENCH_RESULTS_PATH
   expected_artifacts:
   - scorecard.json
@@ -150,7 +149,6 @@ runner:
   verification_status: pending
   required_env: []
   optional_env:
-  - WORLDFOUNDRY_WORLDMEMBENCH_ROOT
   - WORLDFOUNDRY_WORLDMEMBENCH_RESULTS_PATH
   - WORLDFOUNDRY_WORLDMEMBENCH_PYTHON
   - WORLDFOUNDRY_WORLDMEMBENCH_CONFIG
@@ -176,7 +174,7 @@ runner_availability:
   task_yaml_available: true
   runtime_verified: false
   full_suite_verified: false
-  surface: external_official_runtime_with_result_normalizer
+  surface: in_tree_official_runtime_with_result_normalizer
 validation_command:
 - worldfoundry-eval
 - zoo
@@ -192,5 +190,7 @@ validation_command:
 - --json
 notes:
 - Source and metric protocol are attributed to ZJU-REAL/WorldMemBench under MIT.
-- Result import is weight-free; official metric execution requires a separately provisioned upstream runtime and assets.
+- All twelve metric protocols execute in tree; result import remains weight-free.
+- CLIP, LAION heads and DINO checkpoint loading reuse canonical components; human/object masked DINO features share one implementation.
+- DA3-Streaming and ViPE pose preparation accept staged artifacts or explicitly configured model runtimes; the WorldMemBench checkout is not required.
 - GPU and full-checkpoint replay are pending; result import does not establish leaderboard validity.

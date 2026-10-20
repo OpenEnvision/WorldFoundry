@@ -224,12 +224,15 @@ INFER_TENSOR_CONTRACTS = \
 	$(EVALUATION_CPU_CONTRACTS)
 EVALUATION_CPU_CONTRACTS = \
 	tests/eval_core/test_worldmembench_official_runner.py \
+	tests/eval_core/test_worldmembench_runtime.py \
 	tests/evaluation/execution/test_resume_options.py \
 	tests/evaluation/execution/test_result_integrity.py \
 	tests/evaluation/execution/test_helper_reuse.py \
 	tests/evaluation/execution/test_pipeline_boundaries.py \
 	tests/evaluation/execution/test_generation_artifact_materialization.py \
 	tests/evaluation/execution/test_shared_scoring_backend.py \
+	tests/evaluation/execution/test_shared_quality.py \
+	tests/evaluation/execution/test_worldmembench_camera.py \
 	tests/evaluation/execution/test_vbench_appearance_reduction.py \
 	tests/evaluation/execution/test_worldscore_evaluator_lifecycle.py \
 	tests/evaluation/metrics/test_scalar_aggregation.py \

@@ -17,6 +17,10 @@ WorldFoundry **检入指标 runtime**（HPSv3、TransNetV2、PAVRM、DreamSim、
 
 <BenchmarkPageSections id="wbench" locale="zh" />
 
+成像质量采用官方 PyIQA `musiq` 版本（KonIQ），通过 `wbench_quality_metric_assets`
+显式解析权重。可用 `WORLDFOUNDRY_WBENCH_MUSIQ_KONIQ_CKPT` 指向已准备的权重。
+预处理和逐帧归一化保留官方协议；WorldMemBench 的 MUSIQ-SPAQ 属于不同的后端配置。
+
 ## 如何运行
 
 ```bash

@@ -15,23 +15,23 @@ bounded_official_gpu_validation:
   verified: true
   scope: bounded_official_gpu_validation
   scorecard: tmp/local_open_eval/worldscore_bounded_gpu_validation_after_readiness_layers_20260525/scorecard.json
-blocked_reason: Bounded WorldScore dynamic official GPU validation passed; 
-  DROID/GroundingDINO/SAM/RAFT/SEA-RAFT/FlowFormer++/VFIMamba are tracked as reusable WorldFoundry base-model 
+blocked_reason: Bounded WorldScore dynamic official GPU validation passed;
+  DROID/GroundingDINO/SAM/RAFT/SEA-RAFT/FlowFormer++/VFIMamba are tracked as reusable WorldFoundry base-model
   dependencies. Full leaderboard parity still needs complete evaluation.json trees and full GPU metric execution.
 environment_id: worldfoundry-unified-cu128
 id: worldscore
 name: WorldScore
 needs_new_env: false
 notes:
-- DROID/GroundingDINO/SAM/RAFT/SEA-RAFT/FlowFormer++/VFIMamba checkpoints are now modeled as reusable WorldFoundry 
+- DROID/GroundingDINO/SAM/RAFT/SEA-RAFT/FlowFormer++/VFIMamba checkpoints are now modeled as reusable WorldFoundry
   base-model dependencies rather than benchmark-private assets.
-- Full leaderboard parity still needs complete evaluation.json trees and full GPU metric execution. 
+- Full leaderboard parity still needs complete evaluation.json trees and full GPU metric execution.
   CUDA_VISIBLE_DEVICES=7; both cu118 stacks initialized CUDA and completed a one-element tensor sum.
-preflight_command: 
+preflight_command:
   PYTHONPATH=${WORLDFOUNDRY_REPO_ROOT}:${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore
   ${WORLDFOUNDRY_UNIFIED_PYTHON:-python} -m
-  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile worldscore --manifest 
-  worldfoundry/data/benchmarks/runtime_profiles/official/worldscore.yaml --output-dir 
+  worldfoundry.evaluation.tasks.execution.orchestration.runtime_preflight --profile worldscore --manifest
+  worldfoundry/data/benchmarks/runtime_profiles/official/worldscore.yaml --output-dir
   tmp/worldfoundry_preflight/worldscore --json
 python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
 pythonpath_roots:
@@ -57,7 +57,6 @@ required_imports:
 - structlog
 - submitit
 - pyiqa
-- pytorch_lightning
 - worldfoundry.base_models.perception_core.detection.grounding_dino
 - worldfoundry.base_models.perception_core.segment.sam2
 - worldfoundry.base_models.perception_core.segment.sam_v1
@@ -95,7 +94,6 @@ required_packages:
 - structlog
 - submitit
 - pyiqa
-- pytorch-lightning
 - lietorch
 - spacy
 - cvxpy
@@ -142,20 +140,20 @@ base_model_dependency_preflight:
   - vfimamba
   ready_env:
     WORLDFOUNDRY_DROID_SLAM_CKPT: cache/worldfoundry/assets/worldscore_official/metrics/checkpoints/droid.pth
-    WORLDFOUNDRY_FLOWFORMERPLUSPLUS_CKPT: 
+    WORLDFOUNDRY_FLOWFORMERPLUSPLUS_CKPT:
       cache/worldfoundry/assets/worldscore_official/metrics/checkpoints/things_288960.pth
     WORLDFOUNDRY_GROUNDING_DINO_CKPT: cache/hfd/ShilongLiu--GroundingDINO/groundingdino_swint_ogc.pth
-    WORLDFOUNDRY_RAFT_THINGS_CKPT: 
+    WORLDFOUNDRY_RAFT_THINGS_CKPT:
       cache/worldfoundry/assets/worldscore_official/metrics/checkpoints/models/raft-things.pth
     WORLDFOUNDRY_SAM_VIT_H_CKPT: cache/worldfoundry/assets/worldscore_official/metrics/checkpoints/sam_vit_h_4b8939.pth
     WORLDFOUNDRY_SAM2_CKPT: cache/hfd/facebook--sam2.1-hiera-base-plus/sam2.1_hiera_base_plus.pt
-    WORLDFOUNDRY_SEA_RAFT_CKPT: 
+    WORLDFOUNDRY_SEA_RAFT_CKPT:
       cache/worldfoundry/assets/worldscore_official/metrics/checkpoints/Tartan-C-T-TSKH-spring540x960-M.pth
     WORLDFOUNDRY_VFIMAMBA_CKPT: ckpt/WorldScore/VFIMamba.pkl
   runtime_env:
-    WORLDFOUNDRY_WORLDSCORE_ROOT: 
+    WORLDFOUNDRY_WORLDSCORE_ROOT:
       ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/evaluation/tasks/execution/runners/worldscore/runtime/worldscore
-    WORLDFOUNDRY_WORLDSCORE_CONFIG_ROOT: 
+    WORLDFOUNDRY_WORLDSCORE_CONFIG_ROOT:
       ${WORLDFOUNDRY_REPO_ROOT}/worldfoundry/data/benchmarks/assets/worldscore/config
     WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR: cache/worldfoundry/assets/worldscore_official/metrics/checkpoints
   missing: []
