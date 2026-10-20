@@ -1,0 +1,89 @@
+---
+title: WorldMemBench
+description: 复用共享模型组件的仓内视觉记忆与相机控制评测。
+---
+
+<BenchmarkPageSections id="worldmembench" locale="zh" />
+
+## 范围
+
+[WorldMemBench](https://github.com/ZJU-REAL/WorldMemBench) 评测人物、物体、环境和
+动态记忆，以及相机控制和视频质量。WorldFoundry 的 12 项官方指标协议均在仓内执行，
+基于 MIT 许可的上游版本 `1b79840143a98e017891e893b5d3ef75b93078a3` 适配，
+不需要额外检出或安装 WorldMemBench。
+
+| 指标 ID | 官方分数字段 | 方向 |
+| --- | --- | --- |
+| `imaging_quality` | `score` | 越高越好 |
+| `aesthetic_quality` | `score` | 越高越好 |
+| `human_identity` | `score` | 越高越好 |
+| `human_appearance` | `score` | 越高越好 |
+| `object_geometry` | `score` | 越高越好 |
+| `object_appearance` | `score` | 越高越好 |
+| `environment_visible_memory` | `score` | 越高越好 |
+| `environment_depth_fidelity` | `depth_spearman` | 越高越好 |
+| `environment_scene_reconstruction` | `reconstruction_score` | 越高越好 |
+| `dynamic_memory` | `score` | 越高越好 |
+| `camera_rotation` | `camera_rotation_rpe_path` | 越低越好 |
+| `camera_translation` | `camera_translation_rpe` | 越低越好 |
+
+分数保留官方单位，包括负的深度相关系数和无上界的相机误差，不构造跨指标平均分或综合分。
+
+## 共享组件与协议
+
+OpenAI CLIP、LAION 美学头和 DINO 权重加载复用 WorldFoundry 的规范组件；人物和物体
+外观共用一份掩码 DINOv2 特征提取实现。同次评测中，相同权重路径与设备共享模型，
+预处理和批大小状态保持独立。WorldScore、MemoBench 使用共享 LAION MLP，
+MIND、WBench、WorldArena 使用共享线性头，两种头不能互换。WorldScore 与
+4DWorldBench 共用其 512 方形 IQA 预处理和基类，该变换不应用于 WorldMemBench。
+
+WorldMemBench 保留 MUSIQ-SPAQ、保持宽高比的 OpenCV 缩放、每 4 帧采样、分数归一化
+和视频等权聚合。重访分段、冻结目标关联、掩码裁剪、相机对齐、场景重建，以及动态记忆
+按事件门控的 VLM 问答均遵循官方协议。
+
+## 评测生成输出
+
+使用官方 `model/category/trajectory/case/video.mp4` 目录结构或官方 JSONL 清单。
+每个 case 保留标注、参考图、轨迹文件及目标相机位姿。数据集为
+[`rescuerz/WorldMemBench`](https://huggingface.co/datasets/rescuerz/WorldMemBench)。
+
+在已准备的 GPU 环境中安装所选指标的依赖；
+`worldfoundry/data/benchmarks/requirements/worldmembench.txt` 列出完整依赖，
+不替换环境中的 Torch/CUDA。显式准备官方权重；`--weights-dir` 接受上游指标资产布局，
+YAML 中的 checkpoint 覆盖项可以指向已经准备的共享资产。
+
+```bash
+python -m worldfoundry.evaluation.tasks.execution.runners.worldmembench.run_worldmembench_official_runner \
+  --run-official --input-path <manifest.jsonl> \
+  --weights-dir <metric-assets> --config <worldmembench.yaml> \
+  --output-dir <fresh-out> --json
+```
+
+重复 `--metric` 可选择指标，`--gpus 0,1` 按视频划分到可见 GPU。
+`--expected-revisits 1|2|3` 选择官方固定重访协议；否则使用清单中的值或官方返回检测。
+
+DA3-Streaming 和 ViPE 预处理复用已有的 `da3/results.npz`、
+`da3/scene_geometry.npz` 和 `vipe/results.npz`。如需生成缺失资产，配置
+`da3.source`、`da3.dinov2_source` 和 `vipe.source` 指向官方模型运行时，
+各节还可指定 `python` 和 `weights`。不将 DA3-Streaming 替换为单批 DA3，
+也不将 ViPE 默认流水线替换为 WorldFoundry 的精简位姿配置。动态记忆需要官方 VLM
+配置；API 密钥保留在配置指定的环境变量中，不通过命令行传递。
+
+## 导入官方结果
+
+```bash
+worldfoundry-eval zoo benchmark-run --benchmark-id worldmembench \
+  --mode official-validation --official-results-path <official-eval-output> \
+  --result-model-id <model-id> --output-dir <out> --json
+```
+
+接受评测输出根目录、其中的 `metrics/` 目录或单指标的 `summary.json`。
+多模型结果必须显式选择模型。汇总覆盖率、分组明细和相邻的 `cases.jsonl` 记录
+保留在 `scorecard.json`、`raw_metric_table.jsonl` 和 `per_sample_scores.jsonl` 中。
+
+## 限制
+
+GPU/真实权重和完整数据集回放尚未完成；仓内执行与免权重测试不代表全套验证或排行榜
+有效性。没有预计算资产时，DA3-Streaming 和完整配置 ViPE 推理仍需要配置对应模型
+运行时。`model_failure` 保留官方赋分，`not_applicable` 不填零。
+`eval_failed` 和 `data_invalid` 保留覆盖率，并使运行器返回非零，即使已有部分分数。

@@ -1,0 +1,69 @@
+id: worldmembench
+name: WorldMemBench
+benchmark_ids:
+- worldmembench
+environment_id: worldfoundry-unified-cu128
+needs_new_env: false
+python_path: ${WORLDFOUNDRY_UNIFIED_PYTHON:-python}
+pythonpath_roots:
+- .
+required_env: []
+optional_env:
+- WORLDFOUNDRY_WORLDMEMBENCH_RESULTS_PATH
+- WORLDFOUNDRY_WORLDMEMBENCH_PYTHON
+- WORLDFOUNDRY_WORLDMEMBENCH_CONFIG
+- WORLDFOUNDRY_WORLDMEMBENCH_WEIGHTS_DIR
+- WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+required_imports: []
+required_packages: []
+required_paths:
+- id: official_runner_script
+  path: worldfoundry/evaluation/tasks/execution/runners/worldmembench/run_worldmembench_official_runner.py
+- id: in_tree_runtime
+  path: worldfoundry/evaluation/tasks/execution/runners/worldmembench/runtime/cli.py
+- id: metric_requirements
+  path: worldfoundry/data/benchmarks/requirements/worldmembench.txt
+- id: metrics_module
+  path: worldfoundry/evaluation/tasks/execution/runners/worldmembench/worldmembench_metrics.py
+- id: task_yaml
+  path: worldfoundry/data/benchmarks/tasks/external/worldmembench.yaml
+required_assets:
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/worldmembench.yaml
+  hf_dataset_ids:
+  - rescuerz/WorldMemBench
+requires_cuda_visibility: false
+status: official_runtime_ready_real_data_validation_pending
+notes:
+- Result import uses the unified environment without CUDA, metric checkpoints, or upstream Python dependencies.
+- All twelve official metric protocols execute in tree without an installed worldmembench package or checkout.
+- CLIP, LAION heads and DINO checkpoint loading use shared components; masked human/object DINO inference has one implementation.
+- WORLDFOUNDRY_WORLDMEMBENCH_PYTHON selects the metric interpreter without changing the unified Torch/CUDA ABI.
+- DA3-Streaming and ViPE preparation reuse staged artifacts or explicitly configured model runtimes and interpreters.
+- Dynamic Memory uses the official VLM configuration and API-key environment variable; credentials are not runner arguments.
+- Official dataset/checkpoint replay and leaderboard parity remain pending.
+validation_command: &worldmembench_validation_command
+- worldfoundry-eval
+- zoo
+- benchmark-run
+- --benchmark-id
+- worldmembench
+- --mode
+- official-validation
+- --official-results-path
+- <official_eval_output>
+- --output-dir
+- <out>
+- --json
+normalization_command: *worldmembench_validation_command
+full_runtime_command:
+- python
+- -m
+- worldfoundry.evaluation.tasks.execution.runners.worldmembench.run_worldmembench_official_runner
+- --run-official
+- --input-path
+- <manifest.jsonl>
+- --config
+- <worldmembench.yaml>
+- --output-dir
+- <fresh_out>
+- --json

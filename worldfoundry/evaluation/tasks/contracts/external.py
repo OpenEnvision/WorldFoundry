@@ -22,7 +22,6 @@ from .registry import (
     register_external_benchmark_contract,
 )
 
-
 ROBOTWIN_BENCHMARK_ID = "robotwin"
 ROBOTWIN_BENCHMARK_NAME = "RoboTwin 2.0"
 ROBOTWIN_ROOT_ENV = "WORLDFOUNDRY_ROBOTWIN_ROOT"
@@ -856,6 +855,33 @@ MiraBenchContract = ExternalBenchmarkContract(
     ),
 )
 
+WorldMemBenchContract = ExternalBenchmarkContract(
+    benchmark_id="worldmembench",
+    display_name="WorldMemBench",
+    input_keys=("generated_video_dir", "official_results_path", "worldmembench_config", "weights_dir"),
+    output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "official_metric_summaries"),
+    metric_ids=(
+        "imaging_quality",
+        "aesthetic_quality",
+        "human_identity",
+        "human_appearance",
+        "object_geometry",
+        "object_appearance",
+        "environment_visible_memory",
+        "environment_depth_fidelity",
+        "environment_scene_reconstruction",
+        "dynamic_memory",
+        "camera_rotation",
+        "camera_translation",
+    ),
+    requires_upstream_runtime=True,
+    notes=(
+        "Imports official per-model summaries or runs all twelve metric protocols in tree with shared model components.",
+        "Scores retain official units, case statuses, and camera-error directions; no composite score is defined.",
+        "Full evaluation needs metric checkpoints, staged or configured DA3-Streaming/ViPE artifacts, and a Dynamic Memory VLM endpoint.",
+    ),
+)
+
 MemoBenchContract = ExternalBenchmarkContract(
     benchmark_id="memobench",
     display_name="MemoBench",
@@ -1061,7 +1087,12 @@ T2VSafetyBenchContract = ExternalBenchmarkContract(
 IPVBenchContract = ExternalBenchmarkContract(
     benchmark_id="ipv-bench",
     display_name="IPV-Bench",
-    input_keys=("impossible_prompt_manifest", "generated_video_dir", "understanding_results_path", "official_results_path"),
+    input_keys=(
+        "impossible_prompt_manifest",
+        "generated_video_dir",
+        "understanding_results_path",
+        "official_results_path",
+    ),
     output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "benchmark_contract"),
     metric_ids=(
         "visual_quality",
@@ -1155,7 +1186,12 @@ VideoScienceBenchContract = ExternalBenchmarkContract(
 PhyEduVideoContract = ExternalBenchmarkContract(
     benchmark_id="phyeduvideo",
     display_name="PhyEduVideo",
-    input_keys=("physics_education_prompt_manifest", "generated_video_dir", "judge_results_path", "official_results_path"),
+    input_keys=(
+        "physics_education_prompt_manifest",
+        "generated_video_dir",
+        "judge_results_path",
+        "official_results_path",
+    ),
     output_keys=("scorecard", "raw_metric_table", "per_sample_scores", "benchmark_contract"),
     metric_ids=(
         "semantic_adherence",
@@ -1213,7 +1249,12 @@ WorldArenaContract = ExternalBenchmarkContract(
 WorldInWorldContract = ExternalBenchmarkContract(
     benchmark_id="world-in-world",
     display_name="World-in-World",
-    input_keys=("closed_loop_task_manifest", "world_model_rollouts_dir", "planner_results_path", "official_results_path"),
+    input_keys=(
+        "closed_loop_task_manifest",
+        "world_model_rollouts_dir",
+        "planner_results_path",
+        "official_results_path",
+    ),
     output_keys=("scorecard", "raw_metric_table", "rollout_logs", "benchmark_contract"),
     metric_ids=(
         "active_recognition_success_rate",
@@ -1604,15 +1645,30 @@ def _embodied_action_contract(
 Behavior1KContract = _embodied_action_contract(
     "behavior1k",
     "BEHAVIOR-1K",
-    input_keys=("behavior_dataset_root", "simulator_root", "task_manifest", "policy_results_path", "official_results_path"),
+    input_keys=(
+        "behavior_dataset_root",
+        "simulator_root",
+        "task_manifest",
+        "policy_results_path",
+        "official_results_path",
+    ),
     metric_ids=("success_rate", "task_success", "episode_success", "subgoal_success", "reward"),
     notes=("BEHAVIOR-1K requires OmniGibson/Isaac Sim assets and license-gated simulator setup.",),
 )
 KinetixContract = _embodied_action_contract(
     "kinetix",
     "Kinetix",
-    metric_ids=("success_rate", "task_success", "episode_success", "reward", "normalized_return", "real_time_success_rate"),
-    notes=("Kinetix uses a JAX 2D physics runtime; keep it in a simulator-specific environment when the unified PyTorch environment is insufficient.",),
+    metric_ids=(
+        "success_rate",
+        "task_success",
+        "episode_success",
+        "reward",
+        "normalized_return",
+        "real_time_success_rate",
+    ),
+    notes=(
+        "Kinetix uses a JAX 2D physics runtime; keep it in a simulator-specific environment when the unified PyTorch environment is insufficient.",
+    ),
 )
 LIBEROMemContract = _embodied_action_contract(
     "libero-mem",
@@ -1651,7 +1707,13 @@ MIKASAContract = _embodied_action_contract(
 MolmoSpacesContract = _embodied_action_contract(
     "molmospaces",
     "MolmoSpaces-Bench",
-    input_keys=("molmospaces_asset_root", "simulator_root", "task_manifest", "policy_results_path", "official_results_path"),
+    input_keys=(
+        "molmospaces_asset_root",
+        "simulator_root",
+        "task_manifest",
+        "policy_results_path",
+        "official_results_path",
+    ),
     metric_ids=("success_rate", "pick_success_rate", "task_success", "episode_success", "reward"),
     notes=("MolmoSpaces assets are large; stage only the benchmark subset required by the selected suite.",),
 )
@@ -1664,7 +1726,13 @@ RoboMMEContract = _embodied_action_contract(
     "robomme",
     "RoboMME",
     input_keys=("dataset_root", "simulator_root", "memory_manifest", "policy_results_path", "official_results_path"),
-    metric_ids=("success_rate", "counting_success_rate", "permanence_success_rate", "reference_success_rate", "imitation_success_rate"),
+    metric_ids=(
+        "success_rate",
+        "counting_success_rate",
+        "permanence_success_rate",
+        "reference_success_rate",
+        "imitation_success_rate",
+    ),
 )
 VLABenchContract = _embodied_action_contract(
     "vlabench",
@@ -1792,6 +1860,7 @@ _BUILTIN_CONTRACT_ITEMS = (
     WorldArenaContract,
     WorldBenchContract,
     WorldInWorldContract,
+    WorldMemBenchContract,
     WorldModelBenchContract,
     HarnessEvalWContract,
     WorldOlympiadContract,
@@ -1834,8 +1903,4 @@ def list_external_benchmark_contracts() -> tuple[ExternalBenchmarkContract, ...]
     return _CONTRACT_REGISTRY.list()
 
 
-__all__ = sorted(
-    name
-    for name in globals()
-    if not name.startswith("_") and name not in {"Path", "annotations"}
-)
+__all__ = sorted(name for name in globals() if not name.startswith("_") and name not in {"Path", "annotations"})

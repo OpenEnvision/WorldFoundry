@@ -6331,3 +6331,38 @@ Wan2.2 support assets retain their Apache-2.0 license.
 
 Original-File: WorldPlay2/WorldPlay2/LICENSE.txt
 license: cc-by-nc-4.0
+
+
+WorldMemBench evaluation protocols
+---------------------------------
+Source: https://github.com/ZJU-REAL/WorldMemBench
+Source revision: 1b79840143a98e017891e893b5d3ef75b93078a3
+License: MIT
+Files: worldfoundry/evaluation/tasks/execution/runners/worldmembench/runtime/
+
+WorldFoundry retains the official sampling, revisit, alignment, aggregation,
+VLM judging and result protocols. CLIP, LAION aesthetic heads and DINO model
+loading use shared WorldFoundry components. Human and object masked DINO
+features share one implementation. Model weights are distributed separately.
+
+MIT License
+
+Copyright (c) 2026 WorldMemBench
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

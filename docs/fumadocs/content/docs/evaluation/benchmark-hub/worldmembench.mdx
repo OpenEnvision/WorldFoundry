@@ -1,0 +1,104 @@
+---
+title: WorldMemBench
+description: In-tree visual-memory and camera-control evaluation with shared model components.
+---
+
+<BenchmarkPageSections id="worldmembench" locale="en" />
+
+## Scope
+
+[WorldMemBench](https://github.com/ZJU-REAL/WorldMemBench) evaluates human,
+object, environment and dynamic memory, camera control, and video quality.
+WorldFoundry runs all twelve official metric protocols in tree, adapted from
+revision `1b79840143a98e017891e893b5d3ef75b93078a3` under MIT. An upstream
+WorldMemBench checkout or Python package is not required.
+
+| Metric ID | Official score field | Direction |
+| --- | --- | --- |
+| `imaging_quality` | `score` | Higher |
+| `aesthetic_quality` | `score` | Higher |
+| `human_identity` | `score` | Higher |
+| `human_appearance` | `score` | Higher |
+| `object_geometry` | `score` | Higher |
+| `object_appearance` | `score` | Higher |
+| `environment_visible_memory` | `score` | Higher |
+| `environment_depth_fidelity` | `depth_spearman` | Higher |
+| `environment_scene_reconstruction` | `reconstruction_score` | Higher |
+| `dynamic_memory` | `score` | Higher |
+| `camera_rotation` | `camera_rotation_rpe_path` | Lower |
+| `camera_translation` | `camera_translation_rpe` | Lower |
+
+Scores retain their official units, including negative depth correlations and
+unbounded camera errors. There is no cross-metric average or composite score.
+
+## Shared components and protocol
+
+OpenAI CLIP, LAION aesthetic heads and DINO checkpoint loading use canonical
+WorldFoundry components. Human and object appearance share one masked DINOv2
+extractor. Within a run, identical DINO checkpoint/device pairs share the model;
+preprocessing and batch-size state remain protocol-specific.
+WorldScore and MemoBench use the shared LAION MLP; MIND, WBench and
+WorldArena use the shared linear head. These heads are not interchangeable.
+WorldScore and 4DWorldBench share their 512-square IQA preprocessing and base
+implementation; that transform is not applied to WorldMemBench.
+
+WorldMemBench retains MUSIQ-SPAQ, its aspect-preserving OpenCV resize, stride-4
+quality sampling, score normalization, and equal-weight video aggregation.
+Revisit segmentation, frozen target association, masked crops, camera alignment,
+scene reconstruction and Dynamic Memory's event-gated VLM checklist retain
+the official protocols.
+
+## Evaluate generated outputs
+
+Use the official `model/category/trajectory/case/video.mp4` layout or an official
+JSONL manifest. Keep annotations, reference images, trajectory files and target
+poses with each case. The dataset is
+[`rescuerz/WorldMemBench`](https://huggingface.co/datasets/rescuerz/WorldMemBench).
+
+Install the selected metric dependencies into the prepared GPU environment;
+`worldfoundry/data/benchmarks/requirements/worldmembench.txt` lists the complete
+set without replacing its Torch/CUDA installation. Stage the official
+checkpoints explicitly. `--weights-dir` accepts the upstream metric asset
+layout; YAML checkpoint overrides can point to already staged shared assets.
+
+```bash
+python -m worldfoundry.evaluation.tasks.execution.runners.worldmembench.run_worldmembench_official_runner \
+  --run-official --input-path <manifest.jsonl> \
+  --weights-dir <metric-assets> --config <worldmembench.yaml> \
+  --output-dir <fresh-out> --json
+```
+
+Repeat `--metric` to select metrics. `--gpus 0,1` shards videos across visible
+GPUs. `--expected-revisits 1|2|3` selects the official fixed revisit protocol;
+otherwise manifest values or official return detection apply.
+
+DA3-Streaming and ViPE preparation reuse existing `da3/results.npz`,
+`da3/scene_geometry.npz` and `vipe/results.npz` artifacts. To generate missing
+artifacts, configure `da3.source`, `da3.dinov2_source` and `vipe.source` for the
+official model runtimes, with optional `python` and `weights` overrides in each
+section. DA3-Streaming is not replaced with single-batch DA3, nor ViPE's default
+pipeline with WorldFoundry's reduced pose-only profile. Dynamic Memory requires
+the official VLM configuration; API keys stay in its configured environment
+variable, not CLI arguments.
+
+## Import official results
+
+```bash
+worldfoundry-eval zoo benchmark-run --benchmark-id worldmembench \
+  --mode official-validation --official-results-path <official-eval-output> \
+  --result-model-id <model-id> --output-dir <out> --json
+```
+
+Accepts an evaluation output root, its `metrics/` directory, or a metric's
+`summary.json`. Multiple model groups require explicit selection. Summary
+coverage, group breakdowns and adjacent `cases.jsonl` records are retained in
+`scorecard.json`, `raw_metric_table.jsonl` and `per_sample_scores.jsonl`.
+
+## Limitations
+
+GPU/checkpoint and complete-dataset replay remain pending; in-tree execution
+and weight-free tests do not establish full-suite or leaderboard validity.
+DA3-Streaming and full-profile ViPE inference require their configured model
+runtimes unless artifacts are already available. `model_failure` retains its
+official scored result; `not_applicable` is not zero-filled. `eval_failed` and
+`data_invalid` retain coverage and cause a nonzero exit, even with partial scores.

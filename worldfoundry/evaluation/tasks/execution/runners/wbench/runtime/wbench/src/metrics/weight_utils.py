@@ -13,7 +13,7 @@ _FALLBACK_WEIGHTS_DIR = Path(_LEGACY_WEIGHTS_DIR or _PROJECT_ROOT / "weights")
 
 _DIR_ASSET_BY_SUBDIR = {
     "clip": "wbench_clip_vit_b32_checkpoint",
-    "pyiqa": "wbench_musiq_spaq_checkpoint",
+    "pyiqa": "wbench_musiq_koniq_checkpoint",
 }
 
 _LEGACY_ASSET_RELATIVE_PATHS = {
@@ -23,9 +23,9 @@ _LEGACY_ASSET_RELATIVE_PATHS = {
         "aesthetic/sa_0_4_vit_l_14_linear.pth",
         "aesthetic_model/emb_reader/sa_0_4_vit_l_14_linear.pth",
     ),
-    "wbench_musiq_spaq_checkpoint": (
-        "pyiqa/musiq_spaq_ckpt-358bb6af.pth",
-        "pyiqa_model/musiq_spaq_ckpt-358bb6af.pth",
+    "wbench_musiq_koniq_checkpoint": (
+        "pyiqa/musiq_koniq_ckpt-e95806b9.pth",
+        "pyiqa_model/musiq_koniq_ckpt-e95806b9.pth",
     ),
     "wbench_clip_vit_b16_model_dir": (
         "clip-vit-base-patch16",

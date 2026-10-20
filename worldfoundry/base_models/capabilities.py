@@ -15,7 +15,9 @@ from typing import Any
 
 from worldfoundry.core.io.paths import worldfoundry_path_tokens
 
-REPO_ROOT = Path(os.environ.get("WORLDFOUNDRY_REPO_ROOT") or worldfoundry_path_tokens()["WORLDFOUNDRY_REPO_ROOT"]).expanduser()
+REPO_ROOT = Path(
+    os.environ.get("WORLDFOUNDRY_REPO_ROOT") or worldfoundry_path_tokens()["WORLDFOUNDRY_REPO_ROOT"]
+).expanduser()
 
 
 def _path_tokens(env: Mapping[str, str] | None = None) -> dict[str, str]:
@@ -44,8 +46,7 @@ def _path_tokens(env: Mapping[str, str] | None = None) -> dict[str, str]:
         ).expanduser()
     )
     worldscore_asset_dir = Path(
-        environ.get("WORLDFOUNDRY_WORLDSCORE_ASSET_DIR")
-        or cache_root / "assets" / "worldscore_official"
+        environ.get("WORLDFOUNDRY_WORLDSCORE_ASSET_DIR") or cache_root / "assets" / "worldscore_official"
     ).expanduser()
     return {
         "WORLDFOUNDRY_REPO_ROOT": repo_root,
@@ -60,8 +61,10 @@ def _path_tokens(env: Mapping[str, str] | None = None) -> dict[str, str]:
         "WORLDFOUNDRY_MODEL_DIR": core_tokens["WORLDFOUNDRY_MODEL_DIR"],
         "WORLDFOUNDRY_WORLDSCORE_ASSET_DIR": str(worldscore_asset_dir),
         "WORLDFOUNDRY_WORLDSCORE_DATASET_DIR": str(
-            Path(environ.get("WORLDFOUNDRY_WORLDSCORE_DATASET_DIR") or worldscore_asset_dir / "data" / "WorldScore-Dataset")
-            .expanduser()
+            Path(
+                environ.get("WORLDFOUNDRY_WORLDSCORE_DATASET_DIR")
+                or worldscore_asset_dir / "data" / "WorldScore-Dataset"
+            ).expanduser()
         ),
         "WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR": str(
             Path(
@@ -557,11 +560,7 @@ class BaseModelCapability:
             return {}
         if self.install_packages and len(self.install_packages) == len(self.package_imports):
             pairs = zip(self.package_imports, self.install_packages)
-            return {
-                import_name: package
-                for import_name, package in pairs
-                if import_name not in non_pip and package
-            }
+            return {import_name: package for import_name, package in pairs if import_name not in non_pip and package}
         pip_imports = [name for name in self.package_imports if name not in non_pip]
         install_packages = self.install_packages or tuple(pip_imports)
         return {
@@ -928,7 +927,17 @@ BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
         family="depth",
         canonical_owner="worldfoundry.base_models.three_dimensions.depth.depth_anything.depth_anything_v3",
         canonical_path="worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v3",
-        package_imports=("torch", "torchvision", "cv2", "numpy", "PIL", "omegaconf", "einops", "huggingface_hub", "safetensors"),
+        package_imports=(
+            "torch",
+            "torchvision",
+            "cv2",
+            "numpy",
+            "PIL",
+            "omegaconf",
+            "einops",
+            "huggingface_hub",
+            "safetensors",
+        ),
         install_packages=(
             "torch",
             "torchvision",
@@ -1300,8 +1309,24 @@ BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
         family="depth",
         canonical_owner="worldfoundry.base_models.three_dimensions.depth.unidepth",
         canonical_path="worldfoundry/base_models/three_dimensions/depth/unidepth",
-        package_imports=("torch", "torchvision", "numpy", "einops", "huggingface_hub", "safetensors", "xformers.components.attention"),
-        install_packages=("torch", "torchvision", "numpy", "einops", "huggingface-hub", "safetensors", "xformers==0.0.28.post3"),
+        package_imports=(
+            "torch",
+            "torchvision",
+            "numpy",
+            "einops",
+            "huggingface_hub",
+            "safetensors",
+            "xformers.components.attention",
+        ),
+        install_packages=(
+            "torch",
+            "torchvision",
+            "numpy",
+            "einops",
+            "huggingface-hub",
+            "safetensors",
+            "xformers==0.0.28.post3",
+        ),
         asset_env=("WORLDFOUNDRY_UNIDEPTH_V2_VITL14_MODEL_DIR",),
         assets=(
             BaseModelAsset(
@@ -1548,9 +1573,7 @@ BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
                 role="checkpoint",
                 env=("WORLDFOUNDRY_DEAOT_R50_CKPT",),
                 local_path="${WORLDFOUNDRY_CKPT_DIR}/R50_DeAOTL_PRE_YTB_DAV.pth",
-                alternate_paths=(
-                    "${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/R50_DeAOTL_PRE_YTB_DAV.pth",
-                ),
+                alternate_paths=("${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/R50_DeAOTL_PRE_YTB_DAV.pth",),
                 min_size_bytes=150_000_000,
                 note="DeAOT-L R50 checkpoint used by Segment-and-Track-Anything object attribute metrics.",
             ),
@@ -1618,7 +1641,16 @@ BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
         canonical_owner="worldfoundry.base_models.perception_core.frame_interpolation.vfimamba",
         canonical_path="worldfoundry/base_models/perception_core/frame_interpolation/vfimamba",
         package_imports=("torch", "cv2", "numpy", "timm", "einops", "mamba_ssm", "huggingface_hub", "transformers"),
-        install_packages=("torch", "opencv-python", "numpy", "timm", "einops", "mamba-ssm", "huggingface-hub", "transformers"),
+        install_packages=(
+            "torch",
+            "opencv-python",
+            "numpy",
+            "timm",
+            "einops",
+            "mamba-ssm",
+            "huggingface-hub",
+            "transformers",
+        ),
         asset_env=("WORLDFOUNDRY_VFIMAMBA_CKPT", "WORLDFOUNDRY_VFIMAMBA_S_CKPT"),
         assets=(
             BaseModelAsset(
@@ -1742,17 +1774,17 @@ BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
                 download_command_template=(
                     "RAFT_CKPT=${WORLDFOUNDRY_RAFT_THINGS_CKPT:-${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/models/raft-things.pth}; "
                     "RAFT_ZIP=${WORLDFOUNDRY_RAFT_MODELS_ZIP:-${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}/models.zip}; "
-                    "mkdir -p \"$(dirname \"$RAFT_CKPT\")\" \"$(dirname \"$RAFT_ZIP\")\"; "
-                    "if [ ! -f \"$RAFT_CKPT\" ]; then "
-                    "curl -L --fail --retry 5 --retry-delay 2 https://dl.dropboxusercontent.com/s/4j4z58wuv8o0mfz/models.zip -o \"$RAFT_ZIP\" "
+                    'mkdir -p "$(dirname "$RAFT_CKPT")" "$(dirname "$RAFT_ZIP")"; '
+                    'if [ ! -f "$RAFT_CKPT" ]; then '
+                    'curl -L --fail --retry 5 --retry-delay 2 https://dl.dropboxusercontent.com/s/4j4z58wuv8o0mfz/models.zip -o "$RAFT_ZIP" '
                     "&& python -c 'import pathlib, sys, zipfile; "
-                    "member=\"models/raft-things.pth\"; "
+                    'member="models/raft-things.pth"; '
                     "archive=zipfile.ZipFile(sys.argv[1]); "
                     "info=archive.getinfo(member); "
                     "target=pathlib.Path(sys.argv[2]); "
                     "target.parent.mkdir(parents=True, exist_ok=True); "
                     "target.write_bytes(archive.read(info)); "
-                    "print(target)' \"$RAFT_ZIP\" \"$RAFT_CKPT\"; "
+                    'print(target)\' "$RAFT_ZIP" "$RAFT_CKPT"; '
                     "fi"
                 ),
                 min_size_bytes=20_000_000,
@@ -1803,7 +1835,7 @@ BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
         min_file_count=10,
         download_command_template=(
             "COCO_ROOT=${WORLDFOUNDRY_COCO2017_ROOT:-${WORLDFOUNDRY_DATA_DIR}/perception/coco2017}; "
-            "mkdir -p \"$COCO_ROOT\" && cd \"$COCO_ROOT\"; "
+            'mkdir -p "$COCO_ROOT" && cd "$COCO_ROOT"; '
             "if [ ! -d val2017 ]; then "
             "curl -L --fail --retry 5 --retry-delay 2 http://images.cocodataset.org/zips/val2017.zip -o val2017.zip "
             "&& python -m zipfile -e val2017.zip .; "
@@ -1828,12 +1860,12 @@ BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
         min_file_count=20,
         download_command_template=(
             "DAVIS_ROOT=${WORLDFOUNDRY_DAVIS2017_ROOT:-${WORLDFOUNDRY_DATA_DIR}/perception/davis2017/DAVIS}; "
-            "DAVIS_PARENT=$(dirname \"$DAVIS_ROOT\"); "
-            "mkdir -p \"$DAVIS_PARENT\"; "
-            "if [ ! -d \"$DAVIS_ROOT/JPEGImages/480p\" ]; then "
+            'DAVIS_PARENT=$(dirname "$DAVIS_ROOT"); '
+            'mkdir -p "$DAVIS_PARENT"; '
+            'if [ ! -d "$DAVIS_ROOT/JPEGImages/480p" ]; then '
             "curl -L --fail --retry 5 --retry-delay 2 https://data.vision.ee.ethz.ch/csergi/share/davis/DAVIS-2017-trainval-480p.zip "
-            "-o \"$DAVIS_PARENT/DAVIS-2017-trainval-480p.zip\" "
-            "&& python -m zipfile -e \"$DAVIS_PARENT/DAVIS-2017-trainval-480p.zip\" \"$DAVIS_PARENT\"; "
+            '-o "$DAVIS_PARENT/DAVIS-2017-trainval-480p.zip" '
+            '&& python -m zipfile -e "$DAVIS_PARENT/DAVIS-2017-trainval-480p.zip" "$DAVIS_PARENT"; '
             "fi"
         ),
         note="DAVIS 2017 trainval 480p bundle for video object segmentation and tracking metric validation.",
@@ -1851,12 +1883,12 @@ BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
         min_file_count=10,
         download_command_template=(
             "TUM_ROOT=${WORLDFOUNDRY_TUM_RGBD_SLAM_SAMPLE_ROOT:-${WORLDFOUNDRY_DATA_DIR}/perception/tum_rgbd/rgbd_dataset_freiburg1_desk}; "
-            "TUM_PARENT=$(dirname \"$TUM_ROOT\"); "
-            "mkdir -p \"$TUM_PARENT\"; "
-            "if [ ! -f \"$TUM_ROOT/rgb.txt\" ]; then "
+            'TUM_PARENT=$(dirname "$TUM_ROOT"); '
+            'mkdir -p "$TUM_PARENT"; '
+            'if [ ! -f "$TUM_ROOT/rgb.txt" ]; then '
             "curl -L --fail --retry 5 --retry-delay 2 https://vision.in.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_desk.tgz "
-            "-o \"$TUM_PARENT/rgbd_dataset_freiburg1_desk.tgz\" "
-            "&& tar -xzf \"$TUM_PARENT/rgbd_dataset_freiburg1_desk.tgz\" -C \"$TUM_PARENT\"; "
+            '-o "$TUM_PARENT/rgbd_dataset_freiburg1_desk.tgz" '
+            '&& tar -xzf "$TUM_PARENT/rgbd_dataset_freiburg1_desk.tgz" -C "$TUM_PARENT"; '
             "fi"
         ),
         note="Small official TUM RGB-D Freiburg1 desk sequence for SLAM/depth validation and trajectory sanity checks.",
@@ -1905,9 +1937,7 @@ BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
                 role="metric_checkpoint_bundle",
                 env=("WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR",),
                 local_path="${WORLDFOUNDRY_WORLDSCORE_ASSET_CHECKPOINT_DIR}",
-                alternate_paths=(
-                    "${WORLDFOUNDRY_WORLDSCORE_ASSET_DIR}/metrics/checkpoints",
-                ),
+                alternate_paths=("${WORLDFOUNDRY_WORLDSCORE_ASSET_DIR}/metrics/checkpoints",),
                 min_file_count=8,
                 note="WorldScore metric checkpoint bundle containing DROID, SAM, SAM2, RAFT, SEA-RAFT, and quality checkpoints.",
             ),
@@ -1981,9 +2011,7 @@ BASE_MODEL_CAPABILITIES: dict[str, BaseModelCapability] = {
                 role="benchmark_dataset",
                 env=("WORLDFOUNDRY_VIDEOSCORE_BENCH_DATASET_ROOT",),
                 local_path="${WORLDFOUNDRY_HFD_DATASET_ROOT}/TIGER-Lab__VideoScore-Bench",
-                alternate_paths=(
-                    "${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/TIGER-Lab__VideoScore-Bench",
-                ),
+                alternate_paths=("${WORLDFOUNDRY_WORKSPACE_ROOT}/data/hfd_datasets/TIGER-Lab__VideoScore-Bench",),
                 hf_repo_id="TIGER-Lab/VideoScore-Bench",
                 hf_repo_type="dataset",
                 min_file_count=4,
@@ -2269,20 +2297,19 @@ BASE_MODEL_CAPABILITIES.update(
                     note="LAION aesthetic predictor linear head used by WBench aesthetic quality.",
                 ),
                 BaseModelAsset(
-                    id="wbench_musiq_spaq_checkpoint",
+                    id="wbench_musiq_koniq_checkpoint",
                     kind="file",
                     role="checkpoint",
-                    env=("WORLDFOUNDRY_WBENCH_MUSIQ_SPAQ_CKPT",),
-                    local_path="${WORLDFOUNDRY_CACHE_DIR}/models/wbench/pyiqa_model/musiq_spaq_ckpt-358bb6af.pth",
+                    env=("WORLDFOUNDRY_WBENCH_MUSIQ_KONIQ_CKPT",),
+                    local_path="${WORLDFOUNDRY_CACHE_DIR}/models/wbench/pyiqa_model/musiq_koniq_ckpt-e95806b9.pth",
                     alternate_paths=(
-                        "${WORLDFOUNDRY_CKPT_DIR}/WBench/pyiqa_model/musiq_spaq_ckpt-358bb6af.pth",
-                        "${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/pyiqa/musiq_spaq_ckpt-358bb6af.pth",
-                        "${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/pyiqa_model/musiq_spaq_ckpt-358bb6af.pth",
-                        "${WORLDFOUNDRY_CKPT_DIR}/VBench/pyiqa_model/musiq_spaq_ckpt-358bb6af.pth",
+                        "${WORLDFOUNDRY_CKPT_DIR}/WBench/pyiqa_model/musiq_koniq_ckpt-e95806b9.pth",
+                        "${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/pyiqa/musiq_koniq_ckpt-e95806b9.pth",
+                        "${WORLDFOUNDRY_CKPT_DIR}/WBench/weights/pyiqa_model/musiq_koniq_ckpt-e95806b9.pth",
                     ),
-                    download_url="https://github.com/chaofengc/IQA-PyTorch/releases/download/v0.1-weights/musiq_spaq_ckpt-358bb6af.pth",
+                    download_url="https://github.com/chaofengc/IQA-PyTorch/releases/download/v0.1-weights/musiq_koniq_ckpt-e95806b9.pth",
                     min_size_bytes=100_000_000,
-                    note="MUSIQ-SPAQ checkpoint used by WBench imaging quality.",
+                    note="MUSIQ-KonIQ checkpoint selected by the official WBench pyiqa.create_metric('musiq') call.",
                 ),
                 BaseModelAsset(
                     id="wbench_clip_vit_b16_model_dir",
@@ -2605,9 +2632,7 @@ BASE_MODEL_CAPABILITIES.update(
                     min_file_count=8,
                     required_files=("constants.py", "models/model.py", "models/vqascore_models/__init__.py"),
                     required_paths=("models",),
-                    note=(
-                        "In-tree VQAScore model backend shared by evaluation scorers."
-                    ),
+                    note=("In-tree VQAScore model backend shared by evaluation scorers."),
                 ),
             ),
             gpu_required=False,
@@ -2642,9 +2667,7 @@ BASE_MODEL_CAPABILITIES.update(
                     role="metric_tokenizer_dir",
                     env=("WORLDFOUNDRY_T2V_METRICS_FLAN_T5_XXL_DIR",),
                     local_path="${WORLDFOUNDRY_HFD_ROOT}/google--flan-t5-xxl",
-                    alternate_paths=(
-                        "${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/google--flan-t5-xxl",
-                    ),
+                    alternate_paths=("${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/google--flan-t5-xxl",),
                     hf_repo_id="google/flan-t5-xxl",
                     min_file_count=2,
                     required_files=("config.json", "tokenizer_config.json"),
@@ -2667,9 +2690,7 @@ BASE_MODEL_CAPABILITIES.update(
                     role="metric_model_dir",
                     env=("WORLDFOUNDRY_T2V_METRICS_BLIP2_ITM_DIR",),
                     local_path="${WORLDFOUNDRY_HFD_ROOT}/Salesforce--blip2-opt-2.7b",
-                    alternate_paths=(
-                        "${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/Salesforce--blip2-opt-2.7b",
-                    ),
+                    alternate_paths=("${WORLDFOUNDRY_WORKSPACE_ROOT}/ckpt/hfd/Salesforce--blip2-opt-2.7b",),
                     hf_repo_id="Salesforce/blip2-opt-2.7b",
                     min_file_count=2,
                     required_files=("config.json",),
@@ -2749,9 +2770,7 @@ BASE_MODEL_CAPABILITIES.update(
                     role="metric_model_file",
                     env=("WORLDFOUNDRY_JEDI_VITH16_CHECKPOINT",),
                     local_path="${WORLDFOUNDRY_JEDI_MODEL_DIR}/vith16.pth.tar",
-                    alternate_paths=(
-                        "${WORLDFOUNDRY_HFD_ROOT}/jedi-vjepa/vith16.pth.tar",
-                    ),
+                    alternate_paths=("${WORLDFOUNDRY_HFD_ROOT}/jedi-vjepa/vith16.pth.tar",),
                     download_url="https://dl.fbaipublicfiles.com/jepa/vith16/vith16.pth.tar",
                     required_files=("vith16.pth.tar",),
                     note="V-JEPA ViT-H/16 encoder checkpoint used by VideoJEDi feature extraction.",
@@ -2773,9 +2792,7 @@ BASE_MODEL_CAPABILITIES.update(
                     role="metric_model_file",
                     env=("WORLDFOUNDRY_JEDI_SSV2_PROBE_CHECKPOINT",),
                     local_path="${WORLDFOUNDRY_JEDI_MODEL_DIR}/ssv2-probe.pth.tar",
-                    alternate_paths=(
-                        "${WORLDFOUNDRY_HFD_ROOT}/jedi-vjepa/ssv2-probe.pth.tar",
-                    ),
+                    alternate_paths=("${WORLDFOUNDRY_HFD_ROOT}/jedi-vjepa/ssv2-probe.pth.tar",),
                     download_url="https://dl.fbaipublicfiles.com/jepa/vith16/ssv2-probe.pth.tar",
                     required_files=("ssv2-probe.pth.tar",),
                     note="Fine-tuned SSV2 attentive probe used by VideoJEDi feature aggregation.",
@@ -3282,7 +3299,9 @@ BASE_MODEL_CAPABILITIES.update(
                     role="checkpoint",
                     env=("WORLDFOUNDRY_VBENCH_UMT_CKPT",),
                     local_path="${WORLDFOUNDRY_CACHE_DIR}/models/vbench/umt_model/l16_ptk710_ftk710_ftk400_f16_res224.pth",
-                    alternate_paths=("${WORLDFOUNDRY_CKPT_DIR}/VBench/umt_model/l16_ptk710_ftk710_ftk400_f16_res224.pth",),
+                    alternate_paths=(
+                        "${WORLDFOUNDRY_CKPT_DIR}/VBench/umt_model/l16_ptk710_ftk710_ftk400_f16_res224.pth",
+                    ),
                     hf_repo_id="OpenGVLab/VBench_Used_Models",
                     hf_filename="l16_ptk710_ftk710_ftk400_f16_res224.pth",
                     min_size_bytes=200_000_000,
@@ -3382,7 +3401,9 @@ BASE_MODEL_CAPABILITIES.update(
                     role="checkpoint",
                     env=("WORLDFOUNDRY_VBENCH_AESTHETIC_LINEAR_CKPT",),
                     local_path="${WORLDFOUNDRY_CACHE_DIR}/models/vbench/aesthetic_model/emb_reader/sa_0_4_vit_l_14_linear.pth",
-                    alternate_paths=("${WORLDFOUNDRY_CKPT_DIR}/VBench/aesthetic_model/emb_reader/sa_0_4_vit_l_14_linear.pth",),
+                    alternate_paths=(
+                        "${WORLDFOUNDRY_CKPT_DIR}/VBench/aesthetic_model/emb_reader/sa_0_4_vit_l_14_linear.pth",
+                    ),
                     download_url="https://github.com/LAION-AI/aesthetic-predictor/raw/main/sa_0_4_vit_l_14_linear.pth",
                     min_size_bytes=1_000,
                     note="LAION aesthetic predictor linear head used by VBench aesthetic quality.",
@@ -3404,7 +3425,9 @@ BASE_MODEL_CAPABILITIES.update(
                     role="checkpoint",
                     env=("WORLDFOUNDRY_VBENCH_RETINAFACE_CKPT",),
                     local_path="${WORLDFOUNDRY_CACHE_DIR}/models/vbench/retina_face_model/retinaface_resnet50_2020-07-20-f168fae3c.zip",
-                    alternate_paths=("${WORLDFOUNDRY_CKPT_DIR}/VBench/retina_face_model/retinaface_resnet50_2020-07-20-f168fae3c.zip",),
+                    alternate_paths=(
+                        "${WORLDFOUNDRY_CKPT_DIR}/VBench/retina_face_model/retinaface_resnet50_2020-07-20-f168fae3c.zip",
+                    ),
                     download_url="https://github.com/ternaus/retinaface/releases/download/0.01/retinaface_resnet50_2020-07-20-f168fae3c.zip",
                     min_size_bytes=100_000_000,
                     required=False,
@@ -3490,7 +3513,9 @@ BASE_MODEL_CAPABILITIES.update(
                     role="checkpoint",
                     env=("WORLDFOUNDRY_VBENCH2_YOLO_WORLD_CKPT",),
                     local_path="${WORLDFOUNDRY_CACHE_DIR}/models/vbench2/YOLO-World/yolo_world_v2_xl_obj365v1_goldg_cc3mlite_pretrain-5daf1395.pth",
-                    alternate_paths=("${WORLDFOUNDRY_CKPT_DIR}/VBench2/YOLO-World/yolo_world_v2_xl_obj365v1_goldg_cc3mlite_pretrain-5daf1395.pth",),
+                    alternate_paths=(
+                        "${WORLDFOUNDRY_CKPT_DIR}/VBench2/YOLO-World/yolo_world_v2_xl_obj365v1_goldg_cc3mlite_pretrain-5daf1395.pth",
+                    ),
                     required=False,
                     manual_action=(
                         "Stage the official VBench-2.0 YOLO-World checkpoint under $WORLDFOUNDRY_VBENCH2_CACHE_DIR "
@@ -4254,10 +4279,7 @@ def base_model_inventory() -> dict[str, Any]:
         "stack_count": len(BASE_MODEL_STACKS),
         "asset_count": asset_count,
         "required_asset_count": sum(
-            1
-            for capability in BASE_MODEL_CAPABILITIES.values()
-            for asset in capability.assets
-            if asset.required
+            1 for capability in BASE_MODEL_CAPABILITIES.values() for asset in capability.assets if asset.required
         ),
         "capabilities_by_family": _capabilities_by_family(),
         "stacks_by_family": _stacks_by_family(),
@@ -4268,13 +4290,9 @@ def base_model_inventory() -> dict[str, Any]:
             for benchmark_id, capability_ids in sorted(BENCHMARK_DATA_ASSET_CAPABILITIES.items())
         },
         "capabilities": [
-            BASE_MODEL_CAPABILITIES[capability_id].to_dict()
-            for capability_id in sorted(BASE_MODEL_CAPABILITIES)
+            BASE_MODEL_CAPABILITIES[capability_id].to_dict() for capability_id in sorted(BASE_MODEL_CAPABILITIES)
         ],
-        "stacks": [
-            BASE_MODEL_STACKS[stack_id].to_dict()
-            for stack_id in sorted(BASE_MODEL_STACKS)
-        ],
+        "stacks": [BASE_MODEL_STACKS[stack_id].to_dict() for stack_id in sorted(BASE_MODEL_STACKS)],
     }
 
 
@@ -4607,33 +4625,15 @@ def base_model_materialization_plan(
         check_base_model_capability(capability_id, env=env, python_executable=python_executable)
         for capability_id in selected_ids
     ]
-    download_commands = [
-        command
-        for check in checks
-        for command in check["repair_hints"]["download_commands"]
-    ]
+    download_commands = [command for check in checks for command in check["repair_hints"]["download_commands"]]
     download_command_argvs = [
-        command
-        for check in checks
-        for command in check["repair_hints"]["download_command_argvs"]
+        command for check in checks for command in check["repair_hints"]["download_command_argvs"]
     ]
-    export_commands = [
-        command
-        for check in checks
-        for command in check["repair_hints"]["export_commands"]
-    ]
+    export_commands = [command for check in checks for command in check["repair_hints"]["export_commands"]]
     pip_install_packages = sorted(
-        {
-            package
-            for check in checks
-            for package in check["repair_hints"]["pip_install_packages"]
-        }
+        {package for check in checks for package in check["repair_hints"]["pip_install_packages"]}
     )
-    manual_actions = [
-        action
-        for check in checks
-        for action in check["repair_hints"]["manual_actions"]
-    ]
+    manual_actions = [action for check in checks for action in check["repair_hints"]["manual_actions"]]
     return {
         "schema_version": "worldfoundry-base-model-assets-v1",
         "ok": all(check["ok"] for check in checks),

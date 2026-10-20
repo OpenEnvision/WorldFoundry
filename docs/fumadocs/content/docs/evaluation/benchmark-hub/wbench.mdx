@@ -17,6 +17,12 @@ WorldFoundry **checks in the metric runtime** (HPSv3, TransNetV2, PAVRM, DreamSi
 
 <BenchmarkPageSections id="wbench" locale="en" />
 
+Imaging quality uses the official PyIQA `musiq` variant (KonIQ), with its
+checkpoint resolved explicitly through `wbench_quality_metric_assets`.
+`WORLDFOUNDRY_WBENCH_MUSIQ_KONIQ_CKPT` can select an already staged checkpoint.
+Its preprocessing and per-frame normalization retain the official protocol;
+WorldMemBench's MUSIQ-SPAQ is a different metric backend profile.
+
 ## How to run
 
 ```bash

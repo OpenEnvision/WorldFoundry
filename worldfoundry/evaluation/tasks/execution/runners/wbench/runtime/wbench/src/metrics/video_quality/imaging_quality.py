@@ -1,10 +1,11 @@
-"""Imaging quality metric — MUSIQ (via pyiqa)."""
+"""Imaging quality metric — the official MUSIQ-KonIQ variant via PyIQA."""
+
 import numpy as np
 import torch
 import torchvision.transforms as T
 
 from ..base import BaseMetric
-from ..weight_utils import setup_torch_hub_dir, get_weights_dir
+from ..weight_utils import wbench_asset_path
 
 
 def _vbench_transform(img_tensor, max_edge=512):
@@ -20,13 +21,13 @@ def _vbench_transform(img_tensor, max_edge=512):
 class ImagingQualityMetric(BaseMetric):
     def __init__(self, device="cuda"):
         super().__init__(device)
-        setup_torch_hub_dir()
-        import os
         import pyiqa
-        import pyiqa.utils.download_util as _dl
-        # Keep pyiqa aligned with the WBench MUSIQ asset location.
-        _dl.DEFAULT_CACHE_DIR = get_weights_dir("pyiqa")
-        self.model = pyiqa.create_metric('musiq', device=self.device)
+
+        self.model = pyiqa.create_metric(
+            "musiq",
+            device=self.device,
+            pretrained_model_path=str(wbench_asset_path("wbench_musiq_koniq_checkpoint")),
+        )
 
     @property
     def name(self):
