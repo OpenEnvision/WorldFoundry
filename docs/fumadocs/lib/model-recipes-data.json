@@ -111484,13 +111484,13 @@
           "Camera paths use row-major OpenCV world-to-camera matrices; named upstream viewer matrices use column-major 16-vectors.",
           "Exported scene depth equals Marigold scene depth times 1000; camera translations use these exported units.",
           "Guided depth uses the final eight Euler steps and known scene/ground anchors; latent noise and U-Net input remain unscaled as in the pinned source.",
-          "gsplat RGB rendering, opacity-crossing median depth, and 0.8 L1 plus 0.2 DSSIM fitting are native implementations; full official rasterizer and quality parity remain pending.",
+          "gsplat supplies differentiable projections and sorted tile lists; native Triton RGB/alpha and median depth share alpha cap 0.99 and retain the surface crossing the termination threshold.",
+          "Fitting uses 0.8 L1 plus 0.2 DSSIM. Integration contracts and numerical comparison are separate from scene-quality observations; full official pipeline parity remains pending.",
           "New Gaussians precede the frozen scene at equal depth; only their bounded particle range is fitted and pruned.",
           "Upstream reports 48 GB VRAM. Local component weights and a CUDA-compatible gsplat installation are required.",
           "No separate WonderWorld generator checkpoint is needed. SD2 uses CreativeML Open RAIL++-M; retain all component licensing terms.",
           "Uses the unified WorldFoundry GPU environment and an ABI-compatible gsplat build.",
-          "All inference orchestration is in-tree; no external checkout, PyTorch3D, Flask server, or OpenAI credential is needed.",
-          "Stage the public SD2 Inpainting, Marigold depth/normals, OneFormer ADE20K metadata/weights, and RepViT-SAM weights outside the source tree."
+          "All inference orchestration is in-tree; no external checkout, PyTorch3D, Flask server, or OpenAI credential is needed."
         ]
       },
       "sources": [
@@ -111709,7 +111709,7 @@
         }
       ],
       "notes": [
-        "Native SD2 inpainting and Marigold recipes, canonical OneFormer/RepViT-SAM perception, guided depth, occlusion layers, and gsplat Gaussian reconstruction.",
+        "Native SD2 inpainting and Marigold recipes, canonical OneFormer/RepViT-SAM perception, guided depth, occlusion layers, and Gaussian reconstruction with gsplat projections and native compositing.",
         "Finite offline image/camera-path requests export standard .splat artifacts without an external checkout or upstream server.",
         "Full official FLAGS rasterizer/panorama parity and interactive browser acceptance remain separate validation scopes.",
         "Native standard-runner recipes own SD2/Marigold diffusion; no upstream checkout, Diffusers pipeline, Flask server, or PyTorch3D extension is required.",
@@ -111717,7 +111717,8 @@
         "Camera paths use row-major OpenCV world-to-camera matrices; named upstream viewer matrices use column-major 16-vectors.",
         "Exported scene depth equals Marigold scene depth times 1000; camera translations use these exported units.",
         "Guided depth uses the final eight Euler steps and known scene/ground anchors; latent noise and U-Net input remain unscaled as in the pinned source.",
-        "gsplat RGB rendering, opacity-crossing median depth, and 0.8 L1 plus 0.2 DSSIM fitting are native implementations; full official rasterizer and quality parity remain pending.",
+        "gsplat supplies differentiable projections and sorted tile lists; native Triton RGB/alpha and median depth share alpha cap 0.99 and retain the surface crossing the termination threshold.",
+        "Fitting uses 0.8 L1 plus 0.2 DSSIM. Integration contracts and numerical comparison are separate from scene-quality observations; full official pipeline parity remains pending.",
         "New Gaussians precede the frozen scene at equal depth; only their bounded particle range is fitted and pruned.",
         "Upstream reports 48 GB VRAM. Local component weights and a CUDA-compatible gsplat installation are required.",
         "No separate WonderWorld generator checkpoint is needed. SD2 uses CreativeML Open RAIL++-M; retain all component licensing terms."
@@ -111736,10 +111737,10 @@
           "WonderWorld 从单张图像创建分层高斯世界，并在指定相机视角扩展场景。WorldFoundry 使用原生扩散配方与树内场景重建，导出标准 .splat 场景和视角预览。"
         ],
         "architecture": [
-          "Guided Marigold depth diffusion aligns generated views to existing geometry and a ground plane. RepViT-SAM refines region disparity, OneFormer identifies sky and occluders, SD2 completes hidden/new regions, and normal-oriented Gaussians are reconstructed and fitted with gsplat."
+          "Guided Marigold depth diffusion aligns generated views to existing geometry and a ground plane. RepViT-SAM refines region disparity, OneFormer identifies sky and occluders, SD2 completes hidden/new regions, and normal-oriented Gaussians use gsplat projections and native differentiable RGB/alpha compositing for reconstruction and fitting."
         ],
         "architectureZh": [
-          "引导式 Marigold 深度扩散将新视角对齐已有几何与地面。RepViT-SAM 细化区域视差，OneFormer 识别天空与遮挡物，SD2 补全隐藏和新出现区域，再通过 gsplat 重建并拟合法线定向的高斯。"
+          "引导式 Marigold 深度扩散将新视角对齐已有几何与地面。RepViT-SAM 细化区域视差，OneFormer 识别天空与遮挡物，SD2 补全隐藏和新出现区域，再通过 gsplat 投影与原生可微 RGB/透明度合成重建并拟合法线定向的高斯。"
         ],
         "usageNotes": [
           "Supply an RGB image and local SD2 Inpainting, Marigold depth/normals, OneFormer, and RepViT-SAM assets. Optional camera_path contains OpenCV world-to-camera matrices in exported scene units. Default image size is 512x512; calls own independent scenes while retaining weights."
