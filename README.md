@@ -114,17 +114,15 @@ or [中文](https://openenvision.github.io/WorldFoundry/zh/docs).
 | Use the browser workspace | [Studio](https://openenvision.github.io/WorldFoundry/docs/guides/studio) |
 | Tune inference | [Inference optimization](https://openenvision.github.io/WorldFoundry/docs/guides/inference-optimization) |
 | Score generated outputs | [Evaluation](https://openenvision.github.io/WorldFoundry/docs/evaluation) |
-| Validate changes and understand internals | [Validation](https://openenvision.github.io/WorldFoundry/docs/reference/validation) · [Architecture](https://openenvision.github.io/WorldFoundry/docs/maintainers/architecture) |
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for GPU development setup, coding conventions,
 tests, DCO sign-off, and the PR workflow.
 
-Repository [Agent Skills](skills/index.md) provide opt-in workflows for model and
-benchmark integration, inference optimization, numerical validation, and maintenance.
-
-Use these checks before opening a PR or marking a model/benchmark ready:
+- [Architecture](https://openenvision.github.io/WorldFoundry/docs/maintainers/architecture) — module boundaries and execution flow.
+- [Validation](https://openenvision.github.io/WorldFoundry/docs/reference/validation) — fast checks, CUDA contracts, and real-checkpoint evidence.
+- [Agent Skills](skills/index.md) — model integration, optimization, and maintenance workflows.
 
 Community standards and private vulnerability reporting are covered by the
 [Code of Conduct](CODE_OF_CONDUCT.md) and [Security Policy](SECURITY.md).
@@ -133,11 +131,6 @@ Community standards and private vulnerability reporting are covered by the
 
 If you use WorldFoundry in research, cite this repository and the upstream methods,
 checkpoints, datasets, and benchmarks that your work depends on.
-
-## Community Policies
-
-Contributions follow the [Code of Conduct](CODE_OF_CONDUCT.md). Use the
-[Security Policy](SECURITY.md) for private vulnerability reports.
 
 ## License
 

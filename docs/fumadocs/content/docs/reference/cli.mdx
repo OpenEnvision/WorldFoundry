@@ -67,6 +67,15 @@ Running `worldfoundry-eval` with no arguments prints a short first-run banner. A
 
 **Which command.** Everyday reproducible / model-page commands use `worldfoundry-eval run <id> --pipeline.task-profile …`. Use `python -m worldfoundry.studio.workspace_job infer` only for Workspace visual smoke.
 
+Within one Workspace process, `WORLDFOUNDRY_STUDIO_BATCH_MAX_SIZE` (default `1`)
+and `WORLDFOUNDRY_STUDIO_BATCH_DELAY_MS` (default `5`) configure compatible native
+Wan T2V and 5B TI2V resident-worker batches. Admission requires parallel job
+slots, resident weights and compatible Torch attention; compiled batches use
+regional scope. Configuration takes effect before worker startup and does not
+combine independent CLI processes. See the
+[batch admission, warmup and cancellation contracts](/docs/guides/inference-optimization#studio-resident-queue-batching)
+for precision and input requirements.
+
 Examples below use `worldfoundry-eval` so shell history, job scripts, and bug reports share one spelling.
 
 ## Help at every level
@@ -340,6 +349,16 @@ Audio uses an `input_audio` block with base64 `data` and `format` set to `wav` o
 other audio formats. Text and image blocks retain their content and data URIs.
 Conversion is local and does not call an API provider.
 
+### Job completion and cancellation
+
+Durable command jobs preserve the original termination reason in completion
+receipts and restored status. Timeouts remain `failed` with their timeout error;
+user cancellations remain `cancelled`.
+
+On POSIX, bounded benchmark commands clean up their owned process group before
+returning or propagating an interruption. Timeout payloads record `timed_out`
+and `kill_stuck`; the latter indicates that teardown did not finish.
+
 The parser is the source of truth for flags. Use `worldfoundry-eval <command> [<subcommand>] --help` instead of copying flags from an unrelated model or benchmark recipe.
 
 ## Common workflows
@@ -482,6 +501,28 @@ worldfoundry-eval zoo benchmark-run \
 Benchmark-specific inputs such as data roots, score directories, prompt manifests, judge credentials, and metric subsets live on the corresponding [Benchmark Hub](/docs/evaluation/benchmark-hub) page.
 
 For HarnessEval-W, `--result-model-id` selects a model without changing the official common-case cohort. See [HarnessEval-W](/docs/evaluation/benchmark-hub/harnesseval-w) for Python execution, cached scoring and model prerequisites.
+
+### 6. Replay native Wan execution and request batches
+
+From a checkout with local checkpoints:
+
+```bash
+python -m benchmarks.inference.wan_execution_preparation \
+  --checkpoint /path/to/Wan2.1-T2V-1.3B \
+  --output-dir tmp/wan-execution --request-batching
+```
+
+`--request-batching` adds A/B, B/A, A/B batches to the singleton comparison.
+Select `wan2.1-t2v-1.3b`, `wan2.2-t2v-a14b`, `wan2.2-ti2v-5b` or
+`wan2.2-i2v-a14b` with `--model-id`. Image-conditioned replays require
+`--images IMAGE_A IMAGE_B`.
+
+Dense references are mandatory and existing latent/RGB quality limits remain
+unchanged. Reports include warmup time/memory and matched two-request diagnostic
+throughput comparisons. Require both `complete` and `passed` in `report.json`;
+timing is diagnostic, not an isolated performance result. See
+[Inference optimization](/docs/guides/inference-optimization) for compile,
+Graph, precision and batch compatibility.
 
 ## Benchmark modes
 
