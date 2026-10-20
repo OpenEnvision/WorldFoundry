@@ -1,0 +1,90 @@
+---
+title: WorldMemBench
+description: 视频世界模型记忆评测：官方指标、按模型导入结果及调用上游评测运行时。
+---
+
+WorldMemBench 从人物、物体、环境和动态记忆，以及视频质量与相机跟随能力评测视频世界模型。
+WorldFoundry 提供 **12 项官方指标**的统一入口，支持按模型导入官方结果，或调用官方指标运行时
+评测已生成的视频。模型生成与评测分开执行。
+
+代码：[ZJU-REAL/WorldMemBench](https://github.com/ZJU-REAL/WorldMemBench)（MIT）。
+论文：[WorldMemBench](https://arxiv.org/abs/2610.19063)。
+数据：[rescuerz/WorldMemBench](https://huggingface.co/datasets/rescuerz/WorldMemBench)。
+集成对应上游版本 `1b79840143a98e017891e893b5d3ef75b93078a3`。
+
+<BenchmarkPageSections id="worldmembench" locale="zh" />
+
+## 导入官方结果
+
+结果导入不需要 GPU 或指标权重：
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id worldmembench \
+  --mode official-validation \
+  --official-results-path /path/to/official_eval_output \
+  --output-dir tmp/worldmembench/import \
+  --json
+```
+
+输入可以是官方评测输出根目录、其中的 `metrics` 目录，或单个
+`metrics/<metric>/summary.json`。存在 `cases.jsonl` 时同时导入逐样本结果。
+多模型结果必须通过 runner 显式选择一个模型：
+
+```bash
+python -m worldfoundry.evaluation.tasks.execution.runners.worldmembench.run_worldmembench_official_runner \
+  --official-results-path /path/to/official_eval_output \
+  --model-id model_a \
+  --metrics human_identity,object_geometry,camera_rotation \
+  --output-dir tmp/worldmembench/model_a \
+  --json
+```
+
+输出为 `scorecard.json`、`raw_metric_table.jsonl` 和 `per_sample_scores.jsonl`。
+Scorecard 保留官方分数字段、类别/轨迹分组、样本数与状态，不对不同模型求平均。
+`camera_rotation` 和 `camera_translation` 是误差，**越低越好**。
+所有数值沿用官方单位，包括可为负的深度相关系数和无上界的相机误差；不裁剪、取倒数，
+也不构造跨指标总分。
+
+## 执行官方指标
+
+先按上游的[安装说明](https://github.com/ZJU-REAL/WorldMemBench#installation)
+准备官方代码与所选指标依赖。WorldFoundry 调度使用统一环境；上游需要独立解释器时通过
+`--python` 指定，不替换统一环境中的 Torch/CUDA。
+
+```bash
+python -m worldfoundry.evaluation.tasks.execution.runners.worldmembench.run_worldmembench_official_runner \
+  --run-official \
+  --repo-root /path/to/WorldMemBench \
+  --python /path/to/upstream-env/bin/python \
+  --input-path /path/to/manifest.jsonl \
+  --config /path/to/worldmembench.yaml \
+  --weights-dir /path/to/weights \
+  --metrics imaging_quality,aesthetic_quality \
+  --device cuda:0 \
+  --output-dir tmp/worldmembench/official \
+  --json
+```
+
+`--repo-root` 使用该 checkout 的 `src/worldmembench`；指定解释器已安装
+`worldmembench` 时可省略。输入也可以是单个视频，或官方视频树：
+`<model>/<category>/<trajectory>/<case>/video.mp4`。使用上游 JSONL manifest
+可保留模型 ID、相机协议与逐样本标注。`--expected-revisits 1|2|3` 指定人物/物体的固定重访
+协议；省略时沿用官方 manifest 或自动检测行为。`--gpus 0,1` 将进程分片交给上游，
+代替 `--device`。每次执行使用新的输出目录；官方结果位于 `official/`，标准输出与错误日志
+位于 scorecard 同级。
+
+统一 CLI 也支持通过 `--generated-artifact-dir` 与 `--mode official-run` 评测已有视频。
+运行时路径使用 `WORLDFOUNDRY_WORLDMEMBENCH_ROOT`、
+`WORLDFOUNDRY_WORLDMEMBENCH_PYTHON`、`WORLDFOUNDRY_WORLDMEMBENCH_CONFIG` 和
+`WORLDFOUNDRY_WORLDMEMBENCH_WEIGHTS_DIR` 配置。
+结果导入可使用 `WORLDFOUNDRY_WORLDMEMBENCH_RESULTS_PATH`。
+
+## 限制
+
+官方计算需要所选指标权重、DA3/ViPE 子进程环境，以及 Dynamic Memory 的 VLM 服务。
+后端解释器、权重路径与 VLM 设置放在上游 YAML 中；API 密钥使用上游配置的环境变量。
+本仓库不复制指标实现或权重。GPU/真实权重与完整数据集回放尚待验证，因此 scorecard
+不声明完整评测或排行榜有效性。`model_failure` 保留官方计分结果；`not_applicable`
+不补零。`eval_failed` 或 `data_invalid` 保留覆盖率，且即使存在部分分数，runner
+也返回非零退出码。

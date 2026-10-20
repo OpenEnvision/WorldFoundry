@@ -29,8 +29,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
-from worldfoundry.core.observability.logging_setup import configure_logging, get_logger
 from worldfoundry.core.execution.process import run_logged_subprocess
+from worldfoundry.core.observability.logging_setup import configure_logging, get_logger
 from worldfoundry.evaluation.reporting.scorecard import SCORECARD_SCHEMA_VERSION
 from worldfoundry.evaluation.tasks.catalog.zoo_registry import load_benchmark_zoo_registry
 from worldfoundry.evaluation.tasks.execution.framework.io import (
@@ -48,7 +48,6 @@ from worldfoundry.evaluation.tasks.execution.framework.normalizers import (
 )
 from worldfoundry.evaluation.tasks.execution.framework.result_normalizer import OfficialResultsNormalizer
 from worldfoundry.evaluation.utils import BENCHMARK_ZOO_DIR, REPO_ROOT
-
 
 ExtractMetricsFn = Callable[[Any, Path], dict[str, dict[str, Any]]]
 DiscoverResultsFn = Callable[[Path, Path | None], Path | None]
@@ -69,7 +68,7 @@ class BenchRunnerConfig:
     metric_order: tuple[str, ...]
     metric_specs: dict[str, dict[str, Any]]
     metric_aliases: dict[str, str]
-    average_metric_id: str
+    average_metric_id: str | None
     official_entry: str | None = None
     official_output_globs: tuple[str, ...] = ()
     generated_video_envs: tuple[str, ...] = ("WORLDFOUNDRY_GENERATED_ARTIFACT_DIR",)
@@ -248,9 +247,7 @@ def metric_id_from_key(key: Any, config: BenchRunnerConfig) -> str | None:
     # only trusted when every fuzzy hit agrees on one metric id; ambiguous keys
     # are dropped instead of being attached to whichever alias iterates first.
     fuzzy_hits = {
-        metric_id
-        for alias, metric_id in config.metric_aliases.items()
-        if alias in normalized or normalized in alias
+        metric_id for alias, metric_id in config.metric_aliases.items() if alias in normalized or normalized in alias
     }
     if len(fuzzy_hits) != 1:
         if len(fuzzy_hits) > 1 and (config.benchmark_id, normalized) not in _FUZZY_ALIAS_WARNED:
@@ -291,9 +288,7 @@ def declared_metric_normalizers(benchmark_id: str) -> Mapping[str, str]:
     try:
         entry = load_benchmark_zoo_registry(BENCHMARK_ZOO_DIR).get(benchmark_id)
         declared = {
-            metric.metric_id: str(metric.normalizer)
-            for metric in entry.metrics
-            if getattr(metric, "normalizer", None)
+            metric.metric_id: str(metric.normalizer) for metric in entry.metrics if getattr(metric, "normalizer", None)
         }
     except Exception:  # noqa: BLE001 - uncataloged benchmarks fall back to the legacy heuristic.
         declared = {}
@@ -417,6 +412,8 @@ def catalog_fallback(
 
 
 def compute_average(config: BenchRunnerConfig, extracted: dict[str, dict[str, Any]]) -> None:
+    if config.average_metric_id is None:
+        return
     existing = extracted.get(config.average_metric_id)
     if existing is not None and existing.get("normalized_score") is not None:
         return
@@ -447,9 +444,7 @@ def metric_row(
     config: BenchRunnerConfig | None = None,
 ) -> dict[str, Any]:
     normalized = (
-        normalized_metric_score(config, metric_id, raw_score)
-        if config is not None
-        else normalize_unit_score(raw_score)
+        normalized_metric_score(config, metric_id, raw_score) if config is not None else normalize_unit_score(raw_score)
     )
     return {
         "metric_id": metric_id,
@@ -479,7 +474,7 @@ def merge_metric_id_score_rows(
     for metric_id, values in buckets.items():
         extracted[metric_id] = metric_row(
             metric_id,
-            mean_numeric(values),
+            sum(values) / len(values),
             source=str(results_path),
             sample_count=len(values),
             config=config,
@@ -609,9 +604,7 @@ def build_runner_config_from_contract(
         for metric_id in metric_order
     }
     sample_display_name = (
-        f"sample_results{Path(sample_filename).suffix}"
-        if sample_filename is not None
-        else "sample_results.*"
+        f"sample_results{Path(sample_filename).suffix}" if sample_filename is not None else "sample_results.*"
     )
     return BenchRunnerConfig(
         benchmark_id=benchmark_id,
@@ -831,9 +824,7 @@ def run_official_pipeline(
     if results_path is not None and hooks.prepare_upstream_results is not None:
         results_path = hooks.prepare_upstream_results(config, results_path, args, output_dir)
 
-    extract_fn = hooks.extract_metrics or (
-        lambda payload, path: generic_extract_metrics(payload, config, str(path))
-    )
+    extract_fn = hooks.extract_metrics or (lambda payload, path: generic_extract_metrics(payload, config, str(path)))
 
     if results_path is not None:
         payload, _fmt = load_upstream_payload(results_path)
@@ -1126,7 +1117,9 @@ def run_main(config: BenchRunnerConfig, hooks: RunnerHooks, argv: list[str] | No
         sample_path = benchmark_task_sample_path(config.benchmark_id)
         if sample_path is None:
             logger.event("ERROR", "official_runner.fixture_missing", "Official runner fixture is unavailable")
-            reason = f"no checked-in sample for {config.benchmark_id} under {BENCHMARK_ASSETS_ROOT / config.benchmark_id}"
+            reason = (
+                f"no checked-in sample for {config.benchmark_id} under {BENCHMARK_ASSETS_ROOT / config.benchmark_id}"
+            )
             write_failed_scorecard(
                 benchmark_id=config.benchmark_id,
                 display_name=config.display_name,
@@ -1144,9 +1137,7 @@ def run_main(config: BenchRunnerConfig, hooks: RunnerHooks, argv: list[str] | No
         env_results = resolve_results_path(config, None)
         if env_results is None:
             logger.event("ERROR", "official_runner.results_missing", "Official runner results path is unavailable")
-            reason = (
-                f"--official-results-path or {config.results_path_env} is required unless --run-official is set"
-            )
+            reason = f"--official-results-path or {config.results_path_env} is required unless --run-official is set"
             write_failed_scorecard(
                 benchmark_id=config.benchmark_id,
                 display_name=config.display_name,

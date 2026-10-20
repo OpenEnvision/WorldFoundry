@@ -1810,6 +1810,27 @@
     "summaryZh": "仓内 evaluator 按 task protocol 评估 artifact bundle",
     "verificationStatus": "bounded_fixture_verified"
   },
+  "worldmembench": {
+    "aliases": [],
+    "badges": ["integrated"],
+    "category": "World Models",
+    "categoryZh": "世界模型",
+    "domains": ["human-memory", "object-memory", "environment-memory", "dynamic-memory"],
+    "integrationStatus": "integrated",
+    "leaderboardValid": false,
+    "metrics": [
+      "imaging_quality", "aesthetic_quality", "human_identity", "human_appearance",
+      "object_geometry", "object_appearance", "environment_visible_memory",
+      "environment_depth_fidelity", "environment_scene_reconstruction", "dynamic_memory",
+      "camera_rotation", "camera_translation"
+    ],
+    "name": "WorldMemBench",
+    "requiresApi": false,
+    "runtimeKind": "external_official_repo",
+    "summary": "Imports per-model memory metrics or invokes the official WorldMemBench runtime",
+    "summaryZh": "按模型导入记忆指标或调用官方 WorldMemBench 运行时",
+    "verificationStatus": "official_runtime_ready_real_data_validation_pending"
+  },
   "worldmodelbench": {
     "aliases": [],
     "badges": [

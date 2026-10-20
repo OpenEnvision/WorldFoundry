@@ -1,0 +1,196 @@
+id: worldmembench
+name: WorldMemBench
+publisher: Zhejiang University
+publisher_kind: university
+benchmark_kind:
+- video-world-model
+- visual-memory
+- camera-control
+domains:
+- world-model
+- human-memory
+- object-memory
+- environment-memory
+- dynamic-memory
+modalities:
+- video
+- text
+status: official_runtime_ready_real_data_validation_pending
+maturity: contract_ready
+release_status: experimental
+open_source_status: experimental
+official_benchmark_verified: false
+integration_evidence: false
+leaderboard_valid: false
+checkpoint_refs: []
+requires:
+- Official result summaries, or generated videos with a provisioned upstream runtime and selected metric assets.
+blockers:
+- Complete-dataset and checkpoint replay remain pending.
+source:
+  status: open_source
+official_sources:
+  github:
+    url: https://github.com/ZJU-REAL/WorldMemBench
+    revision: 1b79840143a98e017891e893b5d3ef75b93078a3
+  paper:
+    url: https://arxiv.org/abs/2610.19063
+  huggingface_dataset:
+    repo_id: rescuerz/WorldMemBench
+source_provenance:
+  official_repo:
+    url: https://github.com/ZJU-REAL/WorldMemBench
+    revision: 1b79840143a98e017891e893b5d3ef75b93078a3
+    license: MIT
+    role: external_runtime_dependency
+    provenance: Official metric implementations are invoked without vendoring or reimplementation.
+metrics:
+- id: imaging_quality
+  name: Imaging Quality
+  description: Official MUSIQ-SPAQ frame scores, normalized upstream and averaged equally per video.
+  higher_is_better: true
+  output_unit: score
+  aggregator: mean
+- id: aesthetic_quality
+  name: Aesthetic Quality
+  description: Official CLIP/LAION aesthetic frame scores, normalized upstream and averaged per video.
+  higher_is_better: true
+  output_unit: score
+  aggregator: mean
+- id: human_identity
+  name: Human Identity
+  description: Human identity retention across departure and revisit segments.
+  higher_is_better: true
+  output_unit: score
+  aggregator: mean
+- id: human_appearance
+  name: Human Appearance
+  description: Human appearance retention under the official revisit protocol.
+  higher_is_better: true
+  output_unit: score
+  aggregator: mean
+- id: object_geometry
+  name: Object Geometry
+  description: Object geometry retention under the official revisit protocol.
+  higher_is_better: true
+  output_unit: score
+  aggregator: mean
+- id: object_appearance
+  name: Object Appearance
+  description: Object appearance retention under the official revisit protocol.
+  higher_is_better: true
+  output_unit: score
+  aggregator: mean
+- id: environment_visible_memory
+  name: Environment Visible Memory
+  description: DINOv2 full-frame similarity at camera return frames.
+  higher_is_better: true
+  output_unit: score
+  aggregator: mean
+- id: environment_depth_fidelity
+  name: Environment Depth Fidelity
+  description: Pixel-aligned DA3 depth-order Spearman correlation at return frames.
+  higher_is_better: true
+  output_unit: correlation
+  aggregator: mean
+- id: environment_scene_reconstruction
+  name: Environment Scene Reconstruction
+  description: Official scene reconstruction score at departure and revisit frames.
+  higher_is_better: true
+  output_unit: score
+  aggregator: mean
+- id: dynamic_memory
+  name: Dynamic Memory
+  description: Event-gated eight-question VLM checklist score with per-category details retained.
+  higher_is_better: true
+  output_unit: score
+  aggregator: mean
+- id: camera_rotation
+  name: Camera Rotation
+  description: DA3 adjacent rotation RPE normalized by the reference rotation path.
+  higher_is_better: false
+  output_unit: error
+  aggregator: mean
+- id: camera_translation
+  name: Camera Translation
+  description: DA3/ViPE path-normalized translation RPE following Sim(3) alignment.
+  higher_is_better: false
+  output_unit: error
+  aggregator: mean
+integration:
+  status: integrated
+  tier: in_tree
+  evidence:
+    runtime_surface: external_official_runtime_with_result_normalizer
+    full_suite_verified: false
+runner:
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldMemBenchContract
+  official_script: worldfoundry/evaluation/tasks/execution/runners/worldmembench/run_worldmembench_official_runner.py
+  workspace:
+    module: worldfoundry.evaluation.tasks.execution.runners.worldmembench.run_worldmembench_official_runner
+    supports_official_runtime: true
+    accepts_generated_artifacts: true
+    supports_fixture: false
+    model_arg: --model-id
+    metric_arg: --metric
+  normalization:
+    artifact_official_run: true
+    pass_generated_artifact_dir: true
+  runtime:
+    kind: external_official_repo
+    repo_url: https://github.com/ZJU-REAL/WorldMemBench
+    repo_revision: 1b79840143a98e017891e893b5d3ef75b93078a3
+    root_env: WORLDFOUNDRY_WORLDMEMBENCH_ROOT
+    root_env_required: false
+    results_path_env: WORLDFOUNDRY_WORLDMEMBENCH_RESULTS_PATH
+  expected_artifacts:
+  - scorecard.json
+  - raw_metric_table.jsonl
+  - per_sample_scores.jsonl
+  verification_status: pending
+  required_env: []
+  optional_env:
+  - WORLDFOUNDRY_WORLDMEMBENCH_ROOT
+  - WORLDFOUNDRY_WORLDMEMBENCH_RESULTS_PATH
+  - WORLDFOUNDRY_WORLDMEMBENCH_PYTHON
+  - WORLDFOUNDRY_WORLDMEMBENCH_CONFIG
+  - WORLDFOUNDRY_WORLDMEMBENCH_WEIGHTS_DIR
+  - WORLDFOUNDRY_GENERATED_ARTIFACT_DIR
+  notes:
+  - Import the evaluation output root, its metrics directory, or a metric summary.json.
+  - Multi-model outputs require an explicit model selection; scores are never pooled across models.
+  - Evaluation and invalid-data failures retain coverage and produce a nonzero runner exit.
+  - Model failures remain scored according to the official protocol; not-applicable cases are not zero-filled.
+  - Raw metric units and score directions are retained without a cross-metric average.
+data_refs:
+  task_yaml: worldfoundry/data/benchmarks/tasks/external/worldmembench.yaml
+  hf_dataset_ids:
+  - rescuerz/WorldMemBench
+artifact_layout:
+  output_artifact: benchmark_scorecard
+  filename_template: scorecard.json
+runner_availability:
+  available: true
+  runner_target: worldfoundry.evaluation.tasks.contracts.external:WorldMemBenchContract
+  runner_script_available: true
+  task_yaml_available: true
+  runtime_verified: false
+  full_suite_verified: false
+  surface: external_official_runtime_with_result_normalizer
+validation_command:
+- worldfoundry-eval
+- zoo
+- benchmark-run
+- --benchmark-id
+- worldmembench
+- --mode
+- official-validation
+- --official-results-path
+- <official_eval_output>
+- --output-dir
+- <out>
+- --json
+notes:
+- Source and metric protocol are attributed to ZJU-REAL/WorldMemBench under MIT.
+- Result import is weight-free; official metric execution requires a separately provisioned upstream runtime and assets.
+- GPU and full-checkpoint replay are pending; result import does not establish leaderboard validity.

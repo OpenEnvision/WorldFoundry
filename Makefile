@@ -223,6 +223,7 @@ INFER_TENSOR_CONTRACTS = \
 	tests/eval_core/test_catalog_integration_status.py \
 	$(EVALUATION_CPU_CONTRACTS)
 EVALUATION_CPU_CONTRACTS = \
+	tests/eval_core/test_worldmembench_official_runner.py \
 	tests/evaluation/execution/test_resume_options.py \
 	tests/evaluation/execution/test_result_integrity.py \
 	tests/evaluation/execution/test_helper_reuse.py \

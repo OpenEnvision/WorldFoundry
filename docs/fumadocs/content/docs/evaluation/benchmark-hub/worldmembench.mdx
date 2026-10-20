@@ -1,0 +1,103 @@
+---
+title: WorldMemBench
+description: Official video-world-model memory metrics, per-model result import, and upstream runtime execution.
+---
+
+WorldMemBench evaluates video world models through human, object, environment,
+and dynamic memory, alongside video quality and camera following. WorldFoundry
+exposes all **12 official metrics**, imports their per-model summaries, and can
+invoke the official metric runtime on staged videos. Model generation remains
+separate from evaluation.
+
+Code: [ZJU-REAL/WorldMemBench](https://github.com/ZJU-REAL/WorldMemBench) (MIT).
+Paper: [WorldMemBench](https://arxiv.org/abs/2610.19063).
+Data: [rescuerz/WorldMemBench](https://huggingface.co/datasets/rescuerz/WorldMemBench).
+The integration targets upstream revision `1b79840143a98e017891e893b5d3ef75b93078a3`.
+
+<BenchmarkPageSections id="worldmembench" locale="en" />
+
+## Import official results
+
+Result import needs no GPU or metric checkpoints:
+
+```bash
+worldfoundry-eval zoo benchmark-run \
+  --benchmark-id worldmembench \
+  --mode official-validation \
+  --official-results-path /path/to/official_eval_output \
+  --output-dir tmp/worldmembench/import \
+  --json
+```
+
+The input may be the official evaluation output root, its `metrics` directory,
+or one `metrics/<metric>/summary.json` file. `cases.jsonl` files are imported
+when present. A directory containing several model groups needs an explicit
+selection through the runner:
+
+```bash
+python -m worldfoundry.evaluation.tasks.execution.runners.worldmembench.run_worldmembench_official_runner \
+  --official-results-path /path/to/official_eval_output \
+  --model-id model_a \
+  --metrics human_identity,object_geometry,camera_rotation \
+  --output-dir tmp/worldmembench/model_a \
+  --json
+```
+
+Outputs are `scorecard.json`, `raw_metric_table.jsonl`, and
+`per_sample_scores.jsonl`. The scorecard retains official score fields, grouped
+category/trajectory results, sample counts, and case statuses. Models are not
+averaged together. `camera_rotation` and `camera_translation` are errors:
+**lower is better**. Metric values retain upstream units, including signed depth
+correlations and unbounded camera errors; no clipping, inversion, or
+cross-metric composite is applied.
+
+## Execute official metrics
+
+Provision the official checkout and selected metric dependencies following its
+[installation instructions](https://github.com/ZJU-REAL/WorldMemBench#installation).
+Use the unified WorldFoundry environment for orchestration; if upstream needs a
+separate interpreter, select it with `--python` rather than replacing the
+unified environment's Torch/CUDA packages.
+
+```bash
+python -m worldfoundry.evaluation.tasks.execution.runners.worldmembench.run_worldmembench_official_runner \
+  --run-official \
+  --repo-root /path/to/WorldMemBench \
+  --python /path/to/upstream-env/bin/python \
+  --input-path /path/to/manifest.jsonl \
+  --config /path/to/worldmembench.yaml \
+  --weights-dir /path/to/weights \
+  --metrics imaging_quality,aesthetic_quality \
+  --device cuda:0 \
+  --output-dir tmp/worldmembench/official \
+  --json
+```
+
+`--repo-root` loads the checkout's `src/worldmembench`; omit it when the selected
+interpreter already has `worldmembench` installed. Input can also be a video or
+an official video tree: `<model>/<category>/<trajectory>/<case>/video.mp4`.
+Use upstream JSONL manifests to retain model IDs, camera protocols, and per-case
+annotations. `--expected-revisits 1|2|3` selects the fixed human/object revisit
+protocol; omitting it preserves upstream manifest/detection behavior.
+`--gpus 0,1` delegates process sharding to upstream instead of using `--device`.
+Each execution needs a fresh output directory; official results go under
+`official/`, with stdout/stderr logs beside the scorecard.
+
+The unified CLI can also score staged videos using `--generated-artifact-dir`
+and `--mode official-run`. Configure runtime paths through
+`WORLDFOUNDRY_WORLDMEMBENCH_ROOT`, `WORLDFOUNDRY_WORLDMEMBENCH_PYTHON`,
+`WORLDFOUNDRY_WORLDMEMBENCH_CONFIG`, and
+`WORLDFOUNDRY_WORLDMEMBENCH_WEIGHTS_DIR`. For import, use
+`WORLDFOUNDRY_WORLDMEMBENCH_RESULTS_PATH`.
+
+## Limitations
+
+Official execution needs the selected metric checkpoints, DA3/ViPE subprocess
+environments, and a VLM endpoint for Dynamic Memory. Keep backend interpreters,
+checkpoint paths, and VLM settings in the upstream YAML config; API keys stay
+in the upstream-configured environment variable. Metric implementations and
+weights are not vendored. GPU/checkpoint and complete-dataset replay remain
+pending, so scorecards do not claim full-suite or leaderboard validity.
+`model_failure` retains its official scored result; `not_applicable` is not
+zero-filled. `eval_failed` or `data_invalid` cases retain their coverage and
+make the runner exit nonzero, including when partial scores are available.

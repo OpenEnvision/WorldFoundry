@@ -1,8 +1,8 @@
 {
   "generatedFrom": "worldfoundry/data/benchmarks/catalog + tasks/external + recorded About facts + curated docs overrides",
-  "benchmarkCount": 74,
+  "benchmarkCount": 75,
   "leaderboardIngestedIds": [],
-  "leaderboardPlaceholderCount": 74,
+  "leaderboardPlaceholderCount": 75,
   "pages": {
     "ai2thor": {
       "id": "ai2thor",
@@ -10321,6 +10321,179 @@
         "source": "",
         "sourceZh": "",
         "officialUrl": "https://world-bench.github.io/",
+        "entries": []
+      }
+    },
+    "worldmembench": {
+      "id": "worldmembench",
+      "name": "WorldMemBench",
+      "projectPage": "",
+      "paperUrl": "",
+      "dimensions": [
+        {
+          "id": "imaging_quality",
+          "name": "Imaging Quality",
+          "nameZh": "Imaging Quality",
+          "kind": "axis",
+          "description": "Official MUSIQ-SPAQ frame scores, normalized upstream and averaged equally per video.",
+          "descriptionZh": ""
+        },
+        {
+          "id": "aesthetic_quality",
+          "name": "Aesthetic Quality",
+          "nameZh": "Aesthetic Quality",
+          "kind": "axis",
+          "description": "Official CLIP/LAION aesthetic frame scores, normalized upstream and averaged per video.",
+          "descriptionZh": ""
+        },
+        {
+          "id": "environment_scene_reconstruction",
+          "name": "Environment Scene Reconstruction",
+          "nameZh": "Environment Scene Reconstruction",
+          "kind": "axis",
+          "description": "Official scene reconstruction score at departure and revisit frames.",
+          "descriptionZh": ""
+        }
+      ],
+      "data": {
+        "summary": "",
+        "summaryZh": "",
+        "sizeLabel": "",
+        "sizeLabelZh": "",
+        "count": null,
+        "unit": "",
+        "sources": [
+          {
+            "kind": "github",
+            "id": "https://github.com/ZJU-REAL/WorldMemBench",
+            "license": ""
+          }
+        ],
+        "splits": [],
+        "modalities": [
+          "video",
+          "text"
+        ],
+        "license": "",
+        "notes": [],
+        "notesZh": [],
+        "notApplicable": false
+      },
+      "metrics": [
+        {
+          "id": "imaging_quality",
+          "name": "Imaging Quality",
+          "description": "Official MUSIQ-SPAQ frame scores, normalized upstream and averaged equally per video.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "imaging_quality"
+        },
+        {
+          "id": "aesthetic_quality",
+          "name": "Aesthetic Quality",
+          "description": "Official CLIP/LAION aesthetic frame scores, normalized upstream and averaged per video.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "aesthetic_quality"
+        },
+        {
+          "id": "human_identity",
+          "name": "Human Identity",
+          "description": "Human identity retention across departure and revisit segments.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "human_identity"
+        },
+        {
+          "id": "human_appearance",
+          "name": "Human Appearance",
+          "description": "Human appearance retention under the official revisit protocol.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "human_appearance"
+        },
+        {
+          "id": "object_geometry",
+          "name": "Object Geometry",
+          "description": "Object geometry retention under the official revisit protocol.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "object_geometry"
+        },
+        {
+          "id": "object_appearance",
+          "name": "Object Appearance",
+          "description": "Object appearance retention under the official revisit protocol.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "object_appearance"
+        },
+        {
+          "id": "environment_visible_memory",
+          "name": "Environment Visible Memory",
+          "description": "DINOv2 full-frame similarity at camera return frames.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "environment_visible_memory"
+        },
+        {
+          "id": "environment_depth_fidelity",
+          "name": "Environment Depth Fidelity",
+          "description": "Pixel-aligned DA3 depth-order Spearman correlation at return frames.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "environment_depth_fidelity"
+        },
+        {
+          "id": "environment_scene_reconstruction",
+          "name": "Environment Scene Reconstruction",
+          "description": "Official scene reconstruction score at departure and revisit frames.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "environment_scene_reconstruction"
+        },
+        {
+          "id": "dynamic_memory",
+          "name": "Dynamic Memory",
+          "description": "Event-gated eight-question VLM checklist score with per-category details retained.",
+          "descriptionZh": "",
+          "higherIsBetter": true,
+          "primary": false,
+          "leaderboardKey": "dynamic_memory"
+        },
+        {
+          "id": "camera_rotation",
+          "name": "Camera Rotation",
+          "description": "DA3 adjacent rotation RPE normalized by the reference rotation path.",
+          "descriptionZh": "",
+          "higherIsBetter": false,
+          "primary": false,
+          "leaderboardKey": "camera_rotation"
+        },
+        {
+          "id": "camera_translation",
+          "name": "Camera Translation",
+          "description": "DA3/ViPE path-normalized translation RPE following Sim(3) alignment.",
+          "descriptionZh": "",
+          "higherIsBetter": false,
+          "primary": false,
+          "leaderboardKey": "camera_translation"
+        }
+      ],
+      "leaderboard": {
+        "ingested": false,
+        "source": "",
+        "sourceZh": "",
+        "officialUrl": "",
         "entries": []
       }
     },

@@ -1,7 +1,7 @@
 {
   "modelsTotal": 275,
   "modelsListed": 265,
-  "benchmarksTotal": 74,
+  "benchmarksTotal": 75,
   "modelFamilies": [
     {
       "id": "video",
@@ -2214,7 +2214,7 @@
     {
       "id": "video",
       "label": "Video & world",
-      "count": 52,
+      "count": 53,
       "entries": [
         {
           "id": "4dworldbench",
@@ -2543,6 +2543,13 @@
           "name": "WorldBench",
           "aliases": [
             "worldbench"
+          ]
+        },
+        {
+          "id": "worldmembench",
+          "name": "WorldMemBench",
+          "aliases": [
+            "worldmembench"
           ]
         },
         {
