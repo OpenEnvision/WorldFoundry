@@ -2,8 +2,9 @@
 
 [![Python](https://img.shields.io/badge/python-3.10%20--%203.13-blue)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
-[![CI](https://github.com/OpenEnvision/WorldFoundry/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/OpenEnvision/WorldFoundry/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-Fumadocs-orange)](https://openenvision.github.io/WorldFoundry/docs)
+[![arXiv](https://img.shields.io/badge/arXiv-2611.10771-b31b1b)](https://arxiv.org/abs/2611.10771)
+[![Hugging Face](https://img.shields.io/badge/Hugging%20Face-Paper-yellow)](https://huggingface.co/papers/2611.10771)
 
 [Documentation](https://openenvision.github.io/WorldFoundry/docs) · [中文文档](https://openenvision.github.io/WorldFoundry/zh/docs) · [Contributing](CONTRIBUTING.md)
 
