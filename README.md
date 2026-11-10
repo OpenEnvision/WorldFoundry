@@ -15,7 +15,7 @@ It brings video generation, interactive worlds, 3D/4D reconstruction, and embodi
 
 ## 📰 News
 
-- **[2026-11-10]** 🔥 **The WorldFoundry technical report is now available on [arXiv](https://arxiv.org/abs/2611.10771)!** We welcome your support with a GitHub Star and a [Hugging Face Upvote](https://huggingface.co/papers/2611.10771). Thank you for your support!
+- **[2026-11-07]** 📄 **Our paper is out on arXiv!** Read [WorldFoundry: Towards Unified Infrastructure for World Intelligence](https://arxiv.org/abs/2611.10771).
 - **[2026-07-12]** 🔥 **WorldFoundry reached 100+ stars on its very first day!** Thanks to the community for the incredible support and encouragement. More exciting updates are coming!
 - **[2026-07-11]** 🎉 **WorldFoundry is officially open-sourced.** We welcome ⭐ stars, bug reports, feature requests, and pull requests from the community!
 
@@ -133,8 +133,19 @@ Community standards and private vulnerability reporting are covered by the
 
 ## Citation
 
-If you use WorldFoundry in research, cite this repository and the upstream methods,
-checkpoints, datasets, and benchmarks that your work depends on.
+If you use WorldFoundry in research, please cite our [paper](https://arxiv.org/abs/2611.10771) together with the upstream methods, checkpoints, datasets, and benchmarks that your work depends on.
+
+```bibtex
+@misc{tian2026worldfoundry,
+  title         = {WorldFoundry: Towards Unified Infrastructure for World Intelligence},
+  author        = {Juanxi Tian and Jiadong Hou and Baiang Li and Xin Lin and Zhengbo Jiao and Weijia Zhang and Yeying Jin and Truong Nguyen and Haitian Zheng and Zhifei Zhang and Jianfei Yang and Ming-Hsuan Yang and Felix Heide and Wei Xiong and Enze Xie and Wanhua Li},
+  year          = {2026},
+  eprint        = {2611.10771},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+  url           = {https://arxiv.org/abs/2611.10771}
+}
+```
 
 ## Community Policies
 
