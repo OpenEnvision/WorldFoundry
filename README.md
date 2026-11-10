@@ -14,6 +14,7 @@ It brings video generation, interactive worlds, 3D/4D reconstruction, and embodi
 
 ## 📰 News
 
+- **[2026-11-10]** 🔥 **The WorldFoundry technical report is now available on [arXiv](https://arxiv.org/abs/2611.10771)!** We welcome your support with a GitHub Star and a [Hugging Face Upvote](https://huggingface.co/papers/2611.10771). Thank you for your support!
 - **[2026-07-12]** 🔥 **WorldFoundry reached 100+ stars on its very first day!** Thanks to the community for the incredible support and encouragement. More exciting updates are coming!
 - **[2026-07-11]** 🎉 **WorldFoundry is officially open-sourced.** We welcome ⭐ stars, bug reports, feature requests, and pull requests from the community!
 
