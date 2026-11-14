@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import types
@@ -35,6 +36,8 @@ def test_runner_launches_package_worker_with_workspace_assets(
     output = tmp_path / "result.mp4"
     monkeypatch.setenv("WORLDFOUNDRY_UNIANIMATE_DIT_DEMO_ROOT", str(demo))
     monkeypatch.setenv("PYTHONPATH", "/operator/package-path")
+    launch_time = 1_700_000_000.0
+    monkeypatch.setattr(runner, "time", types.SimpleNamespace(time=lambda: launch_time))
     monkeypatch.setattr(
         runner,
         "parse_args",
@@ -62,6 +65,7 @@ def test_runner_launches_package_worker_with_workspace_assets(
         generated = Path(kwargs["cwd"]) / "outputs" / "generated.mp4"
         generated.parent.mkdir()
         generated.write_bytes(b"composite")
+        os.utime(generated, (launch_time + 1, launch_time + 1))
         return subprocess.CompletedProcess(command, 0, "", "")
 
     monkeypatch.setattr(runner.subprocess, "run", run)
@@ -101,6 +105,22 @@ def test_runner_launches_package_worker_with_workspace_assets(
     assert output.read_bytes() == b"composite"
     assert (tmp_path / "result_official_composite.mp4").read_bytes() == b"composite"
     assert not list(tmp_path.rglob("*.py"))
+
+
+def test_newest_video_rejects_stale_artifacts_and_includes_launch_boundary(tmp_path: Path) -> None:
+    cutoff = 1_700_000_000.0
+    stale = tmp_path / "stale.mp4"
+    stale.write_bytes(b"stale")
+    os.utime(stale, (cutoff - 1, cutoff - 1))
+    assert runner._newest_mp4(tmp_path, since=cutoff) is None
+    boundary = tmp_path / "boundary.mp4"
+    boundary.write_bytes(b"boundary")
+    os.utime(boundary, (cutoff, cutoff))
+    assert runner._newest_mp4(tmp_path, since=cutoff) == boundary
+    newest = tmp_path / "newest.mp4"
+    newest.write_bytes(b"newest")
+    os.utime(newest, (cutoff + 1, cutoff + 1))
+    assert runner._newest_mp4(tmp_path, since=cutoff) == newest
 
 
 def test_pose_alignment_launches_package_module(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

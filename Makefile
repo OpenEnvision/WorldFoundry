@@ -23,18 +23,7 @@ INFER_TENSOR_MANIFEST ?= tmp/inference-cpu-selection.json
 INFER_TENSOR_JUNIT ?= tmp/inference-cpu-contracts.xml
 STRICT_TEST_RUNNER = $(PYTHON) tests/manual/validate_junit_contract.py run
 PUBLIC_GATE_CONTRACTS = \
-	tests/evaluation/execution/test_videobench_text_alignment.py \
-	tests/evaluation/execution/test_wbench_sam2_tracking_summary.py \
 	tests/evaluation/execution/test_stevo_bench_eval_utils.py \
-	tests/evaluation/execution/test_t2vworldbench_evaluator_imports.py \
-	tests/evaluation/execution/test_t2v_compbench_mllm_metric_imports.py \
-	tests/evaluation/execution/test_fetv_blip_modes.py \
-	tests/evaluation/execution/test_fetv_video_frames.py \
-	tests/evaluation/execution/test_vmbench_qalign_helpers.py \
-	tests/evaluation/execution/test_vmbench_cas_writer.py \
-	tests/evaluation/execution/test_vbench_sampling.py \
-	tests/evaluation/execution/test_vbench_metadata_errors.py \
-	tests/evaluation/metrics/test_fvd_spatial_squeeze.py \
 	tests/evaluation/test_source_cache.py \
 	tests/eval_core/test_videoverse_local_vlm.py \
 	tests/eval_core/test_libero_mem_recording.py \
@@ -45,6 +34,7 @@ PUBLIC_GATE_CONTRACTS = \
 	tests/runtime/test_geometry_regression_declarations.py \
 	tests/runtime/test_junit_contract_validator.py \
 	tests/core/test_repository_policies.py \
+	tests/core/test_inference_gate_selection.py \
 	tests/scripts/test_pr_checks.py \
 	tests/scripts/test_model_env_install_shell_compatibility.py \
 	tests/runtime/test_conda_setup_commands.py \
@@ -63,7 +53,6 @@ PUBLIC_GATE_CONTRACTS = \
 	tests/eval_core/test_ltx25_integration.py::test_ltx25_pipeline_loads_from_standard_runner_spec \
 	tests/studio/test_catalog_class_constants.py \
 	tests/base_models/diffusion_model/test_module_boundaries.py \
-	tests/base_models/test_transnetv2_unsupported_options.py \
 	tests/studio/test_pipeline_owned_stream_state.py \
 	tests/studio/test_dispatch_lifecycle.py \
 	tests/studio/test_stream_init.py \
@@ -155,6 +144,7 @@ DIFFUSION_ACCELERATION_CPU_CONTRACTS = \
 	tests/base_models/diffusion_model/test_image_request_batching.py \
 	tests/base_models/diffusion_model/loaders/test_module_compile_wiring.py
 INFER_TENSOR_CONTRACTS = \
+	tests/base_models/test_transnetv2_unsupported_options.py \
 	tests/base_models/test_device_coefficient_flow_unipc_scheduler.py \
 	tests/base_models/diffusion_model/models/autoencoders/wan/test_shared_leaves.py \
 	tests/base_models/diffusion_model/models/autoencoders/wan/test_diffusers_blocks.py \
@@ -484,6 +474,7 @@ EVALUATION_CPU_CONTRACTS = \
 
 # Select numerical CUDA nodes explicitly: older CUDA tests do not all carry the gpu marker.
 INFER_CUDA_CONTRACTS = \
+	tests/base_models/diffusion_model/test_action_attention_dispatch.py \
 	tests/synthesis/test_inspatio_renderer_gpu.py::test_strict_renderer_matches_cpu_and_repeats \
 	tests/core/execution/test_cuda_frame_transfer.py::test_cuda_host_pixels_wait_for_producer_and_preserve_frame_order \
 	tests/core/execution/test_cuda_frame_transfer.py::test_cuda_prefetch_failure_uses_the_correct_blocking_fallback \

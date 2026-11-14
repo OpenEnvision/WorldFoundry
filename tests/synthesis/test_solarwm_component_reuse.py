@@ -152,12 +152,25 @@ def test_solarwm_diffusion_decoder_loads_canonical_weights(tmp_path: Path) -> No
     assert loaded.state_dict().keys() == reference.state_dict().keys()
     for key, value in loaded.state_dict().items():
         torch.testing.assert_close(value, reference.state_dict()[key], rtol=0, atol=0)
-    from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.transformer.config import DiffVAEMode
+    from dataclasses import replace
+
+    from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.transformer.apply import (
+        apply_diffvae_config,
+    )
+    from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.transformer.config import (
+        DiffVAEMode,
+        NAttentionKind,
+    )
 
     op = build_diffvae_mode_op(DiffVAEMode.CHUNKED_EAGER)
     assert op.matcher(loaded)
-    op.mutator(loaded)
-    op.mutator(reference)
+    assert op.mutator(loaded) is loaded
+    assert op.mutator(reference) is reference
+    assert loaded.deferred_stage4_upsample and reference.deferred_stage4_upsample
+    # Loading parity uses the same CPU neighborhood attention on both sides.
+    cpu_config = replace(DiffVAEMode.CHUNKED_EAGER.resolve(), attention=NAttentionKind.EAGER_SDPA, natten_backend=None)
+    apply_diffvae_config(loaded, cpu_config)
+    apply_diffvae_config(reference, cpu_config)
     latent = torch.randn(1, 16, 2, 2, 3)
     with torch.no_grad():
         actual = tuple(loaded.decode_video(latent, generator=torch.Generator().manual_seed(3)))

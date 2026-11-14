@@ -293,12 +293,15 @@ dev = [
     "ty==0.0.99",
 ]
 test = [
+    "av>=12",
     "fastapi",
     "openai>=1.61",
     "pydantic>=2,<3",
     "numpy>=1.26,<3",
     "pillow>=10",
+    "protobuf>=4.25",
     "pytest>=8,<9",
+    "soundfile>=0.12",
     "setuptools>=77",
     "tomli>=2; python_version < '3.11'",
 ]
@@ -886,6 +889,9 @@ include-package-data = true
 "worldfoundry.base_models.three_dimensions.depth" = [
     "dvlt/**/*",
     "unik3d/**/*",
+]
+"worldfoundry.base_models.three_dimensions.depth.dvlt" = [
+    "dvlt_runtime/**/*",
 ]
 "worldfoundry.base_models.three_dimensions.general_3d" = [
     "dust3r/**/*",

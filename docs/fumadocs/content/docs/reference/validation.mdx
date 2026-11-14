@@ -42,7 +42,10 @@ Conda dispatch, pipeline cleanup, job shutdown, and packaging boundaries.
 It runs without CUDA, checkpoint downloads, or provider API credentials. CI
 uses the complete selection plus the coverage, evidence, historical-reference
 and JUnit-validator contracts. `make test-infer` is an alias; use `PYTHON=python3` on
-systems whose `python` command still points to Python 2.
+systems whose `python` command still points to Python 2. The public gate uses the
+`test` extra without Torch; PyAV, Protobuf and SoundFile support its artifact
+readers. Contracts that import model runtimes or tensor-based metrics belong to
+`test-infer-tensors`.
 
 The Make targets collect an independent complete node manifest before running
 tests. They reject skips, collection errors, missing or additional nodes,
@@ -98,7 +101,11 @@ parity, and backend fallbacks. These CPU tests require Torch/torchvision, PyAV,
 ImageIO/FFmpeg and OpenCV; hosted tensor CI installs them separately from the
 Torch-free public gate. The extended component selection also installs Diffusers
 0.39, EasyDict, Loguru, Matplotlib, dm-tree, timm and aiortc for scheduler,
-logging, pose-rendering, tensor-tree, perception and WebRTC contracts. RTX adapter tests use a fake effect and do not establish
+logging, pose-rendering, tensor-tree, perception and WebRTC contracts. Hydra,
+Trimesh, Kornia, Lightning utilities, Lightning/PyTorch Lightning, msgspec,
+OpenCLIP, einops-exts, Beautiful Soup, gdown and Decord provide the selected
+configuration, geometry, encoder and video-reader dependencies.
+RTX adapter tests use a fake effect and do not establish
 proprietary-runtime execution. Bridge and realtime integration tests remain
 selected alongside these shared contracts.
 `tests/core/execution/test_cuda_nvenc_transport.py` belongs to the CUDA gate;

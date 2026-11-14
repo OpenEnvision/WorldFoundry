@@ -14,39 +14,50 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.mark.parametrize("plan_fps", [None, 12])
-def test_module_command_preserves_asset_paths_and_request_overrides(tmp_path: Path, plan_fps: int | None) -> None:
+@pytest.mark.parametrize("linked_assets", [False, True])
+def test_module_command_preserves_asset_paths_and_request_overrides(
+    tmp_path: Path, plan_fps: int | None, linked_assets: bool
+) -> None:
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    asset_input = assets
+    if linked_assets:
+        asset_input = tmp_path / "asset-link"
+        asset_input.symlink_to(assets, target_is_directory=True)
+    output_path = str(tmp_path / "result.mp4")
     plan = tmp_path / "plan.json"
     plan.write_text(json.dumps({"fps": plan_fps, "extra": {"num_frames": 49, "ddim_steps": 8}}))
     options = {
-        "checkpoint_path": "/ckpt/oasis.safetensors",
-        "vae_checkpoint_path": "/ckpt/vae.safetensors",
-        "input_path": "/data/prompt.png",
-        "action_path": "/data/actions.pt",
+        "checkpoint_path": str(asset_input / "oasis.safetensors"),
+        "vae_checkpoint_path": str(asset_input / "vae.safetensors"),
+        "input_path": str(asset_input / "prompt.png"),
+        "action_path": str(asset_input / "actions.pt"),
         "num_frames": 32,
         "fps": 20,
         "ddim_steps": 10,
     }
+    original_options = dict(options)
     command = runtime.build_command(
         {
             "python": "/env/python",
             "entrypoint": str(runtime.OFFICIAL_ENTRYPOINT),
-            "output_path": "/out/result.mp4",
+            "output_path": output_path,
             "plan_path": str(plan),
             "options": options,
         }
     )
     assert command[:3] == ["/env/python", "-m", "worldfoundry.synthesis.visual_generation.open_oasis.generate"]
     assert dict(zip(command[3::2], command[4::2], strict=True)) == {
-        "--oasis-ckpt": "/ckpt/oasis.safetensors",
-        "--vae-ckpt": "/ckpt/vae.safetensors",
-        "--prompt-path": "/data/prompt.png",
-        "--actions-path": "/data/actions.pt",
-        "--output-path": "/out/result.mp4",
+        "--oasis-ckpt": str((assets / "oasis.safetensors").resolve()),
+        "--vae-ckpt": str((assets / "vae.safetensors").resolve()),
+        "--prompt-path": str((assets / "prompt.png").resolve()),
+        "--actions-path": str((assets / "actions.pt").resolve()),
+        "--output-path": output_path,
         "--num-frames": "49",
         "--fps": str(plan_fps or 20),
         "--ddim-steps": "8",
     }
-    assert options["num_frames"] == 32
+    assert options == original_options
 
 
 def test_generate_uses_the_same_packaged_components() -> None:

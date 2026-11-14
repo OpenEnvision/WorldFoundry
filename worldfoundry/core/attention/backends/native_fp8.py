@@ -14,6 +14,7 @@ import importlib
 import math
 import threading
 import weakref
+from typing import Any
 
 import torch
 import torch.version
@@ -126,7 +127,7 @@ class _Plan:
         workspace = torch.empty(self.graph.get_workspace_size(), device=self.device, dtype=torch.uint8)
         one = torch.ones((1, 1, 1, 1), device=self.device, dtype=torch.float32)
         amax_s, amax_o = torch.empty_like(one), torch.empty_like(one)
-        pack = dict(zip(self.descriptors, (query, key, value), strict=False))
+        pack: dict[Any, torch.Tensor] = dict(zip(self.descriptors, (query, key, value), strict=False))
         pack.update(dict.fromkeys(self.scales, one))
         for descriptor, factor in zip(self.scales[:3], (descale_q, descale_k, descale_v), strict=False):
             pack[descriptor] = one * factor
@@ -151,19 +152,22 @@ class _Plan:
                 int(child_graph),
             )
             capture = self._checked("cudaStreamGetCaptureInfo", runtime.cudaStreamGetCaptureInfo(stream))
-            status, _, parent_graph, dependencies, _, dependency_count = capture
+            status, _, parent_graph, dependencies, *capture_details = capture
+            dependency_count = capture_details[-1]
             if status != runtime.cudaStreamCaptureStatus.cudaStreamCaptureStatusActive:
                 raise RuntimeError("cudnn_fp8 requires active CUDA capture")
             (child_node,) = self._checked(
                 "cudaGraphAddChildGraphNode",
                 runtime.cudaGraphAddChildGraphNode(parent_graph, dependencies, dependency_count, child_graph),
             )
+            # CUDA 13 adds edge data to both capture info and dependency updates.
+            edge_data = (None,) if len(capture_details) == 2 else ()
             self._checked(
                 "cudaStreamUpdateCaptureDependencies",
                 runtime.cudaStreamUpdateCaptureDependencies(
                     stream,
                     [child_node],
-                    None,
+                    *edge_data,
                     1,
                     runtime.cudaStreamUpdateCaptureDependenciesFlags.cudaStreamSetCaptureDependencies,
                 ),

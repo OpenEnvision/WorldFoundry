@@ -34,6 +34,8 @@ python -m pytest -q tests/runtime/test_geometry_regression_impact.py
 
 默认 CPU 门禁覆盖进程日志、模拟 GPU 租约、checkpoint staging、任务持久化、Conda dispatch、推理取消与超时、worker 退出和打包边界。它不需要 CUDA、模型下载、Torch 或 API 凭据，CI 使用同一选择。`make test-infer` 是别名；系统的 `python` 仍为 Python 2 时，使用 `make test PYTHON=python3`。
 
+公共门禁仅依赖不含 Torch 的 `test` extra；PyAV、Protobuf 与 SoundFile 支持其中的实际 artifact reader。需要导入模型 runtime 或张量 metric 的契约属于 `test-infer-tensors`。
+
 `make test` 还包含覆盖策略、官方推理证据、固定历史参考和 JUnit 验证器的测试。Make 门禁先独立收集完整节点清单，再执行测试，拒绝 skip、collection error、少跑、多跑、重复节点、源码改变和旧报告。`TEST_ARGS` 只影响执行阶段，使用 `-k` 或 `-m` 漏跑节点仍会失败。CI 发布完整清单及 JUnit。标准库成功 subtest 保留父节点，失败或跳过的 subtest 仍使门禁失败。
 
 | 路径 | 内容与环境要求 |
@@ -76,7 +78,7 @@ CPU Torch 门禁纳入 `tests/pipelines/test_native_output_contracts.py`，检�
 layout、像素值域、chunk 顺序与帧数。Codec 测试覆盖成功/失败路径的 reader
 释放、有限帧解码、ImageIO 编码一致性和后端 fallback。这些 CPU 测试需要
 Torch/torchvision、PyAV、ImageIO/FFmpeg 与 OpenCV；托管张量 CI 单独安装这些依赖，不改变无 Torch 公共门禁。扩展组件选择另行安装 Diffusers 0.39、
-EasyDict、Loguru、Matplotlib、dm-tree、timm 和 aiortc，用于 scheduler、日志、姿态渲染、tensor tree、感知和 WebRTC 契约。
+EasyDict、Loguru、Matplotlib、dm-tree、timm 和 aiortc，用于 scheduler、日志、姿态渲染、tensor tree、感知和 WebRTC 契约。Hydra、Trimesh、Kornia、Lightning utilities、Lightning/PyTorch Lightning、msgspec、OpenCLIP、einops-exts、Beautiful Soup、gdown 和 Decord 提供所选配置、几何、encoder 与视频 reader 契约的依赖。
 RTX adapter 测试使用 fake effect，不能证明专有 runtime 已执行。Bridge 和实时集成测试与这些共享契约一并进入门禁。`tests/core/execution/test_cuda_nvenc_transport.py` 属于 CUDA 门禁；其设备所有权/event 检查与 checkpoint 回放、编码吞吐证据分开。Catalog 覆盖不代表列出的每个模型均已成功生成。
 
 Workspace evaluation 的准备流程将 `resume` 和 `metric_batch_size` 传入普通生成与任务 registry 生成，默认值分别为 `false` 和 `32`；非正数 metric batch size 在准备和执行阶段均会于生成前被拒绝。POSIX `PWD` 保持目录上下文语义，不被当成密码，使图片 warmup 仍可进入驻留批处理；`pwd` 字段和 `SERVICE_PWD` 凭据继续脱敏。

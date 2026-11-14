@@ -2,8 +2,6 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlparse
 
-import requests
-
 # ---------------------------------------------------------------------------
 # Occlusion-variant helpers
 # ---------------------------------------------------------------------------
@@ -120,6 +118,8 @@ def _path_from_rel(s: str, base: Path | None = None) -> Path:
 
 
 def _download(url: str, dst: Path) -> None:
+    import requests
+
     dst.parent.mkdir(parents=True, exist_ok=True)
     with requests.get(url, stream=True, timeout=300) as r:
         r.raise_for_status()

@@ -50,7 +50,7 @@ def test_ci_installs_declared_quality_group_and_protocol_extra() -> None:
     assert ".[lint" not in install
     requirements = project["dependency-groups"]["lint"]
     assert "ruff==0.12.7" in requirements
-    assert any(requirement.startswith("ty>=") for requirement in requirements)
+    assert "ty==0.0.99" in requirements
     assert {"test", "mcp"} <= project["project"]["optional-dependencies"].keys()
     assert '"torch==2.9.0+cpu" "torchvision==0.24.0+cpu" --index-url https://download.pytorch.org/whl/cpu' in install
     assert "opencv-python-headless" in install
@@ -65,7 +65,24 @@ def test_tensor_ci_installs_its_own_torchvision_and_media_backends() -> None:
         if step.get("name") == "Install CPU Torch and tensor test dependencies"
     )
     requirements = shlex.split(install.replace("\\\n", " "))
-    assert {"torch==2.9.0+cpu", "torchvision==0.24.0+cpu", "av", "imageio", "imageio-ffmpeg"} <= set(requirements)
+    assert {
+        "torch==2.9.0+cpu",
+        "torchvision==0.24.0+cpu",
+        "av",
+        "imageio",
+        "imageio-ffmpeg",
+        "beautifulsoup4",
+        "decord",
+        "einops-exts==0.0.4",
+        "gdown",
+        "hydra-core",
+        "kornia",
+        "lightning-utilities",
+        "msgspec",
+        "open-clip-torch",
+        "pytorch-lightning==2.6.1",
+        "trimesh",
+    } <= set(requirements)
     assert "https://download.pytorch.org/whl/cpu" in requirements
 
 

@@ -13,6 +13,10 @@ conditioning inputs already support full-model CUDA Graph replay.
 from __future__ import annotations
 
 import math
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
 
 import pytest
 import torch
@@ -46,10 +50,8 @@ def _inputs(cache: BlockKVCache, value: int) -> tuple[torch.Tensor, torch.Tensor
     base = torch.arange(math.prod(shape), device="cuda", dtype=torch.float32).reshape(shape)
     # Every chunk/rewrite changes K, V and Q, so replay cannot pass by retaining
     # captured inputs or attending to a previously populated cache.
-    return tuple(
-        ((base + value * 11).sin() * scale).to(cache.dtype)
-        for scale in (0.25, 0.75, 0.5)
-    )
+    k, v, q = (((base + value * 11).sin() * scale).to(cache.dtype) for scale in (0.25, 0.75, 0.5))
+    return k, v, q
 
 
 def _attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, seq_dim: int) -> torch.Tensor:
@@ -58,9 +60,7 @@ def _attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, seq_dim: int) 
     return F.scaled_dot_product_attention(q, k, v)
 
 
-def _oracle(
-    history: list[tuple[torch.Tensor, torch.Tensor]], cache: BlockKVCache
-) -> tuple[torch.Tensor, torch.Tensor]:
+def _oracle(history: list[tuple[torch.Tensor, torch.Tensor]], cache: BlockKVCache) -> tuple[torch.Tensor, torch.Tensor]:
     # Independent sink + tail oracle; it never uses physical cache positions.
     result = []
     for column in (0, 1):
@@ -74,7 +74,7 @@ def _oracle(
                 dim=cache.seq_dim,
             )
         result.append(full)
-    return tuple(result)
+    return result[0], result[1]
 
 
 class _CapturedUpdate:
@@ -94,7 +94,15 @@ class _CapturedUpdate:
         torch.cuda.current_stream().wait_stream(self.stream)
         self.stream.synchronize()
         self.graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(self.graph, stream=self.stream):
+        inference_mode = torch.is_inference_mode_enabled()
+        # Graph controls may update inference-owned generator state; captured
+        # cache and attention compute retain the caller's mode.
+        with (
+            torch.inference_mode(),
+            torch.cuda.graph(self.graph, stream=self.stream),
+            torch.inference_mode(inference_mode),
+            torch.no_grad(),
+        ):
             self.outputs = self._forward()
         self.replays = 0
         self.storage = tuple(t.data_ptr() for t in (*self.inputs, *self.outputs, cache._k, cache._v))
@@ -110,11 +118,10 @@ class _CapturedUpdate:
         assert (self.cache.size, self.cache._current_write_bounds(), tuple(t.shape for t in inputs)) == self.geometry
         for static, fresh in zip(self.inputs, inputs):
             static.copy_(fresh)
-        self.graph.replay()
+        with torch.inference_mode():
+            self.graph.replay()
         self.replays += 1
-        assert tuple(
-            t.data_ptr() for t in (*self.inputs, *self.outputs, self.cache._k, self.cache._v)
-        ) == self.storage
+        assert tuple(t.data_ptr() for t in (*self.inputs, *self.outputs, self.cache._k, self.cache._v)) == self.storage
         # Raw CUDA Graph outputs are reused buffers. Retain snapshots at the
         # caller boundary before the next replay, just as a model owner must.
         return tuple(output.clone() for output in self.outputs)
@@ -168,12 +175,58 @@ def test_replay_matches_eager_and_history_across_rollover_and_rewrites(sink, win
             captured_cache.after_update(index)
             eager_cache.after_update(index)
 
+    assert graph is not None
     assert graph.replays == 18
     assert graph.geometry[0] == sink + window
     assert captured_cache._prev_chunk_idx == filling_chunks + 5
     for outputs, snapshots in retained:
         for output, snapshot in zip(outputs, snapshots):
             torch.testing.assert_close(output, snapshot, rtol=0, atol=0)
+
+
+def test_raw_graph_after_inference_capture_preserves_no_grad_compute() -> None:
+    # A fresh process controls whether the default generator's graph state was
+    # first allocated inside inference mode, independently of suite ordering.
+    code = textwrap.dedent("""
+        import runpy
+        import sys
+        from unittest.mock import patch
+
+        import torch
+
+        contracts = runpy.run_path(sys.argv[1])
+        with torch.inference_mode():
+            inputs = torch.ones(4, device="cuda")
+            torch.cuda.synchronize()
+            prime = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(prime):
+                output = inputs + 1
+            prime.replay()
+            torch.testing.assert_close(output, inputs + 1, rtol=0, atol=0)
+
+        helper = contracts["_CapturedUpdate"]
+        original = helper._forward
+        modes = []
+
+        def forward(self) -> tuple[torch.Tensor, ...]:
+            modes.append((torch.is_inference_mode_enabled(), torch.is_grad_enabled()))
+            return original(self)
+
+        with patch.object(helper, "_forward", forward):
+            contracts["test_replay_matches_eager_and_history_across_rollover_and_rewrites"](
+                sink=3, window=14, chunk=4, seq_dim=1, dtype=torch.bfloat16
+            )
+        assert modes == [(False, False)] * 3, modes
+        assert torch.isfinite(torch.rand(4, device="cuda")).all()
+    """)
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(Path(__file__).resolve())],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @torch.no_grad()

@@ -44,7 +44,12 @@ def test_ls_apply_patch_clones_gamma_and_preserves_mutation_policy(inplace: bool
 def test_prismatic_owner_avoids_action_runtime_and_tracking_initializers() -> None:
     code = """
 import sys
+import torch
+from timm.models.vision_transformer import LayerScale
+# Test initialization added by the owner, beyond its required timm dependency.
+before = set(sys.modules)
 import worldfoundry.base_models.llm_mllm_core.mllm.prismatic
-assert not any(name.startswith(('worldfoundry.synthesis', 'hydra', 'omegaconf', 'wandb', 'triton')) for name in sys.modules)
+assert not any(name.startswith('worldfoundry.synthesis') for name in sys.modules)
+assert not any(name.startswith(('hydra', 'omegaconf', 'wandb', 'triton')) for name in set(sys.modules) - before)
 """
     subprocess.run([sys.executable, "-c", code], check=True)

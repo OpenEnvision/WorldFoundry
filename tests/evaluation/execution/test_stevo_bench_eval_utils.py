@@ -29,6 +29,15 @@ def _load(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     return module
 
 
+def test_local_video_source_resolution_does_not_require_http(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setitem(sys.modules, "requests", None)
+    module = _load(monkeypatch)
+    assert module._resolve_video_source("video.mp4", tmp_path / "outputs.json") == (
+        "file",
+        (tmp_path / "video.mp4").resolve(),
+    )
+
+
 def test_video_source_resolver_declares_a_kind_and_path(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _load(monkeypatch)
 

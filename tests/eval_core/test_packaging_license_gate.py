@@ -25,6 +25,7 @@ from scripts.setup.check_packaging_license_gate import (
     license_bundle_errors,
     license_gated_paths,
     load_find_config,
+    load_pyproject,
     main,
     manifest_gate_errors,
     misplaced_license_files,
@@ -103,6 +104,23 @@ def test_data_channel_gate_requires_an_exact_retained_parent() -> None:
             gated,
             kept,
             {"worldfoundry.wrapper": ["gated/**/*"]},
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize("populated", [False, True])
+def test_dvlt_runtime_data_is_excluded_with_or_without_its_local_namespace(tmp_path: Path, populated: bool) -> None:
+    depth = tmp_path / "worldfoundry/base_models/three_dimensions/depth"
+    depth.mkdir(parents=True)
+    if populated:
+        (depth / "dvlt/dvlt_runtime").mkdir(parents=True)
+    config = load_find_config()
+    kept = selected_packages(discover_packages(config, repo_root=tmp_path), config["exclude"])
+    data_excludes = load_pyproject()["tool"]["setuptools"]["exclude-package-data"]
+    assert (
+        package_data_exclusion_gaps(
+            ["worldfoundry/base_models/three_dimensions/depth/dvlt/dvlt_runtime"], kept, data_excludes
         )
         == []
     )

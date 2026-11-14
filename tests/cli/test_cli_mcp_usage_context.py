@@ -49,9 +49,13 @@ def test_evaluate_mutex_flags_raise_cli_usage_error() -> None:
         )
 
 
-def test_score_usage_error_exits_two_with_json(capsys: pytest.CaptureFixture[str]) -> None:
+def test_score_usage_error_exits_two_with_json(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     from worldfoundry.cli.main import main
 
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("TERM", "dumb")
     returncode = main(["score", "--benchmark", "does-not-exist-xyz", "--plan-only", "--json"])
     assert returncode == 2
     captured = capsys.readouterr()

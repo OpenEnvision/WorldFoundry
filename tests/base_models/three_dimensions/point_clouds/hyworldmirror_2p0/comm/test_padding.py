@@ -40,7 +40,7 @@ def test_padding_appends_values_on_each_dimension(dtype: torch.dtype, shape: tup
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16, torch.int64])
-def test_empty_dimension_preserves_padding_failures(dtype: torch.dtype) -> None:
+def test_empty_dimension_matches_native_padding(dtype: torch.dtype) -> None:
     tensor = torch.empty(2, 0, 3, dtype=dtype)
     assert minimal_pad_to_divisible(tensor, 4)[0] is tensor
     assert depad_by_length(tensor, 0).shape == tensor.shape
@@ -49,10 +49,25 @@ def test_empty_dimension_preserves_padding_failures(dtype: torch.dtype) -> None:
     assert padded.dtype == dtype
     assert torch.all(padded == torch.tensor(-1.5, dtype=dtype))
     for dim in (0, 2):
-        with pytest.raises(RuntimeError):
-            minimal_pad_to_divisible(tensor, 4, dim=dim)
-        with pytest.raises(RuntimeError):
-            pad_by_length(tensor, 2, dim=dim)
+        for minimal in (True, False):
+            length = (-tensor.shape[dim]) % 4 if minimal else 2
+            padding = (0, 0, 0, 0, 0, length) if dim == 0 else (0, length, 0, 0, 0, 0)
+
+            def apply_padding() -> torch.Tensor:
+                if minimal:
+                    result, actual_length = minimal_pad_to_divisible(tensor, 4, dim=dim)
+                    assert actual_length == length
+                    return result
+                return pad_by_length(tensor, length, dim=dim)
+
+            try:
+                expected = torch.nn.functional.pad(tensor, padding, mode="constant", value=0.0)
+            except RuntimeError as native_error:
+                with pytest.raises(type(native_error)) as actual_error:
+                    apply_padding()
+                assert str(actual_error.value) == str(native_error)
+            else:
+                torch.testing.assert_close(apply_padding(), expected, rtol=0, atol=0)
 
 
 def test_no_padding_identity_and_depadding_view() -> None:
