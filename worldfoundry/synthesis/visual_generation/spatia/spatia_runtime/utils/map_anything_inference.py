@@ -9,11 +9,15 @@ import numpy as np
 import open3d as o3d
 import torch
 import torchvision.transforms as TF
-from mapanything.models import MapAnything
-from mapanything.utils.geometry import closed_form_pose_inverse
 from PIL import Image
-from uniception.models.encoders.image_normalizations import IMAGE_NORMALIZATION_DICT
 
+from worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.encoders.image_normalizations import (
+    IMAGE_NORMALIZATION_DICT,
+)
+from worldfoundry.base_models.three_dimensions.general_3d.mapanything.mapanything.models import MapAnything
+from worldfoundry.base_models.three_dimensions.general_3d.mapanything.mapanything.utils.geometry import (
+    closed_form_pose_inverse,
+)
 from worldfoundry.synthesis.visual_generation.spatia.spatia_runtime.utils.camera_io import (
     read_intrinsics_from_txt,
     read_w2cs_from_txt,

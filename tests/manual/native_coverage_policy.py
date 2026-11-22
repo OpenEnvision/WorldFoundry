@@ -234,11 +234,22 @@ def affected_variants(
     declared_dependencies = runtime_dependencies(rows, root) if changed_paths else {}
     environments = declared_environment_variants(root, rows) if changed_paths else {}
     native = {variant_key(row) for row in rows}
+    impact = _load_impact_module()
+    manifest = root / "tests/manual/geometry_regression_dependencies.json"
+    ignored_paths = (
+        json.loads(manifest.read_text()).get("ignored_paths", []) if changed_paths and manifest.is_file() else []
+    )
+    if not isinstance(ignored_paths, list):
+        raise ValueError("Ignored paths must be a list of repository patterns")
+    for pattern in ignored_paths:
+        impact.relative_path(pattern)
     source_changes = []
     for path in changed_paths:
         pure = Path(path)
         if pure.is_absolute() or ".." in pure.parts or pure.as_posix() != path:
             raise ValueError(f"Invalid changed repository path: {path}")
+        if impact.matches(path, ignored_paths):
+            continue
         direct = [row for row in rows if path in {row.get("catalog_path"), row.get("binding_path")}]
         if direct:
             affected.update(variant_key(row) for row in direct)
@@ -261,7 +272,7 @@ def affected_variants(
         ):
             source_changes.append(path)
     if source_changes:
-        graph = _load_impact_module().ImportGraph(root)
+        graph = impact.ImportGraph(root)
         closures = {}
         for row in rows:
             target = row.get("target")

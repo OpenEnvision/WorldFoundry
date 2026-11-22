@@ -67,6 +67,11 @@
   ],
   "ignored_paths": [
     "docs/**",
+    "skills/index.md",
+    "skills/worldfoundry-studio-serving/SKILL.md",
+    "skills/worldfoundry-studio-serving/references/realtime-contract.md",
+    "worldfoundry/base_models/README.md",
+    "worldfoundry/base_models/three_dimensions/README.md",
     "README*",
     "LICENSE*",
     "THIRD-PARTY-NOTICES",
@@ -97,6 +102,8 @@
     "depth-anything-v3": [
       "worldfoundry/base_models/three_dimensions/depth/depth_anything/runtime_v3.py",
       "worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v3/**",
+      "worldfoundry/base_models/perception_core/general_perception/dinov2/variants/depth_anything_v3/vision_transformer.py",
+      "worldfoundry/base_models/perception_core/general_perception/dinov2/variants/depth_anything_v3/layers/attention.py",
       "worldfoundry/pipelines/depth_anything/pipeline_depth_anything_v3.py"
     ],
     "cut3r": [
@@ -394,7 +401,8 @@
       "worldfoundry/base_models/llm_mllm_core/mllm/omnivinci/**"
     ],
     "action-go1": [
-      "worldfoundry/synthesis/action_generation/go1/**"
+      "worldfoundry/synthesis/action_generation/go1/**",
+      "worldfoundry/base_models/llm_mllm_core/action/rdt.py"
     ],
     "action-ahawam": [
       "worldfoundry/synthesis/action_generation/ahawam/**"
@@ -423,16 +431,26 @@
       "worldfoundry/synthesis/action_generation/internvla_a1/**"
     ],
     "action-lingbot-vla": [
-      "worldfoundry/synthesis/action_generation/lingbot_vla/**"
+      "worldfoundry/synthesis/action_generation/lingbot_vla/**",
+      "worldfoundry/base_models/llm_mllm_core/action/lingbot/__init__.py",
+      "worldfoundry/base_models/llm_mllm_core/action/lingbot/modeling.py",
+      "worldfoundry/base_models/llm_mllm_core/action/lingbot/preprocessing.py"
     ],
     "action-lingbot-vla-v2": [
-      "worldfoundry/synthesis/action_generation/lingbot_vla_v2/**"
+      "worldfoundry/synthesis/action_generation/lingbot_vla_v2/**",
+      "worldfoundry/base_models/llm_mllm_core/action/lingbot/__init__.py",
+      "worldfoundry/base_models/llm_mllm_core/action/lingbot/modeling.py",
+      "worldfoundry/base_models/llm_mllm_core/action/lingbot/preprocessing.py"
     ],
     "action-cogact": [
-      "worldfoundry/synthesis/action_generation/cogact/**"
+      "worldfoundry/synthesis/action_generation/cogact/**",
+      "worldfoundry/base_models/llm_mllm_core/action/cogact.py",
+      "worldfoundry/base_models/llm_mllm_core/action/cogact_diffusion.py"
     ],
     "action-db-cogact": [
-      "worldfoundry/synthesis/action_generation/db_cogact/**"
+      "worldfoundry/synthesis/action_generation/db_cogact/**",
+      "worldfoundry/base_models/llm_mllm_core/action/cogact.py",
+      "worldfoundry/base_models/llm_mllm_core/action/cogact_diffusion.py"
     ],
     "action-diffusion-policy": [
       "worldfoundry/synthesis/action_generation/diffusion_policy/**"
@@ -441,7 +459,8 @@
       "worldfoundry/synthesis/action_generation/roboflamingo/**"
     ],
     "action-tinyvla": [
-      "worldfoundry/synthesis/action_generation/tinyvla/**"
+      "worldfoundry/synthesis/action_generation/tinyvla/**",
+      "worldfoundry/base_models/llm_mllm_core/action/transformer.py"
     ],
     "action-molmoact2": [
       "worldfoundry/synthesis/action_generation/molmoact2/**"
@@ -511,7 +530,13 @@
       "worldfoundry/pipelines/infinite_world/pipeline_infinite_world.py"
     ],
     "visual-krea_realtime_video": [
-      "worldfoundry/synthesis/visual_generation/krea_realtime_video/**"
+      "worldfoundry/synthesis/visual_generation/krea_realtime/worldfoundry_runner.py",
+      "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/sample.py",
+      "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/release_server.py",
+      "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/pipeline/causal_inference.py",
+      "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/runtime_utils/memory.py",
+      "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/runtime_utils/vae_block3.py",
+      "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/utils/wan_wrapper.py"
     ],
     "visual-lyra_1": [
       "worldfoundry/synthesis/visual_generation/lyra_1/**",
@@ -580,6 +605,7 @@
     ],
     "native-uniworld-view": [
       "worldfoundry/pipelines/uniworld_view/pipeline_uniworld_view.py",
+      "worldfoundry/pipelines/uniworld_view/upstream_entry.py",
       "worldfoundry/synthesis/visual_generation/uniworld_view/**"
     ],
     "action-last-r1": [
@@ -695,7 +721,11 @@
     ],
     "native-evoke": [
       "worldfoundry/pipelines/evoke/pipeline_evoke.py",
-      "worldfoundry/synthesis/visual_generation/evoke/**"
+      "worldfoundry/synthesis/visual_generation/evoke/**",
+      "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/mlp.py",
+      "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/patch_embed.py",
+      "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/rope.py",
+      "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/swiglu_ffn.py"
     ],
     "native-hydra": [
       "worldfoundry/pipelines/hydra/pipeline_hydra.py",
@@ -719,7 +749,26 @@
     ],
     "native-spatia": [
       "worldfoundry/pipelines/spatia/pipeline_spatia.py",
-      "worldfoundry/synthesis/visual_generation/spatia/**"
+      "worldfoundry/synthesis/visual_generation/spatia/**",
+      "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/models/mapanything/model.py",
+      "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/geometry.py",
+      "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/inference.py",
+      "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/image.py",
+      "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/multiview_confidence.py",
+      "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/misc.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/encoders/dense_rep_encoder.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/encoders/dinov2.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/encoders/global_rep_encoder.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/info_sharing/alternating_attention_transformer.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/info_sharing/cross_attention_transformer.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/info_sharing/global_attention_transformer.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/__init__.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/adaptors.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/dpt.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/linear.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/mlp_head.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/pose_head.py",
+      "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/utils/transformer_blocks.py"
     ],
     "native-versecrafter": [
       "worldfoundry/pipelines/versecrafter/pipeline_versecrafter.py",

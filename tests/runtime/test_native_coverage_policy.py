@@ -147,6 +147,62 @@ def test_unknown_inference_dependency_expands_conservatively(project):
     assert result["status"] == "failed"
 
 
+@pytest.fixture
+def project_with_ignored_paths(
+    project: tuple[Path, Path, dict, dict, dict],
+) -> tuple[Path, Path, dict, dict, dict]:
+    root, _, _, _, _ = project
+    declarations = json.loads((_ROOT / "tests/manual/geometry_regression_dependencies.json").read_text())
+    manifest = root / "tests/manual/geometry_regression_dependencies.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"ignored_paths": declarations["ignored_paths"]}))
+    return project
+
+
+@pytest.mark.parametrize(
+    "path", ["worldfoundry/base_models/README.md", "worldfoundry/base_models/three_dimensions/README.md"]
+)
+def test_declared_source_guides_do_not_affect_native_variants(
+    project_with_ignored_paths: tuple[Path, Path, dict, dict, dict], path: str
+) -> None:
+    root, _, cases, report, baseline = project_with_ignored_paths
+    result = policy.evaluate_policy(report, cases, baseline, root, [path])
+    assert result["status"] == "passed"
+    assert result["affected_variants"] == []
+    assert result["unknown_inference_paths"] == []
+    assert result["existing_uncovered_variants"] == ["large@large"]
+    assert result["accepted_reference_verified"] is result["gpu_inference_verified"] is False
+
+
+def test_ignored_guides_do_not_hide_unknown_model_code(
+    project_with_ignored_paths: tuple[Path, Path, dict, dict, dict],
+) -> None:
+    root, _, cases, report, baseline = project_with_ignored_paths
+    unknown = "worldfoundry/base_models/unclassified_runtime.py"
+    result = policy.evaluate_policy(
+        report,
+        cases,
+        baseline,
+        root,
+        ["worldfoundry/base_models/README.md", "worldfoundry/base_models/three_dimensions/README.md", unknown],
+    )
+    assert result["unknown_inference_paths"] == [unknown]
+    assert result["affected_variants"] == ["large@large", "small@small"]
+    assert result["status"] == "failed"
+    assert result["violations"] == [
+        {"variant": "large@large", "reason": "affected_native_variant_without_replay_recipe"}
+    ]
+
+
+def test_ignored_path_patterns_cannot_be_a_string(project: tuple[Path, Path, dict, dict, dict]) -> None:
+    root, _, cases, report, baseline = project
+    manifest = root / "tests/manual/geometry_regression_dependencies.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"ignored_paths": "docs/**"}))
+    with pytest.raises(ValueError, match="Ignored paths"):
+        policy.evaluate_policy(report, cases, baseline, root, ["worldfoundry/operators/helper.py"])
+
+
 def test_explicit_affected_model_without_case_fails_and_unknown_identity_is_rejected(project):
     root, _, cases, report, baseline = project
     assert policy.evaluate_policy(report, cases, baseline, root, affected_models=["large"])["status"] == "failed"

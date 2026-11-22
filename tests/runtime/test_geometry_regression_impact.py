@@ -136,6 +136,172 @@ def test_model_owned_input_and_loading_paths_keep_checkpoint_replays(
     assert {case for case, components in policy["cases"].items() if owners.intersection(components)} == expected_cases
 
 
+DECLARED_REPLAY_OWNERS = {
+    "cogact": (
+        (
+            "worldfoundry/base_models/llm_mllm_core/action/cogact.py",
+            "worldfoundry/base_models/llm_mllm_core/action/cogact_diffusion.py",
+        ),
+        {"cogact-action-short", "db-cogact-action-short"},
+    ),
+    "lingbot-vla": (
+        (
+            "worldfoundry/base_models/llm_mllm_core/action/lingbot/__init__.py",
+            "worldfoundry/base_models/llm_mllm_core/action/lingbot/modeling.py",
+            "worldfoundry/base_models/llm_mllm_core/action/lingbot/preprocessing.py",
+        ),
+        {"lingbot-vla-action-short", "lingbot-vla-v2-action-short"},
+    ),
+    "go1-rdt-embedder": (
+        ("worldfoundry/base_models/llm_mllm_core/action/rdt.py",),
+        {"go1-action-short"},
+    ),
+    "tinyvla-transformer": (
+        ("worldfoundry/base_models/llm_mllm_core/action/transformer.py",),
+        {"tinyvla-action-short"},
+    ),
+    "da3-dinov2": (
+        (
+            "worldfoundry/base_models/perception_core/general_perception/dinov2/variants/depth_anything_v3/vision_transformer.py",
+            "worldfoundry/base_models/perception_core/general_perception/dinov2/variants/depth_anything_v3/layers/attention.py",
+        ),
+        {
+            "da3-large-1.1",
+            "da3metric-large",
+            "da3nested-giant-large-1.1",
+            "lyra2-forward",
+            "alayaworld-spatial-two-chunks-short",
+        },
+    ),
+    "krea-worker": (
+        (
+            "worldfoundry/synthesis/visual_generation/krea_realtime/worldfoundry_runner.py",
+            "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/sample.py",
+            "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/release_server.py",
+            "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/pipeline/causal_inference.py",
+            "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/runtime_utils/memory.py",
+            "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/runtime_utils/vae_block3.py",
+            "worldfoundry/synthesis/visual_generation/krea_realtime/krea_runtime/utils/wan_wrapper.py",
+        ),
+        {"krea-realtime-two-blocks-short"},
+    ),
+    "uniworld-entrypoint": (
+        ("worldfoundry/pipelines/uniworld_view/upstream_entry.py",),
+        {"uniworld-view-single-view-short"},
+    ),
+    "spatia-mapanything": (
+        (
+            "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/models/mapanything/model.py",
+            "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/geometry.py",
+            "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/inference.py",
+            "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/image.py",
+            "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/multiview_confidence.py",
+            "worldfoundry/base_models/three_dimensions/general_3d/mapanything/mapanything/utils/misc.py",
+        ),
+        {"spatia-checkpoint-replay"},
+    ),
+    "spatia-uniception": (
+        (
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/encoders/dense_rep_encoder.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/encoders/dinov2.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/encoders/global_rep_encoder.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/info_sharing/alternating_attention_transformer.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/info_sharing/cross_attention_transformer.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/info_sharing/global_attention_transformer.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/__init__.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/adaptors.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/dpt.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/linear.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/mlp_head.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/prediction_heads/pose_head.py",
+            "worldfoundry/base_models/perception_core/general_perception/uniception/uniception/models/utils/transformer_blocks.py",
+        ),
+        {"spatia-checkpoint-replay"},
+    ),
+    "evoke-vigeo": (
+        (
+            "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/mlp.py",
+            "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/patch_embed.py",
+            "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/rope.py",
+            "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/swiglu_ffn.py",
+        ),
+        {"evoke-checkpoint-replay"},
+    ),
+}
+
+INFERENCE_GUIDE_PATHS = (
+    "skills/index.md",
+    "skills/worldfoundry-studio-serving/SKILL.md",
+    "skills/worldfoundry-studio-serving/references/realtime-contract.md",
+    "worldfoundry/base_models/README.md",
+    "worldfoundry/base_models/three_dimensions/README.md",
+)
+
+UNREPRESENTED_REPLAY_PATHS = (
+    "worldfoundry/base_models/three_dimensions/point_clouds/pi3_source.py",
+    "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/prior_dinov2.py",
+    "worldfoundry/base_models/three_dimensions/depth/vigeo/layers/drop_path.py",
+    "worldfoundry/operators/wow_operator.py",
+    "worldfoundry/synthesis/action_generation/rdt_1b/modeling.py",
+    "worldfoundry/base_models/perception_core/general_perception/dinov2/variants/vipe_dav3/vision_transformer.py",
+    "worldfoundry/data/models/runtime/environments/three_d/geometry-priors.yaml",
+    "worldfoundry/data/models/runtime/environments/video/studio_verified_unified.yaml",
+)
+
+
+@pytest.fixture(scope="module")
+def declared_replay_ownership_plan() -> dict:
+    paths = [path for owned, _ in DECLARED_REPLAY_OWNERS.values() for path in owned]
+    return impact.select_cases(
+        TOOLS / "geometry_regression_cases.json",
+        TOOLS / "geometry_regression_dependencies.json",
+        TOOLS.parents[1],
+        [*paths, *INFERENCE_GUIDE_PATHS, *UNREPRESENTED_REPLAY_PATHS],
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("paths,expected_cases", DECLARED_REPLAY_OWNERS.values(), ids=DECLARED_REPLAY_OWNERS)
+def test_configured_and_historical_dependencies_have_exact_replay_owners(
+    declared_replay_ownership_plan: dict,
+    paths: tuple[str, ...],
+    expected_cases: set[str],
+) -> None:
+    plan = declared_replay_ownership_plan
+    assert not plan["graph_errors"]
+    for path in paths:
+        assert path not in plan["uncovered_paths"]
+        owners = {
+            case
+            for case, reasons in plan["reasons"].items()
+            if any(reason.get("path") == path and "declared_component" in reason["kind"] for reason in reasons)
+        }
+        assert owners == expected_cases
+
+
+@pytest.mark.unit
+def test_inference_guides_are_documentation_not_replay_dependencies(declared_replay_ownership_plan: dict) -> None:
+    plan = declared_replay_ownership_plan
+    assert set(INFERENCE_GUIDE_PATHS) <= set(plan["ignored_paths"])
+    assert not set(INFERENCE_GUIDE_PATHS).intersection(plan["uncovered_paths"])
+    assert all(
+        reason.get("path") not in INFERENCE_GUIDE_PATHS for reasons in plan["reasons"].values() for reason in reasons
+    )
+
+
+@pytest.mark.unit
+def test_unrepresented_modes_and_environment_variants_remain_uncovered(declared_replay_ownership_plan: dict) -> None:
+    plan = declared_replay_ownership_plan
+    assert plan["status"] == "uncovered"
+    assert set(UNREPRESENTED_REPLAY_PATHS) <= set(plan["uncovered_paths"])
+    assert not set(UNREPRESENTED_REPLAY_PATHS).intersection(plan["ignored_paths"])
+    assert all(
+        reason.get("path") not in UNREPRESENTED_REPLAY_PATHS or "declared_component" not in reason["kind"]
+        for reasons in plan["reasons"].values()
+        for reason in reasons
+    )
+
+
 def git(root, *args):
     return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
 

@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 import json
+import runpy
+import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -18,6 +20,31 @@ from worldfoundry.synthesis.visual_generation.spatia import worldfoundry_runtime
 
 pytestmark = pytest.mark.unit
 _MODULE = "worldfoundry.synthesis.visual_generation.spatia.spatia_runtime."
+
+
+def test_spatia_mapanything_worker_imports_canonical_components(monkeypatch: pytest.MonkeyPatch) -> None:
+    bindings = {
+        "MapAnything": object(),
+        "closed_form_pose_inverse": object(),
+        "IMAGE_NORMALIZATION_DICT": {},
+    }
+    components = {
+        "worldfoundry.base_models.three_dimensions.general_3d.mapanything.mapanything.models": "MapAnything",
+        "worldfoundry.base_models.three_dimensions.general_3d.mapanything.mapanything.utils.geometry": "closed_form_pose_inverse",
+        "worldfoundry.base_models.perception_core.general_perception.uniception.uniception.models.encoders.image_normalizations": "IMAGE_NORMALIZATION_DICT",
+    }
+    for name, symbol in components.items():
+        module = ModuleType(name)
+        setattr(module, symbol, bindings[symbol])
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.setitem(sys.modules, "mapanything", None)
+    monkeypatch.setitem(sys.modules, "uniception", None)
+    monkeypatch.setitem(sys.modules, "open3d", ModuleType("open3d"))
+    monkeypatch.setenv("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+    worker = runtime.SpatiaRuntime.bundled_repo_root() / "utils" / "map_anything_inference.py"
+    namespace = runpy.run_path(str(worker))
+    for name, value in bindings.items():
+        assert namespace[name] is value
 
 
 def _runtime(tmp_path: Path) -> runtime.SpatiaRuntime:
