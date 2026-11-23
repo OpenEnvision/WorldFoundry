@@ -355,6 +355,28 @@ def test_extra_checkpoint_asset_fails_preflight_before_gpu(replay_host: dict, mo
     assert "weights/extra.txt" in report["error"]
 
 
+def test_reports_all_selected_asset_failures_before_gpu(replay_host: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    index_path = Path(replay_host["reference"]) / "accepted-index.json"
+    index = json.loads(index_path.read_text())
+    index["cases"].pop("b")
+    suite.write_json(index_path, index)
+    replay_host["reference_index_sha256"] = suite.replay.sha256(index_path)
+    manifest = json.loads((index_path.parent / "a" / "manifest.json").read_text())
+    (Path(manifest["case"]["assets"]["weights"]) / "unexpected.txt").touch()
+
+    def acquire(*args: object) -> None:
+        raise AssertionError("Incomplete resources reached GPU acquisition")
+
+    monkeypatch.setattr(suite, "acquire_gpu", acquire)
+    report = suite.run_suite(replay_host, case_ids=["a", "b"], preflight_only=True)
+
+    assert report["status"] == "failed"
+    assert report["cases"] == {}
+    assert set(report["asset_preflight_failures"]) == {"a", "b"}
+    assert "weights/unexpected.txt" in report["asset_preflight_failures"]["a"]
+    assert "Missing accepted reference" in report["asset_preflight_failures"]["b"]
+
+
 @pytest.mark.parametrize("name", ["manifest.json", "arrays.npz", "extra-export.png"])
 def test_modified_baseline_files_are_rejected_before_gpu(replay_host, monkeypatch, name):
     events, _ = no_gpu(monkeypatch)
