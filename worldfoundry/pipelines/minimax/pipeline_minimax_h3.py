@@ -31,7 +31,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any
 
@@ -185,6 +186,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         audio_vae: Any = None,
         text_encoder: Any = None,
         tokenizer: Any = None,
+        processor: Any = None,
         device: str = "cuda",
         component_devices: Mapping[str, str] | None = None,
         model_id: str | None = None,
@@ -195,6 +197,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         self.audio_vae = audio_vae
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
+        self.processor = processor
         self.component_devices = dict(component_devices or dict.fromkeys(_COMPONENT_NAMES, device))
 
     # ------------------------------------------------------------------ #
@@ -425,6 +428,109 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         pdir = cls._subdir(root, "processor", "tokenizer")
         return AutoTokenizer.from_pretrained(str(pdir))
 
+    @staticmethod
+    def _processor_root(base_root: Path, partition: str | None) -> Path:
+        """Resolve processor assets from either a partition or a repository root."""
+
+        candidates = [base_root / "processor"]
+        if partition is not None:
+            candidates.append(base_root / partition / "processor")
+        candidates.append(base_root.parent / "processor")
+        return next((candidate for candidate in candidates if candidate.is_dir()), candidates[0])
+
+    @staticmethod
+    def _load_processor(root: Path) -> Any:
+        from transformers import AutoProcessor
+
+        return AutoProcessor.from_pretrained(str(root))
+
+    @staticmethod
+    def _as_image(value: Any) -> Any:
+        from PIL import Image, ImageOps
+
+        if isinstance(value, Image.Image):
+            return ImageOps.exif_transpose(value).convert("RGB")
+        return ImageOps.exif_transpose(Image.open(value)).convert("RGB")
+
+    @staticmethod
+    def _fit_image(image: Any, *, height: int, width: int) -> Any:
+        from PIL import Image, ImageOps
+
+        if image.size == (width, height):
+            return image
+        return ImageOps.fit(
+            image,
+            (width, height),
+            method=Image.Resampling.LANCZOS,
+            centering=(0.5, 0.5),
+        )
+
+    def _encode_image(self, image: Any, *, deterministic: bool = False) -> torch.Tensor:
+        """Encode one PIL image into normalized H3 video latent storage."""
+
+        if self.video_vae is None:
+            raise RuntimeError(f"{self.model_id} image conditioning requires the video VAE")
+        device = torch.device(self.component_devices["video_vae"])
+        if deterministic:
+            latent = self.video_vae.encode_images([image], deterministic=True)[0]
+        else:
+            cuda_devices = (
+                [device.index if device.index is not None else torch.cuda.current_device()]
+                if device.type == "cuda"
+                else []
+            )
+            with torch.random.fork_rng(devices=cuda_devices):
+                torch.manual_seed(42)
+                if cuda_devices:
+                    torch.cuda.manual_seed(42)
+                latent = self.video_vae.encode_images([image])[0]
+        if latent.ndim == 4:
+            latent = latent.unsqueeze(0)
+        if latent.ndim != 5 or int(latent.shape[1]) != _VIDEO_LATENT_CHANNELS:
+            raise ValueError(f"Unexpected MiniMax-H3 image latent shape: {tuple(latent.shape)}")
+        arch = self.video_vae.sglang_config.arch_config
+        mean = latent.new_tensor(arch.latents_mean).view(1, -1, 1, 1, 1)
+        std = latent.new_tensor(arch.latents_std).view(1, -1, 1, 1, 1)
+        return ((latent.float() - mean) / std).contiguous()
+
+    def _encode_presentation(self, prompt: str, images: Sequence[Any]) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Encode a verbatim H3 prompt with optional numbered vision frames."""
+
+        if not images:
+            return self._encode_prompt(prompt), None
+        if self.processor is None:
+            raise RuntimeError(f"{self.model_id} visual conditioning requires processor assets")
+        if self.text_encoder is None or self.tokenizer is None:
+            raise RuntimeError(f"{self.model_id} text components are not initialized")
+        hidden, tags = self.text_encoder.encode_presentation(
+            prompt,
+            tokenizer=self.tokenizer,
+            processor=self.processor,
+            images=list(images),
+        )
+        if hidden.ndim == 3:
+            hidden = hidden[0]
+        return hidden, tags.detach().to("cpu")
+
+    @staticmethod
+    def _patchify_condition(
+        latent: torch.Tensor,
+        *,
+        seed: int,
+        noise_aug: float = 0.999,
+        seed_offset: int = 7919,
+    ) -> torch.Tensor:
+        """Apply H3 keyframe/reference noise augmentation and patchify into DiT rows."""
+
+        clean = latent.float()
+        if float(noise_aug) == 1.0:
+            augmented = clean
+        else:
+            generator = torch.Generator(device=latent.device).manual_seed(int(seed) + int(seed_offset))
+            noise = torch.randn(clean.shape, device=clean.device, dtype=clean.dtype, generator=generator)
+            augmented = float(noise_aug) * clean + (1.0 - float(noise_aug)) * noise
+        return minimax_h3_patchify_video_latent(augmented, patch_size=(1, _PATCH_H, _PATCH_W))
+
     # ------------------------------------------------------------------ #
     # Geometry / plan resolution.
     # ------------------------------------------------------------------ #
@@ -435,21 +541,43 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         short_edge: int,
         aspect_ratio: str,
         duration_seconds: float,
+        height: int | None = None,
+        width: int | None = None,
+        num_frames: int | None = None,
     ) -> dict[str, int]:
-        if not (MINIMAX_H3_MIN_DURATION_SECONDS <= duration_seconds <= MINIMAX_H3_MAX_DURATION_SECONDS):
-            raise ValueError(
-                f"duration_seconds must be in [{MINIMAX_H3_MIN_DURATION_SECONDS}, "
-                f"{MINIMAX_H3_MAX_DURATION_SECONDS}], got {duration_seconds}"
-            )
-        height, width = _resolve_canvas(short_edge, aspect_ratio)
-        frame_count = minimax_h3_align_frame_count(round(duration_seconds * self.DEFAULT_FPS))
+        del task
+        unit_h = _SPATIAL_COMPRESSION * _PATCH_H
+        unit_w = _SPATIAL_COMPRESSION * _PATCH_W
+        if height is not None or width is not None:
+            if height is None or width is None:
+                raise ValueError("height and width must be supplied together")
+            resolved_h, resolved_w = int(height), int(width)
+            if resolved_h <= 0 or resolved_w <= 0 or resolved_h % unit_h or resolved_w % unit_w:
+                raise ValueError(
+                    f"height and width must be positive multiples of {unit_h}, got {resolved_w}x{resolved_h}"
+                )
+        else:
+            resolved_h, resolved_w = _resolve_canvas(short_edge, aspect_ratio)
+
+        if num_frames is not None:
+            if isinstance(num_frames, bool) or int(num_frames) <= 0:
+                raise ValueError(f"num_frames must be a positive integer, got {num_frames!r}")
+            frame_count = minimax_h3_align_frame_count(int(num_frames))
+            audio_t = minimax_h3_audio_latent_t(frame_count / self.DEFAULT_FPS)
+        else:
+            if not (MINIMAX_H3_MIN_DURATION_SECONDS <= duration_seconds <= MINIMAX_H3_MAX_DURATION_SECONDS):
+                raise ValueError(
+                    f"duration_seconds must be in [{MINIMAX_H3_MIN_DURATION_SECONDS}, "
+                    f"{MINIMAX_H3_MAX_DURATION_SECONDS}], got {duration_seconds}"
+                )
+            frame_count = minimax_h3_align_frame_count(round(duration_seconds * self.DEFAULT_FPS))
+            audio_t = minimax_h3_audio_latent_t(duration_seconds)
         latent_t = minimax_h3_video_latent_t(frame_count)
-        latent_h = height // _SPATIAL_COMPRESSION
-        latent_w = width // _SPATIAL_COMPRESSION
-        audio_t = minimax_h3_audio_latent_t(duration_seconds)
+        latent_h = resolved_h // _SPATIAL_COMPRESSION
+        latent_w = resolved_w // _SPATIAL_COMPRESSION
         return {
-            "height": height,
-            "width": width,
+            "height": resolved_h,
+            "width": resolved_w,
             "frame_count": frame_count,
             "latent_t": latent_t,
             "latent_h": latent_h,
@@ -469,6 +597,9 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         short_edge: int = DEFAULT_SHORT_EDGE,
         aspect_ratio: str = DEFAULT_ASPECT_RATIO,
         duration_seconds: float = DEFAULT_DURATION_SECONDS,
+        height: int | None = None,
+        width: int | None = None,
+        num_frames: int | None = None,
         num_inference_steps: int = DEFAULT_NUM_INFERENCE_STEPS,
         seed: int = 0,
         flow_shift: float | None = None,
@@ -478,6 +609,12 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         ref_blocks: list[dict[str, Any]] | None = None,
         audio_ref_rows: torch.Tensor | None = None,
         text_token_tags: torch.Tensor | None = None,
+        action_text_spans: Sequence[tuple[int, int]] | None = None,
+        negative_prompt_embeds: torch.Tensor | None = None,
+        negative_text_token_tags: torch.Tensor | None = None,
+        negative_action_text_spans: Sequence[tuple[int, int]] | None = None,
+        cfg_scale: float = 1.0,
+        branch_context: Callable[[MiniMaxH3DenoiseBranch], AbstractContextManager] | None = None,
         sigma_knots: tuple[float, ...] | None = None,
         renoise: bool = False,
         shared_initial_noise: bool = False,
@@ -496,45 +633,64 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
             short_edge=short_edge,
             aspect_ratio=aspect_ratio,
             duration_seconds=duration_seconds,
+            height=height,
+            width=width,
+            num_frames=num_frames,
         )
-        text_len = int(prompt_embeds.shape[0])
 
-        if task == "ref2va":
-            if ref_blocks is None:
-                raise ValueError("ref2va requires ref_blocks")
-            packed = minimax_h3_packed_sequence_ref2va_blocks(
-                text_len=text_len,
-                latent_t=plan["latent_t"],
-                latent_h=plan["latent_h"],
-                latent_w=plan["latent_w"],
-                audio_t=plan["audio_t"],
-                ref_blocks=ref_blocks,
-            )
-        else:
-            include_keyframe = task == "fl2va"
-            packed = minimax_h3_packed_sequence(
-                text_len=text_len,
-                latent_t=plan["latent_t"],
-                latent_h=plan["latent_h"],
-                latent_w=plan["latent_w"],
-                audio_t=plan["audio_t"],
-                include_keyframe_cond=include_keyframe,
-                keyframe_frame_indices=keyframe_frame_indices if include_keyframe else None,
-                frame_count=plan["frame_count"] if include_keyframe else None,
+        def _build_branch(
+            embeds: torch.Tensor,
+            tags_override: torch.Tensor | None,
+            spans: Sequence[tuple[int, int]] | None,
+        ) -> tuple[dict[str, Any], MiniMaxH3DenoiseBranch]:
+            branch_text_len = int(embeds.shape[0])
+            if task == "ref2va":
+                if ref_blocks is None:
+                    raise ValueError("ref2va requires ref_blocks")
+                packed_branch = minimax_h3_packed_sequence_ref2va_blocks(
+                    text_len=branch_text_len,
+                    latent_t=plan["latent_t"],
+                    latent_h=plan["latent_h"],
+                    latent_w=plan["latent_w"],
+                    audio_t=plan["audio_t"],
+                    ref_blocks=ref_blocks,
+                )
+            else:
+                include_keyframe = task == "fl2va"
+                packed_branch = minimax_h3_packed_sequence(
+                    text_len=branch_text_len,
+                    latent_t=plan["latent_t"],
+                    latent_h=plan["latent_h"],
+                    latent_w=plan["latent_w"],
+                    audio_t=plan["audio_t"],
+                    include_keyframe_cond=include_keyframe,
+                    keyframe_frame_indices=keyframe_frame_indices if include_keyframe else None,
+                    frame_count=plan["frame_count"] if include_keyframe else None,
+                    action_text_spans=spans,
+                )
+            branch_tags = packed_branch["token_tags"].clone()
+            if tags_override is not None:
+                supplied_tags = tags_override.reshape(-1).to(dtype=branch_tags.dtype, device=branch_tags.device)
+                if int(supplied_tags.numel()) != branch_text_len:
+                    raise ValueError(
+                        f"text_token_tags length {int(supplied_tags.numel())} != prompt length {branch_text_len}"
+                    )
+                branch_tags[:branch_text_len] = supplied_tags
+            return packed_branch, MiniMaxH3DenoiseBranch(
+                packed=packed_branch,
+                text_embeddings=embeds,
+                token_tags=branch_tags,
+                device=device,
             )
 
-        token_tags = packed["token_tags"].clone()
-        if text_token_tags is not None:
-            supplied_tags = text_token_tags.reshape(-1).to(dtype=token_tags.dtype, device=token_tags.device)
-            if int(supplied_tags.numel()) != text_len:
-                raise ValueError(f"text_token_tags length {int(supplied_tags.numel())} != prompt length {text_len}")
-            token_tags[:text_len] = supplied_tags
-        branch = MiniMaxH3DenoiseBranch(
-            packed=packed,
-            text_embeddings=prompt_embeds,
-            token_tags=token_tags,
-            device=device,
-        )
+        packed, branch = _build_branch(prompt_embeds, text_token_tags, action_text_spans)
+        negative_branch: MiniMaxH3DenoiseBranch | None = None
+        if negative_prompt_embeds is not None and float(cfg_scale) != 1.0:
+            _, negative_branch = _build_branch(
+                negative_prompt_embeds,
+                negative_text_token_tags,
+                negative_action_text_spans if negative_action_text_spans is not None else action_text_spans,
+            )
 
         generator = torch.Generator(device="cpu").manual_seed(int(seed))
         n_video_rows = int(packed["img_pos"].shape[0])
@@ -542,7 +698,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         # The released t2va recipe seeds the raw BCTHW latent before
         # patchification. Drawing directly in token-row order changes which
         # noise value lands at each channel/time/pixel for a given seed.
-        initial_video = minimax_h3_patchify_video_latent(
+        initial_video_target = minimax_h3_patchify_video_latent(
             torch.randn(
                 1,
                 _VIDEO_LATENT_CHANNELS,
@@ -554,13 +710,38 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
             ),
             patch_size=(1, _PATCH_H, _PATCH_W),
         )
+        if branch.video_target_start > 0:
+            initial_video = torch.cat(
+                [
+                    torch.zeros(
+                        branch.video_target_start,
+                        int(initial_video_target.shape[-1]),
+                        dtype=torch.float32,
+                    ),
+                    initial_video_target,
+                ],
+                dim=0,
+            )
+        else:
+            initial_video = initial_video_target
         assert initial_video.shape == (n_video_rows, 96)
         # The reference H3 recipe uses a fresh generator for audio. Distilled
         # adapters can opt into one shared stream when their release specifies it.
         audio_generator = generator if shared_initial_noise else torch.Generator(device="cpu").manual_seed(int(seed))
-        initial_audio = torch.randn(
-            n_audio_rows, _AUDIO_LATENT_CHANNELS, generator=audio_generator, dtype=torch.float32
+        target_audio_rows = n_audio_rows - branch.audio_target_start
+        initial_audio_target = torch.randn(
+            target_audio_rows, _AUDIO_LATENT_CHANNELS, generator=audio_generator, dtype=torch.float32
         )
+        if branch.audio_target_start > 0:
+            initial_audio = torch.cat(
+                [
+                    torch.zeros(branch.audio_target_start, _AUDIO_LATENT_CHANNELS, dtype=torch.float32),
+                    initial_audio_target,
+                ],
+                dim=0,
+            )
+        else:
+            initial_audio = initial_audio_target
 
         if sigma_knots is None:
             sigmas_video = minimax_h3_time_shift_sigmas(num_steps=num_inference_steps, shift_scale=flow_shift)
@@ -571,19 +752,25 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         if len(sigmas_video) != len(sigmas_audio):
             raise ValueError("video/audio sigma schedules must have equal lengths")
 
-        video_rows, audio_rows = minimax_h3_denoise_loop(
-            model=self.transformer,
-            positive=branch,
-            initial_video_rows=initial_video,
-            initial_audio_rows=initial_audio,
-            keyframe_cond_rows=keyframe_cond_rows,
-            audio_ref_rows=audio_ref_rows,
-            sigmas_video=sigmas_video,
-            sigmas_audio=sigmas_audio,
-            device=device,
-            renoise=renoise,
-            noise_generator=torch.Generator(device=device).manual_seed(int(seed) + 1) if renoise else None,
-        )
+        loop_kwargs: dict[str, Any] = {
+            "model": self.transformer,
+            "positive": branch,
+            "initial_video_rows": initial_video,
+            "initial_audio_rows": initial_audio,
+            "keyframe_cond_rows": keyframe_cond_rows,
+            "audio_ref_rows": audio_ref_rows,
+            "sigmas_video": sigmas_video,
+            "sigmas_audio": sigmas_audio,
+            "device": device,
+            "renoise": renoise,
+            "noise_generator": torch.Generator(device=device).manual_seed(int(seed) + 1) if renoise else None,
+        }
+        if negative_branch is not None:
+            loop_kwargs["negative"] = negative_branch
+            loop_kwargs["cfg_scale"] = float(cfg_scale)
+        if branch_context is not None:
+            loop_kwargs["branch_context"] = branch_context
+        video_rows, audio_rows = minimax_h3_denoise_loop(**loop_kwargs)
 
         # Target rows are the suffix after any condition/reference rows.
         video_target = video_rows[branch.video_target_slice]

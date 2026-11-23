@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -43,10 +43,9 @@ class PikaH3FlexPipeline(NativeMiniMaxH3Pipeline):
     ) -> None:
         if adapter_task not in PIKA_H3_FLEX_ADAPTERS:
             raise ValueError(f"Pika H3 Flex adapter_task must be one of {PIKA_H3_FLEX_ADAPTERS}")
-        super().__init__(model_id=model_id or self.MODEL_ID, **kwargs)
+        super().__init__(model_id=model_id or self.MODEL_ID, processor=processor, **kwargs)
         self.adapter_task = adapter_task
         self.adapter_path = None if adapter_path is None else Path(adapter_path).expanduser().resolve()
-        self.processor = processor
         self.base_model_path = None if base_model_path is None else Path(base_model_path).expanduser().resolve()
 
     @classmethod
@@ -127,81 +126,6 @@ class PikaH3FlexPipeline(NativeMiniMaxH3Pipeline):
             base_model_path=base_root,
             model_id=model_id or cls.MODEL_ID,
         )
-
-    @staticmethod
-    def _processor_root(base_root: Path, partition: str | None) -> Path:
-        """Resolve processor assets from either a partition or a repository root."""
-
-        candidates = [base_root / "processor"]
-        if partition is not None:
-            candidates.append(base_root / partition / "processor")
-        candidates.append(base_root.parent / "processor")
-        return next((candidate for candidate in candidates if candidate.is_dir()), candidates[0])
-
-    @staticmethod
-    def _load_processor(root: Path) -> Any:
-        from transformers import AutoProcessor
-
-        return AutoProcessor.from_pretrained(str(root))
-
-    @staticmethod
-    def _as_image(value: Any) -> Any:
-        from PIL import Image, ImageOps
-
-        if isinstance(value, Image.Image):
-            return ImageOps.exif_transpose(value).convert("RGB")
-        return ImageOps.exif_transpose(Image.open(value)).convert("RGB")
-
-    @staticmethod
-    def _fit_image(image: Any, *, height: int, width: int) -> Any:
-        from PIL import Image, ImageOps
-
-        return ImageOps.fit(
-            image,
-            (width, height),
-            method=Image.Resampling.LANCZOS,
-            centering=(0.5, 0.5),
-        )
-
-    def _encode_image(self, image: Any) -> torch.Tensor:
-        """Encode one PIL image into normalized H3 video latent storage."""
-
-        if self.video_vae is None:
-            raise RuntimeError("Pika H3 Flex image conditioning requires the video VAE")
-        device = torch.device(self.component_devices["video_vae"])
-        cuda_devices = (
-            [device.index if device.index is not None else torch.cuda.current_device()] if device.type == "cuda" else []
-        )
-        with torch.random.fork_rng(devices=cuda_devices):
-            torch.manual_seed(42)
-            if cuda_devices:
-                torch.cuda.manual_seed(42)
-            latent = self.video_vae.encode_images([image])[0]
-        if latent.ndim == 4:
-            latent = latent.unsqueeze(0)
-        if latent.ndim != 5 or int(latent.shape[1]) != 24:
-            raise ValueError(f"Unexpected MiniMax-H3 image latent shape: {tuple(latent.shape)}")
-        arch = self.video_vae.sglang_config.arch_config
-        mean = latent.new_tensor(arch.latents_mean).view(1, -1, 1, 1, 1)
-        std = latent.new_tensor(arch.latents_std).view(1, -1, 1, 1, 1)
-        return ((latent.float() - mean) / std).contiguous()
-
-    def _encode_presentation(self, prompt: str, images: Sequence[Any]) -> tuple[torch.Tensor, torch.Tensor | None]:
-        if not images:
-            return self._encode_prompt(prompt), None
-        if self.processor is None:
-            raise RuntimeError("Pika H3 Flex visual conditioning requires processor assets")
-        if self.text_encoder is None or self.tokenizer is None:
-            raise RuntimeError("Pika H3 Flex text components are not initialized")
-        hidden, tags = self.text_encoder.encode_presentation(
-            prompt,
-            tokenizer=self.tokenizer,
-            processor=self.processor,
-            images=list(images),
-        )
-        if hidden.ndim == 3:
-            hidden = hidden[0]
-        return hidden, tags.detach().to("cpu")
 
     @staticmethod
     def _normalise_images(values: Any) -> list[Any]:
@@ -349,17 +273,6 @@ class PikaH3FlexPipeline(NativeMiniMaxH3Pipeline):
             )
             result["artifact_path"] = result["output_path"]
         return result if return_dict else result.get("artifact_path", result)
-
-    @staticmethod
-    def _patchify_condition(latent: torch.Tensor, *, seed: int) -> torch.Tensor:
-        from worldfoundry.pipelines.minimax._minimax_h3.packed_tokens import minimax_h3_patchify_video_latent
-
-        # Pika's released reference augmentation is intentionally request-local.
-        clean = latent.float()
-        generator = torch.Generator(device=latent.device).manual_seed(int(seed) + 7919)
-        noise = torch.randn(clean.shape, device=clean.device, dtype=clean.dtype, generator=generator)
-        augmented = 0.999 * clean + 0.001 * noise
-        return minimax_h3_patchify_video_latent(augmented, patch_size=(1, 2, 2))
 
 
 __all__ = ["PIKA_H3_FLEX_KNOTS", "PikaH3FlexPipeline"]

@@ -1,0 +1,28 @@
+---
+title: "H3-World"
+description: "H3-World interactive action-conditioned world model over the shared MiniMax-H3 runtime."
+modelId: "h3-world"
+pageSource: authored
+---
+
+H3-World is an interactive, action-conditioned world model built on MiniMax-H3. It translates keyboard states into per-latent English instructions and binds each instruction to its matching video latent through directed attention routing and a rank-32 LoRA adapter.
+
+Paper: [arXiv 2609.01560](https://arxiv.org/abs/2609.01560).
+
+Project page: [danzer1xxxxchan.github.io/H3-World](https://danzer1xxxxchan.github.io/H3-World). Code: [Danzer1xxxxChan/H3-World](https://github.com/Danzer1xxxxChan/H3-World).
+
+## Runtime contract
+
+H3-World runs in-tree on WorldFoundry's canonical MiniMax-H3 FL2VA components (DiT, Qwen3-VL encoder, video/audio VAEs, packed sequence builder, denoise loop, and MP4 muxer) inside the unified environment.
+
+Prepare the MiniMax-H3 `FL2VA` base weights (`MiniMaxAI/MiniMax-H3`) and the H3-World LoRA checkpoint (`DANNY621/H3-World`, `step-10000.safetensors`) before running:
+
+```bash
+wf run h3-world --pipeline.task-profile action-video --json
+```
+
+Inputs: a starting frame (`images`), a scene description (`prompt`), and action controls via `action_preset` (`still`, `forward`, `back`, `strafe-left`, `strafe-right`, `tilt-up`, `tilt-down`, `pan-left`, `pan-right`, `pan-left-fast`, `pan-right-fast`), `interactions` (key combinations or per-latent schedules), or explicit `action_script` sentences. Default output is `832x480`, 124 frames at 24 fps with synchronized 32 kHz stereo audio (`h3-world.mp4`).
+
+## Limitations
+
+Frame counts must satisfy `17k + 5` (such as 124, 243, or 481) and spatial dimensions must be multiples of 32. Both the MiniMax-H3 base weights and the H3-World LoRA checkpoint are subject to the MiniMax H3 Community License Agreement.

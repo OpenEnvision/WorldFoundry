@@ -11,28 +11,13 @@ copying the transformer or introducing a second H3 implementation.
 
 from __future__ import annotations
 
-from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 import torch
 import torch.nn as nn
 
-_LORA_SUFFIXES = (
-    (".lora_A.default.weight", "A"),
-    (".lora_B.default.weight", "B"),
-    (".lora_A.weight", "A"),
-    (".lora_B.weight", "B"),
-)
-
-
-def _strip_adapter_prefix(key: str) -> str:
-    """Normalize the PEFT wrapper prefixes used by released adapter files."""
-
-    for prefix in ("base_model.model.", "model.", "transformer."):
-        if key.startswith(prefix):
-            return key[len(prefix) :]
-    return key
+from ._lora import read_lora_groups, validate_lora_pair, validate_lora_scale
 
 
 def _target_spec(source: str) -> tuple[str, str | None, bool] | None:
@@ -55,23 +40,6 @@ def _target_spec(source: str) -> tuple[str, str | None, bool] | None:
     if source.endswith(".ff.net.2"):
         return source[: -len(".ff.net.2")] + ".mlp.fc2", None, False
     return None
-
-
-def _read_lora_groups(path: Path) -> dict[str, dict[str, torch.Tensor]]:
-    """Read adapter tensors grouped by their Diffusers target module."""
-
-    from safetensors.torch import load_file
-
-    groups: dict[str, dict[str, torch.Tensor]] = defaultdict(dict)
-    for raw_key, value in load_file(str(path), device="cpu").items():
-        key = _strip_adapter_prefix(raw_key)
-        for suffix, side in _LORA_SUFFIXES:
-            if key.endswith(suffix):
-                groups[key[: -len(suffix)]][side] = value
-                break
-        else:
-            raise ValueError(f"Unsupported Pika H3 Flex adapter tensor: {raw_key}")
-    return dict(groups)
 
 
 def load_pika_h3_flex_adapter(
@@ -98,34 +66,20 @@ def load_pika_h3_flex_adapter(
     adapter_path = Path(path).expanduser().resolve()
     if not adapter_path.is_file():
         raise FileNotFoundError(f"Pika H3 Flex adapter not found: {adapter_path}")
-    if isinstance(rank, bool) or int(rank) <= 0:
-        raise ValueError("Pika H3 Flex LoRA rank must be positive")
-    rank = int(rank)
-    alpha = rank if alpha is None else int(alpha)
-    if alpha <= 0:
-        raise ValueError("Pika H3 Flex LoRA alpha must be positive")
+    rank, alpha = validate_lora_scale(rank=rank, alpha=alpha, label="Pika H3 Flex")
 
     merged: list[str] = []
-    for source, pair in _read_lora_groups(adapter_path).items():
+    for source, pair in read_lora_groups(adapter_path, label="Pika H3 Flex").items():
         target_spec = _target_spec(source)
         if target_spec is None:
             if strict:
                 raise ValueError(f"Unsupported Pika H3 Flex LoRA target: {source}")
             continue
-        if set(pair) != {"A", "B"}:
-            raise ValueError(f"Incomplete Pika H3 Flex LoRA pair for {source}: {sorted(pair)}")
+        matrix_a, matrix_b = validate_lora_pair(source, pair, rank=rank, label="Pika H3 Flex")
         target, logical, swap_halves = target_spec
         module = model.get_submodule(target)
         if not isinstance(module, nn.Linear):
             raise TypeError(f"Pika H3 Flex LoRA target is not linear: {target}")
-        matrix_a, matrix_b = pair["A"], pair["B"]
-        if matrix_a.ndim != 2 or matrix_b.ndim != 2:
-            raise ValueError(f"Pika H3 Flex LoRA tensors must be matrices: {source}")
-        if int(matrix_a.shape[0]) != rank or int(matrix_b.shape[1]) != rank:
-            raise ValueError(
-                f"Pika H3 Flex LoRA rank mismatch for {source}: "
-                f"A={tuple(matrix_a.shape)} B={tuple(matrix_b.shape)} rank={rank}"
-            )
         delta = (matrix_b.float() @ matrix_a.float()) * (float(alpha) / float(rank))
         if swap_halves:
             if delta.shape[0] % 2:

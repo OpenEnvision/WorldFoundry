@@ -73,6 +73,9 @@ class DiagonalGaussianDistribution:
         noise = noise.to(device=self.parameters.device)
         return noise.mul_(self.std).add_(self.mean)
 
+    def mode(self):
+        return self.mean
+
 
 class ClsTokenAggregator:
     def __init__(self, vae_model):
@@ -737,6 +740,7 @@ class AutoencoderKL(nn.Module):
         transform_input: bool = False,
         use_fp16_latent: bool = False,
         verbose: bool = False,
+        deterministic: bool = False,
     ) -> list[torch.Tensor]:
         """encode images into latents
 
@@ -790,14 +794,14 @@ class AutoencoderKL(nn.Module):
             stacked = torch.cat(prepared, dim=0)
             if verbose:
                 logger.info(f"batch encode input shape {tuple(stacked.shape)}")
-            all_latents = self.encode_base(stacked, True)
+            all_latents = self.encode_base(stacked, True, deterministic=deterministic)
             image_latents = [all_latents[i].contiguous() for i in range(all_latents.shape[0])]
         else:
             image_latents = []
             for image_tensor in prepared:
                 if verbose:
                     logger.info(f"input shape {tuple(image_tensor.shape)}")
-                image_latent = self.encode_base(image_tensor, True)
+                image_latent = self.encode_base(image_tensor, True, deterministic=deterministic)
                 image_latents.append(image_latent.squeeze(0).contiguous())
 
         if use_fp16_latent:
@@ -1083,13 +1087,14 @@ class AutoencoderKLLegacy(AutoencoderKL):
             return self.decoder(z2)
         return self.decoder(z2, z)
 
-    def encode_base(self, input, process_image=False):
+    def encode_base(self, input, process_image=False, deterministic=False):
         if self.use_3d_conv and input.ndim == 4:
             input = input.unsqueeze(2)
 
         moments = self._adaptive_encode(input) if process_image or not self.use_3d_conv else self.encode_temporal(input)
 
-        z = DiagonalGaussianDistribution(moments).sample()
+        dist = DiagonalGaussianDistribution(moments)
+        z = dist.mode() if deterministic else dist.sample()
 
         if process_image and self.use_3d_conv:
             z = self.trim_code(z, 1)

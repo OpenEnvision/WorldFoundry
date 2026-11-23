@@ -11,6 +11,7 @@ Single-GPU port: SGLang's Ulysses sequence-parallel context collapses to
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from typing import Any
@@ -173,6 +174,28 @@ class MiniMaxH3DenoiseBranch:
         local_row_stop = local_row_start + local_seq_len
         self.local_row_slice = slice(local_row_start, local_row_stop)
         self.block_token_tags = token_tags_host[local_row_start:local_row_stop].clamp(min=0).to(device)
+        spans_for_refiner = packed.get("action_text_spans_local")
+        if spans_for_refiner is None and packed.get("action_text_rows") is not None:
+            spans_for_refiner = [(int(lo), int(hi)) for lo, hi in packed["action_text_rows"].tolist()]
+        if spans_for_refiner:
+            refiner_bounds = [0, int(spans_for_refiner[0][0]), *(int(hi) for _, hi in spans_for_refiner)]
+            if refiner_bounds[-1] != text_len:
+                raise ValueError(f"action refiner segmentation ends at {refiner_bounds[-1]} != text_len {text_len}")
+            if any(left >= right for left, right in itertools.pairwise(refiner_bounds)):
+                raise ValueError(f"action refiner bounds must be strictly increasing: {refiner_bounds}")
+            refiner_max = max(right - left for left, right in itertools.pairwise(refiner_bounds))
+        else:
+            refiner_bounds = [0, text_len]
+            refiner_max = text_len
+        self.action_mask_spec: dict[str, Any] | None = (
+            {
+                "action_text_rows": packed["action_text_rows"],
+                "video_start": int(packed["action_video_start"]),
+                "frame_rows": int(packed["action_frame_rows"]),
+            }
+            if packed.get("action_text_rows") is not None
+            else None
+        )
         self.static_kwargs: dict[str, Any] = {
             # Cast the fp64 position grid on the host; MiniMaxH3Rope casts to
             # fp32 anyway, and some devices cannot execute fp64.
@@ -191,9 +214,9 @@ class MiniMaxH3DenoiseBranch:
                 "max_seqlen_q": int(cu[1]),
             },
             "refiner_packed_seq_params": {
-                "cu_seqlens_q": torch.tensor([0, text_len], dtype=torch.int32, device=device),
-                "cu_seqlens_q_host": (0, text_len),
-                "max_seqlen_q": text_len,
+                "cu_seqlens_q": torch.tensor(refiner_bounds, dtype=torch.int32, device=device),
+                "cu_seqlens_q_host": tuple(refiner_bounds),
+                "max_seqlen_q": refiner_max,
             },
         }
 
@@ -316,6 +339,9 @@ def minimax_h3_denoise_loop(
     model: Any,
     model_forward: (Callable[[Any, dict[str, Any], int], tuple[torch.Tensor, torch.Tensor]] | None) = None,
     positive: MiniMaxH3DenoiseBranch,
+    negative: MiniMaxH3DenoiseBranch | None = None,
+    cfg_scale: float = 1.0,
+    branch_context: Callable[[MiniMaxH3DenoiseBranch], AbstractContextManager] | None = None,
     initial_video_rows: torch.Tensor,
     initial_audio_rows: torch.Tensor,
     keyframe_cond_rows: torch.Tensor | None,
@@ -334,17 +360,24 @@ def minimax_h3_denoise_loop(
 
     ``initial_video_rows`` covers all image rows of the positive layout. For a
     conditional task, pass ``keyframe_cond_rows`` and/or ``audio_ref_rows`` to
-    pin those rows across every step. The model's raw positive velocity is the
-    update signal; MiniMax H3 only supports CFG-distilled checkpoints.
-    ``model_forward`` is an optional hook receiving the zero-based loop step;
-    the default calls ``model(**kwargs)`` so this helper stays independently
-    testable with a plain callable.
+    pin those rows across every step. When ``negative`` is provided with
+    ``cfg_scale != 1.0``, classifier-free guidance combines the positive and
+    negative velocity predictions; otherwise the raw positive velocity is used.
+    ``branch_context`` optionally wraps model forwards with branch-scoped state
+    (such as H3-World's directed attention mask).
     """
 
     if len(sigmas_video) != len(sigmas_audio):
         raise ValueError("video/audio sigma schedules must have equal length")
     if len(sigmas_video) < 2:
         raise ValueError("sigma schedules need at least 2 entries")
+    use_cfg = negative is not None and float(cfg_scale) != 1.0
+    if use_cfg:
+        assert negative is not None
+        if negative.video_target_start != positive.video_target_start:
+            raise ValueError("negative branch video condition row count must match positive branch")
+        if negative.audio_target_start != positive.audio_target_start:
+            raise ValueError("negative branch audio reference row count must match positive branch")
     n_cond = positive.video_target_start
     if keyframe_cond_rows is None:
         if n_cond != 0:
@@ -390,6 +423,16 @@ def minimax_h3_denoise_loop(
         imgvid_cond_noise_aug=float(imgvid_cond_noise_aug_for_inference),
         audio_ref_cond_noise_aug=float(audio_cond_noise_aug_for_inference),
     )
+    negative_timestep_plan = (
+        negative.prepare_timestep_plan(
+            video_timesteps=video_timesteps,
+            audio_timesteps=audio_timesteps,
+            imgvid_cond_noise_aug=float(imgvid_cond_noise_aug_for_inference),
+            audio_ref_cond_noise_aug=float(audio_cond_noise_aug_for_inference),
+        )
+        if use_cfg and negative is not None
+        else None
+    )
     video_sigmas = torch.tensor(sigmas_video, dtype=torch.float32, device=device)
     audio_sigmas = torch.tensor(sigmas_audio, dtype=torch.float32, device=device)
     video_sigma_ratios = video_sigmas[1:] / video_sigmas[:-1]
@@ -400,54 +443,72 @@ def minimax_h3_denoise_loop(
     audio_one_minus_sigma_ratios = 1.0 - audio_sigma_ratios
     video_denoised_scratch = torch.empty_like(video_rows[video_target_slice])
     audio_denoised_scratch = torch.empty_like(audio_rows[audio_target_slice])
-    for step in range(num_steps):
-        step_cm = step_profiler(step) if step_profiler is not None else nullcontext()
-        with step_cm:
-            s_v = sigmas_video[step]
-            s_a = sigmas_audio[step]
 
-            fk = positive.forward_kwargs(
-                video_rows=video_rows,
-                audio_rows=audio_rows,
-                step_timesteps=timestep_plan[step],
-            )
-            with torch.inference_mode():
-                if model_forward is None:
-                    v_video, v_audio = model(**fk)
-                else:
-                    v_video, v_audio = model_forward(model, fk, step)
-                mv_video_t = v_video.float()
-                mv_audio_t = v_audio[audio_target_slice].float()
+    def _run_branch(branch: MiniMaxH3DenoiseBranch, step_t: tuple[torch.Tensor, torch.Tensor, torch.Tensor], step: int):
+        fk = branch.forward_kwargs(
+            video_rows=video_rows,
+            audio_rows=audio_rows,
+            step_timesteps=step_t,
+        )
+        if model_forward is None:
+            return model(**fk)
+        return model_forward(model, fk, step)
 
-                video_target = video_rows[video_target_slice]
-                _minimax_h3_update_target_rows_(
-                    video_target,
-                    mv_video_t,
-                    sigma_t=video_sigma_t[step],
-                    sigma_curr=s_v,
-                    sigma_next=video_sigmas[step + 1],
-                    sigma_ratio=video_sigma_ratios[step],
-                    one_minus_sigma_ratio=video_one_minus_sigma_ratios[step],
-                    denoised_scratch=video_denoised_scratch,
-                    renoise=renoise and step < num_steps - 1,
-                    noise_generator=noise_generator,
-                )
+    loop_cm = branch_context(positive) if (branch_context is not None and not use_cfg) else nullcontext()
+    with loop_cm:
+        for step in range(num_steps):
+            step_cm = step_profiler(step) if step_profiler is not None else nullcontext()
+            with step_cm:
+                s_v = sigmas_video[step]
+                s_a = sigmas_audio[step]
 
-                audio_target = audio_rows[audio_target_slice]
-                _minimax_h3_update_target_rows_(
-                    audio_target,
-                    mv_audio_t,
-                    sigma_t=audio_sigma_t[step],
-                    sigma_curr=s_a,
-                    sigma_next=audio_sigmas[step + 1],
-                    sigma_ratio=audio_sigma_ratios[step],
-                    one_minus_sigma_ratio=audio_one_minus_sigma_ratios[step],
-                    denoised_scratch=audio_denoised_scratch,
-                    renoise=renoise and step < num_steps - 1,
-                    noise_generator=noise_generator,
-                )
-            if on_step is not None:
-                on_step(step, video_rows, audio_rows)
+                with torch.inference_mode():
+                    if use_cfg and negative is not None and negative_timestep_plan is not None:
+                        pos_cm = branch_context(positive) if branch_context is not None else nullcontext()
+                        with pos_cm:
+                            v_video_pos, v_audio_pos = _run_branch(positive, timestep_plan[step], step)
+                        neg_cm = branch_context(negative) if branch_context is not None else nullcontext()
+                        with neg_cm:
+                            v_video_neg, v_audio_neg = _run_branch(negative, negative_timestep_plan[step], step)
+                        scale = float(cfg_scale)
+                        mv_video_t = v_video_neg.float() + scale * (v_video_pos.float() - v_video_neg.float())
+                        mv_audio_pos = v_audio_pos[audio_target_slice].float()
+                        mv_audio_neg = v_audio_neg[audio_target_slice].float()
+                        mv_audio_t = mv_audio_neg + scale * (mv_audio_pos - mv_audio_neg)
+                    else:
+                        v_video, v_audio = _run_branch(positive, timestep_plan[step], step)
+                        mv_video_t = v_video.float()
+                        mv_audio_t = v_audio[audio_target_slice].float()
+
+                    video_target = video_rows[video_target_slice]
+                    _minimax_h3_update_target_rows_(
+                        video_target,
+                        mv_video_t,
+                        sigma_t=video_sigma_t[step],
+                        sigma_curr=s_v,
+                        sigma_next=video_sigmas[step + 1],
+                        sigma_ratio=video_sigma_ratios[step],
+                        one_minus_sigma_ratio=video_one_minus_sigma_ratios[step],
+                        denoised_scratch=video_denoised_scratch,
+                        renoise=renoise and step < num_steps - 1,
+                        noise_generator=noise_generator,
+                    )
+
+                    audio_target = audio_rows[audio_target_slice]
+                    _minimax_h3_update_target_rows_(
+                        audio_target,
+                        mv_audio_t,
+                        sigma_t=audio_sigma_t[step],
+                        sigma_curr=s_a,
+                        sigma_next=audio_sigmas[step + 1],
+                        sigma_ratio=audio_sigma_ratios[step],
+                        one_minus_sigma_ratio=audio_one_minus_sigma_ratios[step],
+                        denoised_scratch=audio_denoised_scratch,
+                        renoise=renoise and step < num_steps - 1,
+                        noise_generator=noise_generator,
+                    )
+                if on_step is not None:
+                    on_step(step, video_rows, audio_rows)
 
     return video_rows, audio_rows
 

@@ -1,0 +1,14 @@
+schema_version: 2
+binding_id: h3-world
+model_id: h3-world
+aliases:
+- h3_world
+- minimax-h3-world
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.h3_world.pipeline_h3_world:H3WorldPipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation

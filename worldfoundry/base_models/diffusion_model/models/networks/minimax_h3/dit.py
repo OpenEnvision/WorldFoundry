@@ -200,7 +200,8 @@ class MiniMaxH3Rope(nn.Module):
 
     def __init__(self, inv_freq_len: int) -> None:
         super().__init__()
-        self.register_buffer("inv_freq", torch.empty(inv_freq_len, dtype=_FP32), persistent=True)
+        inv_freq = 1.0 / (10000.0 ** (torch.arange(0, inv_freq_len, dtype=_FP32) / float(inv_freq_len)))
+        self.register_buffer("inv_freq", inv_freq, persistent=True)
 
     def forward(self, img_position_ids: torch.Tensor) -> torch.Tensor:
         """img_position_ids: [1, S, 3] (t, h, w) -> freqs [S, rot_dim=96]."""
@@ -512,14 +513,22 @@ class MiniMaxH3DiTModel(nn.Module):
     ) -> torch.Tensor:
         """Project and refine request-static text conditioning once."""
 
-        text_len = int(refiner_cu_seqlens[1].item())
+        if refiner_cu_seqlens.ndim != 1 or int(refiner_cu_seqlens.numel()) < 2:
+            raise ValueError(
+                f"refiner cu_seqlens must be 1-D with at least 2 entries, got {list(refiner_cu_seqlens.shape)}"
+            )
+        bounds = [int(value) for value in refiner_cu_seqlens.tolist()]
+        if bounds[0] != 0 or any(right < left for left, right in itertools.pairwise(bounds)):
+            raise ValueError(f"refiner cu_seqlens must start at 0 and be non-decreasing, got {bounds}")
+        text_len = bounds[-1]
         if text_len <= 0 or text_len > int(prompt_embeds.shape[0]):
             raise ValueError(
                 f"refiner cu_seqlens live text length must be in [1, {int(prompt_embeds.shape[0])}], got {text_len}"
             )
         text_rows = prompt_embeds[:text_len].to(device=device, dtype=self.condition_proj.weight.dtype)
-        # Refiner attends the single text document [0, text_len].
-        refiner_cu = torch.tensor([0, text_len], device=device, dtype=torch.int32)
+        # Preserve caller-provided document boundaries (single document [0, text_len]
+        # or per-segment bounds such as H3-World's isolated action annotations).
+        refiner_cu = refiner_cu_seqlens.to(device=device, dtype=torch.int32)
         text_embed = self.condition_proj(text_rows)
         return self.token_refiner(text_embed, cu_seqlens=refiner_cu)
 
@@ -557,7 +566,7 @@ class MiniMaxH3DiTModel(nn.Module):
         """Build the packed embedding sequence [S, H] bf16 and t_emb [M, t_dim] fp32."""
 
         if refined_prompt_embeds_length is None:
-            text_len = int(refiner_cu_seqlens[1].item())
+            text_len = int(refiner_cu_seqlens[-1].item())
         elif torch.is_tensor(refined_prompt_embeds_length):
             text_len = int(refined_prompt_embeds_length.item())
         else:
