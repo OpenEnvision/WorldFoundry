@@ -426,7 +426,7 @@ python3 tests/manual/geometry_regression_schedule.py remove \
   --profile ~/.config/worldfoundry/geometry-regression.json
 ```
 
-安装保留其他 cron 条目，时区为 `Asia/Shanghai`。控制脚本来自已提交版本；控制脚本变化后需要重新安装。每次运行从指定的本地已提交 ref 生成隔离快照，不自动 pull/reset，也不执行工作区未提交代码。案例各自使用独立模型进程，共用主机上的物理 GPU 租约锁，有单案例和整套超时，并接受严格数值和导入源码审计。每日运行完整短矩阵；按需执行时可传 `--plan` 使用受影响案例计划。
+安装保留其他 cron 条目，时区为 `Asia/Shanghai`。控制脚本来自已提交版本；控制脚本变化后需要重新安装。每次运行从指定的本地已提交 ref 生成隔离快照，不自动 pull/reset，也不执行工作区未提交代码。CUDA 预检和回放进程使用快照中的回放脚本。案例各自使用独立模型进程，共用主机上的物理 GPU 租约锁，有单案例和整套超时，并接受严格数值和导入源码审计。每日运行完整短矩阵；按需执行时可传 `--plan` 使用受影响案例计划。
 
 `latest.json` 在开始时记录 `running`，结束时记录最终结果；`runs/` 保存日志、源码版本和比较报告。默认保留最近七次运行目录，更早的简要报告归档到 `history/`。已验收基准必须位于可清理的运行目录之外，执行器不会重新生成或覆盖它。profile、本地 assets、权重和数值证据不进入 Git。
 

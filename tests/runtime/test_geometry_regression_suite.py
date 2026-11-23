@@ -35,6 +35,9 @@ def replay_host(tmp_path):
     helper = source / "worldfoundry/core/execution/process.py"
     helper.parent.mkdir(parents=True)
     shutil.copyfile(TOOLS.parents[1] / "worldfoundry/core/execution/process.py", helper)
+    runner = source / "tests/manual/geometry_regression.py"
+    runner.parent.mkdir(parents=True)
+    shutil.copyfile(TOOLS / "geometry_regression.py", runner)
     weights = tmp_path / "weights"
     weights.mkdir()
     (weights / "model.safetensors").write_bytes(b"fixture checkpoint")
@@ -611,7 +614,8 @@ def test_preflight_accepts_exact_inventory_with_or_without_setuptools_vendor_act
     suite.write_json(tmp_path / "recipes.json", {"a": {}})
     monkeypatch.setattr(suite, "process_helpers", lambda source: None)
 
-    def fake_probe(*args, **kwargs):
+    def fake_probe(command, *args, **kwargs):
+        assert repr(str(tmp_path / "source/tests/manual/geometry_regression.py")) in command[2]
         suite.write_json(tmp_path / "cuda-preflight-metadata.json", activated)
         suite.write_json(tmp_path / "cuda-preflight-plain-metadata.json", plain)
         return 0
@@ -656,12 +660,18 @@ def test_each_case_uses_its_accepted_environment_and_groups_preflight(replay_hos
     replay_host["env"] = {"COMMON_ENV": "shared", "CASE_ENV": "default"}
     other_python = str(tmp_path / "other-model-env/bin/python")
     replay_host["case_environments"] = {"b": {"python": other_python, "env": {"CASE_ENV": "special"}}}
+    runner = Path(replay_host["source_root"]) / "tests/manual/geometry_regression.py"
+    committed_runner = runner.read_bytes()
+    runner.write_text("# uncommitted worker edit\n")
     probes, children = [], []
 
     def probe(profile, env, root, **kwargs):
         probes.append((profile["python"], kwargs["case_ids"], env["CASE_ENV"]))
 
-    def child(command, env, *args, **kwargs):
+    def child(command, env, cwd, *args, **kwargs):
+        runner = Path(command[1])
+        assert runner == cwd / "tests/manual/geometry_regression.py"
+        assert runner.read_bytes() == committed_runner
         children.append((command[0], env["CASE_ENV"], env["COMMON_ENV"]))
         return 0
 
