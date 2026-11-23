@@ -35,7 +35,11 @@ def replay_host(tmp_path):
     helper = source / "worldfoundry/core/execution/process.py"
     helper.parent.mkdir(parents=True)
     shutil.copyfile(TOOLS.parents[1] / "worldfoundry/core/execution/process.py", helper)
-    cases = {name: {"id": name, "target": f"worldfoundry.{name}:Model", "assets": {}} for name in ("a", "b")}
+    weights = tmp_path / "weights"
+    weights.mkdir()
+    (weights / "model.safetensors").write_bytes(b"fixture checkpoint")
+    assets = {"weights": str(weights)}
+    cases = {name: {"id": name, "target": f"worldfoundry.{name}:Model", "assets": assets} for name in ("a", "b")}
     (source / "matrix.json").write_text(json.dumps(cases))
     (source / "dependencies.json").write_text(
         json.dumps(
@@ -67,7 +71,7 @@ def replay_host(tmp_path):
             {
                 "case": case,
                 "status": "passed",
-                "assets": {},
+                "assets": suite.replay.hash_assets(assets),
                 "runtime": {},
                 "arrays_sha256": suite.replay.sha256(root / "arrays.npz"),
             },
@@ -139,6 +143,7 @@ def test_replay_resolves_archived_exports_from_verified_inventory(
         return SimpleNamespace(release=lambda: None)
 
     def run(command: list[str], env: dict, cwd: Path, log: Path, timeout: float, **options: object) -> int:
+        assert Path(command[command.index("--accepted-manifest") + 1]) == manifest_path
         candidate = Path(command[command.index("--output-dir") + 1])
         shutil.copytree(accepted, candidate)
         source = "worldfoundry/a.py"
@@ -331,6 +336,23 @@ def test_only_documented_recipe_defaults_and_scope_can_change(replay_host):
     assert suite.resolve_case("${ASSET}/${OUTPUT_DIR}", {"ASSET": "path"}) == "path/${OUTPUT_DIR}"
     with pytest.raises(ValueError, match="Missing regression"):
         suite.resolve_case("${MISSING}", {})
+
+
+def test_extra_checkpoint_asset_fails_preflight_before_gpu(replay_host: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    reference = Path(replay_host["reference"]) / "a" / "manifest.json"
+    weights = Path(json.loads(reference.read_text())["case"]["assets"]["weights"])
+    (weights / "extra.txt").write_text("extra local file")
+
+    def acquire(*args: object) -> None:
+        raise AssertionError("Unexpected file reached GPU acquisition")
+
+    monkeypatch.setattr(suite, "acquire_gpu", acquire)
+
+    report = suite.run_suite(replay_host, case_ids=["a"], preflight_only=True)
+
+    assert report["status"] == "failed"
+    assert "Replay asset inventory differs" in report["error"]
+    assert "weights/extra.txt" in report["error"]
 
 
 @pytest.mark.parametrize("name", ["manifest.json", "arrays.npz", "extra-export.png"])

@@ -46,10 +46,10 @@ def expand(value, output_dir: Path):
     return value
 
 
-def hash_assets(assets: dict) -> dict:
+def asset_files(assets: dict) -> dict[str, Path]:
     if not assets:
         raise ValueError("Declare local input and checkpoint assets to pin the replay")
-    hashes = {}
+    inventory = {}
     for name, value in sorted(assets.items()):
         root = Path(value).expanduser().resolve()
         if not root.exists():
@@ -63,7 +63,27 @@ def hash_assets(assets: dict) -> dict:
             raise ValueError(f"Empty asset: {name}")
         for path in files:
             key = name if root.is_file() else f"{name}/{path.relative_to(root).as_posix()}"
-            hashes[key] = sha256(path)
+            inventory[key] = path
+    return inventory
+
+
+def verify_asset_inventory(actual: dict, expected: dict) -> None:
+    if actual.keys() != expected.keys():
+        missing = sorted(expected.keys() - actual.keys())
+        extra = sorted(actual.keys() - expected.keys())
+        raise ValueError(f"Replay asset inventory differs from accepted reference (missing={missing}, extra={extra})")
+
+
+def hash_assets(assets: dict, expected: dict[str, str] | None = None) -> dict[str, str]:
+    files = asset_files(assets)
+    if expected is not None:
+        verify_asset_inventory(files, expected)
+    hashes = {}
+    for name, path in files.items():
+        actual = sha256(path)
+        if expected is not None and actual != expected[name]:
+            raise ValueError(f"Replay asset SHA256 differs from accepted reference: {name}")
+        hashes[name] = actual
     return hashes
 
 
@@ -437,7 +457,14 @@ def runtime_metadata(torch) -> dict:
     }
 
 
-def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str | None = None) -> dict:
+def run_case(
+    case_file: Path,
+    source_root: Path,
+    output_dir: Path,
+    case_id: str | None = None,
+    *,
+    accepted_manifest: Path | None = None,
+) -> dict:
     # Refuse to overwrite evidence, particularly an approved reference run.
     output_dir.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
@@ -477,7 +504,8 @@ def run_case(case_file: Path, source_root: Path, output_dir: Path, case_id: str 
             if "sequence" in resolved:
                 raise ValueError("JSON inputs require a single explicit call")
             resolved["call"] = materialize_input_json(resolved, output_dir)
-        manifest["assets"] = hash_assets(resolved["assets"])
+        accepted_assets = None if accepted_manifest is None else json.loads(accepted_manifest.read_text())["assets"]
+        manifest["assets"] = hash_assets(resolved["assets"], accepted_assets)
         module_name, class_name = resolved["target"].split(":")
         module = importlib.import_module(module_name)
         if module.__file__ is None or not Path(module.__file__).resolve().is_relative_to(source_root):
@@ -716,6 +744,7 @@ def main() -> int:
     run.add_argument("--case-id", help="Select a case from the published case matrix")
     run.add_argument("--source-root", type=Path, required=True)
     run.add_argument("--output-dir", type=Path, required=True)
+    run.add_argument("--accepted-manifest", type=Path)
     compare = commands.add_parser("compare")
     compare.add_argument("--reference", type=Path, required=True)
     compare.add_argument("--candidate", type=Path, required=True)
@@ -731,7 +760,13 @@ def main() -> int:
     audit.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "run":
-        report = run_case(args.case.resolve(), args.source_root.resolve(), args.output_dir.resolve(), args.case_id)
+        report = run_case(
+            args.case.resolve(),
+            args.source_root.resolve(),
+            args.output_dir.resolve(),
+            args.case_id,
+            accepted_manifest=args.accepted_manifest,
+        )
         print(
             json.dumps({key: report[key] for key in ("status", "elapsed_seconds", "error") if key in report}),
             flush=True,

@@ -29,12 +29,15 @@ def accepted(tmp_path):
     exports.mkdir()
     np.save(exports / "depth.npy", np.array([2.0, 3.0], dtype=np.float32))
     np.savez(case / "arrays.npz", depth=np.array([2.0, 3.0], dtype=np.float32))
+    weights = tmp_path / "model.safetensors"
+    weights.write_bytes(b"fixture checkpoint")
+    assets = {"weights": str(weights)}
     suite.write_json(
         case / "manifest.json",
         {
             "status": "passed",
-            "case": {"id": "model", "seed": 42},
-            "assets": {"weights": "sha"},
+            "case": {"id": "model", "seed": 42, "assets": assets},
+            "assets": suite.replay.hash_assets(assets),
             "runtime": {},
             "exported_files": [str(exports / "depth.npy")],
             "arrays_sha256": suite.replay.sha256(case / "arrays.npz"),

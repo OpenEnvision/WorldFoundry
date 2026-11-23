@@ -209,6 +209,25 @@ def test_artifact_only_inference_is_validated_and_compared(tmp_path, artifact_pi
     assert report["outputs"]["export.export/frames.npy"]["passed"] is (not changed)
 
 
+def test_changed_asset_contents_fail_before_checkpoint_loading(
+    tmp_path: Path, artifact_pipeline: tuple[Path, Path, type], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case_file, source, pipeline = artifact_pipeline
+    reference = tmp_path / "reference"
+    assert replay.run_case(case_file, source, reference)["status"] == "passed"
+    (source / "input.txt").write_text("different local input")
+
+    def load_checkpoint() -> None:
+        raise AssertionError("Changed asset reached checkpoint loading")
+
+    monkeypatch.setattr(pipeline, "from_pretrained", load_checkpoint)
+
+    report = replay.run_case(case_file, source, tmp_path / "candidate", accepted_manifest=reference / "manifest.json")
+
+    assert report["status"] == "failed"
+    assert "Replay asset SHA256 differs from accepted reference: input" in report["error"]
+
+
 @pytest.mark.parametrize(
     "mode, error",
     [
