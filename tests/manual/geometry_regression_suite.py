@@ -195,9 +195,8 @@ def materialize_case(case: dict, reference: Path, env: dict) -> dict:
         raise ValueError(f"Current case differs from its accepted recipe: {case['id']}")
     if manifest.get("arrays_sha256") != replay.sha256(reference / "arrays.npz"):
         raise ValueError(f"Accepted arrays were modified: {case['id']}")
-    for path in resolve_case(case, env).get("assets", {}).values():
-        if not Path(path).exists():
-            raise FileNotFoundError(f"Missing replay asset for {case['id']}: {path}")
+    assets = replay.asset_files(resolve_case(case["assets"], env))
+    replay.verify_asset_inventory(assets, manifest["assets"])
     # Retain the original representation of explicit defaults and asset paths.
     # The semantic equality check above prevents replaying an obsolete recipe.
     return manifest["case"]
@@ -682,6 +681,8 @@ def run_suite(
                     str(source),
                     "--output-dir",
                     str(candidate),
+                    "--accepted-manifest",
+                    str(Path(profile["reference"]) / name / "manifest.json"),
                 ]
                 try:
                     exit_code = run_child(
@@ -756,7 +757,9 @@ def main() -> int:
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--case-id", action="append")
     parser.add_argument(
-        "--preflight-only", action="store_true", help="Check assets and accepted environments without model inference"
+        "--preflight-only",
+        action="store_true",
+        help="Check asset inventories and accepted environments without inference",
     )
     args = parser.parse_args()
     try:
