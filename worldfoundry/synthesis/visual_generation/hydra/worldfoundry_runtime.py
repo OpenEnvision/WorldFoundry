@@ -9,7 +9,55 @@ from pathlib import Path
 from typing import Any
 
 from worldfoundry.core.execution.process import package_module_command
+from worldfoundry.core.io.paths import resolve_local_hf_model_path
 from worldfoundry.runtime.in_tree_cli import ensure_in_tree_runtime, execute_in_tree, require_path
+
+
+def _prepared_checkpoint_root(repo_id: str, revision: str, fallback: Path, required_files: tuple[str, ...]) -> Path:
+    if all((fallback / filename).is_file() for filename in required_files):
+        return fallback
+    try:
+        return resolve_local_hf_model_path(repo_id, revision=revision, required_files=required_files)
+    except FileNotFoundError:
+        return fallback
+
+
+def default_hydra_checkpoint() -> Path:
+    override = os.environ.get("WORLDFOUNDRY_HYDRA_CHECKPOINT")
+    if override:
+        return Path(override).expanduser()
+    fallback = Path(os.environ.get("WORLDFOUNDRY_HFD_ROOT", "cache/hfd")).expanduser() / "H-EmbodVis--HyDRA"
+    return (
+        _prepared_checkpoint_root(
+            "H-EmbodVis/HyDRA",
+            "c2b83e1bc452974a9e599b026e0e09f084a0165f",
+            fallback,
+            ("hydra.ckpt",),
+        )
+        / "hydra.ckpt"
+    )
+
+
+def default_hydra_base_model(fallback: Path | None = None) -> Path:
+    override = os.environ.get("WORLDFOUNDRY_WAN21_1P3B_ROOT")
+    if override:
+        return Path(override).expanduser()
+    if fallback is None:
+        fallback = Path(os.environ.get("WORLDFOUNDRY_HFD_ROOT", "cache/hfd")).expanduser() / "Wan-AI--Wan2.1-T2V-1.3B"
+    return _prepared_checkpoint_root(
+        "Wan-AI/Wan2.1-T2V-1.3B",
+        "37ec512624d61f7aa208f7ea8140a131f93afc9a",
+        fallback,
+        (
+            "diffusion_pytorch_model.safetensors",
+            "models_t5_umt5-xxl-enc-bf16.pth",
+            "Wan2.1_VAE.pth",
+            "google/umt5-xxl/tokenizer.json",
+            "google/umt5-xxl/tokenizer_config.json",
+            "google/umt5-xxl/special_tokens_map.json",
+            "google/umt5-xxl/spiece.model",
+        ),
+    )
 
 
 class HydraRuntime:
@@ -27,16 +75,8 @@ class HydraRuntime:
         env: Mapping[str, Any] | None = None,
     ) -> None:
         self.repo_root = ensure_in_tree_runtime(self.bundled_repo_root(), package_file=__file__)
-        self.checkpoint_path = Path(
-            checkpoint_path
-            or os.environ.get("WORLDFOUNDRY_HYDRA_CHECKPOINT")
-            or Path(os.environ.get("WORLDFOUNDRY_HFD_ROOT", "cache/hfd")) / "H-EmbodVis--HyDRA" / "hydra.ckpt"
-        ).expanduser()
-        self.base_model_path = Path(
-            base_model_path
-            or os.environ.get("WORLDFOUNDRY_WAN21_1P3B_ROOT")
-            or Path(os.environ.get("WORLDFOUNDRY_HFD_ROOT", "cache/hfd")) / "Wan-AI--Wan2.1-T2V-1.3B"
-        ).expanduser()
+        self.checkpoint_path = Path(checkpoint_path).expanduser() if checkpoint_path else default_hydra_checkpoint()
+        self.base_model_path = Path(base_model_path).expanduser() if base_model_path else default_hydra_base_model()
         self.python_executable = str(python_executable or sys.executable)
         self.device = device
         self.env = dict(env or {})

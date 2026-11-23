@@ -293,6 +293,8 @@ wf zoo model-download \
   --json
 ```
 
+When a checkpoint declares a commit SHA, the local check inspects that snapshot in the Hugging Face cache. The cached `main` ref can point to a different commit.
+
 Alternatives:
 
 ```bash

@@ -59249,13 +59249,11 @@
       "checkpoints": [
         {
           "id": "H-EmbodVis/HyDRA",
-          "revision": "c2b83e1bc452974a9e599b026e0e09f084a0165f",
-          "role": "hydra_checkpoint"
+          "revision": "c2b83e1bc452974a9e599b026e0e09f084a0165f"
         },
         {
           "id": "Wan-AI/Wan2.1-T2V-1.3B",
-          "revision": "37ec512624d61f7aa208f7ea8140a131f93afc9a",
-          "role": "base_model"
+          "revision": "37ec512624d61f7aa208f7ea8140a131f93afc9a"
         }
       ],
       "variants": [],
@@ -59424,10 +59422,10 @@
           "HyDRA 将自有 checkpoint（H-EmbodVis/HyDRA）与 Wan2.1-T2V-1.3B 基座模型（Wan-AI/Wan2.1-T2V-1.3B）配合使用。"
         ],
         "usageNotes": [
-          "Bundled source is mandatory — external source checkouts are rejected. Inputs are prompt, video, and camera_json."
+          "Bundled source is mandatory — external source checkouts are rejected. Inputs are prompt, video, and camera_json. The preparation command downloads the pinned HyDRA and Wan files into the local Hugging Face cache."
         ],
         "usageNotesZh": [
-          "必须使用内置源码——外部源码检出会被拒绝。输入为提示词、视频与 camera_json。"
+          "必须使用内置源码——外部源码检出会被拒绝。输入为提示词、视频与 camera_json。准备命令会将固定版本的 HyDRA 和 Wan 文件下载到本地 Hugging Face 缓存。"
         ],
         "highlights": [
           "Camera Controlled Video",
