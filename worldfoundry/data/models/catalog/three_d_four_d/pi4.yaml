@@ -1,0 +1,69 @@
+id: pi4
+name: Pi4
+aliases:
+- pi-4
+- yyfz233/Pi4
+- yyfz/Pi4
+tasks:
+- 4d-reconstruction
+- 3d-reconstruction
+- point-cloud
+- dense-tracking
+- motion-segmentation
+provider: official_repo
+source:
+  status: open_source
+  official_repo_url: https://github.com/yyfz/Pi4
+  hf_repo_id: yyfz233/Pi4
+  license: cc-by-nc-4.0
+checkpoint_refs:
+- repo_id: yyfz233/Pi4
+  revision: 59f307317fb630c9c5a5aa635038d98ed106aaf5
+  files:
+  - model.safetensors
+  local_dir: ${WORLDFOUNDRY_CKPT_DIR}/Pi4
+  license: cc-by-nc-4.0
+official_sources:
+  project_page: https://yyfz.github.io/pi4
+  paper: https://arxiv.org/abs/2611.23144
+  github:
+    url: https://github.com/yyfz/Pi4
+    revision: 32dfbea9ce6268ea17446208a804710df9475c32
+  huggingface:
+  - repo_id: yyfz233/Pi4
+    revision: 59f307317fb630c9c5a5aa635038d98ed106aaf5
+    type: model
+    status: confirmed
+integration:
+  kind: pipeline_runner
+  status: runtime_ported
+  notes:
+  - In-tree Pi4 4D geometry and dense motion pipeline is ported from yyfz/Pi4 revision 32dfbea9ce6268ea17446208a804710df9475c32.
+  - Strict 1,319-tensor checkpoint loading supports single-file yyfz233/Pi4/model.safetensors with optional flex_gemm CUDA sparse kernels and a checkpoint-identical pure-PyTorch sparse 3D fallback.
+  - Upstream Pi4 code and weights are licensed under CC BY-NC 4.0 (non-commercial use only); CoWTracker-derived tracking components remain subject to the FAIR Noncommercial Research License.
+runner_target: worldfoundry.evals.models.runners.pipeline:WorldFoundryPipelineRunner
+pipeline_binding: pi4
+runtime_profile: runtime-profile:pi4
+runner_parity:
+  status: checkpoint_gpu_validated
+  notes:
+  - Component-level state_dict schema (1,319 keys), sparse 3D conv/pool/upsample math, and upstream module parity are verified in weight-free unit tests.
+  - Verified end-to-end on H200 with real yyfz233/Pi4 (model.safetensors, 1,319 tensors) on kart.mp4 (8 frames at 512x288, metric scale 6.3243, 653,241 valid metric 3D points, dense 2D/3D tracking, and moving-object masks via pure-PyTorch sparse 3D DepthRefiner).
+catalog_category: three_d_four_d
+catalog_scope: Official-source manifest for 3D, 4D, and camera-controlled world/model generation projects.
+docs:
+  publisher: Physical Intelligence Team, Shanghai Artificial Intelligence Laboratory
+  publisher_kind: lab
+  publisher_zh: 上海人工智能实验室 Physical Intelligence 团队
+  overview: Pi4 (π⁴) is a 0.5B-parameter feed-forward foundation model that jointly predicts metric 3D scene geometry, camera-to-world poses, dense 2D/3D point tracks, and sequence-level moving-object masks in a single forward pass without camera calibration. WorldFoundry provides an in-tree pipeline supporting both geometry-only reconstruction and full 4D dense tracking.
+  overview_zh: Pi4（π⁴）是约 0.5B 参数的前馈基础模型，无需相机标定即可在单次前向中联合预测米制 3D 场景几何、相机到世界位姿、稠密 2D/3D 点轨迹以及序列级运动物体掩码。WorldFoundry 提供树内 pipeline，同时支持纯几何重建与完整 4D 稠密追踪。
+  architecture: Per arXiv 2611.23144, Pi4 combines a patch-16 DINOv3-style axial-RoPE image encoder, a 16-step looped alternating frame/global geometry decoder with a 5-level sparse 3D U-Net depth refiner, camera and metric-scale heads, and an 8-step geometry-conditioned motion decoder driving iterative dense tracking and Hiera-small moving-object segmentation. Code and weights are CC BY-NC 4.0 (non-commercial).
+  architecture_zh: 按论文（arXiv 2611.23144），Pi4 结合了 patch-16 轴向 RoPE 图像编码器、16 步交替帧内/全局循环几何解码器与 5 级稀疏 3D U-Net 深度细化器、相机与米制尺度头，以及驱动迭代稠密追踪与 Hiera-small 运动分割的 8 步几何条件运动解码器。代码与权重采用 CC BY-NC 4.0（仅限非商用）。
+  usage_notes: Stage the non-gated `yyfz233/Pi4` (`model.safetensors`, CC BY-NC 4.0) checkpoint before running inference. Omit `query_frame` for geometry-only reconstruction or pass an integer `query_frame` on sequences of >=2 frames for 4D dense tracking. Install optional `flex_gemm` on CUDA for accelerated sparse depth refinement, or use the built-in checkpoint-identical pure-PyTorch fallback.
+  usage_notes_zh: 运行推理前请就位公开权重 `yyfz233/Pi4`（`model.safetensors`，CC BY-NC 4.0）。省略 `query_frame` 可执行纯几何重建；在不少于 2 帧的序列上指定整数 `query_frame` 可启用 4D 稠密追踪。在 CUDA 上可按需安装 `flex_gemm` 加速稀疏深度细化，未安装时自动回退至与权重完全一致的纯 PyTorch 稀疏实现。
+  limitations:
+  - 'CC BY-NC 4.0 code and weights: non-commercial terms apply downstream (CoWTracker-derived components also carry the FAIR Noncommercial Research License).'
+  - Pure-PyTorch sparse 3D refinement runs without `flex_gemm` on CPU and CUDA (verified on H200 with `yyfz233/Pi4`), but is slower than Triton/FlexGEMM kernels on long high-resolution sequences.
+  limitations_zh:
+  - 代码与权重均为 CC BY-NC 4.0：下游须遵守非商用许可条款（CoWTracker 衍生组件同时适用 FAIR Noncommercial Research License）。
+  - 纯 PyTorch 稀疏 3D 细化无需 `flex_gemm` 即可在 CPU 与 CUDA 上运行（已在 H200 上通过 `yyfz233/Pi4` 真实权重验证），但在长高分辨率序列上速度慢于 Triton/FlexGEMM 核函数。

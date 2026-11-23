@@ -1,0 +1,43 @@
+schema_version: 2
+model_id: pi4
+display_name: Pi4 (π⁴)
+task_family: four_dimension
+groups:
+- 4d
+- 3d
+- reconstruction
+- tracking
+- motion_segmentation
+source_repos:
+- url: https://github.com/yyfz/Pi4
+  revision: 32dfbea9ce6268ea17446208a804710df9475c32
+checkpoints:
+- repo_id: yyfz233/Pi4
+  revision: 59f307317fb630c9c5a5aa635038d98ed106aaf5
+  role: primary
+  filenames:
+  - model.safetensors
+  license: cc-by-nc-4.0
+input_schema:
+  prompt: false
+  image: true
+  video: true
+  actions:
+  - reconstruction
+  - tracking
+  - camera_view
+artifact_kind: generated_4d_scene
+artifact_filename: meta.json
+execution:
+  backend_stage: in_tree_runtime
+  runtime_status: in_tree_runtime_checkpoint_gpu_validated
+  integration_status: integrated
+  pipeline_binding: pi4
+integration:
+  status: integrated
+notes:
+- WorldFoundry ports the official Pi4 4D geometry and dense motion runtime under worldfoundry/base_models/three_dimensions/point_clouds/pi4_inference.
+- Checkpoints stay external from yyfz233/Pi4 (single-file model.safetensors, 1,319 tensors, CC BY-NC 4.0 non-commercial license).
+- DepthRefiner uses flex_gemm.nn on CUDA when installed and transparently falls back to a checkpoint-identical pure-PyTorch sparse 3D implementation on both CPU and CUDA.
+- Verified end-to-end on H200 with yyfz233/Pi4 (model.safetensors) on kart.mp4 (512x288, 8 frames, 4D geometry + dense tracking + moving-object masks).
+verification_status: checkpoint_gpu_validated

@@ -890,6 +890,23 @@ apple/FastFrames-L, zhuhz22/Causal-Forcing, Wan-AI/Wan2.1-*) remain separate
 model assets under their respective upstream licenses.
 
 
+Pi4 4D scene geometry and dense motion inference
+------------------------------------------------
+Copyright 2026 Physical Intelligence Team, Shanghai Artificial Intelligence Laboratory
+Source: https://github.com/yyfz/Pi4
+Source revision: 32dfbea9ce6268ea17446208a804710df9475c32
+Source license: CC BY-NC 4.0 (non-commercial)
+Model license: CC BY-NC 4.0 (non-commercial)
+
+WorldFoundry ports Pi4's inference-only 4D geometry, camera pose, metric scale,
+sparse depth refiner, dense tracking, and moving-object mask architecture under
+worldfoundry/base_models/three_dimensions/point_clouds/pi4_inference. Third-party
+components referenced upstream (including DINOv3, SAM2, MoGe, Depth Anything V2,
+CoTracker/CowTracker, and Pi3) retain their respective upstream licenses. The
+released yyfz233/Pi4 model weights remain separate model assets subject to
+CC BY-NC 4.0 (non-commercial use only).
+
+
 Dependencies and Licenses:
 
 This open-source project builds upon the following open-source model(s) and/or software, each of which remains licensed under its original license(s). Certain component(s) may include modifications made by Tencent ("Tencent Modifications"), which are Copyright (C) Tencent.

@@ -1,0 +1,81 @@
+---
+title: "Pi4"
+description: "Pi4（π⁴）：4D 场景几何、米制点云、相机位姿、稠密 2D/3D 点追踪与运动物体分割（CC BY-NC 4.0）。"
+modelId: "pi4"
+pageSource: authored
+---
+
+Pi4（$\pi^4$）是约 0.5B 参数的前馈式 4D 场景几何与运动基础模型。无需相机标定，输入单张图像、无序图像集合或视频，即可在单次前向中联合预测米制尺度 3D 点云、相机到世界位姿、几何置信度、以指定查询帧为基准的稠密 2D/3D 点轨迹以及序列级运动物体掩码。
+
+论文：[$\pi^4$: A Foundation Model for 4D Scene Geometry and Motion](https://arxiv.org/abs/2611.23144)（2026）。
+
+项目页：[yyfz.github.io/pi4](https://yyfz.github.io/pi4)。代码：[yyfz/Pi4](https://github.com/yyfz/Pi4)（固定修订 `32dfbea9ce6268ea17446208a804710df9475c32`）。权重：[yyfz233/Pi4](https://huggingface.co/yyfz233/Pi4)（`model.safetensors`，修订 `59f307317fb630c9c5a5aa635038d98ed106aaf5`）。
+
+> **许可说明：** 上游 Pi4 代码与权重均采用 **CC BY-NC 4.0** 许可（仅限非商业用途）。按上游 `NOTICE` 说明，源自 CoWTracker 的追踪组件同时受 FAIR Noncommercial Research License 约束。
+
+## 用来做什么
+
+适用场景包括：
+
+- **米制 3D 重建（`query_frame=None`）**：从图像或视频重建相机坐标系与米制世界坐标系点云、深度图、几何置信度掩码与相机位姿。
+- **联合 4D 几何与稠密追踪（`query_frame=<int>`）**：在不少于 2 帧的序列上额外输出稠密 2D 目标像素对应（`tracks_2d`）、米制世界 3D 轨迹（`tracks_3d`）、可见性、追踪置信度以及序列级运动物体概率（`dynamic_mask`）。
+
+任务：4D 重建、3D 重建、点云、稠密追踪、运动分割。
+
+## 架构与稀疏细化后端
+
+WorldFoundry 在 `worldfoundry.base_models.three_dimensions.point_clouds.pi4_inference` 中完整移植了包含 1,319 个张量的 Pi4 推理架构：
+
+- Patch-16 轴向 RoPE ViT `Encoder` 与 16 步循环交替帧内/全局 `GeometryDecoder`
+- `PointHead`、5 级稀疏 3D `DepthRefiner`（`SparseUNet`）、`CameraHead` 与 `MetricHead`
+- 8 步几何条件 `MotionDecoder`、迭代式 `Tracker` 与 Hiera-small `MotionMask`
+
+`DepthRefiner` 在 CUDA 上会延迟探测 `flex_gemm.nn`，安装时直接调用 `flex_gemm` 核函数；在默认未安装 `flex_gemm` 的 `worldfoundry-unified-cu128` 环境中，自动使用与权重布局（`[C_out, 3, 3, 3, C_in]`）完全一致的纯 PyTorch 稀疏 3D 实现，在 CUDA 与 CPU 上均可严格加载全部 `1319/1319` 个权重张量。
+
+## 运行时契约
+
+- **输入**：`input_path` / `images` / `videos`（单张图像、图像目录或视频文件）。按首帧宽高比使用 Lanczos 缩放为不超过 `max_size`（默认 `512`）且为 `16` 正整数倍的统一尺寸，支持 `stride`（默认 `1`）与可选 `max_frames` 抽帧。
+- **参数**：`query_frame`（`None` 表示仅几何重建；传入采样后的整数帧索引以启用 4D 追踪）、`stride`、`max_frames`、`max_size`、`conf_threshold`（默认 `0.05`）。
+- **输出（`Pi4Result.save()`）**：
+  - `point_cloud/result.ply`（经 `geometry_confidence` 过滤的米制世界 XYZ + RGB 点云）
+  - `raw_data/*.npy`（`points`、`local_points`、`camera_poses`、`metric_scale`、`confidence`、`depth_map`、`masks`；启用追踪时额外保存 `tracks_2d`、`tracks_3d`、`visibility`、`tracking_confidence`、`dynamic_mask`、`query_frame`）
+  - `depth/depth_*.png`、`rgb/frame_*.png`、`camera_poses/pose_*.json` 与 `meta.json`
+- **Pipeline 绑定**：`worldfoundry.pipelines.pi4.pipeline_pi4:Pi4Pipeline`（`Pi4Pipeline`）。
+- **系列状态**：**已在 H200 上完成真实权重端到端验证**（`yyfz233/Pi4/model.safetensors` 全部 1,319 个张量，使用纯 PyTorch 稀疏 3D `DepthRefiner` 在 `kart.mp4` 512×288 序列上完成 4D 几何重建、稠密追踪与运动物体掩码输出；同时具备无权重单元测试覆盖 state_dict 契约与稀疏 3D 算子数值一致性）。
+
+## 在 WorldFoundry 中运行
+
+### 命令行
+
+准备统一 CUDA 12.8 环境（`worldfoundry-unified-cu128`）并就位 `yyfz233/Pi4` 权重：
+
+```bash
+bash scripts/inference/prepare_model_infer.sh pi4 --download
+wf run pi4 --pipeline.task-profile reconstruction --input /path/to/images_or_video
+wf run pi4 --pipeline.task-profile 4d-tracking --input /path/to/video.mp4
+```
+
+### Python API
+
+```python
+from worldfoundry.pipelines.pi4 import Pi4Pipeline
+
+pipeline = Pi4Pipeline.from_pretrained("yyfz233/Pi4", device="cuda")
+
+# 纯几何米制 3D 重建
+geom_result = pipeline(images="/path/to/images_or_video", stride=1, max_frames=25)
+geom_result.save("outputs/pi4_geometry")
+
+# 联合 4D 几何、稠密追踪与运动物体掩码
+track_result = pipeline(
+    videos="/path/to/video.mp4",
+    query_frame=0,
+    stride=2,
+    max_frames=50,
+)
+track_result.save("outputs/pi4_4d_tracking")
+```
+
+### 可选 FlexGEMM 加速
+
+在 CUDA 上运行长高分辨率序列（如 `512x288` 下 150–750 帧）时，可按需安装固定版本 `JeffreyXiang/FlexGEMM@b2fadb29d41846c7981ade6801ffc689fae119cf`，Pi4 会在不改变权重与输出的前提下自动启用 Triton 稀疏卷积核加速。

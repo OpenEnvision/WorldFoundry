@@ -1,0 +1,11 @@
+schema_version: 2
+binding_id: pi4
+model_id: pi4
+runner: worldfoundry.pipeline
+pipeline:
+  target: worldfoundry.pipelines.pi4.pipeline_pi4:Pi4Pipeline
+  loading:
+    method: from_pretrained
+    signature: unified
+  invocation:
+    mode: native_or_standard_invocation
