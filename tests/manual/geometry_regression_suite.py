@@ -33,6 +33,7 @@ def load_module(path: Path):
 
 impact = load_module(Path(__file__).with_name("geometry_regression_impact.py"))
 replay = load_module(Path(__file__).with_name("geometry_regression.py"))
+REPLAY_SCRIPT = Path("tests/manual/geometry_regression.py")
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -371,7 +372,7 @@ def run_child(command: list[str], env: dict, cwd: Path, log: Path, timeout: floa
 
 def probe_cuda(profile: dict, env: dict, run_root: Path, lease=None, *, case_ids=None, label="cuda-preflight") -> None:
     metadata_path = run_root / (label + "-metadata.json")
-    replay_path = str(Path(__file__).with_name("geometry_regression.py"))
+    replay_path = str(run_root / "source" / REPLAY_SCRIPT)
     code = (
         "import importlib.util,json,pathlib,torch; "
         "assert torch.cuda.is_available(), 'GPU regression requires CUDA'; torch.cuda.init(); "
@@ -682,7 +683,7 @@ def run_suite(
                 candidate = root / "candidate" / name
                 command = [
                     configurations[name]["python"],
-                    str(Path(__file__).with_name("geometry_regression.py")),
+                    str(source / REPLAY_SCRIPT),
                     "run",
                     "--case",
                     str(root / "recipes.json"),

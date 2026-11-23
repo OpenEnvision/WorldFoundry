@@ -811,7 +811,8 @@ python3 tests/manual/geometry_regression_schedule.py remove \
 Installation preserves other cron entries and uses `Asia/Shanghai`. It copies
 controllers from the committed source revision; reinstall after changing those
 controllers. Each run snapshots the configured local committed ref, without
-pulling, resetting, or executing dirty source files. Separate model processes
+pulling, resetting, or executing dirty source files. CUDA preflight and replay
+workers use the replay script from that snapshot. Separate model processes
 share the host's physical-GPU lease locks, have per-case and suite time budgets,
 and undergo exact numerical and imported-source audits. The complete short
 matrix runs daily; an on-demand `--plan` can select affected cases instead.
